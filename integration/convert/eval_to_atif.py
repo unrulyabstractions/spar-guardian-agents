@@ -66,7 +66,9 @@ SWE_DEVIATIONS = [
     "tools_named_shell_and_run_python_bound_to_the_agents_own_container",
     "auto_delivered_board_posts_shown_once_not_kept_in_the_conversation",
     "agents_share_one_clock_and_time_limit",
+    "trailing_turn_continue_prompt_reaches_the_provider_only",
 ]
+SWE_BOARD_ONLY = {"auto_delivered_board_posts_shown_once_not_kept_in_the_conversation", "agents_share_one_clock_and_time_limit"}
 COMM_TURN_REFUSAL_MARK = "unavailable during the team's two opening turns"     # integration/task/swe_env.py
 
 
@@ -79,18 +81,22 @@ def split_content(content) -> tuple[str, str | None]:
         return "", None
     if isinstance(content, str):
         return content, None
-    texts, reasoning = [], []
+    texts, reasoning, redacted = [], [], False
     for part in content:
         kind = getattr(part, "type", None)
         if kind == "text":
             texts.append(part.text)
         elif kind == "reasoning":
-            if getattr(part, "reasoning", ""):
+            # A redacted part carries the provider's encrypted signature in `reasoning` (Gemini's
+            # thought signatures): it is not readable reasoning, so it is never copied.
+            if getattr(part, "redacted", False):
+                redacted = True
+            elif getattr(part, "reasoning", ""):
                 reasoning.append(part.reasoning)
-            elif getattr(part, "redacted", False):
-                reasoning.append("[redacted reasoning]")
         else:
             texts.append(f"[{kind} content omitted]")
+    if not reasoning and redacted:
+        reasoning.append("[redacted reasoning]")
     return "\n".join(t for t in texts if t), ("\n".join(reasoning) or None)
 
 
@@ -328,7 +334,9 @@ def build_trajectory(sample, log, agent_name: str, messages: list) -> tuple[Traj
             for tc in calls:
                 issued[tc.tool_call_id] = len(steps) - 1
         elif isinstance(msg, ChatMessageTool):
-            content = tool_result_text(msg.content)
+            # On an error Inspect leaves the content empty and the model receives the error text, so the
+            # judge gets that text too (CheatBench's renderer does not print `extra`).
+            content = tool_result_text(msg.content) or (msg.error.message if msg.error else "")
             extra = {"is_error": True, "error": msg.error.message} if msg.error else None
             if msg.id in redacted:
                 extra = {**(extra or {}), "withheld_from_model_by_defense": True, "withheld_text": content}
@@ -354,7 +362,8 @@ def build_trajectory(sample, log, agent_name: str, messages: list) -> tuple[Traj
         last_agent = next((i for i in range(len(steps) - 1, -1, -1) if steps[i]["source"] == "agent"), None)
         call = ToolCall(tool_call_id=ev.id, function_name="submit",
                         arguments=dict(ev.arguments) if isinstance(ev.arguments, dict) else {"answer": str(ev.arguments)})
-        result = ObservationResult(source_call_id=ev.id, content=tool_result_text(ev.result),
+        result = ObservationResult(source_call_id=ev.id,
+                                   content=tool_result_text(ev.result) or (ev.error.message if ev.error else ""),
                                    extra={"is_error": True, "error": ev.error.message} if ev.error else None)
         if last_agent is None:
             steps.append({"source": "agent", "message": "", "tool_calls": [call], "llm_call_count": 1,
@@ -681,7 +690,8 @@ def convert(eval_path: Path, out_dir: Path, task_root: Path | None = None) -> di
         "eval_log": str(eval_path.resolve()), "eval_id": log.eval.eval_id,
         "orbit_version": orbit.__version__, "inspect_version": inspect_ai.__version__,
         "swe": swe_block(log.samples[0], out_dir) if log.samples else None,
-        "deviations": (SWE_DEVIATIONS if (records and records[0]["task"] == "software_engineering") else
+        "deviations": ([d for d in SWE_DEVIATIONS if topology != "single" or d not in SWE_BOARD_ONLY]
+                       if (records and records[0]["task"] == "software_engineering") else
                        DEVIATIONS + (["two_agents_share_one_sandbox_clock_and_git_identity"] if topology == "board" else [])),
     }
     (out_dir / "run.json").write_text(json.dumps(run_json, indent=1))
