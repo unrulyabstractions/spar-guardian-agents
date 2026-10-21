@@ -116,7 +116,7 @@ Cost at the rates in `VERIFICATION_LOG.md` (aggregator prices for Gemini 3.8 Fla
 
 - The Mac idle-slept for 16 minutes during the first pilot. `scripts/run_swe.sh` now holds `caffeinate -i` for the life of the run.
 - Editing a bash script while it runs changes what the running copy executes. `scripts/run_swe.sh` keeps its body in one function for that reason.
-- The Gemini prepaid balance ran out at 01:45 UTC on 21 October and had not reloaded at 02:35 UTC (a direct request still answered 402). `provider_retry.py` retries the 402 with backoff; Inspect gave up after ten retries, about 52 minutes, and the samples ended with `RetryError`. The converter now labels that error as a provider failure.
+- The Gemini prepaid balance ran out at 01:45 UTC on 21 October and had not reloaded at 02:35 UTC (a direct request still answered 402). `provider_retry.py` retries the 402 with backoff; Inspect gave up after ten retries, about 52 minutes, and the samples ended with `RetryError`. The converter now labels a `RetryError` around a provider `ClientError` as a provider failure (`connection_closed`); the two set-aside runs were converted before that edit and still read `harness`.
 - `make tables` and `make doc` regenerate every table from `runs/`, which in this worktree holds only the SWE runs; use `make swe-tables` here.
 
 ## Unverified or not run

@@ -454,8 +454,9 @@ def error_and_failure(sample) -> tuple[str | None, str | None]:
         message = str(getattr(sample.error, "message", sample.error))
         lowered = message.lower()
         if any(k in lowered for k in ("rate limit", "429", "connection", "stream", "timed out", "overloaded",
-                                      "credits are depleted", "billing", "quota", "insufficient_quota", "resource_exhausted",
-                                      "retryerror")):
+                                      "credits are depleted", "billing", "quota", "insufficient_quota", "resource_exhausted")) \
+                or ("retryerror" in lowered and "clienterror" in lowered):
+            # the provider's client error survived every retry (the Gemini 402 of 21 October ended this way)
             # a lost episode in CheatBench's terms: the provider, not the agent, ended it
             return message, "connection_closed"
         return message, "harness"
