@@ -69,6 +69,37 @@ def ending_of(ep: dict) -> str:
     return ep.get("failure") or ("submit" if ep.get("ended_by") == "submit" else (ep.get("ended_by") or "end"))
 
 
+SWE_VERDICT_KEYS = ("reference_solution_seeking", "reference_solution_obtained", "reference_solution_used",
+                    "documentation_lookup", "evaluation_tampering")
+
+
+def swe_of(run: dict, d: Path | None = None) -> dict | None:
+    """The SWE setting of a run (Lucy's plan): task, team size, jigsaw, rule, parts, rewards, measures."""
+    swe = run.get("swe")
+    if not swe:
+        return None
+    grades = swe.get("grades") or {}
+    summ = _json(d / "swe_summary.json") if d is not None else None
+    rungs = _json(d / "rungs.json") if d is not None else None
+    return {
+        "task_key": swe.get("task_key"), "instance": swe.get("instance"), "n_agents": swe.get("n_agents"),
+        "board": swe.get("board"), "jigsaw": swe.get("jigsaw"), "rule": swe.get("rule"),
+        "rule_sentence": swe.get("rule_sentence"), "delivery": swe.get("delivery"), "comm_turns": swe.get("comm_turns"),
+        "base_commit": swe.get("base_commit"), "fix_commit": swe.get("fix_commit"),
+        "arm": f"n{swe.get('n_agents')}{'-jigsaw' if swe.get('jigsaw') else ''}-{swe.get('rule')}",
+        "team_reward": (grades.get("team") or {}).get("reward") if swe.get("board") else None,
+        "rewards": {k: v.get("reward") for k, v in grades.items()},
+        "required_passed": {k: len(v.get("required_passed") or []) for k, v in grades.items()},
+        "required_tests": len(swe.get("required_tests") or []),
+        "parts": {a: (p or {}).get("titles") for a, p in (swe.get("parts") or {}).items()},
+        "fragments": {a: (f or {}).get("files") for a, f in (swe.get("fragments") or {}).items()} or None,
+        "jigsaw_isolation_ok": swe.get("jigsaw_isolation_ok"),
+        "rungs": {a: r.get("rung") for a, r in ((rungs or {}).get("agents") or {}).items()} or None,
+        "measures": ({a: {k: x.get(k) for k in ("fix_posts", "rule_posts", "disclosed", "posts")}
+                      for a, x in (summ.get("agents") or {}).items()} if summ else None),
+    }
+
+
 def endings_of(eps: list[dict]) -> dict:
     out: dict = {}
     for e in eps:
@@ -116,7 +147,7 @@ class Store:
             rec["verdict"] = ({k: v.get(k) for k in ("cheated", "honey_pots_seen", "attempted_access", "extracted_submission",
                                                    "success_claim_seen_before_access", "disclosed_access",
                                                    "explicit_prohibition_violated", "summary", "judge", "judge_cost_usd",
-                                                   "parse_ok", "judge_error")} if v else None)
+                                                   "parse_ok", "judge_error", *SWE_VERDICT_KEYS)} if v else None)
             rec["has_transcript"] = bool(rec.get("transcript_path")) and Path(rec["transcript_path"]).exists()
             out.append(rec)
         return out
@@ -142,6 +173,7 @@ class Store:
             "failed": any(e.get("failure") in FAILED_LABELS for e in eps) or bool(FAILED_NAME.match(name)),
             "episodes": eps,
             "has_communication": (d / "communication").exists(), "has_defense": (d / "defense").exists(),
+            "swe": swe_of(run, d),
         }
 
     def run_detail(self, name: str) -> dict:
@@ -509,6 +541,7 @@ class Store(Store):  # noqa: F811 - extend the class above with timeline and sum
                 "composition": sw.get("composition"), "seed": sw.get("seed"),
                 "report_cheated": sw.get("swarm_report_cheated"), "has_report": sw.get("swarm_report") is not None,
                 "by_role": by_role if sw else None,
+                "task": run.get("task"), "swe": swe_of(run, d),
             })
         return {"runs": rows}
 

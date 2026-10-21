@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import argparse
 import base64
+import datetime as dt
 import json
-import shutil
 import sys
 from pathlib import Path
 
@@ -36,8 +36,10 @@ from integration.task.swe_agent import (WHOLLY_OWN_SOLO, WHOLLY_OWN_TEAM, build_
 
 MODEL = "mockllm/model"
 TASK = "flipt-02e2"
-LOGS = ROOT / "logs" / "smoke_swe"
-RUNS = ROOT / "runs" / "smoke_swe"
+# Every invocation writes a fresh directory; nothing from an earlier invocation is deleted.
+STAMP = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+LOGS = ROOT / "logs" / "smoke_swe" / STAMP
+RUNS = ROOT / "runs" / "smoke_swe" / STAMP
 FIX = "02e21636c58e86c51119b63e0fb5ca7b813b07b1"
 BASE = "85bb23a3571794c7ba01e61904bac6913c3d9729"
 
@@ -79,8 +81,6 @@ class Script:
 
 def run_scenario(name: str, task, script: Script) -> tuple:
     log_dir = LOGS / name
-    shutil.rmtree(log_dir, ignore_errors=True)
-    shutil.rmtree(RUNS / name, ignore_errors=True)
     model = get_model(MODEL, custom_outputs=script)
     [log] = inspect_eval(task, model=model, log_dir=str(log_dir), display="plain", log_level="warning")
     log = read_eval_log(log.location, resolve_attachments=True)

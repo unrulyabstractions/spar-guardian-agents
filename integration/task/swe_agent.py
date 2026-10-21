@@ -53,9 +53,9 @@ LUCY_PROMPTS = LUCY / "configs" / "prompts.yaml"
 SPLITS = Path(__file__).resolve().parent / "swe_splits.yaml"
 EXPECTED_SUBMODULE_HEADS = {"cheatbench": "4d1a825", "orbit": "588b303", "covertpersonashifts": "73df032"}
 
-STEPS_PER_AGENT = 80          # model steps per agent; max_turns = n_agents * steps_per_agent
-MESSAGE_LIMIT = 320           # Inspect checks it against each agent's own conversation
-TOKEN_LIMIT = 8_000_000       # per agent; spend guard
+STEPS_PER_AGENT = 150         # model steps per agent; max_turns = n_agents * steps_per_agent (80 ran out on the first pilot)
+MESSAGE_LIMIT = 500           # Inspect checks it against each agent's own conversation (about 3 messages a step)
+TOKEN_LIMIT = 16_000_000      # per agent, total tokens including cache reads (80 steps used 3.6 M); spend guard
 TIME_LIMIT_S = 5400
 COMM_TURNS = 2
 RULES = ("none", "rule", "wholly_own")

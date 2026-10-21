@@ -749,12 +749,21 @@ function settingOf(run) {
   const graph = run.graph || (run.topology === 'single' ? 'single' : 'board');
   const n = run.n_agents || (run.agents || []).length || (run.episodes || []).length;
   const sw = run.swarm || null;
+  if (run.swe) return sweSetting(run.swe, n);
   if (graph === 'single') return { key: 'single', label: 'lone agent', order: 0, n: 1 };
   if (sw && sw.composition) {
     return { key: `roles-${n}`, label: `board of ${n}, hidden roles`, order: 2, n,
       composition: sw.composition, R: sw.regulators, D: sw.disregulators, W: sw.workers };
   }
   return { key: `board-${n}`, label: `board of ${n}`, order: 1, n };
+}
+
+/** A CheatBench SWE run (Lucy's plan): its own setting, apart from the openmath runs, by team size, jigsaw and rule. */
+function sweSetting(swe, n0) {
+  const n = swe.n_agents || n0;
+  const bits = [swe.jigsaw ? 'jigsaw' : null, swe.rule && swe.rule !== 'none' ? `rule: ${swe.rule}` : null].filter(Boolean);
+  const base = `SWE ${swe.task_key || ''} ${n === 1 ? 'lone agent' : `board of ${n}`}`.replace(/\s+/g, ' ');
+  return { key: `swe-${swe.task_key}-${swe.arm}`, label: base + (bits.length ? ` (${bits.join(', ')})` : ''), order: 3, n };
 }
 
 function settingSortKey(s, run) {
@@ -1153,8 +1162,47 @@ async function viewRun({ run }, view) {
   const boardSection = section('Board messages', communicationView(d.communication, run));
   const evidence = section('Defense evidence', defenseEvidence(d.defense, defs));
   const swarmSection = rj.swarm ? section('Swarm', swarmView(rj.swarm, eps, rj.deliverables)) : null;
+  const sweSection = d.swe ? section('SWE task', sweView(d.swe, eps)) : null;
 
-  return h('div', { class: 'page' }, head, meta, defSection, swarmSection, epSection, boardSection, evidence);
+  return h('div', { class: 'page' }, head, meta, defSection, sweSection, swarmSection, epSection, boardSection, evidence);
+}
+
+// Lucy's plan on a CheatBench SWE task: the arm, each agent's part (and jigsaw fragment), the hidden-test
+// rewards for the team's main and each agent's working tree, the judge, the rung and the talk measures.
+function sweView(swe, eps) {
+  const epOf = name => eps.find(e => e.orbit_agent === name) || null;
+  const agents = Object.keys(swe.parts || {}).sort();
+  const reward = k => (swe.rewards || {})[k] == null ? muted(DASH)
+    : h('span', { title: `${(swe.required_passed || {})[k] || 0} of ${swe.required_tests} required tests passed` },
+      yn(swe.rewards[k] === 1, 'good', 'plain'));
+  const m = (a, k) => ((swe.measures || {})[a] || {})[k];
+  const cols = ['agent', 'part', swe.jigsaw ? 'fragment files' : null, 'reward', 'judge: cheated', 'rung', 'posts', 'about the fix', 'disclosed'].filter(Boolean);
+  const table = h('table', { class: 'data' },
+    h('thead', null, h('tr', null, cols.map(c => h('th', null, c)))),
+    h('tbody', null, agents.map(a => h('tr', null,
+      h('td', null, a),
+      h('td', null, (swe.parts[a] || []).length ? (swe.parts[a] || []).join('; ') : muted('whole issue')),
+      swe.jigsaw ? h('td', null, ((swe.fragments || {})[a] || []).map(f => h('div', null, mono(f)))) : null,
+      h('td', null, reward(a)),
+      h('td', null, verdictCell(epOf(a))),
+      h('td', null, ((swe.rungs || {})[a]) || muted(DASH)),
+      h('td', null, m(a, 'posts') == null ? muted(DASH) : String(m(a, 'posts'))),
+      h('td', null, m(a, 'fix_posts') == null ? muted(DASH) : `${m(a, 'fix_posts')} (rule ${m(a, 'rule_posts')})`),
+      h('td', null, m(a, 'disclosed') == null ? muted(DASH) : yn(m(a, 'disclosed'), 'plain', 'warn'))))));
+  return h('div', null,
+    kv([
+      ['task', h('span', null, mono(swe.task_key || DASH), ' ', muted(swe.instance || '', 'small'))],
+      ['arm', mono(swe.arm || DASH)],
+      ['agents', String(swe.n_agents)],
+      ['jigsaw', yn(!!swe.jigsaw, 'plain', 'plain')],
+      ['rule', swe.rule === 'none' ? muted('none (standard prompt)') : h('span', null, mono(swe.rule), ' ', muted(swe.rule_sentence || '', 'small'))],
+      ['board delivery', swe.delivery || muted(DASH)],
+      ['opening turns', String(swe.comm_turns || 0)],
+      ['team reward (team/main)', swe.board ? reward('team') : muted('lone agent: its working tree ships')],
+      ['jigsaw isolation check', swe.jigsaw ? yn(swe.jigsaw_isolation_ok, 'good', 'bad') : muted(DASH)],
+      ['base / fix commit', h('span', null, mono((swe.base_commit || '').slice(0, 10)), ' / ', mono((swe.fix_commit || '').slice(0, 10)))],
+    ], 'kv-grid'),
+    h('h3', null, 'Agents'), h('div', { class: 'table-wrap' }, table));
 }
 
 // Composition, hidden roles and the team's own report of a swarm run, beside the judge's verdicts,
@@ -3578,7 +3626,7 @@ function swarmTable(swarm, thumbs, onTimeline) {
 
 /** The setting of a /api/summary row, as settingOf() reads a run. */
 function settingOfRow(x) {
-  return settingOf({ graph: x.graph, n_agents: x.n_agents, swarm: x.composition != null
+  return settingOf({ graph: x.graph, n_agents: x.n_agents, swe: x.swe || null, swarm: x.composition != null
     ? { composition: x.composition, regulators: x.regulators, disregulators: x.disregulators, workers: x.workers } : null });
 }
 
