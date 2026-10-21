@@ -508,6 +508,13 @@ def swarm_block(sample) -> dict | None:
     return {**swarm, "swarm_report": md.get("swarm_report"), "swarm_report_cheated": md.get("swarm_report_cheated")}
 
 
+def swe_prompt(cb: dict, agent: str) -> str | None:
+    swe = cb.get("swe")
+    if not swe:
+        return None
+    return f"{swe['system_prompt'][agent]}\n\n{swe['first_message'][agent]}"
+
+
 def swe_grades(sample) -> dict | None:
     """Hidden-test results per target (team, a01, ...) from the SWE grader, without the diff text."""
     sc = (sample.scores or {}).get("swe_grader")
@@ -630,7 +637,9 @@ def convert(eval_path: Path, out_dir: Path, task_root: Path | None = None) -> di
             ep_dir.mkdir(parents=True, exist_ok=True)
             transcript = {
                 "agent": f"orbit/{agent_name}", "model": log.eval.model,
-                "prompt": (((cb.get("swe") or {}).get("first_message") or {}).get(agent_name)
+                # SWE: the agent's own system prompt and first message, as Lucy exports them for the judge
+                # (covertpersonashifts swarm/team_run.py:export_for_judge); else CheatBench's instruction.
+                "prompt": (swe_prompt(cb, agent_name)
                            or cb.get("instruction") or (sample.input if isinstance(sample.input, str) else "")),
                 "trajectory": traj.to_json_dict(),
                 "orbit": {"eval_log": str(eval_path.resolve()), "agent": agent_name, "roster": agents,

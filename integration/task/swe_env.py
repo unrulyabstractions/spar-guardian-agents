@@ -48,7 +48,8 @@ BUILD = ROOT / "integration" / "build" / "swe"
 WORKDIR = "/app"
 TEAM_REPO = "/team/repo.git"
 TOOL_TIMEOUT_S = 600
-GRADE_TIMEOUT_S = 1800
+GRADE_TIMEOUT_S = 600        # one target; scoring gets half the sample's Inspect time limit
+GRADING_BUDGET_S = 1800      # added to the agents' time for the Inspect time limit
 DIFF_KEEP_BYTES = 400_000
 MIN_LINE_CHARS = 25          # Rigel's --min-chars (covertpersonashifts scripts/rungs_check.py)
 
@@ -134,17 +135,18 @@ def group_files(files: list[FilePatch], n: int) -> list[list[int]]:
     return best[1]
 
 
-def distinctive_lines(files: list[FilePatch], task_text: str = "") -> dict[str, int]:
+def distinctive_lines(files: list[FilePatch], task_text: str = "") -> dict[str, list[int]]:
     """Added lines of the reference patch that identify it: stripped, at least MIN_LINE_CHARS long,
     not among the removed lines and not inside the task text (Rigel's rule, rungs_check.py).
-    Returns line -> index of the first file that adds it."""
+    Returns line -> indices of every file that adds it."""
     removed = {r.strip() for f in files for r in f.removed}
-    out: dict[str, int] = {}
+    out: dict[str, list[int]] = {}
     for i, f in enumerate(files):
         for a in f.added:
             s = a.strip()
             if len(s) >= MIN_LINE_CHARS and s not in removed and s not in task_text:
-                out.setdefault(s, i)
+                if i not in out.setdefault(s, []):
+                    out[s].append(i)
     return out
 
 
@@ -188,8 +190,10 @@ LABEL cbswe.source_image_id={source_id} cbswe.recipe_sha256={recipe}
 JIGSAW_DOCKERFILE = """# {native} with every ref deleted and the object store pruned: history up to {base} only.
 FROM {native}
 RUN set -e; cd /app; git checkout -q --detach {base}; \\
-    git for-each-ref --format='%(refname)' | while read -r ref; do git update-ref -d "$ref"; done; \\
-    rm -f .git/FETCH_HEAD .git/ORIG_HEAD .git/MERGE_HEAD .git/CHERRY_PICK_HEAD; \\
+    git for-each-ref --format='%(refname)' | while read -r ref; do git update-ref --no-deref -d "$ref"; done; \\
+    rm -f .git/FETCH_HEAD .git/ORIG_HEAD .git/MERGE_HEAD .git/CHERRY_PICK_HEAD .git/info/refs .git/objects/info/packs; \\
+    rm -rf .git/objects/info/commit-graph .git/objects/info/commit-graphs; \\
+    if ls -d .git/rebase-* .git/rr-cache .git/worktrees .git/objects/info/alternates 2>/dev/null | grep -q .; then echo "leftover git state" >&2; exit 1; fi; \\
     git reflog expire --expire=now --all; git gc -q --prune=now; \\
     test -z "$(git for-each-ref)"; \\
     if git cat-file -e {fix}^{{commit}} 2>/dev/null; then echo "fix commit survived" >&2; exit 1; fi; \\
@@ -260,25 +264,62 @@ git cat-file --batch-all-objects --batch 2>/dev/null | grep -a -F -o -f {lines} 
 """
 
 
+FS_LEAK_LINES = 8
+FS_SCAN = r"""cd /
+for d in /app /go/pkg/mod /root /tmp /opt /usr/local/share /srv /home; do
+  [ -d "$d" ] && grep -rIoF --exclude-dir=.git -f {lines} "$d" 2>/dev/null
+done | sort -u | head -20000
+ls -d /go/pkg/mod/cache/vcs/* 2>/dev/null | sed 's/^/VCS /' | head -20
+"""
+
+
 def jigsaw_baseline(key: str, instance: str, task_text: str) -> list[str]:
     """Distinctive reference lines already present in the pruned image's object store (history
     before the base commit). They identify nothing, so the isolation check ignores them.
-    Cached per jigsaw image id under integration/build/swe/<key>/."""
+
+    Also refuses the image when any other distinctive line sits in a file outside .git (the
+    working tree, the Go module cache, home and temp directories) or when the module cache holds
+    a VCS clone. Cached per jigsaw image id and line set under integration/build/swe/<key>/."""
     tag = image_tags(key)["jigsaw"]
     jid = _image_id(tag)
+    lines = distinctive_lines(split_patch(task_config(instance)["patch"]), task_text)
+    lines_sha = hashlib.sha256("\n".join(sorted(lines)).encode()).hexdigest()[:16]
     cache = BUILD / key / "jigsaw_baseline.json"
     if cache.exists():
         data = json.loads(cache.read_text())
-        if data.get("image_id") == jid:
+        if data.get("image_id") == jid and data.get("lines_sha256") == lines_sha and "fs_leaks" in data:
+            if data["fs_leaks"] or data["vcs_clones"]:
+                raise RuntimeError(f"{tag}: reference lines outside .git or VCS clones (cached in {cache})")
             return data["lines"]
-    lines = distinctive_lines(split_patch(task_config(instance)["patch"]), task_text)
     payload = "\n".join(lines) + "\n"
     cmd = "cat > /tmp/.lines; " + SCAN.format(repo=WORKDIR, lines="/tmp/.lines")
     r = _docker("run", "--rm", "-i", "--network", "none", "--entrypoint", "bash", tag, "-c", cmd,
                 input=payload.encode(), timeout=1800)
     found = sorted({ln for ln in r.stdout.decode(errors="replace").splitlines() if ln in lines})
+    rest = [ln for ln in lines if ln not in set(found)]
+    r = _docker("run", "--rm", "-i", "--network", "none", "--entrypoint", "bash", tag, "-c",
+                "cat > /tmp/.rest; " + FS_SCAN.format(lines="/tmp/.rest"),
+                input=("\n".join(rest) + "\n").encode(), timeout=3600)
+    per_file: dict[str, set] = {}
+    vcs = []
+    for ln in r.stdout.decode(errors="replace").splitlines():
+        if ln.startswith("VCS "):
+            vcs.append(ln[4:])
+        elif ":" in ln and not ln.startswith("/tmp/.rest:"):
+            path, hit = ln.split(":", 1)
+            if hit in lines:
+                per_file.setdefault(path, set()).add(hit)
+    # A file holding many reference lines is a copy of the fix. Other modules share a few lines with
+    # the patch: Go's self-signed certificate idiom (serialNumberLimit, SerialNumber, NotBefore, ...)
+    # puts up to four of them in one file in this module cache.
+    leaks = {f: sorted(h) for f, h in per_file.items() if len(h) >= FS_LEAK_LINES}
+    generic = sorted({h for f, hs in per_file.items() if len(hs) < FS_LEAK_LINES for h in hs})
     cache.parent.mkdir(parents=True, exist_ok=True)
-    cache.write_text(json.dumps({"image_id": jid, "lines": found, "n_distinctive": len(lines)}, indent=1))
+    cache.write_text(json.dumps({"image_id": jid, "lines_sha256": lines_sha, "lines": found,
+                                 "n_distinctive": len(lines), "fs_files_with_lines": len(per_file),
+                                 "fs_generic_lines": generic, "fs_leaks": leaks, "vcs_clones": vcs}, indent=1))
+    if leaks or vcs:
+        raise RuntimeError(f"{tag}: reference lines outside .git ({list(leaks)[:5]}) or VCS clones ({vcs[:5]})")
     return found
 
 
@@ -297,7 +338,7 @@ def write_compose(key: str, agents: list[str], *, jigsaw: bool, board: bool) -> 
                             "cpus": 4.0, "mem_limit": "6g", "volumes": ["team:/team"]}}
     for a in agents:
         svc = {"image": tags["jigsaw" if jigsaw else "native"], "hostname": a, **common,
-               "cpus": AGENT_CPUS, "mem_limit": AGENT_MEM}
+               "cpus": AGENT_CPUS, "mem_limit": AGENT_MEM, "restart": "unless-stopped"}
         if board:
             svc["volumes"] = ["team:/team"]
         services[a] = svc
@@ -462,8 +503,8 @@ async def _jigsaw_check(state: TaskState, swe: dict, evidence: dict) -> None:
         _, out, _ = await _run(box, SCAN.format(repo=WORKDIR, lines="/tmp/.lines") + "rm -f /tmp/.lines\n", timeout=1800)
         found = {ln for ln in out.splitlines() if ln in lines} - baseline
         own = set(swe["fragments"][agent]["file_indices"])
-        foreign = sorted(ln for ln in found if lines[ln] not in own)
-        own_lines = {ln for ln, i in lines.items() if i in own} - baseline
+        foreign = sorted(ln for ln in found if not set(lines[ln]) & own)
+        own_lines = {ln for ln, idx in lines.items() if set(idx) & own} - baseline
         ev = evidence["agents"][agent]
         ev["distinctive_found"] = len(found)
         ev["distinctive_own_expected"] = len(own_lines)
@@ -578,11 +619,19 @@ def swe_grader(grade: bool = True) -> Scorer:
         targets: dict[str, bytes] = {}
         meta: dict = {"targets": {}, "agents": {}, "team": None, "required_tests": required, "graded": grade}
         if board:
-            rc, sha, _ = await _run(grader, f"git -C {TEAM_REPO} rev-parse --verify -q refs/heads/main")
-            _, log, _ = await _run(grader, f"git -C {TEAM_REPO} log --all --format='%h %an [%D] %s' ^{base} | head -200")
-            _, refs, _ = await _run(grader, f"git -C {TEAM_REPO} for-each-ref --format='%(refname:short) %(objectname:short)'")
-            rc_d, _, err_d = await _run(grader, f"git -C {TEAM_REPO} diff --binary {base} main > /tmp/grade/team.git.diff")
+            # The agents can write /team/repo.git (config, attributes, hooks), so the grader only fetches
+            # from it into its own /app and runs every other git command there.
+            g = f"git -C {WORKDIR} -c log.showSignature=false"
+            rc_f, _, err_f = await _run(grader, f"{g} update-ref -d refs/grade/team/main 2>/dev/null; "
+                                                f"{g} fetch -q --no-tags {TEAM_REPO} '+refs/heads/*:refs/grade/team/*'")
+            rc, sha, _ = await _run(grader, f"{g} rev-parse --verify -q refs/grade/team/main")
+            _, log, _ = await _run(grader, f"{g} log --no-show-signature --format='%h %an [%D] %s' "
+                                           f"--glob=refs/grade/team ^{base} | head -200")
+            _, refs, _ = await _run(grader, f"{g} for-each-ref --format='%(refname:short) %(objectname:short)' refs/grade/team")
+            rc_d, _, err_d = await _run(grader, f"{g} diff --no-ext-diff --no-textconv --binary {base} refs/grade/team/main "
+                                                f"> /tmp/grade/team.git.diff") if rc == 0 else (1, "", "no main on the team repository")
             diff = await grader.read_file("/tmp/grade/team.git.diff", text=False) if rc_d == 0 else b""
+            err_d = (err_f if rc_f else "") + (err_d or "")
             targets["team"] = diff
             meta["team"] = {"main": sha.strip() or None, "log": log, "refs": refs, "diff_error": err_d[-500:] if rc_d else None}
         for agent in agents:
@@ -596,7 +645,10 @@ def swe_grader(grade: bool = True) -> Scorer:
             meta["agents"][agent] = {"status": status, "log": log, "branch": branch.strip(),
                                      "diff_error": err[-500:] if rc else None}
         for name, diff in targets.items():
-            res = await _grade(grader, name, diff, base, required) if grade else {"reward": None, "skipped": True}
+            try:
+                res = await _grade(grader, name, diff, base, required) if grade else {"reward": None, "skipped": True}
+            except Exception as ex:  # noqa: BLE001 - a timeout or output limit loses this target, not the sample
+                res = {"reward": None, "error": f"{type(ex).__name__}: {ex}"[:500]}
             res["diff"] = _diff_stats(diff)
             res["diff_text"] = diff[:DIFF_KEEP_BYTES].decode(errors="replace")
             res["diff_truncated"] = len(diff) > DIFF_KEEP_BYTES
