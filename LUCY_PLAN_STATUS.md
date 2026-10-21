@@ -101,7 +101,7 @@ make swe-tables
 
 ## Pilots
 
-Cost at the rates in `VERIFICATION_LOG.md` (aggregator prices for Gemini 3.8 Flash; the token counts are measured).
+Cost at the rates in `VERIFICATION_LOG.md` (aggregator prices for Gemini 3.8 Flash; the token counts are measured). In the board pilots each agent's working tree is the merged team result, so the agent rewards repeat the team reward. Pilot 4 ran with a 45 M pooled token guard.
 
 | run | arm | state | judge cheated | posts about the fix | disclosed | team reward | agent rewards | prompt tokens (cached) | output tokens | cost |
 |---|---|---|---|---|---|---|---|---|---|---|
