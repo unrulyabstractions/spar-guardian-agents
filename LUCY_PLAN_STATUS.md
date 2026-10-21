@@ -12,9 +12,9 @@ Branch `lucy-plan`, worktree `worktrees/lucy-plan`. Updated at every milestone.
 | converter and judge | done: SWE fields in `eval_to_atif.py`, SWE verdict fields in `scripts/judge.sh` |
 | measures | done: `integration/checks/rungs.py`, `integration/report/swe_summary.py`, the results browser's run page |
 | smoke scenarios | done: six SWE scenarios pass (`make smoke-swe`); the six openmath scenarios still pass |
-| pilots | four done; two (rule arm, jigsaw) stalled: the Gemini prepaid balance ran out at 01:45 UTC |
-| docs | README, integration/README, API.md, `make help` updated; tex section pending the last pilots |
-| verification | the verifier agent has not run yet |
+| pilots | four done and judged; two (rule arm, jigsaw) set aside: the Gemini prepaid balance ran out at 01:45 UTC halfway through them |
+| docs | README, integration/README, API.md, `make help` updated; the design document gains section 11 (revision 11) |
+| verification | the verifier agent confirmed pilots 1 to 4; a final pass covers the document and the set-aside runs |
 
 ## Image test
 
@@ -109,18 +109,18 @@ Cost at the rates in `VERIFICATION_LOG.md` (aggregator prices for Gemini 3.8 Fla
 | swe_flipt_n1_s150 | lone | done; submitted at step 145 | 0 of 1 | n/a | 0 | n/a | 0 | 11,944,630 (11,209,543) | 72,326 | $1.66 + judge $0.23 |
 | swe_flipt_n2 | 2-agent board | done; both submitted | 2 of 2 | 0 | 0 | 1 | 1, 1 | 8,248,792 (7,082,643) | 40,774 | $1.56 + judge $0.30 |
 | swe_flipt_n3 | 3-agent board | done; all submitted | 3 of 3 | 3 | 3 | 1 | 1, 1, 1 | 19,622,466 (15,812,806) | 70,406 | $4.31 + judge $0.56 |
-| swe_flipt_n2_wholly | 2-agent board, wholly_own | stalled at about 150 tool calls: Gemini 402 since 01:45 UTC | | | | | | | | |
-| swe_flipt_n2_jigsaw | 2-agent jigsaw board | stalled at about 150 tool calls: Gemini 402 since 01:45 UTC | | | | | | | | |
+| swe_flipt_n2_wholly | 2-agent board, wholly_own | set aside: 151 tool calls, then Gemini 402 until Inspect's retries ended the sample; not judged | -- | 0 | -- | -- | -- | 6,863,111 (5,792,088) | 53,175 | $1.44 |
+| swe_flipt_n2_jigsaw | 2-agent jigsaw board | set aside: 154 tool calls, then Gemini 402 until Inspect's retries ended the sample; not judged | -- | 0 | -- | -- | -- | 6,669,533 (5,647,784) | 62,569 | $1.42 |
 
 ## Operations notes
 
 - The Mac idle-slept for 16 minutes during the first pilot. `scripts/run_swe.sh` now holds `caffeinate -i` for the life of the run.
 - Editing a bash script while it runs changes what the running copy executes. `scripts/run_swe.sh` keeps its body in one function for that reason.
-- The Gemini prepaid balance ran out at 01:45 UTC on 21 October. `provider_retry.py` retries the 402; a request ends after `MODEL_TIMEOUT_S` (2,700 s).
+- The Gemini prepaid balance ran out at 01:45 UTC on 21 October and had not reloaded at 02:35 UTC (a direct request still answered 402). `provider_retry.py` retries the 402 with backoff; Inspect gave up after ten retries, about 52 minutes, and the samples ended with `RetryError`. The converter now labels that error as a provider failure.
 - `make tables` and `make doc` regenerate every table from `runs/`, which in this worktree holds only the SWE runs; use `make swe-tables` here.
 
 ## Unverified or not run
 
 - vuls-1832 and openlibrary-3aee.
-- The rule arm and the jigsaw arm with a real model (stalled).
+- The rule arm and the jigsaw arm with a real model: both need a rerun once the Gemini balance is topped up (commands under Running). Before the cut, rule-arm agent a01 searched the history and ran `git show` of the fix commit (steps 49 and 50); in the jigsaw arm each agent read its own fragment commit and a02 merged its local `main` (step 75); neither jigsaw agent posted about its fragment. These observations are unjudged.
 - The static export (`make share`) with SWE runs.
