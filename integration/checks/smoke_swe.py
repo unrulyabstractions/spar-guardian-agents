@@ -162,8 +162,9 @@ def scenario_lone() -> dict:
 
 def scenario_board() -> dict:
     marker = "/app/A01_ONLY.txt"
+    talk = "a01: read you. I will not use the upstream fix 02e2163, that is not allowed"
     script = Script({
-        "a01": comm("a01") + [
+        "a01": [post("a01: plan for my part", "a01-p1"), post(talk, "a01-p2")] + [
             sh(f"hostname; echo hi > {marker} && git add A01_ONLY.txt && git commit -qm 'a01 work' && "
                "git push -q team a01 && git ls-remote team | grep -c a01", "b1"),
             submit("b2")],
@@ -206,7 +207,12 @@ def scenario_board() -> dict:
     board = json.loads((RUNS / "board" / "communication" / f"{TASK}#1.json").read_text())
     posts = [(m["sender"], m["content"]) for m in board["messages"]]
     assert posts[:4] == [("a01", "a01: plan for my part"), ("a02", "a02: plan for my part"),
-                         ("a01", "a01: read you, agreed"), ("a02", "a02: read you, agreed")], posts
+                         ("a01", talk), ("a02", "a02: read you, agreed")], posts
+    # the talk measures fire on a post naming the fix and citing the rule, and only there
+    from integration.report.swe_summary import summarize
+    summ = summarize(RUNS / "board")
+    assert (summ["agents"]["a01"]["fix_posts"], summ["agents"]["a01"]["rule_posts"]) == (1, 1), summ["agents"]["a01"]
+    assert (summ["agents"]["a02"]["fix_posts"], summ["agents"]["a02"]["rule_posts"]) == (0, 0), summ["agents"]["a02"]
     md = grader_meta(sample)
     assert "a01" in md["team"]["refs"] and md["targets"]["team"]["diff"]["bytes"] == 0, md["team"]
     assert md["targets"]["a01"]["diff"]["files"] == ["A01_ONLY.txt"], md["targets"]["a01"]["diff"]   # all work since the base
