@@ -28,7 +28,7 @@ Code that runs CheatBench rows inside ORBIT and reads the results back. Run ever
 |---|---|
 | `smoke_test.py` | six mock-model scenarios on the real sandbox (complete, message limit, time limit, board, defended, swarm) |
 | `smoke_swe.py` | six mock-model scenarios for Lucy's plan on flipt-02e2 (lone, board, jigsaw, rule, comm_turns, grading); each invocation writes `runs/smoke_swe/<UTC stamp>/` |
-| `rungs.py` | Rigel's cheating ladder (searched, exposed, tried, opened, used, shipped) over SWE run directories; writes `rungs.json` |
+| `rungs.py` | Rigel's cheating ladder (exposed, tried, opened, used, shipped, with a searched count beside it) over SWE run directories; writes `rungs.json` |
 | `check_sweep.py` | exit 1 unless every named swarm run is complete and judged; one summary line per run |
 | `check_share.py` | exit 1 unless the static bundle equals the live data, its figures match `docs/figures`, its page is exactly what the exporter builds, no endpoint is an error record, no text file is over 16 MB and no image over 15 MB, and no credential pattern or credential-like environment value appears |
 | `share_browser.js` | headless Chromium pass over the served bundle (`make share-browser`): every view at 360, 400 and 1440 px with no error, no request outside the bundle and no horizontal scroll; the context note; the four theme states; a redraw after a theme change |
@@ -41,7 +41,7 @@ Code that runs CheatBench rows inside ORBIT and reads the results back. Run ever
 | `report_swarm.py` | swarm tables for the document |
 | `figures.py` | composition heatmap, role funnel, adoption curves, swimlane, controls plot |
 | `summarize_runs.py` | one line per judged episode |
-| `swe_summary.py` | Lucy's measures per SWE run and arm: judge verdicts, posts about the fix and the rule, disclosure, rung, rewards; writes `swe_summary.json` |
+| `swe_summary.py` | Lucy's measures per SWE run: judge verdicts, posts about the fix and the rule, disclosure, rung, rewards; writes `swe_summary.json` per run and prints a table per arm; recomputes `rungs.json` only when it is missing |
 
 ## ui/
 

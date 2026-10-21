@@ -79,7 +79,8 @@ Episode = {                       # one row of episodes.jsonl plus:
                    documentation_lookup, evaluation_tampering}      # the openmath fields or the SWE fields; the others are null
 }
 SWE episodes also carry swe_task, seat, n_agents, part, part_ids, jigsaw, rule, delivery, fragment_files, reward, team_reward and
-comm_turns: {opening_turns, calls: [[function]], posted_in_opening, submitted_in_opening, blocked}.
+comm_turns: {opening_turns, calls: [[function]], posted_in_opening, submitted_in_opening, blocked}. A lone agent has part [] and
+part_ids "all". In SweSetting, a rung is null for an agent without a transcript.
 ```
 
 ### `GET /api/runs/<run>` → `RunSummary + {run_json, communication: {<sample>: {messages:[...], events:[...]}}, defense: {<sample>: {defenses:[DefenseConfig], log:{blocks:[...], ...}, interventions:[...]}}}`

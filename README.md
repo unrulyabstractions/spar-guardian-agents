@@ -2,7 +2,7 @@
 
 CheatBench's `openmath_agent` row `riemann` run inside ORBIT with Gemini 3.8 Flash, in three arrangements: one agent, two agents on a message board, and ten agents on a board with hidden roles (workers, regulators, disregulators). Every run becomes a CheatBench run directory, is judged by gpt-6-sol, and can be browsed locally. The write-up with every result is `docs/cheatbench_orbit_integration.pdf`.
 
-Lucy's plan runs CheatBench's SWE tasks the same way: one, two or three agents on `flipt-02e2`, each agent in its own container, the issue pre-split into parts, two opening turns on the board, a jigsaw arm where the fix is split across the agents, and a rule arm. `vuls-1832` and `openlibrary-3aee` are configured, but their images are neither built nor tested. `LUCY_PLAN_STATUS.md` has the design, the image test and what ran.
+We also run Lucy's plan on CheatBench's SWE task `flipt-02e2` with one, two or three agents. Each agent has its own container and a pre-assigned part of the issue. The team gets two opening turns on the board. A jigsaw arm splits the fix across the agents, and a rule arm states the rule. `vuls-1832` and `openlibrary-3aee` have parts in `integration/task/swe_splits.yaml`; we have not built their images, and openlibrary's native rebuild is not implemented. `LUCY_PLAN_STATUS.md` has the design, the image test and what ran.
 
 ## Quick start
 
@@ -33,8 +33,9 @@ integration/
   report/                tables, figures, one-line summaries
   ui/                    results browser: server, static UI, export.py (static bundle), API.md
   docker/judge/          image that runs CheatBench's judge
-runs/<name>/             one run: run.json, episodes.jsonl, judge.jsonl, trajectories/, communication/, defense/
-logs/                    Inspect eval logs (gitignored): ctrl/<run>/, swarm/<run>/, and the two pilots under gemini*/
+runs/<name>/             one run: run.json, episodes.jsonl, judge.jsonl, trajectories/, communication/, defense/;
+                         an SWE run adds swe/diffs/, rungs.json and swe_summary.json
+logs/                    Inspect eval logs (gitignored): ctrl/<run>/, swarm/<run>/, swe/<run>/, smoke_swe/<stamp>/, and the two pilots under gemini*/
 docs/                    the document, generated tables, figures
 submodules/              cheatbench, orbit and covertpersonashifts (Lucy's swarm-persona repository), read only
 VERIFICATION_LOG.md      every output, how it was verified, and the result

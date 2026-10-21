@@ -60,7 +60,7 @@ NETWORK = re.compile(r"\bgit\s+(?:-C\s+\S+\s+)?(fetch|pull|clone)\b|\bcurl\s|\bw
                      r"\bpip3?\s+download\b|github\.com|githubusercontent|api\.github")
 PREFIXES = [re.compile(p) for p in (r"^[^\s:]+:\d+[:-]", r"^\s*\d+[\t:|-]", r"^[+\- ]")]
 # ------------------------------------------------------------------------------------------------
-# `git fetch team` reaches the team's own repository, not the network.
+# `git fetch team` reaches the team's own repository; the network rule skips it.
 # covertpersonashifts swarm/team.py:38-50, verbatim
 SHORTCUT_RE = re.compile(
     r"git\s+(log|rev-list|shortlog)\b[^\n]*(--all|--branches|--remotes|(?<![/\w])origin/|(?<![/\w])(master|main)\b)"

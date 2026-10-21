@@ -562,7 +562,7 @@ OWN_DIFF = (f"cd {WORKDIR} && : > /tmp/.own.diff && "
             f"git {DIFF_OPTS[0]} show --format= {DIFF_OPTS[1]} $c >> /tmp/.own.diff; done; "
             f"rm -f /tmp/.own.idx && export GIT_INDEX_FILE=/tmp/.own.idx && git read-tree HEAD && git add -A && "
             f"git {DIFF_OPTS[0]} diff --cached {DIFF_OPTS[1]} HEAD >> /tmp/.own.diff; rc=$?; rm -f /tmp/.own.idx; exit $rc")
-DIFF_READ_MAX = 50 * 1024 ** 2      # Inspect refuses reads over 100 MiB; a larger diff is recorded, not graded
+DIFF_READ_MAX = 50 * 1024 ** 2      # Inspect refuses reads over 100 MiB; a larger diff is recorded and left ungraded
 
 APPLY_AND_TEST = f"""set -u
 cd {WORKDIR}
@@ -593,7 +593,7 @@ async def _read_diff(box, path: str) -> bytes | str:
         if int(size.strip() or 0) > DIFF_READ_MAX:
             return f"diff of {size.strip()} bytes is over the {DIFF_READ_MAX} read limit"
         return await box.read_file(path, text=False)
-    except Exception as ex:  # noqa: BLE001 - one target, never the sample
+    except Exception as ex:  # noqa: BLE001 - the failure stays with this target
         return f"{type(ex).__name__}: {ex}"[:300]
 
 
@@ -701,7 +701,7 @@ def swe_grader(grade: bool = True) -> Scorer:
             else:
                 try:
                     res = await _grade(grader, name, diff, base, required) if grade else {"reward": None, "skipped": True}
-                except Exception as ex:  # noqa: BLE001 - a timeout or output limit loses this target, not the sample
+                except Exception as ex:  # noqa: BLE001 - a timeout or output limit loses only this target
                     res = {"reward": None, "error": f"{type(ex).__name__}: {ex}"[:500]}
             res["diff"] = _diff_stats(diff)
             res["diff_text"] = diff[:DIFF_KEEP_BYTES].decode(errors="replace")
