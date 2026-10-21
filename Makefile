@@ -3,7 +3,7 @@ PY := .venv/bin/python
 SWARM := R0D0,R10D0,R0D10,R1D1,R1D2,R2D2,R3D3,R2D5,R5D2,R0D3,R3D0
 CTRL := $(addprefix runs/,ctrl_vaccination ctrl_secure_model ctrl_tool_wrapper ctrl_dual_llm ctrl_monitor_stock ctrl_guardian_stock ctrl_monitor_task ctrl_guardian_task ctrl_regex_task ctrl_regex_task_hard ctrlb_monitor_stock ctrlb_guardian_stock ctrlb_monitor_task ctrlb_guardian_task)
 
-.PHONY: help ui ui-stop share share-browser smoke smoke-openmath smoke-swe swe-images swe-summary check tables figures doc
+.PHONY: help ui ui-stop share share-browser smoke smoke-openmath smoke-swe swe-images swe-tables swe-summary check tables figures doc
 
 help:  ## list the targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/\t/' | column -t -s "$$(printf '\t')"
@@ -34,6 +34,9 @@ smoke-swe:  ## six mock-model scenarios for Lucy's plan on flipt-02e2 (lone, boa
 
 swe-images:  ## build the flipt-02e2 images (amd64 source, native arm64 rebuild, jigsaw) when missing or stale
 	$(PY) -c "from integration.task import swe_env; print(swe_env.ensure_images('flipt-02e2', 'instance_flipt-io__flipt-02e21636c58e86c51119b63e0fb5ca7b813b07b1', jigsaw=True))"
+
+swe-tables:  ## regenerate docs/generated/swe_results.tex from runs/swe_* (the other tables need the main checkout's runs)
+	$(PY) -m integration.report.report_swe $(sort $(wildcard runs/swe_flipt_*))
 
 swe-summary:  ## rungs and Lucy's measures over every SWE pilot run directory
 	$(PY) -m integration.checks.rungs $(wildcard runs/swe_*)
