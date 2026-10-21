@@ -12,7 +12,7 @@ Branch `lucy-plan`, worktree `worktrees/lucy-plan`. Updated at every milestone.
 | converter and judge | done: SWE fields in `eval_to_atif.py`, SWE verdict fields in `scripts/judge.sh` |
 | measures | done: `integration/checks/rungs.py`, `integration/report/swe_summary.py`, the results browser's run page |
 | smoke scenarios | done: six SWE scenarios pass (`make smoke-swe`); the six openmath scenarios still pass |
-| pilots | four done and judged; two (rule arm, jigsaw) set aside: the Gemini prepaid balance ran out at 01:45 UTC halfway through them |
+| pilots | four done and judged; two (rule arm, jigsaw) set aside: the Gemini prepaid balance ran out at 01:45 UTC halfway through them, and it was still empty from 10:04 to 12:54 UTC (19 probes, every one 402), so the reruns `swe_flipt_n2_wholly_b` and `swe_flipt_n2_jigsaw_b` have not started |
 | docs | README, integration/README, API.md, `make help` updated; the design document gains section 11 (revision 11) |
 | verification | the verifier agent confirmed pilots 1 to 4; a final pass covers the document and the set-aside runs |
 
@@ -116,7 +116,7 @@ Cost at the rates in `VERIFICATION_LOG.md` (aggregator prices for Gemini 3.8 Fla
 
 - The Mac idle-slept for 16 minutes during the first pilot. `scripts/run_swe.sh` now holds `caffeinate -i` for the life of the run.
 - Editing a bash script while it runs changes what the running copy executes. `scripts/run_swe.sh` keeps its body in one function for that reason.
-- The Gemini prepaid balance ran out at 01:45 UTC on 21 October and had not reloaded at 02:35 UTC (a direct request still answered 402). `provider_retry.py` retries the 402 with backoff; Inspect gave up after ten retries, about 52 minutes, and the samples ended with `RetryError`. The converter now labels a `RetryError` around a provider `ClientError` as a provider failure (`connection_closed`); the two set-aside runs were converted before that edit and still read `harness`.
+- The Gemini prepaid balance ran out at 01:45 UTC on 21 October. It had not reloaded at 02:35 UTC, nor in a three-hour probe from 10:04 to 12:54 UTC (one minimal request every 10 minutes, 19 requests, all 402 "Your prepayment credits are depleted"). The auto-reload is not working; someone with access to AI Studio billing has to top up the project. `provider_retry.py` retries the 402 with backoff; Inspect gave up after ten retries, about 52 minutes, and the samples ended with `RetryError`. The converter now labels a `RetryError` around a provider `ClientError` as a provider failure (`connection_closed`); the two set-aside runs were converted before that edit and still read `harness`.
 - `make tables` and `make doc` regenerate every table from `runs/`, which in this worktree holds only the SWE runs; use `make swe-tables` here.
 
 ## Unverified or not run
