@@ -1,0 +1,27 @@
+# CheatBench SWE tasks for Lucy's plan (integration/task/swe_agent.py).
+#
+# The parts are Lucy Kappai's, read at run time from her repository at its pinned commit:
+#   submodules/covertpersonashifts/configs/prompts.yaml, team_swe.splits.<split>
+# Each split has four parts; `requirements` are 1-based indices into the issue's own
+# "Requirements:" bullets (her swarm/team.py:requirements), copied verbatim into a part.
+# `groups` is ours: which of her four parts each agent owns when the team has 2 or 3 agents.
+# A lone agent owns the whole issue and gets no part text.
+tasks:
+  flipt-02e2:
+    instance: instance_flipt-io__flipt-02e21636c58e86c51119b63e0fb5ca7b813b07b1
+    split: flipt_redis_tls
+    groups:
+      2: [[1, 2], [3, 4]]
+      3: [[1], [2], [3, 4]]
+  vuls-1832:
+    instance: instance_future-architect__vuls-1832b4ee3a20177ad313d806983127cb6e53f5cf
+    split: vuls_macos
+    groups:
+      2: [[1, 2], [3, 4]]
+      3: [[1], [2], [3, 4]]
+  openlibrary-3aee:
+    instance: instance_internetarchive__openlibrary-3aeec6afed9198d734b7ee1293f03ca94ff970e1-v13642507b4fc1f8d234172bf8129942da2c2ca26
+    split: openlibrary_wikidata
+    groups:
+      2: [[1, 2], [3, 4]]
+      3: [[1], [2], [3, 4]]

@@ -56,6 +56,19 @@ DEVIATIONS = [
     "mirror_served_from_docker_sidecar_and_ca_baked_into_image",
 ]
 
+# CheatBench SWE under Lucy's plan (integration/task/swe_agent.py, swe_env.py).
+SWE_DEVIATIONS = [
+    "agent_is_orbit_turn_react_not_vendor_harness",
+    "orbit_assistant_and_submit_prompt_appended_to_system_prompt",
+    "continue_prompts_are_orbit_synthetic_user_messages",
+    "native_arm64_rebuild_of_the_amd64_swe_bench_pro_image",
+    "no_network_github_unreachable",
+    "tools_named_shell_and_run_python_bound_to_the_agents_own_container",
+    "auto_delivered_board_posts_shown_once_not_kept_in_the_conversation",
+    "agents_share_one_clock_and_time_limit",
+]
+COMM_TURN_REFUSAL_MARK = "unavailable during the team's two opening turns"     # integration/task/swe_env.py
+
 
 # --------------------------------------------------------------------------
 # message content
@@ -495,6 +508,55 @@ def swarm_block(sample) -> dict | None:
     return {**swarm, "swarm_report": md.get("swarm_report"), "swarm_report_cheated": md.get("swarm_report_cheated")}
 
 
+def swe_grades(sample) -> dict | None:
+    """Hidden-test results per target (team, a01, ...) from the SWE grader, without the diff text."""
+    sc = (sample.scores or {}).get("swe_grader")
+    if sc is None:
+        return None
+    return {name: {k: v for k, v in t.items() if k != "diff_text"} for name, t in (sc.metadata or {}).get("targets", {}).items()}
+
+
+def comm_turn_compliance(steps: list[dict], opening: int) -> dict:
+    """What an agent did in its opening communication turns (its first `opening` agent steps)."""
+    agent_steps = [s for s in steps if s.get("source") == "agent"]
+    first = agent_steps[:opening]
+    calls = [[tc["function_name"] for tc in (s.get("tool_calls") or [])] for s in first]
+    blocked = sum(1 for s in agent_steps for r in ((s.get("observation") or {}).get("results") or [])
+                  if COMM_TURN_REFUSAL_MARK in ((r.get("extra") or {}).get("error") or ""))
+    return {"opening_turns": opening, "calls": calls,
+            "posted_in_opening": sum(1 for c in calls if "channel_post" in c),
+            "submitted_in_opening": any("submit" in c for c in calls), "blocked": blocked}
+
+
+def swe_block(sample, out_dir: Path) -> dict | None:
+    """Lucy's-plan facts for run.json; the diffs go to swe/diffs/<target>.diff."""
+    swe = ((sample.metadata or {}).get("cheatbench") or {}).get("swe")
+    if not swe:
+        return None
+    sc = (sample.scores or {}).get("swe_grader")
+    md = (sc.metadata or {}) if sc else {}
+    diffs = out_dir / "swe" / "diffs"
+    for name, t in (md.get("targets") or {}).items():
+        diffs.mkdir(parents=True, exist_ok=True)
+        (diffs / f"{name}.diff").write_text(t.get("diff_text") or "")
+    setup = sample.store.get("swe_setup") or md.get("setup") or {}
+    return {
+        "task_key": swe["task_key"], "instance": swe["instance"], "repo": swe["repo"], "split": swe["split"],
+        "base_commit": swe["base_commit"], "fix_commit": swe["fix_commit"], "n_agents": swe["n_agents"],
+        "agents": swe["agents"], "board": swe["board"], "jigsaw": swe["jigsaw"], "rule": swe["rule"],
+        "rule_sentence": swe["rule_sentence"], "comm_turns": swe["comm_turns"],
+        "delivery": (sample.metadata or {}).get("cheatbench", {}).get("delivery"),
+        "parts": swe["parts"], "patch_files": swe["patch_files"],
+        "fragments": {a: {k: v for k, v in f.items() if k != "patch"} for a, f in (swe.get("fragments") or {}).items()} or None,
+        "fragment_commits": {a: ev.get("fragment_commit") for a, ev in (setup.get("agents") or {}).items()} if swe["jigsaw"] else None,
+        "jigsaw_isolation_ok": setup.get("jigsaw_isolation_ok"),
+        "setup": setup, "images": swe.get("images"),
+        "primary": md.get("primary"), "graded": md.get("graded"), "required_tests": md.get("required_tests"),
+        "grades": swe_grades(sample), "team": md.get("team"),
+        "agents_final": md.get("agents"), "comm_turn_blocks": md.get("comm_turn_blocks"),
+    }
+
+
 def convert(eval_path: Path, out_dir: Path, task_root: Path | None = None) -> dict:
     log = read_eval_log(str(eval_path), resolve_attachments=True)
     out_dir = out_dir.resolve()
@@ -543,6 +605,17 @@ def convert(eval_path: Path, out_dir: Path, task_root: Path | None = None) -> di
                 "limit": sample.limit.type if sample.limit else None,
                 "score": {k: (v.value if hasattr(v, "value") else v) for k, v in (sample.scores or {}).items()},
             }
+            swe = cb.get("swe")
+            if swe:
+                grades = swe_grades(sample) or {}
+                record.update({
+                    "swe_task": cb.get("swe_task"), "seat": agent_name, "n_agents": swe["n_agents"],
+                    "part": swe["parts"][agent_name]["titles"], "part_ids": swe["parts"][agent_name]["parts"],
+                    "jigsaw": swe["jigsaw"], "rule": swe["rule"], "delivery": cb.get("delivery"),
+                    "fragment_files": ((swe.get("fragments") or {}).get(agent_name) or {}).get("files"),
+                    "reward": (grades.get(agent_name) or {}).get("reward"),
+                    "team_reward": (grades.get("team") or {}).get("reward") if swe["board"] else None,
+                })
             if not messages:
                 # The agent never produced a projected conversation: a failed episode
                 # in CheatBench's terms (no transcript, skipped by the judge).
@@ -557,7 +630,8 @@ def convert(eval_path: Path, out_dir: Path, task_root: Path | None = None) -> di
             ep_dir.mkdir(parents=True, exist_ok=True)
             transcript = {
                 "agent": f"orbit/{agent_name}", "model": log.eval.model,
-                "prompt": cb.get("instruction") or (sample.input if isinstance(sample.input, str) else ""),
+                "prompt": (((cb.get("swe") or {}).get("first_message") or {}).get(agent_name)
+                           or cb.get("instruction") or (sample.input if isinstance(sample.input, str) else "")),
                 "trajectory": traj.to_json_dict(),
                 "orbit": {"eval_log": str(eval_path.resolve()), "agent": agent_name, "roster": agents,
                           "topology": topology, "system_prompt": info["system_prompt"],
@@ -565,6 +639,9 @@ def convert(eval_path: Path, out_dir: Path, task_root: Path | None = None) -> di
                           "delivery_notices_recovered_from_events": info["delivery_notices"],
                           "model_calls": info["model_calls"]},
             }
+            if cb.get("swe"):
+                record["comm_turns"] = comm_turn_compliance(transcript["trajectory"].get("steps", []),
+                                                            cb["swe"]["comm_turns"])
             transcript_path = ep_dir / "transcript.json"
             transcript_path.write_text(json.dumps(transcript, indent=1))
             (ep_dir / "prompt.txt").write_text(transcript["prompt"])
@@ -594,7 +671,9 @@ def convert(eval_path: Path, out_dir: Path, task_root: Path | None = None) -> di
         "orbit_halt_reason": orbit_halt_reason(log.samples[0]) if log.samples else None,
         "eval_log": str(eval_path.resolve()), "eval_id": log.eval.eval_id,
         "orbit_version": orbit.__version__, "inspect_version": inspect_ai.__version__,
-        "deviations": DEVIATIONS + (["two_agents_share_one_sandbox_clock_and_git_identity"] if topology == "board" else []),
+        "swe": swe_block(log.samples[0], out_dir) if log.samples else None,
+        "deviations": (SWE_DEVIATIONS if (records and records[0]["task"] == "software_engineering") else
+                       DEVIATIONS + (["two_agents_share_one_sandbox_clock_and_git_identity"] if topology == "board" else [])),
     }
     (out_dir / "run.json").write_text(json.dumps(run_json, indent=1))
     (out_dir / "episodes.jsonl").write_text("".join(json.dumps(r) + "\n" for r in records))
