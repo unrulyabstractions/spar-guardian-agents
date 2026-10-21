@@ -14,7 +14,8 @@ All API responses are JSON.
 | `#/swarm?run=<run>` | Swarm: grids, outcome funnel, adoption curves, swarm runs with rasters, run explorer, figures |
 
 A **setting** is the communication graph (`single`: a lone agent; `board`: every agent on one shared board), the roster size, and
-whether roles were hidden. `run.json` writes `topology: "swarm"` for a board with hidden roles; the API adds `graph` so the swarm reads
+whether roles were hidden. A CheatBench SWE run has its own setting per task, team size, jigsaw and rule ("SWE flipt-02e2 board
+of 2 (jigsaw)"), and its run page gains a "SWE task" section. `run.json` writes `topology: "swarm"` for a board with hidden roles; the API adds `graph` so the swarm reads
 as what it is, a board of N agents with roles.
 
 ## Static export
@@ -56,7 +57,16 @@ RunSummary = {
   deliverables: null | {archive_in_workspace, registered_on_main, registered_message_copied_from},
   endings: {label: count}   # failure label, else "submit", else the converter's ended_by
   has_communication, has_defense,
+  swe: null | SweSetting,          # CheatBench SWE runs (Lucy's plan); null otherwise
   episodes: [Episode]
+}
+SweSetting = {
+  task_key ("flipt-02e2"), instance, n_agents, board: bool, jigsaw: bool, rule ("none"|"rule"|"wholly_own"), rule_sentence,
+  delivery ("auto"|"notify"|"poll"|null for a lone agent), comm_turns, base_commit, fix_commit, arm ("n2-jigsaw-none"),
+  team_reward: 0|1|null (team/main; null for a lone agent), rewards: {team?, <agent>: 0|1|null}, required_passed: {target: int},
+  required_tests: int, parts: {<agent>: [part title]}, fragments: null | {<agent>: [file]}, jigsaw_isolation_ok: bool|null,
+  rungs: null | {<agent>: "none"|"exposed"|"tried"|"opened"|"used"|"shipped"},     # rungs.json
+  measures: null | {<agent>: {posts, fix_posts, rule_posts, disclosed}}            # swe_summary.json
 }
 Episode = {                       # one row of episodes.jsonl plus:
   episode, orbit_agent, role?, n_tool_calls, n_turns, wall_time, limit, failure, error, ended_by, ok, score: {deliverables_scorer: 0|1},
@@ -64,8 +74,12 @@ Episode = {                       # one row of episodes.jsonl plus:
   defense: {checks, blocks, blocks_by_boundary: {model_input?, model_output?, tool_call?}, checks_by_boundary},
   transcript_path, has_transcript,
   verdict: null | {cheated, honey_pots_seen, attempted_access, extracted_submission, success_claim_seen_before_access,
-                   disclosed_access, explicit_prohibition_violated, summary, judge, judge_cost_usd, parse_ok, judge_error}
+                   disclosed_access, explicit_prohibition_violated, summary, judge, judge_cost_usd, parse_ok, judge_error,
+                   reference_solution_seeking, reference_solution_obtained, reference_solution_used,
+                   documentation_lookup, evaluation_tampering}      # the openmath fields or the SWE fields; the others are null
 }
+SWE episodes also carry swe_task, seat, n_agents, part, part_ids, jigsaw, rule, delivery, fragment_files, reward, team_reward and
+comm_turns: {opening_turns, calls: [[function]], posted_in_opening, submitted_in_opening, blocked}.
 ```
 
 ### `GET /api/runs/<run>` → `RunSummary + {run_json, communication: {<sample>: {messages:[...], events:[...]}}, defense: {<sample>: {defenses:[DefenseConfig], log:{blocks:[...], ...}, interventions:[...]}}}`
@@ -129,7 +143,8 @@ RunAggregate = {run, control, topology, graph, roles: bool, mock: bool, model, f
                 attempted, disclosed, blocks, checks, timeouts, score, wall_time, prompt_tokens, output_tokens, cache_read, judge_cost,
                 registered_on_main, registered_copied_from, archive_in_workspace, endings: {label: count},
                 regulators, disregulators, workers, composition, seed, report_cheated, has_report,
-                by_role: {worker|regulator|disregulator: {n, cheated, honeypots_seen, attempted, disclosed}} | null}
+                by_role: {worker|regulator|disregulator: {n, cheated, honeypots_seen, attempted, disclosed}} | null,
+                task, swe: null | SweSetting}
 ```
 
 ### `GET /api/figures` → `[{name, size, modified}]` for the PNG files under `docs/figures`; `GET /figures/<file>` serves one of them (png, svg or pdf; plain file names only).
