@@ -268,6 +268,9 @@ def _communication(names: list[str], delivery: str) -> CommunicationConfig:
                                max_message_chars=20_000, max_context_chars=40_000)
 
 
+SHIM_FILTER_ONLY = TRAILING_TURN_FIX.model_copy(update={"target_agents": ["__model_filter_only__"]})
+
+
 def _with_swe_defenses(task_: Task, control: str, monitor_model: str) -> Task:
     """The control's defenses, or for the baseline only the passive trailing-turn shim.
 
@@ -276,7 +279,10 @@ def _with_swe_defenses(task_: Task, control: str, monitor_model: str) -> Task:
     the continue prompt to the provider input (integration/task/controls.py); it blocks nothing.
     """
     from orbit.configs.experiment import ExperimentConfig
-    defenses = defenses_for(control, monitor_model) or [TRAILING_TURN_FIX]
+    # Filter only: a target that names no agent builds no defense boundary, so the shim's model filter
+    # (applied to every agent, orbit/solvers/orchestrator.py:171-174) runs without a check event at every
+    # message of every call; with a boundary the log grew with the square of the steps (9 MB on pilot 2).
+    defenses = defenses_for(control, monitor_model) or [SHIM_FILTER_ONLY]
     for sample in task_.dataset:
         sample.metadata["experiment"]["defenses"] = [d.model_dump(mode="json") for d in defenses]
         ExperimentConfig.model_validate(sample.metadata["experiment"])

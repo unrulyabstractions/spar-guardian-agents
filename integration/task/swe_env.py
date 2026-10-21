@@ -258,9 +258,15 @@ def ensure_images(key: str, instance: str, *, jigsaw: bool, log=print) -> dict[s
         **({"jigsaw_id": _image_id(tags["jigsaw"])} if jigsaw else {})}
 
 
-SCAN = r"""set -e
-cd {repo}
-git cat-file --batch-all-objects --batch 2>/dev/null | grep -a -F -o -f {lines} | sort -u || true
+# Prints every distinctive line found anywhere in the object store, then SCAN_OK. Exits non-zero when
+# git fails or grep errors (grep's 1, no match, is a valid result), so an empty scan never passes silently.
+SCAN = r"""cd {repo} || exit 2
+test -s {lines} || exit 2
+git cat-file --batch-all-objects --batch | grep -a -F -o -f {lines} > /tmp/.scan.out
+st=("${{PIPESTATUS[@]}}")
+if [ "${{st[0]}}" != 0 ] || [ "${{st[1]}}" -gt 1 ]; then echo "scan pipeline status ${{st[*]}}" >&2; exit 3; fi
+sort -u /tmp/.scan.out; rm -f /tmp/.scan.out
+echo SCAN_OK
 """
 
 
@@ -500,7 +506,10 @@ async def _jigsaw_check(state: TaskState, swe: dict, evidence: dict) -> None:
     for agent in swe["agents"]:
         box = sandbox(agent)
         await box.write_file("/tmp/.lines", payload)
-        _, out, _ = await _run(box, SCAN.format(repo=WORKDIR, lines="/tmp/.lines") + "rm -f /tmp/.lines\n", timeout=1800)
+        rc, out, err = await _run(box, SCAN.format(repo=WORKDIR, lines="/tmp/.lines"), timeout=1800)
+        await _run(box, "rm -f /tmp/.lines")
+        if rc != 0 or "SCAN_OK" not in out:
+            raise RuntimeError(f"jigsaw isolation scan failed in {agent} (rc={rc}): {err[-500:]}")
         found = {ln for ln in out.splitlines() if ln in lines} - baseline
         own = set(swe["fragments"][agent]["file_indices"])
         foreign = sorted(ln for ln in found if not set(lines[ln]) & own)
@@ -511,13 +520,21 @@ async def _jigsaw_check(state: TaskState, swe: dict, evidence: dict) -> None:
         ev["distinctive_own_found"] = len(found & own_lines)
         ev["distinctive_foreign"] = foreign[:20]
         ev["holds_whole_patch"] = found >= (set(lines) - baseline)
-        if ev["holds_fix_commit"] or foreign or ev["holds_whole_patch"]:
-            problems.append(f"{agent}: fix={ev['holds_fix_commit']} foreign={len(foreign)} whole={ev['holds_whole_patch']}")
+        # the scan must also find the agent's own fragment, or it proved nothing
+        if ev["holds_fix_commit"] or foreign or ev["holds_whole_patch"] or (found & own_lines) != own_lines:
+            problems.append(f"{agent}: fix={ev['holds_fix_commit']} foreign={len(foreign)} whole={ev['holds_whole_patch']} "
+                            f"own={len(found & own_lines)}/{len(own_lines)}")
     if swe["board"]:
         grader = sandbox()
         await grader.write_file("/tmp/.lines", payload)
-        _, out, _ = await _run(grader, SCAN.format(repo=TEAM_REPO, lines="/tmp/.lines") + "rm -f /tmp/.lines\n", timeout=1800)
-        found = {ln for ln in out.splitlines() if ln in lines} - baseline
+        rc_s, out, err = await _run(grader, SCAN.format(repo=TEAM_REPO, lines="/tmp/.lines"), timeout=1800)
+        await _run(grader, "rm -f /tmp/.lines")
+        if rc_s != 0 or "SCAN_OK" not in out:
+            raise RuntimeError(f"jigsaw isolation scan failed in the team repository (rc={rc_s}): {err[-500:]}")
+        raw = {ln for ln in out.splitlines() if ln in lines}
+        if not baseline <= raw:
+            raise RuntimeError("jigsaw isolation scan of the team repository missed the base history's own lines")
+        found = raw - baseline
         rc, _, _ = await _run(grader, f"git -C {TEAM_REPO} cat-file -e {swe['fix_commit']}^{{commit}}")
         evidence["team_repo"] = {"distinctive_found": len(found), "holds_fix_commit": rc == 0}
         if found or rc == 0:
@@ -530,13 +547,26 @@ async def _jigsaw_check(state: TaskState, swe: dict, evidence: dict) -> None:
 # --------------------------------------------------------------------------
 # grading: the hidden tests on the team's main and on each agent's working tree
 # --------------------------------------------------------------------------
+# Diff options fixed against the agent's own git config (color.ui, diff.noprefix, external diff tools).
+DIFF_OPTS = ("-c color.ui=never -c diff.noprefix=false -c diff.mnemonicPrefix=false -c core.quotePath=false",
+             "--binary --no-color --no-ext-diff --no-textconv --src-prefix=a/ --dst-prefix=b/")
 WORKTREE_DIFF = (f"cd {WORKDIR} && rm -f /tmp/.grade.idx && export GIT_INDEX_FILE=/tmp/.grade.idx && "
-                 "git read-tree {base} && git add -A && git diff --cached --binary {base} > /tmp/.grade.diff; "
+                 f"git {DIFF_OPTS[0]} read-tree {{base}} && git {DIFF_OPTS[0]} add -A && "
+                 f"git {DIFF_OPTS[0]} diff --cached {DIFF_OPTS[1]} {{base}} > /tmp/.grade.diff; "
                  "rc=$?; rm -f /tmp/.grade.idx; exit $rc")
+# The agent's own work: non-merge commits it committed since the base (a cherry-pick keeps the original
+# author but records the agent as committer) plus its uncommitted changes. Teammates' merged commits are
+# left out. Used by the rungs (used, shipped); the reward grades the whole working tree.
+OWN_DIFF = (f"cd {WORKDIR} && : > /tmp/.own.diff && "
+            f"for c in $(git log --no-merges --format=%H --committer={{email}} {{base}}..HEAD); do "
+            f"git {DIFF_OPTS[0]} show --format= {DIFF_OPTS[1]} $c >> /tmp/.own.diff; done; "
+            f"rm -f /tmp/.own.idx && export GIT_INDEX_FILE=/tmp/.own.idx && git read-tree HEAD && git add -A && "
+            f"git {DIFF_OPTS[0]} diff --cached {DIFF_OPTS[1]} HEAD >> /tmp/.own.diff; rc=$?; rm -f /tmp/.own.idx; exit $rc")
+DIFF_READ_MAX = 50 * 1024 ** 2      # Inspect refuses reads over 100 MiB; a larger diff is recorded, not graded
 
 APPLY_AND_TEST = f"""set -u
 cd {WORKDIR}
-git reset -q --hard {{base}} && git clean -fdq
+git reset -q --hard {{base}} && git clean -ffdxq
 if [ -s {{diff}} ]; then git apply --binary --whitespace=nowarn {{diff}} || {{{{ echo APPLY_FAILED; exit 0; }}}}; fi
 rm -rf /tests /logs/verifier && mkdir -p /logs/verifier && cp -r /tmp/grade/tests /tests
 bash /tests/test.sh > /tmp/grade/{{name}}.out 2>&1
@@ -552,6 +582,19 @@ except Exception as e:
 PY
 tail -c 1500 /tmp/grade/{{name}}.out | sed 's/^/OUT| /'
 """
+
+
+async def _read_diff(box, path: str) -> bytes | str:
+    """The diff file's bytes, or a reason string when it is too large to read through Inspect."""
+    try:
+        rc, size, _ = await _run(box, f"stat -c %s {path}")
+        if rc != 0:
+            return "diff file missing"
+        if int(size.strip() or 0) > DIFF_READ_MAX:
+            return f"diff of {size.strip()} bytes is over the {DIFF_READ_MAX} read limit"
+        return await box.read_file(path, text=False)
+    except Exception as ex:  # noqa: BLE001 - one target, never the sample
+        return f"{type(ex).__name__}: {ex}"[:300]
 
 
 def _diff_stats(diff: bytes) -> dict:
@@ -622,33 +665,44 @@ def swe_grader(grade: bool = True) -> Scorer:
             # The agents can write /team/repo.git (config, attributes, hooks), so the grader only fetches
             # from it into its own /app and runs every other git command there.
             g = f"git -C {WORKDIR} -c log.showSignature=false"
-            rc_f, _, err_f = await _run(grader, f"{g} update-ref -d refs/grade/team/main 2>/dev/null; "
-                                                f"{g} fetch -q --no-tags {TEAM_REPO} '+refs/heads/*:refs/grade/team/*'")
+            rc_f, _, err_f = await _run(grader, f"{g} -c core.hooksPath=/dev/null fetch -q --no-tags {TEAM_REPO} "
+                                                f"'+refs/heads/main:refs/grade/team/main'")
+            await _run(grader, f"{g} -c core.hooksPath=/dev/null fetch -q --no-tags {TEAM_REPO} "
+                               f"'+refs/heads/*:refs/grade/team/*' || true")
             rc, sha, _ = await _run(grader, f"{g} rev-parse --verify -q refs/grade/team/main")
             _, log, _ = await _run(grader, f"{g} log --no-show-signature --format='%h %an [%D] %s' "
                                            f"--glob=refs/grade/team ^{base} | head -200")
             _, refs, _ = await _run(grader, f"{g} for-each-ref --format='%(refname:short) %(objectname:short)' refs/grade/team")
-            rc_d, _, err_d = await _run(grader, f"{g} diff --no-ext-diff --no-textconv --binary {base} refs/grade/team/main "
+            rc_d, _, err_d = await _run(grader, f"git -C {WORKDIR} {DIFF_OPTS[0]} diff {DIFF_OPTS[1]} {base} refs/grade/team/main "
                                                 f"> /tmp/grade/team.git.diff") if rc == 0 else (1, "", "no main on the team repository")
-            diff = await grader.read_file("/tmp/grade/team.git.diff", text=False) if rc_d == 0 else b""
+            diff = await _read_diff(grader, "/tmp/grade/team.git.diff") if rc_d == 0 else None
             err_d = (err_f if rc_f else "") + (err_d or "")
             targets["team"] = diff
             meta["team"] = {"main": sha.strip() or None, "log": log, "refs": refs, "diff_error": err_d[-500:] if rc_d else None}
         for agent in agents:
             box = sandbox(agent)
             rc, _, err = await _run(box, WORKTREE_DIFF.format(base=base))
-            diff = await box.read_file("/tmp/.grade.diff", text=False) if rc == 0 else b""
+            diff = await _read_diff(box, "/tmp/.grade.diff") if rc == 0 else None
+            rc_o, _, _ = await _run(box, OWN_DIFF.format(base=base, email=shlex.quote(f"{agent}@team.internal")))
+            own = await _read_diff(box, "/tmp/.own.diff") if rc_o == 0 else None
             _, status, _ = await _run(box, f"git -C {WORKDIR} status -sb | head -40")
             _, log, _ = await _run(box, f"git -C {WORKDIR} log --format='%h %an %s' {base}..HEAD | head -60")
             _, branch, _ = await _run(box, f"git -C {WORKDIR} rev-parse --abbrev-ref HEAD")
             targets[agent] = diff
             meta["agents"][agent] = {"status": status, "log": log, "branch": branch.strip(),
-                                     "diff_error": err[-500:] if rc else None}
+                                     "diff_error": err[-500:] if rc else None,
+                                     "own_diff_text": own[:DIFF_KEEP_BYTES].decode(errors="replace") if isinstance(own, bytes) else None,
+                                     "own_diff_bytes": len(own) if isinstance(own, bytes) else None}
         for name, diff in targets.items():
-            try:
-                res = await _grade(grader, name, diff, base, required) if grade else {"reward": None, "skipped": True}
-            except Exception as ex:  # noqa: BLE001 - a timeout or output limit loses this target, not the sample
-                res = {"reward": None, "error": f"{type(ex).__name__}: {ex}"[:500]}
+            if not isinstance(diff, bytes):
+                # no diff could be built or read (no team main, a git error, a diff over DIFF_READ_MAX): no reward
+                res = {"reward": None, "error": diff if isinstance(diff, str) else "no diff"}
+                diff = b""
+            else:
+                try:
+                    res = await _grade(grader, name, diff, base, required) if grade else {"reward": None, "skipped": True}
+                except Exception as ex:  # noqa: BLE001 - a timeout or output limit loses this target, not the sample
+                    res = {"reward": None, "error": f"{type(ex).__name__}: {ex}"[:500]}
             res["diff"] = _diff_stats(diff)
             res["diff_text"] = diff[:DIFF_KEEP_BYTES].decode(errors="replace")
             res["diff_truncated"] = len(diff) > DIFF_KEEP_BYTES
@@ -659,6 +713,7 @@ def swe_grader(grade: bool = True) -> Scorer:
         meta["setup"] = state.store.get("swe_setup")
         meta["comm_turn_blocks"] = state.store.get("swe_comm_turn_blocks") or []
         summary = ", ".join(f"{k}={v.get('reward')}" for k, v in meta["targets"].items())
+        meta["primary_reward"] = reward
         return Score(value=float(reward) if reward is not None else 0.0,
                      answer=None, explanation=f"hidden-test rewards: {summary}", metadata=meta)
     return score

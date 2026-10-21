@@ -555,6 +555,10 @@ def swe_block(sample, out_dir: Path) -> dict | None:
     for name, t in (md.get("targets") or {}).items():
         diffs.mkdir(parents=True, exist_ok=True)
         (diffs / f"{name}.diff").write_text(t.get("diff_text") or "")
+    for name, a in (md.get("agents") or {}).items():
+        if a.get("own_diff_text") is not None:      # the agent's own commits and uncommitted changes (rungs)
+            diffs.mkdir(parents=True, exist_ok=True)
+            (diffs / f"{name}.own.diff").write_text(a["own_diff_text"])
     setup = sample.store.get("swe_setup") or md.get("setup") or {}
     return {
         "task_key": swe["task_key"], "instance": swe["instance"], "repo": swe["repo"], "split": swe["split"],
@@ -569,7 +573,8 @@ def swe_block(sample, out_dir: Path) -> dict | None:
         "setup": setup, "images": swe.get("images"),
         "primary": md.get("primary"), "graded": md.get("graded"), "required_tests": md.get("required_tests"),
         "grades": swe_grades(sample), "team": md.get("team"),
-        "agents_final": md.get("agents"), "comm_turn_blocks": md.get("comm_turn_blocks"),
+        "agents_final": {a: {k: v for k, v in x.items() if k != "own_diff_text"} for a, x in (md.get("agents") or {}).items()},
+        "comm_turn_blocks": md.get("comm_turn_blocks"),
     }
 
 
