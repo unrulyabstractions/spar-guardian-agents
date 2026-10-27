@@ -144,3 +144,63 @@ def test_require_provider_key_reads_the_registry(monkeypatch):
     os.environ["META_API_KEY"] = "m"
     require_provider_key("openai-api/meta/muse-spark-1.3")
     assert os.environ["META_BASE_URL"] == models.providers()["meta"]["base_url"]
+
+
+def test_a_pinned_route_reaches_the_eval():
+    # The entry's model_args and generate settings: OpenRouter's provider pin and the agents' generation settings.
+    from src.configuration.swarm_config import PRESETS
+    from src.run import agent_generate_config
+    deepseek = models.resolve("deepseek-v4.1-flash-deepinfra")
+    assert deepseek == "openrouter/deepseek/deepseek-v4.1-flash"
+    assert models.model_args(deepseek) == {"provider": {"order": ["deepinfra"], "allow_fallbacks": False}}
+    assert models.generate_args(deepseek) == {"reasoning_effort": "high", "parallel_tool_calls": False,
+                                              "max_tokens": 16000}
+    haiku = models.resolve("claude-haiku-5-5-openrouter")
+    assert models.model_args(haiku) == {"provider": {"order": ["anthropic"], "allow_fallbacks": False}}
+    assert models.generate_args(haiku)["reasoning_effort"] == "medium"
+    config = PRESETS["default"]
+    assert agent_generate_config(config, deepseek) == models.generate_args(deepseek)
+    assert agent_generate_config(config.with_overrides(["batch_agents=true"]), deepseek)["batch"] is True
+    # An entry without a pin, and a model outside the registry, pass nothing.
+    assert models.model_args("openai/gpt-6-sol") == {} and models.generate_args("mockllm/model") == {}
+    assert agent_generate_config(config, None) == {}
+
+
+def test_luna_judges_through_openrouter():
+    judges = yaml.safe_load(settings.JUDGE_MODELS_CONFIG.read_text())
+    assert judges["gpt-6-luna"]["model"] == "openrouter/openai/gpt-6-luna"
+    assert judges["gpt-6-luna"]["api_key_env"] == OPENROUTER_API_KEY
+    assert models.entries()["gpt-6-luna-openrouter"]["judge_entry"] == "gpt-6-luna"
+    assert judge_prices("gpt-6-luna") == models.usd_per_million("openrouter/openai/gpt-6-luna")
+
+
+def test_an_openrouter_judge_schema_carries_a_description():
+    # OpenRouter drops a json_schema whose description is null; other routes keep the request unchanged.
+    from src.benchmark.judge import judge_spec, response_schema
+    spec = judge_spec(settings.CHEATBENCH / "tasks" / "software_engineering", "software_engineering")
+    assert response_schema(spec, "openrouter/openai/gpt-6-luna").description
+    assert response_schema(spec, "openai/gpt-6-sol").description is None
+    assert response_schema(spec).description is None
+
+
+def test_openrouter_cache_marks_the_last_tool_result():
+    # The turn rules' provider-only notices follow the last tool result, so that result is the breakpoint to keep.
+    from inspect_ai.model._providers import openrouter
+
+    from src.utils import openrouter_cache
+    assert openrouter_cache.install() and openrouter_cache.install()
+    request = {"tools": [{"type": "function", "function": {"name": "shell"}}], "messages": [
+        {"role": "system", "content": "sys"}, {"role": "user", "content": "issue"},
+        {"role": "assistant", "content": None, "tool_calls": [{"id": "1"}]}, {"role": "tool", "content": "out 1"},
+        {"role": "assistant", "content": None, "tool_calls": [{"id": "2"}]}, {"role": "tool", "content": "out 2"},
+        {"role": "user", "content": "[notice] the board changed"}]}
+    openrouter._add_anthropic_cache_markers(request)
+    messages = request["messages"]
+    assert messages[5]["content"] == [{"type": "text", "text": "out 2", "cache_control": {"type": "ephemeral"}}]
+    assert messages[3]["content"] == "out 1" and messages[6]["content"] == "[notice] the board changed"
+    assert openrouter_cache._breakpoints(request) <= openrouter_cache.MAX_BREAKPOINTS
+    # A request already at four breakpoints gets no fifth.
+    full = {"tools": [], "messages": [{"role": "user", "content": [{"type": "text", "text": "x",
+                                                                     "cache_control": {"type": "ephemeral"}}] * 4},
+                                      {"role": "tool", "content": "out"}]}
+    assert not openrouter_cache.mark_last_tool_result(full) and full["messages"][1]["content"] == "out"

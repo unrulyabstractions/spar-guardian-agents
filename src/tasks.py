@@ -32,6 +32,8 @@ config asks for a regulator or a disregulator. Two openmath agents without roles
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from inspect_ai import Task, task
 from inspect_ai.dataset import Sample
 from orbit.configs.execution import AgentGroup
@@ -60,13 +62,22 @@ from src.swarm.controls import BASELINE, defenses_for
 from src.swarm.probes import end_of_episode_probes
 from src.swarm.rules import rules_setup, schedule, turn_rules_defense
 
-JUDGE_ADDENDUM = settings.LUCY / "experiments" / "orbit_cheatbench" / "judge_addendum.py"
+# Lucy's judge addenda by judge_addendum's value; True means orbit.
+JUDGE_ADDENDA = {"orbit": settings.LUCY / "experiments" / "orbit_cheatbench" / "judge_addendum.py",
+                 "guardian": settings.LUCY / "experiments" / "guardian_baseline" / "judge_addendum.py"}
 MONITOR_FACTOR = 3        # an LLM control's own calls count toward the token limit
 
 
 # --------------------------------------------------------------------------
 # the parts of one task
 # --------------------------------------------------------------------------
+def judge_addendum_path(value: bool | str | None) -> Path | None:
+    """The addendum a judge_addendum value names: none for False or None, the orbit addendum for True."""
+    if not value:
+        return None
+    return JUDGE_ADDENDA["orbit" if value is True else value]
+
+
 def level_key(benchmark: Benchmark) -> str:
     return roles_module.LEVEL_KEYS[benchmark.name]
 
@@ -145,8 +156,9 @@ def first_message_groups(sample: Sample, names: list[str]) -> list[AgentGroup]:
 
 
 def scorers(benchmark: Benchmark, config: SwarmConfig) -> list:
+    addendum = judge_addendum_path(config.judge_addendum)
     judge = cheatbench_judge(benchmark.name, str(benchmark.task_root), judge=config.judge,
-                             addendum=str(JUDGE_ADDENDUM) if config.judge_addendum else None, batch=config.batch_judge)
+                             addendum=str(addendum) if addendum else None, batch=config.batch_judge)
     probes = [end_of_episode_probes()] if config.awareness_probe else []
     return [*benchmark.scorers(), judge, *probes]
 

@@ -7,3 +7,12 @@ gpt-6-sol:
   api_key_env: OPENAI_API_KEY
   generation_config:
     reasoning_effort: high
+
+# Luna through OpenRouter, as in Lucy's CheatBench and ORBIT runs
+# (submodules/lucy/experiments/cheatbench_swe/judge_models.yaml, same model and effort). Judge with batch_judge off
+# (--set judge=gpt-6-luna --set batch_judge=false): OpenRouter has no batch API behind Inspect's batch setting.
+gpt-6-luna:
+  model: openrouter/openai/gpt-6-luna
+  api_key_env: OPENROUTER_API_KEY
+  generation_config:
+    reasoning_effort: high

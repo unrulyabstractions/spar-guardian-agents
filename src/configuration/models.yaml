@@ -7,7 +7,9 @@
 # CheatBench's own harness; every CheatBench entry appears once. `status` is default (the agents' default), judge
 # (the judge's default), candidate, or legacy (a newer model of the same provider supersedes it). `usd_per_million`
 # is the provider's own list price on `as_of`, in USD per million tokens, unless `price_source` says otherwise.
-# Context and output limits are tokens. Mock models (`mockllm/model`) need no entry.
+# Context and output limits are tokens. Mock models (`mockllm/model`) need no entry. An entry may pin its route:
+# `model_args` go to Inspect's get_model (OpenRouter's `provider` routing) and `generate` to the agents' generate
+# config (reasoning effort, parallel_tool_calls, max_tokens); src/run.py passes both and the eval log records them.
 
 as_of: 2026-10-27
 
@@ -147,6 +149,22 @@ models:
     notes: >-
       CheatBench's LiteLLM route. On OpenRouter this id is the April snapshot (V4 Pro 0423), not the 0813 release
       that DeepSeek's own deepseek-v4-pro serves.
+  deepseek-v4.1-flash-deepinfra:
+    inspect: openrouter/deepseek/deepseek-v4.1-flash
+    provider: openrouter
+    version: DeepSeek-V4.1-Flash-0910 (deepseek/deepseek-v4.1-flash-20260910)
+    context: 1048576
+    max_output: 131072
+    usd_per_million: {input: 0.14, cached_input: 0.0042, output: 0.42}
+    price_source: OpenRouter listing, the model's own price (its DeepInfra endpoints list 0.112 to 0.21 in)
+    model_args: {provider: {order: [deepinfra], allow_fallbacks: false}}
+    generate: {reasoning_effort: high, parallel_tool_calls: false, max_tokens: 16000}
+    cheatbench: []
+    status: candidate
+    notes: >-
+      Lucy's model and route (submodules/lucy/experiments/orbit_cheatbench/experiment.yaml, E7 and the Terminus-2
+      runs): the September snapshot, pinned to DeepInfra with no fallback, since the SPAR key's privacy setting
+      excludes DeepSeek's own endpoint. Not the 1017 snapshot deepseek-flash-openrouter names.
 
   # ---------------------------------------------------------------------------------------------- Google
   gemini-3.8-flash:
@@ -241,6 +259,21 @@ models:
     cheatbench: []
     status: default
     notes: The cheapest GPT-6, and the agents' default since 2026-10-27 at the user's word; no run yet.
+  gpt-6-luna-openrouter:
+    inspect: openrouter/openai/gpt-6-luna
+    provider: openrouter
+    context: 1050000
+    max_output: 128000
+    reasoning: reasoning model; the judge entry sets effort high
+    usd_per_million: {input: 0.10, cached_input: 0.01, output: 0.50}
+    price_source: OpenRouter listing
+    cheatbench: []
+    judge_entry: gpt-6-luna
+    status: candidate
+    notes: >-
+      Luna as the judge on the one OpenRouter key (src/benchmark/models.yaml gpt-6-luna), as in Lucy's CheatBench
+      and ORBIT runs (submodules/lucy/experiments/cheatbench_swe/judge_models.yaml). Judge it with batch_judge off:
+      the batch API is OpenAI's, not OpenRouter's.
   gpt-6-astra:
     inspect: openai/gpt-6-astra
     provider: openai
@@ -335,6 +368,22 @@ models:
     cheatbench: []
     status: candidate
     notes: The cheapest Claude.
+  claude-haiku-5-5-openrouter:
+    inspect: openrouter/anthropic/claude-haiku-5.5
+    provider: openrouter
+    version: claude-haiku-5.5-20261007
+    context: 1000000
+    max_output: 128000
+    reasoning: adaptive thinking; effort set to medium (its default) so the log records it
+    usd_per_million: {input: 0.10, cached_input: 0.01, output: 0.50}
+    price_source: OpenRouter listing, Anthropic's endpoint
+    model_args: {provider: {order: [anthropic], allow_fallbacks: false}}
+    generate: {reasoning_effort: medium, parallel_tool_calls: false, max_tokens: 16000}
+    cheatbench: []
+    status: candidate
+    notes: >-
+      Haiku on the one OpenRouter key, pinned to Anthropic's own endpoint. Inspect's OpenRouter provider inserts
+      Anthropic's cache_control markers, so the prompt is cached as on the direct route.
   claude-opus-5:
     inspect: anthropic/claude-opus-5
     provider: anthropic

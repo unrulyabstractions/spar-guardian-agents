@@ -80,7 +80,9 @@ def cmd_plots(args: argparse.Namespace) -> int:
 
 def cmd_judge(args: argparse.Namespace) -> int:
     from src import run  # the same four seconds as in cmd_run
-    return run.judge(Path(args.eval_log), args.run_name, args.judge, judge_errors=args.judge_errors)
+    addendum = {"run": None, "none": False}.get(args.addendum, args.addendum)
+    return run.judge(Path(args.eval_log), args.run_name, args.judge, judge_errors=args.judge_errors,
+                     addendum=addendum, batch=args.batch)
 
 
 def cmd_ladder(args: argparse.Namespace) -> int:
@@ -135,6 +137,10 @@ def add_judge_parser(subparsers) -> None:
     judge.add_argument("--judge", default=settings.JUDGE_MODEL, help="entry in src/benchmark/models.yaml")
     judge.add_argument("--judge-errors", action="store_true",
                        help="judge a run even when an episode failed in the harness or at the provider")
+    judge.add_argument("--addendum", choices=("run", "none", "orbit", "guardian"), default="run",
+                       help="Lucy's judge addendum (default: the run's judge_addendum)")
+    judge.add_argument("--batch", action=argparse.BooleanOptionalAction, default=None,
+                       help="the provider's batch API (default: the run's batch_judge)")
     judge.set_defaults(func=cmd_judge)
 
 

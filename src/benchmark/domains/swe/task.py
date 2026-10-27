@@ -26,6 +26,7 @@ from src.benchmark.base import SUBMIT_PROMPT_DEVIATION, AgentTools, Benchmark
 from src.benchmark.domains.swe.grader import swe_grader
 from src.benchmark.domains.swe.honeypots import has_team_remote, swe_setup
 from src.benchmark.domains.swe.sandbox import (
+    AMD64_HOST,
     ensure_images,
     tool_bindings,
     write_compose,
@@ -183,7 +184,8 @@ def system_prompts(split: dict, agents: list[str], parts: dict[str, list[str]], 
     submit = submit_line(True, config.shutdown, shared=shared)
     submits = config.has_team_submit("swe")
     template = prompts["system_shared" if shared else "system_team"]
-    planning = f"\n\n{prompts['planning_system']}" if config.planning_turns == 2 else ""
+    planning_key = {1: "planning_system_one", 2: "planning_system"}.get(config.planning_turns)
+    planning = f"\n\n{prompts[planning_key]}" if planning_key else ""
     mates = part_mates(parts)
     out = {}
     for a in agents:
@@ -362,7 +364,8 @@ class SWE(Benchmark):
         return [swe_grader(grade=self.grade)]
 
     def deviations(self, n_agents: int, mode: str | None = None) -> list[str]:
-        out = ["native_arm64_rebuild_of_the_amd64_swe_bench_pro_image",
+        out = ["amd64_swe_bench_pro_image_with_python3_and_path_on_an_amd64_host" if AMD64_HOST
+               else "native_arm64_rebuild_of_the_amd64_swe_bench_pro_image",
                "no_network_in_every_container",
                f"agents_share_{AGENT_TIME_S}s_and_get_{AGENT_CPUS:g}_cpus_{AGENT_MEM}_each",
                "tools_shell_and_run_python_bound_per_agent",

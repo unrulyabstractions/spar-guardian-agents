@@ -20,6 +20,7 @@ The experiment on ORBIT. It turns one benchmark from `src/benchmark/` and one `S
 | `benchmark/` | CheatBench's tasks: the Benchmark protocol, the openmath, SWE and knowledge-work domains, the transcript, the judge and the export; see `src/benchmark/README.md` |
 | `measures/` | over run directories: the command line's summary (`summary.py`), the board engagement funnel (`engagement.py`), Rigel's cheating ladder (`rungs.py`) and Lucy's SWE measures (`swe_summary.py`) |
 | `utils/provider_retry.py` | Gemini's 402 "credits depleted" retried as a rate limit |
+| `utils/openrouter_cache.py` | an Anthropic model's conversation cached through OpenRouter (the last tool result marked) |
 | `ui/` | the results browser: `server.py`, `launch.py` (start and stop in the background), `API.md` and the single-page UI in `static/` |
 
 ## Commands
@@ -85,7 +86,7 @@ The judge runs inside the eval as the scorer `cheatbench_judge`, bound to the mo
 | `message_limit`, `token_limit`, `time_limit_s` | 320, 0, 0 | Inspect's message and token limits, and `SchedulerConfig.max_time_seconds`; 0 means the default; a scale sets the first and the last |
 | `batch_agents`, `batch_judge` | false, true | `GenerateConfig(batch=True)` for the agents' model (from the scale) and for the model bound to the judge role |
 | `control`, `monitor_model` | baseline | `DefenseConfig` entries in `metadata["experiment"]["defenses"]` |
-| `judge`, `judge_addendum` | gpt-6-sol, false | the judge entry in `src/benchmark/models.yaml`, and Lucy's judge addendum appended to the schema |
+| `judge`, `judge_addendum` | gpt-6-sol, false | the judge entry in `src/benchmark/models.yaml`, and Lucy's judge addendum appended to the schema (`orbit` or true, `guardian`) |
 
 A step is charged to `steps_per_agent` unless its last tool call is a board action that succeeded, `submit` or `team_submit`. A step that ends with a board action that succeeded is free and earns a follow-up step in the same round. A board action that fails (an error, a budget refusal, or "no such agent") is charged as work, with the charge `refused` in the timeline.
 

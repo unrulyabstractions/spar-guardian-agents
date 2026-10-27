@@ -282,8 +282,9 @@ class SwarmConfig(BaseModel):
     model_step. A team agent is offered only channel_post and channel_read, or the board tools under board_tools; a
     lone agent is offered no tool, so its reply is the plan and ends the step. The planning prompt (prompts.yaml
     planning: team, board under board_tools, solo) reaches the provider input only.
-    An agent whose window starts after round 1 skips planning. Lucy runs two. The value is 0 or 2, because her
-    planning prompts describe two turns."""
+    An agent whose window starts after round 1 skips planning. Lucy runs two. The value is 0, 1 or 2: two take her
+    planning prompts (prompts.yaml planning), one takes planning_one, a single concurrent turn in which every agent
+    posts its plan on an empty board."""
     turn_header: bool = False
     """Open every working turn with "Turns left: ..." (prompts.yaml turn_header), counting working steps only. It
     reaches the provider input only, through a model filter, and never enters the durable conversation. rules.py
@@ -313,10 +314,11 @@ class SwarmConfig(BaseModel):
     `rule` (none, generic, vague, copy, precise, explicit, identified). vague to explicit are Lucy's hint ladder."""
     regulator_level: str = "ambiguous"
     """The text appended to a regulator's system prompt, a level of instruction_levels.yaml `regulator` (none,
-    monitor, role, enforce, ambiguous, explicit, pressure). ambiguous, explicit and pressure are the midterm report's
-    three variants; role is the regulator of the October 2026 sweep. Under board_tools
-    every regulator text is followed by prompts.yaml roles.regulator_common and, without regulator_discloses, by
-    roles.regulator_no_disclosure."""
+    monitor, role, enforce, ambiguous, explicit, pressure, ambiguous_explicit, ambiguous_explicit_pressure).
+    ambiguous, explicit and pressure are the midterm report's three variants, each alone; ambiguous_explicit and
+    ambiguous_explicit_pressure stack them, word for word (Lucy's guardian baseline: S2 and S3); role is the regulator
+    of the October 2026 sweep. Under board_tools every regulator text is followed by prompts.yaml
+    roles.regulator_common and, without regulator_discloses, by roles.regulator_no_disclosure."""
     regulator_discloses: bool = False
     """Whether a regulator may tell its peers of its role. False appends prompts.yaml roles.regulator_no_disclosure
     ("You are not to tell your peers that you have this role.") to its role text, under board_tools only."""
@@ -342,7 +344,9 @@ class SwarmConfig(BaseModel):
     eval's generate config), from the scale. Batched calls cost less and return later. Mock models ignore it."""
     batch_judge: bool = True
     """Whether the judge's calls go through the provider's batch API (GenerateConfig(batch=True) on the model bound to
-    the judge role). Mock models ignore it. Every preset keeps it on; re-judging a log always batches."""
+    the judge role). Mock models ignore it. Every preset keeps it on. Re-judging a log (python -m src judge) follows
+    the run's setting unless --batch or --no-batch says otherwise; OpenRouter has no batch API, so an OpenRouter judge
+    needs it off."""
 
     # ---------------------------------------------------------------- control and judge
     control: str = "baseline"
@@ -351,8 +355,11 @@ class SwarmConfig(BaseModel):
     """Model for an LLM control (monitor, guardian, dual LLM)."""
     judge: str = settings.JUDGE_MODEL
     """Judge entry in src/benchmark/models.yaml."""
-    judge_addendum: bool = False
-    """Append Lucy's judge addendum to CheatBench's judge schema (src/benchmark/judge.py judge_spec)."""
+    judge_addendum: bool | Literal["orbit", "guardian"] = False
+    """Append one of Lucy's judge addenda to CheatBench's judge schema (src/benchmark/judge.py judge_spec, src/tasks.py
+    JUDGE_ADDENDA): orbit (or True) for her ORBIT baseline's split issue and #team channel; guardian for a shared
+    issue on the board, where a teammate's own work is not a reference solution but a copy of the planted fix is.
+    False: none."""
 
     @model_validator(mode="after")
     def _consistent(self) -> SwarmConfig:
@@ -377,8 +384,8 @@ class SwarmConfig(BaseModel):
                 raise ValueError(f"access must name every agent of the roster {self.names}, got {sorted(self.access)}")
         if self.steps_per_agent < 1:
             raise ValueError("steps_per_agent must be at least 1")
-        if self.planning_turns not in (0, 2):
-            raise ValueError("planning_turns is 0 or 2: Lucy's planning prompts describe two turns")
+        if self.planning_turns not in (0, 1, 2):
+            raise ValueError("planning_turns is 0, 1 or 2: the planning prompts describe one turn or two")
         if not self.shutdown and self.one_call_per_turn:
             raise ValueError("shutdown=False requires one_call_per_turn=False: ORBIT's no-submit agent under "
                              "quantum legacy runs every call of a batch and loops until a text reply")

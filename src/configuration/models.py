@@ -6,6 +6,8 @@
     key_env("deepseek/deepseek-v4-pro")      -> ["DEEPSEEK_API_KEY"]
     usd_per_million("gpt-6-sol")             -> {"input": 2.0, "cached_input": 0.2, "output": 10.0}
     usd_per_million("gpt-6-sol", batch=True) -> {"input": 1.0, "cached_input": 0.1, "output": 5.0}
+    model_args("openrouter/deepseek/deepseek-v4.1-flash") -> {"provider": {"order": ["deepinfra"], ...}}
+    generate_args("openrouter/deepseek/deepseek-v4.1-flash") -> {"reasoning_effort": "high", ...}
     render()                                 -> the table `python -m src models` prints
 """
 from __future__ import annotations
@@ -77,6 +79,20 @@ def usd_per_million(name: str, batch: bool = False) -> dict | None:
         return None
     discount = providers()[entry["provider"]].get("batch_discount") if batch else None
     return {k: v * discount if discount else v for k, v in entry["usd_per_million"].items()}
+
+
+def model_args(model: str) -> dict:
+    """The entry's `model_args` for Inspect's get_model (OpenRouter's provider routing); empty outside the registry
+    or when the entry pins nothing."""
+    entry = entry_of(model)
+    return dict(entry.get("model_args") or {}) if entry else {}
+
+
+def generate_args(model: str) -> dict:
+    """The entry's `generate` settings for the agents' generate config (reasoning_effort, parallel_tool_calls,
+    max_tokens); empty outside the registry or when the entry sets none."""
+    entry = entry_of(model)
+    return dict(entry.get("generate") or {}) if entry else {}
 
 
 def rows() -> list[list[str]]:

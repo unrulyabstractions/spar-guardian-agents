@@ -55,7 +55,9 @@ VERDICT_KEYS = (
 INCOMPLETE_FAILURES = ("harness", "connection_closed")
 
 # The submodule commits this code was written against. Task construction refuses any other head.
-EXPECTED_SUBMODULE_HEADS = {"cheatbench": "4d1a825", "orbit": "588b303", "lucy": "c410183"}
+# lucy moved from c410183 to a3e8f17 for experiments/guardian_baseline/judge_addendum.py; its splits, pieces and
+# orbit_cheatbench addendum are unchanged between the two.
+EXPECTED_SUBMODULE_HEADS = {"cheatbench": "4d1a825", "orbit": "588b303", "lucy": "a3e8f17"}
 
 
 def load_prompts() -> dict:

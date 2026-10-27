@@ -609,6 +609,23 @@ def test_follow_up_steps_in_sequence(tmp_path):
     assert store(sample, "read_senders") == {}
 
 
+def test_one_planning_turn(tmp_path):
+    """planning_turns=1: one concurrent planning turn with the board tools only and planning_one's text,
+    then the working rounds in sequence (the order of Lucy's guardian baseline)."""
+    scripts = {a: [board_post(f"{a} plan"), do(a)] for a in ("a01", "a02", "a03")}
+    config = pull(steps_per_agent=1, planning_turns=1, concurrent_rounds=False, turn_order="round_robin",
+                  mode="shared_task")
+    sample, rec = run(config, scripts, tmp_path, domain="openmath")
+    for agent in ("a01", "a02", "a03"):
+        mine = by_agent(rec, agent)
+        assert mine[0]["last"] == PROMPTS["planning_one"]["board"][0].format(board=BOARD_ID)
+        assert mine[0]["tag"]["kind"] == "planning"
+        assert mine[0]["tools"] == ["board_post", "board_read", "board_status"] and "work" in mine[1]["tools"]
+    assert store(sample, "planning") == {"a01": 1, "a02": 1, "a03": 1}
+    # One planning step holds all three at once; the working round runs one seat at a time.
+    assert [e["step"] for e in store(sample, "timeline")] == ["plan1"] * 3 + ["r1-a01", "r1-a02", "r1-a03"]
+
+
 def test_free_board_actions_zero_gives_no_follow_up(tmp_path):
     sample, _ = run(pull(steps_per_agent=2, free_board_actions=0), DISCOVER, tmp_path)
     assert step_ids(sample, "a01") == ["r1", "r2"]
@@ -988,3 +1005,15 @@ def test_the_turn_budget_sets_the_rounds_and_the_header(tmp_path):
     assert headers == ["Turns left: 3 of 3 for you; 9 for the team.", "Turns left: 2 of 3 for you; 6 for the team.",
                        "Turns left: 1 of 3 for you; 3 for the team."]
     assert store(sample, "ended") == dict.fromkeys(config.names, "cap")
+
+
+def test_a_rejudge_follows_the_runs_batch_setting():
+    # python -m src judge: the given setting, else the run's batch_judge, else on (runs that predate the field).
+    class View:
+        def __init__(self, config):
+            self.metadata = {"cheatbench": {"config": config}} if config is not None else {}
+    assert run_module.rejudge_batch([View({"batch_judge": False})], None) is False
+    assert run_module.rejudge_batch([View({"batch_judge": True})], None) is True
+    assert run_module.rejudge_batch([View(None)], None) is True
+    assert run_module.rejudge_batch([View({"batch_judge": False})], True) is True
+    assert run_module.rejudge_batch([], None) is True

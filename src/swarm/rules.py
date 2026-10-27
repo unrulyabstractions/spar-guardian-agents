@@ -718,7 +718,8 @@ class TurnRulesFilter(ModelFilter):
         st.opened = {**st.opened, agent: n + 1}
         if planning:
             plan_side = "board" if known and self.config.board_tools else side
-            return "planning", self.prompts["planning"][plan_side][n].format(board=BOARD_ID)
+            texts = self.prompts["planning_one" if self.config.planning_turns == 1 else "planning"]
+            return "planning", texts[plan_side][n].format(board=BOARD_ID)
         if self.config.turn_header:
             mine, team_left = turns_left(agent)
             key = "turn_header_pooled" if self.config.pooled_steps else "turn_header"

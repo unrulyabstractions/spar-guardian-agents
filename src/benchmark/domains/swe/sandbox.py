@@ -2,13 +2,15 @@
 
 One compose project per sample, every service without network: `default` is the grader, and each agent has a service
 of its own name. SWE.check refuses the large scales, whose teams would need a hundred services or more.
-The native image is built from scripts/native.Dockerfile.
+The native image is built from scripts/native.Dockerfile, an arm64 rebuild for Go tasks. On an amd64 host the amd64
+image is native already: scripts/host.Dockerfile adds the same python3, PATH and /logs on top of it, for any language.
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import os
+import platform
 import shlex
 import subprocess
 from pathlib import Path
@@ -23,6 +25,8 @@ from src.configuration.swe import AGENT_CPUS, AGENT_MEM, BUILD, TOOL_TIMEOUT_S, 
 # The recipe's text is hashed into the native image's label, so any change to it (the comment line included)
 # rebuilds the image, which takes about half an hour. The comment line keeps the module's old path for that reason.
 NATIVE_DOCKERFILE = (Path(__file__).parent / "scripts" / "native.Dockerfile").read_text()
+HOST_DOCKERFILE = (Path(__file__).parent / "scripts" / "host.Dockerfile").read_text()
+AMD64_HOST = platform.machine().lower() in ("x86_64", "amd64")
 
 
 def _docker(*args: str, check: bool = True, timeout: int = 3600) -> subprocess.CompletedProcess:
@@ -66,15 +70,26 @@ def native_recipe(tags: dict[str, str], source_id: str) -> tuple[str, str]:
     return text.replace("RECIPE", recipe), recipe
 
 
+def host_recipe(tags: dict[str, str], source_id: str) -> tuple[str, str]:
+    """On an amd64 host: the Dockerfile text that layers native.Dockerfile's additions on the amd64 image, and its
+    recipe hash."""
+    path = _source_facts(tags["amd64"])["env"]["PATH"]
+    text = HOST_DOCKERFILE.format(source=tags["amd64"], path_q=shlex.quote(path), source_id=source_id,
+                                  recipe="RECIPE")
+    recipe = hashlib.sha256(text.encode()).hexdigest()[:16]
+    return text.replace("RECIPE", recipe), recipe
+
+
 def ensure_images(issue: str, *, log=print) -> dict[str, str]:
     """Build the amd64 and native images when missing or stale; return their tags and ids.
 
-    Staleness is by label: the native image records the amd64 image id and its recipe hash. A Python task
-    raises: its native rebuild would need its dependencies reinstalled.
+    Staleness is by label: the native image records the amd64 image id and its recipe hash. On an arm64 host a
+    Python task raises: its native rebuild would need its dependencies reinstalled. On an amd64 host every task's
+    native image is the amd64 image with host.Dockerfile's additions.
     """
     instance = load_split(issue)["task"]
     language = task_config(instance).get("repo_language")
-    if language != "go":
+    if language != "go" and not AMD64_HOST:
         raise NotImplementedError(f"{issue}: the native rebuild is implemented for Go tasks only "
                                   f"(repo_language={language!r})")
     tags = image_tags(issue)
@@ -83,7 +98,7 @@ def ensure_images(issue: str, *, log=print) -> dict[str, str]:
         _docker("build", "--platform", "linux/amd64", "-t", tags["amd64"], str(task_dir(instance) / "environment"),
                 timeout=7200)
     source_id = _image_id(tags["amd64"])
-    text, recipe = native_recipe(tags, source_id)
+    text, recipe = (host_recipe if AMD64_HOST else native_recipe)(tags, source_id)
     if (_label(tags["native"], "cbswe.source_image_id") != source_id
             or _label(tags["native"], "cbswe.recipe_sha256") != recipe):
         folder = BUILD / issue / "native"
