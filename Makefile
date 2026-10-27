@@ -6,7 +6,7 @@ TOOLS := uv run --project tools python
 RUN ?= riemann_minimal
 
 .PHONY: help ui ui-stop smoke smoke-swe smoke-kw check test lint tools-setup scout docent graph transect contagion \
-	failures hawk analyse
+	failures hawk analyse figures tables
 
 help:  ## list the targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/\t/' | column -t -s "$$(printf '\t')"
@@ -63,3 +63,9 @@ hawk:  ## Hawk: the scan config for one run's log, and the command to run it
 	$(TOOLS) -m tools hawk $(RUN)
 
 analyse: scout graph transect contagion failures hawk  ## every tool over one run, in the order the later ones read the earlier
+
+figures:  ## the paper's design figures as PNG under tmp/figures/ (gitignored)
+	$(PY) scripts/figures.py
+
+tables:  ## the paper's configuration tables as PNG under tmp/tables/ (gitignored)
+	$(PY) scripts/tables.py

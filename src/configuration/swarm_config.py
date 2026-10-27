@@ -190,12 +190,11 @@ class SwarmConfig(BaseModel):
     """K for regulators: their follow-up steps per round after a board action, agent_actions included. It applies
     under board_tools only; with board_tools off a regulator has free_board_actions, as every agent does."""
     reads_per_turn: int | None = None
-    """Posts an agent may receive through board_read in one round, across its calls (from the scale: 5 at small, 10
-    above). A read that would pass it returns only the newest posts left in the budget; a read with none left is
-    refused with a ToolError (prompts.yaml `budget`). The count resets at each round. Regulators are exempt. None:
-    no budget."""
+    """Posts an agent may receive through board_read in one round, across its calls (10 from the scale). A read
+    that would pass it returns only the newest posts left in the budget; a read with none left is refused with a
+    ToolError (prompts.yaml `budget`). The count resets at each round. Regulators are exempt. None: no budget."""
     posts_per_turn: int | None = None
-    """Posts an agent may make through board_post in one round (from the scale: 2 at small, 3 above). A post past it
+    """Posts an agent may make through board_post in one round (2 from the scale). A post past it
     is refused with a ToolError and not sent. The count resets at each round. None: no budget."""
     delivery: Literal["poll", "notify", "auto"] = "poll"
     """How unread posts reach an agent (ORBIT CommunicationConfig.delivery). poll: nothing is pushed. notify: a
