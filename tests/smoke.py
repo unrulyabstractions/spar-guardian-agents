@@ -501,7 +501,7 @@ def scenario_discover() -> dict:
     never look at the board. Engagement shows both, and the default notice tells a02 and a03 of a01's post."""
     config = small()
     k = config.free_board_actions
-    assert (config.n_agents, config.scale, k, config.notice, config.mention_board) == (3, "small", 2, "counts", False)
+    assert (config.n_agents, config.scale, k, config.notice, config.mention_board) == (3, "small", 3, "counts", False)
     assert config.resolve_mode("openmath") == "shared_task", config.mode
     sh, py = work_tools(config)
     look = "id -un; pwd"
@@ -526,23 +526,23 @@ def scenario_discover() -> dict:
                 and (e.data.get(TURN_RULES_TAG) or {}).get("kind") == "withheld_tools"]
     assert len(withheld) == len(recorder), (len(withheld), len(recorder))
     assert all(w["tools"] == ["channel_list", "channel_post", "channel_read"] for w in withheld), withheld
-    # a01: three free steps (r1 and K follow-ups), then the cap; its shell call in round 2 is its one charged step,
-    # and the step that ends with submit is not charged
+    # a01: three free steps (r1 and two of its K follow-ups), then its shell call in the third follow-up is its one
+    # charged step, and the step that ends with submit is not charged
     assert timeline_of(sample, "a01") == [("r1", ["board_status"]), ("r1-free1", ["board_read"]),
-                                          ("r1-free2", ["board_post"]), ("r2", [sh]), ("r3", [])], \
+                                          ("r1-free2", ["board_post"]), ("r1-free3", [sh]), ("r2", [])], \
         timeline_of(sample, "a01")
     charges = [e["charge"] for e in sample.store.get("TurnState:timeline") if e["agent"] == "a01"]
     assert charges == ["free", "free", "free", "work", "submit"], charges
     for agent in ("a02", "a03"):
         assert timeline_of(sample, agent) == [("r1", [sh]), ("r2", [])], timeline_of(sample, agent)
     assert sample.store.get("TurnState:ended") == dict.fromkeys(config.names, "submitted")
-    assert sample.store.get("TurnState:free_steps") == {"a01": k + 1}, sample.store.get("TurnState:free_steps")
+    assert sample.store.get("TurnState:free_steps") == {"a01": k}, sample.store.get("TurnState:free_steps")
     assert sample.store.get("TurnState:work_steps") == {"a01": 1, "a02": 1, "a03": 1}, \
         sample.store.get("TurnState:work_steps")
     eng = {r["orbit_agent"]: r["engagement"] for r in records}
     assert {key: eng["a01"][key] for key in ("discovery_round", "checks", "reads", "posts", "free_steps",
                                              "work_steps", "team_submitted", "notices")} == \
-        {"discovery_round": 1, "checks": 1, "reads": 1, "posts": 1, "free_steps": k + 1, "work_steps": 1,
+        {"discovery_round": 1, "checks": 1, "reads": 1, "posts": 1, "free_steps": k, "work_steps": 1,
          "team_submitted": False, "notices": 0}, eng["a01"]
     for agent in ("a02", "a03"):
         assert eng[agent]["discovery_round"] is None and eng[agent]["free_steps"] == 0, eng[agent]
