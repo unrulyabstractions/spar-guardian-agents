@@ -5,7 +5,7 @@
 # below, which says which variable holds the key, and whose `batch_discount` scales every price of a batch call.
 # `cheatbench` lists the entries of submodules/cheatbench/configs/models.yaml that run the same model through
 # CheatBench's own harness; every CheatBench entry appears once. `status` is default (the agents' default), judge
-# (the judge's default), candidate, or legacy (a newer model of the same provider supersedes it). `usd_per_million`
+# (the judge's default), candidate, or superseded (a newer model of the same provider replaces it). `usd_per_million`
 # is the provider's own list price on `as_of`, in USD per million tokens, unless `price_source` says otherwise.
 # Context and output limits are tokens. Mock models (`mockllm/model`) need no entry.
 
@@ -113,7 +113,7 @@ models:
     cheatbench: []
     status: candidate
     notes: >-
-      The legacy names deepseek-v4-flash and deepseek-v4-flash-vision-exp still resolve to this model at this
+      The older names deepseek-v4-flash and deepseek-v4-flash-vision-exp still resolve to this model at this
       price. Vision input.
   deepseek-v4-pro-0813-openrouter:
     inspect: openrouter/deepseek/deepseek-v4-pro-0813
@@ -143,7 +143,7 @@ models:
     usd_per_million: {input: 0.955, cached_input: 0.08, output: 1.911}
     price_source: OpenRouter listing
     cheatbench: [deepseek-v4-pro-litellm]
-    status: legacy
+    status: superseded
     notes: >-
       CheatBench's LiteLLM route. On OpenRouter this id is the April snapshot (V4 Pro 0423), not the 0813 release
       that DeepSeek's own deepseek-v4-pro serves.
@@ -195,7 +195,7 @@ models:
     usd_per_million: {input: 1.25, cached_input: 0.125, output: 10.00}
     price_note: prompts over 200k tokens cost 2.50, 0.25 and 15.00
     cheatbench: [gemini-2.5-pro]
-    status: legacy
+    status: superseded
     notes: Not deprecated, but Google limits the 2.5 models to accounts that used them before.
 
   # ---------------------------------------------------------------------------------------------- OpenAI
@@ -260,7 +260,7 @@ models:
     usd_per_million: {input: 4.00, cached_input: 0.40, output: 20.00}
     price_note: promotional price at least through 2026-11-21
     cheatbench: [gpt-5.6-sol, gpt-5.6-sol-chat]
-    status: legacy
+    status: superseded
     notes: gpt-5.6-sol-chat is CheatBench's entry without the reasoning summary.
   gpt-5.6-terra:
     inspect: openai/gpt-5.6-terra
@@ -270,7 +270,7 @@ models:
     reasoning: reasoning model; effort medium by default
     usd_per_million: {input: 2.00, cached_input: 0.20, output: 12.00}
     cheatbench: [gpt-5.6-terra]
-    status: legacy
+    status: superseded
   gpt-5.6-luna:
     inspect: openai/gpt-5.6-luna
     provider: openai
@@ -279,7 +279,7 @@ models:
     reasoning: reasoning model; effort medium by default
     usd_per_million: {input: 0.20, cached_input: 0.02, output: 1.20}
     cheatbench: [gpt-5.6-luna]
-    status: legacy
+    status: superseded
   gpt-5:
     inspect: openai/gpt-5
     provider: openai
@@ -288,7 +288,7 @@ models:
     reasoning: reasoning model; effort minimal, low, medium or high
     usd_per_million: {input: 1.25, cached_input: 0.125, output: 10.00}
     cheatbench: [gpt-5]
-    status: legacy
+    status: superseded
     notes: Deprecated; OpenAI removes it from the API on 2026-12-11 and names gpt-5.6-sol as the replacement.
 
   # ---------------------------------------------------------------------------------------------- Anthropic
@@ -343,7 +343,7 @@ models:
     reasoning: adaptive thinking; effort high by default
     usd_per_million: {input: 5.00, cached_input: 0.50, output: 25.00}
     cheatbench: [claude-opus-5, claude-opus-5-max]
-    status: legacy
+    status: superseded
     notes: claude-opus-5-max is CheatBench's entry at effort max.
   claude-sonnet-5:
     inspect: anthropic/claude-sonnet-5
@@ -353,7 +353,7 @@ models:
     reasoning: adaptive thinking; effort high by default
     usd_per_million: {input: 2.00, cached_input: 0.20, output: 10.00}
     cheatbench: [claude-sonnet-5, claude-sonnet-5-max]
-    status: legacy
+    status: superseded
     notes: claude-sonnet-5-max is CheatBench's entry at effort max.
 
   # ---------------------------------------------------------------------------------------------- xAI
@@ -383,7 +383,7 @@ models:
     usd_per_million: {input: 2.00, cached_input: 0.50, output: 6.00}
     price_source: OpenRouter listing
     cheatbench: [grok-4.6]
-    status: legacy
+    status: superseded
     notes: CheatBench's route, through Grok Build 1.0.30.
 
   # ---------------------------------------------------------------------------------------------- Moonshot
@@ -405,7 +405,7 @@ models:
     usd_per_million: {input: 3.00, cached_input: 0.30, output: 15.00}
     price_note: cache writes 3.00 (5 min) and 6.00 (1 h)
     cheatbench: []
-    status: legacy
+    status: superseded
     notes: Moonshot's previous flagship, open weights.
   kimi-k3-openrouter:
     inspect: openrouter/moonshotai/kimi-k3
@@ -415,7 +415,7 @@ models:
     usd_per_million: {input: 3.00, cached_input: 0.30, output: 15.00}
     price_source: OpenRouter's moonshotai endpoint, the provider CheatBench pins; the cheapest route lists 0.18 in
     cheatbench: [kimi-k3]
-    status: legacy
+    status: superseded
     notes: CheatBench's route, pinned to the moonshotai provider, through Kimi Code 0.43.0.
 
   # ---------------------------------------------------------------------------------------------- Z.ai

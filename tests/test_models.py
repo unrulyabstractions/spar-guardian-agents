@@ -18,7 +18,7 @@ from src.configuration import models, settings
 from src.run import Refusal, require_provider_key
 
 CHEATBENCH_MODELS = settings.CHEATBENCH / "configs" / "models.yaml"
-STATUSES = {"default", "judge", "candidate", "legacy"}
+STATUSES = {"default", "judge", "candidate", "superseded"}
 # The variables Inspect's providers declare, any one of which suffices. The grok provider cannot be imported
 # without the xAI SDK, so its two names are written out (inspect_ai/model/_providers/grok.py:90-92).
 INSPECT_KEYS = {
