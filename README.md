@@ -106,42 +106,32 @@ In openmath rebuilding the archive takes every slice. In knowledge work the hold
 
 ## Scales
 
-| scale | agents | steps per agent | post size | read page | reads per round | posts per round | free board actions | time limit (s) | concurrency | batch calls |
+| scale | agents | steps per agent without a budget | post size | read page | reads per round | posts per round | free board actions | time limit (s) | concurrency | batch calls |
 |---|---|---|---|---|---|---|---|---|---|---|
-| `small` | 3 | 8 | 800 | 5 | 5 | 2 | 2 | 600 | 3 | no |
-| `medium` | 10 | 60 | 4000 | 10 | 10 | 3 | 3 | 3600 | 10 | no |
-| `large` | 100 | 60 | 4000 | 10 | 10 | 3 | 3 | 7200 | 20 | yes |
-| `extra_large` | 500 | 40 | 2000 | 10 | 10 | 3 | 3 | 14400 | 50 | yes |
-| `gigantic` | 1000 | 30 | 2000 | 10 | 10 | 3 | 3 | 21600 | 50 | yes |
+| `small` | 3 | 8 | 2000 | 10 | 10 | 2 | 3 | 1800 | 3 | no |
+| `medium` | 10 | 60 | 2000 | 10 | 10 | 2 | 3 | 7200 | 10 | no |
+| `large` | 100 | 60 | 2000 | 10 | 10 | 2 | 3 | 14400 | 50 | yes |
+| `extra_large` | 500 | 40 | 2000 | 10 | 10 | 2 | 3 | 28800 | 50 | yes |
+| `gigantic` | 1000 | 30 | 2000 | 10 | 10 | 2 | 3 | 43200 | 50 | yes |
 
-A scale also derives the bound on pushed post text and the message limit. Names widen with the team: `a01` to `a99`, then `a001`, then `a0001`. SWE runs one container per agent, so it refuses `large` and above. The judge's calls go through the provider's batch API in every preset (`batch_judge`). The agents' calls use it from `large` up (`batch_agents`).
+The post size, the read page, the per-round budgets and the free board actions are the same at every scale; the team size, the time limit, the concurrency and the batch calls grow with it. Under the turn budget (next section) the steps per agent come from the budget, so the scale's own steps apply only with `--set turn_budget=none`. A scale also derives the bound on pushed post text and the message limit. Names widen with the team: `a01` to `a99`, then `a001`, then `a0001`. SWE runs one container per agent, so it refuses `large` and above. The judge's calls go through the provider's batch API in every preset (`batch_judge`). The agents' calls use it from `large` up (`batch_agents`).
 
 ## Turn budget
 
-Every domain has a turn budget counted against the swarm: the turns a single agent used on the task, divided equally among the agents. An agent's working steps are the budget divided by the team size, and at least one. The first table gives each domain's budget and its source. The knowledge-work figure is provisional until a lone run measures it. A lone run on any domain turns the budget off and gives the agent a high step cap, so its own turns set the number, and `budget` reads it back:
+Every domain has a turn budget per agent: the turns one agent of the same model needed on the task alone, the median of three lone runs. Every agent of a swarm gets that many working steps, at every scale; free board steps come on top. The table gives each domain's budget and the lone runs behind it. A lone run on any domain turns the budget off and gives the agent a high step cap, so its own turns set the number, and `budget` reads the median back:
 
 ```
-uv run python -m src run kw_lone --benchmark knowledge_work --set n_agents=1 --set turn_budget=none --set steps_per_agent=120
-uv run python -m src budget runs/kw_lone
+uv run python -m src run kw_lone_1 --benchmark knowledge_work --set n_agents=1 --set turn_budget=none --set steps_per_agent=200
+uv run python -m src budget runs/kw_lone_1 runs/kw_lone_2 runs/kw_lone_3
 ```
 
-| domain | turn budget | source |
+| domain | turn budget | lone GPT-6 Luna runs (turns, 2026-10-27) |
 |---|---|---|
-| openmath | 55 | the lone Gemini run `runs/gemini_riemann` |
-| SWE | 150 | the midterm report's figure from Lucy's runs |
-| knowledge work | 55 | provisional: openmath's figure, until a lone run |
+| openmath | 13 | 11, 13, 14 |
+| SWE | 25 | 25, 25, 44 |
+| knowledge work | 38 | 38, 41, 35 |
 
-`--set turn_budget=knowledge_work:70,swe:120` changes the named domains and keeps the table's values for the rest. `--set turn_budget=N` sets one budget for every domain. `--set turn_budget=none` turns the budget off, so the scale's steps per agent apply. A regulator's or disregulator's window must start within the rounds the budget gives the run's domain. `python -m src budget <lone_run_dir> [--scale S]` prints a lone run's turns and the steps they give at each scale. The second table gives the steps per agent at each scale.
-
-| scale | agents | openmath steps per agent | SWE steps per agent | knowledge-work steps per agent |
-|---|---|---|---|---|
-| `small` | 3 | 18 | 50 | 18 |
-| `medium` | 10 | 5 | 15 | 5 |
-| `large` | 100 | 1 | 1 | 1 |
-| `extra_large` | 500 | 1 | 1 | 1 |
-| `gigantic` | 1000 | 1 | 1 | 1 |
-
-At `large`, `extra_large` and `gigantic` the literal rule gives every agent one working step on every domain. Free board steps come on top of the working steps.
+`--set turn_budget=knowledge_work:70,swe:120` changes the named domains and keeps the table's values for the rest. `--set turn_budget=N` sets one budget for every domain. `--set turn_budget=none` turns the budget off, so the scale's steps per agent apply. A regulator's or disregulator's window must start within the rounds the budget gives the run's domain.
 
 ## Requirements
 

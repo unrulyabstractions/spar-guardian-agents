@@ -8,11 +8,10 @@ model calls use the provider's batch API. Two values follow from the others: the
 Inspect's message limit. The command line applies the preset, then `--scale`, then every `--set`, so a `--set`
 overrides any value a scale gave.
 
-Under a domain's turn budget (SwarmConfig.turn_budget, settings.TURN_BUDGETS) the working steps per agent are the
-budget divided by the team size, at least one, in place of the scale's steps_per_agent (SwarmConfig.steps_for).
-`steps_by_scale` gives that table; `python -m src budget <lone_run_dir>` prints it from a lone run's turns. At the
-large scales the literal rule gives one step per agent: 55 turns (openmath, knowledge work) over 100, 500 or 1000
-agents, and 150 (SWE) over 500 or 1000.
+Under a domain's turn budget (SwarmConfig.turn_budget, settings.TURN_BUDGETS) every agent's working steps are the
+budget, the turns one agent of the same model needed on the task alone, in place of the scale's steps_per_agent
+(SwarmConfig.steps_for), at every scale. `python -m src budget <lone_run_dir> ...` prints lone runs' turns and
+their median, the budget.
 """
 from __future__ import annotations
 
@@ -54,28 +53,17 @@ class Scale:
 
 
 SCALES: dict[str, Scale] = {
-    "small": Scale(n_agents=3, steps_per_agent=8, max_message_chars=800, read_page=5, free_board_actions=2,
-                   time_limit_s=600, max_concurrency=3, batch_agents=False, reads_per_turn=5, posts_per_turn=2),
-    "medium": Scale(n_agents=10, steps_per_agent=60, max_message_chars=4000, read_page=10, free_board_actions=3,
-                    time_limit_s=3600, max_concurrency=10, batch_agents=False, reads_per_turn=10, posts_per_turn=3),
-    "large": Scale(n_agents=100, steps_per_agent=60, max_message_chars=4000, read_page=10, free_board_actions=3,
-                   time_limit_s=7200, max_concurrency=20, batch_agents=True, reads_per_turn=10, posts_per_turn=3),
+    "small": Scale(n_agents=3, steps_per_agent=8, max_message_chars=2000, read_page=10, free_board_actions=3,
+                   time_limit_s=1800, max_concurrency=3, batch_agents=False, reads_per_turn=10, posts_per_turn=2),
+    "medium": Scale(n_agents=10, steps_per_agent=60, max_message_chars=2000, read_page=10, free_board_actions=3,
+                    time_limit_s=7200, max_concurrency=10, batch_agents=False, reads_per_turn=10, posts_per_turn=2),
+    "large": Scale(n_agents=100, steps_per_agent=60, max_message_chars=2000, read_page=10, free_board_actions=3,
+                   time_limit_s=14400, max_concurrency=50, batch_agents=True, reads_per_turn=10, posts_per_turn=2),
     "extra_large": Scale(n_agents=500, steps_per_agent=40, max_message_chars=2000, read_page=10, free_board_actions=3,
-                         time_limit_s=14400, max_concurrency=50, batch_agents=True, reads_per_turn=10,
-                         posts_per_turn=3),
+                         time_limit_s=28800, max_concurrency=50, batch_agents=True, reads_per_turn=10,
+                         posts_per_turn=2),
     "gigantic": Scale(n_agents=1000, steps_per_agent=30, max_message_chars=2000, read_page=10, free_board_actions=3,
-                      time_limit_s=21600, max_concurrency=50, batch_agents=True, reads_per_turn=10, posts_per_turn=3),
+                      time_limit_s=43200, max_concurrency=50, batch_agents=True, reads_per_turn=10, posts_per_turn=2),
 }
 SCALE_NAMES = tuple(SCALES)
 
-
-def budget_steps(budget: int, n_agents: int) -> int:
-    """Working steps per agent under a turn budget for the swarm: the budget divided equally, at least one."""
-    return max(1, budget // n_agents)
-
-
-def steps_by_scale(budget: int, names: list[str] | None = None) -> dict[str, dict[str, int]]:
-    """For each scale (or the named ones): its team size, its own steps_per_agent and the steps under the budget."""
-    return {name: {"n_agents": SCALES[name].n_agents, "scale_steps": SCALES[name].steps_per_agent,
-                   "budget_steps": budget_steps(budget, SCALES[name].n_agents)}
-            for name in (names or SCALES)}

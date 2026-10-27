@@ -45,7 +45,7 @@ def test_defaults_and_properties():
     assert (c.regulator_discloses, c.access, c.free_board_actions_regulator) == (False, "split", 10)
     assert (c.reads_per_turn, c.posts_per_turn, c.turn_budget) == (None, None, None)
     assert (c.max_message_chars, c.max_context_chars, c.max_inbox_messages, c.read_tool) == (4000, 16000, 10, True)
-    assert not c.board and c.names == ["a01"] and c.max_turns == 60 * 3
+    assert not c.board and c.names == ["a01"] and c.max_turns == 60 * 4
     c = SwarmConfig(n_agents=10, regulators=3, disregulators=2, planning_turns=2, steps_per_agent=5,
                     free_board_actions=0)
     # Seven agents take one step a round; the three regulators also take up to ten follow-ups (their own K).
@@ -61,8 +61,8 @@ def test_presets():
     # The default preset is the midterm report: the ambiguous regulator, not disclosing, split access, budgets.
     default = PRESETS["default"]
     assert (default.regulator_level, default.regulator_discloses, default.access) == ("ambiguous", False, "split")
-    assert (default.reads_per_turn, default.posts_per_turn, default.free_board_actions_regulator) == (5, 2, 10)
-    assert default.turn_budget == {"openmath": 55, "swe": 150, "knowledge_work": 55} == settings.TURN_BUDGETS
+    assert (default.reads_per_turn, default.posts_per_turn, default.free_board_actions_regulator) == (10, 2, 10)
+    assert default.turn_budget == {"openmath": 13, "swe": 25, "knowledge_work": 38} == settings.TURN_BUDGETS
     assert (default.notice, default.board_tools, default.concurrent_rounds) == ("counts", True, True)
     # The preset records its name, and build_config keeps it through the scale and every --set.
     assert default.preset == "default" and build_config("default", "medium", ["n_agents=4"]).preset == "default"
@@ -187,11 +187,11 @@ def test_names_width():
 
 SCALE_TABLE = {   # n_agents, steps_per_agent, max_message_chars, read_page, K, time_limit_s, max_concurrency, batch,
     #               reads_per_turn, posts_per_turn
-    "small": (3, 8, 800, 5, 2, 600, 3, False, 5, 2),
-    "medium": (10, 60, 4000, 10, 3, 3600, 10, False, 10, 3),
-    "large": (100, 60, 4000, 10, 3, 7200, 20, True, 10, 3),
-    "extra_large": (500, 40, 2000, 10, 3, 14400, 50, True, 10, 3),
-    "gigantic": (1000, 30, 2000, 10, 3, 21600, 50, True, 10, 3),
+    "small": (3, 8, 2000, 10, 3, 1800, 3, False, 10, 2),
+    "medium": (10, 60, 2000, 10, 3, 7200, 10, False, 10, 2),
+    "large": (100, 60, 2000, 10, 3, 14400, 50, True, 10, 2),
+    "extra_large": (500, 40, 2000, 10, 3, 28800, 50, True, 10, 2),
+    "gigantic": (1000, 30, 2000, 10, 3, 43200, 50, True, 10, 2),
 }
 
 
@@ -235,20 +235,14 @@ def test_cli_builds_the_config_in_order(argv, expected):
     c = build_config(args.preset, args.scale, args.settings)
     assert (args.preset, args.scale, c.scale, c.n_agents) == expected
     if "steps_per_agent=5" in argv:
-        assert c.steps_per_agent == 5 and c.max_concurrency == 20
+        assert c.steps_per_agent == 5 and c.max_concurrency == 50
 
 
 # ------------------------------------------------------------------------------------------------ the turn budget
 
-# The steps per agent under each domain's budget at each scale: max(1, budget // n_agents). openmath's budget is the
-# lone Gemini run's 55 turns, swe's the report's 150, knowledge_work's the provisional 55 (settings.TURN_BUDGETS).
-BUDGET_STEPS = {   # scale: (openmath, swe, knowledge_work)
-    "small": (18, 50, 18),
-    "medium": (5, 15, 5),
-    "large": (1, 1, 1),
-    "extra_large": (1, 1, 1),
-    "gigantic": (1, 1, 1),
-}
+# The steps per agent under each domain's budget: the budget itself at every scale (settings.TURN_BUDGETS, the
+# medians of three lone GPT-6 Luna runs: openmath 13, swe 25, knowledge_work 38).
+BUDGET_STEPS = {name: (13, 25, 38) for name in SCALES}
 
 
 @pytest.mark.parametrize("name", list(BUDGET_STEPS))
@@ -258,7 +252,7 @@ def test_steps_for_every_scale_with_and_without_a_budget(name):
     # CheatBench's task names resolve to the same domains.
     assert c.steps_for("openmath_agent") == c.steps_for("openmath") and c.steps_for("software_engineering") == \
         c.steps_for("swe")
-    assert c.turn_budget_for("openmath") == 55 and c.turn_budget_for("knowledge_work") == 55
+    assert c.turn_budget_for("openmath") == 13 and c.turn_budget_for("knowledge_work") == 38
     # Without a budget every domain keeps the scale's steps_per_agent; no domain means steps_per_agent too.
     off = build_config("default", name, ["turn_budget=none"])
     assert off.turn_budget is None and off.turn_budget_for("swe") is None
@@ -266,12 +260,12 @@ def test_steps_for_every_scale_with_and_without_a_budget(name):
     assert c.steps_for(None) == SCALES[name].steps_per_agent
     # An int is one budget for every domain.
     flat = build_config("default", name, ["turn_budget=300"])
-    assert flat.turn_budget == 300 and flat.steps_for("knowledge_work") == max(1, 300 // SCALES[name].n_agents)
+    assert flat.turn_budget == 300 and flat.steps_for("knowledge_work") == 300
     # Per-domain text changes the named domains and keeps the table's values for the rest.
     some = build_config("default", name, ["turn_budget=knowledge_work:70,software_engineering:120"])
     assert some.turn_budget == {"knowledge_work": 70, "swe": 120}
-    assert [some.turn_budget_for(d) for d in ("openmath", "swe", "knowledge_work")] == [55, 120, 70]
-    assert some.steps_for("knowledge_work") == max(1, 70 // SCALES[name].n_agents)
+    assert [some.turn_budget_for(d) for d in ("openmath", "swe", "knowledge_work")] == [13, 120, 70]
+    assert some.steps_for("knowledge_work") == 70
     with pytest.raises(ValidationError):
         build_config("default", name, ["turn_budget=knowledge_work:none"])
 
@@ -279,15 +273,15 @@ def test_steps_for_every_scale_with_and_without_a_budget(name):
 def test_windows_are_checked_against_the_rounds_the_budget_gives():
     from src.benchmark.domains.openmath import OpenMath
     from src.tasks import swarm_task
-    # Twelve rounds fit the 18 the small scale's budgets give openmath and knowledge work, and SWE's 50.
+    # Twelve rounds fit openmath's 13, SWE's 25 and knowledge work's 38.
     late = build_config("default", "small", ["regulators=1", "regulator_window=1:12"])
     assert late.regulator_window.end == 12
     with pytest.raises(ValidationError, match="the rounds"):
         build_config("default", "small", ["regulators=1", "regulator_window=60:"])
-    # A window that starts after openmath's 18 rounds is refused for an openmath run, before any sample is built.
+    # A window that starts after openmath's 13 rounds is refused for an openmath run, before any sample is built.
     swe_only = build_config("default", "small", ["regulators=1", "regulator_window=25:"])
     assert swe_only.check_windows("swe") is None
-    with pytest.raises(ValueError, match="after the 18 rounds"):
+    with pytest.raises(ValueError, match="after the 13 rounds"):
         swarm_task(OpenMath(), swe_only)
     # Without a budget the rounds are steps_per_agent, as before.
     with pytest.raises(ValidationError, match="the rounds"):
@@ -299,15 +293,15 @@ def test_the_turn_budget_reaches_the_plan_the_bounds_and_the_store():
     c = build_config("default", "small", ["regulators=1"])
     roles = {"a01": "worker", "a02": "regulator", "a03": "worker"}
     plan = rules.schedule(c, c.names, roles, "openmath").steps
-    assert [s.id for s in plan] == [f"r{r}" for r in range(1, 19)]
+    assert [s.id for s in plan] == [f"r{r}" for r in range(1, 14)]
     assert [s.id for s in rules.schedule(c, c.names, roles).steps] == [f"r{r}" for r in range(1, 9)]
     state = rules.initial_state(c, c.names, roles, "swe")
-    assert (state["cap"], state["rounds"], state["turn_budget"]) == (50, 50, 150)
-    assert state["free_caps"] == {"a01": 2, "a02": 10, "a03": 2} and (state["reads_per_turn"],
-                                                                      state["posts_per_turn"]) == (5, 2)
-    # The bounds follow the rounds: two workers with K=2 and the regulator with K=10, 18 rounds.
-    assert c.max_turns_for("openmath") == 18 * (2 * 3 + 11)
-    assert c.message_limit_for("openmath") == (2 * (18 + 2) + (18 + 10)) * 6 + 20
+    assert (state["cap"], state["rounds"], state["turn_budget"]) == (25, 25, 25)
+    assert state["free_caps"] == {"a01": 3, "a02": 10, "a03": 3} and (state["reads_per_turn"],
+                                                                      state["posts_per_turn"]) == (10, 2)
+    # The bounds follow the rounds: two workers with K=3 and the regulator with K=10, 13 rounds.
+    assert c.max_turns_for("openmath") == 13 * (2 * 4 + 11)
+    assert c.message_limit_for("openmath") == (2 * (13 + 3) + (13 + 10)) * 6 + 20
     # Without a budget and a larger regulator K, the bounds are the config's own.
     off = build_config("default", "small", ["turn_budget=none"])
     assert off.max_turns_for("openmath") == off.max_turns and off.message_limit_for("swe") == off.message_limit
@@ -315,30 +309,26 @@ def test_the_turn_budget_reaches_the_plan_the_bounds_and_the_store():
 
 def test_budget_command(tmp_path, capsys):
     from src import run as run_module
-    lone = tmp_path / "lone"
-    lone.mkdir()
-    (lone / "episodes.jsonl").write_text(json.dumps({"episode": "riemann#1", "orbit_roster": ["solver"],
-                                                     "orbit_agent": "solver", "n_turns": 55}) + "\n")
+    lone, other = tmp_path / "lone", tmp_path / "other"
+    for folder, turns in ((lone, 55), (other, 13)):
+        folder.mkdir()
+        (folder / "episodes.jsonl").write_text(json.dumps({"episode": "riemann#1", "orbit_roster": ["solver"],
+                                                           "orbit_agent": "solver", "n_turns": turns}) + "\n")
     args = build_parser().parse_args(["budget", str(lone)])
     assert args.func(args) == 0
     out = capsys.readouterr().out
-    assert "n_turns 55; budget 55" in out
-    rows = {line.split()[0]: line.split()[1:4] for line in out.splitlines()[2:]}
-    assert rows == {name: [str(SCALES[name].n_agents), str(SCALES[name].steps_per_agent), str(steps[0])]
-                    for name, steps in BUDGET_STEPS.items()}
-    assert "literal rule" in [line for line in out.splitlines() if line.startswith("gigantic")][0]
-    args = build_parser().parse_args(["budget", str(lone), "--scale", "medium"])
+    assert "n_turns 55" in out and "budget 55 (the median of 1 lone episode(s))" in out
+    args = build_parser().parse_args(["budget", str(lone), str(other)])
     assert args.func(args) == 0
-    out = capsys.readouterr().out.splitlines()
-    assert len(out) == 3 and out[2].split()[:4] == ["medium", "10", "60", "5"]
+    assert "budget 34 (the median of 2 lone episode(s))" in capsys.readouterr().out
     # A run of several agents, or a folder without episodes, is refused.
     team = tmp_path / "team"
     team.mkdir()
     (team / "episodes.jsonl").write_text(json.dumps({"orbit_roster": ["a01", "a02"], "n_turns": 9}) + "\n")
-    assert run_module.budget(team) == 2 and run_module.budget(tmp_path / "missing") == 2
+    assert run_module.budget([team]) == 2 and run_module.budget([tmp_path / "missing"]) == 2
     assert "not a lone agent's run" in capsys.readouterr().err
-    if (ROOT / "runs" / "gemini_riemann" / "episodes.jsonl").exists():
-        assert run_module.lone_turns(ROOT / "runs" / "gemini_riemann") == [55]
+    if (ROOT / "runs" / "om_lone_1" / "episodes.jsonl").exists():
+        assert run_module.lone_turns(ROOT / "runs" / "om_lone_1") == [11]
 
 
 def test_cli_defaults_to_the_jigsaw_honeypot():

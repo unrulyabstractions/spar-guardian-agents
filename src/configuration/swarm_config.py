@@ -12,7 +12,8 @@ docstring says what it does, which ORBIT mechanism implements it, and how it dif
 One preset exists. `default` is the team's midterm report (2026-10-26) at the small scale: the pull board, which
 agents look at through board_status, board_read and board_post and are told nothing about; per-round read and post
 budgets; regulators with agent_actions, unbounded reads and their own K, at the `ambiguous` level, not disclosing
-their role; the domain's turn budget (settings.TURN_BUDGETS) divided among the agents; split access to the exploit.
+their role; the domain's turn budget (settings.TURN_BUDGETS) as every agent's working steps; split access to the
+exploit.
 
 Three behaviours of Lucy's patch are not fields:
 - Free reads. Her patch lets channel_read run without ending the turn. Unpatched ORBIT cannot do that.
@@ -39,7 +40,7 @@ from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from src.configuration import access as access_policy
 from src.configuration import settings
 from src.configuration.access import POLICIES, Access, Policy
-from src.configuration.scales import MESSAGE_MARGIN, MESSAGES_PER_STEP, SCALE_NAMES, SCALES, budget_steps
+from src.configuration.scales import MESSAGE_MARGIN, MESSAGES_PER_STEP, SCALE_NAMES, SCALES
 
 LADDERS = ("rule", "regulator", "disregulator")
 Mode = Literal["solo_task", "shared_task", "collaboration_needed"]
@@ -182,7 +183,7 @@ class SwarmConfig(BaseModel):
     durable conversation."""
     read_page: int = 5
     """The most posts one board_read returns (from the scale). It also sizes max_context_chars in a scale."""
-    free_board_actions: int = 2
+    free_board_actions: int = 3
     """K, from the scale: follow-up steps per round after a step that ended with a board action (board_status,
     board_read or board_post as its last tool call). They do not count against steps_per_agent. 0 turns them off."""
     free_board_actions_regulator: int = 10
@@ -231,12 +232,12 @@ class SwarmConfig(BaseModel):
     ORBIT's. Lucy uses a fixed order."""
     steps_per_agent: int = 60
     """Working steps per agent, as rounds of the written plan. Planning steps and free board steps do not count.
-    Under a domain's turn budget (turn_budget) the budget's share replaces it; read it through steps_for(domain)."""
+    Under a domain's turn budget (turn_budget) the budget replaces it; read it through steps_for(domain)."""
     turn_budget: int | dict[str, int] | None = None
-    """The swarm's turn budget, counted against the swarm: the turns a single agent used on the task, divided equally
-    among the agents (steps_for: max(1, budget // n_agents) working steps per agent). Every domain has one. A dict
-    gives one budget per domain key, and a domain it leaves out keeps settings.TURN_BUDGETS' (the default preset
-    sets that table: openmath 55, swe 150, knowledge_work 55); on the command line `knowledge_work:70,swe:120`. An
+    """The turn budget per agent: the turns one agent of the same model needed on the task alone (the median of lone
+    runs), which every agent of the swarm gets as its working steps (steps_for), at every scale. Every domain has
+    one. A dict gives one budget per domain key, and a domain it leaves out keeps settings.TURN_BUDGETS' (the default
+    preset sets that table: openmath 13, swe 25, knowledge_work 38); on the command line `knowledge_work:70,swe:120`. An
     int applies to every domain. None turns the budget off, so steps_per_agent applies
     (`--set turn_budget=none`)."""
 
@@ -482,7 +483,7 @@ class SwarmConfig(BaseModel):
         return self.planning_turns + self._agent_steps(self.steps_per_agent)
 
     def turn_budget_for(self, domain: str | None) -> int | None:
-        """The swarm's turn budget on this domain (turn_budget; a domain a dict leaves out takes
+        """The turn budget per agent on this domain (turn_budget; a domain a dict leaves out takes
         settings.TURN_BUDGETS'), or None when the budget is off or no domain is named."""
         if domain is None or self.turn_budget is None:
             return None
@@ -492,10 +493,10 @@ class SwarmConfig(BaseModel):
         return self.turn_budget
 
     def steps_for(self, domain: str | None) -> int:
-        """Working steps per agent on this domain: max(1, budget // n_agents) under the domain's turn budget, else
-        steps_per_agent. rules.schedule writes this many rounds and the turn header counts against it."""
+        """Working steps per agent on this domain: the domain's turn budget, else steps_per_agent. rules.schedule
+        writes this many rounds and the turn header counts against it."""
         budget = self.turn_budget_for(domain)
-        return self.steps_per_agent if budget is None else budget_steps(budget, self.n_agents)
+        return self.steps_per_agent if budget is None else budget
 
     def check_windows(self, domain: str) -> None:
         """Raise when a regulator's or disregulator's window starts after the last round this domain gets, so the

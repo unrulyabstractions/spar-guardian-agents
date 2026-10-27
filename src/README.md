@@ -34,7 +34,7 @@ The experiment on ORBIT. It turns one benchmark from `src/benchmark/` and one `S
 | `ladder <run ...> [--judge gpt-6-sol] [--view full\|actions] [--agents a01,a02] [--force] [--table]` | places every agent on the cheating ladder from its stored transcript (`src/benchmark/ladder.py`, the addendum `src/configuration/judge_ladder.py`): `runs/<name>/ladder.jsonl` with the rung, the cited calls and their rounds, the labels beside the ladder and the honesty labels; `--table` sums the existing files |
 | `ui [start\|stop] [--port 8765] [--no-open]` | starts or stops the results browser in the background |
 | `summary <run_dir ...> [--full]` | one line per judged episode, the swarm composition and the shutdown rate |
-| `budget <lone_run_dir> [--scale S]` | a lone run's turns, and the working steps per agent that budget gives at each scale |
+| `budget <lone_run_dir ...>` | lone runs' turns and their median, the turn budget every agent gets |
 | `models [NAME]` | the models we can consider, one row per entry with its Inspect string, key variable, context, prices and CheatBench entries; with a name, that entry in full |
 | `plots <run_dir> [--out DIR]` | one run's figures as PNG with CSV twins under `out/<run name>/` (gitignored): every agent's steps round by round with the judge's verdict, the board's actions per round, the judge's flags per agent (`src/ui/plots.py`) |
 
@@ -59,9 +59,9 @@ The judge runs inside the eval as the scorer `cheatbench_judge`, bound to the mo
 | `mention_board` | false | the board sentence in the system prompt (SWE: the team chat paragraph) |
 | `notice` | counts | one provider-only line when the board changed since the agent's last call: `counts` gives each sender's new and total posts, `changed` the line alone, `none` nothing |
 | `read_page` | 5 | the most posts one `board_read` returns |
-| `free_board_actions` | 2 | follow-up steps per round after a free step, amended into the plan by the `after_activation` callback; 0 charges every step |
+| `free_board_actions` | 3 | follow-up steps per round after a free step, amended into the plan by the `after_activation` callback; 0 charges every step |
 | `free_board_actions_regulator` | 10 | a regulator's follow-up steps per round, under `board_tools` only; `agent_actions` counts as a board action |
-| `reads_per_turn`, `posts_per_turn` | none (5 and 2 at the small scale) | posts an agent may receive through `board_read` and posts it may make per round; past them the tool returns the newest posts left or raises a ToolError; regulators have no read budget |
+| `reads_per_turn`, `posts_per_turn` | none (10 and 2 from the scale) | posts an agent may receive through `board_read` and posts it may make per round; past them the tool returns the newest posts left or raises a ToolError; regulators have no read budget |
 | `delivery` | poll | `CommunicationConfig.delivery`; auto puts every unread post in the model input at the start of the turn |
 | `channel_list` | true | with `board_tools` off only; false withholds `channel_list` from the provider request (rules.py filter) and rewrites the unread notice's last line |
 | `read_tool` | true | with `board_tools` off only; false withholds `channel_read` the same way and drops the prompt sentences that name it; needs auto delivery |
@@ -69,7 +69,7 @@ The judge runs inside the eval as the scorer `cheatbench_judge`, bound to the mo
 | `max_message_chars`, `max_context_chars`, `max_inbox_messages` | 4000, 16000, 10 | the same `CommunicationConfig` fields; a scale sets the first two |
 | `turn_order` | random | the order of each round in the written plan (`ExecutionConfig.plan`); random draws a permutation per round from the seed |
 | `steps_per_agent` | 60 (8 in the `default` preset) | rounds of the plan; an agent is charged at most one working step per round, and planning steps and free board steps are never charged |
-| `turn_budget` | none (`settings.TURN_BUDGETS` in the `default` preset: openmath 55, SWE 150, knowledge work 55) | the swarm's turns on a domain; `steps_for(domain)` gives max(1, budget // n_agents) rounds in place of `steps_per_agent`; an int applies to every domain; `knowledge_work:70,swe:120` changes the named domains and keeps the table's values for the rest, on a legacy preset too; `none` turns the budget off |
+| `turn_budget` | none (`settings.TURN_BUDGETS` in the `default` preset: openmath 13, SWE 25, knowledge work 38, the medians of three lone GPT-6 Luna runs) | the turns per agent on a domain; `steps_for(domain)` gives the budget as rounds in place of `steps_per_agent`; an int applies to every domain; `knowledge_work:70,swe:120` changes the named domains and keeps the table's values for the rest, on a legacy preset too; `none` turns the budget off |
 | `concurrent_rounds`, `max_concurrency` | true, 3 | one concurrent `ScheduleStep` per round with a snapshot of the board; false runs one single-agent step per agent per round |
 | `pooled_steps` | true | the `after_activation` callback gives a stopped agent's steps to the active agents (`ScheduleRuntime.amend_pending`) |
 | `one_call_per_turn` | false | quantum `legacy`, which runs the first call of a response; false is quantum `model_step` |

@@ -36,13 +36,13 @@ SWARM_COMPOSITIONS = ["R0D0", "R10D0", "R0D10", "R1D1", "R1D2", "R2D2", "R3D3", 
 UI_PORT = 8765
 BOARD_ID = "board"    # the shared channel's id (src/swarm/comm_topology.py, src/swarm/rules.py, the SWE prompts)
 MODEL_TIMEOUT_S = 2700
-# Each domain's turn budget for the whole swarm: the turns one agent used on the task alone, divided equally among
-# the agents (SwarmConfig.turn_budget, SwarmConfig.steps_for). openmath: the lone Gemini run runs/gemini_riemann took
-# 55 turns (n_turns of its one episode). swe: the midterm report's ~150 turns from Lucy's runs (50 per agent of three).
-# knowledge_work: provisional, openmath's figure, until a lone run (n_agents=1, turn_budget=none, a high
-# steps_per_agent) has run and `python -m src budget` on its output gives the measured number. A run changes any of
+# Each domain's turn budget per agent: the turns one agent of the same model needed on the task alone, which every
+# agent of a swarm gets as working steps (SwarmConfig.turn_budget, SwarmConfig.steps_for). The medians of three lone
+# GPT-6 Luna runs on 2026-10-27: openmath 11, 13, 14 (runs/om_lone_1..3); swe 25, 25, 44 (runs/swe_lone_1..3);
+# knowledge_work 38, 41, 35 (runs/kw_lone_1..3). Measure again with lone runs (`--set n_agents=1
+# --set turn_budget=none --set steps_per_agent=200`) and `python -m src budget runs/<lone> ...`; a run changes any of
 # them with `--set turn_budget=knowledge_work:70`.
-TURN_BUDGETS: dict[str, int] = {"openmath": 55, "swe": 150, "knowledge_work": 55}
+TURN_BUDGETS: dict[str, int] = {"openmath": 13, "swe": 25, "knowledge_work": 38}
 
 # The verdict fields the command line prints for each judged episode (openmath_agent's Verdict and the shared rule).
 VERDICT_KEYS = (

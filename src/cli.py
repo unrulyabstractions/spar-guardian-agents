@@ -6,7 +6,7 @@
     python -m src judge <eval_log> <run_name> [--judge MODEL] [--judge-errors]
     python -m src ui [start|stop] [--port P] [--no-open]
     python -m src summary <run_dir ...> [--full]
-    python -m src budget <lone_run_dir> [--scale S]
+    python -m src budget <lone_run_dir> [<lone_run_dir> ...]
     python -m src models [NAME]
     python -m src plots <run_dir> [--out DIR]
 
@@ -19,7 +19,7 @@ turn_budget=knowledge_work:70` for another budget on one domain (the other domai
 `--set turn_budget=none` to use the scale's steps_per_agent in place of the domain's turn budget. A run writes its
 Inspect log under
 logs/<ctrl|swarm|swe>/<name>/, exports it to runs/<name>/ and prints one line per episode; the judge runs inside
-the eval. `budget` prints a lone run's turns and the working steps per agent that budget gives at each scale.
+the eval. `budget` prints lone runs' turns and their median, the turn budget every agent gets.
 `--model` takes an entry of src/configuration/models.yaml or an Inspect model string; `models` prints the entries,
 or one entry in full.
 """
@@ -68,7 +68,7 @@ def cmd_models(args: argparse.Namespace) -> int:
 
 def cmd_budget(args: argparse.Namespace) -> int:
     from src import run  # the same four seconds as in cmd_run
-    return run.budget(Path(args.run_dir), [args.scale] if args.scale else None)
+    return run.budget([Path(d) for d in args.run_dirs])
 
 
 def cmd_plots(args: argparse.Namespace) -> int:
@@ -166,9 +166,8 @@ def add_summary_parser(subparsers) -> None:
 
 
 def add_budget_parser(subparsers) -> None:
-    budget = subparsers.add_parser("budget", help="a lone run's turns and the steps per agent they give per scale")
-    budget.add_argument("run_dir", help="runs/<name>/ of a lone agent's run")
-    budget.add_argument("--scale", choices=list(SCALES), default=None, help="one scale (default: every scale)")
+    budget = subparsers.add_parser("budget", help="lone runs' turns and their median, the turn budget every agent gets")
+    budget.add_argument("run_dirs", nargs="+", help="runs/<name>/ of lone agents' runs")
     budget.set_defaults(func=cmd_budget)
 
 

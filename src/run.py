@@ -1,10 +1,10 @@
 """The run, judge, ladder and budget commands: run a task in process, judge a finished eval log again, place a
-run's agents on the cheating ladder, or derive the turn budget's steps per agent from a lone run.
+run's agents on the cheating ladder, or read the turn budget off lone runs.
 
     run("swarm_R3D3_s1", OpenMath(), config, model="google/gemini-3.8-flash", timeout=2700)
     judge(Path("logs/swarm/swarm_R3D3/<log>.eval"), "swarm_R3D3", "gpt-6-sol", judge_errors=False)
     ladder_runs([Path("runs/swarm_R3D3")], "gpt-6-sol", view="full")
-    budget(Path("runs/gemini_riemann"), ["medium"])
+    budget([Path("runs/om_lone_1"), Path("runs/om_lone_2"), Path("runs/om_lone_3")])
 
 A run calls inspect_ai.eval with the task from tasks.py, writes its log under logs/<kind>/<name>/, exports it to
 runs/<name>/ with src/benchmark/export.py and prints one line per episode. CheatBench's judge runs inside the eval as a
@@ -19,6 +19,7 @@ import asyncio
 import functools
 import json
 import os
+import statistics
 import sys
 from pathlib import Path
 
@@ -39,7 +40,6 @@ from src.benchmark.transcript import (
     transcript_dict,
 )
 from src.configuration import models, settings
-from src.configuration.scales import steps_by_scale
 from src.configuration.swarm_config import SwarmConfig
 from src.measures import summary
 from src.tasks import JUDGE_ADDENDUM, hidden_roles, swarm_task
@@ -271,15 +271,13 @@ def lone_turns(run_dir: Path) -> list[int]:
 
 
 @command
-def budget(run_dir: Path, scales: list[str] | None = None) -> int:
-    """Print the lone run's n_turns and, per scale, the working steps per agent that budget gives
-    (max(1, budget // n_agents), SwarmConfig.steps_for). Several episodes give their mean, rounded."""
-    turns = lone_turns(run_dir)
-    total = round(sum(turns) / len(turns))
-    print(f"{run_dir}: {len(turns)} episode(s) of a lone agent, n_turns {', '.join(map(str, turns))}; "
-          f"budget {total}")
-    print(f"{'scale':<12} {'agents':>6} {'scale steps':>11} {'budget steps':>12}")
-    for name, row in steps_by_scale(total, scales).items():
-        literal = "  (the literal rule: at least one step)" if total // row["n_agents"] < 1 else ""
-        print(f"{name:<12} {row['n_agents']:>6} {row['scale_steps']:>11} {row['budget_steps']:>12}{literal}")
+def budget(run_dirs: list[Path]) -> int:
+    """Print each lone run's n_turns and the median over every episode: the turn budget each agent gets
+    (settings.TURN_BUDGETS, SwarmConfig.turn_budget)."""
+    turns: list[int] = []
+    for run_dir in run_dirs:
+        mine = lone_turns(run_dir)
+        print(f"{run_dir}: {len(mine)} episode(s) of a lone agent, n_turns {', '.join(map(str, mine))}")
+        turns += mine
+    print(f"budget {int(statistics.median(turns))} (the median of {len(turns)} lone episode(s))")
     return 0

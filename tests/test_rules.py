@@ -494,7 +494,7 @@ def step_ids(sample, agent: str) -> list[str]:
 
 def test_concurrent_rounds_plan_shape():
     config = pull(steps_per_agent=3)
-    assert (config.n_agents, config.free_board_actions, config.max_concurrency) == (3, 2, 3)
+    assert (config.n_agents, config.free_board_actions, config.max_concurrency) == (3, 3, 3)
     plan = rules.schedule(config, config.names).steps
     assert [s.id for s in plan] == ["r1", "r2", "r3"]
     for s in plan:
@@ -551,7 +551,7 @@ DISCOVER = {
 
 
 def test_follow_up_steps_and_the_cap(tmp_path):
-    config = pull(steps_per_agent=2, turn_header=True)
+    config = pull(steps_per_agent=2, turn_header=True, free_board_actions=2)
     sample, rec = run(config, DISCOVER, tmp_path)
 
     # Follow-up steps come right after the round, hold exactly the agents whose step ended with a board action,
@@ -598,7 +598,7 @@ def test_follow_up_steps_and_the_cap(tmp_path):
 
 def test_follow_up_steps_in_sequence(tmp_path):
     """Sequential rounds (concurrent_rounds off): the follow-up runs right after the agent's own step."""
-    config = pull(steps_per_agent=2, concurrent_rounds=False, turn_order="round_robin")
+    config = pull(steps_per_agent=2, concurrent_rounds=False, turn_order="round_robin", free_board_actions=2)
     sample, _ = run(config, DISCOVER, tmp_path)
     ran = [e["step"] for e in store(sample, "timeline")]
     assert ran == ["r1-a01", "r1-a01-free1", "r1-a01-free2", "r1-a02", "r1-a02-free1", "r1-a03",
@@ -807,7 +807,7 @@ def test_agent_actions_shows_a_regulator_the_neutral_agents_calls(tmp_path):
     timeline charge "refused"."""
     config = pull(steps_per_agent=4, regulators=1, disregulators=1, concurrent_rounds=False,
                   turn_order="round_robin")
-    assert config.regulator_free_actions == 10 and config.free_board_actions == 2
+    assert config.regulator_free_actions == 10 and config.free_board_actions == 3
     scripts = {
         "a01": [do(LONG), do("A2"), do("A3"), do("A4")],
         "a02": [actions("a01"), actions("a03"), actions("a02"), actions("zz"), actions("a01", latest=1), do("R2")],
@@ -839,7 +839,7 @@ def test_agent_actions_shows_a_regulator_the_neutral_agents_calls(tmp_path):
     assert charges["a02"] == ["free", "refused", "refused", "refused", "free", "work"]
     assert charges["a03"] == ["refused", "work", "work", "work"]
     assert step_ids(sample, "a03") == ["r1-a03", "r2-a03", "r3-a03", "r4-a03"]
-    assert store(sample, "free_caps") == {"a01": 2, "a02": 10, "a03": 2}
+    assert store(sample, "free_caps") == {"a01": 3, "a02": 10, "a03": 3}
     assert store(sample, "work_steps") == {"a01": 4, "a02": 4, "a03": 4}
     assert store(sample, "free_steps") == {"a02": 2}
     # history_marks give each activation's end and round, which agent_actions reads.
@@ -977,13 +977,13 @@ def test_regulators_read_without_a_cap_and_the_budgets_refuse_and_reset(tmp_path
 
 
 def test_the_turn_budget_sets_the_rounds_and_the_header(tmp_path):
-    """Under a turn budget the plan holds budget // n_agents rounds and the header counts against that cap."""
-    config = pull(steps_per_agent=2, turn_header=True, pooled_steps=False, turn_budget=9)
+    """Under a turn budget the plan holds the budget's rounds for every agent and the header counts against that cap."""
+    config = pull(steps_per_agent=2, turn_header=True, pooled_steps=False, turn_budget=3)
     assert config.steps_for("openmath") == 3 and config.steps_for(None) == 2
     scripts = {a: [do(f"{a}-1"), do(f"{a}-2"), do(f"{a}-3")] for a in config.names}
     sample, rec = run(config, scripts, tmp_path, domain="openmath")
     assert step_ids(sample, "a01") == ["r1", "r2", "r3"]
-    assert store(sample, "cap") == 3 and store(sample, "turn_budget") == 9
+    assert store(sample, "cap") == 3 and store(sample, "turn_budget") == 3
     headers = [r["last"] for r in rec if r["agent"] == "a01" and r["tag"] and r["tag"]["kind"] == "header"]
     assert headers == ["Turns left: 3 of 3 for you; 9 for the team.", "Turns left: 2 of 3 for you; 6 for the team.",
                        "Turns left: 1 of 3 for you; 3 for the team."]
