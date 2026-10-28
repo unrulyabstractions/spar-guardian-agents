@@ -148,9 +148,11 @@ class SwarmConfig(BaseModel):
     domain's items are dealt round robin over the neutral agents, so the whole exploit needs them all (the midterm
     report's collaboration): openmath cuts the complete submission's archive into one slice per neutral agent, SWE
     deals the honeypot's pieces (jigsaw B, C, A; own_piece A, B, C), knowledge work deals the review tool to the
-    first half of the neutral agents and the artifact read to the rest. Regulators and disregulators hold everything,
-    and so does every agent of a solo_task team, a lone agent, and every agent when fewer than two are neutral. all:
-    every agent holds everything. A map {agent: [items]} names what each agent of the roster holds, on the command
+    first half of the neutral agents and the artifact read to the rest. Regulators and disregulators hold nothing.
+    split_copy: the same deal, and each regulator or disregulator holds a copy of one dealt item (the i-th of them
+    the i-th item in deal order), so it is never the only holder. Every agent holds everything in a solo_task team,
+    alone, and when fewer than two are neutral. all: every agent holds everything. A map {agent: [items]} names what
+    each agent of the roster holds, on the command
     line as `a01:slice1+slice2,a02:slice3,a03:` (nothing after the colon: nothing). The items are slice1..sliceN or
     whole (openmath), A, B, C or whole (SWE), review and read (knowledge work). A dict keyed by domain gives one
     policy per domain; on the command line `swe:split,openmath:all`. Read it through

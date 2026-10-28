@@ -580,7 +580,7 @@ JIGSAW_DEAL = {1: [["whole"]], 2: [["B", "A"], ["C"]], 3: [["B"], ["C"], ["A"]],
 @pytest.mark.parametrize("mode", ["shared_task", "collaboration_needed"])
 def test_jigsaw_deals_every_piece_over_the_neutral_agents(n, mode):
     """Every piece is held by some neutral agent: a lone neutral holds the whole fix, neutral agents beyond three
-    hold none, and a regulator or a disregulator holds the whole fix, as an informed agent."""
+    hold none, and a regulator or a disregulator holds nothing (a copy of B, the first dealt, under split_copy)."""
     from src.benchmark.domains.swe.task import pieces_by_agent
     from src.swarm.roles import assign_roles
     names = agent_names(n)
@@ -592,7 +592,13 @@ def test_jigsaw_deals_every_piece_over_the_neutral_agents(n, mode):
         neutral = [a for a in names if roles[a] == "worker"]
         pieces = pieces_by_agent(names, "jigsaw", mode, roles)
         assert {a: pieces[a] for a in neutral} == dict(zip(neutral, JIGSAW_DEAL[len(neutral)])), roles
-        assert all(pieces[a] == ["whole"] for a in names if roles[a] != "worker"), roles
+        others = [a for a in names if roles[a] != "worker"]
+        whole = len(neutral) < 2
+        assert all(pieces[a] == (["whole"] if whole else []) for a in others), (roles, pieces)
+        copies = pieces_by_agent(names, "jigsaw", mode, roles, "split_copy")
+        assert {a: copies[a] for a in neutral} == {a: pieces[a] for a in neutral}, roles
+        assert [copies[a] for a in others] == [["whole"] if whole else ["B", "C", "A"][i % 3:][:1]
+                                               for i in range(len(others))], (roles, copies)
         held = {p for a in neutral for p in pieces[a]}
         assert held == {"whole"} or held >= {"A", "B", "C"}, pieces
     assert pieces_by_agent(["a01"], "jigsaw") == {"a01": ["whole"]}     # a lone agent holds the whole fix
@@ -607,8 +613,8 @@ def test_own_piece_deals_every_piece_over_the_neutral_agents_in_shared_task(n):
     assert pieces_by_agent(names, "own_piece", "shared_task") == dict(zip(names, deal))
     roles = assign_roles(names, 1, 0, seed=n)
     pieces = pieces_by_agent(names, "own_piece", "shared_task", roles)
-    assert all(pieces[a] == ["whole"] for a in names if roles[a] != "worker"), roles
     neutral = [a for a in names if roles[a] == "worker"]
+    assert all(pieces[a] == (["whole"] if len(neutral) < 2 else []) for a in names if roles[a] != "worker"), roles
     assert {p for a in neutral for p in pieces[a]} in ({"whole"}, {"A", "B", "C"}), pieces
 
 
@@ -626,7 +632,7 @@ def test_the_swe_sample_deals_jigsaw_by_role():
     roles = hidden_roles(SWE("flipt-02e2", "jigsaw"), config)
     swe = build_swe("flipt-02e2", "jigsaw", config.names, config, roles=roles)
     assert [swe["pieces"][a] for a in config.names if roles[a] == "worker"] == [["B", "A"], ["C"]]
-    assert all(swe["pieces"][a] == ["whole"] for a in config.names if roles[a] != "worker")
+    assert all(swe["pieces"][a] == [] for a in config.names if roles[a] != "worker")
 
 
 def test_knowledge_rungs_follow_the_report_table():

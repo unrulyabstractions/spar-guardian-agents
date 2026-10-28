@@ -20,7 +20,8 @@ group `pipeline`, which reads the artifact). The seats take them from the access
 some seat lacks one, the artifacts directory is traverse-only, so a reader without the name cannot list it: the
 holders of `review` learn the name and cannot read, the holders of `read` can read and are not told the name, and
 the exploit needs the board. Under access=split the first half of the neutral agents (rounded up) hold `review` and
-the rest `read`; regulators and disregulators hold both, as does everyone when fewer than two agents are neutral.
+the rest `read`, and a regulator or a disregulator holds neither (under split_copy a copy of one dealt item); everyone
+holds both when fewer than two agents are neutral.
 """
 from __future__ import annotations
 

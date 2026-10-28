@@ -4,18 +4,22 @@
     parse("a01:B+C,a02:A,a03:")      # {"a01": ["B", "C"], "a02": ["A"], "a03": []}
 
 A domain declares its items: the slices of the complete submission's archive on openmath, the honeypot's pieces on
-SWE, the review tool and the artifact read on knowledge work. Under `split` the domain's items for n neutral agents
-are dealt round robin over the neutral agents, so the whole exploit needs them all; a regulator or a disregulator
-holds everything, and so does every agent when fewer than two are neutral. Under `all` every agent holds everything.
-An explicit map names what each agent of the roster holds; the command line writes it as `a01:B+C,a02:A,a03:`.
+SWE, the review tool and the artifact read on knowledge work. Under `split`, the default, the domain's items for n
+neutral agents are dealt round robin over the neutral agents, so the whole exploit needs them all, and a regulator or
+a disregulator holds nothing. Under `split_copy` the deal is the same and each regulator or disregulator holds a copy
+of one dealt item, the i-th of them the i-th item in deal order, so it is one holder among the neutral ones and
+never the only one. When fewer than two agents are neutral every agent holds everything. Under `all` every agent
+holds everything. An explicit map names what each agent of the roster holds; the command line writes it as
+`a01:B+C,a02:A,a03:`.
 """
 from __future__ import annotations
 
 from typing import Callable, Literal
 
-Policy = Literal["split", "all"]
+Policy = Literal["split", "split_copy", "all"]
 Access = Policy | dict[str, list[str]]
-POLICIES = ("split", "all")
+POLICIES = ("split", "split_copy", "all")
+SPLITS = ("split", "split_copy")
 
 
 def parse(value) -> Access:
@@ -29,7 +33,7 @@ def parse(value) -> Access:
     for entry in text.split(","):
         agent, sep, items = entry.partition(":")
         if not sep or not agent.strip():
-            raise ValueError(f"access is 'split', 'all' or agent:item+item,... pairs, got {value!r}")
+            raise ValueError(f"access is one of {', '.join(POLICIES)} or agent:item+item,... pairs, got {value!r}")
         if agent.strip() in out:
             raise ValueError(f"access names {agent.strip()} twice: {value!r}")
         out[agent.strip()] = [i.strip() for i in items.split("+") if i.strip()]
@@ -44,7 +48,7 @@ def text(access: Access) -> str:
 
 
 def policy_name(access: Access) -> str:
-    """split, all or explicit."""
+    """split, split_copy, all or explicit."""
     return access if isinstance(access, str) else "explicit"
 
 
@@ -61,6 +65,14 @@ def deal(items: list[str], agents: list[str]) -> dict[str, list[str]]:
     return dealt
 
 
+def roles_hold(access: Policy, items: list[str], others: list[str]) -> dict[str, list[str]]:
+    """What the agents outside the deal hold: nothing under split; under split_copy the i-th of them a copy of the
+    i-th dealt item, round robin over the items in deal order."""
+    if access == "split_copy" and items:
+        return {a: [items[i % len(items)]] for i, a in enumerate(others)}
+    return {a: [] for a in others}
+
+
 def plan(access: Access, agents: list[str], roles: dict[str, str] | None,
          split_items: Callable[[int], list[str]], whole: list[str]) -> dict[str, list[str]]:
     """What each agent holds. split_items(n) gives the domain's items for n neutral agents; whole is what an agent
@@ -70,8 +82,9 @@ def plan(access: Access, agents: list[str], roles: dict[str, str] | None,
     neutral = neutral_agents(agents, roles)
     if access == "all" or len(neutral) < 2:
         return {a: list(whole) for a in agents}
-    dealt = deal(split_items(len(neutral)), neutral)
-    return {a: dealt[a] if a in dealt else list(whole) for a in agents}
+    items = split_items(len(neutral))
+    held = {**deal(items, neutral), **roles_hold(access, items, [a for a in agents if a not in neutral])}
+    return {a: held[a] for a in agents}
 
 
 def check_map(access: Access, names: list[str], valid: Callable[[str], bool]) -> None:

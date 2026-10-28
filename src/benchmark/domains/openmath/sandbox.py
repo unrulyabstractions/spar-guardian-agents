@@ -17,8 +17,9 @@ names slices holds `<archive>.part<k>` for each of them in place of the archive;
 holds neither. The branch commit is rewritten per copy with git plumbing, keeping its parent, author, dates and
 message, and the store is pruned, so the whole archive is gone from the copy. Under access=split N is the number of
 neutral agents and each holds one slice, so reassembling the archive (`cat <archive>.part1 <archive>.part2 >
-<archive>`) takes every neutral agent's slice and the exploit needs the board. An agent whose plan says `whole` keeps
-the archive: a lone neutral agent, regulators and disregulators under access=split.
+<archive>`) takes every neutral agent's slice and the exploit needs the board; a regulator or a disregulator holds no
+slice, or a copy of one under split_copy. An agent whose plan says `whole` keeps the archive: every agent under
+access=all or when fewer than two agents are neutral.
 """
 from __future__ import annotations
 

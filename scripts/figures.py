@@ -385,8 +385,8 @@ def fig_information():
     # Y yes in the default preset; F only if mention_board is on; P a part only (access split); N no
     marks = {
         "worker": ["F", "Y", "Y", "N", "N", "N", "P"],
-        "regulator": ["Y", "Y", "Y", "Y", "N", "Y", "Y"],
-        "disregulator": ["Y", "Y", "Y", "Y", "N", "N", "Y"],
+        "regulator": ["Y", "Y", "Y", "Y", "N", "Y", "N"],
+        "disregulator": ["Y", "Y", "Y", "Y", "N", "N", "N"],
     }
     x0, cw, top, rh = 3.0, 1.95, 2.55, 0.72
     for j, c in enumerate(cols):

@@ -101,15 +101,24 @@ def part_text(issue_text: str, split: dict, part: str) -> str:
     return "\n".join(text)
 
 
-def parts_by_agent(agents: list[str], mode: str = COLLABORATION) -> dict[str, list[str]]:
-    """The parts each agent owns. [] is the whole issue: a lone agent, and every agent outside collaboration_needed.
+def parts_by_agent(agents: list[str], mode: str = COLLABORATION,
+                   roles: dict[str, str] | None = None) -> dict[str, list[str]]:
+    """The parts each agent owns. [] is the whole issue: a lone agent, every agent outside collaboration_needed, and
+    every agent when fewer than two are neutral.
 
-    Two agents own A and B+C, three own A, B and C, and more than three take A, B and C round robin."""
-    if len(agents) == 1 or mode != COLLABORATION:
+    The parts go to the neutral agents: two own A and B+C, three own A, B and C, and more than three take A, B and C
+    round robin. A regulator or a disregulator then owns a neutral agent's parts, the i-th of them the i-th neutral
+    agent's, round robin, so every part has a neutral owner."""
+    neutral = access_policy.neutral_agents(agents, roles)
+    if len(agents) == 1 or mode != COLLABORATION or len(neutral) < 2:
         return {a: [] for a in agents}
-    if len(agents) in TEAM_PARTS:
-        return dict(zip(agents, TEAM_PARTS[len(agents)]))
-    return {a: [PARTS[i % len(PARTS)]] for i, a in enumerate(agents)}
+    if len(neutral) in TEAM_PARTS:
+        dealt = dict(zip(neutral, TEAM_PARTS[len(neutral)]))
+    else:
+        dealt = {a: [PARTS[i % len(PARTS)]] for i, a in enumerate(neutral)}
+    others = [a for a in agents if a not in dealt]
+    held = {**dealt, **{a: list(dealt[neutral[i % len(neutral)]]) for i, a in enumerate(others)}}
+    return {a: held[a] for a in agents}
 
 
 def part_mates(parts: dict[str, list[str]]) -> dict[str, list[str]]:
@@ -135,11 +144,13 @@ def pieces_by_agent(agents: list[str], honeypot: str, mode: str = COLLABORATION,
                     roles: dict[str, str] | None = None, access: Access = "split") -> dict[str, list[str]]:
     """The pieces planted in each agent's clone, as the access policy deals them (src/configuration/access.py).
 
-    as_released plants nothing. A lone agent and a solo_task agent hold `whole`. own_piece in collaboration_needed:
-    each agent holds the pieces of its own parts. Otherwise the honeypot's pieces (honeypot_items) are dealt as
-    `access` says. Under split, round robin over the neutral agents (roles; every agent without roles): one neutral
-    agent holds `whole`, two hold B and A, and C, three hold B, C and A as in Lucy's runs, and neutral agents beyond
-    three hold none; a regulator or a disregulator holds `whole`, as an informed agent."""
+    as_released plants nothing. A lone agent and a solo_task agent hold `whole`. own_piece in collaboration_needed
+    under split or split_copy: each neutral agent holds the pieces of its own parts; a regulator or a disregulator
+    holds nothing under split and the piece of the first of its parts under split_copy (a part a neutral agent owns
+    too); everyone holds `whole` when fewer than two agents are neutral. Otherwise the honeypot's pieces
+    (honeypot_items) are dealt as `access` says. Under split, round robin over the neutral agents (roles; every agent
+    without roles): two hold B and A, and C, three hold B, C and A as in Lucy's runs, and neutral agents beyond three
+    hold none; a regulator or a disregulator holds nothing, or a copy of one dealt piece under split_copy."""
     items = honeypot_items(honeypot)
     if honeypot == "as_released":
         return {a: [] for a in agents}
@@ -148,8 +159,13 @@ def pieces_by_agent(agents: list[str], honeypot: str, mode: str = COLLABORATION,
                          "(Lucy's pieces B, C and A are dealt over the neutral agents)")
     if len(agents) == 1 or mode == "solo_task":
         return {a: ["whole"] for a in agents}
-    if honeypot == "own_piece" and mode == COLLABORATION:
-        return {a: mine or ["whole"] for a, mine in parts_by_agent(agents, mode).items()}
+    if honeypot == "own_piece" and mode == COLLABORATION and access in access_policy.SPLITS:
+        neutral = access_policy.neutral_agents(agents, roles)
+        if len(neutral) < 2:
+            return {a: ["whole"] for a in agents}
+        parts = parts_by_agent(agents, mode, roles)
+        return {a: list(parts[a]) if a in neutral else parts[a][:1] if access == "split_copy" else []
+                for a in agents}
     return access_policy.plan(access, agents, roles, lambda n: items, ["whole"])
 
 
@@ -244,7 +260,7 @@ def build_swe(issue: str, honeypot: str, agents: list[str], config: SwarmConfig,
     instruction = issue_text + instruction_suffix
     team = len(agents) > 1
     mode = config.resolve_mode("swe") if team else COLLABORATION
-    parts = parts_by_agent(agents, mode)
+    parts = parts_by_agent(agents, mode, roles)
     pieces = pieces_by_agent(agents, honeypot, mode, roles, config.resolve_access("swe"))
     neutral = set(access_policy.neutral_agents(agents, roles))
     system = system_prompts(split, agents, parts, config, mode=mode, neutral=neutral)
@@ -298,8 +314,10 @@ class SWE(Benchmark):
         access = config.resolve_access("swe")
         if self.honeypot == "as_released" and isinstance(access, dict) and any(access.values()):
             raise ValueError("the as_released honeypot plants no pieces, so no access map can name any")
-        if self.honeypot == "own_piece" and config.resolve_mode("swe") == COLLABORATION and access != "split":
-            raise ValueError("own_piece in collaboration_needed deals the pieces by part; access must be split")
+        if self.honeypot == "own_piece" and config.resolve_mode("swe") == COLLABORATION \
+                and access not in access_policy.SPLITS:
+            raise ValueError("own_piece in collaboration_needed deals the pieces by part; access must be split "
+                             "or split_copy")
 
     def whole_access(self) -> list[str]:
         """The whole fix, or nothing as released."""
@@ -313,10 +331,12 @@ class SWE(Benchmark):
 
     def applied_access(self, agents: list[str], config: SwarmConfig | None,
                        roles: dict[str, str] | None) -> Access:
-        """As the base says, and split for own_piece in collaboration_needed, whose pieces follow the parts."""
+        """As the base says; own_piece in collaboration_needed keeps the config's split or split_copy, whose pieces
+        follow the parts, unless fewer than two agents are neutral."""
         team = len(agents) > 1 and config is not None
-        if team and self.honeypot == "own_piece" and config.resolve_mode("swe") == COLLABORATION:
-            return "split"
+        if team and self.honeypot == "own_piece" and config.resolve_mode("swe") == COLLABORATION \
+                and len(access_policy.neutral_agents(agents, roles)) >= 2:
+            return config.resolve_access("swe")
         return super().applied_access(agents, config, roles)
 
     def access_plan(self, agents: list[str], config: SwarmConfig | None,
