@@ -202,7 +202,7 @@ def table_and_csv(section: str, cells: list[str], suffix: str, samples: int) -> 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--suffix", default="flashpin")
-    parser.add_argument("--samples", type=int, default=3)
+    parser.add_argument("--samples", type=int, default=4)
     args = parser.parse_args(argv)
     for section, (title, cells) in SECTIONS.items():
         print(rate_figure(section, title, cells, args.suffix, args.samples))
