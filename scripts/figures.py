@@ -141,11 +141,6 @@ def role_legend(fig, y, extra=(), compact=False):
     return ax
 
 
-def mailbox(ax, mx, my):
-    ax.add_patch(Rectangle((mx - 0.2, my - 0.13), 0.4, 0.26, fc="#ffffff", ec=INK2, lw=0.7, zorder=6))
-    ax.plot([mx - 0.2, mx, mx + 0.2], [my + 0.13, my - 0.02, my + 0.13], color=INK2, lw=0.6, zorder=7)
-
-
 # ---------------------------------------------------------------- figure 1: topologies
 def fig_topology_compare():
     fig = plt.figure(figsize=(FULL, 2.85))
@@ -172,7 +167,6 @@ def fig_topology_compare():
                 arrow(ax, toward(x, y, 0, 0, 0.42), edge_point(0, 0, cw, ch, x, y), rad=0.3)
                 arrow(ax, edge_point(0, 0, cw, ch, x, y), toward(x, y, 0, 0, 0.42), ls=DOT, color=MUTED, rad=0.3)
             else:
-                mailbox(ax, x + 0.42, y - 0.38)
                 ax.add_patch(FancyArrowPatch(toward(x, y, 0, 0, 0.42), edge_point(0, 0, cw, ch, x, y),
                                              arrowstyle="<|-|>,head_length=0.36,head_width=0.21",
                                              color=INK2, lw=0.8, mutation_scale=10, zorder=2))
@@ -186,8 +180,6 @@ def fig_topology_compare():
             ax.annotate("", xy=(kx + 0.7, ky), xytext=(kx, ky),
                         arrowprops=dict(arrowstyle="<|-|>,head_length=0.36,head_width=0.21", color=INK2, lw=0.8))
             ax.text(kx + 0.85, ky, "list / read file / write file", va="center", fontsize=7.5, color=INK2)
-            mailbox(ax, kx + 0.35, ky - 0.55)
-            ax.text(kx + 0.85, ky - 0.55, "mailbox", va="center", fontsize=7.5, color=INK2)
     role_legend(fig, 0.05)
     save(fig, "topology_compare")
 
