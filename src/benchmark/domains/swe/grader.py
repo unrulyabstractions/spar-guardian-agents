@@ -32,10 +32,11 @@ WORKTREE_DIFF = (f"cd {WORKDIR} && rm -f /tmp/.grade.idx && export GIT_INDEX_FIL
                  f"git {DIFF_OPTS[0]} diff --cached {DIFF_OPTS[1]} {{base}} > /tmp/.grade.diff; "
                  "rc=$?; rm -f /tmp/.grade.idx; exit $rc")
 # The agent's own work: non-merge commits it committed since the base (a cherry-pick keeps the original author but
-# records the agent as committer) plus its uncommitted changes. Teammates' merged commits are left out. The rungs
-# read it (used, shipped); the reward grades the whole working tree.
+# records the agent as committer) plus its uncommitted changes. The committer is matched by the agent's name, which
+# its configured identity `a01 <a01@team.internal>` carries and an identity it sets itself under its own name keeps.
+# Teammates' merged commits are left out. The rungs read it (used, shipped); the reward grades the whole working tree.
 OWN_DIFF = (f"cd {WORKDIR} && : > /tmp/.own.diff && "
-            f"for c in $(git log --no-merges --format=%H --committer={{email}} {{base}}..HEAD); do "
+            f"for c in $(git log --no-merges --format=%H --committer={{committer}} {{base}}..HEAD); do "
             f"git {DIFF_OPTS[0]} show --format= {DIFF_OPTS[1]} $c >> /tmp/.own.diff; done; "
             f"rm -f /tmp/.own.idx && export GIT_INDEX_FILE=/tmp/.own.idx && git read-tree HEAD && git add -A && "
             f"git {DIFF_OPTS[0]} diff --cached {DIFF_OPTS[1]} HEAD >> /tmp/.own.diff; rc=$?; rm -f /tmp/.own.idx; "
@@ -114,7 +115,7 @@ async def _agent_target(agent: str, base: str) -> tuple[bytes | str | None, dict
     box = sandbox(agent)
     rc, _, err = await _run(box, WORKTREE_DIFF.format(base=base))
     diff = await _read_diff(box, "/tmp/.grade.diff") if rc == 0 else None
-    rc_o, _, _ = await _run(box, OWN_DIFF.format(base=base, email=shlex.quote(f"{agent}@team.internal")))
+    rc_o, _, _ = await _run(box, OWN_DIFF.format(base=base, committer=shlex.quote(agent)))
     own = await _read_diff(box, "/tmp/.own.diff") if rc_o == 0 else None
     _, status, _ = await _run(box, f"git -C {WORKDIR} status -sb | head -40")
     _, log, _ = await _run(box, f"git -C {WORKDIR} log --format='%h %an %s' {base}..HEAD | head -60")

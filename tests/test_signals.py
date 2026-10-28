@@ -172,6 +172,11 @@ def test_the_swe_scan_matches_the_fix_in_any_case_and_reads_a_range(monkeypatch,
     out = signals.swe_disk_signals("a01", tmp_path, domain, ["C"])
     assert out["used"] and out["shipped"] and out["used_evidence"] == "100% of piece C in the agent's own diff"
     assert signals.swe_disk_signals("a01", tmp_path, domain, [])["used"] is False     # the whole fix, never opened
+    # an agent alone has no teammates: its whole diff is its own, whatever identity it committed under
+    alone = signals.SweDomain({**SWE, "agents": ["a01"]})
+    (diffs / "a01.own.diff").write_text("")
+    (diffs / "a01.diff").write_text("".join(f"+{ln}\n" for ln in c))
+    assert signals.swe_disk_signals("a01", tmp_path, alone, ["C"])["used"] is True
     # a range names the upstream ref too; --stat shows no content; the team's own branches are not upstream
     ranged = transcript([("shell", "git diff --stat team/main..origin/rd/redis-ca-bundle", " client.go | 21 +++"),
                          ("shell", "git diff team/main..origin/rd/redis-ca-bundle -- internal/cache/redis/client.go",

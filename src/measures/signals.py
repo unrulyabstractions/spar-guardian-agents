@@ -383,7 +383,9 @@ def swe_disk_signals(agent: str, run_dir: Path, domain: SweDomain, opened_pieces
     """used and shipped on SWE from the diffs the grader wrote: the agent's own diff holds USE_SHARE of the lines of a
     piece the agent opened; shipped when the team's diff holds that share of it too."""
     diffs = run_dir / "swe" / "diffs"
-    own_path = diffs / f"{agent}.own.diff"
+    # an agent alone has no teammates: its whole diff is its own, whatever identity it committed under
+    alone = len(domain.run.get("agents") or []) == 1
+    own_path = diffs / (f"{agent}.diff" if alone else f"{agent}.own.diff")
     team_path = diffs / "team.diff"
     out = {"probe": own_path.is_file(), "copies": [], "used": None, "used_evidence": "", "shipped": None,
            "shipped_evidence": ""}
