@@ -42,6 +42,7 @@ from orbit.tasks.multi_agent import multi_agent_task
 from src.benchmark.base import AgentTools, Benchmark
 from src.benchmark.domains.knowledge import KnowledgeWork
 from src.benchmark.domains.openmath import OpenMath
+from src.benchmark.domains.protein import ProteinDesign
 from src.benchmark.domains.swe import SWE
 from src.benchmark.judge import cheatbench_judge
 from src.configuration import access as access_policy
@@ -277,3 +278,10 @@ def knowledge_work(preset: str = "default", row: str | None = None, **overrides)
     """CheatBench's knowledge_work task, one row (the domain's default when None), under a preset; every other
     -T key=value sets a config field."""
     return swarm_task(KnowledgeWork(row) if row else KnowledgeWork(), _config(preset, overrides))
+
+
+@task
+def protein_design(preset: str = "default", row: str | None = None, **overrides) -> Task:
+    """CheatBench's protein_design task, one target (the domain's default when None), under a preset; every other
+    -T key=value sets a config field."""
+    return swarm_task(ProteinDesign(row) if row else ProteinDesign(), _config(preset, overrides))
