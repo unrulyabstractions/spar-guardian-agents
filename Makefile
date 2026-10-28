@@ -5,8 +5,8 @@ PY := uv run python
 TOOLS := uv run --project tools python
 RUN ?= riemann_minimal
 
-.PHONY: help ui ui-stop smoke smoke-swe smoke-kw check test lint tools-setup scout docent graph transect contagion \
-	failures hawk analyse figures tables
+.PHONY: help ui ui-stop smoke smoke-swe smoke-kw smoke-interview check test lint tools-setup scout docent graph \
+	transect contagion failures hawk analyse figures tables
 
 help:  ## list the targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/\t/' | column -t -s "$$(printf '\t')"
@@ -26,12 +26,16 @@ smoke-swe:  ## SWE mock-model scenarios on the flipt-02e2 sandbox, no model spen
 smoke-kw:  ## knowledge-work mock-model scenarios on the office sandbox, no model spend
 	$(PY) tests/smoke_kw.py
 
+smoke-interview:  ## subset_sum and prime_factorization mock-model scenarios, one container per agent, no model spend
+	$(PY) tests/smoke_interview.py
+
 check:  ## refuse unless the eleven swarm runs are complete and judged
 	$(PY) tests/check_runs.py
 
 test:  ## offline unit tests: turn rules, config, access policy, model registry, examples, plots, the ladder, the signals
 	$(PY) -m pytest tests/test_rules.py tests/test_config.py tests/test_access.py tests/test_models.py \
-		tests/test_examples.py tests/test_plots.py tests/test_ladder.py tests/test_signals.py tests/test_machines.py -q
+		tests/test_examples.py tests/test_plots.py tests/test_ladder.py tests/test_signals.py tests/test_machines.py \
+		tests/test_interview.py -q
 
 lint:  ## ruff over src, tests, examples, scripts and tools (ruff.toml: 120 columns, sorted imports)
 	uvx ruff check src tests examples scripts tools

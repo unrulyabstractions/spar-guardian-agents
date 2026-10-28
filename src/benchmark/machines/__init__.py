@@ -23,8 +23,10 @@ import os
 import subprocess
 import tarfile
 import time
+import uuid
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import yaml
 from inspect_ai.tool import ToolDef, ToolError, ToolParams, bash, python
@@ -53,6 +55,7 @@ LONE_TOOL_KWARGS = {"bash": {"user": AGENT_NAME, "timeout": TOOL_TIMEOUT_S},
 MACHINE_TOOL_NAMES = ["shell", "run_python"]
 TOOL_STATE = "task_tool_state"      # sample store: {owner: the grader's state after its last call}
 TOOL_CALLS = "task_tool_calls"      # sample store: every call, in order
+TOOL_RUN = "task_tool_run"          # sample store: this sample run's id, which keys its owners' grader states
 
 
 # --------------------------------------------------------------------------
@@ -224,17 +227,21 @@ def host_tool(name: str, description: str, parameters: ToolParams, make_call: Ca
               owner_of: Callable[[str], str]) -> dict[str, ToolFactory]:
     """A CheatBench grader tool run on the host and bound per agent, as a tool binding.
 
-    make_call(owner) builds the grader's `(state, call)` once per owner, on the owner's first call; owner_of(agent)
-    names the owner (the agent, or the team). call(arguments) is CheatBench's: it returns {content: [{text}],
-    isError}, and an error becomes an Inspect tool error with that text, as the MCP adapter shows it. Every call is
-    appended to the sample store (TOOL_CALLS) and the owner's state copied there (TOOL_STATE).
+    make_call(owner) builds the grader's `(state, call)` once per owner and sample run, on the owner's first call
+    (the run is named in its own store, so a second run of the same row and epoch in one process starts afresh);
+    owner_of(agent) names the owner (the agent, or the team). call(arguments) is CheatBench's: it returns
+    {content: [{text}], isError}, and an error becomes an Inspect tool error with that text, as the MCP adapter shows
+    it. Every call is appended to the sample store (TOOL_CALLS) and the owner's state copied there (TOOL_STATE).
     """
     def factory(ctx: ToolContext) -> ToolDef:
         agent = ctx.agent_name
         owner = owner_of(agent)
-        key = (name, ctx.sample_id, ctx.epoch, owner)
 
-        async def execute(**arguments) -> str:
+        async def execute(**kwargs: Any) -> str:      # Inspect passes the arguments through only to **kwargs: Any
+            arguments = kwargs
+            run = store().get(TOOL_RUN) or uuid.uuid4().hex
+            store().set(TOOL_RUN, run)
+            key = (name, ctx.sample_id, ctx.epoch, run, owner)
             if key not in _HOST_TOOLS:
                 _HOST_TOOLS[key] = make_call(owner)
             state, call = _HOST_TOOLS[key]

@@ -8,7 +8,7 @@ The second form skips what `python -m src run` adds: the key checks and the Gemi
 
 What comes from where:
   * the sample, its tools, its setup solver and its graders come from the benchmark (src/benchmark/domains/openmath/,
-    src/benchmark/domains/swe/);
+    src/benchmark/domains/swe/, .../knowledge/, .../interview/);
   * the roster, the board, the board tools and team_submit, the hidden roles, the written plan and the turn rules
     come from src/swarm/ (comm_topology.py, board.py, roles.py, rules.py);
   * the control's defenses come from controls.py, and CheatBench's judge is added as a scorer (src/benchmark/judge.py).
@@ -40,6 +40,7 @@ from orbit.configs.setup import AgentSpec, SetupConfig
 from orbit.tasks.multi_agent import multi_agent_task
 
 from src.benchmark.base import AgentTools, Benchmark
+from src.benchmark.domains.interview import PrimeFactorization, SubsetSum
 from src.benchmark.domains.knowledge import KnowledgeWork
 from src.benchmark.domains.openmath import OpenMath
 from src.benchmark.domains.swe import SWE
@@ -277,3 +278,17 @@ def knowledge_work(preset: str = "default", row: str | None = None, **overrides)
     """CheatBench's knowledge_work task, one row (the domain's default when None), under a preset; every other
     -T key=value sets a config field."""
     return swarm_task(KnowledgeWork(row) if row else KnowledgeWork(), _config(preset, overrides))
+
+
+@task
+def subset_sum(preset: str = "default", row: str | None = None, **overrides) -> Task:
+    """CheatBench's subset_sum interview, one question (the domain's default when None), under a preset; every other
+    -T key=value sets a config field."""
+    return swarm_task(SubsetSum(row), _config(preset, overrides))
+
+
+@task
+def prime_factorization(preset: str = "default", row: str | None = None, **overrides) -> Task:
+    """CheatBench's prime_factorization interview, one question (the domain's default when None), under a preset;
+    every other -T key=value sets a config field."""
+    return swarm_task(PrimeFactorization(row), _config(preset, overrides))
