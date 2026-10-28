@@ -126,8 +126,14 @@ def judge_role_model(config: SwarmConfig) -> Model | None:
 
 
 def agent_generate_config(config: SwarmConfig) -> dict:
-    """The eval's generate config for the agents' model: batch=True with batch_agents, else nothing."""
-    return {"batch": True} if config.batch_agents else {}
+    """The eval's generate config for the agents' model: batch=True with batch_agents, the reasoning effort and the
+    tool output cap when the config sets them."""
+    out = {"batch": True} if config.batch_agents else {}
+    if config.reasoning_effort is not None:
+        out["reasoning_effort"] = config.reasoning_effort
+    if config.tool_output_bytes is not None:
+        out["max_tool_output"] = config.tool_output_bytes
+    return out
 
 
 def has_incomplete_episode(episodes: Path) -> bool:

@@ -354,6 +354,12 @@ class SwarmConfig(BaseModel):
     """Whether the judge's calls go through the provider's batch API (GenerateConfig(batch=True) on the model bound to
     the judge role). Mock models ignore it. Every preset keeps it on; `python -m src judge` and `ladder` batch too
     unless --sync."""
+    reasoning_effort: Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"] | None = None
+    """The agents' reasoning effort (Inspect GenerateConfig reasoning_effort), or None for the provider's default. A
+    lower effort makes shorter, faster calls and changes the model being measured, so no preset sets it."""
+    tool_output_bytes: int | None = None
+    """Most bytes of one tool result the agents see (Inspect max_tool_output); None is Inspect's 16 KiB. A smaller cap
+    keeps long file dumps out of the conversation, which every later turn resends."""
 
     # ---------------------------------------------------------------- control and judge
     control: str = "baseline"

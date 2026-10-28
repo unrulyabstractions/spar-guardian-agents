@@ -136,19 +136,21 @@ models:
   deepseek-flash-openrouter:
     inspect: openrouter/deepseek/deepseek-v4.1-flash-1017
     provider: openrouter
-    routing: {order: [deepinfra], allow_fallbacks: false}
+    routing: {order: [together], allow_fallbacks: false}
     version: DeepSeek-V4.1-Flash-1017
     context: 1048576
-    usd_per_million: {input: 0.078, cached_input: 0.002, output: 0.235}
-    price_source: OpenRouter's DeepInfra fp8 endpoint on 2026-10-28, the host the routing pins, at a 51% promotion
+    usd_per_million: {input: 0.30, cached_input: 0.006, output: 1.20}
+    price_source: OpenRouter's Together endpoint on 2026-10-28, the host the routing pins
     cheatbench: []
     status: default
     notes: >-
       The agents' default since 2026-10-28 at the user's word: it cheats uninstructed on SWE and knowledge work and
       refuses the instruction on openmath, so a regulator and a disregulator both have room to move it. The
-      OpenRouter id of the model the direct deepseek-flash entry serves. Pinned to DeepInfra (fp8, caches: a
-      repeated prompt cost a fifteenth); without the promotion about 0.15, 0.004 and 0.46. DeepSeek's own endpoint
-      trains on prompts and the account's data policy excludes it; Baidu charged cached tokens in full.
+      OpenRouter id of the model the direct deepseek-flash entry serves. Pinned to Together, the fastest Flash host
+      on 2026-10-28 (260 tokens/s at the median; it caches: a repeated prompt cost a fifteenth), for the wall time:
+      the screen of 2026-10-28 ran on DeepInfra (fp8, 0.078/0.002/0.235 at a promotion), where a 100-turn cell took
+      50 minutes. DeepSeek's own endpoint trains on prompts and the account's data policy excludes it; Baidu
+      charged cached tokens in full.
   deepseek-v4-pro-openrouter:
     inspect: openrouter/deepseek/deepseek-v4-pro
     provider: openrouter
