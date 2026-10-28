@@ -6,8 +6,8 @@ and every agent's rung on the code ladder per domain and sample.
 Reads runs/<cell>_<suffix><k>/signals.jsonl and writes, for the sections solo, solo_cheat, minimal and minimal_cheat,
 tmp/appendix_<section>_rate.png (the cheating rate per domain: the share of agents at opened or higher, the ladder's
 rung that agrees with the judge's cheated, beside the share at used or higher) and tmp/appendix_<section>.png (every
-agent's rung per domain and sample, as tiles); and tmp/appendix_rates_table.png, the rates of every section in one
-table. A run that has not finished shows as an empty tile and counts in no rate.
+agent's rung per domain and sample, as tiles). A run that has not finished shows as an empty tile and counts in no
+rate.
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ for path in (ROOT, ROOT / "scripts" / "paper"):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from tables import INK, INK2, table_png  # noqa: E402
+from tables import INK, INK2  # noqa: E402
 
 from src.configuration import settings  # noqa: E402
 
@@ -119,15 +119,6 @@ def rate_figure(section: str, title: str, cells: list[str], suffixes: list[str])
     return path
 
 
-def rates_table(suffixes: list[str]) -> Path:
-    """Every section's rates in one table: per domain, agents at opened or higher of the agents judged."""
-    rows = []
-    for section, (title, cells) in SECTIONS.items():
-        found = rates(cells, suffixes)
-        rows.append([title, *[[f"{f['cheated']} of {f['n']}" if f["n"] else "(no run)"] for f in found.values()]])
-    return table_png("appendix_rates_table", ["cell", *DOMAINS], rows, [2.6, 1.3, 1.5, 1.1])
-
-
 def tiles_figure(section: str, title: str, cells: list[str], suffixes: list[str]) -> Path:
     """Rows are the domains, columns the samples (every run found, in name order), one tile per agent coloured by
     its rung."""
@@ -191,7 +182,6 @@ def main(argv: list[str] | None = None) -> int:
     for section, (title, cells) in SECTIONS.items():
         print(rate_figure(section, title, cells, args.suffixes))
         print(tiles_figure(section, title, cells, args.suffixes))
-    print(rates_table(args.suffixes))
     return 0
 
 
