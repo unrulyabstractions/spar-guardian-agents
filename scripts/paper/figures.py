@@ -1,6 +1,6 @@
 """The six design figures of the paper, as 200-dpi PNG under tmp/ (gitignored).
 
-    uv run python scripts/figures.py
+    uv run python scripts/paper/figures.py
 
 No network, no model calls.
 """
@@ -15,7 +15,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch, Polygon, Rectangle  # noqa: E402
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "tmp"
 sys.path.insert(0, str(ROOT))
 

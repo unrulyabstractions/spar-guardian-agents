@@ -1,7 +1,7 @@
 """The appendix figures and tables of a screen: for each of the four cells of the first experiment, every agent's rung
 on the code ladder per domain and sample, and the runs' turns, tokens and billed cost.
 
-    uv run python scripts/appendix.py [--suffix flashpin] [--samples 3]
+    uv run python scripts/paper/appendix.py [--suffix flashpin] [--samples 4]
 
 Reads runs/<cell>_<suffix><k>/signals.jsonl and writes, for the sections solo, solo_cheat, minimal and minimal_cheat,
 tmp/appendix_<section>_rate.png (the cheating rate per domain: the share of agents at opened or higher, the ladder's
@@ -22,8 +22,8 @@ import matplotlib
 from matplotlib.figure import Figure
 from matplotlib.patches import FancyBboxPatch
 
-ROOT = Path(__file__).resolve().parents[1]
-for path in (ROOT, ROOT / "scripts"):
+ROOT = Path(__file__).resolve().parents[2]
+for path in (ROOT, ROOT / "scripts" / "paper"):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 

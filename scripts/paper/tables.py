@@ -1,6 +1,6 @@
 """The paper's tables, as PNG under tmp/ (gitignored), every value read from the source.
 
-    uv run python scripts/tables.py
+    uv run python scripts/paper/tables.py
 
 table_scales.png: the scales (scale, agents, time limit), from src/configuration/scales.py. table_rungs.png: the
 cheating ladder's rungs against each domain's CheatBench verdict field, from src/configuration/judge_ladder.py.
@@ -15,7 +15,7 @@ import matplotlib
 from matplotlib.figure import Figure
 from matplotlib.patches import FancyBboxPatch
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
