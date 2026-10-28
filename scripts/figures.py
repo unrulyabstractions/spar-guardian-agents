@@ -1,8 +1,8 @@
-"""The seven design figures of the paper, as 200-dpi PNG under tmp/figures/ (gitignored).
+"""The six design figures of the paper, as 200-dpi PNG under tmp/ (gitignored).
 
     uv run python scripts/figures.py
 
-The values come from the source: SCALES, TURN_BUDGETS and the default preset. No network, no model calls.
+No network, no model calls.
 """
 
 import math
@@ -16,12 +16,9 @@ import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch, Polygon, Rectangle  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "tmp" / "figures"
+OUT = ROOT / "tmp"
 sys.path.insert(0, str(ROOT))
 
-from src.configuration.scales import SCALES  # noqa: E402
-from src.configuration.settings import TURN_BUDGETS  # noqa: E402
-from src.configuration.swarm_config import PRESETS  # noqa: E402
 
 # Palette: reference dataviz palette, light mode. Roles take the first two categorical slots;
 # workers are neutral (white fill, ink ring). Structures are neutral greys.
@@ -60,7 +57,6 @@ plt.rcParams.update(
 )
 
 ROLES5 = {"a01": "worker", "a02": "regulator", "a03": "worker", "a04": "disregulator", "a05": "worker"}
-DEFAULT = PRESETS["default"]
 
 
 def save(fig, name):
@@ -219,15 +215,12 @@ def fig_round_structure():
     ax.text(14.7, top - 2 * lane_h, "run over", ha="center", va="center", fontsize=7, color=INK2, zorder=4,
             bbox=dict(fc=SURF, ec="none", pad=1.5))
     hy = top + lane_h / 2 + 0.12
-    k = DEFAULT.free_board_actions
-    k_reg = DEFAULT.free_board_actions_regulator
     ax.text(3.0, hy + 0.1, "round r", ha="center", va="bottom", fontsize=8, weight="bold")
-    ax.text(7.27, hy + 0.1, f"follow-up steps (up to K = {k}; a regulator's K is {k_reg})", ha="center",
-            va="bottom", fontsize=8, weight="bold")
+    ax.text(7.27, hy + 0.1, "free follow-up steps", ha="center", va="bottom", fontsize=8, weight="bold")
     ax.text(11.65, hy + 0.1, "round r + 1", ha="center", va="bottom", fontsize=8, weight="bold")
     by = top - 4 * lane_h - lane_h / 2 - 0.15
     ky, kx = by - 0.35, 1.2
-    for a, label in [("work", "charged step (work)"), ("read", "free step (board action)")]:
+    for a, label in [("work", "charged step"), ("read", "free step")]:
         step(ax, a, kx, ky - 0.2, 0.8, 0.4, text=False)
         ax.text(kx + 0.95, ky, label, va="center", fontsize=7, color=INK2)
         kx += 0.95 + len(label) * 0.128 + 0.45
@@ -268,8 +261,7 @@ def fig_context_ledger():
         (3, "a03"): [("tool", "status"), ("tool", "read #1, #2")],
     }
     ax.text(0.15, 3.35, "What each agent sees, round by round", fontsize=8.5, weight="bold", va="center")
-    keys = [("notice", "notice: in the provider input once, not kept"),
-            ("tool", "board_status or board_read result: kept"), ("post", "own post")]
+    keys = [("notice", "notice (not kept)"), ("tool", "tool result (kept)"), ("post", "own post")]
     kx = 1.0
     for kind, label in keys:
         item(ax, kind, kx + 0.35, -0.35, 0.7, None)
@@ -309,32 +301,34 @@ def item(ax, kind, cx, cy, w, text):
 # ---------------------------------------------------------------- figure 4: engagement funnel
 def fig_engagement_funnel():
     """The board engagement stages (src/measures/engagement.py) and the tool each one takes."""
-    fig = plt.figure(figsize=(FULL, 1.1))
+    fig = plt.figure(figsize=(FULL, 1.45))
     ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
-    ax.set_xlim(0, 11.7)
-    ax.set_ylim(0, 1.7)
+    ax.set_xlim(0, 17)
+    ax.set_ylim(0, 3.7)
     ax.axis("off")
-    stages = [("on the board", "has the board tools"), ("looked", "board_status or board_read"),
+    ax.text(0.15, 3.3, "Board engagement funnel", fontsize=8.5, weight="bold", va="center")
+    stages = [("on the board", "has the board tools"), ("looked", "board_status\nor board_read"),
               ("read", "board_read"), ("posted", "board_post"), ("submitted", "team_submit")]
     fills = ["#efeee9", "#e1e0d9", "#d4d3cc", "#c7c6be", "#b9b8b0"]
-    sw, gap, y0, h, tip = 2.22, 0.08, 0.25, 1.2, 0.3
+    sw, gap, y0, h, tip = 3.26, 0.1, 0.3, 2.4, 0.45
     for i, (name, tool) in enumerate(stages):
         x = 0.15 + i * (sw + gap)
         pts = [(x, y0), (x + sw - tip, y0), (x + sw, y0 + h / 2), (x + sw - tip, y0 + h), (x, y0 + h)]
         if i > 0:
             pts.append((x + tip, y0 + h / 2))
         ax.add_patch(Polygon(pts, closed=True, fc=fills[i], ec="none", zorder=2))
-        tx = x + sw / 2 + (0.08 if i else -0.08)
-        ax.text(tx, y0 + h / 2 + 0.22, name, ha="center", va="center", fontsize=8, weight="bold")
-        ax.text(tx, y0 + h / 2 - 0.2, tool, ha="center", va="center", fontsize=6.5, color=INK2)
+        tx = x + sw / 2 + (0.12 if i else -0.12)
+        ax.text(tx, y0 + h / 2 + 0.45, name, ha="center", va="center", fontsize=8, weight="bold")
+        ax.text(tx, y0 + h / 2 - 0.45, tool, ha="center", va="center", fontsize=6.5, color=INK2, linespacing=1.2)
     save(fig, "engagement_funnel")
 
 
 def fig_read_graph():
     """Who read whose posts, as a graph: reader to sender, width by reads. Illustrative values."""
-    fig = plt.figure(figsize=(HALF, 2.6))
+    fig = plt.figure(figsize=(HALF, 2.9))
     gx = fig.add_axes([0.02, 0.02, 0.96, 0.96])
-    blank(gx, (-2.6, 2.6), (-2.75, 2.2))
+    blank(gx, (-2.6, 2.6), (-2.75, 2.85))
+    gx.text(-2.5, 2.6, "Who read whom", fontsize=8.5, weight="bold", va="center")
     pos = dict(zip(ROLES5, ring(5, 1.75)))
     reads = {("a01", "a02"): 4, ("a02", "a01"): 1, ("a03", "a02"): 3, ("a05", "a02"): 2, ("a04", "a01"): 2,
              ("a02", "a04"): 1, ("a05", "a03"): 1, ("a01", "a05"): 1}
@@ -344,7 +338,7 @@ def fig_read_graph():
               color=INK2, head=4 + count)
     for name, (x, y) in pos.items():
         agent(gx, x, y, name, ROLES5[name], r=0.32, fs=6)
-    gx.text(0, -2.55, "edge: reader to sender; width: reads (illustrative)", ha="center", va="center", fontsize=6.8,
+    gx.text(0, -2.55, "edge: reader to sender; width: reads", ha="center", va="center", fontsize=6.8,
             color=INK2)
     save(fig, "read_graph")
 
@@ -352,9 +346,10 @@ def fig_read_graph():
 # ---------------------------------------------------------------- figure 5: modes
 def fig_modes():
     """collaboration_needed: one issue in parts, one or more agents per part, the team's main as the deliverable."""
-    fig = plt.figure(figsize=(HALF, 2.3))
-    ax = fig.add_axes([0.02, 0.17, 0.96, 0.82])
-    blank(ax, (-3.1, 3.1), (-2.9, 2.75))
+    fig = plt.figure(figsize=(HALF, 2.55))
+    ax = fig.add_axes([0.02, 0.15, 0.96, 0.84])
+    blank(ax, (-3.1, 3.1), (-2.9, 3.5))
+    ax.text(-3.0, 3.2, "collaboration_needed", fontsize=8.5, weight="bold", va="center")
     bw, bh, by = 1.6, 0.6, 2.3
     box(ax, -bw / 2, by - bh / 2, bw, bh, "board", fc=PLANE, ec=INK2, fs=7.5)
     parts = {"A": ["a01", "a04"], "B": ["a02", "a05"], "C": ["a03"]}
@@ -377,101 +372,15 @@ def fig_modes():
     save(fig, "modes")
 
 
-# ---------------------------------------------------------------- figure 6: scales
-DOMAIN_LABELS = {"openmath": "openmath", "swe": "SWE", "knowledge_work": "knowledge work"}
-
-
-def fmt_time(s):
-    return f"{s // 60} min" if s < 3600 else f"{s // 3600} h"
-
-
-def constant(field):
-    """The one value a scale field takes at every scale; a field that varies is an error."""
-    values = {getattr(s, field) for s in SCALES.values()}
-    if len(values) != 1:
-        raise ValueError(f"{field} varies across scales: {sorted(values)}")
-    return values.pop()
-
-
-def fig_scales():
-    fig = plt.figure(figsize=(FULL, 2.5))
-    ax = fig.add_axes([0, 0, 0.6, 1])
-    ax.set_xlim(0, 10.2)
-    ax.set_ylim(-0.3, 6.6)
-    ax.axis("off")
-    lx0, lx1 = 2.55, 5.0
-
-    def lx(n):
-        return lx0 + (lx1 - lx0) * math.log10(n) / 3
-
-    heads = [("scale", 0.15, "left"), ("agents", 2.3, "right"), ("time limit", 6.2, "center"),
-             ("concurrency", 7.75, "center"), ("batch", 9.35, "center")]
-    hy, ry, rh = 5.6, 4.75, 0.82
-    ax.text(0.15, 6.3, "What changes with scale", fontsize=8.5, weight="bold", va="center")
-    for h, x, ha in heads:
-        ax.text(x, hy - 0.25, h, ha=ha, va="bottom", fontsize=7, color=INK2, weight="bold")
-    ax.text((lx0 + lx1) / 2, hy - 0.25, "log scale", ha="center", va="bottom", fontsize=7, color=INK2,
-            weight="bold")
-    ax.plot([0.05, 10.1], [hy - 0.4, hy - 0.4], color=INK2, lw=0.8)
-    for i, (name, s) in enumerate(SCALES.items()):
-        y = ry - i * rh
-        if i:
-            ax.plot([0.05, 10.1], [y + rh / 2, y + rh / 2], color=GRID, lw=0.5)
-        cells = [(name, 0.15, "left"), (f"{s.n_agents:,}", 2.3, "right"), (fmt_time(s.time_limit_s), 6.2, "center"),
-                 (str(s.max_concurrency), 7.75, "center"), ("yes" if s.batch_agents else "no", 9.35, "center")]
-        for text, x, ha in cells:
-            ax.text(x, y, text, ha=ha, va="center", fontsize=8)
-        ax.plot([lx0, lx1], [y, y], color=GRID, lw=0.8, zorder=1)
-        for tick in (1, 10, 100, 1000):
-            ax.plot([lx(tick)] * 2, [y - 0.08, y + 0.08], color=BASE, lw=0.6, zorder=1)
-        ax.scatter([lx(s.n_agents)], [y], s=30, c=INK2, zorder=3, edgecolors=SURF, linewidths=1.0)
-    by = ry - 4 * rh - rh / 2
-    ax.plot([0.05, 10.1], [by, by], color=INK2, lw=0.8)
-    for tick in (1, 10, 100, 1000):
-        ax.text(lx(tick), by - 0.15, f"{tick:,}", ha="center", va="top", fontsize=6.8, color=MUTED)
-
-    rx = fig.add_axes([0.63, 0, 0.37, 1])
-    rx.set_xlim(0, 6.3)
-    rx.set_ylim(-0.3, 6.6)
-    rx.axis("off")
-    rx.text(0.1, 6.3, "The same at every scale", fontsize=8.5, weight="bold", va="center")
-    same = [
-        ("post size", f"{constant('max_message_chars'):,} characters"),
-        ("posts per board_read", str(constant("read_page"))),
-        ("posts read per round", str(constant("reads_per_turn"))),
-        ("posts written per round", str(constant("posts_per_turn"))),
-        ("free board actions K", f"{constant('free_board_actions')}, a regulator's "
-                                 f"{DEFAULT.free_board_actions_regulator}"),
-    ]
-    for k, (label, value) in enumerate(same):
-        y = 5.55 - k * 0.5
-        rx.text(0.1, y, label, va="center", fontsize=7, color=INK2)
-        rx.text(3.0, y, value, va="center", fontsize=7.5)
-    rx.text(0.1, 2.85, "Working steps per agent, at every scale", fontsize=7.5, weight="bold", va="center")
-    top = max(TURN_BUDGETS.values())
-    x0, x1 = 2.0, 5.4
-    for k, (domain, budget) in enumerate(TURN_BUDGETS.items()):
-        y = 2.25 - k * 0.6
-        rx.text(x0 - 0.12, y, DOMAIN_LABELS.get(domain, domain), ha="right", va="center", fontsize=7, color=INK2)
-        w = (x1 - x0) * budget / top
-        rx.add_patch(FancyBboxPatch((x0, y - 0.15), w, 0.3, boxstyle="round,pad=0,rounding_size=0.06", fc=MUTED,
-                                    ec="none", zorder=2))
-        rx.text(x0 + w + 0.1, y, str(budget), va="center", fontsize=7.5)
-    rx.text(0.1, 0.3, "Each budget is the turns one agent\nneeded on the task alone.", fontsize=6.8, color=INK2,
-            va="center", linespacing=1.15)
-    save(fig, "scales")
-
-
-# ---------------------------------------------------------------- figure 7: information
+# ---------------------------------------------------------------- figure 6: information
 def fig_information():
-    fig = plt.figure(figsize=(HALF, 2.45))
+    fig = plt.figure(figsize=(FULL, 1.75))
     ax = fig.add_axes([0, 0, 1, 1])
-    ax.set_xlim(0, 8.5)
-    ax.set_ylim(-0.25, 5.55)
+    ax.set_xlim(0, 17)
+    ax.set_ylim(0, 4.45)
     ax.axis("off")
-    ax.text(0.2, 5.3, "What each role is told, and what it holds", va="center", fontsize=7.5, weight="bold")
-    cols = ["told a\nboard\nexists", "has the\nboard\ntools", "told\nthe\nroster", "told its\nown\nrole",
-            "told the\nothers'\nroles", "can read\nteammates'\ntool calls", "holds the\nwhole\nexploit"]
+    ax.text(0.2, 4.15, "What each role is told, and what it holds", va="center", fontsize=8.5, weight="bold")
+    cols = ["board exists", "board tools", "roster", "own role", "others' roles", "teammates'\ntool calls", "exploit"]
     rows = ["worker", "regulator", "disregulator"]
     # Y yes in the default preset; F only if mention_board is on; P a part only (access split); N no
     marks = {
@@ -479,25 +388,20 @@ def fig_information():
         "regulator": ["Y", "Y", "Y", "Y", "N", "Y", "Y"],
         "disregulator": ["Y", "Y", "Y", "Y", "N", "N", "Y"],
     }
-    x0, cw, top, rh = 2.05, 0.9, 3.35, 0.72
+    x0, cw, top, rh = 3.0, 1.95, 2.55, 0.72
     for j, c in enumerate(cols):
-        ax.text(x0 + j * cw + cw / 2, top + 0.55, c, ha="center", va="bottom", fontsize=6.1, color=INK2,
+        ax.text(x0 + j * cw + cw / 2, top + 0.5, c, ha="center", va="bottom", fontsize=7, color=INK2,
                 linespacing=1.05)
     for i, r in enumerate(rows):
         y = top - i * rh
-        ax.scatter([0.3], [y], s=40, c=ROLE_FILL[r], edgecolors=ROLE_EDGE[r], linewidths=1.0, zorder=3)
-        ax.text(0.55, y, r, va="center", fontsize=7.5)
+        ax.scatter([0.4], [y], s=40, c=ROLE_FILL[r], edgecolors=ROLE_EDGE[r], linewidths=1.0, zorder=3)
+        ax.text(0.7, y, r, va="center", fontsize=7.5)
         for j, v in enumerate(marks[r]):
             glyph(ax, v, x0 + j * cw + cw / 2, y, 0.4)
-    ky = top - 2 * rh - 0.75
-    for kx, v, label in [(0.2, "Y", "yes"), (2.2, "F", "only with mention_board on")]:
+    ky = top - 2 * rh - 0.65
+    for kx, v, label in [(0.4, "Y", "yes"), (2.0, "F", "with mention_board"), (5.0, "P", "a part")]:
         glyph(ax, v, kx + 0.13, ky, 0.26)
         ax.text(kx + 0.4, ky, label, va="center", fontsize=6.8, color=INK2)
-    glyph(ax, "P", 0.33, ky - 0.45, 0.26)
-    ax.text(0.6, ky - 0.45, "a part only: the exploit is split over the neutral agents", va="center", fontsize=6.8,
-            color=INK2)
-    ax.text(0.2, ky - 0.95, "The tool list is the only hint a worker gets that a board exists.", va="center",
-            fontsize=6.8, color=INK2)
     save(fig, "information")
 
 
@@ -520,6 +424,5 @@ if __name__ == "__main__":
     fig_engagement_funnel()
     fig_read_graph()
     fig_modes()
-    fig_scales()
     fig_information()
     print("\n".join(str(p) for p in sorted(OUT.glob("*.png"))))

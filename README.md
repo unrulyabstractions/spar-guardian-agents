@@ -198,7 +198,7 @@ A run writes its eval log under `logs/`, exports it to `runs/<name>/` and prints
 
 `scripts/rejudge.py` runs both judges on a run (CheatBench's from the eval log, then the ladder); `scripts/regenerate.py` rebuilds what a run's directory derives from its log (the export, keeping the verdicts in judge.jsonl; the measures; the figures; with `--tools` the analysis tools' outputs) and with `--restart-ui` restarts the browser, which reads the directory live.
 
-`make figures` and `make tables` write the paper's design figures and its two tables (the scales; the turn budget per agent) as PNG under `tmp/figures/` and `tmp/tables/` (gitignored), every value read from the source.
+`make figures` and `make tables` write the paper's design figures and its two tables (the scales; the turn budget per agent) as PNG under `tmp/` (gitignored, `table_*.png` for the tables), every value read from the source.
 
 ## Analysis tools
 

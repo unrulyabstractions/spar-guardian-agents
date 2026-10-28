@@ -1,13 +1,12 @@
-"""The paper's two configuration tables, as PNG under tmp/tables/ (gitignored), every value read from the source.
+"""The paper's two configuration tables, as PNG under tmp/ (gitignored), every value read from the source.
 
     uv run python scripts/tables.py
 
-scales.png: the scales (scale, agents, time limit), from src/configuration/scales.py. turn_budget.png: each domain's
-turn budget per agent (settings.TURN_BUDGETS) with the lone runs behind it (runs/<domain>_lone_<k>/episodes.jsonl).
+table_scales.png: the scales (scale, agents, time limit), from src/configuration/scales.py. table_turn_budget.png:
+each domain's turn budget per agent (settings.TURN_BUDGETS).
 """
 from __future__ import annotations
 
-import json
 import sys
 import textwrap
 from pathlib import Path
@@ -24,8 +23,7 @@ from src.configuration import settings  # noqa: E402
 from src.configuration.scales import SCALES  # noqa: E402
 
 matplotlib.use("Agg")
-OUT = ROOT / "tmp" / "tables"
-LONE_PREFIX = {"openmath": "om", "swe": "swe", "knowledge_work": "kw"}
+OUT = ROOT / "tmp"
 DOMAIN_LABEL = {"openmath": "openmath", "swe": "SWE", "knowledge_work": "knowledge work"}
 # The renderer: 8-point sans, 13 characters to the inch, 0.17 inch per line.
 CHARS_PER_INCH = 13
@@ -42,14 +40,12 @@ def wrap(text: str, width_in: float) -> list[str]:
     return textwrap.wrap(str(text), chars, break_long_words=True, break_on_hyphens=False) or [""]
 
 
-def table_png(name: str, header: list[str], rows: list[list[str]], widths: list[float],
-              note: str | None = None) -> Path:
-    """One table as a PNG: a bold header row, wrapped cells, a note below. widths are column widths in inches."""
+def table_png(name: str, header: list[str], rows: list[list[str]], widths: list[float]) -> Path:
+    """One table as a PNG: a bold header row, wrapped cells. widths are column widths in inches."""
     cells = [[wrap(cell, w - 2 * PAD) for cell, w in zip(row, widths)] for row in [header, *rows]]
     heights = [max(len(c) for c in row) * LINE + 2 * PAD for row in cells]
     width = sum(widths)
-    note_lines = wrap(note, width - 2 * PAD) if note else []
-    height = sum(heights) + (len(note_lines) * LINE + 2 * PAD if note_lines else 0) + 0.1
+    height = sum(heights) + 0.1
     fig = Figure(figsize=(width, height), dpi=200)
     ax = fig.add_axes([0, 0, 1, 1])
     ax.set_xlim(0, width)
@@ -65,9 +61,6 @@ def table_png(name: str, header: list[str], rows: list[list[str]], widths: list[
                     weight="bold" if r == 0 else "normal", va="top", ha="left", linespacing=1.25)
             x += w
         y += h
-    if note_lines:
-        ax.text(PAD, y + PAD, "\n".join(note_lines), fontsize=7.5, color="#52514e", style="italic", va="top",
-                ha="left", linespacing=1.25)
     OUT.mkdir(parents=True, exist_ok=True)
     path = OUT / f"{name}.png"
     fig.savefig(path, dpi=200, facecolor="#ffffff")
@@ -78,26 +71,14 @@ def hours(seconds: int) -> str:
     return f"{seconds // 60} min" if seconds < 3600 else f"{seconds // 3600} h"
 
 
-def lone_turns(domain: str) -> list[int]:
-    turns = []
-    for k in (1, 2, 3):
-        episodes = ROOT / "runs" / f"{LONE_PREFIX[domain]}_lone_{k}" / "episodes.jsonl"
-        if episodes.is_file():
-            turns += [int(json.loads(line)["n_turns"]) for line in episodes.read_text().splitlines() if line.strip()]
-    return turns
-
-
 def write_scales() -> Path:
     rows = [[name.replace("_", " "), str(s.n_agents), hours(s.time_limit_s)] for name, s in SCALES.items()]
-    return table_png("scales", ["scale", "agents", "time limit"], rows, [1.4, 1.0, 1.2])
+    return table_png("table_scales", ["scale", "agents", "time limit"], rows, [1.4, 1.0, 1.2])
 
 
 def write_turn_budget() -> Path:
-    rows = [[DOMAIN_LABEL[d], str(b), ", ".join(map(str, lone_turns(d))) or "(no lone runs on disk)"]
-            for d, b in settings.TURN_BUDGETS.items()]
-    return table_png("turn_budget", ["domain", "turn budget per agent", "lone runs (turns)"], rows, [1.7, 2.0, 1.9],
-                     note="The median of three runs of one agent alone on the task, on the agents' model; every agent "
-                          "of a swarm gets that many working steps at every scale.")
+    rows = [[DOMAIN_LABEL[d], str(b)] for d, b in settings.TURN_BUDGETS.items()]
+    return table_png("table_turn_budget", ["domain", "turn budget per agent"], rows, [1.7, 2.0])
 
 
 if __name__ == "__main__":
