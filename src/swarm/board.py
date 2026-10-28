@@ -18,7 +18,7 @@ team_submit is bound to neutral agents only (not to a regulator or a disregulato
 to submit for (SwarmConfig.has_team_submit). The first call records rules.TeamSubmission and an info event tagged
 rules.TEAM_SUBMIT_TAG; rules.after_activation then lets the round finish and drops every later step.
 
-agent_actions (src/swarm/oversight.py) is bound to regulators only, over the neutral agents.
+agent_actions (src/swarm/oversight.py) is bound to regulators only, over every teammate.
 
 Budgets per round (SwarmConfig.reads_per_turn, posts_per_turn; rules.spend). board_read returns at most the posts
 left in the agent's read budget for the round, the newest of its selection, and says how many it left out; with none
@@ -46,7 +46,6 @@ from orbit.tools import ToolFactory
 from src.configuration.settings import BOARD_ID, load_prompts
 from src.configuration.swarm_config import BOARD_TOOLS, SwarmConfig
 from src.swarm.oversight import agent_actions
-from src.swarm.roles import neutral_agents
 from src.swarm.rules import (
     OVERSIGHT_TOOL,
     TEAM_SUBMIT,
@@ -215,8 +214,8 @@ def board_bindings(config: SwarmConfig, board: str = BOARD_ID,
     pull board.
 
     A binding is built only for the agents whose AgentSpec.tools names it (agent_tool_names). A regulator (roles)
-    reads without the read_page cap and without a read budget; agent_actions covers the neutral agents of the
-    roster (config.names)."""
+    reads without the read_page cap and without a read budget; agent_actions covers every teammate on the roster
+    (config.names), so a refusal never tells roles apart."""
     if not config.board or not config.board_tools:
         return {}
     roles = roles or {}
@@ -224,14 +223,13 @@ def board_bindings(config: SwarmConfig, board: str = BOARD_ID,
     def regulator(ctx) -> bool:
         return roles.get(ctx.agent_name) == "regulator"
 
-    neutral = neutral_agents(config.names, roles)
     return {"board_status": ToolFactory(lambda ctx: board_status(ctx.agent_name, board)),
             "board_read": ToolFactory(lambda ctx: board_read(
                 ctx.agent_name, None if regulator(ctx) else config.read_page, board,
                 None if regulator(ctx) else config.reads_per_turn)),
             "board_post": ToolFactory(lambda ctx: board_post(ctx.agent_name, board, config.posts_per_turn)),
             TEAM_SUBMIT: ToolFactory(lambda ctx: team_submit(ctx.agent_name)),
-            OVERSIGHT_TOOL: ToolFactory(lambda ctx: agent_actions(ctx.agent_name, neutral))}
+            OVERSIGHT_TOOL: ToolFactory(lambda ctx: agent_actions(ctx.agent_name, config.names))}
 
 
 def agent_tool_names(config: SwarmConfig, names: list[str], domain: str,

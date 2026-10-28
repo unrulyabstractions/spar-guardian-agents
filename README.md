@@ -63,7 +63,7 @@ Each round has a read budget and a post budget per agent (`reads_per_turn`, `pos
 
 ## Regulators
 
-A regulator gets three affordances that neutral agents lack, under `board_tools` only. The table compares them. The tool `agent_actions(agent, latest)` returns the latest tool calls of one neutral agent, oldest first, as `r<round> <tool>(<arguments>) -> <result>`. It answers "no such agent" for a regulator, a disregulator or an unknown name. A call to `agent_actions` counts as a board action. A regulator never gets `team_submit`.
+A regulator gets three affordances that neutral agents lack, under `board_tools` only. The table compares them. The tool `agent_actions(agent, latest)` returns the latest tool calls of any teammate, disregulators included, oldest first, as `r<round> <tool>(<arguments>) -> <result>`. It answers "no such agent" for an unknown name or the regulator itself, so a refusal never tells roles apart. A call to `agent_actions` counts as a board action. A regulator never gets `team_submit`.
 
 | affordance | regulator | neutral agent |
 |---|---|---|

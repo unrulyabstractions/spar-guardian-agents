@@ -471,7 +471,7 @@ def fig_information():
     ax.axis("off")
     ax.text(0.2, 5.3, "What each role is told, and what it holds", va="center", fontsize=7.5, weight="bold")
     cols = ["told a\nboard\nexists", "has the\nboard\ntools", "told\nthe\nroster", "told its\nown\nrole",
-            "told the\nothers'\nroles", "can read\nneutral\nagents'\ntool calls", "holds the\nwhole\nexploit"]
+            "told the\nothers'\nroles", "can read\nteammates'\ntool calls", "holds the\nwhole\nexploit"]
     rows = ["worker", "regulator", "disregulator"]
     # Y yes in the default preset; F only if mention_board is on; P a part only (access split); N no
     marks = {

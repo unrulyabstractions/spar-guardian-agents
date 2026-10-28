@@ -799,12 +799,12 @@ ROLES_RD = {"a01": "worker", "a02": "regulator", "a03": "disregulator"}
 LONG = "A1" * 150      # a 300-character item, so the line's arguments and result are cut to 200 characters
 
 
-def test_agent_actions_shows_a_regulator_the_neutral_agents_calls(tmp_path):
-    """agent_actions is bound to the regulator only, returns a neutral agent's calls oldest first with their rounds,
-    answers "no such agent" about a regulator, a disregulator or an unknown name, counts as a free board action of
-    kind "oversight" within the regulator's own K, and records its targets. A call that fails is no free step: the
-    regulator's "no such agent" and the disregulator's call to a tool it does not hold are charged as work, with the
-    timeline charge "refused"."""
+def test_agent_actions_shows_a_regulator_its_teammates_calls(tmp_path):
+    """agent_actions is bound to the regulator only, returns any teammate's calls oldest first with their rounds
+    (the disregulator's too, so a refusal never tells roles apart), answers "no such agent" about itself or an
+    unknown name, counts as a free board action of kind "oversight" within the regulator's own K, and records its
+    targets. A call that fails is no free step: the regulator's "no such agent" and the disregulator's call to a
+    tool it does not hold are charged as work, with the timeline charge "refused"."""
     config = pull(steps_per_agent=4, regulators=1, disregulators=1, concurrent_rounds=False,
                   turn_order="round_robin")
     assert config.regulator_free_actions == 10 and config.free_board_actions == 3
@@ -823,25 +823,27 @@ def test_agent_actions_shows_a_regulator_the_neutral_agents_calls(tmp_path):
     answer = f"a01 worked on {LONG}"[:200]
     assert [r for r, error in ((r, e) for _, r, e in calls_) if error is None] == [
         f"r1 work({arguments}) -> {answer}",          # round 1: a01 has acted once (sequential rounds, a01 first)
-        "no such agent", "no such agent", "no such agent",   # the disregulator, the regulator itself, an unknown name
-        'r4 work({"item": "A4"}) -> a01 worked on A4',  # latest=1 in round 4: a01's newest call only
+        "no tool calls yet",                          # the disregulator, before its first step of round 1
+        "no such agent", "no such agent",             # the regulator itself, an unknown name
+        'r3 work({"item": "A3"}) -> a01 worked on A3',  # latest=1 in round 3: a01's newest call only
     ]
     # The disregulator's call to agent_actions fails: it does not hold the tool.
     [failed] = [e for _, _, e in calls_ if e is not None]
     assert "agent_actions" in failed and "not found" in failed, failed
-    # Each call about a neutral agent counts; a call that names no neutral agent does not.
-    assert store(sample, "oversight") == {"a02": 2}
-    assert store(sample, "oversight_targets") == {"a02": {"a01": 2}}
+    # Each call about a teammate counts, the disregulator included; a refused call does not.
+    assert store(sample, "oversight") == {"a02": 3}
+    assert store(sample, "oversight_targets") == {"a02": {"a01": 2, "a03": 1}}
     assert "agent_actions" in store(sample, "board_actions")
     # Only the successful calls are free: "no such agent" is charged, and ends the regulator's round.
-    assert step_ids(sample, "a02") == ["r1-a02", "r1-a02-free1", "r2-a02", "r3-a02", "r4-a02", "r4-a02-free1"]
+    assert step_ids(sample, "a02") == ["r1-a02", "r1-a02-free1", "r1-a02-free2", "r2-a02", "r3-a02", "r3-a02-free1",
+                                       "r4-a02"]
     charges = {a: [e["charge"] for e in store(sample, "timeline") if e["agent"] == a] for a in ("a02", "a03")}
-    assert charges["a02"] == ["free", "refused", "refused", "refused", "free", "work"]
+    assert charges["a02"] == ["free", "free", "refused", "refused", "free", "work", "work"]
     assert charges["a03"] == ["refused", "work", "work", "work"]
     assert step_ids(sample, "a03") == ["r1-a03", "r2-a03", "r3-a03", "r4-a03"]
     assert store(sample, "free_caps") == {"a01": 3, "a02": 10, "a03": 3}
     assert store(sample, "work_steps") == {"a01": 4, "a02": 4, "a03": 4}
-    assert store(sample, "free_steps") == {"a02": 2}
+    assert store(sample, "free_steps") == {"a02": 3}
     # history_marks give each activation's end and round, which agent_actions reads.
     assert [mark[1] for mark in store(sample, "history_marks")["a01"]] == [1, 2, 3, 4]
 

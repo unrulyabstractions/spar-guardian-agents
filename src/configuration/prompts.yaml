@@ -85,7 +85,7 @@ budget:
 
 # What agent_actions returns (src/swarm/oversight.py). One `line` per tool call, oldest first: {arguments} is the
 # call's arguments as JSON and {result} the start of its result, each cut to 200 characters. Ours, after the midterm
-# report's "access to all tool calls from neutral agents".
+# report's "access to all tool calls from neutral agents", answered for every teammate so a refusal tells no role.
 oversight_output:
   line: "r{round} {tool}({arguments}) -> {result}"
   no_such_agent: "no such agent"

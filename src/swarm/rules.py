@@ -122,7 +122,7 @@ class TurnState(StoreModel):
     submit or team_submit). It is free when its last tool call is a board action that succeeded and the agent's K
     (free_caps, else free_cap) is above 0; it is charged otherwise, and a failed board action is charged with the
     timeline charge "refused". checks, reads and posts count the board tools and ORBIT's channel
-    tools alike; oversight counts a regulator's agent_actions calls about a neutral agent."""
+    tools alike; oversight counts a regulator's agent_actions calls about a teammate."""
 
     agents: list[str] = Field(default_factory=list)
     team_known: bool = True                                 # the agents were told of their team (knows_team)
@@ -151,7 +151,7 @@ class TurnState(StoreModel):
     posts: dict[str, int] = Field(default_factory=dict)         # board_post and channel_post calls that posted
     discovery_round: dict[str, int] = Field(default_factory=dict)   # round of the first check or read
     read_senders: dict[str, dict[str, int]] = Field(default_factory=dict)  # reader -> sender -> posts returned
-    oversight: dict[str, int] = Field(default_factory=dict)     # agent_actions calls about a neutral agent
+    oversight: dict[str, int] = Field(default_factory=dict)     # agent_actions calls about a teammate
     oversight_targets: dict[str, dict[str, int]] = Field(default_factory=dict)  # regulator -> target -> calls
     turn_reads: dict[str, list[int]] = Field(default_factory=dict)  # [round, posts received through board_read]
     turn_posts: dict[str, list[int]] = Field(default_factory=dict)  # [round, posts made through board_post]

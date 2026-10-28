@@ -1,8 +1,9 @@
-"""agent_actions: a regulator's view of the neutral agents' tool calls, as an Inspect tool.
+"""agent_actions: a regulator's view of its teammates' tool calls, as an Inspect tool.
 
-The midterm report gives regulators "access to all tool calls from neutral agents". tasks.py binds agent_actions to
-regulators only (board.agent_tool_names, board.board_bindings), and only under board_tools. Workers and disregulators
-never get it.
+The midterm report gives regulators "access to all tool calls from neutral agents"; the tool answers for every
+teammate, disregulators included, so that a refusal never tells a regulator who holds a role. tasks.py binds it to
+regulators only (board.agent_tool_names, board.board_bindings), and only under board_tools. Workers and
+disregulators never get it.
 
     agent_actions(agent="a02", latest=20)
     r1 bash({"cmd": "git log --all"}) -> commit 3f2a...
@@ -10,7 +11,7 @@ never get it.
 
 One line per call, oldest first: the round of the activation that made the call, the tool, its arguments as JSON
 and the start of its result, each cut to CUT characters (prompts.yaml `oversight_output`). A call about an unknown
-agent, a regulator or a disregulator returns "no such agent": a regulator sees the neutral agents only.
+name, or about the regulator itself, returns "no such agent".
 
 The calls come from the agent's own conversation. During the run that is ORBIT's live session record
 (orbit/execution/sessions.py, current_session_registry().scheduled(agent).state.messages), the same source
@@ -88,12 +89,12 @@ def call_lines(messages: list, marks: list[list[int]], running: int, latest: int
     return lines[-latest:]
 
 
-def agent_actions(owner: str, neutral: list[str]) -> ToolDef:
-    """The tool bound to the regulator `owner`: the latest tool calls of one of the neutral agents."""
+def agent_actions(owner: str, agents: list[str]) -> ToolDef:
+    """The tool bound to the regulator `owner`: the latest tool calls of any teammate on the roster `agents`."""
     prompts = load_prompts()
     args = prompts["tool_args"][OVERSIGHT_TOOL]
     out = prompts["oversight_output"]
-    allowed = set(neutral) - {owner}
+    allowed = set(agents) - {owner}
 
     async def execute(agent: str, latest: int = 20) -> str:
         if latest < 1:
