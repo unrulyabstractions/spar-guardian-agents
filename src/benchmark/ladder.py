@@ -191,7 +191,7 @@ async def judge_run(run_dir: Path, judge_name: str, *, view: str = "full", agent
     spec = ladder_spec(task)
     model_name, config = judging.judge_model_config(judge_name)
     prices = judging.judge_prices(judge_name, batch=batch)
-    model = get_model(model_name, config=GenerateConfig(batch=batch))
+    model = get_model(model_name, config=GenerateConfig(batch=batch), memoize=False)   # one client per event loop
     done = {row["episode"]: row for row in read_rows(run_dir, view) if row.get("parse_ok")} if not force else {}
     todo = [ep for ep in episodes_of(run_dir) if ep["episode"] not in done
             and (agents is None or ep["agent"] in agents)]

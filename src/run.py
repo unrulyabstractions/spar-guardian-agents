@@ -194,7 +194,8 @@ async def _judge_views(views: list, judge_name: str, batch: bool) -> dict[str, d
     keyed by episode."""
     model_name, config = judging.judge_model_config(judge_name)
     prices = judging.judge_prices(judge_name, batch=batch)
-    model = get_model(model_name, config=GenerateConfig(batch=batch))
+    # a fresh client: a memoized one belongs to the event loop that first used it, and rejudge runs two
+    model = get_model(model_name, config=GenerateConfig(batch=batch), memoize=False)
     verdicts = {}
     for view in views:
         cb = (view.metadata or {}).get("cheatbench", {})

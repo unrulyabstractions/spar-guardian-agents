@@ -650,3 +650,8 @@
 - **Output:** at the user's word (after the 44 adjudicated disagreements: luna 266 of 269 with gpt-6-sol, haiku 222) `settings.JUDGE_MODEL = "gpt-6-luna"`; src/benchmark/models.yaml holds gpt-6-luna, gpt-6-sol (the reference) and claude-haiku-5-5; the registry's luna entry carries `judge_entry`; README, src/README, examples/README and the command docstrings follow. Same price as haiku.
 - **How verified (by me):** `make lint` clean, `make test` 192 passed (2026-10-28 04:59 UTC).
 - **Result:** VERIFIED.
+
+## 2026-10-28 05:15 UTC — one judge client per event loop
+- **Output:** `run._judge_views` and `ladder.judge_run` take `get_model(..., memoize=False)`: scripts/rejudge.py runs CheatBench's judge and the ladder on two event loops, and the memoized client of the first failed on the second ("RuntimeError: Event loop is closed" on every ladder row of the openmath cells).
+- **How verified (by me):** `make lint` clean, `make test` 192 passed; `python -m src ladder runs/riemann_solo runs/riemann_solo_cheat runs/riemann_swarm_cheat --sync` judged all five agents (2026-10-28 05:15 UTC), every citation found.
+- **Result:** VERIFIED.
