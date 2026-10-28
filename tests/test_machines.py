@@ -1,9 +1,13 @@
-"""The shared machines layer: the staging archive, the compose file and the host-side task tool. No docker."""
+"""The shared machines layer: the staging archive, the compose file, the host-side task tool and the staged files'
+hashes. No docker."""
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import importlib.util
 import json
+import os
+import subprocess
 import sys
 import tarfile
 from dataclasses import dataclass
@@ -123,3 +127,21 @@ def test_the_host_tool_pools_a_teams_calls_in_one_state_and_records_them(monkeyp
     exact = json.loads(asyncio.run(tool(subset_indices=[0, 3])))
     assert exact["exact"] is True and "accepted" in exact["note"]
     assert machines.tool_states(st)["a03"]["accepted"] == [0, 3] and "team" in machines.tool_states(st)
+
+
+def test_the_staged_files_hashes_open_regular_files_only(tmp_path, monkeypatch):
+    (tmp_path / "instance.txt").write_bytes(b"NAME: x\n")
+    os.mkfifo(tmp_path / "fifo.txt")                    # an agent's swap of a staged file: open() would block
+    (tmp_path / "link.txt").symlink_to(tmp_path / "instance.txt")
+    paths = [str(tmp_path / n) for n in ("instance.txt", "fifo.txt", "link.txt", "gone.txt")]
+    out = subprocess.run([sys.executable, "-c", machines.FILE_HASHES], input=json.dumps(paths), capture_output=True,
+                         text=True, timeout=30, check=True)
+    assert json.loads(out.stdout) == {paths[0]: hashlib.sha256(b"NAME: x\n").hexdigest(), paths[1]: None,
+                                      paths[2]: None, paths[3]: None}
+
+    class Broken:
+        async def exec(self, *args, **kwargs):
+            raise TimeoutError("the read never ended")
+
+    monkeypatch.setattr(machines, "sandbox", lambda service: Broken())
+    assert asyncio.run(machines.file_hashes("a01", paths[:2])) == {paths[0]: None, paths[1]: None}

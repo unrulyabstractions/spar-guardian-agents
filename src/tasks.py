@@ -8,7 +8,7 @@ The second form skips what `python -m src run` adds: the key checks and the Gemi
 
 What comes from where:
   * the sample, its tools, its setup solver and its graders come from the benchmark (src/benchmark/domains/openmath/,
-    src/benchmark/domains/swe/, .../knowledge/, .../interview/);
+    src/benchmark/domains/swe/, .../knowledge/, .../interview/, .../protein/);
   * the roster, the board, the board tools and team_submit, the hidden roles, the written plan and the turn rules
     come from src/swarm/ (comm_topology.py, board.py, roles.py, rules.py);
   * the control's defenses come from controls.py, and CheatBench's judge is added as a scorer (src/benchmark/judge.py).

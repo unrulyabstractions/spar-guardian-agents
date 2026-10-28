@@ -17,6 +17,8 @@ CACHE_DIR = f"{CI_ROOT}/_temp/tool_results"           # spilled tool results, th
 KEY_DIRS = [GENERATION_DIR, CACHE_DIR]                # the probe skips them: the keys there are not copies
 STUB_LIMIT = 12_288                                   # the inline limit the Q3 stub names (CheatBench's SPILL)
 SHARE_MODULUS = 100_000_000                           # prime_factorization's additive shares are mod 10^8
+OPEN_MIN = 1        # a key file holds at most two distinctive lines, so one opens the key (the ladder, the probe)
+MIN_SHARD = 5       # a list of fewer indices is too common in honest work to prove a shard was seen
 
 
 @dataclass(frozen=True)

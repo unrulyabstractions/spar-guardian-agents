@@ -21,7 +21,8 @@ Departures from CheatBench's runner: the agent is ORBIT's turn_react loop; ORBIT
 prompts; the verifier runs on the host with its state in the sample store (verifier.py), with parameter descriptions
 and Inspect's schema check; the agents' messages are not mirrored into the checkout's live logs, which stay as
 staged; the containers have no network, where CheatBench leaves egress open and forbids it in the prompt; the staged
-files carry the time the sample was built as their mtime.
+files carry the time the sample was built as their mtime. In a team the checkout's generator takes its seed from an
+environment variable no container sets, in a rewritten commit (generator.py), so running it rebuilds nothing.
 """
 from __future__ import annotations
 
@@ -55,6 +56,7 @@ DEVIATIONS = [
 MACHINE_DEVIATIONS = [
     "each_agent_has_its_own_container_and_copy_of_the_row",
     "tools_shell_and_run_python_bound_per_agent_container",
+    "generator_takes_its_seed_from_an_unset_environment_variable_in_a_rewritten_commit",
 ]
 SHARED_DEVIATIONS = ["team_shares_one_tool_state_in_shared_task"]
 SPLIT_DEVIATIONS = {
@@ -96,13 +98,16 @@ class Interview(Benchmark):
         self.parts: int | None = None
         self.split = False
         self.owners: dict[str, str] = {}
+        self.planned: tuple | None = None
+        """The roster and config the plan is for (the config as its dump)."""
 
     def time_limit_s(self) -> int:
         return int(load_task_yaml(self.spec)["timeout_s"])
 
     def check(self, config: SwarmConfig) -> None:
         """The base's checks; no collaboration_needed; an explicit map names pieces 1..N with N at least 2, so no
-        piece is the whole key renamed."""
+        piece is the whole key renamed, and gives every agent a copy of the key that can be built (a subset_sum line
+        keeps its length). An agent holding every piece holds the whole key."""
         super().check(config)
         if config.resolve_mode(self.name) == "collaboration_needed":
             raise ValueError(f"{self.name} has no parts to split; run it in mode solo_task or shared_task")
@@ -112,6 +117,16 @@ class Interview(Benchmark):
             if named and (named != list(range(1, named[-1] + 1)) or named[-1] < 2):
                 raise ValueError(f"access must name {self.spec.piece}s 1..N with N at least 2, each held by some "
                                  f"agent, got {named}")
+            if named:
+                pieces, n = keys.cut(access, self.spec.piece)
+                row = keys.load_row(self.spec, self.row)
+                files = keys.staged_files(self.spec, row)
+                for agent, held in pieces.items():
+                    try:
+                        keys.variant(self.spec, row, files, held, n)
+                    except ValueError as ex:
+                        raise ValueError(f"access: {agent}'s copy of the key cannot be built ({ex}); give it fewer "
+                                         f"{self.spec.piece}s, or all of them for the whole key") from None
 
     def split_items(self, n_neutral: int) -> list[str]:
         """One piece of the key per neutral agent."""
@@ -133,6 +148,7 @@ class Interview(Benchmark):
         self.pieces, self.parts = keys.cut(self.holds, self.spec.piece)
         self.split = any(held is not None for held in self.pieces.values())
         self.owners = {a: "team" if self.mode == "shared_task" else a for a in agents}
+        self.planned = (list(agents), None if config is None else config.model_dump(mode="json"))
 
     def sample(self, agents: list[str], *, instruction_suffix: str = "", config: SwarmConfig | None = None,
                roles: dict[str, str] | None = None) -> Sample:
@@ -146,7 +162,7 @@ class Interview(Benchmark):
         compose = machines.write_compose(spec.build, agents)
         seats, stage = {}, {}
         for agent in agents:
-            copy = {**files, **keys.variant(spec, row, files, self.pieces[agent], self.parts)}
+            copy = keys.agent_copy(spec, row, files, self.pieces[agent], self.parts, team=self.layout == "machines")
             digest = hashlib.sha256(json.dumps({d: hashlib.sha256(b).hexdigest() for d, b in sorted(copy.items())})
                                     .encode()).hexdigest()[:12]
             stage[agent] = str(machines.make_stage_tar(copy, spec.build / "stage" / f"{row['id']}-{digest}.tgz"))
@@ -167,9 +183,10 @@ class Interview(Benchmark):
 
     def tools(self, agents: list[str], config: SwarmConfig | None = None) -> AgentTools:
         """A lone agent: ORBIT's bash and python as `user`, and the verifier. A team: shell and run_python in each
-        agent's own container, and the verifier, whose owner is the agent or the team."""
+        agent's own container, and the verifier, whose owner is the agent or the team. The plan is the last
+        sample's when that sample was for this roster and config, else made afresh."""
         agents = list(agents)
-        if set(self.owners) != set(agents):
+        if self.planned != (agents, None if config is None else config.model_dump(mode="json")):
             self.plan(agents, config, None)
         owners = dict(self.owners)
         verifier = verifier_binding(self.spec, keys.load_row(self.spec, self.row), lambda agent: owners[agent])

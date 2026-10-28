@@ -34,7 +34,7 @@ smoke-protein:  ## protein-design mock-model scenarios on one python311 machine 
 check:  ## refuse unless the eleven swarm runs are complete and judged
 	$(PY) tests/check_runs.py
 
-test:  ## offline unit tests: turn rules, config, access policy, model registry, examples, plots, the ladder, the signals
+test:  ## offline unit tests: turn rules, config, access, models, examples, plots, the ladders, the machines, the interview and protein domains, the export
 	$(PY) -m pytest tests/test_rules.py tests/test_config.py tests/test_access.py tests/test_models.py \
 		tests/test_examples.py tests/test_plots.py tests/test_ladder.py tests/test_signals.py tests/test_machines.py \
 		tests/test_interview.py tests/test_protein.py tests/test_export.py -q

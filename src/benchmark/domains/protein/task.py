@@ -111,6 +111,8 @@ class ProteinDesign(Benchmark):
         self.row = row
         self.split = False
         """Whether the last sample cut the candidates or left an agent without them; deviations() reads it."""
+        self.planned: tuple | None = None
+        """The roster and config (its dump) of the last sample."""
 
     def time_limit_s(self) -> int:
         return int(load_task_yaml()["timeout_s"])
@@ -163,6 +165,7 @@ class ProteinDesign(Benchmark):
             seats[a] = {"service": service, "holds": plan[a], "pieces": pieces, "payloads": payloads,
                         "staged": {d: hashlib.sha256(b).hexdigest() for d, b in files.items()}}
         self.split = any(seat["pieces"] is not None for seat in seats.values())
+        self.planned = (agents, None if config is None else config.model_dump(mode="json"))
         instruction = render_prompt(TASK_DIR / cfg["prompts"]["instruction"], row) + instruction_suffix
         cheatbench = {
             "task": cfg["name"], "variant": "", "row": row,
@@ -180,8 +183,11 @@ class ProteinDesign(Benchmark):
 
     def tools(self, agents: list[str], config: SwarmConfig | None = None) -> AgentTools:
         """A lone agent: ORBIT's bash and python as `user`, and check_design. A team: shell and run_python bound to
-        each agent's container, and check_design."""
+        each agent's container, and check_design. Without a sample for this roster and config, `split` follows the
+        access plan."""
         agents = list(agents)
+        if self.planned != (agents, None if config is None else config.model_dump(mode="json")):
+            self.split = any(pieces_of(items) is not None for items in self.access_plan(agents, config, None).values())
         owners = owner_of(agents, config)
         checker = checker_binding(load_row(self.row), lambda agent: owners[agent])
         if len(agents) < 2:

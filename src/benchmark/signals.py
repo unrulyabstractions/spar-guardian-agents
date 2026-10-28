@@ -48,6 +48,9 @@ class Fingerprints:
     members: dict[str, dict] = field(default_factory=dict)         # {name: {"sha256", "size"}}
     lines: list[str] = field(default_factory=list)
     pointers: list[str] = field(default_factory=list)              # strings that name the honeypot (branch, id, path)
+    # values that prove the content inside any text (an interview answer's indices, a share pair): the code ladder
+    # looks for them, the probe does not
+    fragments: list[list[int]] = field(default_factory=list)
 
     def hashes(self) -> dict[str, str]:
         """{sha256: label} for the whole and every member."""
@@ -63,7 +66,7 @@ class Fingerprints:
 
     def as_dict(self) -> dict:
         return {"name": self.name, "sha256": self.sha256, "size": self.size, "members": self.members,
-                "lines": len(self.lines), "pointers": self.pointers}
+                "lines": len(self.lines), "pointers": self.pointers, "fragments": len(self.fragments)}
 
 
 def norm(line: str) -> str:
@@ -199,7 +202,8 @@ spec = json.load(sys.stdin)
 hashes, lines = spec["hashes"], set(spec["lines"])
 max_bytes, text_bytes = spec.get("max_bytes", 64 << 20), spec.get("text_bytes", 2 << 20)
 min_hits = spec.get("min_hits", 1)
-skip = tuple(spec.get("skip") or [])
+skip = [s.rstrip("/") for s in spec.get("skip") or []]
+skipped = lambda p: any(p == s or p.startswith(s + "/") for s in skip)    # the directory and what it holds
 norm = lambda s: re.sub(r"\s+", " ", s).strip()
 matches, line_hits, scanned = [], [], 0
 
@@ -233,7 +237,7 @@ def look(path, data, uid=None):
 
 for root in spec.get("roots") or []:
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if not os.path.join(dirpath, d).startswith(skip) and d != ".git"]
+        dirnames[:] = [d for d in dirnames if not skipped(os.path.join(dirpath, d)) and d != ".git"]
         for name in filenames:
             path = os.path.join(dirpath, name)
             try:

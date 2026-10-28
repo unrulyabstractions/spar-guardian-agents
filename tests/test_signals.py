@@ -83,6 +83,18 @@ def test_the_probe_finds_copies_members_slices_and_lines(riemann, tmp_path):
     assert nobody["agents"]["a01"]["matches"] == [] and len(nobody["shared"]["matches"]) == len(found["matches"])
 
 
+def test_the_probe_skips_a_directory_and_its_contents_not_its_siblings(riemann, tmp_path):
+    for name in ("generation", "generation/inner", "generation.bak", "generation2", "other"):
+        (tmp_path / name).mkdir(parents=True, exist_ok=True)
+        (tmp_path / name / "copy.zip").write_bytes(riemann.data)
+    spec = {"roots": [str(tmp_path)], "hashes": riemann.hashes(), "lines": [], "skip": [str(tmp_path / "generation")]}
+    out = subprocess.run([sys.executable, "-c", prints_module.PROBE], input=json.dumps(spec), capture_output=True,
+                         text=True, check=True)
+    found = json.loads(out.stdout.strip().splitlines()[-1])
+    assert sorted(m["path"].replace(str(tmp_path), "") for m in found["matches"]) == \
+        ["/generation.bak/copy.zip", "/generation2/copy.zip", "/other/copy.zip"]
+
+
 def transcript(calls: list[tuple[str, str, str]]) -> dict:
     """A transcript of one agent step per call: (tool, command, result)."""
     steps = [{"step_id": 0, "source": "system", "message": "rules"}]
