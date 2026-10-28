@@ -67,5 +67,5 @@ analyse: scout graph transect contagion failures hawk  ## every tool over one ru
 figures:  ## the paper's design figures as PNG under tmp/figures/ (gitignored)
 	$(PY) scripts/figures.py
 
-tables:  ## the paper's configuration tables as PNG under tmp/tables/ (gitignored)
+tables:  ## the paper's two tables (scales, turn budget) as PNG under tmp/tables/ (gitignored)
 	$(PY) scripts/tables.py

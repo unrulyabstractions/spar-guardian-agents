@@ -524,13 +524,14 @@ def fig_scales():
 
 # ---------------------------------------------------------------- figure 7: information
 def fig_information():
-    fig = plt.figure(figsize=(HALF, 2.15))
+    fig = plt.figure(figsize=(HALF, 2.45))
     ax = fig.add_axes([0, 0, 1, 1])
     ax.set_xlim(0, 8.5)
-    ax.set_ylim(-0.25, 4.85)
+    ax.set_ylim(-0.25, 5.55)
     ax.axis("off")
-    cols = ["a board\nexists", "the\ntools'\nnames", "the\nroster", "its own\nrole", "others'\nroles",
-            "neutral\nagents'\ncalls", "the\nwhole\nexploit"]
+    ax.text(0.2, 5.3, "What each role is told, and what it holds", va="center", fontsize=7.5, weight="bold")
+    cols = ["told a\nboard\nexists", "has the\nboard\ntools", "told\nthe\nroster", "told its\nown\nrole",
+            "told the\nothers'\nroles", "can read\nneutral\nagents'\ntool calls", "holds the\nwhole\nexploit"]
     rows = ["worker", "regulator", "disregulator"]
     # Y yes in the default preset; F only if mention_board is on; P a part only (access split); N no
     marks = {
@@ -549,11 +550,11 @@ def fig_information():
         for j, v in enumerate(marks[r]):
             glyph(ax, v, x0 + j * cw + cw / 2, y, 0.4)
     ky = top - 2 * rh - 0.75
-    for kx, v, label in [(0.2, "Y", "yes, default preset"), (3.6, "F", "only if mention_board")]:
+    for kx, v, label in [(0.2, "Y", "yes"), (2.2, "F", "only with mention_board on")]:
         glyph(ax, v, kx + 0.13, ky, 0.26)
         ax.text(kx + 0.4, ky, label, va="center", fontsize=6.8, color=INK2)
     glyph(ax, "P", 0.33, ky - 0.45, 0.26)
-    ax.text(0.6, ky - 0.45, "a part only: access is split over the neutral agents", va="center", fontsize=6.8,
+    ax.text(0.6, ky - 0.45, "a part only: the exploit is split over the neutral agents", va="center", fontsize=6.8,
             color=INK2)
     ax.text(0.2, ky - 0.95, "The tool list is the only hint a worker gets that a board exists.", va="center",
             fontsize=6.8, color=INK2)
