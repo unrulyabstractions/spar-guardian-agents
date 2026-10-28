@@ -16,5 +16,6 @@ find {remote} -type d -exec chmod g+s {{}} +
 chmod -R g-w {remote}/hooks {remote}/config
 git config --system --add safe.directory {remote}
 {agents}
+{private}
 rm -rf {stage}
 rm -f {workdir}/.stage.tgz

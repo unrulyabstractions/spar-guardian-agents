@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from src.benchmark.domains.knowledge import KnowledgeWork
 from src.benchmark.domains.knowledge.sandbox import is_split, split_items
 from src.benchmark.domains.openmath import OpenMath
-from src.benchmark.domains.openmath.sandbox import archive_parts, split_layout, split_setup_script
+from src.benchmark.domains.openmath.sandbox import archive_parts, solo_setup_script, split_layout, split_setup_script
 from src.benchmark.domains.openmath.task import SPLIT_DEVIATIONS, layout_of, load_rows
 from src.benchmark.domains.swe import SWE
 from src.benchmark.domains.swe.task import build_swe, part_mates, parts_by_agent, pieces_by_agent
@@ -124,6 +124,12 @@ def test_openmath_slices_follow_the_plan():
     script = split_setup_script(layout)
     assert script.count("update-index --force-remove Riemann.zip") == 3    # the regulator's copy loses it too
     assert script.count("Riemann.zip.part1") == 1 and script.count("Riemann.zip.part2") == 1
+    # both per-agent layouts end by closing the temporary directories and proving it between the first two agents
+    for text in (script, solo_setup_script(THREE)):
+        assert "chmod 1733 /tmp /var/tmp /dev/shm" in text and "umask 077" in text, text
+        assert 'runuser -u a01 -- bash -lc "umask > $probe.umask' in text, text
+        assert 'if runuser -u a02 -- bash -lc "cat $probe 2>/dev/null || ls /tmp 2>/dev/null"; then' in text, text
+        assert text.index("chmod 1733") > text.index("chmod 700 /workspace/a03"), text
     # split_copy: the regulator holds a copy of slice1, so two copies carry part1
     copy = build_config("default", "small", ["regulators=1", "seed=2", "access=split_copy"])
     plan = bench.access_plan(THREE, copy, roles)

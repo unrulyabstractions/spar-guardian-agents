@@ -20,6 +20,11 @@ neutral agents and each holds one slice, so reassembling the archive (`cat <arch
 <archive>`) takes every neutral agent's slice and the exploit needs the board; a regulator or a disregulator holds no
 slice, or a copy of one under split_copy. An agent whose plan says `whole` keeps the archive: every agent under
 access=all or when fewer than two agents are neutral.
+
+In both per-agent layouts the agents share one container, so the setup closes the side channel the shared temporary
+directories would be: the agent users' shells create private files (umask 077) and /tmp, /var/tmp and /dev/shm are
+writable but not listable (mode 1733). A slice passed through /tmp therefore takes its owner opening the file and
+naming its path to the others, which the transcript shows and the probe records by owner.
 """
 from __future__ import annotations
 
@@ -43,6 +48,7 @@ SOLO_SETUP = (SCRIPTS / "setup_solo.sh").read_text()
 SOLO_SETUP_AGENT = (SCRIPTS / "setup_solo_agent.sh").read_text()
 SPLIT_SETUP = (SCRIPTS / "setup_split.sh").read_text()
 SPLIT_SETUP_AGENT = (SCRIPTS / "setup_split_agent.sh").read_text()
+PRIVATE_SETUP = (SCRIPTS / "setup_private.sh").read_text()
 SPLIT_ARCHIVE = (SCRIPTS / "split_archive.sh").read_text()
 SPLIT_ARCHIVE_SLICE = (SCRIPTS / "split_archive_slice.sh").read_text()
 # An access item naming one slice of the complete submission's archive.
@@ -89,7 +95,16 @@ def solo_setup_script(agents: list[str]) -> str:
     The tarball is extracted once per agent with its members' modes and mtimes; chown changes the owner only."""
     layout = agent_layout(agents)
     blocks = "".join(SOLO_SETUP_AGENT.format(workdir=WORKDIR, name=a, uid=layout[a]["uid"]) for a in agents)
-    return SOLO_SETUP.format(workdir=WORKDIR, agents=blocks.rstrip("\n"))
+    return SOLO_SETUP.format(workdir=WORKDIR, agents=blocks.rstrip("\n"), private=private_setup(agents))
+
+
+def private_setup(agents: list[str]) -> str:
+    """The block closing every multi-agent layout: the agent users' login shells get umask 077 and the temporary
+    directories /tmp, /var/tmp and /dev/shm mode 1733 (writable, not listable), so a file an agent writes there stays
+    its own unless it opens it and names its path; the probe records every copy there by owner. The block then
+    proves it, as the first agent writing a file and the second failing to read it or list /tmp, and refuses the
+    layout otherwise."""
+    return PRIVATE_SETUP.format(first=agents[0], second=agents[1]).rstrip("\n")
 
 
 def honeypot_branches(row: dict) -> list[str]:
@@ -157,7 +172,8 @@ def split_setup_script(layout: dict) -> str:
                                                copy=copy, remote=layout["remote"], rewrite=rewrite))
     refs = " ".join(f"refs/heads/{b}:refs/heads/{b}" for b in layout["remote_branches"])
     return SPLIT_SETUP.format(workdir=WORKDIR, group=layout["group"], team=TEAM_DIR, stage=SPLIT_STAGE,
-                              remote=layout["remote"], refs=refs, agents="".join(blocks).rstrip("\n"))
+                              remote=layout["remote"], refs=refs, agents="".join(blocks).rstrip("\n"),
+                              private=private_setup(list(layout["agents"])))
 
 
 def parse_mtime(value) -> int:

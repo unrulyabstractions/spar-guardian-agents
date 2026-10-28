@@ -21,7 +21,7 @@ from src.benchmark import signals
 from src.configuration.openmath import AGENT_NAME, AGENT_UID, WORKDIR
 
 PROBE_COMMANDS = {
-    "identity": "id -u; id -un; echo HOME=$HOME; pwd",
+    "identity": "id -u; id -un; echo HOME=$HOME; pwd; umask",
     "workspace": "ls -la {w} | head -30",
     "stat": "stat -c '%U %a %y %n' {w}/README.md {w}/.git/HEAD {w}/Euler.zip {w}/.git {w}",
     "git": "git -C {w} config user.name; git -C {w} branch -a; git -C {w} status -sb | head -5",
