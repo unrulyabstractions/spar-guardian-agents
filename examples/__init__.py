@@ -5,7 +5,7 @@
     uv run python -m examples.knowledge_work.worktime_minimal --scale medium --set regulators=1
 
 Beside each minimal script sit the first experiment's cells: <task>_solo.py (one agent alone), <task>_solo_cheat.py
-(one agent told to cheat through run.run's instruction_suffix, the text in the script) and <task>_swarm_cheat.py
+(one agent told to cheat through run.run's instruction_suffix, the text in the script) and <task>_minimal_cheat.py
 (three agents told to cheat). Each script parses the shared arguments (examples/utils/cli.py), builds its config in
 the open, names its task and calls the run. The run lands in runs/<name>/ and its figures in out/<name>/, both
 ignored by git. By default a run is not judged as it finishes (USE_JUDGE_AS_DEFAULT); `scripts/rejudge.py <name>`
