@@ -41,7 +41,7 @@ from src.benchmark.transcript import (
 )
 from src.configuration import models, settings
 from src.configuration.swarm_config import SwarmConfig
-from src.measures import summary
+from src.measures import signals, summary
 from src.tasks import JUDGE_ADDENDUM, hidden_roles, swarm_task
 from src.utils import provider_retry
 
@@ -168,6 +168,9 @@ def run(name: str, benchmark, config: SwarmConfig, model: str, timeout: int | No
         raise Refusal("no eval log written", 3)
     run_dir = export(Path(log.location), name)
     summary.main([str(run_dir)])
+    print(f"== signals {run_dir}", flush=True)
+    for row in signals.run_signals(run_dir):
+        print(signals.agent_line(row), flush=True)
     return 0 if log.status == "success" else 3
 
 

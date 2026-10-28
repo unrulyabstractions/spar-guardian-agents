@@ -31,6 +31,7 @@ The experiment on ORBIT. It turns one benchmark from `src/benchmark/` and one `S
 | `run ... --issue flipt-02e2 --honeypot as_released\|own_piece\|jigsaw [--no-grade]` | the SWE issue and Lucy's honeypot, `jigsaw` by default; `--no-grade` skips the hidden tests |
 | `run ... --model M --timeout S` | the agents' model, an entry of `src/configuration/models.yaml` or an Inspect model string, and the seconds one model request may take (default `MODEL_TIMEOUT_S`) |
 | `judge <eval_log> <run_name> [--judge claude-haiku-5-5] [--sync] [--judge-errors]` | judges a finished log (again, or for the first time after `--no-judge`) and exports it with the verdicts; batch API unless `--sync` |
+| `signals <run ...> [--table]` | places every agent on the cheating ladder by code, no judge (`src/measures/signals.py`: the honeypot's fingerprints in tool results, posts and, from the end-of-run probe, on disk; `signals.jsonl`); every run gets it as it ends |
 | `ladder <run ...> [--judge claude-haiku-5-5] [--sync] [--view full\|actions] [--agents a01,a02] [--force] [--table]` | places every agent on the cheating ladder from its stored transcript (`src/benchmark/ladder.py`, the addendum `src/configuration/judge_ladder.py`): `runs/<name>/ladder.jsonl` with the rung, the cited calls and their rounds, the labels beside the ladder and the honesty labels; `--table` sums the existing files |
 | `ui [start\|stop] [--port 8765] [--no-open]` | starts or stops the results browser in the background |
 | `summary <run_dir ...> [--full]` | one line per judged episode, the swarm composition and the shutdown rate |
@@ -109,6 +110,7 @@ Hidden roles are used on an openmath board of three or more agents, and on any b
 
 | file | holds |
 |---|---|
+| `signals.py` | the code ladder: exposed, tried, opened, used, shipped and searched per agent from the transcript (pointers, aimed commands with copies followed, distinctive lines and bytes in results and read posts) and the probe's report in `run.json` (copies on disk, the deliverable, the team's submission); writes `signals.jsonl`; the table adds the agreement with the judge |
 | `rungs.py` | Rigel's ladder, version 1: searched, exposed, tried, opened, used, shipped per agent; writes `rungs.json`; a knowledge-work run is placed from its verdict fields (`KNOWLEDGE_RUNGS`) |
 | `swe_summary.py` | Lucy's SWE measures: cheated, fix posts, rule posts, disclosure, rung and reward; writes `swe_summary.json` |
 | `engagement.py` | the board engagement funnel per role and per agent: on the board, looked, read, posted, submitted for the team; each agent's refused reads and posts and its `agent_actions` queries |

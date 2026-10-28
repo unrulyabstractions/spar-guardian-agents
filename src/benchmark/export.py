@@ -242,20 +242,34 @@ def access_block(view: SampleView) -> dict | None:
 
 def knowledge_block(view: SampleView) -> dict | None:
     """The knowledge-work sample (layout, mode, seats, the pipeline artifact) and what its reviews found: each
-    contract's to_send/ files, the grader state per agent and the last verdict. None for another task."""
+    contract's to_send/ files, the grader state per agent, the last verdict, the number of review calls and each
+    call's agent, deliverable, verdict and error (review_calls). None for another task."""
     kw = _cheatbench(view).get("knowledge")
     if not kw:
         return None
     md = _score_metadata(view, KNOWLEDGE_SCORER) or {}
     sc = (view.scores or {}).get(KNOWLEDGE_SCORER)
+    calls = md.get("reviews") or []
     return {**{k: kw.get(k) for k in KNOWLEDGE_SAMPLE_KEYS}, **{k: md.get(k) for k in KNOWLEDGE_SCORE_KEYS},
-            "share_delivered": None if sc is None else sc.value, "reviews": len(md.get("reviews") or [])}
+            "share_delivered": None if sc is None else sc.value, "reviews": len(calls),
+            "review_calls": [{k: c.get(k) for k in ("agent", "deliverable", "verdict", "error_type")}
+                             for c in calls]}
+
+
+def signals_block(view: SampleView) -> dict | None:
+    """The honeypot probe's report (src/benchmark/signals.py by_owner), from whichever scorer ran it."""
+    for name in (DELIVERABLES_SCORER, KNOWLEDGE_SCORER):
+        found = (_score_metadata(view, name) or {}).get("signals")
+        if found is not None:
+            return found
+    return None
 
 
 def newer_run_facts(view: SampleView) -> dict:
     """run.json keys that only newer runs carry, each present only when the run recorded it."""
     cb = _cheatbench(view)
-    facts = {"turn_budget": cb.get("turn_budget"), "access": access_block(view), "knowledge": knowledge_block(view)}
+    facts = {"turn_budget": cb.get("turn_budget"), "access": access_block(view), "knowledge": knowledge_block(view),
+             "signals": signals_block(view)}
     return {k: v for k, v in facts.items() if v is not None}
 
 

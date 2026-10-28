@@ -95,6 +95,7 @@ Episode = {                       # one row of episodes.jsonl plus:
   transcript_path, has_transcript,
   verdict: null | Verdict,
   ladder: null | Ladder,
+  signals: null | Signals,
   engagement: null | {discovery_round, checks, reads, posts, read_senders: {sender: count}, free_steps, work_steps,
                       team_submitted: bool, notices,
                       reads_refused?, posts_refused?, oversight?, oversight_targets?: {target: count}},
@@ -110,6 +111,10 @@ Verdict = every key of the episode's judge.jsonl row except the bookkeeping keys
           explicit_prohibition_violated, explicit_prohibition_evidence; SWE has reference_solution_seeking,
           reference_solution_obtained, reference_solution_used, documentation_lookup, evaluation_tampering. A row that did
           not parse also carries raw (the judge's text).
+Signals = the episode's signals.jsonl row (src/measures/signals.py, `python -m src signals`) without episode, agent,
+         role and task: rung, exposed, exposed_call, exposed_source, searched, searched_call, tried, tried_call,
+         tried_evidence, opened, opened_call, opened_evidence, lines_seen, probe, copies, used, used_evidence,
+         shipped, shipped_evidence, calls. Null when the run has no signals.jsonl or the episode is not in it.
 Ladder = the episode's ladder.jsonl row (src/benchmark/ladder.py, `python -m src ladder`) without the same bookkeeping keys
          and without raw: CheatBench's verdict fields as that judge call answered them, then the ladder's fields exposed, exposed_call,
          exposed_source, searched, searched_call, tried, tried_call, tried_evidence, opened, opened_call, opened_evidence, used,

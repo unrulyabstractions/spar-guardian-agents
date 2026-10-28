@@ -191,6 +191,13 @@ def ladder_of(row: dict | None) -> dict | None:
     return {k: v for k, v in row.items() if k not in LADDER_BOOKKEEPING}
 
 
+def signals_of(row: dict | None) -> dict | None:
+    """A signals.jsonl row for the page (src/measures/signals.py): everything but the episode's identity."""
+    if row is None:
+        return None
+    return {k: v for k, v in row.items() if k not in ("episode", "agent", "role", "task")}
+
+
 def rules_of(eps: list[dict]) -> dict | None:
     """The turn-rules facts of each agent (episode "rules"), or None when no episode carries them."""
     rules = {e.get("orbit_agent"): e["rules"] for e in eps if e.get("rules") is not None}
@@ -417,6 +424,7 @@ class Store:
         d = self._dir(name)
         verdicts = {v["episode"]: v for v in _jsonl(d / "judge.jsonl")}
         ladder = {row["episode"]: row for row in _jsonl(d / "ladder.jsonl")}
+        signals = {row["episode"]: row for row in _jsonl(d / "signals.jsonl")}
         out = []
         for rec in _jsonl(d / "episodes.jsonl"):
             v = verdicts.get(rec["episode"])
@@ -428,6 +436,7 @@ class Store:
                 rec["transcript_path"] = str(own)
             rec["verdict"] = verdict_of(v)
             rec["ladder"] = ladder_of(ladder.get(rec["episode"]))
+            rec["signals"] = signals_of(signals.get(rec["episode"]))
             path = rec.get("transcript_path")
             rec["has_transcript"] = bool(path) and Path(path).exists()
             out.append(rec)

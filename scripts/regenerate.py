@@ -6,8 +6,9 @@ analysis tools' outputs. The results browser reads the directory live, so this a
 
 The export rewrites run.json, episodes.jsonl and judge.jsonl from the log and keeps the verdicts already in
 judge.jsonl, so a re-judged run keeps its re-judgement; ladder.jsonl and the measures' files are never cleared. The
-measures are the board engagement funnel on every run, the code ladder (src/measures/rungs.py) on SWE and
-knowledge-work runs, and Lucy's SWE measures on SWE runs. The figures go to out/<run>/. --tools runs every analysis
+measures are the board engagement funnel on every run, the cheating signals (src/measures/signals.py, the code
+ladder) on every run, Rigel's code ladder (src/measures/rungs.py) on SWE and knowledge-work runs, and Lucy's SWE
+measures on SWE runs. The figures go to out/<run>/. --tools runs every analysis
 tool of tools/ in order (scout, graph, transect, contagion, failures, hawk) when tools/.venv exists. --restart-ui
 stops and starts the results browser.
 """
@@ -25,7 +26,7 @@ if str(ROOT) not in sys.path:
 
 from src import run  # noqa: E402
 from src.configuration import settings  # noqa: E402
-from src.measures import engagement, rungs, swe_summary  # noqa: E402
+from src.measures import engagement, rungs, signals, swe_summary  # noqa: E402
 from src.ui import launch, plots  # noqa: E402
 
 TOOLS = ("scout", "graph", "transect", "contagion", "failures", "hawk")
@@ -57,6 +58,9 @@ def measures_again(run_dir: Path) -> None:
     task = json.loads((run_dir / "run.json").read_text()).get("task")
     print(f"== engagement {run_dir}", flush=True)
     engagement.run_measures(run_dir)
+    if task in signals.DOMAINS:
+        print(f"== signals {run_dir}", flush=True)
+        signals.run_signals(run_dir)
     if task in ("software_engineering", "knowledge_work"):
         print(f"== rungs {run_dir}", flush=True)
         rungs.run_rungs(run_dir)

@@ -84,6 +84,12 @@ def cmd_judge(args: argparse.Namespace) -> int:
                      judge_errors=args.judge_errors)
 
 
+def cmd_signals(args: argparse.Namespace) -> int:
+    from src.measures import signals  # the benchmark's imports, the same seconds
+    run_dirs = [Path(r) if "/" in r or Path(r).is_dir() else settings.RUNS / r for r in args.runs]
+    return signals.main([str(d) for d in run_dirs] + (["--table"] if args.table else []))
+
+
 def cmd_ladder(args: argparse.Namespace) -> int:
     from src import run  # the same four seconds as in cmd_run
     from src.benchmark import ladder  # the judge's imports, the same seconds
@@ -144,6 +150,13 @@ def add_judge_parser(subparsers) -> None:
     judge.set_defaults(func=cmd_judge)
 
 
+def add_signals_parser(subparsers) -> None:
+    signals = subparsers.add_parser("signals", help="the cheating signals of a run by code, no judge (signals.jsonl)")
+    signals.add_argument("runs", nargs="+", help="run names under runs/, or run directories")
+    signals.add_argument("--table", action="store_true", help="only the table over the runs' signals.jsonl")
+    signals.set_defaults(func=cmd_signals)
+
+
 def add_ladder_parser(subparsers) -> None:
     ladder = subparsers.add_parser("ladder", help="place every agent of a run on the cheating ladder (ladder.jsonl)")
     ladder.add_argument("runs", nargs="+", help="run names under runs/, or run directories")
@@ -199,6 +212,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_run_parser(subparsers)
     add_judge_parser(subparsers)
     add_ladder_parser(subparsers)
+    add_signals_parser(subparsers)
     add_ui_parser(subparsers)
     add_summary_parser(subparsers)
     add_budget_parser(subparsers)

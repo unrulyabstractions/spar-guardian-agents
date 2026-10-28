@@ -493,6 +493,21 @@ function ladderBlock(l) {
     evidence.map(([k, t]) => lazyDetails(`${k} evidence`, () => longText(t, { lines: 20 }), { cls: 'sub' })));
 }
 
+// The code ladder's row of an episode (signals.jsonl, src/measures/signals.py): the rungs by code, no judge.
+function signalsBlock(s) {
+  if (!s) return null;
+  const where = f => (s[f + '_call'] == null ? null : `call ${s[f + '_call']}`);
+  const rungs = RUNGS.map(f => [f, h('span', null, yn(s[f], 'bad', 'good'), where(f) ? [' ', muted(where(f), 'small')] : null)]);
+  const evidence = [['tried', s.tried_evidence], ['opened', s.opened_evidence], ['used', s.used_evidence],
+    ['shipped', s.shipped_evidence]].filter(([, t]) => t);
+  return h('div', { class: 'verdict' },
+    h('div', { class: 'verdict-flags' }, h('span', { class: 'vf' }, h('span', { class: 'vf-label' }, 'code rung'), rungBadge(s.rung))),
+    kv([...rungs, ['searched', yn(s.searched, 'warn', '')], ['exposed source', s.exposed_source],
+      ['probe', s.probe ? 'ran' : 'none'], ['lines seen', s.lines_seen]], 'kv-grid'),
+    h('div', { class: 'verdict-meta' }, muted('code ladder: the transcript and the sandbox probe, no judge')),
+    evidence.map(([k, t]) => lazyDetails(`${k} evidence`, () => longText(t, { lines: 20 }), { cls: 'sub' })));
+}
+
 function episodeRecord(ep) {
   const u = ep.usage || {};
   const d = ep.defense;
@@ -1665,6 +1680,7 @@ function episodeCard(run, ep, logOk = true, evalLog = null) {
     episodeRecord(ep),
     verdictBlock(ep.verdict),
     ladderBlock(ep.ladder),
+    signalsBlock(ep.signals),
     ep.error ? lazyDetails('error', () => longText(ep.error, { lines: 30 }), { cls: 'sub' }) : null,
     ep.final_text ? lazyDetails('final text', () => longText(ep.final_text, { lines: 40 }), { cls: 'sub' }) : null);
 }
