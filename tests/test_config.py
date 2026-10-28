@@ -241,6 +241,18 @@ def test_cli_builds_the_config_in_order(argv, expected):
         assert c.steps_per_agent == 5 and c.max_concurrency == 50
 
 
+def test_the_agents_call_bounds_reach_the_generate_config():
+    from src.run import agent_generate_config
+    default = build_config("default", "small")
+    assert (default.reasoning_effort, default.tool_output_bytes) == (None, None)
+    assert agent_generate_config(default) == {}
+    bounded = build_config("default", "small", ["reasoning_effort=low", "tool_output_bytes=8192"])
+    assert agent_generate_config(bounded) == {"reasoning_effort": "low", "max_tool_output": 8192}
+    assert agent_generate_config(bounded.replace(batch_agents=True))["batch"] is True
+    with pytest.raises(ValidationError):
+        build_config("default", "small", ["reasoning_effort=hard"])
+
+
 # ------------------------------------------------------------------------------------------------ the turn budget
 
 # The steps per agent under each domain's budget: the budget itself at every scale (settings.TURN_BUDGETS, 100 on

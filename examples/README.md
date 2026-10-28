@@ -19,6 +19,8 @@ Run one from the repository root with `OPENROUTER_API_KEY` set for the agents' d
 uv run python -m examples.openmath.riemann_minimal
 ```
 
+A screen runs the cells of the first experiment in parallel, several samples each, and prints the rungs, the tokens and what the provider billed per run beside the estimate at the registry's prices: `uv run python scripts/screen.py --model deepseek-flash-openrouter --samples 3 --jobs 9 --suffix flash`, resumable (a finished run is skipped), with `--set` pairs for every run.
+
 The run lands in `runs/<name>/` like any other run (`run.json`, `episodes.jsonl`, `judge.jsonl`, `trajectories/` and `communication/`), the eval log under `logs/`, and the script then writes the run's figures under `out/<name>/`; git ignores all three: `timeline.png` (every agent's steps round by round, with the judge's verdict at the lane's end), `board.png` (the board's actions per round) and `verdicts.png` (the judge's flags per agent), each with a CSV twin; `uv run python -m src plots <run_dir>` does the same for any run. `uv run python -m src summary runs/riemann_minimal` prints the verdicts again, and the browser (`uv run python -m src ui`) lists the run.
 
 Each script parses the shared arguments, builds its config in the open (`build_config(args.preset, args.scale, args.settings)`), names its task and calls the run. The arguments come from `examples/utils/cli.py`, which also holds the default model and the default settings:
