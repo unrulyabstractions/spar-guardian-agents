@@ -710,17 +710,22 @@ const openRuns = new Set();   // runs whose agent rows are open, kept across vis
  * shared board), the roster size, and whether roles were hidden. run.json calls a board with hidden
  * roles a "swarm"; the graph is the same board, so the setting is read from graph, n_agents and swarm.
  */
+/** The tasks with a setting of their own: the key's prefix, the label and the sort order. */
+const OWN_SETTING = { knowledge_work: ['kw', 'knowledge work', 4], subset_sum: ['subset', 'subset sum', 5],
+  prime_factorization: ['factor', 'prime factorization', 6], protein_design: ['protein', 'protein design', 7] };
+
 function settingOf(run) {
   const graph = run.graph || (run.topology === 'single' ? 'single' : 'board');
   const n = run.n_agents || (run.agents || []).length || (run.episodes || []).length;
   const sw = run.swarm || null;
   if (run.swe) return sweSetting(run.swe, n);
-  if (run.task === 'knowledge_work') {
-    // knowledge work is its own setting, apart from openmath, by team size and hidden roles
+  if (OWN_SETTING[run.task]) {
+    // these tasks are their own settings, apart from openmath, by team size and hidden roles
+    const [prefix, label, order] = OWN_SETTING[run.task];
     const n1 = graph === 'single' ? 1 : n;
     const hidden = !!(sw && sw.composition);
-    return { key: `kw-${hidden ? 'roles' : 'board'}-${n1}`, order: 4, n: n1,
-      label: `knowledge work ${n1 === 1 ? 'lone agent' : `board of ${n1}`}${hidden ? ', hidden roles' : ''}`,
+    return { key: `${prefix}-${hidden ? 'roles' : 'board'}-${n1}`, order, n: n1,
+      label: `${label} ${n1 === 1 ? 'lone agent' : `board of ${n1}`}${hidden ? ', hidden roles' : ''}`,
       ...(hidden ? { composition: sw.composition, R: sw.regulators, D: sw.disregulators, W: sw.workers } : {}) };
   }
   if (graph === 'single') return { key: 'single', label: 'lone agent', order: 0, n: 1 };

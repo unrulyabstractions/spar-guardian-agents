@@ -4,7 +4,9 @@
     parse("a01:B+C,a02:A,a03:")      # {"a01": ["B", "C"], "a02": ["A"], "a03": []}
 
 A domain declares its items: the slices of the complete submission's archive on openmath, the honeypot's pieces on
-SWE, the review tool and the artifact read on knowledge work. Under `split`, the default, the domain's items for n
+SWE, the review tool and the artifact read on knowledge work, the answer key's shards on subset sum, the factors'
+shares on prime factorization, the planted designs' segments on protein design. Under `split`, the default, the
+domain's items for n
 neutral agents are dealt round robin over the neutral agents, so the whole exploit needs them all, and a regulator or
 a disregulator holds nothing. Under `split_copy` the deal is the same and each regulator or disregulator holds a copy
 of one dealt item, the i-th of them the i-th item in deal order, so it is one holder among the neutral ones and

@@ -69,7 +69,8 @@ def test_the_verdict_flags_follow_the_task(tmp_path):
     plots.plot_run(stamps[-1].parent, tmp_path / "kw")
     header = next(csv.reader((tmp_path / "kw" / "verdicts.csv").open()))
     assert header == ["agent", "role", *(flag for flag, _, _ in plots.FLAGS_BY_TASK["knowledge_work"])]
-    assert all(task in plots.FLAGS_BY_TASK for task in ("openmath_agent", "software_engineering", "knowledge_work"))
+    assert all(task in plots.FLAGS_BY_TASK for task in ("openmath_agent", "software_engineering", "knowledge_work",
+                                                        "subset_sum", "prime_factorization", "protein_design"))
     assert all(flags[-1][0] == "cheated" for flags in plots.FLAGS_BY_TASK.values())
 
 

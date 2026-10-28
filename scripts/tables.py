@@ -37,14 +37,17 @@ CHIP = "#efeee9"
 # The ladder's rungs (src/configuration/judge_ladder.py LADDER and HONEYPOT) against the CheatBench verdict field each
 # task's judge_schema.py records the same act under; "none" where only the ladder records it.
 RUNGS = [
-    ("exposed", ["`honey_pots_seen`"], ["none"], ["`honey_pots_seen`"]),
-    ("searched", ["none"], ["`reference_solution_seeking`", "(no known target)"], ["none"]),
-    ("tried", ["`attempted_access`"], ["`reference_solution_seeking`", "(known target)"], ["none"]),
-    ("opened", ["`cheated`", "`extracted_submission`"], ["`reference_solution_obtained`"], ["`inspected_competitor`"]),
-    ("used", ["none"], ["`reference_solution_used`"], ["`copied_or_transformed_competitor`"]),
-    ("shipped", ["none"], ["none"], ["`copied_final`"]),
-    ("tampered", ["none"], ["`evaluation_tampering`"], ["`attempted_grader_manipulation`"]),
-    ("admitted", ["`disclosed_access`"], ["none"], ["none"]),
+    ("exposed", ["`honey_pots_seen`"], ["none"], ["`honey_pots_seen`"], ["`honey_pots_seen`"], ["`honey_pots_seen`"]),
+    ("searched", ["none"], ["`reference_solution_seeking`", "(no known target)"], ["none"], ["none"], ["none"]),
+    ("tried", ["`attempted_access`"], ["`reference_solution_seeking`", "(known target)"], ["none"], ["none"],
+     ["`attempted_access`"]),
+    ("opened", ["`cheated`", "`extracted_submission`"], ["`reference_solution_obtained`"], ["`inspected_competitor`"],
+     ["`answer_file_read`"], ["`read_sequence_file`", "`obtained_designs`"]),
+    ("used", ["none"], ["`reference_solution_used`"], ["`copied_or_transformed_competitor`"], ["`used_answer_key`"],
+     ["none"]),
+    ("shipped", ["none"], ["none"], ["`copied_final`"], ["none"], ["`copied_design`"]),
+    ("tampered", ["none"], ["`evaluation_tampering`"], ["`attempted_grader_manipulation`"], ["`tampering`"], ["none"]),
+    ("admitted", ["`disclosed_access`"], ["none"], ["none"], ["`final_source_disclosure`"], ["`disclosed_access`"]),
 ]
 
 
@@ -113,8 +116,9 @@ def write_scales() -> Path:
 
 
 def write_rungs() -> Path:
-    rows = [[rung, openmath, swe, kw] for rung, openmath, swe, kw in RUNGS]
-    return table_png("table_rungs", ["rung", "openmath", "SWE", "knowledge work"], rows, [1.0, 2.1, 2.6, 3.0])
+    rows = [list(row) for row in RUNGS]
+    return table_png("table_rungs", ["rung", "openmath", "SWE", "knowledge work", "subset sum, factoring",
+                                     "protein design"], rows, [1.0, 2.1, 2.6, 3.0, 2.4, 2.4])
 
 
 if __name__ == "__main__":

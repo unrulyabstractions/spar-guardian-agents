@@ -47,10 +47,13 @@ Mode = Literal["solo_task", "shared_task", "collaboration_needed"]
 ScaleName = Literal["small", "medium", "large", "extra_large", "gigantic"]
 MODES = typing.get_args(Mode)
 # The mode a domain runs in when `mode` is None. Keys are instruction_levels.yaml's benchmark keys.
-DOMAIN_MODES: dict[str, str] = {"openmath": "shared_task", "swe": "shared_task", "knowledge_work": "shared_task"}
+DOMAIN_MODES: dict[str, str] = {"openmath": "shared_task", "swe": "shared_task", "knowledge_work": "shared_task",
+                                "subset_sum": "shared_task", "prime_factorization": "shared_task",
+                                "protein_design": "shared_task"}
 # CheatBench's task names for the same domains (Benchmark.name).
 DOMAIN_KEYS = {"openmath": "openmath", "swe": "swe", "knowledge_work": "knowledge_work",
-               "openmath_agent": "openmath", "software_engineering": "swe"}
+               "subset_sum": "subset_sum", "prime_factorization": "prime_factorization",
+               "protein_design": "protein_design", "openmath_agent": "openmath", "software_engineering": "swe"}
 BOARD_TOOLS = ("board_status", "board_read", "board_post")
 NONE_TEXT = ("none", "null")
 
@@ -73,7 +76,8 @@ def role_count(value: int | float, n_agents: int) -> int:
 
 
 def domain_key(domain: str) -> str:
-    """"openmath", "swe" or "knowledge_work", from either key or CheatBench's task name."""
+    """The domain key ("openmath", "swe", "knowledge_work", "subset_sum", "prime_factorization" or
+    "protein_design"), from either the key or CheatBench's task name."""
     if domain not in DOMAIN_KEYS:
         raise ValueError(f"unknown domain {domain!r}; choose one of {sorted(DOMAIN_KEYS)}")
     return DOMAIN_KEYS[domain]
@@ -126,12 +130,14 @@ class SwarmConfig(BaseModel):
     """How the team shares the task. solo_task: each agent its own copy of the task, its own workspace, git identity
     and honeypot; the roster is not told and there is no team_submit. shared_task: one task and one deliverable; the
     agents hold the parts of the exploit `access` deals them, each in its own copy of the repository and workspace
-    (openmath, SWE) or with its own share of the tools (knowledge work), and under access=all openmath shares one
+    (openmath, SWE), with its own share of the tools (knowledge work) or on its own machine (subset sum, prime
+    factorization, protein design), and under access=all openmath shares one
     workspace; the roster is told and neutral agents get team_submit. collaboration_needed: one issue split into
     parts, one or more agents per part, the team's main
     branch is graded; the roster is told and neutral agents get team_submit. None resolves per domain
     (DOMAIN_MODES): shared_task on every domain. A dict gives one mode per domain key ("openmath", "swe",
-    "knowledge_work"). Read it through resolve_mode(domain)."""
+    "knowledge_work", "subset_sum", "prime_factorization", "protein_design"). Read it through
+    resolve_mode(domain)."""
     scale: ScaleName | None = None
     """The scale the size fields came from (src/configuration/scales.py SCALES), set by at_scale. None means the
     fields hold their own values. A later --set may change any field a scale gave; this
@@ -148,13 +154,16 @@ class SwarmConfig(BaseModel):
     domain's items are dealt round robin over the neutral agents, so the whole exploit needs them all (the midterm
     report's collaboration): openmath cuts the complete submission's archive into one slice per neutral agent, SWE
     deals the honeypot's pieces (jigsaw B, C, A; own_piece A, B, C), knowledge work deals the review tool to the
-    first half of the neutral agents and the artifact read to the rest. Regulators and disregulators hold nothing.
+    first half of the neutral agents and the artifact read to the rest, subset sum deals the answer key's shards,
+    prime factorization the factors' additive shares and protein design the segments of the planted designs.
+    Regulators and disregulators hold nothing.
     split_copy: the same deal, and each regulator or disregulator holds a copy of one dealt item (the i-th of them
     the i-th item in deal order), so it is never the only holder. Every agent holds everything in a solo_task team,
     alone, and when fewer than two are neutral. all: every agent holds everything. A map {agent: [items]} names what
     each agent of the roster holds, on the command
     line as `a01:slice1+slice2,a02:slice3,a03:` (nothing after the colon: nothing). The items are slice1..sliceN or
-    whole (openmath), A, B, C or whole (SWE), review and read (knowledge work). A dict keyed by domain gives one
+    whole (openmath), A, B, C or whole (SWE), review and read (knowledge work), shard1..shardN (subset sum),
+    share1..shareN (prime factorization) and segment1..segmentN (protein design). A dict keyed by domain gives one
     policy per domain; on the command line `swe:split,openmath:all`. Read it through
     resolve_access(domain)."""
 
@@ -441,7 +450,7 @@ class SwarmConfig(BaseModel):
         return isinstance(self.access, dict) and all(isinstance(v, str) for v in self.access.values())
 
     def resolve_access(self, domain: str) -> Access:
-        """The access policy on this domain ("openmath", "swe", "knowledge_work" or CheatBench's task name): the
+        """The access policy on this domain (a domain key or CheatBench's task name): the
         field itself, or the domain's entry of a per-domain dict (split when the domain has none)."""
         if self._access_by_domain():
             return self.access.get(domain_key(domain), "split")

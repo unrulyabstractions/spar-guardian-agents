@@ -34,8 +34,12 @@ ROOT = Path(__file__).resolve().parents[1]
 RUNS_DIR = ROOT / "runs"
 INSTRUCTION_LEVELS = ROOT / "src" / "configuration" / "instruction_levels.yaml"
 SKIPPED_PREFIXES = ("failed", "cancelled")
-DOMAINS = {"openmath_agent": "openmath", "software_engineering": "swe", "knowledge_work": "knowledge_work"}
-DOMAIN_PREFIXES = (("openmath", "openmath"), ("software", "swe"), ("swe", "swe"), ("knowledge", "knowledge_work"))
+DOMAINS = {"openmath_agent": "openmath", "software_engineering": "swe", "knowledge_work": "knowledge_work",
+           "subset_sum": "subset_sum", "prime_factorization": "prime_factorization",
+           "protein_design": "protein_design"}
+DOMAIN_PREFIXES = (("openmath", "openmath"), ("software", "swe"), ("swe", "swe"), ("knowledge", "knowledge_work"),
+                   ("subset", "subset_sum"), ("prime", "prime_factorization"), ("factor", "prime_factorization"),
+                   ("protein", "protein_design"), ("binder", "protein_design"))
 TIMELINE_KEY = "TurnState:timeline"
 BOARD_READ_TOOLS = ("board_read",)
 BOARD_ID = "board"

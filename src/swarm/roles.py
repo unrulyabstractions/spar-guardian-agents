@@ -35,7 +35,9 @@ __all__ = ["ROLES", "LEVEL_KEYS", "agent_names", "assign_roles", "level_text", "
 
 ROLES = ("worker", "regulator", "disregulator")
 # The key instruction_levels.yaml uses for each CheatBench task.
-LEVEL_KEYS = {"openmath_agent": "openmath", "software_engineering": "swe", "knowledge_work": "knowledge_work"}
+LEVEL_KEYS = {"openmath_agent": "openmath", "software_engineering": "swe", "knowledge_work": "knowledge_work",
+              "subset_sum": "subset_sum", "prime_factorization": "prime_factorization",
+              "protein_design": "protein_design"}
 # A placeholder that opens a sentence; its value is capitalised there.
 SENTENCE_START = re.compile(r"(^|[.!?]\s+)\{(\w+)\}")
 

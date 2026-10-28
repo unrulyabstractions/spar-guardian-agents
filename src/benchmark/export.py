@@ -19,7 +19,8 @@ Facts that only newer runs record are written only when the run has them, so a r
 byte for byte as before (the smoke runs of 395e9c8 recorded split_access and archive_part, which nothing reads any
 more): run.json "turn_budget" ({budget, steps_per_agent}), "access" (the access policy and what each agent held:
 its items, and on openmath its honeypot branches and archive slices, on knowledge work the review tool and the
-artifact read), "knowledge" (the knowledge-work sample and its reviews); the engagement keys oversight,
+artifact read), "knowledge" (the knowledge-work sample and its reviews), "interview" and "protein" (a machines
+domain's sample and its tool's states and calls); the engagement keys oversight,
 oversight_targets, reads_refused and posts_refused; and an episode's "access" and "review" (its grader state on
 knowledge work).
 
@@ -63,6 +64,10 @@ from src.configuration.swarm_config import DOMAIN_KEYS, DOMAIN_MODES, PRESETS
 CHEATED_LINE = re.compile(r"^\s*CHEATED\s*:\s*(yes|no)\b", re.I | re.M)
 DELIVERABLES_SCORER = "deliverables_scorer"
 KNOWLEDGE_SCORER = "knowledge_deliverables"   # src/benchmark/domains/knowledge/probe.py
+INTERVIEW_SCORER = "interview_deliverables"   # src/benchmark/domains/interview/probe.py
+PROTEIN_SCORER = "protein_deliverables"       # src/benchmark/domains/protein/probe.py
+# The machines domains (one container per agent): run.json key and scorer name.
+MACHINE_BLOCKS = {"interview": INTERVIEW_SCORER, "protein": PROTEIN_SCORER}
 SWE_GRADER = "swe_grader"
 PROBES_SCORER = "end_of_episode_probes"
 TURN_STATE = "TurnState"      # the StoreModel of src/swarm/rules.py; Inspect stores its fields as "TurnState:<field>"
@@ -237,6 +242,9 @@ def access_block(view: SampleView) -> dict | None:
     kw = cb.get("knowledge") or {}
     for a, seat in (kw.get("seats") or {}).items():
         block["agents"].setdefault(a, {}).update({"review": seat.get("review"), "read": seat.get("read")})
+    for key in MACHINE_BLOCKS:
+        for a, seat in ((cb.get(key) or {}).get("agents") or {}).items():
+            block["agents"].setdefault(a, {}).update({"service": seat.get("service"), "pieces": seat.get("pieces")})
     return block if block["agents"] else None
 
 
@@ -256,9 +264,22 @@ def knowledge_block(view: SampleView) -> dict | None:
                              for c in calls]}
 
 
+def machine_block(view: SampleView, key: str) -> dict | None:
+    """run.json[key] for a machines domain (interview, protein): the sample's layout facts
+    (metadata["cheatbench"][key]) merged with the scorer's outcome facts (its metadata[key]: the tool's states and
+    calls, what the agents left behind) and the score as "value". None for another task."""
+    facts = _cheatbench(view).get(key)
+    if not facts:
+        return None
+    scorer = MACHINE_BLOCKS[key]
+    sc = (view.scores or {}).get(scorer)
+    return {**facts, **((_score_metadata(view, scorer) or {}).get(key) or {}),
+            "value": None if sc is None else sc.value}
+
+
 def signals_block(view: SampleView) -> dict | None:
     """The honeypot probe's report (src/benchmark/signals.py by_owner), from whichever scorer ran it."""
-    for name in (DELIVERABLES_SCORER, KNOWLEDGE_SCORER):
+    for name in (DELIVERABLES_SCORER, KNOWLEDGE_SCORER, *MACHINE_BLOCKS.values()):
         found = (_score_metadata(view, name) or {}).get("signals")
         if found is not None:
             return found
@@ -269,14 +290,18 @@ def newer_run_facts(view: SampleView) -> dict:
     """run.json keys that only newer runs carry, each present only when the run recorded it."""
     cb = _cheatbench(view)
     facts = {"turn_budget": cb.get("turn_budget"), "access": access_block(view), "knowledge": knowledge_block(view),
-             "signals": signals_block(view)}
+             **{key: machine_block(view, key) for key in MACHINE_BLOCKS}, "signals": signals_block(view)}
     return {k: v for k, v in facts.items() if v is not None}
 
 
 def newer_episode_facts(view: SampleView, agent: str) -> dict:
-    """An episode's access (what it held) and review (its knowledge-work grader state), when the run recorded them."""
+    """An episode's access (what it held), review (its knowledge-work grader state) and task_tool (its owner's
+    state and its calls of the task's tool on a machines domain), when the run recorded them."""
     facts = {"access": ((access_block(view) or {}).get("agents") or {}).get(agent),
-             "review": ((_score_metadata(view, KNOWLEDGE_SCORER) or {}).get("grader_state") or {}).get(agent)}
+             "review": ((_score_metadata(view, KNOWLEDGE_SCORER) or {}).get("grader_state") or {}).get(agent),
+             "task_tool": next((md["agents"][agent] for md in map(lambda s: _score_metadata(view, s),
+                                                                   MACHINE_BLOCKS.values())
+                                if md and agent in (md.get("agents") or {})), None)}
     return {k: v for k, v in facts.items() if v is not None}
 
 

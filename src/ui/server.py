@@ -64,7 +64,7 @@ DELIVERABLE_FIELDS = ("archive_in_workspace", "registered_on_main", "registered_
 SAMPLE_STORE_KEYS = (
     "EnvironmentState:turn", "EnvironmentState:last_text_by_agent",
     "DefenseLog:blocks", "DefenseLog:activity", "DefenseLog:vaccination_injections",
-    "knowledge_reviews",
+    "knowledge_reviews", "task_tool_state", "task_tool_calls",
 )
 ROLES = ("worker", "regulator", "disregulator")
 # The analysis tools (tools/ at the repository root) write runs/<run>/tools/<tool>/summary.json and their own files.
@@ -488,6 +488,8 @@ class Store:
             "turn_budget": run.get("turn_budget"),
             "access": run.get("access"),
             "knowledge": run.get("knowledge"),
+            "interview": run.get("interview"),
+            "protein": run.get("protein"),
             "tools": self.tool_names(name),
         }
 

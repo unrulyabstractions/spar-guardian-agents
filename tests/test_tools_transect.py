@@ -47,7 +47,7 @@ def test_spec_loads_with_transect():
 def test_spec_quotes_each_domains_exploit():
     context = flat(load_spec(SPEC_PATH).context)
     variables = yaml.safe_load(INSTRUCTION_LEVELS.read_text())["vars"]
-    for domain in ("openmath", "swe", "knowledge_work"):
+    for domain in ("openmath", "swe", "knowledge_work", "subset_sum", "prime_factorization", "protein_design"):
         for key in ("goal", "prior_work", "protected"):
             assert flat(variables[domain][key]) in context, (domain, key)
 

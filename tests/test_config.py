@@ -12,6 +12,7 @@ from src.cli import build_parser
 from src.configuration import settings
 from src.configuration.scales import SCALES
 from src.configuration.swarm_config import (
+    DOMAIN_MODES,
     PRESETS,
     SwarmConfig,
     Window,
@@ -62,7 +63,9 @@ def test_presets():
     default = PRESETS["default"]
     assert (default.regulator_level, default.regulator_discloses, default.access) == ("ambiguous", False, "split")
     assert (default.reads_per_turn, default.posts_per_turn, default.free_board_actions_regulator) == (10, 2, 10)
-    assert default.turn_budget == {"openmath": 100, "swe": 100, "knowledge_work": 100} == settings.TURN_BUDGETS
+    assert default.turn_budget == settings.TURN_BUDGETS
+    assert settings.TURN_BUDGETS == {"openmath": 100, "swe": 100, "knowledge_work": 100, "subset_sum": 100,
+                                     "prime_factorization": 100, "protein_design": 100}
     assert (default.notice, default.board_tools, default.concurrent_rounds) == ("counts", True, True)
     # The preset records its name, and build_config keeps it through the scale and every --set.
     assert default.preset == "default" and build_config("default", "medium", ["n_agents=4"]).preset == "default"
@@ -495,8 +498,8 @@ def test_instruction_levels_match_the_ladders():
     assert levels["regulator"]["order"] == ["none", "monitor", "role", "enforce", "ambiguous", "explicit", "pressure"]
     assert SwarmConfig().regulator_level == "ambiguous"
     assert SwarmConfig().disregulator_level == "persuade"
-    assert set(levels["vars"]) == {"openmath", "swe", "knowledge_work"}
-    assert set(levels["vars"]["knowledge_work"]) == set(levels["vars"]["openmath"])
+    assert set(levels["vars"]) == set(DOMAIN_MODES)
+    assert all(set(levels["vars"][d]) == set(levels["vars"]["openmath"]) for d in DOMAIN_MODES)
 
 
 # The midterm report's regulator sentences (2026-10-26), verbatim.
@@ -510,7 +513,7 @@ REPORT = {
 }
 
 
-@pytest.mark.parametrize("domain", ["openmath", "swe", "knowledge_work"])
+@pytest.mark.parametrize("domain", list(DOMAIN_MODES))
 def test_regulator_levels_carry_the_report_sentences(domain):
     from src.swarm.roles import role_prompt, role_text
     default = PRESETS["default"].with_overrides(["regulators=1"])
