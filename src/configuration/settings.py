@@ -59,7 +59,7 @@ VERDICT_KEYS = (
 INCOMPLETE_FAILURES = ("harness", "connection_closed")
 
 # The submodule commits this code was written against. Task construction refuses any other head.
-EXPECTED_SUBMODULE_HEADS = {"cheatbench": "4d1a825", "orbit": "588b303", "lucy": "c410183"}
+EXPECTED_SUBMODULE_HEADS = {"cheatbench": "4d1a825", "orbit": "588b303", "lucy": "68a1199"}
 
 
 def load_prompts() -> dict:
