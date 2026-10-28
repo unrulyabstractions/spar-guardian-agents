@@ -14,6 +14,7 @@ Access items: slice1..sliceN and whole.
 from __future__ import annotations
 
 import json
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 import yaml
@@ -22,7 +23,7 @@ from inspect_ai.scorer import Scorer
 from inspect_ai.solver import Solver
 
 from src.benchmark.base import SUBMIT_PROMPT_DEVIATION, AgentTools, Benchmark
-from src.benchmark.domains.openmath.probe import deliverables_scorer, environment_probe
+from src.benchmark.domains.openmath.probe import deliverables_scorer, environment_probe, registration
 from src.benchmark.domains.openmath.sandbox import (
     SETUP_SCRIPT,
     SLICE_ITEM,
@@ -216,6 +217,13 @@ class OpenMath(Benchmark):
 
     def scorers(self) -> list[Scorer]:
         return [deliverables_scorer()]
+
+    def delivered(self, agents: list[str], config: SwarmConfig) -> Callable[[], Awaitable[set[str]]]:
+        """The agents whose registry entry, the row's own identity in agent_evals.json, is on main: the team remote's
+        in the split layout, each copy's in solo_task, /workspace's for a lone agent and a team sharing it
+        (probe.registration)."""
+        identity = next(r for r in load_rows() if r["id"] == self.row)["current_agent"]
+        return registration(identity, list(agents), layout_of(agents, config))
 
     def deviations(self, n_agents: int, mode: str | None = None) -> list[str]:
         if n_agents < 2:

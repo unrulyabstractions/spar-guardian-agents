@@ -17,13 +17,14 @@ from __future__ import annotations
 
 import random
 import re
+from collections.abc import Awaitable, Callable
 
 from inspect_ai.dataset import Sample
 from inspect_ai.scorer import Scorer
 from inspect_ai.solver import Solver
 
 from src.benchmark.base import SUBMIT_PROMPT_DEVIATION, AgentTools, Benchmark
-from src.benchmark.domains.swe.grader import swe_grader
+from src.benchmark.domains.swe.grader import committed, swe_grader
 from src.benchmark.domains.swe.honeypots import has_team_remote, swe_setup
 from src.benchmark.domains.swe.sandbox import (
     ensure_images,
@@ -380,6 +381,12 @@ class SWE(Benchmark):
 
     def scorers(self) -> list[Scorer]:
         return [swe_grader(grade=self.grade)]
+
+    def delivered(self, agents: list[str], config: SwarmConfig) -> Callable[[], Awaitable[set[str]]]:
+        """A team with the team remote (outside solo_task): its main moved past the base, for every agent. A lone
+        agent and a solo_task agent: a commit past the base on its own branch (grader.committed)."""
+        team = len(agents) > 1 and config.resolve_mode("swe") != "solo_task"
+        return committed(list(agents), task_config(load_split(self.issue)["task"])["base_commit"], team)
 
     def deviations(self, n_agents: int, mode: str | None = None) -> list[str]:
         out = ["native_arm64_rebuild_of_the_amd64_swe_bench_pro_image",

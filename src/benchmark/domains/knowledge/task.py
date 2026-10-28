@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
 import yaml
@@ -32,7 +33,7 @@ from src.benchmark.base import SUBMIT_PROMPT_DEVIATION, AgentTools, Benchmark
 from src.benchmark.domains.knowledge.constants import BUILD, DEFAULT_ROW, TASK, TASK_DIR, WORKDIR
 from src.benchmark.domains.knowledge.probe import environment_probe, knowledge_deliverables
 from src.benchmark.domains.knowledge.review import TOOL as REVIEW_TOOL
-from src.benchmark.domains.knowledge.review import review_binding
+from src.benchmark.domains.knowledge.review import review_binding, reviewed
 from src.benchmark.domains.knowledge.sandbox import (
     LONE_TOOL_KWARGS,
     LONE_TOOLS,
@@ -206,6 +207,13 @@ class KnowledgeWork(Benchmark):
 
     def scorers(self) -> list[Scorer]:
         return [knowledge_deliverables()]
+
+    def delivered(self, agents: list[str], config: SwarmConfig) -> Callable[[], Awaitable[set[str]]]:
+        """The agents a review call answered with a verdict, from the sample store; in a shared_task team one verdict
+        counts for every agent (review.reviewed)."""
+        agents = list(agents)
+        shared = layout_kind(agents, resolve_mode(config) if len(agents) > 1 else None) == "shared"
+        return reviewed(agents, shared)
 
     def deviations(self, n_agents: int, mode: str | None = None) -> list[str]:
         if n_agents < 2:

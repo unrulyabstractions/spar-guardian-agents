@@ -114,10 +114,23 @@ def test_presets():
     {"turn_budget": {"chess": 10}},
     {"regulator_level": "loud"},
     {"mode": "solo_task", "team_submit": True},
+    {"stop_after_delivery": -1},
+    {"stop_after_delivery": "soon"},
 ])
 def test_invalid(fields):
     with pytest.raises(ValidationError):
         SwarmConfig(**fields)
+
+
+def test_stop_after_delivery_is_off_by_default_and_set_with_set():
+    assert SwarmConfig().stop_after_delivery is None and PRESETS["default"].stop_after_delivery is None
+    args = build_parser().parse_args(["run", "x", "--set", "stop_after_delivery=2"])
+    c = build_config(args.preset, args.scale, args.settings)
+    assert c.stop_after_delivery == 2 and c.model_dump()["stop_after_delivery"] == 2
+    assert c.with_overrides(["stop_after_delivery=0"]).stop_after_delivery == 0
+    assert c.with_overrides(["stop_after_delivery=none"]).stop_after_delivery is None
+    with pytest.raises(ValidationError, match="stop_after_delivery cannot be negative"):
+        c.with_overrides(["stop_after_delivery=-1"])
 
 
 def test_frozen():

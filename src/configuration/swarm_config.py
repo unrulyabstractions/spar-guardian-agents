@@ -310,6 +310,16 @@ class SwarmConfig(BaseModel):
     submission (store TeamSubmission, info event swarm_team_submit); the round under way finishes, then
     rules.after_activation drops every pending step, so the run ends, and SWE grades the team's main. None: by mode,
     False in solo_task and True otherwise. Never in solo_task and never for a lone agent."""
+    stop_after_delivery: int | None = None
+    """Ends an episode soon after its deliverable exists, so an agent that keeps working after it registered, sent
+    its work for review or merged does not run to its turn budget. None turns the rule off. At the end of every round
+    rules.after_activation awaits the benchmark's delivery predicate (Benchmark.delivered) while some deliverable is
+    unseen. N for a lone agent and in solo_task: an agent's episode ends after N more of its working steps once its
+    own deliverable is first seen. N in shared_task and collaboration_needed: every agent's episode ends N rounds after
+    the round that first shows the team's deliverable, as team_submit ends the run after its round; 0 ends it after
+    that round. An episode the rule ends is ended "delivered" (TurnState.ended, an episode's ended_by) and its steps
+    go to nobody. The store Delivery, and run.json "delivery", hold the round and working step at which each
+    deliverable was first seen."""
     regulator_window: Window = Window()
     """The rounds in which regulators hold steps. A regulator enters the swarm at its start round: ORBIT inserts its
     system prompt at its first activation, and with auto delivery the board's unread posts reach it then. It leaves
@@ -420,6 +430,8 @@ class SwarmConfig(BaseModel):
             unknown = set(self.turn_budget) - set(DOMAIN_MODES)
             if unknown:
                 raise ValueError(f"turn_budget keys are domains {sorted(DOMAIN_MODES)}, got {sorted(unknown)}")
+        if self.stop_after_delivery is not None and self.stop_after_delivery < 0:
+            raise ValueError("stop_after_delivery cannot be negative; stop_after_delivery=none turns the rule off")
         if isinstance(self.mode, dict):
             unknown = set(self.mode) - set(DOMAIN_MODES)
             if unknown:

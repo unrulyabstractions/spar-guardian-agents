@@ -14,10 +14,14 @@ items dealt over the neutral agents under `split` (a regulator or a disregulator
 (each holds a copy of one dealt item), everything under `all`, for a solo_task team, a lone agent or fewer than two
 neutral agents, or an explicit map. The sample builds each agent's copy, tools or permissions from that plan, and
 src/tasks.py records the plan as metadata["cheatbench"]["access"].
+
+Delivery. `delivered` gives the predicate stop_after_delivery awaits at the end of a round: which agents' deliverable
+exists. A team outside solo_task has one deliverable, which counts for every agent.
 """
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -128,6 +132,13 @@ class Benchmark(ABC):
     @abstractmethod
     def scorers(self) -> list[Scorer]:
         """The scorers that grade the outcome. The judge scorer is added by the task factory."""
+
+    @abstractmethod
+    def delivered(self, agents: list[str], config: SwarmConfig) -> Callable[[], Awaitable[set[str]]]:
+        """The delivery predicate for this roster under the config's mode (SwarmConfig.stop_after_delivery): an
+        async call, made inside the sample, that returns the agents whose deliverable exists. A team's deliverable
+        (shared_task, collaboration_needed) counts for every agent. Each domain reads as little as it can: one git
+        command per repository, or the sample store."""
 
     @abstractmethod
     def deviations(self, n_agents: int, mode: str | None = None) -> list[str]:

@@ -31,7 +31,12 @@ module reproduces her rules, and adds the pull board's rounds, with three public
      rounds, so an agent is charged at most once per round;
    - a stopped agent's steps are removed, and with pooling its round steps go to the agents still working;
    - once a neutral agent has called team_submit (src/swarm/board.py), the rest of the round runs and every later
-     step is dropped, so the run ends.
+     step is dropped, so the run ends;
+   - under stop_after_delivery the activation that closes a round awaits the benchmark's delivery predicate
+     (Benchmark.delivered) while some active agent's deliverable is unseen. An agent alone or in solo_task is ended
+     "delivered" after N more of its working steps once its own deliverable is seen. A team is ended "delivered" N
+     rounds after the round that showed its deliverable, and no later step runs. The steps of an agent ended
+     "delivered" go to nobody.
 3. A model filter on every agent (`TurnRulesFilter`, carried by the passive `TurnRulesDefense`). It changes what the
    provider receives and never the durable conversation:
    - with board_tools on, ORBIT's channel_post, channel_read and channel_list are withheld: the board is reached
@@ -65,13 +70,18 @@ reason ModelEvent.tools lists the tools before the filter, channel tools include
 Per-sample facts live in the store as TurnState, set up by the `rules_setup` solver and saved in the eval log. The
 team submission lives in the store as TeamSubmission. The board tools keep the per-round read and post budgets there
 (turn_reads, turn_posts, reads_refused, posts_refused; `spend`), and after_activation keeps where each activation
-ended in the agent's conversation (history_marks), so agent_actions can give each call its round.
+ended in the agent's conversation (history_marks), so agent_actions can give each call its round. The
+stop-after-delivery record lives in the store as Delivered, written only when the rule is on, so a run without it
+keeps today's store. rules_setup hands the delivery predicate to after_activation through a context variable of the
+sample.
 """
 from __future__ import annotations
 
 import json
 import random
 import re
+from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 from typing import Any
 
 from inspect_ai.log import transcript
@@ -96,6 +106,8 @@ TURN_RULES_NAME = "turn_rules"
 TURN_RULES_TAG = "swarm_turn_rules"
 TEAM_SUBMIT_TAG = "swarm_team_submit"                 # info event of a team_submit call (src/swarm/board.py)
 HALT_TAG = "swarm_team_halt"                           # info event when the plan is cut after a team submission
+DELIVERED_TAG = "swarm_delivered"                      # info event of stop_after_delivery: a sighting or an end
+DELIVERED = "delivered"                                # the TurnState.ended reason of stop_after_delivery
 DELIVERY_TAG = "orbit_communication_delivery"        # orbit/communication/delivery.py _DELIVERY_TAG
 ACTOR = "swarm.rules"
 PLAN_PREFIX = "plan"
@@ -161,7 +173,7 @@ class TurnState(StoreModel):
     team_submission: dict | None = None                     # the TeamSubmission, once a neutral agent submitted
     halted_after_round: int | None = None                   # the round after which the plan was cut
     notice_seen: dict[str, int] = Field(default_factory=dict)   # highest board sequence of others at the last call
-    ended: dict[str, str] = Field(default_factory=dict)         # submitted | cap | context
+    ended: dict[str, str] = Field(default_factory=dict)         # submitted | cap | context | delivered
     opened: dict[str, int] = Field(default_factory=dict)        # the activation whose opening message was sent
     extra_calls: dict[str, int] = Field(default_factory=dict)   # calls dropped by quantum legacy
     timeline: list[dict] = Field(default_factory=list)          # one entry per activation
@@ -175,6 +187,26 @@ class TeamSubmission(StoreModel):
     answer: str = ""
     time: str | None = None                                 # UTC, ISO 8601
     refused: list[dict] = Field(default_factory=list)       # later calls: {"agent", "round"}
+
+
+class Delivered(StoreModel):
+    """The stop-after-delivery record (SwarmConfig.stop_after_delivery), written only when the rule is on.
+
+    seen gives each agent's first sighting of its deliverable: the round whose end showed it and the agent's working
+    steps by then. A team's deliverable counts for every agent of the roster, and halt_round is the last round that
+    runs. A predicate that raises counts as nothing delivered; errors keeps what it raised."""
+
+    after: int = 0                                          # N
+    team: bool = False                                      # the team's deliverable ends every agent, N rounds on
+    seen: dict[str, dict] = Field(default_factory=dict)     # agent -> {"round", "turn"}
+    halt_round: int | None = None                           # a team's last round
+    cut: list[str] = Field(default_factory=list)            # agents of a team that held a step after its last round
+    checks: int = 0                                         # predicate calls
+    errors: list[str] = Field(default_factory=list)         # what failed predicate calls raised
+
+
+# The sample's delivery predicate (Benchmark.delivered), set by rules_setup; None when stop_after_delivery is off.
+PREDICATE: ContextVar[Callable[[], Awaitable[set[str]]] | None] = ContextVar("swarm_delivered", default=None)
 
 
 # ------------------------------------------------------------------------------------------------ step ids
@@ -311,17 +343,30 @@ def initial_state(config: SwarmConfig, agents: list[str], roles: dict[str, str] 
             "planning": {a: config.planning_turns if a in planning else 0 for a in agents}}
 
 
+def team_delivery(config: SwarmConfig, agents: list[str], domain: str | None = None) -> bool:
+    """Whether stop_after_delivery reads one deliverable for the team: two or more agents outside solo_task (on any
+    board when no domain is named). Otherwise each agent has its own."""
+    return len(agents) > 1 and (config.resolve_mode(domain) != "solo_task" if domain else True)
+
+
 @solver
 def rules_setup(config: SwarmConfig | dict, agents: list[str], roles: dict[str, str] | None = None,
-                domain: str | None = None) -> Solver:
+                domain: str | None = None, delivered: Callable[[], Awaitable[set[str]]] | None = None) -> Solver:
     """Task setup: write the initial TurnState into the sample's store. domain ("openmath", "swe") decides whether
-    the agents know their team (SwarmConfig.knows_team)."""
+    the agents know their team (SwarmConfig.knows_team). Under stop_after_delivery it also writes the Delivered
+    record and sets the sample's delivery predicate, `delivered` (Benchmark.delivered), which the rule needs."""
     rules = SwarmConfig.model_validate(config)
+    if rules.stop_after_delivery is not None and delivered is None:
+        raise ValueError("stop_after_delivery needs the benchmark's delivery predicate (Benchmark.delivered)")
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         st = store_as(TurnState)
         for key, value in initial_state(rules, agents, roles, domain).items():
             setattr(st, key, value)
+        PREDICATE.set(None if rules.stop_after_delivery is None else delivered)
+        if rules.stop_after_delivery is not None:
+            record = store_as(Delivered)
+            record.after, record.team = rules.stop_after_delivery, team_delivery(rules, agents, domain)
         return state
 
     return solve
@@ -576,7 +621,100 @@ def _halt(st: TurnState, keep: list[dict]) -> list[dict]:
     return [s for s in keep if step_round(s["id"]) <= submitted_round and not s["id"].startswith(PLAN_PREFIX)]
 
 
-def after_activation(runtime, result, global_turn: int) -> None:
+# ------------------------------------------------------------------------------------------------ stop after delivery
+
+def _delivery() -> Delivered | None:
+    """The Delivered record when stop_after_delivery is on in this sample, else None, with nothing written."""
+    return store_as(Delivered) if PREDICATE.get() is not None else None
+
+
+def _spent(record: Delivered, agent: str, used: int) -> bool:
+    """Whether an agent with its own deliverable has taken its N working steps since the deliverable was seen."""
+    seen = record.seen.get(agent)
+    return not record.team and seen is not None and used >= seen["turn"] + record.after
+
+
+def _holds(agent: str, steps: list[dict]) -> bool:
+    return any(agent in s["agents"] for s in steps)
+
+
+def _round_over(runtime, step: ScheduleStep | None, agent: str, keep: list[dict]) -> bool:
+    """Whether this activation closes its round: the last activation of its step to complete (ORBIT calls back in
+    activation order once a concurrent step has finished; StepRecord.activations, through `_current` as in
+    running_step), with no step of the round left in the plan. A planning step closes no round."""
+    if step is None or step.id.startswith(PLAN_PREFIX):
+        return False
+    current = getattr(runtime, "_current", None)
+    done = [a.agent for a in current.activations if a.status == "completed"] if current is not None else []
+    if done and done[-1] != agent:
+        return False
+    return not any(step_round(s["id"]) == step_round(step.id) for s in keep)
+
+
+async def _look(st: TurnState, record: Delivered, round_number: int) -> None:
+    """Await the delivery predicate once, unless the team's deliverable or every active agent's was seen, and record
+    each first sighting: the round and the agent's working steps by then. A team's sighting counts for every agent
+    of the roster and sets its last round, N rounds on."""
+    active = [a for a in st.agents if a not in st.ended]
+    unseen = [a for a in active if a not in record.seen]
+    if not unseen or (record.team and record.halt_round is not None):
+        return
+    record.checks += 1
+    try:
+        found = set(await PREDICATE.get()())
+    except Exception as error:  # noqa: BLE001 - a failed check shows nothing; the run goes on
+        record.errors = [*record.errors, f"round {round_number}: {type(error).__name__}: {error}"[:500]]
+        return
+    if record.team:
+        shown = [a for a in st.agents if a not in record.seen] if found else []
+    else:
+        shown = [a for a in unseen if a in found]
+    if not shown:
+        return
+    record.seen = {**record.seen, **{a: {"round": round_number, "turn": st.used.get(a, 0)} for a in shown}}
+    if record.team:
+        record.halt_round = round_number + record.after
+    transcript().info({DELIVERED_TAG: {"kind": "seen", "round": round_number, "agents": shown,
+                                       "halt_round": record.halt_round}})
+
+
+def _end(st: TurnState, agents: list[str], round_number: int) -> None:
+    """End these agents "delivered"."""
+    st.ended = {**st.ended, **dict.fromkeys(agents, DELIVERED)}
+    transcript().info({DELIVERED_TAG: {"kind": "ended", "round": round_number, "agents": agents}})
+
+
+async def _after_delivery(st: TurnState, record: Delivered, runtime, step: ScheduleStep | None, agent: str,
+                          keep: list[dict]) -> tuple[list[dict], list[str]]:
+    """The rule at the end of an activation, on the amended plan `keep`. When the activation closes a round it looks
+    for deliverables. A team's steps after its last round are cut at every activation, and the agents they belonged
+    to are kept in `cut`. At the end of the team's last round (or of the plan) the active agents with a step cut are
+    ended; an agent with its own deliverable is ended once its N working steps are spent and it still holds a step.
+    Returns the plan without the ended agents' steps, which go to nobody, and the agents it ended."""
+    over = _round_over(runtime, step, agent, keep)
+    round_number = step_round(step.id) if step is not None else 0
+    if over:
+        await _look(st, record, round_number)
+    if record.team and record.halt_round is not None:
+        late = [s for s in keep if step_round(s["id"]) > record.halt_round]
+        if late:
+            record.cut = sorted({*record.cut, *(a for s in late for a in s["agents"])})
+            keep = [s for s in keep if step_round(s["id"]) <= record.halt_round]
+    active = [a for a in st.agents if a not in st.ended]
+    ended: list[str] = []
+    if over and record.team:
+        if record.halt_round is not None and (round_number >= record.halt_round or not keep):
+            ended = [a for a in active if a in record.cut]
+    elif over:
+        ended = [a for a in active if _spent(record, a, st.used.get(a, 0)) and _holds(a, keep)]
+    if not ended:
+        return keep, ended
+    _end(st, ended, round_number)
+    keep = [{**s, "agents": [a for a in s["agents"] if a not in ended]} for s in keep]
+    return [s for s in keep if s["agents"]], ended
+
+
+def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | None:
     """ORBIT calls this after every activation of the plan (ScheduleConfig.after_activation).
 
     Charges the step by what it did (step_charge), counts ORBIT's channel tool calls as board actions, records why
@@ -585,6 +723,9 @@ def after_activation(runtime, result, global_turn: int) -> None:
     gets its follow-up step while the round's K lasts; a team submission cuts every step after its round. The
     timeline marks an agent's first activation ("entered") and the activation after which its window holds no more
     steps ("left").
+
+    Under stop_after_delivery it returns a coroutine, which ORBIT awaits: the rule may await the delivery predicate
+    before the plan is amended (_after_delivery). Without the rule it returns None, as before.
     """
     st = store_as(TurnState)
     agent = result.agent_name
@@ -607,10 +748,14 @@ def after_activation(runtime, result, global_turn: int) -> None:
     st.work_steps = {**st.work_steps, agent: used}
     if free:
         st.free_steps = _bump(st.free_steps, agent)
-    reason = _stop_reason(st, agent, result.submitted, used)
-    if reason and agent not in st.ended:
-        st.ended = {**st.ended, agent: reason}
     pending = list(runtime.pending_steps)
+    delivery = _delivery()
+    reason = _stop_reason(st, agent, result.submitted, used)
+    if reason is None and delivery is not None and agent not in st.ended and _spent(delivery, agent, used) \
+            and any(agent in s.agents for s in pending):
+        _end(st, [agent], round_number)
+    elif reason and agent not in st.ended:
+        st.ended = {**st.ended, agent: reason}
     left = _window(st, agent).end is not None and not any(agent in s.agents for s in pending)
     st.timeline = [*st.timeline, {"turn": global_turn, "agent": agent, "activation": activation, "working": working,
                                   "free": free, "charge": charge, "step": step.id if step is not None else None,
@@ -621,8 +766,8 @@ def after_activation(runtime, result, global_turn: int) -> None:
     keep, dropped = [], 0
     for s in pending:
         agents = [name for name in s.agents if name in active]
-        if is_round_step(s.id):
-            dropped += len(s.agents) - len(agents)
+        if is_round_step(s.id):     # an agent ended "delivered" leaves its steps to nobody
+            dropped += sum(1 for name in s.agents if name not in active and st.ended.get(name) != DELIVERED)
         if len(agents) == len(s.agents):
             keep.append(s.model_dump(mode="json"))
         elif agents:
@@ -635,10 +780,24 @@ def after_activation(runtime, result, global_turn: int) -> None:
         keep = _halt(st, keep)
     elif st.pooled and dropped:
         keep += _pooled_steps(st, active, dropped, runtime.revision)
+    if delivery is not None and not halted:     # team_submit ends the run itself; the rule stays out of it
+        return _amend_after_delivery(st, delivery, runtime, step, agent, keep, before)
+    _amend(st, runtime, agent, keep, before, halted)
+
+
+def _amend(st: TurnState, runtime, agent: str, keep: list[dict], before: list[dict], halted: bool,
+           delivered: bool = False) -> None:
     if keep == before:
         return
-    why = "team_submit" if halted else st.ended.get(agent) or ("free step" if len(keep) > len(before) else "stopped")
+    why = "team_submit" if halted else DELIVERED if delivered else \
+        st.ended.get(agent) or ("free step" if len(keep) > len(before) else "stopped")
     runtime.amend_pending(keep, actor=ACTOR, reason=f"{agent}: {why}", expected_revision=runtime.revision)
+
+
+async def _amend_after_delivery(st: TurnState, record: Delivered, runtime, step: ScheduleStep | None, agent: str,
+                                keep: list[dict], before: list[dict]) -> None:
+    keep, ended = await _after_delivery(st, record, runtime, step, agent, keep)
+    _amend(st, runtime, agent, keep, before, False, bool(ended))
 
 
 # ------------------------------------------------------------------------------------------------ the model filter

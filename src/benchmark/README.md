@@ -6,7 +6,7 @@ This package runs CheatBench's tasks as Inspect tasks. Each task domain gives th
 
 | file | holds |
 |---|---|
-| `base.py` | the Benchmark protocol: `check(config)`, `sample(agents, config=, roles=)`, `tools(agents, config)` and the deviations by mode |
+| `base.py` | the Benchmark protocol: `check(config)`, `sample(agents, config=, roles=)`, `tools(agents, config)`, the delivery predicate `delivered(agents, config)` that `stop_after_delivery` awaits, and the deviations by mode |
 | `domains/openmath/task.py` | `OpenMath`, the sample, the rendered prompt and the deviations from CheatBench's runner |
 | `domains/openmath/sandbox.py` | the staging tarball, the docker context, the per-agent layout of solo_task and of split access with its `shell` and `run_python`, and the archive slices of split access |
 | `domains/openmath/probe.py` | the environment probe and the deliverables scorer, which reads the team remote under split access |
@@ -36,7 +36,7 @@ This package runs CheatBench's tasks as Inspect tasks. Each task domain gives th
 | `machines/` | one container per agent on CheatBench's python311 image (`cbtask:python311`), for the interview tasks and protein design: the image, the compose file, the staging archive, `shell` and `run_python` per container, the host-side task tool with its state per owner, the probe and the staged files' hashes |
 | `transcript.py` | one Inspect sample as one ATIF transcript per agent |
 | `judge.py`, `models.yaml` | CheatBench's judge as an Inspect scorer |
-| `export.py` | one eval log as a run directory, with the run's mode, scale, preset, board engagement, access plan, turn budget, knowledge-work block, and the interview and protein blocks |
+| `export.py` | one eval log as a run directory, with the run's mode, scale, preset, board engagement, access plan, turn budget, knowledge-work block, the interview and protein blocks, and the stop-after-delivery record (`delivery`, an episode's `ended_by` delivered) |
 
 Each file in `scripts/` is read when its module is imported. A file with placeholders is filled with `str.format`, so its literal braces are written doubled.
 
