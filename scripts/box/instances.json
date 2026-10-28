@@ -1,0 +1,25 @@
+{
+ "instances": [
+  {
+   "id": 58129018,
+   "offer": 54571906,
+   "label": "spar-screen",
+   "dph": 0.453,
+   "template": "eb81138672b619694cbce2fda9414035",
+   "disk_gb": 200,
+   "created": "2026-10-28T17:48:09Z",
+   "destroyed": "2026-10-28T17:55:00Z",
+   "note": "never ran: the template pulled vastai/kvm:latest, which does not exist"
+  },
+  {
+   "id": 58129905,
+   "label": "spar-screen",
+   "image": "docker.io/vastai/kvm:ubuntu_terminal",
+   "vm": true,
+   "disk_gb": 200,
+   "ssh": "ssh1.vast.ai:35410",
+   "created": "2026-10-28T17:56:30Z",
+   "destroyed": null
+  }
+ ]
+}

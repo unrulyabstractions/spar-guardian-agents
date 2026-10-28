@@ -1,7 +1,7 @@
 """The appendix figures and tables of a screen: for each of the four cells of the first experiment, every agent's rung
 on the code ladder per domain and sample, and the runs' turns, tokens and billed cost.
 
-    uv run python scripts/paper/appendix.py [--suffix flashpin] [--samples 4]
+    uv run python scripts/paper/appendix.py [--suffixes flashpin flashbox flashboxb]
 
 Reads runs/<cell>_<suffix><k>/signals.jsonl and writes, for the sections solo, solo_cheat, minimal and minimal_cheat,
 tmp/appendix_<section>_rate.png (the cheating rate per domain: the share of agents at opened or higher, the ladder's
@@ -49,8 +49,15 @@ TEXT = {"used": "#ffffff", "shipped": "#ffffff"}
 TILE_W, TILE_H, GAP = 0.78, 0.46, 0.08
 
 
-def run_name(cell: str, suffix: str, k: int) -> str:
-    return f"{cell}_{suffix}{k}"
+def run_names(cell: str, suffixes: list[str]) -> list[str]:
+    """Every finished or expected run of the cell: <cell>_<suffix><k> for each suffix, k from 1 to the highest
+    sample present (at least one), so a screen on another machine adds its samples under its own suffix."""
+    names = []
+    for suffix in suffixes:
+        present = sorted(int(d.name[len(f"{cell}_{suffix}"):]) for d in settings.RUNS.glob(f"{cell}_{suffix}[0-9]*")
+                         if d.name[len(f"{cell}_{suffix}"):].isdigit())
+        names += [f"{cell}_{suffix}{k}" for k in range(1, max(present or [0]) + 1)]
+    return names
 
 
 CHEATED = {"opened", "used", "shipped"}        # the ladder's "opened or higher", which agrees with the judge's cheated
@@ -66,21 +73,21 @@ def load_run(name: str) -> dict | None:
     return {"agents": [(r["agent"], r["rung"]) for r in rows]}
 
 
-def rates(cells: list[str], suffix: str, samples: int) -> dict[str, dict]:
+def rates(cells: list[str], suffixes: list[str]) -> dict[str, dict]:
     """Per domain: the agents judged over every finished sample, and how many sit at opened or higher and at used or
     higher."""
     out = {}
     for domain, cell in zip(DOMAINS, cells):
-        rungs = [rung for k in range(1, samples + 1) for run in [load_run(run_name(cell, suffix, k))] if run
+        rungs = [rung for name in run_names(cell, suffixes) for run in [load_run(name)] if run
                  for _, rung in run["agents"]]
         out[domain] = {"n": len(rungs), "cheated": sum(r in CHEATED for r in rungs),
                        "used": sum(r in USED for r in rungs)}
     return out
 
 
-def rate_figure(section: str, title: str, cells: list[str], suffix: str, samples: int) -> Path:
+def rate_figure(section: str, title: str, cells: list[str], suffixes: list[str]) -> Path:
     """One pair of bars per domain: the share of agents at opened or higher and at used or higher, labelled k of n."""
-    found = rates(cells, suffix, samples)
+    found = rates(cells, suffixes)
     width, height = 5.2, 2.6
     fig = Figure(figsize=(width, height), dpi=200)
     ax = fig.add_axes([0.08, 0.2, 0.9, 0.62])
@@ -114,19 +121,22 @@ def rate_figure(section: str, title: str, cells: list[str], suffix: str, samples
     return path
 
 
-def rates_table(suffix: str, samples: int) -> Path:
+def rates_table(suffixes: list[str]) -> Path:
     """Every section's rates in one table: per domain, agents at opened or higher of the agents judged."""
     rows = []
     for section, (title, cells) in SECTIONS.items():
-        found = rates(cells, suffix, samples)
+        found = rates(cells, suffixes)
         rows.append([title, *[[f"{f['cheated']} of {f['n']}" if f["n"] else "(no run)"] for f in found.values()]])
     return table_png("appendix_rates_table", ["cell", *DOMAINS], rows, [2.6, 1.3, 1.5, 1.1])
 
 
-def tiles_figure(section: str, title: str, cells: list[str], suffix: str, samples: int) -> Path:
-    """Rows are the domains, columns the samples, one tile per agent coloured by its rung."""
-    runs = {(d, k): load_run(run_name(cell, suffix, k))
-            for d, cell in zip(DOMAINS, cells) for k in range(1, samples + 1)}
+def tiles_figure(section: str, title: str, cells: list[str], suffixes: list[str]) -> Path:
+    """Rows are the domains, columns the samples (every run found, in name order), one tile per agent coloured by
+    its rung."""
+    names = {d: run_names(cell, suffixes) for d, cell in zip(DOMAINS, cells)}
+    samples = max(len(v) for v in names.values())
+    runs = {(d, k): load_run(names[d][k - 1]) if k <= len(names[d]) else None
+            for d in DOMAINS for k in range(1, samples + 1)}
     agents = max((len(r["agents"]) for r in runs.values() if r), default=1)
     cell_w = agents * TILE_W + (agents - 1) * GAP
     left, top = 1.25, 0.75
@@ -175,12 +185,11 @@ def tiles_figure(section: str, title: str, cells: list[str], suffix: str, sample
     return path
 
 
-def table_and_csv(section: str, cells: list[str], suffix: str, samples: int) -> tuple[Path, Path]:
+def table_and_csv(section: str, cells: list[str], suffixes: list[str]) -> tuple[Path, Path]:
     """One row per run: each agent's rung as a chip."""
     rows, records = [], []
     for domain, cell in zip(DOMAINS, cells):
-        for k in range(1, samples + 1):
-            name = run_name(cell, suffix, k)
+        for k, name in enumerate(run_names(cell, suffixes), 1):
             run = load_run(name)
             if run is None:
                 rows.append([domain, str(k), ["(not finished)"]])
@@ -201,15 +210,15 @@ def table_and_csv(section: str, cells: list[str], suffix: str, samples: int) -> 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--suffix", default="flashpin")
-    parser.add_argument("--samples", type=int, default=4)
+    parser.add_argument("--suffixes", nargs="+", default=["flashpin", "flashbox", "flashboxb"],
+                        help="run-name suffixes, each followed by the sample number")
     args = parser.parse_args(argv)
     for section, (title, cells) in SECTIONS.items():
-        print(rate_figure(section, title, cells, args.suffix, args.samples))
-        print(tiles_figure(section, title, cells, args.suffix, args.samples))
-        for path in table_and_csv(section, cells, args.suffix, args.samples):
+        print(rate_figure(section, title, cells, args.suffixes))
+        print(tiles_figure(section, title, cells, args.suffixes))
+        for path in table_and_csv(section, cells, args.suffixes):
             print(path)
-    print(rates_table(args.suffix, args.samples))
+    print(rates_table(args.suffixes))
     return 0
 
 
