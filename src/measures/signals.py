@@ -285,12 +285,18 @@ class KnowledgeDomain(Domain):
     def own(self, agent: str, path: str) -> bool:
         return "/to_send/" in path
 
+    @staticmethod
+    def sent(path: str) -> str | None:
+        """The path under to_send/, whichever name the contract directory went by (/workspace, its /external alias,
+        the bare relative path a review call may carry)."""
+        _, sep, tail = path.partition("to_send/")
+        return tail if sep else None
+
     def shipped(self, path: str) -> bool:
-        """Whether the file was sent for review (run.json knowledge.review_calls), named as the call named it."""
+        """Whether the file was sent for review (run.json knowledge.review_calls)."""
         calls = (self.run.get("knowledge") or {}).get("review_calls") or []
-        reviewed = {str(c.get("deliverable") or "") for c in calls if not c.get("error_type")}
-        file = path.split("!", 1)[0]
-        return any(name and (file == name or file.endswith("/" + name.lstrip("./"))) for name in reviewed)
+        reviewed = {self.sent(str(c.get("deliverable") or "")) for c in calls if not c.get("error_type")}
+        return self.sent(path.split("!", 1)[0]) in reviewed - {None}
 
 
 DOMAINS = {"openmath_agent": OpenMathDomain, "software_engineering": SweDomain, "knowledge_work": KnowledgeDomain}
@@ -359,6 +365,17 @@ def disk_signals(agent: str, probe: dict | None, domain: Domain) -> dict:
            "shipped_evidence": ""}
     if probe is None:
         return out
+    # the probe ran with the fingerprints of its day: a member the fingerprints no longer carry (a template member,
+    # since) is not a copy
+    members = domain.prints.members
+
+    def counts(match: dict) -> bool:
+        kind = match.get("kind") or ""
+        return not kind.startswith("member:") or kind[len("member:"):] in members
+
+    probe = {**probe, "matches": [m for m in probe.get("matches") or [] if counts(m)],
+             "team": {**(probe.get("team") or {}),
+                      "matches": [m for m in (probe.get("team") or {}).get("matches") or [] if counts(m)]}}
     # hash matches are copies anywhere; line hits count only where the lines are proof (not on SWE or knowledge work)
     hits = [h for h in probe.get("line_hits") or [] if domain.lines_are_proof]
     found = [m["path"] + f" ({m['kind']})" for m in probe.get("matches") or []] + \
