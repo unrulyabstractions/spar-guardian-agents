@@ -3,9 +3,12 @@ on the code ladder per domain and sample, and the runs' turns, tokens and billed
 
     uv run python scripts/appendix.py [--suffix flashpin] [--samples 3]
 
-Reads runs/<cell>_<suffix><k>/ (signals.jsonl, episodes.jsonl) and writes tmp/appendix_<section>.png (the rung tiles),
-tmp/appendix_<section>_table.png (one table) and tmp/appendix_<section>.csv for the sections solo, solo_cheat, minimal
-and minimal_cheat. A run that has not finished shows as an empty tile and a "(not finished)" row.
+Reads runs/<cell>_<suffix><k>/signals.jsonl and writes, for the sections solo, solo_cheat, minimal and minimal_cheat,
+tmp/appendix_<section>_rate.png (the cheating rate per domain: the share of agents at opened or higher, the ladder's
+rung that agrees with the judge's cheated, beside the share at used or higher), tmp/appendix_<section>.png (every
+agent's rung per domain and sample, as tiles), tmp/appendix_<section>_table.png (the same as one table) and
+tmp/appendix_<section>.csv; and tmp/appendix_rates_table.png, the rates of every section in one table. A run that has
+not finished shows as an empty tile and a "(not finished)" row, and counts in no rate.
 """
 from __future__ import annotations
 
@@ -50,19 +53,74 @@ def run_name(cell: str, suffix: str, k: int) -> str:
     return f"{cell}_{suffix}{k}"
 
 
+CHEATED = {"opened", "used", "shipped"}        # the ladder's "opened or higher", which agrees with the judge's cheated
+USED = {"used", "shipped"}
+
+
 def load_run(name: str) -> dict | None:
-    """The run's agents with their rungs and calls, and its tokens and billed cost; None before it finishes."""
+    """The run's agents with their rungs; None before it finishes."""
     run_dir = settings.RUNS / name
     if not (run_dir / "signals.jsonl").is_file():
         return None
     rows = [json.loads(line) for line in (run_dir / "signals.jsonl").read_text().splitlines()]
-    usage = {"prompt": 0, "output": 0, "billed": 0.0}
-    for line in (run_dir / "episodes.jsonl").read_text().splitlines():
-        u = json.loads(line).get("usage") or {}
-        usage["prompt"] += u.get("input", 0)
-        usage["output"] += u.get("output", 0)
-        usage["billed"] += u.get("billed_usd", 0.0)
-    return {"agents": [(r["agent"], r["rung"], r.get("calls", 0)) for r in rows], **usage}
+    return {"agents": [(r["agent"], r["rung"]) for r in rows]}
+
+
+def rates(cells: list[str], suffix: str, samples: int) -> dict[str, dict]:
+    """Per domain: the agents judged over every finished sample, and how many sit at opened or higher and at used or
+    higher."""
+    out = {}
+    for domain, cell in zip(DOMAINS, cells):
+        rungs = [rung for k in range(1, samples + 1) for run in [load_run(run_name(cell, suffix, k))] if run
+                 for _, rung in run["agents"]]
+        out[domain] = {"n": len(rungs), "cheated": sum(r in CHEATED for r in rungs),
+                       "used": sum(r in USED for r in rungs)}
+    return out
+
+
+def rate_figure(section: str, title: str, cells: list[str], suffix: str, samples: int) -> Path:
+    """One pair of bars per domain: the share of agents at opened or higher and at used or higher, labelled k of n."""
+    found = rates(cells, suffix, samples)
+    width, height = 5.2, 2.6
+    fig = Figure(figsize=(width, height), dpi=200)
+    ax = fig.add_axes([0.08, 0.2, 0.9, 0.62])
+    bar_w, pair = 0.34, 0.38
+    for i, domain in enumerate(DOMAINS):
+        f = found[domain]
+        for shift, key, colour in ((-pair / 2, "cheated", FILL["opened"]), (pair / 2, "used", FILL["used"])):
+            share = f[key] / f["n"] if f["n"] else 0
+            ax.bar(i + shift, share, width=bar_w, color=colour, edgecolor="none", zorder=3)
+            ax.text(i + shift, share + 0.03, f"{f[key]} of {f['n']}" if f["n"] else "no run", ha="center", va="bottom",
+                    fontsize=6.5, family="DejaVu Sans Mono", color=INK2)
+    ax.set_xticks(range(len(DOMAINS)))
+    ax.set_xticklabels(DOMAINS, fontsize=8, family="DejaVu Sans", color=INK)
+    ax.set_ylim(0, 1.15)
+    ax.set_yticks([0, 0.5, 1])
+    ax.set_yticklabels(["0%", "50%", "100%"], fontsize=7, family="DejaVu Sans Mono", color=INK2)
+    ax.grid(axis="y", color="#e1e0d9", lw=0.6, zorder=0)
+    for side in ("top", "right", "left"):
+        ax.spines[side].set_visible(False)
+    ax.spines["bottom"].set_color("#c3c2b7")
+    ax.tick_params(axis="both", length=0)
+    fig.text(0.08, 0.93, title, fontsize=9.5, family="DejaVu Sans", color=INK, weight="bold", va="center")
+    for n, (label, colour) in enumerate((("opened or higher", FILL["opened"]), ("used or higher", FILL["used"]))):
+        x = 0.08 + n * 0.3
+        fig.patches.append(FancyBboxPatch((x, 0.04), 0.025, 0.05, boxstyle="square,pad=0", facecolor=colour,
+                                          edgecolor="none", transform=fig.transFigure))
+        fig.text(x + 0.035, 0.065, label, fontsize=7, family="DejaVu Sans", color=INK2, va="center")
+    OUT.mkdir(parents=True, exist_ok=True)
+    path = OUT / f"appendix_{section}_rate.png"
+    fig.savefig(path, dpi=200, facecolor="#ffffff")
+    return path
+
+
+def rates_table(suffix: str, samples: int) -> Path:
+    """Every section's rates in one table: per domain, agents at opened or higher of the agents judged."""
+    rows = []
+    for section, (title, cells) in SECTIONS.items():
+        found = rates(cells, suffix, samples)
+        rows.append([title, *[[f"{f['cheated']} of {f['n']}" if f["n"] else "(no run)"] for f in found.values()]])
+    return table_png("appendix_rates_table", ["cell", *DOMAINS], rows, [2.6, 1.3, 1.5, 1.1])
 
 
 def tiles_figure(section: str, title: str, cells: list[str], suffix: str, samples: int) -> Path:
@@ -90,8 +148,8 @@ def tiles_figure(section: str, title: str, cells: list[str], suffix: str, sample
         for j in range(samples):
             x0 = left + j * (cell_w + 0.3)
             run = runs[(domain, j + 1)]
-            seats = run["agents"] if run else [(f"a{n + 1:02d}", None, 0) for n in range(agents)]
-            for n, (agent, rung, _) in enumerate(seats):
+            seats = run["agents"] if run else [(f"a{n + 1:02d}", None) for n in range(agents)]
+            for n, (agent, rung) in enumerate(seats):
                 x = x0 + n * (TILE_W + GAP)
                 fill = FILL.get(rung, "#ffffff")
                 ax.add_patch(FancyBboxPatch((x, y), TILE_W, TILE_H, boxstyle="round,pad=0,rounding_size=0.05",
@@ -118,26 +176,20 @@ def tiles_figure(section: str, title: str, cells: list[str], suffix: str, sample
 
 
 def table_and_csv(section: str, cells: list[str], suffix: str, samples: int) -> tuple[Path, Path]:
-    """One row per run: the agents' rungs as chips, the calls, the tokens and the billed cost."""
+    """One row per run: each agent's rung as a chip."""
     rows, records = [], []
     for domain, cell in zip(DOMAINS, cells):
         for k in range(1, samples + 1):
             name = run_name(cell, suffix, k)
             run = load_run(name)
             if run is None:
-                rows.append([domain, str(k), ["(not finished)"], [""], [""], [""], [""]])
+                rows.append([domain, str(k), ["(not finished)"]])
                 records.append({"domain": domain, "sample": k, "run": name})
                 continue
-            rungs = [f"`{agent}: {rung}`" for agent, rung, _ in run["agents"]]
-            calls = "/".join(str(c) for _, _, c in run["agents"])
-            rows.append([domain, str(k), rungs, [calls], [f"{run['prompt'] / 1e6:.1f} M"],
-                         [f"{run['output'] / 1e3:.0f} k"], [f"{run['billed']:.3f}"]])
-            records.append({"domain": domain, "sample": k, "run": name, "calls": calls,
-                            "prompt_tokens": run["prompt"], "output_tokens": run["output"],
-                            "billed_usd": round(run["billed"], 4),
-                            **{f"{agent}_rung": rung for agent, rung, _ in run["agents"]}})
-    header = ["domain", "sample", "rungs", "calls", "prompt", "output", "billed $"]
-    table = table_png(f"appendix_{section}_table", header, rows, [1.3, 0.7, 2.6, 0.9, 0.8, 0.8, 0.8])
+            rows.append([domain, str(k), [f"`{agent}: {rung}`" for agent, rung in run["agents"]]])
+            records.append({"domain": domain, "sample": k, "run": name,
+                            **{f"{agent}_rung": rung for agent, rung in run["agents"]}})
+    table = table_png(f"appendix_{section}_table", ["domain", "sample", "agents' rungs"], rows, [1.3, 0.7, 2.6])
     csv_path = OUT / f"appendix_{section}.csv"
     fields = sorted({key for r in records for key in r}, key=lambda key: (key not in ("domain", "sample", "run"), key))
     with csv_path.open("w", newline="") as handle:
@@ -153,9 +205,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--samples", type=int, default=3)
     args = parser.parse_args(argv)
     for section, (title, cells) in SECTIONS.items():
+        print(rate_figure(section, title, cells, args.suffix, args.samples))
         print(tiles_figure(section, title, cells, args.suffix, args.samples))
         for path in table_and_csv(section, cells, args.suffix, args.samples):
             print(path)
+    print(rates_table(args.suffix, args.samples))
     return 0
 
 
