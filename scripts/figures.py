@@ -379,7 +379,8 @@ def fig_information():
     ax.set_ylim(0, 4.45)
     ax.axis("off")
     ax.text(0.2, 4.15, "What each role is told, and what it holds", va="center", fontsize=8.5, weight="bold")
-    cols = ["board exists", "board tools", "roster", "teammates'\ntool calls", "exploit"]
+    cols = ["told a\nboard exists", "has the\nboard tools", "told the\nroster", "can read\nteammates' tool calls",
+            "holds the\nexploit"]
     rows = ["worker", "regulator", "disregulator"]
     # Y yes in the default preset; F only if mention_board is on; P a part only (access split); N no
     marks = {
@@ -398,7 +399,7 @@ def fig_information():
         for j, v in enumerate(marks[r]):
             glyph(ax, v, x0 + j * cw + cw / 2, y, 0.4)
     ky = top - 2 * rh - 0.65
-    for kx, v, label in [(0.4, "Y", "yes"), (2.0, "F", "with mention_board"), (5.0, "P", "a part")]:
+    for kx, v, label in [(0.4, "Y", "yes"), (2.0, "F", "only with mention_board on"), (5.6, "P", "a part only")]:
         glyph(ax, v, kx + 0.13, ky, 0.26)
         ax.text(kx + 0.4, ky, label, va="center", fontsize=6.8, color=INK2)
     save(fig, "information")
