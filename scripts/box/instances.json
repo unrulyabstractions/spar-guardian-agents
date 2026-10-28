@@ -19,7 +19,11 @@
    "disk_gb": 200,
    "ssh": "ssh1.vast.ai:35410",
    "created": "2026-10-28T17:56:30Z",
-   "destroyed": null
+   "destroyed": "2026-10-28T20:06:00Z",
+   "dph": 0.707,
+   "credit_before": 61.76,
+   "credit_after": 60.26,
+   "note": "ran the Flash screen: 24 runs (flashbox) and 6 (flashboxb); every file under runs/, out/ and logs/ captured (scripts/box/capture_check.sh: 475 files, 0 missing, 0 differ) before the destroy"
   }
  ]
 }
