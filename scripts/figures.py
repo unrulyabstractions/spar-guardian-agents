@@ -345,7 +345,8 @@ def fig_read_graph():
 # ---------------------------------------------------------------- figure 5: access
 def fig_access():
     """access=split: the exploit cut into one piece per worker, each in its own box; the regulator and the
-    disregulator outside with nothing; everyone on the board and the team's main."""
+    disregulator outside with nothing and without team_submit; everyone on the board, the workers' pieces into the
+    submitted work."""
     fig = plt.figure(figsize=(HALF, 2.3))
     ax = fig.add_axes([0.02, 0.17, 0.96, 0.82])
     blank(ax, (-3.1, 3.1), (-2.9, 2.75))
@@ -371,7 +372,6 @@ def fig_access():
         x = xs[a]
         agent(ax, x, y - 0.1, a, ROLES5[a], r=0.34, fs=6)
         arrow(ax, toward(x, y - 0.1, 0, by, 0.4), edge_point(0, by, bw, bh, x, y - 0.1), lw=0.7, color=MUTED, head=4)
-        arrow(ax, toward(x, y - 0.1, x * 0.35, -1.75, 0.4), (x * 0.35, -1.75), lw=0.7, color=MUTED, head=4)
     box(ax, -1.3, -2.45, 2.6, 0.65, "submitted work", fc=PLANE, ec=INK2, fs=7)
 
     def dmark(ax, x, y):
