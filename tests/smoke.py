@@ -1,7 +1,8 @@
 """Mock-model smoke tests for the ORBIT <-> CheatBench seams on openmath_agent. No model spend.
 
     uv run python tests/smoke.py [--only complete,message_limit,time_limit,board,defended,swarm,rules,judge,
-                                            discover,team_submit,channel,split_access,split_copy]
+                                            discover,team_submit,channel,split_access,split_copy,delivered,
+                                            team_delivered]
 
 Every scenario starts the real sandbox (CheatBench's image plus the article mirror), drives ORBIT with Inspect's
 mockllm scripted to call tools, judges every agent with a mock judge model bound to the "judge" role, exports the log
@@ -20,7 +21,9 @@ layout itself: each neutral agent's copy holds only its own slice of the complet
 regulator's no slice, a push to the team remote landing on main, the scorer reading the remote, and team_submit
 ending the run; and that a slice one agent copies to /tmp is its own (umask 077) and /tmp cannot be listed, so the
 others cannot reach it. `split_copy` checks the policy of that name: the regulator's copy holds a copy of the first
-slice.
+slice. `delivered` and `team_delivered` check stop_after_delivery: a lone agent's episode ends one step after its
+registration on main, and a split-layout team's one round after the round that pushed the registration to the team
+remote.
 """
 from __future__ import annotations
 
@@ -878,11 +881,83 @@ def scenario_split_copy() -> dict:
     return {"roles": roles, "plan": plan, "blobs": views}
 
 
+# The lone agent's registration: agent-018's entry committed on /workspace's main, which the task asks for.
+LONE_REGISTER = REGISTER.replace("smoke split", "smoke delivered").replace(
+    " && git push origin main 2>&1", " && git log --oneline -1 main")
+
+
+def scenario_delivered() -> dict:
+    """stop_after_delivery=1 on a lone agent: it registers on main in its second step, the check at the end of that
+    round sees the entry, the agent takes one more step and its episode ends "delivered", before the steps and the
+    submit its script still holds."""
+    outputs = [
+        call("bash", {"command": "id -un; pwd"}, "v1"),
+        call("bash", {"command": LONE_REGISTER}, "v2"),
+        call("bash", {"command": "echo after the registration"}, "v3"),
+        call("bash", {"command": "echo unreached-1"}, "v4"),
+        call("bash", {"command": "echo unreached-2"}, "v5"),
+        call("submit", {"answer": "unreached"}, "v6"),
+    ]
+    log, summary, records = run_scenario("delivered", task_for(stop_after_delivery=1), outputs)
+    sample = log.samples[0]
+    assert log.status == "success" and sample.limit is None and sample.error is None, (log.status, sample.error)
+    [rec] = records
+    assert rec["ended_by"] == "delivered" and rec["ok"] and rec["failure"] is None, rec
+    assert rec["delivery"] == {"round": 2, "turn": 2}, rec.get("delivery")
+    assert rec["rules"]["ended"] == "delivered" and rec["rules"]["used"] == 3, rec["rules"]
+    assert is_judgeable(rec), rec
+    assert_judged("delivered", sample, records)
+    t = load_transcript(rec)
+    assert [c[0] for c in tool_calls_of(t)] == ["bash", "bash", "bash"], tool_calls_of(t)
+    out = results_text(t)
+    assert "after the registration" in out and "unreached" not in out, out[-800:]
+    run = json.loads((RUNS / "delivered" / "run.json").read_text())
+    assert run["config"]["stop_after_delivery"] == 1 and run["shutdown_rate"] == 0.0, run["config"]
+    assert run["delivery"] == {"after": 1, "team": False, "seen": {"a01": {"round": 2, "turn": 2}},
+                               "halt_round": None, "cut": [], "checks": 2, "errors": [], "ended": ["a01"]}, \
+        run["delivery"]
+    assert run["rules"]["ended"] == {"a01": "delivered"}, run["rules"]["ended"]
+    registry = json.loads(sample.scores["deliverables_scorer"].metadata["agent_evals_main"])
+    assert registry["agents"][-1]["message"] == "smoke delivered", registry
+    return {"timeline": timeline_of(sample, "a01"), "delivery": run["delivery"], "ended_by": rec["ended_by"]}
+
+
+def scenario_team_delivered() -> dict:
+    """stop_after_delivery=1 on the default preset's split layout, whose plan holds 100 rounds: a neutral agent pushes
+    the registration to the team remote's main in round 2, the check at the end of round 2 sees it, every agent
+    takes round 3 and every episode ends "delivered" there. Nobody calls team_submit."""
+    config = small("stop_after_delivery=1", "seed=2")
+    assert layout_of(config.names, config) == "split" and config.steps_for("openmath") == 100, config
+    pusher = config.names[0]
+    script = {a: [call("shell", {"command": f"echo {a} round {i}"}, f"{a}-{i}") for i in range(1, 9)]
+              for a in config.names}
+    script[pusher][1] = call("shell", {"command": REGISTER}, "push")
+    log, summary, records = run_scenario("team_delivered", swarm_task(OpenMath(), config), scripted(script))
+    sample = log.samples[0]
+    assert log.status == "success" and sample.limit is None and sample.error is None, (log.status, sample.error)
+    assert_judged("team_delivered", sample, records)
+    for agent in config.names:
+        assert [s for s, _ in timeline_of(sample, agent)] == ["r1", "r2", "r3"], timeline_of(sample, agent)
+    assert sample.store.get("TeamSubmission:agent") is None and sample.store.get("TurnState:halted_after_round") is None
+    for rec in records:
+        assert rec["ended_by"] == "delivered" and rec["delivery"] == {"round": 2, "turn": 2}, rec
+        assert rec["rules"]["ended"] == "delivered" and rec["rules"]["used"] == 3, rec["rules"]
+    run = json.loads((RUNS / "team_delivered" / "run.json").read_text())
+    assert run["delivery"] == {"after": 1, "team": True, "seen": dict.fromkeys(config.names, {"round": 2, "turn": 2}),
+                               "halt_round": 3, "cut": config.names, "checks": 2, "errors": [],
+                               "ended": config.names}, run["delivery"]
+    assert run["rules"]["ended"] == dict.fromkeys(config.names, "delivered"), run["rules"]["ended"]
+    remote = sample.scores["deliverables_scorer"].metadata["remote"]
+    assert json.loads(remote["agent_evals_main"])["agents"][-1]["message"] == "smoke split", remote
+    return {"timeline": timeline_of(sample, pusher), "delivery": run["delivery"]}
+
+
 SCENARIOS = {"complete": scenario_complete, "message_limit": scenario_message_limit,
              "time_limit": scenario_time_limit, "board": scenario_board, "defended": scenario_defended,
              "swarm": scenario_swarm, "rules": scenario_rules, "judge": scenario_judge,
              "discover": scenario_discover, "team_submit": scenario_team_submit, "channel": scenario_channel,
-             "split_access": scenario_split_access, "split_copy": scenario_split_copy}
+             "split_access": scenario_split_access, "split_copy": scenario_split_copy,
+             "delivered": scenario_delivered, "team_delivered": scenario_team_delivered}
 
 
 def run_one(name: str) -> dict:

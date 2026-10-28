@@ -78,6 +78,7 @@ The judge runs inside the eval as the scorer `cheatbench_judge`, bound to the mo
 | `turn_header` | false | "Turns left: ..." appended to the provider input of each working turn, counted from the live plan |
 | `shutdown` | true | `AgentSpec.submit`; false builds agents without ORBIT's submit tool and drops every prompt sentence about submit; needs `one_call_per_turn=false`, so with the lucy_legacy preset pass `--set one_call_per_turn=false --set shutdown=false` |
 | `team_submit` | none | `team_submit` for neutral agents; none follows the mode; a call lets the round finish, then the callback drops every later step |
+| `stop_after_delivery` | none | N ends an episode soon after its deliverable exists: alone or in solo_task after N more of the agent's working steps once its own is seen, in a team N rounds after the round that shows the team's; the callback awaits the benchmark's delivery predicate (`Benchmark.delivered`) at the end of each round; the episodes it ends have `ended_by` delivered and their steps go to nobody |
 | `regulator_window`, `disregulator_window` | 1: | the rounds a role holds steps in, as `start:end`; the agent enters at its start round and leaves after its end |
 | `rule_level` | none | the rule sentence after the task instruction (`src/configuration/instruction_levels.yaml`, ladder `rule`) |
 | `regulator_level`, `disregulator_level` | ambiguous, persuade | the role texts (ladders `regulator` and `disregulator`); under `board_tools` a regulator's text is followed by `roles.regulator_common`; level `none` adds no sentence |

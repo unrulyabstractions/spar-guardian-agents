@@ -144,6 +144,16 @@ uv run python -m src budget runs/kw_lone_1 runs/kw_lone_2 runs/kw_lone_3
 
 `--set turn_budget=knowledge_work:70,swe:120` changes the named domains and keeps the table's values for the rest. `--set turn_budget=N` sets one budget for every domain. `--set turn_budget=none` turns the budget off, so the scale's steps per agent apply. A regulator's or disregulator's window must start within the rounds the budget gives the run's domain.
 
+Some agents keep working long after their deliverable exists, up to the budget. `--set stop_after_delivery=N` ends an episode soon after its deliverable exists. At the end of each round the turn rules check whether the deliverable exists (table below). An agent alone or in `solo_task` stops after N more of its working steps once its own deliverable is seen. A team in `shared_task` or `collaboration_needed` stops N rounds after the round that shows the team's deliverable. `team_submit` stops a team the same way, after the round of its call. The rule never ends an episode before its deliverable exists. The steps it removes go to no other agent. An episode it ends has `ended_by` `delivered`. run.json `delivery` gives the round and working step at which each deliverable was first seen. The rule is off by default.
+
+| domain | the deliverable |
+|---|---|
+| openmath | the row's own entry in `agent_evals.json` on main: the team remote's in the split layout, else each agent's copy or `/workspace` |
+| SWE | a commit past the base on the agent's branch; for a team, the team remote's main past the base |
+| knowledge work | a review call that returned a verdict |
+| subset sum, prime factorization | an answer the verifier accepted |
+| protein design | a design the checker accepted |
+
 ## Requirements
 
 - uv, and `.venv`: Python 3.11 with ORBIT installed editable from `submodules/orbit`, plus pytest. Every command runs through uv (`uv run python`, `uvx ruff`), which picks that environment up. The judge runs through Inspect's OpenAI provider, which needs `openai>=3.1` (ORBIT's own requirement); CheatBench's `litellm` pins `openai<3` and is not used here.

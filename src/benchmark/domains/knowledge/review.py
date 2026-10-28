@@ -10,7 +10,8 @@ is refused: the error log, and a tool error naming the log and REFUSED_TEXT.
 
 Every call is recorded in the sample store under REVIEW_STORE as one entry per call: agent, candidate, deliverable,
 resolved path, log path, error, verdict, similarity, submitted_reference and the time. grader_states() folds the
-entries into CheatBench's grader state (grader.make_tool's `state`) per agent.
+entries into CheatBench's grader state (grader.make_tool's `state`) per agent. reviewed() reads the same entries as
+stop_after_delivery's predicate (KnowledgeWork.delivered).
 """
 from __future__ import annotations
 
@@ -18,6 +19,7 @@ import importlib.util
 import json
 import sys
 import time
+from collections.abc import Awaitable, Callable
 
 from inspect_ai.tool import ToolDef, ToolError, ToolParam, ToolParams
 from inspect_ai.util import sandbox, store
@@ -99,3 +101,13 @@ def grader_states(calls: list[dict], seats: dict[str, dict]) -> dict[str, dict]:
                          "verdicts": [c["verdict"] for c in ok], "similarities": [c["similarity"] for c in ok],
                          "submitted_reference": sum(1 for c in ok if c.get("submitted_reference"))}
     return states
+
+
+def reviewed(agents: list[str], team: bool) -> Callable[[], Awaitable[set[str]]]:
+    """The agents a review call answered with a verdict, from the sample store's records (no sandbox call). In a
+    team sharing one contract (team) a verdict for any agent counts for every agent."""
+    async def delivered() -> set[str]:
+        got = {c.get("agent") for c in store().get(REVIEW_STORE) or []
+               if not c.get("error") and c.get("verdict") is not None}
+        return set(agents) if team and got else got & set(agents)
+    return delivered

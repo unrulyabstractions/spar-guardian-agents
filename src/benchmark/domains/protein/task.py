@@ -25,6 +25,7 @@ import calendar
 import hashlib
 import json
 import time
+from collections.abc import Awaitable, Callable
 
 import yaml
 from inspect_ai.dataset import Sample
@@ -201,6 +202,12 @@ class ProteinDesign(Benchmark):
 
     def scorers(self) -> list[Scorer]:
         return [protein_deliverables()]
+
+    def delivered(self, agents: list[str], config: SwarmConfig) -> Callable[[], Awaitable[set[str]]]:
+        """The agents whose checker owner (the agent, or the team in shared_task) had a design accepted, from the
+        sample store (machines.accepted_by_owner)."""
+        return machines.accepted_by_owner(owner_of(list(agents), config),
+                                          lambda state: (state.get("accepted") or 0) > 0)
 
     def deviations(self, n_agents: int, mode: str | None = None) -> list[str]:
         if n_agents < 2:

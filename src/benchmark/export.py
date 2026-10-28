@@ -20,9 +20,10 @@ byte for byte as before (the smoke runs of 395e9c8 recorded split_access and arc
 more): run.json "turn_budget" ({budget, steps_per_agent}), "access" (the access policy and what each agent held:
 its items, and on openmath its honeypot branches and archive slices, on knowledge work the review tool and the
 artifact read), "knowledge" (the knowledge-work sample and its reviews), "interview" and "protein" (a machines
-domain's sample and its tool's states and calls); the engagement keys oversight,
-oversight_targets, reads_refused and posts_refused; and an episode's "access" and "review" (its grader state on
-knowledge work).
+domain's sample and its tool's states and calls), "delivery" (the stop-after-delivery record); the engagement keys
+oversight, oversight_targets, reads_refused and posts_refused; and an episode's "access", "review" (its grader state on
+knowledge work) and "delivery" (the round and working step at which its deliverable was first seen). An episode that
+stop_after_delivery ended has ended_by "delivered".
 
 Episode ids: "<sample>#<epoch>" for a single agent, "<sample>#<epoch>@<agent>" otherwise.
 Verdicts come from the `verdicts` argument (re-judging) or from the cheatbench_judge score in the log.
@@ -90,6 +91,9 @@ BOARD_POST_LINE = re.compile(r"^\[(\S+) #(\d+)\] ", re.M)   # prompts.yaml board
 TEAM_SUBMIT_TAG = "swarm_team_submit"     # the info event team_submit writes (src/swarm/board.py)
 TEAM_SUBMISSION = "TeamSubmission"        # its StoreModel: agent, round, answer, time
 TEAM_SUBMISSION_FIELDS = ("agent", "round", "answer", "time")
+DELIVERED_STORE = "Delivered"             # src/swarm/rules.py's stop-after-delivery record, kept only under the rule
+DELIVERED_FIELDS = ("after", "team", "seen", "halt_round", "cut", "checks", "errors")
+DELIVERED = "delivered"                   # its TurnState.ended reason and an episode's ended_by
 SWE_TEXT_KEYS = ("first_message", "judge_prompt", "system_prompt")
 
 # Deviations of runs made before samples carried their own (metadata["cheatbench"]["deviations"]).
@@ -286,22 +290,43 @@ def signals_block(view: SampleView) -> dict | None:
     return None
 
 
+def delivery_block(view: SampleView) -> dict | None:
+    """The stop-after-delivery record (src/swarm/rules.py Delivered): N ("after"), whether one deliverable counted
+    for the team, each agent's first sighting {round, turn}, the team's last round, the agents of a team whose later
+    steps were cut, the predicate's calls and errors, and the agents the rule ended ("ended", from TurnState.ended).
+    None for a run without the rule."""
+    if view.store_get(f"{DELIVERED_STORE}:after") is None:
+        return None
+    ended = view.store_get(f"{TURN_STATE}:ended") or {}
+    return {**{f: view.store_get(f"{DELIVERED_STORE}:{f}") for f in DELIVERED_FIELDS},
+            "ended": [a for a, why in ended.items() if why == DELIVERED]}
+
+
+def ended_by_delivery(view: SampleView, agent: str) -> bool:
+    """Whether stop_after_delivery ended the agent's episode."""
+    return ((view.store_get(f"{TURN_STATE}:ended") or {}).get(agent) == DELIVERED
+            and view.store_get(f"{DELIVERED_STORE}:after") is not None)
+
+
 def newer_run_facts(view: SampleView) -> dict:
     """run.json keys that only newer runs carry, each present only when the run recorded it."""
     cb = _cheatbench(view)
     facts = {"turn_budget": cb.get("turn_budget"), "access": access_block(view), "knowledge": knowledge_block(view),
-             **{key: machine_block(view, key) for key in MACHINE_BLOCKS}, "signals": signals_block(view)}
+             **{key: machine_block(view, key) for key in MACHINE_BLOCKS}, "signals": signals_block(view),
+             "delivery": delivery_block(view)}
     return {k: v for k, v in facts.items() if v is not None}
 
 
 def newer_episode_facts(view: SampleView, agent: str) -> dict:
-    """An episode's access (what it held), review (its knowledge-work grader state) and task_tool (its owner's
-    state and its calls of the task's tool on a machines domain), when the run recorded them."""
+    """An episode's access (what it held), review (its knowledge-work grader state), task_tool (its owner's
+    state and its calls of the task's tool on a machines domain) and delivery (the round and working step at which
+    its deliverable was first seen), when the run recorded them."""
     facts = {"access": ((access_block(view) or {}).get("agents") or {}).get(agent),
              "review": ((_score_metadata(view, KNOWLEDGE_SCORER) or {}).get("grader_state") or {}).get(agent),
              "task_tool": next((md["agents"][agent] for md in map(lambda s: _score_metadata(view, s),
                                                                    MACHINE_BLOCKS.values())
-                                if md and agent in (md.get("agents") or {})), None)}
+                                if md and agent in (md.get("agents") or {})), None),
+             "delivery": ((delivery_block(view) or {}).get("seen") or {}).get(agent)}
     return {k: v for k, v in facts.items() if v is not None}
 
 
@@ -671,9 +696,11 @@ def _submitted(transcript: dict) -> bool:
     return False
 
 
-def _ended_by(view: SampleView, submitted: bool, ep_failure: str | None) -> str:
+def _ended_by(view: SampleView, submitted: bool, ep_failure: str | None, delivered: bool = False) -> str:
     if submitted:
         return "submit"
+    if delivered:
+        return DELIVERED
     if view.limit or ep_failure in LIMIT_FAILURES:
         return "limit"
     if view.error:
@@ -691,9 +718,9 @@ def _write_episode(view: SampleView, run_dir: Path, agent: str, episode: str, er
     transcript_path.write_text(json.dumps(transcript, indent=1))
     (ep_dir / "prompt.txt").write_text(transcript["prompt"])
     # A limit ends the sample, not every agent in it: an agent whose last tool call
-    # was submit finished its own episode before the limit hit the others.
-    submitted = _submitted(transcript)
-    if submitted and failure in LIMIT_FAILURES:
+    # was submit, or that stop_after_delivery ended, finished its own episode before the limit hit the others.
+    submitted, delivered = _submitted(transcript), ended_by_delivery(view, agent)
+    if (submitted or delivered) and failure in LIMIT_FAILURES:
         ep_error, ep_failure = None, None
     else:
         ep_error, ep_failure = error, failure
@@ -702,7 +729,7 @@ def _write_episode(view: SampleView, run_dir: Path, agent: str, episode: str, er
         "n_turns": info["n_agent_steps"], "n_tool_calls": info["n_tool_calls"],
         "usage": info["usage"], "transcript_path": str(transcript_path),
         "error": ep_error, "failure": ep_failure, "ok": ep_error is None,
-        "ended_by": _ended_by(view, submitted, ep_failure),
+        "ended_by": _ended_by(view, submitted, ep_failure, delivered),
     }
     swe = _cheatbench(view).get("swe") or {}
     if "comm_turns" in swe:

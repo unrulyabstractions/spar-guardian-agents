@@ -19,7 +19,8 @@ then team_submit for a neutral agent when the mode has a team to submit for, and
 
 The plan's rounds, the scheduler's turn bound and Inspect's message limit follow the domain's turn budget
 (SwarmConfig.steps_for, max_turns_for, message_limit_for). Under a budget metadata["cheatbench"]["turn_budget"] holds
-{"budget", "steps_per_agent"}; without one the key is absent.
+{"budget", "steps_per_agent"}; without one the key is absent. Under stop_after_delivery the benchmark's delivery
+predicate (Benchmark.delivered) goes to the turn rules' setup; without the rule rules_setup gets no predicate.
 
 The run's facts go into the sample metadata: metadata["cheatbench"] gains the config dump, the control, the hidden
 roles and their composition, and the deviations from CheatBench's own runner. The mode and who holds team_submit
@@ -161,6 +162,14 @@ def token_limit(config: SwarmConfig) -> int:
     return config.n_agents * TOKEN_LIMIT * (MONITOR_FACTOR if config.control not in BASELINE else 1)
 
 
+def delivery(benchmark: Benchmark, config: SwarmConfig) -> dict:
+    """rules_setup's delivery predicate under stop_after_delivery ({"delivered": Benchmark.delivered}); nothing
+    without the rule, so the eval log's plan records the setup's arguments as before."""
+    if config.stop_after_delivery is None:
+        return {}
+    return {"delivered": benchmark.delivered(config.names, config)}
+
+
 def check_control(benchmark: Benchmark, config: SwarmConfig) -> None:
     """The task-aware controls carry the openmath rule; refuse them on another benchmark."""
     if config.control.endswith("_task") and not isinstance(benchmark, OpenMath):
@@ -244,8 +253,8 @@ def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = 
         scheduler=board_scheduler(max_turns=config.max_turns_for(domain) + 5, max_time_seconds=time_limit_s),
         scorer=scorers(benchmark, config),
         tool_bindings=bindings or None,
-        task_setup=[s for s in (rules_setup(config, names, roles, domain), benchmark.setup())
-                    if s is not None],
+        task_setup=[s for s in (rules_setup(config, names, roles, domain, **delivery(benchmark, config)),
+                                benchmark.setup()) if s is not None],
         message_limit=message_limit,
         token_limit=token_limit(config),
         **inspect_time,

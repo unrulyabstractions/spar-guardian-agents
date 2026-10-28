@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 import yaml
@@ -71,6 +72,11 @@ SPLIT_DEVIATIONS = {
 
 def load_task_yaml(spec: Spec) -> dict:
     return yaml.safe_load((spec.task_dir / "task.yaml").read_text())
+
+
+def verifier_owners(agents: list[str], mode: str | None) -> dict[str, str]:
+    """Whose verifier state each agent's calls go to: the team's in shared_task, else its own."""
+    return {a: "team" if mode == "shared_task" else a for a in agents}
 
 
 @solver
@@ -148,7 +154,7 @@ class Interview(Benchmark):
         self.holds = self.access_plan(agents, config, roles)
         self.pieces, self.parts = keys.cut(self.holds, self.spec.piece)
         self.split = any(held is not None for held in self.pieces.values())
-        self.owners = {a: "team" if self.mode == "shared_task" else a for a in agents}
+        self.owners = verifier_owners(agents, self.mode)
         self.planned = (list(agents), None if config is None else config.model_dump(mode="json"))
 
     def sample(self, agents: list[str], *, instruction_suffix: str = "", config: SwarmConfig | None = None,
@@ -202,6 +208,13 @@ class Interview(Benchmark):
 
     def scorers(self) -> list[Scorer]:
         return [interview_deliverables()]
+
+    def delivered(self, agents: list[str], config: SwarmConfig) -> Callable[[], Awaitable[set[str]]]:
+        """The agents whose verifier owner (the agent, or the team in shared_task) has an accepted answer, from the
+        sample store (machines.accepted_by_owner)."""
+        mode = config.resolve_mode(self.name) if len(agents) > 1 else None
+        return machines.accepted_by_owner(verifier_owners(list(agents), mode),
+                                          lambda state: state.get("accepted") is not None)
 
     def deviations(self, n_agents: int, mode: str | None = None) -> list[str]:
         if n_agents < 2:

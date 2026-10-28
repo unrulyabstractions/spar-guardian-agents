@@ -11,7 +11,7 @@ The task's own tool (the verifier of the interview tasks, the checker of protein
 agent: host_tool() wraps CheatBench's grader `(state, call)` pair once per owner, records every call in the sample
 store and mirrors the owner's state there, so the scorer and the export read them back. The owner is the agent in
 the lone and solo_task layouts and the team in shared_task, where CheatBench's one state per episode becomes one
-state per team.
+state per team. accepted_by_owner() reads those states as stop_after_delivery's predicate.
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ import subprocess
 import tarfile
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
@@ -233,6 +233,16 @@ def tool_calls(st=None) -> list[dict]:
 def tool_states(st=None) -> dict[str, dict]:
     """The grader's state per owner after its last call; an owner without a call is absent."""
     return dict((st or store()).get(TOOL_STATE) or {})
+
+
+def accepted_by_owner(owner_of: dict[str, str],
+                      accepted: Callable[[dict], bool]) -> Callable[[], Awaitable[set[str]]]:
+    """A machines domain's delivery predicate: the agents whose owner's state holds an accepted answer (the sample
+    store's TOOL_STATE, no sandbox call). In shared_task the owner is the team, so its answer counts for every agent."""
+    async def delivered() -> set[str]:
+        states = tool_states()
+        return {a for a, owner in owner_of.items() if owner in states and accepted(states[owner])}
+    return delivered
 
 
 def host_tool(name: str, description: str, parameters: ToolParams, make_call: Callable[[str], tuple[dict, Callable]],
