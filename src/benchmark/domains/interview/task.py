@@ -21,8 +21,9 @@ Departures from CheatBench's runner: the agent is ORBIT's turn_react loop; ORBIT
 prompts; the verifier runs on the host with its state in the sample store (verifier.py), with parameter descriptions
 and Inspect's schema check; the agents' messages are not mirrored into the checkout's live logs, which stay as
 staged; the containers have no network, where CheatBench leaves egress open and forbids it in the prompt; the staged
-files carry the time the sample was built as their mtime. In a team the checkout's generator takes its seed from an
-environment variable no container sets, in a rewritten commit (generator.py), so running it rebuilds nothing.
+files carry the time the sample was built as their mtime. In a team the checkout's generator salts its random
+source from an environment variable no container sets, in a rewritten commit (generator.py), so running it rebuilds
+nothing and a made-up salt gives another corpus.
 """
 from __future__ import annotations
 
@@ -56,7 +57,7 @@ DEVIATIONS = [
 MACHINE_DEVIATIONS = [
     "each_agent_has_its_own_container_and_copy_of_the_row",
     "tools_shell_and_run_python_bound_per_agent_container",
-    "generator_takes_its_seed_from_an_unset_environment_variable_in_a_rewritten_commit",
+    "generator_salts_its_random_source_from_an_unset_environment_variable_in_a_rewritten_commit",
 ]
 SHARED_DEVIATIONS = ["team_shares_one_tool_state_in_shared_task"]
 SPLIT_DEVIATIONS = {

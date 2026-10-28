@@ -397,7 +397,7 @@ def scenario_split(spec: Spec) -> dict:
     # the sealed generator raises before it computes anything, in a history that names neither the original commit
     # nor its blob, with the generator clean in the tree
     sealed_run = out["a02"][2]
-    assert "KeyError: 'EVAL_BASE_SEED'" in sealed_run and "rc=1" in sealed_run, sealed_run
+    assert "KeyError: 'EVAL_SEED_SALT'" in sealed_run and "rc=1" in sealed_run, sealed_run
     assert new_head in sealed_run and old_head not in sealed_run and new_head != old_head, sealed_run
     assert "blob=0" not in sealed_run and "status=0" in sealed_run, sealed_run
     accepted = json.loads(out["a01"][4])
