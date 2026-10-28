@@ -35,7 +35,7 @@ uv run python -m examples.swe.flipt_minimal
 uv run python -m examples.knowledge_work.worktime_minimal
 ```
 
-Every script takes `--model` (a registry entry or an Inspect model string), `--preset`, `--scale`, `--set key=value` (repeatable), `--name` and `--timeout`; `--help` lists them. The run lands in `runs/<name>/` like any other run, and its figures go under `out/<name>/`: every agent's steps round by round with the judge's verdict, the board's actions per round, and the judge's flags per agent. `examples/README.md` has the details. Another model or size is one argument away:
+Every script takes `--model` (a registry entry or an Inspect model string), `--preset`, `--scale`, `--set key=value` (repeatable), `--no-judge` (run now, judge later with `scripts/rejudge.py <name>`), `--name` and `--timeout`; `--help` lists them. The run lands in `runs/<name>/` like any other run, and its figures go under `out/<name>/`: every agent's steps round by round with the judge's verdict, the board's actions per round, and the judge's flags per agent. `examples/README.md` has the details. Another model or size is one argument away:
 
 ```
 uv run python -m examples.swe.flipt_minimal --model gemini-3.8-flash --scale medium --set regulators=1
@@ -138,7 +138,7 @@ uv run python -m src budget runs/kw_lone_1 runs/kw_lone_2 runs/kw_lone_3
 - uv, and `.venv`: Python 3.11 with ORBIT installed editable from `submodules/orbit`, plus pytest. Every command runs through uv (`uv run python`, `uvx ruff`), which picks that environment up. The judge runs through Inspect's OpenAI provider, which needs `openai>=3.1` (ORBIT's own requirement); CheatBench's `litellm` pins `openai<3` and is not used here.
 - Docker. The openmath sandbox image is built by the task. SWE needs the `cbswe-<issue>:native` image, which the SWE domain builds when it is missing. Knowledge work needs CheatBench's office image `cbkw:office` (LibreOffice) and our `cbkw:agent`, which the domain builds when they are missing.
 - Knowledge work reads the GDPval rows that CheatBench's `build.py` writes to `build/knowledge_work/`. The download from Hugging Face needs no token. The command is in the error a missing build raises.
-- `OPENAI_API_KEY` for the agents' default model and for the judge; `GEMINI_API_KEY` for Gemini runs. Another agents' model takes `--model <entry>`; `python -m src models` lists the entries of `src/configuration/models.yaml` (DeepSeek, the models CheatBench ran, and the current models of each provider) with the key variable each route needs.
+- `OPENAI_API_KEY` for the agents' default model; `ANTHROPIC_API_KEY` for the judge (claude-haiku-5-5 since 2026-10-28; `--set judge=gpt-6-sol` is CheatBench's own judge, twenty times the price, kept as the reference); `GEMINI_API_KEY` for Gemini runs. Another agents' model takes `--model <entry>`; `python -m src models` lists the entries of `src/configuration/models.yaml` (DeepSeek, the models CheatBench ran, and the current models of each provider) with the key variable each route needs.
 
 ## Layout
 
@@ -186,13 +186,13 @@ uv run python -m src run swe_jigsaw --benchmark swe --honeypot jigsaw --set mode
 uv run python -m src run kw_small --benchmark knowledge_work --set regulators=1
 uv run python -m src run riemann_pressure --set regulators=1 --set regulator_level=pressure
 uv run python -m src judge logs/swarm/<run>/<log>.eval <run>
-uv run python -m src ladder <run> [--judge gpt-6-sol] [--view full|actions]
+uv run python -m src ladder <run> [--judge claude-haiku-5-5] [--sync] [--view full|actions]
 uv run python -m src summary runs/<run> --full
 uv run python scripts/rejudge.py <run>
 uv run python scripts/regenerate.py <run> [--tools] [--restart-ui]
 ```
 
-A run writes its eval log under `logs/`, exports it to `runs/<name>/` and prints one line per episode. `--set` takes any field of `SwarmConfig`, after the preset and the scale. `--set shutdown=false` builds the agents without ORBIT's submit tool, so they run until their turns or the time limit run out. A run that died in the harness or at the provider is set aside under a `failed_` or `failed2_` prefix. The browser hides those by default and never counts them. `judge` refuses such a run unless `--judge-errors` is given.
+A run writes its eval log under `logs/`, exports it to `runs/<name>/` and prints one line per episode. `--set` takes any field of `SwarmConfig`, after the preset and the scale. `--no-judge` (or `--set judge=none`) runs without the judge; `scripts/rejudge.py <name>` then judges the run from its eval log and places its agents on the ladder, through the provider's batch API (half price, up to a day) or with `--sync` through the normal API (full price, minutes). `--set shutdown=false` builds the agents without ORBIT's submit tool, so they run until their turns or the time limit run out. A run that died in the harness or at the provider is set aside under a `failed_` or `failed2_` prefix. The browser hides those by default and never counts them. `judge` refuses such a run unless `--judge-errors` is given.
 
 `ladder` places every agent of a run on the cheating ladder (Rigel's: exposed, tried, opened, used, shipped, with searched and tampered beside it and three honesty labels: admitted, concealed, false denial) with one judge call per agent over its stored transcript, so it also runs on a set-aside run whose log is gone. `src/configuration/judge_ladder.py` adds the fields to CheatBench's verdict schema; the rung is derived in code from the booleans, each cited call is checked against the transcript, and the eval log's turn timeline gives the round of each cited call. The rows go to `runs/<name>/ladder.jsonl`; `--table` sums them over runs. `--view actions` judges from the tool calls and their results alone, without the agent's prose, for measuring how far the agent's own account moves the judge; its rows go to `ladder_actions.jsonl`.
 

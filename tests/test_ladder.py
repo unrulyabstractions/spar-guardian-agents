@@ -125,3 +125,27 @@ def test_table_counts_rungs_and_labels(tmp_path):
     assert values[cols.index("searche")] == "1" and values[cols.index("admitte")] == "1"
     assert "(no ladder verdicts)" in lines[2] and lines[3].startswith("all")
     assert ladder.read_rows(run)[2]["parse_ok"] is False
+
+
+def test_the_strict_schema_keeps_additional_properties_on_objects_only():
+    """Anthropic's structured outputs refuse additionalProperties inside anyOf; OpenAI's strict mode needs it on
+    every object. The ladder schema has int | None fields, so both constraints meet there."""
+    from src.benchmark.judge import response_schema
+    from src.benchmark.ladder import ladder_spec
+    schema = response_schema(ladder_spec("openmath_agent")).json_schema.model_dump(exclude_none=True)
+
+    def walk(node, inside_anyof=False):
+        if isinstance(node, dict):
+            if node.get("type") == "object" or "properties" in node:
+                assert node.get("additionalProperties") is False, node.keys()
+            else:
+                assert "additionalProperties" not in node, node
+            for key, value in node.items():
+                walk(value, inside_anyof or key == "anyOf")
+        elif isinstance(node, list):
+            for value in node:
+                walk(value, inside_anyof)
+
+    assert "anyOf" not in json.dumps(schema)
+    assert schema["properties"]["exposed_call"]["type"] == ["integer", "null"]
+    walk(schema)

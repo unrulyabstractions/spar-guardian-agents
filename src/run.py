@@ -2,8 +2,8 @@
 run's agents on the cheating ladder, or read the turn budget off lone runs.
 
     run("swarm_R3D3_s1", OpenMath(), config, model="google/gemini-3.8-flash", timeout=2700)
-    judge(Path("logs/swarm/swarm_R3D3/<log>.eval"), "swarm_R3D3", "gpt-6-sol", judge_errors=False)
-    ladder_runs([Path("runs/swarm_R3D3")], "gpt-6-sol", view="full")
+    judge(Path("logs/swarm/swarm_R3D3/<log>.eval"), "swarm_R3D3", "claude-haiku-5-5", batch=True)
+    ladder_runs([Path("runs/swarm_R3D3")], "claude-haiku-5-5", view="full", batch=True)
     budget([Path("runs/om_lone_1"), Path("runs/om_lone_2"), Path("runs/om_lone_3")])
 
 A run calls inspect_ai.eval with the task from tasks.py, writes its log under logs/<kind>/<name>/, exports it to
@@ -88,7 +88,7 @@ def require_provider_key(model: str) -> None:
 
 
 def require_judge_key(judge_name: str, code: int) -> None:
-    """The judge's key, named by its src/benchmark/models.yaml entry (OPENAI_API_KEY for gpt-6-sol)."""
+    """The judge's key, named by its src/benchmark/models.yaml entry (ANTHROPIC_API_KEY for claude-haiku-5-5)."""
     try:
         judging.require_judge_key(judge_name)
     except RuntimeError as error:
@@ -105,10 +105,13 @@ def log_kind(benchmark, config: SwarmConfig) -> str:
     return "swarm" if hidden_roles(benchmark, config) else "ctrl"
 
 
-def judge_role_model(config: SwarmConfig) -> Model:
-    """The model bound to the "judge" role, with the provider's batch API on or off as batch_judge says.
+def judge_role_model(config: SwarmConfig) -> Model | None:
+    """The model bound to the "judge" role, with the provider's batch API on or off as batch_judge says, or None
+    when the config has no judge.
 
     The batch setting is explicit either way, so a judge never inherits the agents' batch_agents setting."""
+    if config.judge is None:
+        return None
     judge_model, _ = judging.judge_model_config(config.judge)
     return get_model(judge_model, config=GenerateConfig(batch=config.batch_judge))
 
@@ -147,15 +150,20 @@ def access_line(task) -> str:
 def run(name: str, benchmark, config: SwarmConfig, model: str, timeout: int | None) -> int:
     """Run one task, export it to runs/<name>/ and print the summary. Returns 0, or 3 when the eval did not succeed."""
     require_provider_key(model)
-    require_judge_key(config.judge, 1)
+    judge_model = judge_role_model(config)
+    if judge_model is not None:
+        require_judge_key(config.judge, 1)
     provider_retry.install()
     log_dir = settings.LOGS / log_kind(benchmark, config) / name
     log_dir.mkdir(parents=True, exist_ok=True)
-    print(f"== eval {benchmark.name} n_agents={config.n_agents} control={config.control} -> {log_dir}", flush=True)
+    judged = f"judge={config.judge}" if judge_model is not None else "not judged"
+    print(f"== eval {benchmark.name} n_agents={config.n_agents} control={config.control} {judged} -> {log_dir}",
+          flush=True)
     task = swarm_task(benchmark, config, name=name)
     print(access_line(task), flush=True)
     [log] = inspect_ai.eval(task, model=model, log_dir=str(log_dir), display="plain", timeout=timeout,
-                            model_roles={"judge": judge_role_model(config)}, **agent_generate_config(config))
+                            model_roles={"judge": judge_model} if judge_model is not None else None,
+                            **agent_generate_config(config))
     if not log.samples and not Path(log.location).exists():
         raise Refusal("no eval log written", 3)
     run_dir = export(Path(log.location), name)
@@ -171,11 +179,12 @@ def _episode(view, agents: list[str], agent: str) -> str:
     return key if len(agents) == 1 else f"{key}@{agent}"
 
 
-async def _judge_views(views: list, judge_name: str) -> dict[str, dict]:
-    """Every agent of every sample judged again, through the provider's batch API; verdict rows keyed by episode."""
+async def _judge_views(views: list, judge_name: str, batch: bool) -> dict[str, dict]:
+    """Every agent of every sample judged again, through the provider's batch API or the normal one; verdict rows
+    keyed by episode."""
     model_name, config = judging.judge_model_config(judge_name)
-    prices = judging.judge_prices(judge_name, batch=True)
-    model = get_model(model_name, config=GenerateConfig(batch=True))
+    prices = judging.judge_prices(judge_name, batch=batch)
+    model = get_model(model_name, config=GenerateConfig(batch=batch))
     verdicts = {}
     for view in views:
         cb = (view.metadata or {}).get("cheatbench", {})
@@ -202,8 +211,10 @@ def print_verdicts(judge_jsonl: Path) -> None:
 
 
 @command
-def judge(eval_log: Path, run_name: str, judge_name: str, *, judge_errors: bool = False) -> int:
-    """Judge a finished eval log again and export it to runs/<run_name>/ with the new verdicts."""
+def judge(eval_log: Path, run_name: str, judge_name: str, *, batch: bool = True, judge_errors: bool = False) -> int:
+    """Judge a finished eval log (again, or for the first time after a run without a judge) and export it to
+    runs/<run_name>/ with the verdicts. batch: the provider's batch API, half price, up to a day; else the normal
+    API, full price, minutes."""
     require_judge_key(judge_name, 2)
     eval_log = eval_log.resolve()
     if not eval_log.is_file():
@@ -215,8 +226,8 @@ def judge(eval_log: Path, run_name: str, judge_name: str, *, judge_errors: bool 
     failures = [error_and_failure(view)[1] for view in views]
     if not judge_errors and any(f in settings.INCOMPLETE_FAILURES for f in failures):
         raise Refusal("run has a harness or provider failure; not judging (pass --judge-errors to force)", 5)
-    print(f"== judge ({judge_name}) {eval_log}", flush=True)
-    verdicts = asyncio.run(_judge_views(views, judge_name))
+    print(f"== judge ({judge_name}, {'batch' if batch else 'sync'}) {eval_log}", flush=True)
+    verdicts = asyncio.run(_judge_views(views, judge_name, batch))
     run_dir = export(eval_log, run_name, verdicts=verdicts)
     judge_jsonl = run_dir / "judge.jsonl"
     if not verdicts or not judge_jsonl.exists():
@@ -230,26 +241,31 @@ def judge(eval_log: Path, run_name: str, judge_name: str, *, judge_errors: bool 
 # --------------------------------------------------------------------------
 @command
 def ladder_runs(run_dirs: list[Path], judge_name: str, *, view: str = "full", agents: list[str] | None = None,
-                force: bool = False) -> int:
+                force: bool = False, batch: bool = True) -> int:
     """Place every agent of each run on the cheating ladder (src/benchmark/ladder.py): runs/<name>/ladder.jsonl,
-    one line per agent, then the table over the runs."""
+    one line per agent, then the table over the runs. batch as in judge()."""
     require_judge_key(judge_name, 2)
     if view not in ladder.VIEWS:
         raise Refusal(f"unknown view {view!r}; choose one of {ladder.VIEWS}", 2)
     missing = [str(d) for d in run_dirs if not (Path(d) / "run.json").is_file()]
     if missing:
         raise Refusal(f"not a run directory: {', '.join(missing)}", 2)
-    asyncio.run(_ladder_all(run_dirs, judge_name, view, agents, force))
+    asyncio.run(_ladder_all(run_dirs, judge_name, view, agents, force, batch))
     print(ladder.table([Path(d) for d in run_dirs], view), end="")
     return 0
 
 
 async def _ladder_all(run_dirs: list[Path], judge_name: str, view: str, agents: list[str] | None,
-                      force: bool) -> None:
-    """The runs one after the other on one event loop, since Inspect keeps its model clients across calls."""
+                      force: bool, batch: bool) -> None:
+    """The runs together on one event loop (Inspect keeps its model clients across calls, and a batch should hold
+    every run's episodes), each run's lines printed when its verdicts are in."""
+    mode = "batch" if batch else "sync"
     for run_dir in run_dirs:
-        print(f"== ladder ({judge_name}, {view}) {run_dir}", flush=True)
-        rows = await ladder.judge_run(Path(run_dir), judge_name, view=view, agents=agents, force=force)
+        print(f"== ladder ({judge_name}, {mode}, {view}) {run_dir}", flush=True)
+    results = await asyncio.gather(*(ladder.judge_run(Path(run_dir), judge_name, view=view, agents=agents,
+                                                      force=force, batch=batch) for run_dir in run_dirs))
+    for run_dir, rows in zip(run_dirs, results):
+        print(f"== ladder {run_dir}", flush=True)
         for row in rows:
             print(ladder.agent_line(row), flush=True)
 

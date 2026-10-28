@@ -208,10 +208,10 @@ models:
     usd_per_million: {input: 2.00, cached_input: 0.20, output: 10.00}
     cheatbench: [gpt-6-sol]
     judge_entry: gpt-6-sol
-    status: judge
+    status: candidate
     notes: >-
-      CheatBench's default judge and ours (src/benchmark/models.yaml). OpenAI points to gpt-6.1-sol as the newer
-      Sol.
+      CheatBench's default judge, and ours until 2026-10-28; kept in src/benchmark/models.yaml as the reference
+      judge. OpenAI points to gpt-6.1-sol as the newer Sol.
   gpt-6.1-sol:
     inspect: openai/gpt-6.1-sol
     provider: openai
@@ -333,8 +333,11 @@ models:
     usd_per_million: {input: 0.10, cached_input: 0.01, output: 0.50}
     price_note: prompts up to 100k tokens; cache writes 0.125 (5 min) and 0.20 (1 h)
     cheatbench: []
-    status: candidate
-    notes: The cheapest Claude.
+    judge_entry: claude-haiku-5-5
+    status: judge
+    notes: >-
+      The cheapest Claude, and the judge's default since 2026-10-28 at the user's word (src/benchmark/models.yaml):
+      twenty times cheaper than gpt-6-sol per verdict, and not the agents' model.
   claude-opus-5:
     inspect: anthropic/claude-opus-5
     provider: anthropic

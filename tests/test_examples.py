@@ -37,7 +37,11 @@ def test_the_shared_arguments_and_their_defaults():
     assert args.settings == [*DEFAULT_SETTINGS, "regulators=1", "time_limit_s=900"]
     config = build_config(args.preset, args.scale, args.settings)
     assert (config.scale, config.n_agents, config.regulator_count, config.time_limit_s) == ("medium", 10, 1, 900)
-    assert config.batch_judge is False
+    assert config.batch_judge is False and config.judge == settings.JUDGE_MODEL
+    # --no-judge: judge=none after every other setting, so the run is not judged
+    args = parse_example_arguments(script, None, ["--no-judge", "--set", "judge=gpt-6-sol"])
+    assert args.settings == [*DEFAULT_SETTINGS, "judge=gpt-6-sol", "judge=none"]
+    assert build_config(args.preset, args.scale, args.settings).judge is None
     for bad in (["--model", "nope"], ["--set", "nope=1"], ["--set", "regulators"], ["--scale", "huge"]):
         with pytest.raises(SystemExit) as stop:
             parse_example_arguments(script, None, bad)

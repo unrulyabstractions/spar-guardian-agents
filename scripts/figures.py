@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "tmp"
 sys.path.insert(0, str(ROOT))
 
+from src.benchmark.domains.swe.task import parts_by_agent  # noqa: E402
 
 # Palette: reference dataviz palette, light mode. Roles take the first two categorical slots;
 # workers are neutral (white fill, ink ring). Structures are neutral greys.
@@ -325,10 +326,9 @@ def fig_engagement_funnel():
 
 def fig_read_graph():
     """Who read whose posts, as a graph: reader to sender, width by reads. Illustrative values."""
-    fig = plt.figure(figsize=(HALF, 2.9))
+    fig = plt.figure(figsize=(HALF, 2.4))
     gx = fig.add_axes([0.02, 0.02, 0.96, 0.96])
-    blank(gx, (-2.6, 2.6), (-2.75, 2.85))
-    gx.text(-2.5, 2.6, "Who read whom", fontsize=8.5, weight="bold", va="center")
+    blank(gx, (-2.6, 2.6), (-2.3, 2.2))
     pos = dict(zip(ROLES5, ring(5, 1.75)))
     reads = {("a01", "a02"): 4, ("a02", "a01"): 1, ("a03", "a02"): 3, ("a05", "a02"): 2, ("a04", "a01"): 2,
              ("a02", "a04"): 1, ("a05", "a03"): 1, ("a01", "a05"): 1}
@@ -338,21 +338,20 @@ def fig_read_graph():
               color=INK2, head=4 + count)
     for name, (x, y) in pos.items():
         agent(gx, x, y, name, ROLES5[name], r=0.32, fs=6)
-    gx.text(0, -2.55, "edge: reader to sender; width: reads", ha="center", va="center", fontsize=6.8,
-            color=INK2)
     save(fig, "read_graph")
 
 
 # ---------------------------------------------------------------- figure 5: modes
 def fig_modes():
     """collaboration_needed: one issue in parts, one or more agents per part, the team's main as the deliverable."""
-    fig = plt.figure(figsize=(HALF, 2.55))
-    ax = fig.add_axes([0.02, 0.15, 0.96, 0.84])
-    blank(ax, (-3.1, 3.1), (-2.9, 3.5))
-    ax.text(-3.0, 3.2, "collaboration_needed", fontsize=8.5, weight="bold", va="center")
+    fig = plt.figure(figsize=(HALF, 2.3))
+    ax = fig.add_axes([0.02, 0.17, 0.96, 0.82])
+    blank(ax, (-3.1, 3.1), (-2.9, 2.75))
     bw, bh, by = 1.6, 0.6, 2.3
     box(ax, -bw / 2, by - bh / 2, bw, bh, "board", fc=PLANE, ec=INK2, fs=7.5)
-    parts = {"A": ["a01", "a04"], "B": ["a02", "a05"], "C": ["a03"]}
+    # the parts as the code deals them: over the neutral agents first, then a role repeats a neutral agent's part
+    owned = parts_by_agent(list(ROLES5), "collaboration_needed", ROLES5)
+    parts = {part: [a for a in ROLES5 if owned[a] == [part]] for part in ("A", "B", "C")}
     for (part, members), x in zip(parts.items(), [-2.0, 0.0, 2.0]):
         box(ax, x - 0.92, -0.95, 1.84, 2.25, None, fc="#ffffff", ec=INK2, z=1)
         ax.text(x, 1.05, f"part {part}", ha="center", va="center", fontsize=7)
@@ -380,15 +379,15 @@ def fig_information():
     ax.set_ylim(0, 4.45)
     ax.axis("off")
     ax.text(0.2, 4.15, "What each role is told, and what it holds", va="center", fontsize=8.5, weight="bold")
-    cols = ["board exists", "board tools", "roster", "own role", "others' roles", "teammates'\ntool calls", "exploit"]
+    cols = ["board exists", "board tools", "roster", "teammates'\ntool calls", "exploit"]
     rows = ["worker", "regulator", "disregulator"]
     # Y yes in the default preset; F only if mention_board is on; P a part only (access split); N no
     marks = {
-        "worker": ["F", "Y", "Y", "N", "N", "N", "P"],
-        "regulator": ["Y", "Y", "Y", "Y", "N", "Y", "N"],
-        "disregulator": ["Y", "Y", "Y", "Y", "N", "N", "N"],
+        "worker": ["F", "Y", "Y", "N", "P"],
+        "regulator": ["Y", "Y", "Y", "Y", "N"],
+        "disregulator": ["Y", "Y", "Y", "N", "N"],
     }
-    x0, cw, top, rh = 3.0, 1.95, 2.55, 0.72
+    x0, cw, top, rh = 3.0, 2.7, 2.55, 0.72
     for j, c in enumerate(cols):
         ax.text(x0 + j * cw + cw / 2, top + 0.5, c, ha="center", va="bottom", fontsize=7, color=INK2,
                 linespacing=1.05)

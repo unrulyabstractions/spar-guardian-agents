@@ -344,17 +344,26 @@ class SwarmConfig(BaseModel):
     eval's generate config), from the scale. Batched calls cost less and return later. Mock models ignore it."""
     batch_judge: bool = True
     """Whether the judge's calls go through the provider's batch API (GenerateConfig(batch=True) on the model bound to
-    the judge role). Mock models ignore it. Every preset keeps it on; re-judging a log always batches."""
+    the judge role). Mock models ignore it. Every preset keeps it on; `python -m src judge` and `ladder` batch too
+    unless --sync."""
 
     # ---------------------------------------------------------------- control and judge
     control: str = "baseline"
     """The named control (src/swarm/controls.py defenses_for). baseline means none."""
     monitor_model: str = settings.DEFAULT_MONITOR_MODEL
     """Model for an LLM control (monitor, guardian, dual LLM)."""
-    judge: str = settings.JUDGE_MODEL
-    """Judge entry in src/benchmark/models.yaml."""
+    judge: str | None = settings.JUDGE_MODEL
+    """Judge entry in src/benchmark/models.yaml, or None (`--set judge=none`, `--no-judge`): the run is not judged
+    and gets no judge.jsonl; `scripts/rejudge.py <run>` judges it later from its eval log."""
     judge_addendum: bool = False
     """Append Lucy's judge addendum to CheatBench's judge schema (src/benchmark/judge.py judge_spec)."""
+
+    @field_validator("judge", mode="before")
+    @classmethod
+    def _parse_judge(cls, value):
+        if isinstance(value, str) and value.strip().lower() in NONE_TEXT:
+            return None
+        return value
 
     @model_validator(mode="after")
     def _consistent(self) -> SwarmConfig:

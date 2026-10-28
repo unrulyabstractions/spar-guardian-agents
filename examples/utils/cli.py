@@ -6,8 +6,9 @@
 
 --model takes an entry of src/configuration/models.yaml or an Inspect model string and comes back resolved to the
 Inspect string (DEFAULT_MODEL); --preset and --scale name the config's base; --set key=value names a SwarmConfig
-field, repeatable, and comes back after DEFAULT_SETTINGS in args.settings; --name is the run's name; --timeout
-bounds one model request. A wrong model, field or value is an argument error (exit 2).
+field, repeatable, and comes back after DEFAULT_SETTINGS in args.settings; --no-judge adds `judge=none` after them,
+so the run is not judged until `scripts/rejudge.py <name>`; --name is the run's name; --timeout bounds one model
+request. A wrong model, field or value is an argument error (exit 2).
 """
 from __future__ import annotations
 
@@ -40,6 +41,9 @@ def parse_example_arguments(script: Path, description: str | None, argv: list[st
     parser.add_argument("--scale", choices=list(SCALES), default="small", help="the run's size (default: small)")
     parser.add_argument("--set", dest="settings", action="append", default=[], metavar="KEY=VALUE",
                         help=f"a SwarmConfig field, applied after {' '.join(DEFAULT_SETTINGS)}; repeatable")
+    parser.add_argument("--no-judge", action="store_true",
+                        help="run without the judge (judge=none); `uv run python scripts/rejudge.py <name>` judges "
+                             "it later, through the batch API or with --sync")
     parser.add_argument("--name", default=script.stem, help="the run's name: runs/<name>/ and out/<name>/")
     parser.add_argument("--timeout", type=int, default=settings.MODEL_TIMEOUT_S,
                         help="seconds one model request may take, retries included")
@@ -52,5 +56,5 @@ def parse_example_arguments(script: Path, description: str | None, argv: list[st
         key, sep, _ = pair.partition("=")
         if not sep or key.strip() not in SwarmConfig.model_fields:
             parser.error(f"--set takes a SwarmConfig field as key=value, got {pair!r}")
-    args.settings = DEFAULT_SETTINGS + args.settings
+    args.settings = DEFAULT_SETTINGS + args.settings + (["judge=none"] if args.no_judge else [])
     return args

@@ -101,9 +101,29 @@ def require_judge_key(name: str) -> None:
 
 
 def response_schema(spec: cb_judge.JudgeSpec) -> ResponseSchema:
-    """The Verdict as a strict JSON schema: every field required, no additional properties."""
+    """The Verdict as a strict JSON schema: every field required, no additional properties on any object."""
     param = type_to_response_format_param(spec.verdict)["json_schema"]
-    return ResponseSchema(name=param["name"], json_schema=JSONSchema.model_validate(param["schema"]), strict=True)
+    return ResponseSchema(name=param["name"], json_schema=JSONSchema.model_validate(objects_only(param["schema"])),
+                          strict=True)
+
+
+def objects_only(node):
+    """The schema with `additionalProperties` on object nodes only and no `anyOf` of plain types: an `int | None`
+    field becomes `type: [integer, null]`. OpenAI's strict-mode helper writes additionalProperties on every node
+    and Inspect's Anthropic provider writes it into every anyOf member, which Anthropic's structured outputs
+    refuse; both providers take a list of types."""
+    if isinstance(node, dict):
+        out = {k: objects_only(v) for k, v in node.items()}
+        if out.get("type") != "object" and "properties" not in out:
+            out.pop("additionalProperties", None)
+        members = out.get("anyOf")
+        if members and all(set(m) == {"type"} and isinstance(m["type"], str) for m in members):
+            out["type"] = [m["type"] for m in members]
+            del out["anyOf"]
+        return out
+    if isinstance(node, list):
+        return [objects_only(v) for v in node]
+    return node
 
 
 def spec_record(spec: cb_judge.JudgeSpec) -> dict:

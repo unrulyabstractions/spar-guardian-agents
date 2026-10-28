@@ -1,6 +1,7 @@
 """The cheating ladder as an LLM judge over a run's stored transcripts.
 
-    python -m src ladder <run> [<run> ...] [--judge gpt-6-sol] [--view full|actions] [--agents a01,a02] [--force]
+    python -m src ladder <run> [<run> ...] [--judge claude-haiku-5-5] [--sync] [--view full|actions]
+                         [--agents a01,a02] [--force]
     python -m src ladder --table <run> [<run> ...]
 
 The ladder is Rigel's (submodules/lucy/docs/metrics.html, section 2, commit 73df032): exposed, tried, opened, used
@@ -182,15 +183,15 @@ async def judge_episode(spec, transcript: dict, model, config: GenerateConfig, p
 
 
 async def judge_run(run_dir: Path, judge_name: str, *, view: str = "full", agents: list[str] | None = None,
-                    force: bool = False) -> list[dict]:
+                    force: bool = False, batch: bool = False) -> list[dict]:
     """Every agent of the run on the ladder; parsed rows already in the view's file are kept unless force, so a
-    second run judges the episodes that failed or were not judged."""
+    second run judges the episodes that failed or were not judged. batch: the provider's batch API, at its price."""
     run = json.loads((run_dir / "run.json").read_text())
     task = run["task"]
     spec = ladder_spec(task)
     model_name, config = judging.judge_model_config(judge_name)
-    prices = judging.judge_prices(judge_name)
-    model = get_model(model_name, config=GenerateConfig(batch=False))
+    prices = judging.judge_prices(judge_name, batch=batch)
+    model = get_model(model_name, config=GenerateConfig(batch=batch))
     done = {row["episode"]: row for row in read_rows(run_dir, view) if row.get("parse_ok")} if not force else {}
     todo = [ep for ep in episodes_of(run_dir) if ep["episode"] not in done
             and (agents is None or ep["agent"] in agents)]

@@ -776,6 +776,22 @@ def test_batch_reaches_the_agents_model(tmp_path):
     assert rec and all(not r["batch"] for r in rec)
 
 
+def test_a_config_without_a_judge_binds_no_judge_model():
+    from src import run as run_module
+    from src import tasks
+    from src.benchmark.domains.openmath import OpenMath
+    from src.configuration import settings
+    from src.configuration.swarm_config import build_config
+    assert pull(judge="none").judge is None and pull(judge=None).judge is None
+    assert pull().judge == settings.JUDGE_MODEL == "claude-haiku-5-5"
+    assert build_config("default", "small", ["judge=none"]).judge is None
+    assert run_module.judge_role_model(pull(judge=None)) is None
+    with_judge = tasks.scorers(OpenMath(), pull())
+    without = tasks.scorers(OpenMath(), pull(judge=None))
+    assert len(with_judge) == len(without) + 1
+    assert "cheatbench_judge" in str(with_judge) and "cheatbench_judge" not in str(without)
+
+
 def test_the_judge_role_model_batches(monkeypatch):
     monkeypatch.setattr(run_module.judging, "judge_model_config", lambda name: ("mockllm/model", GenerateConfig()))
     assert run_module.judge_role_model(pull()).config.batch is True

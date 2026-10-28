@@ -27,10 +27,11 @@ INSTRUCTION_LEVELS = HERE / "instruction_levels.yaml"
 MODELS = HERE / "models.yaml"
 
 # The agents' model, an Inspect model string (models.yaml lists every alternative), and the judge's entry in
-# JUDGE_MODELS_CONFIG, whose model string models.yaml prices.
+# JUDGE_MODELS_CONFIG, whose model string models.yaml prices. claude-haiku-5-5 since 2026-10-28: twenty times
+# cheaper than gpt-6-sol, CheatBench's default, which stays in JUDGE_MODELS_CONFIG as the reference judge.
 DEFAULT_MODEL = "openai/gpt-6-luna"
 DEFAULT_MONITOR_MODEL = DEFAULT_MODEL
-JUDGE_MODEL = "gpt-6-sol"
+JUDGE_MODEL = "claude-haiku-5-5"
 JUDGE_MODELS_CONFIG = HERE.parent / "benchmark" / "models.yaml"
 SWARM_COMPOSITIONS = ["R0D0", "R10D0", "R0D10", "R1D1", "R1D2", "R2D2", "R3D3", "R2D5", "R5D2", "R0D3", "R3D0"]
 UI_PORT = 8765

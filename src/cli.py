@@ -3,7 +3,7 @@
     python -m src run <name> [--benchmark openmath|swe|knowledge_work] [--preset default]
                              [--scale small|medium|large|extra_large|gigantic] [--set key=value ...]
                              [--row R] [--issue I] [--honeypot H] [--no-grade] [--model M] [--timeout S]
-    python -m src judge <eval_log> <run_name> [--judge MODEL] [--judge-errors]
+    python -m src judge <eval_log> <run_name> [--judge MODEL] [--sync] [--judge-errors]
     python -m src ui [start|stop] [--port P] [--no-open]
     python -m src summary <run_dir ...> [--full]
     python -m src budget <lone_run_dir> [<lone_run_dir> ...]
@@ -50,7 +50,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     from src import run
     from src.benchmark.domains.openmath import OpenMath
     from src.benchmark.domains.swe import SWE
-    config = build_config(args.preset, args.scale, args.settings)
+    config = build_config(args.preset, args.scale, args.settings + (["judge=none"] if args.no_judge else []))
     if args.benchmark == "openmath":
         benchmark = OpenMath(args.row or OPENMATH_ROW)
     elif args.benchmark == "swe":
@@ -80,7 +80,8 @@ def cmd_plots(args: argparse.Namespace) -> int:
 
 def cmd_judge(args: argparse.Namespace) -> int:
     from src import run  # the same four seconds as in cmd_run
-    return run.judge(Path(args.eval_log), args.run_name, args.judge, judge_errors=args.judge_errors)
+    return run.judge(Path(args.eval_log), args.run_name, args.judge, batch=not args.sync,
+                     judge_errors=args.judge_errors)
 
 
 def cmd_ladder(args: argparse.Namespace) -> int:
@@ -91,7 +92,8 @@ def cmd_ladder(args: argparse.Namespace) -> int:
         print(ladder.table(run_dirs, args.view), end="")
         return 0
     agents = args.agents.split(",") if args.agents else None
-    return run.ladder_runs(run_dirs, args.judge, view=args.view, agents=agents, force=args.force)
+    return run.ladder_runs(run_dirs, args.judge, view=args.view, agents=agents, force=args.force,
+                           batch=not args.sync)
 
 
 def cmd_ui(args: argparse.Namespace) -> int:
@@ -120,6 +122,8 @@ def add_run_parser(subparsers) -> None:
     run.add_argument("--honeypot", choices=("as_released", "own_piece", "jigsaw"), default="jigsaw",
                      help="SWE honeypot (default jigsaw: the fix's pieces are dealt over the neutral agents)")
     run.add_argument("--no-grade", action="store_true", help="SWE: collect the diffs and skip the hidden tests")
+    run.add_argument("--no-judge", action="store_true",
+                     help="run without the judge (--set judge=none); scripts/rejudge.py <name> judges it later")
     run.add_argument("--model", default=settings.DEFAULT_MODEL,
                      help="the agents' model: an entry of src/configuration/models.yaml (python -m src models) or an "
                           "Inspect model string")
@@ -133,6 +137,8 @@ def add_judge_parser(subparsers) -> None:
     judge.add_argument("eval_log")
     judge.add_argument("run_name")
     judge.add_argument("--judge", default=settings.JUDGE_MODEL, help="entry in src/benchmark/models.yaml")
+    judge.add_argument("--sync", action="store_true",
+                       help="the normal API (full price, minutes) instead of the batch API (half price, up to a day)")
     judge.add_argument("--judge-errors", action="store_true",
                        help="judge a run even when an episode failed in the harness or at the provider")
     judge.set_defaults(func=cmd_judge)
@@ -142,6 +148,8 @@ def add_ladder_parser(subparsers) -> None:
     ladder = subparsers.add_parser("ladder", help="place every agent of a run on the cheating ladder (ladder.jsonl)")
     ladder.add_argument("runs", nargs="+", help="run names under runs/, or run directories")
     ladder.add_argument("--judge", default=settings.JUDGE_MODEL, help="entry in src/benchmark/models.yaml")
+    ladder.add_argument("--sync", action="store_true",
+                        help="the normal API (full price, minutes) instead of the batch API (half price, up to a day)")
     ladder.add_argument("--view", choices=("full", "actions"), default="full",
                         help="full: CheatBench's rendering of the transcript; actions: tool calls and results only")
     ladder.add_argument("--agents", default=None, help="judge these agents only, comma separated")

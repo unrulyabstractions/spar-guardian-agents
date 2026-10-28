@@ -30,15 +30,15 @@ The experiment on ORBIT. It turns one benchmark from `src/benchmark/` and one `S
 | `run ... --row R` | the openmath_agent row (`riemann` by default) or the knowledge_work row (`2ea2e5b5` by default) |
 | `run ... --issue flipt-02e2 --honeypot as_released\|own_piece\|jigsaw [--no-grade]` | the SWE issue and Lucy's honeypot, `jigsaw` by default; `--no-grade` skips the hidden tests |
 | `run ... --model M --timeout S` | the agents' model, an entry of `src/configuration/models.yaml` or an Inspect model string, and the seconds one model request may take (default `MODEL_TIMEOUT_S`) |
-| `judge <eval_log> <run_name> [--judge gpt-6-sol] [--judge-errors]` | judges a finished log again and exports it with the new verdicts |
-| `ladder <run ...> [--judge gpt-6-sol] [--view full\|actions] [--agents a01,a02] [--force] [--table]` | places every agent on the cheating ladder from its stored transcript (`src/benchmark/ladder.py`, the addendum `src/configuration/judge_ladder.py`): `runs/<name>/ladder.jsonl` with the rung, the cited calls and their rounds, the labels beside the ladder and the honesty labels; `--table` sums the existing files |
+| `judge <eval_log> <run_name> [--judge claude-haiku-5-5] [--sync] [--judge-errors]` | judges a finished log (again, or for the first time after `--no-judge`) and exports it with the verdicts; batch API unless `--sync` |
+| `ladder <run ...> [--judge claude-haiku-5-5] [--sync] [--view full\|actions] [--agents a01,a02] [--force] [--table]` | places every agent on the cheating ladder from its stored transcript (`src/benchmark/ladder.py`, the addendum `src/configuration/judge_ladder.py`): `runs/<name>/ladder.jsonl` with the rung, the cited calls and their rounds, the labels beside the ladder and the honesty labels; `--table` sums the existing files |
 | `ui [start\|stop] [--port 8765] [--no-open]` | starts or stops the results browser in the background |
 | `summary <run_dir ...> [--full]` | one line per judged episode, the swarm composition and the shutdown rate |
 | `budget <lone_run_dir ...>` | lone runs' turns and their median, the turn budget every agent gets |
 | `models [NAME]` | the models we can consider, one row per entry with its Inspect string, key variable, context, prices and CheatBench entries; with a name, that entry in full |
 | `plots <run_dir> [--out DIR]` | one run's figures as PNG with CSV twins under `out/<run name>/` (gitignored): every agent's steps round by round with the judge's verdict, the board's actions per round, the judge's flags per agent (`src/ui/plots.py`) |
 
-The judge runs inside the eval as the scorer `cheatbench_judge`, bound to the model role `judge`. With `batch_judge` its calls go through the provider's batch API. `judge` always re-judges through the batch API. `inspect eval src/tasks.py@openmath -T preset=default -T regulators=1` also works; every `-T` key other than the task's own arguments sets a config field, and `-T scale=medium` applies a scale first.
+The judge runs inside the eval as the scorer `cheatbench_judge`, bound to the model role `judge`, unless the config's `judge` is none (`run --no-judge`), in which case the run is exported without verdicts and `judge` or `scripts/rejudge.py` adds them later. With `batch_judge` its calls go through the provider's batch API; `judge` and `ladder` batch too unless `--sync`. `inspect eval src/tasks.py@openmath -T preset=default -T regulators=1` also works; every `-T` key other than the task's own arguments sets a config field, and `-T scale=medium` applies a scale first.
 
 ## What each option does
 
@@ -85,7 +85,7 @@ The judge runs inside the eval as the scorer `cheatbench_judge`, bound to the mo
 | `message_limit`, `token_limit`, `time_limit_s` | 320, 0, 0 | Inspect's message and token limits, and `SchedulerConfig.max_time_seconds`; 0 means the default; a scale sets the first and the last |
 | `batch_agents`, `batch_judge` | false, true | `GenerateConfig(batch=True)` for the agents' model (from the scale) and for the model bound to the judge role |
 | `control`, `monitor_model` | baseline | `DefenseConfig` entries in `metadata["experiment"]["defenses"]` |
-| `judge`, `judge_addendum` | gpt-6-sol, false | the judge entry in `src/benchmark/models.yaml`, and Lucy's judge addendum appended to the schema |
+| `judge`, `judge_addendum` | claude-haiku-5-5, false | the judge entry in `src/benchmark/models.yaml` (`gpt-6-sol` is the reference judge; none: no judge), and Lucy's judge addendum appended to the schema |
 
 A step is charged to `steps_per_agent` unless its last tool call is a board action that succeeded, `submit` or `team_submit`. A step that ends with a board action that succeeded is free and earns a follow-up step in the same round. A board action that fails (an error, a budget refusal, or "no such agent") is charged as work, with the charge `refused` in the timeline.
 

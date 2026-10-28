@@ -104,8 +104,12 @@ def test_batch_prices_follow_the_route_discount():
 
 def test_the_judge_price_comes_from_the_judge_entry_model():
     # judge_prices takes the judge entry (src/benchmark/models.yaml) and prices its model string.
-    assert judge_prices(settings.JUDGE_MODEL) == models.usd_per_million("openai/gpt-6-sol")
-    assert judge_prices(settings.JUDGE_MODEL, batch=True) == models.usd_per_million("openai/gpt-6-sol", batch=True)
+    assert judge_prices(settings.JUDGE_MODEL) == models.usd_per_million("anthropic/claude-haiku-5-5")
+    assert judge_prices(settings.JUDGE_MODEL, batch=True) == models.usd_per_million("anthropic/claude-haiku-5-5",
+                                                                                   batch=True)
+    assert judge_prices("gpt-6-sol") == models.usd_per_million("openai/gpt-6-sol")          # the reference judge
+    assert settings.JUDGE_MODEL == "claude-haiku-5-5"
+    assert judge_prices("gpt-6-sol")["input"] == 20 * judge_prices(settings.JUDGE_MODEL)["input"]
     prices = {"input": 2.0, "cached_input": 0.2, "output": 10.0}
     usage = {"input": 1_000_000, "cached": 500_000, "output": 100_000}
     assert _cost_usd(prices, usage) == 0.5 * 2.0 + 0.5 * 0.2 + 0.1 * 10.0
