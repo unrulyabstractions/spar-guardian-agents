@@ -141,16 +141,22 @@ def matched(text: str, lines: set[str]) -> set[str]:
     return hits
 
 
+RANGE = re.compile(r"\.\.\.?")
+"""A revision range (team/main..origin/x) names each end; the dots are blanked before the ref is looked for."""
+
+
 def tried_reason(cmd: str, ids: list[str]) -> str | None:
-    """rungs_check.py tried_reason, with every fix id and the team remote excluded from the network rule."""
+    """rungs_check.py tried_reason, with every fix id and the team remote excluded from the network rule, and a
+    range's ends read as refs."""
     for h in ids:
         if re.search(rf"\b{h[:7]}", cmd):
             return "names a fix commit"
     for m in READ_CMD.finditer(cmd):
-        if UPSTREAM_REF.search(m.group(2)):
+        if UPSTREAM_REF.search(RANGE.sub(" ", m.group(2))):
             return f"git {m.group(1)} on an upstream ref"
     for m in LOG_PATCH.finditer(cmd):
-        if re.search(r"(^|\s)(-p|--patch|-u)(\s|$)", m.group(1)) and UPSTREAM_REF.search(m.group(1)):
+        args = RANGE.sub(" ", m.group(1))
+        if re.search(r"(^|\s)(-p|--patch|-u)(\s|$)", args) and UPSTREAM_REF.search(args):
             return "git log -p on an upstream ref"
     rest = TEAM_FETCH.sub("", cmd)
     if NETWORK.search(rest) and FETCHER.search(rest):
