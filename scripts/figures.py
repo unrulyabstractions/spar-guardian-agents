@@ -117,22 +117,26 @@ def ring(n, radius, start=90):
             for k in range(n)]
 
 
-def role_legend(fig, y, extra=()):
-    """One legend row of the role glyphs, centred at figure height fraction y."""
+def role_legend(fig, y, extra=(), compact=False):
+    """One legend row of the role glyphs, centred at figure height fraction y; compact drops "(neutral)" and
+    packs the items for a half-width figure."""
     ax = fig.add_axes([0, y - 0.05, 1, 0.1])
     ax.set_xlim(0, 100)
     ax.set_ylim(-1, 1)
     ax.axis("off")
-    items = [("worker", "worker (neutral)"), ("regulator", "regulator"), ("disregulator", "disregulator")]
-    widths = [len(lab) * 0.8 + 5.5 for _, lab in items] + [len(lab) * 0.8 + 5.5 for _, lab in extra]
+    items = [("worker", "worker" if compact else "worker (neutral)"), ("regulator", "regulator"),
+             ("disregulator", "disregulator")]
+    k = FULL / fig.get_figwidth()
+    per_char, base = (0.62, 4.2) if compact else (0.8, 5.5)
+    widths = [(len(lab) * per_char + base) * k for _, lab in [*items, *extra]]
     x = 50 - sum(widths) / 2
     for (role, label), w in zip(items, widths):
         ax.scatter([x], [0], s=36, c=ROLE_FILL[role], edgecolors=ROLE_EDGE[role], linewidths=1.0, zorder=3)
-        ax.text(x + 1.4, 0, label, va="center", fontsize=7.5, color=INK2)
+        ax.text(x + 1.4 * k, 0, label, va="center", fontsize=7.5, color=INK2)
         x += w
     for (draw, label), w in zip(extra, widths[len(items):]):
         draw(ax, x, 0)
-        ax.text(x + 1.4, 0, label, va="center", fontsize=7.5, color=INK2)
+        ax.text(x + 1.4 * k, 0, label, va="center", fontsize=7.5, color=INK2)
         x += w
     return ax
 
@@ -190,10 +194,11 @@ def fig_topology_compare():
 
 # ---------------------------------------------------------------- figure 2: round structure
 def fig_round_structure():
-    fig = plt.figure(figsize=(FULL, 2.9))
+    """One round, its follow-up steps and the next round, step by step per agent."""
+    fig = plt.figure(figsize=(FULL, 2.2))
     ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
     ax.set_xlim(0, 17.0)
-    ax.set_ylim(0, 7.3)
+    ax.set_ylim(0.6, 6.15)
     ax.axis("off")
     names = list(ROLES5)
     lane_h, top = 0.62, 5.05
@@ -219,38 +224,23 @@ def fig_round_structure():
             step(ax, a, x, y - lane_h / 2 + 0.04, w, lane_h - 0.08)
     ax.add_patch(Rectangle((13.6, top - 4 * lane_h - lane_h / 2 + 0.04), 2.2, 5 * lane_h - 0.08, fc="none",
                            ec=BASE, hatch="////", lw=0, zorder=1))
-    ax.text(14.7, top - 2 * lane_h, "after\nteam_submit:\nno further\nsteps", ha="center", va="center", fontsize=7,
-            color=INK2, zorder=4, bbox=dict(fc=SURF, ec="none", pad=1.5))
+    ax.text(14.7, top - 2 * lane_h, "run over", ha="center", va="center", fontsize=7, color=INK2, zorder=4,
+            bbox=dict(fc=SURF, ec="none", pad=1.5))
     hy = top + lane_h / 2 + 0.12
     k = DEFAULT.free_board_actions
     k_reg = DEFAULT.free_board_actions_regulator
-    ax.text(3.0, hy + 0.95, "round r", ha="center", va="bottom", fontsize=8, weight="bold")
-    ax.text(3.0, hy, "every eligible agent, one step,\nconcurrent, board snapshot\nat round start",
-            ha="center", va="bottom", fontsize=6.8, color=INK2, linespacing=1.15)
-    ax.text(7.27, hy + 0.95, f"follow-up steps k = 1 .. K (K = {k})", ha="center", va="bottom", fontsize=8,
-            weight="bold")
-    ax.text(7.27, hy, f"only agents whose last call\nwas a board action;\na regulator's K is {k_reg}",
-            ha="center", va="bottom", fontsize=6.8, color=INK2, linespacing=1.15)
-    ax.text(11.65, hy + 0.95, "round r + 1", ha="center", va="bottom", fontsize=8, weight="bold")
-    ax.text(11.65, hy, "every eligible agent;\na neutral agent calls\nteam_submit",
-            ha="center", va="bottom", fontsize=6.8, color=INK2, linespacing=1.15)
+    ax.text(3.0, hy + 0.1, "round r", ha="center", va="bottom", fontsize=8, weight="bold")
+    ax.text(7.27, hy + 0.1, f"follow-up steps (up to K = {k}; a regulator's K is {k_reg})", ha="center",
+            va="bottom", fontsize=8, weight="bold")
+    ax.text(11.65, hy + 0.1, "round r + 1", ha="center", va="bottom", fontsize=8, weight="bold")
     by = top - 4 * lane_h - lane_h / 2 - 0.15
-
-    def bracket(x0, x1, text):
-        ax.plot([x0 + 0.05, x0 + 0.05, x1 - 0.05, x1 - 0.05], [by, by - 0.18, by - 0.18, by], color=INK2, lw=0.8)
-        ax.text((x0 + x1) / 2, by - 0.3, text, ha="center", va="top", fontsize=7, color=INK2, linespacing=1.15)
-
-    bracket(1.2, 4.8, "round step")
-    bracket(5.0, 9.55, "follow-up steps, at most K per round")
-    bracket(9.85, 13.45, "round step")
-    ky, kx = by - 0.95, 1.2
-    for a, label in [("work", "charged: ends with work, counts against the turn budget"),
-                     ("read", "free: ends with a board action that succeeded")]:
+    ky, kx = by - 0.35, 1.2
+    for a, label in [("work", "charged step (work)"), ("read", "free step (board action)")]:
         step(ax, a, kx, ky - 0.2, 0.8, 0.4, text=False)
         ax.text(kx + 0.95, ky, label, va="center", fontsize=7, color=INK2)
         kx += 0.95 + len(label) * 0.128 + 0.45
-    arrow(ax, (1.2, 0.18), (15.8, 0.18), color=MUTED, lw=0.7)
-    ax.text(15.8, 0.36, "time", ha="right", va="bottom", fontsize=7, color=MUTED)
+    arrow(ax, (1.2, 0.8), (15.8, 0.8), color=MUTED, lw=0.7)
+    ax.text(15.8, 0.95, "time", ha="right", va="bottom", fontsize=7, color=MUTED)
     save(fig, "round_structure")
 
 
@@ -326,114 +316,72 @@ def item(ax, kind, cx, cy, w, text):
 
 # ---------------------------------------------------------------- figure 4: engagement funnel
 def fig_engagement_funnel():
-    fig = plt.figure(figsize=(FULL, 2.3))
-    ax = fig.add_axes([0.0, 0.0, 0.68, 1.0])
-    ax.set_xlim(0, 11.56)
-    ax.set_ylim(0.45, 4.2)
+    """The board engagement stages (src/measures/engagement.py) and the tool each one takes."""
+    fig = plt.figure(figsize=(FULL, 1.1))
+    ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
+    ax.set_xlim(0, 11.7)
+    ax.set_ylim(0, 1.7)
     ax.axis("off")
-    stages = [
-        ("on the board", "has the\nboard tools", ["working steps", "free steps"]),
-        ("looked", "board_status\nor board_read", ["round found", "checks"]),
-        ("read", "board_read", ["reads, by sender", "refused reads"]),
-        ("posted", "board_post", ["posts", "refused posts"]),
-        ("submitted", "team_submit", ["neutral agents"]),
-    ]
+    stages = [("on the board", "has the board tools"), ("looked", "board_status or board_read"),
+              ("read", "board_read"), ("posted", "board_post"), ("submitted", "team_submit")]
     fills = ["#efeee9", "#e1e0d9", "#d4d3cc", "#c7c6be", "#b9b8b0"]
-    sw, gap, y0, h = 2.22, 0.08, 2.35, 1.25
-    for i, (name, tool, measures) in enumerate(stages):
+    sw, gap, y0, h, tip = 2.22, 0.08, 0.25, 1.2, 0.3
+    for i, (name, tool) in enumerate(stages):
         x = 0.15 + i * (sw + gap)
-        tip = 0.3
         pts = [(x, y0), (x + sw - tip, y0), (x + sw, y0 + h / 2), (x + sw - tip, y0 + h), (x, y0 + h)]
         if i > 0:
             pts.append((x + tip, y0 + h / 2))
         ax.add_patch(Polygon(pts, closed=True, fc=fills[i], ec="none", zorder=2))
         tx = x + sw / 2 + (0.08 if i else -0.08)
-        ax.text(tx, y0 + h / 2 + 0.28, name, ha="center", va="center", fontsize=8, weight="bold")
-        ax.text(tx, y0 + h / 2 - 0.17, tool, ha="center", va="center", fontsize=6.5, color=INK2, linespacing=1.05)
-        for k, m in enumerate(measures):
-            ax.text(x + 0.2, y0 - 0.32 - k * 0.36, m, ha="left", va="center", fontsize=7, color=INK2)
-            ax.plot([x + 0.06], [y0 - 0.32 - k * 0.36], marker="s", ms=2.5, color=MUTED)
-    ax.text(0.15, 3.95, "agents reaching each stage, per role; measures per agent", fontsize=7, color=MUTED,
-            va="center")
-    ax.text(0.15, 0.75, "Regulators add their agent_actions queries and whom they queried.", fontsize=7,
-            color=INK2, va="center")
-    gx = fig.add_axes([0.69, 0.02, 0.30, 0.96])
-    blank(gx, (-2.6, 2.6), (-2.75, 2.45))
+        ax.text(tx, y0 + h / 2 + 0.22, name, ha="center", va="center", fontsize=8, weight="bold")
+        ax.text(tx, y0 + h / 2 - 0.2, tool, ha="center", va="center", fontsize=6.5, color=INK2)
+    save(fig, "engagement_funnel")
+
+
+def fig_read_graph():
+    """Who read whose posts, as a graph: reader to sender, width by reads. Illustrative values."""
+    fig = plt.figure(figsize=(HALF, 2.6))
+    gx = fig.add_axes([0.02, 0.02, 0.96, 0.96])
+    blank(gx, (-2.6, 2.6), (-2.75, 2.2))
     pos = dict(zip(ROLES5, ring(5, 1.75)))
     reads = {("a01", "a02"): 4, ("a02", "a01"): 1, ("a03", "a02"): 3, ("a05", "a02"): 2, ("a04", "a01"): 2,
              ("a02", "a04"): 1, ("a05", "a03"): 1, ("a01", "a05"): 1}
-    for (r, s), c in reads.items():
-        (x1, y1), (x2, y2) = pos[r], pos[s]
-        arrow(gx, toward(x1, y1, x2, y2, 0.36), toward(x2, y2, x1, y1, 0.42), lw=0.6 + 0.65 * c, rad=0.18,
-              color=INK2, head=4 + c)
-    for n, (x, y) in pos.items():
-        agent(gx, x, y, n, ROLES5[n], r=0.32, fs=6)
-    gx.text(0, 2.45, "read graph (illustrative)", ha="center", va="top", fontsize=7.5, weight="bold")
-    gx.text(0, -2.4, "edge: reader → sender\nwidth: number of reads", ha="center", va="center", fontsize=6.8,
+    for (reader, sender), count in reads.items():
+        (x1, y1), (x2, y2) = pos[reader], pos[sender]
+        arrow(gx, toward(x1, y1, x2, y2, 0.36), toward(x2, y2, x1, y1, 0.42), lw=0.6 + 0.65 * count, rad=0.18,
+              color=INK2, head=4 + count)
+    for name, (x, y) in pos.items():
+        agent(gx, x, y, name, ROLES5[name], r=0.32, fs=6)
+    gx.text(0, -2.55, "edge: reader to sender; width: reads (illustrative)", ha="center", va="center", fontsize=6.8,
             color=INK2)
-    save(fig, "engagement_funnel")
+    save(fig, "read_graph")
 
 
 # ---------------------------------------------------------------- figure 5: modes
 def fig_modes():
-    fig = plt.figure(figsize=(FULL, 2.95))
-    names = list(ROLES5)
-    titles = ["solo_task", "shared_task (default)", "collaboration_needed"]
-    notes = ["roster untold; no team_submit", "roster told; exploit split over neutral agents",
-             "roster told; the team's main is graded"]
-    xs = [-2.4, -1.2, 0.0, 1.2, 2.4]
-
-    def submit_mark(ax, x, y):
-        ax.scatter([x + 0.3], [y + 0.3], marker="D", s=14, c=INK, zorder=9, edgecolors=SURF, linewidths=0.6)
-
-    for i, title in enumerate(titles):
-        ax = fig.add_axes([0.005 + i / 3, 0.15, 1 / 3 - 0.01, 0.8])
-        blank(ax, (-3.1, 3.1), (-3.0, 3.2))
-        ax.text(0, 3.15, title, ha="center", va="bottom", fontsize=8.5, weight="bold")
-        ax.text(0, -3.0, notes[i], ha="center", va="center", fontsize=7, color=INK2)
-        bw, bh, by = 1.6, 0.6, 2.25
-        box(ax, -bw / 2, by - bh / 2, bw, bh, "board", fc=PLANE, ec=INK2, fs=7.5)
-        if i == 0:
-            for x, n in zip(xs, names):
-                box(ax, x - 0.56, -1.2, 1.12, 2.0, None, fc="#ffffff", ec=BASE, ls=(0, (3, 2)), z=1)
-                agent(ax, x, 0.15, n, ROLES5[n], r=0.34, fs=6)
-                arrow(ax, (x, 0.5), edge_point(0, by, bw, bh, x, 0.5), lw=0.7, color=MUTED, head=4)
-                ax.text(x, -0.8, "whole\ntask", ha="center", va="center", fontsize=6, color=MUTED, linespacing=1.0)
-        elif i == 1:
-            pieces = iter(f"part {k}" for k in range(1, 4))
-            for x, n in zip(xs, names):
-                box(ax, x - 0.56, -1.2, 1.12, 2.0, None, fc="#ffffff", ec=BASE, ls=(0, (3, 2)), z=1)
-                agent(ax, x, 0.15, n, ROLES5[n], r=0.34, fs=6)
-                arrow(ax, (x, 0.5), edge_point(0, by, bw, bh, x, 0.5), lw=0.7, color=MUTED, head=4)
-                worker = ROLES5[n] == "worker"
-                label = next(pieces) if worker else "whole"
-                ax.text(x, -0.8, f"{label}\nexploit", ha="center", va="center", fontsize=6, color=MUTED,
-                        linespacing=1.0)
-                if worker:
-                    submit_mark(ax, x, 0.15)
-                    arrow(ax, (x, -1.2), (x * 0.3, -1.85), lw=0.7, color=MUTED, head=4)
-            box(ax, -1.1, -2.5, 2.2, 0.65, "one deliverable", fc=PLANE, ec=INK2, fs=7)
-        else:
-            parts = {"A": ["a01", "a04"], "B": ["a02", "a05"], "C": ["a03"]}
-            for (p, members), x in zip(parts.items(), [-2.0, 0.0, 2.0]):
-                box(ax, x - 0.92, -0.95, 1.84, 2.25, None, fc="#ffffff", ec=INK2, z=1)
-                ax.text(x, 1.05, f"part {p}", ha="center", va="center", fontsize=7)
-                for k, n in enumerate(members):
-                    yy = 0.3 - k * 0.85
-                    agent(ax, x, yy, n, ROLES5[n], r=0.34, fs=6)
-                    if ROLES5[n] == "worker":
-                        submit_mark(ax, x, yy)
-                arrow(ax, (x, -0.95), (x * 0.35, -1.75), lw=0.7, color=MUTED, head=4)
-                arrow(ax, (x, 1.3), edge_point(0, by, bw, bh, x, 1.3), lw=0.7, color=MUTED, head=4)
-            box(ax, -1.0, -2.45, 2.0, 0.65, "team's main", fc=PLANE, ec=INK2, fs=7)
+    """collaboration_needed: one issue in parts, one or more agents per part, the team's main as the deliverable."""
+    fig = plt.figure(figsize=(HALF, 2.3))
+    ax = fig.add_axes([0.02, 0.17, 0.96, 0.82])
+    blank(ax, (-3.1, 3.1), (-2.9, 2.75))
+    bw, bh, by = 1.6, 0.6, 2.3
+    box(ax, -bw / 2, by - bh / 2, bw, bh, "board", fc=PLANE, ec=INK2, fs=7.5)
+    parts = {"A": ["a01", "a04"], "B": ["a02", "a05"], "C": ["a03"]}
+    for (part, members), x in zip(parts.items(), [-2.0, 0.0, 2.0]):
+        box(ax, x - 0.92, -0.95, 1.84, 2.25, None, fc="#ffffff", ec=INK2, z=1)
+        ax.text(x, 1.05, f"part {part}", ha="center", va="center", fontsize=7)
+        for k, name in enumerate(members):
+            yy = 0.3 - k * 0.85
+            agent(ax, x, yy, name, ROLES5[name], r=0.34, fs=6)
+            if ROLES5[name] == "worker":
+                ax.scatter([x + 0.3], [yy + 0.3], marker="D", s=14, c=INK, zorder=9, edgecolors=SURF, linewidths=0.6)
+        arrow(ax, (x, -0.95), (x * 0.35, -1.75), lw=0.7, color=MUTED, head=4)
+        arrow(ax, (x, 1.3), edge_point(0, by, bw, bh, x, 1.3), lw=0.7, color=MUTED, head=4)
+    box(ax, -1.0, -2.45, 2.0, 0.65, "team's main", fc=PLANE, ec=INK2, fs=7)
 
     def dmark(ax, x, y):
         ax.scatter([x], [y], marker="D", s=16, c=INK, zorder=3)
 
-    def wmark(ax, x, y):
-        ax.add_patch(Rectangle((x - 0.7, y - 0.45), 1.4, 0.9, fc="#ffffff", ec=BASE, ls=(0, (3, 2)), lw=0.8))
-
-    role_legend(fig, 0.05, extra=[(dmark, "team_submit"), (wmark, "own workspace")])
+    role_legend(fig, 0.07, extra=[(dmark, "team_submit")], compact=True)
     save(fig, "modes")
 
 
@@ -578,6 +526,7 @@ if __name__ == "__main__":
     fig_round_structure()
     fig_context_ledger()
     fig_engagement_funnel()
+    fig_read_graph()
     fig_modes()
     fig_scales()
     fig_information()
