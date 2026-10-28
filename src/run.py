@@ -178,7 +178,10 @@ def evaluate(name: str, benchmark, config: SwarmConfig, task: Task, model: str, 
           flush=True)
     print(access_line(task), flush=True)
     agents = get_model(model, memoize=False, **models.model_args(model))
+    # every raw model call is kept (Inspect keeps five per model by default): OpenRouter's billed cost per call
+    # lives in the raw response, and the export sums it per episode
     [log] = inspect_ai.eval(task, model=agents, log_dir=str(log_dir), display="plain", timeout=timeout,
+                            log_model_api=True,
                             model_roles={"judge": judge_model} if judge_model is not None else None,
                             **agent_generate_config(config))
     if not log.samples and not Path(log.location).exists():

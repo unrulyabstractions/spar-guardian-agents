@@ -383,25 +383,46 @@ def provider_only_messages(model_events, rules_by_call: dict[int, list] | None =
 
 
 def _usage_totals(usages) -> dict:
-    """Prompt tokens include cache reads: Inspect reports them apart from input_tokens."""
-    total_in = total_out = cache_read = 0
+    """Prompt tokens include cache reads: Inspect reports them apart from input_tokens. Output tokens include the
+    reasoning tokens, which Inspect also reports on their own (reasoning, when any)."""
+    total_in = total_out = cache_read = reasoning = 0
     for usage in usages:
         cached = getattr(usage, "input_tokens_cache_read", 0) or 0
         total_in += (getattr(usage, "input_tokens", 0) or 0) + cached
         cache_read += cached
         total_out += getattr(usage, "output_tokens", 0) or 0
+        reasoning += getattr(usage, "reasoning_tokens", 0) or 0
     if not (total_in or total_out):
         return {}
-    return {"input": total_in, "output": total_out, "cache_read": cache_read}
+    totals = {"input": total_in, "output": total_out, "cache_read": cache_read}
+    return {**totals, "reasoning": reasoning} if reasoning else totals
+
+
+def billed_cost(ev) -> float | None:
+    """What the provider charged for one model call, from the raw response the log kept (OpenRouter's usage.cost);
+    None when the log kept no raw response for the call or the provider reports no cost."""
+    call = getattr(ev, "call", None)
+    response = getattr(call, "response", None) if call else None
+    cost = ((response or {}).get("usage") or {}).get("cost") if isinstance(response, dict) else None
+    return float(cost) if isinstance(cost, (int, float)) else None
 
 
 def usage_from_events(model_events) -> dict:
-    usages = []
+    """The episode's token totals, plus billed_usd and billed_calls: what the provider charged for the calls whose
+    raw response the log kept (every call since run.evaluate logs them all; the first five per model before)."""
+    usages, billed, calls = [], 0.0, 0
     for ev in model_events:
         usage = getattr(ev.output, "usage", None) if ev.output else None
         if usage:
             usages.append(usage)
-    return _usage_totals(usages)
+        cost = billed_cost(ev)
+        if cost is not None:
+            billed += cost
+            calls += 1
+    totals = _usage_totals(usages)
+    if calls:
+        totals.update(billed_usd=round(billed, 6), billed_calls=calls)
+    return totals
 
 
 def sum_usage(view: SampleView) -> dict:
