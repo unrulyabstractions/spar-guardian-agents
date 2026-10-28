@@ -6,6 +6,7 @@
     key_env("deepseek/deepseek-v4-pro")      -> ["DEEPSEEK_API_KEY"]
     usd_per_million("gpt-6-sol")             -> {"input": 2.0, "cached_input": 0.2, "output": 10.0}
     usd_per_million("gpt-6-sol", batch=True) -> {"input": 1.0, "cached_input": 0.1, "output": 5.0}
+    model_args("deepseek-flash-openrouter")  -> {"provider": {"order": ["deepinfra"], "allow_fallbacks": False}}
     render()                                 -> the table `python -m src models` prints
 """
 from __future__ import annotations
@@ -65,6 +66,19 @@ def entry_name(name: str) -> str | None:
 def entry_of(name: str) -> dict | None:
     key = entry_name(name)
     return entries()[key] if key else None
+
+
+def routing(name: str) -> dict | None:
+    """The OpenRouter provider routing an entry pins (its `routing`), or None: no entry, or a route without one."""
+    entry = entry_of(name)
+    return dict(entry["routing"]) if entry and entry.get("routing") else None
+
+
+def model_args(name: str) -> dict:
+    """The model arguments get_model takes for this model beyond its name: {"provider": routing} on OpenRouter,
+    nothing elsewhere."""
+    pin = routing(name)
+    return {"provider": pin} if pin else {}
 
 
 def usd_per_million(name: str, batch: bool = False) -> dict | None:

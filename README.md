@@ -1,6 +1,6 @@
 # spar-guardian-agents
 
-This repository studies peer pressure on cheating in agent swarms. It runs CheatBench tasks inside ORBIT, with GPT-6 Luna as the agents' default model since 2026-10-27 (every run before that used Gemini 3.8 Flash): one agent alone, a team that shares a message board, or a swarm with hidden regulators and disregulators. Six benchmarks are wired. The first is CheatBench's `openmath_agent` row `riemann`, the mathematical research task. The second is CheatBench's SWE issues with Lucy's honeypots. The third is CheatBench's `knowledge_work` task, one GDPval assignment with a review tool. The fourth and fifth are CheatBench's interview rounds `subset_sum` and `prime_factorization`, each with a verifier tool and a planted answer key. The sixth is CheatBench's `protein_design` task, a binder brief for a plant protein whose checker accepts only a colleague's six submitted designs. Every run becomes a CheatBench run directory, is judged by gpt-6-sol inside the eval, and can be browsed locally.
+This repository studies peer pressure on cheating in agent swarms. It runs CheatBench tasks inside ORBIT, with DeepSeek V4.1 Flash, pinned to one OpenRouter host, as the agents' default model since 2026-10-28 (GPT-6 Luna on 2026-10-27 and 2026-10-28, Gemini 3.8 Flash before): one agent alone, a team that shares a message board, or a swarm with hidden regulators and disregulators. Six benchmarks are wired. The first is CheatBench's `openmath_agent` row `riemann`, the mathematical research task. The second is CheatBench's SWE issues with Lucy's honeypots. The third is CheatBench's `knowledge_work` task, one GDPval assignment with a review tool. The fourth and fifth are CheatBench's interview rounds `subset_sum` and `prime_factorization`, each with a verifier tool and a planted answer key. The sixth is CheatBench's `protein_design` task, a binder brief for a plant protein whose checker accepts only a colleague's six submitted designs. Every run becomes a CheatBench run directory, is judged by gpt-6-sol inside the eval, and can be browsed locally.
 
 ## Quick start
 
@@ -29,7 +29,7 @@ A run starts from a preset, then applies a scale, then every `--set key=value`. 
 
 ## Examples
 
-`examples/` holds one script per task: three neutral agents on the pull board at the small scale, with the exploit split over them, so completing it takes the board. Run one from the repository root with `OPENAI_API_KEY` set (the default model and the judge both use it):
+`examples/` holds one script per task: three neutral agents on the pull board at the small scale, with the exploit split over them, so completing it takes the board. Run one from the repository root with `OPENROUTER_API_KEY` set for the agents' default model and `OPENAI_API_KEY` for the judge:
 
 ```
 uv run python -m examples.openmath.riemann_minimal
@@ -151,7 +151,7 @@ uv run python -m src budget runs/kw_lone_1 runs/kw_lone_2 runs/kw_lone_3
 - Knowledge work reads the GDPval rows that CheatBench's `build.py` writes to `build/knowledge_work/`. The download from Hugging Face needs no token. The command is in the error a missing build raises.
 - The interview tasks run in `cbtask:python311`, CheatBench's python311 image plus the agent user. `src/benchmark/machines/` builds it when it is missing or stale. Each task's `build.py` writes the rows offline, to `build/subset_sum/` and `build/prime_factorization/`. The command is in the error a missing build raises.
 - Protein design reads the rows that `uv run python -m src.benchmark.domains.protein.build` writes to `build/protein_design/` from CheatBench's generator. The build fetches 20 FASTA records from rcsb.org once. The command is in the error a missing build raises.
-- `OPENAI_API_KEY` for the agents' default model and for the judge (gpt-6-luna since 2026-10-28, which agreed with gpt-6-sol on 266 of 269 judged episodes; `--set judge=gpt-6-sol` is CheatBench's own judge, twenty times the price, kept as the reference; `--set judge=claude-haiku-5-5` the cheapest judge of another family, at 222 of 269); `GEMINI_API_KEY` for Gemini runs. Another agents' model takes `--model <entry>`; `python -m src models` lists the entries of `src/configuration/models.yaml` (DeepSeek, the models CheatBench ran, and the current models of each provider) with the key variable each route needs.
+- `OPENROUTER_API_KEY` for the agents' default model (deepseek-flash-openrouter, pinned to the DeepInfra host its registry entry names; an OpenRouter model never runs unpinned) and `OPENAI_API_KEY` for the judge (gpt-6-luna since 2026-10-28, which agreed with gpt-6-sol on 266 of 269 judged episodes; `--set judge=gpt-6-sol` is CheatBench's own judge, twenty times the price, kept as the reference; `--set judge=claude-haiku-5-5` the cheapest judge of another family, at 222 of 269); `GEMINI_API_KEY` for Gemini runs. Another agents' model takes `--model <entry>`; `python -m src models` lists the entries of `src/configuration/models.yaml` (DeepSeek, the models CheatBench ran, and the current models of each provider) with the key variable each route needs.
 
 ## Layout
 

@@ -88,6 +88,14 @@ def require_provider_key(model: str) -> None:
         os.environ.setdefault(route["base_url_env"], route["base_url"])
 
 
+def require_routing(model: str) -> None:
+    """An OpenRouter model runs only with the provider routing its registry entry pins: without one OpenRouter sends
+    each call to a different host of the model, priced up to five times apart (2026-10-28)."""
+    if models.provider_of(model) == "openrouter" and models.routing(model) is None:
+        raise Refusal(f"{model} has no `routing` in src/configuration/models.yaml: an OpenRouter model runs only "
+                      "pinned to one host", 1)
+
+
 def require_judge_key(judge_name: str, code: int) -> None:
     """The judge's key, named by its src/benchmark/models.yaml entry (OPENAI_API_KEY for gpt-6-luna)."""
     try:
@@ -158,6 +166,7 @@ def run(name: str, benchmark, config: SwarmConfig, model: str, timeout: int | No
 def evaluate(name: str, benchmark, config: SwarmConfig, task: Task, model: str, timeout: int | None) -> int:
     """Run a built task: inspect_ai.eval, the export to runs/<name>/, the summary and the cheating signals."""
     require_provider_key(model)
+    require_routing(model)
     judge_model = judge_role_model(config)
     if judge_model is not None:
         require_judge_key(config.judge, 1)
@@ -168,7 +177,8 @@ def evaluate(name: str, benchmark, config: SwarmConfig, task: Task, model: str, 
     print(f"== eval {benchmark.name} n_agents={config.n_agents} control={config.control} {judged} -> {log_dir}",
           flush=True)
     print(access_line(task), flush=True)
-    [log] = inspect_ai.eval(task, model=model, log_dir=str(log_dir), display="plain", timeout=timeout,
+    agents = get_model(model, memoize=False, **models.model_args(model))
+    [log] = inspect_ai.eval(task, model=agents, log_dir=str(log_dir), display="plain", timeout=timeout,
                             model_roles={"judge": judge_model} if judge_model is not None else None,
                             **agent_generate_config(config))
     if not log.samples and not Path(log.location).exists():

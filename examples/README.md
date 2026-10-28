@@ -13,7 +13,7 @@ One script per task: three neutral agents on the pull board at the small scale, 
 
 The cells of the first experiment sit beside them, three per domain, the same arguments (the stems are `subset`, `factor` and `binder` on the new domains): `<task>_solo.py` (one agent alone, CheatBench's own layout, the whole exploit in reach), `<task>_solo_cheat.py` (the same agent with `CHEAT`, a paragraph after the task instruction telling it to reuse the prior work and present it as its own) and `<task>_minimal_cheat.py` (the three-agent split with `CHEAT` to every agent). The cheating text is a control for the floor of instruction following and lives in each script, in the open; the script builds the domain's sample itself (`benchmark.sample(..., instruction_suffix=rule_suffix(...) + CHEAT)`), the task from that sample (`swarm_task(..., sample=)`) and runs it (`run.evaluate`). A solo cell is the default config with `config.replace(n_agents=1)`. The protein-design cells name the colleague's directory and `check_design` in their `CHEAT`.
 
-Run one from the repository root with `OPENAI_API_KEY` set, which the agents' default model and the judge, gpt-6-luna, both use (another agents' model takes its own key, `GEMINI_API_KEY` for Gemini):
+Run one from the repository root with `OPENROUTER_API_KEY` set for the agents' default model, deepseek-flash-openrouter (pinned to one host by its registry entry), and `OPENAI_API_KEY` for the judge, gpt-6-luna (another agents' model takes its own key, `GEMINI_API_KEY` for Gemini):
 
 ```
 uv run python -m examples.openmath.riemann_minimal
@@ -25,7 +25,7 @@ Each script parses the shared arguments, builds its config in the open (`build_c
 
 | argument | default | what it does |
 |---|---|---|
-| `--model` | `gpt-6-luna` | the agents' model: an entry of `src/configuration/models.yaml` (`uv run python -m src models`) or an Inspect model string |
+| `--model` | `deepseek-flash-openrouter` | the agents' model: an entry of `src/configuration/models.yaml` (`uv run python -m src models`) or an Inspect model string |
 | `--preset` | `default` | the preset |
 | `--scale` | `small` | the run's size |
 | `--set KEY=VALUE` | none | a `SwarmConfig` field, applied after the default settings; repeatable |

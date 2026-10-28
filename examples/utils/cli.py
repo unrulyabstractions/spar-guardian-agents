@@ -21,7 +21,7 @@ from src.configuration import models, settings
 from src.configuration.scales import SCALES
 from src.configuration.swarm_config import PRESETS, SwarmConfig
 
-DEFAULT_MODEL = "gpt-6-luna"
+DEFAULT_MODEL = "deepseek-flash-openrouter"
 """The agents' model, as a registry entry (src/configuration/models.yaml). Every run before 2026-10-27 used
 gemini-3.8-flash."""
 

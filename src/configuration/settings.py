@@ -30,7 +30,7 @@ MODELS = HERE / "models.yaml"
 # JUDGE_MODELS_CONFIG, whose model string models.yaml prices. gpt-6-luna as judge since 2026-10-28: twenty times
 # cheaper than gpt-6-sol, CheatBench's default, and it agreed with it on 266 of 269 judged episodes (claude-haiku-5-5,
 # the same price, on 222); gpt-6-sol stays in JUDGE_MODELS_CONFIG as the reference judge.
-DEFAULT_MODEL = "openai/gpt-6-luna"
+DEFAULT_MODEL = "openrouter/deepseek/deepseek-v4.1-flash-1017"
 DEFAULT_MONITOR_MODEL = DEFAULT_MODEL
 JUDGE_MODEL = "gpt-6-luna"
 JUDGE_MODELS_CONFIG = HERE.parent / "benchmark" / "models.yaml"

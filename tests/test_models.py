@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 
+import pytest
 import yaml
 from inspect_ai._util.registry import registry_find
 from inspect_ai.model._providers.anthropic import ANTHROPIC_API_KEY
@@ -15,7 +16,7 @@ from inspect_ai.model._providers.openrouter import OPENROUTER_API_KEY
 from src.benchmark.judge import _cost_usd, judge_prices
 from src.cli import main
 from src.configuration import models, settings
-from src.run import Refusal, require_provider_key
+from src.run import Refusal, require_provider_key, require_routing
 
 CHEATBENCH_MODELS = settings.CHEATBENCH / "configs" / "models.yaml"
 STATUSES = {"default", "judge", "candidate", "superseded"}
@@ -126,6 +127,21 @@ def test_the_models_command_prints_the_registry(capsys):
     assert one == {"deepseek-v4-pro": models.entries()["deepseek-v4-pro"]}
     assert main(["models", "openai/gpt-6-sol"]) == 0 and "judge_entry: gpt-6-sol" in capsys.readouterr().out
     assert main(["models", "nope"]) == 2 and "unknown model" in capsys.readouterr().err
+
+
+def test_every_openrouter_entry_pins_one_host_and_the_runner_refuses_an_unpinned_one():
+    for name, entry in models.entries().items():
+        if entry["provider"] == "openrouter":
+            pin = entry.get("routing")
+            assert pin and len(pin["order"]) == 1 and pin["allow_fallbacks"] is False, name
+            assert models.model_args(name) == {"provider": pin} == models.model_args(entry["inspect"])
+        else:
+            assert "routing" not in entry and models.model_args(name) == {}, name
+    assert models.routing("mockllm/model") is None and models.model_args("openai/gpt-6-luna") == {}
+    require_routing("openrouter/deepseek/deepseek-v4.1-flash-1017")
+    require_routing("openai/gpt-6-luna")
+    with pytest.raises(Refusal, match="no `routing`"):
+        require_routing("openrouter/some-author/some-model")
 
 
 def test_require_provider_key_reads_the_registry(monkeypatch):

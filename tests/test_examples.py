@@ -37,7 +37,7 @@ def script_of(name: str) -> Path:
 def test_the_shared_arguments_and_their_defaults():
     script = script_of(EXAMPLES[0])
     args = parse_example_arguments(script, "The first line.", [])
-    assert args.model == models.resolve(DEFAULT_MODEL) == "openai/gpt-6-luna"
+    assert args.model == models.resolve(DEFAULT_MODEL) == "openrouter/deepseek/deepseek-v4.1-flash-1017"
     # no judge by default: judge=none after the settings, and USE_JUDGE_AS_DEFAULT says so
     assert USE_JUDGE_AS_DEFAULT is False and args.judge is False
     assert (args.preset, args.scale, args.settings, args.name, args.timeout) == \
@@ -79,7 +79,7 @@ def test_each_script_runs_three_neutral_agents_on_the_default_preset(name, monke
     assert module.main() == 0
     [(args, kwargs)] = calls
     run_name, benchmark, config, model, timeout = args
-    assert (run_name, model, timeout) == (script.stem, "openai/gpt-6-luna", settings.MODEL_TIMEOUT_S)
+    assert (run_name, model, timeout) == (script.stem, models.resolve(DEFAULT_MODEL), settings.MODEL_TIMEOUT_S)
     assert kwargs == {}
     # The run goes to runs/<name>/ and the figures follow a successful run into out/<name>/.
     assert plotted == [(settings.RUNS / script.stem, settings.ROOT / "out" / script.stem)]
@@ -132,7 +132,8 @@ def test_each_cell_script_sets_its_agents_and_its_cheat_text(name, monkeypatch):
     else:
         assert entry == "run" and not hasattr(module, "CHEAT") and not hasattr(module, "SOLO")
         run_name, benchmark, config, model, timeout = args
-    assert (run_name, model, config.n_agents, config.judge) == (script.stem, "openai/gpt-6-luna", n_agents, None)
+    assert (run_name, model, config.n_agents, config.judge) == (script.stem, models.resolve(DEFAULT_MODEL), n_agents,
+                                                                None)
     assert config.preset == "default" and config.access == "split" and config.turn_budget == settings.TURN_BUDGETS
     benchmark.check(config)
     if n_agents == 1:
