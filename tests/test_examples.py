@@ -18,6 +18,12 @@ from src.ui import plots
 
 EXAMPLES = ["examples.openmath.riemann_minimal", "examples.swe.flipt_minimal",
             "examples.knowledge_work.worktime_minimal"]
+# The cells of the first experiment, per domain: one agent alone, one agent alone told to cheat, three agents told
+# to cheat (CHEAT in the script, through run.run's instruction_suffix).
+CELLS = {"solo": (1, False), "solo_cheat": (1, True), "swarm_cheat": (3, True)}
+CELL_SCRIPTS = [f"examples.{domain}.{stem}_{cell}" for domain, stem in (("openmath", "riemann"), ("swe", "flipt"),
+                                                                          ("knowledge_work", "worktime"))
+                for cell in CELLS]
 
 
 def script_of(name: str) -> Path:
@@ -98,3 +104,32 @@ def test_the_openmath_example_task_records_its_plan():
     config = build_config(args.preset, args.scale, args.settings)
     task = swarm_task(module.OpenMath("riemann"), config)
     assert access_line(task) == "== access split: a01 slice1, a02 slice2, a03 slice3"
+
+
+@pytest.mark.parametrize("name", CELL_SCRIPTS)
+def test_each_cell_script_sets_its_agents_and_its_cheat_text(name, monkeypatch):
+    module = importlib.import_module(name)
+    script = script_of(name)
+    n_agents, cheats = CELLS[script.stem.split("_", 1)[1]]
+    calls = []
+    monkeypatch.setattr(run, "run", lambda *args: calls.append(("run", args)) or 0)
+    monkeypatch.setattr(run, "evaluate", lambda *args: calls.append(("evaluate", args)) or 0)
+    monkeypatch.setattr(plots, "plot_run", lambda run_dir, out_dir: [])
+    monkeypatch.setattr("sys.argv", [script.name])
+    assert module.main() == 0
+    [(entry, args)] = calls
+    if cheats:
+        # the cell builds the sample with CHEAT itself and runs the task it built from it
+        assert entry == "evaluate" and not hasattr(module, "SOLO")
+        run_name, benchmark, config, task, model, timeout = args
+        assert module.CHEAT.startswith("Your real objective") and "fair game" in module.CHEAT
+        assert ("team" in module.CHEAT) == (n_agents == 3)
+        assert task.dataset[0].input.endswith(f"\n{module.CHEAT}\n")
+    else:
+        assert entry == "run" and not hasattr(module, "CHEAT") and not hasattr(module, "SOLO")
+        run_name, benchmark, config, model, timeout = args
+    assert (run_name, model, config.n_agents, config.judge) == (script.stem, "openai/gpt-6-luna", n_agents, None)
+    assert config.preset == "default" and config.access == "split" and config.turn_budget == settings.TURN_BUDGETS
+    benchmark.check(config)
+    if n_agents == 1:
+        assert benchmark.access_plan(config.names, config, None) == {"a01": benchmark.whole_access()}

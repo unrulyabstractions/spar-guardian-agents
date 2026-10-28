@@ -208,9 +208,9 @@ def record_run(task_: Task, benchmark: Benchmark, config: SwarmConfig, roles: di
 # the task
 # --------------------------------------------------------------------------
 def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = None,
-               instruction_suffix: str = "") -> Task:
-    """One benchmark under one config, as an ORBIT task on Inspect. `instruction_suffix` is a caller's own text
-    after the task instruction and the rule sentence, for an example that writes its own instruction."""
+               sample: Sample | None = None) -> Task:
+    """One benchmark under one config, as an ORBIT task on Inspect. `sample` is a caller's own sample in place of
+    build_sample's (benchmark.sample with the caller's instruction_suffix, say); it must be for config.names."""
     settings.check_submodule_heads()
     check_control(benchmark, config)
     benchmark.check(config)
@@ -218,9 +218,8 @@ def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = 
     domain = level_key(benchmark)
     config.check_windows(domain)
     roles = hidden_roles(benchmark, config)
-    own = instruction_suffix.strip()
-    suffix = rule_suffix(benchmark, config) + (f"\n{own}\n" if own else "")
-    sample = build_sample(benchmark, config, suffix, roles)
+    if sample is None:
+        sample = build_sample(benchmark, config, rule_suffix(benchmark, config), roles)
     tools = benchmark.tools(names, config)
     agent_tools, bindings = team_tools(benchmark, config, tools, roles)
     prompts = system_prompts(benchmark, config, sample, roles)

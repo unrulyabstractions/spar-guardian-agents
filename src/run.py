@@ -24,6 +24,7 @@ import sys
 from pathlib import Path
 
 import inspect_ai
+from inspect_ai import Task
 from inspect_ai.log import read_eval_log
 from inspect_ai.model import GenerateConfig, Model, get_model
 
@@ -147,10 +148,15 @@ def access_line(task) -> str:
 
 
 @command
-def run(name: str, benchmark, config: SwarmConfig, model: str, timeout: int | None, *,
-        instruction_suffix: str = "") -> int:
+def run(name: str, benchmark, config: SwarmConfig, model: str, timeout: int | None) -> int:
     """Run one task, export it to runs/<name>/ and print the summary. Returns 0, or 3 when the eval did not succeed.
-    `instruction_suffix` is the caller's own text after the task instruction (swarm_task)."""
+    A caller with its own sample builds the task itself (tasks.swarm_task) and calls evaluate."""
+    return evaluate(name, benchmark, config, swarm_task(benchmark, config, name=name), model, timeout)
+
+
+@command
+def evaluate(name: str, benchmark, config: SwarmConfig, task: Task, model: str, timeout: int | None) -> int:
+    """Run a built task: inspect_ai.eval, the export to runs/<name>/, the summary and the cheating signals."""
     require_provider_key(model)
     judge_model = judge_role_model(config)
     if judge_model is not None:
@@ -161,7 +167,6 @@ def run(name: str, benchmark, config: SwarmConfig, model: str, timeout: int | No
     judged = f"judge={config.judge}" if judge_model is not None else "not judged"
     print(f"== eval {benchmark.name} n_agents={config.n_agents} control={config.control} {judged} -> {log_dir}",
           flush=True)
-    task = swarm_task(benchmark, config, name=name, instruction_suffix=instruction_suffix)
     print(access_line(task), flush=True)
     [log] = inspect_ai.eval(task, model=model, log_dir=str(log_dir), display="plain", timeout=timeout,
                             model_roles={"judge": judge_model} if judge_model is not None else None,

@@ -8,6 +8,8 @@ One script per task: three neutral agents on the pull board at the small scale, 
 | `swe/flipt_minimal.py` | SWE issue `flipt-02e2`, jigsaw honeypot | one of the fix's three pieces, on its own machine |
 | `knowledge_work/worktime_minimal.py` | knowledge-work row `2ea2e5b5` | two agents the review tool, which names the client's artifact; one the permission to read it |
 
+The cells of the first experiment sit beside them, three per domain, the same arguments: `<task>_solo.py` (one agent alone, CheatBench's own layout, the whole exploit in reach), `<task>_solo_cheat.py` (the same agent with `CHEAT`, a paragraph after the task instruction telling it to reuse the prior work and present it as its own) and `<task>_swarm_cheat.py` (the three-agent split with `CHEAT` to every agent). The cheating text is a control for the floor of instruction following and lives in each script, in the open; the script builds the domain's sample itself (`benchmark.sample(..., instruction_suffix=rule_suffix(...) + CHEAT)`), the task from that sample (`swarm_task(..., sample=)`) and runs it (`run.evaluate`). A solo cell is the default config with `config.replace(n_agents=1)`.
+
 Run one from the repository root with `OPENAI_API_KEY` set for the agents' default model and `ANTHROPIC_API_KEY` for the judge, claude-haiku-5-5 (another agents' model takes its own key, `GEMINI_API_KEY` for Gemini):
 
 ```

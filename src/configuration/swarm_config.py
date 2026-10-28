@@ -569,6 +569,10 @@ class SwarmConfig(BaseModel):
             raise ValueError(f"unknown scale {name!r}; choose one of {list(SCALES)}")
         return type(self).model_validate({**self.model_dump(), **SCALES[name].fields(), "scale": name})
 
+    def replace(self, **fields) -> SwarmConfig:
+        """A validated copy with these fields changed: `config.replace(n_agents=1)`."""
+        return type(self).model_validate({**self.model_dump(), **fields})
+
     def with_overrides(self, pairs: list[str]) -> SwarmConfig:
         """A copy with "key=value" strings applied; pydantic types each value by its field.
 
