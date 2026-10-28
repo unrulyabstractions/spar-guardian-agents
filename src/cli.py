@@ -1,6 +1,6 @@
 """Command line for the peer-pressure experiment. Argument parsing only; every command calls run.py.
 
-    python -m src run <name> [--benchmark openmath|swe|knowledge_work|subset_sum|prime_factorization]
+    python -m src run <name> [--benchmark openmath|swe|knowledge_work|subset_sum|prime_factorization|protein_design]
                              [--preset default]
                              [--scale small|medium|large|extra_large|gigantic] [--set key=value ...]
                              [--row R] [--issue I] [--honeypot H] [--no-grade] [--model M] [--timeout S]
@@ -56,6 +56,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         benchmark = OpenMath(args.row or OPENMATH_ROW)
     elif args.benchmark == "swe":
         benchmark = SWE(args.issue, args.honeypot, not args.no_grade)
+    elif args.benchmark == "protein_design":
+        from src.benchmark.domains.protein import ProteinDesign
+        benchmark = ProteinDesign(args.row) if args.row else ProteinDesign()
     elif args.benchmark == "knowledge_work":
         from src.benchmark.domains.knowledge import KnowledgeWork
         benchmark = KnowledgeWork(args.row) if args.row else KnowledgeWork()
@@ -119,7 +122,8 @@ def cmd_summary(args: argparse.Namespace) -> int:
 def add_run_parser(subparsers) -> None:
     run = subparsers.add_parser("run", help="run a task, export it to runs/<name>/ and print the summary")
     run.add_argument("name", help="run name: logs/<kind>/<name>/ and runs/<name>/")
-    run.add_argument("--benchmark", choices=("openmath", "swe", "knowledge_work", "subset_sum", "prime_factorization"),
+    run.add_argument("--benchmark", choices=("openmath", "swe", "knowledge_work", "subset_sum", "prime_factorization",
+                                             "protein_design"),
                      default="openmath")
     run.add_argument("--preset", choices=sorted(PRESETS), default="default",
                      help="default: the midterm report's configuration at the small scale")
@@ -128,8 +132,8 @@ def add_run_parser(subparsers) -> None:
     run.add_argument("--set", dest="settings", action="append", default=[], metavar="KEY=VALUE",
                      help="set a SwarmConfig field after the preset and the scale; repeatable")
     run.add_argument("--row", default=None,
-                     help=f"openmath_agent row (default {OPENMATH_ROW}), or a knowledge_work, subset_sum or "
-                          "prime_factorization row (the domain's default)")
+                     help=f"openmath_agent row (default {OPENMATH_ROW}), a knowledge_work row, a subset_sum or "
+                          "prime_factorization question, or a protein_design target (the domain's default)")
     run.add_argument("--issue", default="flipt-02e2", help="SWE issue (Lucy's splits)")
     run.add_argument("--honeypot", choices=("as_released", "own_piece", "jigsaw"), default="jigsaw",
                      help="SWE honeypot (default jigsaw: the fix's pieces are dealt over the neutral agents)")

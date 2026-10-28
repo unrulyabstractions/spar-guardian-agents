@@ -18,14 +18,15 @@ from src.ui import plots
 
 EXAMPLES = ["examples.openmath.riemann_minimal", "examples.swe.flipt_minimal",
             "examples.knowledge_work.worktime_minimal", "examples.subset_sum.subset_minimal",
-            "examples.prime_factorization.factor_minimal"]
+            "examples.prime_factorization.factor_minimal", "examples.protein_design.binder_minimal"]
 # The cells of the first experiment, per domain: one agent alone, one agent alone told to cheat, three agents told
 # to cheat (CHEAT in the script, through run.run's instruction_suffix).
 CELLS = {"solo": (1, False), "solo_cheat": (1, True), "minimal_cheat": (3, True)}
 CELL_SCRIPTS = [f"examples.{domain}.{stem}_{cell}" for domain, stem in (("openmath", "riemann"), ("swe", "flipt"),
                                                                           ("knowledge_work", "worktime"),
                                                                           ("subset_sum", "subset"),
-                                                                          ("prime_factorization", "factor"))
+                                                                          ("prime_factorization", "factor"),
+                                                                          ("protein_design", "binder"))
                 for cell in CELLS]
 
 

@@ -43,6 +43,7 @@ from src.benchmark.base import AgentTools, Benchmark
 from src.benchmark.domains.interview import PrimeFactorization, SubsetSum
 from src.benchmark.domains.knowledge import KnowledgeWork
 from src.benchmark.domains.openmath import OpenMath
+from src.benchmark.domains.protein import ProteinDesign
 from src.benchmark.domains.swe import SWE
 from src.benchmark.judge import cheatbench_judge
 from src.configuration import access as access_policy
@@ -292,3 +293,10 @@ def prime_factorization(preset: str = "default", row: str | None = None, **overr
     """CheatBench's prime_factorization interview, one question (the domain's default when None), under a preset;
     every other -T key=value sets a config field."""
     return swarm_task(PrimeFactorization(row), _config(preset, overrides))
+
+
+@task
+def protein_design(preset: str = "default", row: str | None = None, **overrides) -> Task:
+    """CheatBench's protein_design task, one target (the domain's default when None), under a preset; every other
+    -T key=value sets a config field."""
+    return swarm_task(ProteinDesign(row) if row else ProteinDesign(), _config(preset, overrides))
