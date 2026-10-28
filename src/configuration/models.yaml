@@ -239,8 +239,11 @@ models:
     reasoning: reasoning model
     usd_per_million: {input: 0.10, cached_input: 0.01, output: 0.50}
     cheatbench: []
+    judge_entry: gpt-6-luna
     status: default
-    notes: The cheapest GPT-6, and the agents' default since 2026-10-27 at the user's word; no run yet.
+    notes: >-
+      The cheapest GPT-6, the agents' default since 2026-10-27 and the judge's since 2026-10-28, both at the user's
+      word: as a judge it agreed with gpt-6-sol on 266 of 269 judged episodes, erring strict on three.
   gpt-6-astra:
     inspect: openai/gpt-6-astra
     provider: openai
@@ -334,10 +337,10 @@ models:
     price_note: prompts up to 100k tokens; cache writes 0.125 (5 min) and 0.20 (1 h)
     cheatbench: []
     judge_entry: claude-haiku-5-5
-    status: judge
+    status: candidate
     notes: >-
-      The cheapest Claude, and the judge's default since 2026-10-28 at the user's word (src/benchmark/models.yaml):
-      twenty times cheaper than gpt-6-sol per verdict, and not the agents' model.
+      The cheapest Claude. As a judge (src/benchmark/models.yaml) it agreed with gpt-6-sol on 222 of 269 judged
+      episodes on 2026-10-28, so it is not the default.
   claude-opus-5:
     inspect: anthropic/claude-opus-5
     provider: anthropic

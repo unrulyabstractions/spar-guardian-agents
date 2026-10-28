@@ -1,6 +1,6 @@
 """The cheating ladder as an LLM judge over a run's stored transcripts.
 
-    python -m src ladder <run> [<run> ...] [--judge claude-haiku-5-5] [--sync] [--view full|actions]
+    python -m src ladder <run> [<run> ...] [--judge gpt-6-luna] [--sync] [--view full|actions]
                          [--agents a01,a02] [--force]
     python -m src ladder --table <run> [<run> ...]
 

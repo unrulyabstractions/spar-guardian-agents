@@ -1,14 +1,19 @@
 # Judge entries for CheatBench's judge.py (--models-config), outside the submodule. Each names the model as Inspect
 # takes it and the variable that holds its key; the OpenAI and Anthropic clients use their default endpoints
 # (CheatBench's own gpt-6-sol entry routes through ${OPENAI_BASE_URL}, which is unset here).
-# claude-haiku-5-5 is the default judge (settings.JUDGE_MODEL) since 2026-10-28; gpt-6-sol, CheatBench's default,
-# is the reference judge for calibration.
-claude-haiku-5-5:
-  model: anthropic/claude-haiku-5-5
-  api_key_env: ANTHROPIC_API_KEY
-  generation_config: {}
+# gpt-6-luna is the default judge (settings.JUDGE_MODEL) since 2026-10-28; gpt-6-sol, CheatBench's default, is the
+# reference judge for calibration; claude-haiku-5-5 is the cheapest judge of another family.
+gpt-6-luna:
+  model: openai/gpt-6-luna
+  api_key_env: OPENAI_API_KEY
+  generation_config:
+    reasoning_effort: high
 gpt-6-sol:
   model: openai/gpt-6-sol
   api_key_env: OPENAI_API_KEY
   generation_config:
     reasoning_effort: high
+claude-haiku-5-5:
+  model: anthropic/claude-haiku-5-5
+  api_key_env: ANTHROPIC_API_KEY
+  generation_config: {}

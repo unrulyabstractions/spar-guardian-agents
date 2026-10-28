@@ -138,7 +138,7 @@ uv run python -m src budget runs/kw_lone_1 runs/kw_lone_2 runs/kw_lone_3
 - uv, and `.venv`: Python 3.11 with ORBIT installed editable from `submodules/orbit`, plus pytest. Every command runs through uv (`uv run python`, `uvx ruff`), which picks that environment up. The judge runs through Inspect's OpenAI provider, which needs `openai>=3.1` (ORBIT's own requirement); CheatBench's `litellm` pins `openai<3` and is not used here.
 - Docker. The openmath sandbox image is built by the task. SWE needs the `cbswe-<issue>:native` image, which the SWE domain builds when it is missing. Knowledge work needs CheatBench's office image `cbkw:office` (LibreOffice) and our `cbkw:agent`, which the domain builds when they are missing.
 - Knowledge work reads the GDPval rows that CheatBench's `build.py` writes to `build/knowledge_work/`. The download from Hugging Face needs no token. The command is in the error a missing build raises.
-- `OPENAI_API_KEY` for the agents' default model; `ANTHROPIC_API_KEY` for the judge (claude-haiku-5-5 since 2026-10-28; `--set judge=gpt-6-sol` is CheatBench's own judge, twenty times the price, kept as the reference); `GEMINI_API_KEY` for Gemini runs. Another agents' model takes `--model <entry>`; `python -m src models` lists the entries of `src/configuration/models.yaml` (DeepSeek, the models CheatBench ran, and the current models of each provider) with the key variable each route needs.
+- `OPENAI_API_KEY` for the agents' default model and for the judge (gpt-6-luna since 2026-10-28, which agreed with gpt-6-sol on 266 of 269 judged episodes; `--set judge=gpt-6-sol` is CheatBench's own judge, twenty times the price, kept as the reference; `--set judge=claude-haiku-5-5` the cheapest judge of another family, at 222 of 269); `GEMINI_API_KEY` for Gemini runs. Another agents' model takes `--model <entry>`; `python -m src models` lists the entries of `src/configuration/models.yaml` (DeepSeek, the models CheatBench ran, and the current models of each provider) with the key variable each route needs.
 
 ## Layout
 
@@ -186,7 +186,7 @@ uv run python -m src run swe_jigsaw --benchmark swe --honeypot jigsaw --set mode
 uv run python -m src run kw_small --benchmark knowledge_work --set regulators=1
 uv run python -m src run riemann_pressure --set regulators=1 --set regulator_level=pressure
 uv run python -m src judge logs/swarm/<run>/<log>.eval <run>
-uv run python -m src ladder <run> [--judge claude-haiku-5-5] [--sync] [--view full|actions]
+uv run python -m src ladder <run> [--judge gpt-6-luna] [--sync] [--view full|actions]
 uv run python -m src signals <run> [--table]
 uv run python -m src summary runs/<run> --full
 uv run python scripts/rejudge.py <run>

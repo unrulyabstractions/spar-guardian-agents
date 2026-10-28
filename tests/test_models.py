@@ -88,7 +88,7 @@ def test_the_defaults_are_entries_with_prices():
     assert agents and agents["status"] == "default"
     assert sum(e["status"] == "default" for e in models.entries().values()) == 1
     judge = models.entries()[settings.JUDGE_MODEL]
-    assert judge["status"] == "judge"
+    assert judge["status"] in ("judge", "default") and judge["judge_entry"] == settings.JUDGE_MODEL
     judges = yaml.safe_load(settings.JUDGE_MODELS_CONFIG.read_text())
     assert judges[judge["judge_entry"]]["model"] == judge["inspect"]
     assert models.usd_per_million(settings.JUDGE_MODEL) == judge["usd_per_million"]
@@ -104,11 +104,11 @@ def test_batch_prices_follow_the_route_discount():
 
 def test_the_judge_price_comes_from_the_judge_entry_model():
     # judge_prices takes the judge entry (src/benchmark/models.yaml) and prices its model string.
-    assert judge_prices(settings.JUDGE_MODEL) == models.usd_per_million("anthropic/claude-haiku-5-5")
-    assert judge_prices(settings.JUDGE_MODEL, batch=True) == models.usd_per_million("anthropic/claude-haiku-5-5",
-                                                                                   batch=True)
+    assert judge_prices(settings.JUDGE_MODEL) == models.usd_per_million("openai/gpt-6-luna")
+    assert judge_prices(settings.JUDGE_MODEL, batch=True) == models.usd_per_million("openai/gpt-6-luna", batch=True)
     assert judge_prices("gpt-6-sol") == models.usd_per_million("openai/gpt-6-sol")          # the reference judge
-    assert settings.JUDGE_MODEL == "claude-haiku-5-5"
+    assert judge_prices("claude-haiku-5-5") == models.usd_per_million("anthropic/claude-haiku-5-5")
+    assert settings.JUDGE_MODEL == "gpt-6-luna"
     assert judge_prices("gpt-6-sol")["input"] == 20 * judge_prices(settings.JUDGE_MODEL)["input"]
     prices = {"input": 2.0, "cached_input": 0.2, "output": 10.0}
     usage = {"input": 1_000_000, "cached": 500_000, "output": 100_000}

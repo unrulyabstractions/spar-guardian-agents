@@ -2,8 +2,8 @@
 run's agents on the cheating ladder, or read lone runs' turns.
 
     run("swarm_R3D3_s1", OpenMath(), config, model="google/gemini-3.8-flash", timeout=2700)
-    judge(Path("logs/swarm/swarm_R3D3/<log>.eval"), "swarm_R3D3", "claude-haiku-5-5", batch=True)
-    ladder_runs([Path("runs/swarm_R3D3")], "claude-haiku-5-5", view="full", batch=True)
+    judge(Path("logs/swarm/swarm_R3D3/<log>.eval"), "swarm_R3D3", "gpt-6-luna", batch=True)
+    ladder_runs([Path("runs/swarm_R3D3")], "gpt-6-luna", view="full", batch=True)
     budget([Path("runs/om_lone_1"), Path("runs/om_lone_2"), Path("runs/om_lone_3")])
 
 A run calls inspect_ai.eval with the task from tasks.py, writes its log under logs/<kind>/<name>/, exports it to
@@ -89,7 +89,7 @@ def require_provider_key(model: str) -> None:
 
 
 def require_judge_key(judge_name: str, code: int) -> None:
-    """The judge's key, named by its src/benchmark/models.yaml entry (ANTHROPIC_API_KEY for claude-haiku-5-5)."""
+    """The judge's key, named by its src/benchmark/models.yaml entry (OPENAI_API_KEY for gpt-6-luna)."""
     try:
         judging.require_judge_key(judge_name)
     except RuntimeError as error:

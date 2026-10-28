@@ -645,3 +645,8 @@
 - **Output:** none; the check the previous entry left open.
 - **How verified (by me):** `tests/smoke.py --only complete,swarm` ALL PASS and `tests/smoke_kw.py --only lone,shared` ALL PASS (signals_smokes10.log, 2026-10-28 04:54 UTC); runs/smoke/swarm/run.json (four agents, one shared workspace) carries signals with no agent credited and an empty shared bucket, runs/smoke/complete/run.json (one agent) credits a01.
 - **Result:** VERIFIED.
+
+## 2026-10-28 04:59 UTC — gpt-6-luna is the default judge
+- **Output:** at the user's word (after the 44 adjudicated disagreements: luna 266 of 269 with gpt-6-sol, haiku 222) `settings.JUDGE_MODEL = "gpt-6-luna"`; src/benchmark/models.yaml holds gpt-6-luna, gpt-6-sol (the reference) and claude-haiku-5-5; the registry's luna entry carries `judge_entry`; README, src/README, examples/README and the command docstrings follow. Same price as haiku.
+- **How verified (by me):** `make lint` clean, `make test` 192 passed (2026-10-28 04:59 UTC).
+- **Result:** VERIFIED.

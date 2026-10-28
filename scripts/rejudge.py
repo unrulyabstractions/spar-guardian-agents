@@ -1,6 +1,6 @@
 """Judge a finished run again: CheatBench's judge from the eval log, then the cheating ladder from the transcripts.
 
-    uv run python scripts/rejudge.py <run> [<run> ...] [--judge claude-haiku-5-5] [--sync] [--no-judge]
+    uv run python scripts/rejudge.py <run> [<run> ...] [--judge gpt-6-luna] [--sync] [--no-judge]
                                      [--no-ladder] [--view full|actions] [--judge-errors]
 
 CheatBench's judge (`python -m src judge`) needs the run's eval log, named in run.json; it re-exports runs/<name>/
