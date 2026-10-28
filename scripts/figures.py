@@ -184,10 +184,10 @@ def fig_topology_compare():
 # ---------------------------------------------------------------- figure 2: round structure
 def fig_round_structure():
     """One round, its follow-up steps and the next round, step by step per agent."""
-    fig = plt.figure(figsize=(FULL, 2.2))
+    fig = plt.figure(figsize=(FULL, 2.3))
     ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
     ax.set_xlim(0, 17.0)
-    ax.set_ylim(0.6, 6.15)
+    ax.set_ylim(0.6, 6.4)
     ax.axis("off")
     names = list(ROLES5)
     lane_h, top = 0.62, 5.05
@@ -215,10 +215,11 @@ def fig_round_structure():
                            ec=BASE, hatch="////", lw=0, zorder=1))
     ax.text(14.7, top - 2 * lane_h, "run over", ha="center", va="center", fontsize=7, color=INK2, zorder=4,
             bbox=dict(fc=SURF, ec="none", pad=1.5))
+    # a round is each agent's step and, for an agent whose step ended with a board action, its free follow-up steps
     hy = top + lane_h / 2 + 0.12
-    ax.text(3.0, hy + 0.1, "round r", ha="center", va="bottom", fontsize=8, weight="bold")
-    ax.text(7.27, hy + 0.1, "free follow-up steps", ha="center", va="bottom", fontsize=8, weight="bold")
-    ax.text(11.65, hy + 0.1, "round r + 1", ha="center", va="bottom", fontsize=8, weight="bold")
+    for label, x0, x1 in (("round r", 1.2, 9.55), ("round r + 1", 9.85, 13.45)):
+        ax.text((x0 + x1) / 2, hy + 0.28, label, ha="center", va="bottom", fontsize=8, weight="bold")
+        ax.plot([x0, x0, x1, x1], [hy + 0.02, hy + 0.2, hy + 0.2, hy + 0.02], color=INK2, lw=0.7)
     by = top - 4 * lane_h - lane_h / 2 - 0.15
     ky, kx = by - 0.35, 1.2
     for a, label in [("work", "charged step"), ("read", "free step")]:

@@ -585,3 +585,8 @@
 - **Output:** scripts/figures.py: fig_modes (collaboration_needed's task parts) replaced by fig_access, tmp/access.png: the exploit cut into one piece per worker as `access.plan("split", ...)` deals it over the five-agent roster, each piece a box with its worker and the team_submit mark, the regulator and the disregulator outside the boxes with nothing, everyone joined to the board and the team's main. modes.png moved to the scratchpad backup.
 - **How verified (by me):** access.png regenerated and viewed with image tokens (2026-10-28 02:38 UTC): three boxes piece 1 to 3 with a01, a03, a05, a02 and a04 outside, no collisions; `uvx ruff check scripts` clean.
 - **Result:** VERIFIED.
+
+## 2026-10-28 02:39 UTC — the round structure figure brackets the free follow-up steps inside the round
+- **Output:** scripts/figures.py: the "free follow-up steps" header is gone; a bracket labelled "round r" spans each agent's step and the three follow-up columns, and "round r + 1" its own column, as src/swarm/rules.py defines a round (the follow-ups of round r are concurrent steps r<r>-free<k> right after it, holding the agents whose step ended with a board action).
+- **How verified (by me):** round_structure.png regenerated and viewed with image tokens (2026-10-28 02:39 UTC): two brackets, no overlap with the lanes; `uvx ruff check scripts` clean.
+- **Result:** VERIFIED.
