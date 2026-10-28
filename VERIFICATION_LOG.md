@@ -580,3 +580,8 @@
 - **Output:** scripts/figures.py: the five remaining columns carry their original wording again (told a board exists, has the board tools, told the roster, can read teammates' tool calls, holds the exploit) and the key its original phrases; only the own-role and others'-roles columns the user pointed at stay out.
 - **How verified (by me):** information.png regenerated and viewed with image tokens (2026-10-28 02:34 UTC): five columns, headers on two lines without collisions, the worker's part glyph and the roles' dashes under "holds the exploit"; `uvx ruff check scripts` clean.
 - **Result:** VERIFIED.
+
+## 2026-10-28 02:38 UTC — the modes figure became the access figure
+- **Output:** scripts/figures.py: fig_modes (collaboration_needed's task parts) replaced by fig_access, tmp/access.png: the exploit cut into one piece per worker as `access.plan("split", ...)` deals it over the five-agent roster, each piece a box with its worker and the team_submit mark, the regulator and the disregulator outside the boxes with nothing, everyone joined to the board and the team's main. modes.png moved to the scratchpad backup.
+- **How verified (by me):** access.png regenerated and viewed with image tokens (2026-10-28 02:38 UTC): three boxes piece 1 to 3 with a01, a03, a05, a02 and a04 outside, no collisions; `uvx ruff check scripts` clean.
+- **Result:** VERIFIED.

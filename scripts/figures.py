@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "tmp"
 sys.path.insert(0, str(ROOT))
 
-from src.benchmark.domains.swe.task import parts_by_agent  # noqa: E402
+from src.configuration import access as access_policy  # noqa: E402
 
 # Palette: reference dataviz palette, light mode. Roles take the first two categorical slots;
 # workers are neutral (white fill, ink ring). Structures are neutral greys.
@@ -341,34 +341,43 @@ def fig_read_graph():
     save(fig, "read_graph")
 
 
-# ---------------------------------------------------------------- figure 5: modes
-def fig_modes():
-    """collaboration_needed: one issue in parts, one or more agents per part, the team's main as the deliverable."""
+# ---------------------------------------------------------------- figure 5: access
+def fig_access():
+    """access=split: the exploit cut into one piece per worker, each in its own box; the regulator and the
+    disregulator outside with nothing; everyone on the board and the team's main."""
     fig = plt.figure(figsize=(HALF, 2.3))
     ax = fig.add_axes([0.02, 0.17, 0.96, 0.82])
     blank(ax, (-3.1, 3.1), (-2.9, 2.75))
     bw, bh, by = 1.6, 0.6, 2.3
     box(ax, -bw / 2, by - bh / 2, bw, bh, "board", fc=PLANE, ec=INK2, fs=7.5)
-    # the parts as the code deals them: over the neutral agents first, then a role repeats a neutral agent's part
-    owned = parts_by_agent(list(ROLES5), "collaboration_needed", ROLES5)
-    parts = {part: [a for a in ROLES5 if owned[a] == [part]] for part in ("A", "B", "C")}
-    for (part, members), x in zip(parts.items(), [-2.0, 0.0, 2.0]):
-        box(ax, x - 0.92, -0.95, 1.84, 2.25, None, fc="#ffffff", ec=INK2, z=1)
-        ax.text(x, 1.05, f"part {part}", ha="center", va="center", fontsize=7)
-        for k, name in enumerate(members):
-            yy = 0.3 - k * 0.85
-            agent(ax, x, yy, name, ROLES5[name], r=0.34, fs=6)
-            if ROLES5[name] == "worker":
-                ax.scatter([x + 0.3], [yy + 0.3], marker="D", s=14, c=INK, zorder=9, edgecolors=SURF, linewidths=0.6)
-        arrow(ax, (x, -0.95), (x * 0.35, -1.75), lw=0.7, color=MUTED, head=4)
-        arrow(ax, (x, 1.3), edge_point(0, by, bw, bh, x, 1.3), lw=0.7, color=MUTED, head=4)
+    # the pieces as the code deals them: round robin over the neutral agents, nothing for a role
+    names = list(ROLES5)
+    held = access_policy.plan("split", names, ROLES5, lambda n: [f"piece {k}" for k in range(1, n + 1)], ["whole"])
+    workers = [a for a in names if held[a]]
+    roles = [a for a in names if not held[a]]
+    xs = {a: x for a, x in zip(workers, [-1.3, 0.0, 1.3])}
+    xs.update({a: x for a, x in zip(roles, [-2.6, 2.6])})
+    y = 0.15
+    for a in workers:
+        x = xs[a]
+        box(ax, x - 0.55, y - 0.65, 1.1, 1.45, None, fc="#ffffff", ec=INK2, z=1)
+        ax.text(x, y + 0.55, held[a][0], ha="center", va="center", fontsize=6.8)
+        agent(ax, x, y - 0.1, a, ROLES5[a], r=0.34, fs=6)
+        ax.scatter([x + 0.3], [y + 0.2], marker="D", s=14, c=INK, zorder=9, edgecolors=SURF, linewidths=0.6)
+        arrow(ax, (x, y + 0.8), edge_point(0, by, bw, bh, x, y + 0.8), lw=0.7, color=MUTED, head=4)
+        arrow(ax, (x, y - 0.65), (x * 0.35, -1.75), lw=0.7, color=MUTED, head=4)
+    for a in roles:
+        x = xs[a]
+        agent(ax, x, y - 0.1, a, ROLES5[a], r=0.34, fs=6)
+        arrow(ax, toward(x, y - 0.1, 0, by, 0.4), edge_point(0, by, bw, bh, x, y - 0.1), lw=0.7, color=MUTED, head=4)
+        arrow(ax, toward(x, y - 0.1, x * 0.35, -1.75, 0.4), (x * 0.35, -1.75), lw=0.7, color=MUTED, head=4)
     box(ax, -1.0, -2.45, 2.0, 0.65, "team's main", fc=PLANE, ec=INK2, fs=7)
 
     def dmark(ax, x, y):
         ax.scatter([x], [y], marker="D", s=16, c=INK, zorder=3)
 
     role_legend(fig, 0.07, extra=[(dmark, "team_submit")], compact=True)
-    save(fig, "modes")
+    save(fig, "access")
 
 
 # ---------------------------------------------------------------- figure 6: information
@@ -423,6 +432,6 @@ if __name__ == "__main__":
     fig_context_ledger()
     fig_engagement_funnel()
     fig_read_graph()
-    fig_modes()
+    fig_access()
     fig_information()
     print("\n".join(str(p) for p in sorted(OUT.glob("*.png"))))
