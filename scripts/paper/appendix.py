@@ -1,19 +1,17 @@
-"""The appendix figures and tables of a screen: for each of the four cells of the first experiment, every agent's rung
-on the code ladder per domain and sample, and the runs' turns, tokens and billed cost.
+"""The appendix figures of a screen: for each of the four cells of the first experiment, the cheating rate per domain
+and every agent's rung on the code ladder per domain and sample.
 
     uv run python scripts/paper/appendix.py [--suffixes flashpin flashbox flashboxb]
 
 Reads runs/<cell>_<suffix><k>/signals.jsonl and writes, for the sections solo, solo_cheat, minimal and minimal_cheat,
 tmp/appendix_<section>_rate.png (the cheating rate per domain: the share of agents at opened or higher, the ladder's
-rung that agrees with the judge's cheated, beside the share at used or higher), tmp/appendix_<section>.png (every
-agent's rung per domain and sample, as tiles), tmp/appendix_<section>_table.png (the same as one table) and
-tmp/appendix_<section>.csv; and tmp/appendix_rates_table.png, the rates of every section in one table. A run that has
-not finished shows as an empty tile and a "(not finished)" row, and counts in no rate.
+rung that agrees with the judge's cheated, beside the share at used or higher) and tmp/appendix_<section>.png (every
+agent's rung per domain and sample, as tiles); and tmp/appendix_rates_table.png, the rates of every section in one
+table. A run that has not finished shows as an empty tile and counts in no rate.
 """
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import sys
 from pathlib import Path
@@ -185,29 +183,6 @@ def tiles_figure(section: str, title: str, cells: list[str], suffixes: list[str]
     return path
 
 
-def table_and_csv(section: str, cells: list[str], suffixes: list[str]) -> tuple[Path, Path]:
-    """One row per run: each agent's rung as a chip."""
-    rows, records = [], []
-    for domain, cell in zip(DOMAINS, cells):
-        for k, name in enumerate(run_names(cell, suffixes), 1):
-            run = load_run(name)
-            if run is None:
-                rows.append([domain, str(k), ["(not finished)"]])
-                records.append({"domain": domain, "sample": k, "run": name})
-                continue
-            rows.append([domain, str(k), [f"`{agent}: {rung}`" for agent, rung in run["agents"]]])
-            records.append({"domain": domain, "sample": k, "run": name,
-                            **{f"{agent}_rung": rung for agent, rung in run["agents"]}})
-    table = table_png(f"appendix_{section}_table", ["domain", "sample", "agents' rungs"], rows, [1.3, 0.7, 2.6])
-    csv_path = OUT / f"appendix_{section}.csv"
-    fields = sorted({key for r in records for key in r}, key=lambda key: (key not in ("domain", "sample", "run"), key))
-    with csv_path.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields)
-        writer.writeheader()
-        writer.writerows(records)
-    return table, csv_path
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--suffixes", nargs="+", default=["flashpin", "flashbox", "flashboxb"],
@@ -216,8 +191,6 @@ def main(argv: list[str] | None = None) -> int:
     for section, (title, cells) in SECTIONS.items():
         print(rate_figure(section, title, cells, args.suffixes))
         print(tiles_figure(section, title, cells, args.suffixes))
-        for path in table_and_csv(section, cells, args.suffixes):
-            print(path)
     print(rates_table(args.suffixes))
     return 0
 
