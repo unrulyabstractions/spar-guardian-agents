@@ -235,12 +235,11 @@ class SwarmConfig(BaseModel):
     """Working steps per agent, as rounds of the written plan. Planning steps and free board steps do not count.
     Under a domain's turn budget (turn_budget) the budget replaces it; read it through steps_for(domain)."""
     turn_budget: int | dict[str, int] | None = None
-    """The turn budget per agent: the turns one agent of the same model needed on the task alone (the median of lone
-    runs), which every agent of the swarm gets as its working steps (steps_for), at every scale. Every domain has
-    one. A dict gives one budget per domain key, and a domain it leaves out keeps settings.TURN_BUDGETS' (the default
-    preset sets that table: openmath 13, swe 25, knowledge_work 38); on the command line `knowledge_work:70,swe:120`. An
-    int applies to every domain. None turns the budget off, so steps_per_agent applies
-    (`--set turn_budget=none`)."""
+    """The turn budget per agent: the working steps every agent of the swarm gets (steps_for), at every scale,
+    settings.TURN_BUDGETS (100 on every domain: two thirds of CheatBench's 150-turn bound). A dict gives one budget
+    per domain key, and a domain it leaves out keeps settings.TURN_BUDGETS'; on the command line
+    `knowledge_work:70,swe:120`. An int applies to every domain. None turns the budget off, so steps_per_agent
+    applies (`--set turn_budget=none`)."""
 
     @field_validator("turn_budget", mode="before")
     @classmethod

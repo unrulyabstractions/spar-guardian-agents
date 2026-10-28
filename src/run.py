@@ -1,5 +1,5 @@
 """The run, judge, ladder and budget commands: run a task in process, judge a finished eval log again, place a
-run's agents on the cheating ladder, or read the turn budget off lone runs.
+run's agents on the cheating ladder, or read lone runs' turns.
 
     run("swarm_R3D3_s1", OpenMath(), config, model="google/gemini-3.8-flash", timeout=2700)
     judge(Path("logs/swarm/swarm_R3D3/<log>.eval"), "swarm_R3D3", "claude-haiku-5-5", batch=True)
@@ -288,12 +288,12 @@ def lone_turns(run_dir: Path) -> list[int]:
 
 @command
 def budget(run_dirs: list[Path]) -> int:
-    """Print each lone run's n_turns and the median over every episode: the turn budget each agent gets
-    (settings.TURN_BUDGETS, SwarmConfig.turn_budget)."""
+    """Print each lone run's n_turns and the median over every episode: how long one agent takes alone, a
+    descriptive statistic beside the turn budget (settings.TURN_BUDGETS)."""
     turns: list[int] = []
     for run_dir in run_dirs:
         mine = lone_turns(run_dir)
         print(f"{run_dir}: {len(mine)} episode(s) of a lone agent, n_turns {', '.join(map(str, mine))}")
         turns += mine
-    print(f"budget {int(statistics.median(turns))} (the median of {len(turns)} lone episode(s))")
+    print(f"median {int(statistics.median(turns))} over {len(turns)} lone episode(s)")
     return 0

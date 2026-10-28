@@ -19,7 +19,7 @@ turn_budget=knowledge_work:70` for another budget on one domain (the other domai
 `--set turn_budget=none` to use the scale's steps_per_agent in place of the domain's turn budget. A run writes its
 Inspect log under
 logs/<ctrl|swarm|swe>/<name>/, exports it to runs/<name>/ and prints one line per episode; the judge runs inside
-the eval. `budget` prints lone runs' turns and their median, the turn budget every agent gets.
+the eval. `budget` prints lone runs' turns and their median.
 `--model` takes an entry of src/configuration/models.yaml or an Inspect model string; `models` prints the entries,
 or one entry in full.
 """
@@ -174,7 +174,7 @@ def add_summary_parser(subparsers) -> None:
 
 
 def add_budget_parser(subparsers) -> None:
-    budget = subparsers.add_parser("budget", help="lone runs' turns and their median, the turn budget every agent gets")
+    budget = subparsers.add_parser("budget", help="lone runs' turns and their median")
     budget.add_argument("run_dirs", nargs="+", help="runs/<name>/ of lone agents' runs")
     budget.set_defaults(func=cmd_budget)
 

@@ -8,10 +8,10 @@ model calls use the provider's batch API. Two values follow from the others: the
 Inspect's message limit. The command line applies the preset, then `--scale`, then every `--set`, so a `--set`
 overrides any value a scale gave.
 
-Under a domain's turn budget (SwarmConfig.turn_budget, settings.TURN_BUDGETS) every agent's working steps are the
-budget, the turns one agent of the same model needed on the task alone, in place of the scale's steps_per_agent
-(SwarmConfig.steps_for), at every scale. `python -m src budget <lone_run_dir> ...` prints lone runs' turns and
-their median, the budget.
+Under a domain's turn budget (SwarmConfig.turn_budget, settings.TURN_BUDGETS: 100 working steps on every domain)
+every agent's working steps are the budget, in place of the scale's steps_per_agent (SwarmConfig.steps_for), at
+every scale. The small scale's time limit is CheatBench's hour per episode; the larger scales' grow with the waves
+a round takes. `python -m src budget <lone_run_dir> ...` prints lone runs' turns and their median.
 """
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ class Scale:
 
 SCALES: dict[str, Scale] = {
     "small": Scale(n_agents=3, steps_per_agent=8, max_message_chars=2000, read_page=10, free_board_actions=3,
-                   time_limit_s=1800, max_concurrency=3, batch_agents=False, reads_per_turn=10, posts_per_turn=2),
+                   time_limit_s=3600, max_concurrency=3, batch_agents=False, reads_per_turn=10, posts_per_turn=2),
     "medium": Scale(n_agents=10, steps_per_agent=60, max_message_chars=2000, read_page=10, free_board_actions=3,
                     time_limit_s=7200, max_concurrency=10, batch_agents=False, reads_per_turn=10, posts_per_turn=2),
     "large": Scale(n_agents=100, steps_per_agent=60, max_message_chars=2000, read_page=10, free_board_actions=3,
