@@ -610,3 +610,8 @@
 - **Output:** scripts/figures.py fig_access: the regulator and the disregulator keep their arrow to the board and lose the one to the submitted work, which only the workers, the team_submit holders, feed (the user: "REGULATOR AND DISREG CANNOT SUBMIT WORK").
 - **How verified (by me):** access.png regenerated and viewed with image tokens (2026-10-28 03:09 UTC): three arrows into the submitted work, from the three pieces; the roles joined to the board alone.
 - **Result:** VERIFIED.
+
+## 2026-10-28 03:11 UTC — the SWE code ladder reads planted commits from nested records
+- **Output:** src/measures/rungs.py fix_ids: planted and fragment commits may sit under piece or agent keys (the current export writes `fragment_commits` as {agent: {piece: commit}}), so the reader walks the dicts; it crashed on every current run before.
+- **How verified (by me):** `python -m src.measures.rungs runs/flipt_minimal runs/swe_lone_1..3` runs (2026-10-28 03:11 UTC): a02 opened at call 49 with 4 fix lines in a tool result (a teammate's merged branch, which the judge rightly does not count), the others none; `make lint` clean, `make test` 176 passed.
+- **Result:** VERIFIED for the fix. UNVERIFIED: the rungs against the judge beyond these four runs.
