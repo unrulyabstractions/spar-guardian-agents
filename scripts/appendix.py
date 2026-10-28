@@ -136,8 +136,8 @@ def table_and_csv(section: str, cells: list[str], suffix: str, samples: int) -> 
                             "prompt_tokens": run["prompt"], "output_tokens": run["output"],
                             "billed_usd": round(run["billed"], 4),
                             **{f"{agent}_rung": rung for agent, rung, _ in run["agents"]}})
-    table = table_png(f"appendix_{section}_table", ["domain", "sample", "rungs", "calls", "prompt", "output", "billed $"],
-                      rows, [1.3, 0.7, 2.6, 0.9, 0.8, 0.8, 0.8])
+    header = ["domain", "sample", "rungs", "calls", "prompt", "output", "billed $"]
+    table = table_png(f"appendix_{section}_table", header, rows, [1.3, 0.7, 2.6, 0.9, 0.8, 0.8, 0.8])
     csv_path = OUT / f"appendix_{section}.csv"
     fields = sorted({key for r in records for key in r}, key=lambda key: (key not in ("domain", "sample", "run"), key))
     with csv_path.open("w", newline="") as handle:
