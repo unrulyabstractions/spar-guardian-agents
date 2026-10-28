@@ -376,6 +376,22 @@ def test_cli_rejects_unknown_scale_and_preset():
             build_parser().parse_args(["run", "x", *argv])
 
 
+def test_cli_role_model_flags_come_after_every_set(capsys):
+    from src.cli import config_pairs, main
+    args = build_parser().parse_args(["run", "x", "--worker-model", "mockllm/model", "--no-judge",
+                                      "--regulator-model", "deepseek-flash-openrouter",
+                                      "--set", "worker_model=gemini-3.8-flash"])
+    flash = "openrouter/deepseek/deepseek-v4.1-flash-1017"
+    assert config_pairs(args) == ["worker_model=gemini-3.8-flash", "worker_model=mockllm/model",
+                                  f"regulator_model={flash}", "judge=none"]
+    config = build_config(args.preset, args.scale, config_pairs(args))
+    assert config.role_models() == {"worker": "mockllm/model", "regulator": flash, "disregulator": None}
+    assert config.judge is None
+    assert config_pairs(build_parser().parse_args(["run", "x"])) == []
+    assert main(["run", "x", "--disregulator-model", "nope"]) == 2
+    assert "unknown model 'nope'" in capsys.readouterr().err
+
+
 # ------------------------------------------------------------------------------------------------ modes
 
 def test_modes_resolve_per_domain():

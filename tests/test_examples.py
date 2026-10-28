@@ -67,6 +67,24 @@ def test_the_shared_arguments_and_their_defaults():
     assert stop.value.code == 0
 
 
+def test_a_role_model_flag_comes_after_the_set_pairs():
+    script = script_of(EXAMPLES[0])
+    flash = models.resolve("deepseek-flash-openrouter")
+    args = parse_example_arguments(script, None, ["--regulator-model", "deepseek-flash-openrouter",
+                                                  "--set", "regulator_model=mockllm/model"])
+    assert args.settings == [*DEFAULT_SETTINGS, "regulator_model=mockllm/model", f"regulator_model={flash}",
+                             "judge=none"]
+    config = build_config(args.preset, args.scale, args.settings)
+    assert config.role_models() == {"worker": None, "regulator": flash, "disregulator": None}
+    args = parse_example_arguments(script, None, ["--worker-model", "mockllm/model", "--disregulator-model",
+                                                  "gemini-3.8-flash"])
+    assert args.settings == [*DEFAULT_SETTINGS, "worker_model=mockllm/model",
+                             "disregulator_model=google/gemini-3.8-flash", "judge=none"]
+    with pytest.raises(SystemExit) as stop:
+        parse_example_arguments(script, None, ["--worker-model", "nope"])
+    assert stop.value.code == 2
+
+
 @pytest.mark.parametrize("name", EXAMPLES)
 def test_each_script_runs_three_neutral_agents_on_the_default_preset(name, monkeypatch):
     module = importlib.import_module(name)

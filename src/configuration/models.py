@@ -7,6 +7,7 @@
     usd_per_million("gpt-6-sol")             -> {"input": 2.0, "cached_input": 0.2, "output": 10.0}
     usd_per_million("gpt-6-sol", batch=True) -> {"input": 1.0, "cached_input": 0.1, "output": 5.0}
     model_args("deepseek-flash-openrouter")  -> {"provider": {"order": ["deepinfra"], "allow_fallbacks": False}}
+    check_routing("openrouter/x/y")          -> ValueError: an OpenRouter model without a `routing`
     render()                                 -> the table `python -m src models` prints
 """
 from __future__ import annotations
@@ -79,6 +80,14 @@ def model_args(name: str) -> dict:
     nothing elsewhere."""
     pin = routing(name)
     return {"provider": pin} if pin else {}
+
+
+def check_routing(model: str) -> None:
+    """Raise ValueError for an OpenRouter model whose entry pins no host. Without a routing OpenRouter sends each
+    call to a different host of the model, priced up to five times apart (2026-10-28)."""
+    if provider_of(model) == "openrouter" and routing(model) is None:
+        raise ValueError(f"{model} has no `routing` in src/configuration/models.yaml: an OpenRouter model runs only "
+                         "pinned to one host")
 
 
 def usd_per_million(name: str, batch: bool = False) -> dict | None:

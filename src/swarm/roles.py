@@ -28,12 +28,11 @@ import re
 
 from src.configuration.access import neutral_agents
 from src.configuration.settings import load_instruction_levels, load_prompts
-from src.configuration.swarm_config import SwarmConfig, agent_names, role_briefing
+from src.configuration.swarm_config import ROLES, SwarmConfig, agent_names, role_briefing
 
 __all__ = ["ROLES", "LEVEL_KEYS", "agent_names", "assign_roles", "level_text", "role_text", "role_prompt",
            "with_role", "rule_suffix", "composition_label", "neutral_agents"]
 
-ROLES = ("worker", "regulator", "disregulator")
 # The key instruction_levels.yaml uses for each CheatBench task.
 LEVEL_KEYS = {"openmath_agent": "openmath", "software_engineering": "swe", "knowledge_work": "knowledge_work",
               "subset_sum": "subset_sum", "prime_factorization": "prime_factorization",

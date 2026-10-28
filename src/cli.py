@@ -4,6 +4,7 @@
                              [--preset default]
                              [--scale small|medium|large|extra_large|gigantic] [--set key=value ...]
                              [--row R] [--issue I] [--honeypot H] [--no-grade] [--model M] [--timeout S]
+                             [--worker-model M] [--regulator-model M] [--disregulator-model M]
     python -m src judge <eval_log> <run_name> [--judge MODEL] [--sync] [--judge-errors]
     python -m src ui [start|stop] [--port P] [--no-open]
     python -m src summary <run_dir ...> [--full]
@@ -22,7 +23,8 @@ Inspect log under
 logs/<ctrl|swarm|swe>/<name>/, exports it to runs/<name>/ and prints one line per episode; the judge runs inside
 the eval. `budget` prints lone runs' turns and their median.
 `--model` takes an entry of src/configuration/models.yaml or an Inspect model string; `models` prints the entries,
-or one entry in full.
+or one entry in full. `--worker-model`, `--regulator-model` and `--disregulator-model` give a role its own model the
+same way; each sets the config's `<role>_model` after every `--set`, so the flag wins.
 """
 from __future__ import annotations
 
@@ -33,7 +35,7 @@ from pathlib import Path
 
 from src.configuration import models, settings
 from src.configuration.scales import SCALES
-from src.configuration.swarm_config import PRESETS, build_config
+from src.configuration.swarm_config import PRESETS, ROLES, build_config, role_model_pairs
 from src.measures import summary
 from src.ui import launch
 
@@ -46,12 +48,19 @@ def env_timeout() -> int:
     return int(value) if value.isdigit() else settings.MODEL_TIMEOUT_S
 
 
+def config_pairs(args: argparse.Namespace) -> list[str]:
+    """The run's key=value pairs: every --set, then the role models' flags, then judge=none under --no-judge. A wrong
+    model name is a ValueError."""
+    roles = role_model_pairs({role: getattr(args, f"{role}_model") for role in ROLES})
+    return args.settings + roles + (["judge=none"] if args.no_judge else [])
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     # run.py imports Inspect, ORBIT and CheatBench, four seconds; only run and judge pay for them.
     from src import run
     from src.benchmark.domains.openmath import OpenMath
     from src.benchmark.domains.swe import SWE
-    config = build_config(args.preset, args.scale, args.settings + (["judge=none"] if args.no_judge else []))
+    config = build_config(args.preset, args.scale, config_pairs(args))
     if args.benchmark == "openmath":
         benchmark = OpenMath(args.row or OPENMATH_ROW)
     elif args.benchmark == "swe":
@@ -143,6 +152,10 @@ def add_run_parser(subparsers) -> None:
     run.add_argument("--model", default=settings.DEFAULT_MODEL,
                      help="the agents' model: an entry of src/configuration/models.yaml (python -m src models) or an "
                           "Inspect model string")
+    for role, holders in (("worker", "the neutral workers'"), ("regulator", "the regulators'"),
+                          ("disregulator", "the disregulators'")):
+        run.add_argument(f"--{role}-model", metavar="MODEL", default=None,
+                         help=f"{holders} model, like --model, set after every --set (default: --model)")
     run.add_argument("--timeout", type=int, default=env_timeout(),
                      help="seconds one model request may take, retries included (env MODEL_TIMEOUT_S)")
     run.set_defaults(func=cmd_run)

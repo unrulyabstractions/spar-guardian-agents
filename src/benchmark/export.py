@@ -15,6 +15,10 @@ Writes
 run.json also carries the run's mode, scale and preset, and each episode and the run an `engagement` block: who
 looked at the board, read it, posted and submitted for the team (None for a run without a board).
 
+An episode's "model" is the agent's own model: its role's model when the run gave the role one, else the eval's model.
+The eval log names a role model "swarm/<model>" (src/configuration/provider.py); the export drops the prefix. A run
+that recorded role models gets run.json "role_models" ({role: Inspect string or None}) next to "model".
+
 Facts that only newer runs record are written only when the run has them, so a run of the October 2026 sweep exports
 byte for byte as before (the smoke runs of 395e9c8 recorded split_access and archive_part, which nothing reads any
 more): run.json "turn_budget" ({budget, steps_per_agent}), "access" (the access policy and what each agent held:
@@ -57,7 +61,7 @@ from src.benchmark.transcript import (
     roster,
     topology,
 )
-from src.configuration import settings
+from src.configuration import provider, settings
 from src.configuration.openmath import TEAM_IDENTITY
 from src.configuration.scales import SCALES
 from src.configuration.swarm_config import DOMAIN_KEYS, DOMAIN_MODES, PRESETS
@@ -668,13 +672,22 @@ def _write_defense(view: SampleView, run_dir: Path, defenses_cfg: list, evidence
 # --------------------------------------------------------------------------
 # one episode
 # --------------------------------------------------------------------------
+def episode_model(view: SampleView, agent: str) -> str:
+    """The agent's own model: its role's model when the run gave the role one (metadata["cheatbench"]["role_models"]),
+    else the eval's model, as an Inspect string without the swarm provider's prefix. An agent without a role is a
+    worker."""
+    cb = _cheatbench(view)
+    role = ((_swarm_facts(cb) or {}).get("roles") or {}).get(agent) or "worker"
+    return provider.inspect_string((cb.get("role_models") or {}).get(role) or view.model)
+
+
 def _base_record(view: SampleView, agent: str, episode: str, defenses_cfg: list, evidence: dict) -> dict:
     cb = _cheatbench(view)
     scores = {k: (v.value if hasattr(v, "value") else v) for k, v in (view.scores or {}).items()}
     return {
         "id": view.id, "episode": episode, "replicate": view.epoch,
         "task": cb.get("task"), "variant": cb.get("variant", ""),
-        "model": view.model, "agent": f"orbit/{agent}", "orbit_agent": agent,
+        "model": episode_model(view, agent), "agent": f"orbit/{agent}", "orbit_agent": agent,
         "orbit_roster": roster(view), "topology": topology(view),
         "control": cb.get("control", "baseline"), "monitor_model": cb.get("monitor_model"),
         "role": ((_swarm_facts(cb) or {}).get("roles") or {}).get(agent),
@@ -798,9 +811,11 @@ def run_json(view: SampleView | None, eval_path: Path, run_dir: Path, records: l
     task = first.get("task")
     topo = first.get("topology", "single")
     meta = view.metadata if view else {}
+    cb = meta.get("cheatbench") or {}
     return {
         "task": task, "task_root": str((settings.CHEATBENCH / "tasks" / (task or "unknown")).resolve()),
-        "variant": "", "run_id": run_dir.name, "model": model, "agent": "orbit",
+        "variant": "", "run_id": run_dir.name, "model": provider.inspect_string(model),
+        **({"role_models": cb["role_models"]} if "role_models" in cb else {}), "agent": "orbit",
         "source": "orbit", "topology": topo, "agents": first.get("orbit_roster", []),
         "control": first.get("control"), "monitor_model": first.get("monitor_model"),
         "defenses": (meta.get("experiment", {}).get("defenses") if view else None) or [],

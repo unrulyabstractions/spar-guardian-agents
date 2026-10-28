@@ -40,7 +40,7 @@ uv run python -m examples.prime_factorization.factor_minimal
 uv run python -m examples.protein_design.binder_minimal
 ```
 
-Every script takes `--model` (a registry entry or an Inspect model string), `--preset`, `--scale`, `--set key=value` (repeatable), `--judge` or `--no-judge` (the default is `USE_JUDGE_AS_DEFAULT` in `examples/__init__.py`, false: the run is judged later with `scripts/rejudge.py <name>`), `--name` and `--timeout`; `--help` lists them. The run lands in `runs/<name>/` like any other run, and its figures go under `out/<name>/`: every agent's steps round by round with the judge's verdict, the board's actions per round, and the judge's flags per agent. `examples/README.md` has the details. Another model or size is one argument away:
+Every script takes `--model` (a registry entry or an Inspect model string), `--preset`, `--scale`, `--set key=value` (repeatable), `--judge` or `--no-judge` (the default is `USE_JUDGE_AS_DEFAULT` in `examples/__init__.py`, false: the run is judged later with `scripts/rejudge.py <name>`), `--name` and `--timeout`; `--help` lists them. `--worker-model`, `--regulator-model` and `--disregulator-model` give a role its own model and win over `--set`. The run lands in `runs/<name>/` like any other run, and its figures go under `out/<name>/`: every agent's steps round by round with the judge's verdict, the board's actions per round, and the judge's flags per agent. `examples/README.md` has the details. Another model or size is one argument away:
 
 ```
 uv run python -m examples.swe.flipt_minimal --model gemini-3.8-flash --scale medium --set regulators=1
@@ -161,7 +161,7 @@ Some agents keep working long after their deliverable exists, up to the budget. 
 - Knowledge work reads the GDPval rows that CheatBench's `build.py` writes to `build/knowledge_work/`. The download from Hugging Face needs no token. The command is in the error a missing build raises.
 - Each interview task's `build.py` writes its rows offline, to `build/subset_sum/` and `build/prime_factorization/`. The command is in the error a missing build raises.
 - Protein design reads the rows that `uv run python -m src.benchmark.domains.protein.build` writes to `build/protein_design/` from CheatBench's generator. The build fetches 20 FASTA records from rcsb.org once. The command is in the error a missing build raises.
-- `OPENROUTER_API_KEY` for the agents' default model (deepseek-flash-openrouter, pinned to the DeepInfra host its registry entry names; an OpenRouter model never runs unpinned) and `OPENAI_API_KEY` for the judge (gpt-6-luna since 2026-10-28, which agreed with gpt-6-sol on 266 of 269 judged episodes; `--set judge=gpt-6-sol` is CheatBench's own judge, twenty times the price, kept as the reference; `--set judge=claude-haiku-5-5` the cheapest judge of another family, at 222 of 269); `GEMINI_API_KEY` for Gemini runs. Another agents' model takes `--model <entry>`; `python -m src models` lists the entries of `src/configuration/models.yaml` (DeepSeek, the models CheatBench ran, and the current models of each provider) with the key variable each route needs.
+- `OPENROUTER_API_KEY` for the agents' default model (deepseek-flash-openrouter, pinned to the DeepInfra host its registry entry names; an OpenRouter model never runs unpinned) and `OPENAI_API_KEY` for the judge (gpt-6-luna since 2026-10-28, which agreed with gpt-6-sol on 266 of 269 judged episodes; `--set judge=gpt-6-sol` is CheatBench's own judge, twenty times the price, kept as the reference; `--set judge=claude-haiku-5-5` the cheapest judge of another family, at 222 of 269); `GEMINI_API_KEY` for Gemini runs. Another agents' model takes `--model <entry>`, and a role's own model takes `--worker-model`, `--regulator-model` or `--disregulator-model` with the key its route needs; an OpenRouter role model runs pinned like the agents' model. The eval log names a role model's calls `swarm/<model>`, and `runs/<name>/episodes.jsonl` names each agent's real model. `python -m src models` lists the entries of `src/configuration/models.yaml` (DeepSeek, the models CheatBench ran, and the current models of each provider) with the key variable each route needs.
 
 ## Layout
 
@@ -192,9 +192,10 @@ scripts/                 rejudge.py (both judges on a run), regenerate.py (a run
                          figures.py and tables.py (the paper's figures and tables, as PNG under tmp/)
 tools/                   the analysis tools in their own environment (make tools-setup); see tools/README.md
 tests/                   smoke.py, smoke_swe.py, smoke_kw.py, smoke_interview.py, smoke_protein.py (mock-model scenarios),
-                         test_rules.py, test_config.py, test_access.py, test_models.py, test_examples.py, test_plots.py,
-                         test_ladder.py, test_signals.py, test_machines.py, test_interview.py, test_protein.py,
-                         test_export.py (unit tests, make test), check_runs.py (swarm runs complete and judged)
+                         test_rules.py, test_config.py, test_access.py, test_models.py, test_provider.py,
+                         test_examples.py, test_plots.py, test_ladder.py, test_signals.py, test_machines.py,
+                         test_interview.py, test_protein.py, test_export.py, test_delivery.py (unit tests, make test),
+                         check_runs.py (swarm runs complete and judged)
 build/                   staged tasks and docker contexts (gitignored)
 runs/<name>/             one run: run.json, episodes.jsonl, judge.jsonl, ladder.jsonl, trajectories/, communication/,
                          defense/, tools/<tool>/

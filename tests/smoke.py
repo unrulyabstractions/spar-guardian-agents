@@ -2,7 +2,7 @@
 
     uv run python tests/smoke.py [--only complete,message_limit,time_limit,board,defended,swarm,rules,judge,
                                             discover,team_submit,channel,split_access,split_copy,delivered,
-                                            team_delivered]
+                                            team_delivered,role_models]
 
 Every scenario starts the real sandbox (CheatBench's image plus the article mirror), drives ORBIT with Inspect's
 mockllm scripted to call tools, judges every agent with a mock judge model bound to the "judge" role, exports the log
@@ -23,7 +23,9 @@ ending the run; and that a slice one agent copies to /tmp is its own (umask 077)
 others cannot reach it. `split_copy` checks the policy of that name: the regulator's copy holds a copy of the first
 slice. `delivered` and `team_delivered` check stop_after_delivery: a lone agent's episode ends one step after its
 registration on main, and a split-layout team's one round after the round that pushed the registration to the team
-remote.
+remote. `role_models` checks a regulator on a model of its own through the swarm provider, with the end-of-episode
+probes. Its turns and its probe answers come from that model, and the eval log names its calls
+"swarm/mockllm/regulator". The export names each episode's own model without the prefix.
 """
 from __future__ import annotations
 
@@ -48,13 +50,14 @@ from core.render import render_trajectory  # noqa: E402
 from inspect_ai import eval as inspect_eval  # noqa: E402
 from inspect_ai.log import read_eval_log  # noqa: E402
 from inspect_ai.model import ModelOutput, get_model  # noqa: E402
+from inspect_ai.model._providers.mockllm import MockLLM  # noqa: E402
 from orbit.communication.runtime import current_identity  # noqa: E402
 
 from src.benchmark.domains.openmath.sandbox import TEAM_REMOTE, archive_parts  # noqa: E402
 from src.benchmark.domains.openmath.task import SPLIT_DEVIATIONS, OpenMath, build_sample, layout_of  # noqa: E402
 from src.benchmark.export import write_run  # noqa: E402
 from src.benchmark.judge import judge_spec  # noqa: E402
-from src.benchmark.transcript import ATTRIBUTION_KEY, TURN_RULES_TAG  # noqa: E402
+from src.benchmark.transcript import ATTRIBUTION_KEY, TURN_RULES_TAG, SampleView, agent_events  # noqa: E402
 from src.configuration import settings  # noqa: E402
 from src.configuration.openmath import BUILD  # noqa: E402
 from src.configuration.swarm_config import SwarmConfig, build_config  # noqa: E402
@@ -952,12 +955,71 @@ def scenario_team_delivered() -> dict:
     return {"timeline": timeline_of(sample, pusher), "delivery": run["delivery"]}
 
 
+def scenario_role_models() -> dict:
+    """regulator_model=mockllm/regulator on a three-agent board, with the end-of-episode probes. The regulator runs a
+    second mockllm through the swarm provider and answers every turn and both probe questions with its default text.
+    The workers follow their scripts on the eval's model, mockllm/model, and answer the probes with the scripted
+    texts. The eval log names the regulator's calls "swarm/mockllm/regulator" and the workers' "mockllm/model". The
+    export names each episode's own model, and run.json records role_models. A worker's team_submit in round 2 ends
+    the run."""
+    role_model = "mockllm/regulator"
+    config = small("regulators=1", f"regulator_model={role_model}", "awareness_probe=true", "seed=2")
+    roles = hidden_roles(OpenMath(), config)
+    regulator = next(a for a, r in roles.items() if r == "regulator")
+    workers = [a for a in config.names if roles[a] == "worker"]
+    own = {a: role_model if a == regulator else MODEL for a in config.names}
+    sh, _ = work_tools(config)
+    script = {a: [call(sh, {"command": f"echo {a} round {i}"}, f"{a}-{i}") for i in range(1, 9)] for a in workers}
+    script[workers[0]][1] = call("team_submit", {"answer": "done"}, "ts")
+    recorder: list[dict] = []
+    questions = settings.load_prompts()["probes"]
+    agent_outputs = scripted(script, recorder)
+
+    def outputs(messages, tools, tool_choice, cfg) -> ModelOutput:
+        last = messages[-1].text
+        if last == questions["reflection"]:
+            return text("It went fine.")
+        if last == questions["awareness"]:
+            return text(PROBE_ANSWER)
+        return agent_outputs(messages, tools, tool_choice, cfg)
+
+    log, summary, records = run_scenario("role_models", swarm_task(OpenMath(), config), outputs)
+    sample = log.samples[0]
+    assert log.status == "success" and sample.limit is None and sample.error is None, (log.status, sample.error)
+    assert_judged("role_models", sample, records)
+    cb = sample.metadata["cheatbench"]
+    assert cb["role_models"] == {"worker": None, "regulator": role_model, "disregulator": None}, cb
+    specs = {a["name"]: a.get("model") for a in sample.metadata["experiment"]["setup"]["agents"]}
+    assert specs == {a: f"swarm/{role_model}" if a == regulator else None for a in config.names}, specs
+    # the eval's scripted model never answered the regulator's turns
+    assert {r["agent"] for r in recorder} == set(workers), sorted({r["agent"] for r in recorder})
+    view = SampleView.from_eval_sample(sample, log)
+    events = {a: sorted({e.model for e in agent_events(view, a, "model")}) for a in config.names}
+    assert events == {a: [f"swarm/{role_model}" if a == regulator else MODEL] for a in config.names}, events
+    by_agent = {r["orbit_agent"]: r for r in records}
+    models = {a: r["model"] for a, r in by_agent.items()}
+    assert models == own, models
+    replies = [step["message"] for step in steps_of(load_transcript(by_agent[regulator])) if step["source"] == "agent"]
+    assert replies and set(replies) == {MockLLM.default_output}, replies
+    # each agent's probe answers come from its own model: the regulator's are the swarm model's default text
+    answers = {a: [r["probes"]["reflection"], r["probes"]["raw"]] for a, r in by_agent.items()}
+    assert answers == {a: [MockLLM.default_output] * 2 if a == regulator else ["It went fine.", PROBE_ANSWER]
+                       for a in config.names}, answers
+    run = json.loads((RUNS / "role_models" / "run.json").read_text())
+    assert run["model"] == MODEL and run["role_models"] == cb["role_models"], run.get("role_models")
+    assert run["role_models"]["regulator"] == run["config"]["regulator_model"] == role_model, run["config"]
+    assert list(run)[list(run).index("model") + 1] == "role_models", list(run)[:8]
+    return {"roles": roles, "events": events, "models": models, "regulator_replies": len(replies),
+            "probes": answers, "role_models": run["role_models"]}
+
+
 SCENARIOS = {"complete": scenario_complete, "message_limit": scenario_message_limit,
              "time_limit": scenario_time_limit, "board": scenario_board, "defended": scenario_defended,
              "swarm": scenario_swarm, "rules": scenario_rules, "judge": scenario_judge,
              "discover": scenario_discover, "team_submit": scenario_team_submit, "channel": scenario_channel,
              "split_access": scenario_split_access, "split_copy": scenario_split_copy,
-             "delivered": scenario_delivered, "team_delivered": scenario_team_delivered}
+             "delivered": scenario_delivered, "team_delivered": scenario_team_delivered,
+             "role_models": scenario_role_models}
 
 
 def run_one(name: str) -> dict:

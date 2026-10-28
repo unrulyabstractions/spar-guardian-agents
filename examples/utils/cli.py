@@ -6,10 +6,12 @@
 
 --model takes an entry of src/configuration/models.yaml or an Inspect model string and comes back resolved to the
 Inspect string (DEFAULT_MODEL); --preset and --scale name the config's base; --set key=value names a SwarmConfig
-field, repeatable, and comes back after DEFAULT_SETTINGS in args.settings; --judge and --no-judge say whether the run
-is judged as it finishes (examples.USE_JUDGE_AS_DEFAULT otherwise), and a run that is not adds `judge=none` after
-the settings, for `scripts/rejudge.py <name>` to judge later; --name is the run's name; --timeout bounds one model
-request. A wrong model, field or value is an argument error (exit 2).
+field, repeatable, and comes back after DEFAULT_SETTINGS in args.settings; --worker-model, --regulator-model and
+--disregulator-model give a role its own model, resolved like --model, and each adds `<role>_model=<Inspect string>`
+after the --set pairs, so the flag wins; --judge and --no-judge say whether the run is judged as it finishes
+(examples.USE_JUDGE_AS_DEFAULT otherwise), and a run that is not adds `judge=none` after the settings, for
+`scripts/rejudge.py <name>` to judge later; --name is the run's name; --timeout bounds one model request. A wrong
+model, field or value is an argument error (exit 2).
 """
 from __future__ import annotations
 
@@ -19,11 +21,13 @@ from pathlib import Path
 from examples import USE_JUDGE_AS_DEFAULT
 from src.configuration import models, settings
 from src.configuration.scales import SCALES
-from src.configuration.swarm_config import PRESETS, SwarmConfig
+from src.configuration.swarm_config import PRESETS, ROLES, SwarmConfig, role_model_pairs
 
 DEFAULT_MODEL = "deepseek-flash-openrouter"
 """The agents' model, as a registry entry (src/configuration/models.yaml). Every run before 2026-10-27 used
 gemini-3.8-flash."""
+
+ROLE_HOLDERS = {"worker": "the neutral workers'", "regulator": "the regulators'", "disregulator": "the disregulators'"}
 
 DEFAULT_SETTINGS = ["time_limit_s=3600", "batch_judge=false"]
 """An hour for the agents, since the small scale's 600 s would stop a SWE run before its turn budget; and a
@@ -39,6 +43,10 @@ def parse_example_arguments(script: Path, description: str | None, argv: list[st
     parser.add_argument("--model", default=DEFAULT_MODEL,
                         help=f"the agents' model: an entry of src/configuration/models.yaml (python -m src models) "
                              f"or an Inspect model string (default {DEFAULT_MODEL})")
+    for role in ROLES:
+        parser.add_argument(f"--{role}-model", metavar="MODEL", default=None,
+                            help=f"{ROLE_HOLDERS[role]} model, an entry or an Inspect model string, set after the "
+                                 "--set pairs (default: --model)")
     parser.add_argument("--preset", choices=sorted(PRESETS), default="default", help="the preset (default: default)")
     parser.add_argument("--scale", choices=list(SCALES), default="small", help="the run's size (default: small)")
     parser.add_argument("--set", dest="settings", action="append", default=[], metavar="KEY=VALUE",
@@ -61,5 +69,9 @@ def parse_example_arguments(script: Path, description: str | None, argv: list[st
         key, sep, _ = pair.partition("=")
         if not sep or key.strip() not in SwarmConfig.model_fields:
             parser.error(f"--set takes a SwarmConfig field as key=value, got {pair!r}")
-    args.settings = DEFAULT_SETTINGS + args.settings + ([] if args.judge else ["judge=none"])
+    try:
+        roles = role_model_pairs({role: getattr(args, f"{role}_model") for role in ROLES})
+    except ValueError as error:
+        parser.error(str(error))
+    args.settings = DEFAULT_SETTINGS + args.settings + roles + ([] if args.judge else ["judge=none"])
     return args

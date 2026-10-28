@@ -3,8 +3,9 @@
     task = swarm_task(OpenMath("riemann"), build_config("default", "medium", ["regulators=3"]))
     inspect eval src/tasks.py@openmath -T preset=default -T regulators=1
 
-The second form skips what `python -m src run` adds: the key checks and the Gemini 402 retry
-(src/utils/provider_retry.py).
+The second form skips what `python -m src run` adds: the key and routing checks, the role models built before the
+sandbox starts, and the Gemini 402 retry (src/utils/provider_retry.py). A role model still gets the eval's generate
+config there through the swarm model provider.
 
 What comes from where:
   * the sample, its tools, its setup solver and its graders come from the benchmark (src/benchmark/domains/openmath/,
@@ -23,10 +24,14 @@ The plan's rounds, the scheduler's turn bound and Inspect's message limit follow
 predicate (Benchmark.delivered) goes to the turn rules' setup; without the rule rules_setup gets no predicate.
 
 The run's facts go into the sample metadata: metadata["cheatbench"] gains the config dump, the control, the hidden
-roles and their composition, and the deviations from CheatBench's own runner. The mode and who holds team_submit
-follow from the config dump and the roles (SwarmConfig.resolve_mode, board.agent_tool_names).
+roles and their composition, each role's model (role_models), and the deviations from CheatBench's own runner. The
+mode and who holds team_submit follow from the config dump and the roles (SwarmConfig.resolve_mode,
+board.agent_tool_names).
 metadata["experiment"]["defenses"] holds the control's defenses plus the passive turn-rules defense, which every run
 carries.
+
+An agent whose role has a model of its own (worker_model, regulator_model, disregulator_model) runs it through the
+swarm model provider (src/configuration/provider.py); every other agent runs the eval's model.
 
 Hidden roles are used on a board of three or more agents on openmath (the October 2026 swarm), and on any board whose
 config asks for a regulator or a disregulator. Two openmath agents without roles are the plain board.
@@ -48,7 +53,7 @@ from src.benchmark.domains.protein import ProteinDesign
 from src.benchmark.domains.swe import SWE
 from src.benchmark.judge import cheatbench_judge
 from src.configuration import access as access_policy
-from src.configuration import settings
+from src.configuration import provider, settings  # importing provider registers the "swarm" model provider
 from src.configuration.openmath import TOKEN_LIMIT
 from src.configuration.swarm_config import SwarmConfig, board_system_prompt, preset
 from src.configuration.swe import GRADING_BUDGET_S
@@ -128,12 +133,22 @@ def team_tools(benchmark: Benchmark, config: SwarmConfig, tools: AgentTools,
 
 
 def agent_specs(config: SwarmConfig, tools: dict[str, list[str]], prompts: dict[str, str | None],
-                message_limit: int | None = None) -> list[AgentSpec]:
+                message_limit: int | None = None, roles: dict[str, str] | None = None) -> list[AgentSpec]:
     """One worker per name. An agent with no prompt of ours keeps AgentSpec's default system prompt. Each
-    conversation is capped at the sample's message limit (message_limit, else config.message_limit) plus ten."""
+    conversation is capped at the sample's message limit (message_limit, else config.message_limit) plus ten.
+
+    An agent whose hidden role has a model of its own (SwarmConfig.role_models) gets AgentSpec.model
+    "swarm/<Inspect string>" (src/configuration/provider.py); the others leave it None and run the eval's model.
+    roles None means every agent is a worker."""
     limit = config.message_limit if message_limit is None else message_limit
+    chosen = config.role_models()
+
+    def model_of(name: str) -> dict:
+        model = chosen[(roles or {}).get(name, "worker")]
+        return {"model": provider.role_model(model)} if model else {}
+
     return [AgentSpec(name=n, role="worker", tools=list(tools[n]), max_messages=limit + 10,
-                      submit=config.shutdown, **({"system_prompt": prompts[n]} if prompts[n] else {}))
+                      submit=config.shutdown, **model_of(n), **({"system_prompt": prompts[n]} if prompts[n] else {}))
             for n in config.names]
 
 
@@ -199,6 +214,7 @@ def record_run(task_: Task, benchmark: Benchmark, config: SwarmConfig, roles: di
         cb["control"] = config.control if config.control not in BASELINE else "baseline"
         cb["monitor_model"] = config.monitor_model if control else None
         cb["config"] = config.model_dump(mode="json")
+        cb["role_models"] = config.role_models()
         cb["access"] = {"policy": access_policy.policy_name(benchmark.applied_access(config.names, config, roles)),
                         "agents": benchmark.access_plan(config.names, config, roles)}
         cb["deviations"] = benchmark.run_deviations(config.n_agents, shutdown=config.shutdown,
@@ -244,8 +260,8 @@ def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = 
     message_limit = config.message_limit_for(domain)
     task_ = multi_agent_task(
         name=name or f"swarm_{domain}",
-        setup=SetupConfig(agents=agent_specs(config, agent_tools, prompts, message_limit), communication_edges=None,
-                          tool_kwargs=tools.tool_kwargs),
+        setup=SetupConfig(agents=agent_specs(config, agent_tools, prompts, message_limit, roles),
+                          communication_edges=None, tool_kwargs=tools.tool_kwargs),
         dataset=[sample],
         communication=communication,
         execution=board_execution(quantum=config.quantum, plan=schedule(config, names, roles, domain),

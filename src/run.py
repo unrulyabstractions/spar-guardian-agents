@@ -9,9 +9,12 @@ run's agents on the cheating ladder, or read lone runs' turns.
 A run calls inspect_ai.eval with the task from tasks.py, writes its log under logs/<kind>/<name>/, exports it to
 runs/<name>/ with src/benchmark/export.py and prints one line per episode. CheatBench's judge runs inside the eval as a
 scorer, bound to the model role "judge". With batch_judge the judge's calls use the provider's batch API, and with
-batch_agents so do the agents' calls (Inspect GenerateConfig.batch). Re-judging reads a finished log, judges every agent
-again with src/benchmark/judge.py and exports the log with the new verdicts. A refused precondition prints its reason
-to stderr, and the command returns the exit code the command line passes on.
+batch_agents so do the agents' calls (Inspect GenerateConfig.batch). A role with a model of its own (worker_model,
+regulator_model, disregulator_model) runs it through the swarm model provider (src/configuration/provider.py). The
+provider carries the agents' generate config to that model's calls. Each role model is built once before the eval, so
+a provider name Inspect does not know is refused before the sandbox starts. Re-judging reads a finished log, judges
+every agent again with src/benchmark/judge.py and exports the log with the new verdicts. A refused precondition prints
+its reason to stderr, and the command returns the exit code the command line passes on.
 """
 from __future__ import annotations
 
@@ -25,6 +28,7 @@ from pathlib import Path
 
 import inspect_ai
 from inspect_ai import Task
+from inspect_ai._util.error import PrerequisiteError
 from inspect_ai.log import read_eval_log
 from inspect_ai.model import GenerateConfig, Model, get_model
 
@@ -40,7 +44,7 @@ from src.benchmark.transcript import (
     roster,
     transcript_dict,
 )
-from src.configuration import models, settings
+from src.configuration import models, provider, settings  # importing provider registers the "swarm" model provider
 from src.configuration.swarm_config import SwarmConfig
 from src.measures import signals, summary
 from src.tasks import JUDGE_ADDENDUM, hidden_roles, swarm_task
@@ -91,9 +95,22 @@ def require_provider_key(model: str) -> None:
 def require_routing(model: str) -> None:
     """An OpenRouter model runs only with the provider routing its registry entry pins: without one OpenRouter sends
     each call to a different host of the model, priced up to five times apart (2026-10-28)."""
-    if models.provider_of(model) == "openrouter" and models.routing(model) is None:
-        raise Refusal(f"{model} has no `routing` in src/configuration/models.yaml: an OpenRouter model runs only "
-                      "pinned to one host", 1)
+    try:
+        models.check_routing(model)
+    except ValueError as error:
+        raise Refusal(str(error), 1) from error
+
+
+def require_role_model(model: str) -> None:
+    """A role model's key and routing, then its client built through the swarm provider without a call. ORBIT builds
+    the model only inside the sample, so a provider name Inspect does not know would otherwise fail after the sandbox
+    starts."""
+    require_provider_key(model)
+    require_routing(model)
+    try:
+        get_model(provider.role_model(model), memoize=False)
+    except (ValueError, PrerequisiteError) as error:
+        raise Refusal(f"role model {model}: {getattr(error, 'message', None) or error}", 1) from error
 
 
 def require_judge_key(judge_name: str, code: int) -> None:
@@ -161,6 +178,11 @@ def access_line(task) -> str:
     return f"== access {access['policy']}: {held}"
 
 
+def models_line(config: SwarmConfig) -> str:
+    """One line on each role's model; "(run model)" where the role runs the eval's model."""
+    return "== models " + " ".join(f"{role}={model or '(run model)'}" for role, model in config.role_models().items())
+
+
 @command
 def run(name: str, benchmark, config: SwarmConfig, model: str, timeout: int | None) -> int:
     """Run one task, export it to runs/<name>/ and print the summary. Returns 0, or 3 when the eval did not succeed.
@@ -173,6 +195,8 @@ def evaluate(name: str, benchmark, config: SwarmConfig, task: Task, model: str, 
     """Run a built task: inspect_ai.eval, the export to runs/<name>/, the summary and the cheating signals."""
     require_provider_key(model)
     require_routing(model)
+    for role_model in filter(None, config.role_models().values()):
+        require_role_model(role_model)
     judge_model = judge_role_model(config)
     if judge_model is not None:
         require_judge_key(config.judge, 1)
@@ -183,6 +207,9 @@ def evaluate(name: str, benchmark, config: SwarmConfig, task: Task, model: str, 
     print(f"== eval {benchmark.name} n_agents={config.n_agents} control={config.control} {judged} -> {log_dir}",
           flush=True)
     print(access_line(task), flush=True)
+    print(models_line(config), flush=True)
+    # Inspect merges the eval's generate config into the eval's model only; the role models get it from the provider
+    provider.set_agent_config(GenerateConfig(**agent_generate_config(config)))
     agents = get_model(model, memoize=False, **models.model_args(model))
     # every raw model call is kept (Inspect keeps five per model by default): OpenRouter's billed cost per call
     # lives in the raw response, and the export sums it per episode

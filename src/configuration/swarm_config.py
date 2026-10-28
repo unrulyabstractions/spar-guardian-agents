@@ -38,11 +38,12 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from src.configuration import access as access_policy
-from src.configuration import settings
+from src.configuration import models, settings
 from src.configuration.access import POLICIES, Access, Policy
 from src.configuration.scales import MESSAGE_MARGIN, MESSAGES_PER_STEP, SCALE_NAMES, SCALES
 
 LADDERS = ("rule", "regulator", "disregulator")
+ROLES = ("worker", "regulator", "disregulator")     # the hidden roles (src/swarm/roles.py)
 Mode = Literal["solo_task", "shared_task", "collaboration_needed"]
 ScaleName = Literal["small", "medium", "large", "extra_large", "gigantic"]
 MODES = typing.get_args(Mode)
@@ -370,6 +371,24 @@ class SwarmConfig(BaseModel):
     tool_output_bytes: int | None = None
     """Most bytes of one tool result the agents see (Inspect max_tool_output); None is Inspect's 16 KiB. A smaller cap
     keeps long file dumps out of the conversation, which every later turn resends."""
+    worker_model: str | None = None
+    """The neutral workers' model: a registry entry or an Inspect model string; None is the run's --model. An entry
+    is stored as its Inspect string. An agent whose role has a model of its own runs it through the swarm provider
+    (src/configuration/provider.py), with the entry's routing and the agents' generate config. A lone agent and the
+    agents of a run without roles are workers."""
+    regulator_model: str | None = None
+    """The regulators' model, like worker_model."""
+    disregulator_model: str | None = None
+    """The disregulators' model, like worker_model."""
+
+    @field_validator("worker_model", "regulator_model", "disregulator_model", mode="before")
+    @classmethod
+    def _resolve_model(cls, value):
+        """An entry becomes its Inspect string, so run.json names Inspect strings; a wrong name is a ValueError."""
+        if not isinstance(value, str):
+            return value
+        text = value.strip()
+        return None if text.lower() in NONE_TEXT else models.resolve(text)
 
     # ---------------------------------------------------------------- control and judge
     control: str = "baseline"
@@ -564,6 +583,10 @@ class SwarmConfig(BaseModel):
         """The rounds an agent of this role holds steps in. Workers hold every round."""
         return {"regulator": self.regulator_window, "disregulator": self.disregulator_window}.get(role, Window())
 
+    def role_models(self) -> dict[str, str | None]:
+        """Each role's model as an Inspect string, or None where the role runs the run's --model."""
+        return {role: getattr(self, f"{role}_model") for role in ROLES}
+
     def resolve_mode(self, domain: str) -> str:
         """The mode of a run on this domain ("openmath", "swe", or CheatBench's task name)."""
         key = domain_key(domain)
@@ -646,6 +669,12 @@ def build_config(preset_name: str, scale: str | None = None, pairs: list[str] | 
     """The CLI's order: the preset, then the scale (None keeps the preset's), then every key=value pair. The config
     records the preset's name (`preset`)."""
     return preset(preset_name).at_scale(scale).with_overrides(list(pairs or []))
+
+
+def role_model_pairs(chosen: dict[str, str | None]) -> list[str]:
+    """`<role>_model=<Inspect string>` for each role given a model, in ROLES order: the pairs the command lines' role
+    model flags add after the --set pairs. A wrong name is a ValueError."""
+    return [f"{role}_model={models.resolve(chosen[role])}" for role in ROLES if chosen.get(role)]
 
 
 # -------------------------------------------------------------------- prompt texts that depend on a setting
