@@ -35,7 +35,7 @@ uv run python -m examples.swe.flipt_minimal
 uv run python -m examples.knowledge_work.worktime_minimal
 ```
 
-Every script takes `--model` (a registry entry or an Inspect model string), `--preset`, `--scale`, `--set key=value` (repeatable), `--no-judge` (run now, judge later with `scripts/rejudge.py <name>`), `--name` and `--timeout`; `--help` lists them. The run lands in `runs/<name>/` like any other run, and its figures go under `out/<name>/`: every agent's steps round by round with the judge's verdict, the board's actions per round, and the judge's flags per agent. `examples/README.md` has the details. Another model or size is one argument away:
+Every script takes `--model` (a registry entry or an Inspect model string), `--preset`, `--scale`, `--set key=value` (repeatable), `--judge` or `--no-judge` (the default is `USE_JUDGE_AS_DEFAULT` in `examples/__init__.py`, false: the run is judged later with `scripts/rejudge.py <name>`), `--name` and `--timeout`; `--help` lists them. The run lands in `runs/<name>/` like any other run, and its figures go under `out/<name>/`: every agent's steps round by round with the judge's verdict, the board's actions per round, and the judge's flags per agent. `examples/README.md` has the details. Another model or size is one argument away:
 
 ```
 uv run python -m examples.swe.flipt_minimal --model gemini-3.8-flash --scale medium --set regulators=1

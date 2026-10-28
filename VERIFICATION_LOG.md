@@ -615,3 +615,8 @@
 - **Output:** src/measures/rungs.py fix_ids: planted and fragment commits may sit under piece or agent keys (the current export writes `fragment_commits` as {agent: {piece: commit}}), so the reader walks the dicts; it crashed on every current run before.
 - **How verified (by me):** `python -m src.measures.rungs runs/flipt_minimal runs/swe_lone_1..3` runs (2026-10-28 03:11 UTC): a02 opened at call 49 with 4 fix lines in a tool result (a teammate's merged branch, which the judge rightly does not count), the others none; `make lint` clean, `make test` 176 passed.
 - **Result:** VERIFIED for the fix. UNVERIFIED: the rungs against the judge beyond these four runs.
+
+## 2026-10-28 03:28 UTC — the examples do not judge by default (USE_JUDGE_AS_DEFAULT)
+- **Output:** `examples/__init__.py` holds `USE_JUDGE_AS_DEFAULT = False`; `examples/utils/cli.py` reads it as the default of the exclusive pair `--judge` / `--no-judge` and adds `judge=none` to the settings of a run that is not judged; examples/README.md and README.md say so.
+- **How verified (by me):** `make lint` clean, `make test` 176 passed (2026-10-28 03:28 UTC): the default arguments end with judge=none, `--judge` drops it, both flags together exit 2, every example script builds a config with judge None; `python -m examples.openmath.riemann_minimal --help` shows the pair.
+- **Result:** VERIFIED.

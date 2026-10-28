@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from examples import USE_JUDGE_AS_DEFAULT
 from examples.utils.cli import DEFAULT_MODEL, DEFAULT_SETTINGS, parse_example_arguments
 from src import run
 from src.configuration import models, settings
@@ -27,21 +28,26 @@ def test_the_shared_arguments_and_their_defaults():
     script = script_of(EXAMPLES[0])
     args = parse_example_arguments(script, "The first line.", [])
     assert args.model == models.resolve(DEFAULT_MODEL) == "openai/gpt-6-luna"
+    # no judge by default: judge=none after the settings, and USE_JUDGE_AS_DEFAULT says so
+    assert USE_JUDGE_AS_DEFAULT is False and args.judge is False
     assert (args.preset, args.scale, args.settings, args.name, args.timeout) == \
-        ("default", "small", DEFAULT_SETTINGS, script.stem, settings.MODEL_TIMEOUT_S)
+        ("default", "small", [*DEFAULT_SETTINGS, "judge=none"], script.stem, settings.MODEL_TIMEOUT_S)
     assert DEFAULT_SETTINGS == ["time_limit_s=3600", "batch_judge=false"]
-    args = parse_example_arguments(script, None, ["--model", "claude-haiku-5-5", "--scale", "medium", "--set",
-                                                  "regulators=1", "--set", "time_limit_s=900", "--name", "trial",
-                                                  "--timeout", "60"])
+    args = parse_example_arguments(script, None, ["--judge", "--model", "claude-haiku-5-5", "--scale", "medium",
+                                                  "--set", "regulators=1", "--set", "time_limit_s=900", "--name",
+                                                  "trial", "--timeout", "60"])
     assert args.model == "anthropic/claude-haiku-5-5" and (args.name, args.timeout) == ("trial", 60)
-    assert args.settings == [*DEFAULT_SETTINGS, "regulators=1", "time_limit_s=900"]
+    assert args.judge is True and args.settings == [*DEFAULT_SETTINGS, "regulators=1", "time_limit_s=900"]
     config = build_config(args.preset, args.scale, args.settings)
     assert (config.scale, config.n_agents, config.regulator_count, config.time_limit_s) == ("medium", 10, 1, 900)
     assert config.batch_judge is False and config.judge == settings.JUDGE_MODEL
-    # --no-judge: judge=none after every other setting, so the run is not judged
+    # --no-judge, the default spelled out: judge=none after every other setting, so the run is not judged
     args = parse_example_arguments(script, None, ["--no-judge", "--set", "judge=gpt-6-sol"])
     assert args.settings == [*DEFAULT_SETTINGS, "judge=gpt-6-sol", "judge=none"]
     assert build_config(args.preset, args.scale, args.settings).judge is None
+    with pytest.raises(SystemExit) as stop:
+        parse_example_arguments(script, None, ["--judge", "--no-judge"])
+    assert stop.value.code == 2
     for bad in (["--model", "nope"], ["--set", "nope=1"], ["--set", "regulators"], ["--scale", "huge"]):
         with pytest.raises(SystemExit) as stop:
             parse_example_arguments(script, None, bad)
@@ -70,6 +76,7 @@ def test_each_script_runs_three_neutral_agents_on_the_default_preset(name, monke
     assert (config.preset, config.scale, config.n_agents) == ("default", "small", 3)
     assert config.regulator_count == 0 and config.disregulator_count == 0 and config.access == "split"
     assert config.time_limit_s == 3600 and config.batch_judge is False and config.turn_budget == settings.TURN_BUDGETS
+    assert config.judge is None                                 # not judged as it finishes (USE_JUDGE_AS_DEFAULT)
     benchmark.check(config)
     held = list(benchmark.access_plan(config.names, config, None).values())
     assert all(len(items) == 1 for items in held) and len({i for items in held for i in items}) >= 2

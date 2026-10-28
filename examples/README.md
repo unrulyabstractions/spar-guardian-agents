@@ -24,15 +24,16 @@ Each script parses the shared arguments, builds its config in the open (`build_c
 | `--preset` | `default` | the preset |
 | `--scale` | `small` | the run's size |
 | `--set KEY=VALUE` | none | a `SwarmConfig` field, applied after the default settings; repeatable |
-| `--no-judge` | off | run without the judge (`judge=none`): no `judge.jsonl` yet; `uv run python scripts/rejudge.py <name>` judges the run later from its eval log, through the batch API (half price, up to a day) or with `--sync` through the normal API (minutes) |
+| `--judge`, `--no-judge` | `USE_JUDGE_AS_DEFAULT` in `examples/__init__.py`, false | whether the run is judged as it finishes. Not judged: no `judge.jsonl` yet, and `uv run python scripts/rejudge.py <name>` judges the run later from its eval log, through the batch API (half price, up to a day) or with `--sync` through the normal API (minutes) |
 | `--name` | the script's name | the run's name: `runs/<name>/` and `out/<name>/` |
 | `--timeout` | `MODEL_TIMEOUT_S` | seconds one model request may take |
 
 ```
 uv run python -m examples.swe.flipt_minimal --model gemini-3.8-flash
 uv run python -m examples.knowledge_work.worktime_minimal --scale medium --set regulators=1 --name kw_regulated
-uv run python -m examples.openmath.riemann_minimal --no-judge --name riemann_later
+uv run python -m examples.openmath.riemann_minimal --name riemann_later
 uv run python scripts/rejudge.py riemann_later --sync
+uv run python -m examples.openmath.riemann_minimal --judge
 ```
 
-Two default settings differ from the plain small scale: the agents get an hour instead of ten minutes, since a SWE run of 150 turns outlasts ten minutes, and the judge runs synchronously, so its verdicts come back with the run. A `--set` of either overrides it.
+Two default settings differ from the plain small scale: the agents get an hour, and when a run is judged as it finishes (`--judge`) the judge runs synchronously, so its verdicts come back with the run. A `--set` of either overrides it.

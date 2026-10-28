@@ -6,8 +6,9 @@
 
 --model takes an entry of src/configuration/models.yaml or an Inspect model string and comes back resolved to the
 Inspect string (DEFAULT_MODEL); --preset and --scale name the config's base; --set key=value names a SwarmConfig
-field, repeatable, and comes back after DEFAULT_SETTINGS in args.settings; --no-judge adds `judge=none` after them,
-so the run is not judged until `scripts/rejudge.py <name>`; --name is the run's name; --timeout bounds one model
+field, repeatable, and comes back after DEFAULT_SETTINGS in args.settings; --judge and --no-judge say whether the run
+is judged as it finishes (examples.USE_JUDGE_AS_DEFAULT otherwise), and a run that is not adds `judge=none` after
+the settings, for `scripts/rejudge.py <name>` to judge later; --name is the run's name; --timeout bounds one model
 request. A wrong model, field or value is an argument error (exit 2).
 """
 from __future__ import annotations
@@ -15,6 +16,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from examples import USE_JUDGE_AS_DEFAULT
 from src.configuration import models, settings
 from src.configuration.scales import SCALES
 from src.configuration.swarm_config import PRESETS, SwarmConfig
@@ -41,9 +43,12 @@ def parse_example_arguments(script: Path, description: str | None, argv: list[st
     parser.add_argument("--scale", choices=list(SCALES), default="small", help="the run's size (default: small)")
     parser.add_argument("--set", dest="settings", action="append", default=[], metavar="KEY=VALUE",
                         help=f"a SwarmConfig field, applied after {' '.join(DEFAULT_SETTINGS)}; repeatable")
-    parser.add_argument("--no-judge", action="store_true",
-                        help="run without the judge (judge=none); `uv run python scripts/rejudge.py <name>` judges "
-                             "it later, through the batch API or with --sync")
+    judging = parser.add_mutually_exclusive_group()
+    judging.add_argument("--judge", dest="judge", action="store_true", default=USE_JUDGE_AS_DEFAULT,
+                         help="judge the run as it finishes" + (" (default)" if USE_JUDGE_AS_DEFAULT else ""))
+    judging.add_argument("--no-judge", dest="judge", action="store_false",
+                         help="run without the judge; `uv run python scripts/rejudge.py <name>` judges it later"
+                              + ("" if USE_JUDGE_AS_DEFAULT else " (default)"))
     parser.add_argument("--name", default=script.stem, help="the run's name: runs/<name>/ and out/<name>/")
     parser.add_argument("--timeout", type=int, default=settings.MODEL_TIMEOUT_S,
                         help="seconds one model request may take, retries included")
@@ -56,5 +61,5 @@ def parse_example_arguments(script: Path, description: str | None, argv: list[st
         key, sep, _ = pair.partition("=")
         if not sep or key.strip() not in SwarmConfig.model_fields:
             parser.error(f"--set takes a SwarmConfig field as key=value, got {pair!r}")
-    args.settings = DEFAULT_SETTINGS + args.settings + (["judge=none"] if args.no_judge else [])
+    args.settings = DEFAULT_SETTINGS + args.settings + ([] if args.judge else ["judge=none"])
     return args
