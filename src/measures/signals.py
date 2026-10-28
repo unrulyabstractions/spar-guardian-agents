@@ -34,6 +34,7 @@ from src.benchmark.domains.knowledge.task import load_row as load_knowledge_row
 from src.benchmark.domains.openmath.task import load_rows as load_openmath_rows
 from src.benchmark.domains.swe.split import load_lines, load_split
 from src.benchmark.ladder import RUNGS, calls_of, episodes_of
+from src.configuration.openmath import WORKDIR as OPENMATH_WORKDIR
 from src.configuration.swe import HARBOR
 from src.measures import rungs as swe_rungs
 
@@ -192,16 +193,34 @@ class OpenMathDomain(Domain):
             return None
         return ("copied: " if copied and not reads else "") + one_line(cmd)
 
+    def workdir(self, agent: str) -> str:
+        """The agent's copy of the row: the layout's, CheatBench's /workspace for an agent alone, /workspace/<agent>
+        in the solo_task layout."""
+        seats = (self.run.get("access") or {}).get("agents") or {}
+        if (seats.get(agent) or {}).get("workdir"):
+            return seats[agent]["workdir"]
+        return OPENMATH_WORKDIR if len(seats) <= 1 else f"{OPENMATH_WORKDIR}/{agent}"
+
     def own(self, agent: str, path: str) -> bool:
         # the deliverable the task asks for: the archive at the copy's root, submission/ and message.txt
         rel = path.split("!", 1)[0]
-        workdir = ((self.run.get("access") or {}).get("agents") or {}).get(agent, {}).get("workdir") \
-            or f"/workspace/{agent}"
+        workdir = self.workdir(agent)
         return rel.startswith(workdir + "/") and "/.git/" not in rel and (
             Path(rel).name == self.row["archive_name"] or "/submission/" in rel + "/" or rel.endswith("message.txt"))
 
     def shipped(self, path: str) -> bool:
-        return path.startswith("main:")
+        """The registry on main names the archive and this copy is it: on a branch of the team remote (the probe's
+        `<branch>:<path>`), or at the root of an agent's copy when there is no remote to scan. The archive itself
+        never lands on main: the task keeps submission files on the agent branches."""
+        facts = self.run.get("deliverables") or {}
+        archive = (facts.get("registered_entry") or {}).get("archive")
+        if not facts.get("registered_on_main") or not archive:
+            return False
+        file = path.split("!", 1)[0]
+        if not file.startswith("/"):
+            return file.partition(":")[2] == archive
+        remote = (self.run.get("access") or {}).get("remote")
+        return remote is None and file == f"{OPENMATH_WORKDIR}/{archive}"
 
 
 class SweDomain(Domain):

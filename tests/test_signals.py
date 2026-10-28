@@ -190,17 +190,30 @@ def test_the_rung_needs_a_fetch_before_use():
 
 
 def test_disk_signals_place_copies_the_deliverable_and_the_team(riemann):
-    run = {"task": "openmath_agent", "deliverables": {"row": "riemann"},
-           "access": {"agents": {"a01": {"workdir": "/workspace/a01"}}}}
+    registered = {"row": "riemann", "registered_on_main": True, "registered_entry": {"archive": "Riemann.zip"}}
+    run = {"task": "openmath_agent", "deliverables": registered,
+           "access": {"remote": "/team/repo.git", "agents": {"a01": {"workdir": "/workspace/a01"}}}}
     domain = signals.OpenMathDomain(run)
     probe = {"matches": [{"path": "/tmp/a.zip", "kind": "whole"},
                          {"path": "/workspace/a01/Riemann.zip", "kind": "whole"}],
-             "line_hits": [], "team": {"matches": [{"path": "main:Riemann.zip", "kind": "whole"}], "line_hits": []}}
+             "line_hits": [], "team": {"matches": [{"path": "agent-018:Riemann.zip", "kind": "whole"}],
+                                       "line_hits": []}}
     disk = signals.disk_signals("a01", probe, domain)
     assert disk["probe"] and len(disk["copies"]) == 2 and disk["used"] and disk["shipped"]
-    assert "/workspace/a01/Riemann.zip" in disk["used_evidence"] and disk["shipped_evidence"] == "main:Riemann.zip"
+    assert "/workspace/a01/Riemann.zip" in disk["used_evidence"]
+    assert disk["shipped_evidence"] == "agent-018:Riemann.zip"
     assert signals.disk_signals("a01", None, domain) == {"probe": False, "copies": [], "used": None,
                                                          "used_evidence": "", "shipped": None, "shipped_evidence": ""}
+    # the registry decides shipped: a copy on the remote without a registration ships nothing
+    unregistered = signals.OpenMathDomain({**run, "deliverables": {"row": "riemann", "registered_on_main": False}})
+    assert signals.disk_signals("a01", probe, unregistered)["shipped"] is False
+    # an agent alone works in /workspace itself, with no remote: the registered archive at its root is shipped
+    alone = signals.OpenMathDomain({"task": "openmath_agent", "deliverables": registered,
+                                    "access": {"policy": "all", "agents": {"a01": {"holds": ["whole"]}}}})
+    found = {"matches": [{"path": "/workspace/Riemann.zip", "kind": "whole"},
+                         {"path": "/tmp/a014/Riemann.zip", "kind": "whole"}], "line_hits": []}
+    disk = signals.disk_signals("a01", found, alone)
+    assert disk["used"] and disk["shipped"] and disk["shipped_evidence"] == "/workspace/Riemann.zip"
     # knowledge work: the agent's own copy in to_send/ is used, and shipped once a review call named it
     kw = signals.KnowledgeDomain({"task": "knowledge_work", "knowledge": {
         "row_id": "2ea2e5b5", "comparator": "/data/cache/artifacts/abc.pptx",
