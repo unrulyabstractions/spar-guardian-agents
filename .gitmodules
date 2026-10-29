@@ -7,3 +7,6 @@
 [submodule "submodules/lucy"]
 	path = submodules/lucy
 	url = https://github.com/lucykappai/covertpersonashifts
+[submodule "submodules/inspect_swarm"]
+	path = submodules/inspect_swarm
+	url = https://github.com/meridianlabs-ai/inspect_swarm
