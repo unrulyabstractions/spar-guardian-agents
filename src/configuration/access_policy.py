@@ -3,14 +3,14 @@
     plan("split", ["a01", "a02", "a03"], roles, lambda n: [f"slice{k}" for k in range(1, n + 1)], ["whole"])
     parse("a01:B+C,a02:A,a03:")      # {"a01": ["B", "C"], "a02": ["A"], "a03": []}
 
-A domain declares its items: the slices of the complete submission's archive on openmath, the honeypot's pieces on
-SWE, the review tool and the artifact read on knowledge work, the answer key's shards on subset sum, the factors'
-shares on prime factorization, the planted designs' segments on protein design. Under `split`, the default, the
-domain's items for n
-neutral agents are dealt round robin over the neutral agents, so the whole exploit needs them all, and a regulator or
-a disregulator holds nothing. When fewer than two agents are neutral every agent holds everything. Under `all` every
-agent holds everything. An explicit map names what each agent of the roster holds; the command line writes it as
-`a01:B+C,a02:A,a03:`.
+A domain declares its items: the slices of the complete submission's archive on openmath, the honeypot's pieces on SWE,
+the review tool and the artifact read on knowledge work, the answer key's shards on subset sum, the factors' shares on
+prime factorization, the planted designs' segments on protein design. Under `split`, the default, the domain's items for
+n neutral agents are dealt round robin over the neutral agents, so the whole exploit needs them all, and a regulator or
+a disregulator holds nothing. A domain with fewer items than neutral agents (SWE's three pieces) deals them again to the
+agents beyond: with five, a04 and a05 hold the first and second pieces. When fewer than two agents are neutral every
+agent holds everything. Under `all` every agent holds everything. An explicit map names what each agent of the roster
+holds; the command line writes it as `a01:B+C,a02:A,a03:`.
 """
 from __future__ import annotations
 
@@ -57,10 +57,15 @@ def neutral_agents(names: list[str], roles: dict[str, str] | None) -> list[str]:
 
 
 def deal(items: list[str], agents: list[str]) -> dict[str, list[str]]:
-    """Round robin: item i goes to agent i mod n. Agents beyond the items hold nothing."""
+    """Round robin: item i goes to agent i mod n. When the agents outnumber the items, agent i beyond the items holds
+    item i mod k again, so every agent holds something and each item has as even a number of holders as it can."""
     dealt: dict[str, list[str]] = {a: [] for a in agents}
-    for i, item in enumerate(items if agents else []):
+    if not agents or not items:
+        return dealt
+    for i, item in enumerate(items):
         dealt[agents[i % len(agents)]].append(item)
+    for i in range(len(items), len(agents)):
+        dealt[agents[i]].append(items[i % len(items)])
     return dealt
 
 

@@ -44,7 +44,10 @@ def test_text_form_round_trips():
 
 def test_the_deal_is_round_robin_over_the_neutral_agents():
     assert access.deal(["x", "y", "z"], ["a01", "a02"]) == {"a01": ["x", "z"], "a02": ["y"]}
-    assert access.deal(["x"], THREE) == {"a01": ["x"], "a02": [], "a03": []}
+    assert access.deal(["x"], THREE) == {"a01": ["x"], "a02": ["x"], "a03": ["x"]}
+    assert access.deal(["x", "y"], THREE + ["a04", "a05"]) == {"a01": ["x"], "a02": ["y"], "a03": ["x"],
+                                                               "a04": ["y"], "a05": ["x"]}
+    assert access.deal([], THREE) == {"a01": [], "a02": [], "a03": []}
     assert access.deal(["x"], []) == {}
     roles = {"a01": "worker", "a02": "regulator", "a03": "worker"}
     assert access.neutral_agents(THREE, roles) == ["a01", "a03"] and access.neutral_agents(THREE, None) == THREE
@@ -180,6 +183,69 @@ def test_the_applied_policy_is_the_one_recorded():
     assert own.access_plan(THREE, two_roles, roles) == {a: ["whole"] for a in THREE}
     assert SWE("flipt-02e2", "jigsaw").applied_access(THREE, build_config("default", "small", ["access=all"]),
                                                      None) == "all"
+
+
+def test_swe_honeypot_pieces_under_shared_task():
+    agents = ["a01", "a02", "a03"]
+    # shared_task plants different pieces in different clones, independent of parts.
+    assert pieces_by_agent(agents, "own_piece", "shared_task") == {"a01": ["A"], "a02": ["B"], "a03": ["C"]}
+    assert pieces_by_agent(agents, "jigsaw", "shared_task") == {"a01": ["B"], "a02": ["C"], "a03": ["A"]}
+    assert pieces_by_agent(agents, "own_piece", "solo_task") == {a: ["whole"] for a in agents}
+    assert pieces_by_agent(["a01"], "own_piece", "shared_task") == {"a01": ["whole"]}
+    with pytest.raises(ValueError, match="jigsaw"):
+        pieces_by_agent(agents, "jigsaw", "solo_task")
+
+
+# Lucy's pieces B, C, A dealt over n neutral agents: piece i goes to neutral i mod n.
+JIGSAW_DEAL = {1: [["whole"]], 2: [["B", "A"], ["C"]], 3: [["B"], ["C"], ["A"]], 4: [["B"], ["C"], ["A"], ["B"]],
+               5: [["B"], ["C"], ["A"], ["B"], ["C"]], 6: [["B"], ["C"], ["A"], ["B"], ["C"], ["A"]]}
+
+
+@pytest.mark.parametrize("n", range(2, 7))
+def test_jigsaw_deals_every_piece_over_the_neutral_agents(n):
+    """Every piece is held by some neutral agent: a lone neutral holds the whole fix, neutral agents beyond three
+    hold the pieces again in deal order, and a regulator or a disregulator holds nothing."""
+    names = agent_names(n)
+    assert pieces_by_agent(names, "jigsaw") == dict(zip(names, JIGSAW_DEAL[n]))
+    for regulators, disregulators in ((1, 0), (0, 1), (1, 1)):
+        if regulators + disregulators >= n:
+            continue
+        roles = assign_roles(names, regulators, disregulators, seed=n)
+        neutral = [a for a in names if roles[a] == "worker"]
+        pieces = pieces_by_agent(names, "jigsaw", "shared_task", roles)
+        assert {a: pieces[a] for a in neutral} == dict(zip(neutral, JIGSAW_DEAL[len(neutral)])), roles
+        others = [a for a in names if roles[a] != "worker"]
+        whole = len(neutral) < 2
+        assert all(pieces[a] == (["whole"] if whole else []) for a in others), (roles, pieces)
+        held = {p for a in neutral for p in pieces[a]}
+        assert held == {"whole"} or held >= {"A", "B", "C"}, pieces
+    assert pieces_by_agent(["a01"], "jigsaw") == {"a01": ["whole"]}     # a lone agent holds the whole fix
+
+
+@pytest.mark.parametrize("n", range(2, 7))
+def test_own_piece_deals_every_piece_over_the_neutral_agents_in_shared_task(n):
+    names = agent_names(n)
+    deal = {2: [["A", "C"], ["B"]], 3: [["A"], ["B"], ["C"]]}.get(n, [[p] for p in "ABCABC"[:n]])
+    assert pieces_by_agent(names, "own_piece", "shared_task") == dict(zip(names, deal))
+    roles = assign_roles(names, 1, 0, seed=n)
+    pieces = pieces_by_agent(names, "own_piece", "shared_task", roles)
+    neutral = [a for a in names if roles[a] == "worker"]
+    assert all(pieces[a] == (["whole"] if len(neutral) < 2 else []) for a in names if roles[a] != "worker"), roles
+    assert {p for a in neutral for p in pieces[a]} in ({"whole"}, {"A", "B", "C"}), pieces
+
+
+def test_the_swe_sample_deals_jigsaw_by_role():
+    """build_swe (no Docker) passes the hidden roles to the jigsaw deal."""
+    config = build_config("default", "small", ["n_agents=5", "regulators=1", "disregulators=1"])
+    roles = hidden_roles(SWE("flipt-02e2", "jigsaw"), config)
+    swe = build_swe("flipt-02e2", "jigsaw", config.names, config, roles=roles)
+    neutral = [a for a in config.names if roles[a] == "worker"]
+    assert [swe["pieces"][a] for a in neutral] == [["B"], ["C"], ["A"]]
+    config = build_config("default", "small", ["n_agents=3", "regulators=1"])
+    roles = hidden_roles(SWE("flipt-02e2", "jigsaw"), config)
+    swe = build_swe("flipt-02e2", "jigsaw", config.names, config, roles=roles)
+    assert [swe["pieces"][a] for a in config.names if roles[a] == "worker"] == [["B", "A"], ["C"]]
+    assert all(swe["pieces"][a] == [] for a in config.names if roles[a] != "worker")
 
 
 def test_swe_pieces_follow_the_plan():

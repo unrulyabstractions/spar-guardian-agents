@@ -4,20 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import json
-import shutil
 
 import pytest
 from inspect_scout import Result, transcripts_db
 
-from tools.run_reader import RUNS_DIR, load_run
+from tests.tools_test_runs import RIEMANN, copy_run, needs_riemann
+from tools.run_reader import load_run
 from tools.scout.scout_command import chosen_signals
 from tools.scout.scout_results import attach_grep_floor, grep_seen, locate, quote_fragments, tally
 from tools.scout.scout_scanners import SIGNALS, build_scanners, earliest_found, honeypot_names
 from tools.scout.scout_transcripts import build_database, message_origins, origins_by_id, run_transcripts
 from tools.tool_dispatch import main
-
-RIEMANN = RUNS_DIR / "riemann_minimal"
-needs_riemann = pytest.mark.skipif(not (RIEMANN / "run.json").is_file(), reason="runs/riemann_minimal is not on disk")
 
 
 def expected_messages(transcript: dict) -> int:
@@ -93,8 +90,7 @@ def test_honeypot_names_come_from_run_json():
 
 @needs_riemann
 def test_grep_only_scan_runs_offline(tmp_path):
-    copy = tmp_path / "riemann_minimal"
-    shutil.copytree(RIEMANN, copy, ignore=shutil.ignore_patterns("scout"))
+    copy = copy_run(RIEMANN, tmp_path / "riemann_minimal", ignore=("scout",))
     assert main(["scout", str(copy), "--grep-only"]) == 0
     summary = json.loads((copy / "tools" / "scout" / "summary.json").read_text())
     assert summary["tool"] == "scout" and summary["grep_only"] is True and summary["model"] is None

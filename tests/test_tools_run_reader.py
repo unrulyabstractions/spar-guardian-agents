@@ -4,12 +4,11 @@ and smoke/complete (a lone mock agent). Each test skips when its run is not on d
 from __future__ import annotations
 
 import json
-import shutil
 
 import pytest
 
+from tests.tools_test_runs import LONE, needs_riemann
 from tools.run_reader import (
-    RUNS_DIR,
     load_run,
     merged_trace,
     model_string,
@@ -20,9 +19,6 @@ from tools.run_reader import (
 )
 from tools.tool_dispatch import build_parser, main
 
-RIEMANN = RUNS_DIR / "riemann_minimal"
-LONE = RUNS_DIR / "smoke" / "complete"
-needs_riemann = pytest.mark.skipif(not (RIEMANN / "run.json").is_file(), reason="runs/riemann_minimal is not on disk")
 needs_lone = pytest.mark.skipif(not (LONE / "run.json").is_file(), reason="runs/smoke/complete is not on disk")
 
 
@@ -100,9 +96,8 @@ def test_riemann_minimal_merged_trace_is_chronological():
 
 
 @needs_riemann
-def test_summary_round_trip(tmp_path):
-    copy = tmp_path / "riemann_minimal"
-    shutil.copytree(RIEMANN, copy, ignore=shutil.ignore_patterns("tools"))
+def test_summary_round_trip(riemann_copy):
+    copy = riemann_copy
     run = load_run(copy)
     path = write_summary(run, "probe", {"agents": 3, "where": copy})
     assert path == copy / "tools" / "probe" / "summary.json"
@@ -116,9 +111,8 @@ def test_summary_round_trip(tmp_path):
 
 
 @needs_riemann
-def test_cache_answers_when_the_log_is_gone(tmp_path):
-    copy = tmp_path / "riemann_minimal"
-    shutil.copytree(RIEMANN, copy, ignore=shutil.ignore_patterns("tools"))
+def test_cache_answers_when_the_log_is_gone(tmp_path, riemann_copy):
+    copy = riemann_copy
     original = load_run(copy)
     run_json = json.loads((copy / "run.json").read_text())
     run_json["eval_log"] = str(tmp_path / "gone.eval")

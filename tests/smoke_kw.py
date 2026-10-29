@@ -27,12 +27,9 @@ The row is the README's example, 2ea2e5b5 (WorkStudy.pptx, five pages).
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import json
 import re
 import sys
-import traceback
-import typing
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -41,13 +38,8 @@ for path in (ROOT, CB):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from core.agents import trajectory_from_transcript  # noqa: E402
 from core.judge import is_judgeable  # noqa: E402
-from core.render import render_trajectory  # noqa: E402
-from inspect_ai import eval as inspect_eval  # noqa: E402
-from inspect_ai.log import read_eval_log  # noqa: E402
-from inspect_ai.model import ModelOutput, get_model  # noqa: E402
-from orbit.communication.runtime import current_identity  # noqa: E402
+from inspect_ai.model import ModelOutput  # noqa: E402
 
 from src import tasks  # noqa: E402
 from src.benchmark.cheatbench_judge import judge_spec  # noqa: E402
@@ -56,42 +48,31 @@ from src.benchmark.domains.knowledge.knowledge_review_tool import REFUSED_TEXT  
 from src.benchmark.domains.knowledge.knowledge_scoring import SCORER  # noqa: E402
 from src.benchmark.domains.knowledge.knowledge_settings import ARTIFACTS as ARTIFACTS_DIR  # noqa: E402
 from src.benchmark.domains.knowledge.knowledge_task import SPLIT_DEVIATIONS  # noqa: E402
-from src.benchmark.run_export import write_run  # noqa: E402
 from src.configuration import settings  # noqa: E402
-from src.configuration.swarm_config import build_config  # noqa: E402
 from src.measures import code_ladder as signals  # noqa: E402
+from tests import smoke_common as smoke  # noqa: E402
+from tests.smoke_common import call, load_transcript, results_of, scripted, small  # noqa: E402
 
-MODEL = "mockllm/model"
-STAMP = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-LOGS = settings.LOGS / "smoke_kw" / STAMP
-RUNS = settings.RUNS / "smoke_kw" / STAMP
+LOGS, RUNS = smoke.suite_dirs("smoke_kw")
+
 ROW = "2ea2e5b5"
 ARTIFACT = "/data/cache/artifacts/WorkStudy.pptx"     # CheatBench's path; a split layout stages it under a random name
 RANDOM_ARTIFACT = re.compile(r"^/data/cache/artifacts/[0-9a-f]{16}\.pptx$")
 LOG_PATH = re.compile(r"^/data/cache/logs_[0-9a-f]{32}\.txt$")
 CANDIDATE = re.compile(r"^agent-[0-9a-f]{12}$")
 SPEC = judge_spec(KnowledgeWork.task_root, KnowledgeWork.name)
+
+
+def run_scenario(name: str, task, outputs) -> tuple:
+    return smoke.run_scenario(LOGS, RUNS, SPEC, name, task, outputs)
+
+
+def assert_judged(name: str, sample, records: list[dict]) -> None:
+    smoke.assert_judged(RUNS, SPEC, name, sample, records)
+
+
 PDF = ("python3 -c \"from reportlab.pdfgen import canvas; c = canvas.Canvas('to_send/{name}'); "
        "c.drawString(72, 720, 'Work time study by {who}'); c.save()\" && ls -la to_send")
-
-
-def _mock_value(annotation):
-    args = typing.get_args(annotation)
-    if type(None) in args:
-        return None
-    return {str: "smoke", bool: False, int: 0}[annotation]
-
-
-VERDICT = {name: _mock_value(f.annotation) for name, f in SPEC.verdict.model_fields.items()}
-VERDICT["summary"] = "smoke: mock judge"
-
-
-def call(name: str, args: dict, call_id: str) -> ModelOutput:
-    return ModelOutput.for_tool_call(MODEL, name, args, tool_call_id=call_id)
-
-
-def honest_judge(messages, tools, tool_choice, config) -> ModelOutput:
-    return ModelOutput.from_content(MODEL, json.dumps(VERDICT))
 
 
 def last_tool_text(messages) -> str:
@@ -117,67 +98,6 @@ def cat_last_log(tool: str, call_id: str):
         assert LOG_PATH.match(path), f"review returned {path!r}, not a log path"
         return call(tool, {"command": f"cat {path}"}, call_id)
     return make
-
-
-def scripted(script: dict, recorder: list | None = None):
-    """Each agent follows its own script by its count of model turns; an entry may be a function of the messages.
-    The agent is named by its team system prompt ("You are a01.") or by ORBIT's identity; a lone agent is a01."""
-    def outputs(messages, tools, _tool_choice, _config) -> ModelOutput:
-        system = next((m.text for m in messages if m.role == "system" and m.text.startswith("You are ")), "")
-        who = system.split()[2].rstrip(".,") if system else "?"
-        if who not in script and current_identity() is not None:
-            who = current_identity().agent_id
-        if who not in script and len(script) == 1:
-            who = next(iter(script))
-        assert who in script, f"cannot tell which agent is asking from {system[:60]!r}"
-        step = sum(1 for m in messages if m.role == "assistant")
-        if recorder is not None:
-            recorder.append({"agent": who, "step": step, "tools": sorted(t.name for t in tools)})
-        plan = script[who]
-        out = plan[min(step, len(plan) - 1)]
-        return out(messages) if callable(out) else out
-    return outputs
-
-
-def small(*pairs: str):
-    return build_config("default", "small", ["time_limit_s=1200", *pairs])
-
-
-def run_scenario(name: str, task, outputs) -> tuple:
-    model = get_model(MODEL, custom_outputs=outputs)
-    judge_model = get_model(MODEL, custom_outputs=honest_judge)
-    [log] = inspect_eval(task, model=model, model_roles={"judge": judge_model}, log_dir=str(LOGS / name),
-                         display="plain", log_level="warning")
-    log = read_eval_log(log.location, resolve_attachments=True)
-    write_run(Path(log.location), RUNS / name)
-    records = [json.loads(line) for line in (RUNS / name / "episodes.jsonl").read_text().splitlines()]
-    return log, records
-
-
-def load_transcript(record: dict) -> dict:
-    assert record["transcript_path"], f"{record['episode']}: no transcript"
-    transcript = json.loads(Path(record["transcript_path"]).read_text())
-    rendered = render_trajectory(trajectory_from_transcript(transcript))
-    assert rendered.strip(), "rendered transcript is empty"
-    return transcript
-
-
-def steps_of(transcript: dict) -> list[dict]:
-    return transcript["trajectory"]["steps"]
-
-
-def results_of(transcript: dict) -> list[str]:
-    return [r["content"] for s in steps_of(transcript) for r in ((s.get("observation") or {}).get("results") or [])]
-
-
-def assert_judged(name: str, sample, records: list[dict]) -> None:
-    score = sample.scores["cheatbench_judge"]
-    with_transcript = sorted(r["orbit_agent"] for r in records if r["transcript_path"])
-    assert sorted(score.metadata["verdicts"]) == with_transcript and score.value == 0.0, score
-    assert all(v["parse_ok"] for v in score.metadata["verdicts"].values()), score.metadata["verdicts"]
-    rows = [json.loads(line) for line in (RUNS / name / "judge.jsonl").read_text().splitlines()]
-    assert len(rows) == len(with_transcript) and all(r["parse_ok"] for r in rows), rows
-    assert all(set(SPEC.fields) <= set(r) for r in rows), rows[0]
 
 
 def success_log(text: str, candidate: str, submission: str, verdict: str, artifact: str = ARTIFACT) -> None:
@@ -216,7 +136,7 @@ def scenario_lone() -> dict:
     ]}
     recorder: list[dict] = []
     task = tasks.swarm_task(KnowledgeWork(ROW), small("n_agents=1", "steps_per_agent=16"))
-    log, records = run_scenario("lone", task, scripted(script, recorder))
+    log, _, records = run_scenario("lone", task, scripted(script, recorder))
     sample = log.samples[0]
     assert log.status == "success" and sample.error is None and sample.limit is None, (log.status, sample.error)
     kw = sample.metadata["cheatbench"]["knowledge"]
@@ -302,7 +222,7 @@ def scenario_split() -> dict:
                 call("submit", {"answer": "a02 done"}, "b7")],
     }
     recorder: list[dict] = []
-    log, records = run_scenario("split", task, scripted(script, recorder))
+    log, _, records = run_scenario("split", task, scripted(script, recorder))
     sample = log.samples[0]
     assert log.status == "success" and sample.error is None and sample.limit is None, (log.status, sample.error)
     kw = sample.metadata["cheatbench"]["knowledge"]
@@ -394,7 +314,7 @@ def scenario_shared() -> dict:
               for a in agents}
     script["a01"][5] = call("team_submit", {"answer": "deliverables in to_send/"}, "ts")
     recorder: list[dict] = []
-    log, records = run_scenario("shared", task, scripted(script, recorder))
+    log, _, records = run_scenario("shared", task, scripted(script, recorder))
     sample = log.samples[0]
     assert log.status == "success" and sample.error is None and sample.limit is None, (log.status, sample.error)
     kw = sample.metadata["cheatbench"]["knowledge"]
@@ -445,7 +365,7 @@ def scenario_roles() -> dict:
                          call("submit", {"answer": "regulator done"}, "r3")]
     script[neutral[0]][1] = call("team_submit", {"answer": "done"}, "ts")
     recorder: list[dict] = []
-    log, records = run_scenario("roles", task, scripted(script, recorder))
+    log, _, records = run_scenario("roles", task, scripted(script, recorder))
     sample = log.samples[0]
     assert log.status == "success" and sample.error is None and sample.limit is None, (log.status, sample.error)
     kw = sample.metadata["cheatbench"]["knowledge"]
@@ -485,24 +405,8 @@ SCENARIOS = {"lone": scenario_lone, "split": scenario_split, "shared": scenario_
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--only", default="", help="comma-separated scenario names")
-    args = ap.parse_args()
-    names = [n for n in args.only.split(",") if n] or list(SCENARIOS)
-    results, failed = {}, []
-    for name in names:
-        try:
-            results[name] = {"status": "PASS", **SCENARIOS[name]()}
-        except Exception as ex:  # noqa: BLE001 - report every scenario, then fail
-            results[name] = {"status": "FAIL", "error": f"{type(ex).__name__}: {ex}"[:3000],
-                             "traceback": traceback.format_exc()[-4000:]}
-            failed.append(name)
-        shown = {k: v for k, v in results[name].items() if k != "traceback"}
-        print(f"[{results[name]['status']}] {name}: {json.dumps(shown, default=str)[:3000]}", flush=True)
-        if results[name]["status"] == "FAIL":
-            print(results[name]["traceback"], flush=True)
-    RUNS.mkdir(parents=True, exist_ok=True)
-    (RUNS / "smoke_results.json").write_text(json.dumps(results, indent=1, default=str))
-    print("FAILED:" if failed else "ALL PASS:", failed or names)
-    return 1 if failed else 0
+    names = smoke.chosen(ap.parse_args().only, SCENARIOS)
+    return smoke.run_jobs({n: SCENARIOS[n] for n in names}, RUNS)
 
 
 if __name__ == "__main__":

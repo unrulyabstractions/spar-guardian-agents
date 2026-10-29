@@ -32,13 +32,11 @@ logs/smoke_interview/<stamp>/, a fresh directory per invocation. Each scenario r
 from __future__ import annotations
 
 import argparse
-import datetime as dt
+import functools
 import hashlib
 import json
 import re
 import sys
-import traceback
-import typing
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,14 +45,9 @@ for path in (ROOT, CB):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from core.agents import trajectory_from_transcript  # noqa: E402
 from core.judge import is_judgeable  # noqa: E402
-from core.render import render_trajectory  # noqa: E402
-from inspect_ai import eval as inspect_eval  # noqa: E402
-from inspect_ai.log import read_eval_log  # noqa: E402
-from inspect_ai.model import ModelOutput, get_model  # noqa: E402
+from inspect_ai.model import ModelOutput  # noqa: E402
 from inspect_ai.tool import ToolCall  # noqa: E402
-from orbit.communication.runtime import current_identity  # noqa: E402
 
 from src import tasks  # noqa: E402
 from src.benchmark.cheatbench_judge import judge_spec  # noqa: E402
@@ -77,41 +70,24 @@ from src.benchmark.domains.interview.interview_task import (  # noqa: E402
     SPLIT_DEVIATIONS,
 )
 from src.benchmark.domains.interview.interview_verifier_tool import tool_name  # noqa: E402
-from src.benchmark.run_export import write_run  # noqa: E402
-from src.configuration import settings  # noqa: E402
-from src.configuration.swarm_config import build_config  # noqa: E402
 from src.measures import code_ladder as signals  # noqa: E402
+from tests import smoke_common as smoke  # noqa: E402
+from tests.smoke_common import call, load_transcript, results_of, scripted, small  # noqa: E402
 
-MODEL = "mockllm/model"
-STAMP = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-LOGS = settings.LOGS / "smoke_interview" / STAMP
-RUNS = settings.RUNS / "smoke_interview" / STAMP
+LOGS, RUNS = smoke.suite_dirs("smoke_interview")
+
 BENCHMARKS = {SUBSET.task: SubsetSum, FACTOR.task: PrimeFactorization}
 RUN_KEYS = {"task", "row_id", "question", "layout", "mode", "split", "answer", "key_paths", "agents", "owner_of",
             "states", "calls", "accepted", "changed_files", "value"}
 REFUSED_BY_SCHEMA = "Found 1 validation errors parsing tool input arguments"
 
 
-def _mock_value(annotation):
-    args = typing.get_args(annotation)
-    if type(None) in args:
-        return None
-    return {str: "smoke", bool: False, int: 0}[annotation]
+def run_scenario(name: str, spec: Spec, task, outputs) -> tuple:
+    return smoke.run_scenario(LOGS, RUNS, judge_spec(spec.task_dir, spec.task), name, task, outputs)
 
 
-def honest_judge(spec: Spec):
-    """The mock judge: a verdict with every flag false, in the task's own Verdict."""
-    verdict = {name: _mock_value(f.annotation) for name, f in judge_spec(spec.task_dir, spec.task).verdict
-               .model_fields.items()}
-    verdict["summary"] = "smoke: mock judge"
-
-    def outputs(messages, tools, tool_choice, config) -> ModelOutput:
-        return ModelOutput.from_content(MODEL, json.dumps(verdict))
-    return outputs
-
-
-def call(name: str, args: dict, call_id: str) -> ModelOutput:
-    return ModelOutput.for_tool_call(MODEL, name, args, tool_call_id=call_id)
+def assert_judged(name: str, spec: Spec, sample, records: list[dict]) -> None:
+    smoke.assert_judged(RUNS, judge_spec(spec.task_dir, spec.task), name, sample, records)
 
 
 def calls(name: str, many: list[dict], call_id: str) -> ModelOutput:
@@ -170,64 +146,6 @@ def post_own_lines(spec: Spec, tid: str, call_id: str):
         assert lines, f"no key line for {tid} to post"
         return call("board_post", {"message": "\n".join(line.strip() for line in lines)}, call_id)
     return make
-
-
-def scripted(script: dict, recorder: list | None = None):
-    """Each agent follows its own script by its count of model turns; an entry may be a function of the messages.
-    The agent is named by its team system prompt ("You are a01.") or by ORBIT's identity; a lone agent is a01."""
-    def outputs(messages, tools, _tool_choice, _config) -> ModelOutput:
-        system = next((m.text for m in messages if m.role == "system" and m.text.startswith("You are ")), "")
-        who = system.split()[2].rstrip(".,") if system else "?"
-        if who not in script and current_identity() is not None:
-            who = current_identity().agent_id
-        if who not in script and len(script) == 1:
-            who = next(iter(script))
-        assert who in script, f"cannot tell which agent is asking from {system[:60]!r}"
-        step = sum(1 for m in messages if m.role == "assistant")
-        if recorder is not None:
-            recorder.append({"agent": who, "step": step, "tools": sorted(t.name for t in tools)})
-        plan = script[who]
-        out = plan[min(step, len(plan) - 1)]
-        return out(messages) if callable(out) else out
-    return outputs
-
-
-def small(*pairs: str):
-    return build_config("default", "small", ["time_limit_s=1200", *pairs])
-
-
-def run_scenario(name: str, spec: Spec, task, outputs) -> tuple:
-    model = get_model(MODEL, custom_outputs=outputs)
-    judge_model = get_model(MODEL, custom_outputs=honest_judge(spec))
-    [log] = inspect_eval(task, model=model, model_roles={"judge": judge_model}, log_dir=str(LOGS / name),
-                         display="plain", log_level="warning")
-    log = read_eval_log(log.location, resolve_attachments=True)
-    write_run(Path(log.location), RUNS / name)
-    records = [json.loads(line) for line in (RUNS / name / "episodes.jsonl").read_text().splitlines()]
-    return log, records
-
-
-def load_transcript(record: dict) -> dict:
-    assert record["transcript_path"], f"{record['episode']}: no transcript"
-    transcript = json.loads(Path(record["transcript_path"]).read_text())
-    rendered = render_trajectory(trajectory_from_transcript(transcript))
-    assert rendered.strip(), "rendered transcript is empty"
-    return transcript
-
-
-def results_of(transcript: dict) -> list[str]:
-    return [r["content"] for s in transcript["trajectory"]["steps"]
-            for r in ((s.get("observation") or {}).get("results") or [])]
-
-
-def assert_judged(name: str, spec: Spec, sample, records: list[dict]) -> None:
-    score = sample.scores["cheatbench_judge"]
-    with_transcript = sorted(r["orbit_agent"] for r in records if r["transcript_path"])
-    assert sorted(score.metadata["verdicts"]) == with_transcript and score.value == 0.0, score
-    assert all(v["parse_ok"] for v in score.metadata["verdicts"].values()), score.metadata["verdicts"]
-    rows = [json.loads(line) for line in (RUNS / name / "judge.jsonl").read_text().splitlines()]
-    assert len(rows) == len(with_transcript) and all(r["parse_ok"] for r in rows), rows
-    assert all(set(judge_spec(spec.task_dir, spec.task).fields) <= set(r) for r in rows), rows[0]
 
 
 def assert_run_json(name: str, spec: Spec, sample) -> dict:
@@ -291,7 +209,7 @@ def scenario_lone(spec: Spec) -> dict:
     ]}
     recorder: list[dict] = []
     task = tasks.swarm_task(bench, small("n_agents=1", "steps_per_agent=12"))
-    log, records = run_scenario(name, spec, task, scripted(script, recorder))
+    log, _, records = run_scenario(name, spec, task, scripted(script, recorder))
     sample = log.samples[0]
     assert log.status == "success" and sample.error is None and sample.limit is None, (log.status, sample.error)
     cb = sample.metadata["cheatbench"]
@@ -380,7 +298,7 @@ def scenario_split(spec: Spec) -> dict:
     }
     recorder: list[dict] = []
     task = tasks.swarm_task(bench, config)
-    log, records = run_scenario(name, spec, task, scripted(script, recorder))
+    log, _, records = run_scenario(name, spec, task, scripted(script, recorder))
     sample = log.samples[0]
     assert log.status == "success" and sample.error is None and sample.limit is None, (log.status, sample.error)
     cb = sample.metadata["cheatbench"]
@@ -464,7 +382,7 @@ def scenario_roles(spec: Spec) -> dict:
         regulator: [call("shell", {"command": look}, "r1"), call("submit", {"answer": "regulator done"}, "r2")],
     }
     task = tasks.swarm_task(bench, config)
-    log, records = run_scenario(name, spec, task, scripted(script))
+    log, _, records = run_scenario(name, spec, task, scripted(script))
     sample = log.samples[0]
     assert log.status == "success" and sample.error is None and sample.limit is None, (log.status, sample.error)
     cb = sample.metadata["cheatbench"]
@@ -507,7 +425,7 @@ def scenario_solo(spec: Spec) -> dict:
                 call("submit", {"answer": "a02 accepted"}, "b5")],
     }
     task = tasks.swarm_task(bench, config)
-    log, records = run_scenario(name, spec, task, scripted(script))
+    log, _, records = run_scenario(name, spec, task, scripted(script))
     sample = log.samples[0]
     assert log.status == "success" and sample.error is None and sample.limit is None, (log.status, sample.error)
     cb = sample.metadata["cheatbench"]
@@ -564,7 +482,7 @@ def scenario_delivered(spec: Spec) -> dict:
                 call("shell", {"command": "echo waiting"}, "c3"),
                 working, call("shell", {"command": "echo unreached"}, "c5")],
     }
-    log, records = run_scenario(name, spec, tasks.swarm_task(bench, config), scripted(script))
+    log, _, records = run_scenario(name, spec, tasks.swarm_task(bench, config), scripted(script))
     sample = log.samples[0]
     assert log.status == "success" and sample.error is None and sample.limit is None, (log.status, sample.error)
     assert_judged(name, spec, sample, records)
@@ -597,27 +515,10 @@ def main() -> int:
     ap.add_argument("--only", default="", help="comma-separated scenario names")
     ap.add_argument("--tasks", default="", help="comma-separated task names")
     args = ap.parse_args()
-    names = [n for n in args.only.split(",") if n] or list(SCENARIOS)
+    names = smoke.chosen(args.only, SCENARIOS)
     specs = [BENCHMARKS[t].spec for t in args.tasks.split(",") if t] or [SUBSET, FACTOR]
-    results, failed = {}, []
-    for spec in specs:
-        for name in names:
-            label = f"{spec.task}_{name}"
-            try:
-                results[label] = {"status": "PASS", "run": str(RUNS / label), **SCENARIOS[name](spec)}
-            except Exception as ex:  # noqa: BLE001 - report every scenario, then fail
-                results[label] = {"status": "FAIL", "run": str(RUNS / label),
-                                  "error": f"{type(ex).__name__}: {ex}"[:3000],
-                                  "traceback": traceback.format_exc()[-4000:]}
-                failed.append(label)
-            shown = {k: v for k, v in results[label].items() if k != "traceback"}
-            print(f"[{results[label]['status']}] {label}: {json.dumps(shown, default=str)[:3000]}", flush=True)
-            if results[label]["status"] == "FAIL":
-                print(results[label]["traceback"], flush=True)
-    RUNS.mkdir(parents=True, exist_ok=True)
-    (RUNS / "smoke_results.json").write_text(json.dumps(results, indent=1, default=str))
-    print("FAILED:" if failed else "ALL PASS:", failed or list(results))
-    return 1 if failed else 0
+    jobs = {f"{spec.task}_{n}": functools.partial(SCENARIOS[n], spec) for spec in specs for n in names}
+    return smoke.run_jobs(jobs, RUNS)
 
 
 if __name__ == "__main__":

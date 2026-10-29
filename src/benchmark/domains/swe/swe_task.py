@@ -84,7 +84,7 @@ def pieces_by_agent(agents: list[str], honeypot: str, mode: str = SHARED,
     as_released plants nothing. A lone agent and a solo_task agent hold `whole`. Otherwise the honeypot's pieces
     (honeypot_items) are dealt as `access` says. Under split, round robin over the neutral agents (roles; every agent
     without roles): two hold B and A, and C, three hold B, C and A as in Lucy's runs, and neutral agents beyond three
-    hold none; a regulator or a disregulator holds nothing."""
+    hold the pieces again in that order (a04 B, a05 C); a regulator or a disregulator holds nothing."""
     items = honeypot_items(honeypot)
     if honeypot == "as_released":
         return {a: [] for a in agents}

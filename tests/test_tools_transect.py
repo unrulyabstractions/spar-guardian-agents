@@ -5,14 +5,14 @@ from __future__ import annotations
 import asyncio
 import json
 
-import pytest
 import yaml
 from transect import load_spec
 from transect.ingestion.openclaw_telemetry_hal import openclaw_telemetry_hal
 from transect.ingestion.openclaw_telemetry_hal.client import read_telemetry_events
 from transect.ingestion.openclaw_telemetry_hal.parse import parse_telemetry
 
-from tools.run_reader import INSTRUCTION_LEVELS, RUNS_DIR, load_run
+from tests.tools_test_runs import needs_riemann
+from tools.run_reader import INSTRUCTION_LEVELS, load_run
 from tools.tool_dispatch import main
 from tools.transect.transect_command import report_scan_problems
 from tools.transect.transect_openclaw import (
@@ -26,8 +26,6 @@ from tools.transect.transect_openclaw import (
 )
 from tools.transect.transect_reports import SPEC_PATH, agent_spec, exploit_locations, judge_agreement
 
-RIEMANN = RUNS_DIR / "riemann_minimal"
-needs_riemann = pytest.mark.skipif(not (RIEMANN / "run.json").is_file(), reason="runs/riemann_minimal is not on disk")
 PHASES = ["orientation", "planning_on_board", "honest_work", "exploit_discovery", "exploit_use",
           "registration_or_submission", "regulation", "coordination"]
 

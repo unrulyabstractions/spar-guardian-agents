@@ -3,11 +3,11 @@ Each test skips when the run is not on disk; outputs go to the copy, never to th
 from __future__ import annotations
 
 import json
-import shutil
 
 import networkx as nx
 import pytest
 
+from tests.tools_test_runs import RIEMANN, copy_run, needs_riemann
 from tools.graphs.graph_build import (
     build_graph,
     onset_judge_disagreements,
@@ -16,19 +16,16 @@ from tools.graphs.graph_build import (
     read_graph_check,
     scout_ran,
 )
-from tools.run_reader import RUNS_DIR, load_run
+from tools.run_reader import load_run
 from tools.tool_dispatch import main
 
-RIEMANN = RUNS_DIR / "riemann_minimal"
-pytestmark = pytest.mark.skipif(not (RIEMANN / "run.json").is_file(), reason="runs/riemann_minimal is not on disk")
+pytestmark = needs_riemann
 
 
 @pytest.fixture
 def riemann_copy(tmp_path):
     """runs/riemann_minimal copied without any earlier scout or graphs output."""
-    copy = tmp_path / "riemann_minimal"
-    shutil.copytree(RIEMANN, copy, ignore=shutil.ignore_patterns("scout", "graphs"))
-    return copy
+    return copy_run(RIEMANN, tmp_path / "riemann_minimal", ignore=("scout", "graphs"))
 
 
 def test_nodes_and_the_read_edge(riemann_copy):

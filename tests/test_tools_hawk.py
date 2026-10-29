@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import shutil
 import sys
 
 import pytest
@@ -12,6 +11,7 @@ import tomllib
 import yaml
 from inspect_ai._util.registry import registry_lookup
 
+from tests.tools_test_runs import RIEMANN, needs_riemann
 from tools.hawk.hawk_command import run_hawk, scan_status
 from tools.hawk.hawk_scan_config import (
     GREP_NAME,
@@ -26,19 +26,8 @@ from tools.hawk.hawk_scan_config import (
     transcript_source,
     write_scan_config,
 )
-from tools.run_reader import ROOT, RUNS_DIR, load_run, read_summary
+from tools.run_reader import ROOT, load_run, read_summary
 from tools.tool_dispatch import main
-
-RIEMANN = RUNS_DIR / "riemann_minimal"
-needs_riemann = pytest.mark.skipif(not (RIEMANN / "run.json").is_file(), reason="runs/riemann_minimal is not on disk")
-
-
-@pytest.fixture
-def riemann_copy(tmp_path):
-    """A copy of riemann_minimal without its tool outputs, so the tests never touch the real run."""
-    target = tmp_path / "riemann_minimal"
-    shutil.copytree(RIEMANN, target, ignore=shutil.ignore_patterns("tools"))
-    return target
 
 
 def test_model_package_maps_providers_to_pip_packages():

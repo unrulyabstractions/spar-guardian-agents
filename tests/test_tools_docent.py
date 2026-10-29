@@ -4,18 +4,16 @@ own docent outputs untouched. Run tests skip when the run is absent."""
 from __future__ import annotations
 
 import json
-import shutil
 
 import pytest
 
+from tests.tools_test_runs import RIEMANN, copy_run, needs_riemann
 from tools.docent import docent_command as command
 from tools.docent.docent_upload import key_problem
-from tools.run_reader import RUNS_DIR, read_jsonl
+from tools.run_reader import read_jsonl
 from tools.tool_dispatch import main
 
-RIEMANN = RUNS_DIR / "riemann_minimal"
 CACHED_FILES = ("timeline.json", "board_reads.json")
-needs_riemann = pytest.mark.skipif(not (RIEMANN / "run.json").is_file(), reason="runs/riemann_minimal is not on disk")
 
 
 @pytest.fixture
@@ -30,13 +28,7 @@ def no_key(monkeypatch, tmp_path):
 @pytest.fixture
 def riemann_copy(tmp_path):
     """runs/riemann_minimal copied without its tools/ outputs, but with the cached timeline and board reads."""
-    copy = tmp_path / "riemann_minimal"
-    shutil.copytree(RIEMANN, copy, ignore=shutil.ignore_patterns("tools"))
-    (copy / "tools").mkdir()
-    for name in CACHED_FILES:
-        if (RIEMANN / "tools" / name).is_file():
-            shutil.copy2(RIEMANN / "tools" / name, copy / "tools" / name)
-    return copy
+    return copy_run(RIEMANN, tmp_path / "riemann_minimal", keep=CACHED_FILES)
 
 
 def test_key_problem_names_the_three_places():
