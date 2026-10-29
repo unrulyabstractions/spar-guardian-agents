@@ -17,19 +17,15 @@ run.json also carries the run's mode, scale and preset, and each episode and the
 looked at the board, read it, posted and submitted for the team (None for a run without a board).
 
 An episode's "model" is the agent's own model: its role's model when the run gave the role one, else the eval's model.
-The eval log names a role model "swarm/<model>" (src/configuration/swarm_model_provider.py); the export drops
-the prefix. A run
-that recorded role models gets run.json "role_models" ({role: Inspect string or None}) next to "model".
+The eval log names a role model "swarm/<model>" (src/configuration/swarm_model_provider.py) and the export drops the
+prefix. A run that recorded role models gets run.json "role_models" ({role: Inspect string or None}) next to "model".
 
-Facts that only newer runs record are written only when the run has them, so a run of the October 2026 sweep exports
-byte for byte as before (the smoke runs of 395e9c8 recorded split_access and archive_part, which nothing reads any
-more): run.json "turn_budget" ({budget, steps_per_agent}), "access" (the access policy and what each agent held:
-its items, and on openmath its honeypot branches and archive slices, on knowledge work the review tool and the
-artifact read), "knowledge" (the knowledge-work sample and its reviews), "interview" and "protein" (a machines
-domain's sample and its tool's states and calls), "delivery" (the stop-after-delivery record); the engagement keys
-oversight, oversight_targets, reads_refused and posts_refused; and an episode's "access", "review" (its grader state on
-knowledge work) and "delivery" (the round and working step at which its deliverable was first seen). An episode that
-stop_after_delivery ended has ended_by "delivered".
+Blocks written when the run has them: run.json "turn_budget" ({budget, steps_per_agent}), "access" (the access policy
+and what each agent held: its items, and on openmath its honeypot branches and archive slices, on knowledge work the
+review tool and the artifact read), "knowledge" (the knowledge-work sample and its reviews), "interview" and "protein"
+(a machines domain's sample and its tool's states and calls), "delivery" (the stop-after-delivery record); and an
+episode's "access", "review" (its grader state on knowledge work) and "delivery" (the round and working step at which
+its deliverable was first seen). An episode that stop_after_delivery ended has ended_by "delivered".
 
 Episode ids: "<sample>#<epoch>" for a single agent, "<sample>#<epoch>@<agent>" otherwise.
 Verdicts come from the `verdicts` argument (re-judging) or from the cheatbench_judge score in the log.
