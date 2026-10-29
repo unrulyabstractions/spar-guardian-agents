@@ -168,29 +168,37 @@ Some agents keep working long after their deliverable exists, up to the budget. 
 Makefile                 entry points (make help)
 src/                     the package: cli.py, run.py, tasks.py and the packages below; see src/README.md
   swarm/                 the experiment on ORBIT: the board and its tools, the regulators' agent_actions, the hidden
-                         roles, the turn rules, the controls, the end-of-episode probes
+                         roles, the turn rules (the package turn_rules/), the controls, the end-of-episode probes
   benchmark/             CheatBench as tasks: the sample, the sandbox, the graders, the judge, the export;
                          see src/benchmark/README.md
     benchmark_protocol.py  the Benchmark protocol
-    domains/openmath/    openmath_agent: openmath_task.py, openmath_sandbox.py, openmath_scoring.py, scripts/
+    agent_tools.py, staging.py, docker_images.py, sandbox_probe.py, cheatbench_task_files.py
+                         what the domains share: the agents' tools, the staging tarballs and compose files, the
+                         images, the probe, CheatBench's task files
+    domains/openmath/    openmath_agent: openmath_task.py, openmath_sandbox.py, openmath_scoring.py,
+                         openmath_settings.py, openmath_ladder.py, scripts/
     domains/swe/         the SWE issues with Lucy's honeypots: swe_task.py, swe_inputs.py, swe_sandbox.py,
-                         swe_honeypot_setup.py, swe_grader.py, scripts/
+                         swe_honeypot_setup.py, swe_grader.py, swe_settings.py, swe_fix_lines.py, swe_measures.py,
+                         swe_ladder.py, scripts/
     domains/knowledge/   knowledge_work: knowledge_task.py, knowledge_sandbox.py, knowledge_review_tool.py,
-                         knowledge_scoring.py, knowledge_settings.py, scripts/
+                         knowledge_scoring.py, knowledge_settings.py, knowledge_ladder.py, scripts/
     domains/interview/   subset_sum and prime_factorization: interview_task.py, interview_answer_keys.py,
                          interview_sealed_generator.py, interview_verifier_tool.py, interview_scoring.py,
-                         interview_settings.py
+                         interview_settings.py, interview_ladder.py
     machines/            one container per agent: the python311 image, the compose file, the staging, the host tool
     domains/protein/     protein_design: protein_task.py, protein_honeypot.py, protein_checker_tool.py,
-                         protein_scoring.py, protein_rows_build.py, protein_settings.py
+                         protein_scoring.py, protein_rows_build.py, protein_settings.py, protein_ladder.py
     eval_sample_view.py  one Inspect sample, finished or live, as the export and the judge read it
     atif_transcripts.py  one Inspect sample as one ATIF transcript per agent
     cheatbench_judge.py, judge_models.yaml  CheatBench's judge as an Inspect scorer
     run_export.py        one eval log as runs/<name>/ (export_run_blocks.py: run.json's blocks;
                          export_episodes.py: each sample's files and episode records)
-  configuration/         every setting and every model-facing text we add; see src/configuration/README.md
-  measures/, ui/, utils/ the episode summary, the board engagement funnel, the code ladder; the results browser;
-                         the Gemini 402 retry
+  configuration/         every setting and every model-facing text we add: swarm_config.py, prompt_texts.py,
+                         scales.py, access_policy.py, the model registry, the YAML texts; see src/configuration/README.md
+  measures/              the episode summary, the board engagement funnel, the code ladder (code_ladder.py over
+                         shell_commands.py and ladder_domain.py)
+  ui/                    the results browser: server.py, run_store.py, timeline_builder.py, static/app/ (ES modules)
+  utils/                 the Gemini 402 retry and the JSON file readers
 examples/                one script per task, three neutral agents at the small scale; runs go to runs/, figures to out/
 scripts/                 rejudge.py (both judges on a run), regenerate.py (a run's export, measures, figures, tools),
                          screen.py (the example cells in bulk), paper/ (the figures, tables and appendix, as PNG
