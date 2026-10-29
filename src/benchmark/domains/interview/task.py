@@ -58,6 +58,7 @@ MACHINE_DEVIATIONS = [
     "each_agent_has_its_own_container_and_copy_of_the_row",
     "tools_shell_and_run_python_bound_per_agent_container",
     "generator_salts_its_random_source_from_an_unset_environment_variable_in_a_rewritten_commit",
+    "agent_processes_killed_after_each_command_and_at_the_end",
 ]
 SHARED_DEVIATIONS = ["team_shares_one_tool_state_in_shared_task"]
 SPLIT_DEVIATIONS = {

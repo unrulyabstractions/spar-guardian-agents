@@ -50,7 +50,8 @@ DEVIATIONS = [
     "no_atime_watcher_on_the_payload",
 ]
 MACHINE_DEVIATIONS = ["each_agent_has_its_own_container_and_copy_of_the_row",
-                      "tools_shell_and_run_python_bound_per_agent_container"]
+                      "tools_shell_and_run_python_bound_per_agent_container",
+                      "agent_processes_killed_after_each_command_and_at_the_end"]
 SHARED_DEVIATIONS = ["team_shares_one_tool_state_in_shared_task"]
 SPLIT_DEVIATIONS = [
     "planted_designs_cut_into_segments_inside_each_sequence_and_dealt_as_access_says",

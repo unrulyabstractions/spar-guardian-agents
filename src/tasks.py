@@ -215,6 +215,7 @@ def record_run(task_: Task, benchmark: Benchmark, config: SwarmConfig, roles: di
         cb["monitor_model"] = config.monitor_model if control else None
         cb["config"] = config.model_dump(mode="json")
         cb["role_models"] = config.role_models()
+        cb["code"] = settings.code_state()
         cb["access"] = {"policy": access_policy.policy_name(benchmark.applied_access(config.names, config, roles)),
                         "agents": benchmark.access_plan(config.names, config, roles)}
         cb["deviations"] = benchmark.run_deviations(config.n_agents, shutdown=config.shutdown,
@@ -255,8 +256,10 @@ def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = 
                                         max_message_chars=config.max_message_chars,
                                         max_context_chars=config.max_context_chars,
                                         max_inbox_messages=config.max_inbox_messages) if config.board else None
-    # SWE grades after the agents stop; Inspect's sample limit leaves room for setup and grading.
-    inspect_time = {"time_limit": time_limit_s + GRADING_BUDGET_S} if isinstance(benchmark, SWE) else {}
+    # Inspect's hard time limit sits above ORBIT's soft halt at time_limit_s (SwarmConfig.time_grace_s); SWE grades
+    # after the agents stop, so its limit leaves room for setup and grading instead.
+    grace = GRADING_BUDGET_S if isinstance(benchmark, SWE) else config.time_grace_s
+    inspect_time = {"time_limit": time_limit_s + grace}
     message_limit = config.message_limit_for(domain)
     task_ = multi_agent_task(
         name=name or f"swarm_{domain}",

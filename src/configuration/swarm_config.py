@@ -352,6 +352,11 @@ class SwarmConfig(BaseModel):
     because the monitor's calls count too."""
     time_limit_s: int = 0
     """Seconds for the agents (ORBIT SchedulerConfig.max_time_seconds). 0 means the benchmark's own limit."""
+    time_grace_s: int = settings.HARD_TIME_GRACE_S
+    """Seconds Inspect's hard time limit sits above the scheduler's soft halt. ORBIT halts between turns once
+    time_limit_s has passed, so a step in flight finishes and its usage is logged; Inspect's limit, at time_limit_s
+    plus this, cuts only a run whose step never returns. 0 puts both at time_limit_s. SWE keeps its grading budget
+    above the halt instead (src/configuration/swe.py GRADING_BUDGET_S)."""
 
     # ---------------------------------------------------------------- model calls
     batch_agents: bool = False

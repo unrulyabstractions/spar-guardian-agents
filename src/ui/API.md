@@ -54,6 +54,15 @@ RunSummary = {
   preset: null | "default",
   preset_inferred: bool,           # true when the run recorded no preset and its name was inferred from the config's fields
   engagement: null | RunEngagement,  # null for a run without a board
+  validity: null | {agents: {<agent>: {model_calls, tool_calls, never_acted, no_tool_call, identical_tool_run, board_unused}},
+                    flags: [str], ok: bool},      # what a reader should see before trusting the run
+  ledger: null | {agents: {<agent>: {model, calls, errored, with_usage, tokens: {input, cache_read, output},
+                                     cost_usd, billed_usd, billed_calls, flags: [str]}},
+                  total: {...}, complete: bool, flags: [str]},   # list-price cost and what the provider billed; flags make the totals lower bounds
+  sandbox: null | {end: {processes: {<agent>: {alive_at_end, survivors}}, sockets: {inet, unix}, shared_files: {<dir>: {files, by_owner, agent_paths}}},
+                   reaps: {<agent>: {commands, killed, max_alive, survivors, errors}},
+                   loopback: null | {loopback: "refused", uids, allow, ipv6, refusals: {<agent>: str}}},   # src/benchmark/hygiene.py; per container on the machines domains
+  code: null | {commit, dirty, submodules: {<name>: head}},   # the code that ran
   turn_budget: null | {budget, steps_per_agent},   # the domain's turn budget; null without one
   access: null | Access,           # the access policy and what each agent held; null for runs before the field
   knowledge: null | Knowledge,     # knowledge-work runs only

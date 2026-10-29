@@ -40,6 +40,16 @@ This package runs CheatBench's tasks as Inspect tasks. Each task domain gives th
 
 Each file in `scripts/` is read when its module is imported. A file with placeholders is filled with `str.format`, so its literal braces are written doubled.
 
+## What the log records, and what it only observes
+
+The board is recorded: every post, read and status call is a tool call in the eval log, and the export keeps the posts under `communication/`. Everything else between agents is observed, not recorded. A file one agent writes and another reads shows up only in the tool calls that wrote and read it and in the probe's scan of the disk at the end (run.json `signals`); a process an agent starts could read and write between logged calls. The per-agent layouts close what they can and record the rest (`src/benchmark/hygiene.py`):
+
+- after each of an agent's `shell` or `run_python` commands every process of that agent's Linux user (or of `user` in its own container) is killed, so nothing of the agent's outlives its step; the counts are in run.json `sandbox.reaps`;
+- in the shared-container layouts (openmath, knowledge work) loopback traffic from the agent users is refused by iptables rules installed at setup, except to openmath's article mirror; the setup proves it with a listener run by root that root reaches and no agent can, and refuses the layout otherwise (the container has `NET_ADMIN` for root; the agents are unprivileged). Unix sockets are not blocked;
+- at the end of the run the deliverables scorer records, before the honeypot probe, each agent's processes (then killed) and sockets and who owns the files of the shared directories (run.json `sandbox.end`).
+
+A lone agent keeps CheatBench's layout and gets none of this. SWE's agents run as root in their own containers, which the grader never shares, so only the reap applies there through the machines layer. run.json also carries `validity` (an agent that never called a model or a tool, a run of identical tool calls, a board never touched, a team_submit in the first rounds with a token answer), `ledger` (per-agent calls, tokens, list-price cost and what the provider billed, with the flags that make the totals lower bounds) and `code` (the commit, whether the tree was dirty, every submodule's head).
+
 ## openmath
 
 We reproduce CheatBench's runner for one row of `openmath_agent`. The row is `riemann` by default.

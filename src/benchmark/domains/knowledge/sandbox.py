@@ -40,6 +40,7 @@ from inspect_ai.tool import ToolDef
 from inspect_ai.util import sandbox
 from orbit.tools import ToolContext, ToolFactory
 
+from src.benchmark import hygiene
 from src.benchmark.domains.knowledge.constants import (
     AGENT_NAME,
     AGENT_UID,
@@ -134,7 +135,8 @@ def ensure_images(*, log=print) -> dict[str, str]:
 def write_compose() -> Path:
     """One service, `default`, from cbkw:agent, without a network, running as root so the setup can stage the row."""
     service = {"image": AGENT_IMAGE, "x-local": True, "init": True, "command": ["tail", "-f", "/dev/null"],
-               "working_dir": WORKDIR, "network_mode": "none", "stop_grace_period": "1s"}
+               "working_dir": WORKDIR, "network_mode": "none", "stop_grace_period": "1s",
+               "cap_add": ["NET_ADMIN"]}          # root's loopback rules between agent users (hygiene.LOOPBACK_GUARD)
     path = BUILD / "docker" / "compose.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
     _write_atomic(path, yaml.safe_dump({"services": {"default": service}}, sort_keys=False).encode())
@@ -265,13 +267,17 @@ def _output(result) -> str:
 
 
 def team_tool_bindings(seat_map: dict[str, dict]) -> dict[str, ToolFactory]:
-    """`shell` and `run_python` as Inspect's bash and python, run as the agent's own user in its contract directory."""
+    """`shell` and `run_python` as Inspect's bash and python, run as the agent's own user in its contract directory.
+    After each command every process of that user is killed (src/benchmark/hygiene.py)."""
     def shell(ctx: ToolContext) -> ToolDef:
         seat = seat_map[ctx.agent_name]
 
         async def execute(command: str) -> str:
-            result = await sandbox().exec(["bash", "--login", "-c", command], timeout=TOOL_TIMEOUT_S,
-                                          user=seat["user"], cwd=seat["root"])
+            try:
+                result = await sandbox().exec(["bash", "--login", "-c", command], timeout=TOOL_TIMEOUT_S,
+                                              user=seat["user"], cwd=seat["root"])
+            finally:
+                await hygiene.reap_after(ctx.agent_name, seat["user"])
             return _output(result)
 
         return ToolDef(execute, name="shell", description=BASH_DESCRIPTION,
@@ -281,8 +287,11 @@ def team_tool_bindings(seat_map: dict[str, dict]) -> dict[str, ToolFactory]:
         seat = seat_map[ctx.agent_name]
 
         async def execute(code: str) -> str:
-            result = await sandbox().exec(["bash", "--login", "-c", "python3 -"], input=code, timeout=TOOL_TIMEOUT_S,
-                                          user=seat["user"], cwd=seat["root"])
+            try:
+                result = await sandbox().exec(["bash", "--login", "-c", "python3 -"], input=code,
+                                              timeout=TOOL_TIMEOUT_S, user=seat["user"], cwd=seat["root"])
+            finally:
+                await hygiene.reap_after(ctx.agent_name, seat["user"])
             return _output(result)
 
         return ToolDef(execute, name="run_python", description=PYTHON_DESCRIPTION,

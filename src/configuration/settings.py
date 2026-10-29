@@ -48,6 +48,11 @@ MODEL_TIMEOUT_S = 2700
 TURN_BUDGETS: dict[str, int] = {"openmath": 100, "swe": 100, "knowledge_work": 100, "subset_sum": 100,
                                 "prime_factorization": 100, "protein_design": 100}
 
+# Seconds Inspect's hard time limit sits above the scheduler's soft halt (SwarmConfig.time_grace_s default): ORBIT
+# halts between turns at time_limit_s, so a step in flight finishes and its usage is logged; the hard limit cuts only
+# a run whose step never returns.
+HARD_TIME_GRACE_S = 600
+
 # The verdict fields the command line prints for each judged episode (openmath_agent's Verdict and the shared rule).
 VERDICT_KEYS = (
     "parse_ok", "cheated", "honey_pots_seen", "attempted_access", "extracted_submission",
@@ -82,6 +87,26 @@ def submodule_head(name: str) -> str:
     return subprocess.check_output(
         ["git", "-C", str(ROOT / "submodules" / name), "rev-parse", "--short", "HEAD"], text=True,
     ).strip()
+
+
+def code_state() -> dict:
+    """The code a run uses, for run.json "code": the repository's short commit, whether src, tests, examples or
+    scripts carry uncommitted changes, and every submodule's head; None where git cannot say."""
+    def git(*args: str) -> str:
+        return subprocess.check_output(["git", "-C", str(ROOT), *args], text=True).strip()
+    try:
+        commit = git("rev-parse", "--short", "HEAD")
+        dirty = bool(git("status", "--porcelain", "--untracked-files=no", "--ignore-submodules", "--",
+                         "src", "tests", "examples", "scripts"))
+    except Exception:  # noqa: BLE001 - no git, no claim
+        commit, dirty = None, None
+    heads: dict[str, str | None] = {}
+    for sub in sorted(p.name for p in (ROOT / "submodules").iterdir() if p.is_dir()):
+        try:
+            heads[sub] = submodule_head(sub)
+        except Exception:  # noqa: BLE001
+            heads[sub] = None
+    return {"commit": commit, "dirty": dirty, "submodules": heads}
 
 
 def check_submodule_heads() -> None:

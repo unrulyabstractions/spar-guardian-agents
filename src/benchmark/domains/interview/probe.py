@@ -117,6 +117,7 @@ def interview_deliverables() -> Scorer:
                       "agents": {a: {"owner": owner_of[a], "calls": sum(1 for c in calls if c["agent"] == a),
                                      "state": states.get(owner_of[a])} for a in seats},
                       "probe": state.store.get("cheatbench_probe"),
+                      "sandbox": await machines.sandbox_states({a: seat["service"] for a, seat in seats.items()}),
                       "signals": await machines.probe_machines({a: seat["service"] for a, seat in seats.items()},
                                                                prints, PROBE_ROOTS, skip=KEY_DIRS,
                                                                min_hits=OPEN_MIN)},

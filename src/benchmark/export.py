@@ -43,6 +43,7 @@ import inspect_ai
 import orbit
 from inspect_ai.log import read_eval_log
 
+from src.benchmark import hygiene
 from src.benchmark.domains.openmath.task import DEVIATIONS as OPENMATH_DEVIATIONS
 from src.benchmark.domains.openmath.task import TEAM_DEVIATION
 from src.benchmark.judge import JUDGE_SCORER
@@ -50,6 +51,7 @@ from src.benchmark.transcript import (
     LIMIT_FAILURES,
     TURN_RULES_TAG,
     SampleView,
+    agent_events,
     agent_messages,
     agent_version,
     defense_counts,
@@ -61,7 +63,7 @@ from src.benchmark.transcript import (
     roster,
     topology,
 )
-from src.configuration import provider, settings
+from src.configuration import models, provider, settings
 from src.configuration.openmath import TEAM_IDENTITY
 from src.configuration.scales import SCALES
 from src.configuration.swarm_config import DOMAIN_KEYS, DOMAIN_MODES, PRESETS
@@ -294,6 +296,133 @@ def signals_block(view: SampleView) -> dict | None:
     return None
 
 
+def sandbox_block(view: SampleView) -> dict | None:
+    """What the sandbox held at the end of the run (src/benchmark/hygiene.py STATE, from the domain's deliverables
+    scorer; per container on the machines domains), the reaps after the agents' commands (hygiene.REAP_STORE:
+    {agent: {commands, killed, max_alive, survivors, errors}}) and the loopback guard's report (hygiene.GUARD_STORE).
+    None for a run that recorded none of them."""
+    end = None
+    for name in (DELIVERABLES_SCORER, KNOWLEDGE_SCORER, *MACHINE_BLOCKS.values()):
+        found = (_score_metadata(view, name) or {}).get("sandbox")
+        if found is not None:
+            end = found
+            break
+    reaps = hygiene.reaps(view.store_get)
+    guard = hygiene.guard_report(view.store_get)
+    if end is None and reaps is None and guard is None:
+        return None
+    return {"end": end, "reaps": reaps, "loopback": guard}
+
+
+IDENTICAL_RUN_FLAG = 8      # this many identical tool calls in a row flag a stuck agent
+EARLY_SUBMIT_ROUND = 3      # a team_submit this early with a short answer flags a run that never got going
+SHORT_ANSWER = 20
+
+
+def identical_tool_run(steps: list[dict]) -> int:
+    """The longest run of consecutive identical tool calls (same function and arguments) in an episode's steps."""
+    longest = run = 0
+    last = None
+    for step in steps:
+        for call in step.get("tool_calls") or []:
+            key = (call.get("function_name"), json.dumps(call.get("arguments"), sort_keys=True, default=str))
+            run = run + 1 if key == last else 1
+            last = key
+            longest = max(longest, run)
+    return longest
+
+
+def validity_record(steps: list[dict], model_calls: int, engagement: dict | None, board_tools: bool) -> dict:
+    """One agent's validity facts: its model and tool calls, whether it never acted, the longest run of identical
+    tool calls, and whether it never touched the board it was given."""
+    tool_calls = sum(len(s.get("tool_calls") or []) for s in steps)
+    board = sum((engagement or {}).get(k) or 0 for k in ("checks", "reads", "posts"))
+    return {"model_calls": model_calls, "tool_calls": tool_calls, "never_acted": model_calls == 0,
+            "no_tool_call": tool_calls == 0, "identical_tool_run": identical_tool_run(steps),
+            "board_unused": bool(board_tools) and board == 0}
+
+
+def validity_block(records: list[dict], submission: dict | None) -> dict:
+    """The run's validity: each agent's facts (validity_record) and the flags a reader should see before trusting
+    the run: an agent that never called a model or a tool, a stuck agent, a board never touched, a team_submit in
+    the first rounds with a token answer. `ok` when nothing is flagged."""
+    agents = {r["orbit_agent"]: r["validity"] for r in records if r.get("validity")}
+    flags = []
+    for agent, v in agents.items():
+        if v["never_acted"]:
+            flags.append(f"{agent}: no model call")
+        elif v["no_tool_call"]:
+            flags.append(f"{agent}: no tool call")
+        if v["identical_tool_run"] >= IDENTICAL_RUN_FLAG:
+            flags.append(f"{agent}: {v['identical_tool_run']} identical tool calls in a row")
+        if v["board_unused"]:
+            flags.append(f"{agent}: never used the board")
+    sub_round = (submission or {}).get("round")
+    if isinstance(sub_round, int) and sub_round <= EARLY_SUBMIT_ROUND \
+            and len(str((submission or {}).get("answer") or "")) < SHORT_ANSWER:
+        flags.append(f"team_submit in round {sub_round} with a {len(str(submission.get('answer') or ''))}-character "
+                     "answer")
+    return {"agents": agents, "flags": flags, "ok": not flags}
+
+
+def ledger_record(model: str, events: list, usage: dict | None) -> dict:
+    """One agent's accounting: its model calls, the errored ones and those without usage, its tokens, its cost at
+    the registry's list prices (None for a model outside the registry), what the provider billed for the calls
+    whose raw response the log kept, and the flags that make the figures lower bounds."""
+    usage = dict(usage or {})
+    calls = len(events)
+    errored = sum(1 for e in events if getattr(e, "error", None))
+    with_usage = sum(1 for e in events if getattr(getattr(e, "output", None), "usage", None))
+    price = models.usd_per_million(model)
+    cost = None
+    if price and usage:
+        cached = price.get("cached_input", price["input"])
+        cost = ((usage.get("input", 0) - usage.get("cache_read", 0)) * price["input"]
+                + usage.get("cache_read", 0) * cached + usage.get("output", 0) * price["output"]) / 1e6
+    flags = []
+    if price is None:
+        flags.append("unpriced model")
+    if errored:
+        flags.append(f"{errored} errored call(s)")
+    if calls - errored - with_usage > 0:
+        flags.append(f"{calls - errored - with_usage} call(s) without usage")
+    if usage.get("billed_calls") is not None and usage["billed_calls"] < with_usage:
+        flags.append(f"billed for {usage['billed_calls']} of {with_usage} call(s)")
+    return {"model": model, "calls": calls, "errored": errored, "with_usage": with_usage,
+            "tokens": {k: usage.get(k, 0) for k in ("input", "cache_read", "output")},
+            "cost_usd": round(cost, 6) if cost is not None else None,
+            "billed_usd": usage.get("billed_usd"), "billed_calls": usage.get("billed_calls"), "flags": flags}
+
+
+def ledger_block(records: list[dict], limit: str | None) -> dict:
+    """The run's ledger: each agent's record (ledger_record), the totals, and whether the totals are complete: no
+    agent flag, and the sample did not end on a limit, which leaves a call in flight out of the log."""
+    agents = {r["orbit_agent"]: r["ledger"] for r in records if r.get("ledger")}
+    total = {"calls": 0, "errored": 0, "tokens": {"input": 0, "cache_read": 0, "output": 0},
+             "cost_usd": 0.0, "billed_usd": 0.0, "billed_calls": 0}
+    priced = billed = True
+    for rec in agents.values():
+        total["calls"] += rec["calls"]
+        total["errored"] += rec["errored"]
+        for k in total["tokens"]:
+            total["tokens"][k] += rec["tokens"].get(k, 0)
+        if rec["cost_usd"] is None:
+            priced = False
+        else:
+            total["cost_usd"] += rec["cost_usd"]
+        if rec["billed_usd"] is None:
+            billed = False
+        else:
+            total["billed_usd"] += rec["billed_usd"]
+            total["billed_calls"] += rec["billed_calls"] or 0
+    total["cost_usd"] = round(total["cost_usd"], 6) if priced else None
+    total["billed_usd"] = round(total["billed_usd"], 6) if billed and agents else None
+    flags = [f"{agent}: {flag}" for agent, rec in agents.items() for flag in rec["flags"]]
+    if limit:
+        flags.append(f"the sample ended on its {limit} limit: a call in flight is not in the log")
+    return {"agents": agents, "total": total, "complete": not flags, "flags": flags}
+
+
 def delivery_block(view: SampleView) -> dict | None:
     """The stop-after-delivery record (src/swarm/rules.py Delivered): N ("after"), whether one deliverable counted
     for the team, each agent's first sighting {round, turn}, the team's last round, the agents of a team whose later
@@ -317,7 +446,7 @@ def newer_run_facts(view: SampleView) -> dict:
     cb = _cheatbench(view)
     facts = {"turn_budget": cb.get("turn_budget"), "access": access_block(view), "knowledge": knowledge_block(view),
              **{key: machine_block(view, key) for key in MACHINE_BLOCKS}, "signals": signals_block(view),
-             "delivery": delivery_block(view)}
+             "delivery": delivery_block(view), "sandbox": sandbox_block(view), "code": cb.get("code")}
     return {k: v for k, v in facts.items() if v is not None}
 
 
@@ -770,6 +899,7 @@ def sample_records(view: SampleView, run_dir: Path) -> list[dict]:
     probes = probes_block(view) or {}
     submission = team_submission(view)
     notices = notice_counts(view)
+    config = _cheatbench(view).get("config") or {}
     records = []
     for agent in agents:
         episode = _sample_key(view) if len(agents) == 1 else f"{_sample_key(view)}@{agent}"
@@ -785,6 +915,10 @@ def sample_records(view: SampleView, run_dir: Path) -> list[dict]:
         record["rules"] = rules_facts(rules, agent)
         record["probes"] = probes.get(agent)
         record["engagement"] = engagement_record(view, agent, steps, rules, submission, notices)
+        model_events = agent_events(view, agent, "model")
+        record["validity"] = validity_record(steps, len(model_events), record["engagement"],
+                                             bool(len(agents) > 1 and config.get("board_tools")))
+        record["ledger"] = ledger_record(record["model"], model_events, record.get("usage"))
         record.update(newer_episode_facts(view, agent))
         records.append(record)
     return records
@@ -831,6 +965,8 @@ def run_json(view: SampleView | None, eval_path: Path, run_dir: Path, records: l
         **(run_identity(view, task) if view else {"mode": None, "scale": None, "preset": None,
                                                   "preset_inferred": False}),
         "engagement": run_engagement(records, team_submission(view)) if view else None,
+        "validity": validity_block(records, team_submission(view)) if view else None,
+        "ledger": ledger_block(records, view.limit.type if view and view.limit else None) if view else None,
         **(newer_run_facts(view) if view else {}),
     }
 

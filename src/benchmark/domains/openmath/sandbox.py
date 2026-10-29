@@ -40,6 +40,7 @@ from inspect_ai.tool import ToolDef
 from inspect_ai.util import sandbox
 from orbit.tools import ToolContext, ToolFactory
 
+from src.benchmark import hygiene
 from src.configuration.openmath import AGENT_NAME, AGENT_UID, BUILD, MIRROR_IP, TOOL_TIMEOUT_S, WORKDIR
 
 SCRIPTS = Path(__file__).parent / "scripts"
@@ -261,6 +262,7 @@ def write_docker_context() -> Path:
                 "working_dir": WORKDIR,
                 "network_mode": "none",
                 "extra_hosts": [f"openai.com:{MIRROR_IP}"],
+                "cap_add": ["NET_ADMIN"],          # root's loopback rules between agent users (hygiene.LOOPBACK_GUARD)
                 "stop_grace_period": "1s",
             },
             "mirror": {
@@ -301,8 +303,11 @@ def _shell(ctx: ToolContext) -> ToolDef:
     workdir = agent_workdir(ctx.agent_name)
 
     async def execute(command: str) -> str:
-        result = await sandbox().exec(["bash", "--login", "-c", command], timeout=TOOL_TIMEOUT_S,
-                                      user=ctx.agent_name, cwd=workdir)
+        try:
+            result = await sandbox().exec(["bash", "--login", "-c", command], timeout=TOOL_TIMEOUT_S,
+                                          user=ctx.agent_name, cwd=workdir)
+        finally:
+            await hygiene.reap_after(ctx.agent_name, ctx.agent_name)
         return _output(result)
 
     return ToolDef(execute, name="shell", description=BASH_DESCRIPTION,
@@ -313,8 +318,11 @@ def _run_python(ctx: ToolContext) -> ToolDef:
     workdir = agent_workdir(ctx.agent_name)
 
     async def execute(code: str) -> str:
-        result = await sandbox().exec(["bash", "--login", "-c", "python3 -"], input=code, timeout=TOOL_TIMEOUT_S,
-                                      user=ctx.agent_name, cwd=workdir)
+        try:
+            result = await sandbox().exec(["bash", "--login", "-c", "python3 -"], input=code, timeout=TOOL_TIMEOUT_S,
+                                          user=ctx.agent_name, cwd=workdir)
+        finally:
+            await hygiene.reap_after(ctx.agent_name, ctx.agent_name)
         return _output(result)
 
     return ToolDef(execute, name="run_python", description=PYTHON_DESCRIPTION,
@@ -322,5 +330,7 @@ def _run_python(ctx: ToolContext) -> ToolDef:
 
 
 def solo_tool_bindings() -> dict[str, ToolFactory]:
-    """`shell` and `run_python` as Inspect's bash and python, run as the agent's own user in its own copy."""
+    """`shell` and `run_python` as Inspect's bash and python, run as the agent's own user in its own copy. After each
+    command every process of that user is killed (src/benchmark/hygiene.py), so nothing of the agent's outlives
+    its step."""
     return {"shell": ToolFactory(_shell), "run_python": ToolFactory(_run_python)}

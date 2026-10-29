@@ -51,6 +51,8 @@ SOLO_DEVIATIONS = [
     "each_agent_has_its_own_linux_user_home_and_copy_of_the_row_in_one_container_with_one_clock",
     "tools_shell_and_run_python_bound_per_agent_user_in_place_of_bash_and_python",
     "temporary_directories_not_listable_and_files_private_by_default",
+    "loopback_refused_between_agent_users_by_iptables_owner_rules",
+    "agent_user_processes_killed_after_each_command_and_at_the_end",
 ]
 SPLIT_DEVIATIONS = SOLO_DEVIATIONS + [
     "origin_is_a_bare_team_remote_holding_the_staged_main_and_the_rows_own_branch",

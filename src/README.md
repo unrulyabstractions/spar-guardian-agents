@@ -86,6 +86,7 @@ The judge runs inside the eval as the scorer `cheatbench_judge`, bound to the mo
 | `regulator_discloses` | false | without it a regulator's text also ends with `roles.regulator_no_disclosure`, under `board_tools` only |
 | `awareness_probe` | false | adds the `end_of_episode_probes` scorer |
 | `message_limit`, `token_limit`, `time_limit_s` | 320, 0, 0 | Inspect's message and token limits, and `SchedulerConfig.max_time_seconds`; 0 means the default; a scale sets the first and the last |
+| `time_grace_s` | 600 | seconds Inspect's hard `time_limit` sits above ORBIT's soft halt at `time_limit_s`, so a step in flight finishes and its usage is logged; 0 puts both at `time_limit_s`; SWE adds its grading budget instead |
 | `batch_agents`, `batch_judge` | false, true | `GenerateConfig(batch=True)` for the agents' model (from the scale) and for the model bound to the judge role |
 | `control`, `monitor_model` | baseline | `DefenseConfig` entries in `metadata["experiment"]["defenses"]` |
 | `judge`, `judge_addendum` | gpt-6-luna, false | the judge entry in `src/benchmark/models.yaml` (`gpt-6-sol` is the reference judge, `claude-haiku-5-5` the cheapest of another family; none: no judge), and Lucy's judge addendum appended to the schema |

@@ -65,6 +65,8 @@ TEAM_DEVIATIONS = [
     "each_agent_has_its_own_linux_user_and_home_in_one_container_with_one_clock",
     "tools_shell_and_run_python_bound_per_agent_user_in_place_of_bash_and_python",
     "reviews_of_different_agents_are_not_serialized",
+    "loopback_refused_between_agent_users_by_iptables_owner_rules",
+    "agent_user_processes_killed_after_each_command_and_at_the_end",
 ]
 SHARED_DEVIATIONS = ["team_shares_one_contract_directory_and_candidate_id_through_the_group_team"]
 SPLIT_DEVIATIONS = [

@@ -243,7 +243,8 @@ def scenario_message_limit() -> dict:
 
 def scenario_time_limit() -> dict:
     outputs = [call("bash", {"command": "echo started; sleep 120; echo finished"}, "t1")]
-    log, summary, records = run_scenario("time_limit", task_for(time_limit_s=15), outputs)
+    # time_grace_s=0: Inspect's hard limit at the soft halt, so the step in flight is cut (the default keeps a grace)
+    log, summary, records = run_scenario("time_limit", task_for(time_limit_s=15, time_grace_s=0), outputs)
     sample = log.samples[0]
     assert sample.limit is not None and sample.limit.type == "time", sample.limit
     [rec] = records

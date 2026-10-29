@@ -33,7 +33,7 @@ from inspect_ai.tool import ToolDef, ToolError, ToolParams, bash, python
 from inspect_ai.util import sandbox, store
 from orbit.tools import ToolContext, ToolFactory
 
-from src.benchmark import signals
+from src.benchmark import hygiene, signals
 
 HERE = Path(__file__).parent
 IMAGE = "cbtask:python311"
@@ -192,7 +192,10 @@ def _shell(ctx: ToolContext) -> ToolDef:
     spec = ToolDef(inner)
 
     async def execute(command: str) -> str:
-        return await inner(command=command)
+        try:
+            return await inner(command=command)
+        finally:
+            await hygiene.reap_after(ctx.agent_name, AGENT_NAME, box=sandbox(ctx.agent_name))
 
     return ToolDef(execute, name="shell", description=spec.description, parameters=spec.parameters)
 
@@ -202,13 +205,17 @@ def _run_python(ctx: ToolContext) -> ToolDef:
     spec = ToolDef(inner)
 
     async def execute(code: str) -> str:
-        return await inner(code=code)
+        try:
+            return await inner(code=code)
+        finally:
+            await hygiene.reap_after(ctx.agent_name, AGENT_NAME, box=sandbox(ctx.agent_name))
 
     return ToolDef(execute, name="run_python", description=spec.description, parameters=spec.parameters)
 
 
 def machine_tool_bindings() -> dict[str, ToolFactory]:
-    """`shell` and `run_python`: Inspect's bash and python, as `user` in the agent's own container."""
+    """`shell` and `run_python`: Inspect's bash and python, as `user` in the agent's own container. After each command
+    every process of `user` in that container is killed (src/benchmark/hygiene.py)."""
     return {"shell": ToolFactory(_shell), "run_python": ToolFactory(_run_python)}
 
 
@@ -288,6 +295,16 @@ def host_tool(name: str, description: str, parameters: ToolParams, make_call: Ca
 # --------------------------------------------------------------------------
 # the probe
 # --------------------------------------------------------------------------
+STATE_DIRS = ["/tmp", "/var/tmp", "/dev/shm", WORKDIR, f"/home/{AGENT_NAME}"]
+
+
+async def sandbox_states(services: dict[str, str]) -> dict[str, dict]:
+    """Each agent's container at the end of the run (src/benchmark/hygiene.py sandbox_state): `user`'s processes,
+    killed, its sockets, and the files of the shared directories by owner."""
+    return {agent: await hygiene.sandbox_state({agent: AGENT_UID}, STATE_DIRS, box=sandbox(service))
+            for agent, service in services.items()}
+
+
 async def probe_machines(services: dict[str, str], prints: signals.Fingerprints, roots: list[str], *,
                          skip: list[str] | None = None, slices: dict[str, str] | None = None,
                          min_hits: int = 3) -> dict:
