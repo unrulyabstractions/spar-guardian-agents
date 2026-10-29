@@ -1,6 +1,6 @@
 # src
 
-The experiment on ORBIT. It turns one benchmark from `src/benchmark/` and one `SwarmConfig` into an Inspect task, runs it, exports it and serves the results. Lucy's turn rules run on ORBIT's public API, with no patch to ORBIT. Run everything from the repository root with `uv run python -m src <command>`.
+The experiment on ORBIT. It turns one benchmark from `src/benchmark/` and one `SwarmConfig` into an Inspect task, runs it, exports it and serves the results. The turn rules run on ORBIT's public API, with no patch to ORBIT. Run everything from the repository root with `uv run python -m src <command>`.
 
 ## Layout
 
