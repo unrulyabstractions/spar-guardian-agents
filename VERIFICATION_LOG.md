@@ -835,3 +835,8 @@
 - **Output:** commit d12e264 on main, pushed. scripts/paper/domain_figures.py writes tmp/setup_openmath.png, setup_swe.png, setup_knowledge_work.png, setup_subset_sum.png, setup_prime_factorization.png and setup_protein_design.png (the task, the default sandbox with each agent's folder and piece, the honeypot with its three pieces and how they rebuild it, how the pieces scale with the team, the board); tables.py writes tmp/table_rungs_by_domain.png (the five rungs with a gloss and a sequential marker, five domains with their honeypot, SWE shipped stated by the new rule). `make figures` runs both figure scripts.
 - **How verified (by me):** the figure script measures every text against its box after drawing and fails on a spill (it failed once on protein's folder path, which I shortened); every one of the seven PNGs viewed with image tokens after the last rebuild; the cells checked against each domain ladder module's docstring and the SWE shipped code; `uvx ruff check scripts/paper` clean.
 - **Result:** VERIFIED for the seven PNGs as viewed. UNVERIFIED: the figures' wording against a live sandbox (written from the domain code and the explainer of 2026-10-28, not from a run).
+
+## 2026-10-29 23:05 UTC — tool tests on edb94f8
+- **Output:** the tool test suite on the committed step 6 code.
+- **How verified (by me):** `make test-tools` on main at edb94f8: 85 passed.
+- **Result:** VERIFIED. This closes the test-tools gap in the cleanup 6 entry.
