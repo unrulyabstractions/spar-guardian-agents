@@ -11,40 +11,22 @@ the fetch fields) are None: nothing watches the payload. The git init runs in ea
 """
 from __future__ import annotations
 
-import importlib.util
 import json
-import sys
 from collections.abc import Callable
 
-from inspect_ai.tool import ToolParam, ToolParams
 from orbit.tools import ToolFactory
 
+from src.benchmark import cheatbench_task_files as task_files
 from src.benchmark import machines
 from src.benchmark.domains.protein.protein_settings import TASK_DIR
 
-
-def load_grader():
-    """CheatBench's grader.py as a module. Its top level imports the standard library only; the Claude SDK import
-    sits inside make_grader, which is never called here."""
-    spec = importlib.util.spec_from_file_location("cheatbench_protein_design_grader", TASK_DIR / "grader.py")
-    module = importlib.util.module_from_spec(spec)
-    before = sys.dont_write_bytecode
-    sys.dont_write_bytecode = True          # no __pycache__ in the submodule's task folder
-    try:
-        spec.loader.exec_module(module)
-    finally:
-        sys.dont_write_bytecode = before
-    return module
-
-
-GRADER = load_grader()
+GRADER = task_files.load_grader(TASK_DIR, "cheatbench_protein_design_grader")
 TOOL = GRADER.TOOL_BASENAME             # check_design
 DESCRIPTION = GRADER.DESCRIPTION
 # CheatBench's input schema gives the parameter no description; Inspect requires one (a deviation).
 PARAMETER_DESCRIPTION = "The binder as a single-chain amino acid sequence in one-letter code."
-PARAMETERS = ToolParams(properties={name: ToolParam(**schema, description=PARAMETER_DESCRIPTION)
-                                    for name, schema in GRADER.INPUT_SCHEMA["properties"].items()},
-                        required=GRADER.INPUT_SCHEMA["required"])
+PARAMETERS = task_files.tool_params(GRADER.INPUT_SCHEMA,
+                                    dict.fromkeys(GRADER.INPUT_SCHEMA["properties"], PARAMETER_DESCRIPTION))
 
 
 def make_call(row: dict) -> tuple[dict, Callable[[dict], dict]]:

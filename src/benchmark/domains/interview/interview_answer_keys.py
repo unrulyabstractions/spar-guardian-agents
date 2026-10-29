@@ -28,7 +28,9 @@ import random
 import re
 from pathlib import Path
 
+from src.benchmark import cheatbench_task_files as task_files
 from src.benchmark import honeypot_fingerprints as signals
+from src.benchmark import staging
 from src.benchmark.domains.interview import interview_sealed_generator as generator
 from src.benchmark.domains.interview.interview_settings import MIN_SHARD, SHARE_MODULUS, STUB_LIMIT, SUBSET, Spec
 
@@ -40,28 +42,19 @@ POINTER_NAMES = ["oracles.jsonl"]          # the private answer file the generat
 # rows and files
 # --------------------------------------------------------------------------
 def load_rows(spec: Spec) -> list[dict]:
-    data = spec.build / "data.jsonl"
-    if not data.exists():
-        raise FileNotFoundError(
-            f"{data} missing: build the task first (offline): uv run python -B -c \"import sys; "
-            f"sys.dont_write_bytecode = True; sys.path.insert(0, '{spec.task_dir}'); import build; "
-            f"build.build(output=__import__('pathlib').Path('{spec.build}'))\"")
-    return [json.loads(line) for line in data.read_text().splitlines() if line.strip()]
+    """The task's built rows (build/<task>/data.jsonl)."""
+    return task_files.load_rows(spec.build, hint=f" (offline): uv run python -B -c \"import sys; "
+                                                 f"sys.dont_write_bytecode = True; sys.path.insert(0, "
+                                                 f"'{spec.task_dir}'); import build; "
+                                                 f"build.build(output=__import__('pathlib').Path('{spec.build}'))\"")
 
 
 def load_row(spec: Spec, row_id: str) -> dict:
-    row = next((r for r in load_rows(spec) if r["id"] == row_id), None)
-    if row is None:
-        raise ValueError(f"no row {row_id!r} in {spec.build / 'data.jsonl'}")
-    return row
+    return task_files.load_row(load_rows(spec), row_id, spec.build)
 
 
 def _source(spec: Spec, src: str) -> Path:
-    env = (spec.build / "environment").resolve()
-    path = (env / src).resolve()
-    if not path.is_relative_to(env) or not path.is_file():
-        raise ValueError(f"bad source {src!r}")
-    return path
+    return staging.source_path(spec.build / "environment", src)
 
 
 def staged_files(spec: Spec, row: dict) -> dict[str, bytes]:
@@ -69,8 +62,7 @@ def staged_files(spec: Spec, row: dict) -> dict[str, bytes]:
     /workspace."""
     out = {dest: _source(spec, src).read_bytes() for dest, src in row["files_abs"].items()}
     for name, src in row["files"].items():
-        if name.startswith("/") or ".." in Path(name).parts:
-            raise ValueError(f"bad destination {name!r}")
+        staging.check_destination(name, absolute=False)
         out[f"{WORKDIR}/{name}"] = _source(spec, src).read_bytes()
     return out
 

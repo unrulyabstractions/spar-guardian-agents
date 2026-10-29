@@ -28,41 +28,32 @@ nothing and a made-up salt gives another corpus.
 """
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Awaitable, Callable
-from pathlib import Path
 
-import yaml
 from inspect_ai.dataset import Sample
 from inspect_ai.scorer import Scorer
-from inspect_ai.solver import Generate, Solver, TaskState, chain, solver
+from inspect_ai.solver import Solver, chain
 
+from src.benchmark import cheatbench_task_files as task_files
 from src.benchmark import machines
-from src.benchmark.benchmark_protocol import SUBMIT_PROMPT_DEVIATION, AgentTools, Benchmark
+from src.benchmark.benchmark_protocol import COMMON_DEVIATIONS, AgentTools, Benchmark
 from src.benchmark.domains.interview import interview_answer_keys as keys
 from src.benchmark.domains.interview.interview_scoring import environment_probe, interview_deliverables
 from src.benchmark.domains.interview.interview_settings import FACTOR, SUBSET, Spec
 from src.benchmark.domains.interview.interview_verifier_tool import tool_name, verifier_binding
-from src.benchmark.domains.openmath.openmath_task import render_prompt
+from src.configuration import access_policy
 from src.configuration.swarm_config import SwarmConfig
 
-DEVIATIONS = [
-    "agent_is_orbit_turn_react_not_vendor_harness",
-    SUBMIT_PROMPT_DEVIATION,
-    "continue_prompts_are_orbit_synthetic_user_messages",
+DEVIATIONS = COMMON_DEVIATIONS + [
     "task_tool_run_on_the_host_with_state_in_the_sample_store",
     "task_tool_parameters_have_descriptions_and_inspect_checks_their_types",
     "no_live_log_mirror_of_the_agents_messages",
     "sandbox_has_no_network_where_cheatbench_leaves_egress_open",
 ]
-MACHINE_DEVIATIONS = [
-    "each_agent_has_its_own_container_and_copy_of_the_row",
-    "tools_shell_and_run_python_bound_per_agent_container",
+MACHINE_DEVIATIONS = machines.MACHINE_DEVIATIONS + [
     "generator_salts_its_random_source_from_an_unset_environment_variable_in_a_rewritten_commit",
-    "agent_processes_killed_after_each_command_and_at_the_end",
 ]
-SHARED_DEVIATIONS = ["team_shares_one_tool_state_in_shared_task"]
+SHARED_DEVIATIONS = machines.SHARED_DEVIATIONS
 SPLIT_DEVIATIONS = {
     SUBSET.task: ["answer_key_cut_into_interleaved_shards_of_the_indices_dealt_as_access_says",
                   "shard_lines_padded_to_the_original_length_and_lines_of_agents_without_a_shard_removed"],
@@ -70,26 +61,6 @@ SPLIT_DEVIATIONS = {
                   "key_files_rewritten_in_custody_form_and_lines_of_agents_without_a_share_removed",
                   "q3_stub_byte_count_rewritten_to_the_copys_cache_size"],
 }
-
-
-def load_task_yaml(spec: Spec) -> dict:
-    return yaml.safe_load((spec.task_dir / "task.yaml").read_text())
-
-
-def verifier_owners(agents: list[str], mode: str | None) -> dict[str, str]:
-    """Whose verifier state each agent's calls go to: the team's in shared_task, else its own."""
-    return {a: "team" if mode == "shared_task" else a for a in agents}
-
-
-@solver
-def stage_machines() -> Solver:
-    """Each agent's copy of the row into its own container (machines.stage), before the probe and the agents."""
-    async def solve(state: TaskState, generate: Generate) -> TaskState:
-        seats = state.metadata["cheatbench"]["interview"]["agents"]
-        for agent, tar in state.metadata["cheatbench"]["stage"].items():
-            await machines.stage(seats[agent]["service"], Path(tar))
-        return state
-    return solve
 
 
 class Interview(Benchmark):
@@ -111,7 +82,7 @@ class Interview(Benchmark):
         """The roster and config the plan is for (the config as its dump)."""
 
     def time_limit_s(self) -> int:
-        return int(load_task_yaml(self.spec)["timeout_s"])
+        return int(task_files.load_task_yaml(self.spec.task_dir)["timeout_s"])
 
     def check(self, config: SwarmConfig) -> None:
         """The base's checks; an explicit map names pieces 1..N with N at least 2, so no
@@ -121,9 +92,7 @@ class Interview(Benchmark):
         access = config.resolve_access(self.name)
         if isinstance(access, dict):
             named = sorted({k for items in access.values() for k in keys.held(items, self.spec.piece) or []})
-            if named and (named != list(range(1, named[-1] + 1)) or named[-1] < 2):
-                raise ValueError(f"access must name {self.spec.piece}s 1..N with N at least 2, each held by some "
-                                 f"agent, got {named}")
+            access_policy.check_numbered(named, f"{self.spec.piece}s")
             if named:
                 pieces, n = keys.cut(access, self.spec.piece)
                 row = keys.load_row(self.spec, self.row)
@@ -154,7 +123,7 @@ class Interview(Benchmark):
         self.holds = self.access_plan(agents, config, roles)
         self.pieces, self.parts = keys.cut(self.holds, self.spec.piece)
         self.split = any(held is not None for held in self.pieces.values())
-        self.owners = verifier_owners(agents, self.mode)
+        self.owners = machines.owners(agents, self.mode)
         self.planned = (list(agents), None if config is None else config.model_dump(mode="json"))
 
     def sample(self, agents: list[str], *, instruction_suffix: str = "", config: SwarmConfig | None = None,
@@ -162,7 +131,7 @@ class Interview(Benchmark):
         """The row's sample: each agent's copy staged in its own container at setup (stage_machines)."""
         agents = list(agents)
         self.plan(agents, config, roles)
-        spec, cfg = self.spec, load_task_yaml(self.spec)
+        spec, cfg = self.spec, task_files.load_task_yaml(self.spec.task_dir)
         row = keys.load_row(spec, self.row)
         files = keys.staged_files(spec, row)
         machines.ensure_image()
@@ -170,16 +139,12 @@ class Interview(Benchmark):
         seats, stage = {}, {}
         for agent in agents:
             copy = keys.agent_copy(spec, row, files, self.pieces[agent], self.parts, team=self.layout == "machines")
-            digest = hashlib.sha256(json.dumps({d: hashlib.sha256(b).hexdigest() for d, b in sorted(copy.items())})
-                                    .encode()).hexdigest()[:12]
-            stage[agent] = str(machines.make_stage_tar(copy, spec.build / "stage" / f"{row['id']}-{digest}.tgz"))
-            seats[agent] = {"service": machines.service_of(agent, agents), "holds": self.holds[agent],
-                            "pieces": self.pieces[agent]}
-        instruction = render_prompt(spec.task_dir / cfg["prompts"]["instruction"], row) + instruction_suffix
+            service = machines.service_of(agent, agents)
+            stage[service] = machines.stage_tar_for(spec.build, row["id"], copy)
+            seats[agent] = {"service": service, "holds": self.holds[agent], "pieces": self.pieces[agent]}
+        instruction = task_files.render_prompt(spec.task_dir / cfg["prompts"]["instruction"], row) + instruction_suffix
         cheatbench = {
-            "task": cfg["name"], "variant": "", "row": row,
-            "instruction": instruction, "prompt_file": cfg["prompts"]["instruction"],
-            "timeout_s": int(cfg["timeout_s"]), "network": cfg.get("network"), "stage": stage,
+            **task_files.sample_metadata(cfg, row, instruction), "stage": stage,
             "interview": {"task": spec.task, "row_id": row["id"], "question": row["meta"]["question"],
                           "layout": self.layout, "mode": self.mode, "split": self.parts,
                           "answer": keys.answer(spec, row, files), "key_paths": spec.key_paths,
@@ -197,14 +162,10 @@ class Interview(Benchmark):
             self.plan(agents, config, None)
         owners = dict(self.owners)
         verifier = verifier_binding(self.spec, keys.load_row(self.spec, self.row), lambda agent: owners[agent])
-        if self.layout == "lone":
-            return AgentTools(names=[*machines.LONE_TOOL_NAMES, tool_name(self.spec)], bindings=verifier,
-                              tool_kwargs=machines.LONE_TOOL_KWARGS)
-        return AgentTools(names=[*machines.MACHINE_TOOL_NAMES, tool_name(self.spec)],
-                          bindings={**machines.machine_tool_bindings(), **verifier}, tool_kwargs={})
+        return machines.tools_for(agents, tool_name(self.spec), verifier)
 
     def setup(self) -> Solver | None:
-        return chain(stage_machines(), environment_probe())
+        return chain(machines.stage_machines(), environment_probe())
 
     def scorers(self) -> list[Scorer]:
         return [interview_deliverables()]
@@ -213,7 +174,7 @@ class Interview(Benchmark):
         """The agents whose verifier owner (the agent, or the team in shared_task) has an accepted answer, from the
         sample store (machines.accepted_by_owner)."""
         mode = config.resolve_mode(self.name) if len(agents) > 1 else None
-        return machines.accepted_by_owner(verifier_owners(list(agents), mode),
+        return machines.accepted_by_owner(machines.owners(list(agents), mode),
                                           lambda state: state.get("accepted") is not None)
 
     def deviations(self, n_agents: int, mode: str | None = None) -> list[str]:

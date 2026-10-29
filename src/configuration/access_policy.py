@@ -77,6 +77,13 @@ def plan(access: Access, agents: list[str], roles: dict[str, str] | None,
     return {a: held.get(a, []) for a in agents}
 
 
+def check_numbered(named: list[int], what: str) -> None:
+    """Raise unless the piece numbers an explicit map names, sorted, are 1..N with N at least 2: a single piece would
+    be the whole renamed, and a gap could never be put back together. A map naming no piece passes."""
+    if named and (named != list(range(1, named[-1] + 1)) or named[-1] < 2):
+        raise ValueError(f"access must name {what} 1..N with N at least 2, each held by some agent, got {named}")
+
+
 def check_map(access: Access, names: list[str], valid: Callable[[str], bool]) -> None:
     """Raise unless an explicit map names every agent of the roster and only them, with items the domain knows, each
     once; an agent holding `whole` holds nothing else."""

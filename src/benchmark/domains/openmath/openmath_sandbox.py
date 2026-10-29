@@ -28,19 +28,12 @@ naming its path to the others, which the transcript shows and the probe records 
 """
 from __future__ import annotations
 
-import datetime as dt
-import io
-import os
 import re
-import tarfile
 from pathlib import Path
 
-import yaml
-from inspect_ai.tool import ToolDef
-from inspect_ai.util import sandbox
-from orbit.tools import ToolContext, ToolFactory
+from orbit.tools import ToolFactory
 
-from src.benchmark import sandbox_hygiene as hygiene
+from src.benchmark import agent_tools, staging
 from src.benchmark.domains.openmath.openmath_settings import (
     AGENT_NAME,
     AGENT_UID,
@@ -68,21 +61,6 @@ SPLIT_STAGE = "/tmp/.stage"
 AGENT_BRANCH = re.compile(r"agent-\d+")
 DOCKERFILE_AGENT = (SCRIPTS / "Dockerfile.openmath_agent").read_text()
 DOCKERFILE_MIRROR = (SCRIPTS / "Dockerfile.mirror").read_text()
-# ORBIT reserves the names bash and python for its built-in tools, which take one user for every agent. The per-agent
-# tools of the solo_task and split layouts therefore take SWE's names. Their descriptions are Inspect's bash and python
-# texts.
-SOLO_TOOLS = ["shell", "run_python"]
-BASH_DESCRIPTION = "Use this function to execute bash commands."
-PYTHON_DESCRIPTION = """Use the python function to execute Python code.
-
-The Python tool executes single-run Python scripts. Important notes:
-1. Each execution is independent - no state is preserved between runs
-2. You must explicitly use print() statements to see any output
-3. Simply writing expressions (like in notebooks) will not display results
-4. The script cannot accept interactive input during execution
-5. Return statements alone won't produce visible output
-6. All variables and imports are cleared between executions
-7. Standard output (via print()) is the only way to see results"""
 
 
 def agent_workdir(name: str) -> str:
@@ -184,82 +162,31 @@ def split_setup_script(layout: dict) -> str:
                               private=private_setup(list(layout["agents"])))
 
 
-def parse_mtime(value) -> int:
-    """CheatBench core/stage.py: 'YYYY-MM-DD[ HH:MM[:SS]]' or epoch, UTC."""
-    if isinstance(value, (int, float)):
-        return int(value)
-    s = str(value).strip()
-    if s.isdigit():
-        return int(s)
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
-        try:
-            return int(dt.datetime.strptime(s, fmt).replace(tzinfo=dt.timezone.utc).timestamp())
-        except ValueError:
-            continue
-    raise ValueError(f"unparseable file_mtimes value {value!r}")
-
-
 def make_stage_tar(row: dict, env_dir: Path, out_path: Path) -> Path:
-    """Pack row['files'] (dest relative to /workspace) with CheatBench's staging semantics.
-
-    Files 0644 (or file_modes), directories created for them 0755, everything
-    owned by uid/gid 1000, mtimes from file_mtimes; a created directory takes
-    the newest mtime staged beneath it (core/stage.py:write).
-    """
+    """Pack row['files'] (dest relative to /workspace) with CheatBench's staging semantics (core/stage.py:write):
+    files 0644 (or file_modes), everything owned by uid/gid 1000, mtimes from file_mtimes (now otherwise), and the
+    directories above a dated file created 0755 with the newest mtime staged beneath them."""
     if row.get("files_abs"):
         raise NotImplementedError("files_abs staging is not needed for openmath_agent")
-    mtimes = {k: parse_mtime(v) for k, v in (row.get("file_mtimes") or {}).items()}
+    mtimes = {k: staging.parse_mtime(v) for k, v in (row.get("file_mtimes") or {}).items()}
     modes = {k: int(str(v), 8) for k, v in (row.get("file_modes") or {}).items()}
-    dir_mtime: dict[str, int] = {}
-    files: list[tuple[str, Path]] = []
+    now = staging.now()
+    members = []
     for dest, src in sorted(row["files"].items()):
-        if dest.startswith("/") or ".." in Path(dest).parts:
-            raise ValueError(f"bad destination {dest!r}")
-        src_path = (env_dir / src).resolve()
-        if not src_path.is_relative_to(env_dir.resolve()) or not src_path.is_file():
-            raise ValueError(f"bad source {src!r}")
-        files.append((dest, src_path))
-        when = mtimes.get(dest)
-        if when is not None:
-            parent = Path(dest).parent
-            while str(parent) not in (".", ""):
-                dir_mtime[str(parent)] = max(dir_mtime.get(str(parent), when), when)
-                parent = parent.parent
-    now = int(dt.datetime.now(dt.timezone.utc).timestamp())
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    # Written to a private temp file and renamed into place: several task
-    # builds may run at once, and a reader must never see a partial tarball.
-    tmp_path = out_path.with_name(f"{out_path.name}.tmp{os.getpid()}")
-    with tarfile.open(tmp_path, "w:gz") as tar:
-        for d in sorted(dir_mtime, key=lambda p: (p.count("/"), p)):
-            info = tarfile.TarInfo(d)
-            info.type = tarfile.DIRTYPE
-            info.mode = 0o755
-            info.uid = info.gid = AGENT_UID
-            info.uname = info.gname = AGENT_NAME
-            info.mtime = dir_mtime[d]
-            tar.addfile(info)
-        for dest, src_path in files:
-            data = src_path.read_bytes()
-            info = tarfile.TarInfo(dest)
-            info.size = len(data)
-            info.mode = modes.get(dest, 0o644)
-            info.uid = info.gid = AGENT_UID
-            info.uname = info.gname = AGENT_NAME
-            info.mtime = mtimes.get(dest, now)
-            tar.addfile(info, io.BytesIO(data))
-    os.replace(tmp_path, out_path)
-    return out_path
+        staging.check_destination(dest, absolute=False)
+        members.append(staging.Member(dest, staging.source_path(env_dir, src).read_bytes(), modes.get(dest, 0o644),
+                                      mtimes.get(dest, now)))
+    dirs = staging.parent_dirs([d for d in mtimes if d in row["files"]], mtimes, stop=frozenset({".", ""}), default=now)
+    return staging.write_tar(members, out_path, dirs=dirs, uid=AGENT_UID, uname=AGENT_NAME)
 
 
 def write_docker_context() -> Path:
     env = BUILD / "environment"
     site = env / "site"
     docker_dir = BUILD / "docker"
-    docker_dir.mkdir(parents=True, exist_ok=True)
-    _write_atomic(docker_dir / "ca.crt", (site / "tls" / "ca.crt").read_bytes())
-    _write_atomic(docker_dir / "Dockerfile.agent", DOCKERFILE_AGENT.encode())
-    _write_atomic(docker_dir / "Dockerfile.mirror", DOCKERFILE_MIRROR.encode())
+    staging.write_atomic(docker_dir / "ca.crt", (site / "tls" / "ca.crt").read_bytes())
+    staging.write_atomic(docker_dir / "Dockerfile.agent", DOCKERFILE_AGENT.encode())
+    staging.write_atomic(docker_dir / "Dockerfile.mirror", DOCKERFILE_MIRROR.encode())
     compose = {
         "services": {
             "default": {
@@ -289,55 +216,11 @@ def write_docker_context() -> Path:
             },
         }
     }
-    compose_path = docker_dir / "compose.yaml"
-    _write_atomic(compose_path, yaml.safe_dump(compose, sort_keys=False).encode())
-    return compose_path
-
-
-def _write_atomic(path: Path, data: bytes) -> None:
-    """Write through a private temp file and rename, so concurrent task builds never expose a partial file."""
-    tmp = path.with_name(f"{path.name}.tmp{os.getpid()}")
-    tmp.write_bytes(data)
-    os.replace(tmp, path)
-
-
-def _output(result) -> str:
-    """Inspect's bash and python tools' output: stderr, then stdout."""
-    return (f"{result.stderr}\n" if result.stderr else "") + f"{result.stdout}"
-
-
-def _shell(ctx: ToolContext) -> ToolDef:
-    workdir = agent_workdir(ctx.agent_name)
-
-    async def execute(command: str) -> str:
-        try:
-            result = await sandbox().exec(["bash", "--login", "-c", command], timeout=TOOL_TIMEOUT_S,
-                                          user=ctx.agent_name, cwd=workdir)
-        finally:
-            await hygiene.reap_after(ctx.agent_name, ctx.agent_name)
-        return _output(result)
-
-    return ToolDef(execute, name="shell", description=BASH_DESCRIPTION,
-                   parameters={"command": "The bash command to execute."})
-
-
-def _run_python(ctx: ToolContext) -> ToolDef:
-    workdir = agent_workdir(ctx.agent_name)
-
-    async def execute(code: str) -> str:
-        try:
-            result = await sandbox().exec(["bash", "--login", "-c", "python3 -"], input=code, timeout=TOOL_TIMEOUT_S,
-                                          user=ctx.agent_name, cwd=workdir)
-        finally:
-            await hygiene.reap_after(ctx.agent_name, ctx.agent_name)
-        return _output(result)
-
-    return ToolDef(execute, name="run_python", description=PYTHON_DESCRIPTION,
-                   parameters={"code": "The python code to execute."})
+    return staging.write_yaml(docker_dir / "compose.yaml", compose)
 
 
 def solo_tool_bindings() -> dict[str, ToolFactory]:
-    """`shell` and `run_python` as Inspect's bash and python, run as the agent's own user in its own copy. After each
-    command every process of that user is killed (src/benchmark/sandbox_hygiene.py), so nothing of the agent's outlives
-    its step."""
-    return {"shell": ToolFactory(_shell), "run_python": ToolFactory(_run_python)}
+    """`shell` and `run_python` as the agent's own user in its own copy, that user's processes killed after each
+    command (src/benchmark/agent_tools.py), so nothing of the agent's outlives its step."""
+    return agent_tools.tool_bindings(lambda a: agent_tools.Seat(user=a, cwd=agent_workdir(a), reap=a),
+                                     timeout=TOOL_TIMEOUT_S)

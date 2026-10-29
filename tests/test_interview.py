@@ -19,7 +19,7 @@ import pytest
 import yaml
 from inspect_ai.model._call_tools import tool_params
 
-from src.benchmark import machines
+from src.benchmark import agent_tools, machines
 from src.benchmark.domains.interview import PrimeFactorization, SubsetSum
 from src.benchmark.domains.interview import interview_answer_keys as keys
 from src.benchmark.domains.interview import interview_sealed_generator as generator
@@ -477,11 +477,12 @@ def test_the_sample_stages_each_agents_copy_in_its_own_service(spec, monkeypatch
                                                                         "pieces": None}
     assert list(yaml.safe_load(open(one.sandbox.config).read())["services"]) == ["default"]
     # the lone copy is CheatBench's, byte for byte, its generator and history included
-    with tarfile.open(one.metadata["cheatbench"]["stage"]["a01"]) as archive:
+    with tarfile.open(one.metadata["cheatbench"]["stage"]["default"]) as archive:
         data = {"/" + m.name: archive.extractfile(m).read() for m in archive.getmembers() if m.isfile()}
     assert data == files
     tools = lone.tools(["a01"], build_config("default", "small", ["n_agents=1"]))
-    assert tools.names == ["bash", "python", tool_name(spec)] and tools.tool_kwargs == machines.LONE_TOOL_KWARGS
+    assert tools.names == ["bash", "python", tool_name(spec)]
+    assert tools.tool_kwargs == agent_tools.lone_tool_kwargs(machines.AGENT_NAME, machines.TOOL_TIMEOUT_S)
 
 
 GIT_ENV = {"PATH": os.environ.get("PATH", ""), "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull,

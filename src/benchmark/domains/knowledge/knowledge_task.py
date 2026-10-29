@@ -24,20 +24,18 @@ import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
-import yaml
 from inspect_ai.dataset import Sample
 from inspect_ai.scorer import Scorer
 from inspect_ai.solver import Solver
 
-from src.benchmark.benchmark_protocol import SUBMIT_PROMPT_DEVIATION, AgentTools, Benchmark
+from src.benchmark import agent_tools
+from src.benchmark import cheatbench_task_files as task_files
+from src.benchmark.benchmark_protocol import COMMON_DEVIATIONS, AgentTools, Benchmark
 from src.benchmark.domains.knowledge.knowledge_review_tool import TOOL as REVIEW_TOOL
 from src.benchmark.domains.knowledge.knowledge_review_tool import review_binding, reviewed
 from src.benchmark.domains.knowledge.knowledge_sandbox import (
-    LONE_TOOL_KWARGS,
-    LONE_TOOLS,
     SETUP_SCRIPT,
     STAGE_TAR,
-    TEAM_TOOLS,
     ensure_images,
     is_split,
     layout_kind,
@@ -49,14 +47,18 @@ from src.benchmark.domains.knowledge.knowledge_sandbox import (
     write_compose,
 )
 from src.benchmark.domains.knowledge.knowledge_scoring import environment_probe, knowledge_deliverables
-from src.benchmark.domains.knowledge.knowledge_settings import BUILD, DEFAULT_ROW, TASK, TASK_DIR, WORKDIR
-from src.benchmark.domains.openmath.openmath_task import render_prompt
+from src.benchmark.domains.knowledge.knowledge_settings import (
+    AGENT_NAME,
+    BUILD,
+    DEFAULT_ROW,
+    TASK,
+    TASK_DIR,
+    TOOL_TIMEOUT_S,
+    WORKDIR,
+)
 from src.configuration.swarm_config import SwarmConfig
 
-DEVIATIONS = [
-    "agent_is_orbit_turn_react_not_vendor_harness",
-    SUBMIT_PROMPT_DEVIATION,
-    "continue_prompts_are_orbit_synthetic_user_messages",
+DEVIATIONS = COMMON_DEVIATIONS + [
     "review_deliverable_is_an_inspect_tool_running_cheatbench_grader_as_root_in_the_sandbox_not_an_mcp_server",
     "review_errors_return_the_log_path_as_an_inspect_tool_error_in_place_of_mcp_iserror",
     "reference_rendered_on_each_review_from_a_root_only_copy_taken_at_setup",
@@ -88,23 +90,18 @@ class KnowledgeTools(AgentTools):
 
 
 def load_task_yaml() -> dict:
-    return yaml.safe_load((TASK_DIR / "task.yaml").read_text())
+    return task_files.load_task_yaml(TASK_DIR)
 
 
 def load_rows() -> list[dict]:
-    data = BUILD / "data.jsonl"
-    if not data.exists():
-        raise FileNotFoundError(
-            f"{data} missing: build the task first (downloads GDPval from Hugging Face): uv run python -B -c "
-            f"\"import sys; sys.path.insert(0, '{TASK_DIR}'); import build; build.build(output='{BUILD}')\"")
-    return [json.loads(line) for line in data.read_text().splitlines() if line.strip()]
+    """The built rows (build/knowledge_work/data.jsonl)."""
+    return task_files.load_rows(BUILD, hint=f" (downloads GDPval from Hugging Face): uv run python -B -c \"import "
+                                            f"sys; sys.path.insert(0, '{TASK_DIR}'); import build; "
+                                            f"build.build(output='{BUILD}')\"")
 
 
 def load_row(row_id: str) -> dict:
-    row = next((r for r in load_rows() if r["id"] == row_id), None)
-    if row is None:
-        raise ValueError(f"no row {row_id!r} in {BUILD / 'data.jsonl'}")
-    return row
+    return task_files.load_row(load_rows(), row_id, BUILD)
 
 
 def resolve_mode(config: SwarmConfig | None) -> str | None:
@@ -156,11 +153,9 @@ class KnowledgeWork(Benchmark):
         layout = stage_layout(row, self.layout, seat_map)
         digest = hashlib.sha256(json.dumps(layout, sort_keys=True).encode()).hexdigest()[:12]
         tar_path = make_stage_tar(row, BUILD / "environment", layout, BUILD / "stage" / f"{row['id']}-{digest}.tgz")
-        instruction = render_prompt(TASK_DIR / cfg["prompts"]["instruction"], row) + instruction_suffix
+        instruction = task_files.render_prompt(TASK_DIR / cfg["prompts"]["instruction"], row) + instruction_suffix
         cheatbench = {
-            "task": cfg["name"], "variant": "", "row": row,
-            "instruction": instruction, "prompt_file": cfg["prompts"]["instruction"],
-            "timeout_s": int(cfg["timeout_s"]), "network": cfg.get("network"),
+            **task_files.sample_metadata(cfg, row, instruction),
             "knowledge": {"layout": self.layout, "mode": resolve_mode(config) if len(agents) > 1 else None,
                           "split": self.split, "row_id": row["id"], "meta": row.get("meta") or {},
                           "comparator": layout["comparator"], "seats": seat_map,
@@ -176,10 +171,12 @@ class KnowledgeWork(Benchmark):
         if set(self.seats) != set(agents):
             self.plan(agents, config, None)
         if self.layout == "lone":
-            names = [*LONE_TOOLS, REVIEW_TOOL]
-            return KnowledgeTools(names=names, bindings=review_binding(), tool_kwargs=LONE_TOOL_KWARGS,
+            names = [*agent_tools.LONE_TOOL_NAMES, REVIEW_TOOL]
+            return KnowledgeTools(names=names, bindings=review_binding(),
+                                  tool_kwargs=agent_tools.lone_tool_kwargs(AGENT_NAME, TOOL_TIMEOUT_S),
                                   per_agent={a: list(names) for a in agents})
-        per_agent = {a: [*TEAM_TOOLS, *([REVIEW_TOOL] if self.seats[a]["review"] else [])] for a in agents}
+        per_agent = {a: [*agent_tools.TOOL_NAMES, *([REVIEW_TOOL] if self.seats[a]["review"] else [])]
+                     for a in agents}
         names = list(dict.fromkeys(n for a in agents for n in per_agent[a]))
         return KnowledgeTools(names=names, bindings={**team_tool_bindings(self.seats), **review_binding()},
                               tool_kwargs={}, per_agent=per_agent)

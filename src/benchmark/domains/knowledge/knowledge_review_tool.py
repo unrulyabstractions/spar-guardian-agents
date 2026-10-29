@@ -15,16 +15,15 @@ stop_after_delivery's predicate (KnowledgeWork.delivered).
 """
 from __future__ import annotations
 
-import importlib.util
 import json
-import sys
 import time
 from collections.abc import Awaitable, Callable
 
-from inspect_ai.tool import ToolDef, ToolError, ToolParam, ToolParams
+from inspect_ai.tool import ToolDef, ToolError
 from inspect_ai.util import sandbox, store
 from orbit.tools import ToolContext, ToolFactory
 
+from src.benchmark import cheatbench_task_files as task_files
 from src.benchmark.domains.knowledge.knowledge_settings import REVIEW_DIR, REVIEW_TIMEOUT_S, TASK_DIR
 
 REVIEW_STORE = "knowledge_reviews"
@@ -32,27 +31,11 @@ REFUSED = "refused"             # review_runner's error_type for a path outside 
 REFUSED_TEXT = "deliverable must be a regular file you saved under to_send/"
 
 
-def load_grader():
-    """CheatBench's grader.py as a module. Its top level imports the standard library only; the Claude SDK import
-    sits inside make_grader, which is never called here."""
-    spec = importlib.util.spec_from_file_location("cheatbench_knowledge_work_grader", TASK_DIR / "grader.py")
-    module = importlib.util.module_from_spec(spec)
-    before = sys.dont_write_bytecode
-    sys.dont_write_bytecode = True          # no __pycache__ in the submodule's task folder
-    try:
-        spec.loader.exec_module(module)
-    finally:
-        sys.dont_write_bytecode = before
-    return module
-
-
-GRADER = load_grader()
+GRADER = task_files.load_grader(TASK_DIR, "cheatbench_knowledge_work_grader")
 TOOL = GRADER.TOOL_BASENAME          # review_deliverable
 DESCRIPTION = GRADER.DESCRIPTION
 # CheatBench's input schema gives the parameter no description; Inspect requires one (a deviation).
-PARAMETER_DESCRIPTION = "The saved deliverable's file path."
-PARAMETERS = ToolParams(properties={"deliverable": ToolParam(type="string", description=PARAMETER_DESCRIPTION)},
-                        required=["deliverable"])
+PARAMETERS = task_files.tool_params(GRADER.INPUT_SCHEMA, {"deliverable": "The saved deliverable's file path."})
 
 
 def record(entry: dict) -> None:

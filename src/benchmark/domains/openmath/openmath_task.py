@@ -13,20 +13,18 @@ Access items: slice1..sliceN and whole.
 """
 from __future__ import annotations
 
-import json
 from collections.abc import Awaitable, Callable
-from pathlib import Path
 
-import yaml
 from inspect_ai.dataset import Sample
 from inspect_ai.scorer import Scorer
 from inspect_ai.solver import Solver
 
-from src.benchmark.benchmark_protocol import SUBMIT_PROMPT_DEVIATION, AgentTools, Benchmark
+from src.benchmark import agent_tools
+from src.benchmark import cheatbench_task_files as task_files
+from src.benchmark.benchmark_protocol import COMMON_DEVIATIONS, AgentTools, Benchmark
 from src.benchmark.domains.openmath.openmath_sandbox import (
     SETUP_SCRIPT,
     SLICE_ITEM,
-    SOLO_TOOLS,
     agent_layout,
     make_stage_tar,
     slices_of,
@@ -37,15 +35,11 @@ from src.benchmark.domains.openmath.openmath_sandbox import (
     write_docker_context,
 )
 from src.benchmark.domains.openmath.openmath_scoring import deliverables_scorer, environment_probe, registration
-from src.benchmark.domains.openmath.openmath_settings import BUILD, TASK, TASK_DIR, TOOL_KWARGS, WORKDIR
+from src.benchmark.domains.openmath.openmath_settings import AGENT_NAME, BUILD, TASK, TASK_DIR, TOOL_TIMEOUT_S, WORKDIR
+from src.configuration import access_policy
 from src.configuration.swarm_config import SwarmConfig
 
-DEVIATIONS = [
-    "agent_is_orbit_turn_react_not_vendor_harness",
-    SUBMIT_PROMPT_DEVIATION,
-    "continue_prompts_are_orbit_synthetic_user_messages",
-    "mirror_served_from_docker_sidecar_and_ca_baked_into_image",
-]
+DEVIATIONS = COMMON_DEVIATIONS + ["mirror_served_from_docker_sidecar_and_ca_baked_into_image"]
 TEAM_DEVIATION = "two_agents_share_one_sandbox_clock_and_git_identity"
 SOLO_DEVIATIONS = [
     "each_agent_has_its_own_linux_user_home_and_copy_of_the_row_in_one_container_with_one_clock",
@@ -62,33 +56,13 @@ SPLIT_DEVIATIONS = SOLO_DEVIATIONS + [
 
 
 def load_task_yaml() -> dict:
-    return yaml.safe_load((TASK_DIR / "task.yaml").read_text())
-
-
-def render_prompt(template: Path, row: dict) -> str:
-    """CheatBench core/trial.py:render_prompt, reproduced verbatim in behavior."""
-    fields = {"input": row.get("input") or "", **(row.get("vars") or {})}
-    out = []
-    for line in template.read_text().split("\n"):
-        tokens = [k for k in fields if "{{" + k + "}}" in line]
-        if tokens and all(not str(fields[k]).strip() for k in tokens):
-            continue
-        for k, v in fields.items():
-            line = line.replace("{{" + k + "}}", str(v))
-        out.append(line)
-    text = "\n".join(out)
-    while "\n\n\n" in text:
-        text = text.replace("\n\n\n", "\n\n")
-    return text.strip() + "\n"
+    return task_files.load_task_yaml(TASK_DIR)
 
 
 def load_rows() -> list[dict]:
-    data = BUILD / "data.jsonl"
-    if not data.exists():
-        raise FileNotFoundError(
-            f"{data} missing: build the task first, e.g. "
-            f"python -c \"...tasks/openmath_agent/build.py build(output='{BUILD}', selected=['riemann'])\"")
-    return [json.loads(line) for line in data.read_text().splitlines() if line.strip()]
+    """The built rows (build/openmath_agent/data.jsonl)."""
+    return task_files.load_rows(BUILD, hint=f", e.g. python -c \"...tasks/openmath_agent/build.py "
+                                            f"build(output='{BUILD}', selected=['riemann'])\"")
 
 
 def split(config: SwarmConfig | None) -> bool:
@@ -130,17 +104,10 @@ def build_sample(row_id: str, instruction_suffix: str = "", solo_agents: list[st
         raise ValueError("a roster gets one layout: solo_agents or split_agents")
     cfg = load_task_yaml()
     compose = write_docker_context()
-    template = TASK_DIR / cfg["prompts"]["instruction"]
-    row = next((r for r in load_rows() if r["id"] == row_id), None)
-    if row is None:
-        raise ValueError(f"no row {row_id!r} in {BUILD / 'data.jsonl'}")
-    instruction = render_prompt(template, row) + instruction_suffix
+    row = task_files.load_row(load_rows(), row_id, BUILD)
+    instruction = task_files.render_prompt(TASK_DIR / cfg["prompts"]["instruction"], row) + instruction_suffix
     tar_path = make_stage_tar(row, BUILD / "environment", BUILD / "stage" / f"{row['id']}.tgz")
-    cheatbench = {
-        "task": cfg["name"], "variant": "", "row": row,
-        "instruction": instruction, "prompt_file": cfg["prompts"]["instruction"],
-        "timeout_s": int(cfg["timeout_s"]), "network": cfg.get("network"),
-    }
+    cheatbench = task_files.sample_metadata(cfg, row, instruction)
     setup = SETUP_SCRIPT
     if solo_agents:
         cheatbench["openmath"] = {"mode": "solo_task", "agents": agent_layout(solo_agents)}
@@ -179,10 +146,8 @@ class OpenMath(Benchmark):
         super().check(config)
         access = config.resolve_access(TASK)
         if isinstance(access, dict):
-            named = sorted({k for items in access.values() for k in slices_of(items) or []})
-            if named and (named != list(range(1, named[-1] + 1)) or named[-1] < 2):
-                raise ValueError("access must name slices 1..N with N at least 2, each held by some agent, "
-                                 f"got {named}")
+            access_policy.check_numbered(sorted({k for items in access.values() for k in slices_of(items) or []}),
+                                         "slices")
         self.split = split(config)
 
     def split_items(self, n_neutral: int) -> list[str]:
@@ -209,8 +174,9 @@ class OpenMath(Benchmark):
         """ORBIT's bash and python as the user `user`, or in the solo_task and split layouts `shell` and `run_python`
         bound to each agent's own user and copy."""
         if per_agent(agents, config):
-            return AgentTools(names=list(SOLO_TOOLS), bindings=solo_tool_bindings(), tool_kwargs={})
-        return AgentTools(names=["bash", "python"], bindings={}, tool_kwargs=TOOL_KWARGS)
+            return AgentTools(names=list(agent_tools.TOOL_NAMES), bindings=solo_tool_bindings(), tool_kwargs={})
+        return AgentTools(names=list(agent_tools.LONE_TOOL_NAMES), bindings={},
+                          tool_kwargs=agent_tools.lone_tool_kwargs(AGENT_NAME, TOOL_TIMEOUT_S))
 
     def setup(self) -> Solver | None:
         return environment_probe()

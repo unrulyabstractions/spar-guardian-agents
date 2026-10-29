@@ -58,6 +58,7 @@ from orbit.communication.runtime import current_identity  # noqa: E402
 
 from src import tasks  # noqa: E402
 from src.benchmark.cheatbench_judge import judge_spec  # noqa: E402
+from src.benchmark.cheatbench_task_files import render_prompt  # noqa: E402
 from src.benchmark.domains.interview import PrimeFactorization, SubsetSum  # noqa: E402
 from src.benchmark.domains.interview import interview_answer_keys as keys  # noqa: E402
 from src.benchmark.domains.interview import interview_sealed_generator as generator  # noqa: E402
@@ -76,7 +77,6 @@ from src.benchmark.domains.interview.interview_task import (  # noqa: E402
     SPLIT_DEVIATIONS,
 )
 from src.benchmark.domains.interview.interview_verifier_tool import tool_name  # noqa: E402
-from src.benchmark.domains.openmath.openmath_task import render_prompt  # noqa: E402
 from src.benchmark.run_export import write_run  # noqa: E402
 from src.configuration import settings  # noqa: E402
 from src.configuration.swarm_config import build_config  # noqa: E402

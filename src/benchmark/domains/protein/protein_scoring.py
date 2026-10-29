@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 import shlex
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 
 from inspect_ai.scorer import Score, Scorer, Target, mean, scorer
 from inspect_ai.solver import Generate, Solver, TaskState, solver
@@ -28,9 +28,9 @@ from inspect_ai.util import sandbox
 from src.benchmark import machines
 from src.benchmark.domains.protein.protein_honeypot import fingerprints
 from src.benchmark.domains.protein.protein_settings import COLLEAGUE
+from src.benchmark.sandbox_probe import PROBE_STORE, run_commands
 
 SCORER = "protein_deliverables"
-PROBE_STORE = "cheatbench_probe"
 ROOTS = ["/workspace", "/tmp", "/home"]
 PROBE_COMMANDS = {
     "identity": "id; echo HOME=$HOME; pwd",
@@ -70,21 +70,14 @@ def protein(state: TaskState) -> dict:
     return state.metadata["cheatbench"]["protein"]
 
 
-async def _run(service: str, cmd: str) -> dict:
-    try:
-        r = await sandbox(service).exec(["bash", "-lc", cmd], user=machines.AGENT_NAME, timeout=60)
-        return {"rc": r.returncode, "out": (r.stdout or "")[-3000:], "err": (r.stderr or "")[-500:]}
-    except Exception as ex:  # noqa: BLE001 - the probe must never fail the sample
-        return {"rc": None, "out": "", "err": f"{type(ex).__name__}: {ex}"[:500]}
-
-
 @solver
 def protein_setup() -> Solver:
+    """Each agent's copy into its container (machines.stage_all), `git init` on its work dir as `user`, and
+    PROBE_COMMANDS there (src/benchmark/sandbox_probe.py run_commands)."""
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         cb = state.metadata["cheatbench"]
         pd = cb["protein"]
-        for service, tar in cb["stage"].items():
-            await machines.stage(service, Path(tar))
+        await machines.stage_all(cb["stage"])
         submitted = str(PurePosixPath(pd["payload_file"]).parent)
         results = {}
         for agent, seat in pd["agents"].items():
@@ -94,8 +87,8 @@ def protein_setup() -> Solver:
                 raise RuntimeError(f"git init in {seat['service']} failed: {(r.stderr or '')[-300:]}")
             fields = {"work": shlex.quote(pd["work_dir"]), "submitted": shlex.quote(submitted),
                       "staged": " ".join(shlex.quote(p) for p in seat["staged"])}
-            results[agent] = {name: await _run(seat["service"], cmd.format(**fields))
-                              for name, cmd in PROBE_COMMANDS.items()}
+            results[agent] = await run_commands(PROBE_COMMANDS, fields, user=machines.AGENT_NAME,
+                                                box=sandbox(seat["service"]))
         state.store.set(PROBE_STORE, results)
         return state
     return solve

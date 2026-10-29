@@ -8,37 +8,30 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import shlex
-import subprocess
 from pathlib import Path
 
-import yaml
-from inspect_ai.tool import ToolDef, bash, python
-from orbit.tools import ToolContext, ToolFactory
+from orbit.tools import ToolFactory
 
+from src.benchmark import agent_tools, staging
+from src.benchmark.docker_images import docker, image_id, image_labels
 from src.benchmark.domains.swe.swe_inputs import load_split, task_config, task_dir
 from src.benchmark.domains.swe.swe_settings import AGENT_CPUS, AGENT_MEM, BUILD, TOOL_TIMEOUT_S, WORKDIR
 
 # The recipe's text is hashed into the native image's label, so any change to it (the comment line included)
 # rebuilds the image, which takes about half an hour. The comment line keeps the module's old path for that reason.
 NATIVE_DOCKERFILE = (Path(__file__).parent / "scripts" / "native.Dockerfile").read_text()
-
-
-def _docker(*args: str, check: bool = True, timeout: int = 3600) -> subprocess.CompletedProcess:
-    return subprocess.run(["docker", *args], check=check, capture_output=True, timeout=timeout)
-
-
-def _image_id(tag: str) -> str | None:
-    r = _docker("image", "inspect", "--format", "{{.Id}}", tag, check=False)
-    return r.stdout.decode().strip() if r.returncode == 0 else None
+# The agents' tools name the machine and the clock; Inspect's own descriptions name neither.
+TOOL_DESCRIPTIONS = {
+    "shell": (f"Run a bash command on your machine, starting in {WORKDIR}. Each call runs in a fresh shell and is "
+              f"stopped after {TOOL_TIMEOUT_S} seconds.", "The bash command to run."),
+    "run_python": (f"Run Python 3 code on your machine, starting in {WORKDIR}. Print what you want to see. Stopped "
+                   f"after {TOOL_TIMEOUT_S} seconds.", "The Python code to run."),
+}
 
 
 def _label(tag: str, key: str) -> str | None:
-    r = _docker("image", "inspect", "--format", "{{json .Config.Labels}}", tag, check=False)
-    if r.returncode != 0:
-        return None
-    return (json.loads(r.stdout.decode() or "null") or {}).get(key)
+    return (image_labels(tag) or {}).get(key)
 
 
 def image_tags(issue: str) -> dict[str, str]:
@@ -47,10 +40,10 @@ def image_tags(issue: str) -> dict[str, str]:
 
 
 def _source_facts(tag: str) -> dict:
-    r = _docker("image", "inspect", "--format", "{{json .Config.Env}}", tag)
+    r = docker("image", "inspect", "--format", "{{json .Config.Env}}", tag)
     env = dict(e.split("=", 1) for e in json.loads(r.stdout.decode()))
-    r = _docker("run", "--rm", "--platform", "linux/amd64", "--network", "none", "--entrypoint", "bash", tag,
-                "-c", ". /etc/os-release; echo $VERSION_CODENAME", timeout=600)
+    r = docker("run", "--rm", "--platform", "linux/amd64", "--network", "none", "--entrypoint", "bash", tag,
+               "-c", ". /etc/os-release; echo $VERSION_CODENAME", timeout=600)
     return {"env": env, "codename": r.stdout.decode().strip()}
 
 
@@ -78,11 +71,10 @@ def ensure_images(issue: str, *, log=print) -> dict[str, str]:
         raise NotImplementedError(f"{issue}: the native rebuild is implemented for Go tasks only "
                                   f"(repo_language={language!r})")
     tags = image_tags(issue)
-    if _image_id(tags["amd64"]) is None:
+    if image_id(tags["amd64"]) is None:
         log(f"swe: building {tags['amd64']} under linux/amd64 emulation")
-        _docker("build", "--platform", "linux/amd64", "-t", tags["amd64"], str(task_dir(instance) / "environment"),
-                timeout=7200)
-    source_id = _image_id(tags["amd64"])
+        docker("build", "--platform", "linux/amd64", "-t", tags["amd64"], str(task_dir(instance) / "environment"))
+    source_id = image_id(tags["amd64"])
     text, recipe = native_recipe(tags, source_id)
     if (_label(tags["native"], "cbswe.source_image_id") != source_id
             or _label(tags["native"], "cbswe.recipe_sha256") != recipe):
@@ -90,8 +82,8 @@ def ensure_images(issue: str, *, log=print) -> dict[str, str]:
         folder.mkdir(parents=True, exist_ok=True)
         (folder / "Dockerfile").write_text(text)
         log(f"swe: building {tags['native']}")
-        _docker("build", "-t", tags["native"], str(folder), timeout=7200)
-    return {**tags, "amd64_id": source_id, "native_id": _image_id(tags["native"])}
+        docker("build", "-t", tags["native"], str(folder))
+    return {**tags, "amd64_id": source_id, "native_id": image_id(tags["native"])}
 
 
 def _service(image: str, hostname: str, **extra) -> dict:
@@ -107,38 +99,12 @@ def write_compose(issue: str, agents: list[str], *, board: bool) -> Path:
     for a in agents:
         services[a] = _service(image, a, cpus=AGENT_CPUS, mem_limit=AGENT_MEM, restart="unless-stopped",
                                **({"volumes": ["team:/team"]} if board else {}))
-    path = BUILD / issue / f"compose-{len(agents)}{'-board' if board else ''}.yaml"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f"{path.name}.tmp{os.getpid()}")
-    tmp.write_text(yaml.safe_dump({"services": services, "volumes": {"team": {}}}, sort_keys=False))
-    os.replace(tmp, path)
-    return path
-
-
-def _shell(ctx: ToolContext) -> ToolDef:
-    inner = bash(timeout=TOOL_TIMEOUT_S, sandbox=ctx.agent_name)
-
-    async def execute(command: str) -> str:
-        return await inner(command=command)
-
-    return ToolDef(execute, name="shell",
-                   description=f"Run a bash command on your machine, starting in {WORKDIR}. Each call runs in a fresh "
-                               f"shell and is stopped after {TOOL_TIMEOUT_S} seconds.",
-                   parameters={"command": "The bash command to run."})
-
-
-def _run_python(ctx: ToolContext) -> ToolDef:
-    inner = python(timeout=TOOL_TIMEOUT_S, sandbox=ctx.agent_name)
-
-    async def execute(code: str) -> str:
-        return await inner(code=code)
-
-    return ToolDef(execute, name="run_python",
-                   description=f"Run Python 3 code on your machine, starting in {WORKDIR}. Print what you want to see. "
-                               f"Stopped after {TOOL_TIMEOUT_S} seconds.",
-                   parameters={"code": "The Python code to run."})
+    return staging.write_yaml(BUILD / issue / f"compose-{len(agents)}{'-board' if board else ''}.yaml",
+                              {"services": services, "volumes": {"team": {}}})
 
 
 def tool_bindings() -> dict[str, ToolFactory]:
-    """`shell` and `run_python` wrap Inspect's bash and python on the agent's own service."""
-    return {"shell": ToolFactory(_shell), "run_python": ToolFactory(_run_python)}
+    """`shell` and `run_python` on the agent's own service, as the service's own user (src/benchmark/agent_tools.py);
+    nothing is reaped, since each agent is alone on its machine."""
+    return agent_tools.tool_bindings(lambda agent: agent_tools.Seat(service=agent), timeout=TOOL_TIMEOUT_S,
+                                     descriptions=TOOL_DESCRIPTIONS)

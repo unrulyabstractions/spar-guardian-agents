@@ -17,8 +17,8 @@ import pytest
 import yaml
 
 from src import tasks
-from src.benchmark import machines
-from src.benchmark.domains.openmath.openmath_task import render_prompt
+from src.benchmark import agent_tools, machines
+from src.benchmark.cheatbench_task_files import render_prompt
 from src.benchmark.domains.protein import ProteinDesign
 from src.benchmark.domains.protein import protein_honeypot as honeypot
 from src.benchmark.domains.protein.protein_checker_tool import DESCRIPTION, GRADER, PARAMETERS, TOOL, make_call
@@ -28,10 +28,10 @@ from src.benchmark.domains.protein.protein_task import (
     MACHINE_DEVIATIONS,
     SHARED_DEVIATIONS,
     SPLIT_DEVIATIONS,
-    epoch,
     load_row,
     load_rows,
 )
+from src.benchmark.staging import parse_mtime
 from src.cli import build_parser
 from src.configuration.swarm_config import build_config
 from src.measures import code_ladder as signals
@@ -67,7 +67,7 @@ def test_the_build_reproduces_the_readmes_target_and_candidates():
             f"{row['vars']['work_dir']}/{name}" for name in ("target.fasta", "notes.md", "logs/slurm-12746.out.bak")
         } | {row["payload_file"]}, row["id"]
         assert row["payload_file"] == f"{COLLEAGUE}/{row['id']}/submitted/binder_candidates.fasta"
-    assert epoch("2026-03-17 16:30") == 1773765000
+    assert parse_mtime("2026-03-17 16:30") == 1773765000
 
 
 def test_segments_put_each_design_back_together_and_only_the_whole_passes():
@@ -301,7 +301,8 @@ def test_the_tools_keep_cheatbenchs_checker_and_one_state_per_owner(monkeypatch)
     assert PARAMETERS.properties["sequence"].description          # Inspect requires one; CheatBench gives none
     bench = ProteinDesign()
     lone = bench.tools(["a01"], build_config("default", "small", ["n_agents=1"]))
-    assert lone.names == ["bash", "python", "check_design"] and lone.tool_kwargs == machines.LONE_TOOL_KWARGS
+    assert lone.names == ["bash", "python", "check_design"]
+    assert lone.tool_kwargs == agent_tools.lone_tool_kwargs(machines.AGENT_NAME, machines.TOOL_TIMEOUT_S)
     team = bench.tools(["a01", "a02", "a03"], build_config("default", "small", []))
     assert team.names == ["shell", "run_python", "check_design"] and team.tool_kwargs == {}
     assert set(team.bindings) == {"shell", "run_python", "check_design"}
@@ -327,7 +328,7 @@ def test_the_compose_file_and_each_agents_staging_archive(tmp_path):
     compose = yaml.safe_load(machines.write_compose(tmp_path, ["a01", "a02"]).read_text())
     assert list(compose["services"]) == ["a01", "a02"] and compose["services"]["a01"]["image"] == machines.IMAGE
     files = honeypot.agent_files(ROW, [1], 2)
-    when = epoch(ROW["file_mtimes"][PAYLOAD])
+    when = parse_mtime(ROW["file_mtimes"][PAYLOAD])
     tar = machines.make_stage_tar(files, tmp_path / "a01.tgz", mtimes=dict.fromkeys(files, when))
     with tarfile.open(tar) as archive:
         members = {m.name: m for m in archive.getmembers()}

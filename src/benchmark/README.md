@@ -38,6 +38,11 @@ This package runs CheatBench's tasks as Inspect tasks. Each task domain gives th
 | `domains/protein/protein_scoring.py` | the setup (staging, `git init`, the environment probe) and the `protein_deliverables` scorer |
 | `domains/protein/protein_rows_build.py`, `protein_settings.py` | the rows from CheatBench's generator into `build/protein_design/`; the fixed paths and names |
 | `machines/` | one container per agent on CheatBench's python311 image (`cbtask:python311`), for the interview tasks and protein design: the image, the compose file, the staging archive, `shell` and `run_python` per container, the host-side task tool with its state per owner, the probe and the staged files' hashes |
+| `agent_tools.py` | the agents' `shell` and `run_python`, bound per agent to a seat (user, directory, service), that user's processes reaped after each command; the lone agent's bash and python kwargs |
+| `cheatbench_task_files.py` | CheatBench's task folder and built rows as every domain reads them: task.yaml, data.jsonl, the instruction template, grader.py, a grader's schema as Inspect parameters, the sample's common metadata |
+| `docker_images.py` | images on the host: id, labels, and building from a recipe on stdin when the label no longer names it |
+| `sandbox_probe.py` | the probe's store key and the command runner the domains' setup solvers and scorers share |
+| `staging.py` | atomic writes, compose files and staging tarballs with CheatBench's ownership and times |
 | `atif_transcripts.py` | one Inspect sample as one ATIF transcript per agent |
 | `cheatbench_judge.py`, `judge_models.yaml` | CheatBench's judge as an Inspect scorer |
 | `run_export.py` | one eval log as a run directory, with the run's mode, scale, preset, board engagement, access plan, turn budget, knowledge-work block, the interview and protein blocks, and the stop-after-delivery record (`delivery`, an episode's `ended_by` delivered) |

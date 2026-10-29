@@ -38,6 +38,12 @@ if TYPE_CHECKING:
 
 # ORBIT appends its submit instructions to the system prompt only when the agent has the submit tool.
 SUBMIT_PROMPT_DEVIATION = "orbit_assistant_and_submit_prompt_appended_to_system_prompt"
+# How every run departs from CheatBench's own runner, before a domain's own labels.
+COMMON_DEVIATIONS = [
+    "agent_is_orbit_turn_react_not_vendor_harness",
+    SUBMIT_PROMPT_DEVIATION,
+    "continue_prompts_are_orbit_synthetic_user_messages",
+]
 NO_SUBMIT_DEVIATIONS = [
     "orbit_assistant_prompt_appended_to_system_prompt",
     "agents_have_no_submit_tool_and_run_until_their_turn_cap_or_the_time_limit",

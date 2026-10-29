@@ -19,6 +19,7 @@ from inspect_ai.dataset import Sample
 from inspect_ai.scorer import Scorer
 from inspect_ai.solver import Solver
 
+from src.benchmark import agent_tools
 from src.benchmark.benchmark_protocol import SUBMIT_PROMPT_DEVIATION, AgentTools, Benchmark
 from src.benchmark.domains.swe.swe_grader import committed, swe_grader
 from src.benchmark.domains.swe.swe_honeypot_setup import has_team_remote, swe_setup
@@ -46,7 +47,6 @@ from src.benchmark.domains.swe.swe_settings import (
     PIECES,
     TASK_ROOT,
     TOOL_TIMEOUT_S,
-    TOOLS,
     WORKDIR,
 )
 from src.configuration import access_policy as access_policy
@@ -239,7 +239,7 @@ class SWE(Benchmark):
 
     def tools(self, agents: list[str], config: SwarmConfig | None = None) -> AgentTools:
         """`shell` and `run_python` on each agent's own service, in every mode."""
-        return AgentTools(names=list(TOOLS), bindings=tool_bindings(), tool_kwargs={})
+        return AgentTools(names=list(agent_tools.TOOL_NAMES), bindings=tool_bindings(), tool_kwargs={})
 
     def setup(self) -> Solver:
         return swe_setup()

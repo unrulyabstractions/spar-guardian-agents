@@ -18,7 +18,6 @@ DIFF_KEEP_BYTES = 400_000
 DIFF_READ_MAX = 50 * 1024 ** 2   # Inspect refuses reads over 100 MiB; a larger diff is recorded and left ungraded
 AGENT_CPUS = 3.0
 AGENT_MEM = "5g"
-TOOLS = ["shell", "run_python"]   # bound per agent; ORBIT reserves the names bash and python
 
 # Lucy's honeypots and split: splits/<issue>.yaml cuts the fix into one piece per part A, B and C
 HONEYPOTS = ("as_released", "own_piece", "jigsaw")

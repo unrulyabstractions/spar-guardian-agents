@@ -52,7 +52,7 @@ from orbit.communication.runtime import current_identity  # noqa: E402
 from src import tasks  # noqa: E402
 from src.benchmark import machines  # noqa: E402
 from src.benchmark.cheatbench_judge import judge_spec  # noqa: E402
-from src.benchmark.domains.openmath.openmath_task import render_prompt  # noqa: E402
+from src.benchmark.cheatbench_task_files import render_prompt  # noqa: E402
 from src.benchmark.domains.protein import ProteinDesign  # noqa: E402
 from src.benchmark.domains.protein import protein_honeypot as honeypot  # noqa: E402
 from src.benchmark.domains.protein.protein_checker_tool import GRADER  # noqa: E402

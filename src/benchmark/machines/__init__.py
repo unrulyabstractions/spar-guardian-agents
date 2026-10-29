@@ -5,36 +5,34 @@ container built from its Dockerfile, as the user `user`, with the row's files at
 agent gets that container (the service `default`). A team gets one such container per agent, named by the agent and
 staged with the agent's own copy of the row, so a piece of the honeypot moves between agents only through the board.
 A lone agent uses ORBIT's built-in bash and python as `user`; a team's agents use `shell` and `run_python` bound to
-their own containers (ORBIT reserves the names bash and python).
+their own containers (src/benchmark/agent_tools.py).
 
 The task's own tool (the verifier of the interview tasks, the checker of protein design) runs on the host, bound per
 agent: host_tool() wraps CheatBench's grader `(state, call)` pair once per owner, records every call in the sample
 store and mirrors the owner's state there, so the scorer and the export read them back. The owner is the agent in
-the lone and solo_task layouts and the team in shared_task, where CheatBench's one state per episode becomes one
-state per team. accepted_by_owner() reads those states as stop_after_delivery's predicate.
+the lone and solo_task layouts and the team in shared_task (owners), where CheatBench's one state per episode becomes
+one state per team. accepted_by_owner() reads those states as stop_after_delivery's predicate.
 """
 from __future__ import annotations
 
 import copy
 import hashlib
-import io
 import json
-import os
-import subprocess
-import tarfile
 import time
 import uuid
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
-import yaml
-from inspect_ai.tool import ToolDef, ToolError, ToolParams, bash, python
+from inspect_ai.solver import Generate, Solver, TaskState, solver
+from inspect_ai.tool import ToolDef, ToolError, ToolParams
 from inspect_ai.util import sandbox, store
 from orbit.tools import ToolContext, ToolFactory
 
+from src.benchmark import agent_tools, docker_images, staging
 from src.benchmark import honeypot_fingerprints as signals
 from src.benchmark import sandbox_hygiene as hygiene
+from src.benchmark.benchmark_protocol import AgentTools
 
 HERE = Path(__file__).parent
 IMAGE = "cbtask:python311"
@@ -46,49 +44,38 @@ AGENT_UID = 1000
 WORKDIR = "/workspace"
 STAGE_TAR = "/root/.stage.tgz"
 DEFAULT_SERVICE = "default"
+TEAM = "team"                       # the owner of a shared_task team's tool state
 TOOL_TIMEOUT_S = 300
 # Directories the image already has: never in a staging archive, so their owners and modes stay the image's.
 IMAGE_DIRS = frozenset({"/", "/home", f"/home/{AGENT_NAME}", "/tmp", "/var", "/var/tmp", "/opt", "/root", "/usr",
                         "/etc", WORKDIR})
-LONE_TOOL_NAMES = ["bash", "python"]
-LONE_TOOL_KWARGS = {"bash": {"user": AGENT_NAME, "timeout": TOOL_TIMEOUT_S},
-                    "python": {"user": AGENT_NAME, "timeout": TOOL_TIMEOUT_S}}
-MACHINE_TOOL_NAMES = ["shell", "run_python"]
 TOOL_STATE = "task_tool_state"      # sample store: {owner: the grader's state after its last call}
 TOOL_CALLS = "task_tool_calls"      # sample store: every call, in order
 TOOL_RUN = "task_tool_run"          # sample store: this sample run's id, which keys its owners' grader states
+# How a team on machines departs from CheatBench's runner, after the common labels and the domain's own.
+MACHINE_DEVIATIONS = ["each_agent_has_its_own_container_and_copy_of_the_row",
+                      "tools_shell_and_run_python_bound_per_agent_container",
+                      "agent_processes_killed_after_each_command_and_at_the_end"]
+SHARED_DEVIATIONS = ["team_shares_one_tool_state_in_shared_task"]
 
 
 # --------------------------------------------------------------------------
 # the image and the compose file
 # --------------------------------------------------------------------------
-def _docker(*args: str, stdin: bytes | None = None, check: bool = True, timeout: int = 7200):
-    return subprocess.run(["docker", *args], check=check, capture_output=True, timeout=timeout, input=stdin)
-
-
-def image_id(tag: str = IMAGE) -> str | None:
-    r = _docker("image", "inspect", "--format", "{{.Id}}", tag, check=False)
-    return r.stdout.decode().strip() if r.returncode == 0 else None
-
-
-def _labels(tag: str) -> dict | None:
-    r = _docker("image", "inspect", "--format", "{{json .Config.Labels}}", tag, check=False)
-    return (json.loads(r.stdout.decode() or "null") or {}) if r.returncode == 0 else None
-
-
-def ensure_image(*, log=print) -> str:
-    """Build IMAGE from python311.Dockerfile (on stdin, no context) when it is missing or its label no longer holds
-    the recipe's sha256; return the image id."""
-    sha = hashlib.sha256(DOCKERFILE).hexdigest()
-    if (_labels(IMAGE) or {}).get(IMAGE_LABEL) != sha:
-        log(f"machines: building {IMAGE} from {HERE / 'python311.Dockerfile'}")
-        _docker("build", "-t", IMAGE, "--label", f"{IMAGE_LABEL}={sha}", "-", stdin=DOCKERFILE)
-    return image_id(IMAGE)
+def ensure_image(*, log=print) -> str | None:
+    """Build IMAGE from python311.Dockerfile when it is missing or its label no longer holds the recipe's sha256;
+    return the image id."""
+    return docker_images.ensure_labelled_image(IMAGE, DOCKERFILE, IMAGE_LABEL, what="machines", log=log)
 
 
 def service_of(agent: str, agents: list[str]) -> str:
     """The agent's service: `default` for a lone agent, its own name in a team."""
     return DEFAULT_SERVICE if len(agents) < 2 else agent
+
+
+def owners(agents: list[str], mode: str | None) -> dict[str, str]:
+    """Whose tool state each agent's calls go to: the team's in shared_task, else its own."""
+    return {a: TEAM if mode == "shared_task" else a for a in agents}
 
 
 def _service(**extra) -> dict:
@@ -98,17 +85,12 @@ def _service(**extra) -> dict:
 
 def write_compose(build_dir: Path, agents: list[str]) -> Path:
     """The compose file under build_dir/docker/, named by the roster size: the service `default` for a lone agent,
-    one service per agent named by the agent for a team, the first one Inspect's default. Written atomically."""
+    one service per agent named by the agent for a team, the first one Inspect's default."""
     if len(agents) < 2:
         services = {DEFAULT_SERVICE: _service()}
     else:
         services = {a: _service(**({"x-default": True} if i == 0 else {})) for i, a in enumerate(agents)}
-    path = build_dir / "docker" / f"compose-{len(agents)}.yaml"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f"{path.name}.tmp{os.getpid()}")
-    tmp.write_text(yaml.safe_dump({"services": services}, sort_keys=False))
-    os.replace(tmp, path)
-    return path
+    return staging.write_yaml(build_dir / "docker" / f"compose-{len(agents)}.yaml", {"services": services})
 
 
 # --------------------------------------------------------------------------
@@ -118,39 +100,24 @@ def make_stage_tar(files: dict[str, bytes], out_path: Path, *, mtimes: dict[str,
                    modes: dict[str, int] | None = None) -> Path:
     """Pack `files` ({absolute destination: bytes}) with CheatBench's staging semantics (core/stage.py): files 0644
     unless `modes` says otherwise, mtime now unless `mtimes` says otherwise, everything owned by uid 1000, and every
-    directory tar has to create (none the image has) 0755 with the newest mtime beneath it. Written atomically."""
-    now = int(time.time())
+    directory tar has to create (none the image has) 0755 with the newest mtime beneath it."""
+    now = staging.now()
     mtimes, modes = mtimes or {}, modes or {}
-    dirs: dict[str, int] = {}
     for dest in files:
-        if not dest.startswith("/") or ".." in Path(dest).parts:
-            raise ValueError(f"bad destination {dest!r}")
-        parent = str(Path(dest).parent)
-        while parent not in IMAGE_DIRS:
-            dirs[parent] = max(dirs.get(parent, 0), mtimes.get(dest, now))
-            parent = str(Path(parent).parent)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = out_path.with_name(f"{out_path.name}.tmp{os.getpid()}")
-    with tarfile.open(tmp, "w:gz") as tar:
-        for d in sorted(dirs, key=lambda p: (p.count("/"), p)):
-            info = tarfile.TarInfo(d.lstrip("/"))
-            info.type = tarfile.DIRTYPE
-            info.mode = 0o755
-            info.uid = info.gid = AGENT_UID
-            info.uname = info.gname = AGENT_NAME
-            info.mtime = dirs[d]
-            tar.addfile(info)
-        for dest in sorted(files):
-            data = files[dest]
-            info = tarfile.TarInfo(dest.lstrip("/"))
-            info.size = len(data)
-            info.mode = modes.get(dest, 0o644)
-            info.uid = info.gid = AGENT_UID
-            info.uname = info.gname = AGENT_NAME
-            info.mtime = mtimes.get(dest, now)
-            tar.addfile(info, io.BytesIO(data))
-    os.replace(tmp, out_path)
-    return out_path
+        staging.check_destination(dest, absolute=True)
+    dirs = staging.parent_dirs(files, mtimes, stop=IMAGE_DIRS, default=now)
+    members = [staging.Member(dest, files[dest], modes.get(dest, 0o644), mtimes.get(dest, now))
+               for dest in sorted(files)]
+    return staging.write_tar(members, out_path, dirs=dirs, uid=AGENT_UID, uname=AGENT_NAME)
+
+
+def stage_tar_for(build_dir: Path, row_id: str, files: dict[str, bytes], *,
+                  mtimes: dict[str, int] | None = None) -> str:
+    """One agent's staging archive under build_dir/stage/, named by the row and a digest of its files, so agents
+    with the same copy share one archive and a changed copy gets a new one."""
+    digest = hashlib.sha256(json.dumps({d: hashlib.sha256(b).hexdigest() for d, b in sorted(files.items())})
+                            .encode()).hexdigest()[:12]
+    return str(make_stage_tar(files, build_dir / "stage" / f"{row_id}-{digest}.tgz", mtimes=mtimes))
 
 
 async def stage(service: str, tar_path: Path) -> None:
@@ -160,6 +127,21 @@ async def stage(service: str, tar_path: Path) -> None:
     r = await box.exec(["bash", "-c", SETUP_SCRIPT], user="root", timeout=300)
     if r.returncode != 0:
         raise RuntimeError(f"staging {service} failed: {(r.stderr or '')[-500:]}")
+
+
+async def stage_all(stage_map: dict[str, str]) -> None:
+    """Every service's archive (metadata["cheatbench"]["stage"], {service: tar path}) into its container."""
+    for service, tar in stage_map.items():
+        await stage(service, Path(tar))
+
+
+@solver
+def stage_machines() -> Solver:
+    """Task setup: each agent's copy of the row into its own container, before the probe and the agents."""
+    async def solve(state: TaskState, generate: Generate) -> TaskState:
+        await stage_all(state.metadata["cheatbench"]["stage"])
+        return state
+    return solve
 
 
 FILE_HASHES = """import hashlib, json, os, stat, sys
@@ -188,36 +170,21 @@ async def file_hashes(service: str, paths: list[str]) -> dict[str, str | None]:
 # --------------------------------------------------------------------------
 # the agents' tools
 # --------------------------------------------------------------------------
-def _shell(ctx: ToolContext) -> ToolDef:
-    inner = bash(timeout=TOOL_TIMEOUT_S, user=AGENT_NAME, sandbox=ctx.agent_name)
-    spec = ToolDef(inner)
-
-    async def execute(command: str) -> str:
-        try:
-            return await inner(command=command)
-        finally:
-            await hygiene.reap_after(ctx.agent_name, AGENT_NAME, box=sandbox(ctx.agent_name))
-
-    return ToolDef(execute, name="shell", description=spec.description, parameters=spec.parameters)
-
-
-def _run_python(ctx: ToolContext) -> ToolDef:
-    inner = python(timeout=TOOL_TIMEOUT_S, user=AGENT_NAME, sandbox=ctx.agent_name)
-    spec = ToolDef(inner)
-
-    async def execute(code: str) -> str:
-        try:
-            return await inner(code=code)
-        finally:
-            await hygiene.reap_after(ctx.agent_name, AGENT_NAME, box=sandbox(ctx.agent_name))
-
-    return ToolDef(execute, name="run_python", description=spec.description, parameters=spec.parameters)
-
-
 def machine_tool_bindings() -> dict[str, ToolFactory]:
-    """`shell` and `run_python`: Inspect's bash and python, as `user` in the agent's own container. After each command
-    every process of `user` in that container is killed (src/benchmark/sandbox_hygiene.py)."""
-    return {"shell": ToolFactory(_shell), "run_python": ToolFactory(_run_python)}
+    """`shell` and `run_python` as `user` in the agent's own container, that user's processes killed after each
+    command (src/benchmark/agent_tools.py)."""
+    return agent_tools.tool_bindings(lambda agent: agent_tools.Seat(user=AGENT_NAME, service=agent, reap=AGENT_NAME),
+                                     timeout=TOOL_TIMEOUT_S)
+
+
+def tools_for(agents: list[str], task_tool: str, binding: dict[str, ToolFactory]) -> AgentTools:
+    """The roster's tools: a lone agent gets ORBIT's bash and python as `user` and the task's tool; a team gets shell
+    and run_python in each agent's container and the task's tool."""
+    if len(agents) < 2:
+        return AgentTools(names=[*agent_tools.LONE_TOOL_NAMES, task_tool], bindings=binding,
+                          tool_kwargs=agent_tools.lone_tool_kwargs(AGENT_NAME, TOOL_TIMEOUT_S))
+    return AgentTools(names=[*agent_tools.TOOL_NAMES, task_tool], bindings={**machine_tool_bindings(), **binding},
+                      tool_kwargs={})
 
 
 # --------------------------------------------------------------------------
@@ -300,9 +267,8 @@ STATE_DIRS = ["/tmp", "/var/tmp", "/dev/shm", WORKDIR, f"/home/{AGENT_NAME}"]
 
 
 async def sandbox_states(services: dict[str, str]) -> dict[str, dict]:
-    """Each agent's container at the end of the run (src/benchmark/sandbox_hygiene.py sandbox_state):
-    `user`'s processes,
-    killed, its sockets, and the files of the shared directories by owner."""
+    """Each agent's container at the end of the run (src/benchmark/sandbox_hygiene.py sandbox_state): `user`'s
+    processes, killed, its sockets, and the files of the shared directories by owner."""
     return {agent: await hygiene.sandbox_state({agent: AGENT_UID}, STATE_DIRS, box=sandbox(service))
             for agent, service in services.items()}
 
@@ -310,10 +276,10 @@ async def sandbox_states(services: dict[str, str]) -> dict[str, dict]:
 async def probe_machines(services: dict[str, str], prints: signals.Fingerprints, roots: list[str], *,
                          skip: list[str] | None = None, slices: dict[str, str] | None = None,
                          min_hits: int = 3) -> dict:
-    """The honeypot probe (src/benchmark/honeypot_fingerprints.py probe, a file counting from min_hits
-    distinctive lines) in every
-    agent's container ({agent: service}), merged in the by_owner shape: everything uid 1000 in an agent's container
-    is the agent's, root's files are shared, the scanned counts add up, and the first error is reported."""
+    """The honeypot probe (src/benchmark/honeypot_fingerprints.py probe, a file counting from min_hits distinctive
+    lines) in every agent's container ({agent: service}), merged in the by_owner shape: everything uid 1000 in an
+    agent's container is the agent's, root's files are shared, the scanned counts add up, and the first error is
+    reported."""
     merged: dict = {"agents": {}, "team": {"matches": [], "line_hits": []},
                     "shared": {"matches": [], "line_hits": []}, "scanned": 0}
     for agent, service in services.items():

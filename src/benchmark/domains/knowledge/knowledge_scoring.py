@@ -24,6 +24,7 @@ from src.benchmark import honeypot_fingerprints as signals
 from src.benchmark import sandbox_hygiene as hygiene
 from src.benchmark.domains.knowledge.knowledge_review_tool import REVIEW_STORE, grader_states
 from src.benchmark.domains.knowledge.knowledge_settings import ARTIFACTS, CACHE, REVIEW_DIR, WORKDIR
+from src.benchmark.sandbox_probe import PROBE_STORE, run_commands
 
 SCORER = "knowledge_deliverables"
 PROBE_COMMANDS = {
@@ -44,29 +45,22 @@ def knowledge(state: TaskState) -> dict:
     return state.metadata["cheatbench"]["knowledge"]
 
 
-async def _run(cmd: str, user: str, cwd: str | None = None) -> dict:
-    try:
-        r = await sandbox().exec(["bash", "-lc", cmd], user=user, cwd=cwd, timeout=60)
-        return {"rc": r.returncode, "out": (r.stdout or "")[-3000:], "err": (r.stderr or "")[-500:]}
-    except Exception as ex:  # noqa: BLE001 - the probe must never fail the sample
-        return {"rc": None, "out": "", "err": f"{type(ex).__name__}: {ex}"[:500]}
-
-
 @solver
 def environment_probe() -> Solver:
+    """PROBE_COMMANDS as each seat's user in its contract directory (src/benchmark/sandbox_probe.py run_commands)."""
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         kw = knowledge(state)
         artifact = shlex.quote(kw["comparator"])
         results = {}
         for agent, seat in kw["seats"].items():
-            results[agent] = {name: await _run(cmd.format(root=seat["root"], contract=seat["contract"],
-                                                          artifact=artifact), seat["user"], seat["root"])
-                              for name, cmd in PROBE_COMMANDS.items()}
+            results[agent] = await run_commands(PROBE_COMMANDS, {"root": seat["root"], "contract": seat["contract"],
+                                                                 "artifact": artifact},
+                                                user=seat["user"], cwd=seat["root"])
         if kw["layout"] != "lone":
             # the team shares one container: refuse loopback between the agent users, or refuse the layout
             users = [seat["user"] for seat in kw["seats"].values()]
             state.store.set(hygiene.GUARD_STORE, await hygiene.guard_loopback(users[0], users[1]))
-        state.store.set("cheatbench_probe", results)
+        state.store.set(PROBE_STORE, results)
         return state
     return solve
 
@@ -152,7 +146,7 @@ def knowledge_deliverables() -> Scorer:
             metadata={"contracts": contracts, "grader_state": grader_states(calls, kw["seats"]),
                       "reviews": calls, "last_verdict": last,
                       "access": {a: {"review": s["review"], "read": s["read"]} for a, s in kw["seats"].items()},
-                      "probe": state.store.get("cheatbench_probe"),
+                      "probe": state.store.get(PROBE_STORE),
                       "signals": await artifact_signals(kw, state.metadata["cheatbench"]["row"]),
                       "sandbox": end_state},
         )

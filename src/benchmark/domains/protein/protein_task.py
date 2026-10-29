@@ -20,39 +20,31 @@ design (protein_honeypot.py), a regulator or a disregulator none.
 """
 from __future__ import annotations
 
-import calendar
 import hashlib
-import json
-import time
 from collections.abc import Awaitable, Callable
 
-import yaml
 from inspect_ai.dataset import Sample
 from inspect_ai.scorer import Scorer
 from inspect_ai.solver import Solver
 
-from src.benchmark import machines
-from src.benchmark.benchmark_protocol import SUBMIT_PROMPT_DEVIATION, AgentTools, Benchmark
-from src.benchmark.domains.openmath.openmath_task import render_prompt
+from src.benchmark import cheatbench_task_files as task_files
+from src.benchmark import machines, staging
+from src.benchmark.benchmark_protocol import COMMON_DEVIATIONS, AgentTools, Benchmark
 from src.benchmark.domains.protein.protein_checker_tool import TOOL, checker_binding
 from src.benchmark.domains.protein.protein_honeypot import agent_files, part_path, parts_of, pieces_of
 from src.benchmark.domains.protein.protein_scoring import protein_deliverables, protein_setup
 from src.benchmark.domains.protein.protein_settings import BUILD, DEFAULT_ROW, PIECE, TASK, TASK_DIR
+from src.configuration import access_policy
 from src.configuration.swarm_config import SwarmConfig
 
-DEVIATIONS = [
-    "agent_is_orbit_turn_react_not_vendor_harness",
-    SUBMIT_PROMPT_DEVIATION,
-    "continue_prompts_are_orbit_synthetic_user_messages",
+DEVIATIONS = COMMON_DEVIATIONS + [
     "task_tool_run_on_the_host_with_state_in_the_sample_store",
     "check_design_errors_are_inspect_tool_errors_in_place_of_mcp_iserror",
     "check_design_parameter_has_a_description_because_inspect_requires_one",
     "no_atime_watcher_on_the_payload",
 ]
-MACHINE_DEVIATIONS = ["each_agent_has_its_own_container_and_copy_of_the_row",
-                      "tools_shell_and_run_python_bound_per_agent_container",
-                      "agent_processes_killed_after_each_command_and_at_the_end"]
-SHARED_DEVIATIONS = ["team_shares_one_tool_state_in_shared_task"]
+MACHINE_DEVIATIONS = machines.MACHINE_DEVIATIONS
+SHARED_DEVIATIONS = machines.SHARED_DEVIATIONS
 SPLIT_DEVIATIONS = [
     "planted_designs_cut_into_segments_inside_each_sequence_and_dealt_as_access_says",
     "screening_log_names_the_agents_part_files_and_the_cut",
@@ -60,27 +52,17 @@ SPLIT_DEVIATIONS = [
 
 
 def load_task_yaml() -> dict:
-    return yaml.safe_load((TASK_DIR / "task.yaml").read_text())
+    return task_files.load_task_yaml(TASK_DIR)
 
 
 def load_rows() -> list[dict]:
-    data = BUILD / "data.jsonl"
-    if not data.exists():
-        raise FileNotFoundError(f"{data} missing: build the task first (fetches 20 FASTA records from rcsb.org): "
-                                "uv run python -m src.benchmark.domains.protein.protein_rows_build")
-    return [json.loads(line) for line in data.read_text().splitlines() if line.strip()]
+    """The built rows (build/protein_design/data.jsonl)."""
+    return task_files.load_rows(BUILD, hint=" (fetches 20 FASTA records from rcsb.org): uv run python -m "
+                                            "src.benchmark.domains.protein.protein_rows_build")
 
 
 def load_row(row_id: str) -> dict:
-    row = next((r for r in load_rows() if r["id"] == row_id), None)
-    if row is None:
-        raise ValueError(f"no row {row_id!r} in {BUILD / 'data.jsonl'}")
-    return row
-
-
-def epoch(when: str) -> int:
-    """A row's file_mtimes value as an epoch, read as UTC (core/stage.py)."""
-    return calendar.timegm(time.strptime(when, "%Y-%m-%d %H:%M"))
+    return task_files.load_row(load_rows(), row_id, BUILD)
 
 
 def team_mode(agents: list[str], config: SwarmConfig | None) -> str | None:
@@ -91,8 +73,8 @@ def team_mode(agents: list[str], config: SwarmConfig | None) -> str | None:
 
 
 def owner_of(agents: list[str], config: SwarmConfig | None) -> dict[str, str]:
-    """Whose checker state each agent's calls go to: its own, or the team's in shared_task."""
-    return {a: "team" if team_mode(agents, config) == "shared_task" else a for a in agents}
+    """Whose checker state each agent's calls go to: its own, or the team's in shared_task (machines.owners)."""
+    return machines.owners(agents, team_mode(agents, config))
 
 
 class ProteinDesign(Benchmark):
@@ -118,10 +100,8 @@ class ProteinDesign(Benchmark):
         super().check(config)
         access = config.resolve_access(TASK)
         if isinstance(access, dict):
-            named = sorted({k for items in access.values() for k in pieces_of(items) or []})
-            if named and (named != list(range(1, named[-1] + 1)) or named[-1] < 2):
-                raise ValueError(f"access must name segments 1..N with N at least 2, each held by some agent, "
-                                 f"got {named}")
+            access_policy.check_numbered(sorted({k for items in access.values() for k in pieces_of(items) or []}),
+                                         "segments")
 
     def split_items(self, n_neutral: int) -> list[str]:
         """One segment of every planted design per neutral agent."""
@@ -143,27 +123,22 @@ class ProteinDesign(Benchmark):
         parts = parts_of(plan)
         image = machines.ensure_image()
         compose = machines.write_compose(BUILD, agents)
-        mtimes = {dest: epoch(when) for dest, when in (row.get("file_mtimes") or {}).items()}
+        mtimes = {dest: staging.parse_mtime(when) for dest, when in (row.get("file_mtimes") or {}).items()}
         seats, stage = {}, {}
         for a in agents:
             pieces = pieces_of(plan[a])
             files = agent_files(row, pieces, parts)
-            digest = hashlib.sha256(json.dumps({d: hashlib.sha256(b).hexdigest() for d, b in sorted(files.items())})
-                                    .encode()).hexdigest()[:12]
             service = machines.service_of(a, agents)
-            tar = machines.make_stage_tar(files, BUILD / "stage" / f"{row['id']}-{digest}.tgz",
-                                          mtimes={d: mtimes.get(d, mtimes.get(row["payload_file"])) for d in files})
-            stage[service] = str(tar)
+            stage[service] = machines.stage_tar_for(BUILD, row["id"], files, mtimes={
+                d: mtimes.get(d, mtimes.get(row["payload_file"])) for d in files})
             payloads = [row["payload_file"]] if pieces is None else [part_path(row, k, parts) for k in pieces]
             seats[a] = {"service": service, "holds": plan[a], "pieces": pieces, "payloads": payloads,
                         "staged": {d: hashlib.sha256(b).hexdigest() for d, b in files.items()}}
         self.split = any(seat["pieces"] is not None for seat in seats.values())
         self.planned = (agents, None if config is None else config.model_dump(mode="json"))
-        instruction = render_prompt(TASK_DIR / cfg["prompts"]["instruction"], row) + instruction_suffix
+        instruction = task_files.render_prompt(TASK_DIR / cfg["prompts"]["instruction"], row) + instruction_suffix
         cheatbench = {
-            "task": cfg["name"], "variant": "", "row": row,
-            "instruction": instruction, "prompt_file": cfg["prompts"]["instruction"],
-            "timeout_s": int(cfg["timeout_s"]), "network": cfg.get("network"),
+            **task_files.sample_metadata(cfg, row, instruction),
             "protein": {"task": TASK, "row_id": row["id"], "layout": "lone" if len(agents) < 2 else "machines",
                         "mode": team_mode(agents, config), "split": self.split, "parts": parts,
                         "work_dir": row["vars"]["work_dir"], "payload_file": row["payload_file"],
@@ -183,11 +158,7 @@ class ProteinDesign(Benchmark):
             self.split = any(pieces_of(items) is not None for items in self.access_plan(agents, config, None).values())
         owners = owner_of(agents, config)
         checker = checker_binding(load_row(self.row), lambda agent: owners[agent])
-        if len(agents) < 2:
-            return AgentTools(names=[*machines.LONE_TOOL_NAMES, TOOL], bindings=checker,
-                              tool_kwargs=machines.LONE_TOOL_KWARGS)
-        return AgentTools(names=[*machines.MACHINE_TOOL_NAMES, TOOL],
-                          bindings={**machines.machine_tool_bindings(), **checker}, tool_kwargs={})
+        return machines.tools_for(agents, TOOL, checker)
 
     def setup(self) -> Solver | None:
         return protein_setup()

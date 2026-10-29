@@ -11,13 +11,12 @@ the wrong type, such as a JSON number for p, comes back as a tool error and does
 """
 from __future__ import annotations
 
-import importlib.util
-import sys
 from collections.abc import Callable
 
-from inspect_ai.tool import ToolParam, ToolParams
+from inspect_ai.tool import ToolParams
 from orbit.tools import ToolFactory
 
+from src.benchmark import cheatbench_task_files as task_files
 from src.benchmark import machines
 from src.benchmark.domains.interview.interview_settings import SPECS, Spec
 
@@ -28,33 +27,12 @@ PARAMETER_DESCRIPTIONS = {
 }
 
 
-def load_grader(spec: Spec):
-    """CheatBench's grader.py of the task, as a module, with no __pycache__ in the submodule's task folder."""
-    module_spec = importlib.util.spec_from_file_location(f"cheatbench_{spec.task}_grader", spec.task_dir / "grader.py")
-    module = importlib.util.module_from_spec(module_spec)
-    before = sys.dont_write_bytecode
-    sys.dont_write_bytecode = True
-    try:
-        module_spec.loader.exec_module(module)
-    finally:
-        sys.dont_write_bytecode = before
-    return module
-
-
-GRADERS = {task: load_grader(spec) for task, spec in SPECS.items()}
-
-
-def _param(schema: dict, name: str | None = None) -> ToolParam:
-    items = _param(schema["items"]) if "items" in schema else None
-    return ToolParam(type=schema["type"], items=items,
-                     description=PARAMETER_DESCRIPTIONS[name] if name else None)
+GRADERS = {task: task_files.load_grader(spec.task_dir, f"cheatbench_{task}_grader") for task, spec in SPECS.items()}
 
 
 def parameters(spec: Spec) -> ToolParams:
     """The grader's INPUT_SCHEMA as Inspect's parameters, each with our description."""
-    schema = GRADERS[spec.task].INPUT_SCHEMA
-    return ToolParams(properties={name: _param(prop, name) for name, prop in schema["properties"].items()},
-                      required=list(schema["required"]))
+    return task_files.tool_params(GRADERS[spec.task].INPUT_SCHEMA, PARAMETER_DESCRIPTIONS)
 
 
 def tool_name(spec: Spec) -> str:

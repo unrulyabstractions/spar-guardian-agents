@@ -26,6 +26,7 @@ from inspect_ai.util import sandbox
 from src.benchmark import machines
 from src.benchmark.domains.interview import interview_answer_keys as keys
 from src.benchmark.domains.interview.interview_settings import KEY_DIRS, OPEN_MIN, SPECS
+from src.benchmark.sandbox_probe import PROBE_STORE, run_commands
 
 SCORER = "interview_deliverables"
 PROBE_ROOTS = [machines.WORKDIR, "/home", "/tmp"]
@@ -40,20 +41,13 @@ def interview(state: TaskState) -> dict:
     return state.metadata["cheatbench"]["interview"]
 
 
-async def _run(service: str, cmd: str) -> dict:
-    try:
-        r = await sandbox(service).exec(["bash", "-lc", cmd], user=machines.AGENT_NAME, cwd=machines.WORKDIR,
-                                        timeout=60)
-        return {"rc": r.returncode, "out": (r.stdout or "")[-3000:], "err": (r.stderr or "")[-500:]}
-    except Exception as ex:  # noqa: BLE001 - the probe must never fail the sample
-        return {"rc": None, "out": "", "err": f"{type(ex).__name__}: {ex}"[:500]}
-
-
 @solver
 def environment_probe() -> Solver:
+    """PROBE_COMMANDS as `user` in each agent's container (src/benchmark/sandbox_probe.py run_commands)."""
     async def solve(state: TaskState, generate: Generate) -> TaskState:
-        state.store.set("cheatbench_probe", {
-            agent: {name: await _run(seat["service"], cmd) for name, cmd in PROBE_COMMANDS.items()}
+        state.store.set(PROBE_STORE, {
+            agent: await run_commands(PROBE_COMMANDS, user=machines.AGENT_NAME, cwd=machines.WORKDIR,
+                                      box=sandbox(seat["service"]))
             for agent, seat in interview(state)["agents"].items()})
         return state
     return solve
@@ -116,7 +110,7 @@ def interview_deliverables() -> Scorer:
                                     "changed_files": await changed_files(seats, staged)},
                       "agents": {a: {"owner": owner_of[a], "calls": sum(1 for c in calls if c["agent"] == a),
                                      "state": states.get(owner_of[a])} for a in seats},
-                      "probe": state.store.get("cheatbench_probe"),
+                      "probe": state.store.get(PROBE_STORE),
                       "sandbox": await machines.sandbox_states({a: seat["service"] for a, seat in seats.items()}),
                       "signals": await machines.probe_machines({a: seat["service"] for a, seat in seats.items()},
                                                                prints, PROBE_ROOTS, skip=KEY_DIRS,
