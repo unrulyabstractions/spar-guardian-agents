@@ -7,6 +7,7 @@ import sys
 
 from inspect_ai.model import GenerateConfig
 
+from tools import DEFAULT_MODEL
 from tools.failures.fetch_mast_taxonomy import FETCH_COMMAND, taxonomy_present
 from tools.failures.mast import annotate_run
 from tools.failures.who_when import METHODS, attribute_run
@@ -14,7 +15,6 @@ from tools.run_reader import load_run, model_string, tools_dir, write_summary
 
 NAME = "failures"
 HELP = "MAST failure modes and Who&When attribution of the run's merged trace (LLM calls)"
-DEFAULT_MODEL = "gpt-6-luna"
 DEFAULT_MAX_STEPS = 60
 DEFAULT_SEED = 0
 # Who&When's inference.py sends max_tokens 1024, sized for models without reasoning. A reasoning model such as

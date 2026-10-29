@@ -12,17 +12,11 @@ from matplotlib.ticker import MaxNLocator
 
 from tools.contagion.contagion_models import LABELS, Settings, fit
 from tools.contagion.contagion_observed import BEHAVIOURS, Board, adoption_curve
+from tools.figure_style import AXIS, CATEGORICAL, DPI, GRID, INK, INK_SECONDARY, MUTED, SURFACE
 
 # The palette of src/ui/run_figures.py (not importable here: it needs ORBIT), and its categorical slots for the models.
-SURFACE = "#fcfcfb"
-INK = "#0b0b0b"
-INK_SECONDARY = "#52514e"
-MUTED = "#898781"
-GRID = "#e1e0d9"
-AXIS = "#c3c2b7"
-MODEL_COLOURS = {"si": "#2a78d6", "threshold": "#eb6834", "sir": "#1baf7a"}
+MODEL_COLOURS = dict(zip(("si", "threshold", "sir"), CATEGORICAL))
 TITLES = {"dishonest": "dishonest: cheating onset", "honest": "honest: intervention or disclosure"}
-DPI = 160
 
 
 def observed_curves(board: Board) -> dict[str, list[float]]:

@@ -8,6 +8,7 @@ import sys
 
 from inspect_scout import scan, scan_results_df, transcripts_from
 
+from tools import DEFAULT_MODEL
 from tools.run_reader import Run, load_run, model_string, tools_dir, write_summary
 from tools.scout.scout_results import (
     attach_grep_floor,
@@ -24,7 +25,6 @@ from tools.scout.scout_transcripts import build_database, message_origins, origi
 
 NAME = "scout"
 HELP = "Inspect Scout scanners for cheating behaviours in each agent's transcript, with their rounds"
-DEFAULT_MODEL = "gpt-6-luna"
 MAX_PROCESSES = 1
 DISPLAY = "none"
 

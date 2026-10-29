@@ -10,6 +10,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from tools import DEFAULT_MODEL
 from tools.hawk.hawk_scan_config import (
     HAWK_PYTHON,
     HAWK_SPEC,
@@ -26,7 +27,6 @@ from tools.run_reader import ROOT, Run, load_run, model_string, tools_dir, write
 
 NAME = "hawk"
 HELP = "Hawk (METR) scan configs over the runs' transcripts with our Scout scanners; --run runs `hawk local scan`"
-DEFAULT_MODEL = "gpt-6-luna"
 DEFAULT_TIMEOUT_S = 3600
 TAIL_LINES = 40
 LOCAL_NOTES = [

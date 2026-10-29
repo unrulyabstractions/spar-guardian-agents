@@ -15,21 +15,14 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch
 
+from tools.figure_style import CRITICAL, DPI, INK, INK_SECONDARY, MUTED, ROLE_COLOURS, SURFACE, legend_below
 from tools.graphs.graph_build import OVERSIGHT, READ
 
-SURFACE = "#fcfcfb"
-INK = "#0b0b0b"
-INK_SECONDARY = "#52514e"
-MUTED = "#898781"
-CRITICAL = "#d03b3b"
-ROLE_COLOURS = {"worker": "#2a78d6", "regulator": "#eb6834", "disregulator": "#1baf7a"}
 OTHER_ROLE = MUTED
-DPI = 160
 NODE_SIZE = 900
 RING_SIZE = 1500
 LAYOUTS = ("circular", "spring")
-LEGEND = dict(loc="upper left", bbox_to_anchor=(0, -0.02), ncol=3, frameon=False, fontsize=8,
-              labelcolor=INK_SECONDARY, handletextpad=0.5, columnspacing=1.6)
+LEGEND = legend_below(-0.02, handletextpad=0.5)
 
 
 def layout_positions(graph: nx.MultiDiGraph, agents: list[str], layout: str) -> dict[str, tuple[float, float]]:

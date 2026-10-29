@@ -2,7 +2,7 @@
 
     args = parse_example_arguments(Path(__file__), __doc__)
     config = build_config(args.preset, args.scale, args.settings)
-    run.run(args.name, OpenMath("riemann"), config, args.model, args.timeout)
+    return finish(args, run.run(args.name, OpenMath("riemann"), config, args.model, args.timeout))
 
 --model takes an entry of src/configuration/model_registry.yaml or an Inspect model string and comes back
 resolved to the
@@ -12,7 +12,8 @@ field, repeatable, and comes back after DEFAULT_SETTINGS in args.settings; --wor
 after the --set pairs, so the flag wins; --judge and --no-judge say whether the run is judged as it finishes
 (examples.USE_JUDGE_AS_DEFAULT otherwise), and a run that is not adds `judge=none` after the settings, for
 `scripts/rejudge.py <name>` to judge later; --name is the run's name; --timeout bounds one model request. A wrong
-model, field or value is an argument error (exit 2).
+model, field or value is an argument error (exit 2). finish() ends every script: after a run that succeeded it draws
+the run's figures under out/<name>/ and returns the exit code either way.
 """
 from __future__ import annotations
 
@@ -24,6 +25,7 @@ from src.configuration import model_registry as models
 from src.configuration import settings
 from src.configuration.scales import SCALES
 from src.configuration.swarm_config import PRESETS, ROLES, SwarmConfig, role_model_pairs
+from src.ui import run_figures as plots
 
 DEFAULT_MODEL = "deepseek-flash-openrouter"
 """The agents' model, as a registry entry (src/configuration/model_registry.yaml). Every run before 2026-10-27 used
@@ -77,3 +79,11 @@ def parse_example_arguments(script: Path, description: str | None, argv: list[st
         parser.error(str(error))
     args.settings = DEFAULT_SETTINGS + args.settings + roles + ([] if args.judge else ["judge=none"])
     return args
+
+
+def finish(args: argparse.Namespace, exit_code: int) -> int:
+    """The end of every example: the run's figures into out/<name>/ when the run succeeded (src/ui/run_figures.py
+    plot_run), and the run's exit code either way."""
+    if exit_code == 0:
+        plots.plot_run(settings.RUNS / args.name, settings.ROOT / "out" / args.name)
+    return exit_code

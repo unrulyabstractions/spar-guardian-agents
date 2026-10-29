@@ -2,14 +2,10 @@
 review tool, which names the client's cached artifact, and the permission to read it."""
 from pathlib import Path
 
-from examples.utils.example_arguments import parse_example_arguments
+from examples.utils.example_arguments import finish, parse_example_arguments
 from src import run
 from src.benchmark.domains.knowledge import KnowledgeWork
-from src.configuration import settings
 from src.configuration.swarm_config import build_config
-from src.ui import run_figures as plots
-
-OUT = settings.ROOT / "out"
 
 
 def main() -> int:
@@ -19,9 +15,7 @@ def main() -> int:
     config = build_config(args.preset, args.scale, args.settings).replace(n_agents=1)
     benchmark = KnowledgeWork("2ea2e5b5")
     exit_code = run.run(args.name, benchmark, config, args.model, args.timeout)
-    if exit_code == 0:
-        plots.plot_run(settings.RUNS / args.name, OUT / args.name)
-    return exit_code
+    return finish(args, exit_code)
 
 
 if __name__ == "__main__":

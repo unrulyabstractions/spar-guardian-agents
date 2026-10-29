@@ -13,6 +13,18 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.ticker import MaxNLocator
 
+from tools.figure_style import (
+    AXIS,
+    CATEGORICAL,
+    DPI,
+    GRID,
+    INK,
+    INK_SECONDARY,
+    MARKERS,
+    MUTED,
+    SURFACE,
+    legend_below,
+)
 from tools.run_reader import Run
 from tools.scout.scout_scanners import SIGNALS
 from tools.scout.scout_transcripts import MessageOrigin
@@ -43,17 +55,7 @@ JUDGE_FIELDS = {
 }
 # The dataviz palettes as src/ui/run_figures.py uses them (copied: that module imports ORBIT, which the tools
 # venv lacks).
-SURFACE = "#fcfcfb"
-INK = "#0b0b0b"
-INK_SECONDARY = "#52514e"
-MUTED = "#898781"
-GRID = "#e1e0d9"
-AXIS = "#c3c2b7"
-CATEGORICAL = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948")
-MARKERS = ("o", "s", "^", "D", "v", "P", "X", "*")
-DPI = 160
-LEGEND = dict(loc="upper left", bbox_to_anchor=(0, -0.18), ncol=3, frameon=False, fontsize=8,
-              labelcolor=INK_SECONDARY, handletextpad=0.4, columnspacing=1.6)
+LEGEND = legend_below(-0.18)
 
 
 def parse_json(value) -> object:
