@@ -35,13 +35,8 @@ from inspect_ai.solver import TaskState
 from inspect_ai.util import JSONSchema
 from openai.lib._parsing._completions import type_to_response_format_param
 
-from src.benchmark.atif_transcripts import (
-    SampleView,
-    agent_messages,
-    judge_prompt,
-    roster,
-    transcript_dict,
-)
+from src.benchmark.atif_transcripts import judge_prompt, transcript_dict
+from src.benchmark.eval_sample_view import SampleView, agent_messages, roster
 from src.configuration import settings
 from src.configuration.model_registry import usd_per_million
 

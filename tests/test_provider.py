@@ -15,8 +15,8 @@ from inspect_ai.model._providers.mockllm import MockLLM
 from inspect_ai.model._providers.openrouter import OpenRouterAPI
 
 from src import run
-from src.benchmark.atif_transcripts import SampleView
 from src.benchmark.domains.openmath import OpenMath
+from src.benchmark.eval_sample_view import SampleView
 from src.benchmark.run_export import episode_model
 from src.configuration import model_registry as models
 from src.configuration import swarm_model_provider as provider

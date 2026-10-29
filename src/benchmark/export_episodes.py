@@ -1,0 +1,195 @@
+"""The files one sample writes into a run directory and its episode records.
+
+sample_records writes each agent's transcript and prompt under trajectories/<episode>/, the sample's channel
+messages under communication/ and its defense evidence under defense/, and returns one record per agent for
+episodes.jsonl. Episode ids are "<sample>#<epoch>" for a single agent and "<sample>#<epoch>@<agent>" otherwise.
+
+    records = sample_records(view, run_dir)
+    model = episode_model(view, "a01")
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from src.benchmark.atif_transcripts import episode_transcript, judge_prompt
+from src.benchmark.eval_sample_view import (
+    LIMIT_FAILURES,
+    SampleView,
+    agent_events,
+    agent_messages,
+    agent_version,
+    defense_counts,
+    defense_evidence,
+    error_and_failure,
+    roster,
+    topology,
+)
+from src.benchmark.export_run_blocks import (
+    DELIVERED,
+    cheatbench,
+    ended_by_delivery,
+    engagement_record,
+    ledger_record,
+    newer_episode_facts,
+    notice_counts,
+    probes_block,
+    rules_facts,
+    rules_state,
+    swarm_facts,
+    swe_record,
+    team_submission,
+    validity_record,
+)
+from src.configuration import swarm_model_provider as provider
+
+
+# --------------------------------------------------------------------------
+# files per sample
+# --------------------------------------------------------------------------
+def sample_key(view: SampleView) -> str:
+    """The sample's key "<id>#<epoch>": a lone agent's episode id and the name of the sample's files."""
+    return f"{view.id}#{view.epoch}"
+
+
+def _write_communication(view: SampleView, run_dir: Path) -> None:
+    keys = ("CommunicationState:messages", "CommunicationState:events")
+    comm = {k.split(":", 1)[1]: view.store_get(k) for k in keys if view.store_get(k)}
+    if not comm:
+        return
+    comm_dir = run_dir / "communication"
+    comm_dir.mkdir(exist_ok=True)
+    (comm_dir / f"{sample_key(view)}.json").write_text(json.dumps(comm, indent=1, default=str))
+
+
+def _write_defense(view: SampleView, run_dir: Path, defenses_cfg: list, evidence: dict) -> None:
+    if not (defenses_cfg or evidence["interventions"]):
+        return
+    def_dir = run_dir / "defense"
+    def_dir.mkdir(exist_ok=True)
+    payload = {"defenses": defenses_cfg, **evidence}
+    (def_dir / f"{sample_key(view)}.json").write_text(json.dumps(payload, indent=1, default=str))
+
+
+# --------------------------------------------------------------------------
+# one episode
+# --------------------------------------------------------------------------
+def episode_model(view: SampleView, agent: str) -> str:
+    """The agent's own model: its role's model when the run gave the role one (metadata["cheatbench"]["role_models"]),
+    else the eval's model, as an Inspect string without the swarm provider's prefix. An agent without a role is a
+    worker."""
+    cb = cheatbench(view)
+    role = ((swarm_facts(cb) or {}).get("roles") or {}).get(agent) or "worker"
+    return provider.inspect_string((cb.get("role_models") or {}).get(role) or view.model)
+
+
+def _base_record(view: SampleView, agent: str, episode: str, defenses_cfg: list, evidence: dict) -> dict:
+    cb = cheatbench(view)
+    scores = {k: (v.value if hasattr(v, "value") else v) for k, v in (view.scores or {}).items()}
+    return {
+        "id": view.id, "episode": episode, "replicate": view.epoch,
+        "task": cb.get("task"), "variant": cb.get("variant", ""),
+        "model": episode_model(view, agent), "agent": f"orbit/{agent}", "orbit_agent": agent,
+        "orbit_roster": roster(view), "topology": topology(view),
+        "control": cb.get("control", "baseline"), "monitor_model": cb.get("monitor_model"),
+        "role": ((swarm_facts(cb) or {}).get("roles") or {}).get(agent),
+        "defenses": [d["name"] for d in defenses_cfg],
+        "defense": defense_counts(evidence, agent),
+        "agent_version": agent_version(),
+        "prompt_file": cb.get("prompt_file"),
+        "wall_time": view.total_time,
+        "limit": view.limit.type if view.limit else None,
+        "score": scores,
+    }
+
+
+def _submitted(transcript: dict) -> bool:
+    for step in transcript["trajectory"].get("steps", []):
+        for tc in step.get("tool_calls") or []:
+            if tc.get("function_name") == "submit":
+                return True
+    return False
+
+
+def _ended_by(view: SampleView, submitted: bool, ep_failure: str | None, delivered: bool = False) -> str:
+    if submitted:
+        return "submit"
+    if delivered:
+        return DELIVERED
+    if view.limit or ep_failure in LIMIT_FAILURES:
+        return "limit"
+    if view.error:
+        return "error"
+    return "end"
+
+
+def _write_episode(view: SampleView, run_dir: Path, agent: str, episode: str, error,
+                   failure) -> tuple[dict, list[dict]]:
+    """Write one agent's transcript and prompt; return the record fields that depend on them, and its ATIF steps."""
+    transcript, info = episode_transcript(view, agent, judge_prompt(view, agent))
+    ep_dir = run_dir / "trajectories" / episode
+    ep_dir.mkdir(parents=True, exist_ok=True)
+    transcript_path = ep_dir / "transcript.json"
+    transcript_path.write_text(json.dumps(transcript, indent=1))
+    (ep_dir / "prompt.txt").write_text(transcript["prompt"])
+    # A limit ends the sample, not every agent in it: an agent whose last tool call
+    # was submit, or that stop_after_delivery ended, finished its own episode before the limit hit the others.
+    submitted, delivered = _submitted(transcript), ended_by_delivery(view, agent)
+    if (submitted or delivered) and failure in LIMIT_FAILURES:
+        ep_error, ep_failure = None, None
+    else:
+        ep_error, ep_failure = error, failure
+    fields = {
+        "final_text": info["final_text"],
+        "n_turns": info["n_agent_steps"], "n_tool_calls": info["n_tool_calls"],
+        "usage": info["usage"], "transcript_path": str(transcript_path),
+        "error": ep_error, "failure": ep_failure, "ok": ep_error is None,
+        "ended_by": _ended_by(view, submitted, ep_failure, delivered),
+    }
+    return fields, transcript["trajectory"].get("steps", [])
+
+
+def _no_transcript(error, failure) -> dict:
+    """An agent that never produced a projected conversation: a failed episode the judge skips."""
+    return {"final_text": None, "n_turns": 0, "n_tool_calls": 0, "usage": None, "transcript_path": None,
+            "error": error or "no agent conversation was projected into the sample",
+            "failure": failure or "harness", "ok": False, "ended_by": "error"}
+
+
+def sample_records(view: SampleView, run_dir: Path) -> list[dict]:
+    """Write one sample's files and return its episode records."""
+    agents = roster(view)
+    if not agents:
+        raise ValueError(f"sample {view.id}: no ORBIT roster in metadata['experiment']")
+    meta = view.metadata or {}
+    error, failure = error_and_failure(view)
+    _write_communication(view, run_dir)
+    defenses_cfg = meta.get("experiment", {}).get("defenses") or []
+    evidence = defense_evidence(view)
+    _write_defense(view, run_dir, defenses_cfg, evidence)
+    rules = rules_state(view)
+    probes = probes_block(view) or {}
+    submission = team_submission(view)
+    notices = notice_counts(view)
+    records = []
+    for agent in agents:
+        episode = sample_key(view) if len(agents) == 1 else f"{sample_key(view)}@{agent}"
+        record = _base_record(view, agent, episode, defenses_cfg, evidence)
+        if cheatbench(view).get("swe"):
+            record.update(swe_record(view, agent))
+        steps = []
+        if agent_messages(view, agent):
+            fields, steps = _write_episode(view, run_dir, agent, episode, error, failure)
+            record.update(fields)
+        else:
+            record.update(_no_transcript(error, failure))
+        record["rules"] = rules_facts(rules, agent)
+        record["probes"] = probes.get(agent)
+        record["engagement"] = engagement_record(view, agent, rules, submission, notices)
+        model_events = agent_events(view, agent, "model")
+        record["validity"] = validity_record(steps, len(model_events), record["engagement"],
+                                             len(agents) > 1)
+        record["ledger"] = ledger_record(record["model"], model_events, record.get("usage"))
+        record.update(newer_episode_facts(view, agent))
+        records.append(record)
+    return records

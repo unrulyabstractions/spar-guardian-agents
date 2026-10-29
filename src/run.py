@@ -37,15 +37,9 @@ from inspect_ai.model import GenerateConfig, Model, get_model
 
 from src.benchmark import cheatbench_judge as judging
 from src.benchmark import judging_ladder as ladder
-from src.benchmark.atif_transcripts import (
-    SampleView,
-    agent_messages,
-    error_and_failure,
-    judge_prompt,
-    roster,
-    transcript_dict,
-)
+from src.benchmark.atif_transcripts import judge_prompt, transcript_dict
 from src.benchmark.domains.swe import SWE
+from src.benchmark.eval_sample_view import SampleView, agent_messages, error_and_failure, roster
 from src.benchmark.run_export import write_run
 from src.configuration import model_registry as models
 from src.configuration import settings

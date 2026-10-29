@@ -5,8 +5,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from src.benchmark import export_episodes
 from src.benchmark import run_export as export
-from src.benchmark.atif_transcripts import billed_cost, usage_from_events
+from src.benchmark.eval_sample_view import billed_cost, usage_from_events
 
 
 def event(input_tokens, cached, output, reasoning=0, cost=None):
@@ -46,10 +47,10 @@ def test_the_export_names_the_episodes_stop_after_delivery_ended():
     assert export.newer_episode_facts(v, "a01") == {"delivery": {"round": 2, "turn": 2}}
     assert export.newer_episode_facts(v, "a02") == {}
     # submit comes first; an episode the rule ended is "delivered" even when the sample later hit a limit
-    assert export._ended_by(v, True, None, True) == "submit"
-    assert export._ended_by(view(DELIVERED, limit="time"), False, "timeout", True) == "delivered"
-    assert export._ended_by(view(DELIVERED, limit="time"), False, "timeout", False) == "limit"
-    assert export._ended_by(v, False, None, False) == "end"
+    assert export_episodes._ended_by(v, True, None, True) == "submit"
+    assert export_episodes._ended_by(view(DELIVERED, limit="time"), False, "timeout", True) == "delivered"
+    assert export_episodes._ended_by(view(DELIVERED, limit="time"), False, "timeout", False) == "limit"
+    assert export_episodes._ended_by(v, False, None, False) == "end"
     # a run without the rule records no Delivered store and exports nothing new
     bare = view({"TurnState:ended": {"a01": "submitted"}})
     assert export.delivery_block(bare) is None and not export.ended_by_delivery(bare, "a01")

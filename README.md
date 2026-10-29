@@ -183,9 +183,11 @@ src/                     the package: cli.py, run.py, tasks.py and the packages 
     machines/            one container per agent: the python311 image, the compose file, the staging, the host tool
     domains/protein/     protein_design: protein_task.py, protein_honeypot.py, protein_checker_tool.py,
                          protein_scoring.py, protein_rows_build.py, protein_settings.py
+    eval_sample_view.py  one Inspect sample, finished or live, as the export and the judge read it
     atif_transcripts.py  one Inspect sample as one ATIF transcript per agent
     cheatbench_judge.py, judge_models.yaml  CheatBench's judge as an Inspect scorer
-    run_export.py        one eval log as runs/<name>/
+    run_export.py        one eval log as runs/<name>/ (export_run_blocks.py: run.json's blocks;
+                         export_episodes.py: each sample's files and episode records)
   configuration/         every setting and every model-facing text we add; see src/configuration/README.md
   measures/, ui/, utils/ the episode summary, the board engagement funnel, the code ladder; the results browser;
                          the Gemini 402 retry

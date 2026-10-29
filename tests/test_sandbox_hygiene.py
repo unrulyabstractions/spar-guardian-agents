@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from src.benchmark import run_export as export
 from src.benchmark import sandbox_hygiene as hygiene
+from src.configuration import model_registry as models
 from src.configuration import settings
 
 
@@ -76,7 +77,7 @@ def test_the_ledger_prices_the_registry_and_flags_what_it_cannot_see():
     entry = next(iter(settings_models()))
     usage = {"input": 1_000_000, "cache_read": 500_000, "output": 100_000, "billed_usd": 0.5, "billed_calls": 2}
     rec = export.ledger_record(entry, [model_event(), model_event(), model_event(usage=False, error="boom")], usage)
-    price = export.models.usd_per_million(entry)
+    price = models.usd_per_million(entry)
     cached = price.get("cached_input", price["input"])
     expect = (500_000 * price["input"] + 500_000 * cached + 100_000 * price["output"]) / 1e6
     assert rec["calls"] == 3 and rec["errored"] == 1 and rec["with_usage"] == 2
@@ -98,7 +99,6 @@ def test_the_ledger_prices_the_registry_and_flags_what_it_cannot_see():
 
 
 def settings_models():
-    from src.configuration import model_registry as models
     return models.entries()
 
 

@@ -43,9 +43,12 @@ This package runs CheatBench's tasks as Inspect tasks. Each task domain gives th
 | `docker_images.py` | images on the host: id, labels, and building from a recipe on stdin when the label no longer names it |
 | `sandbox_probe.py` | the probe's store key and the command runner the domains' setup solvers and scorers share |
 | `staging.py` | atomic writes, compose files and staging tarballs with CheatBench's ownership and times |
+| `eval_sample_view.py` | one Inspect sample, finished or live, as the export and the judge read it: the roster and topology, each agent's messages and events, the defenses' evidence, token usage and billed cost, how the sample ended |
 | `atif_transcripts.py` | one Inspect sample as one ATIF transcript per agent |
 | `cheatbench_judge.py`, `judge_models.yaml` | CheatBench's judge as an Inspect scorer |
-| `run_export.py` | one eval log as a run directory, with the run's mode, scale, preset, board engagement, access plan, turn budget, knowledge-work block, the interview and protein blocks, and the stop-after-delivery record (`delivery`, an episode's `ended_by` delivered) |
+| `run_export.py` | one eval log as a run directory: `write_run`, run.json, judge.jsonl and clearing an earlier export |
+| `export_run_blocks.py` | the blocks of run.json and an episode's facts: the run's mode, scale, preset, board engagement, access plan, turn budget, knowledge-work block, the interview and protein blocks, SWE, sandbox, validity, ledger and the stop-after-delivery record (`delivery`, an episode's `ended_by` delivered) |
+| `export_episodes.py` | one sample's files (transcripts, prompts, communication, defense) and its records in episodes.jsonl |
 
 Each file in `scripts/` is read when its module is imported. A file with placeholders is filled with `str.format`, so its literal braces are written doubled.
 

@@ -132,7 +132,7 @@ Ladder = the episode's ladder.jsonl row (src/benchmark/judging_ladder.py, `pytho
          citations ({ok, <field>: {call, exists, evidence_in_call?}}), view (full|actions), agent, role, failure, judge,
          judge_cost_usd, parse_ok, judge_error. Null when the run has no ladder.jsonl or the episode is not in it. The
          actions view's rows (ladder_actions.jsonl) are not served.
-SWE episodes also carry the SWE keys src/benchmark/run_export.py writes (swe_task, seat, piece, reward, team_reward, ...). An episode
+SWE episodes also carry the SWE keys src/benchmark/export_run_blocks.py swe_record writes (swe_task, seat, piece, reward, team_reward, ...). An episode
 written by the src tasks carries rules (the turn-rules facts for its agent).
 ```
 
