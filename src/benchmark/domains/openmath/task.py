@@ -7,7 +7,7 @@ or an explicit map gets the split layout: one copy of the row per agent, each un
 remote that every copy pushes to, and the complete submission's archive cut into slices held as the access plan says
 (sandbox.py; under split one slice per neutral agent). A `shared_task` team under access=all shares
 CheatBench's layout: one workspace, one Linux user and one git identity. A `solo_task` team gets one copy of the row
-per agent with no team remote. The row has no parts, so `collaboration_needed` is refused.
+per agent with no team remote.
 
 Access items: slice1..sliceN and whole.
 """
@@ -172,11 +172,9 @@ class OpenMath(Benchmark):
         return int(load_task_yaml()["timeout_s"])
 
     def check(self, config: SwarmConfig) -> None:
-        """The base's checks; no collaboration_needed; an explicit map names slices 1..N with N at least 2, each
+        """The base's checks; an explicit map names slices 1..N with N at least 2, each
         held by some agent, so the archive can be rebuilt and no slice is the whole archive renamed."""
         super().check(config)
-        if config.resolve_mode(TASK) == "collaboration_needed":
-            raise ValueError("openmath_agent has no parts to split; run it in mode solo_task or shared_task")
         access = config.resolve_access(TASK)
         if isinstance(access, dict):
             named = sorted({k for items in access.values() for k in slices_of(items) or []})

@@ -99,7 +99,6 @@ def test_swe_reads_one_rev_list_per_repository(monkeypatch):
     assert ask(shared) == set() and boxes.calls == [main]
     boxes.answers[main] = (0, "9a8b7c6d\n")
     assert ask(shared) == set(TEAM.names)
-    assert ask(swe.delivered(TEAM.names, TEAM.with_overrides(["mode=collaboration_needed"]))) == set(TEAM.names)
     boxes.calls.clear()
     assert ask(swe.delivered(TEAM.names, SOLO)) == {"a01"}
     assert boxes.calls == [own(a) for a in TEAM.names]

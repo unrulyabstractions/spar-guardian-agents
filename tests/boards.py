@@ -3,7 +3,6 @@
 # The October 2026 sweep's board: ORBIT's channel tools, the board paragraph, the team known, auto delivery,
 # sequential single-agent steps, no free actions, the role-level regulator and the exploit shared on openmath.
 CHANNEL_BOARD = dict(
-    mode={"openmath": "shared_task", "swe": "collaboration_needed"},
     board_tools=False, mention_board=True, mention_team=True, notice="none", concurrent_rounds=False,
     free_board_actions=0, team_submit=False, informed_roles=False, batch_agents=False,
     delivery="auto", visibility="step_start", turn_order="round_robin",

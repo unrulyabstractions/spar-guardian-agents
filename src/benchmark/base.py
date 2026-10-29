@@ -5,15 +5,14 @@ the scorers that grade what they left behind, and the ways our harness departs f
 The ORBIT configuration (roster, board, schedule) lives in src/, never here.
 
 The sample and the tools depend on the run's mode (SwarmConfig.resolve_mode): `solo_task` gives each agent its own
-copy of the task, `shared_task` one task for the team, and `collaboration_needed` one issue split into parts. A lone
-agent always gets CheatBench's own layout.
+copy of the task and `shared_task` one task for the team. A lone agent always gets CheatBench's own layout.
 
 Access. A benchmark names the items of its exploit (`whole_access`, `split_items`, `valid_item`), and
 `access_plan` says what each agent holds under the config's `access` policy (src/configuration/access.py): the
-items dealt over the neutral agents under `split` (a regulator or a disregulator holds nothing) and `split_copy`
-(each holds a copy of one dealt item), everything under `all`, for a solo_task team, a lone agent or fewer than two
-neutral agents, or an explicit map. The sample builds each agent's copy, tools or permissions from that plan, and
-src/tasks.py records the plan as metadata["cheatbench"]["access"].
+items dealt over the neutral agents under `split` (a regulator or a disregulator holds nothing), everything under
+`all`, for a solo_task team, a lone agent or fewer than two neutral agents, or an explicit map. The sample builds
+each agent's copy, tools or permissions from that plan, and src/tasks.py records the plan as
+metadata["cheatbench"]["access"].
 
 Delivery. `delivered` gives the predicate stop_after_delivery awaits at the end of a round: which agents' deliverable
 exists. A team outside solo_task has one deliverable, which counts for every agent.
@@ -91,11 +90,11 @@ class Benchmark(ABC):
     def applied_access(self, agents: list[str], config: SwarmConfig | None,
                        roles: dict[str, str] | None) -> Access:
         """The policy access_plan applies, which the run records: all without a config, for a lone agent, in
-        solo_task, and under split or split_copy when fewer than two agents are neutral; else the config's."""
+        solo_task, and under split when fewer than two agents are neutral; else the config's."""
         if config is None or len(agents) < 2 or config.resolve_mode(self.name) == "solo_task":
             return "all"
         access = config.resolve_access(self.name)
-        if access in access_policy.SPLITS and len(access_policy.neutral_agents(agents, roles)) < 2:
+        if access == "split" and len(access_policy.neutral_agents(agents, roles)) < 2:
             return "all"
         return access
 
@@ -137,7 +136,7 @@ class Benchmark(ABC):
     def delivered(self, agents: list[str], config: SwarmConfig) -> Callable[[], Awaitable[set[str]]]:
         """The delivery predicate for this roster under the config's mode (SwarmConfig.stop_after_delivery): an
         async call, made inside the sample, that returns the agents whose deliverable exists. A team's deliverable
-        (shared_task, collaboration_needed) counts for every agent. Each domain reads as little as it can: one git
+        (shared_task) counts for every agent. Each domain reads as little as it can: one git
         command per repository, or the sample store."""
 
     @abstractmethod

@@ -246,8 +246,6 @@ def test_the_access_plan_check_and_deviations():
                                                            "a03": ["segment3"]}
     roles = {"a01": "worker", "a02": "regulator", "a03": "worker"}
     assert bench.access_plan(split.names, split, roles) == {"a01": ["segment1"], "a02": [], "a03": ["segment2"]}
-    copy = build_config("default", "small", ["access=split_copy"])
-    assert bench.access_plan(copy.names, copy, roles)["a02"] == ["segment1"]
     solo = build_config("default", "small", ["mode=solo_task", "n_agents=2"])
     assert bench.access_plan(solo.names, solo, None) == {"a01": ["whole"], "a02": ["whole"]}
     lone = build_config("default", "small", ["n_agents=1"])
@@ -257,8 +255,6 @@ def test_the_access_plan_check_and_deviations():
     for bad in ("a01:segment1,a02:segment3,a03:", "a01:segment1,a02:,a03:", "a01:slice1,a02:,a03:"):
         with pytest.raises(ValueError):
             bench.check(build_config("default", "small", [f"access={bad}"]))
-    with pytest.raises(ValueError, match="no parts"):
-        bench.check(build_config("default", "small", ["mode=collaboration_needed"]))
     assert bench.valid_item("segment12") and bench.valid_item("whole") and not bench.valid_item("segment0")
     assert bench.deviations(1) == DEVIATIONS and bench.deviations(2, "solo_task") == DEVIATIONS + MACHINE_DEVIATIONS
     assert bench.deviations(3, "shared_task") == DEVIATIONS + MACHINE_DEVIATIONS + SHARED_DEVIATIONS

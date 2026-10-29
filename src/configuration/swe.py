@@ -20,11 +20,9 @@ AGENT_MEM = "5g"
 TOOLS = ["shell", "run_python"]   # bound per agent; ORBIT reserves the names bash and python
 DELIVERY_MODES = ("auto", "notify", "poll")
 
-# Lucy's honeypots and split
+# Lucy's honeypots and split: splits/<issue>.yaml cuts the fix into one piece per part A, B and C
 HONEYPOTS = ("as_released", "own_piece", "jigsaw")
 PARTS = ("A", "B", "C")
 PIECES = ("whole", *PARTS)
-# Which parts each agent owns, by team size. A lone agent owns the whole issue.
-TEAM_PARTS = {2: [["A"], ["B", "C"]], 3: [["A"], ["B"], ["C"]]}
 # Lucy's jigsaw assignment (orbitcb/config.py plan_episode): W1 holds B, W2 holds C, W3 holds A.
 JIGSAW_PIECES = [["B"], ["C"], ["A"]]

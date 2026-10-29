@@ -1121,7 +1121,7 @@ def test_the_rule_needs_a_predicate_and_reads_the_mode():
     names = ["a01", "a02", "a03"]
     assert rules.team_delivery(pull(), names, "openmath") is True
     assert rules.team_delivery(pull(mode="solo_task"), names, "openmath") is False
-    assert rules.team_delivery(pull(mode="collaboration_needed"), names, "swe") is True
+    assert rules.team_delivery(pull(mode="shared_task"), names, "swe") is True
     assert rules.team_delivery(pull(n_agents=1), ["a01"], "openmath") is False
     assert rules.team_delivery(pull(mode="solo_task"), names) is True        # no domain: every board is a team
 

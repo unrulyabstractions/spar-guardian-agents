@@ -44,7 +44,7 @@ from src.configuration.scales import MESSAGE_MARGIN, MESSAGES_PER_STEP, SCALE_NA
 
 LADDERS = ("rule", "regulator", "disregulator")
 ROLES = ("worker", "regulator", "disregulator")     # the hidden roles (src/swarm/roles.py)
-Mode = Literal["solo_task", "shared_task", "collaboration_needed"]
+Mode = Literal["solo_task", "shared_task"]
 ScaleName = Literal["small", "medium", "large", "extra_large", "gigantic"]
 MODES = typing.get_args(Mode)
 # The mode a domain runs in when `mode` is None. Keys are instruction_levels.yaml's benchmark keys.
@@ -133,9 +133,7 @@ class SwarmConfig(BaseModel):
     agents hold the parts of the exploit `access` deals them, each in its own copy of the repository and workspace
     (openmath, SWE), with its own share of the tools (knowledge work) or on its own machine (subset sum, prime
     factorization, protein design), and under access=all openmath shares one
-    workspace; the roster is told and neutral agents get team_submit. collaboration_needed: one issue split into
-    parts, one or more agents per part, the team's main
-    branch is graded; the roster is told and neutral agents get team_submit. None resolves per domain
+    workspace; the roster is told and neutral agents get team_submit. None resolves per domain
     (DOMAIN_MODES): shared_task on every domain. A dict gives one mode per domain key ("openmath", "swe",
     "knowledge_work", "subset_sum", "prime_factorization", "protein_design"). Read it through
     resolve_mode(domain)."""
@@ -157,9 +155,7 @@ class SwarmConfig(BaseModel):
     deals the honeypot's pieces (jigsaw B, C, A; own_piece A, B, C), knowledge work deals the review tool to the
     first half of the neutral agents and the artifact read to the rest, subset sum deals the answer key's shards,
     prime factorization the factors' additive shares and protein design the segments of the planted designs.
-    Regulators and disregulators hold nothing.
-    split_copy: the same deal, and each regulator or disregulator holds a copy of one dealt item (the i-th of them
-    the i-th item in deal order), so it is never the only holder. Every agent holds everything in a solo_task team,
+    Regulators and disregulators hold nothing. Every agent holds everything in a solo_task team,
     alone, and when fewer than two are neutral. all: every agent holds everything. A map {agent: [items]} names what
     each agent of the roster holds, on the command
     line as `a01:slice1+slice2,a02:slice3,a03:` (nothing after the colon: nothing). The items are slice1..sliceN or
@@ -316,7 +312,7 @@ class SwarmConfig(BaseModel):
     its work for review or merged does not run to its turn budget. None turns the rule off. At the end of every round
     rules.after_activation awaits the benchmark's delivery predicate (Benchmark.delivered) while some deliverable is
     unseen. N for a lone agent and in solo_task: an agent's episode ends after N more of its working steps once its
-    own deliverable is first seen. N in shared_task and collaboration_needed: every agent's episode ends N rounds after
+    own deliverable is first seen. N in shared_task: every agent's episode ends N rounds after
     the round that first shows the team's deliverable, as team_submit ends the run after its round; 0 ends it after
     that round. An episode the rule ends is ended "delivered" (TurnState.ended, an episode's ended_by) and its steps
     go to nobody. The store Delivery, and run.json "delivery", hold the round and working step at which each
@@ -679,13 +675,12 @@ def role_model_pairs(chosen: dict[str, str | None]) -> list[str]:
 
 # -------------------------------------------------------------------- prompt texts that depend on a setting
 
-def submit_line(team: bool, shutdown: bool, shared: bool = False) -> str:
-    """The SWE prompt's submit bullet with its leading newline, or "" when agents cannot shut down.
-
-    shared picks the bullet of a shared_task team, whose agents all work on the whole issue."""
+def submit_line(team: bool, shutdown: bool) -> str:
+    """The SWE prompt's submit bullet with its leading newline, or "" when agents cannot shut down: a team's names
+    team/main, a lone or solo_task agent's its own tree."""
     if not shutdown:
         return ""
-    return "\n" + settings.load_prompts()["swe"]["submit"]["shared" if team and shared else "team" if team else "solo"]
+    return "\n" + settings.load_prompts()["swe"]["submit"]["shared" if team else "solo"]
 
 
 def channel_tools_text(channel_list: bool, read_tool: bool = True) -> str:
@@ -727,7 +722,7 @@ def board_system_prompt(config: SwarmConfig, name: str, names: list[str], *, wor
 
 
 def swe_board_fields(config: SwarmConfig, *, board: str = settings.BOARD_ID, team_submit: bool = False) -> dict:
-    """The placeholders of prompts.yaml swe.system_team and swe.system_shared that depend on the board settings.
+    """The placeholders of prompts.yaml swe.system_shared that depend on the board settings.
 
     board_paragraph: the "Team chat" paragraph with its two leading newlines, or "" without mention_board.
     board_tool_line: the tool bullet for the board with its leading newline. With board_tools off it names ORBIT's
@@ -747,15 +742,6 @@ def swe_board_fields(config: SwarmConfig, *, board: str = settings.BOARD_ID, tea
                                                                                          config.read_tool))
     return {"board_paragraph": paragraph, "board_tool_line": tool_line,
             "team_submit_line": swe["team_submit_line"] if team_submit else "", "turns": swe["turns"][side]}
-
-
-def swe_part_clause(config: SwarmConfig, mates: list[str] | None = None) -> str:
-    """The end of swe.system_team's first paragraph (prompts.yaml swe.part_clause). With board_tools off it is the
-    sweep's sentence. With board_tools on it names the agents that share the agent's part, when there are any."""
-    clauses = settings.load_prompts()["swe"]["part_clause"]
-    if not config.board_tools:
-        return clauses["channel"]
-    return clauses["shared"].format(mates=_and_list(mates)) if mates else clauses["alone"]
 
 
 def role_briefing(config: SwarmConfig, names: list[str], domain: str) -> str | None:

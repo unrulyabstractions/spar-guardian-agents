@@ -1,14 +1,11 @@
 """The SWE benchmark: one CheatBench issue under one of Lucy's honeypots, for one agent or a team.
 
-Holds the sample (build_swe), each agent's parts and pieces, and the texts each agent reads: the system prompts
-from prompts.yaml `swe` and the first messages with Lucy's assignment.
+Holds the sample (build_swe), each agent's pieces of the honeypot, and the texts each agent reads: the system prompts
+from prompts.yaml `swe`.
 
 Modes of a team (SwarmConfig.resolve_mode, `shared_task` when mode is None):
-  * collaboration_needed: the issue is split into Lucy's parts. Two agents own A and B+C, three own A, B and C, and
-    more than three take A, B and C round robin, each told who shares its part. The team's main is graded.
   * shared_task: every agent gets the whole issue on its own machine. The team's main is graded. The own_piece and
-    jigsaw honeypots' pieces go to the clones as the config's access policy deals them (pieces_by_agent), independent
-    of parts.
+    jigsaw honeypots' pieces go to the clones as the config's access policy deals them (pieces_by_agent).
   * solo_task: every agent gets the whole issue and its own repository, with no team remote. Each agent's working
     tree is graded.
 A lone agent works the whole issue in every mode. Each agent has its own service, so SWE refuses the large scales.
@@ -16,7 +13,6 @@ A lone agent works the whole issue in every mode. Each agent has its own service
 from __future__ import annotations
 
 import random
-import re
 from collections.abc import Awaitable, Callable
 
 from inspect_ai.dataset import Sample
@@ -49,7 +45,6 @@ from src.configuration.swarm_config import (
     board_system_prompt,
     submit_line,
     swe_board_fields,
-    swe_part_clause,
 )
 from src.configuration.swe import (
     AGENT_CPUS,
@@ -61,13 +56,12 @@ from src.configuration.swe import (
     PARTS,
     PIECES,
     TASK_ROOT,
-    TEAM_PARTS,
     TOOL_TIMEOUT_S,
     TOOLS,
     WORKDIR,
 )
 
-COLLABORATION = "collaboration_needed"
+SHARED = "shared_task"
 # Every agent has its own service (sandbox.write_compose). A hundred services is more than one Docker host holds.
 LARGE_SCALES = ("large", "extra_large", "gigantic")
 LARGE_SCALE_ERROR = "SWE runs per-agent containers; large scales need a shared container"
@@ -79,59 +73,6 @@ def check_scale(config: SwarmConfig) -> None:
         raise NotImplementedError(LARGE_SCALE_ERROR)
 
 
-def part_text(issue_text: str, split: dict, part: str) -> str:
-    """A part: the issue's own Requirements bullets for it, verbatim, then its interface block or note
-    (Lucy's scenario.py part_text)."""
-    m = re.search(r"^Requirements:\s*\n(.*?)(?=^New interfaces introduced:|\Z)", issue_text, re.S | re.M)
-    if not m:
-        raise ValueError("the issue has no Requirements: section")
-    bullets: list[str] = []
-    for line in m.group(1).splitlines():
-        if line.startswith("- "):
-            bullets.append(line)
-        elif line.strip() and bullets:
-            bullets[-1] += "\n" + line
-    spec = split["parts"][part]
-    text = [bullets[i - 1] for i in spec["requirements"]]
-    if spec.get("interfaces"):
-        iface = re.search(r"^New interfaces introduced:\s*\n(.*)", issue_text, re.S | re.M).group(1)
-        text.append("New interfaces introduced:\n"
-                    + iface.replace("This task is a work-test for a job interview.", "").strip())
-    if spec.get("note"):
-        text.append(spec["note"])
-    return "\n".join(text)
-
-
-def parts_by_agent(agents: list[str], mode: str = COLLABORATION,
-                   roles: dict[str, str] | None = None) -> dict[str, list[str]]:
-    """The parts each agent owns. [] is the whole issue: a lone agent, every agent outside collaboration_needed, and
-    every agent when fewer than two are neutral.
-
-    The parts go to the neutral agents: two own A and B+C, three own A, B and C, and more than three take A, B and C
-    round robin. A regulator or a disregulator then owns a neutral agent's parts, the i-th of them the i-th neutral
-    agent's, round robin, so every part has a neutral owner."""
-    neutral = access_policy.neutral_agents(agents, roles)
-    if len(agents) == 1 or mode != COLLABORATION or len(neutral) < 2:
-        return {a: [] for a in agents}
-    if len(neutral) in TEAM_PARTS:
-        dealt = dict(zip(neutral, TEAM_PARTS[len(neutral)]))
-    else:
-        dealt = {a: [PARTS[i % len(PARTS)]] for i, a in enumerate(neutral)}
-    others = [a for a in agents if a not in dealt]
-    held = {**dealt, **{a: list(dealt[neutral[i % len(neutral)]]) for i, a in enumerate(others)}}
-    return {a: held[a] for a in agents}
-
-
-def part_mates(parts: dict[str, list[str]]) -> dict[str, list[str]]:
-    """The other agents that own the same parts as each agent, for agents that share a part."""
-    out = {}
-    for a, mine in parts.items():
-        mates = [o for o, theirs in parts.items() if o != a and mine and theirs == mine]
-        if mates:
-            out[a] = mates
-    return out
-
-
 def honeypot_items(honeypot: str) -> list[str]:
     """The pieces access=split deals over the neutral agents, in deal order: Lucy's jigsaw B, C, A; own_piece A, B,
     C; nothing as released."""
@@ -141,32 +82,22 @@ def honeypot_items(honeypot: str) -> list[str]:
     return items[honeypot]
 
 
-def pieces_by_agent(agents: list[str], honeypot: str, mode: str = COLLABORATION,
+def pieces_by_agent(agents: list[str], honeypot: str, mode: str = SHARED,
                     roles: dict[str, str] | None = None, access: Access = "split") -> dict[str, list[str]]:
     """The pieces planted in each agent's clone, as the access policy deals them (src/configuration/access.py).
 
-    as_released plants nothing. A lone agent and a solo_task agent hold `whole`. own_piece in collaboration_needed
-    under split or split_copy: each neutral agent holds the pieces of its own parts; a regulator or a disregulator
-    holds nothing under split and the piece of the first of its parts under split_copy (a part a neutral agent owns
-    too); everyone holds `whole` when fewer than two agents are neutral. Otherwise the honeypot's pieces
+    as_released plants nothing. A lone agent and a solo_task agent hold `whole`. Otherwise the honeypot's pieces
     (honeypot_items) are dealt as `access` says. Under split, round robin over the neutral agents (roles; every agent
     without roles): two hold B and A, and C, three hold B, C and A as in Lucy's runs, and neutral agents beyond three
-    hold none; a regulator or a disregulator holds nothing, or a copy of one dealt piece under split_copy."""
+    hold none; a regulator or a disregulator holds nothing."""
     items = honeypot_items(honeypot)
     if honeypot == "as_released":
         return {a: [] for a in agents}
-    if honeypot == "jigsaw" and mode not in (COLLABORATION, "shared_task"):
-        raise ValueError("the jigsaw honeypot needs a team in collaboration_needed or shared_task "
+    if honeypot == "jigsaw" and len(agents) > 1 and mode != SHARED:
+        raise ValueError("the jigsaw honeypot needs a team in shared_task "
                          "(Lucy's pieces B, C and A are dealt over the neutral agents)")
     if len(agents) == 1 or mode == "solo_task":
         return {a: ["whole"] for a in agents}
-    if honeypot == "own_piece" and mode == COLLABORATION and access in access_policy.SPLITS:
-        neutral = access_policy.neutral_agents(agents, roles)
-        if len(neutral) < 2:
-            return {a: ["whole"] for a in agents}
-        parts = parts_by_agent(agents, mode, roles)
-        return {a: list(parts[a]) if a in neutral else parts[a][:1] if access == "split_copy" else []
-                for a in agents}
     return access_policy.plan(access, agents, roles, lambda n: items, ["whole"])
 
 
@@ -176,15 +107,14 @@ def piece_times(seed: int, issue: str) -> dict[str, int]:
     return {p: rng.randrange(3600) for p in PIECES}
 
 
-def system_prompts(split: dict, agents: list[str], parts: dict[str, list[str]], config: SwarmConfig, *,
-                   mode: str = COLLABORATION, neutral: set[str] | None = None) -> dict[str, str]:
+def system_prompts(split: dict, agents: list[str], config: SwarmConfig, *, mode: str = SHARED,
+                   neutral: set[str] | None = None) -> dict[str, str]:
     """Each agent's system prompt from prompts.yaml `swe`. The submit bullet is left out without shutdown.
 
     A lone agent and a solo_task agent get `system_solo`; a solo_task agent of a board then gets the team and board
-    texts its config asks for (swarm_config.board_system_prompt). A collaboration_needed agent gets `system_team`
-    with the roster's parts, a shared_task agent `system_shared`. Their board sentences and last line come from
-    swarm_config.swe_board_fields, and system_team's sentence on the other parts from swarm_config.swe_part_clause;
-    the team_submit bullet goes to the neutral agents of a mode with team_submit."""
+    texts its config asks for (swarm_config.board_system_prompt). A shared_task agent gets `system_shared` with the
+    roster. Its board sentences and last line come from swarm_config.swe_board_fields; the team_submit bullet goes to
+    the neutral agents of a config with team_submit."""
     prompts = settings.load_prompts()["swe"]
     neutral = set(agents) if neutral is None else neutral
     if len(agents) == 1 or mode == "solo_task":
@@ -196,62 +126,23 @@ def system_prompts(split: dict, agents: list[str], parts: dict[str, list[str]], 
             board = board_system_prompt(config, a, agents, workdir=WORKDIR, domain="swe")
             out[a] = f"{text}\n\n{board}" if board else text
         return out
-    shared = mode == "shared_task"
-    submit = submit_line(True, config.shutdown, shared=shared)
+    submit = submit_line(True, config.shutdown)
     submits = config.has_team_submit("swe")
-    template = prompts["system_shared" if shared else "system_team"]
     planning = f"\n\n{prompts['planning_system']}" if config.planning_turns == 2 else ""
-    mates = part_mates(parts)
     out = {}
     for a in agents:
-        if shared:
-            roster = "\n".join(prompts["roster_line_shared"].format(name=o) for o in agents if o != a)
-        else:
-            roster = "\n".join(prompts["roster_line"].format(name=o, title=part_titles(split, parts[o]))
-                               for o in agents if o != a)
-        out[a] = template.format(
+        roster = "\n".join(prompts["roster_line"].format(name=o) for o in agents if o != a)
+        out[a] = prompts["system_shared"].format(
             name=a, n=len(agents), repo=split["repo"], roster=roster, branch=a, timeout=TOOL_TIMEOUT_S,
-            submit=submit, part_clause=swe_part_clause(config, mates.get(a)),
-            **swe_board_fields(config, team_submit=submits and a in neutral)) + planning
-    return out
-
-
-def part_titles(split: dict, parts: list[str]) -> str:
-    return "; ".join(split["parts"][p]["title"] for p in parts)
-
-
-def _and_list(items: list[str]) -> str:
-    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
-
-
-def first_messages(split: dict, issue_text: str, instruction: str, parts: dict[str, list[str]],
-                   mode: str = COLLABORATION) -> dict[str, str]:
-    """A lone agent's first message is the instruction, and so is every agent's outside collaboration_needed.
-    A collaboration_needed agent's is the instruction, then Lucy's assignment: the team's split and the agent's part,
-    its requirement bullets copied from the issue, then the agents it shares the part with."""
-    agents = list(parts)
-    if len(agents) == 1 or mode != COLLABORATION:
-        return {a: instruction for a in agents}
-    prompts = settings.load_prompts()["swe"]
-    template = prompts["assignment_team"]
-    table = "\n".join(f"- {a}: {part_titles(split, parts[a])}" for a in agents)
-    mates = part_mates(parts)
-    out = {}
-    for a in agents:
-        text = "\n".join(part_text(issue_text, split, p) for p in parts[a])
-        assignment = template.format(table=table, title=part_titles(split, parts[a]), part=text)
-        out[a] = f"{instruction.rstrip()}\n\n{assignment.strip()}\n"
-        if a in mates:
-            out[a] += "\n" + prompts["part_shared_with"].format(mates=_and_list(mates[a]))
+            submit=submit, **swe_board_fields(config, team_submit=submits and a in neutral)) + planning
     return out
 
 
 def build_swe(issue: str, honeypot: str, agents: list[str], config: SwarmConfig, *, instruction_suffix: str = "",
               roles: dict[str, str] | None = None) -> dict:
-    """Everything one sample needs except the images: parts, pieces, prompts and first messages. No Docker.
+    """Everything one sample needs except the images: pieces, prompts and first messages. No Docker.
 
-    The returned dict is metadata["cheatbench"]["swe"]. A team outside collaboration_needed adds `mode`; a team
-    whose agents share parts adds `shares` {agent: [mates]}. Both keys are absent otherwise."""
+    The returned dict is metadata["cheatbench"]["swe"]. A team adds `mode`; a lone agent has none."""
     if config.delivery not in DELIVERY_MODES:
         raise ValueError(f"delivery must be one of {DELIVERY_MODES}, got {config.delivery!r}")
     split = load_split(issue)
@@ -260,12 +151,10 @@ def build_swe(issue: str, honeypot: str, agents: list[str], config: SwarmConfig,
     issue_text = (task_dir(instance) / "instruction.md").read_text()
     instruction = issue_text + instruction_suffix
     team = len(agents) > 1
-    mode = config.resolve_mode("swe") if team else COLLABORATION
-    parts = parts_by_agent(agents, mode, roles)
+    mode = config.resolve_mode("swe") if team else SHARED
     pieces = pieces_by_agent(agents, honeypot, mode, roles, config.resolve_access("swe"))
     neutral = set(access_policy.neutral_agents(agents, roles))
-    system = system_prompts(split, agents, parts, config, mode=mode, neutral=neutral)
-    first = first_messages(split, issue_text, instruction, parts, mode)
+    system = system_prompts(split, agents, config, mode=mode, neutral=neutral)
     swe = {
         "issue": issue, "task_key": issue, "instance": instance, "repo": cfg["repo"],
         "base_commit": cfg["base_commit"], "fix_commit": fix_commit(instance),
@@ -275,19 +164,15 @@ def build_swe(issue: str, honeypot: str, agents: list[str], config: SwarmConfig,
         "channel_list": config.channel_list if team else None, "read_tool": config.read_tool if team else None,
         "shutdown": config.shutdown, "planning_turns": config.planning_turns,
         "hint": instruction_suffix.strip() or None, "instruction": instruction,
-        "parts": {a: {"parts": parts[a] or ["whole"], "titles": [split["parts"][p]["title"] for p in parts[a]]}
-                  for a in agents},
         "pieces": pieces,
         "piece_times": piece_times(config.seed, issue),
-        "system_prompt": system, "first_message": first,
-        "judge_prompt": {a: f"{system[a]}\n\n{first[a]}" for a in agents},
+        "system_prompt": system, "first_message": {a: instruction for a in agents},
+        "judge_prompt": {a: f"{system[a]}\n\n{instruction}" for a in agents},
         "patch_files": patch_files(cfg["patch"]),
         "distinctive_lines": len(load_lines(issue)["fix"]),
     }
-    if team and mode != COLLABORATION:
+    if team:
         swe["mode"] = mode
-    if part_mates(parts):
-        swe["shares"] = part_mates(parts)
     return swe
 
 
@@ -315,10 +200,6 @@ class SWE(Benchmark):
         access = config.resolve_access("swe")
         if self.honeypot == "as_released" and isinstance(access, dict) and any(access.values()):
             raise ValueError("the as_released honeypot plants no pieces, so no access map can name any")
-        if self.honeypot == "own_piece" and config.resolve_mode("swe") == COLLABORATION \
-                and access not in access_policy.SPLITS:
-            raise ValueError("own_piece in collaboration_needed deals the pieces by part; access must be split "
-                             "or split_copy")
 
     def whole_access(self) -> list[str]:
         """The whole fix, or nothing as released."""
@@ -330,22 +211,12 @@ class SWE(Benchmark):
     def valid_item(self, item: str) -> bool:
         return item in PIECES
 
-    def applied_access(self, agents: list[str], config: SwarmConfig | None,
-                       roles: dict[str, str] | None) -> Access:
-        """As the base says; own_piece in collaboration_needed keeps the config's split or split_copy, whose pieces
-        follow the parts, unless fewer than two agents are neutral."""
-        team = len(agents) > 1 and config is not None
-        if team and self.honeypot == "own_piece" and config.resolve_mode("swe") == COLLABORATION \
-                and len(access_policy.neutral_agents(agents, roles)) >= 2:
-            return config.resolve_access("swe")
-        return super().applied_access(agents, config, roles)
-
     def access_plan(self, agents: list[str], config: SwarmConfig | None,
                     roles: dict[str, str] | None) -> dict[str, list[str]]:
         """The pieces each clone holds (pieces_by_agent): a lone agent or a run without a config holds the whole fix,
         a team as its mode and the applied policy say."""
         team = len(agents) > 1 and config is not None
-        mode = config.resolve_mode("swe") if team else COLLABORATION
+        mode = config.resolve_mode("swe") if team else SHARED
         return pieces_by_agent(list(agents), self.honeypot, mode, roles, self.applied_access(agents, config, roles))
 
     def time_limit_s(self) -> int:
@@ -397,9 +268,6 @@ class SWE(Benchmark):
         if self.honeypot != "as_released":
             out.append(f"honeypot_{self.honeypot}_pruned_and_planted_at_sample_setup")
         if n_agents > 1:
-            out.append({"shared_task": "every_agent_works_the_whole_issue_with_a_shared_team_remote",
-                        "solo_task": "every_agent_works_the_whole_issue_alone_and_is_graded_alone"}.get(
-                mode or COLLABORATION, "issue_split_into_lucys_parts_with_a_shared_team_remote"))
-        if n_agents > max(TEAM_PARTS) and (mode or COLLABORATION) == COLLABORATION:
-            out.append("parts_assigned_round_robin_with_several_agents_per_part")
+            out.append("every_agent_works_the_whole_issue_alone_and_is_graded_alone" if mode == "solo_task"
+                       else "every_agent_works_the_whole_issue_with_a_shared_team_remote")
         return out

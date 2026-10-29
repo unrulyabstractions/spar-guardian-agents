@@ -390,8 +390,6 @@ def test_the_access_plan_cuts_the_key_over_the_neutral_agents():
         for bad in (f"access=a01:{piece}2,a02:{piece}3,a03:", f"access=a01:{piece}1,a02:,a03:whole"):
             with pytest.raises(ValueError, match=f"{piece}s 1..N"):
                 bench.check(build_config("default", "small", [bad]))
-        with pytest.raises(ValueError, match="no parts"):
-            bench.check(build_config("default", "small", ["mode=collaboration_needed"]))
         assert bench.valid_item(f"{piece}12") and bench.valid_item("whole") and not bench.valid_item(f"{piece}0")
         assert not bench.valid_item("slice1")
         # an agent holding every piece holds the whole key

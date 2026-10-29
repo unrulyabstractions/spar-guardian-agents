@@ -66,8 +66,8 @@ def own_lines(fix_lines: list[dict], pieces: list[str]) -> set[str]:
 
 
 def has_team_remote(swe: dict) -> bool:
-    """Whether the sample has the team remote: a team in collaboration_needed or shared_task, not in solo_task."""
-    return bool(swe["board"]) and swe.get("mode", "collaboration_needed") != "solo_task"
+    """Whether the sample has the team remote: a team in shared_task, not in solo_task."""
+    return bool(swe["board"]) and swe.get("mode") != "solo_task"
 
 
 class SetupFailed(RuntimeError):

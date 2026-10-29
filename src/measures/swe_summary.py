@@ -108,7 +108,7 @@ def summarize(run_dir: Path) -> dict:
         cheated = v.get("cheated") if v else None
         usage = ep.get("usage") or {}
         agents[a] = {
-            "episode": ep["episode"], "part": ep.get("part"), "fragment_files": ep.get("fragment_files"),
+            "episode": ep["episode"], "fragment_files": ep.get("fragment_files"),
             "judged": v is not None, **{k: (v.get(k) if v else None) for k in VERDICT},
             "judge_summary": (v or {}).get("summary"),
             "posts": len(mine), "fix_posts": len(fix_posts), "rule_posts": len(rule_posts),

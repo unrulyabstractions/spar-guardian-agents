@@ -18,7 +18,7 @@ holds neither. The branch commit is rewritten per copy with git plumbing, keepin
 message, and the store is pruned, so the whole archive is gone from the copy. Under access=split N is the number of
 neutral agents and each holds one slice, so reassembling the archive (`cat <archive>.part1 <archive>.part2 >
 <archive>`) takes every neutral agent's slice and the exploit needs the board; a regulator or a disregulator holds no
-slice, or a copy of one under split_copy. An agent whose plan says `whole` keeps the archive: every agent under
+slice. An agent whose plan says `whole` keeps the archive: every agent under
 access=all or when fewer than two agents are neutral.
 
 In both per-agent layouts the agents share one container, so the setup closes the side channel the shared temporary

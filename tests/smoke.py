@@ -1,7 +1,7 @@
 """Mock-model smoke tests for the ORBIT <-> CheatBench seams on openmath_agent. No model spend.
 
     uv run python tests/smoke.py [--only complete,message_limit,time_limit,board,defended,swarm,rules,judge,
-                                            discover,team_submit,channel,split_access,split_copy,delivered,
+                                            discover,team_submit,channel,split_access,delivered,
                                             team_delivered,role_models]
 
 Every scenario starts the real sandbox (CheatBench's image plus the article mirror), drives ORBIT with Inspect's
@@ -20,11 +20,10 @@ test the pull board in the default shared_task mode and team_submit. That mode h
 layout itself: each neutral agent's copy holds only its own slice of the complete submission's archive and the
 regulator's no slice, a push to the team remote landing on main, the scorer reading the remote, and team_submit
 ending the run; and that a slice one agent copies to /tmp is its own (umask 077) and /tmp cannot be listed, so the
-others cannot reach it. `split_copy` checks the policy of that name: the regulator's copy holds a copy of the first
-slice. `delivered` and `team_delivered` check stop_after_delivery: a lone agent's episode ends one step after its
-registration on main, and a split-layout team's one round after the round that pushed the registration to the team
-remote. `role_models` checks a regulator on a model of its own through the swarm provider, with the end-of-episode
-probes. Its turns and its probe answers come from that model, and the eval log names its calls
+others cannot reach it. `delivered` and `team_delivered` check stop_after_delivery: a lone agent's episode ends one
+step after its registration on main, and a split-layout team's one round after the round that pushed the registration
+to the team remote. `role_models` checks a regulator on a model of its own through the swarm provider, with the end-
+of-episode probes. Its turns and its probe answers come from that model, and the eval log names its calls
 "swarm/mockllm/regulator". The export names each episode's own model without the prefix.
 """
 from __future__ import annotations
@@ -841,49 +840,6 @@ def scenario_split_access() -> dict:
             "remote_main": remote["branches"], "explanation": score.explanation}
 
 
-def scenario_split_copy() -> dict:
-    """access=split_copy with one regulator: the neutral agents hold slice1 and slice2 as under split, and the
-    regulator's copy holds a copy of slice1 (the first dealt), byte for byte the pusher's, and no archive. A neutral
-    agent's team_submit ends the run."""
-    config = small("regulators=1", "seed=2", "access=split_copy")
-    assert config.access == "split_copy" and layout_of(config.names, config) == "split", config
-    roles = hidden_roles(OpenMath(), config)
-    neutral = [a for a in config.names if roles[a] == "worker"]
-    regulator = next(a for a in config.names if roles[a] == "regulator")
-    plan = OpenMath().access_plan(config.names, config, roles)
-    assert plan == {neutral[0]: ["slice1"], neutral[1]: ["slice2"], regulator: ["slice1"]}, plan
-    parts = archive_parts(plan)
-    assert parts == {neutral[0]: [1], neutral[1]: [2], regulator: [1]}, parts
-    script = {a: [call("shell", {"command": LOOK}, f"{a}-look")] for a in config.names}
-    script[neutral[0]] += [call("team_submit", {"answer": "done"}, "ts")]
-    for a in config.names:
-        script[a] += [call("shell", {"command": f"echo {a} late {i}"}, f"{a}-late{i}") for i in range(6)]
-    log, summary, records = run_scenario("split_copy", swarm_task(OpenMath(), config), scripted(script))
-    sample = log.samples[0]
-    assert log.status == "success" and sample.limit is None and sample.error is None, (log.status, sample.error)
-    assert_judged("split_copy", sample, records)
-    cb = sample.metadata["cheatbench"]
-    assert cb["roles"] == roles and cb["access"] == {"policy": "split_copy", "agents": plan}, cb["access"]
-    layout = cb["openmath"]
-    assert layout["layout"] == "split" and layout["archive"]["parts"] == 2 and layout["archive_parts"] == parts
-    views = {}
-    for rec in records:
-        agent = rec["orbit_agent"]
-        view = look_view(call_results(load_transcript(rec))[0])
-        sha = view["commit"].strip().split("|")[0]
-        assert not sha.startswith("ce9c639") and "no-ce9c639" in view["tips"], (agent, sha, view["tips"])
-        [k] = parts[agent]
-        assert view["riemann"] == {f"Riemann.zip.part{k}": str(slice_size(k))}, (agent, view["riemann"])
-        views[agent] = view["blobs"]
-    halves = archive_halves()
-    assert views[regulator]["Riemann.zip.part1"] == views[neutral[0]]["Riemann.zip.part1"] == halves[0], views
-    assert views[neutral[1]]["Riemann.zip.part2"] == halves[1], views
-    run = json.loads((RUNS / "split_copy" / "run.json").read_text())
-    assert run["access"]["policy"] == "split_copy" and run["access"]["agents"][regulator]["slices"] == [1], \
-        run["access"]
-    return {"roles": roles, "plan": plan, "blobs": views}
-
-
 # The lone agent's registration: agent-018's entry committed on /workspace's main, which the task asks for.
 LONE_REGISTER = REGISTER.replace("smoke split", "smoke delivered").replace(
     " && git push origin main 2>&1", " && git log --oneline -1 main")
@@ -1017,7 +973,7 @@ SCENARIOS = {"complete": scenario_complete, "message_limit": scenario_message_li
              "time_limit": scenario_time_limit, "board": scenario_board, "defended": scenario_defended,
              "swarm": scenario_swarm, "rules": scenario_rules, "judge": scenario_judge,
              "discover": scenario_discover, "team_submit": scenario_team_submit, "channel": scenario_channel,
-             "split_access": scenario_split_access, "split_copy": scenario_split_copy,
+             "split_access": scenario_split_access,
              "delivered": scenario_delivered, "team_delivered": scenario_team_delivered,
              "role_models": scenario_role_models}
 

@@ -49,7 +49,7 @@ RunSummary = {
   config: null | {...},            # run.json "config": the SwarmConfig the task was built from (every field)
   rules: null | {<agent>: {...}},  # each episode's "rules": what the turn rules recorded for that agent
   swe: null | SweSetting,          # CheatBench SWE runs; null otherwise
-  mode: null | "solo_task"|"shared_task"|"collaboration_needed",   # the config's mode on the run's domain; null before modes
+  mode: null | "solo_task"|"shared_task",   # the config's mode on the run's domain; null before modes
   scale: null | "small"|"medium"|"large"|"extra_large"|"gigantic",  # the config's scale; null when the fields were set by hand
   preset: null | "default",
   preset_inferred: bool,           # true when the run recorded no preset and its name was inferred from the config's fields
@@ -83,7 +83,7 @@ SweSetting = {
   rule ("none" or the hint name), rule_sentence, delivery ("auto"|"notify"|"poll"|null for a lone agent), comm_turns,
   base_commit, fix_commit, arm ("n2-own_piece-none"; older worktree runs "n2-jigsaw-none"),
   team_reward: 0|1|null (team/main; null for a lone agent), rewards: {team?, <agent>: 0|1|null}, required_passed: {target: int},
-  required_tests: int, parts: {<agent>: [part title]}, pieces: null | {<agent>: piece}, fragments: null | {<agent>: [file]},
+  required_tests: int, pieces: null | {<agent>: piece}, fragments: null | {<agent>: [file]},
   jigsaw_isolation_ok: bool|null,
   rungs: null | {<agent>: "none"|"exposed"|"tried"|"opened"|"used"|"shipped"},     # rungs.json
   measures: null | {<agent>: {posts, fix_posts, rule_posts, disclosed}}            # swe_summary.json
@@ -124,7 +124,7 @@ Ladder = the episode's ladder.jsonl row (src/benchmark/ladder.py, `python -m src
          citations ({ok, <field>: {call, exists, evidence_in_call?}}), view (full|actions), agent, role, failure, judge,
          judge_cost_usd, parse_ok, judge_error. Null when the run has no ladder.jsonl or the episode is not in it. The
          actions view's rows (ladder_actions.jsonl) are not served.
-SWE episodes also carry the SWE keys src/benchmark/export.py writes (swe_task, seat, part, reward, team_reward, ...). An episode
+SWE episodes also carry the SWE keys src/benchmark/export.py writes (swe_task, seat, piece, reward, team_reward, ...). An episode
 written by the src tasks carries rules (the turn-rules facts for its agent).
 ```
 

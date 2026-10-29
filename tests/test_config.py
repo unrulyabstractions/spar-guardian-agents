@@ -28,7 +28,6 @@ from src.configuration.swarm_config import (
     role_count,
     submit_line,
     swe_board_fields,
-    swe_part_clause,
 )
 from tests.boards import CHANNEL_BOARD
 
@@ -403,7 +402,6 @@ def test_modes_resolve_per_domain():
     assert c.has_team_submit("openmath") and c.has_team_submit("swe")
     solo = c.with_overrides(["mode=solo_task"])
     assert not solo.knows_team("openmath") and not solo.has_team_submit("swe")
-    assert c.with_overrides(["mode=collaboration_needed"]).resolve_mode("swe") == "collaboration_needed"
     shared = c.with_overrides(["mode=shared_task"])
     assert shared.resolve_mode("openmath") == shared.resolve_mode("swe") == "shared_task"
     assert shared.knows_team("openmath") and shared.has_team_submit("openmath")
@@ -421,7 +419,7 @@ def test_modes_resolve_per_domain():
 def test_prompt_helpers():
     assert submit_line(team=True, shutdown=False) == ""
     assert submit_line(team=False, shutdown=True).startswith("\n- submit: ")
-    assert "your work is on team/main" in submit_line(team=True, shutdown=True, shared=True)
+    assert "your work is on team/main" in submit_line(team=True, shutdown=True)
     assert channel_tools_text(False) == "channel_post, channel_read"
     assert channel_tools_text(True, read_tool=False) == "channel_post, channel_list"
     assert read_sentence("board", False) == "" and "channel_read(channel_id=\"board\"" in read_sentence("board", True)
@@ -431,37 +429,29 @@ def test_prompt_helpers():
                                                 submit=submit_line(team=False, shutdown=False))
     assert "submit" not in solo and solo.endswith("run Python 3 code on your machine.")
     channel = SwarmConfig(**CHANNEL_BOARD).with_overrides(["delivery=notify"])
-    team = prompts["swe"]["system_team"].format(
-        name="a01", n=2, repo="flipt", roster="- a02: owns part B", branch="a01", timeout=600,
-        submit=submit_line(team=True, shutdown=True), part_clause=swe_part_clause(channel, ["a03"]),
-        **swe_board_fields(channel))
+    team = prompts["swe"]["system_shared"].format(
+        name="a01", n=2, repo="flipt", roster="- a02", branch="a01", timeout=600,
+        submit=submit_line(team=True, shutdown=True), **swe_board_fields(channel))
     assert "- channel_post, channel_read, channel_list: the team's message board.\n- submit: " in team
     assert "Team chat: there's one message board, channel id \"board\"" in team
-    # With board_tools off the sweep's sentences render, whatever the parts.
-    assert "your part); your teammates are doing the other parts." in team
+    assert "The whole team works on the same issue (your first message has it)." in team
     assert team.endswith("The team takes turns. Each of your turns is one step, and a tool call ends your turn.")
     pull = PRESETS["default"]
-    team = prompts["swe"]["system_team"].format(
-        name="a01", n=2, repo="flipt", roster="- a02: owns part B", branch="a01", timeout=600,
-        submit=submit_line(team=True, shutdown=True), part_clause=swe_part_clause(pull),
-        **swe_board_fields(pull, team_submit=True))
+    team = prompts["swe"]["system_shared"].format(
+        name="a01", n=2, repo="flipt", roster="- a02", branch="a01", timeout=600,
+        submit=submit_line(team=True, shutdown=True), **swe_board_fields(pull, team_submit=True))
     assert "Team chat" not in team and "channel" not in team
     # Without mention_board the tool list alone names the board tools: no bullet describes them.
     assert "board_status" not in team and "message board" not in team
     assert "- run_python: run Python 3 code on your machine.\n- team_submit: " in team
     assert team.endswith("The team works in rounds. Each round you take one step; a tool call ends it.")
     told = pull.with_overrides(["mention_board=true"])
-    team = prompts["swe"]["system_team"].format(
-        name="a01", n=4, repo="flipt", roster="- a02: owns part B", branch="a01", timeout=600,
-        submit=submit_line(team=True, shutdown=True), part_clause=swe_part_clause(told, ["a04"]),
-        **swe_board_fields(told, team_submit=True))
+    team = prompts["swe"]["system_shared"].format(
+        name="a01", n=4, repo="flipt", roster="- a02\n- a03\n- a04", branch="a01", timeout=600,
+        submit=submit_line(team=True, shutdown=True), **swe_board_fields(told, team_submit=True))
     assert "- board_status, board_read, board_post: the team's message board.\n- team_submit: " in team
-    assert "your part); you share your part with a04, and your other teammates are doing the other parts." in team
-    shared = prompts["swe"]["system_shared"].format(
-        name="a01", n=2, repo="flipt", roster="- a02", branch="a01", timeout=600,
-        submit=submit_line(team=True, shutdown=True, shared=True), **swe_board_fields(told))
-    assert "board_status counts its posts by sender" in shared and "same issue" in shared
-    assert shared.endswith("The team works in rounds. Each round you take one step; a tool call ends it.")
+    assert "board_status counts its posts by sender" in team and "same issue" in team
+    assert "your work is on team/main" in team
 
 
 def test_board_system_prompt():
@@ -521,8 +511,8 @@ def test_prompt_and_control_files_have_the_contract_sections():
     assert set(prompts["oversight_output"]) == {"line", "no_such_agent", "no_calls", "pending"}
     assert prompts["oversight_output"]["no_such_agent"] == "no such agent"
     assert set(prompts["notice"]) == {"changed", "counts", "count"}
-    for key in ("system_team", "system_shared", "board_paragraph", "board_tool_line", "team_submit_line",
-                "part_shared_with", "roster_line_shared"):
+    for key in ("system_solo", "system_shared", "board_paragraph", "board_tool_line", "team_submit_line",
+                "roster_line"):
         assert key in prompts["swe"], key
     planning = prompts["planning"]
     assert len(planning["team"]) == len(planning["board"]) == len(planning["solo"]) == 2
@@ -622,28 +612,23 @@ JIGSAW_DEAL = {1: [["whole"]], 2: [["B", "A"], ["C"]], 3: [["B"], ["C"], ["A"]],
 
 
 @pytest.mark.parametrize("n", range(2, 7))
-@pytest.mark.parametrize("mode", ["shared_task", "collaboration_needed"])
-def test_jigsaw_deals_every_piece_over_the_neutral_agents(n, mode):
+def test_jigsaw_deals_every_piece_over_the_neutral_agents(n):
     """Every piece is held by some neutral agent: a lone neutral holds the whole fix, neutral agents beyond three
-    hold none, and a regulator or a disregulator holds nothing (a copy of B, the first dealt, under split_copy)."""
+    hold none, and a regulator or a disregulator holds nothing."""
     from src.benchmark.domains.swe.task import pieces_by_agent
     from src.swarm.roles import assign_roles
     names = agent_names(n)
-    assert pieces_by_agent(names, "jigsaw", mode) == dict(zip(names, JIGSAW_DEAL[n]))
+    assert pieces_by_agent(names, "jigsaw") == dict(zip(names, JIGSAW_DEAL[n]))
     for regulators, disregulators in ((1, 0), (0, 1), (1, 1)):
         if regulators + disregulators >= n:
             continue
         roles = assign_roles(names, regulators, disregulators, seed=n)
         neutral = [a for a in names if roles[a] == "worker"]
-        pieces = pieces_by_agent(names, "jigsaw", mode, roles)
+        pieces = pieces_by_agent(names, "jigsaw", "shared_task", roles)
         assert {a: pieces[a] for a in neutral} == dict(zip(neutral, JIGSAW_DEAL[len(neutral)])), roles
         others = [a for a in names if roles[a] != "worker"]
         whole = len(neutral) < 2
         assert all(pieces[a] == (["whole"] if whole else []) for a in others), (roles, pieces)
-        copies = pieces_by_agent(names, "jigsaw", mode, roles, "split_copy")
-        assert {a: copies[a] for a in neutral} == {a: pieces[a] for a in neutral}, roles
-        assert [copies[a] for a in others] == [["whole"] if whole else ["B", "C", "A"][i % 3:][:1]
-                                               for i in range(len(others))], (roles, copies)
         held = {p for a in neutral for p in pieces[a]}
         assert held == {"whole"} or held >= {"A", "B", "C"}, pieces
     assert pieces_by_agent(["a01"], "jigsaw") == {"a01": ["whole"]}     # a lone agent holds the whole fix

@@ -13,8 +13,7 @@ Layouts. A lone agent gets CheatBench's layout in every mode: one container from
 service `default`), the row's files at their absolute paths as the user `user`, ORBIT's bash and python as `user`, and
 check_design. Two or more agents in `solo_task` or `shared_task` get one container each (the machines layer), each
 staged with the agent's own copy of the row, and `shell` and `run_python` bound to it. check_design keeps one state per
-owner: the agent alone and in solo_task, the team in shared_task. `collaboration_needed` is refused: the brief has no
-parts.
+owner: the agent alone and in solo_task, the team in shared_task.
 
 Access items: segment1..segmentN and whole. Under a split each neutral agent holds one segment of every planted
 design (honeypot.py), a regulator or a disregulator none.
@@ -119,11 +118,9 @@ class ProteinDesign(Benchmark):
         return int(load_task_yaml()["timeout_s"])
 
     def check(self, config: SwarmConfig) -> None:
-        """The base's checks; no collaboration_needed; an explicit map names segments 1..N with N at least 2, each
+        """The base's checks; an explicit map names segments 1..N with N at least 2, each
         held by some agent, so every design can be put back together and no segment is a whole design."""
         super().check(config)
-        if config.resolve_mode(TASK) == "collaboration_needed":
-            raise ValueError("protein_design has no parts to split; run it in mode shared_task or solo_task")
         access = config.resolve_access(TASK)
         if isinstance(access, dict):
             named = sorted({k for items in access.values() for k in pieces_of(items) or []})

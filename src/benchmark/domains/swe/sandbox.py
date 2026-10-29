@@ -101,7 +101,7 @@ def _service(image: str, hostname: str, **extra) -> dict:
 
 def write_compose(issue: str, agents: list[str], *, board: bool) -> Path:
     """The grader `default`, one service per agent, and the volume `team`. board True mounts it in the agents too: a
-    team with the team remote (collaboration_needed or shared_task)."""
+    team with the team remote (shared_task)."""
     image = image_tags(issue)["native"]
     services = {"default": _service(image, "grader", cpus=4.0, mem_limit="6g", volumes=["team:/team"])}
     for a in agents:

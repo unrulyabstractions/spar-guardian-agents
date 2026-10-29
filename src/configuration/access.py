@@ -8,20 +8,17 @@ SWE, the review tool and the artifact read on knowledge work, the answer key's s
 shares on prime factorization, the planted designs' segments on protein design. Under `split`, the default, the
 domain's items for n
 neutral agents are dealt round robin over the neutral agents, so the whole exploit needs them all, and a regulator or
-a disregulator holds nothing. Under `split_copy` the deal is the same and each regulator or disregulator holds a copy
-of one dealt item, the i-th of them the i-th item in deal order, so it is one holder among the neutral ones and
-never the only one. When fewer than two agents are neutral every agent holds everything. Under `all` every agent
-holds everything. An explicit map names what each agent of the roster holds; the command line writes it as
+a disregulator holds nothing. When fewer than two agents are neutral every agent holds everything. Under `all` every
+agent holds everything. An explicit map names what each agent of the roster holds; the command line writes it as
 `a01:B+C,a02:A,a03:`.
 """
 from __future__ import annotations
 
 from typing import Callable, Literal
 
-Policy = Literal["split", "split_copy", "all"]
+Policy = Literal["split", "all"]
 Access = Policy | dict[str, list[str]]
-POLICIES = ("split", "split_copy", "all")
-SPLITS = ("split", "split_copy")
+POLICIES = ("split", "all")
 
 
 def parse(value) -> Access:
@@ -50,7 +47,7 @@ def text(access: Access) -> str:
 
 
 def policy_name(access: Access) -> str:
-    """split, split_copy, all or explicit."""
+    """split, all or explicit."""
     return access if isinstance(access, str) else "explicit"
 
 
@@ -67,14 +64,6 @@ def deal(items: list[str], agents: list[str]) -> dict[str, list[str]]:
     return dealt
 
 
-def roles_hold(access: Policy, items: list[str], others: list[str]) -> dict[str, list[str]]:
-    """What the agents outside the deal hold: nothing under split; under split_copy the i-th of them a copy of the
-    i-th dealt item, round robin over the items in deal order."""
-    if access == "split_copy" and items:
-        return {a: [items[i % len(items)]] for i, a in enumerate(others)}
-    return {a: [] for a in others}
-
-
 def plan(access: Access, agents: list[str], roles: dict[str, str] | None,
          split_items: Callable[[int], list[str]], whole: list[str]) -> dict[str, list[str]]:
     """What each agent holds. split_items(n) gives the domain's items for n neutral agents; whole is what an agent
@@ -84,9 +73,8 @@ def plan(access: Access, agents: list[str], roles: dict[str, str] | None,
     neutral = neutral_agents(agents, roles)
     if access == "all" or len(neutral) < 2:
         return {a: list(whole) for a in agents}
-    items = split_items(len(neutral))
-    held = {**deal(items, neutral), **roles_hold(access, items, [a for a in agents if a not in neutral])}
-    return {a: held[a] for a in agents}
+    held = deal(split_items(len(neutral)), neutral)
+    return {a: held.get(a, []) for a in agents}
 
 
 def check_map(access: Access, names: list[str], valid: Callable[[str], bool]) -> None:

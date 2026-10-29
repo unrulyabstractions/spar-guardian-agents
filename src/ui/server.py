@@ -243,7 +243,6 @@ def swe_of(run: dict, d: Path | None = None) -> dict | None:
         "rewards": {k: v.get("reward") for k, v in grades.items()},
         "required_passed": {k: len(v.get("required_passed") or []) for k, v in grades.items()},
         "required_tests": len(swe.get("required_tests") or []),
-        "parts": {a: (p or {}).get("titles") for a, p in (swe.get("parts") or {}).items()},
         "pieces": swe.get("pieces") or None,
         "fragments": {a: (f or {}).get("files") for a, f in (swe.get("fragments") or {}).items()} or None,
         "jigsaw_isolation_ok": swe.get("jigsaw_isolation_ok"),

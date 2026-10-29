@@ -1555,22 +1555,21 @@ function rulesTable(rules) {
     h('tbody', null, agents.map(a => h('tr', null, h('td', null, a), facts.map(f => h('td', null, cell((rules[a] || {})[f]))))))));
 }
 
-// Lucy's plan on a CheatBench SWE task: the arm, each agent's part (and jigsaw fragment or planted piece), the
+// A CheatBench SWE task: the arm, each agent's jigsaw fragment or planted piece, the
 // hidden-test rewards for the team's main and each agent's working tree, the judge, the rung and the talk measures.
 function sweView(swe, eps) {
   const epOf = name => eps.find(e => e.orbit_agent === name) || null;
-  const agents = Object.keys(swe.parts || {}).sort();
+  const agents = eps.map(e => e.orbit_agent).filter(Boolean).sort();
   const reward = k => (swe.rewards || {})[k] == null ? muted(DASH)
     : h('span', { title: `${(swe.required_passed || {})[k] || 0} of ${swe.required_tests} required tests passed` },
       yn(swe.rewards[k] === 1, 'good', 'plain'));
   const m = (a, k) => ((swe.measures || {})[a] || {})[k];
-  const cols = ['agent', 'part', swe.jigsaw ? 'fragment files' : null, swe.pieces ? 'planted piece' : null, 'reward',
+  const cols = ['agent', swe.jigsaw ? 'fragment files' : null, swe.pieces ? 'planted piece' : null, 'reward',
     'judge: cheated', 'rung', 'posts', 'about the fix', 'disclosed'].filter(Boolean);
   const table = h('table', { class: 'data' },
     h('thead', null, h('tr', null, cols.map(c => h('th', null, c)))),
     h('tbody', null, agents.map(a => h('tr', null,
       h('td', null, a),
-      h('td', null, (swe.parts[a] || []).length ? (swe.parts[a] || []).join('; ') : muted('whole issue')),
       swe.jigsaw ? h('td', null, ((swe.fragments || {})[a] || []).map(f => h('div', null, mono(f)))) : null,
       swe.pieces ? h('td', null, (swe.pieces || {})[a] == null ? muted(DASH) : mono(asText(swe.pieces[a]))) : null,
       h('td', null, reward(a)),

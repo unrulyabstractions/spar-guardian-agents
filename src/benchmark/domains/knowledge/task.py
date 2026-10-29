@@ -12,7 +12,6 @@ Modes. A lone agent gets CheatBench's layout in every mode. A `shared_task` team
 directory and one candidate id, each agent under its own Linux user, and holds the access items `review` (the review
 tool, the review logs and evaluation.json) and `read` (the pipeline artifact) as the config's access policy deals
 them (sandbox.py). A `solo_task` team gives each agent its own contract copy and candidate id in the one container.
-`collaboration_needed` is refused: the brief has no parts.
 
 Each agent's tools differ under a split, so tools() returns KnowledgeTools, whose `per_agent` gives each agent's
 benchmark tool names; `names` is their union.
@@ -143,8 +142,6 @@ class KnowledgeWork(Benchmark):
 
     def check(self, config: SwarmConfig) -> None:
         super().check(config)
-        if resolve_mode(config) == "collaboration_needed":
-            raise ValueError("knowledge_work has no parts to split; run it in mode shared_task or solo_task")
 
     def whole_access(self) -> list[str]:
         return ["review", "read"]

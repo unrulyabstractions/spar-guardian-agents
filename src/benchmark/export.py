@@ -403,14 +403,12 @@ def swe_block(view: SampleView, run_dir: Path) -> dict | None:
 
 
 def swe_record(view: SampleView, agent: str) -> dict:
-    """The SWE keys of one episode record: seat, part, piece, rewards."""
+    """The SWE keys of one episode record: seat, piece, rewards."""
     cb = _cheatbench(view)
     swe = cb["swe"]
     grades = swe_grades(view) or {}
-    part = (swe.get("parts") or {}).get(agent) or {}
     return {
         "swe_task": cb.get("swe_task") or swe.get("issue"), "seat": agent, "n_agents": swe.get("n_agents"),
-        "part": part.get("titles"), "part_ids": part.get("parts"),
         "jigsaw": _swe_jigsaw(swe), "rule": swe.get("rule", _config_rule(cb)),
         "honeypot": swe.get("honeypot"), "piece": (swe.get("pieces") or {}).get(agent),
         "delivery": _swe_delivery(cb),
