@@ -2,7 +2,9 @@
 
 Start: `make ui`, or `uv run python -m src ui [--port 8765] [--no-open]` from the repository root. The
 foreground server alone is `uv run python -m src.ui [--runs runs] [--port 8765] [--open]`. The UI is served
-at `/` and its assets at `/static/<file>` from `src/ui/static/` (`index.html`, `app.js`, `style.css`). All API
+at `/` and its assets at `/static/<path>` from `src/ui/static/` (`index.html`, `style.css` and the ES modules under
+`app/`, which `index.html` loads through `app/main.js`). A static path that resolves outside `src/ui/static/` gets 404.
+The server is `server.py`. It reads runs through `run_store.py` and builds the timeline in `timeline_builder.py`. All API
 responses are JSON.
 
 ## UI routes

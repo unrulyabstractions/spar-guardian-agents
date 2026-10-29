@@ -21,7 +21,7 @@ The experiment on ORBIT. It turns one benchmark from `src/benchmark/` and one `S
 | `benchmark/` | CheatBench's tasks: the Benchmark protocol, the openmath, SWE, knowledge-work, interview (subset_sum, prime_factorization) and protein-design domains, the per-agent machines layer (`machines/`), the transcript, the judge and the export; see `src/benchmark/README.md` |
 | `measures/` | over run directories: the command line's summary (`episode_summary.py`), the board engagement funnel (`board_engagement.py`) and the code ladder (`code_ladder.py`); each domain's own measures live in its package |
 | `utils/gemini_402_retry.py` | Gemini's 402 "credits depleted" retried as a rate limit |
-| `ui/` | the results browser: `server.py`, `launch.py` (start and stop in the background), `API.md` and the single-page UI in `static/` |
+| `ui/` | the results browser: `server.py` (the HTTP routes), `run_store.py` (the run directories and eval logs it reads), `timeline_builder.py` (one run's events on a common clock), `launch.py` (start and stop in the background), `API.md` and the single-page UI in `static/` (`index.html`, `style.css` and the ES modules under `static/app/`, booted by `main.js`) |
 
 ## Commands
 
