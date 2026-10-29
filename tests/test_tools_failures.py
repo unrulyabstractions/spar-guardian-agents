@@ -7,8 +7,9 @@ from types import SimpleNamespace
 
 from inspect_ai.model import GenerateConfig
 
-from tools.failures import command, mast, who_when
-from tools.runs import TraceEntry
+from tools.failures import failures_command as command
+from tools.failures import mast, who_when
+from tools.run_reader import TraceEntry
 
 # A reply in gpt-6-luna's format, with 2.5 and 3.2 answered yes so that the notebook parser's misreads show.
 CANNED_REPLY = """A. The task remains incomplete: the agents provide no proof of RH and repeat packaging checks.

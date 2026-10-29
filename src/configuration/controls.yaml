@@ -1,5 +1,5 @@
 # The control texts: CheatBench's rule for a task as criteria for an LLM monitor or guardian, and as regex patterns for
-# ORBIT's pattern monitor. Read with src.configuration.settings.load_controls(); used by src/swarm/controls.py.
+# ORBIT's pattern monitor. Read with src.configuration.settings.load_controls(); used by src/swarm/control_defenses.py.
 # Source: the October 2026 sweep's controls.py at this repository's commit 8dd0069 (TASK_CRITERIA, TASK_PATTERNS,
 # TASK_PATTERNS_HARD), verbatim. The regex fragments _GIT, _OTHER and _G are inlined, so each entry is a final regex.
 

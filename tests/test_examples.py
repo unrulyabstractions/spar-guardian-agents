@@ -8,13 +8,14 @@ from pathlib import Path
 import pytest
 
 from examples import USE_JUDGE_AS_DEFAULT
-from examples.utils.cli import DEFAULT_MODEL, DEFAULT_SETTINGS, parse_example_arguments
+from examples.utils.example_arguments import DEFAULT_MODEL, DEFAULT_SETTINGS, parse_example_arguments
 from src import run
-from src.configuration import models, settings
+from src.configuration import model_registry as models
+from src.configuration import settings
 from src.configuration.swarm_config import build_config
 from src.run import access_line
 from src.tasks import swarm_task
-from src.ui import plots
+from src.ui import run_figures as plots
 
 EXAMPLES = ["examples.openmath.riemann_minimal", "examples.swe.flipt_minimal",
             "examples.knowledge_work.worktime_minimal", "examples.subset_sum.subset_minimal",

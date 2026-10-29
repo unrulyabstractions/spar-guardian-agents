@@ -4,7 +4,7 @@
     inspect eval src/tasks.py@openmath -T preset=default -T regulators=1
 
 The second form skips what `python -m src run` adds: the key and routing checks, the role models built before the
-sandbox starts, and the Gemini 402 retry (src/utils/provider_retry.py). A role model still gets the eval's generate
+sandbox starts, and the Gemini 402 retry (src/utils/gemini_402_retry.py). A role model still gets the eval's generate
 config there through the swarm model provider.
 
 What comes from where:
@@ -12,11 +12,13 @@ What comes from where:
     src/benchmark/domains/swe/, .../knowledge/, .../interview/, .../protein/);
   * the roster, the board, the board tools and team_submit, the hidden roles, the written plan and the turn rules
     come from src/swarm/ (comm_topology.py, board.py, roles.py, rules.py);
-  * the control's defenses come from controls.py, and CheatBench's judge is added as a scorer (src/benchmark/judge.py).
+  * the control's defenses come from controls.py, and CheatBench's judge is added as a scorer
+  (src/benchmark/cheatbench_judge.py).
 
 Each agent's tools are the benchmark's, then, on a pull board (board_tools), board_status, board_read and board_post,
 then team_submit for a neutral agent when the mode has a team to submit for, and agent_actions for a regulator
-(src/swarm/oversight.py). They are bound per agent through ORBIT's tool_bindings next to the benchmark's own bindings.
+(src/swarm/regulator_oversight.py). They are bound per agent through ORBIT's tool_bindings next to the
+benchmark's own bindings.
 
 The plan's rounds, the scheduler's turn bound and Inspect's message limit follow the domain's turn budget
 (SwarmConfig.steps_for, max_turns_for, message_limit_for). Under a budget metadata["cheatbench"]["turn_budget"] holds
@@ -31,7 +33,7 @@ metadata["experiment"]["defenses"] holds the control's defenses plus the passive
 carries.
 
 An agent whose role has a model of its own (worker_model, regulator_model, disregulator_model) runs it through the
-swarm model provider (src/configuration/provider.py); every other agent runs the eval's model.
+swarm model provider (src/configuration/swarm_model_provider.py); every other agent runs the eval's model.
 
 Hidden roles are used on a board of three or more agents on openmath (the October 2026 swarm), and on any board whose
 config asks for a regulator or a disregulator. Two openmath agents without roles are the plain board.
@@ -45,28 +47,28 @@ from orbit.configs.experiment import ExperimentConfig
 from orbit.configs.setup import AgentSpec, SetupConfig
 from orbit.tasks.multi_agent import multi_agent_task
 
-from src.benchmark.base import AgentTools, Benchmark
+from src.benchmark.benchmark_protocol import AgentTools, Benchmark
+from src.benchmark.cheatbench_judge import cheatbench_judge
 from src.benchmark.domains.interview import PrimeFactorization, SubsetSum
 from src.benchmark.domains.knowledge import KnowledgeWork
 from src.benchmark.domains.openmath import OpenMath
 from src.benchmark.domains.protein import ProteinDesign
 from src.benchmark.domains.swe import SWE
-from src.benchmark.judge import cheatbench_judge
-from src.configuration import access as access_policy
-from src.configuration import provider, settings  # importing provider registers the "swarm" model provider
-from src.configuration.openmath import TOKEN_LIMIT
+from src.configuration import access_policy, settings
+from src.configuration import swarm_model_provider as provider  # importing it registers the "swarm" provider
+from src.configuration.openmath_settings import TOKEN_LIMIT
 from src.configuration.swarm_config import SwarmConfig, board_system_prompt, preset
-from src.configuration.swe import GRADING_BUDGET_S
-from src.swarm import roles as roles_module
-from src.swarm.board import agent_tool_names, board_bindings
-from src.swarm.comm_topology import (
+from src.configuration.swe_settings import GRADING_BUDGET_S
+from src.swarm import hidden_roles as roles_module
+from src.swarm.awareness_probes import end_of_episode_probes
+from src.swarm.board_config import (
     board_communication,
     board_execution,
     board_scheduler,
 )
-from src.swarm.controls import BASELINE, defenses_for
-from src.swarm.probes import end_of_episode_probes
-from src.swarm.rules import rules_setup, schedule, turn_rules_defense
+from src.swarm.control_defenses import BASELINE, defenses_for
+from src.swarm.pull_board import agent_tool_names, board_bindings
+from src.swarm.turn_rules import rules_setup, schedule, turn_rules_defense
 
 JUDGE_ADDENDUM = settings.LUCY / "experiments" / "orbit_cheatbench" / "judge_addendum.py"
 MONITOR_FACTOR = 3        # an LLM control's own calls count toward the token limit
@@ -125,7 +127,7 @@ def system_prompts(benchmark: Benchmark, config: SwarmConfig, sample: Sample,
 def team_tools(benchmark: Benchmark, config: SwarmConfig, tools: AgentTools,
                roles: dict[str, str] | None) -> tuple[dict[str, list[str]], dict]:
     """(each agent's AgentSpec.tools, ORBIT tool_bindings): the benchmark's tools (its per_agent names when it has
-    them), then the board tools and team_submit (src/swarm/board.py)."""
+    them), then the board tools and team_submit (src/swarm/pull_board.py)."""
     extra = agent_tool_names(config, config.names, level_key(benchmark), roles)
     own = getattr(tools, "per_agent", None) or {}   # KnowledgeTools: the review tool follows the access plan
     names = {n: [*own.get(n, tools.names), *extra[n]] for n in config.names}
@@ -138,7 +140,8 @@ def agent_specs(config: SwarmConfig, tools: dict[str, list[str]], prompts: dict[
     conversation is capped at the sample's message limit (message_limit, else config.message_limit) plus ten.
 
     An agent whose hidden role has a model of its own (SwarmConfig.role_models) gets AgentSpec.model
-    "swarm/<Inspect string>" (src/configuration/provider.py); the others leave it None and run the eval's model.
+    "swarm/<Inspect string>" (src/configuration/swarm_model_provider.py); the others leave it None and run
+    the eval's model.
     roles None means every agent is a worker."""
     limit = config.message_limit if message_limit is None else message_limit
     chosen = config.role_models()

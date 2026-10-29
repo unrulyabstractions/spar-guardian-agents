@@ -29,7 +29,7 @@ import re
 from inspect_ai.model import ChatMessageSystem, ChatMessageUser, GenerateConfig
 
 from tools.failures.model_calls import complete
-from tools.runs import Run, TraceEntry, merged_trace
+from tools.run_reader import Run, TraceEntry, merged_trace
 
 METHODS = ("all_at_once", "step_by_step", "binary_search")
 ALL_AT_ONCE_SYSTEM = "You are a helpful assistant skilled in analyzing conversations."

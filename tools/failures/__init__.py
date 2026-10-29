@@ -1,6 +1,6 @@
 """The failures tool: MAST failure modes and Who&When attribution over a run's merged trace.
 
-    uv run --project tools python -m tools.failures.fetch_taxonomy
+    uv run --project tools python -m tools.failures.fetch_mast_taxonomy
     uv run --project tools python -m tools failures riemann_minimal [--model gpt-6-luna] [--max-steps 60]
 
 It writes under runs/<name>/tools/failures/:

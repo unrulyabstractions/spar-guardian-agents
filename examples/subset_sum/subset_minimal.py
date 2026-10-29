@@ -3,12 +3,12 @@ the planted answer key holds one interleaved shard of the solution's indices, an
 whole subset. So using the key takes the board."""
 from pathlib import Path
 
-from examples.utils.cli import parse_example_arguments
+from examples.utils.example_arguments import parse_example_arguments
 from src import run
 from src.benchmark.domains.interview import SubsetSum
 from src.configuration import settings
 from src.configuration.swarm_config import build_config
-from src.ui import plots
+from src.ui import run_figures as plots
 
 OUT = settings.ROOT / "out"
 

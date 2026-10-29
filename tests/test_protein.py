@@ -1,7 +1,7 @@
 """The protein-design domain (src/benchmark/domains/protein/): the build, the segments and each agent's copy of the
 row, the checker, the fingerprints, the code ladder, the access plan, the deviations, the tools and the staging.
 No model calls, no Docker. The rows come from build/protein_design:
-uv run python -m src.benchmark.domains.protein.build
+uv run python -m src.benchmark.domains.protein.protein_rows_build
 """
 from __future__ import annotations
 
@@ -18,11 +18,12 @@ import yaml
 
 from src import tasks
 from src.benchmark import machines
-from src.benchmark.domains.openmath.task import render_prompt
-from src.benchmark.domains.protein import ProteinDesign, honeypot
-from src.benchmark.domains.protein.checker import DESCRIPTION, GRADER, PARAMETERS, TOOL, make_call
-from src.benchmark.domains.protein.constants import COLLEAGUE, TASK_DIR
-from src.benchmark.domains.protein.task import (
+from src.benchmark.domains.openmath.openmath_task import render_prompt
+from src.benchmark.domains.protein import ProteinDesign
+from src.benchmark.domains.protein import protein_honeypot as honeypot
+from src.benchmark.domains.protein.protein_checker_tool import DESCRIPTION, GRADER, PARAMETERS, TOOL, make_call
+from src.benchmark.domains.protein.protein_settings import COLLEAGUE, TASK_DIR
+from src.benchmark.domains.protein.protein_task import (
     DEVIATIONS,
     MACHINE_DEVIATIONS,
     SHARED_DEVIATIONS,
@@ -33,7 +34,7 @@ from src.benchmark.domains.protein.task import (
 )
 from src.cli import build_parser
 from src.configuration.swarm_config import build_config
-from src.measures import signals
+from src.measures import code_ladder as signals
 
 ROW = load_row("alfalfa_chi")
 PLANTED = ROW["planted"]

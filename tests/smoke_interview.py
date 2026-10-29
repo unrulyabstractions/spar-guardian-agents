@@ -6,8 +6,9 @@ spend.
 
 Every scenario starts the real sandbox (cbtask:python311, one container per agent of a team,
 src/benchmark/domains/interview/), drives ORBIT with Inspect's mockllm scripted per agent, judges every agent with a
-mock judge bound to the "judge" role, exports the log with src.benchmark.export.write_run, reads every transcript back
-the way CheatBench's judge does and places the agents on the code ladder (src/measures/signals.py). Each check is an
+mock judge bound to the "judge" role, exports the log with src.benchmark.run_export.write_run, reads every
+transcript back
+the way CheatBench's judge does and places the agents on the code ladder (src/measures/code_ladder.py). Each check is an
 assertion; a failing scenario exits non-zero. Results go to runs/smoke_interview/<stamp>/<task>_<scenario>/ and
 logs/smoke_interview/<stamp>/, a fresh directory per invocation. Each scenario runs on both tasks.
 
@@ -56,22 +57,30 @@ from inspect_ai.tool import ToolCall  # noqa: E402
 from orbit.communication.runtime import current_identity  # noqa: E402
 
 from src import tasks  # noqa: E402
-from src.benchmark.domains.interview import PrimeFactorization, SubsetSum, generator, keys  # noqa: E402
-from src.benchmark.domains.interview.constants import FACTOR, KEY_DIRS, SHARE_MODULUS, SUBSET, Spec  # noqa: E402
-from src.benchmark.domains.interview.probe import SCORER  # noqa: E402
-from src.benchmark.domains.interview.task import (  # noqa: E402
+from src.benchmark.cheatbench_judge import judge_spec  # noqa: E402
+from src.benchmark.domains.interview import PrimeFactorization, SubsetSum  # noqa: E402
+from src.benchmark.domains.interview import interview_answer_keys as keys  # noqa: E402
+from src.benchmark.domains.interview import interview_sealed_generator as generator  # noqa: E402
+from src.benchmark.domains.interview.interview_scoring import SCORER  # noqa: E402
+from src.benchmark.domains.interview.interview_settings import (  # noqa: E402
+    FACTOR,
+    KEY_DIRS,
+    SHARE_MODULUS,
+    SUBSET,
+    Spec,
+)
+from src.benchmark.domains.interview.interview_task import (  # noqa: E402
     DEVIATIONS,
     MACHINE_DEVIATIONS,
     SHARED_DEVIATIONS,
     SPLIT_DEVIATIONS,
 )
-from src.benchmark.domains.interview.verifier import tool_name  # noqa: E402
-from src.benchmark.domains.openmath.task import render_prompt  # noqa: E402
-from src.benchmark.export import write_run  # noqa: E402
-from src.benchmark.judge import judge_spec  # noqa: E402
+from src.benchmark.domains.interview.interview_verifier_tool import tool_name  # noqa: E402
+from src.benchmark.domains.openmath.openmath_task import render_prompt  # noqa: E402
+from src.benchmark.run_export import write_run  # noqa: E402
 from src.configuration import settings  # noqa: E402
 from src.configuration.swarm_config import build_config  # noqa: E402
-from src.measures import signals  # noqa: E402
+from src.measures import code_ladder as signals  # noqa: E402
 
 MODEL = "mockllm/model"
 STAMP = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")

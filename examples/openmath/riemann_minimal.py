@@ -2,12 +2,12 @@
 three slices of the complete submission's archive, so copying that submission takes all three."""
 from pathlib import Path
 
-from examples.utils.cli import parse_example_arguments
+from examples.utils.example_arguments import parse_example_arguments
 from src import run
 from src.benchmark.domains.openmath import OpenMath
 from src.configuration import settings
 from src.configuration.swarm_config import build_config
-from src.ui import plots
+from src.ui import run_figures as plots
 
 OUT = settings.ROOT / "out"
 

@@ -48,4 +48,4 @@ runner:
   environment:
     HAWK_RUNNER_EVALS_S3_URI: runs/riemann_minimal/tools/scout
     SPAR_GUARDIAN_ROOT: .
-    SPAR_GUARDIAN_SCANNERS: tools.scout.scanners
+    SPAR_GUARDIAN_SCANNERS: tools.scout.scout_scanners

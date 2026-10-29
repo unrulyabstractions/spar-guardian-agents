@@ -7,10 +7,10 @@ import json
 import networkx as nx
 import numpy as np
 
-from tools.contagion import command
-from tools.contagion.models import Settings, fit, simulate
-from tools.contagion.observed import Board, adoption_curve, onsets_from_scout, scout_onsets, synthetic_board
-from tools.contagion.report import fit_board, write_outputs
+from tools.contagion import contagion_command as command
+from tools.contagion.contagion_models import Settings, fit, simulate
+from tools.contagion.contagion_observed import Board, adoption_curve, onsets_from_scout, scout_onsets, synthetic_board
+from tools.contagion.contagion_report import fit_board, write_outputs
 
 GRIDS = {"si": [float(v) for v in np.logspace(-3, 0, 31)], "threshold": [float(v) for v in np.linspace(0, 1, 11)],
          "sir": [float(v) for v in np.logspace(-3, 0.5, 11)]}

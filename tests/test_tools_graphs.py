@@ -8,8 +8,7 @@ import shutil
 import networkx as nx
 import pytest
 
-from tools.cli import main
-from tools.graphs.build import (
+from tools.graphs.graph_build import (
     build_graph,
     onset_judge_disagreements,
     onset_metrics,
@@ -17,7 +16,8 @@ from tools.graphs.build import (
     read_graph_check,
     scout_ran,
 )
-from tools.runs import RUNS_DIR, load_run
+from tools.run_reader import RUNS_DIR, load_run
+from tools.tool_dispatch import main
 
 RIEMANN = RUNS_DIR / "riemann_minimal"
 pytestmark = pytest.mark.skipif(not (RIEMANN / "run.json").is_file(), reason="runs/riemann_minimal is not on disk")

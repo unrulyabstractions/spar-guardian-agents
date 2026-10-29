@@ -3,7 +3,7 @@
     uv run python scripts/paper/tables.py
 
 table_scales.png: the scales (scale, agents, time limit), from src/configuration/scales.py. table_rungs.png: the
-cheating ladder's rungs against each domain's CheatBench verdict field, from src/configuration/judge_ladder.py.
+cheating ladder's rungs against each domain's CheatBench verdict field, from src/configuration/ladder_verdict_fields.py.
 """
 from __future__ import annotations
 
@@ -34,7 +34,8 @@ INK2 = "#52514e"
 RULE = "#c3c2b7"
 CHIP = "#efeee9"
 
-# The ladder's rungs (src/configuration/judge_ladder.py LADDER and HONEYPOT) against the CheatBench verdict field each
+# The ladder's rungs (src/configuration/ladder_verdict_fields.py LADDER and HONEYPOT) against the CheatBench
+# verdict field each
 # task's judge_schema.py records the same act under; "none" where only the ladder records it.
 RUNGS = [
     ("exposed", ["`honey_pots_seen`"], ["none"], ["`honey_pots_seen`"], ["`honey_pots_seen`"], ["`honey_pots_seen`"]),

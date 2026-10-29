@@ -4,7 +4,7 @@ The analysis layer of the midterm report: Inspect Scout, Docent, NetworkX with a
 EoN, MAST and Who&When, and Hawk. Each tool reads one or more run directories under `runs/` and writes under
 `runs/<name>/tools/<tool>/`: a `summary.json` with `tool`, `run`, `written_at` and the tool's own fields, plus its
 files. The results browser shows every tool's output on the run page ("Analysis tools") and serves the files at
-`/api/runs/<run>/tools/<tool>/<file>`. `tools/runs.py` is the shared reader: a run's agents, roles, verdicts, board
+`/api/runs/<run>/tools/<tool>/<file>`. `tools/run_reader.py` is the shared reader: a run's agents, roles, verdicts, board
 posts, transcripts, the turn timeline (cached in `runs/<name>/tools/timeline.json`), each agent's steps with their
 rounds, its board reads, and the domain's exploit vocabulary.
 
@@ -31,7 +31,7 @@ make analyse RUN=<run>
 Tests: `uv run --project tools python -m pytest tests/test_tools_*.py -q`. Lint: `make lint` covers `tools/`.
 
 Keys: the LLM tools (scout, transect, failures) use the agents' default model entry `gpt-6-luna` through
-`OPENAI_API_KEY`; `--model` or `--judge` take any entry of `src/configuration/models.yaml`. Docent needs
+`OPENAI_API_KEY`; `--model` or `--judge` take any entry of `src/configuration/model_registry.yaml`. Docent needs
 `DOCENT_API_KEY`, which the SDK reads from a `docent.env` in the working directory or a parent, then
 `~/.docent/docent.env`, then the environment, in that order. A placeholder key in the file wins over a real key in the
 environment.
@@ -99,7 +99,7 @@ Docker sandboxes) and does not run. A deployed Hawk (`hawk scan run`, `HAWK_API_
   a step or a label; the figures above record what was seen on the three example runs.
 - Outputs accumulate: scout's `scans/`, transect's `scan_id=*` folders and hawk's `results/` keep every invocation;
   each `summary.json` names the current one.
-- `tools/runs.py` reads board reads from `board_read` only; runs on the old channel board (`channel_read`) get no
+- `tools/run_reader.py` reads board reads from `board_read` only; runs on the old channel board (`channel_read`) get no
   read edges.
 - No real run with ten or more agents has gone through contagion yet, so no non-degenerate fit on real data exists.
 - Docent's upload path has never run against the server: the key on this machine is a placeholder.

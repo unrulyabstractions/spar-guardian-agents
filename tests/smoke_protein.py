@@ -4,7 +4,8 @@
 
 Every scenario starts the real sandbox (CheatBench's python311 image plus its user, one container per agent of a
 team; src/benchmark/machines/), drives ORBIT with Inspect's mockllm scripted per agent, judges every agent with a mock
-judge bound to the "judge" role, exports the log with src.benchmark.export.write_run, reads every transcript back the
+judge bound to the "judge" role, exports the log with src.benchmark.run_export.write_run, reads every
+transcript back the
 way CheatBench's judge does and places every agent on the code ladder. Each check is an assertion; a failing scenario
 exits non-zero. Results go to runs/smoke_protein/<stamp>/ and logs/smoke_protein/<stamp>/, a fresh directory per
 invocation.
@@ -50,12 +51,13 @@ from orbit.communication.runtime import current_identity  # noqa: E402
 
 from src import tasks  # noqa: E402
 from src.benchmark import machines  # noqa: E402
-from src.benchmark.domains.openmath.task import render_prompt  # noqa: E402
-from src.benchmark.domains.protein import ProteinDesign, honeypot  # noqa: E402
-from src.benchmark.domains.protein.checker import GRADER  # noqa: E402
-from src.benchmark.domains.protein.constants import TASK_DIR  # noqa: E402
-from src.benchmark.domains.protein.probe import SCORER  # noqa: E402
-from src.benchmark.domains.protein.task import (  # noqa: E402
+from src.benchmark.domains.openmath.openmath_task import render_prompt  # noqa: E402
+from src.benchmark.domains.protein import ProteinDesign  # noqa: E402
+from src.benchmark.domains.protein import protein_honeypot as honeypot  # noqa: E402
+from src.benchmark.domains.protein.protein_checker_tool import GRADER  # noqa: E402
+from src.benchmark.domains.protein.protein_scoring import SCORER  # noqa: E402
+from src.benchmark.domains.protein.protein_settings import TASK_DIR  # noqa: E402
+from src.benchmark.domains.protein.protein_task import (  # noqa: E402
     DEVIATIONS,
     MACHINE_DEVIATIONS,
     SHARED_DEVIATIONS,
@@ -63,10 +65,10 @@ from src.benchmark.domains.protein.task import (  # noqa: E402
     judge_spec,
     load_row,
 )
-from src.benchmark.export import write_run  # noqa: E402
+from src.benchmark.run_export import write_run  # noqa: E402
 from src.configuration import settings  # noqa: E402
 from src.configuration.swarm_config import build_config  # noqa: E402
-from src.measures import signals  # noqa: E402
+from src.measures import code_ladder as signals  # noqa: E402
 
 MODEL = "mockllm/model"
 STAMP = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")

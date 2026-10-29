@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "tmp"
 sys.path.insert(0, str(ROOT))
 
-from src.configuration import access as access_policy  # noqa: E402
+from src.configuration import access_policy as access_policy  # noqa: E402
 
 # Palette: reference dataviz palette, light mode. Roles take the first two categorical slots;
 # workers are neutral (white fill, ink ring). Structures are neutral greys.
@@ -302,7 +302,7 @@ def item(ax, kind, cx, cy, w, text):
 
 # ---------------------------------------------------------------- figure 4: engagement funnel
 def fig_engagement_funnel():
-    """The board engagement stages (src/measures/engagement.py) and the tool each one takes."""
+    """The board engagement stages (src/measures/board_engagement.py) and the tool each one takes."""
     fig = plt.figure(figsize=(FULL, 1.45))
     ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
     ax.set_xlim(0, 17)

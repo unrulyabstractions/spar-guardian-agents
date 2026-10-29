@@ -15,13 +15,14 @@ from inspect_ai.model._providers.mockllm import MockLLM
 from inspect_ai.model._providers.openrouter import OpenRouterAPI
 
 from src import run
+from src.benchmark.atif_transcripts import SampleView
 from src.benchmark.domains.openmath import OpenMath
-from src.benchmark.export import episode_model
-from src.benchmark.transcript import SampleView
-from src.configuration import models, provider
-from src.configuration.provider import RegistryModelAPI
+from src.benchmark.run_export import episode_model
+from src.configuration import model_registry as models
+from src.configuration import swarm_model_provider as provider
 from src.configuration.swarm_config import PRESETS, ROLES, SwarmConfig, build_config
-from src.swarm import probes
+from src.configuration.swarm_model_provider import RegistryModelAPI
+from src.swarm import awareness_probes as probes
 from src.tasks import agent_specs
 
 FLASH = "openrouter/deepseek/deepseek-v4.1-flash-1017"

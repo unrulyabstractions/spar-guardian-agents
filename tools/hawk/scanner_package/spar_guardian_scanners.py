@@ -9,7 +9,8 @@ from an uninstalled module without a package prefix, so Hawk's name would not fi
 
 A run-bound factory for every signal in the module's SIGNALS and for its GREP_NAME, when the module has
 build_scanners. It takes `run` (a name under runs/ or a run directory) and an optional `model`, loads the run with
-tools.runs.load_run and returns the scanner build_scanners makes for that run. Without `model` the LLM scanners use
+tools.run_reader.load_run and returns the scanner build_scanners makes for that run. Without `model` the LLM
+scanners use
 the scan's model.
 """
 from __future__ import annotations
@@ -23,7 +24,7 @@ from inspect_ai._util.registry import RegistryInfo, is_registry_object, registry
 PACKAGE = "spar_guardian_scanners"
 ROOT_VARIABLE = "SPAR_GUARDIAN_ROOT"
 MODULE_VARIABLE = "SPAR_GUARDIAN_SCANNERS"
-RUNS_MODULE = "tools.runs"
+RUNS_MODULE = "tools.run_reader"
 
 ROOT = os.environ.get(ROOT_VARIABLE, "")
 if ROOT and ROOT not in sys.path:

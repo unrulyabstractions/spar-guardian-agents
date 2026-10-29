@@ -8,10 +8,10 @@ import shutil
 
 import pytest
 
-from tools.cli import main
-from tools.docent import command
-from tools.docent.upload import key_problem
-from tools.runs import RUNS_DIR, read_jsonl
+from tools.docent import docent_command as command
+from tools.docent.docent_upload import key_problem
+from tools.run_reader import RUNS_DIR, read_jsonl
+from tools.tool_dispatch import main
 
 RIEMANN = RUNS_DIR / "riemann_minimal"
 CACHED_FILES = ("timeline.json", "board_reads.json")

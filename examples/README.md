@@ -23,11 +23,11 @@ A screen runs the cells of the first experiment in parallel, several samples eac
 
 The run lands in `runs/<name>/` like any other run (`run.json`, `episodes.jsonl`, `judge.jsonl`, `trajectories/` and `communication/`), the eval log under `logs/`, and the script then writes the run's figures under `out/<name>/`; git ignores all three: `timeline.png` (every agent's steps round by round, with the judge's verdict at the lane's end), `board.png` (the board's actions per round) and `verdicts.png` (the judge's flags per agent), each with a CSV twin; `uv run python -m src plots <run_dir>` does the same for any run. `uv run python -m src summary runs/riemann_minimal` prints the verdicts again, and the browser (`uv run python -m src ui`) lists the run.
 
-Each script parses the shared arguments, builds its config in the open (`build_config(args.preset, args.scale, args.settings)`), names its task and calls the run. The arguments come from `examples/utils/cli.py`, which also holds the default model and the default settings:
+Each script parses the shared arguments, builds its config in the open (`build_config(args.preset, args.scale, args.settings)`), names its task and calls the run. The arguments come from `examples/utils/example_arguments.py`, which also holds the default model and the default settings:
 
 | argument | default | what it does |
 |---|---|---|
-| `--model` | `deepseek-flash-openrouter` | the agents' model: an entry of `src/configuration/models.yaml` (`uv run python -m src models`) or an Inspect model string |
+| `--model` | `deepseek-flash-openrouter` | the agents' model: an entry of `src/configuration/model_registry.yaml` (`uv run python -m src models`) or an Inspect model string |
 | `--worker-model`, `--regulator-model`, `--disregulator-model` | `--model` | a role's own model, like `--model`; each sets `<role>_model` after every `--set`, so the flag wins. The eval log names the role's calls `swarm/<model>`, and `runs/<name>/episodes.jsonl` names each agent's real model |
 | `--preset` | `default` | the preset |
 | `--scale` | `small` | the run's size |

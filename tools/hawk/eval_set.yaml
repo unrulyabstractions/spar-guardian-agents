@@ -14,7 +14,7 @@
 #    turn rules run on that Python and that inspect-ai is untested.
 # 3. The tasks start CheatBench's Docker sandboxes from submodules/cheatbench. A local run needs Docker and the
 #    submodules checked out next to the shim; a deployed Hawk needs Kubernetes sandbox values instead.
-# 4. The judge is not a model role. It is the config field `judge` (a models.yaml entry, gpt-6-sol by default),
+# 4. The judge is not a model role. It is the config field `judge` (a model_registry.yaml entry, gpt-6-sol by default),
 #    which each task takes as a task argument like any other config field. The agents' model is the eval's model.
 # A local eval-set needs no HAWK_API_URL or login; `hawk eval-set` on a deployed Hawk needs both, and its git
 # packages must be reachable from the cluster.

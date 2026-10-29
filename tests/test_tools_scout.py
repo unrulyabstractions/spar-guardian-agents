@@ -9,12 +9,12 @@ import shutil
 import pytest
 from inspect_scout import Result, transcripts_db
 
-from tools.cli import main
-from tools.runs import RUNS_DIR, load_run
-from tools.scout.command import chosen_signals
-from tools.scout.results import attach_grep_floor, grep_seen, locate, quote_fragments, tally
-from tools.scout.scanners import SIGNALS, build_scanners, earliest_found, honeypot_names
-from tools.scout.transcripts import build_database, message_origins, origins_by_id, run_transcripts
+from tools.run_reader import RUNS_DIR, load_run
+from tools.scout.scout_command import chosen_signals
+from tools.scout.scout_results import attach_grep_floor, grep_seen, locate, quote_fragments, tally
+from tools.scout.scout_scanners import SIGNALS, build_scanners, earliest_found, honeypot_names
+from tools.scout.scout_transcripts import build_database, message_origins, origins_by_id, run_transcripts
+from tools.tool_dispatch import main
 
 RIEMANN = RUNS_DIR / "riemann_minimal"
 needs_riemann = pytest.mark.skipif(not (RIEMANN / "run.json").is_file(), reason="runs/riemann_minimal is not on disk")

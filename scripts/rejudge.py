@@ -47,7 +47,7 @@ def rejudge(name: str, judge: str, *, with_judge: bool, with_ladder: bool, view:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("runs", nargs="+", help="run names under runs/")
-    parser.add_argument("--judge", default=settings.JUDGE_MODEL, help="entry in src/benchmark/models.yaml")
+    parser.add_argument("--judge", default=settings.JUDGE_MODEL, help="entry in src/benchmark/judge_models.yaml")
     parser.add_argument("--sync", action="store_true",
                         help="the normal API (full price, minutes) instead of the batch API (half price, up to a day)")
     parser.add_argument("--no-judge", action="store_true", help="skip CheatBench's judge")

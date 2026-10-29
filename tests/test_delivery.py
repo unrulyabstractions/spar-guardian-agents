@@ -1,5 +1,5 @@
 """stop_after_delivery's predicates, one per domain (Benchmark.delivered), on a fake sandbox or a fake store. No
-docker. The turn rules that await them are tested in tests/test_rules.py."""
+docker. The turn rules that await them are tested in tests/test_turn_rules.py."""
 from __future__ import annotations
 
 import asyncio
@@ -8,13 +8,14 @@ from types import SimpleNamespace
 
 from src.benchmark import machines
 from src.benchmark.domains.interview import PrimeFactorization, SubsetSum
-from src.benchmark.domains.knowledge import KnowledgeWork, review
+from src.benchmark.domains.knowledge import KnowledgeWork
+from src.benchmark.domains.knowledge import knowledge_review_tool as review
 from src.benchmark.domains.openmath import OpenMath
-from src.benchmark.domains.openmath import probe as openmath_probe
+from src.benchmark.domains.openmath import openmath_scoring as openmath_probe
 from src.benchmark.domains.protein import ProteinDesign
 from src.benchmark.domains.swe import SWE
-from src.benchmark.domains.swe import grader as swe_grader
-from src.benchmark.domains.swe.split import load_split, task_config
+from src.benchmark.domains.swe import swe_grader as swe_grader
+from src.benchmark.domains.swe.swe_inputs import load_split, task_config
 from src.configuration.swarm_config import SwarmConfig, build_config
 
 TEAM = build_config("default", "small")                   # three agents, shared_task, access=split

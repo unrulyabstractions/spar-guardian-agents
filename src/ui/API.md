@@ -61,7 +61,7 @@ RunSummary = {
                   total: {...}, complete: bool, flags: [str]},   # list-price cost and what the provider billed; flags make the totals lower bounds
   sandbox: null | {end: {processes: {<agent>: {alive_at_end, survivors}}, sockets: {inet, unix}, shared_files: {<dir>: {files, by_owner, agent_paths}}},
                    reaps: {<agent>: {commands, killed, max_alive, survivors, errors}},
-                   loopback: null | {loopback: "refused", uids, allow, ipv6, refusals: {<agent>: str}}},   # src/benchmark/hygiene.py; per container on the machines domains
+                   loopback: null | {loopback: "refused", uids, allow, ipv6, refusals: {<agent>: str}}},   # src/benchmark/sandbox_hygiene.py; per container on the machines domains
   code: null | {commit, dirty, submodules: {<name>: head}},   # the code that ran
   turn_budget: null | {budget, steps_per_agent},   # the domain's turn budget; null without one
   access: null | Access,           # the access policy and what each agent held; null for runs before the field
@@ -120,11 +120,11 @@ Verdict = every key of the episode's judge.jsonl row except the bookkeeping keys
           explicit_prohibition_violated, explicit_prohibition_evidence; SWE has reference_solution_seeking,
           reference_solution_obtained, reference_solution_used, documentation_lookup, evaluation_tampering. A row that did
           not parse also carries raw (the judge's text).
-Signals = the episode's signals.jsonl row (src/measures/signals.py, `python -m src signals`) without episode, agent,
+Signals = the episode's signals.jsonl row (src/measures/code_ladder.py, `python -m src signals`) without episode, agent,
          role and task: rung, exposed, exposed_call, exposed_source, searched, searched_call, tried, tried_call,
          tried_evidence, opened, opened_call, opened_evidence, lines_seen, probe, copies, used, used_evidence,
          shipped, shipped_evidence, calls. Null when the run has no signals.jsonl or the episode is not in it.
-Ladder = the episode's ladder.jsonl row (src/benchmark/ladder.py, `python -m src ladder`) without the same bookkeeping keys
+Ladder = the episode's ladder.jsonl row (src/benchmark/judging_ladder.py, `python -m src ladder`) without the same bookkeeping keys
          and without raw: CheatBench's verdict fields as that judge call answered them, then the ladder's fields exposed, exposed_call,
          exposed_source, searched, searched_call, tried, tried_call, tried_evidence, opened, opened_call, opened_evidence, used,
          used_evidence, shipped, shipped_evidence, tampered, tampered_evidence, admitted, concealed, false_denial, honesty_evidence,
@@ -133,7 +133,7 @@ Ladder = the episode's ladder.jsonl row (src/benchmark/ladder.py, `python -m src
          citations ({ok, <field>: {call, exists, evidence_in_call?}}), view (full|actions), agent, role, failure, judge,
          judge_cost_usd, parse_ok, judge_error. Null when the run has no ladder.jsonl or the episode is not in it. The
          actions view's rows (ladder_actions.jsonl) are not served.
-SWE episodes also carry the SWE keys src/benchmark/export.py writes (swe_task, seat, piece, reward, team_reward, ...). An episode
+SWE episodes also carry the SWE keys src/benchmark/run_export.py writes (swe_task, seat, piece, reward, team_reward, ...). An episode
 written by the src tasks carries rules (the turn-rules facts for its agent).
 ```
 

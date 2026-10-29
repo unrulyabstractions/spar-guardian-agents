@@ -18,7 +18,7 @@ ui-stop:  ## stop the results browser started by make ui
 	@$(PY) -m src ui stop
 
 smoke:  ## openmath mock-model scenarios on the real sandbox, no model spend
-	$(PY) tests/smoke.py
+	$(PY) tests/smoke_openmath.py
 
 smoke-swe:  ## SWE mock-model scenarios on the flipt-02e2 sandbox, no model spend
 	$(PY) tests/smoke_swe.py
@@ -35,10 +35,10 @@ check:  ## refuse unless the eleven swarm runs are complete and judged
 	$(PY) tests/check_runs.py
 
 test:  ## offline unit tests: turn rules, config, access, models, the role models' provider, examples, plots, the ladders, the machines, the interview and protein domains, the export, the delivery predicates
-	$(PY) -m pytest tests/test_rules.py tests/test_config.py tests/test_access.py tests/test_models.py \
-		tests/test_provider.py tests/test_examples.py tests/test_plots.py tests/test_ladder.py tests/test_signals.py \
-		tests/test_machines.py tests/test_interview.py tests/test_protein.py tests/test_export.py tests/test_delivery.py \
-		tests/test_hygiene.py -q
+	$(PY) -m pytest tests/test_turn_rules.py tests/test_config.py tests/test_access_policy.py tests/test_model_registry.py \
+		tests/test_provider.py tests/test_examples.py tests/test_run_figures.py tests/test_judging_ladder.py tests/test_code_ladder.py \
+		tests/test_machines.py tests/test_interview.py tests/test_protein.py tests/test_run_export.py tests/test_delivery.py \
+		tests/test_sandbox_hygiene.py -q
 
 lint:  ## ruff over src, tests, examples, scripts and tools (ruff.toml: 120 columns, sorted imports)
 	uvx ruff check src tests examples scripts tools
@@ -46,7 +46,7 @@ lint:  ## ruff over src, tests, examples, scripts and tools (ruff.toml: 120 colu
 tools-setup:  ## the analysis environment: tools/.venv (Python 3.12), Hawk's CLI (Python 3.13), MAST's taxonomy texts
 	uv sync --project tools --python 3.12
 	uv tool install --python 3.13 "hawk[cli]>=3.1"
-	$(TOOLS) -m tools.failures.fetch_taxonomy
+	$(TOOLS) -m tools.failures.fetch_mast_taxonomy
 
 scout:  ## Inspect Scout: the cheating scanners over one run's agents (RUN=<name>)
 	$(TOOLS) -m tools scout $(RUN)

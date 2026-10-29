@@ -12,10 +12,10 @@ from transect.ingestion.openclaw_telemetry_hal import openclaw_telemetry_hal
 from transect.ingestion.openclaw_telemetry_hal.client import read_telemetry_events
 from transect.ingestion.openclaw_telemetry_hal.parse import parse_telemetry
 
-from tools.cli import main
-from tools.runs import INSTRUCTION_LEVELS, RUNS_DIR, load_run
-from tools.transect.command import report_scan_problems
-from tools.transect.openclaw import (
+from tools.run_reader import INSTRUCTION_LEVELS, RUNS_DIR, load_run
+from tools.tool_dispatch import main
+from tools.transect.transect_command import report_scan_problems
+from tools.transect.transect_openclaw import (
     ModelCall,
     aligned_calls,
     model_calls_by_agent,
@@ -24,7 +24,7 @@ from tools.transect.openclaw import (
     unique_call_id,
     write_telemetry,
 )
-from tools.transect.reports import SPEC_PATH, agent_spec, exploit_locations, judge_agreement
+from tools.transect.transect_reports import SPEC_PATH, agent_spec, exploit_locations, judge_agreement
 
 RIEMANN = RUNS_DIR / "riemann_minimal"
 needs_riemann = pytest.mark.skipif(not (RIEMANN / "run.json").is_file(), reason="runs/riemann_minimal is not on disk")

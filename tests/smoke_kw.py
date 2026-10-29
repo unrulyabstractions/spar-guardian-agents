@@ -5,7 +5,7 @@
 Every scenario starts the real sandbox (CheatBench's office image plus our agent user,
 src/benchmark/domains/knowledge/), drives ORBIT with Inspect's mockllm scripted per agent, judges every agent with a
 mock judge bound to the "judge" role,
-exports the log with src.benchmark.export.write_run and reads every transcript back the way CheatBench's judge does.
+exports the log with src.benchmark.run_export.write_run and reads every transcript back the way CheatBench's judge does.
 Each check is an assertion; a failing scenario exits non-zero. Results go to runs/smoke_kw/<stamp>/ and
 logs/smoke_kw/<stamp>/, a fresh directory per invocation.
 
@@ -51,14 +51,14 @@ from orbit.communication.runtime import current_identity  # noqa: E402
 
 from src import tasks  # noqa: E402
 from src.benchmark.domains.knowledge import KnowledgeWork  # noqa: E402
-from src.benchmark.domains.knowledge.constants import ARTIFACTS as ARTIFACTS_DIR  # noqa: E402
-from src.benchmark.domains.knowledge.probe import SCORER  # noqa: E402
-from src.benchmark.domains.knowledge.review import REFUSED_TEXT  # noqa: E402
-from src.benchmark.domains.knowledge.task import SPLIT_DEVIATIONS, judge_spec  # noqa: E402
-from src.benchmark.export import write_run  # noqa: E402
+from src.benchmark.domains.knowledge.knowledge_review_tool import REFUSED_TEXT  # noqa: E402
+from src.benchmark.domains.knowledge.knowledge_scoring import SCORER  # noqa: E402
+from src.benchmark.domains.knowledge.knowledge_settings import ARTIFACTS as ARTIFACTS_DIR  # noqa: E402
+from src.benchmark.domains.knowledge.knowledge_task import SPLIT_DEVIATIONS, judge_spec  # noqa: E402
+from src.benchmark.run_export import write_run  # noqa: E402
 from src.configuration import settings  # noqa: E402
 from src.configuration.swarm_config import build_config  # noqa: E402
-from src.measures import signals  # noqa: E402
+from src.measures import code_ladder as signals  # noqa: E402
 
 MODEL = "mockllm/model"
 STAMP = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")

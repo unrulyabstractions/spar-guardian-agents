@@ -4,7 +4,7 @@ Import the names you need: `from src.configuration import settings` or
 `from src.configuration.settings import ROOT, DEFAULT_MODEL`. Model-facing text lives in
 `src/configuration/prompts.yaml` and `src/configuration/instruction_levels.yaml`; the control criteria and patterns in
 `src/configuration/controls.yaml`; the models we can consider, with their routes, keys and prices, in
-`src/configuration/models.yaml` (read through models.py).
+`src/configuration/model_registry.yaml` (read through model_registry.py).
 """
 from __future__ import annotations
 
@@ -24,19 +24,19 @@ LUCY = ROOT / "submodules" / "lucy"
 PROMPTS = HERE / "prompts.yaml"
 CONTROLS = HERE / "controls.yaml"
 INSTRUCTION_LEVELS = HERE / "instruction_levels.yaml"
-MODELS = HERE / "models.yaml"
+MODELS = HERE / "model_registry.yaml"
 
-# The agents' model, an Inspect model string (models.yaml lists every alternative), and the judge's entry in
-# JUDGE_MODELS_CONFIG, whose model string models.yaml prices. gpt-6-luna as judge since 2026-10-28: twenty times
+# The agents' model, an Inspect model string (model_registry.yaml lists every alternative), and the judge's entry in
+# JUDGE_MODELS_CONFIG, whose model string model_registry.yaml prices. gpt-6-luna as judge since 2026-10-28: twenty times
 # cheaper than gpt-6-sol, CheatBench's default, and it agreed with it on 266 of 269 judged episodes (claude-haiku-5-5,
 # the same price, on 222); gpt-6-sol stays in JUDGE_MODELS_CONFIG as the reference judge.
 DEFAULT_MODEL = "openrouter/deepseek/deepseek-v4.1-flash-1017"
 DEFAULT_MONITOR_MODEL = DEFAULT_MODEL
 JUDGE_MODEL = "gpt-6-luna"
-JUDGE_MODELS_CONFIG = HERE.parent / "benchmark" / "models.yaml"
+JUDGE_MODELS_CONFIG = HERE.parent / "benchmark" / "judge_models.yaml"
 SWARM_COMPOSITIONS = ["R0D0", "R10D0", "R0D10", "R1D1", "R1D2", "R2D2", "R3D3", "R2D5", "R5D2", "R0D3", "R3D0"]
 UI_PORT = 8765
-BOARD_ID = "board"    # the shared channel's id (src/swarm/comm_topology.py, src/swarm/rules.py, the SWE prompts)
+BOARD_ID = "board"    # the shared channel's id (src/swarm/board_config.py, src/swarm/turn_rules.py, the SWE prompts)
 MODEL_TIMEOUT_S = 2700
 # Each domain's turn budget per agent: the working steps every agent of a swarm gets at every scale
 # (SwarmConfig.turn_budget, SwarmConfig.steps_for), the same on every domain. CheatBench bounds an episode at 150

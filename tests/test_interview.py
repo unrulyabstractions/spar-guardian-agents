@@ -20,19 +20,21 @@ import yaml
 from inspect_ai.model._call_tools import tool_params
 
 from src.benchmark import machines
-from src.benchmark.domains.interview import PrimeFactorization, SubsetSum, generator, keys
-from src.benchmark.domains.interview.constants import FACTOR, KEY_DIRS, MIN_SHARD, SHARE_MODULUS, SUBSET
-from src.benchmark.domains.interview.probe import accepted_calls
-from src.benchmark.domains.interview.task import (
+from src.benchmark.domains.interview import PrimeFactorization, SubsetSum
+from src.benchmark.domains.interview import interview_answer_keys as keys
+from src.benchmark.domains.interview import interview_sealed_generator as generator
+from src.benchmark.domains.interview.interview_scoring import accepted_calls
+from src.benchmark.domains.interview.interview_settings import FACTOR, KEY_DIRS, MIN_SHARD, SHARE_MODULUS, SUBSET
+from src.benchmark.domains.interview.interview_task import (
     DEVIATIONS,
     MACHINE_DEVIATIONS,
     SHARED_DEVIATIONS,
     SPLIT_DEVIATIONS,
 )
-from src.benchmark.domains.interview.verifier import parameters, tool_name, verifier_binding
-from src.benchmark.signals import PROBE
+from src.benchmark.domains.interview.interview_verifier_tool import parameters, tool_name, verifier_binding
+from src.benchmark.honeypot_fingerprints import PROBE
 from src.configuration.swarm_config import build_config
-from src.measures import signals
+from src.measures import code_ladder as signals
 
 SPECS = [SUBSET, FACTOR]
 BENCHMARKS = {SUBSET.task: SubsetSum, FACTOR.task: PrimeFactorization}

@@ -4,7 +4,7 @@ The prompt and the parser are the notebook llm_judge_pipeline.ipynb of
 https://github.com/multi-agent-systems-failure-taxonomy/MAST at commit a70542e541b2104ef8fcd785778179e173fb8d70:
 `mast_prompt` is cell 0's `openai_evaluator` prompt verbatim and `parse_responses` is cell 8 verbatim, except that its
 function-level `import re` moved to the top of this module. The notebook appends definitions.txt and examples.txt
-from taxonomy_definitions_examples/; `python -m tools.failures.fetch_taxonomy` downloads them into mast_taxonomy/.
+from taxonomy_definitions_examples/; `python -m tools.failures.fetch_mast_taxonomy` downloads them into mast_taxonomy/.
 
 The trace is the run's merged trace (board posts and agent steps) rendered one entry per line as
 "round r | agent (role) | post: ..." or "round r | agent (role) | step: <tool calls> | <text>". It is cut as cell 6
@@ -30,9 +30,9 @@ from pathlib import Path
 
 from inspect_ai.model import ChatMessageUser, GenerateConfig
 
-from tools.failures.fetch_taxonomy import TAXONOMY_DIR, taxonomy_present
+from tools.failures.fetch_mast_taxonomy import TAXONOMY_DIR, taxonomy_present
 from tools.failures.model_calls import complete
-from tools.runs import Run, TraceEntry, merged_trace
+from tools.run_reader import Run, TraceEntry, merged_trace
 
 TRUNCATE_AT = 1048570
 MODES = ("1.1", "1.2", "1.3", "1.4", "1.5", "2.1", "2.2", "2.3", "2.4", "2.5", "2.6", "3.1", "3.2", "3.3")

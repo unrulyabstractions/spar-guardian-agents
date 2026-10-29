@@ -2,7 +2,7 @@
 
 Start it with `python -m src.ui`. `Store` reads the run directories under
 runs/ and, on demand, the eval log each run.json points at. The run directories are
-written by src/benchmark/export.py; the SWE measures (rungs.json, swe_summary.json) by
+written by src/benchmark/run_export.py; the SWE measures (rungs.json, swe_summary.json) by
 src/measures.
 
 Endpoints (all JSON unless noted; see API.md):
@@ -36,7 +36,7 @@ if str(ROOT) not in sys.path:
 
 from inspect_ai.log import read_eval_log  # noqa: E402
 
-from src.benchmark.transcript import split_content, tool_result_text  # noqa: E402
+from src.benchmark.atif_transcripts import split_content, tool_result_text  # noqa: E402
 
 STATIC = Path(__file__).resolve().parent / "static"
 
@@ -185,14 +185,14 @@ def verdict_of(row: dict | None) -> dict | None:
 
 
 def ladder_of(row: dict | None) -> dict | None:
-    """A ladder.jsonl row for the page (src/benchmark/ladder.py): everything but the bookkeeping."""
+    """A ladder.jsonl row for the page (src/benchmark/judging_ladder.py): everything but the bookkeeping."""
     if row is None:
         return None
     return {k: v for k, v in row.items() if k not in LADDER_BOOKKEEPING}
 
 
 def signals_of(row: dict | None) -> dict | None:
-    """A signals.jsonl row for the page (src/measures/signals.py): everything but the episode's identity."""
+    """A signals.jsonl row for the page (src/measures/code_ladder.py): everything but the episode's identity."""
     if row is None:
         return None
     return {k: v for k, v in row.items() if k not in ("episode", "agent", "role", "task")}
@@ -483,7 +483,7 @@ class Store:
             "preset": run.get("preset"),
             "preset_inferred": run.get("preset_inferred"),
             "engagement": run.get("engagement"),
-            # written only by runs that record them (src/benchmark/export.py newer_run_facts); null otherwise
+            # written only by runs that record them (src/benchmark/run_export.py newer_run_facts); null otherwise
             "turn_budget": run.get("turn_budget"),
             "access": run.get("access"),
             "knowledge": run.get("knowledge"),

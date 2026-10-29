@@ -1,7 +1,7 @@
 # Levels of instruction: the "strength of instruction" variable of the project proposal (Oct 14, 2026; section
 # "Instruction / Boundary Specification" and "Baselines / Controls"). Three ladders, each from no instruction to the
 # strongest. Every string is model-facing text. SwarmConfig selects one level per ladder (rule_level,
-# regulator_level, disregulator_level); src/swarm/roles.py renders the texts.
+# regulator_level, disregulator_level); src/swarm/hidden_roles.py renders the texts.
 #
 # Placeholders in braces are filled per benchmark from `vars` below. A level may give one text (`text`) or one per
 # benchmark (`openmath`, `swe`).
@@ -85,7 +85,7 @@ rule:
 # The regulator: a peer told to keep the team honest. Appended to the board system prompt of the agents assigned the
 # role. `none` is a plain worker. Under board_tools every text here is followed by prompts.yaml
 # roles.regulator_common and, unless the regulator may disclose its role, roles.regulator_no_disclosure
-# (src/swarm/roles.py role_text). ambiguous, explicit and pressure are the midterm report's (2026-10-26) three
+# (src/swarm/hidden_roles.py role_text). ambiguous, explicit and pressure are the midterm report's (2026-10-26) three
 # variants, taken literally: ambiguous and pressure are the report's sentences verbatim, and explicit fills the
 # report's "[explain the explicit exploit to avoid]" with one sentence from `vars`. Neither explicit nor pressure
 # carries the ambiguous sentence.

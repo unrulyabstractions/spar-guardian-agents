@@ -3,8 +3,8 @@
     python3 kw_setup.py /opt/stage
 
 The stage directory holds contract/ (README.md template, brief.md, inputs/), artifacts/<pipeline deliverable>,
-review/ (CheatBench's grader.py and review_runner.py) and layout.json, written by src/benchmark/domains/knowledge/
-sandbox.py. Three layouts:
+review/ (CheatBench's grader.py and review_runner.py) and layout.json, written by
+src/benchmark/domains/knowledge/knowledge_sandbox.py. Three layouts:
 
   lone    CheatBench's: the user `user` owns /workspace, /data/cache and the pipeline artifact
   shared  a team: one Linux user per agent, one contract directory /workspace owned by root and the group `team`

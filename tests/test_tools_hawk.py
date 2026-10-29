@@ -12,9 +12,8 @@ import tomllib
 import yaml
 from inspect_ai._util.registry import registry_lookup
 
-from tools.cli import main
-from tools.hawk.command import run_hawk, scan_status
-from tools.hawk.config import (
+from tools.hawk.hawk_command import run_hawk, scan_status
+from tools.hawk.hawk_scan_config import (
     GREP_NAME,
     RUN_BOUND_SCANNERS,
     SCANNER_PACKAGE_DIR,
@@ -27,7 +26,8 @@ from tools.hawk.config import (
     transcript_source,
     write_scan_config,
 )
-from tools.runs import ROOT, RUNS_DIR, load_run, read_summary
+from tools.run_reader import ROOT, RUNS_DIR, load_run, read_summary
+from tools.tool_dispatch import main
 
 RIEMANN = RUNS_DIR / "riemann_minimal"
 needs_riemann = pytest.mark.skipif(not (RIEMANN / "run.json").is_file(), reason="runs/riemann_minimal is not on disk")
@@ -61,7 +61,7 @@ def test_run_bound_scanners_get_the_run(tmp_path):
 def test_scan_config_points_hawk_at_a_local_directory(tmp_path):
     source = TranscriptSource("scout_db", tmp_path / "tools" / "scout", "transcripts")
     config = scan_config("demo-scan", source, ["honeypot_seen", "tool_call_count"], tmp_path, "openai/gpt-6-luna",
-                         "tools.scout.scanners", SCANNER_PACKAGE_DIR, ROOT)
+                         "tools.scout.scout_scanners", SCANNER_PACKAGE_DIR, ROOT)
     assert config["scanners"][0]["package"] == str(SCANNER_PACKAGE_DIR)
     assert config["scanners"][0]["name"] == SCANNER_PACKAGE_NAME
     assert [item["name"] for item in config["scanners"][0]["items"]] == ["honeypot_seen", "tool_call_count"]
@@ -69,7 +69,7 @@ def test_scan_config_points_hawk_at_a_local_directory(tmp_path):
     environment = config["runner"]["environment"]
     assert environment["HAWK_RUNNER_EVALS_S3_URI"] == str(tmp_path / "tools" / "scout")
     assert environment["SPAR_GUARDIAN_ROOT"] == str(ROOT)
-    assert environment["SPAR_GUARDIAN_SCANNERS"] == "tools.scout.scanners"
+    assert environment["SPAR_GUARDIAN_SCANNERS"] == "tools.scout.scout_scanners"
     path = write_scan_config(tmp_path / "out" / "scan.yaml", config)
     assert yaml.safe_load(path.read_text()) == config
 
@@ -89,7 +89,7 @@ def test_shim_entry_point_matches_the_package_name():
 @needs_riemann
 def test_shim_registers_run_bound_scanners(monkeypatch):
     monkeypatch.setenv("SPAR_GUARDIAN_ROOT", str(ROOT))
-    monkeypatch.setenv("SPAR_GUARDIAN_SCANNERS", "tools.scout.scanners")
+    monkeypatch.setenv("SPAR_GUARDIAN_SCANNERS", "tools.scout.scout_scanners")
     shim = SCANNER_PACKAGE_DIR / f"{SCANNER_PACKAGE_NAME}.py"
     spec = importlib.util.spec_from_file_location("hawk_shim_under_test", shim)
     module = importlib.util.module_from_spec(spec)

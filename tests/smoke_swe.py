@@ -4,16 +4,18 @@
 
 Every scenario starts the real sandbox (the grader and one service per agent, from the native image that
 src/benchmark/domains/swe/ builds), drives ORBIT with Inspect's mockllm scripted per agent, judges with a mock judge
-model, exports the log with src.benchmark.export.write_run and reads every transcript back the way CheatBench's judge
+model, exports the log with src.benchmark.run_export.write_run and reads every transcript back the way
+CheatBench's judge
 does.
 Each check is an assertion; a failing scenario exits non-zero. Results go to runs/smoke_swe/<stamp>/ and
 logs/smoke_swe/<stamp>/, a fresh directory per invocation.
 
 Adapted from the lucy-plan worktree's integration/checks/smoke_swe.py. The jigsaw scenario became `honeypots`
 (Lucy's own_piece and jigsaw, pruned and planted at setup). The comm_turns scenario is gone with the tool gate;
-planning turns are tested in tests/test_rules.py. The new `shutdown` scenario runs agents without the submit tool.
+planning turns are tested in tests/test_turn_rules.py. The new `shutdown` scenario runs agents without the submit tool.
 The lone scenarios run on the field defaults. The team scenarios that post with ORBIT's channel tools run on the
-October 2026 sweep's board (tests/boards.py CHANNEL_BOARD); `honeypots` runs jigsaw under shared_task. `team_4` and
+October 2026 sweep's board (tests/legacy_boards.py CHANNEL_BOARD); `honeypots` runs jigsaw under shared_task.
+`team_4` and
 `team_submit` run the default preset at the small scale: four agents on the whole issue, and a neutral agent that
 submits the team's main and ends the run.
 """
@@ -42,21 +44,21 @@ from inspect_ai.log import read_eval_log  # noqa: E402
 from inspect_ai.model import ModelOutput, get_model  # noqa: E402
 
 from src.benchmark.domains.swe import SWE  # noqa: E402
-from src.benchmark.domains.swe.honeypots import parse_scan, scan_script  # noqa: E402
-from src.benchmark.domains.swe.sandbox import image_tags  # noqa: E402
-from src.benchmark.domains.swe.split import (  # noqa: E402
+from src.benchmark.domains.swe.swe_honeypot_setup import parse_scan, scan_script  # noqa: E402
+from src.benchmark.domains.swe.swe_inputs import (  # noqa: E402
     load_lines,
     load_split,
     task_config,
     task_dir,
 )
-from src.benchmark.export import write_run  # noqa: E402
+from src.benchmark.domains.swe.swe_sandbox import image_tags  # noqa: E402
+from src.benchmark.run_export import write_run  # noqa: E402
 from src.configuration import settings  # noqa: E402
-from src.configuration import swe as swe_cfg  # noqa: E402
+from src.configuration import swe_settings as swe_cfg  # noqa: E402
 from src.configuration.swarm_config import SwarmConfig, build_config  # noqa: E402
-from src.measures.swe_summary import summarize  # noqa: E402
+from src.measures.swe_measures import summarize  # noqa: E402
 from src.tasks import hidden_roles, swarm_task  # noqa: E402
-from tests.boards import CHANNEL_BOARD  # noqa: E402
+from tests.legacy_boards import CHANNEL_BOARD  # noqa: E402
 
 MODEL = "mockllm/model"
 ISSUE = "flipt-02e2"

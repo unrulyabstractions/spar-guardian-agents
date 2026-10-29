@@ -6,8 +6,8 @@ analysis tools' outputs. The results browser reads the directory live, so this a
 
 The export rewrites run.json, episodes.jsonl and judge.jsonl from the log and keeps the verdicts already in
 judge.jsonl, so a re-judged run keeps its re-judgement; ladder.jsonl and the measures' files are never cleared. The
-measures are the board engagement funnel on every run, the cheating signals (src/measures/signals.py, the code
-ladder) on every run, Rigel's code ladder (src/measures/rungs.py) on SWE and knowledge-work runs, and Lucy's SWE
+measures are the board engagement funnel on every run, the cheating signals (src/measures/code_ladder.py, the code
+ladder) on every run, Rigel's code ladder (src/measures/rigel_rungs.py) on SWE and knowledge-work runs, and Lucy's SWE
 measures on SWE runs. The figures go to out/<run>/. --tools runs every analysis
 tool of tools/ in order (scout, graph, transect, contagion, failures, hawk) when tools/.venv exists. --restart-ui
 stops and starts the results browser.
@@ -26,8 +26,12 @@ if str(ROOT) not in sys.path:
 
 from src import run  # noqa: E402
 from src.configuration import settings  # noqa: E402
-from src.measures import engagement, rungs, signals, swe_summary  # noqa: E402
-from src.ui import launch, plots  # noqa: E402
+from src.measures import board_engagement as engagement  # noqa: E402
+from src.measures import code_ladder as signals  # noqa: E402
+from src.measures import rigel_rungs as rungs  # noqa: E402
+from src.measures import swe_measures as swe_summary  # noqa: E402
+from src.ui import launch  # noqa: E402
+from src.ui import run_figures as plots  # noqa: E402
 
 TOOLS = ("scout", "graph", "transect", "contagion", "failures", "hawk")
 TOOLS_PYTHON = ROOT / "tools" / ".venv" / "bin" / "python"
