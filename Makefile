@@ -71,8 +71,9 @@ hawk:  ## Hawk: the scan config for one run's log, and the command to run it
 
 analyse: scout graph transect contagion failures hawk  ## every tool over one run, in the order the later ones read the earlier
 
-figures:  ## the paper's design figures as PNG under tmp/ (gitignored)
+figures:  ## the paper's design figures and one setup figure per task, as PNG under tmp/ (gitignored)
 	$(PY) scripts/paper/figures.py
+	$(PY) scripts/paper/domain_figures.py
 
-tables:  ## the paper's two tables (scales, turn budget) as PNG under tmp/ (gitignored)
+tables:  ## the paper's tables (scales, rungs against verdict fields, rungs by domain) as PNG under tmp/ (gitignored)
 	$(PY) scripts/paper/tables.py
