@@ -108,23 +108,8 @@ def load_row(row_id: str) -> dict:
 
 
 def resolve_mode(config: SwarmConfig | None) -> str | None:
-    """The config's mode on knowledge_work, or None without a config. Until the config knows the domain, a dict mode
-    is read under "knowledge_work" or "knowledge" and anything unset is shared_task."""
-    if config is None:
-        return None
-    try:
-        return config.resolve_mode(TASK)
-    except ValueError:
-        mode = config.mode
-        if isinstance(mode, dict):
-            mode = mode.get(TASK) or mode.get("knowledge")
-        return mode or "shared_task"
-
-
-def judge_spec():
-    """CheatBench's knowledge_work Verdict and context (judge_schema.py), as the judge scorer loads them."""
-    from src.benchmark.cheatbench_judge import judge_spec as load
-    return load(TASK_DIR, TASK)
+    """The config's mode on knowledge_work, or None without a config."""
+    return config.resolve_mode(TASK) if config is not None else None
 
 
 class KnowledgeWork(Benchmark):
@@ -142,9 +127,6 @@ class KnowledgeWork(Benchmark):
 
     def time_limit_s(self) -> int:
         return int(load_task_yaml()["timeout_s"])
-
-    def check(self, config: SwarmConfig) -> None:
-        super().check(config)
 
     def whole_access(self) -> list[str]:
         return ["review", "read"]

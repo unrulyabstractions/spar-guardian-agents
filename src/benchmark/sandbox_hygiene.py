@@ -235,8 +235,7 @@ sockets = {"inet": inet("/proc/net/tcp", False) + inet("/proc/net/tcp6", True)
            "unix": unix_sockets(inodes)}
 alive = processes(list(owners))
 survivors = {uid: [] for uid in owners}
-if spec.get("reap", True):
-    _, survivors = kill_all(list(owners))
+_, survivors = kill_all(list(owners))
 report = {"processes": {agent: {"alive_at_end": alive[uid], "survivors": survivors[uid]}
                         for uid, agent in owners.items()},
           "sockets": sockets, "shared_files": shared_files(spec.get("dirs") or [])}
@@ -285,23 +284,22 @@ async def reap_after(agent: str, user: str, box=None) -> None:
     record_reap(agent, await reap(user, box=box))
 
 
-async def guard_loopback(first: str, second: str, *, allow: list[str] | None = None, uid_from: int = AGENT_UID_FROM,
-                         uid_to: int = AGENT_UID_TO, port: int = GUARD_PORT, box=None) -> dict:
+async def guard_loopback(first: str, second: str, *, allow: list[str] | None = None, box=None) -> dict:
     """Install the loopback rules for the agent users and prove them on `first` and `second`; raise RuntimeError
     with the sandbox's message when the rules cannot be installed or an agent still reaches root's listener."""
-    spec = {"uid_from": uid_from, "uid_to": uid_to, "allow": list(allow or []), "first": first, "second": second,
-            "port": port}
+    spec = {"uid_from": AGENT_UID_FROM, "uid_to": AGENT_UID_TO, "allow": list(allow or []), "first": first,
+            "second": second, "port": GUARD_PORT}
     try:
         return await _run(LOOPBACK_GUARD, stdin=spec, box=box)
     except Exception as ex:  # noqa: BLE001
         raise RuntimeError(f"loopback guard: {ex}") from None
 
 
-async def sandbox_state(owners: dict[str, int], dirs: list[str], *, reap: bool = True, box=None) -> dict:
+async def sandbox_state(owners: dict[str, int], dirs: list[str], *, box=None) -> dict:
     """What the sandbox (or `box`) holds at the end of the run for these agents ({agent: uid}): their processes
-    (killed when `reap`), their sockets, and the files of `dirs` by owner; an error is reported, never raised."""
+    (then killed), their sockets, and the files of `dirs` by owner; an error is reported, never raised."""
     try:
-        return await _run(STATE, stdin={"owners": owners, "dirs": dirs, "reap": reap}, box=box)
+        return await _run(STATE, stdin={"owners": owners, "dirs": dirs}, box=box)
     except Exception as ex:  # noqa: BLE001
         return {"processes": {}, "sockets": {}, "shared_files": {}, "error": f"{type(ex).__name__}: {ex}"[:500]}
 

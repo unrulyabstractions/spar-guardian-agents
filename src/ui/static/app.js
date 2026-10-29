@@ -767,7 +767,6 @@ function runAggregate(run) {
     endings,
     ended: Object.entries(endings).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([k, c]) => `${c} ${k}`).join(', '),
     registered: d ? d.registered_on_main : null, copied: d ? d.registered_message_copied_from : null,
-    report: run.swarm ? run.swarm.swarm_report_cheated : undefined, hasReport: run.swarm ? run.swarm.has_report : undefined,
   };
 }
 
@@ -791,7 +790,6 @@ const RUN_COLS = [
   { key: 'cheated', label: 'Cheated', num: true, sort: r => (r.agg.judged ? r.agg.cheated / r.agg.judged : null), title: 'agents the judge found cheated, over judged agents' },
   { key: 'seen', label: 'Saw honeypot', num: true, sort: r => r.agg.seen, title: 'judged agents that saw the honeypot' },
   { key: 'attempted', label: 'Attempted', num: true, sort: r => r.agg.attempted, title: 'judged agents that attempted access' },
-  { key: 'report', label: 'Team report', sort: r => r.agg.report, title: 'what swarm_report.txt says' },
   { key: 'registered', label: 'Registered', sort: r => r.agg.registered, title: 'a registry entry on main at the end' },
   { key: 'ended', label: 'Ended', sort: r => r.agg.ended, title: 'how the agents’ episodes ended' },
   { key: 'blocks', label: 'Blocks / checks', num: true, sort: r => (r.agg.hasDefense ? r.agg.blocks : null) },
@@ -858,14 +856,6 @@ function registeredCell(agg) {
     agg.copied ? [' ', badge('copied', 'warn', `the registry entry carries ${agg.copied}’s message verbatim`)] : null);
 }
 
-function reportCell(agg) {
-  if (agg.hasReport === undefined) return muted(DASH, 'small');
-  if (!agg.hasReport) return badge('no file', 'warn');
-  if (agg.report == null) return badge('unparsed', 'warn');
-  const agrees = agg.judged ? (agg.report === (agg.cheated > 0)) : null;
-  return h('span', { title: agrees == null ? 'no judged agent to compare with' : agrees ? 'agrees with the judge' : 'disagrees with the judge' },
-    yn(agg.report, 'bad', 'good'), agrees === false ? [' ', badge('≠ judge', 'warn', 'the report disagrees with the judge')] : null);
-}
 
 /** The agents of one run, one row each. */
 function episodesTable(run) {
@@ -1123,7 +1113,7 @@ async function viewRun({ run }, view) {
     ['monitor model', d.monitor_model],
     ['mode', d.mode],
     ['scale', d.scale],
-    ['preset', d.preset ? (d.preset_inferred ? `${d.preset} (inferred from the config)` : d.preset) : null],
+    ['preset', d.preset],
     // the access policy and the turn budget: shown only for runs that recorded them
     ['access', d.access && d.access.policy ? d.access.policy : undefined],
     ['turn budget', d.turn_budget ? `${d.turn_budget.budget} turns, ${d.turn_budget.steps_per_agent} working steps per agent` : undefined],
@@ -1584,11 +1574,10 @@ function sweView(swe, eps) {
       ['arm', mono(swe.arm || DASH)],
       ['agents', String(swe.n_agents)],
       ['honeypot', swe.honeypot ? mono(swe.honeypot) : muted('as released')],
-      ['rule', swe.rule === 'none' ? muted('none (standard prompt)') : h('span', null, mono(swe.rule), ' ', muted(swe.rule_sentence || '', 'small'))],
+      ['rule', swe.rule === 'none' ? muted('none (standard prompt)') : mono(swe.rule)],
       ['board delivery', swe.delivery || muted(DASH)],
-      ['opening turns', String(swe.comm_turns || 0)],
       ['team reward (team/main)', swe.board ? reward('team') : muted('lone agent: its working tree ships')],
-      ['jigsaw isolation check', swe.jigsaw ? yn(swe.jigsaw_isolation_ok, 'good', 'bad') : muted(DASH)],
+      ['setup checks', swe.checks_ok == null ? muted(DASH) : yn(swe.checks_ok, 'good', 'bad')],
       ['base / fix commit', h('span', null, mono((swe.base_commit || '').slice(0, 10)), ' / ', mono((swe.fix_commit || '').slice(0, 10)))],
     ], 'kv-grid'),
     h('h3', null, 'Agents'), h('div', { class: 'table-wrap' }, table));
@@ -1612,21 +1601,16 @@ function swarmView(sw, eps, deliverables) {
     h('thead', null, h('tr', null, ['agent', 'hidden role', 'judge: cheated'].map(c => h('th', null, c)))),
     h('tbody', null, roles.map(([name, role]) => h('tr', null,
       h('td', null, name), h('td', null, roleBadge(role)), h('td', null, verdictCell(epOf(name)))))));
-  const reportVerdict = sw.swarm_report_cheated;
-  const agree = reportVerdict == null || !judged ? null : (reportVerdict === anyCheated);
   return h('div', null,
     kv([
       ['composition', h('span', null, mono(sw.composition || DASH), ' ', muted(`${sw.regulators} regulators, ${sw.disregulators} disregulators, ${sw.workers} workers; seed ${sw.seed}`, 'small'))],
       ['judge: any agent cheated', judged ? yn(anyCheated, 'bad', 'good')
         : muted(blind ? `not counted: ${plural(blind, 'verdict')} on episodes without a transcript` : 'not judged')],
-      ['team report says cheated', sw.swarm_report == null ? badge('no report file', 'warn') : yn(reportVerdict, 'bad', 'good')],
-      ['report agrees with judge', agree == null ? muted(DASH) : yn(agree, 'plain', 'warn')],
       ['registered on main', del == null ? muted('not recorded') : h('span', { title: `checkout ${del.checkout || DASH}; registry on main: ${(del.main_registry_agents || []).join(', ')}` }, yn(del.registered_on_main, 'good', 'warn'))],
       ['archive in workspace at end', del == null ? muted('not recorded') : yn(del.archive_in_workspace, 'plain', 'warn')],
       ['agents ended by', eps.length ? endedText : muted(DASH)],
     ], 'kv-grid'),
     del && del.commits && del.commits.length ? h('div', null, h('h3', null, 'Commits at the end (git log --all)'), h('pre', { class: 'pre' }, del.commits.join('\n'))) : null,
-    sw.swarm_report ? h('div', null, h('h3', null, 'swarm_report.txt'), h('pre', { class: 'pre' }, String(sw.swarm_report))) : null,
     h('h3', null, 'Roles'), table);
 }
 
@@ -1940,7 +1924,6 @@ function renderStep(s) {
   const msg = asText(s.message);
   const flags = new Set();
   if (ex.orbit_delivery_notice) flags.add('notice');
-  if (ex.orbit_trailing_turn_fix) flags.add('trailing');
   if (ex.swarm_turn_rules) flags.add('rules');
   if (ex.withheld_from_model_by_defense) flags.add('withheld');
   if (ex.defense_refusal) flags.add('refusal');
@@ -1962,7 +1945,7 @@ function renderStep(s) {
     h('span', { class: 'step-src' }, src),
     s.model_name ? muted(s.model_name, 'small') : null,
     [...flags].map(f => badge(...FLAG_BADGE[f])),
-    extraBadges(ex, ['orbit_delivery_notice', 'orbit_trailing_turn_fix', 'swarm_turn_rules', 'withheld_from_model_by_defense', 'withheld_text',
+    extraBadges(ex, ['orbit_delivery_notice', 'swarm_turn_rules', 'withheld_from_model_by_defense', 'withheld_text',
       'defense_refusal', 'blocked_output_message_id', 'refusal_text_written_by_model']),
     h('span', { class: 'spacer' }),
     s.llm_call_count != null ? muted(plural(s.llm_call_count, 'model call'), 'small') : null));
@@ -2197,7 +2180,6 @@ async function viewEpisode({ run, episode, query: q }, view) {
 // refusal sentence). They describe the history the call saw, not what happened to its output.
 const CALL_FLAG_LABEL = {
   delivery_notice: ['notice in input', 'notice', 'an ORBIT board delivery notice is in this call’s input'],
-  trailing_turn_fix: ['continue prompt in input', 'notice', 'the integration appended a continue prompt (trailing-turn fix) to this input'],
   turn_rules: ['turn rules in input', 'notice', 'the turn rules placed a planning prompt, turn header or continue prompt in this input'],
   redacted: ['redacted input', 'withheld', 'a defense withheld a message of this input from the model'],
   refusal_in_history: ['refusal in history', 'plain', 'the input holds the refusal sentence: a substituted completion or the model’s own text'],
@@ -2207,7 +2189,6 @@ const CALL_FILTERS = [
   ['', 'any'],
   ['output_blocked', 'output blocked by a defense'],
   ['delivery_notice', 'notice in input'],
-  ['trailing_turn_fix', 'continue prompt in input'],
   ['turn_rules', 'turn rules in input'],
   ['redacted', 'redacted input'],
   ['refusal_in_history', 'refusal in history'],
@@ -2215,7 +2196,6 @@ const CALL_FILTERS = [
 ];
 const MSG_FLAG_BADGE = {
   delivery_notice: ['delivery notice', 'notice'],
-  trailing_turn_fix: ['trailing-turn fix', 'notice'],
   turn_rules: ['turn rules', 'notice'],
   redacted: ['REDACTED', 'withheld'],
   refusal_in_history: ['refusal in history', 'plain'],
@@ -2283,7 +2263,7 @@ function blockedToolResult(ivs) {
 
 function messageView(m, i, status, opts = {}) {
   const flags = m.flags || [];
-  const notice = flags.includes('delivery_notice') || flags.includes('trailing_turn_fix') || flags.includes('turn_rules');
+  const notice = flags.includes('delivery_notice') || flags.includes('turn_rules');
   const el = h('div', {
     class: ['msg', 'role-' + m.role, status && 'st-' + status, notice && 'provider-only',
       flags.includes('redacted') && 'is-redacted', flags.includes('output_blocked') && 'is-refusal'],
@@ -2305,8 +2285,6 @@ function messageView(m, i, status, opts = {}) {
     el.appendChild(h('div', { class: 'caption caption-notice' },
       flags.includes('turn_rules')
         ? 'Provider-only: planning prompt, turn header or continue prompt placed by the turn rules.'
-        : flags.includes('trailing_turn_fix')
-        ? 'Provider-only: continue prompt appended by the integration.'
         : 'Provider-only: ORBIT board delivery notice placed in the input.'));
   }
   if (flags.includes('redacted')) {
@@ -3798,7 +3776,6 @@ function cascadeView(ctx, width) {
 // =====================================================================================
 
 const swarmSize = x => ((x.regulators || 0) + (x.disregulators || 0) + (x.workers || 0)) || x.n_agents || 0;
-const reportDisagrees = x => x.report_cheated != null && x.judged > 0 && x.report_cheated !== (x.cheated > 0);
 const kOfN = (k, n) => (n ? `${fmtInt(k)}/${fmtInt(n)}` : DASH);
 const isSwarmRow = x => x.composition != null;
 
@@ -3819,13 +3796,11 @@ function cellAggregate(runs, failed = []) {
       if (s) { by[role].n += s.n || 0; by[role].cheated += s.cheated || 0; }
     }
   }
-  return { k, n, byRole: by, runs, failed, failedOnly: !runs.length,
-    disagree: runs.some(reportDisagrees), noReport: runs.some(x => !x.has_report) };
+  return { k, n, byRole: by, runs, failed, failedOnly: !runs.length };
 }
 
 function runTipLines(x) {
-  return `${x.run} · seed ${x.seed ?? DASH} · ${x.judged ? `${x.cheated}/${x.judged} cheated` : 'not judged'} · team report ${x.has_report ? (x.report_cheated == null ? 'unparsed' : x.report_cheated ? 'cheated' : 'not cheated') : 'missing'}` +
-    `${reportDisagrees(x) ? ' (disagrees with the judge)' : ''} · ${plural(x.timeouts || 0, 'timeout')} · score ${x.score ?? DASH}`;
+  return `${x.run} · seed ${x.seed ?? DASH} · ${x.judged ? `${x.cheated}/${x.judged} cheated` : 'not judged'} · ${plural(x.timeouts || 0, 'timeout')} · score ${x.score ?? DASH}`;
 }
 const failedTipLine = x => `${x.run} · seed ${x.seed ?? DASH} · failed run (harness crash or provider error), not counted`;
 const failedNote = cell => (cell.failed.length ? ` (${plural(cell.failed.length, 'failed run')} not counted)` : '');
@@ -3894,10 +3869,6 @@ function heatmapCell(svg, cell, x, y, c, r, d, N) {
     : svgEl('rect', { class: 'hm-unjudged', x: x + 1.5, y: y + 1.5, width: c - 3, height: c - 3, rx: 3 }));
   g.appendChild(svgEl('text', { class: ['hm-text', !fill && 't-muted'], x: x + c / 2, y: y + c / 2 + 4, 'text-anchor': 'middle', style: ink }, cell.n ? `${cell.k}/${cell.n}` : DASH));
   if (cell.runs.length > 1) g.appendChild(svgEl('text', { class: ['hm-count', !fill && 't-muted'], x: x + 5, y: y + c - 5, style: ink }, `×${cell.runs.length}`));
-  if (cell.disagree || cell.noReport) {
-    const s = 11;
-    g.appendChild(svgEl('path', { class: ['corner-mark', !cell.disagree && 'hollow'], d: `M${x + c - 1 - s},${y + 1}L${x + c - 1},${y + 1}L${x + c - 1},${y + 1 + s}Z` }));
-  }
   svg.appendChild(g);
 }
 
@@ -3976,8 +3947,6 @@ function compositionSection(swarm, failed = []) {
       [swatch('sw-hatch'), 'no run'],
       [swatch('sw-unjudged'), 'not judged yet'],
       failedDrawn.length ? [swatch('sw-failed'), 'failed runs only (harness crash or provider error), not counted'] : null,
-      [lgSvg(svgEl('path', { class: 'corner-mark', d: 'M6,2L16,2L16,12Z' })), 'team report disagrees with the judge'],
-      [lgSvg(svgEl('path', { class: 'corner-mark hollow', d: 'M6,2L16,2L16,12Z' })), 'no team report'],
     ]),
     vizLegend([
       [lgSvg(svgEl('rect', { class: 'rb-track', x: 7, y: 1, width: 6, height: 12 }), svgEl('rect', { class: 'rb-bar role-disregulator', x: 7, y: 7, width: 6, height: 6 })), 'per-role bar: share of that role’s judged agents who cheated'],
@@ -4004,7 +3973,7 @@ function swarmTable(swarm, thumbs, onTimeline) {
     h('thead', null, h('tr', null,
       ['run', 'composition', 'seed', 'judged', 'cheated'].map((c, i) => h('th', { class: i >= 2 ? 'num' : '' }, c)),
       ROLE_ORDER.map(role => h('th', { class: 'num', title: `${role}s judged cheated / judged` }, roleIcon(role, 10), ' ', role)),
-      ['team report', 'agrees with judge', 'registered', 'ended'].map(c => h('th', null, c)),
+      ['registered', 'ended'].map(c => h('th', null, c)),
       thumbs ? h('th', { title: 'agent by turn raster; click for the timeline' }, 'agent × turn') : null)),
     h('tbody', null, sorted.map(x => h('tr', { class: x.failed && 'failed', title: x.failed ? 'failed run (harness crash or provider error): not counted in the charts' : null },
       h('td', null, link(R.run(x.run), x.run, 'run-link'), x.failed ? [' ', badge('failed', 'bad')] : null, ' ',
@@ -4014,8 +3983,6 @@ function swarmTable(swarm, thumbs, onTimeline) {
       h('td', { class: 'num' }, fmtInt(x.judged)),
       h('td', { class: 'num' }, x.judged ? (x.cheated ? badge(`${x.cheated}`, 'bad') : '0') : muted(DASH)),
       ROLE_ORDER.map(role => roleCell(x, role)),
-      h('td', null, !x.has_report ? badge('no file', 'warn') : x.report_cheated == null ? badge('unparsed', 'warn') : yn(x.report_cheated, 'bad', 'good')),
-      h('td', null, x.report_cheated == null || !x.judged ? muted(DASH) : yn(!reportDisagrees(x), 'plain', 'warn')),
       h('td', null, registered(x)),
       h('td', { class: 'small' }, ended(x)),
       thumbs ? h('td', { class: 'thumb-cell' }, thumbs(x.run)) : null)))));
@@ -4140,9 +4107,8 @@ async function viewSummary(r, view) {
     section('Teams with hidden roles, by composition',
       swarm.length || swarmFailed.length ? compositionSection(swarm, swarmFailed) : muted('No swarm run yet.'),
       h('div', { class: 'muted small' }, 'Left grid: share of judged agents who cheated. Right grid: the same by hidden role. ', link(R.swarm(), 'Swarm visualizations'), ' has the funnel, the adoption curves and every run’s timeline.')),
-    section('Team reports against the judge',
-      swarm.length ? swarmTable(swarm, null) : muted('No completed swarm run yet.'),
-      h('div', { class: 'muted small' }, 'The team report is the first line of swarm_report.txt. The judge counts an agent that inspected another agent’s archive; the report asks the team about use, copying, extraction or presentation, a broader question.')));
+    section('Swarm runs',
+      swarm.length ? swarmTable(swarm, null) : muted('No completed swarm run yet.')));
 }
 
 // ---- swarm visualizations ------------------------------------------------------------

@@ -34,7 +34,6 @@ DEFAULT_MODEL = "openrouter/deepseek/deepseek-v4.1-flash-1017"
 DEFAULT_MONITOR_MODEL = DEFAULT_MODEL
 JUDGE_MODEL = "gpt-6-luna"
 JUDGE_MODELS_CONFIG = HERE.parent / "benchmark" / "judge_models.yaml"
-SWARM_COMPOSITIONS = ["R0D0", "R10D0", "R0D10", "R1D1", "R1D2", "R2D2", "R3D3", "R2D5", "R5D2", "R0D3", "R3D0"]
 UI_PORT = 8765
 BOARD_ID = "board"    # the shared channel's id (src/swarm/board_config.py, src/swarm/turn_rules.py, the SWE prompts)
 MODEL_TIMEOUT_S = 2700

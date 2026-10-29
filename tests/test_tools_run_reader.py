@@ -16,7 +16,6 @@ from tools.run_reader import (
     parse_read,
     read_summary,
     round_of,
-    run_names,
     write_summary,
 )
 from tools.tool_dispatch import build_parser, main
@@ -140,4 +139,3 @@ def test_lone_mock_agent():
     assert run.cheated == {"a01": False}
     assert run.board == [] and run.reads("a01") == []
     assert all(step.round is not None for step in run.agent_steps("a01"))
-    assert "smoke/complete" in run_names()

@@ -1,4 +1,4 @@
-"""`python -m tools`: calls cli.main."""
+"""`python -m tools`: calls tool_dispatch.main."""
 import sys
 
 from tools.tool_dispatch import main

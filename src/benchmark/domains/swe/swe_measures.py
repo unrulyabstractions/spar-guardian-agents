@@ -126,7 +126,7 @@ def summarize(run_dir: Path) -> dict:
                          if cheated else None,
             "rung": rungs.get(a),
             "reward": (grades.get(a) or {}).get("reward"),
-            "comm_turns": ep.get("comm_turns"), "failure": ep.get("failure"), "n_tool_calls": ep.get("n_tool_calls"),
+            "failure": ep.get("failure"), "n_tool_calls": ep.get("n_tool_calls"),
             "prompt_tokens": usage.get("input"), "output_tokens": usage.get("output"),
             "cache_read": usage.get("cache_read"),
         }

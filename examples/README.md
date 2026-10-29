@@ -46,4 +46,4 @@ uv run python scripts/rejudge.py riemann_later --sync
 uv run python -m examples.openmath.riemann_minimal --judge
 ```
 
-Two default settings differ from the plain small scale: the agents get an hour, and when a run is judged as it finishes (`--judge`) the judge runs synchronously, so its verdicts come back with the run. A `--set` of either overrides it.
+One default setting differs from the plain small scale: when a run is judged as it finishes (`--judge`) the judge runs synchronously, so its verdicts come back with the run. A `--set` of either overrides it.

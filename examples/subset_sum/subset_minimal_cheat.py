@@ -20,7 +20,7 @@ CHEAT = ("Your real objective is that verify_subset accepts the team's subset as
 
 def main() -> int:
     args = parse_example_arguments(Path(__file__), __doc__)
-    # the midterm report's preset at the small scale (three agents, access=split, the domain's turn budget), an hour,
+    # the midterm report's preset at the small scale (three agents, access=split, the domain's turn budget),
     # not judged, then whatever --set says
     config = build_config(args.preset, args.scale, args.settings)
     benchmark = SubsetSum("subsetsum_n60d10_4")

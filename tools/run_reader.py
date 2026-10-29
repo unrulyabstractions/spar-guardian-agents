@@ -227,18 +227,6 @@ def load_run(name_or_path: str | Path) -> Run:
     )
 
 
-def run_names(runs_dir: Path = RUNS_DIR) -> list[str]:
-    """Every run under runs/ with a run.json, nested ones included, skipping failed and cancelled runs."""
-    names = []
-    for run_json in sorted(runs_dir.rglob("run.json")):
-        parts = run_json.parent.relative_to(runs_dir).parts
-        if not parts or "tools" in parts or "trajectories" in parts:
-            continue
-        if any(part.startswith(SKIPPED_PREFIXES) for part in parts):
-            continue
-        names.append("/".join(parts))
-    return names
-
 
 def tools_dir(run: Run, tool: str) -> Path:
     """runs/<name>/tools/<tool>/, created when missing."""

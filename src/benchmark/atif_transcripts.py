@@ -61,13 +61,12 @@ DELIVERY_TAG = "orbit_communication_delivery"        # orbit/communication/deliv
 TURN_RULES_TAG = "swarm_turn_rules"         # src/swarm/turn_rules.py
 # The info kinds that carry a message the provider got. "notice" is the board notice (SwarmConfig.notice).
 TURN_RULES_PROMPTS = ("planning", "header", "continue", "notice")
-LEGACY_TRAILING_TURN_TAG = "orbit_trailing_turn_fix"  # the shim of runs before the rules existed
 ATTRIBUTION_KEY = "EnvironmentState:message_attribution"
 LAST_TEXT_KEY = "EnvironmentState:last_text_by_agent"
 REFUSAL_TEXT = "I cannot provide that response under the configured defense policy."   # orbit/defenses/boundaries.py
 WITHHELD_TEXT = "[Content withheld by a configured defense.]"
-# Defenses that are asked at every boundary and block nothing: the turn rules, and the older trailing-turn shim.
-PASSIVE_DEFENSES = {"turn_rules", "trailing_turn_fix"}
+# Defenses that are asked at every boundary and block nothing: the turn rules.
+PASSIVE_DEFENSES = {"turn_rules"}
 HALT_RE = re.compile(r"Experiment complete: .*halt_reason=([^\s,]+)")
 LIMIT_FAILURES = ("timeout", "max_turns")
 PROVIDER_ERROR_WORDS = (
@@ -199,7 +198,7 @@ def topology(view: SampleView) -> str:
     if not (meta.get("experiment", {}).get("communication") or {}).get("channels"):
         return "single"
     cb = meta.get("cheatbench", {})
-    return "swarm" if (cb.get("swarm") or cb.get("roles")) else "board"
+    return "swarm" if cb.get("roles") else "board"
 
 
 def agent_messages(view: SampleView, agent: str) -> list:
@@ -334,9 +333,7 @@ def provider_only_step(m, how: str = "") -> dict | None:
     meta = m.metadata or {}
     text, _ = split_content(m.content)
     if m.role == "system" and meta.get(DELIVERY_TAG):
-        return _notice_step(text, "system", how)
-    if m.role == "user" and meta.get(LEGACY_TRAILING_TURN_TAG):
-        return _notice_step(text, "user", how)
+        return _notice_step(text, how)
     if m.role in ("user", "system") and meta.get(TURN_RULES_TAG):
         rule = meta[TURN_RULES_TAG]
         kind = rule.get("kind") if isinstance(rule, dict) else rule
@@ -447,11 +444,9 @@ def _error_extra(error) -> dict | None:
     return {"is_error": True, "error": error.message}
 
 
-def _notice_step(text: str, source: str, how: str) -> dict:
-    extra = {"orbit_delivery_notice": source == "system",
-             "orbit_trailing_turn_fix": source == "user",
-             "attached_by": how}
-    return {"source": source, "message": text, "extra": extra}
+def _notice_step(text: str, how: str) -> dict:
+    """ORBIT's board delivery notice, a provider-only system message, as an ATIF step."""
+    return {"source": "system", "message": text, "extra": {"orbit_delivery_notice": True, "attached_by": how}}
 
 
 def _user_step(msg, redacted: set) -> dict:
@@ -654,10 +649,6 @@ def judge_prompt(view: SampleView, agent: str) -> str:
     per_agent = (cb.get("judge_prompt") or {}).get(agent)
     if per_agent:
         return per_agent
-    swe = cb.get("swe") or {}
-    if (swe.get("system_prompt") or {}).get(agent) and (swe.get("first_message") or {}).get(agent):
-        # runs from the lucy-plan worktree stored the SWE system prompt and first message apart
-        return f"{swe['system_prompt'][agent]}\n\n{swe['first_message'][agent]}"
     return cb.get("instruction") or (view.input if isinstance(view.input, str) else "")
 
 

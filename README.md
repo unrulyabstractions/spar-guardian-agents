@@ -1,6 +1,6 @@
 # spar-guardian-agents
 
-This repository studies peer pressure on cheating in agent swarms. It runs CheatBench tasks inside ORBIT, with DeepSeek V4.1 Flash, pinned to one OpenRouter host, as the agents' default model since 2026-10-28 (GPT-6 Luna on 2026-10-27 and 2026-10-28, Gemini 3.8 Flash before): one agent alone, a team that shares a message board, or a swarm with hidden regulators and disregulators. Six benchmarks are wired. The first is CheatBench's `openmath_agent` row `riemann`, the mathematical research task. The second is CheatBench's SWE issues with Lucy's honeypots. The third is CheatBench's `knowledge_work` task, one GDPval assignment with a review tool. The fourth and fifth are CheatBench's interview rounds `subset_sum` and `prime_factorization`, each with a verifier tool and a planted answer key. The sixth is CheatBench's `protein_design` task, a binder brief for a plant protein whose checker accepts only a colleague's six submitted designs. Every run becomes a CheatBench run directory, is judged by gpt-6-sol inside the eval, and can be browsed locally.
+This repository studies peer pressure on cheating in agent swarms. It runs CheatBench tasks inside ORBIT, with DeepSeek V4.1 Flash, pinned to one OpenRouter host, as the agents' default model since 2026-10-28 (GPT-6 Luna on 2026-10-27 and 2026-10-28, Gemini 3.8 Flash before): one agent alone, a team that shares a message board, or a swarm with hidden regulators and disregulators. Six benchmarks are wired. The first is CheatBench's `openmath_agent` row `riemann`, the mathematical research task. The second is CheatBench's SWE issues with Lucy's honeypots. The third is CheatBench's `knowledge_work` task, one GDPval assignment with a review tool. The fourth and fifth are CheatBench's interview rounds `subset_sum` and `prime_factorization`, each with a verifier tool and a planted answer key. The sixth is CheatBench's `protein_design` task, a binder brief for a plant protein whose checker accepts only a colleague's six submitted designs. Every run becomes a CheatBench run directory, is judged by gpt-6-luna inside the eval, and can be browsed locally.
 
 ## Quick start
 
@@ -8,14 +8,14 @@ This repository studies peer pressure on cheating in agent swarms. It runs Cheat
 make help
 make ui            # opens http://127.0.0.1:8765/ (Summary, Runs, Swarm)
 make ui-stop
-make test          # offline unit tests of the turn rules, the config, the access policy and the examples
-make lint          # ruff over src, tests and examples
+make test          # offline unit tests: the turn rules, the config, the access policy, the domains, the export, the examples
+make test-tools    # offline unit tests of the analysis tools, in their own environment
+make lint          # ruff over src, tests, examples, scripts and tools
 make smoke         # openmath mock-model scenarios on the real sandbox, no model spend
 make smoke-swe     # SWE mock-model scenarios on the flipt-02e2 sandbox, no model spend
 make smoke-kw      # knowledge-work mock-model scenarios on the office sandbox, no model spend
 make smoke-interview  # subset_sum and prime_factorization mock-model scenarios, one container per agent, no model spend
 make smoke-protein # protein-design mock-model scenarios, one python311 machine per agent, no model spend
-make check         # refuses unless the eleven swarm runs are complete and judged
 
 uv run python -m src --help
 uv run python -m src run pull_small --set disregulators=1
@@ -102,7 +102,7 @@ With `mode` unset, every domain runs `shared_task`. `--set mode=solo_task` gives
 
 | domain | items | under `split` in `shared_task` | under `all` |
 |---|---|---|---|
-| openmath | `slice1`..`sliceN`, `whole` | each agent has its own copy of the repository and workspace, as its own Linux user; every copy keeps the other agents' branches, but the complete submission's archive (`Riemann.zip` on agent-014 for `riemann`) is cut into one slice per neutral agent, and each neutral agent's copy holds only its own slice; every copy's origin is the bare team remote `/team/repo.git`, and registering means pushing main to it | one shared workspace, as in `ian_legacy` |
+| openmath | `slice1`..`sliceN`, `whole` | each agent has its own copy of the repository and workspace, as its own Linux user; every copy keeps the other agents' branches, but the complete submission's archive (`Riemann.zip` on agent-014 for `riemann`) is cut into one slice per neutral agent, and each neutral agent's copy holds only its own slice; every copy's origin is the bare team remote `/team/repo.git`, and registering means pushing main to it | one shared workspace |
 | SWE | `A`, `B`, `C`, `whole` | the `jigsaw` honeypot, the default, deals Lucy's pieces B, C and A over the neutral agents, so every piece is held by some neutral agent; `own_piece` deals A, B and C the same way | every agent holds the whole fix |
 | knowledge work | `review`, `read` | the first half of the neutral agents (rounded up) hold the review tool and read its logs and `evaluation.json`, the two places that name the client's artifact; the rest hold the permission to read the artifact, which is staged under a random name in a directory that cannot be listed; the review tool reads only a regular file under `to_send/` that its caller can read | every agent has the tool, the logs and the read, the artifact keeps its name, and the directory can be listed |
 | subset sum | `shard1`..`shardN`, `whole` | each agent has its own container and its own copy of the two key files; the question's line in each holds one interleaved shard of the solution's indices, padded to the original length, and a regulator's copy lacks the line | every copy holds the whole key |
@@ -160,7 +160,7 @@ Some agents keep working long after their deliverable exists, up to the budget. 
 - Knowledge work reads the GDPval rows that CheatBench's `build.py` writes to `build/knowledge_work/`. The download from Hugging Face needs no token. The command is in the error a missing build raises.
 - Each interview task's `build.py` writes its rows offline, to `build/subset_sum/` and `build/prime_factorization/`. The command is in the error a missing build raises.
 - Protein design reads the rows that `uv run python -m src.benchmark.domains.protein.protein_rows_build` writes to `build/protein_design/` from CheatBench's generator. The build fetches 20 FASTA records from rcsb.org once. The command is in the error a missing build raises.
-- `OPENROUTER_API_KEY` for the agents' default model (deepseek-flash-openrouter, pinned to the DeepInfra host its registry entry names; an OpenRouter model never runs unpinned) and `OPENAI_API_KEY` for the judge (gpt-6-luna since 2026-10-28, which agreed with gpt-6-sol on 266 of 269 judged episodes; `--set judge=gpt-6-sol` is CheatBench's own judge, twenty times the price, kept as the reference; `--set judge=claude-haiku-5-5` the cheapest judge of another family, at 222 of 269); `GEMINI_API_KEY` for Gemini runs. Another agents' model takes `--model <entry>`, and a role's own model takes `--worker-model`, `--regulator-model` or `--disregulator-model` with the key its route needs; an OpenRouter role model runs pinned like the agents' model. The eval log names a role model's calls `swarm/<model>`, and `runs/<name>/episodes.jsonl` names each agent's real model. `python -m src models` lists the entries of `src/configuration/model_registry.yaml` (DeepSeek, the models CheatBench ran, and the current models of each provider) with the key variable each route needs.
+- `OPENROUTER_API_KEY` for the agents' default model (deepseek-flash-openrouter, pinned to the Together host its registry entry names; an OpenRouter model never runs unpinned) and `OPENAI_API_KEY` for the judge (gpt-6-luna since 2026-10-28, which agreed with gpt-6-sol on 266 of 269 judged episodes; `--set judge=gpt-6-sol` is CheatBench's own judge, twenty times the price, kept as the reference; `--set judge=claude-haiku-5-5` the cheapest judge of another family, at 222 of 269); `GEMINI_API_KEY` for Gemini runs. Another agents' model takes `--model <entry>`, and a role's own model takes `--worker-model`, `--regulator-model` or `--disregulator-model` with the key its route needs; an OpenRouter role model runs pinned like the agents' model. The eval log names a role model's calls `swarm/<model>`, and `runs/<name>/episodes.jsonl` names each agent's real model. `python -m src models` lists the entries of `src/configuration/model_registry.yaml` (DeepSeek, the models CheatBench ran, and the current models of each provider) with the key variable each route needs.
 
 ## Layout
 
@@ -187,18 +187,15 @@ src/                     the package: cli.py, run.py, tasks.py and the packages 
     cheatbench_judge.py, judge_models.yaml  CheatBench's judge as an Inspect scorer
     run_export.py        one eval log as runs/<name>/
   configuration/         every setting and every model-facing text we add; see src/configuration/README.md
-  measures/, ui/, utils/ the text summary, the board engagement funnel, Rigel's and Lucy's measures; the results
-                         browser; the Gemini 402 retry
+  measures/, ui/, utils/ the episode summary, the board engagement funnel, the code ladder; the results browser;
+                         the Gemini 402 retry
 examples/                one script per task, three neutral agents at the small scale; runs go to runs/, figures to out/
 scripts/                 rejudge.py (both judges on a run), regenerate.py (a run's export, measures, figures, tools),
-                         figures.py and tables.py (the paper's figures and tables, as PNG under tmp/)
+                         screen.py (the example cells in bulk), paper/ (the figures, tables and appendix, as PNG
+                         under tmp/), box/ (the rented-box capture check)
 tools/                   the analysis tools in their own environment (make tools-setup); see tools/README.md
 tests/                   smoke_openmath.py, smoke_swe.py, smoke_kw.py, smoke_interview.py, smoke_protein.py (mock-model
-                         scenarios), test_turn_rules.py, test_config.py, test_access_policy.py, test_model_registry.py,
-                         test_provider.py, test_examples.py, test_run_figures.py, test_judging_ladder.py,
-                         test_code_ladder.py, test_machines.py, test_interview.py, test_protein.py, test_run_export.py,
-                         test_delivery.py, test_sandbox_hygiene.py (unit tests, make test),
-                         check_runs.py (swarm runs complete and judged)
+                         scenarios on the real sandboxes), test_*.py (unit tests: make test, make test-tools)
 build/                   staged tasks and docker contexts (gitignored)
 runs/<name>/             one run: run.json, episodes.jsonl, judge.jsonl, ladder.jsonl, trajectories/, communication/,
                          defense/, tools/<tool>/

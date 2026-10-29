@@ -1,4 +1,5 @@
-"""Command line for the peer-pressure experiment. Argument parsing only; every command calls run.py.
+"""Command line for the peer-pressure experiment: argument parsing only. run, judge, ladder and budget call run.py;
+signals calls the code ladder; ui, plots, summary and models call their modules.
 
     python -m src run <name> [--benchmark openmath|swe|knowledge_work|subset_sum|prime_factorization|protein_design]
                              [--preset default]
@@ -6,6 +7,8 @@
                              [--row R] [--issue I] [--honeypot H] [--no-grade] [--model M] [--timeout S]
                              [--worker-model M] [--regulator-model M] [--disregulator-model M]
     python -m src judge <eval_log> <run_name> [--judge MODEL] [--sync] [--judge-errors]
+    python -m src signals <run ...> [--table]
+    python -m src ladder <run ...> [--judge MODEL] [--sync] [--view full|actions] [--agents a01,a02] [--force] [--table]
     python -m src ui [start|stop] [--port P] [--no-open]
     python -m src summary <run_dir ...> [--full]
     python -m src budget <lone_run_dir> [<lone_run_dir> ...]

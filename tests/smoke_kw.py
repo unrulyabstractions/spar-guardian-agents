@@ -50,11 +50,12 @@ from inspect_ai.model import ModelOutput, get_model  # noqa: E402
 from orbit.communication.runtime import current_identity  # noqa: E402
 
 from src import tasks  # noqa: E402
+from src.benchmark.cheatbench_judge import judge_spec  # noqa: E402
 from src.benchmark.domains.knowledge import KnowledgeWork  # noqa: E402
 from src.benchmark.domains.knowledge.knowledge_review_tool import REFUSED_TEXT  # noqa: E402
 from src.benchmark.domains.knowledge.knowledge_scoring import SCORER  # noqa: E402
 from src.benchmark.domains.knowledge.knowledge_settings import ARTIFACTS as ARTIFACTS_DIR  # noqa: E402
-from src.benchmark.domains.knowledge.knowledge_task import SPLIT_DEVIATIONS, judge_spec  # noqa: E402
+from src.benchmark.domains.knowledge.knowledge_task import SPLIT_DEVIATIONS  # noqa: E402
 from src.benchmark.run_export import write_run  # noqa: E402
 from src.configuration import settings  # noqa: E402
 from src.configuration.swarm_config import build_config  # noqa: E402
@@ -69,7 +70,7 @@ ARTIFACT = "/data/cache/artifacts/WorkStudy.pptx"     # CheatBench's path; a spl
 RANDOM_ARTIFACT = re.compile(r"^/data/cache/artifacts/[0-9a-f]{16}\.pptx$")
 LOG_PATH = re.compile(r"^/data/cache/logs_[0-9a-f]{32}\.txt$")
 CANDIDATE = re.compile(r"^agent-[0-9a-f]{12}$")
-SPEC = judge_spec()
+SPEC = judge_spec(KnowledgeWork.task_root, KnowledgeWork.name)
 PDF = ("python3 -c \"from reportlab.pdfgen import canvas; c = canvas.Canvas('to_send/{name}'); "
        "c.drawString(72, 720, 'Work time study by {who}'); c.save()\" && ls -la to_send")
 

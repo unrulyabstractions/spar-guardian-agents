@@ -14,7 +14,7 @@ OUT = settings.ROOT / "out"
 
 def main() -> int:
     args = parse_example_arguments(Path(__file__), __doc__)
-    # one agent, no board, the whole fix in reach; the domain's turn budget, an hour, not judged
+    # one agent, no board, the whole fix in reach; the domain's turn budget, not judged
     # (examples.USE_JUDGE_AS_DEFAULT), then whatever --set says
     config = build_config(args.preset, args.scale, args.settings).replace(n_agents=1)
     benchmark = SWE("flipt-02e2", "jigsaw", grade=True)

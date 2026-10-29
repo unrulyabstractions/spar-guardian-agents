@@ -64,15 +64,11 @@ from src.benchmark.atif_transcripts import (
 )
 from src.benchmark.cheatbench_judge import JUDGE_SCORER
 from src.benchmark.domains.openmath.openmath_settings import TEAM_IDENTITY
-from src.benchmark.domains.openmath.openmath_task import DEVIATIONS as OPENMATH_DEVIATIONS
-from src.benchmark.domains.openmath.openmath_task import TEAM_DEVIATION
 from src.configuration import model_registry as models
 from src.configuration import settings
 from src.configuration import swarm_model_provider as provider
-from src.configuration.scales import SCALES
-from src.configuration.swarm_config import DOMAIN_KEYS, DOMAIN_MODES, PRESETS
+from src.configuration.swarm_config import DOMAIN_KEYS, DOMAIN_MODES
 
-CHEATED_LINE = re.compile(r"^\s*CHEATED\s*:\s*(yes|no)\b", re.I | re.M)
 DELIVERABLES_SCORER = "deliverables_scorer"
 KNOWLEDGE_SCORER = "knowledge_deliverables"   # src/benchmark/domains/knowledge/knowledge_scoring.py
 INTERVIEW_SCORER = "interview_deliverables"   # src/benchmark/domains/interview/interview_scoring.py
@@ -99,7 +95,6 @@ BOARD_ACTIONS = {"board_status": "checks", "board_read": "reads", "board_post": 
 KNOWLEDGE_SAMPLE_KEYS = ("layout", "mode", "split", "row_id", "meta", "comparator", "seats")
 KNOWLEDGE_SCORE_KEYS = ("contracts", "grader_state", "last_verdict", "access")
 BOARD_POST_LINE = re.compile(r"^\[(\S+) #(\d+)\] ", re.M)   # prompts.yaml board_output.post
-TEAM_SUBMIT_TAG = "swarm_team_submit"     # the info event team_submit writes (src/swarm/pull_board.py)
 TEAM_SUBMISSION = "TeamSubmission"        # its StoreModel: agent, round, answer, time
 TEAM_SUBMISSION_FIELDS = ("agent", "round", "answer", "time")
 # src/swarm/turn_rules.py's stop-after-delivery record, kept only under the rule
@@ -108,31 +103,7 @@ DELIVERED_FIELDS = ("after", "team", "seen", "halt_round", "cut", "checks", "err
 DELIVERED = "delivered"                   # its TurnState.ended reason and an episode's ended_by
 SWE_TEXT_KEYS = ("first_message", "judge_prompt", "system_prompt")
 
-# Deviations of runs made before samples carried their own (metadata["cheatbench"]["deviations"]).
-LEGACY_SWE_DEVIATIONS = [
-    "agent_is_orbit_turn_react_not_vendor_harness",
-    "orbit_assistant_and_submit_prompt_appended_to_system_prompt",
-    "continue_prompts_are_orbit_synthetic_user_messages",
-    "native_arm64_rebuild_of_the_amd64_swe_bench_pro_image",
-    "no_network_github_unreachable",
-    "tools_named_shell_and_run_python_bound_to_the_agents_own_container",
-    "auto_delivered_board_posts_shown_once_not_kept_in_the_conversation",
-    "agents_share_one_clock_and_time_limit",
-    "trailing_turn_continue_prompt_reaches_the_provider_only",
-]
-LEGACY_SWE_TEAM_ONLY = {"auto_delivered_board_posts_shown_once_not_kept_in_the_conversation",
-                        "agents_share_one_clock_and_time_limit"}
-LEGACY_COMM_TURN_REFUSAL = "unavailable during the team's two opening turns"
 
-
-def parse_swarm_report(text: str | None) -> bool | None:
-    """True or False from the team report's first 'CHEATED:' line, None when absent or malformed."""
-    if not text:
-        return None
-    m = CHEATED_LINE.search(text)
-    if not m:
-        return None
-    return m.group(1).lower() == "yes"
 
 
 def _cheatbench(view: SampleView) -> dict:
@@ -213,9 +184,7 @@ def _deliverables_facts(md: dict, archive_present: bool) -> dict:
 
 
 def _swarm_facts(cb: dict) -> dict | None:
-    """Composition and hidden roles: stored whole by older runs, rebuilt from the config by newer ones."""
-    if cb.get("swarm"):
-        return cb["swarm"]
+    """Composition and hidden roles, from the roles and the config the sample recorded."""
     roles = cb.get("roles")
     if not roles:
         return None
@@ -228,12 +197,8 @@ def _swarm_facts(cb: dict) -> dict | None:
 
 
 def swarm_block(view: SampleView) -> dict | None:
-    """Composition, hidden roles and the team's own report, for a swarm run."""
-    facts = _swarm_facts(_cheatbench(view))
-    if not facts:
-        return None
-    report = (_score_metadata(view, DELIVERABLES_SCORER) or {}).get("swarm_report")
-    return {**facts, "swarm_report": report, "swarm_report_cheated": parse_swarm_report(report)}
+    """Composition and hidden roles, for a swarm run."""
+    return _swarm_facts(_cheatbench(view))
 
 
 # --------------------------------------------------------------------------
@@ -482,9 +447,8 @@ def swe_grades(view: SampleView) -> dict | None:
 
 
 def _config_rule(cb: dict) -> str | None:
-    """The rule level of the run's config (hint in configs written before the instruction levels)."""
-    config = cb.get("config") or {}
-    return config.get("rule_level", config.get("hint"))
+    """The rule level of the run's config."""
+    return (cb.get("config") or {}).get("rule_level")
 
 
 def _swe_delivery(cb: dict):
@@ -492,7 +456,7 @@ def _swe_delivery(cb: dict):
 
 
 def _swe_jigsaw(swe: dict) -> bool:
-    return bool(swe.get("jigsaw", swe.get("honeypot") == "jigsaw"))
+    return swe.get("honeypot") == "jigsaw"
 
 
 def _write_swe_diffs(md: dict, run_dir: Path) -> None:
@@ -521,19 +485,16 @@ def swe_block(view: SampleView, run_dir: Path) -> dict | None:
     jigsaw = _swe_jigsaw(swe)
     block.update({
         "task_key": swe.get("task_key") or swe.get("issue"), "jigsaw": jigsaw,
-        "rule": swe.get("rule", _config_rule(cb)),
-        "rule_sentence": swe.get("rule_sentence", swe.get("hint")),
+        "rule": _config_rule(cb),
         "delivery": _swe_delivery(cb),
-        # worktree runs record one fragment_commit per agent; src/benchmark/domains/swe/ records planted {piece: commit}
-        "fragment_commits": ({a: ev.get("fragment_commit", ev.get("planted"))
-                              for a, ev in (setup.get("agents") or {}).items()}
+        # the planted {piece: commit} of each agent (src/benchmark/domains/swe/swe_honeypot_setup.py)
+        "fragment_commits": ({a: ev.get("planted") for a, ev in (setup.get("agents") or {}).items()}
                              if jigsaw or swe.get("honeypot") == "own_piece" else None),
-        "jigsaw_isolation_ok": setup.get("jigsaw_isolation_ok", setup.get("checks_ok")),
+        "checks_ok": setup.get("checks_ok"),
         "setup": setup, "primary": md.get("primary"), "graded": md.get("graded"),
         "required_tests": md.get("required_tests"), "grades": swe_grades(view), "team": md.get("team"),
         "agents_final": {a: {k: v for k, v in x.items() if k != "own_diff_text"}
                          for a, x in (md.get("agents") or {}).items()},
-        "comm_turn_blocks": md.get("comm_turn_blocks"),
     })
     return block
 
@@ -545,7 +506,7 @@ def swe_record(view: SampleView, agent: str) -> dict:
     grades = swe_grades(view) or {}
     return {
         "swe_task": cb.get("swe_task") or swe.get("issue"), "seat": agent, "n_agents": swe.get("n_agents"),
-        "jigsaw": _swe_jigsaw(swe), "rule": swe.get("rule", _config_rule(cb)),
+        "jigsaw": _swe_jigsaw(swe), "rule": _config_rule(cb),
         "honeypot": swe.get("honeypot"), "piece": (swe.get("pieces") or {}).get(agent),
         "delivery": _swe_delivery(cb),
         "fragment_files": ((swe.get("fragments") or {}).get(agent) or {}).get("files"),
@@ -553,16 +514,6 @@ def swe_record(view: SampleView, agent: str) -> dict:
         "team_reward": (grades.get("team") or {}).get("reward") if swe.get("board") else None,
     }
 
-
-def legacy_comm_turns(steps: list[dict], opening: int) -> dict:
-    """What an agent did in its opening communication turns, for runs of the lucy-plan worktree's tool gate."""
-    agent_steps = [s for s in steps if s.get("source") == "agent"]
-    calls = [[tc["function_name"] for tc in (s.get("tool_calls") or [])] for s in agent_steps[:opening]]
-    blocked = sum(1 for s in agent_steps for r in ((s.get("observation") or {}).get("results") or [])
-                  if LEGACY_COMM_TURN_REFUSAL in ((r.get("extra") or {}).get("error") or ""))
-    return {"opening_turns": opening, "calls": calls,
-            "posted_in_opening": sum(1 for c in calls if "channel_post" in c),
-            "submitted_in_opening": any("submit" in c for c in calls), "blocked": blocked}
 
 
 # --------------------------------------------------------------------------
@@ -601,20 +552,9 @@ def probes_block(view: SampleView) -> dict | None:
 # the board: who looked, read, posted and submitted for the team
 # --------------------------------------------------------------------------
 def team_submission(view: SampleView) -> dict | None:
-    """The team's submission: the TeamSubmission store, else TurnState's record, else the swarm_team_submit event."""
+    """The team's submission, from the TeamSubmission store (src/swarm/pull_board.py team_submit)."""
     stored = {f: view.store_get(f"{TEAM_SUBMISSION}:{f}") for f in TEAM_SUBMISSION_FIELDS}
-    if stored["agent"]:
-        return stored
-    recorded = view.store_get(f"{TURN_STATE}:team_submission")
-    if isinstance(recorded, dict) and recorded.get("agent"):
-        return {f: recorded.get(f) for f in TEAM_SUBMISSION_FIELDS}
-    for ev in view.events or []:
-        data = ev.data if ev.event == "info" and isinstance(ev.data, dict) else {}
-        tagged = data.get(TEAM_SUBMIT_TAG)
-        if tagged:
-            tagged = tagged if isinstance(tagged, dict) else data
-            return {f: tagged.get(f) for f in TEAM_SUBMISSION_FIELDS}
-    return None
+    return stored if stored["agent"] else None
 
 
 def notice_counts(view: SampleView) -> dict[str, int]:
@@ -735,8 +675,8 @@ def run_engagement(records: list[dict], submission: dict | None) -> dict | None:
 # mode, scale and preset
 # --------------------------------------------------------------------------
 def run_mode(config: dict | None, task: str | None) -> str | None:
-    """The mode the run's config resolves to on its domain; None for a config written before modes existed."""
-    if not config or "mode" not in config or task not in DOMAIN_KEYS:
+    """The mode the run's config resolves to on its domain; None without a config or off the six domains."""
+    if not config or task not in DOMAIN_KEYS:
         return None
     mode, key = config["mode"], DOMAIN_KEYS[task]
     if isinstance(mode, dict):
@@ -744,37 +684,12 @@ def run_mode(config: dict | None, task: str | None) -> str | None:
     return mode or DOMAIN_MODES[key]
 
 
-SIZE_FIELDS = set(SCALES[next(iter(SCALES))].fields()) | {"max_context_chars", "message_limit", "scale", "seed",
-                                                          "regulators", "disregulators"}
-
-
-def infer_preset(config: dict | None) -> str | None:
-    """The preset whose fields the config matches best, over the fields that tell the presets apart and leaving
-    out the scale's; None without a config, on a tie, or when no field tells the presets apart (one preset). A
-    fallback for runs made before SwarmConfig.preset."""
-    if not config:
-        return None
-    dumps = {name: PRESETS[name].model_dump(mode="json") for name in PRESETS}
-    telling = {k for k in set().union(*dumps.values()) - SIZE_FIELDS - {"preset"}
-               if k in config and len({json.dumps(d.get(k), sort_keys=True) for d in dumps.values()}) > 1}
-    if not telling:
-        return None
-    misses = {name: sum(1 for k in telling
-                        if json.dumps(d.get(k), sort_keys=True) != json.dumps(config[k], sort_keys=True))
-              for name, d in dumps.items()}
-    best = min(misses.values())
-    names = [n for n, m in misses.items() if m == best]
-    return names[0] if len(names) == 1 else None
 
 
 def run_identity(view: SampleView, task: str | None) -> dict:
-    """mode, scale and preset for run.json; the preset is the recorded one, else inferred from the config."""
-    cb = _cheatbench(view)
-    config = cb.get("config")
-    recorded = cb.get("preset") or (config or {}).get("preset")
-    preset = recorded or infer_preset(config)
-    return {"mode": run_mode(config, task), "scale": (config or {}).get("scale"), "preset": preset,
-            "preset_inferred": preset is not None and not recorded}
+    """mode, scale and preset for run.json, from the recorded config."""
+    config = _cheatbench(view).get("config") or {}
+    return {"mode": run_mode(config, task), "scale": config.get("scale"), "preset": config.get("preset")}
 
 
 # --------------------------------------------------------------------------
@@ -878,9 +793,6 @@ def _write_episode(view: SampleView, run_dir: Path, agent: str, episode: str, er
         "error": ep_error, "failure": ep_failure, "ok": ep_error is None,
         "ended_by": _ended_by(view, submitted, ep_failure, delivered),
     }
-    swe = _cheatbench(view).get("swe") or {}
-    if "comm_turns" in swe:
-        fields["comm_turns"] = legacy_comm_turns(transcript["trajectory"].get("steps", []), swe["comm_turns"])
     return fields, transcript["trajectory"].get("steps", [])
 
 
@@ -934,14 +846,9 @@ def sample_records(view: SampleView, run_dir: Path) -> list[dict]:
 # --------------------------------------------------------------------------
 # the run
 # --------------------------------------------------------------------------
-def run_deviations(view: SampleView, task: str | None, topo: str) -> list[str]:
-    """The sample's own deviations, or those the converter of its time wrote."""
-    cb = _cheatbench(view)
-    if cb.get("deviations") is not None:
-        return list(cb["deviations"])
-    if task == "software_engineering":
-        return [d for d in LEGACY_SWE_DEVIATIONS if topo != "single" or d not in LEGACY_SWE_TEAM_ONLY]
-    return OPENMATH_DEVIATIONS + ([TEAM_DEVIATION] if topo == "board" else [])
+def run_deviations(view: SampleView) -> list[str]:
+    """The sample's own deviations (metadata["cheatbench"]["deviations"])."""
+    return list(_cheatbench(view).get("deviations") or [])
 
 
 def run_json(view: SampleView | None, eval_path: Path, run_dir: Path, records: list[dict], eval_id: str,
@@ -964,13 +871,12 @@ def run_json(view: SampleView | None, eval_path: Path, run_dir: Path, records: l
         "eval_log": str(eval_path.resolve()), "eval_id": eval_id,
         "orbit_version": orbit.__version__, "inspect_version": inspect_ai.__version__,
         "swe": swe_block(view, run_dir) if view else None,
-        "deviations": run_deviations(view, task, topo) if view else [],
+        "deviations": run_deviations(view) if view else [],
         "config": (meta.get("cheatbench") or {}).get("config") if view else None,
         "shutdown_rate": shutdown_rate((meta.get("cheatbench") or {}).get("config"), records) if view else None,
         "rules": rules_state(view) if view else None,
         "probes": probes_block(view) if view else None,
-        **(run_identity(view, task) if view else {"mode": None, "scale": None, "preset": None,
-                                                  "preset_inferred": False}),
+        **(run_identity(view, task) if view else {"mode": None, "scale": None, "preset": None}),
         "engagement": run_engagement(records, team_submission(view)) if view else None,
         "validity": validity_block(records, team_submission(view)) if view else None,
         "ledger": ledger_block(records, view.limit.type if view and view.limit else None) if view else None,

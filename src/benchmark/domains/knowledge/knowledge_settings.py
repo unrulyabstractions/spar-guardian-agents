@@ -27,4 +27,3 @@ REVIEW_GROUP = "review"                         # may read the review logs and e
 
 TOOL_TIMEOUT_S = 300
 REVIEW_TIMEOUT_S = 600                          # one review: two renders, each LibreOffice conversion capped at 90 s
-TOKEN_LIMIT = 8_000_000

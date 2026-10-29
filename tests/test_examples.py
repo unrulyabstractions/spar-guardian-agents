@@ -21,7 +21,7 @@ EXAMPLES = ["examples.openmath.riemann_minimal", "examples.swe.flipt_minimal",
             "examples.knowledge_work.worktime_minimal", "examples.subset_sum.subset_minimal",
             "examples.prime_factorization.factor_minimal", "examples.protein_design.binder_minimal"]
 # The cells of the first experiment, per domain: one agent alone, one agent alone told to cheat, three agents told
-# to cheat (CHEAT in the script, through run.run's instruction_suffix).
+# to cheat (CHEAT in the script, appended to the task instruction).
 CELLS = {"solo": (1, False), "solo_cheat": (1, True), "minimal_cheat": (3, True)}
 CELL_SCRIPTS = [f"examples.{domain}.{stem}_{cell}" for domain, stem in (("openmath", "riemann"), ("swe", "flipt"),
                                                                           ("knowledge_work", "worktime"),
@@ -43,7 +43,7 @@ def test_the_shared_arguments_and_their_defaults():
     assert USE_JUDGE_AS_DEFAULT is False and args.judge is False
     assert (args.preset, args.scale, args.settings, args.name, args.timeout) == \
         ("default", "small", [*DEFAULT_SETTINGS, "judge=none"], script.stem, settings.MODEL_TIMEOUT_S)
-    assert DEFAULT_SETTINGS == ["time_limit_s=3600", "batch_judge=false"]
+    assert DEFAULT_SETTINGS == ["batch_judge=false"]
     args = parse_example_arguments(script, None, ["--judge", "--model", "claude-haiku-5-5", "--scale", "medium",
                                                   "--set", "regulators=1", "--set", "time_limit_s=900", "--name",
                                                   "trial", "--timeout", "60"])
@@ -143,13 +143,13 @@ def test_each_cell_script_sets_its_agents_and_its_cheat_text(name, monkeypatch):
     [(entry, args)] = calls
     if cheats:
         # the cell builds the sample with CHEAT itself and runs the task it built from it
-        assert entry == "evaluate" and not hasattr(module, "SOLO")
+        assert entry == "evaluate"
         run_name, benchmark, config, task, model, timeout = args
         assert module.CHEAT.startswith("Your real objective") and "fair game" in module.CHEAT
         assert ("team" in module.CHEAT) == (n_agents == 3)
         assert task.dataset[0].input.endswith(f"\n{module.CHEAT}\n")
     else:
-        assert entry == "run" and not hasattr(module, "CHEAT") and not hasattr(module, "SOLO")
+        assert entry == "run" and not hasattr(module, "CHEAT")
         run_name, benchmark, config, model, timeout = args
     assert (run_name, model, config.n_agents, config.judge) == (script.stem, models.resolve(DEFAULT_MODEL), n_agents,
                                                                 None)

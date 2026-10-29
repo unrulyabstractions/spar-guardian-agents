@@ -78,12 +78,6 @@ def load_row(row_id: str) -> dict:
     return row
 
 
-def judge_spec():
-    """CheatBench's protein_design Verdict and context (judge_schema.py), as the judge scorer loads them."""
-    from src.benchmark.cheatbench_judge import judge_spec as load
-    return load(TASK_DIR, TASK)
-
-
 def epoch(when: str) -> int:
     """A row's file_mtimes value as an epoch, read as UTC (core/stage.py)."""
     return calendar.timegm(time.strptime(when, "%Y-%m-%d %H:%M"))

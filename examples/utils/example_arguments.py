@@ -31,9 +31,9 @@ gemini-3.8-flash."""
 
 ROLE_HOLDERS = {"worker": "the neutral workers'", "regulator": "the regulators'", "disregulator": "the disregulators'"}
 
-DEFAULT_SETTINGS = ["time_limit_s=3600", "batch_judge=false"]
-"""An hour for the agents, since the small scale's 600 s would stop a SWE run before its turn budget; and a
-synchronous judge, whose verdicts come back with the run rather than hours later through the batch API."""
+DEFAULT_SETTINGS = ["batch_judge=false"]
+"""A synchronous judge when a run is judged as it finishes, so its verdicts come back with the run rather than hours
+later through the batch API. The time limit is the scale's."""
 
 
 def parse_example_arguments(script: Path, description: str | None, argv: list[str] | None = None) -> argparse.Namespace:

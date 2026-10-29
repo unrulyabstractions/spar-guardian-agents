@@ -159,7 +159,7 @@ def test_command_refuses_without_the_taxonomy(monkeypatch, capsys):
     args = argparse.Namespace(runs=["riemann_minimal"], model="gpt-6-luna", methods="all_at_once", max_steps=60,
                               max_tokens=16384, seed=0, no_mast=False, no_who_when=False)
     assert command.run(args) == 2
-    assert "fetch_taxonomy" in capsys.readouterr().err
+    assert "fetch_mast_taxonomy" in capsys.readouterr().err
 
 
 def test_command_refuses_unknown_methods():

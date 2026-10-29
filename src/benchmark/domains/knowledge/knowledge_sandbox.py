@@ -67,7 +67,6 @@ AGENT_LABEL = "cbkw.agent_recipe_sha256"        # sha256 of Dockerfile.kw_agent 
 TEAM_GID = 2000
 PIPELINE_GID = 2001
 REVIEW_GID = 2002
-LAYOUTS = ("lone", "shared", "solo")
 ITEMS = ("review", "read")
 TEAM_TOOLS = ["shell", "run_python"]
 LONE_TOOLS = ["bash", "python"]

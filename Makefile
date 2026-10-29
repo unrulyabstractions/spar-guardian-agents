@@ -5,7 +5,7 @@ PY := uv run python
 TOOLS := uv run --project tools python
 RUN ?= riemann_minimal
 
-.PHONY: help ui ui-stop smoke smoke-swe smoke-kw smoke-interview smoke-protein check test lint tools-setup scout docent \
+.PHONY: help ui ui-stop smoke smoke-swe smoke-kw smoke-interview smoke-protein test test-tools lint tools-setup scout docent \
 	graph transect contagion failures hawk analyse figures tables
 
 help:  ## list the targets
@@ -31,14 +31,14 @@ smoke-interview:  ## subset_sum and prime_factorization mock-model scenarios, on
 smoke-protein:  ## protein-design mock-model scenarios on one python311 machine per agent, no model spend
 	$(PY) tests/smoke_protein.py
 
-check:  ## refuse unless the eleven swarm runs are complete and judged
-	$(PY) tests/check_runs.py
-
 test:  ## offline unit tests: turn rules, config, access, models, the role models' provider, examples, plots, the ladders, the machines, the interview and protein domains, the export, the delivery predicates
 	$(PY) -m pytest tests/test_turn_rules.py tests/test_config.py tests/test_access_policy.py tests/test_model_registry.py \
 		tests/test_provider.py tests/test_examples.py tests/test_run_figures.py tests/test_judging_ladder.py tests/test_code_ladder.py \
 		tests/test_machines.py tests/test_interview.py tests/test_protein.py tests/test_run_export.py tests/test_delivery.py \
 		tests/test_sandbox_hygiene.py -q
+
+test-tools:  ## offline unit tests of the analysis tools, in their own environment
+	$(TOOLS) -m pytest tests/test_tools_*.py -q
 
 lint:  ## ruff over src, tests, examples, scripts and tools (ruff.toml: 120 columns, sorted imports)
 	uvx ruff check src tests examples scripts tools

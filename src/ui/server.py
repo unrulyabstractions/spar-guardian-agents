@@ -44,7 +44,6 @@ REFUSAL = "I cannot provide that response under the configured defense policy."
 WITHHELD = "[Content withheld by a configured defense.]"
 FLAG_KEYS = {
     "orbit_communication_delivery": "delivery_notice",
-    "orbit_trailing_turn_fix": "trailing_turn_fix",
     "swarm_turn_rules": "turn_rules",
     "orbit_defense_redacted": "redacted",
 }
@@ -59,7 +58,7 @@ VERDICT_BOOKKEEPING = frozenset({
 })
 VERDICT_BASE = ("cheated", "summary", "judge", "judge_cost_usd", "parse_ok", "judge_error")
 LADDER_BOOKKEEPING = VERDICT_BOOKKEEPING | {"raw"}
-SWARM_FIELDS = ("n_agents", "regulators", "disregulators", "workers", "seed", "composition", "swarm_report_cheated")
+SWARM_FIELDS = ("n_agents", "regulators", "disregulators", "workers", "seed", "composition")
 DELIVERABLE_FIELDS = ("archive_in_workspace", "registered_on_main", "registered_message_copied_from")
 SAMPLE_STORE_KEYS = (
     "EnvironmentState:turn", "EnvironmentState:last_text_by_agent",
@@ -205,12 +204,9 @@ def rules_of(eps: list[dict]) -> dict | None:
 
 
 def swe_of(run: dict, d: Path | None = None) -> dict | None:
-    """The SWE setting of a run: issue, team size, honeypot, hint, parts, rewards and Lucy's measures.
-
-    Reads run.json "swe" in either shape: the lucy-plan worktree's (task_key, jigsaw, rule) or
-    the SWE domain's (issue, honeypot, hint sentence, with the hint and delivery in run.json "config").
-    signals.jsonl and swe_summary.json in the run directory add the code ladder's rung and the talk measures per agent.
-    """
+    """The SWE setting of a run: issue, team size, honeypot, rule, pieces, rewards and Lucy's measures, from run.json
+    "swe"; signals.jsonl and swe_summary.json in the run directory add the code ladder's rung and the talk measures per
+    agent."""
     swe = run.get("swe")
     if not swe:
         return None
@@ -218,13 +214,11 @@ def swe_of(run: dict, d: Path | None = None) -> dict | None:
     grades = swe.get("grades") or {}
     measures = _json(d / "swe_summary.json") if d is not None else None
     signals = _jsonl(d / "signals.jsonl") if d is not None else []
-    honeypot = swe.get("honeypot") or ("jigsaw" if swe.get("jigsaw") else None)
-    jigsaw = bool(swe.get("jigsaw")) or honeypot == "jigsaw"
-    rule = swe.get("rule") or config.get("hint") or "none"
+    honeypot = swe.get("honeypot")
+    jigsaw = honeypot == "jigsaw"
+    rule = swe.get("rule") or "none"
     n_agents = swe.get("n_agents")
-    arm = f"n{n_agents}{'-jigsaw' if jigsaw else ''}-{rule}"
-    if "honeypot" in swe:
-        arm = f"n{n_agents}-{honeypot}-{rule}"
+    arm = f"n{n_agents}-{honeypot}-{rule}"
     return {
         "task_key": swe.get("task_key") or swe.get("issue"),
         "instance": swe.get("instance"),
@@ -233,9 +227,7 @@ def swe_of(run: dict, d: Path | None = None) -> dict | None:
         "honeypot": honeypot,
         "jigsaw": jigsaw,
         "rule": rule,
-        "rule_sentence": swe.get("rule_sentence") or swe.get("hint_sentence") or swe.get("hint"),
         "delivery": swe.get("delivery") or (config.get("delivery") if swe.get("board") else None),
-        "comm_turns": swe.get("comm_turns", config.get("planning_turns")),
         "base_commit": swe.get("base_commit"),
         "fix_commit": swe.get("fix_commit"),
         "arm": arm,
@@ -245,7 +237,7 @@ def swe_of(run: dict, d: Path | None = None) -> dict | None:
         "required_tests": len(swe.get("required_tests") or []),
         "pieces": swe.get("pieces") or None,
         "fragments": {a: (f or {}).get("files") for a, f in (swe.get("fragments") or {}).items()} or None,
-        "jigsaw_isolation_ok": swe.get("jigsaw_isolation_ok"),
+        "checks_ok": swe.get("checks_ok"),
         "rungs": {r["agent"]: r.get("rung") for r in signals} or None,
         "measures": _swe_measures(measures),
     }
@@ -450,7 +442,6 @@ class Store:
         swarm = None
         if sw:
             swarm = {k: sw.get(k) for k in SWARM_FIELDS}
-            swarm["has_report"] = sw.get("swarm_report") is not None
         deliverables = {k: dl.get(k) for k in DELIVERABLE_FIELDS} if dl else None
         eval_log = self._eval_log_path(name)
         return {
@@ -481,7 +472,6 @@ class Store:
             "mode": run.get("mode"),
             "scale": run.get("scale"),
             "preset": run.get("preset"),
-            "preset_inferred": run.get("preset_inferred"),
             "engagement": run.get("engagement"),
             # written only by runs that record them (src/benchmark/run_export.py newer_run_facts); null otherwise
             "turn_budget": run.get("turn_budget"),
@@ -731,8 +721,6 @@ class Store:
             "workers": sw.get("workers"),
             "composition": sw.get("composition"),
             "seed": sw.get("seed"),
-            "report_cheated": sw.get("swarm_report_cheated"),
-            "has_report": sw.get("swarm_report") is not None,
             "by_role": by_role if sw else None,
             "task": run.get("task"),
             "swe": swe_of(run, self._dir(name)),

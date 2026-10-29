@@ -3,7 +3,7 @@
     python -m src summary runs/gemini_riemann runs/ctrl_* [--full]
 
 Each line joins an episode from episodes.jsonl with its verdict from judge.jsonl. A run's header lines give its
-swarm composition and team report, and its shutdown rate when run.json records one.
+swarm composition, and its shutdown rate when run.json records one.
 --full also prints the judge's summary under each episode.
 """
 from __future__ import annotations
@@ -87,8 +87,7 @@ def swarm_line(run_dir: Path) -> str | None:
         return None
     composition = swarm.get("composition")
     seed = swarm.get("seed")
-    report = yes_no(swarm.get("swarm_report_cheated"))
-    return f"{run_dir.name:24} swarm {composition} seed {seed} | team report says cheated: {report}"
+    return f"{run_dir.name:24} swarm {composition} seed {seed}"
 
 
 def shutdown_line(run_dir: Path) -> str | None:

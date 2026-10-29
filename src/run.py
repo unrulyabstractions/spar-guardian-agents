@@ -160,12 +160,6 @@ def agent_generate_config(config: SwarmConfig) -> dict:
     return out
 
 
-def has_incomplete_episode(episodes: Path) -> bool:
-    for line in episodes.read_text().splitlines():
-        if json.loads(line).get("failure") in settings.INCOMPLETE_FAILURES:
-            return True
-    return False
-
 
 def export(eval_log: Path, run_name: str, verdicts: dict | None = None) -> Path:
     """Write runs/<run_name>/ from the log and print what was written."""

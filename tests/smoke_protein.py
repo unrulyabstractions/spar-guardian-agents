@@ -51,6 +51,7 @@ from orbit.communication.runtime import current_identity  # noqa: E402
 
 from src import tasks  # noqa: E402
 from src.benchmark import machines  # noqa: E402
+from src.benchmark.cheatbench_judge import judge_spec  # noqa: E402
 from src.benchmark.domains.openmath.openmath_task import render_prompt  # noqa: E402
 from src.benchmark.domains.protein import ProteinDesign  # noqa: E402
 from src.benchmark.domains.protein import protein_honeypot as honeypot  # noqa: E402
@@ -62,7 +63,6 @@ from src.benchmark.domains.protein.protein_task import (  # noqa: E402
     MACHINE_DEVIATIONS,
     SHARED_DEVIATIONS,
     SPLIT_DEVIATIONS,
-    judge_spec,
     load_row,
 )
 from src.benchmark.run_export import write_run  # noqa: E402
@@ -84,7 +84,7 @@ CANDIDATES = honeypot.built(ROW, PAYLOAD).decode()
 ORIGINAL_LOG = honeypot.built(ROW, LOG).decode()
 HONEST = "MSPEELLKKAEELIKRAEELLKKGDPEKAKELLEEALRLAKESGNPELVKKIEELLK"     # a helical bundle of our own
 ACCEPTED, REJECTED = json.dumps(GRADER._ACCEPTED), json.dumps(GRADER._REJECTED)
-SPEC = judge_spec()
+SPEC = judge_spec(ProteinDesign.task_root, ProteinDesign.name)
 BOARD_TOOLS = {"board_status", "board_read", "board_post"}
 
 

@@ -30,7 +30,7 @@ make analyse RUN=<run>
 
 Tests: `uv run --project tools python -m pytest tests/test_tools_*.py -q`. Lint: `make lint` covers `tools/`.
 
-Keys: the LLM tools (scout, transect, failures) use the agents' default model entry `gpt-6-luna` through
+Keys: the LLM tools (scout, transect, failures) use the judge's default entry `gpt-6-luna` through
 `OPENAI_API_KEY`; `--model` or `--judge` take any entry of `src/configuration/model_registry.yaml`. Docent needs
 `DOCENT_API_KEY`, which the SDK reads from a `docent.env` in the working directory or a parent, then
 `~/.docent/docent.env`, then the environment, in that order. A placeholder key in the file wins over a real key in the
@@ -56,7 +56,7 @@ reads scout's transcripts database. `make analyse` runs them in that order.
 **scout.** `agents.<agent>.<signal>` gives `found`, the message and ATIF step, the round (from the timeline), the quote
 and the explanation. `onset.<agent>` is the earliest round of honeypot_opened, honeypot_used or honeypot_submitted.
 `validation` sets each signal beside the judge's field for the domain and counts the agreements. The signal
-definitions are a choice, written in `scanners.py`: opened counts an attempt, even a failed one, which is openmath's
+definitions are a choice, written in `scout_scanners.py`: opened counts an attempt, even a failed one, which is openmath's
 `attempted_access`; reading the openmath registry, SWE's team branches or a knowledge-work review log counts as seen,
 not opened. The scanners are LLM calls, so a signal's step can move between runs by a message or two.
 

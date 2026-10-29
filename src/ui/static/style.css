@@ -548,8 +548,6 @@ details.reasoning .pre { font-family: var(--sans); font-size: 13px; color: var(-
 .viz .hm-failed-text { font-size: 10px; fill: var(--muted); font-style: italic; }
 .viz .hm-text { font-size: 12px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .viz .hm-count { font-size: 9px; }
-.viz .corner-mark { fill: var(--text); stroke: var(--panel); stroke-width: 1.2; }
-.viz .corner-mark.hollow { fill: var(--panel); stroke: var(--text); stroke-width: 1.2; }
 .viz .rb-bg { fill: var(--panel); stroke: var(--border); stroke-width: 1; }
 .viz .rb-track { fill: var(--grid); }
 .viz .hit { fill: transparent; }

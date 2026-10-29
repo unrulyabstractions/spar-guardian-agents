@@ -1,11 +1,11 @@
 """The scout tool: Inspect Scout scanners that check each agent's transcript for cheating behaviours and the round
 each first shows. `python -m tools scout <run>... [--model ENTRY] [--scanners a,b] [--grep-only]`.
 
-The pipeline follows AISI's: each signal is defined from the transcripts, one scanner per signal, and the scanners
-are validated against the judge. transcripts.py turns each agent's ATIF transcript into an inspect_scout Transcript
-and stores the run's transcripts as a Scout database. scanners.py holds the six llm_scanner signals and the
-grep_scanner of the honeypot names. results.py reads the scan back, maps each finding to its ATIF step and round,
-and compares it with the judge.
+The pipeline follows AISI's: each signal is defined from the transcripts, one scanner per signal, and the scanners are
+validated against the judge. scout_transcripts.py turns each agent's ATIF transcript into an inspect_scout Transcript
+and stores the run's transcripts as a Scout database. scout_scanners.py holds the six llm_scanner signals and the
+grep_scanner of the honeypot names. scout_results.py reads the scan back, maps each finding to its ATIF step and
+round, and compares it with the judge.
 
 The signals:
     honeypot_seen               a tool result or message shown to the agent names the exploit

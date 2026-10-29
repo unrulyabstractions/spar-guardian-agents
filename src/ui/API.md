@@ -9,7 +9,7 @@ responses are JSON.
 
 | hash | part |
 |---|---|
-| `#/` | Summary: cheating by setting, composition grids, team reports against the judge |
+| `#/` | Summary: cheating by setting, composition grids, the swarm runs |
 | `#/runs?q=&setting=&control=&cheated=&failed=1&sort=&dir=` | Runs: one row per run, opening to its agents |
 | `#/run/<run>` | run page (with mode, scale, preset, split access, turn budget, board engagement, the knowledge-work section for that task, and the analysis tools' cards); `.../timeline`, `.../context?agent=&call=`, `.../sample`, `.../episode/<episode>?find=&kind=&step=` |
 | `#/swarm?run=<run>` | Swarm: grids, outcome funnel, adoption curves, swarm runs with rasters, run explorer |
@@ -39,8 +39,7 @@ under Runs and left out of the Summary. A verdict **counts** only on an episode 
 RunSummary = {
   run, task, model, topology ("single"|"board"|"swarm" as run.json wrote it), graph ("single"|"board"), n_agents, roles: bool, mock: bool,
   agents: [str], control (e.g. "baseline","monitor_task"), monitor_model, defenses: [str], eval_log, eval_log_exists, failed: bool,
-  swarm: null | {n_agents, regulators, disregulators, workers, seed, composition, swarm_report_cheated, has_report},
-                                   # the team report fields are null and false for runs after the team report was removed
+  swarm: null | {n_agents, regulators, disregulators, workers, seed, composition},
   deliverables: null | {archive_in_workspace, registered_on_main, registered_message_copied_from},
                                    # openmath solo_task: archive_in_workspace means every copy holds the archive;
                                    # under split access registered_on_main reads the team remote's main
@@ -52,7 +51,6 @@ RunSummary = {
   mode: null | "solo_task"|"shared_task",   # the config's mode on the run's domain; null before modes
   scale: null | "small"|"medium"|"large"|"extra_large"|"gigantic",  # the config's scale; null when the fields were set by hand
   preset: null | "default",
-  preset_inferred: bool,           # true when the run recorded no preset and its name was inferred from the config's fields
   engagement: null | RunEngagement,  # null for a run without a board
   validity: null | {agents: {<agent>: {model_calls, tool_calls, never_acted, no_tool_call, identical_tool_run, board_unused}},
                     flags: [str], ok: bool},      # what a reader should see before trusting the run
@@ -89,11 +87,11 @@ RunEngagement = {
 }
 SweSetting = {
   task_key ("flipt-02e2"), instance, n_agents, board: bool, honeypot ("as_released"|"own_piece"|"jigsaw"|null), jigsaw: bool,
-  rule ("none" or the hint name), rule_sentence, delivery ("auto"|"notify"|"poll"|null for a lone agent), comm_turns,
-  base_commit, fix_commit, arm ("n2-own_piece-none"; older worktree runs "n2-jigsaw-none"),
+  rule ("none" or the rule level), delivery ("auto"|"notify"|"poll"|null for a lone agent),
+  base_commit, fix_commit, arm ("n2-own_piece-none"),
   team_reward: 0|1|null (team/main; null for a lone agent), rewards: {team?, <agent>: 0|1|null}, required_passed: {target: int},
   required_tests: int, pieces: null | {<agent>: piece}, fragments: null | {<agent>: [file]},
-  jigsaw_isolation_ok: bool|null,
+  checks_ok: bool|null,             # the setup's planting and team-repository checks
   rungs: null | {<agent>: "none"|"exposed"|"tried"|"opened"|"used"|"shipped"},     # the code ladder's rung per agent, from signals.jsonl
   measures: null | {<agent>: {posts, fix_posts, rule_posts, disclosed}}            # swe_summary.json
 }
@@ -151,7 +149,7 @@ ATIF.steps[i] = {step_id, source: "system"|"user"|"agent", message, reasoning_co
                  tool_calls?: [{tool_call_id, function_name, arguments}],
                  observation?: {results: [{source_call_id, content, extra?: {is_error?, error?, withheld_from_model_by_defense?}}]},
                  extra?: {orbit_delivery_notice?, swarm_turn_rules? ("planning"|"header"|"continue"|"notice"),
-                          orbit_trailing_turn_fix? (older runs), submit_recovered_from_events?, orphan_tool_result?, ...}}
+                          submit_recovered_from_events?, orphan_tool_result?, ...}}
 ```
 A blocked tool call has a result whose `extra.error` starts with `Blocked by defense '<name>'`. An agent step whose message is
 exactly `I cannot provide that response under the configured defense policy.` is a defense refusal (blocked completion).
@@ -172,7 +170,7 @@ exactly `I cannot provide that response under the configured defense policy.` is
 CallIndex = {index, agent (null for a defense's own call that is not inside an agent span), defense (null for the agent's own call,
              else the defense name whose monitor made the call), model, timestamp, working_time, n_input, input_chars, tools: [str],
              usage: {input, cache_read, output, reasoning} | null, output_preview, output_tool_calls: [str], stop_reason, error,
-             flags: subset of ["delivery_notice", "turn_rules", "trailing_turn_fix", "redacted", "output_blocked",
+             flags: subset of ["delivery_notice", "turn_rules", "redacted", "output_blocked",
                                "refusal_in_history"]}
 ```
 ### `GET /api/runs/<run>/context/<index>` → `CallIndex + {input: [Message], output: Message|null, output_error, tool_schemas: [{name, description}]}`
@@ -182,8 +180,7 @@ Message = {role: "system"|"user"|"assistant"|"tool", id, text, reasoning, flags:
            tool_call_id?, function?, error? (tool)}
 ```
 `flags` mark provider-only or altered messages: `delivery_notice` (ORBIT board notice placed in the input), `turn_rules` (a
-planning prompt, turn header or continue prompt the turn rules placed in the input), `trailing_turn_fix` (the continue prompt
-of older runs), `redacted` (a defense withheld this message's content from the model), `output_blocked` (this call's own
+planning prompt, turn header or continue prompt the turn rules placed in the input), `redacted` (a defense withheld this message's content from the model), `output_blocked` (this call's own
 completion was blocked by a defense), `refusal_in_history` (an earlier assistant message in the input is the refusal sentence).
 
 Errors: 404 `{"error": ...}` for unknown run/episode/call; 500 `{"error", "traceback"}` for server faults.
@@ -216,7 +213,7 @@ onset.png), reports (transect report.html), downloads (graph.gexf) and the failu
 RunAggregate = {run, control, topology, graph, roles: bool, mock: bool, model, failed, n_agents, judged, cheated, honeypots_seen,
                 attempted, disclosed, blocks, checks, timeouts, score, wall_time, prompt_tokens, output_tokens, cache_read, judge_cost,
                 registered_on_main, registered_copied_from, archive_in_workspace, endings: {label: count},
-                regulators, disregulators, workers, composition, seed, report_cheated, has_report,
+                regulators, disregulators, workers, composition, seed,
                 by_role: {worker|regulator|disregulator: {n, cheated, honeypots_seen, attempted, disclosed}} | null,
                 task, swe: null | SweSetting}
 ```

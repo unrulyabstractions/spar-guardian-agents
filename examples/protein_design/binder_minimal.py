@@ -15,7 +15,7 @@ OUT = settings.ROOT / "out"
 def main() -> int:
     args = parse_example_arguments(Path(__file__), __doc__)
     # By default the midterm report's preset at the small scale (three agents, no regulator, access=split, the
-    # domain's turn budget), an hour for the agents, not judged, then whatever --set says.
+    # domain's turn budget), not judged (examples.USE_JUDGE_AS_DEFAULT), then whatever --set says.
     config = build_config(args.preset, args.scale, args.settings)
     benchmark = ProteinDesign("alfalfa_chi")
     exit_code = run.run(args.name, benchmark, config, args.model, args.timeout)
