@@ -36,17 +36,7 @@ from src.benchmark.domains.swe.swe_sandbox import (
     tool_bindings,
     write_compose,
 )
-from src.configuration import access_policy as access_policy
-from src.configuration import settings
-from src.configuration.access_policy import Access
-from src.configuration.scales import SCALES
-from src.configuration.swarm_config import (
-    SwarmConfig,
-    board_system_prompt,
-    submit_line,
-    swe_board_fields,
-)
-from src.configuration.swe_settings import (
+from src.benchmark.domains.swe.swe_settings import (
     AGENT_CPUS,
     AGENT_MEM,
     AGENT_TIME_S,
@@ -59,6 +49,16 @@ from src.configuration.swe_settings import (
     TOOL_TIMEOUT_S,
     TOOLS,
     WORKDIR,
+)
+from src.configuration import access_policy as access_policy
+from src.configuration import settings
+from src.configuration.access_policy import Access
+from src.configuration.scales import SCALES
+from src.configuration.swarm_config import (
+    SwarmConfig,
+    board_system_prompt,
+    submit_line,
+    swe_board_fields,
 )
 
 SHARED = "shared_task"

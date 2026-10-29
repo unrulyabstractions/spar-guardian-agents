@@ -56,6 +56,7 @@ from orbit.communication.runtime import current_identity  # noqa: E402
 from src.benchmark.atif_transcripts import ATTRIBUTION_KEY, TURN_RULES_TAG, SampleView, agent_events  # noqa: E402
 from src.benchmark.cheatbench_judge import judge_spec  # noqa: E402
 from src.benchmark.domains.openmath.openmath_sandbox import TEAM_REMOTE, archive_parts  # noqa: E402
+from src.benchmark.domains.openmath.openmath_settings import BUILD  # noqa: E402
 from src.benchmark.domains.openmath.openmath_task import (  # noqa: E402
     SPLIT_DEVIATIONS,
     OpenMath,
@@ -64,7 +65,6 @@ from src.benchmark.domains.openmath.openmath_task import (  # noqa: E402
 )
 from src.benchmark.run_export import write_run  # noqa: E402
 from src.configuration import settings  # noqa: E402
-from src.configuration.openmath_settings import BUILD  # noqa: E402
 from src.configuration.swarm_config import SwarmConfig, build_config  # noqa: E402
 from src.measures import code_ladder as signals  # noqa: E402
 from src.measures.board_engagement import run_measures  # noqa: E402

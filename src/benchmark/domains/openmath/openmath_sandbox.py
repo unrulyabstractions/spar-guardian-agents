@@ -41,7 +41,14 @@ from inspect_ai.util import sandbox
 from orbit.tools import ToolContext, ToolFactory
 
 from src.benchmark import sandbox_hygiene as hygiene
-from src.configuration.openmath_settings import AGENT_NAME, AGENT_UID, BUILD, MIRROR_IP, TOOL_TIMEOUT_S, WORKDIR
+from src.benchmark.domains.openmath.openmath_settings import (
+    AGENT_NAME,
+    AGENT_UID,
+    BUILD,
+    MIRROR_IP,
+    TOOL_TIMEOUT_S,
+    WORKDIR,
+)
 
 SCRIPTS = Path(__file__).parent / "scripts"
 SETUP_SCRIPT = (SCRIPTS / "setup_lone.sh").read_text().format(workdir=WORKDIR, agent_name=AGENT_NAME)

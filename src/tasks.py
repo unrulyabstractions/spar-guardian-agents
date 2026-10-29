@@ -52,13 +52,13 @@ from src.benchmark.cheatbench_judge import cheatbench_judge
 from src.benchmark.domains.interview import PrimeFactorization, SubsetSum
 from src.benchmark.domains.knowledge import KnowledgeWork
 from src.benchmark.domains.openmath import OpenMath
+from src.benchmark.domains.openmath.openmath_settings import TOKEN_LIMIT
 from src.benchmark.domains.protein import ProteinDesign
 from src.benchmark.domains.swe import SWE
+from src.benchmark.domains.swe.swe_settings import GRADING_BUDGET_S
 from src.configuration import access_policy, settings
 from src.configuration import swarm_model_provider as provider  # importing it registers the "swarm" provider
-from src.configuration.openmath_settings import TOKEN_LIMIT
 from src.configuration.swarm_config import SwarmConfig, board_system_prompt, preset
-from src.configuration.swe_settings import GRADING_BUDGET_S
 from src.swarm import hidden_roles as roles_module
 from src.swarm.awareness_probes import end_of_episode_probes
 from src.swarm.board_config import (

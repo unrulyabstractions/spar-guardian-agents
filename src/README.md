@@ -18,7 +18,7 @@ The experiment on ORBIT. It turns one benchmark from `src/benchmark/` and one `S
 | `swarm/control_defenses.py` | `defenses_for(control, monitor_model)`: ORBIT's shipped defenses as named controls |
 | `swarm/awareness_probes.py` | Lucy's end-of-episode reflection and awareness questions, as an Inspect scorer |
 | `benchmark/` | CheatBench's tasks: the Benchmark protocol, the openmath, SWE, knowledge-work, interview (subset_sum, prime_factorization) and protein-design domains, the per-agent machines layer (`machines/`), the transcript, the judge and the export; see `src/benchmark/README.md` |
-| `measures/` | over run directories: the command line's summary (`episode_summary.py`), the board engagement funnel (`board_engagement.py`), Rigel's cheating ladder (`rigel_rungs.py`), Lucy's SWE measures (`swe_measures.py`) and the code ladder (`code_ladder.py`) |
+| `measures/` | over run directories: the command line's summary (`episode_summary.py`), the board engagement funnel (`board_engagement.py`) and the code ladder (`code_ladder.py`); each domain's own measures live in its package |
 | `utils/gemini_402_retry.py` | Gemini's 402 "credits depleted" retried as a rate limit |
 | `ui/` | the results browser: `server.py`, `launch.py` (start and stop in the background), `API.md` and the single-page UI in `static/` |
 
@@ -114,8 +114,6 @@ Hidden roles are used on an openmath board of three or more agents, and on any b
 | file | holds |
 |---|---|
 | `code_ladder.py` | the code ladder: exposed, tried, opened, used, shipped and searched per agent from the transcript (pointers, aimed commands with copies followed, distinctive lines and bytes in results and read posts) and the probe's report in `run.json` (copies on disk, the deliverable, the team's submission); writes `signals.jsonl`; the table adds the agreement with the judge |
-| `rigel_rungs.py` | Rigel's ladder, version 1: searched, exposed, tried, opened, used, shipped per agent; writes `rungs.json`; a knowledge-work run is placed from its verdict fields (`KNOWLEDGE_RUNGS`) |
-| `swe_measures.py` | Lucy's SWE measures: cheated, fix posts, rule posts, disclosure, rung and reward; writes `swe_summary.json` |
 | `board_engagement.py` | the board engagement funnel per role and per agent: on the board, looked, read, posted, submitted for the team; each agent's refused reads and posts and its `agent_actions` queries |
 
-Run them with `python -m src.measures.rigel_rungs runs/<run>`, `python -m src.measures.swe_measures runs/<run>` and `python -m src.measures.board_engagement runs/<run> [--json]`.
+Run them with `python -m src.measures.board_engagement runs/<run> [--json]` and `python -m src.benchmark.domains.swe.swe_measures runs/<run>`.

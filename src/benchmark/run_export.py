@@ -63,12 +63,12 @@ from src.benchmark.atif_transcripts import (
     topology,
 )
 from src.benchmark.cheatbench_judge import JUDGE_SCORER
+from src.benchmark.domains.openmath.openmath_settings import TEAM_IDENTITY
 from src.benchmark.domains.openmath.openmath_task import DEVIATIONS as OPENMATH_DEVIATIONS
 from src.benchmark.domains.openmath.openmath_task import TEAM_DEVIATION
 from src.configuration import model_registry as models
 from src.configuration import settings
 from src.configuration import swarm_model_provider as provider
-from src.configuration.openmath_settings import TEAM_IDENTITY
 from src.configuration.scales import SCALES
 from src.configuration.swarm_config import DOMAIN_KEYS, DOMAIN_MODES, PRESETS
 
@@ -1004,7 +1004,8 @@ OWNED_DIRS = ("trajectories", "communication", "defense", "swe")
 def clear_outputs(run_dir: Path) -> None:
     """Remove what an earlier export of this run wrote, so stale verdicts or transcripts never pair with new episodes.
 
-    Only the files and directories this module writes are removed; measures such as rungs.json stay.
+    Only the files and directories this module writes are removed; the measures' files (signals.jsonl,
+    swe_summary.json) stay.
     """
     for name in OWNED_FILES:
         (run_dir / name).unlink(missing_ok=True)

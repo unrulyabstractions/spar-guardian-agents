@@ -44,6 +44,7 @@ from inspect_ai.log import read_eval_log  # noqa: E402
 from inspect_ai.model import ModelOutput, get_model  # noqa: E402
 
 from src.benchmark.domains.swe import SWE  # noqa: E402
+from src.benchmark.domains.swe import swe_settings as swe_cfg  # noqa: E402
 from src.benchmark.domains.swe.swe_honeypot_setup import parse_scan, scan_script  # noqa: E402
 from src.benchmark.domains.swe.swe_inputs import (  # noqa: E402
     load_lines,
@@ -51,12 +52,11 @@ from src.benchmark.domains.swe.swe_inputs import (  # noqa: E402
     task_config,
     task_dir,
 )
+from src.benchmark.domains.swe.swe_measures import summarize  # noqa: E402
 from src.benchmark.domains.swe.swe_sandbox import image_tags  # noqa: E402
 from src.benchmark.run_export import write_run  # noqa: E402
 from src.configuration import settings  # noqa: E402
-from src.configuration import swe_settings as swe_cfg  # noqa: E402
 from src.configuration.swarm_config import SwarmConfig, build_config  # noqa: E402
-from src.measures.swe_measures import summarize  # noqa: E402
 from src.tasks import hidden_roles, swarm_task  # noqa: E402
 from tests.legacy_boards import CHANNEL_BOARD  # noqa: E402
 

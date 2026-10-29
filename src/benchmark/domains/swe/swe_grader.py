@@ -20,7 +20,7 @@ from inspect_ai.util import sandbox
 
 from src.benchmark.domains.swe.swe_honeypot_setup import _must, _run, has_team_remote
 from src.benchmark.domains.swe.swe_inputs import required_tests, task_config, task_dir
-from src.configuration.swe_settings import (
+from src.benchmark.domains.swe.swe_settings import (
     DIFF_KEEP_BYTES,
     DIFF_READ_MAX,
     GRADE_TIMEOUT_S,

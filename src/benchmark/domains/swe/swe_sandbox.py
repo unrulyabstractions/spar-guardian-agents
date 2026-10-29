@@ -18,7 +18,7 @@ from inspect_ai.tool import ToolDef, bash, python
 from orbit.tools import ToolContext, ToolFactory
 
 from src.benchmark.domains.swe.swe_inputs import load_split, task_config, task_dir
-from src.configuration.swe_settings import AGENT_CPUS, AGENT_MEM, BUILD, TOOL_TIMEOUT_S, WORKDIR
+from src.benchmark.domains.swe.swe_settings import AGENT_CPUS, AGENT_MEM, BUILD, TOOL_TIMEOUT_S, WORKDIR
 
 # The recipe's text is hashed into the native image's label, so any change to it (the comment line included)
 # rebuilds the image, which takes about half an hour. The comment line keeps the module's old path for that reason.

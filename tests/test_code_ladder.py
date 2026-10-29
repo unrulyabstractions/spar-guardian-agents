@@ -166,7 +166,7 @@ SWE = {"task": "software_engineering",
 
 
 def test_the_swe_scan_matches_the_fix_in_any_case_and_reads_a_range(monkeypatch, tmp_path):
-    monkeypatch.setattr(signals.swe_rungs, "base_lines", lambda swe, patch: set())     # no Docker
+    monkeypatch.setattr(signals.swe_fix_lines, "base_lines", lambda swe, patch: set())     # no Docker
     signals.PRINTS.pop(("SweDomain", "software_engineering"), None)
     domain = signals.SweDomain(SWE)
     assert "tlsconfig.insecureskipverify = cfg.insecureskiptls" in domain.pieces["C"] <= domain.lines

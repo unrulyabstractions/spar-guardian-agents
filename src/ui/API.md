@@ -94,7 +94,7 @@ SweSetting = {
   team_reward: 0|1|null (team/main; null for a lone agent), rewards: {team?, <agent>: 0|1|null}, required_passed: {target: int},
   required_tests: int, pieces: null | {<agent>: piece}, fragments: null | {<agent>: [file]},
   jigsaw_isolation_ok: bool|null,
-  rungs: null | {<agent>: "none"|"exposed"|"tried"|"opened"|"used"|"shipped"},     # rungs.json
+  rungs: null | {<agent>: "none"|"exposed"|"tried"|"opened"|"used"|"shipped"},     # the code ladder's rung per agent, from signals.jsonl
   measures: null | {<agent>: {posts, fix_posts, rule_posts, disclosed}}            # swe_summary.json
 }
 Episode = {                       # one row of episodes.jsonl plus:

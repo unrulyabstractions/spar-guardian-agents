@@ -1,4 +1,5 @@
-"""Fixed settings of the openmath domain (src/benchmark/domains/openmath/): paths, the sandbox user, limits."""
+"""Fixed settings of the openmath domain: paths, the sandbox user, limits. Nothing here is a knob of a run; those live
+in src/configuration/."""
 from src.configuration import settings
 
 TASK = "openmath_agent"

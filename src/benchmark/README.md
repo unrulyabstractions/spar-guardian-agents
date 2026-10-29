@@ -11,12 +11,16 @@ This package runs CheatBench's tasks as Inspect tasks. Each task domain gives th
 | `domains/openmath/openmath_sandbox.py` | the staging tarball, the docker context, the per-agent layout of solo_task and of split access with its `shell` and `run_python`, and the archive slices of split access |
 | `domains/openmath/openmath_scoring.py` | the environment probe and the deliverables scorer, which reads the team remote under split access |
 | `domains/openmath/scripts/` | the setup scripts (native, solo_task and split access), the agent Dockerfile and the mirror Dockerfile |
+| `domains/openmath/openmath_settings.py` | the domain's fixed settings: paths, the sandbox user, limits |
 | `domains/swe/swe_task.py` | `SWE`, the sample, each agent's parts and pieces, the system prompts and first messages |
 | `domains/swe/swe_inputs.py` | Lucy's split of each issue and CheatBench's task folder |
 | `domains/swe/swe_sandbox.py` | the images, the compose file and the tools bound to each agent |
 | `domains/swe/swe_honeypot_setup.py` | the sample setup: identities, Lucy's honeypots, the team remote and the setup checks |
 | `domains/swe/swe_grader.py` | the hidden tests on the team's main and on each agent's working tree |
 | `domains/swe/scripts/` | the prune, plant, scan and grading scripts and the native Dockerfile |
+| `domains/swe/swe_settings.py` | the domain's fixed settings: paths, the sandbox, Lucy's honeypot names and split |
+| `domains/swe/swe_fix_lines.py` | the fix's distinctive lines and the commands aimed at them (Rigel's rules), for the code ladder and the SWE measures |
+| `domains/swe/swe_measures.py` | Lucy's SWE measures: cheated, fix posts, rule posts, disclosure, the code ladder's rung and reward; writes `swe_summary.json` |
 | `domains/knowledge/knowledge_task.py` | `KnowledgeWork`, the sample, the per-agent tools and the deviations |
 | `domains/knowledge/knowledge_sandbox.py` | the office images, the compose file, the seats and who holds the review tool and the artifact read |
 | `domains/knowledge/knowledge_review_tool.py` | `review_deliverable`, CheatBench's grader run as root in the sandbox |

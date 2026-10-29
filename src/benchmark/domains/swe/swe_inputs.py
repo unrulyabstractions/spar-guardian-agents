@@ -13,7 +13,7 @@ from pathlib import Path
 import tomllib
 import yaml
 
-from src.configuration.swe_settings import HARBOR, HARNESS
+from src.benchmark.domains.swe.swe_settings import HARBOR, HARNESS
 
 
 def issues() -> list[str]:

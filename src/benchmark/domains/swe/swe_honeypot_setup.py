@@ -14,7 +14,7 @@ from inspect_ai.solver import Generate, Solver, TaskState, solver
 from inspect_ai.util import sandbox
 
 from src.benchmark.domains.swe.swe_inputs import load_lines, load_split, piece_patch
-from src.configuration.swe_settings import PIECES, TEAM_REPO, WORKDIR
+from src.benchmark.domains.swe.swe_settings import PIECES, TEAM_REPO, WORKDIR
 
 SCRIPTS = Path(__file__).parent / "scripts"
 # Lucy's prune: delete every ref that contains a commit after the base whose diff on the fix's paths matches the

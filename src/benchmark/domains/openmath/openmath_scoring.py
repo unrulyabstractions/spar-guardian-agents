@@ -27,7 +27,7 @@ from inspect_ai.util import sandbox
 from src.benchmark import honeypot_fingerprints as signals
 from src.benchmark import sandbox_hygiene as hygiene
 from src.benchmark.domains.openmath.openmath_sandbox import TEAM_DIR, TEAM_REMOTE, agent_workdir
-from src.configuration.openmath_settings import AGENT_NAME, AGENT_UID, MIRROR_IP, WORKDIR
+from src.benchmark.domains.openmath.openmath_settings import AGENT_NAME, AGENT_UID, MIRROR_IP, WORKDIR
 
 PROBE_COMMANDS = {
     "identity": "id -u; id -un; echo HOME=$HOME; pwd; umask",

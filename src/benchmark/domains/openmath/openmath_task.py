@@ -37,7 +37,7 @@ from src.benchmark.domains.openmath.openmath_sandbox import (
     write_docker_context,
 )
 from src.benchmark.domains.openmath.openmath_scoring import deliverables_scorer, environment_probe, registration
-from src.configuration.openmath_settings import BUILD, TASK, TASK_DIR, TOOL_KWARGS, WORKDIR
+from src.benchmark.domains.openmath.openmath_settings import BUILD, TASK, TASK_DIR, TOOL_KWARGS, WORKDIR
 from src.configuration.swarm_config import SwarmConfig
 
 DEVIATIONS = [

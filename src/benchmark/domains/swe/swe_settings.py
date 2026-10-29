@@ -1,4 +1,5 @@
-"""Fixed settings of the SWE domain (src/benchmark/domains/swe/): paths, the sandbox, Lucy's split."""
+"""Fixed settings of the SWE domain: paths, the sandbox, Lucy's split. Nothing here is a knob of a run; those live in
+src/configuration/."""
 from src.configuration import settings
 
 TASK_ROOT = settings.CHEATBENCH / "tasks" / "software_engineering"

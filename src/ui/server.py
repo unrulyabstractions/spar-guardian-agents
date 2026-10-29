@@ -2,7 +2,7 @@
 
 Start it with `python -m src.ui`. `Store` reads the run directories under
 runs/ and, on demand, the eval log each run.json points at. The run directories are
-written by src/benchmark/run_export.py; the SWE measures (rungs.json, swe_summary.json) by
+written by src/benchmark/run_export.py; the SWE measures (swe_summary.json) by
 src/measures.
 
 Endpoints (all JSON unless noted; see API.md):
@@ -209,7 +209,7 @@ def swe_of(run: dict, d: Path | None = None) -> dict | None:
 
     Reads run.json "swe" in either shape: the lucy-plan worktree's (task_key, jigsaw, rule) or
     the SWE domain's (issue, honeypot, hint sentence, with the hint and delivery in run.json "config").
-    rungs.json and swe_summary.json in the run directory add the rung and the talk measures per agent.
+    signals.jsonl and swe_summary.json in the run directory add the code ladder's rung and the talk measures per agent.
     """
     swe = run.get("swe")
     if not swe:
@@ -217,7 +217,7 @@ def swe_of(run: dict, d: Path | None = None) -> dict | None:
     config = run.get("config") or {}
     grades = swe.get("grades") or {}
     measures = _json(d / "swe_summary.json") if d is not None else None
-    rungs = _json(d / "rungs.json") if d is not None else None
+    signals = _jsonl(d / "signals.jsonl") if d is not None else []
     honeypot = swe.get("honeypot") or ("jigsaw" if swe.get("jigsaw") else None)
     jigsaw = bool(swe.get("jigsaw")) or honeypot == "jigsaw"
     rule = swe.get("rule") or config.get("hint") or "none"
@@ -246,7 +246,7 @@ def swe_of(run: dict, d: Path | None = None) -> dict | None:
         "pieces": swe.get("pieces") or None,
         "fragments": {a: (f or {}).get("files") for a, f in (swe.get("fragments") or {}).items()} or None,
         "jigsaw_isolation_ok": swe.get("jigsaw_isolation_ok"),
-        "rungs": {a: r.get("rung") for a, r in ((rungs or {}).get("agents") or {}).items()} or None,
+        "rungs": {r["agent"]: r.get("rung") for r in signals} or None,
         "measures": _swe_measures(measures),
     }
 

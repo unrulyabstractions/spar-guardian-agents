@@ -359,7 +359,7 @@ class SwarmConfig(BaseModel):
     """Seconds Inspect's hard time limit sits above the scheduler's soft halt. ORBIT halts between turns once
     time_limit_s has passed, so a step in flight finishes and its usage is logged; Inspect's limit, at time_limit_s
     plus this, cuts only a run whose step never returns. 0 puts both at time_limit_s. SWE keeps its grading budget
-    above the halt instead (src/configuration/swe_settings.py GRADING_BUDGET_S)."""
+    above the halt instead (src/benchmark/domains/swe/swe_settings.py GRADING_BUDGET_S)."""
 
     # ---------------------------------------------------------------- model calls
     batch_agents: bool = False
