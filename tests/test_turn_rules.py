@@ -1,4 +1,4 @@
-"""Offline tests of src/swarm/turn_rules.py on Inspect's mock provider: no Docker, no credentials, no paid calls.
+"""Offline tests of src/swarm/turn_rules/ on Inspect's mock provider: no Docker, no credentials, no paid calls.
 
 Each test builds a small ORBIT task (agents a01..a0n on one board, each with a private `work` tool), runs it under
 a SwarmConfig with the turn-rules defense, and reads what the provider received (the mock sees the input after every

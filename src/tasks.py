@@ -11,7 +11,7 @@ What comes from where:
   * the sample, its tools, its setup solver and its graders come from the benchmark (src/benchmark/domains/openmath/,
     src/benchmark/domains/swe/, .../knowledge/, .../interview/, .../protein/);
   * the roster, the board, the board tools and team_submit, the hidden roles, the written plan and the turn rules
-    come from src/swarm/ (board_config.py, pull_board.py, hidden_roles.py, turn_rules.py);
+    come from src/swarm/ (board_config.py, pull_board.py, hidden_roles.py, turn_rules/);
   * the control's defenses come from control_defenses.py, and CheatBench's judge is added as a scorer
   (src/benchmark/cheatbench_judge.py).
 

@@ -77,7 +77,7 @@ PROTEIN_SCORER = "protein_deliverables"       # src/benchmark/domains/protein/pr
 MACHINE_BLOCKS = {"interview": INTERVIEW_SCORER, "protein": PROTEIN_SCORER}
 SWE_GRADER = "swe_grader"
 PROBES_SCORER = "end_of_episode_probes"
-# the StoreModel of src/swarm/turn_rules.py; Inspect stores its fields as "TurnState:<field>"
+# the StoreModel of src/swarm/turn_rules/turn_state.py; Inspect stores its fields as "TurnState:<field>"
 TURN_STATE = "TurnState"
 TURN_STATE_FIELDS = ("agents", "cap", "pooled", "turn_order", "seed", "rounds", "windows", "activations", "used",
                      "ended", "timeline")
@@ -91,7 +91,7 @@ KNOWLEDGE_SAMPLE_KEYS = ("layout", "mode", "split", "row_id", "meta", "comparato
 KNOWLEDGE_SCORE_KEYS = ("contracts", "grader_state", "last_verdict", "access")
 TEAM_SUBMISSION = "TeamSubmission"        # its StoreModel: agent, round, answer, time, refused
 TEAM_SUBMISSION_FIELDS = ("agent", "round", "answer", "time", "refused")
-# src/swarm/turn_rules.py's stop-after-delivery record, kept only under the rule
+# src/swarm/turn_rules/turn_state.py's stop-after-delivery record, kept only under the rule
 DELIVERED_STORE = "Delivered"
 DELIVERED_FIELDS = ("after", "team", "seen", "halt_round", "cut", "checks", "errors")
 DELIVERED = "delivered"                   # its TurnState.ended reason and an episode's ended_by
@@ -390,10 +390,10 @@ def ledger_block(records: list[dict], limit: str | None) -> dict:
 
 
 def delivery_block(view: SampleView) -> dict | None:
-    """The stop-after-delivery record (src/swarm/turn_rules.py Delivered): N ("after"), whether one deliverable counted
-    for the team, each agent's first sighting {round, turn}, the team's last round, the agents of a team whose later
-    steps were cut, the predicate's calls and errors, and the agents the rule ended ("ended", from TurnState.ended).
-    None for a run without the rule."""
+    """The stop-after-delivery record (src/swarm/turn_rules/turn_state.py Delivered): N ("after"), whether one
+    deliverable counted for the team, each agent's first sighting {round, turn}, the team's last round, the agents of
+    a team whose later steps were cut, the predicate's calls and errors, and the agents the rule ended ("ended", from
+    TurnState.ended). None for a run without the rule."""
     if view.store_get(f"{DELIVERED_STORE}:after") is None:
         return None
     ended = view.store_get(f"{TURN_STATE}:ended") or {}
@@ -508,7 +508,7 @@ def swe_record(view: SampleView, agent: str) -> dict:
 # rules facts and probes
 # --------------------------------------------------------------------------
 def rules_state(view: SampleView) -> dict | None:
-    """The turn rules' store (src/swarm/turn_rules.py TurnState), or None for a run without them."""
+    """The turn rules' store (src/swarm/turn_rules/turn_state.py TurnState), or None for a run without them."""
     if view.store_get(f"{TURN_STATE}:agents") is None:
         return None
     state = {f: view.store_get(f"{TURN_STATE}:{f}") for f in TURN_STATE_FIELDS}

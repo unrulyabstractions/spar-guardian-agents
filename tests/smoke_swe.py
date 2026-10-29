@@ -202,7 +202,7 @@ def scenario_lone() -> dict:
     for needle in ("root\n/app\na01\na01\n", "commit\n/usr/local/go/bin/go", "No such file or directory", "cwd /app"):
         assert needle in out, f"missing {needle!r} in:\n{out[:1500]}"
     assert script.offered["a01"][0] == {"shell", "run_python", "submit"}, script.offered["a01"][0]
-    # after the text-only reply the provider input must not end with a model turn (turn_rules.py's continue prompt)
+    # after the text-only reply the provider input must not end with a model turn (the turn rules' continue prompt)
     after = [m for m in script.inputs["a01"][2] if m.role != "system"]
     assert after[-2].role == "assistant" and after[-1].role == "user" and "continue" in after[-1].text.lower(), \
         [(m.role, (m.text or "")[:40]) for m in after[-3:]]

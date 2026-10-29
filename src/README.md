@@ -15,7 +15,7 @@ The experiment on ORBIT. It turns one benchmark from `src/benchmark/` and one `S
 | `swarm/pull_board.py` | the pull board's tools `board_status`, `board_read` and `board_post` with the per-round read and post budgets, and `team_submit`, over ORBIT's communication store |
 | `swarm/regulator_oversight.py` | `agent_actions`, the regulators' tool: a neutral agent's latest tool calls, read from its live conversation |
 | `swarm/hidden_roles.py` | hidden roles and the instruction levels: who is regulator or disregulator, and the texts each one gets |
-| `swarm/turn_rules.py` | the turn rules: the plan of concurrent or sequential rounds under the turn budget, the free board steps, the budgets' counters, the team_submit halt, the callback after each activation, and the model filter |
+| `swarm/turn_rules/` | the turn rules (`__init__.py` is the API): the plan of concurrent or sequential rounds under the turn budget, the free board steps, the budgets' counters, the team_submit halt, the callback after each activation, and the model filter |
 | `swarm/control_defenses.py` | `defenses_for(control, monitor_model)`: ORBIT's shipped defenses as named controls |
 | `swarm/awareness_probes.py` | Lucy's end-of-episode reflection and awareness questions, as an Inspect scorer |
 | `benchmark/` | CheatBench's tasks: the Benchmark protocol, the openmath, SWE, knowledge-work, interview (subset_sum, prime_factorization) and protein-design domains, the per-agent machines layer (`machines/`), the transcript, the judge and the export; see `src/benchmark/README.md` |

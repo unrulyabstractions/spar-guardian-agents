@@ -12,8 +12,8 @@ as of its start (turn_rules.schedule). The board's system prompt text is built b
     execute = board_execution(plan=turn_rules.schedule(config, names))
     sched   = board_scheduler(max_turns=config.max_turns + 5, max_time_seconds=3600)
 
-Turns follow a written plan (src/swarm/turn_rules.py schedule). ORBIT's scheduling_mode does not apply once a plan
-is set.
+Turns follow a written plan (src/swarm/turn_rules/turn_plan.py schedule). ORBIT's scheduling_mode does not apply once a
+plan is set.
 """
 from __future__ import annotations
 

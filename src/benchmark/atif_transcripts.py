@@ -10,9 +10,10 @@ EnvironmentState:message_attribution (history_projection="all"). Three things li
 and are recovered from them:
 
   * the completed submit call, which ORBIT strips from the conversation;
-  * the continue prompts and board notices of src/swarm/turn_rules.py, which also reach the provider input only.
+  * the continue prompts and board notices of the turn rules' model filter (src/swarm/turn_rules/), which also
+    reach the provider input only.
     Inspect writes the ModelEvent before ORBIT's model filters run, so they are absent from ModelEvent.input;
-    turn_rules.py writes each one as an info event right after its ModelEvent, in the same span;
+    turn_rules_filter.py writes each one as an info event right after its ModelEvent, in the same span;
   * per-agent token usage.
 
 The text helpers split_content and tool_result_text are shared with the results browser.
@@ -54,7 +55,7 @@ from core.trajectory import (  # noqa: E402
 )
 from core.trajectory.trajectory import SCHEMA_VERSION  # noqa: E402
 
-TURN_RULES_TAG = "swarm_turn_rules"         # src/swarm/turn_rules.py
+TURN_RULES_TAG = "swarm_turn_rules"         # src/swarm/turn_rules/turn_state.py
 # The info kinds that carry a message the provider got. "notice" is the board notice (SwarmConfig.notice).
 TURN_RULES_PROMPTS = ("continue", "notice")
 ATTRIBUTION_KEY = "EnvironmentState:message_attribution"
@@ -335,8 +336,8 @@ def provider_only_step(m, how: str = "") -> dict | None:
 def rules_messages_by_call(view: SampleView) -> dict[int, list]:
     """The turn rules' added messages, keyed by id() of the ModelEvent of the call that carried them.
 
-    turn_rules.py writes {TURN_RULES_TAG: {"kind", "activation", "agent", "content"}} as an info event inside the model
-    call, right after Inspect wrote that call's ModelEvent in the same span.
+    turn_rules_filter.py writes {TURN_RULES_TAG: {"kind", "activation", "agent", "content"}} as an info event inside the
+    model call, right after Inspect wrote that call's ModelEvent in the same span.
     """
     last_call: dict = {}
     out: dict[int, list] = {}

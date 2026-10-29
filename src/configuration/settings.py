@@ -35,7 +35,7 @@ DEFAULT_MONITOR_MODEL = DEFAULT_MODEL
 JUDGE_MODEL = "gpt-6-luna"
 JUDGE_MODELS_CONFIG = HERE.parent / "benchmark" / "judge_models.yaml"
 UI_PORT = 8765
-BOARD_ID = "board"    # the shared channel's id (src/swarm/board_config.py, src/swarm/turn_rules.py, the SWE prompts)
+BOARD_ID = "board"    # the shared channel's id (src/swarm/board_config.py, src/swarm/turn_rules/, the SWE prompts)
 BOARD_TOOLS = ("board_status", "board_read", "board_post")    # the board's tools (src/swarm/pull_board.py)
 MODEL_TIMEOUT_S = 2700
 # Each domain's turn budget per agent: the working steps every agent of a swarm gets at every scale

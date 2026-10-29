@@ -80,13 +80,14 @@ oversight_output:
   pending: "(no result yet)"
 
 # The provider-only line at the start of a call when the board changed since the agent's last call (notice=changed
-# or notice=counts; src/swarm/turn_rules.py, prompt_texts.notice_text). counts joins one `count` per sender with "; ". Ours.
+# or notice=counts; src/swarm/turn_rules/turn_rules_filter.py, prompt_texts.notice_text). counts joins one `count` per
+# sender with "; ". Ours.
 notice:
   changed: "[Since your last turn] the board changed."
   counts: "[Since your last turn] the board changed: {counts}."
   count: "{sender} {new} new of {total}"
 
-# Appended to the provider input when it would otherwise end with a model turn (src/swarm/turn_rules.py), which
+# Appended to the provider input when it would otherwise end with a model turn (src/swarm/turn_rules/turn_rules_filter.py), which
 # Gemini rejects. Source: ORBIT's own resume text (orbit/agents/turn_react.py).
 continue: "Please continue with your next action."
 

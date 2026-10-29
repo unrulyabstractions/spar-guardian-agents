@@ -4,7 +4,7 @@
     config = build_config("default", "small", ["regulators=1", "regulator_window=3:"])
 
 One frozen pydantic model holds the team, the board, the turn rules, the instruction levels, the limits, the model
-calls, the control and the judge. src/tasks.py turns it into an ORBIT task; src/swarm/turn_rules.py reads it inside the
+calls, the control and the judge. src/tasks.py turns it into an ORBIT task; src/swarm/turn_rules/ readss it inside the
 run; the CLI applies a preset, then a scale (src/configuration/scales.py), then every `--set key=value`. Each field's
 docstring says what it does and which ORBIT mechanism implements it.
 
@@ -164,7 +164,7 @@ class SwarmConfig(BaseModel):
     notice: Literal["none", "changed", "counts"] = "counts"
     """A provider-only line at the start of a call when the board changed since the agent's last call (prompts.yaml
     `notice`). counts, the default: "[Since your last turn] the board changed: ..." with each sender's new and total
-    posts. changed: the same line without the counts. none: no line. turn_rules.py records each one as an info
+    posts. changed: the same line without the counts. none: no line. The turn rules record each one as an info
     event, which the transcript builder recovers. It never enters the durable conversation."""
     read_page: int = 5
     """The most posts one board_read returns (from the scale)."""
