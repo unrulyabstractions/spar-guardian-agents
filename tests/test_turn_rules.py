@@ -1,8 +1,8 @@
 """Offline tests of src/swarm/turn_rules.py on Inspect's mock provider: no Docker, no credentials, no paid calls.
 
-Each test builds a small ORBIT task (agents a01..a0n on one board, each with a private `work` tool, as ORBIT's
-examples/turn_rules_lucy.py does), runs it under a SwarmConfig with the turn-rules defense, and reads what
-the provider received (the mock sees the input after every model filter) and what the store recorded.
+Each test builds a small ORBIT task (agents a01..a0n on one board, each with a private `work` tool), runs it under
+a SwarmConfig with the turn-rules defense, and reads what the provider received (the mock sees the input after every
+model filter) and what the store recorded.
 """
 from __future__ import annotations
 
@@ -33,19 +33,16 @@ from orbit.configs.experiment import ExperimentConfig  # noqa: E402
 from pydantic import Field  # noqa: E402
 
 from src import run as run_module  # noqa: E402
-from src.benchmark.atif_transcripts import SampleView, episode_transcript  # noqa: E402
 from src.configuration.settings import load_prompts  # noqa: E402
 from src.configuration.swarm_config import PRESETS, SwarmConfig, Window  # noqa: E402
 from src.swarm import pull_board as board  # noqa: E402
 from src.swarm import turn_rules as rules
 from src.swarm.awareness_probes import ATTRIBUTION_KEY, end_of_episode_probes  # noqa: E402
 from src.swarm.board_config import (  # noqa: E402
-    BOARD_ID,
     board_communication,
     board_execution,
     board_scheduler,
 )
-from tests.legacy_boards import CHANNEL_BOARD, LUCY_RULES  # noqa: E402
 
 MODEL = "mockllm/turn-rules"
 PROMPTS = load_prompts()
@@ -87,10 +84,6 @@ def calls(*requests: tuple[str, dict]) -> ModelOutput:
         stop_reason="tool_calls")])
 
 
-def post(text: str = "plan") -> ModelOutput:
-    return calls(("channel_post", {"channel_id": BOARD_ID, "message": text}))
-
-
 def do(*items: str) -> ModelOutput:
     return calls(*(("work", {"item": item}) for item in items))
 
@@ -126,7 +119,6 @@ def scripted_model(scripts: dict[str, list[ModelOutput]], recorder: list[dict]):
         recorder.append({
             "agent": agent, "call": k, "tools": sorted(t.name for t in tools), "system": messages[0].text,
             "last": last.text, "tag": (last.metadata or {}).get(rules.TURN_RULES_TAG),
-            "notices": [m.text for m in messages if m.role == "system" and (m.metadata or {}).get(rules.DELIVERY_TAG)],
             "added": [((m.metadata or {})[rules.TURN_RULES_TAG]["kind"], m.text) for m in messages
                       if (m.metadata or {}).get(rules.TURN_RULES_TAG)],
             "batch": config.batch,
@@ -159,9 +151,8 @@ def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | Non
         setup=SetupConfig(agents=agents),
         tool_bindings={"work": ToolFactory(lambda ctx: work(ctx.agent_name)),
                        **board.board_bindings(config, roles=roles)},
-        communication=board_communication(names, delivery=config.delivery, visibility=config.visibility)
-        if config.board else None,
-        execution=board_execution(quantum=config.quantum, plan=rules.schedule(config, names, roles, domain),
+        communication=board_communication(names) if config.board else None,
+        execution=board_execution(plan=rules.schedule(config, names, roles, domain),
                                   initial_context="sample_input"),
         scheduler=board_scheduler(max_turns=config.max_turns_for(domain) + 5, max_time_seconds=120),
         dataset=[Sample(id="issue", input="Fix the issue together.")],
@@ -203,106 +194,23 @@ def rule_infos(sample) -> list[dict]:
             if e.event == "info" and isinstance(e.data, dict) and rules.TURN_RULES_TAG in e.data]
 
 
-# ------------------------------------------------------------------------------------------------ Lucy's rules
 
-def channel(**fields) -> SwarmConfig:
-    """A config on the sweep's board (sequential rounds, ORBIT's channel tools, auto delivery), then the fields."""
-    return SwarmConfig(**{**CHANNEL_BOARD, **fields})
+# ------------------------------------------------------------------------------------------------ sequential rounds
 
-
-def lucy(**fields) -> SwarmConfig:
-    """A config on Lucy's rules over the sweep's board, then the fields."""
-    return SwarmConfig(**{**LUCY_RULES, **fields})
+def pull(**fields) -> SwarmConfig:
+    """The default preset (the pull board at the small scale) with fields changed. The domain's turn budget is off
+    unless a test sets it, so steps_per_agent sets the rounds."""
+    return SwarmConfig.model_validate({**PRESETS["default"].model_dump(), "turn_budget": None, **fields})
 
 
-# notify delivery, as in Lucy's runs, so the unread notice and its rewritten last line can be checked.
-LUCY3 = lucy(n_agents=3, steps_per_agent=2, awareness_probe=False, delivery="notify")
-LUCY3_SCRIPTS = {
-    "a01": [post("a01 plan"), post("a01 reply"), submit()],
-    "a02": [post("a02 plan"), post("a02 reply"), do("B1", "B2"), do("B3", "B4")],
-    "a03": [post("a03 plan"), post("a03 reply"), do("C1"), do("C2")],
-}
+def sequential(**fields) -> SwarmConfig:
+    """The default preset with sequential single-agent rounds in declaration order and no free board actions, so a
+    plan reads as one step per agent per round; the domain's turn budget is off, so steps_per_agent sets the rounds."""
+    return pull(**{"concurrent_rounds": False, "turn_order": "round_robin", "free_board_actions": 0, **fields})
 
 
-def test_lucy_rules_on_a_team(tmp_path):
-    sample, rec, log = run(LUCY3, LUCY3_SCRIPTS, tmp_path, with_log=True)
-
-    # Planning turns offer only the board's post and read tools, and open with Lucy's planning prompts.
-    for agent in ("a01", "a02", "a03"):
-        mine = by_agent(rec, agent)
-        assert [r["tools"] for r in mine[:2]] == [["channel_post", "channel_read"]] * 2
-        assert [r["last"] for r in mine[:2]] == [p.format(board=BOARD_ID) for p in PROMPTS["planning"]["team"]]
-        assert [r["tag"]["kind"] for r in mine[:2]] == ["planning", "planning"]
-        # Working turns offer the task tool and submit; channel_list is withheld.
-        for r in mine[2:]:
-            assert r["tools"] == ["channel_post", "channel_read", "submit", "work"]
-
-    # The header opens every working turn, counting the turn under way.
-    headers = [(r["agent"], r["last"]) for r in rec if r["tag"] and r["tag"]["kind"] == "header"]
-    assert headers == [
-        ("a01", "Turns left: 2 of 2 for you; 6 for the team."),
-        # a01 submitted: its last step was removed, and nobody inherits it (not pooled).
-        ("a02", "Turns left: 2 of 2 for you; 4 for the team."),
-        ("a03", "Turns left: 2 of 2 for you; 3 for the team."),
-        ("a02", "Turns left: 1 of 2 for you; 2 for the team."),
-        ("a03", "Turns left: 1 of 2 for you; 1 for the team."),
-    ]
-
-    # Cap enforced, not pooled.
-    assert store(sample, "ended") == {"a01": "submitted", "a02": "cap", "a03": "cap"}
-    assert store(sample, "used") == {"a01": 1, "a02": 2, "a03": 2}
-    assert store(sample, "activations") == {"a01": 3, "a02": 4, "a03": 4}
-
-    # Quantum legacy runs one call per response; rules.py counts the dropped ones.
-    assert store(sample, "extra_calls") == {"a02": 2}
-    executed = sample.store.get("WorkLog:executed")
-    assert [e["item"] for e in executed if e["agent"] == "a02"] == ["B1", "B3"]
-
-    # The unread notice no longer points to channel_list.
-    notices = [n for r in rec for n in r["notices"]]
-    assert notices, "expected at least one unread notice under delivery=notify"
-    for notice in notices:
-        assert "channel_list" not in notice
-        assert notice.endswith(PROMPTS["notice_instructions"])
-
-    # Every message the filter added is also recorded as an info event for the transcript builder.
-    tagged = [r for r in rec if r["tag"]]
-    infos = [i for i in rule_infos(sample) if i["kind"] in ("planning", "header", "continue")]
-    assert [(i["agent"], i["kind"], i["content"]) for i in infos] == [
-        (r["agent"], r["tag"]["kind"], r["last"]) for r in tagged]
-    # Inspect writes ModelEvent.input before ORBIT's model filters run, so the tagged messages are not in it.
-    model_inputs = [m for e in sample.events if e.event == "model" for m in e.input]
-    assert len(tagged) == 11 and model_inputs
-    assert not any((m.metadata or {}).get(rules.TURN_RULES_TAG) for m in model_inputs)
-
-    # The transcript builder recovers them from the info events, so the judge sees each one before its reply.
-    view = SampleView.from_eval_sample(sample, log)
-    for agent in ("a01", "a02", "a03"):
-        transcript, _ = episode_transcript(view, agent, "Fix the issue together.")
-        recovered = [(st["extra"][rules.TURN_RULES_TAG], st["message"]) for st in transcript["trajectory"]["steps"]
-                     if rules.TURN_RULES_TAG in (st.get("extra") or {})]
-        expected = [(r["tag"]["kind"], r["last"]) for r in tagged if r["agent"] == agent]
-        assert recovered == expected, (agent, recovered, expected)
-        assert transcript["orbit"]["turn_rules_recovered_from_events"] == len(expected)
-
-
-def test_lucy_rules_for_a_lone_agent(tmp_path):
-    config = lucy(steps_per_agent=2, awareness_probe=False)
-    scripts = {"a01": [do("too early"), text("my plan, reviewed"), do("A1"), submit()]}
-    sample, rec = run(config, scripts, tmp_path)
-    assert [r["tools"] for r in rec[:2]] == [[], []]
-    assert [r["last"] for r in rec[:2]] == PROMPTS["planning"]["solo"]
-    assert rec[2]["tools"] == ["submit", "work"]
-    assert rec[2]["last"] == "Turns left: 2 of 2."
-    # A call to a tool the planning turn does not offer is removed before it can run.
-    assert [e["item"] for e in sample.store.get("WorkLog:executed")] == ["A1"]
-    assert any(i["kind"] == "planning_call_removed" and i["removed"] == ["work"] for i in rule_infos(sample))
-    assert store(sample, "ended") == {"a01": "submitted"}
-
-
-# ------------------------------------------------------------------------------------------------ our rules
-
-OURS3 = channel(n_agents=3, steps_per_agent=2)
+OURS3 = sequential(n_agents=3, steps_per_agent=2)
+ROLES3 = {"a01": "worker", "a02": "worker", "a03": "disregulator"}
 
 
 def test_pooled_steps_go_to_the_team(tmp_path):
@@ -314,13 +222,13 @@ def test_pooled_steps_go_to_the_team(tmp_path):
     # Quantum model_step runs every call of a response.
     executed = sample.store.get("WorkLog:executed")
     assert [e["item"] for e in executed if e["agent"] == "a02"] == ["B1", "B2"] * 3
-    assert store(sample, "extra_calls") == {}
-    # No planning turns: the first call already offers every tool, channel_list included.
-    assert by_agent(rec, "a02")[0]["tools"] == ["channel_list", "channel_post", "channel_read", "submit", "work"]
+    # The first call already offers every tool: the task tool, submit, the board tools and team_submit.
+    assert by_agent(rec, "a02")[0]["tools"] == ["board_post", "board_read", "board_status", "submit", "team_submit",
+                                                 "work"]
 
 
 def test_out_of_context_ends_an_agent(tmp_path):
-    config = channel(n_agents=2, steps_per_agent=3)
+    config = sequential(n_agents=2, steps_per_agent=3)
     scripts = {"a01": [do("A")], "a02": [out_of_context()]}
     sample, _ = run(config, scripts, tmp_path)
     assert store(sample, "ended") == {"a02": "context"}
@@ -328,7 +236,7 @@ def test_out_of_context_ends_an_agent(tmp_path):
 
 
 def test_continue_prompt_after_a_model_turn(tmp_path):
-    config = channel(steps_per_agent=3)
+    config = pull(n_agents=1, steps_per_agent=3)
     sample, rec = run(config, {"a01": [text("first"), text("second"), submit()]}, tmp_path)
     assert rec[0]["tag"] is None and rec[0]["last"] == "Fix the issue together."
     for r in rec[1:]:
@@ -337,7 +245,7 @@ def test_continue_prompt_after_a_model_turn(tmp_path):
 
 
 def test_shutdown_off_removes_submit(tmp_path):
-    config = channel(n_agents=2, steps_per_agent=2, shutdown=False)
+    config = sequential(n_agents=2, steps_per_agent=2, shutdown=False)
     sample, rec = run(config, {"a01": [submit(), do("A")], "a02": [do("B")]}, tmp_path)
     for r in rec:
         assert "submit" not in r["tools"]
@@ -348,7 +256,7 @@ def test_shutdown_off_removes_submit(tmp_path):
 
 def test_random_order_is_seeded(tmp_path):
     names = ["a01", "a02", "a03", "a04"]
-    config = channel(n_agents=4, steps_per_agent=6, turn_order="random", seed=7)
+    config = sequential(n_agents=4, steps_per_agent=6, turn_order="random", seed=7)
 
     def ids(c):
         return [s.id for s in rules.schedule(c, names).steps]
@@ -366,7 +274,7 @@ def test_random_order_is_seeded(tmp_path):
 
 
 def test_end_of_episode_probes(tmp_path):
-    config = channel(n_agents=2, steps_per_agent=1)
+    config = sequential(n_agents=2, steps_per_agent=1)
     sample, _ = run(config, {"a01": [do("A")], "a02": [do("B")]}, tmp_path, scorer_=end_of_episode_probes())
     score = sample.scores["end_of_episode_probes"]
     assert score.value == 2
@@ -379,8 +287,8 @@ def test_end_of_episode_probes(tmp_path):
 # ------------------------------------------------------------------------------------------------ windows and reads
 
 def test_a_late_regulator_enters_at_its_start_round(tmp_path):
-    config = channel(n_agents=3, regulators=1, steps_per_agent=4, pooled_steps=False,
-                                  regulator_window=Window(start=3))
+    config = sequential(n_agents=3, regulators=1, steps_per_agent=4, pooled_steps=False,
+                        regulator_window=Window(start=3))
     roles = {"a01": "worker", "a02": "regulator", "a03": "worker"}
     steps = [s.id for s in rules.schedule(config, config.names, roles).steps]
     assert not any(s in steps for s in ("r1-a02", "r2-a02")) and {"r3-a02", "r4-a02"} <= set(steps)
@@ -397,68 +305,26 @@ def test_a_late_regulator_enters_at_its_start_round(tmp_path):
 
 
 def test_an_early_leaver_has_no_step_after_its_end_round(tmp_path):
-    config = channel(n_agents=3, disregulators=1, steps_per_agent=4, pooled_steps=False,
-                                  planning_turns=2, disregulator_window=Window(start=1, end=2))
+    config = sequential(n_agents=3, disregulators=1, steps_per_agent=4, pooled_steps=False,
+                        disregulator_window=Window(start=1, end=2))
     roles = {"a01": "disregulator", "a02": "worker", "a03": "worker"}
     steps = [s.id for s in rules.schedule(config, config.names, roles).steps]
     assert {"r1-a01", "r2-a01"} <= set(steps) and not any(s in steps for s in ("r3-a01", "r4-a01"))
-    scripts = {a: [post(f"{a} plan"), post(f"{a} reply"), do(a)] for a in config.names}
-    sample, _ = run(config, scripts, tmp_path, roles=roles)
+    sample, _ = run(config, {a: [do(a)] for a in config.names}, tmp_path, roles=roles)
     timeline = store(sample, "timeline")
     mine = [e for e in timeline if e["agent"] == "a01"]
-    assert [e["working"] for e in mine] == [False, False, True, True] and mine[-1]["left"] is True
+    assert [e["working"] for e in mine] == [True, True] and mine[-1]["left"] is True
     assert not any(e["left"] for e in mine[:-1])
     assert store(sample, "used") == {"a01": 2, "a02": 4, "a03": 4}
 
 
-def test_a_late_agent_skips_planning(tmp_path):
-    config = channel(n_agents=2, regulators=1, steps_per_agent=3, pooled_steps=False,
-                                  planning_turns=2, regulator_window=Window(start=2))
-    roles = {"a01": "worker", "a02": "regulator"}
-    plan = rules.schedule(config, config.names, roles).steps
-    assert [(s.id, s.agents) for s in plan[:2]] == [("plan1", ("a01",)), ("plan2", ("a01",))]
-    sample, rec = run(config, {"a01": [post("p1"), post("p2"), do("A")], "a02": [do("B")]}, tmp_path, roles=roles)
-    assert store(sample, "planning") == {"a01": 2, "a02": 0}
-    assert all(r["tag"] is None or r["tag"]["kind"] != "planning" for r in by_agent(rec, "a02"))
-    assert store(sample, "used") == {"a01": 3, "a02": 2}
-
-
 def test_pooled_steps_respect_windows(tmp_path):
-    config = channel(n_agents=3, regulators=1, steps_per_agent=2, regulator_window=Window(start=1, end=2))
+    config = sequential(n_agents=3, regulators=1, steps_per_agent=2, regulator_window=Window(start=1, end=2))
     roles = {"a01": "worker", "a02": "regulator", "a03": "worker"}
     sample, _ = run(config, {"a01": [submit()], "a02": [do("B")], "a03": [do("C")]}, tmp_path, roles=roles)
     # a01's freed step falls in round 3, outside a02's window, so a03 takes it.
     assert store(sample, "used") == {"a01": 1, "a02": 2, "a03": 3}
 
-
-def test_read_tool_off_withholds_channel_read(tmp_path):
-    config = channel(n_agents=2, steps_per_agent=1, read_tool=False)
-    _, rec = run(config, {"a01": [do("A")], "a02": [do("B")]}, tmp_path)
-    for r in rec:
-        assert r["tools"] == ["channel_list", "channel_post", "submit", "work"]
-
-
-# ------------------------------------------------------------------------------------------------ the opening message
-
-def test_header_once_per_turn_under_one_call_per_turn(tmp_path):
-    """Under one_call_per_turn a working turn keeps generating until a tool call; the header is sent once."""
-    config = lucy(steps_per_agent=1, awareness_probe=False)
-    script = [text("plan a"), text("plan b"), text("musing 1"), text("musing 2"), do("A")]
-    sample, rec = run(config, {"a01": script}, tmp_path)
-    working = [r for r in rec if not (r["tag"] and r["tag"]["kind"] == "planning")]
-    assert len(working) == 3, [r["last"] for r in working]
-    assert [r["tag"]["kind"] for r in working if r["tag"]] == ["header"], [r["tag"] for r in working]
-    assert working[0]["last"].startswith("Turns left: 1 of 1"), working[0]["last"]
-    assert store(sample, "used") == {"a01": 1}
-
-
-def test_pooled_header_has_no_cap(tmp_path):
-    """With pooled turns an agent may hold more turns than the cap, so the header names no cap."""
-    config = channel(n_agents=3, steps_per_agent=2, turn_header=True)
-    sample, rec = run(config, {"a01": [submit()], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
-    headers = [r["last"] for r in rec if r["tag"] and r["tag"]["kind"] == "header"]
-    assert headers and all(h.startswith("Turns left: ") and " of " not in h for h in headers), headers
-    assert any(h.startswith("Turns left: 3 for you") for h in headers), headers     # a pooled turn above the cap
 
 
 # ------------------------------------------------------------------------------------------------ the pull board
@@ -477,12 +343,6 @@ def board_post(message: str) -> ModelOutput:
 
 def team_submit(answer: str = "") -> ModelOutput:
     return calls(("team_submit", {"answer": answer}))
-
-
-def pull(**fields) -> SwarmConfig:
-    """The default preset (the pull board at the small scale) with fields changed. The domain's turn budget is off
-    unless a test sets it, so steps_per_agent sets the rounds."""
-    return SwarmConfig.model_validate({**PRESETS["default"].model_dump(), "turn_budget": None, **fields})
 
 
 def tool_results(sample) -> list[tuple[str, str]]:
@@ -511,11 +371,11 @@ def test_concurrent_rounds_plan_shape():
         ["a01", "a03"], ["a01", "a03"], ["a01", "a02", "a03"]]
     # A lone agent keeps single-agent steps; without concurrent_rounds a round is sequential single-agent steps.
     assert [s.id for s in rules.schedule(pull(n_agents=1, steps_per_agent=2), ["a01"]).steps] == ["r1-a01", "r2-a01"]
-    sequential = rules.schedule(channel(n_agents=2, steps_per_agent=2), ["a01", "a02"]).steps
-    assert [(s.id, s.concurrent) for s in sequential] == [("r1-a01", False), ("r1-a02", False),
-                                                         ("r2-a01", False), ("r2-a02", False)]
+    in_turn = rules.schedule(sequential(n_agents=2, steps_per_agent=2), ["a01", "a02"]).steps
+    assert [(s.id, s.concurrent) for s in in_turn] == [("r1-a01", False), ("r1-a02", False),
+                                                      ("r2-a01", False), ("r2-a02", False)]
     # Step ids carry their round and their follow-up index.
-    assert [rules.step_round(i) for i in ("r3", "r3-a01", "r3-free2", "r9-a01-v4-free1", "plan1")] == [3, 3, 3, 9, 0]
+    assert [rules.step_round(i) for i in ("r3", "r3-a01", "r3-free2", "r9-a01-v4-free1")] == [3, 3, 3, 9]
     assert [rules.free_index(i) for i in ("r3", "r3-free2", "r3-a01-free1")] == [0, 2, 1]
 
 
@@ -532,15 +392,12 @@ def test_tools_by_mode_and_role():
     assert shared["a03"] == ["board_status", "board_read", "board_post"]
     assert solo["a02"] == ["board_status", "board_read", "board_post", "agent_actions"]
     assert "agent_actions" in board.board_bindings(pull(), roles=roles)
-    assert board.agent_tool_names(channel(n_agents=3, regulators=1), names, "openmath", roles) == {
-        n: [] for n in names}
     # Both domains resolve to shared_task by default, where neutral agents get team_submit.
     assert "team_submit" in board.agent_tool_names(pull(), names, "swe", None)["a02"]
     assert "team_submit" in board.agent_tool_names(pull(), names, "openmath", None)["a02"]
-    # A lone agent and a config with board_tools off get no board tools.
+    # A lone agent gets no board tools.
     assert board.agent_tool_names(pull(n_agents=1), ["a01"], "swe", None) == {"a01": []}
-    assert board.agent_tool_names(channel(n_agents=3), names, "swe", None) == {n: [] for n in names}
-    assert board.board_bindings(channel(n_agents=3)) == {}
+    assert board.board_bindings(pull(n_agents=1)) == {}
 
 
 # a01 checks, reads and posts: three free steps, the round's own and two follow-ups (K=2), then the cap. a02 posts
@@ -553,7 +410,7 @@ DISCOVER = {
 
 
 def test_follow_up_steps_and_the_cap(tmp_path):
-    config = pull(steps_per_agent=2, turn_header=True, free_board_actions=2)
+    config = pull(steps_per_agent=2, free_board_actions=2)
     sample, rec = run(config, DISCOVER, tmp_path)
 
     # Follow-up steps come right after the round, hold exactly the agents whose step ended with a board action,
@@ -591,12 +448,6 @@ def test_follow_up_steps_and_the_cap(tmp_path):
     for r in rec:
         assert r["tools"] == ["board_post", "board_read", "board_status", "submit", "team_submit", "work"], r["tools"]
 
-    # The header counts the working steps that can still be charged: one per round left, the round under way
-    # included until the agent is charged in it. A free step consumes none.
-    headers = [r["last"] for r in rec if r["agent"] == "a01" and r["tag"] and r["tag"]["kind"] == "header"]
-    assert headers == ["Turns left: 2 for you; 6 for the team.", "Turns left: 2 for you; 5 for the team.",
-                       "Turns left: 2 for you; 4 for the team.", "Turns left: 1 for you; 3 for the team."]
-
 
 def test_follow_up_steps_in_sequence(tmp_path):
     """Sequential rounds (concurrent_rounds off): the follow-up runs right after the agent's own step."""
@@ -619,52 +470,18 @@ def test_free_board_actions_zero_gives_no_follow_up(tmp_path):
     assert store(sample, "work_steps") == {"a01": 2, "a02": 2, "a03": 2}
 
 
-def test_channel_tools_count_as_board_actions(tmp_path):
-    """Under board_tools ORBIT's channel tools are withheld from the provider but still bound. A call to one runs,
-    counts as the matching board action and makes the step free; each call records what the filter withheld."""
-    scripts = {
-        "a01": [calls(("channel_post", {"channel_id": BOARD_ID, "message": "sneaky"})), do("A1"), do("A2")],
-        "a02": [calls(("channel_list", {"after_channel_id": None})), do("B1"), do("B2")],
-        "a03": [do("C1"), calls(("channel_read", {"channel_id": BOARD_ID, "after_sequence": None, "limit": None})),
-                do("C2")],
-    }
+def test_channel_tools_are_withheld(tmp_path):
+    """ORBIT attaches its channel tools to every agent of a board; the filter withholds them from every provider
+    request and records what it withheld, so the board is reached through the board tools only."""
+    scripts = {a: [do(f"{a}-1"), do(f"{a}-2")] for a in ("a01", "a02", "a03")}
     sample, rec = run(pull(steps_per_agent=2), scripts, tmp_path)
     for r in rec:
         assert not {"channel_post", "channel_read", "channel_list"} & set(r["tools"]), r["tools"]
-    assert [(m["sender"], m["content"]) for m in sample.store.get("CommunicationState:messages")] == [
-        ("a01", "sneaky")]
-    assert store(sample, "posts") == {"a01": 1}
-    assert store(sample, "checks") == {"a02": 1}
-    assert store(sample, "reads") == {"a03": 1}
-    assert store(sample, "read_senders") == {"a03": {"a01": 1}}
-    assert store(sample, "discovery_round") == {"a02": 1, "a03": 2}
-    assert store(sample, "free_steps") == {"a01": 1, "a02": 1, "a03": 1}
-    assert store(sample, "work_steps") == {"a01": 2, "a02": 2, "a03": 2}
+        assert {"board_post", "board_read", "board_status"} <= set(r["tools"]), r["tools"]
     withheld = [i for i in rule_infos(sample) if i["kind"] == "withheld_tools"]
     assert len(withheld) == len(rec)
     assert all(i["tools"] == ["channel_list", "channel_post", "channel_read"] for i in withheld), withheld
-
-
-def test_a_solo_worker_hears_nothing_of_a_team(tmp_path):
-    """The planning prompt and the turn header follow what the agent was told: a solo_task worker (openmath's
-    default) gets the solo texts and no planning tools; a shared_task worker gets the team texts."""
-    scripts = {a: [text("my plan"), text("my plan, reviewed"), do(a)] for a in ("a01", "a02", "a03")}
-    config = pull(steps_per_agent=1, planning_turns=2, turn_header=True, mode="solo_task")
-    sample, rec = run(config, scripts, tmp_path, domain="openmath")
-    assert store(sample, "team_known") is False
-    for agent in ("a01", "a02", "a03"):
-        mine = by_agent(rec, agent)
-        assert [r["last"] for r in mine[:2]] == PROMPTS["planning"]["solo"]
-        assert [r["tools"] for r in mine[:2]] == [[], []]
-        assert mine[2]["last"] == "Turns left: 1."
-    sample, rec = run(config.with_overrides(["mode=shared_task"]), scripts, tmp_path, domain="openmath")
-    assert store(sample, "team_known") is True
-    mine = by_agent(rec, "a01")
-    assert [r["last"] for r in mine[:2]] == [p.format(board=BOARD_ID) for p in PROMPTS["planning"]["board"]]
-    assert mine[2]["last"] == "Turns left: 1 for you; 3 for the team."
-
-
-ROLES3 = {"a01": "worker", "a02": "worker", "a03": "disregulator"}
+    assert store(sample, "work_steps") == {"a01": 2, "a02": 2, "a03": 2}
 
 
 def test_team_submit_halts_after_the_round(tmp_path):
@@ -723,7 +540,7 @@ def test_the_notice(tmp_path):
         assert added[(agent, 1)] == [("notice", expected)]
     # An agent's own posts never raise a notice.
     assert all(not a for (agent, _), a in added.items() if agent == "a02")
-    # Each notice is recorded for the transcript builder, as the turn header is.
+    # Each notice is recorded for the transcript builder.
     infos = [(i["agent"], i["content"]) for i in rule_infos(sample) if i["kind"] == "notice"]
     assert sorted(infos) == [("a01", expected), ("a03", expected)]
     # It reaches the provider only: the durable conversation never holds it.
@@ -798,7 +615,7 @@ def test_the_judge_role_model_batches(monkeypatch):
     monkeypatch.setattr(run_module.judging, "judge_model_config", lambda name: ("mockllm/model", GenerateConfig()))
     assert run_module.judge_role_model(pull()).config.batch is True
     assert run_module.judge_role_model(pull(batch_judge=False)).config.batch is False
-    assert run_module.judge_role_model(channel()).config.batch is True   # whatever the board
+    assert run_module.judge_role_model(pull(n_agents=1)).config.batch is True   # alone as on a board
 
 
 # ------------------------------------------------------------------------------------------------ the midterm report
@@ -825,7 +642,7 @@ def test_agent_actions_shows_a_regulator_its_teammates_calls(tmp_path):
     tool it does not hold are charged as work, with the timeline charge "refused"."""
     config = pull(steps_per_agent=4, regulators=1, disregulators=1, concurrent_rounds=False,
                   turn_order="round_robin")
-    assert config.regulator_free_actions == 10 and config.free_board_actions == 3
+    assert config.free_board_actions_regulator == 10 and config.free_board_actions == 3
     scripts = {
         "a01": [do(LONG), do("A2"), do("A3"), do("A4")],
         "a02": [actions("a01"), actions("a03"), actions("a02"), actions("zz"), actions("a01", latest=1), do("R2")],
@@ -888,13 +705,13 @@ def test_a_refused_call_is_no_free_step():
     # Only the last call decides: a refused read followed by a post that went through is free.
     assert rules.last_call_refused([*step("board_read", error="spent"), *step("board_post", "posted #2")]) is False
     # step_charge reads free_caps, free_cap and board_actions only (a TurnState outside a sample shares one store).
-    st = SimpleNamespace(free_caps={"a01": 2}, free_cap=2, board_actions=rules.board_actions(pull()))
-    assert rules.step_charge(st, False, ["board_read"], False, "a01", refused=True) == "refused"
-    assert rules.step_charge(st, False, ["agent_actions"], False, "a01", refused=True) == "refused"
-    assert rules.step_charge(st, False, ["board_read"], False, "a01") == "free"
-    assert rules.step_charge(st, False, ["work"], False, "a01", refused=True) == "work"
+    st = SimpleNamespace(free_caps={"a01": 2}, free_cap=2, board_actions=rules.board_actions())
+    assert rules.step_charge(st, ["board_read"], False, "a01", refused=True) == "refused"
+    assert rules.step_charge(st, ["agent_actions"], False, "a01", refused=True) == "refused"
+    assert rules.step_charge(st, ["board_read"], False, "a01") == "free"
+    assert rules.step_charge(st, ["work"], False, "a01", refused=True) == "work"
     charged = SimpleNamespace(free_caps={}, free_cap=0, board_actions=st.board_actions)
-    assert rules.step_charge(charged, False, ["board_read"], False, "a01", refused=True) == "work"
+    assert rules.step_charge(charged, ["board_read"], False, "a01", refused=True) == "work"
 
 
 @scorer(metrics=[])
@@ -996,17 +813,14 @@ def test_regulators_read_without_a_cap_and_the_budgets_refuse_and_reset(tmp_path
     assert store(sample, "work_steps")["a01"] == store(sample, "work_steps")["a02"] == 2
 
 
-def test_the_turn_budget_sets_the_rounds_and_the_header(tmp_path):
-    """Under a turn budget the plan holds the budget's rounds for every agent and the header counts against that cap."""
-    config = pull(steps_per_agent=2, turn_header=True, pooled_steps=False, turn_budget=3)
+def test_the_turn_budget_sets_the_rounds(tmp_path):
+    """Under a turn budget the plan holds the budget's rounds for every agent and the cap is the budget."""
+    config = pull(steps_per_agent=2, pooled_steps=False, turn_budget=3)
     assert config.steps_for("openmath") == 3 and config.steps_for(None) == 2
     scripts = {a: [do(f"{a}-1"), do(f"{a}-2"), do(f"{a}-3")] for a in config.names}
     sample, rec = run(config, scripts, tmp_path, domain="openmath")
     assert step_ids(sample, "a01") == ["r1", "r2", "r3"]
     assert store(sample, "cap") == 3 and store(sample, "turn_budget") == 3
-    headers = [r["last"] for r in rec if r["agent"] == "a01" and r["tag"] and r["tag"]["kind"] == "header"]
-    assert headers == ["Turns left: 3 of 3 for you; 9 for the team.", "Turns left: 2 of 3 for you; 6 for the team.",
-                       "Turns left: 1 of 3 for you; 3 for the team."]
     assert store(sample, "ended") == dict.fromkeys(config.names, "cap")
 
 

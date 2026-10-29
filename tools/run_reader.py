@@ -14,8 +14,8 @@ reads the cache when there is one. A log or cache without a timeline falls back 
 under rules, and then to an empty one.
 
 Rounds come from the timeline. The k-th agent step of an agent's ATIF transcript is the k-th activation of that agent
-in the timeline, and the round is the integer after "r" in the activation's step id ("r3", "r3-free1", "r12-v4");
-a planning step ("plan1") is round 0. A board post's round is the round of its sender's activation at the post's turn.
+in the timeline, and the round is the integer after "r" in the activation's step id ("r3", "r3-free1", "r12-v4").
+A board post's round is the round of its sender's activation at the post's turn.
 """
 from __future__ import annotations
 

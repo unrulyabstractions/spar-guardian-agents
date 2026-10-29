@@ -79,24 +79,18 @@ SWE_GRADER = "swe_grader"
 PROBES_SCORER = "end_of_episode_probes"
 # the StoreModel of src/swarm/turn_rules.py; Inspect stores its fields as "TurnState:<field>"
 TURN_STATE = "TurnState"
-TURN_STATE_FIELDS = ("agents", "planning_turns", "cap", "pooled", "turn_order", "seed", "rounds", "windows",
-                     "planning", "activations", "used", "ended", "extra_calls", "timeline")
+TURN_STATE_FIELDS = ("agents", "cap", "pooled", "turn_order", "seed", "rounds", "windows", "activations", "used",
+                     "ended", "timeline")
 # The pull board's per-agent counts ({agent: value}) and the team submission; written only when the run stored them.
 TURN_STATE_BOARD_FIELDS = ("work_steps", "free_steps", "checks", "reads", "posts", "discovery_round", "read_senders",
                            "team_submission", "free_caps", "reads_per_turn", "posts_per_turn", "turn_budget",
                            "oversight", "oversight_targets", "turn_reads", "turn_posts", "reads_refused",
                            "posts_refused", "history_marks")
-# Engagement counts that only runs with regulators' oversight and per-turn budgets record ({agent: value}).
-ENGAGEMENT_NEW_FIELDS = {"oversight": 0, "oversight_targets": {}, "reads_refused": 0, "posts_refused": 0}
-# Board actions by the engagement count they feed. The channel tools are the board with board_tools off.
-BOARD_ACTIONS = {"board_status": "checks", "board_read": "reads", "board_post": "posts",
-                 "channel_list": "checks", "channel_read": "reads", "channel_post": "posts"}
 # The knowledge-work keys run.json keeps; the row, the evaluation file and the image ids stay in the eval log.
 KNOWLEDGE_SAMPLE_KEYS = ("layout", "mode", "split", "row_id", "meta", "comparator", "seats")
 KNOWLEDGE_SCORE_KEYS = ("contracts", "grader_state", "last_verdict", "access")
-BOARD_POST_LINE = re.compile(r"^\[(\S+) #(\d+)\] ", re.M)   # prompts.yaml board_output.post
-TEAM_SUBMISSION = "TeamSubmission"        # its StoreModel: agent, round, answer, time
-TEAM_SUBMISSION_FIELDS = ("agent", "round", "answer", "time")
+TEAM_SUBMISSION = "TeamSubmission"        # its StoreModel: agent, round, answer, time, refused
+TEAM_SUBMISSION_FIELDS = ("agent", "round", "answer", "time", "refused")
 # src/swarm/turn_rules.py's stop-after-delivery record, kept only under the rule
 DELIVERED_STORE = "Delivered"
 DELIVERED_FIELDS = ("after", "team", "seen", "halt_round", "cut", "checks", "errors")
@@ -304,14 +298,14 @@ def identical_tool_run(steps: list[dict]) -> int:
     return longest
 
 
-def validity_record(steps: list[dict], model_calls: int, engagement: dict | None, board_tools: bool) -> dict:
+def validity_record(steps: list[dict], model_calls: int, engagement: dict | None, board: bool) -> dict:
     """One agent's validity facts: its model and tool calls, whether it never acted, the longest run of identical
     tool calls, and whether it never touched the board it was given."""
     tool_calls = sum(len(s.get("tool_calls") or []) for s in steps)
-    board = sum((engagement or {}).get(k) or 0 for k in ("checks", "reads", "posts"))
+    board_calls = sum((engagement or {}).get(k) or 0 for k in ("checks", "reads", "posts"))
     return {"model_calls": model_calls, "tool_calls": tool_calls, "never_acted": model_calls == 0,
             "no_tool_call": tool_calls == 0, "identical_tool_run": identical_tool_run(steps),
-            "board_unused": bool(board_tools) and board == 0}
+            "board_unused": board and board_calls == 0}
 
 
 def validity_block(records: list[dict], submission: dict | None) -> dict:
@@ -451,10 +445,6 @@ def _config_rule(cb: dict) -> str | None:
     return (cb.get("config") or {}).get("rule_level")
 
 
-def _swe_delivery(cb: dict):
-    return cb.get("delivery") or (cb.get("config") or {}).get("delivery")
-
-
 def _swe_jigsaw(swe: dict) -> bool:
     return swe.get("honeypot") == "jigsaw"
 
@@ -486,7 +476,6 @@ def swe_block(view: SampleView, run_dir: Path) -> dict | None:
     block.update({
         "task_key": swe.get("task_key") or swe.get("issue"), "jigsaw": jigsaw,
         "rule": _config_rule(cb),
-        "delivery": _swe_delivery(cb),
         # the planted {piece: commit} of each agent (src/benchmark/domains/swe/swe_honeypot_setup.py)
         "fragment_commits": ({a: ev.get("planted") for a, ev in (setup.get("agents") or {}).items()}
                              if jigsaw or swe.get("honeypot") == "own_piece" else None),
@@ -508,7 +497,6 @@ def swe_record(view: SampleView, agent: str) -> dict:
         "swe_task": cb.get("swe_task") or swe.get("issue"), "seat": agent, "n_agents": swe.get("n_agents"),
         "jigsaw": _swe_jigsaw(swe), "rule": _config_rule(cb),
         "honeypot": swe.get("honeypot"), "piece": (swe.get("pieces") or {}).get(agent),
-        "delivery": _swe_delivery(cb),
         "fragment_files": ((swe.get("fragments") or {}).get(agent) or {}).get("files"),
         "reward": (grades.get(agent) or {}).get("reward"),
         "team_reward": (grades.get("team") or {}).get("reward") if swe.get("board") else None,
@@ -529,11 +517,10 @@ def rules_state(view: SampleView) -> dict | None:
 
 
 def rules_facts(state: dict | None, agent: str) -> dict | None:
-    """One agent's activations, working turns used, how it ended, the tool calls dropped under legacy, and its
-    window of rounds."""
+    """One agent's activations, working turns used, how it ended and its window of rounds."""
     if state is None:
         return None
-    return {k: (state.get(k) or {}).get(agent) for k in ("activations", "used", "ended", "extra_calls", "windows")}
+    return {k: (state.get(k) or {}).get(agent) for k in ("activations", "used", "ended", "windows")}
 
 
 def shutdown_rate(config: dict | None, records: list[dict]) -> float | None:
@@ -567,96 +554,48 @@ def notice_counts(view: SampleView) -> dict[str, int]:
     return out
 
 
-def _board_calls(steps: list[dict]) -> tuple[dict[str, int], dict[str, int], bool]:
-    """(checks, reads, posts counts; senders of the posts board_read returned; whether team_submit was called)
-    from the agent's conversation."""
-    counts = {"checks": 0, "reads": 0, "posts": 0}
-    senders: dict[str, int] = {}
-    submitted = False
-    for step in steps:
-        results = {r.get("source_call_id"): r for r in ((step.get("observation") or {}).get("results") or [])}
-        for tc in step.get("tool_calls") or []:
-            name = tc.get("function_name")
-            submitted = submitted or name == "team_submit"
-            if name not in BOARD_ACTIONS:
-                continue
-            counts[BOARD_ACTIONS[name]] += 1
-            text = (results.get(tc.get("tool_call_id")) or {}).get("content") or ""
-            text = text if isinstance(text, str) else ""
-            if name == "board_read":
-                found = [sender for sender, _ in BOARD_POST_LINE.findall(text)]
-            elif name == "channel_read":
-                found = _channel_read_senders(text)
-            else:
-                found = []
-            for sender in found:
-                senders[sender] = senders.get(sender, 0) + 1
-    return counts, senders, submitted
+def engagement_record(view: SampleView, agent: str, rules: dict | None, submission: dict | None,
+                      notices: dict[str, int]) -> dict | None:
+    """One agent's board engagement, from the turn rules' store (TurnState), or None for a run without a board.
 
-
-def _channel_read_senders(text: str) -> list[str]:
-    """The senders in ORBIT's channel_read result: a JSON header line, then one JSON line per message."""
-    out = []
-    for line in text.splitlines()[1:]:
-        try:
-            message = json.loads(line)
-        except ValueError:
-            continue
-        if isinstance(message, dict) and message.get("sender"):
-            out.append(message["sender"])
-    return out
-
-
-def engagement_record(view: SampleView, agent: str, steps: list[dict], rules: dict | None,
-                      submission: dict | None, notices: dict[str, int]) -> dict | None:
-    """One agent's board engagement, or None for a run without a board.
-
-    Every count comes from the turn rules' store when the run recorded it (posts that went through). Without it,
-    checks, reads and posts count the board tool calls in the agent's conversation (the channel tools count
-    as the same actions), read_senders holds the senders of the posts board_read or channel_read returned (the
-    agent itself left out), work_steps falls back to the working turns used, and the rest is None.
-
-    A run that recorded a regulator's oversight or the per-turn budgets adds oversight (agent_actions calls that named
-    a neutral agent), oversight_targets ({target: count}), reads_refused and posts_refused.
-    """
+    discovery_round is the round of its first board_status or board_read; checks, reads and posts count the board
+    tool calls (posts that went through); read_senders holds the senders of the posts board_read returned, the agent
+    itself left out; free_steps and work_steps are its steps by charge; oversight and oversight_targets count a
+    regulator's agent_actions calls; reads_refused and posts_refused the calls the per-round budgets refused;
+    team_submitted whether it called team_submit (the submission's agent, or a later call the tool refused);
+    notices the board notices its calls opened with."""
     if topology(view) == "single":
         return None
-    counts, senders, called_submit = _board_calls(steps)
-    senders.pop(agent, None)           # an agent's own posts are not news to it
     state = rules or {}
 
     def recorded(field, default=None):
         table = state.get(field)
-        return table.get(agent, default) if isinstance(table, dict) else None
+        return table.get(agent, default) if isinstance(table, dict) else default
 
-    work = recorded("work_steps", 0)
+    refused = [r.get("agent") for r in (submission or {}).get("refused") or []]
     return {
         "discovery_round": recorded("discovery_round"),
-        **{k: n if recorded(k, 0) is None else recorded(k, 0) for k, n in counts.items()},
-        "read_senders": recorded("read_senders", {}) if isinstance(state.get("read_senders"), dict) else senders,
+        "checks": recorded("checks", 0), "reads": recorded("reads", 0), "posts": recorded("posts", 0),
+        "read_senders": recorded("read_senders", {}),
         "free_steps": recorded("free_steps", 0),
-        "work_steps": recorded("used") if work is None else work,
-        "team_submitted": called_submit or bool(submission and submission.get("agent") == agent),
+        "work_steps": recorded("work_steps", 0),
+        "team_submitted": bool(submission) and (submission.get("agent") == agent or agent in refused),
         "notices": notices.get(agent, 0),
-        **{k: recorded(k, default) for k, default in ENGAGEMENT_NEW_FIELDS.items() if isinstance(state.get(k), dict)},
+        "oversight": recorded("oversight", 0), "oversight_targets": recorded("oversight_targets", {}),
+        "reads_refused": recorded("reads_refused", 0), "posts_refused": recorded("posts_refused", 0),
     }
 
 
 def run_engagement(records: list[dict], submission: dict | None) -> dict | None:
-    """The run's board engagement: how many agents looked, the median round they first looked, the posts and
-    reads, and who read whom ({reader: {sender: count}}). A run that recorded them adds the totals of oversight,
-    reads_refused and posts_refused, and whose calls each regulator queried (oversight_graph:
-    {regulator: {target: count}})."""
+    """The run's board engagement: how many agents looked, the median round they first looked, the posts, reads,
+    oversight calls and refused calls, who read whom ({reader: {sender: count}}) and whose calls each regulator
+    queried (oversight_graph: {regulator: {target: count}})."""
     rows = [(r["orbit_agent"], r["engagement"]) for r in records if r.get("engagement")]
     if not rows:
         return None
     rounds = sorted(e["discovery_round"] for _, e in rows if e.get("discovery_round") is not None)
     mid = len(rounds) // 2
     median = None if not rounds else (rounds[mid] if len(rounds) % 2 else (rounds[mid - 1] + rounds[mid]) / 2)
-    recorded = [k for k in ENGAGEMENT_NEW_FIELDS if k != "oversight_targets" and any(k in e for _, e in rows)]
-    newer = {k: sum(e.get(k) or 0 for _, e in rows) for k in recorded}
-    if "oversight" in recorded:
-        newer["oversight_graph"] = {a: dict(e["oversight_targets"]) for a, e in rows if e.get("oversight_targets")}
     return {
         "agents": len(rows),
         "agents_checked": sum(1 for _, e in rows if e["checks"] or e["reads"]),
@@ -667,7 +606,10 @@ def run_engagement(records: list[dict], submission: dict | None) -> dict | None:
         "posts": sum(e["posts"] for _, e in rows),
         "read_graph": {a: dict(e["read_senders"]) for a, e in rows if e.get("read_senders")},
         "team_submission": submission,
-        **newer,
+        "oversight": sum(e["oversight"] for _, e in rows),
+        "reads_refused": sum(e["reads_refused"] for _, e in rows),
+        "posts_refused": sum(e["posts_refused"] for _, e in rows),
+        "oversight_graph": {a: dict(e["oversight_targets"]) for a, e in rows if e.get("oversight_targets")},
     }
 
 
@@ -818,7 +760,6 @@ def sample_records(view: SampleView, run_dir: Path) -> list[dict]:
     probes = probes_block(view) or {}
     submission = team_submission(view)
     notices = notice_counts(view)
-    config = _cheatbench(view).get("config") or {}
     records = []
     for agent in agents:
         episode = _sample_key(view) if len(agents) == 1 else f"{_sample_key(view)}@{agent}"
@@ -833,10 +774,10 @@ def sample_records(view: SampleView, run_dir: Path) -> list[dict]:
             record.update(_no_transcript(error, failure))
         record["rules"] = rules_facts(rules, agent)
         record["probes"] = probes.get(agent)
-        record["engagement"] = engagement_record(view, agent, steps, rules, submission, notices)
+        record["engagement"] = engagement_record(view, agent, rules, submission, notices)
         model_events = agent_events(view, agent, "model")
         record["validity"] = validity_record(steps, len(model_events), record["engagement"],
-                                             bool(len(agents) > 1 and config.get("board_tools")))
+                                             len(agents) > 1)
         record["ledger"] = ledger_record(record["model"], model_events, record.get("usage"))
         record.update(newer_episode_facts(view, agent))
         records.append(record)

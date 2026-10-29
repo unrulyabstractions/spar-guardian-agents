@@ -15,10 +15,10 @@ What comes from where:
   * the control's defenses come from control_defenses.py, and CheatBench's judge is added as a scorer
   (src/benchmark/cheatbench_judge.py).
 
-Each agent's tools are the benchmark's, then, on a pull board (board_tools), board_status, board_read and board_post,
-then team_submit for a neutral agent when the mode has a team to submit for, and agent_actions for a regulator
-(src/swarm/regulator_oversight.py). They are bound per agent through ORBIT's tool_bindings next to the
-benchmark's own bindings.
+Each agent's tools are the benchmark's, then on a board board_status, board_read and board_post, then team_submit
+for a neutral agent when the mode has a team to submit for, and agent_actions for a regulator
+(src/swarm/regulator_oversight.py). They are bound per agent through ORBIT's tool_bindings next to the benchmark's
+own bindings.
 
 The plan's rounds, the scheduler's turn bound and Inspect's message limit follow the domain's turn budget
 (SwarmConfig.steps_for, max_turns_for, message_limit_for). Under a budget metadata["cheatbench"]["turn_budget"] holds
@@ -255,10 +255,7 @@ def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = 
     agent_tools, bindings = team_tools(benchmark, config, tools, roles)
     prompts = system_prompts(benchmark, config, sample, roles)
     time_limit_s = config.time_limit_s or benchmark.time_limit_s()
-    communication = board_communication(names, delivery=config.delivery, visibility=config.visibility,
-                                        max_message_chars=config.max_message_chars,
-                                        max_context_chars=config.max_context_chars,
-                                        max_inbox_messages=config.max_inbox_messages) if config.board else None
+    communication = board_communication(names, max_message_chars=config.max_message_chars) if config.board else None
     # Inspect's hard time limit sits above ORBIT's soft halt at time_limit_s (SwarmConfig.time_grace_s); SWE grades
     # after the agents stop, so its limit leaves room for setup and grading instead.
     grace = GRADING_BUDGET_S if isinstance(benchmark, SWE) else config.time_grace_s
@@ -270,7 +267,7 @@ def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = 
                           communication_edges=None, tool_kwargs=tools.tool_kwargs),
         dataset=[sample],
         communication=communication,
-        execution=board_execution(quantum=config.quantum, plan=schedule(config, names, roles, domain),
+        execution=board_execution(plan=schedule(config, names, roles, domain),
                                   agent_groups=first_message_groups(sample, names), initial_context="sample_input"),
         scheduler=board_scheduler(max_turns=config.max_turns_for(domain) + 5, max_time_seconds=time_limit_s),
         scorer=scorers(benchmark, config),

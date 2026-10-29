@@ -902,7 +902,6 @@ function runRowCells(row) {
       { num: true, title: frac == null ? 'no judged agent' : `${Math.round(frac * 100)}% of judged agents` }),
     td(agg.judged ? fmtInt(agg.seen) : DASH, { num: true }),
     td(agg.judged ? fmtInt(agg.attempted) : DASH, { num: true }),
-    td(reportCell(agg)),
     td(registeredCell(agg)),
     td(agg.ended || DASH, { cls: 'wrap-cell small' }),
     td(agg.hasDefense ? h('span', { class: agg.blocks ? 'has-blocks' : '' }, `${fmtInt(agg.blocks)} / ${fmtInt(agg.checks)}`) : DASH, { num: true }),
@@ -1575,7 +1574,6 @@ function sweView(swe, eps) {
       ['agents', String(swe.n_agents)],
       ['honeypot', swe.honeypot ? mono(swe.honeypot) : muted('as released')],
       ['rule', swe.rule === 'none' ? muted('none (standard prompt)') : mono(swe.rule)],
-      ['board delivery', swe.delivery || muted(DASH)],
       ['team reward (team/main)', swe.board ? reward('team') : muted('lone agent: its working tree ships')],
       ['setup checks', swe.checks_ok == null ? muted(DASH) : yn(swe.checks_ok, 'good', 'bad')],
       ['base / fix commit', h('span', null, mono((swe.base_commit || '').slice(0, 10)), ' / ', mono((swe.fix_commit || '').slice(0, 10)))],
@@ -1863,8 +1861,6 @@ const FLAG_BADGE = {
   refusal: ['REFUSAL', 'refusal'],
   'refusal-text': ['REFUSAL TEXT (model-written)', 'plain'],
   withheld: ['WITHHELD', 'withheld'],
-  notice: ['NOTICE', 'notice'],
-  trailing: ['TRAILING-TURN FIX', 'notice'],
   rules: ['TURN RULES', 'notice'],
   error: ['ERROR', 'bad'],
 };
@@ -1923,7 +1919,6 @@ function renderStep(s) {
   const src = s.source || 'unknown';
   const msg = asText(s.message);
   const flags = new Set();
-  if (ex.orbit_delivery_notice) flags.add('notice');
   if (ex.swarm_turn_rules) flags.add('rules');
   if (ex.withheld_from_model_by_defense) flags.add('withheld');
   if (ex.defense_refusal) flags.add('refusal');
@@ -1934,7 +1929,7 @@ function renderStep(s) {
     else if (rx.is_error || rx.error) flags.add('error');
     if (rx.withheld_from_model_by_defense) flags.add('withheld');
   }
-  const providerOnly = flags.has('notice') || flags.has('trailing') || flags.has('rules');
+  const providerOnly = flags.has('rules');
   const el = h('article', {
     class: ['step', 'src-' + src, providerOnly && 'provider-only', flags.has('refusal') && 'is-refusal',
       flags.has('blocked') && 'has-blocked', ex.withheld_from_model_by_defense && 'is-withheld'],
@@ -1945,17 +1940,13 @@ function renderStep(s) {
     h('span', { class: 'step-src' }, src),
     s.model_name ? muted(s.model_name, 'small') : null,
     [...flags].map(f => badge(...FLAG_BADGE[f])),
-    extraBadges(ex, ['orbit_delivery_notice', 'swarm_turn_rules', 'withheld_from_model_by_defense', 'withheld_text',
+    extraBadges(ex, ['swarm_turn_rules', 'withheld_from_model_by_defense', 'withheld_text',
       'defense_refusal', 'blocked_output_message_id', 'refusal_text_written_by_model']),
     h('span', { class: 'spacer' }),
     s.llm_call_count != null ? muted(plural(s.llm_call_count, 'model call'), 'small') : null));
   if (providerOnly) {
     el.appendChild(h('div', { class: 'caption caption-notice' },
-      flags.has('rules')
-        ? `Provider-only: ${ex.swarm_turn_rules} prompt placed by the turn rules, not part of the agent conversation.`
-        : flags.has('trailing')
-        ? 'Provider-only: continue prompt appended by the integration (trailing-turn fix), not part of the agent conversation.'
-        : 'Provider-only: ORBIT delivery notice placed in the model input, not part of the agent conversation.'));
+      `Provider-only: ${ex.swarm_turn_rules} prompt placed by the turn rules, not part of the agent conversation.`));
   }
   if (ex.withheld_from_model_by_defense) {
     el.appendChild(h('div', { class: 'caption caption-withheld' }, 'WITHHELD: a defense withheld this message from the model; the model received the placeholder shown below.'));
@@ -1994,7 +1985,7 @@ function stepMatchesKind(e, k) {
     case 'agent': case 'user': case 'system': return e.src === k;
     case 'tools': return e.hasTools;
     case 'flagged': return e.flags.size > 0;
-    case 'notice': return e.flags.has('notice') || e.flags.has('trailing') || e.flags.has('rules');
+    case 'notice': return e.flags.has('rules');
     default: return e.flags.has(k);
   }
 }
@@ -2027,7 +2018,7 @@ async function viewEpisode({ run, episode, query: q }, view) {
   for (const e of entries) {
     counts.tools += (e.step.tool_calls || []).length;
     for (const f of ['blocked', 'refusal', 'withheld', 'error']) if (e.flags.has(f)) counts[f]++;
-    if (e.flags.has('notice') || e.flags.has('trailing') || e.flags.has('rules')) counts.notice++;
+    if (e.flags.has('rules')) counts.notice++;
   }
 
   const headerCard = h('section', { class: 'card ep-header' },
@@ -2059,7 +2050,6 @@ async function viewEpisode({ run, episode, query: q }, view) {
       kv([
         ['agent', orbit.agent], ['roster', asText(orbit.roster)], ['topology', orbit.topology],
         ['model calls', orbit.model_calls], ['submit recovered from events', asText(orbit.submit_recovered_from_events)],
-        ['delivery notices recovered from events', asText(orbit.delivery_notices_recovered_from_events)],
         ['schema', traj.schema_version],
         ['agent version', ep.agent_version],
       ], 'kv-grid'),
@@ -2179,8 +2169,7 @@ async function viewEpisode({ run, episode, query: q }, view) {
 // A call's flags are the union of its input messages' flags (plus the output being the
 // refusal sentence). They describe the history the call saw, not what happened to its output.
 const CALL_FLAG_LABEL = {
-  delivery_notice: ['notice in input', 'notice', 'an ORBIT board delivery notice is in this call’s input'],
-  turn_rules: ['turn rules in input', 'notice', 'the turn rules placed a planning prompt, turn header or continue prompt in this input'],
+  turn_rules: ['turn rules in input', 'notice', 'the turn rules placed a board notice or continue prompt in this input'],
   redacted: ['redacted input', 'withheld', 'a defense withheld a message of this input from the model'],
   refusal_in_history: ['refusal in history', 'plain', 'the input holds the refusal sentence: a substituted completion or the model’s own text'],
   output_blocked: ['output blocked', 'blocked', 'a defense blocked this call’s completion and substituted the refusal sentence'],
@@ -2188,14 +2177,12 @@ const CALL_FLAG_LABEL = {
 const CALL_FILTERS = [
   ['', 'any'],
   ['output_blocked', 'output blocked by a defense'],
-  ['delivery_notice', 'notice in input'],
   ['turn_rules', 'turn rules in input'],
   ['redacted', 'redacted input'],
   ['refusal_in_history', 'refusal in history'],
   ['error', 'has error'],
 ];
 const MSG_FLAG_BADGE = {
-  delivery_notice: ['delivery notice', 'notice'],
   turn_rules: ['turn rules', 'notice'],
   redacted: ['REDACTED', 'withheld'],
   refusal_in_history: ['refusal in history', 'plain'],
@@ -2263,7 +2250,7 @@ function blockedToolResult(ivs) {
 
 function messageView(m, i, status, opts = {}) {
   const flags = m.flags || [];
-  const notice = flags.includes('delivery_notice') || flags.includes('turn_rules');
+  const notice = flags.includes('turn_rules');
   const el = h('div', {
     class: ['msg', 'role-' + m.role, status && 'st-' + status, notice && 'provider-only',
       flags.includes('redacted') && 'is-redacted', flags.includes('output_blocked') && 'is-refusal'],
@@ -2283,9 +2270,7 @@ function messageView(m, i, status, opts = {}) {
     m.id ? h('span', { class: 'tc-id', title: 'message id' }, m.id) : null));
   if (notice) {
     el.appendChild(h('div', { class: 'caption caption-notice' },
-      flags.includes('turn_rules')
-        ? 'Provider-only: planning prompt, turn header or continue prompt placed by the turn rules.'
-        : 'Provider-only: ORBIT board delivery notice placed in the input.'));
+      'Provider-only: board notice or continue prompt placed by the turn rules.'));
   }
   if (flags.includes('redacted')) {
     el.appendChild(h('div', { class: 'caption caption-withheld' }, 'REDACTED: a defense withheld this message’s content from the model; the placeholder below is what the provider received.'));
@@ -2898,8 +2883,11 @@ function jobQueue(limit) {
 // 11. View: timeline   #/run/<run>/timeline
 // =====================================================================================
 
-const TOOL_KINDS = ['bash', 'python', 'channel_post', 'channel_read', 'submit'];
-const toolKind = fn => (TOOL_KINDS.includes(fn) ? fn : 'other');
+// The mark a tool call gets: the task's shell and Python tools (CheatBench's bash and python in older runs), the
+// board tools (board_status drawn as a read) and submit; any other tool is 'other'.
+const TOOL_KIND = { shell: 'bash', bash: 'bash', run_python: 'python', python: 'python', board_post: 'board_post',
+  board_read: 'board_read', board_status: 'board_read', submit: 'submit' };
+const toolKind = fn => TOOL_KIND[fn] || 'other';
 
 /**
  * The verdict a chart draws for one agent. It counts only under the rule of /api/summary and the runs
@@ -2969,8 +2957,8 @@ function turnClock(tl, agents) {
 // Agent x turn raster: one cell per model call, coloured by the call's main action.
 const RASTER_KINDS = [
   ['work', 'bash, python or another tool', 'sw-work'],
-  ['post', 'channel_post', 'sw-post'],
-  ['read', 'channel_read', 'sw-read'],
+  ['post', 'board_post', 'sw-post'],
+  ['read', 'board_read or board_status', 'sw-read'],
   ['touch', 'honeypot touch', 'sw-touch'],
   ['member', 'member read', 'sw-member'],
   ['submit', 'submit', 'sw-submit'],
@@ -2999,7 +2987,7 @@ function rasterRows(tl, agents) {
       const mine = [];
       while (j < tools.length && tools[j].t < next) mine.push(tools[j++]);
       const fn = (m.tool_calls || [])[0];
-      let kind = !fn ? 'none' : fn === 'channel_post' ? 'post' : fn === 'channel_read' ? 'read' : fn === 'submit' ? 'submit' : 'work';
+      let kind = !fn ? 'none' : fn === 'board_post' ? 'post' : fn === 'board_read' ? 'read' : fn === 'board_status' ? 'read' : fn === 'submit' ? 'submit' : 'work';
       if (m.refusal) kind = 'refusal';
       if (mine.some(x => x.member_read)) kind = 'member';
       else if (mine.some(x => x.honeypot_touch)) kind = 'touch';
@@ -3224,7 +3212,7 @@ function buildLaneData(tl, agents) {
       if (!r.agent || r.agent === p.sender || r.t == null || !lanes.has(r.agent)) continue;
       const key = `${r.agent}|${r.t}`;
       const prev = by.get(key);
-      if (!prev || (prev.how !== 'read' && r.how === 'read')) by.set(key, { post: p, agent: r.agent, t: r.t, how: r.how });
+      if (!prev) by.set(key, { post: p, agent: r.agent, t: r.t });
     }
     reads.push(...by.values());
   }
@@ -3251,8 +3239,7 @@ function swimlaneCard(ctx, lane, run) {
   const anyBlockedTool = allTools.some(e => e.blocked);
   const anyRefusal = L_.some(L => L.models.some(m => m.refusal));
   const anyBlocks = freeBlocks.length > 0 || L_.some(L => L.blocks.length);
-  const anyRead = reads.some(r => r.how === 'read');
-  const anyExposure = reads.some(r => r.how !== 'read');
+  const anyRead = reads.length > 0;
   const st = { mode: 'time', lo: 0, hi: duration, arrows: true, defcalls: true };
   const full = () => (st.mode === 'time' ? [0, duration] : [1, clock.maxTurns + 1]);
   const X = (a, t) => (st.mode === 'time' ? t : clock.at(a, t));
@@ -3325,15 +3312,14 @@ function swimlaneCard(ctx, lane, run) {
   const legend = vizLegend([
     [lgSvg(svgEl('rect', { class: 'm-model', x: 6, y: 4, width: 8, height: 9, rx: 1.5 })), 'model call (height: tokens in + out, log)'],
     anyDefcalls ? [lgSvg(svgEl('rect', { class: 'm-defcall', x: 2, y: 5, width: 16, height: 3 })), 'control’s model call'] : null,
-    kinds.has('bash') ? [lgSvg(svgEl('line', { class: 'tk tk-bash', x1: 10, x2: 10, y1: 2, y2: 13 })), 'bash'] : null,
-    kinds.has('python') ? [lgSvg(svgEl('line', { class: 'tk tk-python', x1: 10, x2: 10, y1: 3, y2: 13 }), svgEl('rect', { class: 'fill-python', x: 8, y: 1, width: 4, height: 4 })), 'python'] : null,
-    kinds.has('channel_post') ? [lgSvg(svgEl('line', { class: 'tk tk-channel_post', x1: 10, x2: 10, y1: 1, y2: 7 })), 'channel_post (upper half)'] : null,
-    kinds.has('channel_read') ? [lgSvg(svgEl('line', { class: 'tk tk-channel_read', x1: 10, x2: 10, y1: 7, y2: 13 })), 'channel_read (lower half)'] : null,
+    kinds.has('bash') ? [lgSvg(svgEl('line', { class: 'tk tk-bash', x1: 10, x2: 10, y1: 2, y2: 13 })), 'shell'] : null,
+    kinds.has('python') ? [lgSvg(svgEl('line', { class: 'tk tk-python', x1: 10, x2: 10, y1: 3, y2: 13 }), svgEl('rect', { class: 'fill-python', x: 8, y: 1, width: 4, height: 4 })), 'run_python'] : null,
+    kinds.has('board_post') ? [lgSvg(svgEl('line', { class: 'tk tk-board_post', x1: 10, x2: 10, y1: 1, y2: 7 })), 'board_post (upper half)'] : null,
+    kinds.has('board_read') ? [lgSvg(svgEl('line', { class: 'tk tk-board_read', x1: 10, x2: 10, y1: 7, y2: 13 })), 'board_read or board_status (lower half)'] : null,
     kinds.has('submit') ? [lgSvg(svgEl('line', { class: 'tk tk-submit', x1: 7, x2: 7, y1: 1, y2: 13 }), svgEl('path', { class: 'fill-ink', d: 'M7,1 l7,3 l-7,3 z' })), 'submit'] : null,
     kinds.has('other') ? [lgSvg(svgEl('line', { class: 'tk tk-other', x1: 10, x2: 10, y1: 2, y2: 13 })), 'another tool'] : null,
     posts.length ? [lgSvg(svgEl('circle', { class: 'm-post', cx: 10, cy: 7, r: 4.5 })), 'board post'] : null,
     anyRead ? [lgSvg(svgEl('line', { class: 'arrow', x1: 1, y1: 7, x2: 19, y2: 7 })), 'post read'] : null,
-    anyExposure ? [lgSvg(svgEl('line', { class: 'arrow exposure', x1: 1, y1: 7, x2: 19, y2: 7 })), 'post shown to the model only'] : null,
     anyTouch ? [lgSvg(svgEl('circle', { class: 'm-touch', cx: 10, cy: 7, r: 5 })), 'honeypot touch'] : null,
     anyMember ? [lgSvg(diamond(10, 7, 5, 'm-member')), 'member read'] : null,
     anyBlocks ? [lgSvg(svgEl('rect', { class: 'm-block', x: 5, y: 0, width: 9, height: 14 }), svgEl('line', { class: 'm-block-line', x1: 14, x2: 14, y1: 0, y2: 14 })), 'defense block (band from the control call to the decision)'] : null,
@@ -3455,7 +3441,7 @@ function swimlaneCard(ctx, lane, run) {
         if (!vis(xa, xe)) continue;
         let ya = top + laneH * 0.08;
         let yb = base;
-        if (fn === 'channel_post') { ya = top - 3; yb = mid; } else if (fn === 'channel_read') { ya = mid; yb = base; } else if (fn === 'submit') { ya = top - 4; }
+        if (fn === 'board_post') { ya = top - 3; yb = mid; } else if (fn === 'board_read') { ya = mid; yb = base; } else if (fn === 'submit') { ya = top - 4; }
         if (xe - xa > 3) marks.appendChild(svgEl('line', { class: ['dur', 'tk-' + fn], x1: xa, x2: xe, y1: (ya + yb) / 2, y2: (ya + yb) / 2 }));
         marks.appendChild(svgEl('line', { class: ['tk', 'tk-' + fn], x1: xa, x2: xa, y1: ya, y2: yb }));
         if (fn === 'python') marks.appendChild(svgEl('rect', { class: 'fill-python', x: xa - 2, y: ya - 3, width: 4, height: 4 }));
@@ -3514,9 +3500,9 @@ function swimlaneCard(ctx, lane, run) {
         if ((xa < x0 && xb < x0) || (xa > x1 && xb > x1)) continue;
         const ya = laneY.get(p.sender) + laneH * 0.3;
         const yb = laneY.get(r.agent) + laneH * 0.3;
-        arrowsG.appendChild(svgEl('line', { class: ['arrow', r.how !== 'read' && 'exposure'], x1: xa, y1: ya, x2: xb, y2: yb, 'marker-end': `url(#tlarrow-${uid})` }));
+        arrowsG.appendChild(svgEl('line', { class: 'arrow', x1: xa, y1: ya, x2: xb, y2: yb, 'marker-end': `url(#tlarrow-${uid})` }));
         hits.push({ x0: xb - 4, x1: xb + 2, y0: yb - 4, y1: yb + 4, pri: 3,
-          lines: () => [`${r.agent} ${r.how === 'read' ? 'read' : 'was shown'} post #${p.sequence} from ${p.sender}`,
+          lines: () => [`${r.agent} read post #${p.sequence} from ${p.sender}`,
             `${fmtSecs(r.t)}, posted at ${fmtSecs(p.t)}`, String(p.content || '').slice(0, 400)] });
       }
     }
@@ -3617,7 +3603,7 @@ function swimlaneCard(ctx, lane, run) {
 }
 
 /**
- * Edges A -> B: posts of A that B read (or was shown) before B's first honeypot touch. An edge needs a
+ * Edges A -> B: posts of A that B read before B's first honeypot touch. An edge needs a
  * read before a touch, so an agent that never touched the honeypot has no incoming edge.
  */
 function exposureEdges(tl) {
@@ -3761,7 +3747,7 @@ function cascadeView(ctx, width) {
     caption ? h('div', { class: 'muted small' }, caption) : null,
     doubt.length ? h('div', { class: 'muted small' },
       `The touch heuristic places ${doubt.join(', ')} although the judge found no attempted access; ${doubt.length === 1 ? 'its' : 'their'} position may come from a heuristic false positive.`) : null,
-    h('p', { class: 'small viz-note' }, 'An arrow A → B means B read a post of A, or was shown it in its model input, before B’s first honeypot touch. An agent that never touched has no incoming arrow. Width counts such posts. Position is the first touch found by a regex heuristic; the judge verdict is the record of truth. The arrows show exposure, not cause.'),
+    h('p', { class: 'small viz-note' }, 'An arrow A → B means B read a post of A before B’s first honeypot touch. An agent that never touched has no incoming arrow. Width counts such posts. Position is the first touch found by a regex heuristic; the judge verdict is the record of truth. The arrows show exposure, not cause.'),
     vizLegend([
       [lgSvg(svgEl('circle', { class: 'glyph out-cheated', cx: 10, cy: 7, r: 5 })), 'judged cheated'],
       [lgSvg(svgEl('circle', { class: 'glyph out-honest', cx: 10, cy: 7, r: 5 })), 'judged not cheated'],

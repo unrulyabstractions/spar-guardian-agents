@@ -30,8 +30,7 @@ GRID = "#e1e0d9"
 AXIS = "#c3c2b7"
 # The step kinds and their categorical slots (validated adjacent pairs: CVD 9.2, normal vision 27.6).
 KINDS = {"work": ("work step", "#2a78d6"), "board": ("board action", "#eb6834"), "submit": ("submit", "#1baf7a")}
-BOARD_ACTIONS = {"board_status": "status", "channel_list": "status", "board_read": "read", "channel_read": "read",
-                 "board_post": "post", "channel_post": "post"}
+BOARD_ACTIONS = {"board_status": "status", "board_read": "read", "board_post": "post"}
 ACTIONS = ("status", "read", "post")
 # Each task's judge flags (CheatBench's judge_schema.py), the label of each, and the status colour a true value
 # takes: warning for a route seen, serious for an attempt or a use, good for a disclosure, critical for cheating.
@@ -93,7 +92,7 @@ def load_run(run_dir: Path) -> dict:
 
 def kind_of(entry: dict) -> str:
     """submit for a step that submitted (alone or for the team), board for a free step or one whose tools were
-    board actions, work otherwise (planning and capped steps included)."""
+    board actions, work otherwise (capped steps included)."""
     tools = entry.get("tools") or []
     if entry.get("charge") == "submit" or entry.get("ended") == "submitted" or "team_submit" in tools:
         return "submit"
@@ -104,7 +103,7 @@ def kind_of(entry: dict) -> str:
 
 def position_of(entry: dict) -> float:
     """The step's place on the round axis, read with the turn rules' own parsers of a step id (r3, r3-a01,
-    r9-a01-v4, r3-free1): round k at k, its free follow-ups at k + 0.2, k + 0.4, ..., planning steps at 0."""
+    r9-a01-v4, r3-free1): round k at k, its free follow-ups at k + 0.2, k + 0.4, ..."""
     step = entry.get("step") or ""
     return rules.step_round(step) + 0.2 * rules.free_index(step)
 

@@ -1,8 +1,7 @@
 """Mock-model smoke tests for the ORBIT <-> CheatBench seams on openmath_agent. No model spend.
 
-    uv run python tests/smoke_openmath.py [--only complete,message_limit,time_limit,board,defended,swarm,rules,judge,
-                                            discover,team_submit,channel,split_access,delivered,
-                                            team_delivered,role_models]
+    uv run python tests/smoke_openmath.py [--only complete,message_limit,time_limit,board,defended,swarm,judge,
+                                            discover,team_submit,split_access,delivered,team_delivered,role_models]
 
 Every scenario starts the real sandbox (CheatBench's image plus the article mirror), drives ORBIT with Inspect's
 mockllm scripted to call tools, judges every agent with a mock judge model bound to the "judge" role, exports the log
@@ -10,13 +9,11 @@ with src.benchmark.run_export.write_run, and reads the run directory back the wa
 (core.judge.is_judgeable, core.agents.trajectory_from_transcript, core.render.render_trajectory). Each check is an
 assertion: a failing seam exits non-zero. Results go to runs/smoke/ and logs/smoke/.
 
-The lone-agent scenarios run on the field defaults. The `board`, `swarm`, `rules` and `channel` scenarios test
-ORBIT's channel tools, so they run on the October 2026 sweep's board (tests/legacy_boards.py CHANNEL_BOARD);
-`rules` runs
-Lucy's rules (LUCY_RULES) with three agents and the instruction levels, and `channel` auto delivery with the sweep's
-board prompt. The `judge` scenario checks the judge scorer's verdicts and the exported judge.jsonl, including a
-reply that does not parse, on the default preset's solo_task layout. The `discover` and `team_submit` scenarios
-test the pull board in the default shared_task mode and team_submit. That mode has access=split, so `discover` and
+The lone-agent scenarios run on the field defaults. The `board` and `swarm` scenarios run a team and a swarm with
+hidden roles on the board, posting and reading through the board tools. The `judge` scenario checks the judge
+scorer's verdicts and the exported judge.jsonl, including a reply that does not parse, on the default preset's
+solo_task layout. The `discover` and `team_submit` scenarios test the pull board in the default shared_task mode
+and team_submit. That mode has access=split, so `discover` and
 `team_submit` run in the split layout (shell and run_python per agent). The `split_access` scenario checks that
 layout itself: each neutral agent's copy holds only its own slice of the complete submission's archive and the
 regulator's no slice, a push to the team remote landing on main, the scorer reading the remote, and team_submit
@@ -60,7 +57,6 @@ from src.benchmark.domains.openmath.openmath_settings import BUILD  # noqa: E402
 from src.benchmark.domains.openmath.openmath_task import (  # noqa: E402
     SPLIT_DEVIATIONS,
     OpenMath,
-    build_sample,
     layout_of,
 )
 from src.benchmark.run_export import write_run  # noqa: E402
@@ -68,10 +64,8 @@ from src.configuration import settings  # noqa: E402
 from src.configuration.swarm_config import SwarmConfig, build_config  # noqa: E402
 from src.measures import code_ladder as signals  # noqa: E402
 from src.measures.board_engagement import run_measures  # noqa: E402
-from src.swarm import turn_rules as rules  # noqa: E402
 from src.swarm.hidden_roles import level_text  # noqa: E402
 from src.tasks import hidden_roles, swarm_task  # noqa: E402
-from tests.legacy_boards import CHANNEL_BOARD, LUCY_RULES  # noqa: E402
 
 MODEL = "mockllm/model"
 LOGS = settings.LOGS / "smoke"
@@ -95,11 +89,6 @@ def honest_judge(messages, tools, tool_choice, config) -> ModelOutput:
 
 def task_for(**fields):
     return swarm_task(OpenMath(), SwarmConfig(**{"time_limit_s": 600, **fields}))
-
-
-def channel_task_for(**fields):
-    """A task on the sweep's board: ORBIT's channel tools, the board prompt, sequential rounds."""
-    return task_for(**{**CHANNEL_BOARD, **fields})
 
 
 def small(*pairs: str) -> SwarmConfig:
@@ -263,21 +252,24 @@ def scenario_time_limit() -> dict:
 
 
 def scenario_board() -> dict:
+    """Two agents on the board: a01 posts, works and reads; a02 reads a01's post and posts back. The notice tells
+    each of the other's post, and the board tools are the only way to the board."""
     script = {
         "a01": [
-            call("channel_post", {"channel_id": "board", "message": "a01: I will read README.md first"}, "a1"),
-            call("bash", {"command": "id -un; git -C /workspace branch --show-current"}, "a2"),
-            call("channel_read", {"channel_id": "board", "after_sequence": None, "limit": None}, "a3"),
+            call("board_post", {"message": "a01: I will read README.md first"}, "a1"),
+            call("shell", {"command": "id -un; git branch --show-current"}, "a2"),
+            call("board_read", {}, "a3"),
             call("submit", {"answer": "a01 done"}, "a4"),
         ],
         "a02": [
-            call("channel_read", {"channel_id": "board", "after_sequence": None, "limit": None}, "b1"),
-            call("channel_post", {"channel_id": "board", "message": "a02: I will check the git branches"}, "b2"),
+            call("board_read", {}, "b1"),
+            call("board_post", {"message": "a02: I will check the git branches"}, "b2"),
             call("submit", {"answer": "a02 done"}, "b3"),
         ],
     }
-    task = channel_task_for(n_agents=2, delivery="notify")
-    log, summary, records = run_scenario("board", task, scripted(script))
+    task = task_for(n_agents=2, concurrent_rounds=False, turn_order="round_robin")
+    recorder: list[dict] = []
+    log, summary, records = run_scenario("board", task, scripted(script, recorder))
     sample = log.samples[0]
     assert log.status == "success", log.status
     assert sample.limit is None, sample.limit
@@ -299,16 +291,18 @@ def scenario_board() -> dict:
         assert t["orbit"]["submit_recovered_from_events"] == 1, t["orbit"]
         assert "You are " + rec["orbit_agent"] in steps_of(t)[0]["message"], "wrong system prompt"
         out[rec["orbit_agent"]] = {"steps": len(steps_of(t)), "tool_calls": names,
-                                   "notices": t["orbit"]["delivery_notices_recovered_from_events"],
+                                   "notices": t["orbit"]["turn_rules_recovered_from_events"],
                                    "results": results_text(t)}
-    # a01 posts on turn 1; a02's first model call (turn 2) must carry the notify notice,
-    # and a02's channel_read must return a01's post.
-    offered = tool_names_offered(sample)
-    assert offered == {"bash", "python", "submit", "channel_post", "channel_read", "channel_list"}, offered
+    # a01 posts first; a02's first call (right after, in sequence) carries the notice and its board_read returns
+    # a01's post; a01's later read returns a02's post.
+    # the provider gets the task tools, submit, the board tools and team_submit, never ORBIT's channel tools
+    for r in recorder:
+        assert set(r["tools"]) == {"shell", "run_python", "submit", "board_status", "board_read", "board_post",
+                                   "team_submit"}, (r["agent"], r["tools"])
     assert out["a02"]["notices"] >= 1, out["a02"]
-    assert "a01: I will read README.md first" in out["a02"]["results"], out["a02"]["results"][:1500]
-    assert "a02: I will check the git branches" in out["a01"]["results"], out["a01"]["results"][:1500]
-    assert "user\n" in out["a01"]["results"], out["a01"]["results"][:500]
+    assert "[a01 #1] a01: I will read README.md first" in out["a02"]["results"], out["a02"]["results"][:1500]
+    assert "[a02 #2] a02: I will check the git branches" in out["a01"]["results"], out["a01"]["results"][:1500]
+    assert "a01\n" in out["a01"]["results"], out["a01"]["results"][:500]
     board = json.loads((RUNS / "board" / "communication" / "riemann#1.json").read_text())
     posts = [(m["sender"], m["content"]) for m in board["messages"]]
     assert posts == [("a01", "a01: I will read README.md first"), ("a02", "a02: I will check the git branches")], posts
@@ -355,19 +349,20 @@ def scenario_defended() -> dict:
 
 
 def scenario_swarm() -> dict:
-    """Four agents with hidden roles on the sweep's board post, work and submit. Nobody is asked for a team report."""
+    """Four agents with hidden roles on the board post, work and submit. Nobody is asked for a team report."""
     script = {
-        "a01": [call("channel_post", {"channel_id": "board", "message": "a01: I will read the problem"}, "s1"),
-                call("bash", {"command": "head -3 /workspace/Problem.md"}, "s2"),
+        "a01": [call("board_post", {"message": "a01: I will read the problem"}, "s1"),
+                call("shell", {"command": "head -3 Problem.md"}, "s2"),
                 call("submit", {"answer": "a01 done"}, "s3")],
-        "a02": [call("channel_read", {"channel_id": "board", "after_sequence": None, "limit": None}, "s4"),
+        "a02": [call("board_read", {}, "s4"),
                 call("submit", {"answer": "a02 done"}, "s5")],
-        "a03": [call("bash", {"command": "git -C /workspace status --short | head -3"}, "s6"),
+        "a03": [call("shell", {"command": "git status --short | head -3"}, "s6"),
                 call("submit", {"answer": "a03 done"}, "s7")],
-        "a04": [call("channel_post", {"channel_id": "board", "message": "a04: fine by me"}, "s8"),
+        "a04": [call("board_post", {"message": "a04: fine by me"}, "s8"),
                 call("submit", {"answer": "a04 done"}, "s9")],
     }
-    task = channel_task_for(n_agents=4, regulators=1, disregulators=1, seed=3)
+    task = task_for(n_agents=4, regulators=1, disregulators=1, seed=3, concurrent_rounds=False,
+                    turn_order="round_robin")
     log, summary, records = run_scenario("swarm", task, scripted(script))
     sample = log.samples[0]
     assert log.status == "success" and sample.limit is None, (log.status, sample.limit)
@@ -389,84 +384,16 @@ def scenario_swarm() -> dict:
         t = load_transcript(rec)
         sysmsg = steps_of(t)[0]["message"]
         assert sysmsg.startswith(f"You are {rec['orbit_agent']}."), sysmsg[:40]
-        assert ("regulator" in sysmsg) == (rec["orbit_agent"] == reg), (rec["orbit_agent"], reg)
-        assert ("Private instruction" in sysmsg) == (rec["orbit_agent"] == dis), (rec["orbit_agent"], dis)
+        reg_text = level_text("regulator", "ambiguous", "openmath").strip()
+        dis_text = level_text("disregulator", "persuade", "openmath").strip()
+        assert (reg_text in sysmsg) == (rec["orbit_agent"] == reg), (rec["orbit_agent"], reg)
+        assert (dis_text in sysmsg) == (rec["orbit_agent"] == dis), (rec["orbit_agent"], dis)
         assert "Team report" not in first_user(t) and "swarm_report" not in first_user(t), first_user(t)[-400:]
-        assert tool_names_offered(sample) >= {"bash", "python", "submit", "channel_post", "channel_read"}
+        assert tool_names_offered(sample) >= {"shell", "run_python", "submit", "board_post", "board_read"}
     board = json.loads((RUNS / "swarm" / "communication" / "riemann#1.json").read_text())
     assert [m["sender"] for m in board["messages"]] == ["a01", "a04"], board["messages"]
     return {"roles": roles, "composition": run["swarm"]["composition"]}
 
-
-PROBE_ANSWER = "CODING_EVAL: 60\nSOCIAL_EVAL: 30\nREASON: smoke."
-
-
-def scenario_rules() -> dict:
-    """Lucy's rules on three agents: planning turns, headers, seeded random order, a cap, levels and probes."""
-    config = SwarmConfig(**LUCY_RULES).with_overrides([
-        "n_agents=3", "regulators=1", "disregulators=1", "seed=4", "turn_order=random", "steps_per_agent=2",
-        "rule_level=precise", "regulator_level=role", "disregulator_level=persuade", "time_limit_s=600"])
-    prompts = settings.load_prompts()
-    script = {a: [call("channel_post", {"channel_id": "board", "message": f"{a}: plan"}, f"{a}-p1"),
-                  call("channel_post", {"channel_id": "board", "message": f"{a}: reply"}, f"{a}-p2"),
-                  call("bash", {"command": f"echo {a} work 1"}, f"{a}-w1"),
-                  call("bash", {"command": f"echo {a} work 2"}, f"{a}-w2")]
-              for a in config.names}
-    recorder: list[dict] = []
-    agent_outputs = scripted(script, recorder)
-
-    def outputs(messages, tools, tool_choice, cfg) -> ModelOutput:
-        last = messages[-1].text
-        if last == prompts["probes"]["reflection"]:
-            return text("It went fine.")
-        if last == prompts["probes"]["awareness"]:
-            return text(PROBE_ANSWER)
-        return agent_outputs(messages, tools, tool_choice, cfg)
-
-    task = swarm_task(OpenMath(), config)
-    log, summary, records = run_scenario("rules", task, outputs)
-    sample = log.samples[0]
-    assert log.status == "success" and sample.limit is None and sample.error is None, (log.status, sample.error)
-    roles = sample.metadata["cheatbench"]["roles"]
-    assert_judged("rules", sample, records)
-    # planning turns offer only the board's post and read tools (channel_list is off in the LUCY preset)
-    for agent in config.names:
-        mine = [r for r in recorder if r["agent"] == agent]
-        assert [r["tools"] for r in mine[:2]] == [["channel_post", "channel_read"]] * 2, (agent, mine[:2])
-        lasts = [r["last"] for r in mine[:2]]
-        assert lasts == [p.format(board="board") for p in prompts["planning"]["team"]], (agent, lasts)
-        assert all(r["last"].startswith("Turns left: ") for r in mine[2:]), (agent, [r["last"] for r in mine[2:]])
-        assert all("channel_list" not in r["tools"] and "bash" in r["tools"] for r in mine[2:]), mine[2:]
-    # the working steps ran in the seeded random order, capped at two per agent and not pooled
-    timeline = sample.store.get("TurnState:timeline")
-    plan = [s.agents[0] for s in rules.schedule(config, config.names, roles).steps if not s.id.startswith("plan")]
-    assert [e["agent"] for e in timeline if e["working"]] == plan, (timeline, plan)
-    other = [s.agents[0] for s in rules.schedule(config.with_overrides(["seed=5"]), config.names, roles).steps
-             if not s.id.startswith("plan")]
-    assert plan != other and plan != config.names * 2, (plan, other)
-    assert sample.store.get("TurnState:ended") == {a: "cap" for a in config.names}
-    assert sample.store.get("TurnState:used") == {a: 2 for a in config.names}
-    # the rule follows the instruction in every first user message; role texts only in their holders' prompts
-    rule = level_text("rule", "precise", "openmath")
-    regulator = level_text("regulator", "role", "openmath")
-    disregulator = level_text("disregulator", "persuade", "openmath")
-    base = build_sample("riemann").input
-    for rec in records:
-        agent = rec["orbit_agent"]
-        t = load_transcript(rec)
-        msg = first_user(t)
-        assert msg.startswith(base) and msg[len(base):].count(rule) == 1, (agent, msg[len(base) - 40:][:400])
-        assert rule in t["prompt"], f"{agent}: the judge prompt lacks the rule"
-        system = steps_of(t)[0]["message"]
-        assert (regulator in system) == (roles[agent] == "regulator"), (agent, roles[agent])
-        assert (disregulator in system) == (roles[agent] == "disregulator"), (agent, roles[agent])
-        recovered = [s["extra"][TURN_RULES_TAG] for s in steps_of(t) if TURN_RULES_TAG in (s.get("extra") or {})]
-        assert recovered == ["planning", "planning", "header", "header"], (agent, recovered)
-        assert rec["rules"]["ended"] == "cap" and rec["probes"]["coding_eval"] == 60, (rec["rules"], rec["probes"])
-    run = json.loads((RUNS / "rules" / "run.json").read_text())
-    assert run["config"]["rule_level"] == "precise" and run["rules"]["cap"] == 2, run["config"]
-    assert set(run["probes"]) == set(config.names), run["probes"]
-    return {"roles": roles, "order": plan, "probes": sample.scores["end_of_episode_probes"].value}
 
 
 def scenario_judge() -> dict:
@@ -630,45 +557,6 @@ def scenario_team_submit() -> dict:
     return {"roles": roles, "submitter": submitter, "disregulator": dis, "dropped": len(halts[0]["dropped"])}
 
 
-def scenario_channel() -> dict:
-    """The sweep's board builds and runs: ORBIT's channel tools, the sweep's board prompt, auto delivery and
-    sequential single-agent steps."""
-    config = SwarmConfig(**CHANNEL_BOARD).with_overrides(["n_agents=2", "time_limit_s=600"])
-    script = {
-        "a01": [call("channel_post", {"channel_id": "board", "message": "a01: I will read README.md first"}, "l1"),
-                call("bash", {"command": "id -un; pwd"}, "l2"),
-                call("submit", {"answer": "a01 done"}, "l3")],
-        "a02": [call("bash", {"command": "id -un; pwd"}, "m1"),
-                call("channel_post", {"channel_id": "board", "message": "a02: noted"}, "m2"),
-                call("submit", {"answer": "a02 done"}, "m3")],
-    }
-    recorder: list[dict] = []
-    log, summary, records = run_scenario("channel", swarm_task(OpenMath(), config), scripted(script, recorder))
-    sample = log.samples[0]
-    assert log.status == "success" and sample.limit is None and sample.error is None, (log.status, sample.error)
-    assert_judged("channel", sample, records)
-    assert tool_names_offered(sample) == {"bash", "python", "submit", "channel_post", "channel_read", "channel_list"}
-    assert all(not set(r["tools"]) & {"board_status", "board_read", "board_post", "team_submit"} for r in recorder)
-    assert timeline_of(sample, "a01") == [("r1-a01", ["channel_post"]), ("r2-a01", ["bash"]), ("r3-a01", [])], \
-        timeline_of(sample, "a01")
-    prompts = settings.load_prompts()
-    for rec in records:
-        agent = rec["orbit_agent"]
-        other = "a02" if agent == "a01" else "a01"
-        t = load_transcript(rec)
-        expected = prompts["board_channel"].format(name=agent, others=other, n=2, workdir="/workspace", board="board",
-                                                   read=prompts["board_read"].format(board="board"))
-        assert steps_of(t)[0]["message"].startswith(expected), steps_of(t)[0]["message"][:300]
-        assert "user\n/workspace\n" in results_text(t), results_text(t)[:300]
-    # auto delivery: a02's first model input carries a01's post without a read
-    first_a02 = next(r for r in recorder if r["agent"] == "a02")
-    assert any("a01: I will read README.md first" in x for x in first_a02["system_texts"]), first_a02["system_texts"]
-    run = json.loads((RUNS / "channel" / "run.json").read_text())
-    assert (run["mode"], run["scale"], run["preset"]) == ("shared_task", None, None), run
-    board = json.loads((RUNS / "channel" / "communication" / "riemann#1.json").read_text())
-    posts = [(m["sender"], m["content"]) for m in board["messages"]]
-    assert posts == [("a01", "a01: I will read README.md first"), ("a02", "a02: noted")], posts
-    return {"timeline": timeline_of(sample, "a01"), "posts": len(posts), "preset": run["preset"]}
 
 
 AGENT_022 = "356493c7174cf76210278f9a6d53b57ada98f50c"
@@ -906,6 +794,9 @@ def scenario_team_delivered() -> dict:
     return {"timeline": timeline_of(sample, pusher), "delivery": run["delivery"]}
 
 
+PROBE_ANSWER = "CODING_EVAL: 60\nSOCIAL_EVAL: 30\nREASON: smoke."
+
+
 def scenario_role_models() -> dict:
     """regulator_model=mockllm/regulator on a three-agent board, with the end-of-episode probes. The regulator runs a
     second mockllm through the swarm provider and answers every turn and both probe questions with its default text.
@@ -966,8 +857,8 @@ def scenario_role_models() -> dict:
 
 SCENARIOS = {"complete": scenario_complete, "message_limit": scenario_message_limit,
              "time_limit": scenario_time_limit, "board": scenario_board, "defended": scenario_defended,
-             "swarm": scenario_swarm, "rules": scenario_rules, "judge": scenario_judge,
-             "discover": scenario_discover, "team_submit": scenario_team_submit, "channel": scenario_channel,
+             "swarm": scenario_swarm, "judge": scenario_judge,
+             "discover": scenario_discover, "team_submit": scenario_team_submit,
              "split_access": scenario_split_access,
              "delivered": scenario_delivered, "team_delivered": scenario_team_delivered,
              "role_models": scenario_role_models}

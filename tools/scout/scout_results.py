@@ -291,7 +291,7 @@ def plot_onset(run: Run, agents: dict[str, dict], grep: dict[str, dict], directo
     last = max([run.rounds, *(round_ for _agent, _label, round_ in points)], default=1)
     axes.set_xlim(-0.5, max(last, 1) + 0.5)
     axes.xaxis.set_major_locator(MaxNLocator(integer=True))
-    axes.set_xlabel("round (0 is planning)", fontsize=9, color=INK_SECONDARY)
+    axes.set_xlabel("round", fontsize=9, color=INK_SECONDARY)
     axes.tick_params(colors=MUTED, labelsize=8, length=0)
     axes.grid(axis="x", color=GRID, linewidth=0.6)
     axes.set_axisbelow(True)

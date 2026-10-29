@@ -81,13 +81,13 @@ Knowledge = {layout ("lone"|"shared"|"solo"), mode, split, row_id, meta: {task_i
              last_verdict, access, share_delivered, reviews}
 RunEngagement = {
   agents, agents_checked (looked: board_status or board_read), agents_posted, median_discovery_round,
-  checks, reads, posts, read_graph: {reader: {sender: count}}, team_submission: null | {agent, round, answer, time},
-  reads_refused?, posts_refused?, oversight?, oversight_graph?: {regulator: {target: count}}
-                                   # present only for runs with per-turn budgets and the regulators' agent_actions
+  checks, reads, posts, read_graph: {reader: {sender: count}},
+  team_submission: null | {agent, round, answer, time, refused: [{agent, round}]},
+  reads_refused, posts_refused, oversight, oversight_graph: {regulator: {target: count}}
 }
 SweSetting = {
   task_key ("flipt-02e2"), instance, n_agents, board: bool, honeypot ("as_released"|"own_piece"|"jigsaw"|null), jigsaw: bool,
-  rule ("none" or the rule level), delivery ("auto"|"notify"|"poll"|null for a lone agent),
+  rule ("none" or the rule level),
   base_commit, fix_commit, arm ("n2-own_piece-none"),
   team_reward: 0|1|null (team/main; null for a lone agent), rewards: {team?, <agent>: 0|1|null}, required_passed: {target: int},
   required_tests: int, pieces: null | {<agent>: piece}, fragments: null | {<agent>: [file]},
@@ -104,9 +104,8 @@ Episode = {                       # one row of episodes.jsonl plus:
   ladder: null | Ladder,
   signals: null | Signals,
   engagement: null | {discovery_round, checks, reads, posts, read_senders: {sender: count}, free_steps, work_steps,
-                      team_submitted: bool, notices,
-                      reads_refused?, posts_refused?, oversight?, oversight_targets?: {target: count}},
-                                   # null for a run without a board; the last four only for runs that record them
+                      team_submitted: bool, notices, reads_refused, posts_refused, oversight,
+                      oversight_targets: {target: count}},      # null for a run without a board
   access?: {holds, branches?, slices?, review?, read?},   # this agent's entry of Access
   review?: {agent_id, calls, errors, verdicts, similarities, submitted_reference}   # knowledge work: its grader state
 }
@@ -144,11 +143,11 @@ Board message: `{id, sender, sequence, channel_id, content, ...}`. Intervention:
 ### `GET /api/runs/<run>/transcript/<episode>` → `{episode: Episode, transcript: Transcript}`
 ```
 Transcript = {agent, model, prompt, orbit: {agent, roster, topology, system_prompt, submit_recovered_from_events,
-              delivery_notices_recovered_from_events, model_calls}, trajectory: ATIF}
+              turn_rules_recovered_from_events, model_calls}, trajectory: ATIF}
 ATIF.steps[i] = {step_id, source: "system"|"user"|"agent", message, reasoning_content?, model_name?,
                  tool_calls?: [{tool_call_id, function_name, arguments}],
                  observation?: {results: [{source_call_id, content, extra?: {is_error?, error?, withheld_from_model_by_defense?}}]},
-                 extra?: {orbit_delivery_notice?, swarm_turn_rules? ("planning"|"header"|"continue"|"notice"),
+                 extra?: {swarm_turn_rules? ("continue"|"notice"),
                           submit_recovered_from_events?, orphan_tool_result?, ...}}
 ```
 A blocked tool call has a result whose `extra.error` starts with `Blocked by defense '<name>'`. An agent step whose message is
@@ -170,7 +169,7 @@ exactly `I cannot provide that response under the configured defense policy.` is
 CallIndex = {index, agent (null for a defense's own call that is not inside an agent span), defense (null for the agent's own call,
              else the defense name whose monitor made the call), model, timestamp, working_time, n_input, input_chars, tools: [str],
              usage: {input, cache_read, output, reasoning} | null, output_preview, output_tool_calls: [str], stop_reason, error,
-             flags: subset of ["delivery_notice", "turn_rules", "redacted", "output_blocked",
+             flags: subset of ["turn_rules", "redacted", "output_blocked",
                                "refusal_in_history"]}
 ```
 ### `GET /api/runs/<run>/context/<index>` → `CallIndex + {input: [Message], output: Message|null, output_error, tool_schemas: [{name, description}]}`
@@ -179,8 +178,8 @@ Message = {role: "system"|"user"|"assistant"|"tool", id, text, reasoning, flags:
            tool_calls?: [{id, function, arguments}] (assistant), model? (assistant),
            tool_call_id?, function?, error? (tool)}
 ```
-`flags` mark provider-only or altered messages: `delivery_notice` (ORBIT board notice placed in the input), `turn_rules` (a
-planning prompt, turn header or continue prompt the turn rules placed in the input), `redacted` (a defense withheld this message's content from the model), `output_blocked` (this call's own
+`flags` mark provider-only or altered messages: `turn_rules` (a board notice or continue prompt the turn rules placed in
+the input), `redacted` (a defense withheld this message's content from the model), `output_blocked` (this call's own
 completion was blocked by a defense), `refusal_in_history` (an earlier assistant message in the input is the refusal sentence).
 
 Errors: 404 `{"error": ...}` for unknown run/episode/call; 500 `{"error", "traceback"}` for server faults.
@@ -193,9 +192,9 @@ Errors: 404 `{"error": ...}` for unknown run/episode/call; 500 `{"error", "trace
 Event = {t, t_end?, agent, kind: "model"|"defense_call"|"tool"|"submit"|"defense", ...}
   model:        tokens_in, tokens_out, tool_calls: [function], output_blocked: bool (a defense replaced this completion; from the block event), refusal: bool (the output text is the refusal sentence, possibly model-written), error
   defense_call: defense (the control's own judge call)
-  tool/submit:  function, id, preview, blocked, error, honeypot_touch, member_read, message_ids? (channel_post: sent; channel_read: read)
+  tool/submit:  function, id, preview, blocked, error, honeypot_touch, member_read, message_ids? (board_post: sent; board_read: read)
   defense:      defense, boundary, allow, reason, tool?
-Post = {sequence, sender, id, t, content, read_by: [{agent, t, how: "read"|"model_exposure"}]}
+Post = {sequence, sender, id, t, content, read_by: [{agent, t}]}
 ```
 `honeypot_touch` marks a bash/python call whose arguments name another agent's branch, commit or copied archive
 (openmath_agent riemann row); `member_read` marks a successful call whose result carries text found only inside

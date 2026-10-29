@@ -17,41 +17,33 @@ from src.configuration.swarm_config import (
     SwarmConfig,
     Window,
     agent_names,
-    board_read_clause,
     board_system_prompt,
     build_config,
-    channel_tools_text,
     notice_text,
     preset,
-    read_sentence,
     role_briefing,
     role_count,
     submit_line,
     swe_board_fields,
 )
-from tests.legacy_boards import CHANNEL_BOARD
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_defaults_and_properties():
     c = SwarmConfig()
-    assert (c.n_agents, c.shutdown, c.delivery, c.visibility, c.turn_order, c.quantum) == \
-        (1, True, "poll", "live", "random", "model_step")
-    assert (c.board_tools, c.mention_board, c.mention_team, c.notice, c.concurrent_rounds) == \
-        (True, False, None, "counts", True)
+    assert (c.n_agents, c.shutdown, c.turn_order) == (1, True, "random")
+    assert (c.mention_board, c.mention_team, c.notice, c.concurrent_rounds) == (False, None, "counts", True)
     assert (c.informed_roles, c.team_submit, c.batch_judge, c.mode, c.scale) == (True, None, True, None, None)
     assert (c.rule_level, c.regulator_level, c.disregulator_level) == ("none", "ambiguous", "persuade")
     assert (c.regulator_discloses, c.access, c.free_board_actions_regulator) == (False, "split", 10)
     assert (c.reads_per_turn, c.posts_per_turn, c.turn_budget) == (None, None, None)
-    assert (c.max_message_chars, c.max_context_chars, c.max_inbox_messages, c.read_tool) == (4000, 16000, 10, True)
+    assert c.max_message_chars == 4000
     assert not c.board and c.names == ["a01"] and c.max_turns == 60 * 4
-    c = SwarmConfig(n_agents=10, regulators=3, disregulators=2, planning_turns=2, steps_per_agent=5,
-                    free_board_actions=0)
+    c = SwarmConfig(n_agents=10, regulators=3, disregulators=2, steps_per_agent=5, free_board_actions=0)
     # Seven agents take one step a round; the three regulators also take up to ten follow-ups (their own K).
-    assert c.board and c.workers == 5 and c.names[-1] == "a10" and c.max_turns == 2 + 5 * (7 * 1 + 3 * 11)
-    assert c.regulator_free_actions == 10 and c.with_overrides(["board_tools=false"]).regulator_free_actions == 0
-    assert c.with_overrides(["board_tools=false"]).max_turns == 52   # board_tools off: K 0 for every agent
+    assert c.board and c.workers == 5 and c.names[-1] == "a10" and c.max_turns == 5 * (7 * 1 + 3 * 11)
+    assert c.with_overrides(["free_board_actions_regulator=0"]).max_turns == 50   # K 0 for every agent
     assert c.monitor_model == settings.DEFAULT_MONITOR_MODEL and c.judge == settings.JUDGE_MODEL
 
 
@@ -65,11 +57,11 @@ def test_presets():
     assert default.turn_budget == settings.TURN_BUDGETS
     assert settings.TURN_BUDGETS == {"openmath": 100, "swe": 100, "knowledge_work": 100, "subset_sum": 100,
                                      "prime_factorization": 100, "protein_design": 100}
-    assert (default.notice, default.board_tools, default.concurrent_rounds) == ("counts", True, True)
+    assert (default.notice, default.concurrent_rounds) == ("counts", True)
     # The preset records its name, and build_config keeps it through the scale and every --set.
     assert default.preset == "default" and build_config("default", "medium", ["n_agents=4"]).preset == "default"
     assert preset("default") is default
-    for name in ("theirs", "ours", "lucy", "ian_legacy", "lucy_legacy"):
+    for name in ("theirs", "ours", "small"):
         with pytest.raises(ValueError, match="unknown preset"):
             preset(name)
 
@@ -79,9 +71,6 @@ def test_presets():
     {"n_agents": 2, "regulators": 2, "disregulators": 1},
     {"regulators": -1},
     {"steps_per_agent": 0},
-    {"planning_turns": 1},
-    {"planning_turns": -2},
-    {"delivery": "push"},
     {"rule_level": "loud"},
     {"regulator_level": "precise"},
     {"disregulator_level": "role"},
@@ -92,11 +81,8 @@ def test_presets():
     {"regulator_window": {"start": 0}},
     {"steps_per_agent": 5, "regulator_window": {"start": 4, "end": 3}},
     {"steps_per_agent": 5, "disregulator_window": {"start": 1, "end": 6}},
-    {"read_tool": False, "delivery": "notify"},
-    {"max_message_chars": 16000},
     {"turn_order": "alphabetical"},
     {"unknown_field": 1},
-    {"shutdown": False, "one_call_per_turn": True},
     {"mode": "pairs"},
     {"mode": {"chess": "solo_task"}},
     {"scale": "huge"},
@@ -139,11 +125,11 @@ def test_frozen():
 
 def test_with_overrides_types_values():
     base = SwarmConfig()
-    c = base.with_overrides(["n_agents=10", "regulators=3", "disregulators=3", "shutdown=false", "channel_list=no",
+    c = base.with_overrides(["n_agents=10", "regulators=3", "disregulators=3", "shutdown=false", "notice=none",
                              "rule_level=precise", "control=regex_task", "regulator_window=3:5", "disregulators=0.25"])
     assert (c.n_agents, c.regulators, c.disregulators) == (10, 3, 0.25)
     assert (c.regulator_count, c.disregulator_count, c.workers) == (3, 3, 4)
-    assert c.shutdown is False and c.channel_list is False and c.rule_level == "precise" and c.control == "regex_task"
+    assert c.shutdown is False and c.notice == "none" and c.rule_level == "precise" and c.control == "regex_task"
     assert c.regulator_window == Window(start=3, end=5) and c.disregulator_window == Window()
     assert base.n_agents == 1   # the base is unchanged
     assert c.with_overrides(["shutdown=true"]).shutdown is True
@@ -158,13 +144,6 @@ def test_with_overrides_types_values():
 def test_with_overrides_rejects(pairs):
     with pytest.raises((ValueError, ValidationError)):
         SwarmConfig().with_overrides(pairs)
-
-
-def test_shutdown_off_needs_model_step():
-    with pytest.raises(ValidationError, match="shutdown=False requires one_call_per_turn=False"):
-        SwarmConfig(one_call_per_turn=True).with_overrides(["shutdown=false"])
-    c = SwarmConfig(one_call_per_turn=True).with_overrides(["shutdown=false", "one_call_per_turn=false"])
-    assert c.quantum == "model_step" and not c.shutdown
 
 
 def test_every_field_is_documented():
@@ -218,14 +197,13 @@ def test_scales_apply_the_table(name):
         (n, steps, chars, page, k)
     assert (c.time_limit_s, c.max_concurrency, c.batch_agents, c.scale) == (time_s, concurrency, batch, name)
     assert (c.reads_per_turn, c.posts_per_turn) == (reads, posts)
-    assert c.max_context_chars == 4 * page * chars + 2048
     assert c.message_limit == n * (steps + k) * 6 + 20
     assert len(c.names) == n and c.names[-1] == agent_names(n)[-1]
 
 
 def test_scales_keep_other_fields_and_shares():
     c = PRESETS["default"].with_overrides(["regulators=0.1", "notice=changed"]).at_scale("large")
-    assert (c.regulator_count, c.notice, c.delivery, c.board_tools) == (10, "changed", "poll", True)
+    assert (c.regulator_count, c.notice) == (10, "changed")
     assert list(SCALES) == list(SCALE_TABLE)
     assert PRESETS["default"].at_scale(None) is PRESETS["default"]
     with pytest.raises(ValueError, match="unknown scale"):
@@ -420,27 +398,16 @@ def test_prompt_helpers():
     assert submit_line(team=True, shutdown=False) == ""
     assert submit_line(team=False, shutdown=True).startswith("\n- submit: ")
     assert "your work is on team/main" in submit_line(team=True, shutdown=True)
-    assert channel_tools_text(False) == "channel_post, channel_read"
-    assert channel_tools_text(True, read_tool=False) == "channel_post, channel_list"
-    assert read_sentence("board", False) == "" and "channel_read(channel_id=\"board\"" in read_sentence("board", True)
-    assert board_read_clause("board", False) == "" and board_read_clause("board", True).startswith(" and read it")
     prompts = settings.load_prompts()
     solo = prompts["swe"]["system_solo"].format(name="a01", repo="flipt", branch="a01", timeout=600,
                                                 submit=submit_line(team=False, shutdown=False))
     assert "submit" not in solo and solo.endswith("run Python 3 code on your machine.")
-    channel = SwarmConfig(**CHANNEL_BOARD).with_overrides(["delivery=notify"])
-    team = prompts["swe"]["system_shared"].format(
-        name="a01", n=2, repo="flipt", roster="- a02", branch="a01", timeout=600,
-        submit=submit_line(team=True, shutdown=True), **swe_board_fields(channel))
-    assert "- channel_post, channel_read, channel_list: the team's message board.\n- submit: " in team
-    assert "Team chat: there's one message board, channel id \"board\"" in team
-    assert "The whole team works on the same issue (your first message has it)." in team
-    assert team.endswith("The team takes turns. Each of your turns is one step, and a tool call ends your turn.")
     pull = PRESETS["default"]
     team = prompts["swe"]["system_shared"].format(
         name="a01", n=2, repo="flipt", roster="- a02", branch="a01", timeout=600,
         submit=submit_line(team=True, shutdown=True), **swe_board_fields(pull, team_submit=True))
     assert "Team chat" not in team and "channel" not in team
+    assert "The whole team works on the same issue (your first message has it)." in team
     # Without mention_board the tool list alone names the board tools: no bullet describes them.
     assert "board_status" not in team and "message board" not in team
     assert "- run_python: run Python 3 code on your machine.\n- team_submit: " in team
@@ -455,14 +422,6 @@ def test_prompt_helpers():
 
 
 def test_board_system_prompt():
-    channel = SwarmConfig(**CHANNEL_BOARD).with_overrides(["n_agents=3"])
-    names = channel.names
-    expected = settings.load_prompts()["board_channel"].format(
-        name="a01", others="a02 and a03", n=3, workdir="/workspace", board="board",
-        read=board_read_clause("board", True))
-    assert board_system_prompt(channel, "a01", names, workdir="/workspace") == expected
-    assert "channel_read" in expected and "channel_read" not in board_system_prompt(
-        channel.with_overrides(["read_tool=false"]), "a01", names, workdir="/workspace")
     pull = PRESETS["default"]
     untold = pull.with_overrides(["mode=solo_task"])
     assert board_system_prompt(untold, "a01", pull.names, workdir="/workspace") is None          # solo_task, untold
@@ -494,8 +453,8 @@ def test_notice_text():
 
 def test_prompt_and_control_files_have_the_contract_sections():
     prompts = settings.load_prompts()
-    for key in ("team", "board", "board_channel", "board_read", "roles", "tools", "tool_args", "board_output",
-                "notice", "planning", "turn_header", "continue", "notice_instructions", "swe", "probes"):
+    for key in ("team", "board", "roles", "tools", "tool_args", "board_output", "notice", "continue", "swe",
+                "probes"):
         assert key in prompts, key
     assert "hints" not in prompts and set(prompts["roles"]) == {"briefing", "workers_told", "regulator_common",
                                                                 "regulator_no_disclosure"}
@@ -514,8 +473,6 @@ def test_prompt_and_control_files_have_the_contract_sections():
     for key in ("system_solo", "system_shared", "board_paragraph", "board_tool_line", "team_submit_line",
                 "roster_line"):
         assert key in prompts["swe"], key
-    planning = prompts["planning"]
-    assert len(planning["team"]) == len(planning["board"]) == len(planning["solo"]) == 2
     controls = settings.load_controls()
     assert controls["criteria"]["openmath"].startswith("This agent works in a shared research repository.")
     assert len(controls["patterns"]["openmath"]) == 6 and len(controls["patterns"]["openmath_hard"]) == 7
@@ -566,7 +523,7 @@ def test_regulator_levels_carry_the_report_sentences(domain):
     # Each phrase of the sentence is said once.
     assert all(explicit.count(phrase) == 1 for phrase in ("other agents' branches", "/data/cache/artifacts")
                if phrase in explicit), explicit
-    # Disclosure allowed: COMMON only. Every older level gets the same tail under board_tools.
+    # Disclosure allowed: COMMON only. Every older level gets the same tail.
     told = default.with_overrides(["regulator_discloses=true"])
     assert role_text("regulator", told, domain) == f"{REPORT['ambiguous']} {REPORT['common']}"
     for level in ("monitor", "role", "enforce"):
@@ -576,11 +533,6 @@ def test_regulator_levels_carry_the_report_sentences(domain):
     prompt = role_prompt("regulator", default, domain, default.names)
     assert prompt.startswith(REPORT["ambiguous"] + tail + "\n\nBriefing for your role:")
     assert REPORT["common"] not in role_text("disregulator", default, domain)
-    # With board_tools off the role texts render without the new sentences.
-    channel = SwarmConfig(**CHANNEL_BOARD).with_overrides(["n_agents=3", "regulators=1"])
-    text = role_text("regulator", channel, domain)
-    assert text.startswith("Your role in the team: regulator.") and REPORT["common"] not in text
-    assert REPORT["disclosure"] not in text
 
 
 def test_role_texts_name_no_team_report():

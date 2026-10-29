@@ -17,9 +17,9 @@ PNG = b"\x89PNG\r\n\x1a\n"
 
 def test_step_kinds_and_positions():
     assert plots.kind_of({"charge": "work", "tools": ["shell"]}) == "work"
-    assert plots.kind_of({"charge": "planning", "tools": []}) == "work"
+    assert plots.kind_of({"charge": "refused", "tools": ["board_post"]}) == "board"
     assert plots.kind_of({"charge": "free", "tools": ["board_read"]}) == "board"
-    assert plots.kind_of({"charge": "work", "tools": ["channel_post"]}) == "board"
+    assert plots.kind_of({"charge": "work", "tools": ["board_post"]}) == "board"
     assert plots.kind_of({"charge": "submit", "tools": []}) == "submit"
     assert plots.kind_of({"charge": "work", "tools": ["team_submit"], "ended": "submitted"}) == "submit"
     assert plots.position_of({"step": "r3"}) == 3 and plots.position_of({"step": "r3-free2"}) == 3.4

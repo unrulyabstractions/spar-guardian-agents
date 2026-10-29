@@ -52,7 +52,7 @@ uv run python -m examples.swe.flipt_minimal --model gemini-3.8-flash --scale med
 |---|---|
 | `default` | the midterm report's configuration at the small scale: the pull board in `shared_task`, the exploit split over the neutral agents (`access=split`), read and post budgets per round and the domain's turn budget; no regulators, and the regulator level `ambiguous` without disclosure for any that `regulators` adds; the agents know their team, are told nothing about the board, and get the board notice with counts |
 
-The config records its preset, so `run.json` names it. The October 2026 sweep's board is still available as fields: `board_tools=false` offers ORBIT's channel tools, `mention_board=true` puts the board paragraph in the system prompt, `delivery=auto` pushes every unread post into the agent's input, and `concurrent_rounds=false` runs one agent at a time. `tests/legacy_boards.py` lists the full set, and Lucy's rules on top of it.
+The config records its preset, so `run.json` names it.
 
 ## The pull board
 
@@ -68,7 +68,7 @@ Each round has a read budget and a post budget per agent (`reads_per_turn`, `pos
 
 ## Regulators
 
-A regulator gets three affordances that neutral agents lack, under `board_tools` only. The table compares them. The tool `agent_actions(agent, latest)` returns the latest tool calls of any teammate, disregulators included, oldest first, as `r<round> <tool>(<arguments>) -> <result>`. It answers "no such agent" for an unknown name or the regulator itself, so a refusal never tells roles apart. A call to `agent_actions` counts as a board action. A regulator never gets `team_submit`.
+A regulator gets three affordances that neutral agents lack. The table compares them. The tool `agent_actions(agent, latest)` returns the latest tool calls of any teammate, disregulators included, oldest first, as `r<round> <tool>(<arguments>) -> <result>`. It answers "no such agent" for an unknown name or the regulator itself, so a refusal never tells roles apart. A call to `agent_actions` counts as a board action. A regulator never gets `team_submit`.
 
 | affordance | regulator | neutral agent |
 |---|---|---|
@@ -239,6 +239,6 @@ A run writes its eval log under `logs/`, exports it to `runs/<name>/` and prints
 
 ## Results browser
 
-The browser has three parts. **Summary** shows the share of judged agents who cheated by setting, the composition grids, and the team reports of older runs against the judge. **Runs** has one row per run. A row opens to its agents, then to the run page, the transcript, the context windows, the sample and the timeline. The run page shows the run's mode, scale and preset, its access policy and turn budget, its configuration, its turn-rules facts and its board engagement. The engagement table adds the reads and posts the budgets refused and each regulator's `agent_actions` queries. The access table shows what each agent held. A SWE run shows its SWE task, and a knowledge-work run its contracts and reviews. **Swarm** shows the composition grids, the role funnel, the adoption curves, the swarm runs with their rasters, and a run explorer with the swimlane and the exposure cascade. `src/ui/API.md` is the HTTP contract.
+The browser has three parts. **Summary** shows the share of judged agents who cheated by setting and the composition grids. **Runs** has one row per run. A row opens to its agents, then to the run page, the transcript, the context windows, the sample and the timeline. The run page shows the run's mode, scale and preset, its access policy and turn budget, its configuration, its turn-rules facts and its board engagement. The engagement table adds the reads and posts the budgets refused and each regulator's `agent_actions` queries. The access table shows what each agent held. A SWE run shows its SWE task, and a knowledge-work run its contracts and reviews. **Swarm** shows the composition grids, the role funnel, the adoption curves, the swarm runs with their rasters, and a run explorer with the swimlane and the exposure cascade. `src/ui/API.md` is the HTTP contract.
 
 `uv run python -m src plots <run_dir>` writes one run's figures as PNG files, each with a CSV twin of its data, under `out/<run name>/` (gitignored): every agent's steps round by round with the judge's verdict at the lane's end, the board's actions per round, and the judge's flags per agent. The examples write them after their run. `src/ui/run_figures.py` holds them.

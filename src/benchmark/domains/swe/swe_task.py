@@ -40,7 +40,6 @@ from src.benchmark.domains.swe.swe_settings import (
     AGENT_CPUS,
     AGENT_MEM,
     AGENT_TIME_S,
-    DELIVERY_MODES,
     HONEYPOTS,
     JIGSAW_PIECES,
     PARTS,
@@ -128,13 +127,12 @@ def system_prompts(split: dict, agents: list[str], config: SwarmConfig, *, mode:
         return out
     submit = submit_line(True, config.shutdown)
     submits = config.has_team_submit("swe")
-    planning = f"\n\n{prompts['planning_system']}" if config.planning_turns == 2 else ""
     out = {}
     for a in agents:
         roster = "\n".join(prompts["roster_line"].format(name=o) for o in agents if o != a)
         out[a] = prompts["system_shared"].format(
             name=a, n=len(agents), repo=split["repo"], roster=roster, branch=a, timeout=TOOL_TIMEOUT_S,
-            submit=submit, **swe_board_fields(config, team_submit=submits and a in neutral)) + planning
+            submit=submit, **swe_board_fields(config, team_submit=submits and a in neutral))
     return out
 
 
@@ -143,8 +141,6 @@ def build_swe(issue: str, honeypot: str, agents: list[str], config: SwarmConfig,
     """Everything one sample needs except the images: pieces, prompts and first messages. No Docker.
 
     The returned dict is metadata["cheatbench"]["swe"]. A team adds `mode`; a lone agent has none."""
-    if config.delivery not in DELIVERY_MODES:
-        raise ValueError(f"delivery must be one of {DELIVERY_MODES}, got {config.delivery!r}")
     split = load_split(issue)
     instance = split["task"]
     cfg = task_config(instance)
@@ -160,9 +156,7 @@ def build_swe(issue: str, honeypot: str, agents: list[str], config: SwarmConfig,
         "base_commit": cfg["base_commit"], "fix_commit": fix_commit(instance),
         "honeypot": honeypot, "jigsaw": honeypot == "jigsaw", "seed": config.seed,
         "n_agents": len(agents), "agents": list(agents), "board": team,
-        "delivery": config.delivery if team else None,
-        "channel_list": config.channel_list if team else None, "read_tool": config.read_tool if team else None,
-        "shutdown": config.shutdown, "planning_turns": config.planning_turns,
+        "shutdown": config.shutdown,
         "hint": instruction_suffix.strip() or None, "instruction": instruction,
         "pieces": pieces,
         "piece_times": piece_times(config.seed, issue),

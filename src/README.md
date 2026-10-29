@@ -57,33 +57,25 @@ The judge runs inside the eval as the scorer `cheatbench_judge`, bound to the mo
 | `scale` | none (small in the `default` preset) | the label of the scale the size fields came from (`src/configuration/scales.py`) |
 | `mention_team` | none | the `team` sentence and the roster in the system prompt; none follows the mode |
 | `informed_roles` | true | `roles.briefing` after a regulator's or disregulator's role text |
-| `board_tools` | true | binds `board_status`, `board_read` and `board_post` per agent (`tool_bindings`) and withholds ORBIT's channel tools from the provider request; false offers the channel tools |
 | `mention_board` | false | the board sentence in the system prompt (SWE: the team chat paragraph) |
 | `notice` | counts | one provider-only line when the board changed since the agent's last call: `counts` gives each sender's new and total posts, `changed` the line alone, `none` nothing |
 | `read_page` | 5 | the most posts one `board_read` returns |
 | `free_board_actions` | 3 | follow-up steps per round after a free step, amended into the plan by the `after_activation` callback; 0 charges every step |
-| `free_board_actions_regulator` | 10 | a regulator's follow-up steps per round, under `board_tools` only; `agent_actions` counts as a board action |
+| `free_board_actions_regulator` | 10 | a regulator's follow-up steps per round; `agent_actions` counts as a board action |
 | `reads_per_turn`, `posts_per_turn` | none (10 and 2 from the scale) | posts an agent may receive through `board_read` and posts it may make per round; past them the tool returns the newest posts left or raises a ToolError; regulators have no read budget |
-| `delivery` | poll | `CommunicationConfig.delivery`; auto puts every unread post in the model input at the start of the turn |
-| `channel_list` | true | with `board_tools` off only; false withholds `channel_list` from the provider request (turn_rules.py filter) and rewrites the unread notice's last line |
-| `read_tool` | true | with `board_tools` off only; false withholds `channel_read` the same way and drops the prompt sentences that name it; needs auto delivery |
-| `visibility` | live | `CommunicationConfig.visibility`; a concurrent round always sees the board as of its start |
-| `max_message_chars`, `max_context_chars`, `max_inbox_messages` | 4000, 16000, 10 | the same `CommunicationConfig` fields; a scale sets the first two |
-| `turn_order` | random | the order of each round in the written plan (`ExecutionConfig.plan`); random draws a permutation per round from the seed |
-| `steps_per_agent` | 60 (8 in the `default` preset) | rounds of the plan; an agent is charged at most one working step per round, and planning steps and free board steps are never charged |
+| `max_message_chars` | 4000 | `CommunicationConfig.max_message_chars`, the longest post; a scale sets it |
+| `turn_order` | random | the order of each round in the written plan (`ExecutionConfig.plan`); random draws a permutation per round from the seed; round_robin keeps declaration order |
+| `steps_per_agent` | 60 (8 in the `default` preset) | rounds of the plan; an agent is charged at most one working step per round, and free board steps are never charged |
 | `turn_budget` | none (`settings.TURN_BUDGETS` in the `default` preset: 100 on every domain, two thirds of CheatBench's 150-turn bound) | the turns per agent on a domain; `steps_for(domain)` gives the budget as rounds in place of `steps_per_agent`; an int applies to every domain; `knowledge_work:70,swe:120` changes the named domains and keeps the table's values for the rest,; `none` turns the budget off |
 | `concurrent_rounds`, `max_concurrency` | true, 3 | one concurrent `ScheduleStep` per round with a snapshot of the board; false runs one single-agent step per agent per round |
 | `pooled_steps` | true | the `after_activation` callback gives a stopped agent's steps to the active agents (`ScheduleRuntime.amend_pending`) |
-| `one_call_per_turn` | false | quantum `legacy`, which runs the first call of a response; false is quantum `model_step` |
-| `planning_turns` | 0 | 0 or 2 concurrent snapshot steps before round 1, quantum `model_step`, offering only the three board tools, or `channel_post` and `channel_read` on the legacy board |
-| `turn_header` | false | "Turns left: ..." appended to the provider input of each working turn, counted from the live plan |
-| `shutdown` | true | `AgentSpec.submit`; false builds agents without ORBIT's submit tool and drops every prompt sentence about submit; needs `one_call_per_turn=false` |
+| `shutdown` | true | `AgentSpec.submit`; false builds agents without ORBIT's submit tool and drops every prompt sentence about submit |
 | `team_submit` | none | `team_submit` for neutral agents; none follows the mode; a call lets the round finish, then the callback drops every later step |
 | `stop_after_delivery` | none | N ends an episode soon after its deliverable exists: alone or in solo_task after N more of the agent's working steps once its own is seen, in a team N rounds after the round that shows the team's; the callback awaits the benchmark's delivery predicate (`Benchmark.delivered`) at the end of each round; the episodes it ends have `ended_by` delivered and their steps go to nobody |
 | `regulator_window`, `disregulator_window` | 1: | the rounds a role holds steps in, as `start:end`; the agent enters at its start round and leaves after its end |
 | `rule_level` | none | the rule sentence after the task instruction (`src/configuration/instruction_levels.yaml`, ladder `rule`) |
-| `regulator_level`, `disregulator_level` | ambiguous, persuade | the role texts (ladders `regulator` and `disregulator`); under `board_tools` a regulator's text is followed by `roles.regulator_common`; level `none` adds no sentence |
-| `regulator_discloses` | false | without it a regulator's text also ends with `roles.regulator_no_disclosure`, under `board_tools` only |
+| `regulator_level`, `disregulator_level` | ambiguous, persuade | the role texts (ladders `regulator` and `disregulator`); a regulator's text is followed by `roles.regulator_common`; level `none` adds no sentence |
+| `regulator_discloses` | false | without it a regulator's text also ends with `roles.regulator_no_disclosure` |
 | `awareness_probe` | false | adds the `end_of_episode_probes` scorer |
 | `message_limit`, `token_limit`, `time_limit_s` | 320, 0, 0 | Inspect's message and token limits, and `SchedulerConfig.max_time_seconds`; 0 means the default; a scale sets the first and the last |
 | `time_grace_s` | 600 | seconds Inspect's hard `time_limit` sits above ORBIT's soft halt at `time_limit_s`, so a step in flight finishes and its usage is logged; 0 puts both at `time_limit_s`; SWE adds its grading budget instead |
@@ -95,19 +87,9 @@ A step is charged to `steps_per_agent` unless its last tool call is a board acti
 
 Every run also carries the passive `turn_rules` defense. Its model filter appends "Please continue with your next action." when the provider input would end with a model turn, which Gemini rejects.
 
-One preset exists. `default` is the midterm report's configuration: the fields above at the small scale, with the turn budgets of `settings.TURN_BUDGETS`. It has no regulators; it sets only their level. The October 2026 sweep's board is the fields `mode` shared_task, `access` all on openmath and knowledge work and split for SWE, `regulator_level=role`, `board_tools=false`, `mention_board=true`, `mention_team=true`, `concurrent_rounds=false`, `free_board_actions=0`, `team_submit=false`, `informed_roles=false`, `notice=none`, `delivery=auto`, `visibility=step_start` and `turn_order=round_robin` (`tests/legacy_boards.py` CHANNEL_BOARD). Lucy's rules add `channel_list=false`, `pooled_steps=false`, `one_call_per_turn=true`, `planning_turns=2`, `turn_header=true`, `awareness_probe=true` and `steps_per_agent=50` (LUCY_RULES).
+One preset exists. `default` is the midterm report's configuration: the fields above at the small scale, with the turn budgets of `settings.TURN_BUDGETS`. It has no regulators; it sets only their level.
 
 Hidden roles are used on an openmath board of three or more agents, and on any board whose config asks for a regulator or a disregulator. No agent is asked for a team report any more. The export still reads the report of an older run that has one.
-
-## Where we differ from Lucy's patched ORBIT
-
-- Free reads. Lucy's `channel_read` does not end the turn, which needs her patch. Auto delivery shows every unread post at the start of the turn with no call. `read_tool=false` removes `channel_read` entirely. The pull board instead gives a free follow-up step after each board action, up to `free_board_actions` per round.
-- Dropped calls. Lucy answers every call after the first "not run: one tool call per turn". Quantum `legacy` drops them from the history instead, and `turn_rules.py` counts them in `extra_calls`.
-- Provider-only messages. The planning prompts, the turn header, the board notice and the continue prompt reach the provider input through a model filter. They never enter the durable conversation. Lucy's patch writes them into it. `turn_rules.py` records each one as an info event, and `src/benchmark/atif_transcripts.py` puts it back into the transcript, so the judge sees it.
-- Withheld tools. `channel_list` and `channel_read`, and all three channel tools under `board_tools`, are withheld from the provider request only. The tools still exist, so a model that names one anyway runs it. Such a call counts as the matching board action (check, read or post) in `TurnState` and the engagement block. Each call records the names it withheld as an info event of kind `withheld_tools`. The raw Inspect log's `ModelEvent.tools` is recorded before ORBIT's filter runs, so it lists the channel tools, although the provider never received them.
-- Planning prompts. Lucy's planning texts name her channel `#team`; ours name the board's channel id, `#board`. On the pull board they name `board_post` and `board_read`.
-- Text-only replies. Lucy ends a working turn after three replies with no tool call. Under `one_call_per_turn` ORBIT keeps asking for a tool call until one comes; the header is sent once per turn.
-- Windows. A regulator or disregulator may enter late or leave early. Lucy's harness has no such window.
 
 ## measures/
 

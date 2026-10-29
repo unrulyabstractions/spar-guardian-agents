@@ -2,8 +2,7 @@
 
 The midterm report gives regulators "access to all tool calls from neutral agents"; the tool answers for every
 teammate, disregulators included, so that a refusal never tells a regulator who holds a role. tasks.py binds it to
-regulators only (board.agent_tool_names, board.board_bindings), and only under board_tools. Workers and
-disregulators never get it.
+regulators only (pull_board.agent_tool_names, pull_board.board_bindings). Workers and disregulators never get it.
 
     agent_actions(agent="a02", latest=20)
     r1 bash({"cmd": "git log --all"}) -> commit 3f2a...
@@ -15,12 +14,12 @@ name, or about the regulator itself, returns "no such agent".
 
 The calls come from the agent's own conversation. During the run that is ORBIT's live session record
 (orbit/execution/sessions.py, current_session_registry().scheduled(agent).state.messages), the same source
-rules.after_activation reads. ORBIT writes the attributed conversation (the store's
+turn_rules.after_activation reads. ORBIT writes the attributed conversation (the store's
 EnvironmentState:message_attribution, which src/swarm/awareness_probes.py reads) only when the run ends
 (AgentScheduler.sync_to_task_state), so it is the fallback outside a live run. The round of each call comes from
 TurnState.history_marks, which after_activation writes; a call after the last mark belongs to the step under way.
 
-A call counts as a board action of kind "oversight" (rules.record_board_action): TurnState.oversight per regulator
+A call counts as a board action of kind "oversight" (turn_rules.record_board_action): TurnState.oversight per regulator
 and oversight_targets per regulator and target. A step that ends with agent_actions is a free step, within the
 regulator's K (free_board_actions_regulator).
 """

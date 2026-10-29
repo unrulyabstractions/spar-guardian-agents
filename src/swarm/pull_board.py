@@ -1,9 +1,9 @@
 """The pull board: board_status, board_read, board_post and team_submit, as Inspect tools over ORBIT's store.
 
-Nothing is pushed to an agent under the pull board. It checks, reads and posts through three tools, which tasks.py
-binds to every agent of a board with board_tools on (ORBIT tool_bindings, one ToolFactory per name, the way SWE binds
-shell and run_python). ORBIT's channel_post, channel_read and channel_list stay attached, and rules.TurnRulesFilter
-withholds them from the provider.
+Nothing is pushed to an agent. It checks, reads and posts through three tools, which tasks.py binds to every agent
+of a board (ORBIT tool_bindings, one ToolFactory per name, the way SWE binds shell and run_python). ORBIT's
+channel_post, channel_read and channel_list stay attached, and turn_rules.TurnRulesFilter withholds them from the
+provider.
 
 The tools keep no store of their own. They read and write ORBIT's communication store (orbit/communication/):
     board_post    send_message, as channel_post does, so exports, the transcript and the browser see a normal post
@@ -15,18 +15,18 @@ read_messages honours a concurrent round's snapshot, so an agent sees the board 
 number (#17) is its position on the board, oldest first; it does not change when later posts arrive.
 
 team_submit is bound to neutral agents only (not to a regulator or a disregulator), and only when the mode has a team
-to submit for (SwarmConfig.has_team_submit). The first call records rules.TeamSubmission and an info event tagged
-rules.TEAM_SUBMIT_TAG; rules.after_activation then lets the round finish and drops every later step.
+to submit for (SwarmConfig.has_team_submit). The first call records turn_rules.TeamSubmission and an info event tagged
+turn_rules.TEAM_SUBMIT_TAG; turn_rules.after_activation then lets the round finish and drops every later step.
 
 agent_actions (src/swarm/regulator_oversight.py) is bound to regulators only, over every teammate.
 
-Budgets per round (SwarmConfig.reads_per_turn, posts_per_turn; rules.spend). board_read returns at most the posts
+Budgets per round (SwarmConfig.reads_per_turn, posts_per_turn; turn_rules.spend). board_read returns at most the posts
 left in the agent's read budget for the round, the newest of its selection, and says how many it left out; with none
 left it raises a ToolError and counts the refusal (TurnState.reads_refused). board_post past the post budget raises a
 ToolError, sends nothing and counts the refusal (posts_refused). The counts reset at each round. Regulators read
 without a budget and without the read_page cap: a board_read with no selection returns the whole board.
 
-Each tool also counts the action in rules.TurnState (checks, reads, posts, read_senders, discovery_round).
+Each tool also counts the action in turn_rules.TurnState (checks, reads, posts, read_senders, discovery_round).
 Descriptions come from src/configuration/prompts.yaml `tools`, argument descriptions from `tool_args`, the result
 lines from `board_output` and the budget texts from `budget`.
 """
@@ -186,7 +186,7 @@ def board_post(agent: str, board: str = BOARD_ID, posts_per_turn: int | None = N
 
 
 def team_submit(agent: str) -> ToolDef:
-    """Record the team's submission; the run ends after the round under way (rules.after_activation)."""
+    """Record the team's submission; the run ends after the round under way (turn_rules.after_activation)."""
     prompts = load_prompts()
 
     async def execute(answer: str = "") -> str:
@@ -211,12 +211,12 @@ def team_submit(agent: str) -> ToolDef:
 def board_bindings(config: SwarmConfig, board: str = BOARD_ID,
                    roles: dict[str, str] | None = None) -> dict[str, ToolFactory]:
     """ORBIT tool_bindings for the board tools, team_submit and agent_actions, built per agent. Empty without a
-    pull board.
+    board.
 
     A binding is built only for the agents whose AgentSpec.tools names it (agent_tool_names). A regulator (roles)
     reads without the read_page cap and without a read budget; agent_actions covers every teammate on the roster
     (config.names), so a refusal never tells roles apart."""
-    if not config.board or not config.board_tools:
+    if not config.board:
         return {}
     roles = roles or {}
 
@@ -234,10 +234,9 @@ def board_bindings(config: SwarmConfig, board: str = BOARD_ID,
 
 def agent_tool_names(config: SwarmConfig, names: list[str], domain: str,
                      roles: dict[str, str] | None = None) -> dict[str, list[str]]:
-    """The board tool names each agent gets: the three board tools on a pull board, team_submit for a neutral
-    agent (no role, or the worker role) when the mode has a team to submit for, and agent_actions for a
-    regulator."""
-    if not config.board or not config.board_tools:
+    """The board tool names each agent gets: the three board tools, team_submit for a neutral agent (no role, or the
+    worker role) when the mode has a team to submit for, and agent_actions for a regulator."""
+    if not config.board:
         return {n: [] for n in names}
     submit = config.has_team_submit(domain)
     out = {}

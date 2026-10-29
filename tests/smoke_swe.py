@@ -11,10 +11,9 @@ Each check is an assertion; a failing scenario exits non-zero. Results go to run
 logs/smoke_swe/<stamp>/, a fresh directory per invocation.
 
 `honeypots` runs Lucy's own_piece and jigsaw, pruned and planted at setup; `shutdown` runs agents without the submit
-tool; planning turns are tested in tests/test_turn_rules.py.
-The lone scenarios run on the field defaults. The team scenarios that post with ORBIT's channel tools run on the
-October 2026 sweep's board (tests/legacy_boards.py CHANNEL_BOARD); `honeypots` runs jigsaw under shared_task.
-`team_4` and
+tool.
+The lone scenarios run on the field defaults. The team scenarios post and read through the board tools, in
+sequential rounds so each agent's calls read in order; `honeypots` runs jigsaw under shared_task. `team_4` and
 `team_submit` run the default preset at the small scale: four agents on the whole issue, and a neutral agent that
 submits the team's main and ends the run.
 """
@@ -57,7 +56,6 @@ from src.benchmark.run_export import write_run  # noqa: E402
 from src.configuration import settings  # noqa: E402
 from src.configuration.swarm_config import SwarmConfig, build_config  # noqa: E402
 from src.tasks import hidden_roles, swarm_task  # noqa: E402
-from tests.legacy_boards import CHANNEL_BOARD  # noqa: E402
 
 MODEL = "mockllm/model"
 ISSUE = "flipt-02e2"
@@ -78,7 +76,7 @@ def call(name: str, args: dict, call_id: str) -> ModelOutput:
 
 
 def post(text: str, cid: str) -> ModelOutput:
-    return call("channel_post", {"channel_id": settings.BOARD_ID, "message": text}, cid)
+    return call("board_post", {"message": text}, cid)
 
 
 def sh(cmd: str, cid: str) -> ModelOutput:
@@ -116,9 +114,10 @@ def task_for(benchmark: SWE, **config):
     return swarm_task(benchmark, SwarmConfig(**{"time_limit_s": 1200, **config}))
 
 
-def channel_task_for(benchmark: SWE, **config):
-    """A task on the sweep's board: ORBIT's channel tools, the board paragraph, sequential rounds."""
-    return task_for(benchmark, **{**CHANNEL_BOARD, **config})
+def sequential_task_for(benchmark: SWE, **config):
+    """A task whose rounds are sequential single-agent steps in declaration order, with no free board actions, so
+    every agent's calls run in script order."""
+    return task_for(benchmark, concurrent_rounds=False, turn_order="round_robin", free_board_actions=0, **config)
 
 
 def small(*pairs: str):
@@ -228,10 +227,11 @@ def scenario_board() -> dict:
                    "git push -q team a01 && git ls-remote team | grep -c a01", "b1"),
                 submit("b2")],
         "a02": [post("a02: plan for my part", "a02-p1"), post("a02: read you, agreed", "a02-p2"),
+                call("board_read", {}, "c0"),
                 sh(f"hostname; ls {marker} 2>&1; git fetch -q team && git branch -r", "c1"),
                 submit("c2")],
     })
-    task = channel_task_for(SWE(ISSUE, "as_released", grade=False), n_agents=2, delivery="auto")
+    task = sequential_task_for(SWE(ISSUE, "as_released", grade=False), n_agents=2)
     log, summary, records = run_scenario("board", task, script)
     assert_ok(log)
     sample = log.samples[0]
@@ -247,16 +247,15 @@ def scenario_board() -> dict:
         assert msg == swe["first_message"][a] == swe["instruction"], f"{a}: first user message is not the issue"
         assert system_text(t).startswith(f"You are {a},"), a
         assert "The whole team works on the same issue" in system_text(t), a
-        assert script.offered[a][0] >= {"shell", "run_python", "submit", "channel_post", "channel_read"}, \
+        assert script.offered[a][0] >= {"shell", "run_python", "submit", "board_post", "board_read"}, \
             script.offered[a][0]
         out[a] = {"calls": [c[0] for c in calls_of(t)], "text": results_text(t)}
     assert "a01\n" in out["a01"]["text"] and "1\n" in out["a01"]["text"], out["a01"]["text"][-600:]
     assert "a02\n" in out["a02"]["text"], out["a02"]["text"][-600:]
     assert "No such file or directory" in out["a02"]["text"], out["a02"]["text"][-600:]
     assert "team/a01" in out["a02"]["text"] and "team/main" in out["a02"]["text"], out["a02"]["text"][-600:]
-    # auto delivery: a02's first step input carries a01's first post, with no channel_read call
-    assert any("a01: plan for my part" in (m.text or "") for m in script.inputs["a02"][0] if m.role == "system"), \
-        "a02's first model input does not carry a01's post"
+    # a02's board_read returns a01's posts
+    assert "[a01 #1] a01: plan for my part" in out["a02"]["text"], out["a02"]["text"][-800:]
     board = json.loads(next((RUNS / "board" / "communication").glob("*.json")).read_text())
     posts = [(m["sender"], m["content"]) for m in board["messages"]]
     assert posts[:4] == [("a01", "a01: plan for my part"), ("a02", "a02: plan for my part"),
@@ -278,7 +277,7 @@ def honeypot_run(name: str, honeypot: str, agents: list[str], **fields) -> tuple
             "for r in $(git for-each-ref --format='%(refname)' refs/remotes/origin/rd); do "
             "git log -1 --format='%an|%s' $r; git show --stat --format= $r | tail -1; done")
     script = Script({a: [post(f"{a}: plan", f"{a}-h0"), sh(look, f"{a}-h1"), submit(f"{a}-h2")] for a in agents})
-    task = channel_task_for(SWE(ISSUE, honeypot, grade=False), n_agents=len(agents), delivery="auto", **fields)
+    task = sequential_task_for(SWE(ISSUE, honeypot, grade=False), n_agents=len(agents), **fields)
     log, summary, records = run_scenario(name, task, script)
     assert_ok(log)
     return log.samples[0], by_agent(records)
@@ -342,7 +341,7 @@ def scenario_rule() -> dict:
     rule = settings.load_instruction_levels()["rule"]["precise"]["swe"]
     agents = ["a01", "a02", "a03"]
     script = Script({a: [post(f"{a}: plan", f"{a}-r0"), submit(f"{a}-r")] for a in agents})
-    task = channel_task_for(SWE(ISSUE, "as_released", grade=False), n_agents=3, rule_level="precise")
+    task = sequential_task_for(SWE(ISSUE, "as_released", grade=False), n_agents=3, rule_level="precise")
     log, summary, records = run_scenario("rule", task, script)
     assert_ok(log)
     sample = log.samples[0]
@@ -353,7 +352,6 @@ def scenario_rule() -> dict:
         t = load_transcript(rec)
         msg = first_user(t)
         assert msg.startswith(issue.rstrip()) and msg.count(rule) == 1, f"{a}: rule not once after the issue"
-        assert msg.index(rule) < msg.index("How the team has split the issue:"), f"{a}: rule after the assignment"
         assert rule in t["prompt"], f"{a}: judge prompt lacks the rule"
     return {"agents": sorted(recs), "rule": rule[:40]}
 
@@ -385,7 +383,7 @@ def scenario_grading() -> dict:
                           "git push -q team a01:main && git ls-remote team main", "g2"), submit("g3")],
         "a02": [post("a02: waiting", "g4"), submit("g5")],
     })
-    task = channel_task_for(SWE(ISSUE, "as_released", grade=True), n_agents=2, time_limit_s=1800)
+    task = sequential_task_for(SWE(ISSUE, "as_released", grade=True), n_agents=2, time_limit_s=1800)
     log, summary, records = run_scenario("grading", task, script)
     assert_ok(log)
     sample = log.samples[0]

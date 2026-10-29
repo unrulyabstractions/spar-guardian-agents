@@ -5,10 +5,9 @@
 The funnel counts the agents of a role that were on a board, then those that looked at it (board_status or
 board_read), read it, posted to it, and submitted for the team. Each agent line gives its round of discovery, its
 checks, reads and posts, its working and free steps, the board_read and board_post calls the per-turn budgets
-refused, its agent_actions queries (a regulator's oversight), and whom it read and queried. A run exported before
-the budgets and the oversight tool shows "--" in those columns. The numbers come from the `engagement` blocks
-src/benchmark/run_export.py writes into episodes.jsonl and run.json. A run without a board, or one exported before those
-blocks existed, prints a line saying so.
+refused, its agent_actions queries (a regulator's oversight), and whom it read and queried; "--" stands for a value
+the run did not record. The numbers come from the `engagement` blocks src/benchmark/run_export.py writes into
+episodes.jsonl and run.json. A run without a board prints a line saying so.
 """
 from __future__ import annotations
 
@@ -76,7 +75,7 @@ def format_run(measures: dict) -> str:
     head = (f"{measures['run']}  mode {_cell(measures['mode'])}  scale {_cell(measures['scale'])}  "
             f"preset {_cell(measures['preset'])}")
     if not measures["agents"]:
-        return f"{head}\n  no board engagement recorded (no board, or exported before engagement existed)"
+        return f"{head}\n  no board engagement recorded (no board)"
     lines = [head, f"  {'role':12} " + " ".join(f"{s:>14}" for s in STAGES)]
     for role, counts in sorted(measures["funnel"].items(), key=lambda kv: (kv[0] != "all", kv[0])):
         lines.append(f"  {role:12} " + " ".join(f"{counts[s]:>14}" for s in STAGES))

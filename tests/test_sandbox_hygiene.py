@@ -53,10 +53,10 @@ def test_identical_tool_runs_and_validity_flags():
     assert export.identical_tool_run(steps) == 3 and export.identical_tool_run([]) == 0
     stuck = [step(("shell", {"command": "cat x"}))] * export.IDENTICAL_RUN_FLAG
     rec = export.validity_record(stuck, model_calls=9, engagement={"checks": 0, "reads": 0, "posts": 0},
-                                 board_tools=True)
+                                 board=True)
     assert rec == {"model_calls": 9, "tool_calls": 8, "never_acted": False, "no_tool_call": False,
                    "identical_tool_run": 8, "board_unused": True}
-    idle = export.validity_record([], model_calls=0, engagement=None, board_tools=False)
+    idle = export.validity_record([], model_calls=0, engagement=None, board=False)
     assert idle["never_acted"] and idle["no_tool_call"] and not idle["board_unused"]
     block = export.validity_block([{"orbit_agent": "a01", "validity": rec}, {"orbit_agent": "a02", "validity": idle}],
                                   {"agent": "a01", "round": 1, "answer": "placeholder"})

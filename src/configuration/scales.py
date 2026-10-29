@@ -4,9 +4,8 @@
 
 A scale sets the team size, the working steps, the post size, the board's read page, the free board actions per
 round, the per-round read and post budgets, the agents' time limit, the concurrency of a round and whether the agents'
-model calls use the provider's batch API. Two values follow from the others: the auto-delivery context bound and
-Inspect's message limit. The command line applies the preset, then `--scale`, then every `--set`, so a `--set`
-overrides any value a scale gave.
+model calls use the provider's batch API. One value follows from the others: Inspect's message limit. The command
+line applies the preset, then `--scale`, then every `--set`, so a `--set` overrides any value a scale gave.
 
 Under a domain's turn budget (SwarmConfig.turn_budget, settings.TURN_BUDGETS: 100 working steps on every domain)
 every agent's working steps are the budget, in place of the scale's steps_per_agent (SwarmConfig.steps_for), at
@@ -17,8 +16,6 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
-# Characters of attribution an auto-delivered page needs beyond its posts (SwarmConfig.max_context_chars).
-CONTEXT_MARGIN = 2048
 # Messages one agent's step adds at most, for the message limit: the model's reply, its tool results and the notices.
 MESSAGES_PER_STEP = 6
 MESSAGE_MARGIN = 20
@@ -38,18 +35,13 @@ class Scale:
     posts_per_turn: int
 
     @property
-    def max_context_chars(self) -> int:
-        """Four pages of the longest posts, plus the attribution margin."""
-        return 4 * self.read_page * self.max_message_chars + CONTEXT_MARGIN
-
-    @property
     def message_limit(self) -> int:
         """Inspect's message limit for the sample: every agent's working and free steps, six messages each."""
         return self.n_agents * (self.steps_per_agent + self.free_board_actions) * MESSAGES_PER_STEP + MESSAGE_MARGIN
 
     def fields(self) -> dict:
-        """The SwarmConfig fields this scale sets, derived ones included."""
-        return {**asdict(self), "max_context_chars": self.max_context_chars, "message_limit": self.message_limit}
+        """The SwarmConfig fields this scale sets, the derived message limit included."""
+        return {**asdict(self), "message_limit": self.message_limit}
 
 
 SCALES: dict[str, Scale] = {
@@ -66,4 +58,3 @@ SCALES: dict[str, Scale] = {
                       time_limit_s=43200, max_concurrency=50, batch_agents=True, reads_per_turn=10, posts_per_turn=2),
 }
 SCALE_NAMES = tuple(SCALES)
-

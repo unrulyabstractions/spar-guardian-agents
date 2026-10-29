@@ -43,7 +43,6 @@ STATIC = Path(__file__).resolve().parent / "static"
 REFUSAL = "I cannot provide that response under the configured defense policy."
 WITHHELD = "[Content withheld by a configured defense.]"
 FLAG_KEYS = {
-    "orbit_communication_delivery": "delivery_notice",
     "swarm_turn_rules": "turn_rules",
     "orbit_defense_redacted": "redacted",
 }
@@ -210,7 +209,6 @@ def swe_of(run: dict, d: Path | None = None) -> dict | None:
     swe = run.get("swe")
     if not swe:
         return None
-    config = run.get("config") or {}
     grades = swe.get("grades") or {}
     measures = _json(d / "swe_summary.json") if d is not None else None
     signals = _jsonl(d / "signals.jsonl") if d is not None else []
@@ -227,7 +225,6 @@ def swe_of(run: dict, d: Path | None = None) -> dict | None:
         "honeypot": honeypot,
         "jigsaw": jigsaw,
         "rule": rule,
-        "delivery": swe.get("delivery") or (config.get("delivery") if swe.get("board") else None),
         "base_commit": swe.get("base_commit"),
         "fix_commit": swe.get("fix_commit"),
         "arm": arm,
@@ -658,8 +655,7 @@ class Store:
             elif e.event == "info" and isinstance(e.data, dict) and e.data.get("event") == "defense_intervention":
                 events.append(_defense_item(e, secs))
         events.sort(key=lambda x: (x["t"] if x["t"] is not None else 0))
-        model_by_id = {e.id: e for e in sample.events if e.event == "model" and getattr(e, "id", None)}
-        board = _board(comm, events, model_by_id, secs)
+        board = _board(comm, events)
         return {
             "run": name,
             "t0": t0.isoformat(),
@@ -753,11 +749,11 @@ def _tool_item(e, agent, secs, by_call: dict) -> dict:
         "member_read": read,
     }
     board_events = by_call.get(e.id, [])
-    if e.function == "channel_post":
+    if e.function == "board_post":
         sent = [c for c in board_events if c.get("kind") == "sent"]
         item["message_ids"] = [m for c in sent for m in c.get("message_ids", [])]
-    if e.function == "channel_read":
-        reads = [c for c in board_events if c.get("kind") in ("read", "model_exposure")]
+    if e.function == "board_read":
+        reads = [c for c in board_events if c.get("kind") == "read"]
         item["message_ids"] = sorted({m for c in reads for m in c.get("message_ids", [])})
     if e.function == "submit":
         item["kind"] = "submit"
@@ -798,21 +794,20 @@ def _defense_item(e, secs) -> dict:
     }
 
 
-def _board(comm: dict, events: list[dict], model_by_id: dict, secs) -> list[dict]:
-    """Board messages with the moment each was sent and who read it when."""
+def _board(comm: dict, events: list[dict]) -> list[dict]:
+    """Board messages with the moment each was sent (its board_post call) and who read it when (their board_read
+    calls), from the communication store's sent and read events."""
     tool_t = {ev["id"]: ev["t"] for ev in events if ev["kind"] in ("tool", "submit")}
     sent_t = {}
-    exposures = {}
+    reads = {}
     for ev in comm.get("events", []):
         if ev.get("kind") == "sent":
             for m in ev.get("message_ids", []):
                 sent_t[m] = tool_t.get(ev.get("tool_call_id"))
-        if ev.get("kind") in ("read", "model_exposure"):
+        if ev.get("kind") == "read":
             t = tool_t.get(ev.get("tool_call_id"))
-            if t is None and ev.get("inspect_model_event_id") in model_by_id:
-                t = secs(model_by_id[ev["inspect_model_event_id"]].timestamp)
             for m in ev.get("message_ids", []):
-                exposures.setdefault(m, []).append({"agent": ev.get("agent_id"), "t": t, "how": ev.get("kind")})
+                reads.setdefault(m, []).append({"agent": ev.get("agent_id"), "t": t})
     messages = sorted(comm.get("messages", []), key=lambda m: m.get("sequence", 0))
     return [
         {
@@ -821,7 +816,7 @@ def _board(comm: dict, events: list[dict], model_by_id: dict, secs) -> list[dict
             "id": m.get("id"),
             "t": sent_t.get(m.get("id")),
             "content": m.get("content"),
-            "read_by": exposures.get(m.get("id"), []),
+            "read_by": reads.get(m.get("id"), []),
         }
         for m in messages
     ]

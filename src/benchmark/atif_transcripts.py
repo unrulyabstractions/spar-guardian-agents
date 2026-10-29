@@ -6,16 +6,13 @@ CheatBench's judge reads: a "trajectory" key holding ATIF, which core/agents/fac
 adapter.
 
 Each ORBIT agent becomes its own episode: the sample's projected messages are split by
-EnvironmentState:message_attribution (history_projection="all"). Four things live only in Inspect's native events
+EnvironmentState:message_attribution (history_projection="all"). Three things live only in Inspect's native events
 and are recovered from them:
 
   * the completed submit call, which ORBIT strips from the conversation;
-  * channel notices and auto-delivered board posts, which ORBIT adds to the provider input only
-    (CommunicationDeliveryFilter);
-  * the planning prompts, turn headers, continue prompts and board notices of src/swarm/turn_rules.py, which
-  also reach the
-    provider input only. Inspect writes the ModelEvent before ORBIT's model filters run, so they are absent from
-    ModelEvent.input; turn_rules.py writes each one as an info event right after its ModelEvent, in the same span;
+  * the continue prompts and board notices of src/swarm/turn_rules.py, which also reach the provider input only.
+    Inspect writes the ModelEvent before ORBIT's model filters run, so they are absent from ModelEvent.input;
+    turn_rules.py writes each one as an info event right after its ModelEvent, in the same span;
   * per-agent token usage.
 
 The text helpers split_content and tool_result_text are shared with the results browser.
@@ -57,10 +54,9 @@ from core.trajectory import (  # noqa: E402
 )
 from core.trajectory.trajectory import SCHEMA_VERSION  # noqa: E402
 
-DELIVERY_TAG = "orbit_communication_delivery"        # orbit/communication/delivery.py
 TURN_RULES_TAG = "swarm_turn_rules"         # src/swarm/turn_rules.py
 # The info kinds that carry a message the provider got. "notice" is the board notice (SwarmConfig.notice).
-TURN_RULES_PROMPTS = ("planning", "header", "continue", "notice")
+TURN_RULES_PROMPTS = ("continue", "notice")
 ATTRIBUTION_KEY = "EnvironmentState:message_attribution"
 LAST_TEXT_KEY = "EnvironmentState:last_text_by_agent"
 REFUSAL_TEXT = "I cannot provide that response under the configured defense policy."   # orbit/defenses/boundaries.py
@@ -325,16 +321,11 @@ def redacted_message_ids(model_events, view: SampleView) -> set:
 # provider-only messages and usage
 # --------------------------------------------------------------------------
 def provider_only_step(m, how: str = "") -> dict | None:
-    """The ATIF step for a message that reached the provider but not the conversation, or None.
-
-    These are ORBIT's channel notices (system), the turn rules' planning prompts, turn headers and
-    continue prompts (user), and the older trailing-turn shim's prompt (user).
-    """
+    """The ATIF step for a message that reached the provider but not the conversation, or None: the turn rules'
+    board notices and continue prompts (user)."""
     meta = m.metadata or {}
     text, _ = split_content(m.content)
-    if m.role == "system" and meta.get(DELIVERY_TAG):
-        return _notice_step(text, how)
-    if m.role in ("user", "system") and meta.get(TURN_RULES_TAG):
+    if m.role == "user" and meta.get(TURN_RULES_TAG):
         rule = meta[TURN_RULES_TAG]
         kind = rule.get("kind") if isinstance(rule, dict) else rule
         return {"source": m.role, "message": text, "extra": {TURN_RULES_TAG: kind, "attached_by": how}}
@@ -444,11 +435,6 @@ def _error_extra(error) -> dict | None:
     return {"is_error": True, "error": error.message}
 
 
-def _notice_step(text: str, how: str) -> dict:
-    """ORBIT's board delivery notice, a provider-only system message, as an ATIF step."""
-    return {"source": "system", "message": text, "extra": {"orbit_delivery_notice": True, "attached_by": how}}
-
-
 def _user_step(msg, redacted: set) -> dict:
     text, _ = split_content(msg.content)
     if msg.id not in redacted:
@@ -531,21 +517,15 @@ def _atif_steps(steps: list[dict]) -> list[Step]:
     return out
 
 
-def _attach_provider_only(msg, by_id: dict, ordered: list, assistant_seen: int, steps: list[dict]) -> tuple[int, int]:
-    """Add the provider-only messages of the call that produced `msg`; return (notices, rule prompts) added."""
+def _attach_provider_only(msg, by_id: dict, ordered: list, assistant_seen: int, steps: list[dict]) -> int:
+    """Add the provider-only messages of the call that produced `msg`; return how many."""
     items = by_id.get(msg.id)
     how = "message_id"
     if items is None and not by_id and assistant_seen < len(ordered):
         items, how = [ordered[assistant_seen]], "order"
-    notices = rules = 0
     for m in items or []:
-        step = provider_only_step(m, how)
-        steps.append(step)
-        if TURN_RULES_TAG in step["extra"]:
-            rules += 1
-        else:
-            notices += 1
-    return notices, rules
+        steps.append(provider_only_step(m, how))
+    return len(items or [])
 
 
 def build_trajectory(view: SampleView, agent: str) -> tuple[Trajectory, dict]:
@@ -565,7 +545,7 @@ def build_trajectory(view: SampleView, agent: str) -> tuple[Trajectory, dict]:
     issued: dict[str, int] = {}          # tool_call_id -> index into steps
     system_prompt = None
     assistant_seen = 0
-    attached_notices = attached_rules = 0
+    attached_rules = 0
     for msg in messages:
         if isinstance(msg, ChatMessageSystem):
             text, _ = split_content(msg.content)
@@ -575,9 +555,7 @@ def build_trajectory(view: SampleView, agent: str) -> tuple[Trajectory, dict]:
         elif isinstance(msg, ChatMessageUser):
             steps.append(_user_step(msg, redacted))
         elif isinstance(msg, ChatMessageAssistant):
-            notices, rules = _attach_provider_only(msg, by_id, ordered, assistant_seen, steps)
-            attached_notices += notices
-            attached_rules += rules
+            attached_rules += _attach_provider_only(msg, by_id, ordered, assistant_seen, steps)
             call_output_id = output_ids[assistant_seen] if assistant_seen < len(output_ids) else None
             assistant_seen += 1
             step = _assistant_step(msg, call_output_id, blocked_outputs)
@@ -613,7 +591,7 @@ def build_trajectory(view: SampleView, agent: str) -> tuple[Trajectory, dict]:
         extra={"final_text": last_text or None},
     )
     info = {"system_prompt": system_prompt, "submit_recovered": recovered,
-            "delivery_notices": attached_notices, "turn_rules_messages": attached_rules,
+            "turn_rules_messages": attached_rules,
             "model_calls": len(model_events),
             "n_agent_steps": sum(1 for s in atif_steps if s.source == "agent"),
             "n_tool_calls": sum(len(s.tool_calls or []) for s in atif_steps),
@@ -631,7 +609,6 @@ def episode_transcript(view: SampleView, agent: str, prompt: str) -> tuple[dict,
         "orbit": {"eval_log": view.eval_log, "agent": agent, "roster": roster(view),
                   "topology": topology(view), "system_prompt": info["system_prompt"],
                   "submit_recovered_from_events": info["submit_recovered"],
-                  "delivery_notices_recovered_from_events": info["delivery_notices"],
                   "turn_rules_recovered_from_events": info["turn_rules_messages"],
                   "model_calls": info["model_calls"]},
     }

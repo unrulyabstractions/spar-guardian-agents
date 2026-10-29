@@ -99,7 +99,6 @@ Docker sandboxes) and does not run. A deployed Hawk (`hawk scan run`, `HAWK_API_
   a step or a label; the figures above record what was seen on the three example runs.
 - Outputs accumulate: scout's `scans/`, transect's `scan_id=*` folders and hawk's `results/` keep every invocation;
   each `summary.json` names the current one.
-- `tools/run_reader.py` reads board reads from `board_read` only; runs on the old channel board (`channel_read`) get no
-  read edges.
+- `tools/run_reader.py` reads board reads from `board_read` calls.
 - No real run with ten or more agents has gone through contagion yet, so no non-degenerate fit on real data exists.
 - Docent's upload path has never run against the server: the key on this machine is a placeholder.

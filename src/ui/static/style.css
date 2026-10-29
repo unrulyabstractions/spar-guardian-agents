@@ -509,8 +509,8 @@ details.reasoning .pre { font-family: var(--sans); font-size: 13px; color: var(-
 .viz .tk { stroke-width: 1.5; }
 .viz .tk-bash { stroke: var(--tl-bash); }
 .viz .tk-python { stroke: var(--tl-python); stroke-width: 1.8; }
-.viz .tk-channel_post { stroke: var(--tl-post); stroke-width: 2.2; }
-.viz .tk-channel_read { stroke: var(--tl-read); stroke-width: 2.2; }
+.viz .tk-board_post { stroke: var(--tl-post); stroke-width: 2.2; }
+.viz .tk-board_read { stroke: var(--tl-read); stroke-width: 2.2; }
 .viz .tk-submit { stroke: var(--text); stroke-width: 2; }
 .viz .tk-other { stroke: var(--tl-bash); stroke-dasharray: 2 2; }
 .viz .dur { stroke-width: 1; opacity: .55; }
@@ -523,7 +523,6 @@ details.reasoning .pre { font-family: var(--sans); font-size: 13px; color: var(-
 .viz .m-block-line { stroke: var(--bad); stroke-width: 1.5; }
 .viz .m-post { fill: var(--tl-post); stroke: var(--panel); stroke-width: 2; }
 .viz .arrow { stroke: var(--tl-arrow); stroke-width: 1.2; fill: none; }
-.viz .arrow.exposure { stroke-dasharray: 4 3; }
 .viz .arrowhead { fill: var(--tl-arrow); }
 .viz .crosshair { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 3; pointer-events: none; }
 .viz .cross-label { font-size: 10.5px; fill: var(--text); pointer-events: none; }
