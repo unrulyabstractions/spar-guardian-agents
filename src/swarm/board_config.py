@@ -6,7 +6,7 @@ agent as soon as a CommunicationConfig is set (orbit/solvers/orchestrator.py _bu
 their task tools. Agents reach the channel through board_status, board_read and board_post (src/swarm/pull_board.py),
 and turn_rules.TurnRulesFilter withholds ORBIT's channel tools from the provider. Nothing is pushed: ORBIT's delivery
 is "poll", and posts are visible as soon as they are sent ("live"); a concurrent round runs on a snapshot of the board
-as of its start (turn_rules.schedule). The board's system prompt text is built by swarm_config.board_system_prompt.
+as of its start (turn_rules.schedule). The board's system prompt text is built by prompt_texts.board_system_prompt.
 
     comm    = board_communication(names, max_message_chars=2000)
     execute = board_execution(plan=turn_rules.schedule(config, names))

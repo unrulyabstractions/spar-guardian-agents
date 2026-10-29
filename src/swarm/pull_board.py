@@ -43,8 +43,8 @@ from orbit.communication.runtime import read_messages, record_read, send_message
 from orbit.communication.state import CommunicationState
 from orbit.tools import ToolFactory
 
-from src.configuration.settings import BOARD_ID, load_prompts
-from src.configuration.swarm_config import BOARD_TOOLS, SwarmConfig
+from src.configuration.settings import BOARD_ID, BOARD_TOOLS, load_prompts
+from src.configuration.swarm_config import SwarmConfig
 from src.swarm.regulator_oversight import agent_actions
 from src.swarm.turn_rules import (
     OVERSIGHT_TOOL,

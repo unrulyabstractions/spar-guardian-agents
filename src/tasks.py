@@ -58,7 +58,8 @@ from src.benchmark.domains.swe import SWE
 from src.benchmark.domains.swe.swe_settings import GRADING_BUDGET_S
 from src.configuration import access_policy, settings
 from src.configuration import swarm_model_provider as provider  # importing it registers the "swarm" provider
-from src.configuration.swarm_config import SwarmConfig, board_system_prompt, preset
+from src.configuration.prompt_texts import board_system_prompt
+from src.configuration.swarm_config import SwarmConfig, preset
 from src.swarm import hidden_roles as roles_module
 from src.swarm.awareness_probes import end_of_episode_probes
 from src.swarm.board_config import (
@@ -106,7 +107,7 @@ def system_prompts(benchmark: Benchmark, config: SwarmConfig, sample: Sample,
                    roles: dict[str, str] | None) -> dict[str, str | None]:
     """Each agent's system prompt: the benchmark's own (SWE) or the board prompt (openmath), then what its role adds.
 
-    The openmath board prompt says what mention_team and mention_board turn on (swarm_config.board_system_prompt);
+    The openmath board prompt says what mention_team and mention_board turn on (prompt_texts.board_system_prompt);
     with neither, an agent has no system prompt of ours. A lone openmath agent has none, as in CheatBench's runner.
     A regulator or disregulator gets its role text and, with informed_roles, the briefing (roles.role_prompt).
     """

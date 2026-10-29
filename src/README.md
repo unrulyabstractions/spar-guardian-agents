@@ -10,6 +10,7 @@ The experiment on ORBIT. It turns one benchmark from `src/benchmark/` and one `S
 | `cli.py` | argument parsing; `run`, `judge` and `budget` call `run.py`, `ui` calls `ui/launch.py`, `plots` calls `ui/run_figures.py`, `summary` calls `measures/episode_summary.py`, `models` calls `configuration/model_registry.py` |
 | `run.py` | the `run`, `judge` and `budget` commands: `inspect_ai.eval` in process, export, re-judging, and the turn budget's steps per agent from a lone run |
 | `tasks.py` | `swarm_task(benchmark, config)` and the `@task` entry points `openmath`, `swe`, `knowledge_work`, `subset_sum`, `prime_factorization` and `protein_design` |
+| `configuration/` | every setting and model-facing text: `swarm_config.py` (`SwarmConfig`, the preset, `build_config`), `prompt_texts.py` (the texts that depend on a setting: the submit bullet, the board system prompt, the SWE board fields, the role briefing and the board notice), `settings.py`, the scales, the access policy and the YAML texts; see `src/configuration/README.md` |
 | `swarm/board_config.py` | the board as ORBIT configuration: one shared channel, no invocation edges, a written plan |
 | `swarm/pull_board.py` | the pull board's tools `board_status`, `board_read` and `board_post` with the per-round read and post budgets, and `team_submit`, over ORBIT's communication store |
 | `swarm/regulator_oversight.py` | `agent_actions`, the regulators' tool: a neutral agent's latest tool calls, read from its live conversation |

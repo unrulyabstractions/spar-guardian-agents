@@ -79,8 +79,9 @@ from orbit.execution.plans import current_schedule
 from orbit.execution.sessions import current_session_registry
 from pydantic import Field
 
-from src.configuration.settings import BOARD_ID, load_prompts
-from src.configuration.swarm_config import BOARD_TOOLS, SwarmConfig, Window, notice_text
+from src.configuration.prompt_texts import notice_text
+from src.configuration.settings import BOARD_ID, BOARD_TOOLS, load_prompts
+from src.configuration.swarm_config import SwarmConfig, Window
 
 TURN_RULES_TYPE = "swarm.turn_rules.v1"
 TURN_RULES_NAME = "turn_rules"

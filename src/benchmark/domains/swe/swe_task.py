@@ -52,13 +52,9 @@ from src.benchmark.domains.swe.swe_settings import (
 from src.configuration import access_policy as access_policy
 from src.configuration import settings
 from src.configuration.access_policy import Access
+from src.configuration.prompt_texts import board_system_prompt, submit_line, swe_board_fields
 from src.configuration.scales import SCALES
-from src.configuration.swarm_config import (
-    SwarmConfig,
-    board_system_prompt,
-    submit_line,
-    swe_board_fields,
-)
+from src.configuration.swarm_config import SwarmConfig
 
 SHARED = "shared_task"
 # Every agent has its own service (sandbox.write_compose). A hundred services is more than one Docker host holds.
@@ -111,8 +107,8 @@ def system_prompts(split: dict, agents: list[str], config: SwarmConfig, *, mode:
     """Each agent's system prompt from prompts.yaml `swe`. The submit bullet is left out without shutdown.
 
     A lone agent and a solo_task agent get `system_solo`; a solo_task agent of a board then gets the team and board
-    texts its config asks for (swarm_config.board_system_prompt). A shared_task agent gets `system_shared` with the
-    roster. Its board sentences and last line come from swarm_config.swe_board_fields; the team_submit bullet goes to
+    texts its config asks for (prompt_texts.board_system_prompt). A shared_task agent gets `system_shared` with the
+    roster. Its board sentences and last line come from prompt_texts.swe_board_fields; the team_submit bullet goes to
     the neutral agents of a config with team_submit."""
     prompts = settings.load_prompts()["swe"]
     neutral = set(agents) if neutral is None else neutral

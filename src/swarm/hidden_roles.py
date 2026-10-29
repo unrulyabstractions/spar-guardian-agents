@@ -18,7 +18,7 @@ calls, src/swarm/regulator_oversight.py, and read the board) and, unless regulat
 roles.regulator_no_disclosure.
 
 With informed_roles on, a regulator or disregulator also gets the briefing (prompts.yaml `roles.briefing`, built by
-swarm_config.role_briefing) after its role text: the swarm's size and roster, the board and its tools, and what the
+prompt_texts.role_briefing) after its role text: the swarm's size and roster, the board and its tools, and what the
 agents without a role were told. Workers never get it.
 """
 from __future__ import annotations
@@ -27,8 +27,9 @@ import random
 import re
 
 from src.configuration.access_policy import neutral_agents
+from src.configuration.prompt_texts import role_briefing
 from src.configuration.settings import load_instruction_levels, load_prompts
-from src.configuration.swarm_config import ROLES, SwarmConfig, agent_names, role_briefing
+from src.configuration.swarm_config import ROLES, SwarmConfig, agent_names
 
 __all__ = ["ROLES", "LEVEL_KEYS", "agent_names", "assign_roles", "level_text", "role_text", "role_prompt",
            "with_role", "rule_suffix", "composition_label", "neutral_agents"]

@@ -10,6 +10,13 @@ from pydantic import ValidationError
 
 from src.cli import build_parser
 from src.configuration import settings
+from src.configuration.prompt_texts import (
+    board_system_prompt,
+    notice_text,
+    role_briefing,
+    submit_line,
+    swe_board_fields,
+)
 from src.configuration.scales import SCALES
 from src.configuration.swarm_config import (
     DOMAIN_MODES,
@@ -17,14 +24,9 @@ from src.configuration.swarm_config import (
     SwarmConfig,
     Window,
     agent_names,
-    board_system_prompt,
     build_config,
-    notice_text,
     preset,
-    role_briefing,
     role_count,
-    submit_line,
-    swe_board_fields,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
