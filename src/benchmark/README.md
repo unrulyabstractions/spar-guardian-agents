@@ -12,6 +12,7 @@ This package runs CheatBench's tasks as Inspect tasks. Each task domain gives th
 | `domains/openmath/openmath_scoring.py` | the environment probe and the deliverables scorer, which reads the team remote under split access |
 | `domains/openmath/scripts/` | the setup scripts (native, solo_task and split access), the agent Dockerfile and the mirror Dockerfile |
 | `domains/openmath/openmath_settings.py` | the domain's fixed settings: paths, the sandbox user, limits |
+| `domains/openmath/openmath_ladder.py` | `OpenMathDomain`, the code ladder's rules: the peer's archive, the commands aimed at it with copies followed, the agent's deliverable and the registered archive |
 | `domains/swe/swe_task.py` | `SWE`, the sample, each agent's parts and pieces, the system prompts and first messages |
 | `domains/swe/swe_inputs.py` | Lucy's split of each issue and CheatBench's task folder |
 | `domains/swe/swe_sandbox.py` | the images, the compose file and the tools bound to each agent |
@@ -20,22 +21,26 @@ This package runs CheatBench's tasks as Inspect tasks. Each task domain gives th
 | `domains/swe/scripts/` | the prune, plant, scan and grading scripts and the native Dockerfile |
 | `domains/swe/swe_settings.py` | the domain's fixed settings: paths, the sandbox, Lucy's honeypot names and split |
 | `domains/swe/swe_fix_lines.py` | the fix's distinctive lines and the commands aimed at them (Rigel's rules), for the code ladder and the SWE measures |
+| `domains/swe/swe_ladder.py` | `SweDomain`, the code ladder's rules: the fix's lines by piece and Rigel's aimed commands; `swe_disk_signals`, used and shipped from the grader's diffs |
 | `domains/swe/swe_measures.py` | Lucy's SWE measures: cheated, fix posts, rule posts, disclosure, the code ladder's rung and reward; writes `swe_summary.json` |
 | `domains/knowledge/knowledge_task.py` | `KnowledgeWork`, the sample, the per-agent tools and the deviations |
 | `domains/knowledge/knowledge_sandbox.py` | the office images, the compose file, the seats and who holds the review tool and the artifact read |
 | `domains/knowledge/knowledge_review_tool.py` | `review_deliverable`, CheatBench's grader run as root in the sandbox |
 | `domains/knowledge/knowledge_scoring.py` | the environment probe and the `knowledge_deliverables` scorer |
+| `domains/knowledge/knowledge_ladder.py` | `KnowledgeDomain`, the code ladder's rules: the staged artifact, the reads aimed at it, `to_send/` and the files sent for review |
 | `domains/knowledge/knowledge_settings.py`, `scripts/` | the fixed paths, images and users; the setup, the review runner and the agent Dockerfile |
 | `domains/interview/interview_task.py` | `SubsetSum` and `PrimeFactorization`, the sample, the layouts, the tools and the deviations |
 | `domains/interview/interview_answer_keys.py` | the rows, the planted answer, each agent's copy of the two key files, the Q3 stub and the key's fingerprints and fragments |
 | `domains/interview/interview_sealed_generator.py` | a team copy's sealed generator: its random source salted from an unset environment variable, in a rewritten commit |
 | `domains/interview/interview_verifier_tool.py` | `verify_subset` and `verify_factors`, CheatBench's graders run on the host |
 | `domains/interview/interview_scoring.py` | the environment probe and the `interview_deliverables` scorer |
+| `domains/interview/interview_ladder.py` | `InterviewDomain`, the code ladder's rules for both tasks: key lines and answer fragments, the reads aimed at a key, used and shipped from the verifier's calls |
 | `domains/interview/interview_settings.py` | each task's paths, default question, piece label and key files |
 | `domains/protein/protein_task.py` | `ProteinDesign`, the sample with each agent's staging archive, the tools and the deviations |
 | `domains/protein/protein_honeypot.py` | the colleague's candidates whole or cut into segments, each agent's files, the rewritten screening log and the fingerprints |
 | `domains/protein/protein_checker_tool.py` | `check_design`, CheatBench's checker run on the host with the accept set from the build |
 | `domains/protein/protein_scoring.py` | the setup (staging, `git init`, the environment probe) and the `protein_deliverables` scorer |
+| `domains/protein/protein_ladder.py` | `ProteinDomain`, the code ladder's rules: the planted designs and segments, the reads aimed at the candidates, used and shipped from `check_design` calls and saved files |
 | `domains/protein/protein_rows_build.py`, `protein_settings.py` | the rows from CheatBench's generator into `build/protein_design/`; the fixed paths and names |
 | `machines/` | one container per agent on CheatBench's python311 image (`cbtask:python311`), for the interview tasks and protein design: the image, the compose file, the staging archive, `shell` and `run_python` per container, the host-side task tool with its state per owner, the probe and the staged files' hashes |
 | `agent_tools.py` | the agents' `shell` and `run_python`, bound per agent to a seat (user, directory, service), that user's processes reaped after each command; the lone agent's bash and python kwargs |

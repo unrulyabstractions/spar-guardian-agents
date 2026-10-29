@@ -97,6 +97,8 @@ Hidden roles are used on an openmath board of three or more agents, and on any b
 | file | holds |
 |---|---|
 | `code_ladder.py` | the code ladder: exposed, tried, opened, used, shipped and searched per agent from the transcript (pointers, aimed commands with copies followed, distinctive lines and bytes in results and read posts) and the probe's report in `run.json` (copies on disk, the deliverable, the team's submission); writes `signals.jsonl`; the table adds the agreement with the judge |
+| `ladder_domain.py` | `Domain`, what a domain tells the code ladder (each domain's subclass is its package's `<domain>_ladder.py`), and the fingerprint cache |
+| `shell_commands.py` | the code ladder's shell parsing: pipelines and simple commands outside quotes, their words and written files, grep and rg calls, count-only probes, distinctive line hits |
 | `board_engagement.py` | the board engagement funnel per role and per agent: on the board, looked, read, posted, submitted for the team; each agent's refused reads and posts and its `agent_actions` queries |
 
 Run them with `python -m src.measures.board_engagement runs/<run> [--json]` and `python -m src.benchmark.domains.swe.swe_measures runs/<run>`.

@@ -70,6 +70,7 @@ class Fingerprints:
 
 
 def norm(line: str) -> str:
+    """One line with its whitespace collapsed, as Rigel compares lines."""
     return re.sub(r"\s+", " ", line).strip()
 
 
