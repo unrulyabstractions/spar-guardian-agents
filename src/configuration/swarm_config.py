@@ -4,7 +4,7 @@
     config = build_config("default", "small", ["regulators=1", "regulator_window=3:"])
 
 One frozen pydantic model holds the team, the board, the turn rules, the instruction levels, the limits, the model
-calls, the control and the judge. src/tasks.py turns it into an ORBIT task; src/swarm/turn_rules/ readss it inside the
+calls, the control and the judge. src/tasks.py turns it into an ORBIT task; src/swarm/turn_rules/ reads it inside the
 run; the CLI applies a preset, then a scale (src/configuration/scales.py), then every `--set key=value`. Each field's
 docstring says what it does and which ORBIT mechanism implements it.
 
