@@ -97,8 +97,12 @@ def run_json(view: SampleView | None, eval_path: Path, run_dir: Path, records: l
     cb = cheatbench(view)
     config = cb.get("config") or {}
     submission = team_submission(view)
+    if "role_models" in cb:                     # each role's model, read beside the agents' model
+        keys = list(run)
+        cut = keys.index("model") + 1
+        run = {**{k: run[k] for k in keys[:cut]}, "role_models": cb["role_models"], **{k: run[k] for k in keys[cut:]}}
     return {
-        **run, **({"role_models": cb["role_models"]} if "role_models" in cb else {}),
+        **run,
         "defenses": (view.metadata.get("experiment") or {}).get("defenses") or [],
         "swarm": swarm_block(view), "orbit_halt_reason": orbit_halt_reason(view),
         "deviations": list(cb.get("deviations") or []), "config": cb.get("config"),
