@@ -20,7 +20,7 @@ neither pooled nor removed.
 """
 from src.swarm.turn_rules.turn_activation import after_activation, last_call_refused, step_charge
 from src.swarm.turn_rules.turn_plan import initial_state, rules_setup, schedule, team_delivery
-from src.swarm.turn_rules.turn_rules_filter import TurnRulesFilter, turn_rules_defense
+from src.swarm.turn_rules.turn_rules_filter import TurnRulesFilter, provider_system_text, turn_rules_defense
 from src.swarm.turn_rules.turn_state import (
     BOARD_ACTIONS,
     BOARD_ID,
@@ -50,5 +50,5 @@ __all__ = [
     "BOARD_ACTIONS", "OVERSIGHT_TOOL", "TEAM_SUBMIT", "CHANNEL_TOOLS", "TurnState", "TeamSubmission", "Delivered",
     "schedule", "initial_state", "rules_setup", "after_activation", "turn_rules_defense", "record_board_action",
     "budget_used", "spend", "refuse", "current_round", "live_state", "step_round", "free_index", "step_charge",
-    "last_call_refused", "team_delivery", "TurnRulesFilter",
+    "last_call_refused", "team_delivery", "TurnRulesFilter", "provider_system_text",
 ]

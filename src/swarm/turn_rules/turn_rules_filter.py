@@ -16,6 +16,7 @@ from __future__ import annotations
 from inspect_ai.log import transcript
 from inspect_ai.model import ChatMessageUser
 from inspect_ai.util import store_as
+from orbit.agents.turn_react import DEFAULT_ASSISTANT_PROMPT_TURN_REACT as ORBIT_ASSISTANT_PROMPT
 from orbit.communication.runtime import read_messages
 from orbit.configs.defense import DefenseConfig
 from orbit.defenses.base import DefenseBase, DefenseVerdict
@@ -30,6 +31,15 @@ TURN_RULES_TYPE = "swarm.turn_rules.v1"
 TURN_RULES_NAME = "turn_rules"
 # A target that names no agent builds no DefenseBoundary, so the filter runs without a check event per message.
 FILTER_ONLY_TARGET = "__model_filter_only__"
+
+
+def provider_system_text(text: str) -> str:
+    """The system text the provider receives: the stored system message without ORBIT's assistant paragraph
+    (DEFAULT_ASSISTANT_PROMPT_TURN_REACT, which turn_react appends after a blank line) and that blank line. "" when
+    the paragraph was the whole message; text without the paragraph comes back unchanged. The filter applies it to
+    every call; a reader of a run whose filter logged a "system_prompt" info event applies it to show what the
+    provider saw."""
+    return text.replace(f"\n\n{ORBIT_ASSISTANT_PROMPT}", "").replace(ORBIT_ASSISTANT_PROMPT, "")
 
 
 def notice_text(kind: str, counts: dict[str, tuple[int, int]] | None = None) -> str | None:
