@@ -6,8 +6,8 @@
  */
 import { DASH, debounce, firstLine, fmtCompact, fmtInt, fmtSecs, fmtUsd, h, plural } from './dom.js';
 import { P, R, apiFresh, setHashQuietly } from './api.js';
-import { badge, dataTable, labeled, link, mono, muted, registeredCell, roleBadge, rungBadge, select, verdictCell, yn }
-  from './components.js';
+import { badge, dataTable, endedByBadge, labeled, link, mono, muted, registeredCell, roleBadge, rungBadge, select,
+  verdictCell, yn } from './components.js';
 import { endingsText, settingSortKey } from './run_facts.js';
 
 const runsState = { q: '', setting: '', control: '', cheated: '', failed: 'hide', sortKey: 'setting', sortDir: 1 };
@@ -75,10 +75,9 @@ function runsQuery() {
 function endedCell(ep) {
   if (ep.failure) {
     const limit = ep.failure === 'timeout' || ep.failure === 'max_turns';
-    return badge(ep.failure, limit ? 'warn' : 'bad', limit ? 'the sample hit this limit before the agent submitted' : (ep.error ? firstLine(ep.error, 300) : ''));
+    return badge(ep.failure, limit ? 'warn' : 'bad', limit ? 'the sample hit this limit while the agent was still working' : (ep.error ? firstLine(ep.error, 300) : ''));
   }
-  if (ep.ended_by === 'submit') return badge('submit', 'good', 'the agent called submit');
-  return muted(ep.ended_by || DASH);
+  return endedByBadge(ep.ended_by) || muted(DASH);
 }
 
 /** The agents of one run, one row each. */

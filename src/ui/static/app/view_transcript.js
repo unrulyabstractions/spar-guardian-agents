@@ -197,7 +197,7 @@ export async function viewEpisode({ run, episode, query: q }, view) {
     lazyDetails('ORBIT metadata and final metrics', () => h('div', null,
       kv([
         ['agent', orbit.agent], ['roster', asText(orbit.roster)], ['topology', orbit.topology],
-        ['model calls', orbit.model_calls], ['submit recovered from events', asText(orbit.submit_recovered_from_events)],
+        ['model calls', orbit.model_calls],
         ['schema', traj.schema_version],
         ['agent version', ep.agent_version],
       ], 'kv-grid'),

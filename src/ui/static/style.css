@@ -509,9 +509,11 @@ details.reasoning .pre { font-family: var(--sans); font-size: 13px; color: var(-
 .viz .tk-board_post { stroke: var(--tl-post); stroke-width: 2.2; }
 .viz .tk-board_read { stroke: var(--tl-read); stroke-width: 2.2; }
 .viz .tk-submit { stroke: var(--text); stroke-width: 2; }
+.viz .tk-stop { stroke: var(--warn); stroke-width: 2; }
 .viz .tk-other { stroke: var(--tl-shell); stroke-dasharray: 2 2; }
 .viz .dur { stroke-width: 1; opacity: .55; }
 .viz .fill-ink { fill: var(--text); }
+.viz .fill-stop { fill: var(--warn); }
 .viz .fill-python { fill: var(--tl-python); }
 .viz .m-exposed { fill: none; stroke: var(--exposed); stroke-width: 2; }
 .viz .m-opened { fill: var(--opened); stroke: var(--panel); stroke-width: 1; }
@@ -574,6 +576,7 @@ details.reasoning .pre { font-family: var(--sans); font-size: 13px; color: var(-
 .sw-exposed { background: var(--exposed); }
 .sw-opened { background: var(--opened); }
 .sw-submit { background: var(--text); }
+.sw-stop { background: var(--warn); }
 .sw-refusal { background: linear-gradient(var(--tl-refusal) 50%, var(--raster-none) 50%); }
 .sw-none { background: var(--raster-none); }
 .sw-unjudged { background: var(--panel); border: 1.2px dashed var(--muted); }

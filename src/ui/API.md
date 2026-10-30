@@ -47,7 +47,8 @@ RunRow = {
   swarm: null | {n_agents, regulators, disregulators, workers, seed, composition},
   deliverables: null | {archive_in_workspace, archive_on_remote_main, registered_on_main,
                         registered_message_copied_from},   # openmath: what the team left behind
-  endings: {label: count},         # each episode's failure, else its ended_by, else "end"
+  endings: {label: count},         # each episode's failure, else its ended_by (submit, teammate_submit,
+                                   # stop_working, delivered, cap, context, limit, error, end), else "end"
   config: null | {...},            # run.json "config": the SwarmConfig the task was built from
   rules: null | {<agent>: {...}},  # each episode's "rules": what the turn rules recorded for that agent
   swe: null | Swe,
@@ -81,7 +82,7 @@ Knowledge = run.json "knowledge": {row_id, mode, split, n_pieces, layout, meta, 
             images, contracts, grader_state, last_verdict, reviews, review_calls,
             value}   # value: the share of contracts delivered
 RunEngagement = {agents, agents_checked, agents_posted, median_discovery_round, checks, reads, posts,
-                 read_graph, team_submission, reads_refused, posts_refused, oversight, oversight_graph}
+                 read_graph, reads_refused, posts_refused, oversight, oversight_graph}
 Verdict = the episode's judge.jsonl row without the bookkeeping keys (id, episode, replicate, task, model,
           transcript_path, judge_generation_config, judge_generation_config_unsupported, judge_prompt, judge_schema,
           output_mode, judge_usage, judge_attempts). Always present, null when absent: cheated, summary, judge,
@@ -96,19 +97,22 @@ An episode keeps every other key episodes.jsonl gives it (usage `{input, output,
 reads, defense, engagement, access, rules, the SWE keys).
 
 ### `GET /api/runs/<run>` → `RunRow + {run_json, communication, defense, tools}`
-`run_json` is run.json itself. `communication: {<sample>: {messages: [Post], events: [...]}}` and `defense: {<sample>:
+`run_json` is run.json itself; the run page reads its `team_submission` (`null | {agent, round, answer, time,
+ends_after_round, snapshot, refused: [{agent, round, reason}]}`: the accepted submit and every refused one) and
+`shutdown_rate` (the share of the team's agents that ended with `stop_working`; null for a lone agent or when no agent
+could stop). `communication: {<sample>: {messages: [Post], events: [...]}}` and `defense: {<sample>:
 {defenses, log, interventions}}` are the run's stores. `tools` replaces the row's name list with each tool's summary.json
 (`{tool, run, written_at, ...}`; the schemas are in each tool package's docstring under tools/); a summary that does not
 parse or is not an object becomes `{"error"}`.
 
 ### `GET /api/runs/<run>/transcript/<episode>` → `{episode: Episode, transcript: Transcript}`
 ```
-Transcript = {agent, model, prompt, orbit: {eval_log, agent, roster, topology, system_prompt, submit_recovered_from_events,
+Transcript = {agent, model, prompt, orbit: {eval_log, agent, roster, topology, system_prompt,
               turn_rules_recovered_from_events, model_calls}, trajectory: ATIF}
 ATIF.steps[i] = {step_id, source: "system"|"user"|"agent", message, reasoning_content?, model_name?,
                  tool_calls?: [{tool_call_id, function_name, arguments}],
                  observation?: {results: [{source_call_id, content, extra?: {is_error?, error?, withheld_from_model_by_defense?}}]},
-                 extra?: {swarm_turn_rules?, defense_refusal?, refusal_text_written_by_model?, submit_recovered_from_events?, ...}}
+                 extra?: {swarm_turn_rules?, defense_refusal?, refusal_text_written_by_model?, ...}}
 ```
 A blocked tool call has a result whose `extra.error` starts with `Blocked by defense`.
 
@@ -131,7 +135,7 @@ Message = {role: "system"|"user"|"assistant"|"tool", id, text, reasoning, flags:
            tool_calls?: [{id, function, arguments}], model? (assistant), tool_call_id?, function?, error? (tool)}
 ```
 `flags` mark provider-only or altered messages: `turn_rules` (a board notice or continue prompt the turn rules placed in
-the input), `redacted` (a defense withheld this message's content; `text` is the placeholder and `withheld_text` the
+the input, or a system message without ORBIT's assistant paragraph, as the filter sent it), `redacted` (a defense withheld this message's content; `text` is the placeholder and `withheld_text` the
 original), `output_blocked` (a defense blocked this call's own completion), `refusal_in_history` (an assistant message
 whose text is the defense's refusal sentence). A call's flags are its input messages' flags plus `output_blocked`.
 
@@ -140,11 +144,12 @@ whose text is the defense's refusal sentence). A call's flags are its input mess
 {run, duration, limit, agents: [str], roles: {agent: role} (from the episodes),
  first_exposed: {agent: t}, first_opened: {agent: t},   # the code ladder's exposed and opened calls on the clock
  events: [Event] sorted by t, board: [Post]}
-Event = {t, t_end?, agent, kind: "model"|"defense_call"|"tool"|"submit"|"defense", ...}
+Event = {t, t_end?, agent, kind: "model"|"defense_call"|"tool"|"submit"|"stop"|"defense", ...}
   model, defense_call: defense, tokens_in (including cache reads), tokens_out, tool_calls: [function],
                        output_blocked (a defense replaced this completion), refusal (the output text is the refusal
                        sentence, possibly model-written), error
-  tool, submit:        function, id, preview, blocked, error, exposed, opened
+  tool, submit, stop:  function, id, preview, blocked, error, exposed, opened; submit and stop are a submit or a
+                       stop_working call that went through, and a refused one stays a tool
   defense:             defense, boundary, allow, reason, tool
 Post = {sequence, sender, id, t, content, read_by: [{agent, t}]}
 ```

@@ -13,8 +13,15 @@ Writes
     <run_dir>/defense/<sample>.json                    defense configuration and interventions, if any
     <run_dir>/swe/diffs/<target>.diff                  for a SWE run, the graded diffs (Benchmark.write_files)
 
-run.json also carries the run's mode, scale and preset, and each episode and the run an `engagement` block: who
-looked at the board, read it, posted and submitted for the team (None for a run without a board).
+run.json also carries the run's mode, scale and preset, the team's submission (`team_submission`: the agent whose
+submit was accepted, its round, the round after which the run ends, the snapshot and the refused calls; None when no
+agent called submit) and the shutdown rate (the share of the team's agents that ended with stop_working; None for a
+lone agent or when no agent could stop), and each episode and the run an `engagement` block: who looked at the board,
+read it, posted and called submit (None for a run without a board).
+
+An episode's ended_by comes from the store records (export_run_blocks.ended_by): "submit" (it handed in),
+"teammate_submit" (a teammate's submit ended the run), "stop_working" (it stopped; ORBIT's own-episode submit in an
+older log), "delivered" (stop_after_delivery), "cap", "context", "limit", "error" or "end" (the plan ran out).
 
 An episode's "model" is the agent's own model: its role's model when the run gave the role one, else the eval's model.
 The eval log names a role model "swarm/<model>" (src/models/swarm_model_provider.py) and the export drops the
@@ -25,7 +32,7 @@ and what each agent held: its items and numbered pieces, and on openmath's split
 branches and the archive), the domain's own blocks (Benchmark.run_blocks: "openmath" and "deliverables", "swe",
 "knowledge", "interview", "protein"), "delivery" (the stop-after-delivery record); and an episode's "access", the
 domain's facts (Benchmark.episode_facts) and "delivery" (the round and working step at which its deliverable was first
-seen). An episode that stop_after_delivery ended has ended_by "delivered".
+seen).
 
 Episode ids: "<sample>#<epoch>" for a single agent, "<sample>#<epoch>@<agent>" otherwise (export_episodes.episode_id).
 Verdicts come from the `verdicts` argument ({episode: verdict}, when re-judging) or from the cheatbench_judge score in
@@ -91,9 +98,9 @@ def run_json(view: SampleView | None, eval_path: Path, run_dir: Path, records: l
         "defenses": (view.metadata.get("experiment") or {}).get("defenses") or [],
         "swarm": swarm_block(view), "orbit_halt_reason": orbit_halt_reason(view),
         "deviations": list(cb.get("deviations") or []), "config": cb.get("config"),
-        "shutdown_rate": shutdown_rate(cb.get("config"), records), "rules": rules_state(view),
+        "team_submission": submission, "shutdown_rate": shutdown_rate(view, records), "rules": rules_state(view),
         "probes": probes_block(view), **{key: config.get(key) for key in ("mode", "scale", "preset")},
-        "engagement": run_engagement(records, submission), "validity": validity_block(records, submission),
+        "engagement": run_engagement(records), "validity": validity_block(records, submission),
         "ledger": ledger_block(records, view.limit.type if view.limit else None),
         **recorded_run_blocks(view),
     }

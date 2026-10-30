@@ -4,10 +4,10 @@ out/<run name>/ by default (gitignored).
 
     plot_run(Path("runs/kw_small"), Path("out/kw_small"))      # -> [timeline.png, board.png, verdicts.png]
 
-The data comes from the run directory: run.json (rules.timeline, the mode, the access policy, the model),
-episodes.jsonl (each agent's role) and judge.jsonl (each agent's verdict). A run without a timeline gets no timeline
-figure, and a run whose agents never touched the board gets no board figure. The colours and the chrome are
-src/utils/figure_style.py's: three categorical slots for the step kinds, the status colours for the verdicts; the
+The data comes from the run directory: run.json (rules.timeline, team_submission, the mode, the access policy, the
+model), episodes.jsonl (each agent's role) and judge.jsonl (each agent's verdict). A run without a timeline gets no
+timeline figure, and a run whose agents never touched the board gets no board figure. The colours and the chrome are
+src/utils/figure_style.py's: four categorical slots for the step kinds, the status colours for the verdicts; the
 judge's flags per task are src/measures/verdict_fields.py's.
 """
 from __future__ import annotations
@@ -40,7 +40,8 @@ from src.utils.figure_style import (
 from src.utils.json_files import read_json, read_jsonl
 
 KINDS = {"work": ("work step", CATEGORICAL[0]), "board": ("board action", CATEGORICAL[1]),
-         "submit": ("submit", CATEGORICAL[2])}
+         "submit": ("submit", CATEGORICAL[2]), "stop": ("stop_working", CATEGORICAL[3])}
+STOPS = (rules.STOP_WORKING, "submitted")    # TurnState.ended of a stop; "submitted": ORBIT's own submit, older logs
 BOARD_ACTIONS = {"board_status": "status", "board_read": "read", "board_post": "post"}
 ACTIONS = ("status", "read", "post")
 DARK_INK_FILLS = {WARNING}                           # a status fill light enough for ink text
@@ -57,16 +58,23 @@ def load_run(run_dir: Path) -> dict:
         agent = row["episode"].split("@", 1)[1] if "@" in row["episode"] else agents[0]
         verdicts[agent] = row
     return {"name": run_dir.name, "run": run, "agents": agents, "roles": roles, "verdicts": verdicts,
-            "timeline": (run.get("rules") or {}).get("timeline") or []}
+            "timeline": (run.get("rules") or {}).get("timeline") or [], "submission": run.get("team_submission")}
 
 
-def kind_of(entry: dict) -> str:
-    """submit for a step that submitted (alone or for the team), board for a free step or one whose tools were
-    board actions, work otherwise (capped steps included)."""
+def kind_of(entry: dict, submission: dict | None = None) -> str:
+    """A step's kind from the turn rules' records. stop: the step that ended the agent with stop_working (its
+    charge, or TurnState.ended). submit: a step that handed in (its charge, an own submit in solo_task, or, where
+    every step is charged, the charged step of the submission's agent in the submission's round). board: a free
+    step or one whose tools were board actions. work otherwise (capped steps included)."""
     tools = entry.get("tools") or []
-    if entry.get("charge") == "submit" or entry.get("ended") == "submitted" or "team_submit" in tools:
+    charge, sub = entry.get("charge"), submission or {}
+    if charge == "stop" or entry.get("ended") in STOPS:
+        return "stop"
+    handed_in = sub.get("agent") is not None and entry.get("agent") == sub["agent"] and charge == "work" \
+        and int(position_of(entry)) == sub.get("round")
+    if charge == "submit" or entry.get("ended") == "submit" or handed_in:
         return "submit"
-    if entry.get("charge") == "free" or any(t in BOARD_ACTIONS for t in tools):
+    if charge == "free" or any(t in BOARD_ACTIONS for t in tools):
         return "board"
     return "work"
 
@@ -107,7 +115,7 @@ def plot_timeline(data: dict, out: Path) -> Path | None:
     for r in range(1, int(rounds) + 1):
         ax.axvline(r, color=GRID, linewidth=1, zorder=0)
     for entry in timeline:
-        kind = kind_of(entry)
+        kind = kind_of(entry, data["submission"])
         ax.plot(position_of(entry), lanes[entry["agent"]], marker="o", markersize=7, color=KINDS[kind][1],
                 markeredgecolor=SURFACE, markeredgewidth=1.5, linestyle="none", zorder=3)
     for agent, lane in lanes.items():
@@ -132,7 +140,8 @@ def plot_timeline(data: dict, out: Path) -> Path | None:
         writer.writerow(["agent", "role", "round", "step", "kind", "tools", "ended"])
         for entry in timeline:
             writer.writerow([entry["agent"], data["roles"].get(entry["agent"]) or "", position_of(entry),
-                             entry.get("step"), kind_of(entry), " ".join(entry.get("tools") or []), entry.get("ended")])
+                             entry.get("step"), kind_of(entry, data["submission"]), " ".join(entry.get("tools") or []),
+                             entry.get("ended")])
     return out
 
 

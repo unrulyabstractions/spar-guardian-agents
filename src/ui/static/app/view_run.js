@@ -47,6 +47,10 @@ export async function viewRun({ run }, view) {
     ['preset', d.preset],
     ['access', d.access && d.access.policy ? d.access.policy : undefined],
     ['turn budget', d.turn_budget ? `${d.turn_budget.budget} turns, ${d.turn_budget.steps_per_agent} working steps per agent` : undefined],
+    ['agents ended by', endingsText(d.endings) || undefined],
+    ['team submission', submissionText(rj.team_submission) || undefined],
+    ['shutdown rate', rj.shutdown_rate == null ? undefined
+      : `${Math.round(rj.shutdown_rate * 100)}% of the team ended with stop_working`],
     ['eval id', rj.eval_id ? mono(rj.eval_id) : null],
     ['run id', rj.run_id],
     ['variant', rj.variant || null],
@@ -393,9 +397,19 @@ function knowledgeView(kw) {
   h('h3', null, 'Contracts'), dataTable(['contract', 'candidate', 'files in to_send/', 'copied the artifact'], contracts));
 }
 
-// Who looked at the board, read it, posted and submitted for the team: run.json "engagement" and each episode's.
+// The team's submission (run.json team_submission): who handed in, in which round, when the run ends, and the calls
+// refused before or after.
+function submissionText(sub) {
+  if (!sub) return null;
+  const round = r => (r == null ? DASH : r);
+  const refused = (sub.refused || []).map(x => `${x.agent} r${round(x.round)}`).join(', ');
+  return [sub.agent ? `${sub.agent} in round ${round(sub.round)}` : 'none accepted',
+    sub.ends_after_round != null ? `the run ends after round ${sub.ends_after_round}` : null,
+    refused ? `refused: ${refused}` : null].filter(Boolean).join('; ');
+}
+
+// Who looked at the board, read it, posted and called submit: run.json "engagement" and each episode's.
 function engagementView(g, eps) {
-  const sub = g.team_submission;
   const summary = kv([
     ['agents on the board', g.agents],
     ['agents that looked', g.agents_checked],
@@ -404,16 +418,15 @@ function engagementView(g, eps) {
     ['checks', g.checks],
     ['reads', g.reads],
     ['posts', g.posts],
-    ['team submission', sub ? `${sub.agent} in round ${sub.round == null ? DASH : sub.round}` : null],
     ['reads refused by the budget', g.reads_refused],
     ['posts refused by the budget', g.posts_refused],
     ['oversight queries (agent_actions)', g.oversight],
   ], 'kv-grid');
   const senders = m => Object.entries(m || {}).sort().map(([s, n]) => `${s} ${n}`).join(', ');
   const cols = ['agent', 'role', 'discovery round', 'checks', 'reads', 'posts', 'work steps', 'free steps', 'notices',
-    'team submit', 'read from', 'reads refused', 'posts refused', 'oversight queries', 'queried'];
+    'called submit', 'read from', 'reads refused', 'posts refused', 'oversight queries', 'queried'];
   const rows = eps.filter(e => e.engagement).map(({ orbit_agent: a, role, engagement: x }) => [a, role, x.discovery_round,
-    x.checks, x.reads, x.posts, x.work_steps, x.free_steps, x.notices, x.team_submitted ? 'yes' : 'no', senders(x.read_senders),
+    x.checks, x.reads, x.posts, x.work_steps, x.free_steps, x.notices, x.called_submit ? 'yes' : 'no', senders(x.read_senders),
     x.reads_refused, x.posts_refused, x.oversight, senders(x.oversight_targets)]);
   return h('div', null, summary, dataTable(cols, rows));
 }
@@ -479,7 +492,6 @@ function swarmView(sw, run) {
         : muted(blind ? `not counted: ${plural(blind, 'verdict')} on episodes without a transcript` : 'not judged')],
       ['registered on main', del == null ? muted('not recorded') : h('span', { title: `checkout ${del.checkout || DASH}; registry on main: ${(del.main_registry_agents || []).join(', ')}` }, yn(del.registered_on_main, 'good', 'warn'))],
       ['archive in workspace at end', del == null ? muted('not recorded') : yn(del.archive_in_workspace, 'plain', 'warn')],
-      ['agents ended by', endingsText(run.endings) || null],
     ], 'kv-grid'),
     del && del.commits && del.commits.length ? h('div', null, h('h3', null, 'Commits at the end (git log --all)'), h('pre', { class: 'pre' }, del.commits.join('\n'))) : null,
     h('h3', null, 'Roles'),

@@ -82,7 +82,8 @@ def verdict_of(row: dict | None) -> dict | None:
 
 
 def verdict_fields(task: str | None) -> list[dict]:
-    """The task's judge flags in the figures' order (src/measures/run_figures.py): field, label and badge kind."""
+    """The task's judge flags in their order (src/measures/verdict_fields.py FLAGS_BY_TASK): field, label and badge
+    kind."""
     return [{"field": field, "label": label.replace("\n", " "), "kind": FLAG_KIND[colour]}
             for field, label, colour in FLAGS_BY_TASK.get(task, ())]
 

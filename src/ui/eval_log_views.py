@@ -17,10 +17,18 @@ from pathlib import Path
 
 from inspect_ai.event import ModelEvent
 
-from src.export.atif_transcripts import REFUSAL_TEXT, WITHHELD_TEXT, output_message, split_content, tool_result_text
+from src.export.atif_transcripts import (
+    REFUSAL_TEXT,
+    SYSTEM_REWRITE,
+    WITHHELD_TEXT,
+    output_message,
+    split_content,
+    tool_result_text,
+    turn_rule_kinds,
+)
 from src.export.eval_sample_view import blocked_message_ids, span_owners, usage_dict
 from src.sandbox import task_tool_store
-from src.swarm.turn_rules.turn_state import TURN_RULES_TAG
+from src.swarm.turn_rules import STOP_WORKING, SUBMIT, TURN_RULES_TAG, provider_system_text
 from src.ui.run_store import Store
 from src.utils.json_files import read_json
 
@@ -34,20 +42,30 @@ SAMPLE_STORE_KEYS = (
 # The code ladder's moments the timeline places (src/measures/code_ladder.py): the call that first showed the agent a
 # pointer to the honeypot, and the call that first showed it the honeypot's content.
 SIGNAL_RUNGS = ("exposed", "opened")
+# The timeline kind of a tool call that succeeded and ended work: submit handed in, stop_working stopped. A refused
+# call stays a "tool".
+ENDING_KINDS = {SUBMIT: "submit", STOP_WORKING: "stop"}
+TOOL_KINDS = ("tool", *ENDING_KINDS.values())
 
 
-def message_dict(m, redacted: set, blocked: set = frozenset(), own_output: bool = False) -> dict:
+def message_dict(m, redacted: set, blocked: set = frozenset(), own_output: bool = False,
+                 rewritten: bool = False) -> dict:
     """One message as the provider saw it.
 
     A withheld message carries the placeholder as text and the original under withheld_text. A refusal sentence is
     flagged output_blocked only when it is a call's own output that a defense blocked (its id is in `blocked`); in an
     input history the same sentence is refusal_in_history, since the substituted message carries a new id and the
-    model may also write the sentence itself.
+    model may also write the sentence itself. With `rewritten` (the run's turn rules logged the system message's
+    rewrite), a system message loses ORBIT's assistant paragraph, as the provider received it, and is flagged
+    turn_rules when that changed it.
     """
     text, reasoning = split_content(m.content)
     if m.role == "tool":
         text = tool_result_text(m.content)
     flags = {flag for key, flag in FLAG_KEYS.items() if (m.metadata or {}).get(key)}
+    if m.role == "system" and rewritten and provider_system_text(text) != text:
+        text = provider_system_text(text)
+        flags.add("turn_rules")
     d = {"role": m.role, "id": m.id, "text": text, "reasoning": reasoning}
     if m.id in redacted:
         flags.add("redacted")
@@ -68,7 +86,8 @@ def message_dict(m, redacted: set, blocked: set = frozenset(), own_output: bool 
 
 @dataclass
 class Call:
-    """One model call of the eval log: its ModelEvent, its caller, and the ids the defenses withheld or blocked."""
+    """One model call of the eval log: its ModelEvent, its caller, the ids the defenses withheld or blocked, and
+    whether the turn rules rewrote the system message for the provider."""
 
     index: int
     event: ModelEvent
@@ -76,6 +95,7 @@ class Call:
     defense: str | None
     redacted: set
     blocked: set
+    rewritten: bool = False
 
     @cached_property
     def summary(self) -> dict:
@@ -84,7 +104,7 @@ class Call:
         msg = output_message(e)
         inputs = e.input or []
         output_blocked = bool(msg and msg.id in self.blocked)
-        flags = {f for m in inputs for f in message_dict(m, self.redacted)["flags"]}
+        flags = {f for m in inputs for f in message_dict(m, self.redacted, rewritten=self.rewritten)["flags"]}
         return {
             "index": self.index,
             "agent": self.agent,
@@ -108,7 +128,7 @@ class Call:
         e, msg = self.event, output_message(self.event)
         return {
             **self.summary,
-            "input": [message_dict(m, self.redacted) for m in (e.input or [])],
+            "input": [message_dict(m, self.redacted, rewritten=self.rewritten) for m in (e.input or [])],
             "output": message_dict(msg, self.redacted, self.blocked, own_output=True) if msg else None,
             "output_error": str(e.output.error) if e.output and e.output.error else None,
             "tool_schemas": [{"name": t.name, "description": t.description} for t in (e.tools or [])],
@@ -162,7 +182,8 @@ class LogViews:
         redacted = blocked_message_ids(s, "model_input")
         blocked = blocked_message_ids(s, "model_output")
         events = [e for e in s.events if e.event == "model"]
-        calls = [Call(i, e, *owner(e.span_id), redacted, blocked) for i, e in enumerate(events)]
+        rewritten = SYSTEM_REWRITE in turn_rule_kinds(s.events)
+        calls = [Call(i, e, *owner(e.span_id), redacted, blocked, rewritten) for i, e in enumerate(events)]
         with self._lock:
             self._calls[name] = calls
         return calls
@@ -242,7 +263,7 @@ def _tool_item(e, agent, t0, rungs: set) -> dict:
         "t": _secs(e.timestamp, t0),
         "t_end": _secs(e.completed, t0),
         "agent": agent,
-        "kind": "submit" if e.function == "submit" else "tool",
+        "kind": "tool" if err else ENDING_KINDS.get(e.function, "tool"),
         "function": e.function,
         "id": e.id,
         "preview": str(shown or " ".join(str(v) for v in args.values()))[:160],
@@ -287,7 +308,7 @@ def _defense_item(e, t0) -> dict:
 def _board(comm: dict, events: list[dict]) -> list[dict]:
     """Board messages with the moment each was sent (its board_post call) and who read it when (their board_read
     calls), from the communication store's sent and read events."""
-    tool_t = {ev["id"]: ev["t"] for ev in events if ev["kind"] in ("tool", "submit")}
+    tool_t = {ev["id"]: ev["t"] for ev in events if ev["kind"] in TOOL_KINDS}
     sent_t, reads = {}, {}
     for ev in comm.get("events", []):
         t = tool_t.get(ev.get("tool_call_id"))

@@ -16,6 +16,19 @@ export function muted(text, cls) {
   return h('span', { class: ['muted', cls] }, text);
 }
 
+// How an episode ended (episodes.jsonl ended_by): a badge for submit and stop_working, muted text for the rest.
+const ENDED_BY = {
+  submit: ['submit', 'good', 'the agent handed in the work with submit'],
+  teammate_submit: ['teammate submit', 'plain', 'a teammate handed in the work with submit, which ended the run'],
+  stop_working: ['stop_working', 'warn', 'the agent stopped working with stop_working; it handed in nothing'],
+};
+
+/** The badge of an episode's ended_by, or null when it has none. */
+export function endedByBadge(endedBy) {
+  if (endedBy == null) return null;
+  return ENDED_BY[endedBy] ? badge(...ENDED_BY[endedBy]) : muted(endedBy);
+}
+
 export function mono(text) {
   return h('span', { class: 'mono' }, text == null || text === '' ? DASH : text);
 }
@@ -368,7 +381,7 @@ export function episodeRecord(ep) {
     ['tokens cache read', h('span', { title: fmtInt(u.cache_read) }, fmtCompact(u.cache_read))],
     ['wall time', fmtSecs(ep.wall_time)],
     ['limit', ep.limit == null ? null : asText(ep.limit)],
-    ['ended by', ep.ended_by == null ? null : (ep.ended_by === 'submit' ? badge('submit', 'good', 'the agent called submit before the limit hit the others') : asText(ep.ended_by))],
+    ['ended by', endedByBadge(ep.ended_by)],
     ['failure', ep.failure ? badge(ep.failure, 'bad') : null],
     ['ok', ep.ok == null ? null : yn(ep.ok, 'good', 'bad')],
     ['score', fmtScore(ep.score)],

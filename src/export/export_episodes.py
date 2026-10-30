@@ -29,10 +29,11 @@ from src.export.eval_sample_view import (
 )
 from src.export.export_run_blocks import (
     cheatbench,
-    ended_by_delivery,
+    ended_by,
     engagement_record,
     ledger_record,
     notice_counts,
+    own_ending,
     probes_block,
     recorded_episode_facts,
     rules_facts,
@@ -41,7 +42,6 @@ from src.export.export_run_blocks import (
     validity_record,
 )
 from src.models import swarm_model_provider as provider
-from src.swarm.turn_rules.turn_state import DELIVERED
 
 
 # --------------------------------------------------------------------------
@@ -106,27 +106,8 @@ def _base_record(view: SampleView, agent: str, defenses_cfg: list, evidence: dic
     }
 
 
-def _submitted(transcript: dict) -> bool:
-    for step in transcript["trajectory"].get("steps", []):
-        for tc in step.get("tool_calls") or []:
-            if tc.get("function_name") == "submit":
-                return True
-    return False
-
-
-def _ended_by(view: SampleView, submitted: bool, ep_failure: str | None, delivered: bool = False) -> str:
-    if submitted:
-        return "submit"
-    if delivered:
-        return DELIVERED
-    if view.limit or ep_failure in LIMIT_FAILURES:
-        return "limit"
-    if view.error:
-        return "error"
-    return "end"
-
-
-def _write_episode(view: SampleView, run_dir: Path, agent: str, error, failure) -> tuple[dict, list[dict]]:
+def _write_episode(view: SampleView, run_dir: Path, agent: str, error, failure, rules: dict | None,
+                   submission: dict | None) -> tuple[dict, list[dict]]:
     """Write one agent's transcript and prompt; return the record fields that depend on them, and its ATIF steps."""
     transcript, info = episode_transcript(view, agent)
     ep_dir = run_dir / "trajectories" / episode_id(view, agent)
@@ -134,10 +115,9 @@ def _write_episode(view: SampleView, run_dir: Path, agent: str, error, failure) 
     transcript_path = ep_dir / "transcript.json"
     transcript_path.write_text(json.dumps(transcript, indent=1))
     (ep_dir / "prompt.txt").write_text(transcript["prompt"])
-    # A limit ends the sample, not every agent in it: an agent whose last tool call
-    # was submit, or that stop_after_delivery ended, finished its own episode before the limit hit the others.
-    submitted, delivered = _submitted(transcript), ended_by_delivery(view, agent)
-    if (submitted or delivered) and failure in LIMIT_FAILURES:
+    # A limit ends the sample, not every agent in it: an agent whose own act or a turn rule ended its episode
+    # (TurnState.ended) finished before the limit hit the others.
+    if own_ending(rules, agent) is not None and failure in LIMIT_FAILURES:
         ep_error, ep_failure = None, None
     else:
         ep_error, ep_failure = error, failure
@@ -146,7 +126,7 @@ def _write_episode(view: SampleView, run_dir: Path, agent: str, error, failure) 
         "n_turns": info["n_agent_steps"], "n_tool_calls": info["n_tool_calls"],
         "usage": info["usage"], "transcript_path": str(transcript_path),
         "error": ep_error, "failure": ep_failure, "ok": ep_error is None,
-        "ended_by": _ended_by(view, submitted, ep_failure, delivered),
+        "ended_by": ended_by(view, agent, rules, submission, ep_failure),
     }
     return fields, transcript["trajectory"].get("steps", [])
 
@@ -178,7 +158,7 @@ def sample_records(view: SampleView, run_dir: Path) -> list[dict]:
         record = _base_record(view, agent, defenses_cfg, evidence)
         steps = []
         if agent_messages(view, agent):
-            fields, steps = _write_episode(view, run_dir, agent, error, failure)
+            fields, steps = _write_episode(view, run_dir, agent, error, failure, rules, submission)
             record.update(fields)
         else:
             record.update(_no_transcript(error, failure))

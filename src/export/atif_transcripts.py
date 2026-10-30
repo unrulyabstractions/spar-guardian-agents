@@ -8,10 +8,11 @@ core/agents/factory.py validates without a vendor adapter.
     transcript, facts = episode_transcript(view, "a01")
 
 Each ORBIT agent becomes its own episode: the sample's projected messages are split by
-EnvironmentState:message_attribution (history_projection="all"). Three things live only in Inspect's native events
-and are recovered from them:
+EnvironmentState:message_attribution (history_projection="all"). The system message is the text the provider
+received: in a run whose turn rules logged the "system_prompt" rewrite, ORBIT's assistant paragraph is taken out
+(turn_rules.provider_system_text), as the filter took it out of every call. Two things live only in Inspect's native
+events and are recovered from them:
 
-  * the completed submit call, which ORBIT strips from the conversation;
   * the continue prompts and board notices of the turn rules' model filter (src/swarm/turn_rules/), which reach the
     provider only. Inspect writes the ModelEvent before ORBIT's model filters run, so they are absent from
     ModelEvent.input; turn_rules_filter.py writes each one as an info event right after its ModelEvent, in the same
@@ -37,11 +38,12 @@ from src.export.eval_sample_view import (
     topology,
     usage_from_events,
 )
-from src.swarm.turn_rules.turn_state import TURN_RULES_TAG
+from src.swarm.turn_rules import TURN_RULES_TAG, provider_system_text
 from src.utils.cheatbench_core import trajectory as atif
 
 # The info kinds that carry a message the provider got. "notice" is the board notice (SwarmConfig.notice).
 TURN_RULES_PROMPTS = ("continue", "notice")
+SYSTEM_REWRITE = "system_prompt"    # the info kind of the filter's rewrite of the system message
 LAST_TEXT_KEY = "EnvironmentState:last_text_by_agent"
 REFUSAL_TEXT = "I cannot provide that response under the configured defense policy."   # orbit/defenses/boundaries.py
 WITHHELD_TEXT = "[Content withheld by a configured defense.]"
@@ -129,15 +131,21 @@ def rules_prompts_by_output(view: SampleView, model_events) -> dict[str, list[di
     return out
 
 
+def turn_rule_kinds(events) -> set[str]:
+    """The kinds of the turn rules' info events among the events ({TURN_RULES_TAG: {"kind", ...}})."""
+    kinds = set()
+    for ev in events or []:
+        rule = (ev.data or {}).get(TURN_RULES_TAG) if ev.event == "info" and isinstance(ev.data, dict) else None
+        if isinstance(rule, dict) and rule.get("kind"):
+            kinds.add(rule["kind"])
+    return kinds
+
+
 # --------------------------------------------------------------------------
 # one (sample, agent) -> one ATIF trajectory
 # --------------------------------------------------------------------------
-def _call_arguments(arguments, fallback_key: str) -> dict:
-    if isinstance(arguments, dict):
-        return dict(arguments)
-    if fallback_key == "answer":
-        return {"answer": str(arguments)}
-    return {fallback_key: arguments}
+def _call_arguments(arguments) -> dict:
+    return dict(arguments) if isinstance(arguments, dict) else {"value": arguments}
 
 
 def _error_extra(error) -> dict | None:
@@ -158,7 +166,7 @@ def _user_step(msg, redacted: set) -> dict:
 def _assistant_step(msg, call_output_id, blocked_outputs: set) -> dict:
     text, reasoning = split_content(msg.content)
     calls = [atif.ToolCall(tool_call_id=tc.id, function_name=tc.function,
-                           arguments=_call_arguments(tc.arguments, "value"))
+                           arguments=_call_arguments(tc.arguments))
              for tc in (msg.tool_calls or [])]
     step = {"source": "agent", "message": text, "reasoning_content": reasoning,
             "tool_calls": calls or None, "llm_call_count": 1,
@@ -191,34 +199,6 @@ def _add_tool_result(msg, redacted: set, steps: list[dict], issued: dict[str, in
     steps[idx]["results"].append(result)
 
 
-def _recover_submits(view: SampleView, agent: str, steps: list[dict], issued: dict[str, int]) -> int:
-    """Put back the completed submit calls ORBIT removed from the conversation.
-
-    orbit/agents/turn_react.py:_remove_submit_tool drops the call and its result;
-    the native tool event keeps it.
-    """
-    recovered = 0
-    for ev in agent_events(view, agent, "tool"):
-        if ev.function != "submit" or ev.id in issued:
-            continue
-        agent_steps = [i for i, s in enumerate(steps) if s["source"] == "agent"]
-        last_agent = agent_steps[-1] if agent_steps else None
-        call = atif.ToolCall(tool_call_id=ev.id, function_name="submit",
-                             arguments=_call_arguments(ev.arguments, "answer"))
-        result = atif.ObservationResult(source_call_id=ev.id, content=_result_content(ev.result, ev.error),
-                                        extra=_error_extra(ev.error))
-        if last_agent is None:
-            steps.append({"source": "agent", "message": "", "tool_calls": [call], "llm_call_count": 1,
-                          "results": [result], "extra": {"submit_recovered_from_events": True}})
-        else:
-            step = steps[last_agent]
-            step["tool_calls"] = list(step.get("tool_calls") or []) + [call]
-            step["results"].append(result)
-            step["extra"] = {**(step.get("extra") or {}), "submit_recovered_from_events": True}
-        recovered += 1
-    return recovered
-
-
 def _atif_steps(steps: list[dict]) -> list[atif.Step]:
     out = []
     for i, s in enumerate(steps, 1):
@@ -229,13 +209,14 @@ def _atif_steps(steps: list[dict]) -> list[atif.Step]:
 
 
 def build_trajectory(view: SampleView, agent: str) -> tuple[atif.Trajectory, dict]:
-    """The agent's ATIF trajectory, and facts about it (system prompt, recovered items, counts, usage)."""
+    """The agent's ATIF trajectory, and facts about it (system prompt, recovered prompts, counts, usage)."""
     messages = agent_messages(view, agent)
     model_events = agent_events(view, agent, "model")
     rules_prompts = rules_prompts_by_output(view, model_events)
     redacted = redacted_message_ids(model_events, view)
     blocked_outputs = blocked_message_ids(view, "model_output")
     output_ids = [output_message_id(ev) for ev in model_events]
+    rewritten = SYSTEM_REWRITE in turn_rule_kinds(view.events)
     steps: list[dict] = []
     issued: dict[str, int] = {}          # tool_call_id -> index into steps
     system_prompt = None
@@ -244,6 +225,7 @@ def build_trajectory(view: SampleView, agent: str) -> tuple[atif.Trajectory, dic
     for msg in messages:
         if isinstance(msg, ChatMessageSystem):
             text, _ = split_content(msg.content)
+            text = provider_system_text(text) if rewritten else text
             if system_prompt is None:
                 system_prompt = text
             steps.append({"source": "system", "message": text})
@@ -266,7 +248,6 @@ def build_trajectory(view: SampleView, agent: str) -> tuple[atif.Trajectory, dic
             text, _ = split_content(getattr(msg, "content", None))
             steps.append({"source": "user", "message": text, "extra": {"role": getattr(msg, "role", "?")}})
 
-    recovered = _recover_submits(view, agent, steps, issued)
     atif_steps = _atif_steps(steps)
 
     lone_agent = len(roster(view)) == 1
@@ -288,7 +269,7 @@ def build_trajectory(view: SampleView, agent: str) -> tuple[atif.Trajectory, dic
         final_metrics=final_metrics,
         extra={"final_text": last_text or None},
     )
-    info = {"system_prompt": system_prompt, "submit_recovered": recovered,
+    info = {"system_prompt": system_prompt,
             "turn_rules_messages": attached_rules,
             "model_calls": len(model_events),
             "n_agent_steps": sum(1 for s in atif_steps if s.source == "agent"),
@@ -307,7 +288,6 @@ def episode_transcript(view: SampleView, agent: str) -> tuple[dict, dict]:
         "trajectory": traj.to_json_dict(),
         "orbit": {"eval_log": view.eval_log, "agent": agent, "roster": roster(view),
                   "topology": topology(view), "system_prompt": info["system_prompt"],
-                  "submit_recovered_from_events": info["submit_recovered"],
                   "turn_rules_recovered_from_events": info["turn_rules_messages"],
                   "model_calls": info["model_calls"]},
     }

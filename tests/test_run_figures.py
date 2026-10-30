@@ -21,8 +21,16 @@ def test_step_kinds_and_positions():
     assert plots.kind_of({"charge": "refused", "tools": ["board_post"]}) == "board"
     assert plots.kind_of({"charge": "free", "tools": ["board_read"]}) == "board"
     assert plots.kind_of({"charge": "work", "tools": ["board_post"]}) == "board"
-    assert plots.kind_of({"charge": "submit", "tools": []}) == "submit"
-    assert plots.kind_of({"charge": "work", "tools": ["team_submit"], "ended": "submitted"}) == "submit"
+    assert plots.kind_of({"charge": "submit", "tools": ["submit"]}) == "submit"
+    assert plots.kind_of({"charge": "stop", "tools": ["stop_working"], "ended": "stop_working"}) == "stop"
+    # a refused submit is charged like work; ORBIT's own submit in an older log was a stop
+    assert plots.kind_of({"charge": "refused", "tools": ["submit"]}) == "work"
+    assert plots.kind_of({"charge": "submit", "tools": [], "ended": "submitted"}) == "stop"
+    # solo_task: the agent's own submit ends it; where every step is charged, the submission record names the step
+    assert plots.kind_of({"charge": "work", "tools": ["submit"], "ended": "submit"}) == "submit"
+    lone = {"agent": "a01", "round": 4}
+    assert plots.kind_of({"agent": "a01", "step": "r4", "charge": "work", "tools": ["submit"]}, lone) == "submit"
+    assert plots.kind_of({"agent": "a01", "step": "r3", "charge": "work", "tools": ["submit"]}, lone) == "work"
     assert plots.position_of({"step": "r3"}) == 3 and plots.position_of({"step": "r3-free2"}) == 3.4
     assert plots.position_of({"step": "r19-v1"}) == 19 and plots.position_of({"step": "r23-a01-v4"}) == 23
     assert plots.position_of({"step": "r3-a01-free2"}) == 3.4 and plots.position_of({"step": "plan1-a01"}) == 0

@@ -11,12 +11,17 @@ import { episodeOf } from './run_facts.js';
 import { COUNT_STEPS, ROLE_ORDER, ROLE_PLURAL, TIME_STEPS, cssVar, diamond, fmtTick, lgRoles, lgSvg, nextVizUid, r2,
   roleGlyph, roleIcon, svgEl, swatch, ticksFor, tip, vizLegend, withTip, xMark } from './charts.js';
 
-// The mark a tool call gets: the task's shell and Python tools, the board tools (board_status drawn as a read) and
-// submit; any other tool is 'other'. In the raster a call's cell takes post, read or submit, else work.
+// The mark a tool call gets: the task's shell and Python tools, the board tools (board_status drawn as a read), and the
+// server's kinds 'submit' and 'stop' for a submit or stop_working that succeeded; any other call, a refused submit
+// included, is 'other'. In the raster a call's cell takes post or read, else work; a submit or stop among the tool
+// calls that follow it wins.
 const TOOL_KIND = { shell: 'shell', run_python: 'python', board_post: 'board_post', board_read: 'board_read',
-  board_status: 'board_read', submit: 'submit' };
+  board_status: 'board_read' };
+const ENDING_KINDS = ['submit', 'stop'];
 const toolKind = fn => TOOL_KIND[fn] || 'other';
-const RASTER_OF_TOOL = { board_post: 'post', board_read: 'read', submit: 'submit' };
+const markOf = e => (ENDING_KINDS.includes(e.kind) ? e.kind : toolKind(e.function));
+const isToolEvent = e => e.kind === 'tool' || ENDING_KINDS.includes(e.kind);
+const RASTER_OF_TOOL = { board_post: 'post', board_read: 'read' };
 
 /**
  * The verdict a chart draws for one agent: a counted verdict (the server's `counted`: a verdict on an episode with a
@@ -88,7 +93,8 @@ const RASTER_KINDS = [
   ['read', 'board_read or board_status', 'sw-read'],
   ['exposed', 'exposed (code ladder)', 'sw-exposed'],
   ['opened', 'opened (code ladder)', 'sw-opened'],
-  ['submit', 'submit', 'sw-submit'],
+  ['submit', 'submit (handed in)', 'sw-submit'],
+  ['stop', 'stop_working', 'sw-stop'],
   ['refusal', 'refusal sentence as output', 'sw-refusal'],
   ['none', 'no tool call', 'sw-none'],
 ];
@@ -101,7 +107,7 @@ function rasterRows(tl, agents) {
     const r = by.get(e.agent);
     if (!r || e.t == null) continue;
     if (e.kind === 'model') r.models.push(e);
-    else if (e.kind === 'tool' || e.kind === 'submit') r.tools.push(e);
+    else if (isToolEvent(e)) r.tools.push(e);
   }
   return agents.map(a => {
     const { models, tools } = by.get(a);
@@ -115,6 +121,8 @@ function rasterRows(tl, agents) {
       while (j < tools.length && tools[j].t < next) mine.push(tools[j++]);
       const fn = m.tool_calls[0];
       let kind = !fn ? 'none' : RASTER_OF_TOOL[toolKind(fn)] || 'work';
+      const ending = mine.find(x => ENDING_KINDS.includes(x.kind));
+      if (ending) kind = ending.kind;
       if (m.refusal) kind = 'refusal';
       if (mine.some(x => x.opened)) kind = 'opened';
       else if (mine.some(x => x.exposed)) kind = 'exposed';
@@ -128,6 +136,7 @@ function rasterColors() {
   return {
     work: cssVar('--raster-work', '#77776f'), post: cssVar('--tl-post', '#e87ba4'), read: cssVar('--tl-read', '#4a3aa7'),
     exposed: cssVar('--exposed', '#2e94dc'), opened: cssVar('--opened', '#750459'), submit: cssVar('--text', '#1c1c1a'),
+    stop: cssVar('--warn', '#85560a'),
     refusal: cssVar('--tl-refusal', '#b02a20'), none: cssVar('--raster-none', '#e4e4de'),
   };
 }
@@ -299,7 +308,7 @@ function buildLaneData(tl, agents) {
     if (!L) continue;
     if (e.kind === 'model') L.models.push(e);
     else if (e.kind === 'defense_call') L.defcalls.push(e);
-    else if (e.kind === 'tool' || e.kind === 'submit') L.tools.push(e);
+    else if (isToolEvent(e)) L.tools.push(e);
   }
   // A block's band starts where the control call that decided it started (same boundary preferred,
   // then the latest end): a control call that ended in (b.t - 2, b.t + 0.05]. The calls are sorted by
@@ -350,7 +359,7 @@ function swimlaneCard(ctx, lane, run) {
   const anyDefcalls = L_.some(L => L.defcalls.length);
   // What occurs in this run, so the legend lists only marks that can be on screen.
   const allTools = L_.flatMap(L => L.tools);
-  const kinds = new Set(allTools.map(e => toolKind(e.function)));
+  const kinds = new Set(allTools.map(markOf));
   const anyExposed = allTools.some(e => e.exposed);
   const anyOpened = allTools.some(e => e.opened);
   const anyBlockedTool = allTools.some(e => e.blocked);
@@ -427,7 +436,8 @@ function swimlaneCard(ctx, lane, run) {
     kinds.has('python') ? [lgSvg(svgEl('line', { class: 'tk tk-python', x1: 10, x2: 10, y1: 3, y2: 13 }), svgEl('rect', { class: 'fill-python', x: 8, y: 1, width: 4, height: 4 })), 'run_python'] : null,
     kinds.has('board_post') ? [lgSvg(svgEl('line', { class: 'tk tk-board_post', x1: 10, x2: 10, y1: 1, y2: 7 })), 'board_post (upper half)'] : null,
     kinds.has('board_read') ? [lgSvg(svgEl('line', { class: 'tk tk-board_read', x1: 10, x2: 10, y1: 7, y2: 13 })), 'board_read or board_status (lower half)'] : null,
-    kinds.has('submit') ? [lgSvg(svgEl('line', { class: 'tk tk-submit', x1: 7, x2: 7, y1: 1, y2: 13 }), svgEl('path', { class: 'fill-ink', d: 'M7,1 l7,3 l-7,3 z' })), 'submit'] : null,
+    kinds.has('submit') ? [lgSvg(svgEl('line', { class: 'tk tk-submit', x1: 7, x2: 7, y1: 1, y2: 13 }), svgEl('path', { class: 'fill-ink', d: 'M7,1 l7,3 l-7,3 z' })), 'submit (handed in)'] : null,
+    kinds.has('stop') ? [lgSvg(svgEl('line', { class: 'tk tk-stop', x1: 10, x2: 10, y1: 4, y2: 13 }), svgEl('rect', { class: 'fill-stop', x: 7, y: 1, width: 6, height: 6 })), 'stop_working'] : null,
     kinds.has('other') ? [lgSvg(svgEl('line', { class: 'tk tk-other', x1: 10, x2: 10, y1: 2, y2: 13 })), 'another tool'] : null,
     posts.length ? [lgSvg(svgEl('circle', { class: 'm-post', cx: 10, cy: 7, r: 4.5 })), 'board post'] : null,
     anyRead ? [lgSvg(svgEl('line', { class: 'arrow', x1: 1, y1: 7, x2: 19, y2: 7 })), 'post read'] : null,
@@ -546,17 +556,18 @@ function swimlaneCard(ctx, lane, run) {
             m.output_blocked ? 'a defense replaced this completion (block event)' : null, m.error ? 'model error' : null] });
       });
       for (const e of L.tools) {
-        const fn = toolKind(e.function);
+        const fn = markOf(e);
         const xa = sx(X(a, e.t));
         const xe = e.t_end != null ? sx(X(a, e.t_end)) : xa;
         if (!vis(xa, xe)) continue;
         let ya = top + laneH * 0.08;
         let yb = base;
-        if (fn === 'board_post') { ya = top - 3; yb = mid; } else if (fn === 'board_read') { ya = mid; yb = base; } else if (fn === 'submit') { ya = top - 4; }
+        if (fn === 'board_post') { ya = top - 3; yb = mid; } else if (fn === 'board_read') { ya = mid; yb = base; } else if (fn === 'submit' || fn === 'stop') { ya = top - 4; }
         if (xe - xa > 3) marks.appendChild(svgEl('line', { class: ['dur', 'tk-' + fn], x1: xa, x2: xe, y1: (ya + yb) / 2, y2: (ya + yb) / 2 }));
         marks.appendChild(svgEl('line', { class: ['tk', 'tk-' + fn], x1: xa, x2: xa, y1: ya, y2: yb }));
         if (fn === 'python') marks.appendChild(svgEl('rect', { class: 'fill-python', x: xa - 2, y: ya - 3, width: 4, height: 4 }));
         if (fn === 'submit') marks.appendChild(svgEl('path', { class: 'fill-ink', d: `M${r2(xa)},${r2(ya)}l7,3l-7,3z` }));
+        if (fn === 'stop') marks.appendChild(svgEl('rect', { class: 'fill-stop', x: r2(xa - 3), y: r2(ya - 3), width: 6, height: 6 }));
         if (e.blocked) over.appendChild(xMark(xa, ya - 5, 3.2));
         if (e.exposed) over.appendChild(svgEl('circle', { class: 'm-exposed', cx: xa, cy: mid, r: 5.5 }));
         if (e.opened) over.appendChild(diamond(xa, mid, 4.6, 'm-opened'));

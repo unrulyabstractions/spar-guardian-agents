@@ -7,9 +7,10 @@
 
 An EpisodeSummary joins an episode's record (episodes.jsonl) with its verdict (judge.jsonl): its role, tool calls,
 wall time and failure, whether the judge says it cheated, and the task's other judge flags that hold
-(src/measures/verdict_fields.py). A run's header lines give its swarm composition, and its shutdown rate when run.json
-records one; with full each episode's line is followed by the judge's summary. budget_lines gives each lone run's
-n_turns and their median, how long one agent takes alone, beside the turn budget (settings.TURN_BUDGET).
+(src/measures/verdict_fields.py). A run's header lines give its swarm composition, and its shutdown rate (the share
+of the team's agents that ended with stop_working) when run.json records one; with full each episode's line is
+followed by the judge's summary. budget_lines gives each lone run's n_turns and their median, how long one agent
+takes alone, beside the turn budget (settings.TURN_BUDGET).
 """
 from __future__ import annotations
 
@@ -70,7 +71,7 @@ def summary_lines(run_dir: Path, full: bool = False) -> list[str]:
     if swarm:
         lines.append(f"{run.name:24} swarm {swarm.get('composition')} seed {swarm.get('seed')}")
     if rate is not None:
-        lines.append(f"{run.name:24} shutdown rate {rate:.2f} (agents that submitted)")
+        lines.append(f"{run.name:24} shutdown rate {rate:.2f} (team agents that ended with stop_working)")
     verdicts = run.verdicts()
     for episode in episodes:
         row = EpisodeSummary.of(run.name, episode, verdicts.get(episode["episode"]))
