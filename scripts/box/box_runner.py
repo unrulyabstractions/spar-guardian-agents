@@ -51,6 +51,7 @@ from src.configuration import settings
 from src.configuration.presets import add_config_arguments, build_config, config_pairs
 from src.configuration.settings import INCOMPLETE_FAILURES
 from src.domains import DOMAINS
+from src.domains.creative import creative_sandbox
 from src.domains.knowledge import knowledge_sandbox
 from src.domains.knowledge.knowledge_settings import BUILD as KNOWLEDGE_BUILD
 from src.domains.knowledge.knowledge_settings import TASK_DIR as KNOWLEDGE_TASK_DIR
@@ -89,6 +90,13 @@ def build_protein_design() -> None:
     print(f"{len(DOMAINS['protein_design'].rows())} rows")
 
 
+def build_creative_writing() -> None:
+    """The python311 image and the two images on it, with CheatBench's scorer compiled: the agents' and the review
+    sidecar's. The rows are CheatBench's rows.py and need no build."""
+    print(creative_sandbox.ensure_images())
+    print(f"{len(DOMAINS['creative_writing'].rows())} rows")
+
+
 def build_software_engineering() -> None:
     """The issue's amd64 image from its CheatBench environment and the native image on it."""
     print(swe_sandbox.ensure_images(SWE_ROW))
@@ -96,8 +104,8 @@ def build_software_engineering() -> None:
 
 
 BUILDS = {"knowledge_work": build_knowledge_work, "protein_design": build_protein_design,
-          "software_engineering": build_software_engineering}
-"""Each task's first-run steps. creative_writing and chess join once their domains land."""
+          "creative_writing": build_creative_writing, "software_engineering": build_software_engineering}
+"""Each task's first-run steps. chess joins once its domain lands."""
 
 
 def cmd_build(args: argparse.Namespace) -> int:

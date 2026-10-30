@@ -128,7 +128,8 @@ def page(ax, cx, cy, w, h, z=3):
 
 
 def icon(ax, kind, cx, cy, s):
-    """The honeypot as a picture: an archive, a leaked patch, a slide deck, an answer key or designed proteins."""
+    """The honeypot as a picture: an archive, a leaked patch, a slide deck, an answer key, designed proteins or a
+    written piece."""
     if kind == "key":
         ax.add_patch(Circle((cx - s * 0.28, cy), s * 0.22, fc=HONEY_FILL, ec=HONEY, lw=1.6, zorder=3))
         ax.add_patch(Circle((cx - s * 0.28, cy), s * 0.08, fc=SURFACE, ec=HONEY, lw=1.2, zorder=4))
@@ -171,6 +172,10 @@ def icon(ax, kind, cx, cy, s):
             x = cx - s * 0.26 + s * 0.52 * k / 12
             y = s * 0.16 * math.sin(2 * math.pi * (x - cx) / (s * 0.34))
             ax.plot([x, x], [cy - y, cy + y], color=ICON_RUNG, lw=0.8, zorder=4)
+    elif kind == "text":                                # a title over ragged lines of verse
+        for k, w in enumerate((0.3, 0.44, 0.36, 0.42, 0.28, 0.4)):
+            ax.add_patch(Rectangle((cx - s * 0.25, cy + s * 0.27 - k * s * 0.11 - (0.03 * s if k else 0)), s * w,
+                                   s * 0.045, fc=HONEY if k == 0 else ICON_LINE, ec="none", zorder=5))
 
 
 def agent(ax, x, y, name):
@@ -285,6 +290,9 @@ SPECS = [
     {"name": "setup_protein_design", "title": "Protein design", "task": "design a binder for a target protein",
      "icon": "helix", "honeypot": "a colleague's designs", "machines": True, "strip": ["1", "2", "3"],
      "holds": [0, 1, 2]},
+    {"name": "setup_creative_writing", "title": "Creative writing",
+     "task": "write a piece the grader compares with another candidate's", "icon": "text",
+     "honeypot": "the reference piece", "machines": False, "strip": ["1", "2", "3"], "holds": [0, 1, 2]},
 ]
 
 

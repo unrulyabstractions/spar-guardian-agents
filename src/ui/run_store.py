@@ -46,7 +46,8 @@ FLAG_KIND = {WARNING: "warn", SERIOUS: "bad", GOOD: "good", CRITICAL: "bad"}
 # Openmath settings sort 0 (lone agent), 1 (board) and 2 (hidden roles); SWE sorts 3.
 TASK_SETTINGS = {"knowledge_work": ("kw", "knowledge work", 4), "subset_sum": ("subset", "subset sum", 5),
                  "prime_factorization": ("factor", "prime factorization", 6),
-                 "protein_design": ("protein", "protein design", 7)}
+                 "protein_design": ("protein", "protein design", 7),
+                 "creative_writings": ("creative", "creative writing", 8)}
 
 # A run is failed when an episode ended in a harness crash or a provider error (the converter's "connection_closed":
 # rate limit, billing, connection), or when it was set aside by name (failed_, failed2_, ..., cancelled_).
