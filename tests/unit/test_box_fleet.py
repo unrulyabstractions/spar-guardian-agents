@@ -504,6 +504,20 @@ def test_entry_prints_a_boxs_fields_and_its_launchs_pins(registry, capsys):
     assert "not the package list launch" in capsys.readouterr().err
 
 
+def test_repin_moves_a_box_while_the_package_list_stays(registry, monkeypatch, capsys):
+    add_box()
+    moved = "c" * 40
+    monkeypatch.setattr(fleet, "fleet_pin", lambda commit: PIN | {"commit": commit})
+    assert fleet.main(["repin", "7", "--commit", moved]) == 0
+    assert f"{PIN['commit']} to {moved}" in capsys.readouterr().out
+    assert fleet.main(["entry", "7", "commit"]) == 0 and capsys.readouterr().out.split() == [moved]
+    monkeypatch.setattr(fleet, "fleet_pin", lambda commit: PIN | {"requirements_sha256": "0" * 64})
+    assert fleet.main(["repin", "7", "--commit", "d" * 40]) == 1
+    assert "a new list takes a new launch" in capsys.readouterr().err
+    assert fleet.main(["entry", "7", "commit"]) == 0 and capsys.readouterr().out.split() == [moved]
+    assert fleet.main(["repin", "8", "--commit", moved]) == 1
+
+
 @pytest.fixture
 def chess_cells(monkeypatch, tmp_path):
     monkeypatch.setattr(fleet, "cells", lambda task, kinds: [f"chess.game_{kind}" for kind in kinds])

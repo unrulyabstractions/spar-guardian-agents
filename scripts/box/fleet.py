@@ -6,6 +6,7 @@
     uv run python -m scripts.box.fleet status
     uv run python -m scripts.box.fleet ids [--dph] [<id> ...]
     uv run python -m scripts.box.fleet entry <id> <field> ...
+    uv run python -m scripts.box.fleet repin <id> ... --commit SHA
     uv run python -m scripts.box.fleet run-args <id> [--suffix S] [--samples N] [--kinds KIND ...] [--mock]
     uv run python -m scripts.box.fleet destroy <id> [--dry-run] [--accept-loss REASON]
 
@@ -42,7 +43,8 @@ machine again; its replacement takes --label-prefix spar-screen-retry. ids print
 record and its launch's pins. run-args prints box_runner.py run's arguments for a box: the task, the model and the
 commit from the registry, and the registry's suffix or one that starts with it; it refuses a run name this machine holds
 from a run made elsewhere, which the watch would overwrite. --mock asks for the mock model instead of the box's, with a
-suffix that says so (<suffix>mock by default).
+suffix that says so (<suffix>mock by default). repin moves boxes to a commit origin/main holds, in the registry: the
+launch's package list must be the .venv's, and box_setup.sh run again checks the commit out and rebuilds what changed.
 
 destroy refuses unless the id is in the registry, vast.ai labels it as the registry does (spar-screen-*),
 capture_check.sh passed for it within the last 10 minutes, and a capture check run again now passes. It prints what
@@ -718,7 +720,8 @@ def open_entry(instance_id: int) -> dict:
     entry = registered(load_registry(), instance_id)
     if entry is None or entry["destroyed"]:
         raise RuntimeError(f"{instance_id} is not a registered box that is not destroyed")
-    return entry | load_launch(entry["launch"]) | minimums(entry["task"])
+    pins = load_launch(entry["launch"])
+    return entry | pins | minimums(entry["task"]) | {"commit": entry.get("commit", pins["commit"])}
 
 
 def cmd_entry(args: argparse.Namespace) -> int:
@@ -729,6 +732,24 @@ def cmd_entry(args: argparse.Namespace) -> int:
         return 1
     for name in args.fields:
         print("" if values.get(name) is None else values[name])
+    return 0
+
+
+def cmd_repin(args: argparse.Namespace) -> int:
+    try:
+        pin = fleet_pin(args.commit)
+        entries = [open_entry(instance_id) for instance_id in args.ids]
+    except (RuntimeError, OSError, KeyError, ValueError) as error:
+        print(f"refused: {error}", file=sys.stderr)
+        return 1
+    other = [entry["id"] for entry in entries if entry["requirements_sha256"] != pin["requirements_sha256"]]
+    if other:
+        print(f"refused: the .venv's package list is not the one {other} pinned; a new list takes a new launch",
+              file=sys.stderr)
+        return 1
+    for entry in entries:
+        update_box(entry["id"], commit=pin["commit"])
+        print(f"{entry['id']}: {entry['commit']} to {pin['commit']}; run box_setup.sh {entry['id']} before box_run.sh")
     return 0
 
 
@@ -941,6 +962,9 @@ def main(argv: list[str] | None = None) -> int:
     entry = commands.add_parser("entry", help="fields of a registered box and its launch, one per line")
     entry.add_argument("id", type=int)
     entry.add_argument("fields", nargs="+", choices=ENTRY_FIELDS)
+    repin = commands.add_parser("repin", help="move boxes to a commit origin/main holds; box_setup.sh checks it out")
+    repin.add_argument("ids", type=int, nargs="+")
+    repin.add_argument("--commit", required=True, help="what the boxes run from now on")
     run_args = commands.add_parser("run-args", help="box_runner.py run's arguments for a box, one per line")
     run_args.add_argument("id", type=int)
     run_args.add_argument("--suffix", help="the run names' suffix: the registry's, or one that starts with it")
@@ -955,7 +979,8 @@ def main(argv: list[str] | None = None) -> int:
                          help="destroy a box that can never pass the capture, recording what is lost and why")
     args = parser.parse_args(argv)
     command = {"offers": cmd_offers, "create": cmd_create, "status": cmd_status, "ids": cmd_ids,
-               "entry": cmd_entry, "run-args": cmd_run_args, "destroy": cmd_destroy}[args.command]
+               "entry": cmd_entry, "repin": cmd_repin, "run-args": cmd_run_args,
+               "destroy": cmd_destroy}[args.command]
     return command(args)
 
 

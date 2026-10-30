@@ -20,7 +20,7 @@ The pilot is one box per task and model, with one sample of two cells: `create -
 
 | file | what it does | bills or destroys |
 |---|---|---|
-| `fleet.py` | offers, create, status, ids, entry, run-args and destroy against the vast.ai API; the registry and the launch pins; the destroy gates | create bills, destroy destroys |
+| `fleet.py` | offers, create, status, ids, entry, repin, run-args and destroy against the vast.ai API; the registry and the launch pins; the destroy gates | create bills, destroy destroys |
 | `fleet_layout.py` | the tasks, models and cell kinds, the labels and run names, the paths; standard library only | no |
 | `box_ssh.sh`, `box_scp.sh` | ssh and scp to a box by its id, through `logs/boxes/<id>/ssh_config` | no |
 | `box_setup.sh` | waits for ssh, the box's id, the baseline of the host image, lucy's commit as a bundle and the package list, then starts `box_setup_remote.sh` and prints its log | no |
