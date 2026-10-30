@@ -85,9 +85,8 @@ The reports load their charts from a CDN; a browser renders them, `report.html` 
 **contagion.** `observed_final` gives the final shares; `fits.<behaviour>.<model>` the fitted parameter, the final
 size and the sum of squared residuals, or `skipped` with the reason; `degenerate` with its reason for boards under ten
 agents. On the synthetic complete board the fitted SI beta sits about a fifth under the planted one because the
-plant makes regulators immune and the model does not. The honest curve reads one judge flag, `disclosed_access`,
-which only openmath's and protein design's verdicts carry. Chess's `disclosed_to_arbiter`, creative writing's
-`disclosed` and the interview tasks' `final_source_disclosure` never count. Knowledge work and SWE have no such flag.
+plant makes regulators immune and the model does not. The honest curve reads each task's disclosure flag from the judge:
+`disclosed_access`, `disclosed`, `disclosed_to_arbiter` or `final_source_disclosure`. Knowledge work and SWE have none.
 
 **failures.** `mast.modes` is the notebook parser's reading and `modes_strict` a line-anchored one; the parser takes
 the first yes or no after a mode number, including inside a word, so prefer `modes_strict` and read `disagreements`.

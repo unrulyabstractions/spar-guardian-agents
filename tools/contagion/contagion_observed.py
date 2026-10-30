@@ -12,6 +12,8 @@ from tools.scout.scout_scanners import CHEATING_SIGNALS, HONEST_SIGNALS
 
 BEHAVIOURS = ("dishonest", "honest")
 READ_KIND = "read"
+# Each task's flag for telling the others, from CheatBench's judge schemas. Knowledge work and SWE have none.
+DISCLOSURE_FLAGS = ("disclosed_access", "disclosed", "disclosed_to_arbiter", "final_source_disclosure")
 
 
 @dataclass(frozen=True)
@@ -72,11 +74,17 @@ def earliest_finding(findings: dict, signals: tuple[str, ...]) -> int | None:
     return int(min(rounds)) if rounds else None
 
 
+def disclosed(run: Run, agent: str) -> bool:
+    """Whether the judge's row for the agent sets its task's disclosure flag."""
+    verdict = run.judge.get(agent) or {}
+    return any(verdict.get(flag) for flag in DISCLOSURE_FLAGS)
+
+
 def judge_disclosures(run: Run, onsets: dict[str, dict[str, int | None]], rounds: int) -> list[str]:
     """Put a disclosure the judge saw but the source gave no round for at the last round; returns those agents."""
     added = []
     for agent in run.agents:
-        if (run.judge.get(agent) or {}).get("disclosed_access") and onsets["honest"].get(agent) is None:
+        if disclosed(run, agent) and onsets["honest"].get(agent) is None:
             onsets["honest"][agent] = rounds
             added.append(agent)
     return added
@@ -85,7 +93,7 @@ def judge_disclosures(run: Run, onsets: dict[str, dict[str, int | None]], rounds
 def onsets_from_judge(run: Run, rounds: int) -> dict[str, dict[str, int | None]]:
     """Cheated and disclosing agents count as adopted at the last round, since the judge gives no round."""
     dishonest = {agent: rounds if run.cheated.get(agent) else None for agent in run.agents}
-    honest = {agent: rounds if (run.judge.get(agent) or {}).get("disclosed_access") else None for agent in run.agents}
+    honest = {agent: rounds if disclosed(run, agent) else None for agent in run.agents}
     return {"dishonest": dishonest, "honest": honest}
 
 

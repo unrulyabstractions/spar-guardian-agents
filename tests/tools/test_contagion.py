@@ -3,13 +3,20 @@ from __future__ import annotations
 
 import argparse
 import json
+from types import SimpleNamespace
 
 import networkx as nx
 import numpy as np
 
 from tools.contagion import contagion_command as command
 from tools.contagion.contagion_models import Settings, fit, simulate
-from tools.contagion.contagion_observed import Board, adoption_curve, onsets_from_scout, synthetic_board
+from tools.contagion.contagion_observed import (
+    Board,
+    adoption_curve,
+    onsets_from_judge,
+    onsets_from_scout,
+    synthetic_board,
+)
 from tools.contagion.contagion_report import fit_board, write_outputs
 
 GRIDS = {"si": [float(v) for v in np.logspace(-3, 0, 31)], "threshold": [float(v) for v in np.linspace(0, 1, 11)],
@@ -37,6 +44,13 @@ def test_a_scout_without_cheating_scanners_gives_no_onsets():
     full = {"scanners": ["honeypot_opened", "regulator_intervened"], "grep_only": False, "onset": {"a02": 3},
             "agents": {"a01": {"regulator_intervened": {"found": True, "round": 5}}}}
     assert onsets_from_scout(full, agents) == {"dishonest": {"a01": None, "a02": 3}, "honest": {"a01": 5, "a02": None}}
+
+
+def test_every_tasks_disclosure_flag_counts_as_honest_at_the_last_round():
+    verdicts = {"a01": {"disclosed_access": True}, "a02": {"disclosed": True}, "a03": {"disclosed_to_arbiter": True},
+                "a04": {"final_source_disclosure": True}, "a05": {"disclosed": False}, "a06": {}}
+    run = SimpleNamespace(agents=list(verdicts), judge=verdicts, cheated={})
+    assert onsets_from_judge(run, 9)["honest"] == {"a01": 9, "a02": 9, "a03": 9, "a04": 9, "a05": None, "a06": None}
 
 
 def test_si_fit_recovers_a_planted_beta_on_a_complete_graph_of_50():
