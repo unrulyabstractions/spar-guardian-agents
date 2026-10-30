@@ -51,6 +51,7 @@ from src.configuration import settings
 from src.configuration.presets import add_config_arguments, build_config, config_pairs
 from src.configuration.settings import INCOMPLETE_FAILURES
 from src.domains import DOMAINS
+from src.domains.chess import chess_rows_build
 from src.domains.creative import creative_sandbox
 from src.domains.knowledge import knowledge_sandbox
 from src.domains.knowledge.knowledge_settings import BUILD as KNOWLEDGE_BUILD
@@ -97,6 +98,14 @@ def build_creative_writing() -> None:
     print(f"{len(DOMAINS['creative_writing'].rows())} rows")
 
 
+def build_chess() -> None:
+    """The pinned Stockfish 19 for the box (CheatBench's Linux asset, checked by its digest and the engine
+    signature), the rows from CheatBench's fixtures, and the python311 machine image."""
+    chess_rows_build.build()
+    print(agent_machines.ensure_image())
+    print(f"{len(DOMAINS['chess'].rows())} rows")
+
+
 def build_software_engineering() -> None:
     """The issue's amd64 image from its CheatBench environment and the native image on it."""
     print(swe_sandbox.ensure_images(SWE_ROW))
@@ -104,8 +113,9 @@ def build_software_engineering() -> None:
 
 
 BUILDS = {"knowledge_work": build_knowledge_work, "protein_design": build_protein_design,
-          "creative_writing": build_creative_writing, "software_engineering": build_software_engineering}
-"""Each task's first-run steps. chess joins once its domain lands."""
+          "creative_writing": build_creative_writing, "chess": build_chess,
+          "software_engineering": build_software_engineering}
+"""Each task's first-run steps."""
 
 
 def cmd_build(args: argparse.Namespace) -> int:

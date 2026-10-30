@@ -281,3 +281,9 @@ def protein_design(preset: str = "default", row: str | None = None, **overrides)
 def creative_writing(preset: str = "default", row: str | None = None, **overrides) -> Task:
     """CheatBench's creative_writings, one brief."""
     return benchmark_task("creative_writing", preset, row, overrides)
+
+
+@task
+def chess(preset: str = "default", row: str | None = None, **overrides) -> Task:
+    """CheatBench's chess, one position."""
+    return benchmark_task("chess", preset, row, overrides)

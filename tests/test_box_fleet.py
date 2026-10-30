@@ -858,13 +858,15 @@ def test_a_run_that_never_wrote_is_quiet_since_its_start():
     assert box_runner.hung(now, now - 89 * 60, 0.0, LIMIT) is None
 
 
-def test_the_limit_is_the_tasks_domains():
+def test_the_limit_is_the_tasks_domains(monkeypatch):
     """Only SWE grades after the agents stop: a non-SWE run is hung 90 minutes in, not 110."""
     protein, swe = box_runner.inspect_limit_s("protein_design"), box_runner.inspect_limit_s("software_engineering")
     assert swe - protein == 1800 - settings.HARD_TIME_GRACE_S
     assert (protein + box_runner.GRACE_S) / 60 == 90
+    assert box_runner.inspect_limit_s("chess") == protein
+    monkeypatch.setitem(box_runner.TASKS, "go", "go")
     with pytest.raises(ValueError, match="no domain"):
-        box_runner.inspect_limit_s("chess")
+        box_runner.inspect_limit_s("go")
 
 
 def test_stop_ends_the_whole_process_group_even_when_it_ignores_sigterm(monkeypatch):
@@ -986,9 +988,11 @@ def test_the_runner_refuses_a_task_without_every_cell(runner_dirs, monkeypatch, 
     assert not (runner_dirs / "screen.pid").exists()
 
 
-def test_build_refuses_a_task_without_build_steps(capsys):
-    assert box_runner.main(["build", "--task", "chess"]) == 1
-    assert "no build steps for chess" in capsys.readouterr().out
+def test_build_refuses_a_task_without_build_steps(capsys, monkeypatch):
+    assert set(box_runner.BUILDS) == set(box_runner.TASKS)
+    monkeypatch.setitem(box_runner.TASKS, "go", "go")
+    assert box_runner.main(["build", "--task", "go"]) == 1
+    assert "no build steps for go" in capsys.readouterr().out
 
 
 def test_status_names_each_runs_state(monkeypatch):
