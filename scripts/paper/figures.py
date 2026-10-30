@@ -1,4 +1,4 @@
-"""The six design figures of the paper, as 200-dpi PNG under tmp/ (gitignored).
+"""The six design figures of the paper, as 200-dpi PNG under tmp/design/ (gitignored).
 
     uv run python scripts/paper/figures.py
 
@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch, Polygon, Rectangle  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / "tmp"
+OUT = ROOT / "tmp" / "design"
 sys.path.insert(0, str(ROOT))
 
 from src.configuration import access_policy as access_policy  # noqa: E402

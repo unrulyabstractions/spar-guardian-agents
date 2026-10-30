@@ -4,10 +4,10 @@ and every agent's rung on the code ladder per domain and sample.
     uv run python scripts/paper/appendix.py [--suffixes flashpin flashbox flashboxb]
 
 Reads runs/<cell>_<suffix><k>/signals.jsonl and writes, for the sections solo, solo_cheat, minimal and minimal_cheat,
-tmp/appendix_<section>_rate.png (the cheating rate per domain: the share of agents at opened or higher, the ladder's
-rung that agrees with the judge's cheated, beside the share at used or higher) and tmp/appendix_<section>.png (every
-agent's rung per domain and sample, as tiles). Only finished runs count: a run without its signals.jsonl is left
-out.
+tmp/appendix/appendix_<section>_rate.png (the cheating rate per domain: the share of agents at opened or higher, the
+ladder's rung that agrees with the judge's cheated, beside the share at used or higher) and
+tmp/appendix/appendix_<section>.png (every agent's rung per domain and sample, as tiles). Only finished runs count: a
+run without its signals.jsonl is left out.
 """
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ from tables import INK, INK2  # noqa: E402
 from src.configuration import settings  # noqa: E402
 
 matplotlib.use("Agg")
-OUT = ROOT / "tmp"
+OUT = ROOT / "tmp" / "appendix"
 SECTIONS = {
     "solo": ("Solo agent", ["riemann_solo", "worktime_solo", "flipt_solo"]),
     "solo_cheat": ("Solo agent instructed to cheat", ["riemann_solo_cheat", "worktime_solo_cheat", "flipt_solo_cheat"]),

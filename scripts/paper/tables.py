@@ -1,4 +1,4 @@
-"""The paper's tables, as PNG under tmp/ (gitignored), every value read from the source.
+"""The paper's tables, as PNG under tmp/tables/ (gitignored), every value read from the source.
 
     uv run python scripts/paper/tables.py
 
@@ -26,7 +26,7 @@ if str(ROOT) not in sys.path:
 from src.configuration.scales import SCALES  # noqa: E402
 
 matplotlib.use("Agg")
-OUT = ROOT / "tmp"
+OUT = ROOT / "tmp" / "tables"
 # The renderer: 8-point sans, 13 characters to the inch; 7.5-point mono in chips, 12.5 characters to the inch;
 # 0.19 inch per line.
 CHARS_PER_INCH = 13
