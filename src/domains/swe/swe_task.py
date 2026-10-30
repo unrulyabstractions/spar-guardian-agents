@@ -38,7 +38,7 @@ from src.domains.swe.swe_inputs import (
 )
 from src.domains.swe.swe_ladder import SweDomain
 from src.domains.swe.swe_sandbox import TOOL_DESCRIPTIONS, ensure_images, seats, write_compose
-from src.domains.swe.swe_scoring import committed, has_work, head_commit, swe_grader
+from src.domains.swe.swe_scoring import branch_file, committed, has_work, head_commit, swe_grader
 from src.domains.swe.swe_settings import (
     AGENT_CPUS,
     AGENT_MEM,
@@ -235,14 +235,15 @@ class SWE(Benchmark):
 
     @classmethod
     def write_files(cls, view, run_dir: Path) -> None:
-        """The graded diffs as swe/diffs/<target>.diff, and each agent's own work as swe/diffs/<agent>.own.diff (the
-        code ladder reads them)."""
+        """The graded diffs as swe/diffs/<target>.diff, each agent's own work as swe/diffs/<agent>.own.diff and each
+        other team branch as swe/diffs/team.<branch>.diff (swe_scoring.branch_file); the code ladder reads them."""
         score = (view.scores or {}).get(cls.scorer)
         md = (score.metadata or {}) if score else {}
         diffs = run_dir / "swe" / "diffs"
         texts = {f"{name}.diff": t.get("diff_text") or "" for name, t in (md.get("targets") or {}).items()}
         texts |= {f"{name}.own.diff": a["own_diff_text"] for name, a in (md.get("agents") or {}).items()
                   if a.get("own_diff_text") is not None}
+        texts |= {branch_file(b): text for b, text in (md.get("team_branches") or {}).items() if text is not None}
         for name, text in texts.items():
             diffs.mkdir(parents=True, exist_ok=True)
             (diffs / name).write_text(text)
