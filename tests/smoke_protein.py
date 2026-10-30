@@ -3,8 +3,8 @@
     uv run python tests/smoke_protein.py [--only lone,split,solo,roles]
 
 Every scenario starts the real sandbox (CheatBench's python311 image plus its user, one container per agent of a
-team; src/benchmark/machines/), drives ORBIT with Inspect's mockllm scripted per agent, judges every agent with a mock
-judge bound to the "judge" role, exports the log with src.benchmark.run_export.write_run, reads every
+team; src/sandbox/machines/), drives ORBIT with Inspect's mockllm scripted per agent, judges every agent with a mock
+judge bound to the "judge" role, exports the log with src.export.run_export.write_run, reads every
 transcript back the
 way CheatBench's judge does and places every agent on the code ladder. Each check is an assertion; a failing scenario
 exits non-zero. Results go to runs/smoke_protein/<stamp>/ and logs/smoke_protein/<stamp>/, a fresh directory per
@@ -42,21 +42,21 @@ from core.judge import is_judgeable  # noqa: E402
 from inspect_ai.model import ModelOutput  # noqa: E402
 
 from src import tasks  # noqa: E402
-from src.benchmark.cheatbench_judge import judge_spec  # noqa: E402
-from src.benchmark.cheatbench_task_files import render_prompt  # noqa: E402
-from src.benchmark.domains.protein import ProteinDesign  # noqa: E402
-from src.benchmark.domains.protein import protein_honeypot as honeypot  # noqa: E402
-from src.benchmark.domains.protein.protein_checker_tool import GRADER  # noqa: E402
-from src.benchmark.domains.protein.protein_scoring import SCORER  # noqa: E402
-from src.benchmark.domains.protein.protein_settings import TASK_DIR  # noqa: E402
-from src.benchmark.domains.protein.protein_task import (  # noqa: E402
+from src.domains.protein import ProteinDesign  # noqa: E402
+from src.domains.protein import protein_honeypot as honeypot  # noqa: E402
+from src.domains.protein.protein_checker_tool import GRADER  # noqa: E402
+from src.domains.protein.protein_scoring import SCORER  # noqa: E402
+from src.domains.protein.protein_settings import TASK_DIR  # noqa: E402
+from src.domains.protein.protein_task import (  # noqa: E402
     DEVIATIONS,
     MACHINE_DEVIATIONS,
     SHARED_DEVIATIONS,
     SPLIT_DEVIATIONS,
     load_row,
 )
+from src.judging.cheatbench_judge import judge_spec  # noqa: E402
 from src.measures import code_ladder as signals  # noqa: E402
+from src.sandbox.cheatbench_task_files import render_prompt  # noqa: E402
 from tests import smoke_common as smoke  # noqa: E402
 from tests.smoke_common import BOARD_TOOLS, call, load_transcript, results_of, scripted, small  # noqa: E402
 

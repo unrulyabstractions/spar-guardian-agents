@@ -14,7 +14,8 @@ from tools.contagion.contagion_models import LABELS, Settings, fit
 from tools.contagion.contagion_observed import BEHAVIOURS, Board, adoption_curve
 from tools.figure_style import AXIS, CATEGORICAL, DPI, GRID, INK, INK_SECONDARY, MUTED, SURFACE
 
-# The palette of src/ui/run_figures.py (not importable here: it needs ORBIT), and its categorical slots for the models.
+# The palette of src/measures/run_figures.py (not importable here: it needs ORBIT), and its categorical slots for the
+# models.
 MODEL_COLOURS = dict(zip(("si", "threshold", "sir"), CATEGORICAL))
 TITLES = {"dishonest": "dishonest: cheating onset", "honest": "honest: intervention or disclosure"}
 
@@ -145,7 +146,7 @@ def plot(path: Path, board: Board, fits: dict[str, dict], models: tuple[str, ...
 
 
 def style_axes(ax, title: str) -> None:
-    """The chrome of src/ui/run_figures.py: surface, no top or right spine, muted ticks, a grid on y."""
+    """The chrome of src/measures/run_figures.py: surface, no top or right spine, muted ticks, a grid on y."""
     ax.set_facecolor(SURFACE)
     for side in ("top", "right", "left"):
         ax.spines[side].set_visible(False)

@@ -4,7 +4,7 @@
     config = build_config(args.preset, args.scale, args.settings)
     return finish(args, run.run(args.name, OpenMath("riemann"), config, args.model, args.timeout))
 
---model takes an entry of src/configuration/model_registry.yaml or an Inspect model string and comes back
+--model takes an entry of src/models/model_registry.yaml or an Inspect model string and comes back
 resolved to the
 Inspect string (DEFAULT_MODEL); --preset and --scale name the config's base; --set key=value names a SwarmConfig
 field, repeatable, and comes back after DEFAULT_SETTINGS in args.settings; --worker-model, --regulator-model and
@@ -21,14 +21,14 @@ import argparse
 from pathlib import Path
 
 from examples import USE_JUDGE_AS_DEFAULT
-from src.configuration import model_registry as models
 from src.configuration import settings
 from src.configuration.scales import SCALES
 from src.configuration.swarm_config import PRESETS, ROLES, SwarmConfig, role_model_pairs
-from src.ui import run_figures as plots
+from src.measures import run_figures as plots
+from src.models import model_registry as models
 
 DEFAULT_MODEL = "deepseek-flash-openrouter"
-"""The agents' model, as a registry entry (src/configuration/model_registry.yaml). Every run before 2026-10-27 used
+"""The agents' model, as a registry entry (src/models/model_registry.yaml). Every run before 2026-10-27 used
 gemini-3.8-flash."""
 
 ROLE_HOLDERS = {"worker": "the neutral workers'", "regulator": "the regulators'", "disregulator": "the disregulators'"}
@@ -45,7 +45,7 @@ def parse_example_arguments(script: Path, description: str | None, argv: list[st
     parser = argparse.ArgumentParser(prog=prog, description=description,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--model", default=DEFAULT_MODEL,
-                        help=f"the agents' model: an entry of src/configuration/model_registry.yaml "
+                        help=f"the agents' model: an entry of src/models/model_registry.yaml "
                              f"(python -m src models) or an Inspect model string (default {DEFAULT_MODEL})")
     for role in ROLES:
         parser.add_argument(f"--{role}-model", metavar="MODEL", default=None,
@@ -82,7 +82,7 @@ def parse_example_arguments(script: Path, description: str | None, argv: list[st
 
 
 def finish(args: argparse.Namespace, exit_code: int) -> int:
-    """The end of every example: the run's figures into out/<name>/ when the run succeeded (src/ui/run_figures.py
+    """The end of every example: the run's figures into out/<name>/ when the run succeeded (src/measures/run_figures.py
     plot_run), and the run's exit code either way."""
     if exit_code == 0:
         plots.plot_run(settings.RUNS / args.name, settings.ROOT / "out" / args.name)

@@ -23,10 +23,10 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from src.configuration import access_policy as access_policy
-from src.configuration import model_registry as models
 from src.configuration import settings
 from src.configuration.access_policy import POLICIES, Access, Policy
 from src.configuration.scales import MESSAGE_MARGIN, MESSAGES_PER_STEP, SCALE_NAMES, SCALES
+from src.models import model_registry as models
 
 LADDERS = ("rule", "regulator", "disregulator")
 ROLES = ("worker", "regulator", "disregulator")     # the hidden roles (src/swarm/hidden_roles.py)
@@ -287,7 +287,7 @@ class SwarmConfig(BaseModel):
     """Seconds Inspect's hard time limit sits above the scheduler's soft halt. ORBIT halts between turns once
     time_limit_s has passed, so a step in flight finishes and its usage is logged; Inspect's limit, at time_limit_s
     plus this, cuts only a run whose step never returns. 0 puts both at time_limit_s. SWE keeps its grading budget
-    above the halt instead (src/benchmark/domains/swe/swe_settings.py GRADING_BUDGET_S)."""
+    above the halt instead (src/domains/swe/swe_settings.py GRADING_BUDGET_S)."""
 
     # ---------------------------------------------------------------- model calls
     batch_agents: bool = False
@@ -306,7 +306,7 @@ class SwarmConfig(BaseModel):
     worker_model: str | None = None
     """The neutral workers' model: a registry entry or an Inspect model string; None is the run's --model. An entry
     is stored as its Inspect string. An agent whose role has a model of its own runs it through the swarm provider
-    (src/configuration/swarm_model_provider.py), with the entry's routing and the agents' generate config. A lone
+    (src/models/swarm_model_provider.py), with the entry's routing and the agents' generate config. A lone
     agent and the agents of a run without roles are workers."""
     regulator_model: str | None = None
     """The regulators' model, like worker_model."""
@@ -328,10 +328,10 @@ class SwarmConfig(BaseModel):
     monitor_model: str = settings.DEFAULT_MONITOR_MODEL
     """Model for an LLM control (monitor, guardian, dual LLM)."""
     judge: str | None = settings.JUDGE_MODEL
-    """Judge entry in src/benchmark/judge_models.yaml, or None (`--set judge=none`, `--no-judge`): the run is not judged
+    """Judge entry in src/judging/judge_models.yaml, or None (`--set judge=none`, `--no-judge`): the run is not judged
     and gets no judge.jsonl; `scripts/rejudge.py <run>` judges it later from its eval log."""
     judge_addendum: bool = False
-    """Append Lucy's judge addendum to CheatBench's judge schema (src/benchmark/cheatbench_judge.py judge_spec)."""
+    """Append Lucy's judge addendum to CheatBench's judge schema (src/judging/cheatbench_judge.py judge_spec)."""
 
     @field_validator("judge", mode="before")
     @classmethod

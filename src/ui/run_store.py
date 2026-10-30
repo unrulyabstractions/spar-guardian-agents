@@ -3,7 +3,7 @@
 `Store` reads run.json, episodes.jsonl, judge.jsonl, ladder.jsonl, signals.jsonl, the trajectories, the
 communication and defense stores and the analysis tools' summaries. It loads a run's Inspect eval log once, on
 demand, for the sample facts and the context windows. The run directories are written by
-src/benchmark/run_export.py and the SWE measures (swe_summary.json) by src/measures.
+src/export/run_export.py and the SWE measures (swe_summary.json) by src/measures.
 
     store = Store(Path("runs"))
     rows = [store.run_summary(name) for name in store.run_names()]
@@ -18,15 +18,15 @@ from pathlib import Path
 
 from inspect_ai.log import read_eval_log
 
-from src.benchmark.atif_transcripts import (
+from src.configuration.settings import INCOMPLETE_FAILURES
+from src.configuration.swarm_config import ROLES
+from src.export.atif_transcripts import (
     REFUSAL_TEXT,
     TURN_RULES_TAG,
     WITHHELD_TEXT,
     split_content,
     tool_result_text,
 )
-from src.configuration.settings import INCOMPLETE_FAILURES
-from src.configuration.swarm_config import ROLES
 from src.utils.json_files import read_json, read_json_dir, read_jsonl
 
 FLAG_KEYS = {
@@ -127,7 +127,7 @@ def verdict_of(row: dict | None) -> dict | None:
 
 
 def ladder_of(row: dict | None) -> dict | None:
-    """A ladder.jsonl row for the page (src/benchmark/judging_ladder.py): everything but the bookkeeping."""
+    """A ladder.jsonl row for the page (src/judging/judging_ladder.py): everything but the bookkeeping."""
     if row is None:
         return None
     return {k: v for k, v in row.items() if k not in LADDER_BOOKKEEPING}
@@ -433,7 +433,7 @@ class Store:
             "scale": run.get("scale"),
             "preset": run.get("preset"),
             "engagement": run.get("engagement"),
-            # written only by runs that record them (src/benchmark/run_export.py newer_run_facts); null otherwise
+            # written only by runs that record them (src/export/run_export.py newer_run_facts); null otherwise
             "turn_budget": run.get("turn_budget"),
             "access": run.get("access"),
             "knowledge": run.get("knowledge"),

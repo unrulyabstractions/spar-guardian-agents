@@ -27,9 +27,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.configuration import model_registry as models  # noqa: E402
 from src.configuration import settings  # noqa: E402
 from src.configuration.swarm_config import ROLES, role_model_pairs  # noqa: E402
+from src.models import model_registry as models  # noqa: E402
 
 CELLS = ["openmath.riemann_solo", "openmath.riemann_solo_cheat", "openmath.riemann_minimal_cheat",
          "knowledge_work.worktime_solo", "knowledge_work.worktime_solo_cheat", "knowledge_work.worktime_minimal_cheat",

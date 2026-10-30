@@ -5,8 +5,8 @@ spend.
                                            [--tasks subset_sum,prime_factorization]
 
 Every scenario starts the real sandbox (cbtask:python311, one container per agent of a team,
-src/benchmark/domains/interview/), drives ORBIT with Inspect's mockllm scripted per agent, judges every agent with a
-mock judge bound to the "judge" role, exports the log with src.benchmark.run_export.write_run, reads every
+src/domains/interview/), drives ORBIT with Inspect's mockllm scripted per agent, judges every agent with a
+mock judge bound to the "judge" role, exports the log with src.export.run_export.write_run, reads every
 transcript back
 the way CheatBench's judge does and places the agents on the code ladder (src/measures/code_ladder.py). Each check is an
 assertion; a failing scenario exits non-zero. Results go to runs/smoke_interview/<stamp>/<task>_<scenario>/ and
@@ -50,27 +50,27 @@ from inspect_ai.model import ModelOutput  # noqa: E402
 from inspect_ai.tool import ToolCall  # noqa: E402
 
 from src import tasks  # noqa: E402
-from src.benchmark.cheatbench_judge import judge_spec  # noqa: E402
-from src.benchmark.cheatbench_task_files import render_prompt  # noqa: E402
-from src.benchmark.domains.interview import PrimeFactorization, SubsetSum  # noqa: E402
-from src.benchmark.domains.interview import interview_answer_keys as keys  # noqa: E402
-from src.benchmark.domains.interview import interview_sealed_generator as generator  # noqa: E402
-from src.benchmark.domains.interview.interview_scoring import SCORER  # noqa: E402
-from src.benchmark.domains.interview.interview_settings import (  # noqa: E402
+from src.domains.interview import PrimeFactorization, SubsetSum  # noqa: E402
+from src.domains.interview import interview_answer_keys as keys  # noqa: E402
+from src.domains.interview import interview_sealed_generator as generator  # noqa: E402
+from src.domains.interview.interview_scoring import SCORER  # noqa: E402
+from src.domains.interview.interview_settings import (  # noqa: E402
     FACTOR,
     KEY_DIRS,
     SHARE_MODULUS,
     SUBSET,
     Spec,
 )
-from src.benchmark.domains.interview.interview_task import (  # noqa: E402
+from src.domains.interview.interview_task import (  # noqa: E402
     DEVIATIONS,
     MACHINE_DEVIATIONS,
     SHARED_DEVIATIONS,
     SPLIT_DEVIATIONS,
 )
-from src.benchmark.domains.interview.interview_verifier_tool import tool_name  # noqa: E402
+from src.domains.interview.interview_verifier_tool import tool_name  # noqa: E402
+from src.judging.cheatbench_judge import judge_spec  # noqa: E402
 from src.measures import code_ladder as signals  # noqa: E402
+from src.sandbox.cheatbench_task_files import render_prompt  # noqa: E402
 from tests import smoke_common as smoke  # noqa: E402
 from tests.smoke_common import call, load_transcript, results_of, scripted, small  # noqa: E402
 

@@ -27,7 +27,7 @@ Each script parses the shared arguments, builds its config in the open (`build_c
 
 | argument | default | what it does |
 |---|---|---|
-| `--model` | `deepseek-flash-openrouter` | the agents' model: an entry of `src/configuration/model_registry.yaml` (`uv run python -m src models`) or an Inspect model string |
+| `--model` | `deepseek-flash-openrouter` | the agents' model: an entry of `src/models/model_registry.yaml` (`uv run python -m src models`) or an Inspect model string |
 | `--worker-model`, `--regulator-model`, `--disregulator-model` | `--model` | a role's own model, like `--model`; each sets `<role>_model` after every `--set`, so the flag wins. The eval log names the role's calls `swarm/<model>`, and `runs/<name>/episodes.jsonl` names each agent's real model |
 | `--preset` | `default` | the preset |
 | `--scale` | `small` | the run's size |

@@ -4,7 +4,7 @@ Import the names you need: `from src.configuration import settings` or
 `from src.configuration.settings import ROOT, DEFAULT_MODEL`. Model-facing text lives in
 `src/configuration/prompts.yaml` and `src/configuration/instruction_levels.yaml`; the control criteria and patterns in
 `src/configuration/controls.yaml`; the models we can consider, with their routes, keys and prices, in
-`src/configuration/model_registry.yaml` (read through model_registry.py).
+`src/models/model_registry.yaml` (read through model_registry.py).
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ LUCY = ROOT / "submodules" / "lucy"
 PROMPTS = HERE / "prompts.yaml"
 CONTROLS = HERE / "controls.yaml"
 INSTRUCTION_LEVELS = HERE / "instruction_levels.yaml"
-MODELS = HERE / "model_registry.yaml"
+MODELS = HERE.parent / "models" / "model_registry.yaml"
 
 # The agents' model, an Inspect model string (model_registry.yaml lists every alternative), and the judge's entry in
 # JUDGE_MODELS_CONFIG, whose model string model_registry.yaml prices. gpt-6-luna as judge since 2026-10-28: twenty times
@@ -33,7 +33,7 @@ MODELS = HERE / "model_registry.yaml"
 DEFAULT_MODEL = "openrouter/deepseek/deepseek-v4.1-flash-1017"
 DEFAULT_MONITOR_MODEL = DEFAULT_MODEL
 JUDGE_MODEL = "gpt-6-luna"
-JUDGE_MODELS_CONFIG = HERE.parent / "benchmark" / "judge_models.yaml"
+JUDGE_MODELS_CONFIG = HERE.parent / "judging" / "judge_models.yaml"
 UI_PORT = 8765
 BOARD_ID = "board"    # the shared channel's id (src/swarm/board_config.py, src/swarm/turn_rules/, the SWE prompts)
 BOARD_TOOLS = ("board_status", "board_read", "board_post")    # the board's tools (src/swarm/pull_board.py)

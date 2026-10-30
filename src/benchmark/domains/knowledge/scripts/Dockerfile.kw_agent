@@ -1,7 +1,0 @@
-# CheatBench's knowledge_work image (tasks/knowledge_work/Dockerfile, built as cbkw:office), plus what its runner does
-# at episode start: the unprivileged agent user. The task's egress policy is deny; compose runs it without a network.
-# iptables serves the loopback rules between agent users (src/benchmark/sandbox_hygiene.py LOOPBACK_GUARD).
-FROM cbkw:office
-RUN apt-get update && apt-get install -y --no-install-recommends iptables && rm -rf /var/lib/apt/lists/*
-RUN useradd --uid 1000 --create-home --home-dir /home/user --shell /bin/bash user \
-    && chown user:user /workspace

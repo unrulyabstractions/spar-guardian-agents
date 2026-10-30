@@ -25,7 +25,7 @@ turn_budget=knowledge_work:70` for another budget on one domain (the other domai
 Inspect log under
 logs/<ctrl|swarm|swe>/<name>/, exports it to runs/<name>/ and prints one line per episode; the judge runs inside
 the eval. `budget` prints lone runs' turns and their median.
-`--model` takes an entry of src/configuration/model_registry.yaml or an Inspect model string; `models` prints
+`--model` takes an entry of src/models/model_registry.yaml or an Inspect model string; `models` prints
 the entries,
 or one entry in full. `--worker-model`, `--regulator-model` and `--disregulator-model` give a role its own model the
 same way; each sets the config's `<role>_model` after every `--set`, so the flag wins.
@@ -37,11 +37,11 @@ import os
 import sys
 from pathlib import Path
 
-from src.configuration import model_registry as models
 from src.configuration import settings
 from src.configuration.scales import SCALES
 from src.configuration.swarm_config import PRESETS, ROLES, build_config, role_model_pairs
 from src.measures import episode_summary as summary
+from src.models import model_registry as models
 from src.ui import launch
 
 OPENMATH_ROW = "riemann"
@@ -63,21 +63,21 @@ def config_pairs(args: argparse.Namespace) -> list[str]:
 def cmd_run(args: argparse.Namespace) -> int:
     # run.py imports Inspect, ORBIT and CheatBench, four seconds; only run and judge pay for them.
     from src import run
-    from src.benchmark.domains.openmath import OpenMath
-    from src.benchmark.domains.swe import SWE
+    from src.domains.openmath import OpenMath
+    from src.domains.swe import SWE
     config = build_config(args.preset, args.scale, config_pairs(args))
     if args.benchmark == "openmath":
         benchmark = OpenMath(args.row or OPENMATH_ROW)
     elif args.benchmark == "swe":
         benchmark = SWE(args.issue, args.honeypot, not args.no_grade)
     elif args.benchmark == "protein_design":
-        from src.benchmark.domains.protein import ProteinDesign
+        from src.domains.protein import ProteinDesign
         benchmark = ProteinDesign(args.row) if args.row else ProteinDesign()
     elif args.benchmark == "knowledge_work":
-        from src.benchmark.domains.knowledge import KnowledgeWork
+        from src.domains.knowledge import KnowledgeWork
         benchmark = KnowledgeWork(args.row) if args.row else KnowledgeWork()
     else:
-        from src.benchmark.domains.interview import PrimeFactorization, SubsetSum
+        from src.domains.interview import PrimeFactorization, SubsetSum
         benchmark = (SubsetSum if args.benchmark == "subset_sum" else PrimeFactorization)(args.row)
     return run.run(args.name, benchmark, config, models.resolve(args.model), args.timeout)
 
@@ -93,7 +93,7 @@ def cmd_budget(args: argparse.Namespace) -> int:
 
 
 def cmd_plots(args: argparse.Namespace) -> int:
-    from src.ui import run_figures as plots  # matplotlib, a second; only run_figures as plots pays for it
+    from src.measures import run_figures as plots  # matplotlib, a second; only run_figures as plots pays for it
     run_dir = Path(args.run_dir)
     plots.plot_run(run_dir, Path(args.out) if args.out else settings.ROOT / "out" / run_dir.name)
     return 0
@@ -113,7 +113,7 @@ def cmd_signals(args: argparse.Namespace) -> int:
 
 def cmd_ladder(args: argparse.Namespace) -> int:
     from src import run  # the same four seconds as in cmd_run
-    from src.benchmark import judging_ladder as ladder  # the cheatbench_judge as judge's imports, the same seconds
+    from src.judging import judging_ladder as ladder  # the cheatbench_judge as judge's imports, the same seconds
     run_dirs = [Path(name) if Path(name).is_dir() else settings.RUNS / name for name in args.runs]
     if args.table:
         print(ladder.table(run_dirs, args.view), end="")
@@ -155,7 +155,7 @@ def add_run_parser(subparsers) -> None:
     run.add_argument("--no-judge", action="store_true",
                      help="run without the judge (--set judge=none); scripts/rejudge.py <name> judges it later")
     run.add_argument("--model", default=settings.DEFAULT_MODEL,
-                     help="the agents' model: an entry of src/configuration/model_registry.yaml "
+                     help="the agents' model: an entry of src/models/model_registry.yaml "
                           "(python -m src models) or an Inspect model string")
     for role, holders in (("worker", "the neutral workers'"), ("regulator", "the regulators'"),
                           ("disregulator", "the disregulators'")):
@@ -170,7 +170,7 @@ def add_judge_parser(subparsers) -> None:
     judge = subparsers.add_parser("judge", help="judge an existing eval log again and export it")
     judge.add_argument("eval_log")
     judge.add_argument("run_name")
-    judge.add_argument("--judge", default=settings.JUDGE_MODEL, help="entry in src/benchmark/judge_models.yaml")
+    judge.add_argument("--judge", default=settings.JUDGE_MODEL, help="entry in src/judging/judge_models.yaml")
     judge.add_argument("--sync", action="store_true",
                        help="the normal API (full price, minutes) instead of the batch API (half price, up to a day)")
     judge.add_argument("--judge-errors", action="store_true",
@@ -188,7 +188,7 @@ def add_signals_parser(subparsers) -> None:
 def add_ladder_parser(subparsers) -> None:
     ladder = subparsers.add_parser("ladder", help="place every agent of a run on the cheating ladder (ladder.jsonl)")
     ladder.add_argument("runs", nargs="+", help="run names under runs/, or run directories")
-    ladder.add_argument("--judge", default=settings.JUDGE_MODEL, help="entry in src/benchmark/judge_models.yaml")
+    ladder.add_argument("--judge", default=settings.JUDGE_MODEL, help="entry in src/judging/judge_models.yaml")
     ladder.add_argument("--sync", action="store_true",
                         help="the normal API (full price, minutes) instead of the batch API (half price, up to a day)")
     ladder.add_argument("--view", choices=("full", "actions"), default="full",

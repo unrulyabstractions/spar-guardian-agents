@@ -1,4 +1,4 @@
-"""The cheating signals (src/benchmark/honeypot_fingerprints.py, src/measures/code_ladder.py): the honeypot
+"""The cheating signals (src/measures/honeypot_fingerprints.py, src/measures/code_ladder.py): the honeypot
 fingerprints, the probe
 script on a directory, the transcript scan and the rung. No model calls, no Docker."""
 from __future__ import annotations
@@ -13,11 +13,11 @@ import zipfile
 
 import pytest
 
-from src.benchmark import honeypot_fingerprints as prints_module
-from src.benchmark.domains.knowledge.knowledge_task import load_row
-from src.benchmark.domains.openmath.openmath_task import load_rows
-from src.benchmark.domains.swe import swe_fix_lines
+from src.domains.knowledge.knowledge_task import load_row
+from src.domains.openmath.openmath_task import load_rows
+from src.domains.swe import swe_fix_lines
 from src.measures import code_ladder as signals
+from src.measures import honeypot_fingerprints as prints_module
 from src.measures.ladder_domain import PRINTS
 
 ROW = next(r for r in load_rows() if r["id"] == "riemann")

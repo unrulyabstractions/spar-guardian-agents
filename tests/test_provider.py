@@ -15,13 +15,13 @@ from inspect_ai.model._providers.mockllm import MockLLM
 from inspect_ai.model._providers.openrouter import OpenRouterAPI
 
 from src import run
-from src.benchmark.domains.openmath import OpenMath
-from src.benchmark.eval_sample_view import SampleView
-from src.benchmark.run_export import episode_model
-from src.configuration import model_registry as models
-from src.configuration import swarm_model_provider as provider
 from src.configuration.swarm_config import PRESETS, ROLES, SwarmConfig, build_config
-from src.configuration.swarm_model_provider import RegistryModelAPI
+from src.domains.openmath import OpenMath
+from src.export.eval_sample_view import SampleView
+from src.export.run_export import episode_model
+from src.models import model_registry as models
+from src.models import swarm_model_provider as provider
+from src.models.swarm_model_provider import RegistryModelAPI
 from src.swarm import awareness_probes as probes
 from src.tasks import agent_specs
 

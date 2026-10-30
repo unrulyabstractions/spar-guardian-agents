@@ -1,5 +1,5 @@
 """The figures' shared style: the surface and ink colours, the categorical palette, the role colours, the DPI and
-the legend below the axes, as src/ui/run_figures.py draws them.
+the legend below the axes, as src/measures/run_figures.py draws them.
 
     from tools.figure_style import CATEGORICAL, DPI, INK, SURFACE, legend_below
     axes.legend(**legend_below(-0.18))

@@ -91,7 +91,7 @@ notice:
 # Gemini rejects. Source: ORBIT's own resume text (orbit/agents/turn_react.py).
 continue: "Please continue with your next action."
 
-# The SWE benchmark's prompts (src/benchmark/domains/swe/).
+# The SWE benchmark's prompts (src/domains/swe/).
 # Placeholders this file adds to the worktree's text: {submit} is prompt_texts.submit_line(team, shutdown),
 # which is empty when agents cannot shut down; {board_paragraph}, {board_tool_line}, {team_submit_line} and {turns}
 # come from prompt_texts.swe_board_fields(config, team_submit=...).

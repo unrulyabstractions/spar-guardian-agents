@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 
-from src.benchmark import honeypot_fingerprints as prints_module
+from src.measures import honeypot_fingerprints as prints_module
 from src.measures.shell_commands import line_hits
 
 OPEN_MIN = 3

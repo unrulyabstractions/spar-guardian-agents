@@ -4,8 +4,8 @@ from pathlib import Path
 
 from examples.utils.example_arguments import finish, parse_example_arguments
 from src import run
-from src.benchmark.domains.swe import SWE
 from src.configuration.swarm_config import build_config
+from src.domains.swe import SWE
 
 
 def main() -> int:

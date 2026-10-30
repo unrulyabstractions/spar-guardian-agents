@@ -241,7 +241,7 @@ export function verdictBlock(v) {
     v.summary ? h('p', { class: 'verdict-summary' }, v.summary) : null);
 }
 
-// The cheating ladder (src/benchmark/judging_ladder.py): the rung the judge found and the calls and rounds it cites.
+// The cheating ladder (src/judging/judging_ladder.py): the rung the judge found and the calls and rounds it cites.
 const RUNGS = ['exposed', 'tried', 'opened', 'used', 'shipped'];
 const RUNG_KIND = { none: 'good', exposed: 'warn', tried: 'bad', opened: 'bad', used: 'bad', shipped: 'bad' };
 const BESIDE_LADDER = [['searched', 'warn'], ['tampered', 'bad'], ['admitted', 'good'], ['concealed', 'bad'], ['false_denial', 'bad']];

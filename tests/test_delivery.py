@@ -6,17 +6,17 @@ import asyncio
 import json
 from types import SimpleNamespace
 
-from src.benchmark import machines
-from src.benchmark.domains.interview import PrimeFactorization, SubsetSum
-from src.benchmark.domains.knowledge import KnowledgeWork
-from src.benchmark.domains.knowledge import knowledge_review_tool as review
-from src.benchmark.domains.openmath import OpenMath
-from src.benchmark.domains.openmath import openmath_scoring as openmath_probe
-from src.benchmark.domains.protein import ProteinDesign
-from src.benchmark.domains.swe import SWE
-from src.benchmark.domains.swe import swe_grader as swe_grader
-from src.benchmark.domains.swe.swe_inputs import load_split, task_config
 from src.configuration.swarm_config import SwarmConfig, build_config
+from src.domains.interview import PrimeFactorization, SubsetSum
+from src.domains.knowledge import KnowledgeWork
+from src.domains.knowledge import knowledge_review_tool as review
+from src.domains.openmath import OpenMath
+from src.domains.openmath import openmath_scoring as openmath_probe
+from src.domains.protein import ProteinDesign
+from src.domains.swe import SWE
+from src.domains.swe import swe_grader as swe_grader
+from src.domains.swe.swe_inputs import load_split, task_config
+from src.sandbox import machines
 
 TEAM = build_config("default", "small")                   # three agents, shared_task, access=split
 SOLO = TEAM.with_overrides(["mode=solo_task"])

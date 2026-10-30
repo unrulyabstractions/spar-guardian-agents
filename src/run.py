@@ -7,15 +7,15 @@ run's agents on the cheating ladder, or read lone runs' turns.
     budget([Path("runs/om_lone_1"), Path("runs/om_lone_2"), Path("runs/om_lone_3")])
 
 A run calls inspect_ai.eval with the task from tasks.py, writes its log under logs/<kind>/<name>/, exports it to
-runs/<name>/ with src/benchmark/run_export.py and prints one line per episode. CheatBench's judge runs inside
+runs/<name>/ with src/export/run_export.py and prints one line per episode. CheatBench's judge runs inside
 the eval as a
 scorer, bound to the model role "judge". With batch_judge the judge's calls use the provider's batch API, and with
 batch_agents so do the agents' calls (Inspect GenerateConfig.batch). A role with a model of its own (worker_model,
 regulator_model, disregulator_model) runs it through the swarm model provider
-(src/configuration/swarm_model_provider.py). The
+(src/models/swarm_model_provider.py). The
 provider carries the agents' generate config to that model's calls. Each role model is built once before the eval, so
 a provider name Inspect does not know is refused before the sandbox starts. Re-judging reads a finished log, judges
-every agent again with src/benchmark/cheatbench_judge.py and exports the log with the new verdicts. A refused
+every agent again with src/judging/cheatbench_judge.py and exports the log with the new verdicts. A refused
 precondition prints
 its reason to stderr, and the command returns the exit code the command line passes on.
 """
@@ -35,20 +35,20 @@ from inspect_ai._util.error import PrerequisiteError
 from inspect_ai.log import read_eval_log
 from inspect_ai.model import GenerateConfig, Model, get_model
 
-from src.benchmark import cheatbench_judge as judging
-from src.benchmark import judging_ladder as ladder
-from src.benchmark.atif_transcripts import judge_prompt, transcript_dict
-from src.benchmark.domains.swe import SWE
-from src.benchmark.eval_sample_view import SampleView, agent_messages, error_and_failure, roster
-from src.benchmark.run_export import write_run
-from src.configuration import model_registry as models
 from src.configuration import settings
-from src.configuration import swarm_model_provider as provider  # importing it registers the "swarm" provider
 from src.configuration.swarm_config import SwarmConfig
+from src.domains.swe import SWE
+from src.export.atif_transcripts import judge_prompt, transcript_dict
+from src.export.eval_sample_view import SampleView, agent_messages, error_and_failure, roster
+from src.export.run_export import write_run
+from src.judging import cheatbench_judge as judging
+from src.judging import judging_ladder as ladder
 from src.measures import code_ladder as signals
 from src.measures import episode_summary as summary
+from src.models import gemini_402_retry as provider_retry
+from src.models import model_registry as models
+from src.models import swarm_model_provider as provider  # importing it registers the "swarm" provider
 from src.tasks import JUDGE_ADDENDUM, hidden_roles, swarm_task
-from src.utils import gemini_402_retry as provider_retry
 
 
 class Refusal(Exception):
@@ -75,7 +75,7 @@ def command(fn):
 # keys
 # --------------------------------------------------------------------------
 def require_provider_key(model: str) -> None:
-    """One of the key variables src/configuration/model_registry.yaml names for the model's route, and the
+    """One of the key variables src/models/model_registry.yaml names for the model's route, and the
     route's base URL.
 
     Gemini's key may be given as GEMINI_API_KEY; it is also exported as GOOGLE_API_KEY, the name Inspect reads. A
@@ -115,7 +115,7 @@ def require_role_model(model: str) -> None:
 
 
 def require_judge_key(judge_name: str, code: int) -> None:
-    """The judge's key, named by its src/benchmark/judge_models.yaml entry (OPENAI_API_KEY for gpt-6-luna)."""
+    """The judge's key, named by its src/judging/judge_models.yaml entry (OPENAI_API_KEY for gpt-6-luna)."""
     try:
         judging.require_judge_key(judge_name)
     except RuntimeError as error:
@@ -294,7 +294,7 @@ def judge(eval_log: Path, run_name: str, judge_name: str, *, batch: bool = True,
 @command
 def ladder_runs(run_dirs: list[Path], judge_name: str, *, view: str = "full", agents: list[str] | None = None,
                 force: bool = False, batch: bool = True) -> int:
-    """Place every agent of each run on the cheating ladder (src/benchmark/judging_ladder.py): runs/<name>/ladder.jsonl,
+    """Place every agent of each run on the cheating ladder (src/judging/judging_ladder.py): runs/<name>/ladder.jsonl,
     one line per agent, then the table over the runs. batch as in judge()."""
     require_judge_key(judge_name, 2)
     if view not in ladder.VIEWS:

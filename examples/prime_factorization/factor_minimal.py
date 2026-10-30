@@ -5,8 +5,8 @@ from pathlib import Path
 
 from examples.utils.example_arguments import finish, parse_example_arguments
 from src import run
-from src.benchmark.domains.interview import PrimeFactorization
 from src.configuration.swarm_config import build_config
+from src.domains.interview import PrimeFactorization
 
 
 def main() -> int:

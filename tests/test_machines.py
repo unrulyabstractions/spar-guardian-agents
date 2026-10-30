@@ -16,8 +16,8 @@ import pytest
 import yaml
 from inspect_ai.tool import ToolError, ToolParam, ToolParams
 
-from src.benchmark import machines
 from src.configuration import settings
+from src.sandbox import machines
 
 
 class FakeStore:

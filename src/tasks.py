@@ -4,16 +4,16 @@
     inspect eval src/tasks.py@openmath -T preset=default -T regulators=1
 
 The second form skips what `python -m src run` adds: the key and routing checks, the role models built before the
-sandbox starts, and the Gemini 402 retry (src/utils/gemini_402_retry.py). A role model still gets the eval's generate
+sandbox starts, and the Gemini 402 retry (src/models/gemini_402_retry.py). A role model still gets the eval's generate
 config there through the swarm model provider.
 
 What comes from where:
-  * the sample, its tools, its setup solver and its graders come from the benchmark (src/benchmark/domains/openmath/,
-    src/benchmark/domains/swe/, .../knowledge/, .../interview/, .../protein/);
+  * the sample, its tools, its setup solver and its graders come from the benchmark (src/domains/openmath/,
+    src/domains/swe/, .../knowledge/, .../interview/, .../protein/);
   * the roster, the board, the board tools and team_submit, the hidden roles, the written plan and the turn rules
     come from src/swarm/ (board_config.py, pull_board.py, hidden_roles.py, turn_rules/);
   * the control's defenses come from control_defenses.py, and CheatBench's judge is added as a scorer
-  (src/benchmark/cheatbench_judge.py).
+  (src/judging/cheatbench_judge.py).
 
 Each agent's tools are the benchmark's, then on a board board_status, board_read and board_post, then team_submit
 for a neutral agent when the mode has a team to submit for, and agent_actions for a regulator
@@ -33,7 +33,7 @@ metadata["experiment"]["defenses"] holds the control's defenses plus the passive
 carries.
 
 An agent whose role has a model of its own (worker_model, regulator_model, disregulator_model) runs it through the
-swarm model provider (src/configuration/swarm_model_provider.py); every other agent runs the eval's model.
+swarm model provider (src/models/swarm_model_provider.py); every other agent runs the eval's model.
 
 Hidden roles are used on a board of three or more agents on openmath (the October 2026 swarm), and on any board whose
 config asks for a regulator or a disregulator. Two openmath agents without roles are the plain board.
@@ -47,19 +47,19 @@ from orbit.configs.experiment import ExperimentConfig
 from orbit.configs.setup import AgentSpec, SetupConfig
 from orbit.tasks.multi_agent import multi_agent_task
 
-from src.benchmark.benchmark_protocol import AgentTools, Benchmark
-from src.benchmark.cheatbench_judge import cheatbench_judge
-from src.benchmark.domains.interview import PrimeFactorization, SubsetSum
-from src.benchmark.domains.knowledge import KnowledgeWork
-from src.benchmark.domains.openmath import OpenMath
-from src.benchmark.domains.openmath.openmath_settings import TOKEN_LIMIT
-from src.benchmark.domains.protein import ProteinDesign
-from src.benchmark.domains.swe import SWE
-from src.benchmark.domains.swe.swe_settings import GRADING_BUDGET_S
 from src.configuration import access_policy, settings
-from src.configuration import swarm_model_provider as provider  # importing it registers the "swarm" provider
 from src.configuration.prompt_texts import board_system_prompt
 from src.configuration.swarm_config import SwarmConfig, preset
+from src.domains.benchmark_protocol import AgentTools, Benchmark
+from src.domains.interview import PrimeFactorization, SubsetSum
+from src.domains.knowledge import KnowledgeWork
+from src.domains.openmath import OpenMath
+from src.domains.openmath.openmath_settings import TOKEN_LIMIT
+from src.domains.protein import ProteinDesign
+from src.domains.swe import SWE
+from src.domains.swe.swe_settings import GRADING_BUDGET_S
+from src.judging.cheatbench_judge import cheatbench_judge
+from src.models import swarm_model_provider as provider  # importing it registers the "swarm" provider
 from src.swarm import hidden_roles as roles_module
 from src.swarm.awareness_probes import end_of_episode_probes
 from src.swarm.board_config import (
@@ -141,7 +141,7 @@ def agent_specs(config: SwarmConfig, tools: dict[str, list[str]], prompts: dict[
     conversation is capped at the sample's message limit (message_limit, else config.message_limit) plus ten.
 
     An agent whose hidden role has a model of its own (SwarmConfig.role_models) gets AgentSpec.model
-    "swarm/<Inspect string>" (src/configuration/swarm_model_provider.py); the others leave it None and run
+    "swarm/<Inspect string>" (src/models/swarm_model_provider.py); the others leave it None and run
     the eval's model.
     roles None means every agent is a worker."""
     limit = config.message_limit if message_limit is None else message_limit

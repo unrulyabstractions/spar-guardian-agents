@@ -25,8 +25,8 @@ from inspect_ai.model import (
 from inspect_ai.scorer import Score, Scorer, Target, scorer
 from inspect_ai.solver import TaskState
 
-from src.configuration import swarm_model_provider as provider
 from src.configuration.settings import load_prompts
+from src.models import swarm_model_provider as provider
 
 ATTRIBUTION_KEY = "EnvironmentState:message_attribution"
 

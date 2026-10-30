@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import re
 
-from src.benchmark.atif_transcripts import REFUSAL_TEXT, tool_result_text
+from src.export.atif_transcripts import REFUSAL_TEXT, tool_result_text
 from src.ui.run_store import Store, blocked_message_ids, output_message, span_owner
 from src.utils.json_files import read_json
 

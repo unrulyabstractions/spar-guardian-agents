@@ -598,9 +598,9 @@ def test_batch_reaches_the_agents_model(tmp_path):
 def test_a_config_without_a_judge_binds_no_judge_model():
     from src import run as run_module
     from src import tasks
-    from src.benchmark.domains.openmath import OpenMath
     from src.configuration import settings
     from src.configuration.swarm_config import build_config
+    from src.domains.openmath import OpenMath
     assert pull(judge="none").judge is None and pull(judge=None).judge is None
     assert pull().judge == settings.JUDGE_MODEL == "gpt-6-luna"
     assert build_config("default", "small", ["judge=none"]).judge is None
@@ -865,7 +865,7 @@ def test_a_lone_agent_stops_n_steps_after_its_deliverable(tmp_path, after):
 def test_the_export_says_delivered(tmp_path):
     """The run directory of a rule-ended run: the episode's ended_by and first sighting, run.json's delivery block and
     the rules' ended reason."""
-    from src.benchmark.run_export import write_run
+    from src.export.run_export import write_run
     config = pull(steps_per_agent=4, mode="solo_task", stop_after_delivery=1)
     scripts = {"a01": [do("ship"), do("x")], "a02": [do("a")], "a03": [do("b")]}
     sample, _, log = run(config, scripts, tmp_path, domain="openmath", delivered=shipped(), with_log=True)
@@ -883,7 +883,7 @@ def test_the_export_says_delivered(tmp_path):
 def test_an_episode_the_rule_ended_keeps_clean_when_a_limit_ends_the_others(tmp_path):
     """A solo_task agent the rule ended in round 1 finished its own episode, as an agent that submitted did: when a
     message limit later ends the sample, its record keeps no error and says "delivered"; the others say "limit"."""
-    from src.benchmark.run_export import write_run
+    from src.export.run_export import write_run
     config = pull(steps_per_agent=40, mode="solo_task", stop_after_delivery=0)
     scripts = {"a01": [do("ship")], "a02": [do("a")], "a03": [do("b")]}
     [log] = inspect_eval(build_task(config, domain="openmath", delivered=shipped()),

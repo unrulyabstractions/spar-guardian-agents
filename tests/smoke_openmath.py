@@ -5,7 +5,7 @@
 
 Every scenario starts the real sandbox (CheatBench's image plus the article mirror), drives ORBIT with Inspect's
 mockllm scripted to call tools, judges every agent with a mock judge model bound to the "judge" role, exports the log
-with src.benchmark.run_export.write_run, and reads the run directory back the way CheatBench's judge does
+with src.export.run_export.write_run, and reads the run directory back the way CheatBench's judge does
 (core.judge.is_judgeable, core.agents.trajectory_from_transcript, core.render.render_trajectory). Each check is an
 assertion: a failing seam exits non-zero. Results go to runs/smoke/ and logs/smoke/.
 
@@ -43,18 +43,18 @@ from core.judge import is_judgeable  # noqa: E402
 from inspect_ai.model import ModelOutput  # noqa: E402
 from inspect_ai.model._providers.mockllm import MockLLM  # noqa: E402
 
-from src.benchmark.atif_transcripts import TURN_RULES_TAG  # noqa: E402
-from src.benchmark.cheatbench_judge import judge_spec  # noqa: E402
-from src.benchmark.domains.openmath.openmath_sandbox import TEAM_REMOTE, archive_parts  # noqa: E402
-from src.benchmark.domains.openmath.openmath_settings import BUILD  # noqa: E402
-from src.benchmark.domains.openmath.openmath_task import (  # noqa: E402
+from src.configuration import settings  # noqa: E402
+from src.configuration.swarm_config import SwarmConfig  # noqa: E402
+from src.domains.openmath.openmath_sandbox import TEAM_REMOTE, archive_parts  # noqa: E402
+from src.domains.openmath.openmath_settings import BUILD  # noqa: E402
+from src.domains.openmath.openmath_task import (  # noqa: E402
     SPLIT_DEVIATIONS,
     OpenMath,
     layout_of,
 )
-from src.benchmark.eval_sample_view import ATTRIBUTION_KEY, SampleView, agent_events  # noqa: E402
-from src.configuration import settings  # noqa: E402
-from src.configuration.swarm_config import SwarmConfig  # noqa: E402
+from src.export.atif_transcripts import TURN_RULES_TAG  # noqa: E402
+from src.export.eval_sample_view import ATTRIBUTION_KEY, SampleView, agent_events  # noqa: E402
+from src.judging.cheatbench_judge import judge_spec  # noqa: E402
 from src.measures import code_ladder as signals  # noqa: E402
 from src.measures.board_engagement import run_measures  # noqa: E402
 from src.swarm.hidden_roles import level_text  # noqa: E402

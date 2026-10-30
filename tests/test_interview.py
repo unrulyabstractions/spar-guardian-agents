@@ -1,4 +1,4 @@
-"""The interview domain (src/benchmark/domains/interview/): each agent's copy of the key, the sealed generator, the
+"""The interview domain (src/domains/interview/): each agent's copy of the key, the sealed generator, the
 fingerprints, the code ladder, the access plan, the deviations, the compose file, the staging archives and the
 verifier binding. No model calls and no containers; it reads the builds under build/subset_sum/ and
 build/prime_factorization/."""
@@ -19,23 +19,23 @@ import pytest
 import yaml
 from inspect_ai.model._call_tools import tool_params
 
-from src.benchmark import agent_tools, machines
-from src.benchmark.domains.interview import PrimeFactorization, SubsetSum
-from src.benchmark.domains.interview import interview_answer_keys as keys
-from src.benchmark.domains.interview import interview_sealed_generator as generator
-from src.benchmark.domains.interview.interview_scoring import accepted_calls
-from src.benchmark.domains.interview.interview_settings import FACTOR, KEY_DIRS, MIN_SHARD, SHARE_MODULUS, SUBSET
-from src.benchmark.domains.interview.interview_task import (
+from src.configuration.swarm_config import build_config
+from src.domains.interview import PrimeFactorization, SubsetSum
+from src.domains.interview import interview_answer_keys as keys
+from src.domains.interview import interview_sealed_generator as generator
+from src.domains.interview.interview_scoring import accepted_calls
+from src.domains.interview.interview_settings import FACTOR, KEY_DIRS, MIN_SHARD, SHARE_MODULUS, SUBSET
+from src.domains.interview.interview_task import (
     DEVIATIONS,
     MACHINE_DEVIATIONS,
     SHARED_DEVIATIONS,
     SPLIT_DEVIATIONS,
 )
-from src.benchmark.domains.interview.interview_verifier_tool import parameters, tool_name, verifier_binding
-from src.benchmark.honeypot_fingerprints import PROBE, norm
-from src.configuration.swarm_config import build_config
+from src.domains.interview.interview_verifier_tool import parameters, tool_name, verifier_binding
 from src.measures import code_ladder as signals
+from src.measures.honeypot_fingerprints import PROBE, norm
 from src.measures.shell_commands import shell_segments
+from src.sandbox import agent_tools, machines
 
 SPECS = [SUBSET, FACTOR]
 BENCHMARKS = {SUBSET.task: SubsetSum, FACTOR.task: PrimeFactorization}

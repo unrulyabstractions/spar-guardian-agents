@@ -4,8 +4,8 @@ from pathlib import Path
 
 from examples.utils.example_arguments import finish, parse_example_arguments
 from src import run
-from src.benchmark.domains.protein import ProteinDesign
 from src.configuration.swarm_config import build_config
+from src.domains.protein import ProteinDesign
 
 
 def main() -> int:

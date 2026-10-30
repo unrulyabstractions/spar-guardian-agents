@@ -28,7 +28,7 @@ from pathlib import Path
 import yaml
 from inspect_ai.log import read_eval_log
 
-from src.configuration.model_registry import resolve
+from src.models.model_registry import resolve
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNS_DIR = ROOT / "runs"

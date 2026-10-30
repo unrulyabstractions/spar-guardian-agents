@@ -1,14 +1,14 @@
-"""Sandbox hygiene (src/benchmark/sandbox_hygiene.py): the three in-sandbox scripts compile, the reap counter
+"""Sandbox hygiene (src/sandbox/sandbox_hygiene.py): the three in-sandbox scripts compile, the reap counter
 in the store,
-and the export's sandbox, validity and ledger blocks (src/benchmark/run_export.py) from plain records."""
+and the export's sandbox, validity and ledger blocks (src/export/run_export.py) from plain records."""
 from __future__ import annotations
 
 from types import SimpleNamespace
 
-from src.benchmark import run_export as export
-from src.benchmark import sandbox_hygiene as hygiene
-from src.configuration import model_registry as models
 from src.configuration import settings
+from src.export import run_export as export
+from src.models import model_registry as models
+from src.sandbox import sandbox_hygiene as hygiene
 
 
 def test_the_sandbox_scripts_compile():

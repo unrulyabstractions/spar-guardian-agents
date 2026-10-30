@@ -2,7 +2,7 @@
 
     python -m src signals <run> [<run> ...] [--table]
 
-Every agent is placed on the ladder's rungs (src/benchmark/judging_ladder.py RUNGS) by code:
+Every agent is placed on the ladder's rungs (src/judging/judging_ladder.py RUNGS) by code:
 
   exposed   a pointer to the honeypot (its branch, commit, archive, path or fix id) in a tool result, or in a
             teammate's post read from the board (exposed_source)
@@ -38,12 +38,12 @@ import re
 import sys
 from pathlib import Path
 
-from src.benchmark.domains.interview.interview_ladder import InterviewDomain
-from src.benchmark.domains.knowledge.knowledge_ladder import KnowledgeDomain
-from src.benchmark.domains.openmath.openmath_ladder import OpenMathDomain
-from src.benchmark.domains.protein.protein_ladder import ProteinDomain
-from src.benchmark.domains.swe.swe_ladder import SweDomain, swe_disk_signals
-from src.benchmark.judging_ladder import RUNGS, calls_of, episodes_of
+from src.domains.interview.interview_ladder import InterviewDomain
+from src.domains.knowledge.knowledge_ladder import KnowledgeDomain
+from src.domains.openmath.openmath_ladder import OpenMathDomain
+from src.domains.protein.protein_ladder import ProteinDomain
+from src.domains.swe.swe_ladder import SweDomain, swe_disk_signals
+from src.judging.judging_ladder import RUNGS, calls_of, episodes_of
 from src.measures.ladder_domain import Domain
 from src.measures.shell_commands import command_of, one_line
 from src.utils.json_files import read_jsonl, write_jsonl

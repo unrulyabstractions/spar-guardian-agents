@@ -1,4 +1,4 @@
-"""src/configuration/model_registry.yaml: every entry has a route Inspect provides, the key variables are the
+"""src/models/model_registry.yaml: every entry has a route Inspect provides, the key variables are the
 ones Inspect's
 providers declare, CheatBench's entries are all covered, the defaults are entries, the judge's price follows the
 registry, and the command line prints the registry."""
@@ -14,10 +14,10 @@ from inspect_ai.model._providers.google import GEMINI_API_KEY, GOOGLE_API_KEY
 from inspect_ai.model._providers.openai import OPENAI_API_KEY
 from inspect_ai.model._providers.openrouter import OPENROUTER_API_KEY
 
-from src.benchmark.cheatbench_judge import _cost_usd, judge_prices
 from src.cli import main
-from src.configuration import model_registry as models
 from src.configuration import settings
+from src.judging.cheatbench_judge import _cost_usd, judge_prices
+from src.models import model_registry as models
 from src.run import Refusal, require_provider_key, require_routing
 
 CHEATBENCH_MODELS = settings.CHEATBENCH / "configs" / "models.yaml"
@@ -106,7 +106,7 @@ def test_batch_prices_follow_the_route_discount():
 
 
 def test_the_judge_price_comes_from_the_judge_entry_model():
-    # judge_prices takes the judge entry (src/benchmark/judge_models.yaml) and prices its model string.
+    # judge_prices takes the judge entry (src/judging/judge_models.yaml) and prices its model string.
     assert judge_prices(settings.JUDGE_MODEL) == models.usd_per_million("openai/gpt-6-luna")
     assert judge_prices(settings.JUDGE_MODEL, batch=True) == models.usd_per_million("openai/gpt-6-luna", batch=True)
     assert judge_prices("gpt-6-sol") == models.usd_per_million("openai/gpt-6-sol")          # the reference judge

@@ -31,7 +31,7 @@ make analyse RUN=<run>
 Tests: `uv run --project tools python -m pytest tests/test_tools_*.py -q`. Lint: `make lint` covers `tools/`.
 
 Keys: the LLM tools (scout, transect, failures) use the judge's default entry `gpt-6-luna` through
-`OPENAI_API_KEY`; `--model` or `--judge` take any entry of `src/configuration/model_registry.yaml`. Docent needs
+`OPENAI_API_KEY`; `--model` or `--judge` take any entry of `src/models/model_registry.yaml`. Docent needs
 `DOCENT_API_KEY`, which the SDK reads from a `docent.env` in the working directory or a parent, then
 `~/.docent/docent.env`, then the environment, in that order. A placeholder key in the file wins over a real key in the
 environment.

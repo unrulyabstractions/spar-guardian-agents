@@ -6,8 +6,8 @@ import json
 
 import pytest
 
-from src.benchmark import judging_ladder as ladder
-from src.benchmark.cheatbench_judge import response_schema
+from src.judging import judging_ladder as ladder
+from src.judging.cheatbench_judge import response_schema
 
 TASKS = ("openmath_agent", "software_engineering", "knowledge_work", "subset_sum", "prime_factorization",
          "protein_design")
@@ -132,8 +132,8 @@ def test_table_counts_rungs_and_labels(tmp_path):
 def test_the_strict_schema_keeps_additional_properties_on_objects_only():
     """Anthropic's structured outputs refuse additionalProperties inside anyOf; OpenAI's strict mode needs it on
     every object. The ladder schema has int | None fields, so both constraints meet there."""
-    from src.benchmark.cheatbench_judge import response_schema
-    from src.benchmark.judging_ladder import ladder_spec
+    from src.judging.cheatbench_judge import response_schema
+    from src.judging.judging_ladder import ladder_spec
     schema = response_schema(ladder_spec("openmath_agent")).json_schema.model_dump(exclude_none=True)
 
     def walk(node, inside_anyof=False):

@@ -3,8 +3,8 @@
     uv run python tests/smoke_swe.py [--only lone,board,honeypots,rule,shutdown,grading,team_4,team_submit]
 
 Every scenario starts the real sandbox (the grader and one service per agent, from the native image that
-src/benchmark/domains/swe/ builds), drives ORBIT with Inspect's mockllm scripted per agent, judges with a mock judge
-model, exports the log with src.benchmark.run_export.write_run and reads every transcript back the way
+src/domains/swe/ builds), drives ORBIT with Inspect's mockllm scripted per agent, judges with a mock judge
+model, exports the log with src.export.run_export.write_run and reads every transcript back the way
 CheatBench's judge
 does.
 Each check is an assertion; a failing scenario exits non-zero. Results go to runs/smoke_swe/<stamp>/ and
@@ -35,19 +35,19 @@ for path in (ROOT, CB):
 from core.judge import is_judgeable  # noqa: E402
 from inspect_ai.model import ModelOutput  # noqa: E402
 
-from src.benchmark.cheatbench_judge import judge_spec  # noqa: E402
-from src.benchmark.domains.swe import SWE  # noqa: E402
-from src.benchmark.domains.swe import swe_settings as swe_cfg  # noqa: E402
-from src.benchmark.domains.swe.swe_honeypot_setup import parse_scan, scan_script  # noqa: E402
-from src.benchmark.domains.swe.swe_inputs import (  # noqa: E402
+from src.configuration import settings  # noqa: E402
+from src.domains.swe import SWE  # noqa: E402
+from src.domains.swe import swe_settings as swe_cfg  # noqa: E402
+from src.domains.swe.swe_honeypot_setup import parse_scan, scan_script  # noqa: E402
+from src.domains.swe.swe_inputs import (  # noqa: E402
     load_lines,
     load_split,
     task_config,
     task_dir,
 )
-from src.benchmark.domains.swe.swe_measures import summarize  # noqa: E402
-from src.benchmark.domains.swe.swe_sandbox import image_tags  # noqa: E402
-from src.configuration import settings  # noqa: E402
+from src.domains.swe.swe_sandbox import image_tags  # noqa: E402
+from src.judging.cheatbench_judge import judge_spec  # noqa: E402
+from src.measures.swe_measures import summarize  # noqa: E402
 from src.tasks import hidden_roles, swarm_task  # noqa: E402
 from tests import smoke_common as smoke  # noqa: E402
 from tests.smoke_common import (  # noqa: E402

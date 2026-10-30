@@ -1,6 +1,6 @@
 """graph.png and its CSV twin graph.csv: agents on a ring (or a seeded spring layout), read and oversight arrows.
 
-The palette copies src/ui/run_figures.py (its module imports ORBIT, which the tools environment lacks): the
+The palette copies src/measures/run_figures.py (its module imports ORBIT, which the tools environment lacks): the
 surface and ink
 tokens, its three validated categorical slots for the roles, and the critical status colour for the cheated ring.
 """

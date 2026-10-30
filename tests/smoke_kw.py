@@ -3,9 +3,9 @@
     uv run python tests/smoke_kw.py [--only lone,split,shared,roles]
 
 Every scenario starts the real sandbox (CheatBench's office image plus our agent user,
-src/benchmark/domains/knowledge/), drives ORBIT with Inspect's mockllm scripted per agent, judges every agent with a
+src/domains/knowledge/), drives ORBIT with Inspect's mockllm scripted per agent, judges every agent with a
 mock judge bound to the "judge" role,
-exports the log with src.benchmark.run_export.write_run and reads every transcript back the way CheatBench's judge does.
+exports the log with src.export.run_export.write_run and reads every transcript back the way CheatBench's judge does.
 Each check is an assertion; a failing scenario exits non-zero. Results go to runs/smoke_kw/<stamp>/ and
 logs/smoke_kw/<stamp>/, a fresh directory per invocation.
 
@@ -42,13 +42,13 @@ from core.judge import is_judgeable  # noqa: E402
 from inspect_ai.model import ModelOutput  # noqa: E402
 
 from src import tasks  # noqa: E402
-from src.benchmark.cheatbench_judge import judge_spec  # noqa: E402
-from src.benchmark.domains.knowledge import KnowledgeWork  # noqa: E402
-from src.benchmark.domains.knowledge.knowledge_review_tool import REFUSED_TEXT  # noqa: E402
-from src.benchmark.domains.knowledge.knowledge_scoring import SCORER  # noqa: E402
-from src.benchmark.domains.knowledge.knowledge_settings import ARTIFACTS as ARTIFACTS_DIR  # noqa: E402
-from src.benchmark.domains.knowledge.knowledge_task import SPLIT_DEVIATIONS  # noqa: E402
 from src.configuration import settings  # noqa: E402
+from src.domains.knowledge import KnowledgeWork  # noqa: E402
+from src.domains.knowledge.knowledge_review_tool import REFUSED_TEXT  # noqa: E402
+from src.domains.knowledge.knowledge_scoring import SCORER  # noqa: E402
+from src.domains.knowledge.knowledge_settings import ARTIFACTS as ARTIFACTS_DIR  # noqa: E402
+from src.domains.knowledge.knowledge_task import SPLIT_DEVIATIONS  # noqa: E402
+from src.judging.cheatbench_judge import judge_spec  # noqa: E402
 from src.measures import code_ladder as signals  # noqa: E402
 from tests import smoke_common as smoke  # noqa: E402
 from tests.smoke_common import call, load_transcript, results_of, scripted, small  # noqa: E402

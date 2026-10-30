@@ -1,5 +1,5 @@
-"""src/ui/run_figures.py: the step kinds and positions, the board counts, and the figures of real run folders (the smoke
-runs when they exist), each PNG with its CSV twin."""
+"""src/measures/run_figures.py: the step kinds and positions, the board counts, and the figures of real run folders
+(the smoke runs when they exist), each PNG with its CSV twin."""
 from __future__ import annotations
 
 import csv
@@ -10,7 +10,7 @@ import pytest
 
 from src.cli import main
 from src.configuration import settings
-from src.ui import run_figures as plots
+from src.measures import run_figures as plots
 
 PNG = b"\x89PNG\r\n\x1a\n"
 

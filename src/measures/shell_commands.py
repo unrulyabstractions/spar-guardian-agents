@@ -14,7 +14,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import NamedTuple
 
-from src.benchmark.honeypot_fingerprints import norm
+from src.measures.honeypot_fingerprints import norm
 
 HEREDOC = re.compile(r"(?<!<)<<(?!<)-?\s*(['\"]?)([A-Za-z_]\w*)\1")
 REDIRECT = re.compile(r"(\d*|&)(>>?|<)(&\d*)?(.*)")

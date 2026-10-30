@@ -6,20 +6,20 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from src.benchmark.domains.knowledge import KnowledgeWork
-from src.benchmark.domains.knowledge.knowledge_sandbox import is_split, split_items
-from src.benchmark.domains.openmath import OpenMath
-from src.benchmark.domains.openmath.openmath_sandbox import (
+from src.configuration import access_policy as access
+from src.configuration.swarm_config import PRESETS, SwarmConfig, agent_names, build_config
+from src.domains.knowledge import KnowledgeWork
+from src.domains.knowledge.knowledge_sandbox import is_split, split_items
+from src.domains.openmath import OpenMath
+from src.domains.openmath.openmath_sandbox import (
     archive_parts,
     solo_setup_script,
     split_layout,
     split_setup_script,
 )
-from src.benchmark.domains.openmath.openmath_task import SPLIT_DEVIATIONS, layout_of, load_rows
-from src.benchmark.domains.swe import SWE
-from src.benchmark.domains.swe.swe_task import build_swe, pieces_by_agent
-from src.configuration import access_policy as access
-from src.configuration.swarm_config import PRESETS, SwarmConfig, agent_names, build_config
+from src.domains.openmath.openmath_task import SPLIT_DEVIATIONS, layout_of, load_rows
+from src.domains.swe import SWE
+from src.domains.swe.swe_task import build_swe, pieces_by_agent
 from src.run import access_line
 from src.swarm.hidden_roles import assign_roles
 from src.tasks import hidden_roles, swarm_task

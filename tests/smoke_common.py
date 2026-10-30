@@ -5,7 +5,7 @@ export, the transcript readers, the judged-run check and the runner that prints 
     log, summary, records = run_scenario(LOGS, RUNS, SPEC, "board", task, scripted(script), judge=None)
     assert_judged(RUNS, SPEC, "board", log.samples[0], records)
 
-Every suite runs the real sandbox under Inspect's mockllm, exports the log with src.benchmark.run_export.write_run
+Every suite runs the real sandbox under Inspect's mockllm, exports the log with src.export.run_export.write_run
 and reads the run directory back the way CheatBench's judge does. A suite keeps only its own scenarios, its task
 builders and the checks of its domain.
 """
@@ -26,10 +26,10 @@ from inspect_ai.log import read_eval_log
 from inspect_ai.model import ModelOutput, get_model
 from orbit.communication.runtime import current_identity
 
-from src.benchmark import machines
-from src.benchmark.run_export import write_run
 from src.configuration import settings
 from src.configuration.swarm_config import SwarmConfig, build_config
+from src.export.run_export import write_run
+from src.sandbox import machines
 from src.tasks import swarm_task
 from src.utils.json_files import read_jsonl
 

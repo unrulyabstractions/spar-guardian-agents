@@ -6,7 +6,7 @@ The funnel counts the agents of a role that were on a board, then those that loo
 board_read), read it, posted to it, and submitted for the team. Each agent line gives its round of discovery, its
 checks, reads and posts, its working and free steps, the board_read and board_post calls the per-turn budgets
 refused, its agent_actions queries (a regulator's oversight), and whom it read and queried; "--" stands for a value
-the run did not record. The numbers come from the `engagement` blocks src/benchmark/run_export.py writes into
+the run did not record. The numbers come from the `engagement` blocks src/export/run_export.py writes into
 episodes.jsonl and run.json. A run without a board prints a line saying so.
 """
 from __future__ import annotations

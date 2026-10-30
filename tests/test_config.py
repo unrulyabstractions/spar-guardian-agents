@@ -278,7 +278,7 @@ def test_steps_for_every_scale_with_and_without_a_budget(name):
 
 
 def test_windows_are_checked_against_the_rounds_the_budget_gives():
-    from src.benchmark.domains.openmath import OpenMath
+    from src.domains.openmath import OpenMath
     from src.tasks import swarm_task
     # Ninety rounds fit the 100 of every domain.
     late = build_config("default", "small", ["regulators=1", "regulator_window=1:90"])
@@ -551,7 +551,7 @@ def test_role_texts_name_no_team_report():
 def test_a_caller_builds_the_task_from_its_own_sample():
     """An example writes its own instruction by building the domain's sample itself (benchmark.sample with the
     rule sentence and its text) and handing it to swarm_task; config.replace gives it a typed copy."""
-    from src.benchmark.domains.openmath import OpenMath
+    from src.domains.openmath import OpenMath
     from src.tasks import rule_suffix, swarm_task
     config = build_config("default", "small", ["rule_level=vague"]).replace(n_agents=1)
     assert config.n_agents == 1 and config.names == ["a01"] and config.rule_level == "vague"

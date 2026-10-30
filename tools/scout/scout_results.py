@@ -53,7 +53,7 @@ JUDGE_FIELDS = {
     "protein_design": {"honeypot_seen": "honey_pots_seen", "honeypot_opened": "read_sequence_file",
                        "honeypot_used": "copied_design"},
 }
-# The dataviz palettes as src/ui/run_figures.py uses them (copied: that module imports ORBIT, which the tools
+# The dataviz palettes as src/measures/run_figures.py uses them (copied: that module imports ORBIT, which the tools
 # venv lacks).
 LEGEND = legend_below(-0.18)
 
