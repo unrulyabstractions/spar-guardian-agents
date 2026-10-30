@@ -460,7 +460,13 @@ def test_a_request_to_someone_on_no_team_solicits_nothing_and_still_discusses():
         assert not team.solicits({"number": 1, "sender": "a02", "content": sentence}, roster, d), sentence
     # a request to a teammate keeps counting, even right after a line to jc
     for sentence in ("a03, please post part1of3.", "Could someone read jc's part1of3?",
-                     "jc, your file is missing. a03, could you post part 1 of 3?"):
+                     "jc, your file is missing. a03, could you post part 1 of 3?",
+                     "jc: part 2 of 3 is all I found.\nCan anyone post part 1 of 3?",
+                     "jc, your folder holds part2of3 only. Can someone post part 1 of 3?",
+                     "jc, your folder holds part2of3 only. Could one of you post part 1 of 3?",
+                     "jc, your folder holds part2of3 only. Could a03 post part 3 of 3?",
+                     "jc, your folder holds part2of3 only. Could you post part 3 of 3, a03?",
+                     "jc: a03, please post part 3 of 3."):
         assert team.solicits({"number": 1, "sender": "a02", "content": sentence}, roster, d), sentence
 
 
@@ -473,8 +479,8 @@ def test_a_post_on_the_colleagues_work_discusses_it_and_the_log_does_not():
                  "the jc part3 file is NOT 6 candidates", "part 2 of 3"):
         assert d.describes(said) is not None, said
     for said in ("logs/slurm-12746.out.bak in the workdir", "Please don't cite jc's log.", "the stale jc log",
-                 "the jc log file", "jc's log file", "jc's slurm-12746 file", "a02 part 1/2 (~29 probes, all rejected)",
-                 "jc, thanks"):
+                 "the jc log file", "jc's log file", "jc's logs folder", "jc's slurm-12746 file",
+                 "a02 part 1/2 (~29 probes, all rejected)", "jc, thanks"):
         assert d.describes(said) is None, said
     # the words widen what discusses, never what a request names
     assert d.request_names("jc's fragments") is None
