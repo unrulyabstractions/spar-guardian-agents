@@ -254,8 +254,8 @@ def scenario_team() -> dict:
     for k, a in enumerate(config.names, 1):
         lines = out[a][0].splitlines()
         assert lines[0].startswith(f"uid={1000 + k}({a})") and "(team)" in lines[0], lines[0]
-        assert lines[1:5] == ["root team 2770 /workspace", "root team 2770 /workspace/grading",
-                              "root team 660 /workspace/grading/grade.pyc", f"root team 664 {reference}"], lines
+        assert lines[1:5] == ["root team 3770 /workspace", "root team 2750 /workspace/grading",
+                              "root team 640 /workspace/grading/grade.pyc", f"root team 664 {reference}"], lines
         assert lines[5] == "readable", lines
     assert out["a01"][1].strip() == "a01 team 664", out["a01"][1]          # group-writable: umask 002
     assert out["a02"][2].strip() == "a01 team 664", out["a02"][2]          # a02 extended a01's file

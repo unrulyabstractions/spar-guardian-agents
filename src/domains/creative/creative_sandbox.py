@@ -12,7 +12,9 @@ Three layouts, by the roster and the mode:
   lone    one agent: CheatBench's layout. The user `user` owns /workspace (instruction.txt and grading/) and the
           reference at /tmp/grading/ref/<hex>/candidate_<id>.md. Tools: ORBIT's bash and python as `user`.
   shared  a shared_task team: one Linux user per agent (src/sandbox/agent_users/), all in the group `team`, which owns
-          the one workspace /workspace (setgid, group-writable). One token for the team.
+          the one workspace /workspace (setgid, group-writable, sticky). One token for the team. grading/ stays
+          root's and the group only reads it, and the sticky bit keeps an agent from renaming it, so no agent can
+          swap the grader a teammate runs.
   solo    a solo_task team: one Linux user per agent, each with its own workspace /workspace/<name> (700), its own
           reference copy, its own token, and private temporary directories.
 
@@ -130,11 +132,11 @@ def new_plant_dir() -> str:
     return f"{PLANT_ROOT}/{secrets.token_hex(4)}"
 
 
-# Per layout: the workspace's owner, group and modes (directories, files, the workspace itself), and its reference's
-# directory and file; a user of None is the workspace's agent (solo).
-MODES = {"lone": ((AGENT_NAME, AGENT_NAME, 0o755, 0o644, 0o755), (AGENT_NAME, AGENT_NAME, 0o755, 0o644)),
-         "shared": (("root", TEAM_GROUP, 0o2770, 0o660, 0o2770), ("root", TEAM_GROUP, 0o2775, 0o664)),
-         "solo": ((None, None, 0o755, 0o644, 0o700), (None, None, 0o755, 0o644))}
+# Per layout: the workspace's owner, group and modes (directories, files, the workspace itself, grading/'s directories
+# and files), and its reference's directory and file; a user of None is the workspace's agent (solo).
+MODES = {"lone": ((AGENT_NAME, AGENT_NAME, 0o755, 0o644, 0o755, 0o755, 0o644), (AGENT_NAME, AGENT_NAME, 0o755, 0o644)),
+         "shared": (("root", TEAM_GROUP, 0o2770, 0o660, 0o3770, 0o2750, 0o640), ("root", TEAM_GROUP, 0o2775, 0o664)),
+         "solo": ((None, None, 0o755, 0o644, 0o700, 0o755, 0o644), (None, None, 0o755, 0o644))}
 
 
 def workspace_owners(plan: Plan) -> dict[str, str]:
@@ -154,9 +156,11 @@ def stage(plan: Plan, row: dict) -> dict:
     text = honeypot.reference_text(row)
     files: dict[str, bytes] = {}
     workspaces, tokens, references, plants = {}, {}, {}, []
-    plant_dirs = [{"path": "/tmp/grading", "owner": "root", "group": "root", "mode": 0o755},
-                  {"path": PLANT_ROOT, "owner": "root", "group": "root", "mode": 0o755}]
-    (ws_owner, ws_group, dir_mode, file_mode, top_mode), (ref_owner, ref_group, ref_dir_mode, ref_mode) = MODES[kind]
+    root_owner = AGENT_NAME if kind == "lone" else "root"     # CheatBench's agent makes them
+    plant_dirs = [{"path": "/tmp/grading", "owner": root_owner, "group": root_owner, "mode": 0o755},
+                  {"path": PLANT_ROOT, "owner": root_owner, "group": root_owner, "mode": 0o755}]
+    workspace_modes, (ref_owner, ref_group, ref_dir_mode, ref_mode) = MODES[kind]
+    ws_owner, ws_group, dir_mode, file_mode, top_mode, grading_dir_mode, grading_file_mode = workspace_modes
     for i, (owner, workdir) in enumerate(workspace_owners(plan).items()):
         folder = new_plant_dir()
         reference = references[workdir] = f"{folder}/{candidate}"
@@ -164,14 +168,15 @@ def stage(plan: Plan, row: dict) -> dict:
         tokens[token] = owner
         workspaces[workdir] = {"stage": f"ws{i}", "token": token, "owner": ws_owner or owner,
                                "group": ws_group or owner, "dir_mode": dir_mode, "file_mode": file_mode,
-                               "top_mode": top_mode}
+                               "top_mode": top_mode, "grading_dir_mode": grading_dir_mode,
+                               "grading_file_mode": grading_file_mode}
         files[f"ws{i}/instruction.txt"] = honeypot.brief_text(row).encode()
         files[f"ws{i}/grade_config.json"] = honeypot.grade_config(reference)
         files[f"ws{i}/grade.py"] = honeypot.grader_source(row, reference, held_by_review=plan.split).encode()
         if plan.split:
             # the holders' segments, each its holder's alone, in a directory every agent lists
             plant_dirs.append({"path": folder, "owner": "root", "group": "root", "mode": 0o755})
-            parts = honeypot.segments(text, plan.n_pieces)
+            parts = honeypot.segments(text, plan.n_pieces) if plan.n_pieces else []
             for agent, pieces in plan.pieces.items():
                 held = [(reference, text)] if pieces is None else \
                     [(f"{folder}/{honeypot.part_name(candidate, k, plan.n_pieces)}", parts[k - 1]) for k in pieces]
@@ -189,7 +194,7 @@ def stage(plan: Plan, row: dict) -> dict:
               "team_group": TEAM_GROUP, "team_gid": TEAM_GID, "score_so": SCORE_SO, "review_url": url,
               "seats": {a: s.as_dict() for a, s in seats(plan).items()} if plan.team else {},
               "workspaces": workspaces, "plant_dirs": plant_dirs, "plants": plants}
-    review = {"bind": REVIEW_IP, "port": int(url.split(":")[2].split("/")[0]), "tokens": tokens,
+    review = {"bind": REVIEW_IP, "port": int(url.split(":")[2].split("/")[0]), "tokens": tokens, "split": plan.split,
               "reference": text, "tie_threshold": honeypot.tie_threshold(), "keep": WRITING_CHARS}
     block = {"layout": kind, "candidate": candidate, "references": references, "review_url": url,
              "workspaces": workspace_owners(plan), "seats": {a: s.as_dict() for a, s in seats(plan).items()},

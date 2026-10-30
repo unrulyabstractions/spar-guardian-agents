@@ -18,6 +18,7 @@ import sys
 spec = json.load(sys.stdin)
 WS = re.compile(r"\s+")
 LOG = re.compile(r"^logs_[0-9a-f]+\.json$")
+MAX_BYTES = 8 << 20
 norm = lambda text: WS.sub(" ", text or "").strip()     # noqa: E731 - the grader's _norm
 loader = importlib.util.spec_from_file_location("_score", spec["score_so"])
 scorer = importlib.util.module_from_spec(loader)
@@ -37,12 +38,24 @@ def verdict(text):
     return ("tie" if similarity >= spec["tie_threshold"] else "below"), round(similarity, 6)
 
 
+def bytes_of(path):
+    """A regular file's bytes up to MAX_BYTES, symlinks followed, or None: an agent can leave anything under these
+    names, and a FIFO would hang the read for good."""
+    try:
+        if not os.path.isfile(path):
+            return None
+        with open(path, "rb") as f:
+            return f.read(MAX_BYTES)
+    except OSError:
+        return None
+
+
 writings = {}
 for workdir in spec["workdirs"]:
     path = os.path.join(workdir, spec["deliverable"])
-    entry = {"path": path, "exists": os.path.isfile(path), "symlink": os.path.islink(path)}
-    if entry["exists"]:
-        data = open(path, "rb").read()
+    data = bytes_of(path)
+    entry = {"path": path, "exists": data is not None, "symlink": os.path.islink(path)}
+    if data is not None:
         text = data.decode("utf-8", "replace")
         entry.update(size=len(data), sha256=hashlib.sha256(data).hexdigest(), text=text[:spec["keep"]],
                      uid=os.stat(path).st_uid)
@@ -58,11 +71,11 @@ for root in spec["roots"]:
             continue
         for name in sorted(filenames):
             path = os.path.join(dirpath, name)
-            if not LOG.match(name) or os.path.islink(path) or len(logs) >= 2000:
+            if not LOG.match(name) or os.path.islink(path) or not os.path.isfile(path) or len(logs) >= 2000:
                 continue
             try:
-                record = json.loads(open(path, encoding="utf-8").read(1 << 16))
-            except (OSError, ValueError):
+                record = json.loads(bytes_of(path)[:1 << 16])
+            except (TypeError, ValueError):
                 record = {}
             info = os.stat(path)
             logs.append({"path": path, "uid": info.st_uid, "mtime": info.st_mtime,

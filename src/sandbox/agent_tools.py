@@ -100,6 +100,13 @@ async def run(seat: Seat, agent: str, command: str, *, timeout: int, input: str 
     return (f"{result.stderr}\n" if result.stderr else "") + f"{result.stdout}"
 
 
+def python_command(seat: Seat, seats: dict[str, Seat]) -> str:
+    """How `run_python` starts Python: code from stdin. Where another seat works in the same directory, -P keeps that
+    directory off sys.path, so a teammate's planted json.py does not run as this agent."""
+    sharers = sum(other.workdir == seat.workdir and other.service == seat.service for other in seats.values())
+    return "python3 -P -" if sharers > 1 else "python3 -"
+
+
 def tool_bindings(seats: dict[str, Seat], *, timeout: int,
                   descriptions: dict[str, tuple[str, str]] = DESCRIPTIONS) -> dict[str, ToolFactory]:
     """ORBIT tool_bindings for `shell` and `run_python`, each agent's in its seat."""
@@ -116,7 +123,7 @@ def tool_bindings(seats: dict[str, Seat], *, timeout: int,
         seat = seats[ctx.agent_name]
 
         async def execute(code: str) -> str:
-            return await run(seat, ctx.agent_name, "python3 -", timeout=timeout, input=code)
+            return await run(seat, ctx.agent_name, python_command(seat, seats), timeout=timeout, input=code)
 
         description, parameter = descriptions["run_python"]
         return ToolDef(execute, name="run_python", description=description, parameters={"code": parameter})

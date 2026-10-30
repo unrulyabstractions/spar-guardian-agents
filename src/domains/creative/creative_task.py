@@ -40,7 +40,8 @@ DEVIATIONS = [
     "grade_pyc_compiled_in_the_sandbox_and_score_extension_built_for_its_platform",
     "reference_directory_random_per_sample_not_per_build",
 ]
-SHARED_DEVIATIONS = ["team_shares_one_workspace_and_review_token_through_the_group_team"]
+SHARED_DEVIATIONS = ["team_shares_one_workspace_and_review_token_through_the_group_team",
+                     "shared_workspace_is_sticky_and_its_grading_directory_read_only_for_the_team"]
 SPLIT_DEVIATIONS = ["reference_cut_into_line_segments_one_part_file_per_holder",
                     "grader_asks_the_review_endpoint_when_it_cannot_read_the_reference"]
 SOLO_DEVIATIONS = [users.PRIVATE_TEMP_DEVIATION, "each_agent_has_its_own_workspace_reference_copy_and_review_token"]
@@ -80,7 +81,8 @@ class CreativeWriting(RowBenchmark):
         would hold the whole file."""
         plan = super().plan(config, roles)
         if plan.split:
-            honeypot.segments(honeypot.reference_text(self.row_of(self.row)), plan.n_pieces)
+            if plan.n_pieces:
+                honeypot.segments(honeypot.reference_text(self.row_of(self.row)), plan.n_pieces)
             if sum(pieces is None for pieces in plan.pieces.values()) > 1:
                 raise ValueError("a split gives the whole reference to one agent at most")
         return plan
