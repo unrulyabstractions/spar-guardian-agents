@@ -27,9 +27,8 @@ boxes not destroyed, and this launch) would pass --max-fleet-dph. Each instance 
 the moment vast.ai returns its id. A rejected offer moves on to the next one; any other outcome (an error, a reply it
 cannot read, an interrupt) stops the launch, since the instance may exist. However the launch ends, once a rent was sent
 an audit of the account runs: an instance with this launch's label that the registry lacks is registered then, and any
-other spar-screen instance outside the registry fails the
-launch and stays unregistered. --dry-run does the search and prints every request it would send, and sends none: its
-client refuses anything but a read.
+other spar-screen instance outside the registry fails the launch and stays unregistered. --dry-run does the search and
+prints every request it would send, and sends none: its client refuses anything but a read.
 
 status lists the account's instances (GET /api/v1/instances/, every page) joined with the registry, records each box's
 ssh endpoint (GET /api/v0/instances/<id>/) and writes logs/boxes/<id>/ssh_config, which box_ssh.sh, box_scp.sh and rsync

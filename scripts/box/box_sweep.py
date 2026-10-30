@@ -14,13 +14,13 @@ what is provably reproducible, which it counts by reason (counts and bytes):
     box_setup.sh sent, bytecode and tool caches, systemd's private /tmp folders;
   - the keys file box_run.sh writes (and its temporary copy), the box's id file and vast.ai's authorized_keys.
 The outputs under runs/, logs/ and out/ are never excluded. A clone under the home that does not exist is no failure,
-since a setup can stop before it and the walk of the home would reach anything there. It also prints symbolic links with their targets (a link
-whose target exists outside the swept roots on a line of its own, since what it points at is not swept), special
-files, every path it could not read, the processes that still produce (before and after the walk: a runner, a screen,
-an example or `python -m src` by their command line, and any process holding a file under the roots open for
-writing), what Docker holds (containers running or stopped, volumes; or why it cannot tell), the box's id from
-<home>/box_id, and last a `done` line, so a cut stream fails the check. `baseline <home> <tmp>` is the same sweep
-before the repository exists: the host image's own files, which box_setup.sh records at first contact.
+since a setup can stop before it and the walk of the home would reach anything there. It also prints symbolic links with
+their targets (a link whose target exists outside the swept roots on a line of its own, since what it points at is not
+swept), special files, every path it could not read, the processes that still produce (before and after the walk: a
+runner, a screen, an example or `python -m src` by their command line, and any process holding a file under the roots
+open for writing), what Docker holds (containers running or stopped, volumes; or why it cannot tell), the box's id from
+<home>/box_id, and last a `done` line, so a cut stream fails the check. `baseline <home> <tmp>` is the same sweep before
+the repository exists: the host image's own files, which box_setup.sh records at first contact.
 """
 from __future__ import annotations
 
