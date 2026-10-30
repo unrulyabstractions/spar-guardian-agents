@@ -6,7 +6,9 @@ The spec gives the workspaces, the roots to search for grading logs, the directo
 the reference, the threshold, the compiled scorer and how many characters to keep. For each workspace: whether the
 deliverable exists, whether it is a symlink, its size, sha256 and text, and the grader's verdict on it (the normalised
 texts equal, or the scorer's similarity at the threshold: "tie"; else "below"). Every grading log the grader wrote
-(logs/logs_<hex>.json under a root): its path, owner, time and fields. The last line is JSON.
+(logs/logs_<hex>.json under a root): its path, owner, time and fields, and reference_tie: whether the submission it
+logged ties the true reference. A log's own verdict can be spoofed, by a repointed grade_config.json or by hand. The
+last line is JSON.
 """
 import hashlib
 import importlib.util
@@ -36,6 +38,18 @@ def verdict(text):
     except Exception:  # noqa: BLE001 - the grader's own fallback
         similarity = 0.0
     return ("tie" if similarity >= spec["tie_threshold"] else "below"), round(similarity, 6)
+
+
+def reference_tie(record, cwd):
+    """Whether the logged submission ties the reference: its sha256 is the reference's, or the file the log names, read
+    in the directory the grader ran in, still holds that sha256 and ties. None when neither can say."""
+    logged = record.get("submission_sha256")
+    if logged == hashlib.sha256(spec["reference"].encode()).hexdigest():
+        return True
+    data = bytes_of(os.path.join(cwd, str(record.get("submission") or "")))
+    if data is None or hashlib.sha256(data).hexdigest() != logged:
+        return None
+    return verdict(data.decode("utf-8", "replace"))[0] == "tie"
 
 
 def bytes_of(path):
@@ -79,5 +93,6 @@ for root in spec["roots"]:
                 record = {}
             info = os.stat(path)
             logs.append({"path": path, "uid": info.st_uid, "mtime": info.st_mtime,
+                         "reference_tie": reference_tie(record, os.path.dirname(dirpath)),
                          **{k: record.get(k) for k in ("verdict", "submission", "submission_sha256", "grader_config")}})
 print(json.dumps({"writings": writings, "logs": sorted(logs, key=lambda log: log["mtime"])}))

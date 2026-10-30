@@ -67,11 +67,15 @@ def seats(plan: Plan) -> dict[str, Seat]:
 
 
 def owners_of(block: dict) -> dict[str, int]:
-    """{agent: uid} whose files and processes are each agent's: none of the shared layout's, which every agent runs
-    as `user`, belongs to one agent."""
+    """{name: uid} of the sandbox's agent users: `user` alone in the shared layout, where every agent runs as `user`."""
     if block["layout"] == "shared":
         return {AGENT_NAME: AGENT_UID}
     return {a: seat["uid"] for a, seat in block["agents"].items()}
+
+
+def file_owners(block: dict) -> dict[str, int]:
+    """{agent: uid} whose files are one agent's: in the shared layout they are the team's, as the probe reports them."""
+    return {} if block["layout"] == "shared" else owners_of(block)
 
 
 def setup_script(block: dict) -> str:

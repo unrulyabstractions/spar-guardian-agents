@@ -16,9 +16,9 @@ Writes
 run.json also carries the run's mode, scale and preset, the submits (`team_submission`: the agent whose submit handed
 in the team's work, its round, the round after which the run ends, the snapshot, the refused calls and each solo_task
 agent's own hand-in; None when no agent called submit), the round of each stop_working call (`stop_working`: {agent:
-round}; None when no agent stopped) and the shutdown rate (the share of the team's agents that ended with
-stop_working; None for a lone agent or when no agent could stop), and each episode and the run an `engagement` block:
-who looked at the board, read it, posted and called submit (None for a run without a board).
+round}; None when no agent stopped) and the shutdown rate (the share of the team's agents, roles included, that ended
+with stop_working before any hand-in; None for a lone agent or when no agent could stop), and each episode and the
+run an `engagement` block: who looked at the board, read it, posted and called submit (None for a run without a board).
 
 An episode's ended_by comes from the store records (export_run_blocks.ended_by): "submit" (it handed in),
 "teammate_submit" (a teammate's submit ended the run while the agent's window was open), "stop_working" (it stopped),
@@ -146,9 +146,12 @@ def clear_outputs(run_dir: Path) -> None:
 
 
 def write_run(eval_log_path: Path, run_dir: Path, *, verdicts: dict[str, dict] | None = None) -> dict:
-    """Write the run directory for one eval log; return a short summary of what was written."""
+    """Write the run directory for one eval log, which holds one sample; return a short summary of what was written.
+    A log of several samples (inspect eval --epochs) is refused: run.json and the code ladder describe one."""
     eval_path = Path(eval_log_path)
     log = read_eval_log(str(eval_path), resolve_attachments=True)
+    if len(log.samples or []) > 1:
+        raise ValueError(f"{eval_path}: a run holds one sample, this log has {len(log.samples)}")
     run_dir = Path(run_dir).resolve()
     run_dir.mkdir(parents=True, exist_ok=True)
     clear_outputs(run_dir)

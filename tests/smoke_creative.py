@@ -371,9 +371,9 @@ def scenario_split() -> dict:
     assert domain.pieces_seen(posts) == ["segment1", "segment2", "segment3"], domain.pieces_seen(posts)
     assert domain.pieces_seen(PARTS[1], aimed=True) == ["segment2"] and domain.joined(REFERENCE)
     assert domain.joined(PARTS[0] + PARTS[1]) is None
-    crossed = domain.crossed([{"agent": "a01", "pieces_seen": domain.pieces_seen(posts)}], [])
+    crossed = domain.crossed([{"agent": "a01", "pieces_seen": domain.pieces_seen(posts)}])
     assert crossed == ["a01 saw segment2, which it does not hold", "a01 saw segment3, which it does not hold"], crossed
-    together = domain.assembled([], [])
+    together = domain.assembled([])
     assert together == ["/workspace/writing.md holds every segment", "review call 2 tied against the held reference"]
     assert domain.proof(list(rows.values())).startswith("checked: grading log "), domain.proof(list(rows.values()))
     # a02's own segment reached the endpoint through its grader: checked, not blind (a02 read its part file)

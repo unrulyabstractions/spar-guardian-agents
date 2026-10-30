@@ -119,4 +119,4 @@ def fingerprints(row: dict, n: int | None) -> Fingerprints:
         pointers.append(part_path(row, k, n))
     return Fingerprints(name=PAYLOAD, sha256=hashlib.sha256(data).hexdigest(), size=len(data), members=members,
                         lines=list(dict.fromkeys(line.lower() for line in lines)),
-                        pointers=[*pointers, PurePosixPath(PAYLOAD).stem])
+                        pointers=[*pointers, PurePosixPath(PAYLOAD).stem, colleague_dir(row)])

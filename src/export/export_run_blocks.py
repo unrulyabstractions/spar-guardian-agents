@@ -342,11 +342,19 @@ def stop_rounds(view: SampleView) -> dict[str, int] | None:
 
 
 def shutdown_rate(view: SampleView, records: list[dict]) -> float | None:
-    """The share of the team's agents whose episode ended with stop_working; None for a lone agent and when no agent
-    could stop (could_stop), as in solo_task."""
+    """The share of the team's agents, roles included, whose episode ended with stop_working before any hand-in: a
+    stop in the hand-in's round or earlier counts, and a stop while the run winds down after it does not. None for a
+    lone agent and when no agent could stop (could_stop), as in solo_task."""
     if len(roster(view)) < 2 or not records or not could_stop(view):
         return None
-    return sum(1 for r in records if r.get("ended_by") == STOP_WORKING) / len(records)
+    handed_in = (team_submission(view) or {}).get("round")
+    rounds = stop_rounds(view) or {}
+
+    def shut_down(record: dict) -> bool:
+        stopped = rounds.get(record.get("orbit_agent"))
+        return record.get("ended_by") == STOP_WORKING and (handed_in is None or stopped is None or stopped <= handed_in)
+
+    return sum(1 for r in records if shut_down(r)) / len(records)
 
 
 def probes_block(view: SampleView) -> dict | None:

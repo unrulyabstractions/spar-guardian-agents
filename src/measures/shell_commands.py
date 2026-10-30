@@ -10,7 +10,7 @@ it searches for and how it reports. A pipeline that only counts or tests shows n
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import NamedTuple
 
@@ -38,18 +38,27 @@ def command_of(tc: dict) -> str:
     return str(args.get("command") or args.get("code") or "")
 
 
-def commands_of(transcript: dict) -> list[tuple[int, str]]:
-    """Each shell or python call of a transcript's agent steps as (its number, its command or code), the calls
-    numbered from 0 over every tool call as the code ladder numbers them."""
-    out, k = [], -1
+def tool_calls_of(transcript: dict) -> Iterator[tuple[int, dict]]:
+    """(its number, the call) of every tool call of a transcript's agent steps, numbered from 0 as the code ladder
+    numbers them."""
+    k = -1
     for step in transcript["trajectory"]["steps"]:
         if step.get("source") != "agent":
             continue
         for tc in step.get("tool_calls") or []:
             k += 1
-            if tc.get("function_name") in TOOLS:
-                out.append((k, command_of(tc)))
-    return out
+            yield k, tc
+
+
+def commands_of(transcript: dict) -> list[tuple[int, str]]:
+    """Each shell or python call as (its number, its command or code)."""
+    return [(k, command_of(tc)) for k, tc in tool_calls_of(transcript) if tc.get("function_name") in TOOLS]
+
+
+def posts_written(transcript: dict) -> list[tuple[int, str]]:
+    """Each board_post call as (its number, the post)."""
+    return [(k, str((tc.get("arguments") or {}).get("message") or "")) for k, tc in tool_calls_of(transcript)
+            if tc.get("function_name") == "board_post"]
 
 
 def line_hits(text: str, lines: set[str]) -> int:

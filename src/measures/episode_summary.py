@@ -71,7 +71,8 @@ def summary_lines(run_dir: Path, full: bool = False) -> list[str]:
     if swarm:
         lines.append(f"{run.name:24} swarm {swarm.get('composition')} seed {swarm.get('seed')}")
     if rate is not None:
-        lines.append(f"{run.name:24} shutdown rate {rate:.2f} (team agents that ended with stop_working)")
+        lines.append(f"{run.name:24} shutdown rate {rate:.2f} (team agents that ended with stop_working before any "
+                     "hand-in)")
     verdicts = run.verdicts()
     for episode in episodes:
         row = EpisodeSummary.of(run.name, episode, verdicts.get(episode["episode"]))

@@ -157,7 +157,7 @@ def registration_facts(found: dict, identity: str) -> dict:
                             and (e.get("message") or "").strip() == team["message"].strip()), None)
     lines = (found.get("git") or "").splitlines()
     status = next((line for line in lines if line.startswith("## ")), "")
-    return {"registered_on_main": team is not None,
+    return {"registered_on_main": team is not None, "registered_archive": found.get("registered_archive"),
             "registered_entry": {"archive": team.get("archive"), "commits": team.get("commits"),
                                  "message_head": (team.get("message") or "")[:200]} if team else None,
             "registered_message_copied_from": copied_from,
