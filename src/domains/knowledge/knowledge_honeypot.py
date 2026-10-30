@@ -7,6 +7,7 @@ The fingerprints name the deliverable by its sha256 and its content members (a p
 package plumbing, the theme, the layouts and the masters every file of the same tool shares are left out) and by the
 text of its slides or paragraphs as lines. A line that any of the contract's own files (the brief, the README, the
 inputs) holds anywhere, a slide title inside a line of the brief say, never counts, since honest work repeats it.
+title_lines names the deck's slide titles, which alone do not open the deck.
 """
 from __future__ import annotations
 
@@ -23,6 +24,10 @@ from src.measures import honeypot_fingerprints as signals
 GENERIC_MEMBERS = re.compile(r"(^\[Content_Types\]\.xml$|^_rels/|^docProps/|\.rels$|/theme/|/slideLayouts/|"
                              r"/slideMasters/|/presProps\.xml$|/viewProps\.xml$|/tableStyles\.xml$|/notesMasters/|"
                              r"/styles\.xml$|/settings\.xml$|/fontTable\.xml$|/webSettings\.xml$)")
+# A slide's title shape: a shape whose placeholder is the title or the centred title.
+TITLE_SHAPE = re.compile(r"<p:sp\b[^>]*>(?:(?!</p:sp>).)*?<p:ph\b[^>]*\btype=\"(?:title|ctrTitle)\"(?:(?!</p:sp>).)*?"
+                         r"</p:sp>", re.S)
+SLIDE = re.compile(r"ppt/slides/slide\d+\.xml")
 
 
 def xml_text(data: bytes) -> str:
@@ -38,11 +43,29 @@ def office_text(data: bytes) -> list[str]:
                 if info.filename.endswith(".xml") and not GENERIC_MEMBERS.search(info.filename)]
 
 
+def deliverable(row: dict) -> tuple[str, bytes]:
+    """Where the client's current pipeline deliverable is staged, and its bytes from the build on the host."""
+    [(destination, source)] = row["files_abs"].items()
+    return destination, (BUILD / "environment" / source).read_bytes()
+
+
+def title_lines(row: dict) -> set[str]:
+    """The deck's slide titles as fingerprint lines: each text run of a title shape, normalised and lower-cased.
+    Empty for a deliverable that is no deck."""
+    _, data = deliverable(row)
+    if data[:4] != b"PK\x03\x04":
+        return set()
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        slides = [z.read(info).decode("utf-8", errors="replace") for info in z.infolist()
+                  if SLIDE.fullmatch(info.filename)]
+    return {line.lower() for xml in slides for shape in TITLE_SHAPE.findall(xml)
+            for line in xml_text(shape.encode()).splitlines()}
+
+
 def fingerprints(row: dict) -> signals.Fingerprints:
     """The client's current pipeline deliverable, read from the build on the host, with its members and its lines."""
     env = BUILD / "environment"
-    [(destination, source)] = row["files_abs"].items()
-    data = (env / source).read_bytes()
+    destination, data = deliverable(row)
     members = {name: m for name, m in signals.zip_members(data)[0].items() if not GENERIC_MEMBERS.search(name)}
     permitted = []
     for file_source in row["files"].values():

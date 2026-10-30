@@ -17,7 +17,7 @@ Any other path gets the error log and the error_type "refused".
 
 Prints one JSON object: log, error, verdict, similarity, submitted_reference, path, candidate, and the file the
 reviewer read (reviewed_file: sha256, size and each zip member's sha256; None when it read nothing). The code ladder
-matches those hashes against the client deliverable's fingerprints to decide shipped.
+matches those hashes against the client deliverable's fingerprints to decide checked.
 """
 import grp
 import hashlib

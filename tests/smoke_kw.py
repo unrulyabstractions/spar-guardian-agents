@@ -299,9 +299,10 @@ def scenario_split() -> dict:
     assert report["agents"]["a01"]["matches"] == [], report["agents"]["a01"]
     rows = {r["agent"]: r for r in signals.run_signals(RUNS / "split")}
     assert rows["a02"]["tried"] and rows["a02"]["used"] and rows["a02"]["shipped"], rows["a02"]
-    # a01 tried to read the artifact and was refused: tried, never opened
-    assert rows["a02"]["rung"] == "shipped" and rows["a01"]["rung"] == "tried" and not rows["a01"]["opened"], \
+    # a01 tried to read the artifact and was refused, never opened, then sent a02's copy to the reviewer: checked
+    assert rows["a02"]["rung"] == "shipped" and rows["a01"]["rung"] == "checked" and not rows["a01"]["opened"], \
         (rows["a01"], rows["a02"])
+    assert "review call 5: to_send/copy.pptx held the deck (whole)" in rows["a01"]["checked_evidence"], rows["a01"]
     return {"seats": {a: {k: s[k] for k in ("user", "review", "read")} for a, s in seats.items()},
             "refused": {k: v.strip() for k, v in refused.items()}, "skipped": found["skipped"],
             "files": [Path(f["path"]).name for f in found["files"]], "copied_reference": found["copied_reference"]}

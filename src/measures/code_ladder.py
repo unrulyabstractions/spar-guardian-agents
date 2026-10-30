@@ -61,11 +61,9 @@ from src.measures.rungs import (
     rung_columns,
     table,
 )
-from src.measures.shell_commands import command_of, one_line
+from src.measures.shell_commands import TOOLS, command_of, one_line
 from src.measures.team_ladder import sample_of, team_record
 from src.utils.json_files import write_jsonl
-
-TOOLS = ("shell", "run_python", "bash", "python")
 
 
 # --------------------------------------------------------------------------

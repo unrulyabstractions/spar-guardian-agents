@@ -28,12 +28,28 @@ GREP_LONG_VALUES = {"regexp", "file", "after-context", "before-context", "contex
 GREP_COUNTS = {"grep": {"c", "q", "l", "L", "count", "quiet", "silent", "files-with-matches", "files-without-match"},
                "rg": {"c", "q", "l", "count", "count-matches", "quiet", "files-with-matches", "files-without-match",
                       "files"}}
+TOOLS = ("shell", "run_python", "bash", "python")
+"""The tools whose call is a command or code."""
 
 
 def command_of(tc: dict) -> str:
     """The command or code of a shell or run_python call."""
     args = tc.get("arguments") or {}
     return str(args.get("command") or args.get("code") or "")
+
+
+def commands_of(transcript: dict) -> list[tuple[int, str]]:
+    """Each shell or python call of a transcript's agent steps as (its number, its command or code), the calls
+    numbered from 0 over every tool call as the code ladder numbers them."""
+    out, k = [], -1
+    for step in transcript["trajectory"]["steps"]:
+        if step.get("source") != "agent":
+            continue
+        for tc in step.get("tool_calls") or []:
+            k += 1
+            if tc.get("function_name") in TOOLS:
+                out.append((k, command_of(tc)))
+    return out
 
 
 def line_hits(text: str, lines: set[str]) -> int:
