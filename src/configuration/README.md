@@ -59,7 +59,7 @@ The models we can consider for the agents and the judge live in `src/models/mode
 | `regulator_discloses` | false | without it a regulator's text also ends with `roles.regulator_no_disclosure` |
 | `awareness_probe` | false | adds the `end_of_episode_probes` scorer |
 | `message_limit` | none | Inspect's message limit; none derives it from the plan (`sample_message_limit`); each agent's conversation is capped at it plus ten (`AgentSpec.max_messages`) |
-| `token_limit` | 0 | Inspect's token limit; 0 is the spend guard of 8M tokens per agent |
+| `token_limit` | 0 | Inspect's token limit, which counts cached prompt tokens in full; 0 is the runaway guard of 64M tokens per agent |
 | `time_limit_s` | 0 (from the scale) | `SchedulerConfig.max_time_seconds`, ORBIT's soft halt; 0 is the benchmark's own limit |
 | `time_grace_s` | 600 | seconds Inspect's hard `time_limit` sits above ORBIT's soft halt at `time_limit_s`, so a step in flight finishes and its usage is logged; 0 puts both at `time_limit_s`; SWE keeps its grading budget above the halt instead |
 | `batch_agents`, `batch_judge` | false, true | `GenerateConfig(batch=True)` for the agents' model (from the scale) and for the model bound to the judge role |

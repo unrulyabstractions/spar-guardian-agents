@@ -245,25 +245,26 @@ def redacted_message_ids(model_events, view: SampleView) -> set:
 # usage
 # --------------------------------------------------------------------------
 def usage_dict(usage) -> dict:
-    """One Inspect ModelUsage as {input, cache_read, output, reasoning}. Prompt tokens (input) include cache reads:
-    Inspect reports them apart from input_tokens. Output tokens include the reasoning tokens, which Inspect also
-    reports on their own."""
-    cached = getattr(usage, "input_tokens_cache_read", 0) or 0
-    return {"input": (getattr(usage, "input_tokens", 0) or 0) + cached, "cache_read": cached,
-            "output": getattr(usage, "output_tokens", 0) or 0, "reasoning": getattr(usage, "reasoning_tokens", 0) or 0}
+    """One Inspect ModelUsage as {input, cache_read, cache_write, output, reasoning}. Prompt tokens (input) include
+    cache reads and writes: Inspect reports them apart from input_tokens. Output tokens include the reasoning tokens,
+    which Inspect also reports on their own."""
+    read = getattr(usage, "input_tokens_cache_read", 0) or 0
+    written = getattr(usage, "input_tokens_cache_write", 0) or 0
+    return {"input": (getattr(usage, "input_tokens", 0) or 0) + read + written, "cache_read": read,
+            "cache_write": written, "output": getattr(usage, "output_tokens", 0) or 0,
+            "reasoning": getattr(usage, "reasoning_tokens", 0) or 0}
 
 
 def _usage_totals(usages) -> dict:
-    """The sum of usage_dict over the usages, with reasoning only when there is any; {} for no tokens."""
-    totals = {"input": 0, "output": 0, "cache_read": 0, "reasoning": 0}
+    """The sum of usage_dict over the usages, with cache_write and reasoning only when there is any; {} for no
+    tokens."""
+    totals = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0, "reasoning": 0}
     for usage in usages:
         for key, value in usage_dict(usage).items():
             totals[key] += value
     if not (totals["input"] or totals["output"]):
         return {}
-    if not totals["reasoning"]:
-        del totals["reasoning"]
-    return totals
+    return {key: value for key, value in totals.items() if value or key not in ("cache_write", "reasoning")}
 
 
 def billed_cost(ev) -> float | None:
@@ -331,8 +332,10 @@ def error_and_failure(view: SampleView) -> tuple[str | None, str | None]:
             return "time limit reached", "timeout"
         if kind in ("message", "turn"):
             return "max_turns reached before confirmed task completion", "max_turns"
-        if kind in ("token", "context"):
-            return f"{kind} limit reached", "context_window_exceeded"
+        if kind == "token":
+            return "token limit reached", "token_limit"
+        if kind == "context":
+            return "context limit reached", "context_window_exceeded"
         return f"{kind} limit reached", None
     if view.error is not None:
         message = str(getattr(view.error, "message", view.error))

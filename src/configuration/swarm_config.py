@@ -237,7 +237,7 @@ class SwarmConfig(BaseModel):
     (AgentSpec.max_messages). None derives it from the plan: six messages per step of max_turns, plus twenty
     (sample_message_limit)."""
     token_limit: int = 0
-    """Tokens per sample (Inspect token_limit). 0 means the spend guard: 8M tokens per agent."""
+    """Tokens per sample (Inspect token_limit). 0 means the runaway guard: 64M tokens per agent."""
     time_limit_s: int = 0
     """Seconds for the agents (ORBIT SchedulerConfig.max_time_seconds). 0 means the benchmark's own limit."""
     time_grace_s: int = settings.HARD_TIME_GRACE_S

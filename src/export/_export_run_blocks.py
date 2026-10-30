@@ -182,8 +182,8 @@ def ledger_record(model: str, events: list, usage: dict | None) -> dict:
     errored = sum(1 for e in events if getattr(e, "error", None))
     with_usage = sum(1 for e in events if getattr(getattr(e, "output", None), "usage", None))
     price = models.usd_per_million(model)
-    cost = models.cost_usd(price, usage.get("input", 0), usage.get("cache_read", 0), usage.get("output", 0)) \
-        if usage else None
+    cost = models.cost_usd(price, usage.get("input", 0), usage.get("cache_read", 0), usage.get("output", 0),
+                           cache_write=usage.get("cache_write", 0)) if usage else None
     flags = []
     if price is None:
         flags.append("unpriced model")
@@ -194,7 +194,7 @@ def ledger_record(model: str, events: list, usage: dict | None) -> dict:
     if usage.get("billed_calls") is not None and usage["billed_calls"] < with_usage:
         flags.append(f"billed for {usage['billed_calls']} of {with_usage} call(s)")
     return {"model": model, "calls": calls, "errored": errored, "with_usage": with_usage,
-            "tokens": {k: usage.get(k, 0) for k in ("input", "cache_read", "output")},
+            "tokens": {k: usage.get(k, 0) for k in ("input", "cache_read", "cache_write", "output")},
             "cost_usd": round(cost, 6) if cost is not None else None,
             "billed_usd": usage.get("billed_usd"), "billed_calls": usage.get("billed_calls"), "flags": flags}
 
@@ -203,7 +203,7 @@ def ledger_block(records: list[dict], limit: str | None) -> dict:
     """The run's ledger: each agent's record (ledger_record), the totals, and whether the totals are complete: no
     agent flag, and the sample did not end on a limit, which leaves a call in flight out of the log."""
     agents = {r["orbit_agent"]: r["ledger"] for r in records if r.get("ledger")}
-    total = {"calls": 0, "errored": 0, "tokens": {"input": 0, "cache_read": 0, "output": 0},
+    total = {"calls": 0, "errored": 0, "tokens": {"input": 0, "cache_read": 0, "cache_write": 0, "output": 0},
              "cost_usd": 0.0, "billed_usd": 0.0, "billed_calls": 0}
     priced = billed = True
     for rec in agents.values():

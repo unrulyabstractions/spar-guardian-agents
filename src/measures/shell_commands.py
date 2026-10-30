@@ -124,6 +124,14 @@ def strip_heredocs(cmd: str) -> str:
     return "\n".join(out)
 
 
+def without_counters(cmd: str) -> str:
+    """The command without the simple commands that only look at a file from outside or print words (COUNTERS, echo,
+    printf); here-documents stay. `ls -l deck.pptx; python own.py` then names the deck in no command that reads it."""
+    looks = {stage for stage in shell_segments(strip_heredocs(cmd))
+             if stage_of(stage).program in COUNTERS | {"echo", "printf"}}
+    return "\n".join(stage for stage in shell_segments(cmd) if stage not in looks)
+
+
 def words(text: str) -> list[tuple[str, bool]]:
     """The shell words of a simple command, unquoted, each with whether it was written without quotes or escapes."""
     out: list[tuple[str, bool]] = []

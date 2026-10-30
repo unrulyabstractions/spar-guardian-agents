@@ -144,7 +144,8 @@ def verdict_row(spec: cb_judge.JudgeSpec, judge: Judge, fields: dict | None, *, 
                 error: str | None = None, raw: str = "") -> dict:
     """A verdict without the episode's identity: the judge's settings, parse_ok, the task's fields (None when the
     reply did not parse), the call's usage and cost, the error, and the raw reply when parsing failed."""
-    cost = cost_usd(judge.prices, usage["input"], usage["cache_read"], usage["output"]) if usage else None
+    cost = cost_usd(judge.prices, usage["input"], usage["cache_read"], usage["output"],
+                    cache_write=usage.get("cache_write", 0)) if usage else None
     row = {"judge": judge.name, "judge_generation_config": judge.entry["generation_config"],
            "judge_generation_config_unsupported": judge.entry["unsupported"],
            "judge_prompt": str(spec.prompt_path), "judge_schema": spec.schema_path.name,

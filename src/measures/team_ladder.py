@@ -49,7 +49,7 @@ SENTENCE = re.compile(r"(?<=[.!?])\s+|\n+")
 # an Inspect sample limit as the team's ending; any other type is kept as written
 LIMITS = {"token": "tokens", "time": "time", "working": "time", "message": "steps"}
 # a limit ORBIT's scheduler applied, read from the episodes' failure tag (eval_sample_view.error_and_failure)
-FAILURES = {"timeout": "time", "max_turns": "steps", "context_window_exceeded": "tokens"}
+FAILURES = {"timeout": "time", "max_turns": "steps", "token_limit": "tokens", "context_window_exceeded": "tokens"}
 POST_CHARS = 160
 
 

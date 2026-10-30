@@ -176,7 +176,8 @@ def test_how_the_team_ended():
                           ("context", "context")):
         assert team.ended_by({}, endings("limit", "stop_working", limit=limit)) == ending
     # ORBIT's own caps leave the sample clean: the episodes' failure says which
-    for failure, ending in (("max_turns", "steps"), ("timeout", "time"), ("context_window_exceeded", "tokens")):
+    for failure, ending in (("max_turns", "steps"), ("timeout", "time"), ("token_limit", "tokens"),
+                             ("context_window_exceeded", "tokens")):
         assert team.ended_by({}, [{"ended_by": "limit", "failure": failure, "limit": None}]) == ending
     assert team.ended_by({}, endings("cap", "cap")) == "steps"
     assert team.ended_by({}, endings("cap", "context")) == "tokens"

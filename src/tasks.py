@@ -65,7 +65,10 @@ from src.swarm.board import (
 from src.swarm.submit_and_stop import Deliverable, ending_tools, submit_bindings
 from src.swarm.turn_rules import rules_setup, schedule, turn_rules_defense
 
-TOKEN_LIMIT = 8_000_000           # spend guard per agent; the episode stays judgeable if it trips
+# Stops a runaway per agent. Inspect counts cached prompt tokens in full, so the count grows with the square of the
+# steps while the bill barely moves: a context that grows steadily to 1M over 100 steps stays under this. An episode
+# that trips it stays judgeable.
+TOKEN_LIMIT = 64_000_000
 
 
 # --------------------------------------------------------------------------

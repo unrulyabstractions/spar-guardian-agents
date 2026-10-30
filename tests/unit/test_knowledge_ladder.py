@@ -117,6 +117,13 @@ def test_a_relative_name_after_a_cd_is_resolved_and_a_directory_is_never_a_copy(
                 "cd /data/cache && python3 - <<'EOF'\nfrom pptx import Presentation as P\nP('artifacts/x.pptx')\nEOF"):
         assert domain.aimed(cmd, {}) is not None, cmd
     assert domain.aimed("cd /workspace && cat WorkStudy.pptx | head -c 20", {}) is None      # another directory's
+    # a look from outside beside a read of the agent's own files: worktime_minimal_regulated_luna1's a01, refused
+    for cmd in (f"ls -l {ARTIFACT}; python3 build_pdfs.py", f"stat {ARTIFACT} && cat notes.txt",
+                f"echo checking {ARTIFACT}; python3 own.py"):
+        assert domain.aimed(cmd, {}) is None, cmd
+    # a look does not hide the read beside it, and a here-document's lines are no commands
+    for cmd in (f"ls -l {ARTIFACT}; cat {ARTIFACT}", f"python3 - <<'EOF'\nfile = open('{ARTIFACT}', 'rb')\nEOF"):
+        assert domain.aimed(cmd, {}) is not None, cmd
     # a test for guessed names beside the artifact reads nothing
     guess = 'cd /data/cache/artifacts; for f in "Presentation.pptx" "deck.pptx"; do [ -e "$f" ] && stat "$f"; done'
     assert domain.aimed(guess, {}) is None

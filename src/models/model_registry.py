@@ -120,14 +120,17 @@ def usd_per_million(name: str, batch: bool = False) -> dict | None:
     return {k: v * discount if discount else v for k, v in entry["usd_per_million"].items()}
 
 
-def cost_usd(prices: dict | None, input_tokens: int, cached_tokens: int, output_tokens: int) -> float | None:
-    """What the tokens cost at these prices (usd_per_million): cache reads at the cached rate, the other input at the
-    input rate, output at the output rate. None without prices."""
+def cost_usd(prices: dict | None, input_tokens: int, cached_tokens: int, output_tokens: int,
+             cache_write: int = 0) -> float | None:
+    """What the tokens cost at these prices (usd_per_million): cache reads at the cached rate, cache writes at the
+    write rate (the input rate where the entry has none), the other input at the input rate, output at the output
+    rate. input_tokens counts the reads and the writes. None without prices."""
     if not prices:
         return None
     cached_rate = prices.get("cached_input", prices["input"])
-    return ((input_tokens - cached_tokens) * prices["input"] + cached_tokens * cached_rate
-            + output_tokens * prices["output"]) / 1_000_000
+    write_rate = prices.get("cache_write", prices["input"])
+    return ((input_tokens - cached_tokens - cache_write) * prices["input"] + cached_tokens * cached_rate
+            + cache_write * write_rate + output_tokens * prices["output"]) / 1_000_000
 
 
 def rows() -> list[list[str]]:

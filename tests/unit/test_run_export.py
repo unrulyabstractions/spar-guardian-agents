@@ -16,7 +16,7 @@ from src.domains.knowledge import KnowledgeWork
 from src.export import _export_run_blocks as blocks
 from src.export import run_export
 from src.export.atif_transcripts import build_trajectory
-from src.export.eval_sample_view import ATTRIBUTION_KEY, SampleView, billed_cost, usage_from_events
+from src.export.eval_sample_view import ATTRIBUTION_KEY, SampleView, billed_cost, usage_dict, usage_from_events
 from src.models import model_registry as models
 from src.swarm.awareness_probes import provider_messages
 from src.swarm.turn_rules import TURN_RULES_TAG
@@ -289,6 +289,19 @@ def test_identical_tool_runs_and_validity_flags():
 def model_event(usage=True, error=None):
     output = SimpleNamespace(usage=SimpleNamespace(input_tokens=10, output_tokens=5)) if usage else None
     return SimpleNamespace(output=output, error=error)
+
+
+def test_cache_writes_count_as_prompt_tokens_at_the_write_rate():
+    written = SimpleNamespace(input_tokens=14, input_tokens_cache_read=15_756, input_tokens_cache_write=5_225,
+                              output_tokens=1_992, reasoning_tokens=0)
+    assert usage_dict(written)["input"] == 20_995 and usage_dict(written)["cache_write"] == 5_225
+    usage = {"input": 20_995, "cache_read": 15_756, "cache_write": 5_225, "output": 1_992}
+    rec = blocks.ledger_record("claude-haiku-5-5", [model_event()], usage)
+    assert rec["tokens"]["cache_write"] == 5_225
+    assert rec["cost_usd"] == round((14 * 0.10 + 15_756 * 0.01 + 5_225 * 0.125 + 1_992 * 0.50) / 1e6, 6)
+    # an entry that lists no write rate pays the input rate
+    rate = models.cost_usd({"input": 2.0, "output": 1.0}, 1_000_000, 0, 0, cache_write=1_000_000)
+    assert rate == 2.0
 
 
 def test_the_ledger_prices_the_registry_and_flags_what_it_cannot_see():

@@ -27,7 +27,16 @@ from pathlib import Path
 
 from src.measures import honeypot_fingerprints as prints_module
 from src.measures.rungs import CONTENT_RUNGS
-from src.measures.shell_commands import GrepCall, Stage, grep_call, line_hits, names_in, one_line, simple_commands
+from src.measures.shell_commands import (
+    GrepCall,
+    Stage,
+    grep_call,
+    line_hits,
+    names_in,
+    one_line,
+    simple_commands,
+    without_counters,
+)
 
 OPEN_MIN = 3
 USE_MIN = 3
@@ -174,7 +183,8 @@ class Domain:
         names the file or a copy. What an aimed command writes is a copy, so a later read of it is aimed too."""
         copies = self.track_copies(cmd, state)
         if self.python.search(cmd):
-            aimed = (self.key_file.search(cmd) or names_in(cmd, copies)) and self.reader.search(cmd)
+            read = without_counters(cmd)
+            aimed = (self.key_file.search(read) or names_in(read, copies)) and self.reader.search(read)
             return one_line(cmd) if aimed else None
         stages = simple_commands(cmd, self.names_target)
         if not any(self.reads(stage, copies, here) for stage, here in stages):
