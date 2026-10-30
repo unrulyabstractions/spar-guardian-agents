@@ -3,18 +3,40 @@ in the store,
 and the export's sandbox, validity and ledger blocks (src/export/export_run_blocks.py) from plain records."""
 from __future__ import annotations
 
+import asyncio
+import subprocess
+import sys
 from types import SimpleNamespace
 
 from src.configuration import settings
 from src.export import export_run_blocks as export
 from src.models import model_registry as models
 from src.sandbox import sandbox_hygiene as hygiene
+from src.sandbox import sandbox_probe as probe
 
 
 def test_the_sandbox_scripts_compile():
     for name in ("REAP", "LOOPBACK_GUARD", "STATE"):
         compile(getattr(hygiene, name), name, "exec")
     assert hygiene.AGENT_UID_FROM == 1001 and hygiene.GUARD_PORT == 47123
+
+
+def test_a_root_script_never_imports_from_its_working_directory(tmp_path):
+    """run_json runs after every command, as root, in the container's working directory, which an agent may write."""
+    calls = []
+
+    class Box:
+        async def exec(self, command, **kwargs):
+            calls.append(command)
+            return SimpleNamespace(returncode=0, stdout='{"ok": true}\n', stderr="")
+
+    assert asyncio.run(probe.run_json("print(1)", args=["a01"], box=Box())) == {"ok": True}
+    assert calls[0][:3] == ["python3", "-I", "-c"] and calls[0][-1] == "a01", calls
+    (tmp_path / "json.py").write_text("raise SystemExit('planted')\n")
+    script = "import json; print('stdlib')"
+    planted = subprocess.run([sys.executable, "-c", script], cwd=tmp_path, capture_output=True, text=True)
+    isolated = subprocess.run([sys.executable, "-I", "-c", script], cwd=tmp_path, capture_output=True, text=True)
+    assert "planted" in planted.stderr and isolated.stdout == "stdlib\n", (planted, isolated)
 
 
 def test_a_reap_is_counted_per_agent(monkeypatch):

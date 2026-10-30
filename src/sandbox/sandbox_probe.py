@@ -41,10 +41,11 @@ async def run_commands(commands: dict[str, str], fields: dict | None = None, *, 
 
 async def run_json(script: str, *, args: list[str] | None = None, stdin=None, box=None, user: str = "root",
                    timeout: int = SCRIPT_TIMEOUT_S):
-    """`python3 -c script args` as `user` (root by default) in the sample's sandbox or in `box`, `stdin` sent as
+    """`python3 -I -c script args` as `user` (root by default) in the sample's sandbox or in `box`, `stdin` sent as
     JSON: the last line of its output, parsed as JSON. Raises RuntimeError with the script's message when it exits
-    non-zero."""
-    r = await (box or sandbox()).exec(["python3", "-c", script, *(args or [])],
+    non-zero. -I keeps the working directory off sys.path: it can be an agent's, and a planted json.py would run as
+    root."""
+    r = await (box or sandbox()).exec(["python3", "-I", "-c", script, *(args or [])],
                                       input=json.dumps(stdin) if stdin is not None else None, user=user,
                                       timeout=timeout)
     if r.returncode != 0:
