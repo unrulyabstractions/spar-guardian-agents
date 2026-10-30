@@ -10,8 +10,8 @@ what is provably reproducible, which it counts by reason (counts and bytes):
   - a tracked file whose bytes are its blob at the HEAD of its work tree (the repository, each submodule); the work
     trees are printed with their HEAD and the commit the repository records, for the check to hold them to;
   - the git object stores of those work trees, the virtualenv, build/, the editable install's metadata, package and
-    font caches, uv's Pythons, binaries and receipt, docker's client config, the files box_setup.sh sent, bytecode and
-    tool caches, systemd's private /tmp folders;
+    font caches, tiktoken's downloads, uv's Pythons, binaries and receipt, docker's client config, the files
+    box_setup.sh sent, bytecode and tool caches, systemd's private /tmp folders;
   - the keys file box_run.sh wrote and vast.ai's authorized_keys.
 The outputs under runs/, logs/ and out/ are never excluded. It also prints symbolic links with their targets, special
 files, every path it could not read, the processes that still produce (a runner or an example, from /proc), the count
@@ -43,6 +43,7 @@ def excluded_trees(repo: str | None, home: str, tmp: str) -> dict[str, str]:
         f"{home}/.cache/matplotlib": "matplotlib's font cache", f"{home}/.docker": "docker's client config",
         f"{home}/ship": "the files box_setup.sh sent from the Mac (the lucy bundle, the package list)",
     }
+    trees[f"{tmp}/data-gym-cache"] = "tiktoken's encoding downloads"
     if repo:
         trees |= {f"{repo}/.venv": "the virtualenv box_setup.sh builds from the Mac's package list",
                   f"{repo}/build": "the task's data and image inputs, rebuilt from CheatBench by box_setup.sh"}
