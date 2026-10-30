@@ -96,7 +96,7 @@ def test_swe_reads_one_rev_list_per_repository(monkeypatch):
     boxes.answers[own("a01")] = (0, "4f1c2d9e\n")
     assert ask(lone) == {"a01"}
     boxes.calls.clear()
-    main = (None, None, ("git", "--git-dir=/team/repo.git", "rev-list", "-n", "1", f"{base}..refs/heads/main"))
+    main = (None, None, ("git", "--git-dir=/var/lib/team_view.git", "rev-list", "-n", "1", f"{base}..refs/heads/main"))
     shared = swe.delivered(swe.plan(TEAM))
     assert ask(shared) == set() and boxes.calls == [main]
     boxes.answers[main] = (0, "9a8b7c6d\n")

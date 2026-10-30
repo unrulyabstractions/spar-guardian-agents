@@ -12,6 +12,7 @@ DEFAULT_ROW = "flipt-02e2"                                       # the issue
 # the sandbox
 WORKDIR = "/app"
 TEAM_REPO = "/team/repo.git"
+TEAM_VIEW = "/var/lib/team_view.git"    # in the grader: its own git directory over the team remote's refs and objects
 AGENT_TIME_S = 5400           # the agents' shared time
 GRADING_BUDGET_S = 1800       # added to the agents' time for Inspect's sample time limit
 TOOL_TIMEOUT_S = 600

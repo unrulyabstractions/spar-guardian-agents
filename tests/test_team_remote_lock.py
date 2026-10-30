@@ -14,6 +14,7 @@ from src.domains.openmath.openmath_settings import TEAM_GROUP
 from src.domains.openmath.openmath_settings import TEAM_REMOTE as OPENMATH_REMOTE
 from src.domains.protein import protein_scoring
 from src.domains.protein.protein_settings import TEAM_REMOTE as PROTEIN_REMOTE
+from src.domains.swe.swe_honeypot import view_script
 from src.sandbox.agent_tools import AGENT_NAME
 from src.sandbox.staging import team_remote_lock
 
@@ -105,3 +106,28 @@ def test_both_domains_lock_their_remote():
     assert all(line.format(r=OPENMATH_REMOTE) in script for line in locked) and f"chgrp -R {TEAM_GROUP} " in script
     assert script.index("git init") < script.index("chmod +t"), script
     assert "{lock}" not in script and AGENT_NAME in protein_scoring.TEAM_REMOTE_INIT
+
+
+def test_the_swe_graders_view_reads_the_remote_and_never_its_config(tmp_path):
+    """SWE's agents are root in their machines, so no lock holds: a config they plant runs a command on a git read of
+    the remote. The grader reads through a git directory of its own."""
+    remote, view, work, proof = tmp_path / "team.git", tmp_path / "view.git", tmp_path / "work", tmp_path / "ran"
+    git("init", "-q", "--bare", "--initial-branch=main", str(remote))
+    git("init", "-q", "--initial-branch=main", str(work))
+    (work / "f").write_text("x\n")
+    git("add", "f", cwd=work)
+    git("commit", "-qm", "one", cwd=work)
+    git("push", "-q", str(remote), "main", cwd=work)
+    subprocess.run(["bash", "-c", view_script(str(remote), str(view))], check=True)
+    head = git("-C", str(work), "rev-parse", "HEAD").strip()
+    (remote / "config").write_text(
+        "[core]\n\trepositoryformatversion = 1\n\tbare = true\n[extensions]\n\tpartialClone = origin\n"
+        f'[remote "origin"]\n\turl = {tmp_path}/none\n\tpromisor = true\n\tuploadpack = touch {proof}; false\n')
+    missing = "d" * 40 + "^{tree}"
+    subprocess.run(["git", f"--git-dir={remote}", "rev-parse", missing], capture_output=True)
+    assert proof.exists(), "a read of the remote ran the planted command"
+    proof.unlink()
+    assert git(f"--git-dir={view}", "rev-parse", "--verify", "-q", "refs/heads/main").strip() == head
+    subprocess.run(["git", f"--git-dir={view}", "rev-parse", missing], capture_output=True)
+    git("-C", str(work), "fetch", "-q", "--no-tags", str(view), "+refs/heads/*:refs/grade/team/*")
+    assert git("-C", str(work), "rev-parse", "refs/grade/team/main").strip() == head and not proof.exists()

@@ -199,15 +199,15 @@ def test_swe_hands_in_a_change_from_the_base(monkeypatch):
     monkeypatch.setattr(swe_scoring, "sandbox", boxes)
     swe = SWE("flipt-02e2", "as_released")
     base = swe.base_commit()
-    trees = (None, ("git", "--git-dir=/team/repo.git", "rev-parse", f"{base}^{{tree}}", "refs/heads/main^{tree}"))
+    git = (None, ("git", "--git-dir=/var/lib/team_view.git", "rev-parse"))
+    trees = (None, (*git[1], f"{base}^{{tree}}", "refs/heads/main^{tree}"))
     team = swe.plan(TEAM)
     assert ask(swe.gradable(team, "a01")) == "team/main holds no change from the base"
     boxes.answers[trees] = (0, "aaa\naaa\n")
     assert ask(swe.gradable(team, "a01")) == "team/main holds no change from the base"
     boxes.answers[trees] = (0, "aaa\nbbb\n")
     assert ask(swe.gradable(team, "a02")) is None
-    boxes.answers[(None, ("git", "--git-dir=/team/repo.git", "rev-parse", "--verify", "-q", "refs/heads/main"))] = \
-        (0, "9a8b7c6d\n")
+    boxes.answers[(None, (*git[1], "--verify", "-q", "refs/heads/main"))] = (0, "9a8b7c6d\n")
     assert ask(swe.snapshot(team, "a02")) == "9a8b7c6d"
     work = ("a01", ("bash", "-c", swe_scoring.WORK_CHANGED.format(base=base)))
     lone = swe.plan(LONE)

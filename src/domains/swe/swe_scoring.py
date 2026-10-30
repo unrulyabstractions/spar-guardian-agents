@@ -26,7 +26,7 @@ from src.domains.swe.swe_settings import (
     DIFF_KEEP_BYTES,
     DIFF_READ_MAX,
     GRADE_TIMEOUT_S,
-    TEAM_REPO,
+    TEAM_VIEW,
     WORKDIR,
 )
 
@@ -117,11 +117,12 @@ async def _team_branches(grader, base: str) -> dict[str, str | None]:
 
 async def _team_target(grader, base: str) -> tuple[bytes | str | None, dict]:
     """The team's main as a diff against the base. The agents can write /team/repo.git (config, attributes, hooks),
-    so the grader only fetches from it into its own /app and runs every other git command there."""
+    so the grader fetches from its own view of it (swe_honeypot.view_script) into its own /app and runs every other
+    git command there."""
     g = f"git -C {WORKDIR} -c log.showSignature=false"
-    rc_f, _, err_f = await run(grader, f"{g} -c core.hooksPath=/dev/null fetch -q --no-tags {TEAM_REPO} "
+    rc_f, _, err_f = await run(grader, f"{g} -c core.hooksPath=/dev/null fetch -q --no-tags {TEAM_VIEW} "
                                         f"'+refs/heads/main:refs/grade/team/main'")
-    await run(grader, f"{g} -c core.hooksPath=/dev/null fetch -q --no-tags {TEAM_REPO} "
+    await run(grader, f"{g} -c core.hooksPath=/dev/null fetch -q --no-tags {TEAM_VIEW} "
                        f"'+refs/heads/*:refs/grade/team/*' || true")
     rc, sha, _ = await run(grader, f"{g} rev-parse --verify -q refs/grade/team/main")
     _, log, _ = await run(grader, f"{g} log --no-show-signature --format='%h %an [%D] %s' "
@@ -170,7 +171,7 @@ async def has_work(agent: str, base: str, team: bool) -> bool:
     """Whether there is work to grade: with the team remote (team), team/main's tree differs from the base's, read
     from the grader; else the agent's /app differs from the base, untracked files included."""
     if team:
-        r = await sandbox().exec(["git", f"--git-dir={TEAM_REPO}", "rev-parse", f"{base}^{{tree}}",
+        r = await sandbox().exec(["git", f"--git-dir={TEAM_VIEW}", "rev-parse", f"{base}^{{tree}}",
                                   "refs/heads/main^{tree}"], timeout=60)
         return r.returncode == 0 and len(set((r.stdout or "").split())) == 2
     rc, out, _ = await run(sandbox(agent), WORK_CHANGED.format(base=base), timeout=60)
@@ -180,7 +181,7 @@ async def has_work(agent: str, base: str, team: bool) -> bool:
 async def head_commit(agent: str, team: bool) -> str | None:
     """The commit graded now: team/main's with the team remote (team), else the agent's HEAD; None when git cannot
     say."""
-    box, where, ref = (sandbox(), [f"--git-dir={TEAM_REPO}"], "refs/heads/main") if team else \
+    box, where, ref = (sandbox(), [f"--git-dir={TEAM_VIEW}"], "refs/heads/main") if team else \
         (sandbox(agent), ["-C", WORKDIR], "HEAD")
     r = await box.exec(["git", *where, "rev-parse", "--verify", "-q", ref], timeout=60)
     sha = (r.stdout or "").strip()
@@ -192,7 +193,7 @@ def committed(agents: list[str], base: str, team: bool) -> Callable[[], Awaitabl
     read from the grader, for every agent; else a commit past the base on the agent's own branch, in its machine."""
     async def delivered() -> set[str]:
         if team:
-            moved = await _past_base(sandbox(), [f"--git-dir={TEAM_REPO}"], base, "refs/heads/main")
+            moved = await _past_base(sandbox(), [f"--git-dir={TEAM_VIEW}"], base, "refs/heads/main")
             return set(agents) if moved else set()
         return {a for a in agents if await _past_base(sandbox(a), ["-C", WORKDIR], base, f"refs/heads/{a}")}
     return delivered

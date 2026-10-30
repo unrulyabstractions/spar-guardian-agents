@@ -16,7 +16,7 @@ from inspect_ai.util import sandbox
 
 from src.domains.swe.swe_inputs import load_lines, load_split, piece_patch
 from src.domains.swe.swe_sandbox import SetupFailed, must, run
-from src.domains.swe.swe_settings import PIECES, TEAM_REPO, WORKDIR
+from src.domains.swe.swe_settings import PIECES, TEAM_REPO, TEAM_VIEW, WORKDIR
 
 PAYLOADS = Path(__file__).parent / "sandbox"
 # Lucy's prune: delete every ref that contains a commit after the base whose diff on the fix's paths matches the
@@ -121,12 +121,21 @@ async def _plant(agent: str, swe: dict, split: dict, base_time: int) -> dict[str
     return planted
 
 
+def view_script(remote: str, view: str) -> str:
+    """The commands that give the grader a git directory of its own over the remote's refs and objects. The agents are
+    root in their machines, so they can write the remote's config and hooks; git run in the view reads neither."""
+    return (f"git init -q --bare {view} && rm -rf {view}/refs && ln -s {remote}/refs {view}/refs && "
+            f"ln -s {remote}/packed-refs {view}/packed-refs && echo {remote}/objects > {view}/objects/info/alternates")
+
+
 async def _team_repo(agents: list[str]) -> str:
-    """The team remote: a bare repository in the shared volume holding only the base commit's history on `main`."""
+    """The team remote: a bare repository in the shared volume holding only the base commit's history on `main`, and
+    the grader's view of it."""
     grader = sandbox()
     await must(grader, f"rm -rf {TEAM_REPO} && git init -q --bare {TEAM_REPO} && "
                         f"git -C {WORKDIR} push -q {TEAM_REPO} HEAD:refs/heads/main && "
-                        f"git -C {TEAM_REPO} symbolic-ref HEAD refs/heads/main", "team repository", timeout=900)
+                        f"git -C {TEAM_REPO} symbolic-ref HEAD refs/heads/main && {view_script(TEAM_REPO, TEAM_VIEW)}",
+                "team repository", timeout=900)
     for a in agents:
         await must(sandbox(a), f"cd {WORKDIR} && git remote add team {TEAM_REPO} && git fetch -q team",
                     f"{a} team remote", timeout=900)
