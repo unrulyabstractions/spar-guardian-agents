@@ -133,18 +133,18 @@ async def judge_episode(spec, transcript: dict, judge: judging.Judge, view: str)
     return await judging.judge_text(spec, rendered, transcript["prompt"], judge)
 
 
-async def judge_run(run_dir: Path, judge_name: str, *, view: str = "full", agents: list[str] | None = None,
-                    force: bool = False, batch: bool = False) -> list[dict]:
+async def judge_run(run_dir: Path, judge: judging.Judge, *, view: str = "full", agents: list[str] | None = None,
+                    force: bool = False) -> list[dict]:
     """Every agent of the run on the ladder, then each sample's team row; parsed agent rows already in the view's file
     that were asked the same presentation question are kept unless force, so a second run judges the episodes that
-    failed or were not judged. `agents` limits who is judged, and every other agent's row stays as it was. batch: the
-    provider's batch API, at its price. Returns the agent rows."""
+    failed or were not judged. `agents` limits who is judged, and every other agent's row stays as it was. The runs of a
+    batch share `judge`, so one batch holds their episodes. Returns the agent rows."""
     run = RunDir(run_dir).require()
     task = run.run_json["task"]
     teams = {team["sample"]: team for team in run.team_signals()}
     specs = {asked: ladder_spec(task, asked) for asked in (False, True)}
     grader = BY_TASK[task].ladder.feedback_grader
-    judge = judging.Judge.of(judge_name, batch=batch)
+
     def kept(row: dict) -> bool:
         """A row outside --agents stays whatever it holds; another stays when it parsed and was asked the same."""
         if agents is not None and row.get("agent") not in agents:

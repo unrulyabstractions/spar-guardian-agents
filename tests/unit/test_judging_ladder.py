@@ -13,6 +13,7 @@ from inspect_ai import eval as inspect_eval
 from inspect_ai.log import read_eval_log
 from inspect_ai.model import GenerateConfig, ModelOutput, get_model
 
+from src import run as running
 from src.domains.openmath import OpenMath
 from src.export.run_export import write_run
 from src.judging import cheatbench_judge as judging
@@ -258,10 +259,25 @@ SAID = {"a01": {"exposed": True, "opened": True, "used": True, "checked": True, 
                 "presentation": "passed_off", "presentation_evidence": "our own proof"}}
 
 
+def mocked_judge() -> judging.Judge:
+    """The judge mock_judge put behind Judge.of."""
+    return judging.Judge.of("mock", batch=False)
+
+
+def test_the_runs_of_a_ladder_batch_share_one_client(tmp_path, monkeypatch):
+    mock_judge(monkeypatch, SAID)
+    built, of = [], judging.Judge.of
+    monkeypatch.setattr(judging.Judge, "of", lambda name, *, batch: built.append(name) or of(name, batch=batch))
+    folders = [ladder_run(tmp_path / name, "shipped", ["a01"]) for name in ("one", "two")]
+    asyncio.run(running._ladder_all(folders, "mock", "full", None, True, False))
+    assert built == ["mock"]
+    assert all((folder / "ladder.jsonl").exists() for folder in folders)
+
+
 def test_the_team_rung_asks_for_presentation_and_the_team_row_sums_the_agents(tmp_path, monkeypatch):
     asked = mock_judge(monkeypatch, SAID)
     folder = ladder_run(tmp_path, "shipped", ["a01"])
-    rows = asyncio.run(ladder.judge_run(folder, "mock"))
+    rows = asyncio.run(ladder.judge_run(folder, mocked_judge()))
     assert asked == [True, True]
     a01, a02 = rows
     assert (a01["row"], a01["sample"], a01["presentation_asked"], a01["presentation"]) == ("agent", "riemann#1", True,
@@ -279,33 +295,33 @@ def test_the_team_rung_asks_for_presentation_and_the_team_row_sums_the_agents(tm
     assert ladder.team_row("riemann#1", rows, {"rung": "checked"}, "full")["presentation"] == "passed_off"
     # a team below checked is not asked; the kept rows were asked, so both are judged again
     write_jsonl(folder / "signals.jsonl", [{"row": "team", "sample": "riemann#1", "rung": "opened"}])
-    rows = asyncio.run(ladder.judge_run(folder, "mock"))
+    rows = asyncio.run(ladder.judge_run(folder, mocked_judge()))
     assert asked == [True, True, False, False]
     assert all(r["presentation_asked"] is False and r["presentation"] is None for r in rows)
     [team] = RunDir(folder).ladder_team_rows()
     assert (team["presentation_asked"], team["presentation"], team["presentation_evidence"]) == (False, None, [])
     # a second run keeps the parsed rows asked the same question
-    asyncio.run(ladder.judge_run(folder, "mock"))
+    asyncio.run(ladder.judge_run(folder, mocked_judge()))
     assert len(asked) == 4
 
 
 def test_a_run_limited_to_some_agents_keeps_every_other_agents_verdict(tmp_path, monkeypatch):
     asked = mock_judge(monkeypatch, SAID)
     folder = ladder_run(tmp_path, "opened", ["a01"])
-    asyncio.run(ladder.judge_run(folder, "mock"))
+    asyncio.run(ladder.judge_run(folder, mocked_judge()))
     assert len(asked) == 2
-    asyncio.run(ladder.judge_run(folder, "mock", agents=["a01"], force=True))
+    asyncio.run(ladder.judge_run(folder, mocked_judge(), agents=["a01"], force=True))
     assert len(asked) == 3 and [r["agent"] for r in RunDir(folder).ladder_rows()] == ["a01", "a02"]
     # a team rung that rose asks a new question: the agents outside --agents keep their paid rows all the same
     write_jsonl(folder / "signals.jsonl", [{"row": "team", "sample": "riemann#1", "rung": "shipped"}])
-    asyncio.run(ladder.judge_run(folder, "mock", agents=["a01"]))
+    asyncio.run(ladder.judge_run(folder, mocked_judge(), agents=["a01"]))
     assert len(asked) == 4 and [r["agent"] for r in RunDir(folder).ladder_rows()] == ["a01", "a02"]
 
 
 def test_checked_stays_where_the_task_has_a_feedback_grader(tmp_path, monkeypatch):
     mock_judge(monkeypatch, SAID)
     monkeypatch.setattr(OpenMath.ladder, "feedback_grader", "review_deliverable")
-    rows = asyncio.run(ladder.judge_run(ladder_run(tmp_path, "none", []), "mock"))
+    rows = asyncio.run(ladder.judge_run(ladder_run(tmp_path, "none", []), mocked_judge()))
     assert (rows[0]["checked"], rows[0]["rung"], rows[0]["presentation_asked"]) == (True, "shipped", False)
     # no code team row: presentation is not asked
     assert ladder.presentation_asked(None) is False

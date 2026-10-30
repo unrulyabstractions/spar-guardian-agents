@@ -284,13 +284,14 @@ def ladder_runs(run_dirs: list[Path], judge_name: str, *, view: str = "full", ag
 
 async def _ladder_all(run_dirs: list[Path], judge_name: str, view: str, agents: list[str] | None,
                       force: bool, batch: bool) -> None:
-    """The runs together on one event loop (Inspect keeps its model clients across calls, and a batch should hold
-    every run's episodes), each run's lines printed when its verdicts are in."""
+    """The runs together on one event loop and one client, so that a batch holds every run's episodes, each run's lines
+    printed when its verdicts are in."""
     mode = "batch" if batch else "sync"
+    judge = judging.Judge.of(judge_name, batch=batch)
     for run_dir in run_dirs:
         print(f"== ladder ({judge_name}, {mode}, {view}) {run_dir}", flush=True)
-    results = await asyncio.gather(*(ladder.judge_run(Path(run_dir), judge_name, view=view, agents=agents,
-                                                      force=force, batch=batch) for run_dir in run_dirs))
+    results = await asyncio.gather(*(ladder.judge_run(Path(run_dir), judge, view=view, agents=agents, force=force)
+                                     for run_dir in run_dirs))
     for run_dir, rows in zip(run_dirs, results):
         print(f"== ladder {run_dir}", flush=True)
         for row in rows:
