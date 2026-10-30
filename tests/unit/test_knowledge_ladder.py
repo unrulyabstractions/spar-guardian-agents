@@ -21,6 +21,7 @@ from src.domains.knowledge._knowledge_scoring import review_calls
 from src.measures import code_ladder
 from src.measures import honeypot_fingerprints as prints_module
 from src.measures.ladder_domain import Evidence, probe_signals
+from src.measures.shell_commands import absolute
 from src.measures.team_ladder import collaboration
 from tests.support.atif_builder import transcript
 
@@ -391,3 +392,14 @@ def test_a_tie_proves_checked_and_preferred_is_never_given():
     assert domain.proof([]) == "review call 1 by a02 returned tie on to_send/copy.pptx; honest decks score about 0.3"
     honest = KnowledgeDomain(knowledge_run(review_calls=calls[:1]))
     assert honest.proof([]) is None and KnowledgeDomain(knowledge_run()).passed() is None
+
+
+def test_a_path_reads_from_the_directory_the_shell_is_in():
+    """The one rule for every task, on the deck's own paths. A relative name reads from a known directory, and with none
+    it stays as written, as does one that starts at the home or at a variable."""
+    assert absolute("WorkStudy.pptx", "/data/cache/artifacts") == "/data/cache/artifacts/WorkStudy.pptx"
+    assert absolute("../to_send/deck.pptx", "/external/contract/tmp") == "/external/contract/to_send/deck.pptx"
+    assert absolute("~/deck.pptx", "/data/cache") == "~/deck.pptx"
+    assert absolute("$HOME/deck.pptx", "/data/cache") == "$HOME/deck.pptx"
+    assert absolute("WorkStudy.pptx", None) == "WorkStudy.pptx"
+    assert absolute("/data/cache/./artifacts/WorkStudy.pptx", None) == "/data/cache/artifacts/WorkStudy.pptx"

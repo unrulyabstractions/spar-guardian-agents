@@ -274,9 +274,14 @@ def grep_call(stage: Stage) -> GrepCall | None:
     return GrepCall(patterns, paths, recursive, bool(flags & GREP_COUNTS[tool]))
 
 
-def absolute(path: str, directory: str) -> str:
-    """A path as read from a directory. One that starts at the home or at a variable stays as written."""
-    return path if path[:1] in ("~", "$") else posixpath.normpath(posixpath.join(directory, path))
+def absolute(path: str, directory: str | None) -> str:
+    """Where the shell finds a path: absolute when written so or when read from a known directory; as written when it
+    starts at the home or at a variable, which no cd moves, or when the directory is unknown."""
+    if path.startswith("/"):
+        return posixpath.normpath(path)
+    if path.startswith(("~", "$")) or not directory:
+        return path
+    return posixpath.normpath(posixpath.join(directory, path))
 
 
 def located(stage: Stage, directory: str) -> Stage:
