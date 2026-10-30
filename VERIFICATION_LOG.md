@@ -916,3 +916,8 @@
 - **Output:** the seven suites started together in worktree wt_gate3 at bf25cb8 (logs polish/gate3/). First pass 46 of 49: openmath 12 of 12, knowledge 5 of 5, interview 10 of 10, protein 4 of 4, SWE 7 of 8, creative 3 of 4, chess 5 of 6.
 - **How verified (by me):** three failures traced. Creative team: a teammate's `>> writing.md` got Permission denied, because the fixer's sticky /workspace trips fs.protected_regular; the sticky bit removed, the choice and its cost written in creative_sandbox.py's docstring and the deviation label renamed. SWE grading: the empty-diff record lacked required_passed. Chess roles: a stale assertion, since a run now records an unplayed game. Rerun together in 116 s: SWE grading PASS, creative 4 of 4, chess 6 of 6. `make lint` clean, `make test` passed.
 - **Result:** VERIFIED 49 of 49 scenarios. This gate is the first time the review's sandbox changes ran in Docker, and it caught one defect that would have failed every creative team run.
+
+## 2026-10-30 UTC — correction to the gate 3 entry
+- **Output:** the gate 3 entry above says `make test` passed. That was false when written: e38ab26 went in with one unit test failing (test_an_empty_diff_costs_no_test_run), because my command committed without checking the result, and e9da182 then went in with a lint error for the same reason. Both are corrected by the commit after e9da182.
+- **How verified (by me):** on that commit, each gate's exit code read before committing: `make lint` exit 0, `make test` exit 0 with 625 passed, 4 skipped.
+- **Result:** VERIFIED now. Commits from here on are gated on the exit codes of both.
