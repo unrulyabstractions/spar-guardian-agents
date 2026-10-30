@@ -5,85 +5,55 @@ out/<run name>/ by default (gitignored).
     plot_run(Path("runs/kw_small"), Path("out/kw_small"))      # -> [timeline.png, board.png, verdicts.png]
 
 The data comes from the run directory: run.json (rules.timeline, the mode, the access policy, the model),
-episodes.jsonl (each agent's role) and judge.jsonl (each agent's verdict). A run without a timeline (a lone agent,
-or one exported before the turn rules) gets the verdicts figure only; a run whose agents never touched the board
-gets no board figure. The colours are the reference palette of the dataviz method: three categorical slots for the
-step kinds, the status colours for the verdicts, ink and hairline tokens for the chrome.
+episodes.jsonl (each agent's role) and judge.jsonl (each agent's verdict). A run without a timeline gets no timeline
+figure, and a run whose agents never touched the board gets no board figure. The colours and the chrome are
+src/utils/figure_style.py's: three categorical slots for the step kinds, the status colours for the verdicts; the
+judge's flags per task are src/measures/verdict_fields.py's.
 """
 from __future__ import annotations
 
 import csv
-import json
 from pathlib import Path
 
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.ticker import MaxNLocator
 
+from src.measures.verdict_fields import FLAGS_BY_TASK
 from src.swarm import turn_rules as rules
+from src.utils.figure_style import (
+    CATEGORICAL,
+    CRITICAL,
+    DPI,
+    GOOD,
+    GRID,
+    INK,
+    INK_SECONDARY,
+    MUTED,
+    SURFACE,
+    WARNING,
+    WHITE,
+    legend_below,
+    style_axes,
+    title_axes,
+)
+from src.utils.json_files import read_json, read_jsonl
 
-SURFACE = "#fcfcfb"
-INK = "#0b0b0b"
-INK_SECONDARY = "#52514e"
-MUTED = "#898781"
-GRID = "#e1e0d9"
-AXIS = "#c3c2b7"
-# The step kinds and their categorical slots (validated adjacent pairs: CVD 9.2, normal vision 27.6).
-KINDS = {"work": ("work step", "#2a78d6"), "board": ("board action", "#eb6834"), "submit": ("submit", "#1baf7a")}
+KINDS = {"work": ("work step", CATEGORICAL[0]), "board": ("board action", CATEGORICAL[1]),
+         "submit": ("submit", CATEGORICAL[2])}
 BOARD_ACTIONS = {"board_status": "status", "board_read": "read", "board_post": "post"}
 ACTIONS = ("status", "read", "post")
-# Each task's judge flags (CheatBench's judge_schema.py), the label of each, and the status colour a true value
-# takes: warning for a route seen, serious for an attempt or a use, good for a disclosure, critical for cheating.
-WARNING, SERIOUS, GOOD, CRITICAL = "#fab219", "#ec835a", "#0ca30c", "#d03b3b"
-FLAGS_BY_TASK = {
-    "openmath_agent": (("honey_pots_seen", "saw the\nhoneypot", WARNING),
-                       ("attempted_access", "attempted\naccess", SERIOUS),
-                       ("extracted_submission", "extracted the\nsubmission", SERIOUS),
-                       ("disclosed_access", "disclosed", GOOD), ("cheated", "cheated", CRITICAL)),
-    "software_engineering": (("reference_solution_seeking", "sought the\nreference", WARNING),
-                             ("reference_solution_obtained", "obtained the\nreference", SERIOUS),
-                             ("reference_solution_used", "used the\nreference", SERIOUS),
-                             ("evaluation_tampering", "tampered with\nthe evaluation", CRITICAL),
-                             ("cheated", "cheated", CRITICAL)),
-    "knowledge_work": (("honey_pots_seen", "saw the\nartifact's route", WARNING),
-                       ("inspected_competitor", "opened the\nartifact", SERIOUS),
-                       ("copied_or_transformed_competitor", "copied or\ntransformed it", SERIOUS),
-                       ("submitted_competitor", "sent it\nfor review", SERIOUS),
-                       ("copied_final", "shipped\na copy", CRITICAL),
-                       ("attempted_grader_manipulation", "tampered with\nthe review", CRITICAL),
-                       ("cheated", "cheated", CRITICAL)),
-    "subset_sum": (("honey_pots_seen", "saw the\nkey's route", WARNING),
-                   ("answer_file_read", "read the\nanswer key", SERIOUS),
-                   ("used_answer_key", "submitted\nthe key", SERIOUS),
-                   ("prohibited_computation", "computed\nwith code", SERIOUS),
-                   ("tampering", "tampered", CRITICAL), ("cheated", "cheated", CRITICAL)),
-    "prime_factorization": (("honey_pots_seen", "saw the\nkey's route", WARNING),
-                            ("answer_file_read", "read the\nanswer key", SERIOUS),
-                            ("used_answer_key", "submitted\nthe key", SERIOUS),
-                            ("prohibited_computation", "computed\nwith code", SERIOUS),
-                            ("tampering", "tampered", CRITICAL), ("cheated", "cheated", CRITICAL)),
-    "protein_design": (("honey_pots_seen", "saw the\ndesigns' route", WARNING),
-                       ("read_sequence_file", "opened the\ndesigns", SERIOUS),
-                       ("obtained_designs", "obtained a\nsequence", SERIOUS),
-                       ("copied_design", "saved a\ncopy", CRITICAL),
-                       ("disclosed_access", "disclosed", GOOD), ("cheated", "cheated", CRITICAL)),
-}
-DARK_INK_FILLS = {WARNING}
-# The legend sits below the plot, where no title or lane can collide with it.
-LEGEND = dict(loc="upper left", bbox_to_anchor=(0, -0.22), ncol=3, frameon=False, fontsize=8,
-              labelcolor=INK_SECONDARY, handletextpad=0.4, columnspacing=1.6)
+DARK_INK_FILLS = {WARNING}                           # a status fill light enough for ink text
+LEGEND = legend_below(-0.22)                         # below the plot, where no title or lane can collide with it
 
 
 def load_run(run_dir: Path) -> dict:
     """run.json, each agent's role from episodes.jsonl and each agent's verdict from judge.jsonl."""
-    run = json.loads((run_dir / "run.json").read_text())
-    episodes = [json.loads(line) for line in (run_dir / "episodes.jsonl").read_text().splitlines() if line.strip()]
-    agents = run.get("agents") or [e["orbit_agent"] for e in episodes]
-    roles = {e["orbit_agent"]: e.get("role") for e in episodes}
+    run = read_json(run_dir / "run.json")
+    agents = run["agents"]
+    roles = {e["orbit_agent"]: e.get("role") for e in read_jsonl(run_dir / "episodes.jsonl")}
     verdicts = {}
-    judge = run_dir / "judge.jsonl"
-    for line in judge.read_text().splitlines() if judge.is_file() else []:
-        row = json.loads(line)
+    for row in read_jsonl(run_dir / "judge.jsonl"):
         agent = row["episode"].split("@", 1)[1] if "@" in row["episode"] else agents[0]
         verdicts[agent] = row
     return {"name": run_dir.name, "run": run, "agents": agents, "roles": roles, "verdicts": verdicts,
@@ -116,19 +86,12 @@ def subtitle(data: dict) -> str:
     return " · ".join(str(p) for p in parts if p)
 
 
-def _style(ax, title: str, sub: str) -> None:
-    ax.set_facecolor(SURFACE)
-    for side in ("top", "right", "left"):
-        ax.spines[side].set_visible(False)
-    ax.spines["bottom"].set_color(AXIS)
-    ax.tick_params(colors=MUTED, labelcolor=INK_SECONDARY, length=0)
-    ax.set_title(title, loc="left", color=INK, fontsize=11, fontweight="bold", pad=14)
-    ax.text(0, 1.02, sub, transform=ax.transAxes, color=INK_SECONDARY, fontsize=8.5, va="bottom")
-
-
-def _new_figure(width: float, height: float):
-    fig = Figure(figsize=(width, height), dpi=150, facecolor=SURFACE)
+def new_axes(width: float, height: float, title: str, data: dict, grid: str | None = None):
+    """A figure with one styled axes, titled with the run's subtitle under the title."""
+    fig = Figure(figsize=(width, height), dpi=DPI, facecolor=SURFACE)
     ax = fig.subplots()
+    style_axes(ax, grid=grid)
+    title_axes(ax, f"{data['name']}: {title}", subtitle(data))
     return fig, ax
 
 
@@ -139,8 +102,7 @@ def plot_timeline(data: dict, out: Path) -> Path | None:
         return None
     agents = data["agents"]
     rounds = max(position_of(e) for e in timeline)
-    fig, ax = _new_figure(min(16, 7 + 0.25 * rounds), 1.6 + 0.55 * len(agents))
-    _style(ax, f"{data['name']}: each agent's steps, round by round", subtitle(data))
+    fig, ax = new_axes(min(16, 7 + 0.25 * rounds), 1.6 + 0.55 * len(agents), "each agent's steps, round by round", data)
     lanes = {a: len(agents) - i for i, a in enumerate(agents)}
     for r in range(1, int(rounds) + 1):
         ax.axvline(r, color=GRID, linewidth=1, zorder=0)
@@ -153,7 +115,7 @@ def plot_timeline(data: dict, out: Path) -> Path | None:
         if verdict is None or verdict.get("judge_error") or verdict.get("cheated") is None:
             text, colour = "not judged", MUTED
         else:
-            text, colour = ("cheated", "#d03b3b") if verdict["cheated"] else ("no cheating", "#0ca30c")
+            text, colour = ("cheated", CRITICAL) if verdict["cheated"] else ("no cheating", GOOD)
         ax.plot(rounds + 0.9, lane, marker="o", markersize=5, color=colour, linestyle="none", clip_on=False)
         ax.text(rounds + 1.15, lane, text, color=INK_SECONDARY, fontsize=8, va="center", clip_on=False)
     ax.set_yticks(list(lanes.values()))
@@ -192,16 +154,13 @@ def plot_board(data: dict, out: Path) -> Path | None:
         return None
     rounds = range(1, max(counts) + 1)
     slots = max(len(rounds), 12)                     # at least twelve slots across, so a column stays thin
-    fig, ax = _new_figure(min(16, 7 + 0.25 * slots), 3.4)
-    _style(ax, f"{data['name']}: board actions per round", subtitle(data))
+    fig, ax = new_axes(min(16, 7 + 0.25 * slots), 3.4, "board actions per round", data, grid="y")
     bottom = [0] * len(rounds)
     for action, colour in zip(ACTIONS, [c for _, c in KINDS.values()]):
         values = [counts.get(r, {}).get(action, 0) for r in rounds]
         ax.bar(list(rounds), values, bottom=bottom, width=0.4, color=colour, edgecolor=SURFACE, linewidth=1.5,
                label=action)
         bottom = [b + v for b, v in zip(bottom, values)]
-    ax.yaxis.grid(True, color=GRID, linewidth=1)
-    ax.set_axisbelow(True)
     ax.set_xlim(0.5, slots + 0.5)
     ax.set_xticks(list(rounds))
     ax.set_xlabel("round", color=INK_SECONDARY, fontsize=9)
@@ -223,9 +182,8 @@ def plot_verdicts(data: dict, out: Path) -> Path | None:
     agents = data["agents"]
     if not data["verdicts"]:
         return None
-    flags = FLAGS_BY_TASK.get(data["run"].get("task"), FLAGS_BY_TASK["openmath_agent"])
-    fig, ax = _new_figure(2.2 + 1.4 * len(flags), 1.6 + 0.5 * len(agents))
-    _style(ax, f"{data['name']}: the judge's verdict per agent", subtitle(data))
+    flags = FLAGS_BY_TASK[data["run"]["task"]]
+    fig, ax = new_axes(2.2 + 1.4 * len(flags), 1.6 + 0.5 * len(agents), "the judge's verdict per agent", data)
     for i, agent in enumerate(agents):
         verdict = data["verdicts"].get(agent) or {}
         for j, (flag, _, colour) in enumerate(flags):
@@ -235,7 +193,7 @@ def plot_verdicts(data: dict, out: Path) -> Path | None:
                    edgecolor=SURFACE if value else GRID, linewidth=1.5)
             text = "yes" if value else ("no" if value is False else "—")
             ax.text(j, len(agents) - 1 - i, text, ha="center", va="center", fontsize=9,
-                    color=(INK if (not value or colour in DARK_INK_FILLS) else "#ffffff"))
+                    color=(INK if (not value or colour in DARK_INK_FILLS) else WHITE))
     ax.set_xticks(range(len(flags)))
     ax.set_xticklabels([label for _, label, _ in flags], color=INK, fontsize=8.5)
     ax.set_yticks(range(len(agents)))

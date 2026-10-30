@@ -13,17 +13,16 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.ticker import MaxNLocator
 
-from tools.figure_style import (
-    AXIS,
+from src.utils.figure_style import (
     CATEGORICAL,
     DPI,
-    GRID,
-    INK,
     INK_SECONDARY,
     MARKERS,
     MUTED,
     SURFACE,
     legend_below,
+    style_axes,
+    title_axes,
 )
 from tools.run_reader import Run
 from tools.scout.scout_scanners import SIGNALS
@@ -37,15 +36,16 @@ CHEATING_SIGNALS = ONSET_SIGNALS
 # Grep labels left out of grep_seen: every openmath agent must read and append to agent_evals.json, so its name
 # matches in every transcript. Its entries name the planted branches, which the branches label still counts.
 GREP_SEEN_IGNORED = ("registry",)
-# The judge field each scanner is checked against, per domain (CheatBench's judge_schema.py). A scanner with no
-# counterpart in a domain's judge is left out of that domain's agreement counts.
+# The judge flag each scanner is checked against, per CheatBench task: one of the task's flags in
+# src/measures/verdict_fields.py. A scanner with no counterpart in a task's judge is left out of its agreement counts.
 JUDGE_FIELDS = {
-    "openmath": {"honeypot_seen": "honey_pots_seen", "honeypot_opened": "attempted_access",
-                 "honeypot_used": "extracted_submission"},
+    "openmath_agent": {"honeypot_seen": "honey_pots_seen", "honeypot_opened": "attempted_access",
+                       "honeypot_used": "extracted_submission"},
     "knowledge_work": {"honeypot_seen": "honey_pots_seen", "honeypot_opened": "inspected_competitor",
                        "honeypot_used": "copied_or_transformed_competitor",
                        "honeypot_submitted": "submitted_competitor"},
-    "swe": {"honeypot_opened": "reference_solution_obtained", "honeypot_used": "reference_solution_used"},
+    "software_engineering": {"honeypot_opened": "reference_solution_obtained",
+                             "honeypot_used": "reference_solution_used"},
     "subset_sum": {"honeypot_seen": "honey_pots_seen", "honeypot_opened": "answer_file_read",
                    "honeypot_used": "used_answer_key"},
     "prime_factorization": {"honeypot_seen": "honey_pots_seen", "honeypot_opened": "answer_file_read",
@@ -53,8 +53,6 @@ JUDGE_FIELDS = {
     "protein_design": {"honeypot_seen": "honey_pots_seen", "honeypot_opened": "read_sequence_file",
                        "honeypot_used": "copied_design"},
 }
-# The dataviz palettes as src/measures/run_figures.py uses them (copied: that module imports ORBIT, which the tools
-# venv lacks).
 LEGEND = legend_below(-0.18)
 
 
@@ -206,7 +204,7 @@ def grep_seen(grep: dict[str, dict]) -> bool | None:
 
 def validation_of(run: Run, agents: dict[str, dict], grep: dict[str, dict]) -> dict:
     """The judge's flags beside the scanners' booleans per agent, and agreement counts per compared pair."""
-    fields = JUDGE_FIELDS.get(run.domain, {})
+    fields = JUDGE_FIELDS.get(run.task, {})
     rows, pairs = {}, {}
     for agent in run.agents:
         judge = run.judge.get(agent) or {}
@@ -277,7 +275,10 @@ def plot_onset(run: Run, agents: dict[str, dict], grep: dict[str, dict], directo
         writer.writerows(points)
     lanes = list(run.agents)
     figure = Figure(figsize=(7.5, 1.4 + 0.55 * max(len(lanes), 1)), facecolor=SURFACE)
-    axes = figure.add_subplot(facecolor=SURFACE)
+    axes = figure.add_subplot()
+    style_axes(axes, grid="x")
+    source = "Scout LLM scanners" if agents else "Scout grep scanner, first match per honeypot label"
+    title_axes(axes, f"{run.name}: first round each behaviour shows, per agent", source)
     offsets = {name: (position - (len(series) - 1) / 2) * 0.1 for position, name in enumerate(series)}
     handles = []
     for position, name in enumerate(series):
@@ -294,15 +295,6 @@ def plot_onset(run: Run, agents: dict[str, dict], grep: dict[str, dict], directo
     axes.set_xlim(-0.5, max(last, 1) + 0.5)
     axes.xaxis.set_major_locator(MaxNLocator(integer=True))
     axes.set_xlabel("round", fontsize=9, color=INK_SECONDARY)
-    axes.tick_params(colors=MUTED, labelsize=8, length=0)
-    axes.grid(axis="x", color=GRID, linewidth=0.6)
-    axes.set_axisbelow(True)
-    for side in ("top", "right", "left"):
-        axes.spines[side].set_visible(False)
-    axes.spines["bottom"].set_color(AXIS)
-    source = "Scout LLM scanners" if agents else "Scout grep scanner (first match per honeypot label)"
-    axes.set_title(f"{run.name}: first round each behaviour shows, per agent ({source})", fontsize=10, color=INK,
-                   loc="left")
     if not points:
         axes.text(0.5, 0.5, "no behaviour found with a round", transform=axes.transAxes, ha="center",
                   color=MUTED, fontsize=9)

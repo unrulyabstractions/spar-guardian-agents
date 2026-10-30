@@ -1,8 +1,7 @@
 """graph.png and its CSV twin graph.csv: agents on a ring (or a seeded spring layout), read and oversight arrows.
 
-The palette copies src/measures/run_figures.py (its module imports ORBIT, which the tools environment lacks): the
-surface and ink
-tokens, its three validated categorical slots for the roles, and the critical status colour for the cheated ring.
+The colours are src/utils/figure_style.py's: the role colours for the nodes (a worker white with a dark edge) and the
+critical status colour for the ring of an agent judged cheated.
 """
 from __future__ import annotations
 
@@ -15,10 +14,21 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch
 
-from tools.figure_style import CRITICAL, DPI, INK, INK_SECONDARY, MUTED, ROLE_COLOURS, SURFACE, legend_below
+from src.utils.figure_style import (
+    CRITICAL,
+    DPI,
+    INK_SECONDARY,
+    MUTED,
+    ROLE_EDGE,
+    ROLE_FILL,
+    ROLE_TEXT,
+    SURFACE,
+    WHITE,
+    legend_below,
+    title_axes,
+)
 from tools.graphs.graph_build import OVERSIGHT, READ
 
-OTHER_ROLE = MUTED
 NODE_SIZE = 900
 RING_SIZE = 1500
 LAYOUTS = ("circular", "spring")
@@ -47,8 +57,7 @@ def plot_graph(graph: nx.MultiDiGraph, agents: list[str], title: str, subtitle: 
     ax = fig.subplots()
     ax.set_facecolor(SURFACE)
     ax.set_axis_off()
-    ax.set_title(title, loc="left", color=INK, fontsize=11, fontweight="bold", pad=22)
-    ax.text(0, 1.015, subtitle, transform=ax.transAxes, color=INK_SECONDARY, fontsize=8.5, va="bottom")
+    title_axes(ax, title, subtitle)
     largest = max((data["weight"] for _, _, data in graph.edges(data=True) if data["kind"] == READ), default=1)
     rows = []
     for source, target, data in graph.edges(data=True):
@@ -71,16 +80,18 @@ def plot_graph(graph: nx.MultiDiGraph, agents: list[str], title: str, subtitle: 
         x, y = positions[node]
         if data["cheated"]:
             ax.scatter([x], [y], s=RING_SIZE, facecolor="none", edgecolor=CRITICAL, linewidth=3, zorder=3)
-        ax.scatter([x], [y], s=NODE_SIZE, color=ROLE_COLOURS.get(data["role"], OTHER_ROLE), edgecolor=SURFACE,
-                   linewidth=2, zorder=3)
-        ax.text(x, y, node, color=SURFACE, fontsize=8.5, fontweight="bold", ha="center", va="center", zorder=5)
+        role = data["role"]
+        ax.scatter([x], [y], s=NODE_SIZE, color=ROLE_FILL.get(role, MUTED), edgecolor=ROLE_EDGE.get(role, MUTED),
+                   linewidth=1.5, zorder=3)
+        ax.text(x, y, node, color=ROLE_TEXT.get(role, WHITE), fontsize=8.5, fontweight="bold", ha="center",
+                va="center", zorder=5)
         rows.append(["node", node, "", "", data["role"], data["cheated"], round(x, 4), round(y, 4), "", "", ""])
     ax.set_xlim(-1.45, 1.45)
     ax.set_ylim(-1.45, 1.45)
     ax.set_aspect("equal")
-    roles = [role for role in ROLE_COLOURS if any(graph.nodes[n]["role"] == role for n in agents)]
-    handles = [Line2D([], [], marker="o", color=ROLE_COLOURS[role], linestyle="none", markersize=9, label=role)
-               for role in roles]
+    roles = [role for role in ROLE_FILL if any(graph.nodes[n]["role"] == role for n in agents)]
+    handles = [Line2D([], [], marker="o", markerfacecolor=ROLE_FILL[role], markeredgecolor=ROLE_EDGE[role],
+                      markeredgewidth=1.5, linestyle="none", markersize=9, label=role) for role in roles]
     handles.append(Line2D([], [], marker="o", markerfacecolor="none", markeredgecolor=CRITICAL, markeredgewidth=2.5,
                           linestyle="none", markersize=11, label="judged cheated (ring)"))
     handles.append(Line2D([], [], color=INK_SECONDARY, linewidth=2, label="read: reader to author, width = posts"))

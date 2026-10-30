@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import csv
 import json
+import textwrap
 from pathlib import Path
 
 from matplotlib.figure import Figure
@@ -10,13 +11,11 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from matplotlib.ticker import MaxNLocator
 
-from tools.contagion.contagion_models import LABELS, Settings, fit
+from src.utils.figure_style import CATEGORICAL, DPI, GRID, INK, INK_SECONDARY, MUTED, SURFACE, style_axes, title_axes
+from tools.contagion.contagion_models import LABELS, MODEL_NAMES, Settings, fit
 from tools.contagion.contagion_observed import BEHAVIOURS, Board, adoption_curve
-from tools.figure_style import AXIS, CATEGORICAL, DPI, GRID, INK, INK_SECONDARY, MUTED, SURFACE
 
-# The palette of src/measures/run_figures.py (not importable here: it needs ORBIT), and its categorical slots for the
-# models.
-MODEL_COLOURS = dict(zip(("si", "threshold", "sir"), CATEGORICAL))
+MODEL_COLOURS = dict(zip(MODEL_NAMES, CATEGORICAL))
 TITLES = {"dishonest": "dishonest: cheating onset", "honest": "honest: intervention or disclosure"}
 
 
@@ -109,7 +108,9 @@ def plot(path: Path, board: Board, fits: dict[str, dict], models: tuple[str, ...
     fig = Figure(figsize=(11, 4.6), dpi=DPI, facecolor=SURFACE)
     axes = fig.subplots(1, 2, sharey=True)
     for ax, behaviour in zip(axes, BEHAVIOURS):
-        style_axes(ax, TITLES[behaviour])
+        style_axes(ax, grid="y")
+        title_axes(ax, TITLES[behaviour])
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
         ax.set_xlabel("round", color=INK_SECONDARY, fontsize=9)
         ax.step(rounds, curves[behaviour], where="post", color=INK, linewidth=1.8)
         ax.step(rounds, curves[f"{behaviour}_without_regulators"], where="post",
@@ -117,8 +118,9 @@ def plot(path: Path, board: Board, fits: dict[str, dict], models: tuple[str, ...
         result = fits[behaviour]
         if "skipped" in result:
             note = "no fit: " + "; ".join(result["skipped"])
-            ax.text(0.02, 0.97, wrap(note, 60), transform=ax.transAxes, va="top", ha="left", color=INK_SECONDARY,
-                    fontsize=8, bbox=dict(boxstyle="round,pad=0.4", facecolor=SURFACE, edgecolor=GRID))
+            ax.text(0.02, 0.97, textwrap.fill(note, 60), transform=ax.transAxes, va="top", ha="left",
+                    color=INK_SECONDARY, fontsize=8, bbox=dict(boxstyle="round,pad=0.4", facecolor=SURFACE,
+                                                               edgecolor=GRID))
             continue
         for model in models:
             fitted = result[model]
@@ -145,36 +147,11 @@ def plot(path: Path, board: Board, fits: dict[str, dict], models: tuple[str, ...
     fig.savefig(path, facecolor=SURFACE, dpi=DPI)
 
 
-def style_axes(ax, title: str) -> None:
-    """The chrome of src/measures/run_figures.py: surface, no top or right spine, muted ticks, a grid on y."""
-    ax.set_facecolor(SURFACE)
-    for side in ("top", "right", "left"):
-        ax.spines[side].set_visible(False)
-    ax.spines["bottom"].set_color(AXIS)
-    ax.tick_params(colors=MUTED, labelcolor=INK_SECONDARY, length=0)
-    ax.yaxis.grid(True, color=GRID, linewidth=1)
-    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-    ax.set_axisbelow(True)
-    ax.set_title(title, loc="left", color=INK, fontsize=10, pad=8)
-
-
 def subtitle(board: Board) -> str:
     """The figure's second line: size, graph, and where the onsets came from."""
     regulators = sum(1 for role in board.roles.values() if role == "regulator")
     return (f"{len(board.agents)} agents ({regulators} regulators), {board.rounds} rounds, "
             f"graph: {board.graph_source}, onsets: {board.onset_source}")
-
-
-def wrap(text: str, width: int) -> str:
-    """The text broken into lines of at most width characters at spaces."""
-    lines, line = [], ""
-    for word in text.split():
-        if line and len(line) + 1 + len(word) > width:
-            lines.append(line)
-            line = word
-        else:
-            line = f"{line} {word}".strip()
-    return "\n".join([*lines, line])
 
 
 def summary_payload(board: Board, fits: dict[str, dict], settings: Settings, files: list[str]) -> dict:

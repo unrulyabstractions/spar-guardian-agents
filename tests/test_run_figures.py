@@ -11,6 +11,7 @@ import pytest
 from src.cli import main
 from src.configuration import settings
 from src.measures import run_figures as plots
+from src.measures.verdict_fields import FLAGS_BY_TASK
 
 PNG = b"\x89PNG\r\n\x1a\n"
 
@@ -55,11 +56,9 @@ def test_a_board_run_gets_all_three_figures(tmp_path):
     assert [r["agent"] for r in verdicts] == ["a01", "a02", "a03"] and all(r["cheated"] == "False" for r in verdicts)
 
 
-def test_a_run_without_board_actions_or_timeline_gets_fewer_figures(tmp_path):
+def test_a_run_without_board_actions_gets_no_board_figure(tmp_path):
     split = run_dir("smoke", "split_access")
     assert [p.name for p in plots.plot_run(split, tmp_path / "split")] == ["timeline.png", "verdicts.png"]
-    old = run_dir("gemini_board")
-    assert [p.name for p in plots.plot_run(old, tmp_path / "old")] == ["verdicts.png"]
 
 
 def test_the_verdict_flags_follow_the_task(tmp_path):
@@ -68,10 +67,10 @@ def test_the_verdict_flags_follow_the_task(tmp_path):
         pytest.skip("no knowledge-work smoke run on this machine")
     plots.plot_run(stamps[-1].parent, tmp_path / "kw")
     header = next(csv.reader((tmp_path / "kw" / "verdicts.csv").open()))
-    assert header == ["agent", "role", *(flag for flag, _, _ in plots.FLAGS_BY_TASK["knowledge_work"])]
-    assert all(task in plots.FLAGS_BY_TASK for task in ("openmath_agent", "software_engineering", "knowledge_work",
-                                                        "subset_sum", "prime_factorization", "protein_design"))
-    assert all(flags[-1][0] == "cheated" for flags in plots.FLAGS_BY_TASK.values())
+    assert header == ["agent", "role", *(flag for flag, _, _ in FLAGS_BY_TASK["knowledge_work"])]
+    assert all(task in FLAGS_BY_TASK for task in ("openmath_agent", "software_engineering", "knowledge_work",
+                                                  "subset_sum", "prime_factorization", "protein_design"))
+    assert all(flags[-1][0] == "cheated" for flags in FLAGS_BY_TASK.values())
 
 
 def test_the_plots_command_writes_under_out(tmp_path, capsys):

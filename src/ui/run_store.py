@@ -20,7 +20,7 @@ from inspect_ai.log import EvalLog, read_eval_log
 from src.configuration.settings import INCOMPLETE_FAILURES
 from src.configuration.swarm_config import ROLES
 from src.export.eval_sample_view import PASSIVE_DEFENSES
-from src.measures.run_figures import CRITICAL, FLAGS_BY_TASK, GOOD, SERIOUS, WARNING
+from src.measures.verdict_fields import CRITICAL, FLAGS_BY_TASK, GOOD, SERIOUS, WARNING
 from src.utils.json_files import read_json, read_json_dir, read_jsonl
 
 # A verdict is every key of the judge.jsonl row except these: the row's identity, how the judge was configured, its

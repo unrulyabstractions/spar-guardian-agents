@@ -1,41 +1,37 @@
-"""The six design figures of the paper, as 200-dpi PNG under tmp/design/ (gitignored).
+"""The seven design figures of the paper, as 200-dpi PNG under tmp/design/ (gitignored): the topologies, the round
+structure, the context ledger, the engagement funnel, the read graph, the access split and what each role is told.
 
-    uv run python scripts/paper/figures.py
+    uv run python -m scripts.paper.figures
 
 No network, no model calls.
 """
+from __future__ import annotations
 
 import math
-import sys
-from pathlib import Path
 
-import matplotlib
+import matplotlib.pyplot as plt
+from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch, Polygon, Rectangle
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch, Polygon, Rectangle  # noqa: E402
+from src.configuration import access_policy
+from src.configuration.settings import ROOT
+from src.utils.figure_style import (
+    AXIS,
+    GREY_RAMP,
+    GRID,
+    INK,
+    INK_SECONDARY,
+    MUTED,
+    PLANE,
+    PRINT_DPI,
+    ROLE_EDGE,
+    ROLE_FILL,
+    ROLE_TEXT,
+    SURFACE,
+    TOOL,
+    WHITE,
+)
 
-ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "tmp" / "design"
-sys.path.insert(0, str(ROOT))
-
-from src.configuration import access_policy as access_policy  # noqa: E402
-
-# Palette: reference dataviz palette, light mode. Roles take the first two categorical slots;
-# workers are neutral (white fill, ink ring). Structures are neutral greys.
-INK = "#0b0b0b"
-INK2 = "#52514e"
-MUTED = "#898781"
-GRID = "#e1e0d9"
-BASE = "#c3c2b7"
-SURF = "#fcfcfb"
-PLANE = "#f0efec"
-TOOL = "#e6e5df"
-REG = "#2a78d6"
-DIS = "#eb6834"
-ROLE_FILL = {"worker": "#ffffff", "regulator": REG, "disregulator": DIS}
-ROLE_EDGE = {"worker": INK2, "regulator": REG, "disregulator": DIS}
-ROLE_TEXT = {"worker": INK, "regulator": "#ffffff", "disregulator": "#ffffff"}
 DASH = (0, (2, 1.5))
 DOT = (0, (1, 1.6))
 
@@ -43,15 +39,16 @@ CM = 1 / 2.54
 FULL = 17 * CM
 HALF = 8.5 * CM
 
+plt.switch_backend("Agg")
 plt.rcParams.update(
     {
         "font.family": "Arial",
         "font.size": 8,
         "pdf.fonttype": 42,
         "ps.fonttype": 42,
-        "figure.facecolor": SURF,
-        "axes.facecolor": SURF,
-        "savefig.facecolor": SURF,
+        "figure.facecolor": SURFACE,
+        "axes.facecolor": SURFACE,
+        "savefig.facecolor": SURFACE,
         "text.color": INK,
         "hatch.linewidth": 0.6,
     }
@@ -62,7 +59,7 @@ ROLES5 = {"a01": "worker", "a02": "regulator", "a03": "worker", "a04": "disregul
 
 def save(fig, name):
     OUT.mkdir(parents=True, exist_ok=True)
-    fig.savefig(OUT / f"{name}.png", dpi=200)
+    fig.savefig(OUT / f"{name}.png", dpi=PRINT_DPI)
     plt.close(fig)
 
 
@@ -78,7 +75,7 @@ def agent(ax, x, y, name, role="worker", r=0.36, fs=6.5, z=5):
     ax.text(x, y, name, ha="center", va="center", fontsize=fs, color=ROLE_TEXT[role], zorder=z + 1)
 
 
-def box(ax, x, y, w, h, text=None, fc="#ffffff", ec=INK2, lw=0.8, ls="-", hatch=None, fs=7,
+def box(ax, x, y, w, h, text=None, fc=WHITE, ec=INK_SECONDARY, lw=0.8, ls="-", hatch=None, fs=7,
         color=INK, pad=0.04, z=3, weight="normal"):
     """Rounded box with lower-left corner (x, y)."""
     p = FancyBboxPatch((x + pad, y + pad), w - 2 * pad, h - 2 * pad,
@@ -91,7 +88,7 @@ def box(ax, x, y, w, h, text=None, fc="#ffffff", ec=INK2, lw=0.8, ls="-", hatch=
     return p
 
 
-def arrow(ax, a, b, color=INK2, lw=0.8, ls="-", rad=0.0, sa=0, sb=0, z=2, head=6):
+def arrow(ax, a, b, color=INK_SECONDARY, lw=0.8, ls="-", rad=0.0, sa=0, sb=0, z=2, head=6):
     ax.add_patch(FancyArrowPatch(a, b, arrowstyle=f"-|>,head_length={head * 0.06},head_width={head * 0.035}",
                                  connectionstyle=f"arc3,rad={rad}", color=color, lw=lw, ls=ls,
                                  shrinkA=sa, shrinkB=sb, zorder=z, mutation_scale=10))
@@ -129,16 +126,16 @@ def role_legend(fig, y, extra=(), compact=False):
     x = 50 - sum(widths) / 2
     for (role, label), w in zip(items, widths):
         ax.scatter([x], [0], s=36, c=ROLE_FILL[role], edgecolors=ROLE_EDGE[role], linewidths=1.0, zorder=3)
-        ax.text(x + 1.4 * k, 0, label, va="center", fontsize=7.5, color=INK2)
+        ax.text(x + 1.4 * k, 0, label, va="center", fontsize=7.5, color=INK_SECONDARY)
         x += w
     for (draw, label), w in zip(extra, widths[len(items):]):
         draw(ax, x, 0)
-        ax.text(x + 1.4 * k, 0, label, va="center", fontsize=7.5, color=INK2)
+        ax.text(x + 1.4 * k, 0, label, va="center", fontsize=7.5, color=INK_SECONDARY)
         x += w
     return ax
 
 
-# ---------------------------------------------------------------- figure 1: topologies
+# ---------------------------------------------------------------- the topologies
 def fig_topology_compare():
     fig = plt.figure(figsize=(FULL, 2.85))
     names = list(ROLES5)
@@ -150,13 +147,13 @@ def fig_topology_compare():
         ax.text(0, 3.0, title, ha="center", va="bottom", fontsize=8.5, weight="bold")
         cw, ch = (1.7, 0.8) if i == 0 else (2.1, 1.15)
         if i == 0:
-            box(ax, -cw / 2, -ch / 2, cw, ch, "board", fc=PLANE, ec=INK2, fs=7.5)
+            box(ax, -cw / 2, -ch / 2, cw, ch, "board", fc=PLANE, ec=INK_SECONDARY, fs=7.5)
         else:
-            box(ax, -cw / 2, -ch / 2, cw, ch, None, fc=PLANE, ec=INK2)
+            box(ax, -cw / 2, -ch / 2, cw, ch, None, fc=PLANE, ec=INK_SECONDARY)
             ax.text(0, ch / 2 - 0.25, "shared cache/", fontsize=6.5, ha="center", va="center", zorder=5)
             for k in range(3):
                 yy = ch / 2 - 0.55 - 0.2 * k
-                ax.plot([-cw / 2 + 0.25, -cw / 2 + 0.25 + (1.1 - 0.25 * k)], [yy, yy], color=BASE, lw=2.0,
+                ax.plot([-cw / 2 + 0.25, -cw / 2 + 0.25 + (1.1 - 0.25 * k)], [yy, yy], color=AXIS, lw=2.0,
                         solid_capstyle="round", zorder=5)
         for (x, y), n in zip(pos, names):
             agent(ax, x, y, n, ROLES5[n] if i == 0 else "worker")
@@ -166,22 +163,25 @@ def fig_topology_compare():
             else:
                 ax.add_patch(FancyArrowPatch(toward(x, y, 0, 0, 0.42), edge_point(0, 0, cw, ch, x, y),
                                              arrowstyle="<|-|>,head_length=0.36,head_width=0.21",
-                                             color=INK2, lw=0.8, mutation_scale=10, zorder=2))
+                                             color=INK_SECONDARY, lw=0.8, mutation_scale=10, zorder=2))
         kx, ky = -2.9, -3.2
         if i == 0:
             arrow(ax, (kx, ky), (kx + 0.7, ky))
-            ax.text(kx + 0.85, ky, "board_status / board_read / board_post", va="center", fontsize=7.5, color=INK2)
+            ax.text(kx + 0.85, ky, "board_status / board_read / board_post", va="center", fontsize=7.5,
+                    color=INK_SECONDARY)
             arrow(ax, (kx, ky - 0.55), (kx + 0.7, ky - 0.55), ls=DOT, color=MUTED)
-            ax.text(kx + 0.85, ky - 0.55, "notice: new posts per sender", va="center", fontsize=7.5, color=INK2)
+            ax.text(kx + 0.85, ky - 0.55, "notice: new posts per sender", va="center", fontsize=7.5,
+                    color=INK_SECONDARY)
         else:
             ax.annotate("", xy=(kx + 0.7, ky), xytext=(kx, ky),
-                        arrowprops=dict(arrowstyle="<|-|>,head_length=0.36,head_width=0.21", color=INK2, lw=0.8))
-            ax.text(kx + 0.85, ky, "list / read file / write file", va="center", fontsize=7.5, color=INK2)
+                        arrowprops=dict(arrowstyle="<|-|>,head_length=0.36,head_width=0.21", color=INK_SECONDARY,
+                                        lw=0.8))
+            ax.text(kx + 0.85, ky, "list / read file / write file", va="center", fontsize=7.5, color=INK_SECONDARY)
     role_legend(fig, 0.05)
     save(fig, "topology_compare")
 
 
-# ---------------------------------------------------------------- figure 2: round structure
+# ---------------------------------------------------------------- the round structure
 def fig_round_structure():
     """One round, its follow-up steps and the next round, step by step per agent."""
     fig = plt.figure(figsize=(FULL, 2.3))
@@ -212,19 +212,19 @@ def fig_round_structure():
                 continue
             step(ax, a, x, y - lane_h / 2 + 0.04, w, lane_h - 0.08)
     ax.add_patch(Rectangle((13.6, top - 4 * lane_h - lane_h / 2 + 0.04), 2.2, 5 * lane_h - 0.08, fc="none",
-                           ec=BASE, hatch="////", lw=0, zorder=1))
-    ax.text(14.7, top - 2 * lane_h, "run over", ha="center", va="center", fontsize=7, color=INK2, zorder=4,
-            bbox=dict(fc=SURF, ec="none", pad=1.5))
+                           ec=AXIS, hatch="////", lw=0, zorder=1))
+    ax.text(14.7, top - 2 * lane_h, "run over", ha="center", va="center", fontsize=7, color=INK_SECONDARY, zorder=4,
+            bbox=dict(fc=SURFACE, ec="none", pad=1.5))
     # a round is each agent's step and, for an agent whose step ended with a board action, its free follow-up steps
     hy = top + lane_h / 2 + 0.12
     for label, x0, x1 in (("round r", 1.2, 9.55), ("round r + 1", 9.85, 13.45)):
         ax.text((x0 + x1) / 2, hy + 0.28, label, ha="center", va="bottom", fontsize=8, weight="bold")
-        ax.plot([x0, x0, x1, x1], [hy + 0.02, hy + 0.2, hy + 0.2, hy + 0.02], color=INK2, lw=0.7)
+        ax.plot([x0, x0, x1, x1], [hy + 0.02, hy + 0.2, hy + 0.2, hy + 0.02], color=INK_SECONDARY, lw=0.7)
     by = top - 4 * lane_h - lane_h / 2 - 0.15
     ky, kx = by - 0.35, 1.2
     for a, label in [("work", "charged step"), ("read", "free step")]:
         step(ax, a, kx, ky - 0.2, 0.8, 0.4, text=False)
-        ax.text(kx + 0.95, ky, label, va="center", fontsize=7, color=INK2)
+        ax.text(kx + 0.95, ky, label, va="center", fontsize=7, color=INK_SECONDARY)
         kx += 0.95 + len(label) * 0.128 + 0.45
     arrow(ax, (1.2, 0.8), (15.8, 0.8), color=MUTED, lw=0.7)
     ax.text(15.8, 0.95, "time", ha="right", va="bottom", fontsize=7, color=MUTED)
@@ -239,14 +239,14 @@ def step(ax, a, x, y, w, h, text=True):
     if a in BOARD_ACTIONS:
         style = dict(fc=PLANE, ec=MUTED, ls=DASH, color=INK)
     elif a == "team_submit":
-        style = dict(fc="#ffffff", ec=INK2, ls="-", color=INK)
+        style = dict(fc=WHITE, ec=INK_SECONDARY, ls="-", color=INK)
     else:
-        style = dict(fc=TOOL, ec=INK2, ls="-", color=INK2)
+        style = dict(fc=TOOL, ec=INK_SECONDARY, ls="-", color=INK_SECONDARY)
     box(ax, x, y, w, h, a if text else None, fc=style["fc"], ec=style["ec"], ls=style["ls"], fs=6.5,
         color=style["color"], weight="bold" if a == "team_submit" else "normal")
 
 
-# ---------------------------------------------------------------- figure 3: context ledger
+# ---------------------------------------------------------------- the context ledger
 def fig_context_ledger():
     fig = plt.figure(figsize=(FULL, 4.25 * CM))
     ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
@@ -267,11 +267,12 @@ def fig_context_ledger():
     kx = 1.0
     for kind, label in keys:
         item(ax, kind, kx + 0.35, -0.35, 0.7, None)
-        ax.text(kx + 0.85, -0.35, label, va="center", fontsize=7, color=INK2)
+        ax.text(kx + 0.85, -0.35, label, va="center", fontsize=7, color=INK_SECONDARY)
         kx += 0.85 + len(label) * 0.118 + 0.6
     x0, cw = 1.0, 5.3
     for r in (1, 2, 3):
-        ax.text(x0 + (r - 1) * cw + cw / 2, 2.82, f"round {r}", ha="center", va="center", fontsize=7.5, color=INK2)
+        ax.text(x0 + (r - 1) * cw + cw / 2, 2.82, f"round {r}", ha="center", va="center", fontsize=7.5,
+                color=INK_SECONDARY)
     for j, n in enumerate(names):
         y = 2.25 - j * 0.85
         agent(ax, 0.5, y, n, "worker", r=0.27, fs=6)
@@ -292,15 +293,15 @@ def fig_context_ledger():
 
 def item(ax, kind, cx, cy, w, text):
     """One context entry of the ledger, centred at (cx, cy)."""
-    style = {"notice": dict(fc="#ffffff", ec=MUTED, ls=DASH, color=INK2),
-             "tool": dict(fc=TOOL, ec=INK2, ls="-", color=INK),
-             "post": dict(fc="#ffffff", ec=INK2, ls="-", color=INK)}[kind]
+    style = {"notice": dict(fc=WHITE, ec=MUTED, ls=DASH, color=INK_SECONDARY),
+             "tool": dict(fc=TOOL, ec=INK_SECONDARY, ls="-", color=INK),
+             "post": dict(fc=WHITE, ec=INK_SECONDARY, ls="-", color=INK)}[kind]
     h = 0.48 if text else 0.34
     box(ax, cx - w / 2, cy - h / 2, w, h, text, fc=style["fc"], ec=style["ec"], ls=style["ls"], color=style["color"],
         fs=6.6, pad=0.02)
 
 
-# ---------------------------------------------------------------- figure 4: engagement funnel
+# ---------------------------------------------------------------- the engagement funnel
 def fig_engagement_funnel():
     """The board engagement stages (src/measures/board_engagement.py) and the tool each one takes."""
     fig = plt.figure(figsize=(FULL, 1.45))
@@ -311,20 +312,21 @@ def fig_engagement_funnel():
     ax.text(0.15, 3.3, "Board engagement funnel", fontsize=8.5, weight="bold", va="center")
     stages = [("on the board", "has the board tools"), ("looked", "board_status\nor board_read"),
               ("read", "board_read"), ("posted", "board_post"), ("submitted", "team_submit")]
-    fills = ["#efeee9", "#e1e0d9", "#d4d3cc", "#c7c6be", "#b9b8b0"]
     sw, gap, y0, h, tip = 3.26, 0.1, 0.3, 2.4, 0.45
     for i, (name, tool) in enumerate(stages):
         x = 0.15 + i * (sw + gap)
         pts = [(x, y0), (x + sw - tip, y0), (x + sw, y0 + h / 2), (x + sw - tip, y0 + h), (x, y0 + h)]
         if i > 0:
             pts.append((x + tip, y0 + h / 2))
-        ax.add_patch(Polygon(pts, closed=True, fc=fills[i], ec="none", zorder=2))
+        ax.add_patch(Polygon(pts, closed=True, fc=GREY_RAMP[i], ec="none", zorder=2))
         tx = x + sw / 2 + (0.12 if i else -0.12)
         ax.text(tx, y0 + h / 2 + 0.45, name, ha="center", va="center", fontsize=8, weight="bold")
-        ax.text(tx, y0 + h / 2 - 0.45, tool, ha="center", va="center", fontsize=6.5, color=INK2, linespacing=1.2)
+        ax.text(tx, y0 + h / 2 - 0.45, tool, ha="center", va="center", fontsize=6.5, color=INK_SECONDARY,
+                linespacing=1.2)
     save(fig, "engagement_funnel")
 
 
+# ---------------------------------------------------------------- the read graph
 def fig_read_graph():
     """Who read whose posts, as a graph: reader to sender, width by reads. Illustrative values."""
     fig = plt.figure(figsize=(HALF, 2.4))
@@ -336,13 +338,13 @@ def fig_read_graph():
     for (reader, sender), count in reads.items():
         (x1, y1), (x2, y2) = pos[reader], pos[sender]
         arrow(gx, toward(x1, y1, x2, y2, 0.36), toward(x2, y2, x1, y1, 0.42), lw=0.6 + 0.65 * count, rad=0.18,
-              color=INK2, head=4 + count)
+              color=INK_SECONDARY, head=4 + count)
     for name, (x, y) in pos.items():
         agent(gx, x, y, name, ROLES5[name], r=0.32, fs=6)
     save(fig, "read_graph")
 
 
-# ---------------------------------------------------------------- figure 5: access
+# ---------------------------------------------------------------- the access split
 def fig_access():
     """access=split: the exploit cut into one piece per worker, each in its own box; the regulator and the
     disregulator outside with nothing and without team_submit; everyone on the board, the workers' pieces into the
@@ -351,7 +353,7 @@ def fig_access():
     ax = fig.add_axes([0.02, 0.17, 0.96, 0.82])
     blank(ax, (-3.1, 3.1), (-2.9, 2.75))
     bw, bh, by = 1.6, 0.6, 2.3
-    box(ax, -bw / 2, by - bh / 2, bw, bh, "board", fc=PLANE, ec=INK2, fs=7.5)
+    box(ax, -bw / 2, by - bh / 2, bw, bh, "board", fc=PLANE, ec=INK_SECONDARY, fs=7.5)
     # the pieces as the code deals them: round robin over the neutral agents, nothing for a role
     names = list(ROLES5)
     held = access_policy.plan("split", names, ROLES5, lambda n: [f"piece {k}" for k in range(1, n + 1)], ["whole"])
@@ -362,10 +364,10 @@ def fig_access():
     y = 0.15
     for a in workers:
         x = xs[a]
-        box(ax, x - 0.55, y - 0.65, 1.1, 1.45, None, fc="#ffffff", ec=INK2, z=1)
+        box(ax, x - 0.55, y - 0.65, 1.1, 1.45, None, fc=WHITE, ec=INK_SECONDARY, z=1)
         ax.text(x, y + 0.55, held[a][0], ha="center", va="center", fontsize=6.8)
         agent(ax, x, y - 0.1, a, ROLES5[a], r=0.34, fs=6)
-        ax.scatter([x + 0.3], [y + 0.2], marker="D", s=14, c=INK, zorder=9, edgecolors=SURF, linewidths=0.6)
+        ax.scatter([x + 0.3], [y + 0.2], marker="D", s=14, c=INK, zorder=9, edgecolors=SURFACE, linewidths=0.6)
         arrow(ax, (x, y + 0.8), edge_point(0, by, bw, bh, x, y + 0.8), lw=0.7, color=MUTED, head=4)
         arrow(ax, (x, y - 0.65), (x * 0.35, -1.75), lw=0.7, color=MUTED, head=4)
     for a in roles:
@@ -373,7 +375,7 @@ def fig_access():
         x, ry = xs[a], y + 0.75
         agent(ax, x, ry, a, ROLES5[a], r=0.34, fs=6)
         arrow(ax, toward(x, ry, 0, by, 0.4), edge_point(0, by, bw, bh, x, ry), lw=0.7, color=MUTED, head=4)
-    box(ax, -1.3, -2.45, 2.6, 0.65, "submitted work", fc=PLANE, ec=INK2, fs=7)
+    box(ax, -1.3, -2.45, 2.6, 0.65, "submitted work", fc=PLANE, ec=INK_SECONDARY, fs=7)
 
     def dmark(ax, x, y):
         ax.scatter([x], [y], marker="D", s=16, c=INK, zorder=3)
@@ -382,7 +384,7 @@ def fig_access():
     save(fig, "access")
 
 
-# ---------------------------------------------------------------- figure 6: information
+# ---------------------------------------------------------------- what each role is told
 def fig_information():
     fig = plt.figure(figsize=(FULL, 1.75))
     ax = fig.add_axes([0, 0, 1, 1])
@@ -401,7 +403,7 @@ def fig_information():
     }
     x0, cw, top, rh = 3.0, 2.7, 2.55, 0.72
     for j, c in enumerate(cols):
-        ax.text(x0 + j * cw + cw / 2, top + 0.5, c, ha="center", va="bottom", fontsize=7, color=INK2,
+        ax.text(x0 + j * cw + cw / 2, top + 0.5, c, ha="center", va="bottom", fontsize=7, color=INK_SECONDARY,
                 linespacing=1.05)
     for i, r in enumerate(rows):
         y = top - i * rh
@@ -412,7 +414,7 @@ def fig_information():
     ky = top - 2 * rh - 0.65
     for kx, v, label in [(0.4, "Y", "yes"), (2.0, "F", "only with mention_board on"), (5.6, "P", "a part only")]:
         glyph(ax, v, kx + 0.13, ky, 0.26)
-        ax.text(kx + 0.4, ky, label, va="center", fontsize=6.8, color=INK2)
+        ax.text(kx + 0.4, ky, label, va="center", fontsize=6.8, color=INK_SECONDARY)
     save(fig, "information")
 
 
@@ -420,20 +422,25 @@ def glyph(ax, v, cx, cy, s):
     """Y a filled square, F an outlined square, P a half-filled square, N a dash."""
     style = "round,pad=0,rounding_size=0.05"
     if v == "N":
-        ax.plot([cx - 0.09, cx + 0.09], [cy, cy], color=BASE, lw=1.0)
+        ax.plot([cx - 0.09, cx + 0.09], [cy, cy], color=AXIS, lw=1.0)
         return
     if v == "P":
-        ax.add_patch(Rectangle((cx - s / 2, cy - s / 2), s / 2, s, fc=INK2, ec="none", zorder=3))
-    ax.add_patch(FancyBboxPatch((cx - s / 2, cy - s / 2), s, s, boxstyle=style, fc=INK2 if v == "Y" else "none",
-                                ec=INK2, lw=1.0, zorder=3))
+        ax.add_patch(Rectangle((cx - s / 2, cy - s / 2), s / 2, s, fc=INK_SECONDARY, ec="none", zorder=3))
+    ax.add_patch(FancyBboxPatch((cx - s / 2, cy - s / 2), s, s, boxstyle=style,
+                                fc=INK_SECONDARY if v == "Y" else "none", ec=INK_SECONDARY, lw=1.0, zorder=3))
+
+
+FIGURES = (fig_topology_compare, fig_round_structure, fig_context_ledger, fig_engagement_funnel, fig_read_graph,
+           fig_access, fig_information)
+
+
+def main() -> int:
+    """Draw every figure and print the paths written."""
+    for draw in FIGURES:
+        draw()
+    print("\n".join(str(p) for p in sorted(OUT.glob("*.png"))))
+    return 0
 
 
 if __name__ == "__main__":
-    fig_topology_compare()
-    fig_round_structure()
-    fig_context_ledger()
-    fig_engagement_funnel()
-    fig_read_graph()
-    fig_access()
-    fig_information()
-    print("\n".join(str(p) for p in sorted(OUT.glob("*.png"))))
+    raise SystemExit(main())

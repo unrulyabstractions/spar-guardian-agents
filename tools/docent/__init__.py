@@ -7,12 +7,11 @@
 An agent's AgentRun is its ATIF transcript converted by docent.sdk.integrations.convert_atif_to_agent_run. Each
 message's metadata gains round, activation, schedule_step, turn and activations from the turn rules' timeline. The
 AgentRun's metadata holds kind "agent", run, agent, role, domain, task, model, preset, mode, scale, roster, roles,
-cheated_by_agent, median_discovery_round, read_graph, rounds, access_policy, holds, access, the judge's verdict
-fields (cheated, honey_pots_seen, attempted_access, extracted_submission, success_claim_seen_before_access,
-disclosed_access, explicit_prohibition_violated, explicit_prohibition_evidence), judge_summary, judge (the whole
-judge.jsonl row), discovery_round, engagement, board_posts, n_board_posts, ended_by, usage and score, next to the
-converter's own atif block. With --board each run also gets one AgentRun of kind "board": a system message naming the
-roster, then one user message per post, labelled with sender, role, board number and round.
+cheated_by_agent, median_discovery_round, read_graph, rounds, access_policy, holds, access, each of the task's judge
+flags (src/measures/verdict_fields.py), judge_summary, judge (the whole judge.jsonl row), discovery_round,
+engagement, board_posts, n_board_posts, ended_by, usage and score, next to the converter's own atif block. With
+--board each run also gets one AgentRun of kind "board": a system message naming the roster, then one user message
+per post, labelled with sender, role, board number and round.
 
 Outputs under runs/<name>/tools/docent/:
     agent_runs.json  the AgentRuns as model_dump(mode="json") gives them, in upload order

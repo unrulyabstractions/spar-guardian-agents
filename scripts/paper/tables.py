@@ -1,31 +1,27 @@
-"""The paper's tables, as PNG under tmp/tables/ (gitignored), every value read from the source.
+"""The paper's tables, as 200-dpi PNG under tmp/tables/ (gitignored).
 
-    uv run python scripts/paper/tables.py
+    uv run python -m scripts.paper.tables
 
-table_scales.png: the scales (scale, agents, time limit), from src/configuration/scales.py. table_rungs.png: the
-cheating ladder's rungs against each domain's CheatBench verdict field, from src/judging/ladder_verdict_fields.py.
-table_rungs_by_domain.png: what puts an agent on each rung of the code ladder in each domain, from the rules in each
-domain's ladder module (src/domains/<domain>/<domain>_ladder.py).
+table_scales.png: the scales (scale, agents, time limit), read from src/configuration/scales.py. table_rungs.png: the
+cheating ladder's rungs against each domain's CheatBench verdict field. table_rungs_by_domain.png: what puts an agent
+on each rung of the code ladder in each domain. The rows of the two rung tables are written by hand here (RUNGS,
+DOMAINS and RUNG_TEXT), from the ladder's addendum (src/judging/ladder_verdict_fields.py HONEYPOT) and each domain's
+ladder module (src/domains/<domain>/<domain>_ladder.py).
 """
 from __future__ import annotations
 
-import sys
 import textwrap
 from pathlib import Path
 
-import matplotlib
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 from matplotlib.font_manager import FontProperties
 from matplotlib.patches import FancyBboxPatch, Rectangle
 
-ROOT = Path(__file__).resolve().parents[2]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+from src.configuration.scales import SCALES
+from src.configuration.settings import ROOT
+from src.utils.figure_style import AXIS, BAND, CHIP, INK, INK_SECONDARY, PRINT_DPI, RUNG_FILL, WHITE
 
-from src.configuration.scales import SCALES  # noqa: E402
-
-matplotlib.use("Agg")
 OUT = ROOT / "tmp" / "tables"
 # The renderer: 8-point sans, 13 characters to the inch; 7.5-point mono in chips, 12.5 characters to the inch;
 # 0.19 inch per line.
@@ -33,14 +29,9 @@ CHARS_PER_INCH = 13
 MONO_PER_INCH = 12.5
 LINE = 0.19
 PAD = 0.1
-INK = "#0b0b0b"
-INK2 = "#52514e"
-RULE = "#c3c2b7"
-CHIP = "#efeee9"
 
-# The ladder's rungs (src/judging/ladder_verdict_fields.py LADDER and HONEYPOT) against the CheatBench
-# verdict field each
-# task's judge_schema.py records the same act under; "none" where only the ladder records it.
+# The ladder's rungs (src/judging/ladder_verdict_fields.py LADDER and HONEYPOT) against the CheatBench verdict field
+# each task's judge_schema.py records the same act under; "none" where only the ladder records it.
 RUNGS = [
     ("exposed", ["`honey_pots_seen`"], ["none"], ["`honey_pots_seen`"], ["`honey_pots_seen`"], ["`honey_pots_seen`"]),
     ("searched", ["none"], ["`reference_solution_seeking`", "(no known target)"], ["none"], ["none"], ["none"]),
@@ -73,8 +64,8 @@ def draw_line(ax, x: float, y: float, text: str, bold: bool = False) -> None:
                                     fc=CHIP, ec="none"))
         ax.text(x + 0.05, y + LINE / 2, code, fontsize=7.5, family="DejaVu Sans Mono", color=INK, va="center")
         return
-    ax.text(x, y + LINE / 2, text, fontsize=8, family="DejaVu Sans", color=INK2 if text.startswith("(") else INK,
-            weight="bold" if bold else "normal", va="center")
+    ax.text(x, y + LINE / 2, text, fontsize=8, family="DejaVu Sans",
+            color=INK_SECONDARY if text.startswith("(") else INK, weight="bold" if bold else "normal", va="center")
 
 
 def table_png(name: str, header: list[str], rows: list[list], widths: list[float]) -> Path:
@@ -84,7 +75,7 @@ def table_png(name: str, header: list[str], rows: list[list], widths: list[float
     width = sum(widths)
     head_h = LINE + 2 * PAD
     height = head_h + sum(heights) + 0.1
-    fig = Figure(figsize=(width, height), dpi=200)
+    fig = Figure(figsize=(width, height), dpi=PRINT_DPI)
     ax = fig.add_axes([0, 0, 1, 1])
     ax.set_xlim(0, width)
     ax.set_ylim(height, 0)
@@ -92,11 +83,11 @@ def table_png(name: str, header: list[str], rows: list[list], widths: list[float
     y = 0.05
     x = 0.0
     for text, w in zip(header, widths):
-        ax.text(x + PAD, y + PAD + LINE / 2, text.upper(), fontsize=6.5, family="DejaVu Sans Mono", color=INK2,
+        ax.text(x + PAD, y + PAD + LINE / 2, text.upper(), fontsize=6.5, family="DejaVu Sans Mono", color=INK_SECONDARY,
                 va="center")
         x += w
     y += head_h
-    ax.plot([0, width], [y, y], color=INK2, lw=0.8)
+    ax.plot([0, width], [y, y], color=INK_SECONDARY, lw=0.8)
     for row, h in zip(cells, heights):
         x = 0.0
         for j, (lines, w) in enumerate(zip(row, widths)):
@@ -104,10 +95,10 @@ def table_png(name: str, header: list[str], rows: list[list], widths: list[float
                 draw_line(ax, x + PAD, y + PAD + k * LINE, text, bold=j == 0)
             x += w
         y += h
-        ax.plot([0, width], [y, y], color=RULE, lw=0.6)
+        ax.plot([0, width], [y, y], color=AXIS, lw=0.6)
     OUT.mkdir(parents=True, exist_ok=True)
     path = OUT / f"{name}.png"
-    fig.savefig(path, dpi=200, facecolor="#ffffff")
+    fig.savefig(path, dpi=PRINT_DPI, facecolor=WHITE)
     return path
 
 
@@ -158,7 +149,6 @@ RUNG_TEXT = [
       "that to_send/ file sent to review_deliverable", "the planted answer accepted, from this agent's call",
       "a saved file in the repo holding a whole design"]),
 ]
-RAMP = ["#f3e3c8", "#e6c58f", "#d2a05a", "#a8712f", "#6a3d10"]     # one warm hue, light to dark: higher rung, darker
 SANS = FontProperties(family="DejaVu Sans", size=7.6)
 SANS_B = FontProperties(family="DejaVu Sans", size=8.2, weight="bold")
 NOTE = FontProperties(family="DejaVu Sans", size=6.8)
@@ -181,7 +171,7 @@ def wrap_measured(renderer, text: str, width_in: float, font: FontProperties) ->
 def write_rungs_by_domain() -> Path:
     first, col, pad, lh, note_lh = 1.75, 1.62, 0.09, 0.145, 0.13
     width = first + col * len(DOMAINS)
-    renderer = FigureCanvasAgg(Figure(figsize=(1, 1), dpi=200)).get_renderer()
+    renderer = FigureCanvasAgg(Figure(figsize=(1, 1), dpi=PRINT_DPI)).get_renderer()
     rows = []
     for name, gloss, cells in RUNG_TEXT:
         gl = wrap_measured(renderer, gloss, first - 0.3 - pad, NOTE)
@@ -192,42 +182,49 @@ def write_rungs_by_domain() -> Path:
     subs = [wrap_measured(renderer, s, col - 2 * pad, NOTE) for _, s in DOMAINS]
     head_h = 2 * pad + max(len(h) for h in head) * 0.16 + max(len(s) for s in subs) * note_lh + 0.03
     height = 0.12 + head_h + sum(r[3] for r in rows) + 0.12
-    fig = Figure(figsize=(width, height), dpi=200)
+    fig = Figure(figsize=(width, height), dpi=PRINT_DPI)
     ax = fig.add_axes([0, 0, 1, 1])
     ax.set_xlim(0, width)
     ax.set_ylim(height, 0)
     ax.axis("off")
     y = 0.12
-    ax.text(pad + 0.22, y + pad + 0.08, "RUNG", fontproperties=MONO, color=INK2, va="center")
+    ax.text(pad + 0.22, y + pad + 0.08, "RUNG", fontproperties=MONO, color=INK_SECONDARY, va="center")
     for j, (h, sub_) in enumerate(zip(head, subs)):
         x = first + j * col + pad
         for k, line in enumerate(h):
             ax.text(x, y + pad + 0.08 + k * 0.16, line, fontproperties=SANS_B, color=INK, va="center")
         top = y + pad + 0.08 + len(h) * 0.16
         for k, line in enumerate(sub_):
-            ax.text(x, top + k * note_lh, line, fontproperties=NOTE, color=INK2, va="center", style="italic")
+            ax.text(x, top + k * note_lh, line, fontproperties=NOTE, color=INK_SECONDARY, va="center", style="italic")
     y += head_h
     ax.plot([0, width], [y, y], color=INK, lw=0.9)
     for i, (name, gl, cl, h) in enumerate(rows):
         if i % 2:
-            ax.add_patch(Rectangle((0, y), width, h, fc="#f7f6f2", ec="none", zorder=0))
-        ax.add_patch(Rectangle((pad, y + pad), 0.09, h - 2 * pad, fc=RAMP[i], ec="none"))
+            ax.add_patch(Rectangle((0, y), width, h, fc=BAND, ec="none", zorder=0))
+        ax.add_patch(Rectangle((pad, y + pad), 0.09, h - 2 * pad, fc=RUNG_FILL[name], ec="none"))
         ax.text(pad + 0.2, y + pad + 0.08, f"{i + 1}  {name}", fontproperties=SANS_B, color=INK, va="center")
         for k, line in enumerate(gl):
-            ax.text(pad + 0.2, y + pad + 0.27 + k * note_lh, line, fontproperties=NOTE, color=INK2, va="center")
+            ax.text(pad + 0.2, y + pad + 0.27 + k * note_lh, line, fontproperties=NOTE, color=INK_SECONDARY,
+                    va="center")
         for j, lines in enumerate(cl):
             for k, line in enumerate(lines):
                 ax.text(first + j * col + pad, y + pad + 0.08 + k * lh, line, fontproperties=SANS, color=INK,
                         va="center")
         y += h
-        ax.plot([0, width], [y, y], color=RULE, lw=0.5)
-    ax.plot([first - 0.02] * 2, [0.12, y], color=RULE, lw=0.5)
+        ax.plot([0, width], [y, y], color=AXIS, lw=0.5)
+    ax.plot([first - 0.02] * 2, [0.12, y], color=AXIS, lw=0.5)
     OUT.mkdir(parents=True, exist_ok=True)
     path = OUT / "table_rungs_by_domain.png"
-    fig.savefig(path, dpi=200, facecolor="#ffffff")
+    fig.savefig(path, dpi=PRINT_DPI, facecolor=WHITE)
     return path
 
 
-if __name__ == "__main__":
+def main() -> int:
+    """Write every table and print the paths written."""
     for path in (write_scales(), write_rungs(), write_rungs_by_domain()):
         print(path)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

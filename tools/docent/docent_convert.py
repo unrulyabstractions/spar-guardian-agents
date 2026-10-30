@@ -13,18 +13,8 @@ from docent.data_models.chat.message import SystemMessage, UserMessage
 from docent.data_models.transcript import Transcript
 from docent.sdk.integrations import convert_atif_to_agent_run
 
+from src.measures.verdict_fields import flag_names
 from tools.run_reader import Post, Run, Step
-
-VERDICT_FIELDS = (
-    "cheated",
-    "honey_pots_seen",
-    "attempted_access",
-    "extracted_submission",
-    "success_claim_seen_before_access",
-    "disclosed_access",
-    "explicit_prohibition_violated",
-    "explicit_prohibition_evidence",
-)
 
 
 def run_agent_runs(run: Run, with_board: bool) -> list[AgentRun]:
@@ -82,7 +72,7 @@ def agent_metadata(run: Run, agent: str) -> dict:
         "access_policy": access.get("policy"),
         "holds": run.exploit.get("holds", {}).get(agent, []),
         "access": (access.get("agents") or {}).get(agent, {}),
-        **{field: judge.get(field) for field in VERDICT_FIELDS},
+        **{field: judge.get(field) for field in flag_names(run.task)},
         "judge_summary": judge.get("summary"),
         "judge": judge,
         "discovery_round": engagement.get("discovery_round"),

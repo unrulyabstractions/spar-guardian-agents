@@ -1,6 +1,6 @@
 """One setup figure per task, as 200-dpi PNG under tmp/setup/ (gitignored).
 
-    uv run python scripts/paper/domain_figures.py
+    uv run python -m scripts.paper.domain_figures
 
 Each figure tells one story in pictures: the honeypot breaks into puzzle pieces, access=split hands one piece to
 each agent inside its sandbox, the pieces can meet only on the board, and together they rebuild the honeypot.
@@ -13,20 +13,29 @@ import math
 import sys
 from pathlib import Path
 
-import matplotlib
+import matplotlib.pyplot as plt
+from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch, Polygon, Rectangle, Wedge
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch, Polygon, Rectangle  # noqa: E402
+from scripts.paper.figures import CM, DASH
+from src.configuration.settings import ROOT
+from src.utils.figure_style import (
+    HONEY,
+    HONEY_FILL,
+    INK,
+    INK_SECONDARY,
+    MUTED,
+    PLANE,
+    PRINT_DPI,
+    SURFACE,
+    WHITE,
+)
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from figures import CM, DASH, INK, INK2, MUTED, PLANE, SURF  # noqa: E402
-
-OUT = Path(__file__).resolve().parents[2] / "tmp" / "setup"
-HONEY = "#6a3d10"
-HONEY_FILL = "#f3e3c8"
-PIECE_FILL = ["#f2dcb4", "#e4b86e", "#c98f3a"]       # one hue, three steps: the pieces of the split
-PIECE_TEXT = [HONEY, HONEY, "#ffffff"]
+OUT = ROOT / "tmp" / "setup"
+# Tints of HONEY for the drawings: the split's three pieces, light to dark, with the text each takes, and two mid
+# tones for the icons' lines.
+PIECE_FILL = ["#f2dcb4", "#e4b86e", "#c98f3a"]
+PIECE_TEXT = [HONEY, HONEY, WHITE]
+ICON_LINE, ICON_RUNG = "#d9b88a", "#c9a46c"
 AGENTS = ["a01", "a02", "a03"]
 XS = [7.4, 10.4, 13.4]                                # the agents' columns
 W, H = 20.0, 9.0                                      # data units are centimetres
@@ -66,7 +75,7 @@ class Canvas:
                     break
                 t.set_fontsize(t.get_fontsize() - 0.25)
         if bad:
-            raise SystemExit("\n".join(bad))
+            raise ValueError("\n".join(bad))
 
 
 # ---------------------------------------------------------------- shapes
@@ -115,14 +124,14 @@ def page(ax, cx, cy, w, h, z=3):
     ax.add_patch(Polygon([(x, y), (x + w, y), (x + w, y + h - fold), (x + w - fold, y + h), (x, y + h)], closed=True,
                          fc=HONEY_FILL, ec=HONEY, lw=1.2, joinstyle="round", zorder=z))
     ax.add_patch(Polygon([(x + w - fold, y + h), (x + w - fold, y + h - fold), (x + w, y + h - fold)], closed=True,
-                         fc="#ffffff", ec=HONEY, lw=1.2, joinstyle="round", zorder=z + 1))
+                         fc=WHITE, ec=HONEY, lw=1.2, joinstyle="round", zorder=z + 1))
 
 
 def icon(ax, kind, cx, cy, s):
     """The honeypot as a picture: an archive, a leaked patch, a slide deck, an answer key or designed proteins."""
     if kind == "key":
         ax.add_patch(Circle((cx - s * 0.28, cy), s * 0.22, fc=HONEY_FILL, ec=HONEY, lw=1.6, zorder=3))
-        ax.add_patch(Circle((cx - s * 0.28, cy), s * 0.08, fc=SURF, ec=HONEY, lw=1.2, zorder=4))
+        ax.add_patch(Circle((cx - s * 0.28, cy), s * 0.08, fc=SURFACE, ec=HONEY, lw=1.2, zorder=4))
         ax.add_patch(Rectangle((cx - s * 0.07, cy - s * 0.045), s * 0.5, s * 0.09, fc=HONEY_FILL, ec=HONEY, lw=1.4,
                                zorder=3))
         for dx, depth in ((0.25, 0.16), (0.36, 0.11)):
@@ -142,17 +151,17 @@ def icon(ax, kind, cx, cy, s):
             y = cy + s * 0.27 - k * s * 0.11
             ax.text(cx - s * 0.27, y, "+" if add else " ", fontsize=6, color=HONEY, va="center", ha="center",
                     family="DejaVu Sans Mono", zorder=5)
-            ax.add_patch(Rectangle((cx - s * 0.2, y - s * 0.025), s * w, s * 0.05, fc=HONEY if add else "#d9b88a",
+            ax.add_patch(Rectangle((cx - s * 0.2, y - s * 0.025), s * w, s * 0.05, fc=HONEY if add else ICON_LINE,
                                    ec="none", zorder=5))
     elif kind == "deck":                                # a slide with a bar chart
-        ax.add_patch(Rectangle((cx - s * 0.25, cy - s * 0.18), s * 0.5, s * 0.42, fc="#ffffff", ec=HONEY, lw=0.9,
+        ax.add_patch(Rectangle((cx - s * 0.25, cy - s * 0.18), s * 0.5, s * 0.42, fc=WHITE, ec=HONEY, lw=0.9,
                                zorder=5))
         for k, h in enumerate((0.12, 0.22, 0.17, 0.3)):
             ax.add_patch(Rectangle((cx - s * 0.19 + k * s * 0.11, cy - s * 0.13), s * 0.07, s * h, fc=HONEY,
                                    ec="none", zorder=6))
         for k in range(2):
             ax.add_patch(Rectangle((cx - s * 0.25, cy - s * (0.3 + k * 0.08)), s * (0.5 - k * 0.15), s * 0.035,
-                                   fc="#d9b88a", ec="none", zorder=5))
+                                   fc=ICON_LINE, ec="none", zorder=5))
     elif kind == "helix":                               # two strands with rungs
         xs = [cx - s * 0.26 + s * 0.52 * k / 60 for k in range(61)]
         for phase in (0, math.pi):
@@ -161,18 +170,18 @@ def icon(ax, kind, cx, cy, s):
         for k in range(1, 12):
             x = cx - s * 0.26 + s * 0.52 * k / 12
             y = s * 0.16 * math.sin(2 * math.pi * (x - cx) / (s * 0.34))
-            ax.plot([x, x], [cy - y, cy + y], color="#c9a46c", lw=0.8, zorder=4)
+            ax.plot([x, x], [cy - y, cy + y], color=ICON_RUNG, lw=0.8, zorder=4)
 
 
 def agent(ax, x, y, name):
-    ax.add_patch(Circle((x, y), 0.46, fc="#ffffff", ec=INK2, lw=1.3, zorder=6))
-    ax.add_patch(Circle((x, y + 0.11), 0.13, fc=INK2, ec="none", zorder=7))        # a head and shoulders
-    ax.add_patch(matplotlib.patches.Wedge((x, y - 0.27), 0.25, 0, 180, fc=INK2, ec="none", zorder=7))
+    ax.add_patch(Circle((x, y), 0.46, fc=WHITE, ec=INK_SECONDARY, lw=1.3, zorder=6))
+    ax.add_patch(Circle((x, y + 0.11), 0.13, fc=INK_SECONDARY, ec="none", zorder=7))        # a head and shoulders
+    ax.add_patch(Wedge((x, y - 0.27), 0.25, 0, 180, fc=INK_SECONDARY, ec="none", zorder=7))
     ax.text(x, y - 0.68, name, ha="center", va="top", fontsize=8, color=INK, zorder=7)
 
 
 def frame(ax, x0, y0, x1, y1):
-    ax.add_patch(FancyBboxPatch((x0, y0), x1 - x0, y1 - y0, boxstyle="round,pad=0,rounding_size=0.18", fc=SURF,
+    ax.add_patch(FancyBboxPatch((x0, y0), x1 - x0, y1 - y0, boxstyle="round,pad=0,rounding_size=0.18", fc=SURFACE,
                                 ec=MUTED, lw=1.0, ls=DASH, zorder=1))
 
 
@@ -185,11 +194,11 @@ def arrow(ax, a, b, color, rad=0.0, lw=1.0, ls="-", z=2, style=None):
 def bubble(ax, cx, cy):
     """A speech bubble: the board's mark."""
     ax.add_patch(FancyBboxPatch((cx - 0.32, cy - 0.17), 0.64, 0.38, boxstyle="round,pad=0,rounding_size=0.1",
-                                fc="#ffffff", ec=INK2, lw=1.0, zorder=5))
+                                fc=WHITE, ec=INK_SECONDARY, lw=1.0, zorder=5))
     ax.add_patch(Polygon([(cx - 0.12, cy - 0.17), (cx - 0.22, cy - 0.33), (cx + 0.02, cy - 0.17)], closed=True,
-                         fc="#ffffff", ec=INK2, lw=1.0, zorder=4))
+                         fc=WHITE, ec=INK_SECONDARY, lw=1.0, zorder=4))
     for k in (-1, 0, 1):
-        ax.add_patch(Circle((cx + k * 0.15, cy + 0.02), 0.035, fc=INK2, ec="none", zorder=6))
+        ax.add_patch(Circle((cx + k * 0.15, cy + 0.02), 0.035, fc=INK_SECONDARY, ec="none", zorder=6))
 
 
 # ---------------------------------------------------------------- one figure
@@ -197,7 +206,7 @@ def setup_figure(spec: dict) -> Path:
     c = Canvas()
     ax = c.ax
     c.text(0.4, H - 0.55, spec["title"], (0.3, H - 0.9, 12, H - 0.2), fontsize=12, weight="bold", va="center")
-    c.text(0.4, H - 1.15, spec["task"], (0.3, H - 1.45, 14.5, H - 0.9), fontsize=8, color=INK2, va="center")
+    c.text(0.4, H - 1.15, spec["task"], (0.3, H - 1.45, 14.5, H - 0.9), fontsize=8, color=INK_SECONDARY, va="center")
     strip = spec["strip"]
     n = len(strip)
 
@@ -231,7 +240,7 @@ def setup_figure(spec: dict) -> Path:
 
     # the board joins the agents
     ax.add_patch(FancyBboxPatch((XS[0] - 1.3, 0.55), XS[-1] - XS[0] + 2.6, 1.0,
-                                boxstyle="round,pad=0,rounding_size=0.2", fc=PLANE, ec=INK2, lw=1.1, zorder=3))
+                                boxstyle="round,pad=0,rounding_size=0.2", fc=PLANE, ec=INK_SECONDARY, lw=1.1, zorder=3))
     bubble(ax, XS[0] - 0.55, 1.08)
     c.text(XS[0] - 0.05, 1.05, "board", (XS[0] - 0.1, 0.6, XS[0] + 1.6, 1.5), fontsize=9, color=INK, va="center",
            weight="bold")
@@ -247,15 +256,15 @@ def setup_figure(spec: dict) -> Path:
         label(c, sx + i * s, 4.3, s, left, text, i, z=9)
     c.text(cx, 3.75, spec["honeypot"], (15.2, 3.45, 19.8, 4.05), fontsize=8.5, color=HONEY, ha="center",
            va="center", weight="bold")
-    arrow(ax, (XS[-1] + 1.3, 1.05), (cx, 3.4), INK2, lw=1.2, ls=(0, (3, 2)),
+    arrow(ax, (XS[-1] + 1.3, 1.05), (cx, 3.4), INK_SECONDARY, lw=1.2, ls=(0, (3, 2)),
           style="angle,angleA=0,angleB=90,rad=8")
-    c.text((XS[-1] + 1.3 + cx) / 2, 1.25, "posted", (XS[-1] + 1.4, 1.1, cx - 0.1, 1.6), fontsize=7.5, color=INK2,
-           ha="center", va="bottom")
+    c.text((XS[-1] + 1.3 + cx) / 2, 1.25, "posted", (XS[-1] + 1.4, 1.1, cx - 0.1, 1.6), fontsize=7.5,
+           color=INK_SECONDARY, ha="center", va="bottom")
 
     c.check(spec["name"])
     OUT.mkdir(parents=True, exist_ok=True)
     path = OUT / f"{spec['name']}.png"
-    c.fig.savefig(path, dpi=200, facecolor=SURF)
+    c.fig.savefig(path, dpi=PRINT_DPI, facecolor=SURFACE)
     plt.close(c.fig)
     return path
 
@@ -279,6 +288,16 @@ SPECS = [
 ]
 
 
+def main() -> int:
+    """Draw every setup figure and print the paths written; 1 when a text spills its box."""
+    try:
+        for spec in SPECS:
+            print(setup_figure(spec))
+    except ValueError as spill:
+        print(spill, file=sys.stderr)
+        return 1
+    return 0
+
+
 if __name__ == "__main__":
-    for spec in SPECS:
-        print(setup_figure(spec))
+    raise SystemExit(main())

@@ -8,10 +8,11 @@ import json
 import pytest
 from inspect_scout import Result, transcripts_db
 
+from src.measures.verdict_fields import FLAGS_BY_TASK, flag_names
 from tests.tools_test_runs import RIEMANN, copy_run, needs_riemann
 from tools.run_reader import load_run
 from tools.scout.scout_command import chosen_signals
-from tools.scout.scout_results import attach_grep_floor, grep_seen, locate, quote_fragments, tally
+from tools.scout.scout_results import JUDGE_FIELDS, attach_grep_floor, grep_seen, locate, quote_fragments, tally
 from tools.scout.scout_scanners import SIGNALS, build_scanners, earliest_found, honeypot_names
 from tools.scout.scout_transcripts import build_database, message_origins, origins_by_id, run_transcripts
 from tools.tool_dispatch import main
@@ -113,6 +114,12 @@ def test_unknown_scanner_is_a_usage_error():
 def test_quote_fragments_and_tally():
     assert quote_fragments("short ... git show agent-014:message.txt; x") == ["git show agent-014:message.txt"]
     assert tally([(True, True), (False, True), (None, False)]) == {"agree": 1, "disagree": 1, "unknown": 1}
+
+
+def test_each_signal_is_checked_against_one_of_the_tasks_judge_flags():
+    assert set(JUDGE_FIELDS) == set(FLAGS_BY_TASK)
+    for task, fields in JUDGE_FIELDS.items():
+        assert set(fields) <= set(SIGNALS) and set(fields.values()) <= set(flag_names(task)), task
 
 
 def test_a_finding_in_an_early_segment_survives():
