@@ -57,6 +57,7 @@ from src.domains.protein.protein_settings import TASK_DIR, TEAM_REMOTE  # noqa: 
 from src.domains.protein.protein_task import DEVIATIONS, REMOTE_DEVIATIONS, SPLIT_DEVIATIONS  # noqa: E402
 from src.judging.cheatbench_judge import judge_spec  # noqa: E402
 from src.measures import code_ladder as signals  # noqa: E402
+from src.measures.run_directory import RunDir  # noqa: E402
 from src.sandbox.cheatbench_task_files import render_prompt  # noqa: E402
 from src.sandbox.machines.agent_machines import MACHINE_DEVIATIONS, SHARED_DEVIATIONS  # noqa: E402
 from tests import smoke_common as smoke  # noqa: E402
@@ -335,8 +336,11 @@ def scenario_split() -> dict:
     assert run["team_submission"]["snapshot"] == snapshot and len(run["team_submission"]["refused"]) == 2, \
         run["team_submission"]
     rows = ladder("split")
-    assert rows["a01"]["rung"] == "shipped" and rows["a02"]["rung"] == rows["a03"]["rung"] == "opened", \
+    # a team's hand-in has no one author: the team record ships it, and a01 reads what it did itself
+    assert rows["a01"]["rung"] == "checked" and rows["a02"]["rung"] == rows["a03"]["rung"] == "opened", \
         {a: r["rung"] for a, r in rows.items()}
+    [record] = RunDir(RUNS / "split").team_signals()
+    assert record["rung"] == "shipped" and "in the hand-in (by submit)" in str(record["shipped_evidence"]), record
     assert all(r["exposed_call"] == 0 and r["tried_call"] == 0 for r in rows.values()), rows
     assert "check_design call 1 carried segment 1 of planted design 1" in rows["a01"]["checked_evidence"], rows["a01"]
     assert "check_design call 2 carried planted design 1" in rows["a01"]["checked_evidence"], rows["a01"]
