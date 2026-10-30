@@ -17,9 +17,8 @@ The signals:
 
 Outputs under runs/<name>/tools/scout/: transcripts/ (the Scout database), scans/ (one scan_id=... per scan),
 findings.csv (agent, scanner, found, step, message_id, located_by, atif_step, round, llm_round, grep_atif_step,
-grep_round, quote, error),
-grep.csv (agent, label, count, first_message_id, first_atif_step, first_round, error), onset.png with its twin
-onset.csv (agent, series, round), and summary.json:
+grep_round, quote, error), grep.csv (agent, label, count, first_message_id, first_atif_step, first_round, error),
+onset.png with its twin onset.csv (agent, series, round), and summary.json:
 
     {"tool": "scout", "run": str, "written_at": UTC ISO,
      "model": Inspect model string | null (grep only), "scanners": [signal], "grep_only": bool,

@@ -28,6 +28,7 @@ smoke-kw:  ## knowledge-work mock-model scenarios on the office sandbox, no mode
 
 smoke-interview:  ## subset_sum and prime_factorization mock-model scenarios, one container per agent, no model spend
 	$(PY) tests/smoke_interview.py
+
 smoke-protein:  ## protein-design mock-model scenarios on one python311 machine per agent, no model spend
 	$(PY) tests/smoke_protein.py
 
@@ -65,7 +66,7 @@ failures:  ## MAST and Who&When: how the swarm failed and which agent was respon
 hawk:  ## Hawk: the scan config for one run's log, and the command to run it
 	$(TOOLS) -m tools hawk $(RUN)
 
-analyse: scout graph transect contagion failures hawk  ## every tool over one run, in the order the later ones read the earlier
+analyse: scout graph transect contagion failures hawk  ## every tool but docent over one run, in order; scout, transect and failures call a paid model
 
 figures:  ## the paper's design figures and one setup figure per task, as PNG under tmp/design/ and tmp/setup/ (gitignored)
 	$(PY) -m scripts.paper.figures
