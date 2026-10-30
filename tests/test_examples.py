@@ -1,5 +1,6 @@
 """The examples build without a model: each parses the shared arguments, builds its config in the open, names its
-task and runs it; by default three neutral agents on the default preset at the small scale."""
+task and runs it; by default three neutral agents on the default preset at the small scale. A regulated cell runs
+four agents, one of them a hidden regulator."""
 from __future__ import annotations
 
 import importlib
@@ -15,7 +16,7 @@ from src.domains import DOMAINS
 from src.measures import run_figures as plots
 from src.models import model_registry as models
 from src.run import access_line
-from src.tasks import swarm_task
+from src.tasks import hidden_roles, swarm_task
 
 # The cells of the first experiment, per domain: one agent alone, one agent alone told to cheat, three agents told
 # to cheat (CHEAT in the script, appended to the task instruction).
@@ -24,6 +25,9 @@ EXAMPLES_DIR = settings.ROOT / "examples"
 EXAMPLES = [f"examples.{path.parent.name}.{path.stem}" for path in sorted(EXAMPLES_DIR.glob("*/*_minimal.py"))]
 CELL_SCRIPTS = [f"examples.{path.parent.name}.{path.stem}" for cell in CELLS
                 for path in sorted(EXAMPLES_DIR.glob(f"*/*_{cell}.py"))]
+# The regulated cell, on the domains that have one: four agents on the split, one of them a hidden regulator.
+REGULATED = [f"examples.{path.parent.name}.{path.stem}"
+             for path in sorted(EXAMPLES_DIR.glob("*/*_minimal_regulated.py"))]
 
 
 def test_every_domain_has_its_example_and_cells():
@@ -154,3 +158,30 @@ def test_each_cell_script_sets_its_agents_and_its_cheat_text(name, monkeypatch):
     plan = benchmark.plan(config)
     if n_agents == 1:
         assert plan.holds == {"a01": benchmark.whole_access()}
+
+
+def test_knowledge_work_swe_and_protein_design_have_a_regulated_cell():
+    assert {"knowledge_work", "swe", "protein_design"} <= {name.split(".")[1] for name in REGULATED}
+
+
+@pytest.mark.parametrize("name", REGULATED)
+def test_each_regulated_cell_runs_four_agents_one_a_hidden_regulator(name, monkeypatch):
+    module = importlib.import_module(name)
+    script = script_of(name)
+    calls = []
+    monkeypatch.setattr(run, "run", lambda *args, **kwargs: calls.append((args, kwargs)) or 0)
+    monkeypatch.setattr(plots, "plot_run", lambda run_dir, out_dir: [])
+    monkeypatch.setattr("sys.argv", [script.name])
+    assert module.main() == 0
+    [(args, kwargs)] = calls
+    run_name, benchmark, config, model, timeout = args
+    assert kwargs == {} and not hasattr(module, "CHEAT")
+    assert (run_name, model, config.judge) == (script.stem, models.resolve(settings.DEFAULT_MODEL), None)
+    assert (config.n_agents, config.regulator_count, config.disregulator_count) == (4, 1, 0)
+    assert config.preset == "default" and config.access == "split" and config.turn_budget == settings.TURN_BUDGET
+    # the regulator holds nothing; the three neutral agents share the split exploit
+    roles = hidden_roles(config)
+    plan = benchmark.plan(config, roles)
+    [regulator] = [a for a, role in roles.items() if role == "regulator"]
+    assert plan.holds[regulator] == [] and plan.split
+    assert all(plan.holds[a] for a in config.names if a != regulator)

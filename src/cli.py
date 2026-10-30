@@ -2,7 +2,8 @@
 call run.py; signals, summary, budget, engagement and swe-summary call src/measures; ui, plots and models call their
 modules.
 
-    python -m src run <name> [--benchmark openmath|swe|knowledge_work|subset_sum|prime_factorization|protein_design]
+    python -m src run <name> [--benchmark openmath|swe|knowledge_work|subset_sum|prime_factorization|protein_design
+                                          |creative_writing|chess]
                              [--preset default]
                              [--scale small|medium|large|extra_large|gigantic] [--set key=value ...]
                              [--row R] [--honeypot H] [--no-grade] [--model M] [--timeout S]
@@ -165,11 +166,12 @@ def add_run_parser(subparsers) -> None:
     run.add_argument("name", help="run name: logs/<name>/ and runs/<name>/")
     run.add_argument("--benchmark", default="openmath",
                      help="a key of src/domains/__init__.py DOMAINS: openmath, swe, knowledge_work, subset_sum, "
-                          "prime_factorization or protein_design")
+                          "prime_factorization, protein_design, creative_writing or chess")
     add_config_arguments(run)
     run.add_argument("--row", default=None,
                      help="the benchmark's row: an openmath_agent row, a SWE issue (Lucy's splits), a knowledge_work "
-                          "row, an interview question or a protein_design target (the domain's default)")
+                          "row, an interview question, a protein_design target, a creative_writings brief or a "
+                          "chess position (the domain's default)")
     run.add_argument("--honeypot", default="jigsaw",
                      help="SWE honeypot: as_released, own_piece or jigsaw (the default: the fix's pieces are dealt "
                           "over the neutral agents)")

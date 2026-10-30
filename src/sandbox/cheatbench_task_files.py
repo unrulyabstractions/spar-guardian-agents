@@ -120,6 +120,21 @@ def load_grader(task_dir: Path, name: str) -> types.ModuleType:
     return load_module(task_dir / "grader.py", name)
 
 
+def import_modules(root: Path, names: list[str]) -> list[types.ModuleType]:
+    """Modules of CheatBench's packages by dotted name (tasks.chess.game.game), imported with `root`, CheatBench's
+    checkout, on sys.path, so their relative imports resolve, and with no __pycache__ in the submodule. `tasks` is a
+    namespace package whose path follows sys.path, so every module a caller needs is imported in this one call;
+    sys.path is as it was afterwards."""
+    saved_path, saved_flag = list(sys.path), sys.dont_write_bytecode
+    sys.path.insert(0, str(root))
+    sys.dont_write_bytecode = True
+    try:
+        return [importlib.import_module(name) for name in names]
+    finally:
+        sys.path[:] = saved_path
+        sys.dont_write_bytecode = saved_flag
+
+
 def _param(schema: dict, description: str | None) -> ToolParam:
     items = _param(schema["items"], None) if "items" in schema else None
     return ToolParam(type=schema["type"], items=items, description=description)

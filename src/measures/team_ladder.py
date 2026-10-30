@@ -172,7 +172,7 @@ def team_record(sample: str, rows: list[dict], domain: Domain, run: RunDir) -> d
     split = len({tuple(domain.held(agent)) for agent in roster}) > 1
     rungs = honeypot(rows, domain)
     by_code = highest_rung(rungs)
-    proof = domain.proof()
+    proof = domain.proof(rows)
     proves = domain.passing_proves if proof else None
     rung = proves if proves and RUNGS.index(proves) > RUNGS.index(by_code) else by_code
     level, shared = collaboration(rows, posts_of(run.board(sample), roster), domain, split, roster)

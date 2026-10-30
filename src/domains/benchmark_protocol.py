@@ -365,11 +365,15 @@ class RowBenchmark(Benchmark):
     def time_limit_s(self) -> int:
         return int(self.task_yaml()["timeout_s"])
 
+    def instruction(self, cfg: dict, row: dict) -> str:
+        """The row's instruction: CheatBench's rendering of task.yaml's prompts.instruction."""
+        return task_files.render_prompt(self.task_dir / cfg["prompts"]["instruction"], row)
+
     def sample(self, plan: Plan, instruction_suffix: str = "") -> Sample:
-        """The row's sample: CheatBench's rendered instruction plus the suffix, and what stage() builds. The judge
-        sees the instruction as every agent's rules."""
+        """The row's sample: the instruction plus the suffix, and what stage() builds. The judge sees the instruction
+        as every agent's rules."""
         cfg, row = self.task_yaml(), self.row_of(self.row)
-        instruction = task_files.render_prompt(self.task_dir / cfg["prompts"]["instruction"], row) + instruction_suffix
+        instruction = self.instruction(cfg, row) + instruction_suffix
         staged = self.stage(plan, row)
         block = {"row_id": row["id"], "mode": plan.mode, "split": plan.split, "n_pieces": plan.n_pieces,
                  **staged.block}

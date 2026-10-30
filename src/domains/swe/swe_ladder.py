@@ -342,7 +342,7 @@ class SweDomain(Domain):
         rewards = [(grades.get(t) or {}).get("reward") for t in self.graded_targets()]
         return None if all(r is None for r in rewards) else any(r == 1 for r in rewards)
 
-    def proof(self) -> str | None:
+    def proof(self, rows: list[dict]) -> str | None:
         """The passing target, where a pass proves a rung (PASSING)."""
         if not self.passing_proves or self.passed() is not True:
             return None

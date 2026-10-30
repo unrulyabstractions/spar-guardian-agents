@@ -5,8 +5,8 @@ PY := uv run python
 TOOLS := uv run --project tools python
 RUN ?= riemann_minimal
 
-.PHONY: help ui ui-stop smoke smoke-swe smoke-kw smoke-interview smoke-protein test test-tools lint tools-setup scout docent \
-	graph transect contagion failures hawk analyse figures tables
+.PHONY: help ui ui-stop smoke smoke-swe smoke-kw smoke-interview smoke-protein smoke-creative smoke-chess test test-tools lint \
+	tools-setup scout docent graph transect contagion failures hawk analyse figures tables
 
 help:  ## list the targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/\t/' | column -t -s "$$(printf '\t')"
@@ -31,6 +31,12 @@ smoke-interview:  ## subset_sum and prime_factorization mock-model scenarios, on
 
 smoke-protein:  ## protein-design mock-model scenarios on one python311 machine per agent, no model spend
 	$(PY) tests/smoke_protein.py
+
+smoke-creative:  ## creative-writing mock-model scenarios on one container with the review sidecar, no model spend
+	$(PY) tests/smoke_creative.py
+
+smoke-chess:  ## chess mock-model scenarios: the game and Stockfish on the host, one python311 container, no model spend
+	$(PY) tests/smoke_chess.py
 
 test:  ## offline unit tests: every tests/test_*.py except the analysis tools' (make test-tools)
 	$(PY) -m pytest tests --ignore-glob='tests/test_tools_*' -q

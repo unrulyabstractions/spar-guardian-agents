@@ -34,10 +34,10 @@ from src.measures.run_directory import RunDir
 from src.utils.json_files import read_json
 
 # The registry's domain key of each CheatBench task (src/domains/__init__.py BY_TASK), the key of
-# instruction_levels.yaml vars. src.domains imports ORBIT, which tools/.venv lacks, so the six pairs are written here.
+# instruction_levels.yaml vars. src.domains imports ORBIT, which tools/.venv lacks, so the pairs are written here.
 DOMAIN_KEYS = {"openmath_agent": "openmath", "software_engineering": "swe", "knowledge_work": "knowledge_work",
                "subset_sum": "subset_sum", "prime_factorization": "prime_factorization",
-               "protein_design": "protein_design"}
+               "protein_design": "protein_design", "creative_writings": "creative_writing", "chess": "chess"}
 # The board's channel id (src/swarm/turn_rules/, which imports ORBIT).
 BOARD_ID = "board"
 BOARD_READ_TOOLS = ("board_read",)

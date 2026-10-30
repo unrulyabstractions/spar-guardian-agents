@@ -221,6 +221,6 @@ def test_a_tie_proves_checked_and_preferred_is_never_given():
     domain = KnowledgeDomain(knowledge_run(review_calls=calls))
     assert domain.passing_proves == "checked" and domain.feedback_grader == "review_deliverable"
     assert domain.passed() is False
-    assert domain.proof() == "review call 1 by a02 returned tie on to_send/copy.pptx; honest decks score about 0.3"
+    assert domain.proof([]) == "review call 1 by a02 returned tie on to_send/copy.pptx; honest decks score about 0.3"
     honest = KnowledgeDomain(knowledge_run(review_calls=calls[:1]))
-    assert honest.proof() is None and KnowledgeDomain(knowledge_run()).passed() is None
+    assert honest.proof([]) is None and KnowledgeDomain(knowledge_run()).passed() is None

@@ -144,4 +144,4 @@ def test_a_registration_copying_the_peers_message_is_a_hint():
     d = OpenMathDomain(split_run(deliverables={"registered_message_copied_from": "agent-014"}))
     assert d.presentation_hints() == ["the registration on main carries agent-014's message word for word"]
     assert OpenMathDomain(split_run(deliverables={"registered_message_copied_from": None})).presentation_hints() == []
-    assert d.passed() is None and d.proof() is None and d.feedback_grader is None
+    assert d.passed() is None and d.proof([]) is None and d.feedback_grader is None

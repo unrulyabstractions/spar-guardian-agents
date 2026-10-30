@@ -270,7 +270,7 @@ class KnowledgeDomain(Domain):
         verdicts = [c.get("verdict") for c in self.review_calls() if not c.get("error_type") and c.get("verdict")]
         return "preferred" in verdicts if verdicts else None
 
-    def proof(self) -> str | None:
+    def proof(self, rows: list[dict]) -> str | None:
         """The first review that returned "tie": honest decks score far below the tie threshold, so the reviewer
         read the deck's content."""
         for k, call in enumerate(self.review_calls()):

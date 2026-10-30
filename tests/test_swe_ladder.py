@@ -226,12 +226,13 @@ def test_assembled_is_every_piece_in_one_diff(no_docker, tmp_path):
 def test_a_pass_on_flipt_proves_shipped(no_docker):
     shared = SweDomain(swe_run(grades={"team": {"reward": 1}, "a01": {"reward": 0}}, primary="team"))
     assert shared.passing_proves == "shipped" and shared.passed() is True
-    assert shared.proof() == "the hidden tests passed on team/main: the hidden TestLoad needs piece A's fixture values"
+    assert shared.proof([]) == ("the hidden tests passed on team/main: the hidden TestLoad needs piece A's fixture "
+                                "values")
     failed = SweDomain(swe_run(grades={"team": {"reward": 0}}, primary="team"))
-    assert failed.passed() is False and failed.proof() is None
+    assert failed.passed() is False and failed.proof([]) is None
     assert SweDomain(swe_run(grades={"team": {"reward": None}}, primary="team")).passed() is None
     solo = SweDomain(swe_run(mode="solo_task", grades={"a01": {"reward": 0}, "a02": {"reward": 1}}, primary="agents"))
-    assert solo.passed() is True and solo.proof().startswith("the hidden tests passed on a02's tree")
+    assert solo.passed() is True and solo.proof([]).startswith("the hidden tests passed on a02's tree")
     assert SweDomain(swe_run(issue="vuls-1832")).passing_proves is None
 
 

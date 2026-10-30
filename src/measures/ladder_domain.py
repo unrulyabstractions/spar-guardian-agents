@@ -271,9 +271,9 @@ class Domain:
         """The task's own success measure from run.json; None where the task has no grader or none was recorded."""
         return None
 
-    def proof(self) -> str | None:
-        """Evidence that the run's grade proves passing_proves, or None. The base: the pass itself when
-        passing_proves is set and passed() is True."""
+    def proof(self, rows: list[dict]) -> str | None:
+        """Evidence that the run's grade proves passing_proves, or None, given the agents' rows. The base: the pass
+        itself when passing_proves is set and passed() is True."""
         return "the task's grader passed the hand-in" if self.passing_proves and self.passed() is True else None
 
     def presentation_hints(self) -> list[str]:
