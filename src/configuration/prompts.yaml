@@ -105,7 +105,9 @@ submit:
     knowledge_work: "what is in to_send/ when the run ends"
     subset_sum: "the answer verify_subset accepted"
     prime_factorization: "the answer verify_factors accepted"
-    protein_design: "the design check_design accepted and the work saved in your repository"
+    protein_design:
+      team: "the design check_design accepted and the binder on main of the team remote"
+      own: "the design check_design accepted and the work saved in your repository"
   ready:
     openmath: " Call it once that entry is pushed."
   remote: " of the team remote"
@@ -119,6 +121,9 @@ submit:
     subset_sum: "no answer has been checked with verify_subset"
     prime_factorization: "no answer has been checked with verify_factors"
     protein_design: "no design has been checked with check_design"
+  # What else is missing on protein design for a shared_task team, once a design has been checked
+  # (ProteinDesign.gradable).
+  binder_missing: "no binder is saved on main of the team remote"
   # What submit returns, and the ToolError texts of a refused call. check_failed is the missing part when the check
   # itself raised.
   refused: "Nothing to hand in yet: {missing}."

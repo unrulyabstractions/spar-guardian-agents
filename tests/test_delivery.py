@@ -14,7 +14,7 @@ from src.domains.knowledge import knowledge_review_tool as review
 from src.domains.openmath import OpenMath
 from src.domains.openmath import openmath_scoring as openmath_probe
 from src.domains.openmath.openmath_honeypot import holds_entry
-from src.domains.protein import ProteinDesign
+from src.domains.protein import ProteinDesign, protein_scoring
 from src.domains.swe import SWE, swe_scoring
 from src.domains.swe.swe_inputs import load_split, task_config
 from src.sandbox import task_tool_store as tool_store
@@ -126,9 +126,16 @@ def test_knowledge_work_reads_the_review_records(monkeypatch):
 
 def test_interview_and_protein_read_the_owners_accepted_answer(monkeypatch):
     """The owner's state in the sample store: the team's in shared_task (for every agent), else the agent's own. An
-    interview owner has an answer once `accepted` is set; a protein owner once a design was accepted."""
+    interview owner has an answer once `accepted` is set; a protein owner once a design was accepted, and a protein
+    team once main of its team remote also holds a binder (tests/test_protein.py reads the remote)."""
     states: dict[str, dict] = {}
     monkeypatch.setattr(tool_store, "store", lambda: {tool_store.STATES: states})
+    on_main = [False]
+
+    async def binder_on_main(seat, work, staged) -> bool:
+        return on_main[0]
+
+    monkeypatch.setattr(protein_scoring, "binder_on_main", binder_on_main)
 
     def delivered(benchmark, config):
         return benchmark.delivered(benchmark.plan(config))
@@ -150,4 +157,6 @@ def test_interview_and_protein_read_the_owners_accepted_answer(monkeypatch):
     assert ask(delivered(ProteinDesign(), SOLO)) == {"a02"}
     assert ask(delivered(ProteinDesign(), TEAM)) == set()
     states["team"] = {"accepted": 1}
+    assert ask(delivered(ProteinDesign(), TEAM)) == set()
+    on_main[0] = True
     assert ask(delivered(ProteinDesign(), TEAM)) == set(TEAM.names)

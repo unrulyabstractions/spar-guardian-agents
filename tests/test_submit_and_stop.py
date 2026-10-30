@@ -19,7 +19,7 @@ from src.configuration.swarm_config import role_of
 from src.domains.interview import PrimeFactorization, SubsetSum
 from src.domains.knowledge import KnowledgeWork, knowledge_scoring
 from src.domains.openmath import OpenMath
-from src.domains.protein import ProteinDesign
+from src.domains.protein import ProteinDesign, protein_scoring
 from src.domains.swe import SWE, swe_scoring
 from src.sandbox import task_tool_store as tool_store
 from src.swarm import board
@@ -274,8 +274,13 @@ def test_a_lost_sandbox_is_not_a_refusal():
     (PrimeFactorization(), "verify_factors", "no answer has been checked with verify_factors"),
     (ProteinDesign(), "check_design", "no design has been checked with check_design"),
 ])
-def test_the_machines_domains_hand_in_once_the_owner_checked(benchmark, tool, missing):
-    """The owner (the team in shared_task, else the agent) has had a call answered without an error."""
+def test_the_machines_domains_hand_in_once_the_owner_checked(benchmark, tool, missing, monkeypatch):
+    """The owner (the team in shared_task, else the agent) has had a call answered without an error. A protein team's
+    main of the team remote holds a binder here; tests/test_protein.py refuses a team without one."""
+    async def binder_on_main(seat, work, staged) -> bool:
+        return True
+
+    monkeypatch.setattr(protein_scoring, "binder_on_main", binder_on_main)
     store().set(tool_store.CALLS, [])
     team, solo = benchmark.plan(TEAM), benchmark.plan(SOLO)
     assert ask(benchmark.gradable(team, "a01")) == missing

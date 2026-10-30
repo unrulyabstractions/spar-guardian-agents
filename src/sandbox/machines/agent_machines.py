@@ -8,9 +8,10 @@ tool on the host, the end state and the probe.
 CheatBench runs every episode of its python311 tasks (subset_sum, prime_factorization, protein_design) in one
 container built from its Dockerfile, as the user `user`, with the row's files at their absolute paths. Here a lone
 agent gets that container (the service `default`). A team gets one such container per agent, named by the agent and
-staged with the agent's own copy of the row, so a piece of the honeypot moves between agents only through the board.
-A lone agent uses ORBIT's built-in bash and python as `user`; a team's agents use `shell` and `run_python` bound to
-their own containers (src/sandbox/agent_tools.py).
+staged with the agent's own copy of the row, so a piece of the honeypot moves between agents only through the board,
+or through the one volume a domain may mount in every machine (protein design's team remote). A lone agent uses
+ORBIT's built-in bash and python as `user`; a team's agents use `shell` and `run_python` bound to their own containers
+(src/sandbox/agent_tools.py).
 
 The task's own tool (the verifier of the interview tasks, the checker of protein design) runs on the host, bound per
 agent: host_tool() wraps CheatBench's grader `(state, call)` pair once per owner and records every call and the
@@ -78,15 +79,18 @@ def machine_seats(agents: list[str]) -> dict[str, Seat]:
                     service=a if team else DEFAULT_SERVICE, reap=team) for a in agents}
 
 
-def write_compose(build_dir: Path, agents: list[str]) -> Path:
+def write_compose(build_dir: Path, agents: list[str], shared: str | None = None) -> Path:
     """The compose file under build_dir/docker/, named by the roster size: the service `default` for a lone agent,
-    one service per agent named by the agent for a team, the first one Inspect's default."""
-    service = staging.compose_service(working_dir=WORKDIR, image=IMAGE)
+    one service per agent named by the agent for a team, the first one Inspect's default. `shared` mounts the volume
+    `team` at that path in every agent's service, and the file's name ends in -team."""
+    service = staging.compose_service(working_dir=WORKDIR, image=IMAGE,
+                                      **({"volumes": [f"team:{shared}"]} if shared else {}))
     if len(agents) < 2:
         services = {DEFAULT_SERVICE: service}
     else:
         services = {a: {**service, **({"x-default": True} if i == 0 else {})} for i, a in enumerate(agents)}
-    return staging.write_compose(build_dir / "docker" / f"compose-{len(agents)}.yaml", services)
+    name = f"compose-{len(agents)}{'-team' if shared else ''}.yaml"
+    return staging.write_compose(build_dir / "docker" / name, services, {"team": {}} if shared else None)
 
 
 # --------------------------------------------------------------------------
