@@ -121,6 +121,10 @@ class Interview(RowBenchmark):
         sample store (agent_machines.accepted_by_owner)."""
         return machines.accepted_by_owner(plan.owners, lambda state: state.get("accepted") is not None)
 
+    async def gradable(self, plan: Plan, agent: str) -> str | None:
+        """The agent's verifier owner (the team in shared_task) has had an answer checked (agent_machines.checked)."""
+        return None if machines.checked(plan.owners[agent]) else self.missing(plan)
+
     def team_deviations(self, plan: Plan) -> list[str]:
         """The machines' labels and the sealed generator; a shared_task team adds its one verifier state, a split
         the cut key."""

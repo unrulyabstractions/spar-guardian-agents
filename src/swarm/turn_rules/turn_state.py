@@ -1,8 +1,9 @@
 """The turn rules' store, their tags and names, the live run's lookups and the counters the board tools keep.
 
-TurnState holds the per-sample turn bookkeeping. TeamSubmission holds the team's submission, and Delivered the
-stop-after-delivery record. The board tools count their actions and spend the per-round budgets here. current_round
-reads the round of the step under way from ORBIT's live plan, and live_state an agent's live AgentState.
+TurnState holds the per-sample turn bookkeeping. TeamSubmission holds the team's hand-in and the refused submits,
+StopWorking the round of each stop_working call, and Delivered the stop-after-delivery record. The board tools count
+their actions and spend the per-round budgets here. current_round reads the round of the step under way from ORBIT's
+live plan, and live_state an agent's live AgentState.
 
     record_board_action("a01", "read", senders=["a02"])
     if budget_used("a01", "post") < limit: spend("a01", "post", 1)
@@ -22,30 +23,33 @@ from pydantic import Field
 from src.swarm.turn_rules.turn_steps import step_round
 
 TURN_RULES_TAG = "swarm_turn_rules"
-TEAM_SUBMIT_TAG = "swarm_team_submit"                 # info event of a team_submit call (src/swarm/board.py)
-HALT_TAG = "swarm_team_halt"                           # info event when the plan is cut after a team submission
+TEAM_SUBMIT_TAG = "swarm_team_submit"     # info event of a submit that went through (src/swarm/submit_and_stop.py)
+HALT_TAG = "swarm_team_halt"                           # info event when the plan is cut after the team's hand-in
 DELIVERED_TAG = "swarm_delivered"                      # info event of stop_after_delivery: a sighting or an end
 DELIVERED = "delivered"                                # the TurnState.ended reason of stop_after_delivery
 ACTOR = "swarm.rules"
 BOARD_ID = "board"                                       # the board's channel id (src/swarm/board.py)
 BOARD_TOOLS = ("board_status", "board_read", "board_post")   # the board's tools (src/swarm/board.py)
-TEAM_SUBMIT = "team_submit"
+TEAM_SUBMIT = "team_submit"           # submit's binding key: ORBIT reserves "submit" for its own tool
+SUBMIT = "submit"                     # the name the model sees (turn_rules_filter.TurnRulesDefense.get_tool_wrappers)
+STOP_WORKING = "stop_working"
+ENDING_TOOLS = (SUBMIT, STOP_WORKING)     # a step ending in one that went through is neither charged nor free
+SYSTEM_SENDER = "system"                  # the sender of the board's notice of the team's hand-in
 OVERSIGHT_TOOL = "agent_actions"                         # a regulator's tool (src/swarm/regulator_oversight.py)
 BOARD_ACTIONS = (*BOARD_TOOLS, OVERSIGHT_TOOL)           # a step whose last call is one of these is free
 CHANNEL_TOOLS = frozenset({"channel_post", "channel_read", "channel_list"})   # ORBIT's, withheld from the provider
 # The TurnState count each board action kind goes to.
 KIND_FIELDS = {"check": "checks", "read": "reads", "post": "posts", "oversight": "oversight"}
-SUBMIT_TOOLS = ("submit", TEAM_SUBMIT)                   # a step ending in one is neither charged nor free
 
 
 class TurnState(StoreModel):
     """Per-sample turn bookkeeping, saved in the eval log. Dicts are keyed by agent name.
 
-    A completed step is charged (work_steps), free (free_steps) or neither (it ended with submit or team_submit). It
-    is free when its last tool call is a board action (BOARD_ACTIONS) that succeeded and the agent's K (free_caps) is
-    above 0; it is charged otherwise, and a failed board action is charged with the timeline charge "refused".
-    checks, reads and posts count the board tools; oversight counts a regulator's agent_actions calls about a
-    teammate."""
+    A completed step is charged (work_steps), free (free_steps) or neither (it ended with a submit or a stop_working
+    that went through). It is free when its last tool call is a board action (BOARD_ACTIONS) that succeeded and the
+    agent's K (free_caps) is above 0; it is charged otherwise, and a failed board action, submit or stop_working is
+    charged with the timeline charge "refused". checks, reads and posts count the board tools; oversight counts a
+    regulator's agent_actions calls about a teammate."""
 
     agents: list[str] = Field(default_factory=list)
     cap: int = 0
@@ -77,18 +81,28 @@ class TurnState(StoreModel):
     history_marks: dict[str, list[list[int]]] = Field(default_factory=dict)  # [messages_after, round] per activation
     halted_after_round: int | None = None                   # the round after which the plan was cut
     notice_seen: dict[str, int] = Field(default_factory=dict)   # highest board sequence of others at the last call
-    ended: dict[str, str] = Field(default_factory=dict)         # submitted | cap | context | delivered
+    ended: dict[str, str] = Field(default_factory=dict)     # stop_working | submit | cap | context | delivered
     timeline: list[dict] = Field(default_factory=list)          # one entry per activation
 
 
 class TeamSubmission(StoreModel):
-    """The first team_submit call of the sample (src/swarm/board.py). Later calls are refused and counted."""
+    """The team's hand-in: the first submit that went through (src/swarm/submit_and_stop.py), by a neutral agent of a
+    shared_task team or by a lone agent; the run ends after ends_after_round. refused holds every submit that handed
+    in nothing, in any mode: refused by the guard (Benchmark.gradable) or made after the hand-in."""
 
     agent: str | None = None
     round: int | None = None
     answer: str = ""
     time: str | None = None                                 # UTC, ISO 8601
-    refused: list[dict] = Field(default_factory=list)       # later calls: {"agent", "round"}
+    ends_after_round: int | None = None                     # the last round that runs
+    snapshot: str | None = None                             # an id of what was graded at the call (Benchmark.snapshot)
+    refused: list[dict] = Field(default_factory=list)       # {"agent", "round", "reason"}
+
+
+class StopWorking(StoreModel):
+    """The stop_working calls that went through (src/swarm/submit_and_stop.py): each agent's round of its call."""
+
+    rounds: dict[str, int] = Field(default_factory=dict)
 
 
 class Delivered(StoreModel):

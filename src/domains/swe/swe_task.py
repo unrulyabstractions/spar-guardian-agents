@@ -21,8 +21,8 @@ from pathlib import Path
 from inspect_ai.dataset import Sample
 from inspect_ai.scorer import Scorer
 
-from src.configuration import access_policy, settings
-from src.configuration.prompt_texts import board_system_prompt, submit_line, swe_board_fields
+from src.configuration import settings
+from src.configuration.prompt_texts import board_system_prompt, swe_board_fields
 from src.configuration.scales import SCALES
 from src.configuration.swarm_config import SwarmConfig
 from src.domains.benchmark_protocol import Benchmark, Plan
@@ -38,7 +38,7 @@ from src.domains.swe.swe_inputs import (
 )
 from src.domains.swe.swe_ladder import SweDomain
 from src.domains.swe.swe_sandbox import TOOL_DESCRIPTIONS, ensure_images, seats, write_compose
-from src.domains.swe.swe_scoring import committed, swe_grader
+from src.domains.swe.swe_scoring import committed, has_work, head_commit, swe_grader
 from src.domains.swe.swe_settings import (
     AGENT_CPUS,
     AGENT_MEM,
@@ -130,25 +130,23 @@ class SWE(Benchmark):
         return AGENT_TIME_S
 
     def system_prompts(self, plan: Plan) -> dict[str, str]:
-        """Each agent's system prompt from prompts.yaml `swe`. The submit bullet is left out without shutdown.
+        """Each agent's system prompt from prompts.yaml `swe`, its tool bullets ending with submit and stop_working as
+        the agent holds them (Benchmark.ending_lines).
 
         A lone agent and a solo_task agent get `system_solo`; a solo_task agent of a board then gets the team and board
         texts its config asks for (prompt_texts.board_system_prompt). A shared_task agent gets `system_shared` with the
-        roster. Its board sentences and last line come from prompt_texts.swe_board_fields; the team_submit bullet goes
-        to the neutral agents of a config with team_submit."""
+        roster. Its board sentences and last line come from prompt_texts.swe_board_fields."""
         prompts, repo = settings.load_prompts()["swe"], load_split(self.row)["repo"]
         config, agents = plan.config, plan.agents
+        ending = {a: "".join(f"\n{line}" for line in self.ending_lines(plan, a)) for a in agents}
         if plan.mode != "shared_task":
-            submit = submit_line(False, config.shutdown)
             texts = {a: prompts["system_solo"].format(name=a, repo=repo, branch=a, timeout=TOOL_TIMEOUT_S,
-                                                      submit=submit) for a in agents}
+                                                      ending=ending[a]) for a in agents}
             return {a: "\n\n".join(filter(None, [texts[a], board_system_prompt(config, a, agents)])) for a in agents}
-        submit = submit_line(True, config.shutdown)
-        neutral = set(access_policy.neutral_agents(agents, plan.roles))
         return {a: prompts["system_shared"].format(
-            name=a, n=len(agents), repo=repo, branch=a, timeout=TOOL_TIMEOUT_S, submit=submit,
+            name=a, n=len(agents), repo=repo, branch=a, timeout=TOOL_TIMEOUT_S, ending=ending[a],
             roster="\n".join(prompts["roster_line"].format(name=o) for o in agents if o != a),
-            **swe_board_fields(config, team_submit=config.has_team_submit and a in neutral)) for a in agents}
+            **swe_board_fields(config)) for a in agents}
 
     def sample(self, plan: Plan, instruction_suffix: str = "") -> Sample:
         """The issue's sample: metadata["cheatbench"]["swe"] holds the issue, its commits, the honeypot, each agent's
@@ -187,11 +185,22 @@ class SWE(Benchmark):
     def scorers(self) -> list[Scorer]:
         return [swe_grader(grade=self.grade)]
 
+    def base_commit(self) -> str:
+        return task_config(load_split(self.row)["task"])["base_commit"]
+
     def delivered(self, plan: Plan) -> Callable[[], Awaitable[set[str]]]:
         """A shared_task team: its main moved past the base, for every agent. A lone agent and a solo_task agent: a
         commit past the base on its own branch (swe_scoring.committed)."""
-        base = task_config(load_split(self.row)["task"])["base_commit"]
-        return committed(plan.agents, base, plan.mode == "shared_task")
+        return committed(plan.agents, self.base_commit(), plan.mode == "shared_task")
+
+    async def gradable(self, plan: Plan, agent: str) -> str | None:
+        """A shared_task team: team/main differs from the base. A lone agent and a solo_task agent: its /app differs
+        from the base (swe_scoring.has_work)."""
+        return None if await has_work(agent, self.base_commit(), plan.mode == "shared_task") else self.missing(plan)
+
+    async def snapshot(self, plan: Plan, agent: str) -> str | None:
+        """team/main's commit in shared_task, else the agent's HEAD (swe_scoring.head_commit)."""
+        return await head_commit(agent, plan.mode == "shared_task")
 
     def team_deviations(self, plan: Plan) -> list[str]:
         return ["every_agent_works_the_whole_issue_alone_and_is_graded_alone" if plan.mode == "solo_task"

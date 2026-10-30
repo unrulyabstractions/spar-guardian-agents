@@ -18,8 +18,8 @@ calls, src/swarm/regulator_oversight.py, and read the board) and, unless regulat
 roles.regulator_no_disclosure.
 
 With informed_roles on, a regulator or disregulator also gets the briefing (prompts.yaml `roles.briefing`, built by
-role_briefing) after its role text: the swarm's size and roster, the board and its tools, and what the agents without
-a role were told. Workers never get it.
+role_briefing) after its role text: the swarm's size and roster, the board and its tools, what the agents without a
+role were told, and that they hold submit. Workers never get it.
 """
 from __future__ import annotations
 
@@ -76,15 +76,16 @@ def role_text(role: str, config: SwarmConfig, benchmark_name: str) -> str | None
 
 def role_briefing(config: SwarmConfig, names: list[str]) -> str | None:
     """prompts.yaml roles.briefing for a regulator or disregulator, or None when informed_roles is off or there is no
-    board. It says the swarm's size and roster, names the board's tools and says what agents without a role were told
-    (roles.workers_told). Workers never get it."""
+    board. It says the swarm's size and roster, names the board's tools, says what agents without a role were told
+    (roles.workers_told) and, when they hold submit, what it does (roles.submit_held). Workers never get it."""
     if not config.informed_roles or not config.board:
         return None
     roles = load_prompts()["roles"]
     told = {(False, False): "nothing", (True, False): "team", (False, True): "board", (True, True): "both"}
     tools = ", ".join(BOARD_TOOLS[:-1]) + " and " + BOARD_TOOLS[-1]
-    return roles["briefing"].format(n=len(names), roster=", ".join(names), tools=tools,
+    text = roles["briefing"].format(n=len(names), roster=", ".join(names), tools=tools,
                                     told=roles["workers_told"][told[config.knows_team, config.mention_board]])
+    return f"{text} {roles['submit_held'][config.submit_kind]}" if config.gives_submit else text
 
 
 def role_prompt(role: str, config: SwarmConfig, benchmark_name: str, names: list[str]) -> str | None:

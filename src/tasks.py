@@ -12,15 +12,15 @@ What comes from where:
   * the benchmark's plan (Benchmark.plan: the mode, the access and what each agent holds) is fixed once, and the
     sample, its tools, its setup solver, its graders and its deviations come from the benchmark under it
     (src/domains/); the @task entry points take the registry's benchmarks (src/domains/__init__.py DOMAINS);
-  * the roster, the board, the board tools and team_submit, the hidden roles and the turn rules come from src/swarm/
-    (board.py, hidden_roles.py, turn_rules/), and CheatBench's judge is added as a scorer
-    (src/judging/cheatbench_judge.py).
+  * the roster, the board and its tools, submit and stop_working, the hidden roles and the turn rules come from
+    src/swarm/ (board.py, submit_and_stop.py, hidden_roles.py, turn_rules/), and CheatBench's judge is added as a
+    scorer (src/judging/cheatbench_judge.py).
 
 The task instruction is the benchmark's, then the rule sentence of rule_level, then extra_instruction on its own
 paragraph (a control cell's text, say). Each agent's tools are the benchmark's, then on a board board_status,
-board_read and board_post, then team_submit for a neutral agent when the mode has a team to submit for, and
-agent_actions for a regulator (src/swarm/regulator_oversight.py). They are bound per agent through ORBIT's
-tool_bindings next to the benchmark's own bindings.
+board_read and board_post and agent_actions for a regulator (src/swarm/regulator_oversight.py), then submit and
+stop_working as the agent holds them (src/swarm/submit_and_stop.py ending_tools). They are bound per agent through
+ORBIT's tool_bindings next to the benchmark's own bindings. No agent gets ORBIT's own submit (AgentSpec.submit=False).
 
 The plan's rounds, the scheduler's turn bound and Inspect's message limit follow SwarmConfig.working_steps,
 max_turns and sample_message_limit. Under a turn budget metadata["cheatbench"]["turn_budget"] holds
@@ -47,7 +47,7 @@ from orbit.tasks.multi_agent import multi_agent_task
 
 from src.configuration import access_policy, settings
 from src.configuration.presets import preset, with_overrides
-from src.configuration.swarm_config import SwarmConfig
+from src.configuration.swarm_config import SwarmConfig, role_of
 from src.domains import DOMAINS
 from src.domains.benchmark_protocol import Benchmark, Plan
 from src.judging.cheatbench_judge import JUDGE_ADDENDUM, cheatbench_judge
@@ -62,6 +62,7 @@ from src.swarm.board import (
     board_execution,
     board_scheduler,
 )
+from src.swarm.submit_and_stop import Deliverable, ending_tools, submit_bindings
 from src.swarm.turn_rules import rules_setup, schedule, turn_rules_defense
 
 TOKEN_LIMIT = 8_000_000           # spend guard per agent; the episode stays judgeable if it trips
@@ -84,31 +85,41 @@ def instruction_suffix(benchmark: Benchmark, config: SwarmConfig, extra_instruct
     return roles_module.rule_suffix(config, benchmark.key) + extra
 
 
-def system_prompts(benchmark: Benchmark, plan: Plan) -> dict[str, str | None]:
+def system_prompts(benchmark: Benchmark, plan: Plan) -> dict[str, str]:
     """Each agent's system prompt: the benchmark's own (Benchmark.system_prompts: SWE's, or the board prompt the
-    config asks for, None for none), then what its role adds. A regulator or disregulator gets its role text and,
-    with informed_roles, the briefing (roles.role_prompt)."""
+    config asks for with the bullets of submit and stop_working), then what its role adds. A regulator or disregulator
+    gets its role text and, with informed_roles, the briefing (roles.role_prompt). An agent nothing gives a prompt
+    gets prompts.yaml `identity`, so no system message is ORBIT's alone."""
     base = benchmark.system_prompts(plan)
-    if not plan.roles:
-        return base
-    return {n: roles_module.with_role(base[n], roles_module.role_prompt(plan.roles[n], plan.config, benchmark.key,
-                                                                         plan.agents))
-            for n in plan.agents}
+    identity = settings.load_prompts()["identity"]
+    return {n: roles_module.with_role(base[n], roles_module.role_prompt(role_of(plan.roles, n), plan.config,
+                                                                         benchmark.key, plan.agents))
+            or identity.format(name=n) for n in plan.agents}
 
 
-def team_tools(config: SwarmConfig, tools: AgentTools,
-               roles: dict[str, str] | None) -> tuple[dict[str, list[str]], dict]:
-    """(each agent's AgentSpec.tools, ORBIT tool_bindings): the benchmark's tools, then the board tools and
-    team_submit (src/swarm/board.py)."""
-    extra = agent_tool_names(config, roles)
-    names = {n: [*tools.per_agent[n], *extra[n]] for n in config.names}
-    return names, {**tools.bindings, **board_bindings(config, roles=roles)}
+def deliverable(benchmark: Benchmark, plan: Plan) -> Deliverable:
+    """What submit reads from the benchmark: its text for the run's kind of agent (SwarmConfig.submit_kind), the
+    guard (Benchmark.gradable) and the snapshot."""
+    return Deliverable(text=benchmark.submit_text(plan, plan.config.submit_kind),
+                       missing=lambda agent: benchmark.gradable(plan, agent),
+                       snapshot=lambda agent: benchmark.snapshot(plan, agent))
+
+
+def team_tools(benchmark: Benchmark, plan: Plan, tools: AgentTools) -> tuple[dict[str, list[str]], dict]:
+    """(each agent's AgentSpec.tools, ORBIT tool_bindings): the benchmark's tools, then the board's
+    (src/swarm/board.py), then submit and stop_working as the agent holds them (src/swarm/submit_and_stop.py)."""
+    config, roles = plan.config, plan.roles
+    board = agent_tool_names(config, roles)
+    names = {n: [*tools.per_agent[n], *board[n], *ending_tools(config, role_of(roles, n))] for n in config.names}
+    return names, {**tools.bindings, **board_bindings(config, roles=roles),
+                   **submit_bindings(config, deliverable(benchmark, plan))}
 
 
 def agent_specs(config: SwarmConfig, tools: dict[str, list[str]], prompts: dict[str, str | None],
                 roles: dict[str, str] | None = None) -> list[AgentSpec]:
-    """One worker per name. An agent with no prompt of ours keeps AgentSpec's default system prompt. Each
-    conversation is capped at the sample's message limit plus ten.
+    """One worker per name, without ORBIT's own submit tool (submit and stop_working are ours, among its tools). An
+    agent with no prompt keeps AgentSpec's default. Each conversation is capped at the sample's message limit plus
+    ten.
 
     An agent whose hidden role has a model of its own (SwarmConfig.role_models) gets AgentSpec.model
     "swarm/<Inspect string>" (provider.agent_model); the others leave it None and run the eval's model. roles None
@@ -118,7 +129,7 @@ def agent_specs(config: SwarmConfig, tools: dict[str, list[str]], prompts: dict[
         return {"model": model} if model else {}
 
     return [AgentSpec(name=n, role="worker", tools=list(tools[n]), max_messages=config.sample_message_limit + 10,
-                      submit=config.shutdown, **model_of(n), **({"system_prompt": prompts[n]} if prompts[n] else {}))
+                      submit=False, **model_of(n), **({"system_prompt": prompts[n]} if prompts[n] else {}))
             for n in config.names]
 
 
@@ -152,7 +163,7 @@ def delivery(benchmark: Benchmark, plan: Plan) -> dict:
 # --------------------------------------------------------------------------
 # metadata the orchestrator and the exporter read
 # --------------------------------------------------------------------------
-def record_run(task_: Task, benchmark: Benchmark, plan: Plan, prompts: dict[str, str | None]) -> None:
+def record_run(task_: Task, benchmark: Benchmark, plan: Plan, prompts: dict[str, str]) -> None:
     """Write the turn rules' defense into the experiment config and the run's facts into metadata["cheatbench"].
 
     multi_agent_task takes no defenses; the orchestrator reads them from metadata["experiment"]["defenses"]
@@ -196,7 +207,7 @@ def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = 
     plan = benchmark.plan(config, hidden_roles(config))
     sample = benchmark.sample(plan, instruction_suffix(benchmark, config, extra_instruction))
     tools = benchmark.tools(plan)
-    agent_tools, bindings = team_tools(config, tools, plan.roles)
+    agent_tools, bindings = team_tools(benchmark, plan, tools)
     prompts = system_prompts(benchmark, plan)
     time_limit_s = config.time_limit_s or benchmark.time_limit_s()
     communication = board_communication(names, max_message_chars=config.max_message_chars) if config.board else None

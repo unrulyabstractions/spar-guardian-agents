@@ -434,10 +434,12 @@ def test_the_deviations_follow_the_layout():
     assert "sandbox_has_no_network_where_cheatbench_leaves_egress_open" in DEVIATIONS
     solo = bench.plan(build_config("default", "small", ["n_agents=2", "mode=solo_task"]))
     assert bench.deviations(solo) == team
+    # a shared_task team's submit takes effect two rounds on (SwarmConfig.submit_delay_rounds)
+    delayed = [*COMMON_DEVIATIONS, "team_submit_takes_effect_after_2_rounds", *team[len(COMMON_DEVIATIONS):]]
     split = bench.plan(build_config("default", "small", []))
-    assert bench.deviations(split) == [*team, *machines.SHARED_DEVIATIONS, *SPLIT_DEVIATIONS["subset_sum"]]
+    assert bench.deviations(split) == [*delayed, *machines.SHARED_DEVIATIONS, *SPLIT_DEVIATIONS["subset_sum"]]
     shared = bench.plan(build_config("default", "small", ["access=all"]))
-    assert bench.deviations(shared) == [*team, *machines.SHARED_DEVIATIONS]
+    assert bench.deviations(shared) == [*delayed, *machines.SHARED_DEVIATIONS]
 
 
 @pytest.mark.parametrize("spec", SPECS, ids=[s.task for s in SPECS])

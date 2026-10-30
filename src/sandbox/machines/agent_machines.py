@@ -16,7 +16,8 @@ The task's own tool (the verifier of the interview tasks, the checker of protein
 agent: host_tool() wraps CheatBench's grader `(state, call)` pair once per owner and records every call and the
 owner's state in the sample store (src/sandbox/task_tool_store.py). The owner is the agent alone and in solo_task, and
 the team in shared_task, where CheatBench's one state per episode becomes one state per team. accepted_by_owner()
-reads those states as stop_after_delivery's predicate.
+reads those states as stop_after_delivery's predicate, and checked() says whether an owner's tool answered a call,
+submit's guard.
 """
 from __future__ import annotations
 
@@ -145,6 +146,11 @@ def accepted_by_owner(owners: dict[str, str],
         states = tool_store.states()
         return {a for a, owner in owners.items() if owner in states and accepted(states[owner])}
     return delivered
+
+
+def checked(owner: str) -> bool:
+    """Whether the owner's task tool answered a call without an error (the sample store)."""
+    return any(c.get("owner") == owner and not c.get("error") for c in tool_store.calls())
 
 
 def host_tool(name: str, description: str, parameters: ToolParams, make_call: Callable[[str], tuple[dict, Callable]],

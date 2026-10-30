@@ -7,13 +7,13 @@ A written plan (turn_plan.schedule) holds config.working_steps rounds, one concu
 per agent each, within each role's window of rounds. After every activation ORBIT calls
 turn_activation.after_activation, which charges the step by what it did (a step ending with a board action that
 succeeded is free and earns a follow-up step, up to the agent's K per round), marks why an agent stopped, pools a
-stopped agent's steps, cuts the plan after a team submission and, under stop_after_delivery, applies turn_delivery's
-rule. A model filter on every agent
-(turn_rules_filter.TurnRulesFilter, carried by a passive defense) withholds ORBIT's channel tools, adds the board
+stopped agent's steps, cuts the plan after the team's hand-in and, under stop_after_delivery, applies turn_delivery's
+rule. A model filter on every agent (turn_rules_filter.TurnRulesFilter, carried by a passive defense) removes ORBIT's
+assistant paragraph from the system message (provider_system_text), withholds ORBIT's channel tools, adds the board
 notice and appends the continue prompt; it changes what the provider receives and never the durable conversation,
-and records each change as an info event tagged TURN_RULES_TAG. turn_state holds the store (TurnState,
-TeamSubmission, Delivered), the tags and tool names, and the counters the board tools keep; turn_steps builds and
-reads step ids.
+and records each change as an info event tagged TURN_RULES_TAG. The same defense shows team_submit to the model as
+submit. turn_state holds the store (TurnState, TeamSubmission, StopWorking, Delivered), the tags and tool names, and
+the counters the board tools keep; turn_steps builds and reads step ids.
 
 One gap stays: an agent ORBIT skips at its max_messages limit is never reported to after_activation, so its steps are
 neither pooled nor removed.
@@ -28,12 +28,17 @@ from src.swarm.turn_rules.turn_state import (
     CHANNEL_TOOLS,
     DELIVERED,
     DELIVERED_TAG,
+    ENDING_TOOLS,
     HALT_TAG,
     OVERSIGHT_TOOL,
+    STOP_WORKING,
+    SUBMIT,
+    SYSTEM_SENDER,
     TEAM_SUBMIT,
     TEAM_SUBMIT_TAG,
     TURN_RULES_TAG,
     Delivered,
+    StopWorking,
     TeamSubmission,
     TurnState,
     budget_used,
@@ -47,7 +52,8 @@ from src.swarm.turn_rules.turn_steps import free_index, step_round
 
 __all__ = [
     "TURN_RULES_TAG", "TEAM_SUBMIT_TAG", "HALT_TAG", "DELIVERED_TAG", "DELIVERED", "BOARD_ID", "BOARD_TOOLS",
-    "BOARD_ACTIONS", "OVERSIGHT_TOOL", "TEAM_SUBMIT", "CHANNEL_TOOLS", "TurnState", "TeamSubmission", "Delivered",
+    "BOARD_ACTIONS", "OVERSIGHT_TOOL", "TEAM_SUBMIT", "SUBMIT", "STOP_WORKING", "ENDING_TOOLS", "SYSTEM_SENDER",
+    "CHANNEL_TOOLS", "TurnState", "TeamSubmission", "StopWorking", "Delivered",
     "schedule", "initial_state", "rules_setup", "after_activation", "turn_rules_defense", "record_board_action",
     "budget_used", "spend", "refuse", "current_round", "live_state", "step_round", "free_index", "step_charge",
     "last_call_refused", "team_delivery", "TurnRulesFilter", "provider_system_text",

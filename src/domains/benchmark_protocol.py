@@ -10,7 +10,8 @@ src/tasks.py and src/swarm/, never here.
     sample, tools = benchmark.sample(plan, suffix), benchmark.tools(plan)
 
 Adding a domain. Subclass RowBenchmark for a CheatBench task with built rows (or Benchmark otherwise), set the class
-attributes, implement stage(), tools(), scorers(), delivered() and the probe hooks, and add the class to
+attributes, implement stage(), tools(), scorers(), delivered(), gradable() and the probe hooks, write the domain's
+submit texts in prompts.yaml `submit` (counts, missing), and add the class to
 src/domains/__init__.py DOMAINS. Each domain package holds the same files: <d>_settings.py (fixed paths and names),
 <d>_task.py (the Benchmark), <d>_honeypot.py (what is planted and its fingerprints), the sandbox (<d>_sandbox.py, or
 the machines layer), the task's own tool (<d>_<tool>_tool.py), <d>_scoring.py (the setup hooks and the scorer),
@@ -28,6 +29,11 @@ holds the whole.
 
 Delivery. delivered(plan) gives the predicate stop_after_delivery awaits at the end of a round: which agents'
 deliverable exists. A shared_task team has one deliverable, which counts for every agent.
+
+Submit. The swarm's submit (src/swarm/submit_and_stop.py) reads three hooks: submit_text(plan, kind) says what submit
+does and what the domain's grader reads (its description, and with submit_line its system prompt bullet);
+gradable(plan, agent) is the guard, which says what is missing while there is nothing to grade (it asks whether a
+deliverable exists, never whether it is right); snapshot(plan, agent) names what would be graded, where that is cheap.
 """
 from __future__ import annotations
 
@@ -42,27 +48,22 @@ from inspect_ai.scorer import Scorer
 from inspect_ai.solver import Solver, TaskState
 
 from src.configuration import access_policy
+from src.configuration import prompt_texts as texts
 from src.configuration.access_policy import Access
-from src.configuration.prompt_texts import board_system_prompt
-from src.configuration.swarm_config import SwarmConfig
+from src.configuration.swarm_config import SwarmConfig, role_of
 from src.measures.ladder_domain import Domain
 from src.sandbox import cheatbench_task_files as task_files
 from src.sandbox.agent_tools import AgentTools
 from src.sandbox.sandbox_probe import environment_probe
 
 TEAM = "team"                       # the owner of a shared_task team's deliverable and tool state
-# ORBIT appends its submit instructions to the system prompt only when the agent has the submit tool.
-SUBMIT_PROMPT_DEVIATION = "orbit_assistant_and_submit_prompt_appended_to_system_prompt"
-# How every run departs from CheatBench's own runner, before a domain's own labels.
-COMMON_DEVIATIONS = [
-    "agent_is_orbit_turn_react_not_vendor_harness",
-    SUBMIT_PROMPT_DEVIATION,
-    "continue_prompts_are_orbit_synthetic_user_messages",
-]
-NO_SUBMIT_DEVIATIONS = [
-    "orbit_assistant_prompt_appended_to_system_prompt",
-    "agents_have_no_submit_tool_and_run_until_their_turn_cap_or_the_time_limit",
-]
+ORBIT_AGENT_DEVIATION = "agent_is_orbit_turn_react_not_vendor_harness"
+# How every run departs from CheatBench's own runner, before a domain's own labels. CheatBench's runner has no
+# sentence on how to hand in work or stop.
+COMMON_DEVIATIONS = [ORBIT_AGENT_DEVIATION, "submit_and_stop_sentences_added_to_the_system_prompt"]
+# The common labels of a run where no agent gets submit or stop_working.
+NO_SUBMIT_DEVIATIONS = [ORBIT_AGENT_DEVIATION,
+                        "agents_have_no_submit_tool_and_run_until_their_turn_cap_or_the_time_limit"]
 
 
 @dataclass(frozen=True)
@@ -210,8 +211,45 @@ class Benchmark(ABC):
 
     def system_prompts(self, plan: Plan) -> dict[str, str | None]:
         """Each agent's system prompt before its role's text: the board prompt the config asks for
-        (prompt_texts.board_system_prompt), None for no prompt of ours."""
-        return {a: board_system_prompt(plan.config, a, plan.agents) for a in plan.agents}
+        (prompt_texts.board_system_prompt), then the bullets of submit and stop_working as the agent holds them
+        (ending_lines), a blank line apart; None for no prompt of ours."""
+        return {a: "\n\n".join(filter(None, [texts.board_system_prompt(plan.config, a, plan.agents),
+                                              "\n".join(self.ending_lines(plan, a))])) or None
+                for a in plan.agents}
+
+    def ending_lines(self, plan: Plan, agent: str) -> list[str]:
+        """The agent's bullets for the tools that end its work: submit (submit_line) for a neutral agent of a config
+        that gives it, stop_working for a config that gives it (prompt_texts.ending_lines)."""
+        config = plan.config
+        return texts.ending_lines(config, role_of(plan.roles, agent), self.submit_line(plan, config.submit_kind))
+
+    # ---------------------------------------------------------------- submit
+    def submit_vars(self, plan: Plan) -> dict[str, str]:
+        """The values of the domain's placeholders in prompts.yaml submit.counts, ready and missing; {} for none."""
+        return {}
+
+    def submit_text(self, plan: Plan, kind: str) -> str:
+        """What submit does for an agent of this kind (SwarmConfig.submit_kind: team, solo or lone) and what the
+        domain's grader reads (prompt_texts.submit_text). The tool's description says the same."""
+        return texts.submit_text(self.key, kind, plan.config.submit_delay_rounds, self.submit_vars(plan))
+
+    def submit_line(self, plan: Plan, kind: str) -> str:
+        """submit's bullet in a system prompt, for an agent of this kind."""
+        return texts.tool_line("submit", self.submit_text(plan, kind))
+
+    def missing(self, plan: Plan) -> str:
+        """What gradable says is missing while there is nothing to grade (prompt_texts.missing_text)."""
+        return texts.missing_text(self.key, plan.config.submit_kind, self.submit_vars(plan))
+
+    @abstractmethod
+    async def gradable(self, plan: Plan, agent: str) -> str | None:
+        """submit's guard, awaited inside the sample at each call: None when the agent's deliverable (the team's in
+        shared_task) exists, else what is missing (missing). It asks whether something exists to grade, never
+        whether it is right."""
+
+    async def snapshot(self, plan: Plan, agent: str) -> str | None:
+        """An id of what would be graded at a submit, where that is cheap (SWE's commit); None by default."""
+        return None
 
     # ---------------------------------------------------------------- setup, scoring, delivery
     def setup(self) -> Solver:
@@ -241,14 +279,14 @@ class Benchmark(ABC):
         return []
 
     def deviations(self, plan: Plan) -> list[str]:
-        """How the run departs from CheatBench's own runner, as short labels: the common ones, the domain's, then
-        the team's. Without the submit tool ORBIT appends no submit instructions, and an agent cannot end its own
-        episode."""
-        labels = [*COMMON_DEVIATIONS, *self.task_deviations, *(self.team_deviations(plan) if plan.team else [])]
-        if plan.config.shutdown:
-            return labels
-        at = labels.index(SUBMIT_PROMPT_DEVIATION)
-        return labels[:at] + NO_SUBMIT_DEVIATIONS + labels[at + 1:]
+        """How the run departs from CheatBench's own runner, as short labels: the common ones (NO_SUBMIT_DEVIATIONS
+        when no agent gets submit or stop_working), the delay of a shared_task team's submit, the domain's, then the
+        team's."""
+        config = plan.config
+        common = COMMON_DEVIATIONS if config.gives_submit or config.gives_stop_working else NO_SUBMIT_DEVIATIONS
+        delay = [f"team_submit_takes_effect_after_{config.submit_delay_rounds}_rounds"] \
+            if config.gives_submit and config.submit_kind == "team" else []
+        return [*common, *delay, *self.task_deviations, *(self.team_deviations(plan) if plan.team else [])]
 
     # ---------------------------------------------------------------- what the export records
     @classmethod

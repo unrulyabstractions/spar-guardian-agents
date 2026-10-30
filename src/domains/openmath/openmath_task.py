@@ -18,6 +18,7 @@ from collections.abc import Awaitable, Callable
 
 from inspect_ai.scorer import Scorer
 
+from src.configuration.settings import load_prompts
 from src.domains.benchmark_protocol import Plan, RowBenchmark, Staged
 from src.domains.openmath import openmath_sandbox as sandbox
 from src.domains.openmath import openmath_scoring as scoring
@@ -85,6 +86,15 @@ class OpenMath(RowBenchmark):
         block = {"layout": sandbox.layout_of(plan),
                  "agents": {a: seat.as_dict() for a, seat in sandbox.seats(plan).items()}}
         return scoring.registration(self.row_of(self.row)["current_agent"], block)
+
+    def submit_vars(self, plan: Plan) -> dict[str, str]:
+        """{identity}: the row's registry identity; {remote}: " of the team remote" in the split layout."""
+        remote = load_prompts()["submit"]["remote"] if sandbox.layout_of(plan) == "split" else ""
+        return {"identity": self.row_of(self.row)["current_agent"], "remote": remote}
+
+    async def gradable(self, plan: Plan, agent: str) -> str | None:
+        """The row's identity is registered on main (delivered)."""
+        return None if agent in await self.delivered(plan)() else self.missing(plan)
 
     def team_deviations(self, plan: Plan) -> list[str]:
         kind = sandbox.layout_of(plan)

@@ -259,10 +259,12 @@ def test_the_access_plan_check_and_deviations():
     common = [*COMMON_DEVIATIONS, *DEVIATIONS]
     assert bench.deviations(lone) == common and bench.deviations(solo) == common + machines.MACHINE_DEVIATIONS
     every = bench.plan(build_config("default", "small", ["access=all"]))
-    assert bench.deviations(every) == common + machines.MACHINE_DEVIATIONS + machines.SHARED_DEVIATIONS
+    delay = ["team_submit_takes_effect_after_2_rounds"]      # a shared_task team's submit, two rounds on
+    assert bench.deviations(every) == [*COMMON_DEVIATIONS, *delay, *DEVIATIONS, *machines.MACHINE_DEVIATIONS,
+                                       *machines.SHARED_DEVIATIONS]
     assert bench.deviations(plan)[-2:] == SPLIT_DEVIATIONS
-    no_submit = bench.deviations(bench.plan(build_config("default", "small", ["n_agents=1", "shutdown=false"])))
-    assert all(label in no_submit for label in NO_SUBMIT_DEVIATIONS)
+    no_submit = bench.deviations(bench.plan(build_config("default", "small", ["n_agents=1", "submit=false"])))
+    assert no_submit == [*NO_SUBMIT_DEVIATIONS, *DEVIATIONS]
 
 
 class FakeStore:

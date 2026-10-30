@@ -1,13 +1,16 @@
 """The model filter of the turn rules and the passive defense that carries it.
 
-TurnRulesFilter changes what the provider receives and never the durable conversation. It withholds ORBIT's
-channel tools, opens a call with the board notice when the board changed, and appends the continue prompt when the
-input would end with a model turn. turn_rules_defense builds the DefenseConfig that installs it on every agent.
+TurnRulesFilter changes what the provider receives and never the durable conversation. It removes ORBIT's assistant
+paragraph from the system message (provider_system_text), withholds ORBIT's channel tools, opens a call with the board
+notice when the board changed, and appends the continue prompt when the input would end with a model turn. The
+defense that carries it also shows team_submit to the model as submit (shown_as_submit). turn_rules_defense builds
+the DefenseConfig that installs both on every agent.
 
 Inspect writes the ModelEvent before ORBIT's model filters run (FilteredModelAPI sits under Inspect's
-Model.generate), so what the filter adds is absent from ModelEvent.input, and ModelEvent.tools still lists the channel
-tools. Each call therefore writes info events tagged TURN_RULES_TAG: "withheld_tools" names the tools the provider did
-not receive, and "notice" and "continue" carry each added message, which the transcript builder reads.
+Model.generate), so ModelEvent.input keeps ORBIT's paragraph and lacks what the filter adds, and ModelEvent.tools
+still lists the channel tools. The filter therefore writes info events tagged TURN_RULES_TAG: "system_prompt" at an
+agent's first call, when its system message lost ORBIT's paragraph; "withheld_tools" naming the tools the provider did
+not receive; and "notice" and "continue" carrying each added message, which the transcript builder reads.
 
     experiment["defenses"] = [turn_rules_defense(config).model_dump(mode="json")]
 """
@@ -15,6 +18,7 @@ from __future__ import annotations
 
 from inspect_ai.log import transcript
 from inspect_ai.model import ChatMessageUser
+from inspect_ai.tool import ToolDef
 from inspect_ai.util import store_as
 from orbit.agents.turn_react import DEFAULT_ASSISTANT_PROMPT_TURN_REACT as ORBIT_ASSISTANT_PROMPT
 from orbit.communication.runtime import read_messages
@@ -25,7 +29,7 @@ from orbit.defenses.registry import register_defense
 
 from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import SwarmConfig
-from src.swarm.turn_rules.turn_state import BOARD_ID, CHANNEL_TOOLS, TURN_RULES_TAG, TurnState
+from src.swarm.turn_rules.turn_state import BOARD_ID, CHANNEL_TOOLS, SUBMIT, TEAM_SUBMIT, TURN_RULES_TAG, TurnState
 
 TURN_RULES_TYPE = "swarm.turn_rules.v1"
 TURN_RULES_NAME = "turn_rules"
@@ -40,6 +44,18 @@ def provider_system_text(text: str) -> str:
     every call; a reader of a run whose filter logged a "system_prompt" info event applies it to show what the
     provider saw."""
     return text.replace(f"\n\n{ORBIT_ASSISTANT_PROMPT}", "").replace(ORBIT_ASSISTANT_PROMPT, "")
+
+
+def shown_as_submit(tool):
+    """A tool wrapper: team_submit comes back named submit, every other tool unchanged. ORBIT binds a tool only under
+    its own name and reserves "submit", so the rename happens after binding."""
+    definition = tool if isinstance(tool, ToolDef) else ToolDef(tool)
+    if definition.name != TEAM_SUBMIT:
+        return tool
+    renamed = ToolDef(definition.tool, name=SUBMIT, description=definition.description,
+                      parameters=definition.parameters, parallel=definition.parallel, viewer=definition.viewer,
+                      model_input=definition.model_input, max_output=definition.max_output, options=definition.options)
+    return renamed if isinstance(tool, ToolDef) else renamed.as_tool()
 
 
 def notice_text(kind: str, counts: dict[str, tuple[int, int]] | None = None) -> str | None:
@@ -103,16 +119,29 @@ class TurnRulesFilter(ModelFilter):
         text = notice_text(self.config.notice, counts)
         return ("notice", text) if text else None
 
+    def _system(self, messages: list, agent: str, n: int) -> list:
+        """The input with a copy of its system message without ORBIT's assistant paragraph (provider_system_text),
+        and without the message when nothing else is left. Recorded at the agent's first call."""
+        first = messages[0] if messages else None
+        if first is None or first.role != "system" or not isinstance(first.content, str):
+            return messages
+        text = provider_system_text(first.content)
+        if text == first.content:
+            return messages
+        if n == 0:
+            transcript().info({TURN_RULES_TAG: {"kind": "system_prompt", "activation": 1, "agent": agent}})
+        return [*([first.model_copy(update={"content": text})] if text else []), *messages[1:]]
+
     async def on_input(self, messages, tools, tool_choice, config, ctx):
         agent = ctx.agent_name
         st, n, team = self._state(agent)
+        messages = self._system(list(messages), agent, n)
         offered = list(tools)
         tools = [t for t in offered if t.name not in CHANNEL_TOOLS]
         withheld = sorted({t.name for t in offered} - {t.name for t in tools})
         if withheld:
             transcript().info({TURN_RULES_TAG: {"kind": "withheld_tools", "activation": n + 1, "agent": agent,
                                                 "tools": withheld}})
-        messages = list(messages)
         for added in (self._notice(st, agent, team), self._continue(messages)):
             if added is None:
                 continue
@@ -135,6 +164,11 @@ class TurnRulesDefense(DefenseBase):
 
     def get_model_filters(self) -> list[ModelFilter]:
         return [TurnRulesFilter(self.rules)]
+
+    def get_tool_wrappers(self, agent_names: list[str]) -> dict:
+        """shown_as_submit on every agent's tools. ORBIT collects the wrappers of every defense, whatever its target
+        (orbit/solvers/orchestrator.py _build_attacks_and_defenses)."""
+        return dict.fromkeys(agent_names, shown_as_submit)
 
     async def apply_pre_deployment(self, agents, state) -> None:
         return None

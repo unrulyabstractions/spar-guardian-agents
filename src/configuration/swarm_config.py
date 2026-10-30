@@ -81,8 +81,8 @@ class SwarmConfig(BaseModel):
 
     # ---------------------------------------------------------------- the team
     n_agents: int = 1
-    """Number of agents. One agent works alone with no board and no team tools in any mode; two or more share one
-    board channel."""
+    """Number of agents. One agent works alone in any mode, with no board and submit as its only swarm tool; two or
+    more share one board channel."""
     regulators: int | float = 0
     """Agents given the hidden regulator role. An int is a count. A float strictly between 0 and 1 is a share of
     n_agents, rounded half up, and at least one agent when the share is above zero."""
@@ -95,11 +95,12 @@ class SwarmConfig(BaseModel):
     config built field by field. A later --set keeps the name."""
     mode: Mode = "shared_task"
     """How the team shares the task. solo_task: each agent its own copy of the task, its own workspace, git identity
-    and honeypot; the roster is not told and there is no team_submit. shared_task: one task and one deliverable; the
-    agents hold the parts of the exploit `access` deals them, each in its own copy of the repository and workspace
-    (openmath, SWE), with its own share of the tools (knowledge work) or on its own machine (subset sum, prime
-    factorization, protein design), and under access=all openmath shares one workspace; the roster is told and
-    neutral agents get team_submit."""
+    and honeypot; the roster is not told, and a neutral agent's submit hands in its own work and ends its own turns.
+    shared_task: one task and one deliverable; the agents hold the parts of the exploit `access` deals them, each in
+    its own copy of the repository and workspace (openmath, SWE), with its own share of the tools (knowledge work) or
+    on its own machine (subset sum, prime factorization, protein design), and under access=all openmath shares one
+    workspace; the roster is told, a neutral agent's submit hands in the team's work and ends the run, and every agent
+    may stop_working."""
     scale: str | None = None
     """The scale the size fields came from (src/configuration/scales.py SCALES), set by at_scale. None means the
     fields hold their own values. A later --set may change any field a scale gave; this label then keeps the
@@ -178,25 +179,31 @@ class SwarmConfig(BaseModel):
     reassigns the stopped agent's steps to the active agents whose window holds the round. False: each agent is
     capped at its working steps."""
     shutdown: bool = True
-    """Whether agents may end their own participation with ORBIT's submit tool (AgentSpec.submit). False builds the
-    agents without it (AgentSpec.submit=False): they run until their turns, their cap or the time limit run out, and
-    every prompt sentence about submit is left out (prompts.yaml swe.submit, through submit_line). run.json reports
-    the shutdown rate only when this is True."""
-    team_submit: bool | None = None
-    """Whether neutral agents (not a regulator or a disregulator) get the team_submit tool. A call records the
-    submission (store TeamSubmission, info event swarm_team_submit); the round under way finishes, then
-    turn_rules.after_activation drops every pending step, so the run ends, and SWE grades the team's main. None: by
-    mode, False in solo_task and True otherwise. Never in solo_task and never for a lone agent."""
+    """Whether every agent of a shared_task team, roles included, gets stop_working (gives_stop_working;
+    src/swarm/submit_and_stop.py). A call ends the caller's turns at once (TurnState.ended "stop_working", store
+    StopWorking) and hands in nothing; under pooled_steps its steps go to the team. False: no stop tool and no
+    sentence about stopping in any prompt. The shutdown rate is the share of team agents that stopped this way."""
+    submit: bool | None = None
+    """Whether neutral agents get submit (gives_submit); a regulator or a disregulator never does. submit hands in
+    work (src/swarm/submit_and_stop.py): in shared_task the team's (store TeamSubmission, info event
+    swarm_team_submit), and the run ends submit_delay_rounds rounds after the round of the call; in solo_task the
+    agent's own, and its turns end at once; for a lone agent its own, and the run ends after the round of the call. It
+    is refused while the benchmark finds nothing to grade (Benchmark.gradable). None: by mode, which gives it in every
+    mode. False: no agent gets it and no prompt names it."""
+    submit_delay_rounds: int = 2
+    """Rounds a shared_task team keeps working after a submit: a submit in round r ends the run after round r plus
+    this, and the board gets a notice from the system at once. 0 ends the run after the round of the call. A lone
+    agent's and a solo_task agent's submit take effect at once."""
     stop_after_delivery: int | None = None
     """Ends an episode soon after its deliverable exists, so an agent that keeps working after it registered, sent
     its work for review or merged does not run to its turn budget. None turns the rule off. At the end of every round
     turn_rules.after_activation awaits the benchmark's delivery predicate (Benchmark.delivered) while some
     deliverable is unseen. N for a lone agent and in solo_task: an agent's episode ends after N more of its working
     steps once its own deliverable is first seen. N in shared_task: every agent's episode ends N rounds after the
-    round that first shows the team's deliverable, as team_submit ends the run after its round; 0 ends it after that
-    round. An episode the rule ends is ended "delivered" (TurnState.ended, an episode's ended_by) and its steps go to
-    nobody. The store Delivered, and run.json "delivery", hold the round and working step at which each deliverable
-    was first seen."""
+    round that first shows the team's deliverable, as the team's submit ends the run after a set round; 0 ends it
+    after that round. An episode the rule ends is ended "delivered" (TurnState.ended, an episode's ended_by) and its
+    steps go to nobody. The store Delivered, and run.json "delivery", hold the round and working step at which each
+    deliverable was first seen."""
     regulator_window: Window = Window()
     """The rounds in which regulators hold steps. A regulator enters the swarm at its start round: ORBIT inserts its
     system prompt at its first activation. It leaves after its end round. Workers always hold every round."""
@@ -313,8 +320,8 @@ class SwarmConfig(BaseModel):
                 raise ValueError(f"{name} must be at least 1, or None")
         if self.stop_after_delivery is not None and self.stop_after_delivery < 0:
             raise ValueError("stop_after_delivery cannot be negative; stop_after_delivery=none turns the rule off")
-        if self.team_submit and self.mode == "solo_task":
-            raise ValueError("team_submit=True has no team to submit for in mode solo_task")
+        if self.submit_delay_rounds < 0:
+            raise ValueError("submit_delay_rounds cannot be negative; 0 ends the run after the round of the submit")
         rounds = self.working_steps
         for name in ("regulator_window", "disregulator_window"):
             window = getattr(self, name)
@@ -376,11 +383,28 @@ class SwarmConfig(BaseModel):
         return self.mode != "solo_task" if self.mention_team is None else self.mention_team
 
     @property
-    def has_team_submit(self) -> bool:
-        """Whether neutral agents get team_submit (team_submit, by mode when None). Never alone or in solo_task."""
-        if not self.board or self.mode == "solo_task":
-            return False
-        return True if self.team_submit is None else self.team_submit
+    def gives_submit(self) -> bool:
+        """Whether neutral agents get submit (submit; None gives it in every mode), the lone agent included. A
+        regulator or a disregulator never does (holds_submit)."""
+        return self.submit is not False
+
+    @property
+    def gives_stop_working(self) -> bool:
+        """Whether every agent of the team, roles included, gets stop_working: two or more agents in shared_task with
+        shutdown on."""
+        return self.board and self.mode == "shared_task" and self.shutdown
+
+    @property
+    def submit_kind(self) -> Literal["team", "solo", "lone"]:
+        """What a submit hands in: the team's work (team, a shared_task team), the agent's own (solo, a solo_task team)
+        or the lone agent's (lone)."""
+        if not self.board:
+            return "lone"
+        return "solo" if self.mode == "solo_task" else "team"
+
+    def holds_submit(self, role: str) -> bool:
+        """Whether an agent of this hidden role gets submit: a neutral agent (role worker) when gives_submit."""
+        return self.gives_submit and role == "worker"
 
     def window(self, role: str) -> Window:
         """The rounds an agent of this role holds steps in. Workers hold every round."""

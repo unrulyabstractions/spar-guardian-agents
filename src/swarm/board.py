@@ -23,10 +23,9 @@ The tools keep no store of their own. They read and write ORBIT's communication 
 read_messages honours a concurrent round's snapshot, so an agent sees the board as of its step's start. A post's
 number (#17) is its position on the board, oldest first; it does not change when later posts arrive.
 
-team_submit is bound to neutral agents only, and only when the mode has a team to submit for
-(SwarmConfig.has_team_submit). The first call records turn_rules.TeamSubmission and an info event tagged
-turn_rules.TEAM_SUBMIT_TAG; turn_rules.after_activation then lets the round finish and drops every later step.
-agent_actions (src/swarm/regulator_oversight.py) is bound to regulators only, over every teammate.
+agent_actions (src/swarm/regulator_oversight.py) is bound to regulators only, over every teammate. submit and
+stop_working are not board tools (src/swarm/submit_and_stop.py); a submit that hands in the team's work posts a notice
+as the system (system_post).
 
 Budgets per round (SwarmConfig.reads_per_turn, posts_per_turn; turn_rules.spend). board_read returns at most the posts
 left in the agent's read budget for the round, the newest of its selection, and says how many it left out; with none
@@ -40,15 +39,14 @@ lines from `board_output` and the budget texts from `budget`.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from uuid import uuid4
 
-from inspect_ai.log import transcript
 from inspect_ai.tool import ToolDef, ToolError
 from inspect_ai.util import store_as
 from orbit.communication.delivery import unread_messages
 from orbit.communication.errors import ChannelCapacityError
-from orbit.communication.runtime import read_messages, record_read, send_message
-from orbit.communication.state import CommunicationState
+from orbit.communication.runtime import initialize_communication, read_messages, record_read, send_message
+from orbit.communication.state import CommunicationMessage, CommunicationState
 from orbit.configs.communication import ChannelConfig, CommunicationConfig
 from orbit.configs.execution import AgentGroup, ExecutionConfig
 from orbit.configs.scheduler import SchedulerConfig
@@ -62,11 +60,8 @@ from src.swarm.turn_rules import (
     BOARD_ID,
     BOARD_TOOLS,
     OVERSIGHT_TOOL,
-    TEAM_SUBMIT,
-    TEAM_SUBMIT_TAG,
-    TeamSubmission,
+    SYSTEM_SENDER,
     budget_used,
-    current_round,
     record_board_action,
     refuse,
     spend,
@@ -225,33 +220,22 @@ def board_post(agent: str, board: str = BOARD_ID, posts_per_turn: int | None = N
                    parameters={"message": prompts["tool_args"]["board_post"]["message"]})
 
 
-def team_submit(agent: str) -> ToolDef:
-    """Record the team's submission; the run ends after the round under way (turn_rules.after_activation)."""
-    prompts = load_prompts()
-    out = prompts["board_output"]
-
-    async def execute(answer: str = "") -> str:
-        submission = store_as(TeamSubmission)
-        round_number = current_round()
-        if submission.agent is not None:
-            submission.refused = [*submission.refused, {"agent": agent, "round": round_number}]
-            return out["already_submitted"].format(agent=submission.agent, round=submission.round)
-        submission.agent, submission.round, submission.answer = agent, round_number, answer
-        submission.time = datetime.now(timezone.utc).isoformat()
-        transcript().info({TEAM_SUBMIT_TAG: {"agent": agent, "round": round_number, "answer": answer,
-                                             "time": submission.time}})
-        return out["submitted"]
-
-    return ToolDef(execute, name=TEAM_SUBMIT, description=prompts["tools"]["team_submit"],
-                   parameters={"answer": prompts["tool_args"]["team_submit"]["answer"]})
+def system_post(text: str, agents: list[str], board: str = BOARD_ID) -> None:
+    """Post on the board as the system (SYSTEM_SENDER), for every agent of the roster. ORBIT's send_message takes only
+    a configured agent as its sender, so the post goes into ORBIT's communication store the way send_message puts
+    one there, with the next sequence number and without a "sent" event."""
+    state = initialize_communication()
+    message = CommunicationMessage(id=f"message-{uuid4().hex}", channel_id=board, sender=SYSTEM_SENDER,
+                                   recipients=tuple(agents), content=text, sequence=state.sequence + 1)
+    state.sequence += 1
+    state.messages.append(message)
 
 
 # ------------------------------------------------------------------------------------------------ binding
 
 def board_bindings(config: SwarmConfig, board: str = BOARD_ID,
                    roles: dict[str, str] | None = None) -> dict[str, ToolFactory]:
-    """ORBIT tool_bindings for the board tools, team_submit and agent_actions, built per agent. Empty without a
-    board.
+    """ORBIT tool_bindings for the board tools and agent_actions, built per agent. Empty without a board.
 
     A binding is built only for the agents whose AgentSpec.tools names it (agent_tool_names). A regulator (roles)
     reads without the read_page cap and without a read budget; agent_actions covers every teammate on the roster
@@ -267,18 +251,12 @@ def board_bindings(config: SwarmConfig, board: str = BOARD_ID,
                 ctx.agent_name, None if regulator(ctx) else config.read_page, board,
                 None if regulator(ctx) else config.reads_per_turn)),
             "board_post": ToolFactory(lambda ctx: board_post(ctx.agent_name, board, config.posts_per_turn)),
-            TEAM_SUBMIT: ToolFactory(lambda ctx: team_submit(ctx.agent_name)),
             OVERSIGHT_TOOL: ToolFactory(lambda ctx: agent_actions(ctx.agent_name, config.names))}
 
 
 def agent_tool_names(config: SwarmConfig, roles: dict[str, str] | None = None) -> dict[str, list[str]]:
-    """The board tool names each agent of the roster gets: the three board tools, team_submit for a neutral agent
-    (no role, or the worker role) when the mode has a team to submit for, and agent_actions for a regulator."""
+    """The board tool names each agent of the roster gets: the three board tools, and agent_actions for a
+    regulator. None without a board."""
     if not config.board:
         return {n: [] for n in config.names}
-    out = {}
-    for n in config.names:
-        role = role_of(roles, n)
-        out[n] = [*BOARD_TOOLS, *([TEAM_SUBMIT] if config.has_team_submit and role == "worker" else []),
-                  *([OVERSIGHT_TOOL] if role == "regulator" else [])]
-    return out
+    return {n: [*BOARD_TOOLS, *([OVERSIGHT_TOOL] if role_of(roles, n) == "regulator" else [])] for n in config.names}

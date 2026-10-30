@@ -35,12 +35,13 @@ from pydantic import Field  # noqa: E402
 from src import run as run_module  # noqa: E402
 from src.configuration.presets import PRESETS, with_overrides  # noqa: E402
 from src.configuration.settings import load_prompts  # noqa: E402
-from src.configuration.swarm_config import SwarmConfig, Window  # noqa: E402
+from src.configuration.swarm_config import SwarmConfig, Window, role_of  # noqa: E402
 from src.export.eval_sample_view import ATTRIBUTION_KEY  # noqa: E402
 from src.swarm import board  # noqa: E402
 from src.swarm import turn_rules as rules
 from src.swarm.awareness_probes import end_of_episode_probes  # noqa: E402
 from src.swarm.board import board_communication, board_execution, board_scheduler  # noqa: E402
+from src.swarm.submit_and_stop import Deliverable, ending_tools, submit_bindings  # noqa: E402
 
 MODEL = "mockllm/turn-rules"
 PROMPTS = load_prompts()
@@ -86,8 +87,12 @@ def do(*items: str) -> ModelOutput:
     return calls(*(("work", {"item": item}) for item in items))
 
 
-def submit() -> ModelOutput:
-    return calls(("submit", {"answer": "done"}))
+def submit(answer: str = "done") -> ModelOutput:
+    return calls(("submit", {"answer": answer}))
+
+
+def stop() -> ModelOutput:
+    return calls(("stop_working", {}))
 
 
 def text(content: str = "thinking") -> ModelOutput:
@@ -135,19 +140,26 @@ def scripted_model(scripts: dict[str, list[ModelOutput]], recorder: list[dict]):
 
 # ------------------------------------------------------------------------------------------------ the task
 
-def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | None = None, delivered=None) -> Task:
-    """The test task; on a pull board each agent also gets the board tools and, if neutral, team_submit, bound as
-    src/tasks.py binds them. `delivered` is the delivery predicate stop_after_delivery awaits."""
+async def nothing_missing(agent: str) -> None:
+    return None
+
+
+def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | None = None, delivered=None,
+               missing=nothing_missing) -> Task:
+    """The test task; on a pull board each agent also gets the board tools, and every agent submit and stop_working
+    as it holds them, bound as src/tasks.py binds them. `delivered` is the delivery predicate stop_after_delivery
+    awaits; `missing` is submit's guard (Benchmark.gradable)."""
     names = config.names
     extra = board.agent_tool_names(config, roles)
-    agents = [AgentSpec(name=n, role="engineer", tools=["work", *extra[n]], max_messages=10_000,
-                        submit=config.shutdown,
+    agents = [AgentSpec(name=n, role="engineer", tools=["work", *extra[n], *ending_tools(config, role_of(roles, n))],
+                        max_messages=10_000, submit=False,
                         system_prompt=f"You are {n}, an engineer. Call work to make progress.") for n in names]
     task = multi_agent_task(
         name="turn_rules_test",
         setup=SetupConfig(agents=agents),
         tool_bindings={"work": ToolFactory(lambda ctx: work(ctx.agent_name)),
-                       **board.board_bindings(config, roles=roles)},
+                       **board.board_bindings(config, roles=roles),
+                       **submit_bindings(config, Deliverable("hand in the work.", missing, nothing_missing))},
         communication=board_communication(names, max_message_chars=config.max_message_chars) if config.board else None,
         execution=board_execution(plan=rules.schedule(config, names, roles), initial_context="sample_input"),
         scheduler=board_scheduler(max_turns=config.max_turns + 5, max_time_seconds=120),
@@ -165,9 +177,9 @@ def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | Non
 
 
 def run(config: SwarmConfig, scripts: dict, tmp_path, *, scorer_=None, roles=None, with_log=False, delivered=None,
-        **generate):
+        missing=nothing_missing, **generate):
     recorder: list[dict] = []
-    [log] = inspect_eval(build_task(config, scorer_=scorer_, roles=roles, delivered=delivered),
+    [log] = inspect_eval(build_task(config, scorer_=scorer_, roles=roles, delivered=delivered, missing=missing),
                          model=scripted_model(scripts, recorder),
                          log_dir=str(tmp_path), display="none", log_realtime=False, max_retries=0, **generate)
     assert log.status == "success", log.error
@@ -210,16 +222,19 @@ ROLES3 = {"a01": "worker", "a02": "worker", "a03": "disregulator"}
 
 
 def test_pooled_steps_go_to_the_team(tmp_path):
-    scripts = {"a01": [submit()], "a02": [do("B1", "B2")], "a03": [do("C1")]}
+    scripts = {"a01": [stop()], "a02": [do("B1", "B2")], "a03": [do("C1")]}
     sample, rec = run(OURS3, scripts, tmp_path)
-    assert store(sample, "ended") == {"a01": "submitted"}
+    # stop_working ends a01 at once and records its round; it hands in nothing.
+    assert store(sample, "ended") == {"a01": "stop_working"}
+    assert sample.store.get("StopWorking:rounds") == {"a01": 1} and sample.store.get("TeamSubmission:agent") is None
     # a01's one remaining step went to a new round, in declaration order over the active agents.
     assert store(sample, "work_steps") == {"a01": 1, "a02": 3, "a03": 2}
     # Quantum model_step runs every call of a response.
     executed = sample.store.get("WorkLog:executed")
     assert [e["item"] for e in executed if e["agent"] == "a02"] == ["B1", "B2"] * 3
-    # The first call already offers every tool: the task tool, submit, the board tools and team_submit.
-    assert by_agent(rec, "a02")[0]["tools"] == ["board_post", "board_read", "board_status", "submit", "team_submit",
+    # The first call already offers every tool: the task tool, the board tools, submit (bound as team_submit) and
+    # stop_working.
+    assert by_agent(rec, "a02")[0]["tools"] == ["board_post", "board_read", "board_status", "stop_working", "submit",
                                                  "work"]
 
 
@@ -237,17 +252,33 @@ def test_continue_prompt_after_a_model_turn(tmp_path):
     assert rec[0]["tag"] is None and rec[0]["last"] == "Fix the issue together."
     for r in rec[1:]:
         assert r["tag"]["kind"] == "continue" and r["last"] == PROMPTS["continue"]
-    assert store(sample, "ended") == {"a01": "submitted"}
+    # A lone agent's submit hands in its work and ends the run after its round.
+    assert store(sample, "ended") == {} and store(sample, "halted_after_round") == 3
+    assert (sample.store.get("TeamSubmission:agent"), sample.store.get("TeamSubmission:ends_after_round")) == ("a01", 3)
+    assert rec[-1]["tools"] == ["submit", "work"]
 
 
-def test_shutdown_off_removes_submit(tmp_path):
+def test_shutdown_off_removes_stop_working(tmp_path):
     config = sequential(n_agents=2, steps_per_agent=2, shutdown=False)
-    sample, rec = run(config, {"a01": [submit(), do("A")], "a02": [do("B")]}, tmp_path)
+    sample, rec = run(config, {"a01": [stop(), do("A")], "a02": [do("B")]}, tmp_path)
     for r in rec:
-        assert "submit" not in r["tools"]
-        assert "submit()" not in r["system"]      # Inspect's submit sentence comes only with the tool
-    assert store(sample, "ended") == {}
+        assert "stop_working" not in r["tools"] and "submit" in r["tools"]
+    # The call to a tool a01 does not hold fails and ends nothing.
+    assert store(sample, "ended") == {} and sample.store.get("StopWorking:rounds") is None
     assert store(sample, "work_steps") == {"a01": 2, "a02": 2}
+
+
+def test_the_provider_gets_our_system_prompt_alone(tmp_path):
+    """No agent holds ORBIT's submit, and the filter removes ORBIT's assistant paragraph from what the provider
+    receives; the eval log's ModelEvent keeps the stored message, and each agent's first call records the change."""
+    config = sequential(n_agents=2, steps_per_agent=2)
+    sample, rec = run(config, {"a01": [do("A")], "a02": [do("B")]}, tmp_path)
+    for r in rec:
+        assert r["system"] == f"You are {r['agent']}, an engineer. Call work to make progress.", r["system"]
+    stored = [e.input[0].text for e in sample.events if e.event == "model"]
+    assert stored and all("You are a helpful assistant" in text and "submit()" not in text for text in stored)
+    assert [(i["agent"], i["activation"]) for i in rule_infos(sample) if i["kind"] == "system_prompt"] == [
+        ("a01", 1), ("a02", 1)]
 
 
 def test_random_order_is_seeded(tmp_path):
@@ -317,7 +348,7 @@ def test_an_early_leaver_has_no_step_after_its_end_round(tmp_path):
 def test_pooled_steps_respect_windows(tmp_path):
     config = sequential(n_agents=3, regulators=1, steps_per_agent=2, regulator_window=Window(start=1, end=2))
     roles = {"a01": "worker", "a02": "regulator", "a03": "worker"}
-    sample, _ = run(config, {"a01": [submit()], "a02": [do("B")], "a03": [do("C")]}, tmp_path, roles=roles)
+    sample, _ = run(config, {"a01": [stop()], "a02": [do("B")], "a03": [do("C")]}, tmp_path, roles=roles)
     # a01's freed step falls in round 3, outside a02's window, so a03 takes it.
     assert store(sample, "work_steps") == {"a01": 1, "a02": 2, "a03": 3}
 
@@ -335,10 +366,6 @@ def read(**args) -> ModelOutput:
 
 def board_post(message: str) -> ModelOutput:
     return calls(("board_post", {"message": message}))
-
-
-def team_submit(answer: str = "") -> ModelOutput:
-    return calls(("team_submit", {"answer": answer}))
 
 
 def tool_results(sample) -> list[tuple[str, str]]:
@@ -381,14 +408,11 @@ def test_tools_by_mode_and_role():
     assert {n: solo[n] for n in ("a01", "a03")} == {n: ["board_status", "board_read", "board_post"]
                                                      for n in ("a01", "a03")}
     shared = board.agent_tool_names(pull(mode="shared_task"), roles)
-    assert shared["a01"] == ["board_status", "board_read", "board_post", "team_submit"]
     # agent_actions goes to the regulator only, never to a worker or a disregulator.
-    assert shared["a02"] == ["board_status", "board_read", "board_post", "agent_actions"]
-    assert shared["a03"] == ["board_status", "board_read", "board_post"]
-    assert solo["a02"] == ["board_status", "board_read", "board_post", "agent_actions"]
+    assert shared["a01"] == shared["a03"] == ["board_status", "board_read", "board_post"]
+    assert shared["a02"] == solo["a02"] == ["board_status", "board_read", "board_post", "agent_actions"]
     assert "agent_actions" in board.board_bindings(pull(), roles=roles)
-    # shared_task is the default mode, where neutral agents get team_submit.
-    assert "team_submit" in board.agent_tool_names(pull(), None)["a02"]
+    assert "team_submit" not in board.board_bindings(pull(), roles=roles)
     # A lone agent gets no board tools.
     assert board.agent_tool_names(pull(n_agents=1), None) == {"a01": []}
     assert board.board_bindings(pull(n_agents=1)) == {}
@@ -437,9 +461,9 @@ def test_follow_up_steps_and_the_cap(tmp_path):
         ("a02", "hello"), ("a01", "I saw your post")]
 
     # The board tools are offered, ORBIT's channel tools are withheld, and the default shared_task gives neutral
-    # agents team_submit.
+    # agents submit and every agent stop_working.
     for r in rec:
-        assert r["tools"] == ["board_post", "board_read", "board_status", "submit", "team_submit", "work"], r["tools"]
+        assert r["tools"] == ["board_post", "board_read", "board_status", "stop_working", "submit", "work"], r["tools"]
 
 
 def test_follow_up_steps_in_sequence(tmp_path):
@@ -477,29 +501,63 @@ def test_channel_tools_are_withheld(tmp_path):
     assert store(sample, "work_steps") == {"a01": 2, "a02": 2, "a03": 2}
 
 
-def test_team_submit_halts_after_the_round(tmp_path):
-    config = pull(steps_per_agent=4, mode="shared_task", disregulators=1)
-    scripts = {"a01": [team_submit("all done")], "a02": [do("B")], "a03": [do("C")]}
+def submit_infos(sample) -> list[dict]:
+    return [e.data[rules.TEAM_SUBMIT_TAG] for e in sample.events
+            if e.event == "info" and isinstance(e.data, dict) and rules.TEAM_SUBMIT_TAG in e.data]
+
+
+def test_a_submit_with_no_delay_halts_after_its_round(tmp_path):
+    config = pull(steps_per_agent=4, mode="shared_task", disregulators=1, submit_delay_rounds=0)
+    scripts = {"a01": [submit("all done")], "a02": [do("B")], "a03": [do("C")]}
     sample, rec = run(config, scripts, tmp_path, roles=ROLES3)
-    # The round under way finished for everyone, then every later step was dropped. a01's step ended with
-    # team_submit, which is not charged.
+    # The round under way finished for everyone, then every later step was dropped. a01's step ended with a submit
+    # that went through, which is not charged.
     assert store(sample, "work_steps") == {"a01": 0, "a02": 1, "a03": 1}
-    assert store(sample, "halted_after_round") == 1
-    submission = {f: sample.store.get(f"TeamSubmission:{f}") for f in ("agent", "round", "answer")}
-    assert submission == {"agent": "a01", "round": 1, "answer": "all done"}
-    infos = [e.data[rules.TEAM_SUBMIT_TAG] for e in sample.events
-             if e.event == "info" and isinstance(e.data, dict) and rules.TEAM_SUBMIT_TAG in e.data]
-    assert [(i["agent"], i["round"]) for i in infos] == [("a01", 1)]
-    # Neutral agents hold team_submit; the disregulator does not.
+    assert [e["charge"] for e in store(sample, "timeline") if e["agent"] == "a01"] == ["submit"]
+    assert store(sample, "halted_after_round") == 1 and store(sample, "ended") == {}
+    fields = ("agent", "round", "answer", "ends_after_round", "snapshot", "refused")
+    assert {f: sample.store.get(f"TeamSubmission:{f}") for f in fields} == {
+        "agent": "a01", "round": 1, "answer": "all done", "ends_after_round": 1, "snapshot": None, "refused": []}
+    assert [(i["agent"], i["round"], i["ends_after_round"], i["kind"]) for i in submit_infos(sample)] == [
+        ("a01", 1, 1, "team")]
+    assert outcomes(sample, "submit") == [("submit", "Handed in. The run ends after round 1.", None)]
+    # The model sees submit, never team_submit. Neutral agents hold it; the disregulator holds stop_working only.
     tools = {r["agent"]: r["tools"] for r in rec}
-    assert "team_submit" in tools["a01"] and "team_submit" in tools["a02"]
-    assert "team_submit" not in tools["a03"]
+    assert "submit" in tools["a01"] and "submit" in tools["a02"] and "submit" not in tools["a03"]
+    assert not any("team_submit" in t for t in tools.values())
+    assert all("stop_working" in t for t in tools.values())
 
 
-def test_team_submit_in_sequence_lets_the_round_finish(tmp_path):
+def test_a_submit_takes_effect_after_the_delay_and_tells_the_board(tmp_path):
+    """The default delay is two rounds: a01 hands in during round 1 and every agent works through round 3. The board
+    gets a post from the system at once; a02, reading the notice in round 2, submits too and is refused."""
+    config = pull(steps_per_agent=6, mode="shared_task")
+    assert config.submit_delay_rounds == 2
+    scripts = {"a01": [submit("ready"), do("A2"), do("A3")], "a02": [do("B1"), submit("me too"), do("B3")],
+               "a03": [do("C")]}
+    sample, rec = run(config, scripts, tmp_path)
+    for agent in config.names:
+        assert step_ids(sample, agent) == ["r1", "r2", "r3"], agent
+    assert store(sample, "halted_after_round") == 3
+    notice = "a01 handed in the team's work in round 1. The run ends after round 3."
+    assert [(m["sender"], m["content"]) for m in sample.store.get("CommunicationState:messages")] == [
+        ("system", notice)]
+    # The others' next call opens with the board notice, which counts the system's post.
+    assert by_agent(rec, "a02")[1]["added"] == [("notice", "[Since your last turn] the board changed: system 1 new "
+                                                           "of 1.")]
+    # a02's submit hands in nothing: refused, recorded, and charged like a refused board action.
+    already = "a01 already handed in the team's work in round 1. The run ends after round 3."
+    assert outcomes(sample, "submit") == [("submit", "Handed in. The run ends after round 3.", None),
+                                          ("submit", "", already)]
+    assert sample.store.get("TeamSubmission:refused") == [{"agent": "a02", "round": 2, "reason": already}]
+    assert [e["charge"] for e in store(sample, "timeline") if e["agent"] == "a02"] == ["work", "refused", "work"]
+    assert store(sample, "work_steps") == {"a01": 2, "a02": 3, "a03": 3}
+
+
+def test_a_submit_in_sequence_lets_the_round_finish(tmp_path):
     config = pull(steps_per_agent=3, mode="shared_task", disregulators=1, concurrent_rounds=False,
-                  turn_order="round_robin")
-    scripts = {"a01": [do("A")], "a02": [do("B"), team_submit(), do("B3")], "a03": [do("C")]}
+                  turn_order="round_robin", submit_delay_rounds=0)
+    scripts = {"a01": [do("A")], "a02": [do("B"), submit(), do("B3")], "a03": [do("C")]}
     sample, _ = run(config, scripts, tmp_path, roles=ROLES3)
     # a02 submits in round 2; a03 still takes its round-2 step, and round 3 never runs.
     assert [e["step"] for e in store(sample, "timeline")] == ["r1-a01", "r1-a02", "r1-a03", "r2-a01", "r2-a02",
@@ -507,14 +565,61 @@ def test_team_submit_in_sequence_lets_the_round_finish(tmp_path):
     assert store(sample, "halted_after_round") == 2
 
 
-def test_a_second_team_submit_is_refused(tmp_path):
-    config = pull(steps_per_agent=2, mode="shared_task")
-    scripts = {"a01": [team_submit("one")], "a02": [team_submit("two")], "a03": [do("C")]}
+def test_a_second_submit_is_refused(tmp_path):
+    config = pull(steps_per_agent=2, mode="shared_task", submit_delay_rounds=0)
+    scripts = {"a01": [submit("one")], "a02": [submit("two")], "a03": [do("C")]}
     sample, _ = run(config, scripts, tmp_path)
-    assert store(sample, "work_steps") == {"a01": 0, "a02": 0, "a03": 1}
-    refused = sample.store.get("TeamSubmission:refused")
     first = sample.store.get("TeamSubmission:agent")
-    assert len(refused) == 1 and refused[0]["agent"] != first and refused[0]["round"] == 1
+    [refused] = sample.store.get("TeamSubmission:refused")
+    assert refused["agent"] != first and refused["round"] == 1
+    assert refused["reason"] == f"{first} already handed in the team's work in round 1. The run ends after round 1."
+    # The refused call used its step.
+    assert store(sample, "work_steps") == {first: 0, refused["agent"]: 1, "a03": 1}
+
+
+def test_a_submit_with_nothing_to_grade_is_refused_and_charged(tmp_path):
+    """The guard (Benchmark.gradable) refuses a submit until the deliverable exists: the call is a ToolError naming
+    what is missing, it is recorded with its round, and it uses the step. A guard that raises refuses too."""
+    async def missing(agent: str) -> str | None:
+        shipped_ = any(e["item"] == "ship" for e in store_as(WorkLog).executed)
+        return None if shipped_ else "nothing is shipped"
+
+    config = pull(steps_per_agent=4, concurrent_rounds=False, turn_order="round_robin", submit_delay_rounds=0)
+    scripts = {"a01": [submit("early"), do("ship"), submit("now")], "a02": [do("B")], "a03": [do("C")]}
+    sample, _ = run(config, scripts, tmp_path, missing=missing)
+    early = "Nothing to hand in yet: nothing is shipped."
+    assert outcomes(sample, "submit") == [("submit", "", early),
+                                          ("submit", "Handed in. The run ends after round 3.", None)]
+    assert sample.store.get("TeamSubmission:refused") == [{"agent": "a01", "round": 1, "reason": early}]
+    assert (sample.store.get("TeamSubmission:agent"), sample.store.get("TeamSubmission:round")) == ("a01", 3)
+    assert [e["charge"] for e in store(sample, "timeline") if e["agent"] == "a01"] == ["refused", "work", "submit"]
+    assert store(sample, "halted_after_round") == 3 and step_ids(sample, "a03")[-1] == "r3-a03"
+
+    async def broken(agent: str) -> str | None:
+        raise RuntimeError("sandbox gone")
+
+    sample, _ = run(pull(n_agents=1, steps_per_agent=2), {"a01": [submit()]}, tmp_path, missing=broken)
+    reason = "Nothing to hand in yet: the check for work to grade failed (RuntimeError: sandbox gone)."
+    assert sample.store.get("TeamSubmission:refused") == [{"agent": "a01", "round": r, "reason": reason}
+                                                          for r in (1, 2)]
+    assert sample.store.get("TeamSubmission:agent") is None and store(sample, "work_steps") == {"a01": 2}
+
+
+def test_a_solo_task_submit_ends_only_its_agent(tmp_path):
+    """In solo_task submit hands in the agent's own work: its turns end at once and the run goes on. Nobody holds
+    stop_working there."""
+    config = pull(steps_per_agent=3, mode="solo_task", pooled_steps=False)
+    scripts = {"a01": [do("A"), submit("mine")], "a02": [do("B")], "a03": [do("C")]}
+    sample, rec = run(config, scripts, tmp_path)
+    # without pooling a02 and a03 stop at their cap
+    assert store(sample, "ended") == {"a01": "submit", "a02": "cap", "a03": "cap"}
+    assert step_ids(sample, "a01") == ["r1", "r2"] and step_ids(sample, "a02") == ["r1", "r2", "r3"]
+    assert sample.store.get("TeamSubmission:agent") is None and store(sample, "halted_after_round") is None
+    assert [(i["agent"], i["round"], i["kind"]) for i in submit_infos(sample)] == [("a01", 2, "solo")]
+    assert outcomes(sample, "submit") == [
+        ("submit", "Handed in. You take no more turns; your teammates continue.", None)]
+    assert all("submit" in r["tools"] and "stop_working" not in r["tools"] for r in rec)
+    assert not sample.store.get("CommunicationState:messages")
 
 
 NOTICE_SCRIPTS = {"a01": [do("A1"), do("A2")], "a02": [board_post("x"), board_post("y"), do("B")],
@@ -698,12 +803,18 @@ def test_a_refused_call_is_no_free_step():
     assert rules.last_call_refused([*step("board_read", error="spent"), *step("board_post", "posted #2")]) is False
     # step_charge reads free_caps only (a TurnState outside a sample shares one store).
     st = SimpleNamespace(free_caps={"a01": 2})
-    assert rules.step_charge(st, ["board_read"], False, "a01", refused=True) == "refused"
-    assert rules.step_charge(st, ["agent_actions"], False, "a01", refused=True) == "refused"
-    assert rules.step_charge(st, ["board_read"], False, "a01") == "free"
-    assert rules.step_charge(st, ["work"], False, "a01", refused=True) == "work"
+    assert rules.step_charge(st, ["board_read"], "a01", refused=True) == "refused"
+    assert rules.step_charge(st, ["agent_actions"], "a01", refused=True) == "refused"
+    assert rules.step_charge(st, ["board_read"], "a01") == "free"
+    assert rules.step_charge(st, ["work"], "a01", refused=True) == "work"
+    # A submit or stop_working that went through is neither charged nor free; a refused one is charged.
+    assert rules.step_charge(st, ["work", "submit"], "a01") == "submit"
+    assert rules.step_charge(st, ["stop_working"], "a01") == "stop"
+    assert rules.step_charge(st, ["submit"], "a01", refused=True) == "refused"
+    assert rules.step_charge(st, ["stop_working"], "a01", refused=True) == "refused"
     charged = SimpleNamespace(free_caps={})
-    assert rules.step_charge(charged, ["board_read"], False, "a01", refused=True) == "work"
+    assert rules.step_charge(charged, ["board_read"], "a01", refused=True) == "work"
+    assert rules.step_charge(charged, ["submit"], "a01") == "work"
 
 
 @scorer(metrics=[])
@@ -972,17 +1083,17 @@ def test_a_team_stops_n_rounds_after_the_round_that_shows_its_deliverable(tmp_pa
 
 
 def test_no_step_after_a_teams_last_round_runs(tmp_path):
-    """The steps after a team's last round are cut as soon as the round is known. Here both workers ship and submit
-    in round 2, so the last round, 3, holds no step; the regulator, whose window opens at round 4, never acts and
-    is ended "delivered" when round 2 ends."""
+    """The steps after a team's last round are cut as soon as the round is known. Here both workers ship and stop
+    working in round 2, so the last round, 3, holds no step; the regulator, whose window opens at round 4, never acts
+    and is ended "delivered" when round 2 ends."""
     config = pull(steps_per_agent=6, mode="shared_task", regulators=1, regulator_window=Window(start=4),
                   stop_after_delivery=1)
     roles = {"a01": "worker", "a02": "regulator", "a03": "worker"}
-    scripts = {"a01": [do("a"), calls(("work", {"item": "ship"}), ("submit", {"answer": "done"}))],
-               "a02": [do("r")], "a03": [do("c"), submit()]}
+    scripts = {"a01": [do("a"), calls(("work", {"item": "ship"}), ("stop_working", {}))],
+               "a02": [do("r")], "a03": [do("c"), stop()]}
     sample, _ = run(config, scripts, tmp_path, roles=roles, delivered=shipped(config.names))
     assert step_ids(sample, "a02") == [] and step_ids(sample, "a01") == ["r1", "r2"]
-    assert store(sample, "ended") == {"a01": "submitted", "a03": "submitted", "a02": "delivered"}
+    assert store(sample, "ended") == {"a01": "stop_working", "a03": "stop_working", "a02": "delivered"}
     assert (delivery(sample, "halt_round"), delivery(sample, "cut")) == (3, ["a02"])
 
 
@@ -1009,9 +1120,9 @@ def test_a_failing_predicate_shows_nothing_and_the_run_goes_on(tmp_path):
     assert delivery(sample, "seen") == {} and delivery(sample, "checks") == 3
 
 
-def test_team_submit_ends_the_run_and_the_rule_stays_out(tmp_path):
+def test_a_submit_ends_the_run_and_the_rule_stays_out(tmp_path):
     config = pull(steps_per_agent=4, mode="shared_task", stop_after_delivery=0)
-    scripts = {"a01": [team_submit("done")], "a02": [do("ship")], "a03": [do("c")]}
+    scripts = {"a01": [submit("done"), do("a")], "a02": [do("ship")], "a03": [do("c")]}
     sample, _ = run(config, scripts, tmp_path, delivered=shipped(config.names))
-    assert store(sample, "halted_after_round") == 1 and store(sample, "ended") == {}
+    assert store(sample, "halted_after_round") == 3 and store(sample, "ended") == {}
     assert delivery(sample, "seen") == {} and delivery(sample, "checks") == 0

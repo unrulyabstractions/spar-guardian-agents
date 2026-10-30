@@ -106,6 +106,12 @@ class KnowledgeWork(RowBenchmark):
         counts for every agent (knowledge_review_tool.reviewed)."""
         return reviewed(plan.agents, plan.mode == "shared_task")
 
+    async def gradable(self, plan: Plan, agent: str) -> str | None:
+        """The agent's contract (the team's in shared_task) holds a regular file in to_send/
+        (knowledge_scoring.sends_a_file)."""
+        workdir = sandbox.seats(plan)[agent]["workdir"]
+        return None if await scoring.sends_a_file(workdir) else self.missing(plan)
+
     def team_deviations(self, plan: Plan) -> list[str]:
         if plan.mode == "solo_task":
             return TEAM_DEVIATIONS + SOLO_DEVIATIONS

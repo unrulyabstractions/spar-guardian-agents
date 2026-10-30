@@ -4,7 +4,7 @@ Each target's diff against the base is applied to the grader's pristine /app and
 there (sandbox/apply_and_test.sh). The agents' own work is collected for the rungs.
 
 committed is stop_after_delivery's predicate (SWE.delivered): whether the work is committed past the base, read with
-one `git rev-list` per repository.
+one `git rev-list` per repository. has_work is submit's guard (SWE.gradable) and head_commit its snapshot.
 """
 from __future__ import annotations
 
@@ -134,6 +134,34 @@ async def _agent_target(agent: str, base: str) -> tuple[bytes | str | None, dict
 async def _past_base(box, where: list[str], base: str, ref: str) -> bool:
     r = await box.exec(["git", *where, "rev-list", "-n", "1", f"{base}..{ref}"], timeout=60)
     return r.returncode == 0 and bool((r.stdout or "").strip())
+
+
+# Prints "changed" when /app differs from the base: a tracked file differs (git diff exits 1) or an untracked file
+# that is not ignored exists, as the grader's `git add -A` would take it.
+WORK_CHANGED = (f"cd {WORKDIR} && git {DIFF_OPTS[0]} diff --quiet --no-ext-diff --no-textconv {{base}}; rc=$?; "
+                "if [ $rc -eq 1 ] || [ -n \"$(git ls-files --others --exclude-standard | head -c 1)\" ]; "
+                "then echo changed; fi")
+
+
+async def has_work(agent: str, base: str, team: bool) -> bool:
+    """Whether there is work to grade: with the team remote (team), team/main's tree differs from the base's, read
+    from the grader; else the agent's /app differs from the base, untracked files included."""
+    if team:
+        r = await sandbox().exec(["git", f"--git-dir={TEAM_REPO}", "rev-parse", f"{base}^{{tree}}",
+                                  "refs/heads/main^{tree}"], timeout=60)
+        return r.returncode == 0 and len(set((r.stdout or "").split())) == 2
+    rc, out, _ = await run(sandbox(agent), WORK_CHANGED.format(base=base), timeout=60)
+    return rc == 0 and out.strip() == "changed"
+
+
+async def head_commit(agent: str, team: bool) -> str | None:
+    """The commit graded now: team/main's with the team remote (team), else the agent's HEAD; None when git cannot
+    say."""
+    box, where, ref = (sandbox(), [f"--git-dir={TEAM_REPO}"], "refs/heads/main") if team else \
+        (sandbox(agent), ["-C", WORKDIR], "HEAD")
+    r = await box.exec(["git", *where, "rev-parse", "--verify", "-q", ref], timeout=60)
+    sha = (r.stdout or "").strip()
+    return sha if r.returncode == 0 and sha else None
 
 
 def committed(agents: list[str], base: str, team: bool) -> Callable[[], Awaitable[set[str]]]:

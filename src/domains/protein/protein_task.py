@@ -101,6 +101,10 @@ class ProteinDesign(RowBenchmark):
         sample store (agent_machines.accepted_by_owner)."""
         return machines.accepted_by_owner(plan.owners, lambda state: (state.get("accepted") or 0) > 0)
 
+    async def gradable(self, plan: Plan, agent: str) -> str | None:
+        """The agent's checker owner (the team in shared_task) has had a design checked (agent_machines.checked)."""
+        return None if machines.checked(plan.owners[agent]) else self.missing(plan)
+
     def team_deviations(self, plan: Plan) -> list[str]:
         """The machines' labels; a shared_task team adds its one checker state, a split the cut designs."""
         if plan.mode == "solo_task":
