@@ -234,7 +234,7 @@ class Store:
         eval_log = self.eval_log_path(name)
         endings: dict[str, int] = {}
         for e in eps:
-            ending = e.get("failure") or e.get("ended_by") or "end"
+            ending = e.get("failure") or e.get("ended_by") or "unrecorded"     # a log without the turn rules
             endings[ending] = endings.get(ending, 0) + 1
         return {
             "run": name,

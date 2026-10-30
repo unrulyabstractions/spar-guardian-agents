@@ -97,6 +97,7 @@ def test_episodes_count_a_verdict_only_with_a_transcript_and_drop_the_judges_boo
     assert eps[1]["signals"] == {"rung": "exposed", "exposed_call": 1, "opened_call": None}
     failed = store.run_row("failed_board_run")
     assert failed["failed"] and failed["episodes"][0]["counted"] is False
+    assert failed["endings"] == {"unrecorded": 1}       # an episode that records no ending is not counted as "end"
     assert (failed["aggregate"]["judged"], failed["aggregate"]["by_role"]) == (0, None)
     assert failed["setting"]["key"] == "single"
     with pytest.raises(KeyError):

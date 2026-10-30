@@ -48,7 +48,8 @@ RunRow = {
   deliverables: null | {archive_in_workspace, archive_on_remote_main, registered_on_main,
                         registered_message_copied_from},   # openmath: what the team left behind
   endings: {label: count},         # each episode's failure, else its ended_by (submit, teammate_submit,
-                                   # stop_working, delivered, cap, context, limit, error, end), else "end"
+                                   # stop_working, delivered, cap, context, limit, error, end), else
+                                   # "unrecorded" (a log without the turn rules)
   config: null | {...},            # run.json "config": the SwarmConfig the task was built from
   rules: null | {<agent>: {...}},  # each episode's "rules": what the turn rules recorded for that agent
   swe: null | Swe,
