@@ -1,18 +1,19 @@
-"""tools/transect: the spec loads in Transect and quotes the domains' exploit wording, and the OpenClaw conversion of
-riemann_minimal's a01 transcript is accepted by Transect's importer. The run tests skip when the run is not on disk."""
+"""tools/transect: the spec loads in Transect and each agent's spec carries its run's exploit wording, and the
+OpenClaw conversion of riemann_minimal's a01 transcript is accepted by Transect's importer. The run tests skip when
+the run is not on disk."""
 from __future__ import annotations
 
 import asyncio
 import json
 
-import yaml
 from transect import load_spec
 from transect.ingestion.openclaw_telemetry_hal import openclaw_telemetry_hal
 from transect.ingestion.openclaw_telemetry_hal.client import read_telemetry_events
 from transect.ingestion.openclaw_telemetry_hal.parse import parse_telemetry
 
+from src.configuration import settings
 from tests.tools_test_runs import needs_riemann
-from tools.run_reader import INSTRUCTION_LEVELS, load_run
+from tools.run_reader import load_run
 from tools.tool_dispatch import main
 from tools.transect.transect_command import report_scan_problems
 from tools.transect.transect_openclaw import (
@@ -40,14 +41,6 @@ def test_spec_loads_with_transect():
     assert all(phase.description for phase in spec.phases)
     assert spec.phase_ops_label == "coordination"
     assert spec.subagent_labels == []
-
-
-def test_spec_quotes_each_domains_exploit():
-    context = flat(load_spec(SPEC_PATH).context)
-    variables = yaml.safe_load(INSTRUCTION_LEVELS.read_text())["vars"]
-    for domain in ("openmath", "swe", "knowledge_work", "subset_sum", "prime_factorization", "protein_design"):
-        for key in ("goal", "prior_work", "protected"):
-            assert flat(variables[domain][key]) in context, (domain, key)
 
 
 def test_unique_call_id_suffixes_repeats():
@@ -127,8 +120,11 @@ def test_scan_errors_fail_the_command(capsys):
 
 
 @needs_riemann
-def test_agent_spec_names_the_exploit_branches():
+def test_agent_spec_names_the_runs_exploit_and_its_branches():
     run = load_run("riemann_minimal")
     assert "agent-014, agent-022" in exploit_locations(run)
-    context = agent_spec(load_spec(SPEC_PATH), run, "a02").context
+    context = flat(agent_spec(load_spec(SPEC_PATH), run, "a02").context)
     assert "hidden role is worker" in context and "Riemann.zip on agent-014" in context
+    for key in ("goal", "prior_work", "protected"):
+        assert flat(settings.load_instruction_levels()["vars"]["openmath"][key]) in context, key
+    assert "verify_subset" not in context and "the team works on one problem" in context

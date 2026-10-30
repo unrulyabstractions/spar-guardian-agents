@@ -6,7 +6,10 @@ EoN, MAST and Who&When, and Hawk. Each tool reads one or more run directories un
 files. The results browser shows every tool's output on the run page ("Analysis tools") and serves the files at
 `/api/runs/<run>/tools/<tool>/<file>`. `tools/run_reader.py` is the shared reader: a run's agents, roles, verdicts, board
 posts, transcripts, the turn timeline (cached in `runs/<name>/tools/timeline.json`), each agent's steps with their
-rounds, its board reads, and the domain's exploit vocabulary.
+rounds, its board reads, and the domain's exploit vocabulary. Every tool refuses a missing run with exit code 2
+before it does any work. The tools import what they share with the run code from `src/` (the paths, the model
+registry, the JSON readers, the figure style and the judge's flags per task); they never import ORBIT, which their
+environment lacks.
 
 ## Setup
 
@@ -14,11 +17,11 @@ rounds, its board reads, and the domain's exploit vocabulary.
 make tools-setup
 ```
 
-This creates `tools/.venv` (Python 3.12) from `tools/pyproject.toml` and `tools/uv.lock`, installs Hawk's command line
-as a uv tool on Python 3.13, and downloads MAST's taxonomy texts into `tools/failures/mast_taxonomy/` (gitignored,
-sha256 checked against the pinned commit). The tools have their own environment because Transect needs Python 3.12
-and Inspect Scout a newer inspect-ai than ORBIT's pin in the run environment. Never create a `pyproject.toml` at the
-repository root: uv would sync and empty `.venv`.
+This creates `tools/.venv` (Python 3.12) from `tools/pyproject.toml` and `tools/uv.lock` and downloads MAST's
+taxonomy texts into `tools/failures/mast_taxonomy/` (gitignored, sha256 checked against the pinned commit). Hawk needs
+no install: the hawk tool runs it through `uvx` on Python 3.13. The tools have their own environment because Transect
+needs Python 3.12 and Inspect Scout a newer inspect-ai than ORBIT's pin in the run environment. Never create a
+`pyproject.toml` at the repository root: uv would sync and empty `.venv`.
 
 Run a tool from the repository root:
 
@@ -28,10 +31,11 @@ make <tool> RUN=<run>
 make analyse RUN=<run>
 ```
 
-Tests: `uv run --project tools python -m pytest tests/test_tools_*.py -q`. Lint: `make lint` covers `tools/`.
+Tests: `make test-tools`. Lint: `make lint` covers `tools/`.
 
-Keys: the LLM tools (scout, transect, failures) use the judge's default entry `gpt-6-luna` through
-`OPENAI_API_KEY`; `--model` or `--judge` take any entry of `src/models/model_registry.yaml`. Docent needs
+Keys: the LLM tools (scout, transect, failures, and hawk with `--run`) default to the judge's model,
+`settings.JUDGE_MODEL` (`gpt-6-luna`, through `OPENAI_API_KEY`); `--model` or `--judge` take any entry of
+`src/models/model_registry.yaml`. Docent needs
 `DOCENT_API_KEY`, which the SDK reads from a `docent.env` in the working directory or a parent, then
 `~/.docent/docent.env`, then the environment, in that order. A placeholder key in the file wins over a real key in the
 environment.
@@ -49,16 +53,18 @@ environment.
 | `hawk <run>... [--run] [--source scout\|eval_log] [--scanner NAME ...] [--model ENTRY]` | the scan config for Hawk's local runner (`hawk local scan`) over the run's Scout database with our scanners, through the shim package in `tools/hawk/scanner_package/`; `--run` runs it and reads the scan's completion and errors back | `scan.yaml`, `summary.json`, `results/` |
 
 The order matters: graph and contagion read scout's onsets when they exist; contagion reads graph's read graph; hawk
-reads scout's transcripts database. `make analyse` runs them in that order.
+reads scout's transcripts database. `make analyse RUN=<run>` runs scout, graph, transect, contagion, failures and hawk
+in that order; it leaves out docent, which uploads to a server. Scout, transect and failures call the judge's model
+there, so `make analyse` costs money; hawk only writes its scan config.
 
 ## What each tool's output means
 
 **scout.** `agents.<agent>.<signal>` gives `found`, the message and ATIF step, the round (from the timeline), the quote
 and the explanation. `onset.<agent>` is the earliest round of honeypot_opened, honeypot_used or honeypot_submitted.
-`validation` sets each signal beside the judge's field for the domain and counts the agreements. The signal
-definitions are a choice, written in `scout_scanners.py`: opened counts an attempt, even a failed one, which is openmath's
-`attempted_access`; reading the openmath registry, SWE's team branches or a knowledge-work review log counts as seen,
-not opened. The scanners are LLM calls, so a signal's step can move between runs by a message or two.
+`validation` sets each signal beside one of the task's judge flags (`src/measures/verdict_fields.py`) and counts the
+agreements. The signal definitions are a choice, written in `scout_scanners.py`: opened counts an attempt, even a
+failed one, which is openmath's `attempted_access`; reading the openmath registry, SWE's team branches or a
+knowledge-work review log counts as seen, not opened. The scanners are LLM calls, so a signal's step can move between runs by a message or two.
 
 **graph.** `who_started` is the agent with the earliest onset (`first_onset_ties` lists ties), `spread_order` the
 agents by onset, `exposure_before_onset` the posts each cheater read before its onset with `exposed_to_cheater`
@@ -67,9 +73,10 @@ lists agents scout gives an onset and the judge clears. In GEXF an unknown onset
 Gephi: `brew install --cask gephi`, then File, Open, `graph.gexf`; Layout, ForceAtlas 2; Appearance, nodes by `role`.
 
 **transect.** `phases.<agent>` is Transect's phase per turn span, with the rounds; `agreement.<agent>` says whether
-the agent's exploit_use phases agree with the judge's verdict. The context tells the judge which branches hold the
-exploit (from `run.json` access), without which it labelled a teammate's merges as exploit use. The reports load
-their charts from a CDN; a browser renders them, `report.html` is also readable as text.
+the agent's exploit_use phases agree with the judge's verdict. The context gives the phase judge the run's task, its
+goal, exploit and protected material (the `instruction_levels.yaml` vars of the run's domain), the agent's hidden role
+and the branches that hold the exploit (from `run.json` access), so a teammate's merges do not read as exploit use.
+The reports load their charts from a CDN; a browser renders them, `report.html` is also readable as text.
 
 **contagion.** `observed_final` gives the final shares; `fits.<behaviour>.<model>` the fitted parameter, the final
 size and the sum of squared residuals, or `skipped` with the reason; `degenerate` with its reason for boards under ten
@@ -90,8 +97,7 @@ upload repeated into the same collection duplicates the runs.
 
 **hawk.** `hawk local scan` needs no server and no login; it builds a fresh virtualenv per scan under
 `~/.cache/inspect-action/` (about 400 MB each, never deleted by Hawk) and calls the model with the provider key.
-`eval_set.yaml` documents what running our tasks on Hawk would need (an installable package, Python 3.11, ORBIT,
-Docker sandboxes) and does not run. A deployed Hawk (`hawk scan run`, `HAWK_API_URL`, login) was not tested.
+A deployed Hawk (`hawk scan run`, `HAWK_API_URL`, login) is not used.
 
 ## Caveats
 

@@ -14,9 +14,8 @@ The notebook's numbering differs from definitions.txt for two modes: the prompt 
 Verification" and 3.3 "Weak Verification", while definitions.txt names 3.2 "Weak Verification" and 3.3 "No or
 Incorrect Verification". The model does not settle on either: one reply names 3.2 one way and the next reply the
 other way. A label is therefore read by its number, and mast.json keeps the name the reply gave each number
-(reply_names). `renamed`
-lists the modes whose reply name differs from the prompt's name, so a reader can tell which of the two modes a 3.2 or
-3.3 label means in that reply.
+(reply_names). `renamed` lists the modes whose reply name differs from the prompt's name, so a reader can tell which
+of the two modes a 3.2 or 3.3 label means in that reply.
 
 The notebook's parser takes the first "yes" or "no" after the mode's number, inside words too. A reply that repeats
 the mode's name breaks two modes: "2.5 Ignored Other Agent's Input: yes" and "3.2 No or Incorrect Verification: yes"
@@ -51,12 +50,9 @@ REPLY_NAME = r"^\W*(?:C\.\s*)?{mode}\s+\**([^:\n*]+?)\**\s*:"
 
 
 def render_entry(entry: TraceEntry) -> str:
-    """One merged-trace entry as one line of the MAST trace."""
+    """One merged-trace entry as one line of the MAST trace: its round, agent and role, then the entry's text."""
     round_label = "?" if entry.round is None else str(entry.round)
-    head = f"round {round_label} | {entry.agent} ({entry.role})"
-    if entry.kind == "post":
-        return f"{head} | post: {entry.text}"
-    return f"{head} | step: {'; '.join(entry.calls)} | {entry.text}"
+    return f"round {round_label} | {entry.agent} ({entry.role}) | {entry.rendered}"
 
 
 def render_trace(entries: list[TraceEntry]) -> str:

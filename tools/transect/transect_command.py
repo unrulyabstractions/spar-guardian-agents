@@ -8,13 +8,14 @@ import traceback
 
 from transect import DigestSettings
 
-from tools.run_reader import load_run, model_string, write_summary
+from src.configuration.settings import JUDGE_MODEL
+from src.models.model_registry import resolve
+from tools.run_reader import load_runs, write_summary
 from tools.transect.transect_openclaw import model_calls_by_agent
 from tools.transect.transect_reports import TOOL, JudgeSettings, run_reports
 
 NAME = "transect"
 HELP = "Transect (AISI) step-by-step reports of each agent, with judged phases unless --structural"
-DEFAULT_JUDGE = "gpt-6-luna"
 K_ROLLS = 1
 VERIFY = False
 # What the phase judge reads per turn: Transect's caps for text and calls, and 300 characters of each tool result
@@ -26,7 +27,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("runs", nargs="+", help="run names under runs/ or run directories")
     parser.add_argument("--judge", default=None, metavar="ENTRY",
                         help=f"the phase judge: a model_registry.yaml entry or an Inspect string "
-                             f"(default {DEFAULT_JUDGE})")
+                             f"(default {JUDGE_MODEL})")
     parser.add_argument("--structural", action="store_true", help="no judge and no model calls: structural surfaces")
 
 
@@ -34,8 +35,7 @@ def judge_settings(args: argparse.Namespace) -> JudgeSettings | None:
     """The judged pass the arguments ask for, or None for a structural run."""
     if args.structural:
         return None
-    return JudgeSettings(model=model_string(args.judge or DEFAULT_JUDGE), k_rolls=K_ROLLS, verify=VERIFY,
-                         digest=DIGEST)
+    return JudgeSettings(model=resolve(args.judge or JUDGE_MODEL), k_rolls=K_ROLLS, verify=VERIFY, digest=DIGEST)
 
 
 def run(args: argparse.Namespace) -> int:
@@ -43,10 +43,12 @@ def run(args: argparse.Namespace) -> int:
         print(f"{NAME}: --judge and --structural exclude each other", file=sys.stderr)
         return 2
     try:
-        runs = [load_run(name) for name in args.runs]
         judge = judge_settings(args)
-    except (FileNotFoundError, KeyError, ValueError) as error:
+    except ValueError as error:
         print(f"{NAME}: {error}", file=sys.stderr)
+        return 2
+    runs = load_runs(args.runs, NAME)
+    if runs is None:
         return 2
     status = 0
     for loaded in runs:

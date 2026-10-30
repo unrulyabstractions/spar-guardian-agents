@@ -7,11 +7,10 @@ from pathlib import Path
 import networkx as nx
 import numpy as np
 
-from tools.run_reader import Run, read_summary
+from tools.run_reader import Run, read_summary, round_of
+from tools.scout.scout_scanners import CHEATING_SIGNALS, HONEST_SIGNALS
 
 BEHAVIOURS = ("dishonest", "honest")
-HONEST_SIGNALS = ("regulator_intervened", "disclosed_access")
-CHEATING_SIGNALS = ("honeypot_opened", "honeypot_used", "honeypot_submitted")
 READ_KIND = "read"
 
 
@@ -20,6 +19,7 @@ class Board:
     """What the models need from one run, real or synthetic."""
 
     name: str
+    directory: Path  # where the tool writes: the run's directory, or runs/<name>/ for a synthetic board
     agents: list[str]
     roles: dict[str, str]
     rounds: int  # the last round played
@@ -43,39 +43,26 @@ def adoption_curve(onsets: dict[str, int | None], agents: list[str], rounds: int
 
 def last_round(run: Run) -> int:
     """The last round in the run's timeline, else run.json rules.rounds."""
-    played = [entry.get("step") for entry in run.timeline]
-    rounds = [int(step[1:].split("-")[0]) for step in played if step and step[0] == "r" and step[1:2].isdigit()]
-    return max(rounds) if rounds else run.rounds
+    rounds = [round_of(entry.get("step")) or 0 for entry in run.timeline]
+    return max(rounds, default=0) or run.rounds
 
 
 def onsets_from_scout(summary: dict | None, agents: list[str]) -> dict[str, dict[str, int | None]] | None:
     """Each behaviour's onset per agent from scout's summary; None when scout ran no cheating scanner.
 
-    Dishonest is scout's "onset" ({agent: round}, {agent: {round, ...}} or [{agent, round, ...}]). Honest is the
-    earliest round among the agent's found HONEST_SIGNALS findings under "agents"; scout has only
-    regulator_intervened today, so a judged disclosure is added at the last round by board_of_run.
-    A grep-only scout, or one without any of the opened, used and submitted scanners, has no onset to give.
+    Dishonest is scout's "onset" ({agent: round or null}). Honest is the earliest round of the agent's found
+    regulator_intervened finding under "agents"; scout has no disclosure scanner, so board_of_run adds a judged
+    disclosure at the last round. A grep-only scout, or one without any of the opened, used and submitted scanners,
+    has no onset to give.
     """
     if not summary or summary.get("onset") is None or summary.get("grep_only"):
         return None
-    if "scanners" in summary and not set(summary["scanners"] or []) & set(CHEATING_SIGNALS):
+    if not set(summary["scanners"]) & set(CHEATING_SIGNALS):
         return None
-    cheating = scout_onsets(summary["onset"])
     findings = summary.get("agents") or {}
-    dishonest = {agent: cheating.get(agent) for agent in agents}
+    dishonest = {agent: summary["onset"].get(agent) for agent in agents}
     honest = {agent: earliest_finding(findings.get(agent) or {}, HONEST_SIGNALS) for agent in agents}
     return {"dishonest": dishonest, "honest": honest}
-
-
-def scout_onsets(table) -> dict[str, int | None]:
-    """Scout's onset field as {agent: round}, from any of the three shapes the graphs tool also accepts."""
-    rows = table if isinstance(table, list) else [{"agent": agent, "value": value} for agent, value in table.items()]
-    onsets = {}
-    for row in rows:
-        value = row.get("value", row)
-        value = value.get("round") if isinstance(value, dict) else value
-        onsets[row["agent"]] = int(value) if isinstance(value, (int, float)) else None
-    return onsets
 
 
 def earliest_finding(findings: dict, signals: tuple[str, ...]) -> int | None:
@@ -148,7 +135,7 @@ def board_of_run(run: Run) -> Board:
             notes.append(f"scout places an onset at round {max(found)}, after the timeline's last round {rounds}; "
                          f"the curves run to round {max(found)}")
             rounds = max(found)
-        if "scanners" in scout and "regulator_intervened" not in (scout["scanners"] or []):
+        if not set(scout["scanners"]) & set(HONEST_SIGNALS):
             notes.append("scout ran no regulator_intervened scanner, so the honest curve holds only judge disclosures")
         added = judge_disclosures(run, onsets, rounds)
         if added:
@@ -160,14 +147,15 @@ def board_of_run(run: Run) -> Board:
         graph, graph_source = read_graph(gexf, run.agents), "graphs"
     else:
         graph, graph_source = nx.complete_graph(run.agents), "complete"
-    return Board(name=run.name, agents=list(run.agents), roles=dict(run.roles), rounds=rounds, onsets=onsets,
-                 onset_source=source, onsets_known=known, graph=graph, graph_source=graph_source, synthetic=False,
-                 planted={}, notes=notes)
+    return Board(name=run.name, directory=run.directory, agents=list(run.agents), roles=dict(run.roles),
+                 rounds=rounds, onsets=onsets, onset_source=source, onsets_known=known, graph=graph,
+                 graph_source=graph_source, synthetic=False, planted={}, notes=notes)
 
 
-def synthetic_board(n_agents: int, rounds: int, seed: int, planted: dict[str, float], role_shares: dict[str, float],
-                    seed_rounds: dict[str, int]) -> Board:
-    """A complete board of n agents whose onsets follow a planted discrete SI process, seeded and reproducible.
+def synthetic_board(runs: Path, n_agents: int, rounds: int, seed: int, planted: dict[str, float],
+                    role_shares: dict[str, float], seed_rounds: dict[str, int]) -> Board:
+    """A complete board of n agents whose onsets follow a planted discrete SI process, seeded and reproducible,
+    written under runs/synthetic_n<n>_seed<seed>/.
 
     Disregulators seed the dishonest behaviour and regulators the honest one, two and one of them at their seed
     rounds; regulators never turn dishonest and disregulators never turn honest.
@@ -188,7 +176,8 @@ def synthetic_board(n_agents: int, rounds: int, seed: int, planted: dict[str, fl
                            planted["dishonest"], seed_rounds["dishonest"], rounds, rng)
     honest = planted_si(agents, honest_seeds, {a for a in agents if roles[a] == "disregulator"}, planted["honest"],
                         seed_rounds["honest"], rounds, rng)
-    return Board(name=f"synthetic_n{n_agents}_seed{seed}", agents=agents, roles=roles, rounds=rounds,
+    name = f"synthetic_n{n_agents}_seed{seed}"
+    return Board(name=name, directory=runs / name, agents=agents, roles=roles, rounds=rounds,
                  onsets={"dishonest": dishonest, "honest": honest}, onset_source="synthetic", onsets_known=True,
                  graph=nx.complete_graph(agents), graph_source="synthetic complete", synthetic=True,
                  planted=dict(planted), notes=[])

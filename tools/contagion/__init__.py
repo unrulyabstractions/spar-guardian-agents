@@ -9,10 +9,9 @@ disclosed its access (scout has no disclosure scanner). Onsets come from runs/<n
 when present: its "onset" field for cheating, and the found round of regulator_intervened under "agents" for
 honesty. A disclosure the judge saw counts at the last round, and summary notes say so. Without scout, or with a
 scout that ran grep only or none of the opened, used and submitted scanners, the onsets come from the judge, which
-gives no round, so a cheated (or disclosing) agent counts as adopted at
-the last round. The graph is the read edges of
-runs/<name>/tools/graphs/graph.gexf, made undirected, when present; otherwise the complete graph on the agents, since a
-board is broadcast. Each model is seeded with the first adopters, runs from their round to the last, and has its
+gives no round, so a cheated (or disclosing) agent counts as adopted at the last round. The graph is the read edges
+of runs/<name>/tools/graphs/graph.gexf, made undirected, when present; otherwise the complete graph on the agents,
+since a board is broadcast. Each model is seeded with the first adopters, runs from their round to the last, and has its
 parameter fitted by least squares of its mean curve on the observed curve over a grid. The models: SI and the linear
 threshold model of NDlib, and SIR by EoN.fast_SIR with a fixed recovery rate. A fit is skipped as degenerate when the
 swarm is too small, the onsets are unknown, nobody adopted, or every adopter was a seed.

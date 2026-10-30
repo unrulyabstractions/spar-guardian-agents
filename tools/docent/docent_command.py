@@ -18,7 +18,7 @@ from tools.docent.docent_upload import (
     open_collection,
     upload_agent_runs,
 )
-from tools.run_reader import load_run, tools_dir, write_summary
+from tools.run_reader import load_runs, tools_dir, write_summary
 
 NAME = "docent"
 HELP = "the runs' agent episodes as Docent AgentRuns, uploaded to a collection (or --dry-run to a JSON file)"
@@ -44,15 +44,10 @@ def run(args: argparse.Namespace) -> int:
     if problem:
         print(problem, file=sys.stderr)
         return 2
-    converted = []
-    for name in args.runs:
-        try:
-            loaded = load_run(name)
-        except FileNotFoundError as error:
-            print(f"docent: {error}", file=sys.stderr)
-            return 2
-        agent_runs = run_agent_runs(loaded, args.board)
-        converted.append((loaded, agent_runs))
+    runs = load_runs(args.runs, NAME)
+    if runs is None:
+        return 2
+    converted = [(loaded, run_agent_runs(loaded, args.board)) for loaded in runs]
     if args.dry_run:
         for loaded, agent_runs in converted:
             write_agent_runs(loaded, agent_runs)

@@ -11,6 +11,7 @@ import tomllib
 import yaml
 from inspect_ai._util.registry import registry_lookup
 
+from src.configuration.settings import ROOT
 from tests.tools_test_runs import RIEMANN, needs_riemann
 from tools.hawk.hawk_command import run_hawk, scan_status
 from tools.hawk.hawk_scan_config import (
@@ -26,7 +27,7 @@ from tools.hawk.hawk_scan_config import (
     transcript_source,
     write_scan_config,
 )
-from tools.run_reader import ROOT, load_run, read_summary
+from tools.run_reader import load_run, read_summary
 from tools.tool_dispatch import main
 
 

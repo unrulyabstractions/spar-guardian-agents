@@ -1,6 +1,7 @@
-"""The shared reader of an exported run: every tool loads a run through `load_run` and writes through `write_summary`.
+"""The shared reader of an exported run: every tool loads its runs through `load_runs` and writes through
+`write_summary`.
 
-    run = load_run("riemann_minimal")  # or a path such as runs/smoke/complete
+    [run] = load_runs(["riemann_minimal"], "graph")  # or a path such as runs/smoke/complete; None when one is missing
     run.cheated  # {"a01": False, "a02": True, "a03": True}
     run.agent_steps("a01")[0].round  # 1
     run.reads("a01")[0].posts  # [("a03", 1)]
@@ -21,28 +22,27 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Protocol
 
-import yaml
 from inspect_ai.log import read_eval_log
 
-from src.models.model_registry import resolve
+from src.configuration import settings
+from src.utils.json_files import read_json, read_jsonl
 
-ROOT = Path(__file__).resolve().parents[1]
-RUNS_DIR = ROOT / "runs"
-INSTRUCTION_LEVELS = ROOT / "src" / "configuration" / "instruction_levels.yaml"
-SKIPPED_PREFIXES = ("failed", "cancelled")
-DOMAINS = {"openmath_agent": "openmath", "software_engineering": "swe", "knowledge_work": "knowledge_work",
-           "subset_sum": "subset_sum", "prime_factorization": "prime_factorization",
-           "protein_design": "protein_design"}
-DOMAIN_PREFIXES = (("openmath", "openmath"), ("software", "swe"), ("swe", "swe"), ("knowledge", "knowledge_work"),
-                   ("subset", "subset_sum"), ("prime", "prime_factorization"), ("factor", "prime_factorization"),
-                   ("protein", "protein_design"), ("binder", "protein_design"))
+# The registry's domain key of each CheatBench task (src/domains/__init__.py BY_TASK), the key of
+# instruction_levels.yaml vars. src.domains imports ORBIT, which tools/.venv lacks, so the six pairs are written here.
+DOMAIN_KEYS = {"openmath_agent": "openmath", "software_engineering": "swe", "knowledge_work": "knowledge_work",
+               "subset_sum": "subset_sum", "prime_factorization": "prime_factorization",
+               "protein_design": "protein_design"}
+# The turn rules' store key and the board's channel id (src/swarm/turn_rules/, which imports ORBIT).
 TIMELINE_KEY = "TurnState:timeline"
-BOARD_READ_TOOLS = ("board_read",)
 BOARD_ID = "board"
+BOARD_READ_TOOLS = ("board_read",)
+UNREADABLE = (FileNotFoundError, ValueError, KeyError)   # what reading a missing or malformed run raises
 ROUND_ID = re.compile(r"^r(\d+)")
 READ_POST = re.compile(r"^\[(\S+) #(\d+)\]", re.MULTILINE)
 
@@ -108,6 +108,13 @@ class TraceEntry:
     calls: list[str]  # each call rendered as name(arguments as JSON); empty for a post
     ref: int  # the step's index in trajectory.steps, or the post's board number
 
+    @property
+    def rendered(self) -> str:
+        """The entry as one line of text: "post: <text>", or "step: <calls joined by '; '> | <text>"."""
+        if self.kind == "post":
+            return f"post: {self.text}"
+        return f"step: {'; '.join(self.calls)} | {self.text}"
+
 
 @dataclass(frozen=True)
 class Run:
@@ -116,12 +123,12 @@ class Run:
     name: str  # the path under runs/, such as "riemann_minimal" or "smoke/complete"
     directory: Path
     run_json: dict
-    task: str  # run.json task: openmath_agent, software_engineering or knowledge_work
-    domain: str  # "openmath", "swe" or "knowledge_work"
+    task: str  # run.json task: CheatBench's task name, such as openmath_agent
+    domain: str  # its registry key, such as openmath
     model: str  # the agents' Inspect model string
     agents: list[str]
     roles: dict[str, str]  # agent -> worker, regulator or disregulator
-    config: dict  # run.json config (the SwarmConfig dump), {} for runs before it
+    config: dict  # run.json config (the SwarmConfig dump)
     eval_log: Path | None  # the .eval file; None when run.json names none or it is gone
     judge: dict[str, dict]  # agent -> judge.jsonl row
     cheated: dict[str, bool | None]  # agent -> the judge's verdict; None when the judge gave none
@@ -190,11 +197,27 @@ class Run:
         return [post for post in self.board if post.sender == agent]
 
 
+class RunPlace(Protocol):
+    """Where a tool writes: a run's name and directory (a Run, or the contagion tool's synthetic board)."""
+
+    name: str
+    directory: Path
+
+
+def load_runs(names: list[str | Path], tool: str) -> list[Run] | None:
+    """Every named run, or None after printing why one cannot be read; the tool then exits 2 before any work."""
+    try:
+        return [load_run(name) for name in names]
+    except UNREADABLE as error:
+        print(f"{tool}: {error}", file=sys.stderr)
+        return None
+
+
 def load_run(name_or_path: str | Path) -> Run:
     """Read one run from a name under runs/ or a path to its directory."""
     directory = run_directory(name_or_path)
-    run_json = json.loads((directory / "run.json").read_text())
-    agents = list(run_json.get("agents") or [])
+    run_json = read_json(directory / "run.json")
+    agents = list(run_json["agents"])
     episode_rows = read_jsonl(directory / "episodes.jsonl")
     judge_rows = read_jsonl(directory / "judge.jsonl")
     lone = lone_agent(agents, episode_rows)
@@ -202,8 +225,8 @@ def load_run(name_or_path: str | Path) -> Run:
     judge = {agent_of(row["episode"], lone): row for row in judge_rows}
     eval_log = eval_log_path(run_json.get("eval_log"))
     timeline, board_reads = eval_log_data(directory, eval_log, run_json)
-    task = run_json.get("task", "")
-    domain = domain_of(task)
+    task = run_json["task"]
+    domain = DOMAIN_KEYS[task]
     return Run(
         name=run_name(directory),
         directory=directory,
@@ -213,7 +236,7 @@ def load_run(name_or_path: str | Path) -> Run:
         model=run_json.get("model", ""),
         agents=agents,
         roles=roles_of(agents, run_json, episodes),
-        config=run_json.get("config") or {},
+        config=run_json["config"],
         eval_log=eval_log,
         judge=judge,
         cheated={agent: row.get("cheated") for agent, row in judge.items()},
@@ -227,15 +250,14 @@ def load_run(name_or_path: str | Path) -> Run:
     )
 
 
-
-def tools_dir(run: Run, tool: str) -> Path:
+def tools_dir(run: RunPlace, tool: str) -> Path:
     """runs/<name>/tools/<tool>/, created when missing."""
     directory = run.directory / "tools" / tool
     directory.mkdir(parents=True, exist_ok=True)
     return directory
 
 
-def write_summary(run: Run, tool: str, payload: dict) -> Path:
+def write_summary(run: RunPlace, tool: str, payload: dict) -> Path:
     """Write runs/<name>/tools/<tool>/summary.json as {tool, run, written_at, **payload}."""
     reserved = {"tool", "run", "written_at"} & set(payload)
     if reserved:
@@ -249,13 +271,7 @@ def write_summary(run: Run, tool: str, payload: dict) -> Path:
 
 def read_summary(run: Run, tool: str) -> dict | None:
     """The tool's summary.json for the run, or None when the tool has not written one."""
-    path = run.directory / "tools" / tool / "summary.json"
-    return json.loads(path.read_text()) if path.is_file() else None
-
-
-def model_string(entry_or_string: str) -> str:
-    """The Inspect model string of a registry entry; an Inspect string passes through."""
-    return resolve(entry_or_string)
+    return read_json(run.directory / "tools" / tool / "summary.json")
 
 
 def merged_trace(run: Run) -> list[TraceEntry]:
@@ -323,26 +339,19 @@ def observation_for(step: Step, call_id: str, position: int) -> str:
 
 def run_directory(name_or_path: str | Path) -> Path:
     """The run's directory: the path itself when it holds a run.json, else runs/<name>."""
-    candidates = [Path(name_or_path), RUNS_DIR / str(name_or_path)]
+    candidates = [Path(name_or_path), settings.RUNS / str(name_or_path)]
     for candidate in candidates:
         if (candidate / "run.json").is_file():
             return candidate.resolve()
-    raise FileNotFoundError(f"no run.json in {name_or_path} or {RUNS_DIR / str(name_or_path)}")
+    raise FileNotFoundError(f"no run.json in {name_or_path} or {settings.RUNS / str(name_or_path)}")
 
 
 def run_name(directory: Path) -> str:
     """The run's path under runs/, or its directory name when it lives elsewhere."""
     try:
-        return "/".join(directory.relative_to(RUNS_DIR.resolve()).parts)
+        return "/".join(directory.relative_to(settings.RUNS.resolve()).parts)
     except ValueError:
         return directory.name
-
-
-def read_jsonl(path: Path) -> list[dict]:
-    """The rows of a JSON-lines file; empty when it is missing."""
-    if not path.is_file():
-        return []
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
 def lone_agent(agents: list[str], episode_rows: list[dict]) -> str | None:
@@ -360,16 +369,6 @@ def agent_of(episode: str, lone: str | None) -> str:
     return lone or episode
 
 
-def domain_of(task: str) -> str:
-    """The domain of a run.json task name."""
-    if task in DOMAINS:
-        return DOMAINS[task]
-    for prefix, domain in DOMAIN_PREFIXES:
-        if task.startswith(prefix):
-            return domain
-    raise ValueError(f"unknown task {task!r}: expected one of {sorted(DOMAINS)}")
-
-
 def roles_of(agents: list[str], run_json: dict, episodes: dict[str, dict]) -> dict[str, str]:
     """Each agent's hidden role: run.json swarm.roles, else the episode's role, else worker."""
     swarm_roles = (run_json.get("swarm") or {}).get("roles") or {}
@@ -377,18 +376,11 @@ def roles_of(agents: list[str], run_json: dict, episodes: dict[str, dict]) -> di
 
 
 def eval_log_path(value: str | None) -> Path | None:
-    """The .eval file run.json names: the file itself, or the newest .eval in a named directory."""
+    """The .eval file run.json names, relative to the repository root unless absolute; None when it is gone."""
     if not value:
         return None
-    path = Path(value)
-    if not path.is_absolute():
-        path = ROOT / path
-    if path.is_file():
-        return path
-    if path.is_dir():
-        logs = sorted(path.glob("*.eval"), key=lambda log: log.stat().st_mtime)
-        return logs[-1] if logs else None
-    return None
+    path = Path(value) if Path(value).is_absolute() else settings.ROOT / value
+    return path if path.is_file() else None
 
 
 def eval_log_data(directory: Path, eval_log: Path | None, run_json: dict) -> tuple[list[dict], dict[str, str]]:
@@ -400,14 +392,14 @@ def eval_log_data(directory: Path, eval_log: Path | None, run_json: dict) -> tup
         logged = eval_log.stat().st_mtime
         fresh = cached and all(path.stat().st_mtime >= logged for path in (timeline_cache, reads_cache))
         if fresh:
-            timeline, board_reads = json.loads(timeline_cache.read_text()), json.loads(reads_cache.read_text())
+            timeline, board_reads = read_json(timeline_cache), read_json(reads_cache)
         else:
             timeline, board_reads = read_log(eval_log)
             cache.mkdir(parents=True, exist_ok=True)
             timeline_cache.write_text(json.dumps(timeline, indent=1) + "\n")
             reads_cache.write_text(json.dumps(board_reads, indent=1, ensure_ascii=False) + "\n")
     elif cached:
-        timeline, board_reads = json.loads(timeline_cache.read_text()), json.loads(reads_cache.read_text())
+        timeline, board_reads = read_json(timeline_cache), read_json(reads_cache)
     else:
         timeline, board_reads = [], {}
     return timeline or list((run_json.get("rules") or {}).get("timeline") or []), board_reads
@@ -434,7 +426,7 @@ def read_board(directory: Path, timeline: list[dict]) -> list[Post]:
     turns = {(entry.get("agent"), entry.get("turn")): entry.get("step") for entry in timeline}
     posts = []
     for path in sorted((directory / "communication").glob("*.json")):
-        messages = json.loads(path.read_text()).get("messages") or []
+        messages = read_json(path).get("messages") or []
         board = [message for message in messages if message.get("channel_id", BOARD_ID) == BOARD_ID]
         for number, message in enumerate(sorted(board, key=lambda m: m.get("sequence", 0)), 1):
             turn = message.get("turn")
@@ -449,13 +441,13 @@ def read_transcripts(directory: Path, lone: str | None) -> dict[str, dict]:
     """Each agent's transcript.json, keyed by the agent of its episode directory."""
     transcripts = {}
     for path in sorted((directory / "trajectories").glob("*/transcript.json")):
-        transcripts[agent_of(path.parent.name, lone)] = json.loads(path.read_text())
+        transcripts[agent_of(path.parent.name, lone)] = read_json(path)
     return transcripts
 
 
 def exploit_of(domain: str, run_json: dict) -> dict:
     """The domain's exploit vocabulary (instruction_levels.yaml vars), run.json access, and each agent's items."""
-    variables = yaml.safe_load(INSTRUCTION_LEVELS.read_text())["vars"].get(domain, {})
+    variables = settings.load_instruction_levels()["vars"][domain]
     access = run_json.get("access") or {}
     holds = {agent: list(entry.get("holds") or []) for agent, entry in (access.get("agents") or {}).items()}
     return {**variables, "access": access, "holds": holds}

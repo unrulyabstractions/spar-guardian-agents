@@ -4,17 +4,16 @@ from __future__ import annotations
 import networkx as nx
 
 from tools.run_reader import Run, read_summary
+from tools.scout.scout_scanners import CHEATING_SIGNALS
 
 READ, OVERSIGHT = "read", "oversight"
 SCOUT_TOOL = "scout"
-# The scout signals whose earliest round is scout's onset (tools/scout/scout_results.py ONSET_SIGNALS).
-SCOUT_ONSET_SIGNALS = ("honeypot_opened", "honeypot_used", "honeypot_submitted")
 
 
 def scout_onset_step(findings: dict, onset_round: int) -> int | None:
     """The earliest ATIF step index among the agent's onset findings in the onset round; None when none has one."""
     steps = [finding["atif_step"] for signal, finding in findings.items()
-             if signal in SCOUT_ONSET_SIGNALS and isinstance(finding, dict) and finding.get("found")
+             if signal in CHEATING_SIGNALS and finding.get("found")
              and finding.get("round") == onset_round and isinstance(finding.get("atif_step"), int)]
     return min(steps) if steps else None
 
@@ -22,32 +21,18 @@ def scout_onset_step(findings: dict, onset_round: int) -> int | None:
 def onsets_of(run: Run) -> dict[str, dict | None]:
     """Each agent's cheating onset {round, step, turn} from the scout tool's summary.json, else None.
 
-    The scout summary's "onset" may map an agent to a round, to {"round", "step"}, or to None, or be a list of
-    {"agent", "round", "step"}. The step is the index in trajectory.steps; the turn is looked up from it. When the
-    onset gives only a round, the step is the earliest atif_step of scout's onset findings in that round.
+    Scout's "onset" maps each agent to its onset round or None. The step is the earliest atif_step (the index in
+    trajectory.steps) of scout's cheating findings in that round, and the turn is looked up from the step.
     """
     summary = read_summary(run, SCOUT_TOOL) or {}
-    findings = summary.get("agents") if isinstance(summary.get("agents"), dict) else {}
-    raw = summary.get("onset")
-    if isinstance(raw, list):
-        raw = {row.get("agent"): row for row in raw if isinstance(row, dict)}
-    if not isinstance(raw, dict):
-        raw = {}
+    findings, rounds = summary.get("agents") or {}, summary.get("onset") or {}
     onsets = {}
     for agent in run.agents:
-        value = raw.get(agent)
-        if isinstance(value, bool) or value is None:
+        onset_round = rounds.get(agent)
+        if onset_round is None:
             onsets[agent] = None
             continue
-        if isinstance(value, (int, float)):
-            value = {"round": int(value)}
-        if not isinstance(value, dict) or value.get("round") is None:
-            onsets[agent] = None
-            continue
-        onset_round = int(value["round"])
-        step = value.get("step")
-        if step is None:
-            step = scout_onset_step(findings.get(agent) or {}, onset_round)
+        step = scout_onset_step(findings.get(agent) or {}, onset_round)
         onsets[agent] = {"round": onset_round, "step": step, "turn": turn_of_step(run, agent, step)}
     return onsets
 

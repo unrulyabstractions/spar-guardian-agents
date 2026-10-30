@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import sys
 from pathlib import Path
 
 import networkx as nx
@@ -20,7 +19,7 @@ from tools.graphs.graph_build import (
     structure_metrics,
 )
 from tools.graphs.graph_figure import LAYOUTS, plot_graph
-from tools.run_reader import Run, load_run, tools_dir, write_summary
+from tools.run_reader import Run, load_runs, tools_dir, write_summary
 
 NAME = "graph"
 HELP = "who read whose board posts before cheating: a NetworkX graph, its metrics, a Gephi export and a figure"
@@ -96,14 +95,11 @@ def graph_run(run: Run, layout: str) -> Path:
 
 
 def run(args: argparse.Namespace) -> int:
-    status = 0
-    for name in args.runs:
-        try:
-            loaded = load_run(name)
-        except (FileNotFoundError, ValueError) as error:
-            print(f"{NAME}: {name}: {error}", file=sys.stderr)
-            status = 1
-            continue
+    """Graph every run named; 2 when one is missing."""
+    runs = load_runs(args.runs, NAME)
+    if runs is None:
+        return 2
+    for loaded in runs:
         summary = graph_run(loaded, args.layout)
         print(f"{NAME}: {loaded.name}: wrote {summary.parent}")
-    return status
+    return 0

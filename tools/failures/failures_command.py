@@ -7,11 +7,12 @@ import sys
 
 from inspect_ai.model import GenerateConfig
 
-from tools import DEFAULT_MODEL
+from src.configuration.settings import JUDGE_MODEL
+from src.models.model_registry import resolve
 from tools.failures.fetch_mast_taxonomy import FETCH_COMMAND, taxonomy_present
 from tools.failures.mast import annotate_run
 from tools.failures.who_when import METHODS, attribute_run
-from tools.run_reader import load_run, model_string, tools_dir, write_summary
+from tools.run_reader import Run, load_runs, tools_dir, write_summary
 
 NAME = "failures"
 HELP = "MAST failure modes and Who&When attribution of the run's merged trace (LLM calls)"
@@ -25,8 +26,8 @@ DEFAULT_WHO_WHEN_MAX_TOKENS = 16384
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("runs", nargs="+", help="run names under runs/ or run directories")
-    parser.add_argument("--model", default=DEFAULT_MODEL, help=f"registry entry or Inspect model string "
-                        f"(default {DEFAULT_MODEL})")
+    parser.add_argument("--model", default=JUDGE_MODEL, help=f"registry entry or Inspect model string "
+                        f"(default {JUDGE_MODEL})")
     parser.add_argument("--methods", default=",".join(METHODS),
                         help=f"comma-separated Who&When methods (default {','.join(METHODS)})")
     parser.add_argument("--max-steps", type=int, default=DEFAULT_MAX_STEPS,
@@ -60,23 +61,18 @@ def run(args: argparse.Namespace) -> int:
         print("failures: --max-tokens must be at least 1", file=sys.stderr)
         return 2
     try:
-        model = model_string(args.model)
+        model = resolve(args.model)
     except ValueError as error:
         print(f"failures: {error}", file=sys.stderr)
         return 2
-    status = 0
-    for name in args.runs:
-        status = max(status, label_run(name, args, model, methods))
-    return status
+    runs = load_runs(args.runs, NAME)
+    if runs is None:
+        return 2
+    return max(label_run(run, args, model, methods) for run in runs)
 
 
-def label_run(name: str, args: argparse.Namespace, model: str, methods: list[str]) -> int:
+def label_run(run: Run, args: argparse.Namespace, model: str, methods: list[str]) -> int:
     """MAST and Who&When on one run; writes mast.json, who_when.json and summary.json. Returns 0 or 1."""
-    try:
-        run = load_run(name)
-    except (FileNotFoundError, ValueError) as error:
-        print(f"failures: {error}", file=sys.stderr)
-        return 1
     directory = tools_dir(run, NAME)
     payload = {"model": model, "who_when_max_tokens": None if args.no_who_when else args.max_tokens, "mast": None,
                "who_when": None}

@@ -16,7 +16,7 @@ from pathlib import Path
 
 from inspect_ai.log import read_eval_log
 
-from tools.run_reader import Run, Step
+from tools.run_reader import Run, Step, observation_for
 
 SYNTHETIC_START_MS = 1_700_000_000_000
 SYNTHETIC_STEP_MS = 1_000
@@ -185,19 +185,11 @@ def assistant_message(agent: str, step: Step, call: ModelCall, call_ids: list[st
 
 
 def tool_results(step: Step, call_ids: list[str], completed_ms: int) -> list[dict]:
-    """The step's tool results as OpenClaw toolResult turns, matched to calls by source_call_id, else by position."""
-    results = []
-    for position, ((name, _arguments), call_id) in enumerate(zip(step.tool_calls, call_ids, strict=True)):
-        original = step.call_ids[position]
-        if original and original in step.result_ids:
-            text = step.observations[step.result_ids.index(original)]
-        elif position < len(step.observations):
-            text = step.observations[position]
-        else:
-            continue
-        results.append({"role": "toolResult", "toolCallId": call_id, "toolName": name, "timestamp": completed_ms,
-                        "content": text})
-    return results
+    """The step's tool results as OpenClaw toolResult turns, one per call: the run reader's observation_for matches
+    each to its call by source_call_id, else by position, and a call without one gets an empty result."""
+    return [{"role": "toolResult", "toolCallId": call_id, "toolName": name, "timestamp": completed_ms,
+             "content": observation_for(step, step.call_ids[position], position)}
+            for position, ((name, _arguments), call_id) in enumerate(zip(step.tool_calls, call_ids, strict=True))]
 
 
 def write_telemetry(records: list[dict], path: Path) -> Path:

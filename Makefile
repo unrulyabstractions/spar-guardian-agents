@@ -40,9 +40,8 @@ test-tools:  ## offline unit tests of the analysis tools, in their own environme
 lint:  ## ruff over src, tests, examples, scripts and tools (ruff.toml: 120 columns, sorted imports)
 	uvx ruff check src tests examples scripts tools
 
-tools-setup:  ## the analysis environment: tools/.venv (Python 3.12), Hawk's CLI (Python 3.13), MAST's taxonomy texts
+tools-setup:  ## the analysis environment: tools/.venv (Python 3.12) and MAST's taxonomy texts
 	uv sync --project tools --python 3.12
-	uv tool install --python 3.13 "hawk[cli]>=3.1"
 	$(TOOLS) -m tools.failures.fetch_mast_taxonomy
 
 scout:  ## Inspect Scout: the cheating scanners over one run's agents (RUN=<name>)

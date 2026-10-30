@@ -8,8 +8,9 @@ import sys
 
 from inspect_scout import scan, scan_results_df, transcripts_from
 
-from tools import DEFAULT_MODEL
-from tools.run_reader import Run, load_run, model_string, tools_dir, write_summary
+from src.configuration.settings import JUDGE_MODEL
+from src.models.model_registry import resolve
+from tools.run_reader import Run, load_runs, tools_dir, write_summary
 from tools.scout.scout_results import (
     attach_grep_floor,
     grep_findings,
@@ -32,8 +33,8 @@ DISPLAY = "none"
 def add_arguments(parser: argparse.ArgumentParser) -> None:
     """The runs, the scanner model, the scanners to run, and the offline grep-only switch."""
     parser.add_argument("runs", nargs="+", help="run names under runs/ or run directories")
-    parser.add_argument("--model", default=DEFAULT_MODEL,
-                        help=f"the LLM scanners' model: a registry entry or an Inspect model string ({DEFAULT_MODEL})")
+    parser.add_argument("--model", default=JUDGE_MODEL,
+                        help=f"the LLM scanners' model: a registry entry or an Inspect model string ({JUDGE_MODEL})")
     parser.add_argument("--scanners", default=",".join(SIGNALS),
                         help=f"comma-separated LLM scanners, of {', '.join(SIGNALS)} (all by default)")
     parser.add_argument("--grep-only", action="store_true",
@@ -90,13 +91,15 @@ def scout_run(run: Run, signals: list[str], model: str | None) -> tuple[dict, in
 
 
 def run(args: argparse.Namespace) -> int:
-    """Scout every run named; 2 on a bad scanner name or a missing run, 1 when a scan had errors."""
+    """Scout every run named; 2 on a bad scanner name or model or a missing run, 1 when a scan had errors."""
     try:
         signals = [] if args.grep_only else chosen_signals(args.scanners)
-        model = None if args.grep_only else model_string(args.model)
-        runs = [load_run(name) for name in args.runs]
-    except (ValueError, KeyError, FileNotFoundError) as error:
+        model = None if args.grep_only else resolve(args.model)
+    except ValueError as error:
         print(f"{NAME}: {error}", file=sys.stderr)
+        return 2
+    runs = load_runs(args.runs, NAME)
+    if runs is None:
         return 2
     failed = False
     for one in runs:

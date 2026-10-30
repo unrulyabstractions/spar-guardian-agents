@@ -9,9 +9,8 @@ from an uninstalled module without a package prefix, so Hawk's name would not fi
 
 A run-bound factory for every signal in the module's SIGNALS and for its GREP_NAME, when the module has
 build_scanners. It takes `run` (a name under runs/ or a run directory) and an optional `model`, loads the run with
-tools.run_reader.load_run and returns the scanner build_scanners makes for that run. Without `model` the LLM
-scanners use
-the scan's model.
+tools.run_reader.load_run and returns the scanner build_scanners makes for that run. Without `model` the LLM scanners
+use the scan's model.
 """
 from __future__ import annotations
 

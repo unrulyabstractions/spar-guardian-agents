@@ -10,7 +10,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tools import DEFAULT_MODEL
+from src.configuration.settings import JUDGE_MODEL, ROOT
+from src.models.model_registry import resolve
 from tools.hawk.hawk_scan_config import (
     HAWK_PYTHON,
     HAWK_SPEC,
@@ -23,7 +24,7 @@ from tools.hawk.hawk_scan_config import (
     transcript_source,
     write_scan_config,
 )
-from tools.run_reader import ROOT, Run, load_run, model_string, tools_dir, write_summary
+from tools.run_reader import Run, load_runs, tools_dir, write_summary
 
 NAME = "hawk"
 HELP = "Hawk (METR) scan configs over the runs' transcripts with our Scout scanners; --run runs `hawk local scan`"
@@ -34,7 +35,7 @@ LOCAL_NOTES = [
     "The transcripts come from HAWK_RUNNER_EVALS_S3_URI/<eval_set_id>, set in runner.environment to a local directory.",
     "Hawk installs every scanner package with uv pip, so the scanners reach it through scanner_package/, "
     "a distribution with an inspect_ai entry point that imports SPAR_GUARDIAN_SCANNERS from SPAR_GUARDIAN_ROOT.",
-    "The command runs hawk from uvx with the runner extra; the installed ~/.local/bin/hawk lacks that extra.",
+    "The command runs hawk from uvx with the runner extra, so no hawk needs to be installed.",
     "Without --direct, hawk builds a fresh venv for the scan; with --direct it installs into the uvx environment.",
     "The model keys come from this environment (OPENAI_API_KEY and the others); a local scan uses no Hawk proxy.",
     "hawk scan run (a deployed Hawk) needs HAWK_API_URL, hawk login and eval sets in the warehouse; not used here.",
@@ -48,7 +49,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("runs", nargs="+", help="run names under runs/ or run directories")
     parser.add_argument("--run", action="store_true", help="run `hawk local scan` and record the outcome")
     parser.add_argument("--direct", action="store_true", help="pass --direct: install into the uvx environment")
-    parser.add_argument("--model", default=DEFAULT_MODEL, help="the scanners' model: registry entry or Inspect string")
+    parser.add_argument("--model", default=JUDGE_MODEL, help="the scanners' model: registry entry or Inspect string")
     parser.add_argument("--scanner", action="append", default=None,
                         help=f"a scanner to run (repeatable); default: {', '.join(RUN_BOUND_SCANNERS)}")
     parser.add_argument("--source", choices=SOURCES, default=SOURCES[0],
@@ -64,14 +65,12 @@ def run(args: argparse.Namespace) -> int:
     """Write every run's scan config, and run hawk when asked; 2 on an unknown model or run, 1 when a scan failed."""
     scanners = args.scanner or list(RUN_BOUND_SCANNERS)
     try:
-        model = model_string(args.model)
+        model = resolve(args.model)
     except ValueError as error:
         print(f"{NAME}: {error}", file=sys.stderr)
         return 2
-    try:
-        runs = [load_run(name) for name in args.runs]
-    except FileNotFoundError as error:
-        print(f"{NAME}: {error}", file=sys.stderr)
+    runs = load_runs(args.runs, NAME)
+    if runs is None:
         return 2
     failures = 0
     for run_data in runs:

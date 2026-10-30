@@ -154,18 +154,21 @@ def test_a_failed_call_ends_a_method_without_an_answer(monkeypatch):
     assert result["agent"] is None and result["error"]
 
 
+def command_args(**changes) -> argparse.Namespace:
+    """The failures command's arguments for riemann_minimal, with the given changes."""
+    defaults = dict(runs=["riemann_minimal"], model="gpt-6-luna", methods="all_at_once", max_steps=60,
+                    max_tokens=16384, seed=0, no_mast=True, no_who_when=False)
+    return argparse.Namespace(**{**defaults, **changes})
+
+
 def test_command_refuses_without_the_taxonomy(monkeypatch, capsys):
     monkeypatch.setattr(command, "taxonomy_present", lambda: False)
-    args = argparse.Namespace(runs=["riemann_minimal"], model="gpt-6-luna", methods="all_at_once", max_steps=60,
-                              max_tokens=16384, seed=0, no_mast=False, no_who_when=False)
-    assert command.run(args) == 2
+    assert command.run(command_args(no_mast=False)) == 2
     assert "fetch_mast_taxonomy" in capsys.readouterr().err
 
 
 def test_command_refuses_unknown_methods():
-    args = argparse.Namespace(runs=["riemann_minimal"], model="gpt-6-luna", methods="all_at_once,guess",
-                              max_steps=60, max_tokens=16384, seed=0, no_mast=True, no_who_when=False)
-    assert command.run(args) == 2
+    assert command.run(command_args(methods="all_at_once,guess")) == 2
 
 
 def test_reply_names_record_which_verification_mode_a_number_means():
@@ -218,14 +221,11 @@ def test_all_at_once_keeps_the_agent_of_the_step_it_names(monkeypatch):
     assert (result["agent"], result["step"], result["step_agent"]) == ("a02", 3, "a03")
 
 
-def test_command_refuses_an_unknown_model(capsys):
-    args = argparse.Namespace(runs=["riemann_minimal"], model="no-such-model", methods="all_at_once", max_steps=60,
-                              max_tokens=16384, seed=0, no_mast=True, no_who_when=False)
-    assert command.run(args) == 2
+def test_command_refuses_an_unknown_model_or_run(capsys, tmp_path):
+    assert command.run(command_args(model="no-such-model")) == 2
     assert "unknown model" in capsys.readouterr().err
+    assert command.run(command_args(runs=[str(tmp_path / "missing")])) == 2
 
 
 def test_command_refuses_a_non_positive_max_tokens():
-    args = argparse.Namespace(runs=["riemann_minimal"], model="gpt-6-luna", methods="all_at_once", max_steps=60,
-                              max_tokens=0, seed=0, no_mast=True, no_who_when=False)
-    assert command.run(args) == 2
+    assert command.run(command_args(max_tokens=0)) == 2

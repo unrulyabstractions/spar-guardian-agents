@@ -42,16 +42,9 @@ STEP_NUMBER_MARKED = re.compile(r"Step Number:\W*(\d+)", re.IGNORECASE)
 REASON = re.compile(r"Reason for Mistake:\W*(.*)", re.IGNORECASE | re.DOTALL)
 
 
-def entry_content(entry: TraceEntry) -> str:
-    """The content of one history entry: a post's text, or a step's tool calls and text."""
-    if entry.kind == "post":
-        return f"post: {entry.text}"
-    return f"step: {'; '.join(entry.calls)} | {entry.text}"
-
-
 def history_of(entries: list[TraceEntry]) -> list[dict]:
     """The merged trace as Who&When's chat history: one {name, content} per entry."""
-    return [{"name": entry.agent, "content": entry_content(entry)} for entry in entries]
+    return [{"name": entry.agent, "content": entry.rendered} for entry in entries]
 
 
 def problem_of(run: Run) -> str:

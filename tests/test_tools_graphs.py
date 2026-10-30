@@ -7,7 +7,7 @@ import json
 import networkx as nx
 import pytest
 
-from tests.tools_test_runs import RIEMANN, copy_run, needs_riemann
+from tests.tools_test_runs import needs_riemann
 from tools.graphs.graph_build import (
     build_graph,
     onset_judge_disagreements,
@@ -20,12 +20,6 @@ from tools.run_reader import load_run
 from tools.tool_dispatch import main
 
 pytestmark = needs_riemann
-
-
-@pytest.fixture
-def riemann_copy(tmp_path):
-    """runs/riemann_minimal copied without any earlier scout or graphs output."""
-    return copy_run(RIEMANN, tmp_path / "riemann_minimal", ignore=("scout", "graphs"))
 
 
 def test_nodes_and_the_read_edge(riemann_copy):
@@ -48,7 +42,7 @@ def test_no_scout_output_means_no_onset(riemann_copy):
 def test_onsets_from_scout_give_the_contagion_edge(riemann_copy):
     scout = riemann_copy / "tools" / "scout"
     scout.mkdir(parents=True)
-    (scout / "summary.json").write_text(json.dumps({"onset": {"a03": {"round": 5, "step": 3}, "a01": 20}}))
+    (scout / "summary.json").write_text(json.dumps({"onset": {"a03": 5, "a01": 20}}))
     run = load_run(riemann_copy)
     metrics = onset_metrics(run, onsets_of(run))
     assert metrics["who_started"] == "a03"
@@ -71,8 +65,8 @@ def test_command_writes_a_gexf_that_parses_back(riemann_copy):
         assert (out / name).is_file()
 
 
-def test_unknown_run_fails(tmp_path):
-    assert main(["graph", str(tmp_path / "missing")]) == 1
+def test_unknown_run_is_refused(tmp_path):
+    assert main(["graph", str(tmp_path / "missing")]) == 2
 
 
 def write_scout(copy, summary):

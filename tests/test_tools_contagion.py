@@ -9,7 +9,7 @@ import numpy as np
 
 from tools.contagion import contagion_command as command
 from tools.contagion.contagion_models import Settings, fit, simulate
-from tools.contagion.contagion_observed import Board, adoption_curve, onsets_from_scout, scout_onsets, synthetic_board
+from tools.contagion.contagion_observed import Board, adoption_curve, onsets_from_scout, synthetic_board
 from tools.contagion.contagion_report import fit_board, write_outputs
 
 GRIDS = {"si": [float(v) for v in np.logspace(-3, 0, 31)], "threshold": [float(v) for v in np.linspace(0, 1, 11)],
@@ -26,12 +26,6 @@ def test_adoption_curve_counts_onsets_at_or_before_each_round():
     onsets = {"a": 1, "b": 3, "c": None, "d": 3}
     assert adoption_curve(onsets, ["a", "b", "c", "d"], 4) == [0.0, 0.25, 0.25, 0.75, 0.75]
     assert adoption_curve(onsets, ["a", "c"], 2) == [0.0, 0.5, 0.5]
-
-
-def test_scout_onsets_reads_every_shape():
-    assert scout_onsets({"a01": None, "a02": 3}) == {"a01": None, "a02": 3}
-    assert scout_onsets({"a02": {"round": 4, "step": 8}}) == {"a02": 4}
-    assert scout_onsets([{"agent": "a03", "round": 2, "step": 5}]) == {"a03": 2}
 
 
 def test_a_scout_without_cheating_scanners_gives_no_onsets():
@@ -56,8 +50,9 @@ def test_si_fit_recovers_a_planted_beta_on_a_complete_graph_of_50():
 
 
 def test_outputs_exist_for_a_synthetic_board(tmp_path):
-    board = synthetic_board(30, 12, 0, {"dishonest": 0.05, "honest": 0.04}, {"regulator": 0.1, "disregulator": 0.1},
-                            {"dishonest": 1, "honest": 2})
+    board = synthetic_board(tmp_path, 30, 12, 0, {"dishonest": 0.05, "honest": 0.04},
+                            {"regulator": 0.1, "disregulator": 0.1}, {"dishonest": 1, "honest": 2})
+    assert board.directory == tmp_path / "synthetic_n30_seed0"
     payload = write_outputs(board, settings_for(("si", "threshold", "sir"), 20), tmp_path, prefix="synthetic_")
     for name in payload["files"]:
         assert (tmp_path / name).stat().st_size > 0
@@ -70,9 +65,9 @@ def test_outputs_exist_for_a_synthetic_board(tmp_path):
     assert set(fits) == {"dishonest", "honest"}
 
 
-def test_three_agents_are_degenerate():
+def test_three_agents_are_degenerate(tmp_path):
     agents = ["a01", "a02", "a03"]
-    board = Board(name="tiny", agents=agents, roles={a: "worker" for a in agents}, rounds=5,
+    board = Board(name="tiny", directory=tmp_path, agents=agents, roles={a: "worker" for a in agents}, rounds=5,
                   onsets={"dishonest": {"a01": 1, "a02": 3, "a03": None}, "honest": {a: None for a in agents}},
                   onset_source="scout", onsets_known=True, graph=nx.complete_graph(agents), graph_source="complete",
                   synthetic=False, planted={}, notes=[])
@@ -81,7 +76,9 @@ def test_three_agents_are_degenerate():
     assert any("no agent turned honest" in reason for reason in fits["honest"]["skipped"])
 
 
-def test_unknown_model_is_refused():
+def test_unknown_model_or_run_is_refused(tmp_path):
     args = argparse.Namespace(runs=["riemann_minimal"], models="si,bogus", synthetic=None, seed=0, simulations=1)
     assert command.run(args) == 2
     assert command.run(argparse.Namespace(runs=[], models="si", synthetic=None, seed=0, simulations=1)) == 2
+    missing = argparse.Namespace(runs=[str(tmp_path / "missing")], models="si", synthetic=None, seed=0, simulations=1)
+    assert command.run(missing) == 2

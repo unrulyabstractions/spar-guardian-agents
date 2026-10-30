@@ -2,17 +2,16 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
 
+from src.configuration.settings import RUNS
 from tools.contagion.contagion_models import MODEL_NAMES, Settings
-from tools.contagion.contagion_observed import Board, board_of_run, synthetic_board
+from tools.contagion.contagion_observed import board_of_run, synthetic_board
 from tools.contagion.contagion_report import write_outputs
-from tools.run_reader import RUNS_DIR, load_run, tools_dir, write_summary
+from tools.run_reader import load_runs, tools_dir, write_summary
 
 NAME = "contagion"
 HELP = "SI, linear threshold and SIR models of dishonest and honest spread on the board, fitted to the onsets"
@@ -55,34 +54,17 @@ def run(args: argparse.Namespace) -> int:
         return 2
     settings = Settings(models=models, simulations=args.simulations, seed=args.seed, grids=GRIDS,
                         threshold_spread=THRESHOLD_SPREAD, sir_gamma=SIR_GAMMA, min_agents=MIN_AGENTS)
-    failures = 0
-    for name in args.runs:
-        try:
-            run_ = load_run(name)
-            board = board_of_run(run_)
-            payload = write_outputs(board, settings, tools_dir(run_, NAME), prefix="")
-            path = write_summary(run_, NAME, payload)
-        except (FileNotFoundError, ValueError, KeyError) as error:
-            print(f"{NAME}: {name}: {error}", file=sys.stderr)
-            failures += 1
-            continue
-        report(path, payload)
+    runs = load_runs(args.runs, NAME)
+    if runs is None:
+        return 2
+    boards = [board_of_run(run_) for run_ in runs]
     if args.synthetic is not None:
-        board = synthetic_board(args.synthetic, SYNTHETIC_ROUNDS, args.seed, SYNTHETIC_PLANTED,
-                                SYNTHETIC_ROLE_SHARES, SYNTHETIC_SEED_ROUNDS)
-        directory = RUNS_DIR / board.name / "tools" / NAME
-        payload = write_outputs(board, settings, directory, prefix="synthetic_")
-        report(write_synthetic_summary(board, directory, payload), payload)
-    return 1 if failures else 0
-
-
-def write_synthetic_summary(board: Board, directory: Path, payload: dict) -> Path:
-    """summary.json of a synthetic board, in the shape write_summary gives a real run."""
-    written_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    path = directory / "summary.json"
-    path.write_text(json.dumps({"tool": NAME, "run": board.name, "written_at": written_at, **payload}, indent=2,
-                               default=str) + "\n")
-    return path
+        boards.append(synthetic_board(RUNS, args.synthetic, SYNTHETIC_ROUNDS, args.seed, SYNTHETIC_PLANTED,
+                                      SYNTHETIC_ROLE_SHARES, SYNTHETIC_SEED_ROUNDS))
+    for board in boards:
+        payload = write_outputs(board, settings, tools_dir(board, NAME), prefix="synthetic_" if board.synthetic else "")
+        report(write_summary(board, NAME, payload), payload)
+    return 0
 
 
 def report(path: Path, payload: dict) -> None:

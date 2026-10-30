@@ -1,6 +1,5 @@
-"""tools/run_reader.py on the real runs: riemann_minimal (three workers, a02 and a03 judged cheated, a01 read
-a03's post)
-and smoke/complete (a lone mock agent). Each test skips when its run is not on disk."""
+"""tools/run_reader.py on the real runs: riemann_minimal (three workers, a02 and a03 judged cheated, a01 read a03's
+post) and smoke/complete (a lone mock agent). Each test skips when its run is not on disk."""
 from __future__ import annotations
 
 import json
@@ -10,8 +9,8 @@ import pytest
 from tests.tools_test_runs import LONE, needs_riemann
 from tools.run_reader import (
     load_run,
+    load_runs,
     merged_trace,
-    model_string,
     parse_read,
     read_summary,
     round_of,
@@ -32,9 +31,9 @@ def test_parse_read_counts_known_senders_only():
     assert parse_read(text, ["a01", "a02", "a03"]) == [("a03", 1), ("a01", 4)]
 
 
-def test_model_string_resolves_entries():
-    assert model_string("gpt-6-luna") == "openai/gpt-6-luna"
-    assert model_string("mockllm/model") == "mockllm/model"
+def test_a_missing_run_stops_the_tool(tmp_path, capsys):
+    assert load_runs([str(tmp_path / "missing")], "probe") is None
+    assert capsys.readouterr().err.startswith("probe: no run.json in ")
 
 
 def test_cli_lists_every_tool():

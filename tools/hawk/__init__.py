@@ -4,8 +4,7 @@
 `hawk local scan` command; `--run` runs it in that directory, so Hawk's results land under results/. The scan reads
 the run's per-agent Scout transcripts database (runs/<name>/tools/scout/transcripts, else one built under
 tools/hawk/transcripts), or with `--source eval_log` the eval log's directory. Hawk reaches our scanners through the
-shim distribution in scanner_package/. scan_set.yaml is the same config for riemann_minimal with paths relative to the
-repository root; eval_set.yaml is the closest eval-set config for our tasks, with what blocks it.
+shim distribution in scanner_package/.
 
 summary.json, beside tool, run and written_at:
     config: str             the scan.yaml path

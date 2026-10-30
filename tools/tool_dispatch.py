@@ -1,6 +1,7 @@
 """`python -m tools <tool> <run> ...`: one subcommand per tool, each from its package's command module.
 
 A command module defines NAME, HELP, add_arguments(parser) and run(args) -> int (0 ok, 1 failure, 2 usage or refused).
+Each loads its runs through run_reader.load_runs, so a missing run is refused with 2 before any work.
 """
 from __future__ import annotations
 

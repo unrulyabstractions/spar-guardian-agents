@@ -7,13 +7,11 @@ import json
 
 import pytest
 
-from tests.tools_test_runs import RIEMANN, copy_run, needs_riemann
+from src.utils.json_files import read_jsonl
+from tests.tools_test_runs import RIEMANN, needs_riemann
 from tools.docent import docent_command as command
 from tools.docent.docent_upload import key_problem
-from tools.run_reader import read_jsonl
 from tools.tool_dispatch import main
-
-CACHED_FILES = ("timeline.json", "board_reads.json")
 
 
 @pytest.fixture
@@ -23,12 +21,6 @@ def no_key(monkeypatch, tmp_path):
     monkeypatch.delenv("DOCENT_PROFILE", raising=False)
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.chdir(tmp_path)
-
-
-@pytest.fixture
-def riemann_copy(tmp_path):
-    """runs/riemann_minimal copied without its tools/ outputs, but with the cached timeline and board reads."""
-    return copy_run(RIEMANN, tmp_path / "riemann_minimal", keep=CACHED_FILES)
 
 
 def test_key_problem_names_the_three_places():

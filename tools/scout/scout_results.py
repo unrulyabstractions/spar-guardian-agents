@@ -25,14 +25,12 @@ from src.utils.figure_style import (
     title_axes,
 )
 from tools.run_reader import Run
-from tools.scout.scout_scanners import SIGNALS
+from tools.scout.scout_scanners import CHEATING_SIGNALS, SIGNALS
 from tools.scout.scout_transcripts import MessageOrigin
 
 FRAGMENT_SPLIT = re.compile(r"\.\.\.|\u2026|\n|;")
 QUOTE_MARKS = " \"'`\u201c\u201d\u2018\u2019"
 MIN_FRAGMENT = 12
-ONSET_SIGNALS = ("honeypot_opened", "honeypot_used", "honeypot_submitted")
-CHEATING_SIGNALS = ONSET_SIGNALS
 # Grep labels left out of grep_seen: every openmath agent must read and append to agent_evals.json, so its name
 # matches in every transcript. Its entries name the planted branches, which the branches label still counts.
 GREP_SEEN_IGNORED = ("registry",)
@@ -178,7 +176,7 @@ def attach_grep_floor(findings: dict[str, dict], grep_labels: dict[str, dict]) -
 
 def onset_of(findings: dict[str, dict]) -> int | None:
     """The earliest round among the agent's opened, used and submitted findings, or None."""
-    rounds = [findings[signal]["round"] for signal in ONSET_SIGNALS
+    rounds = [findings[signal]["round"] for signal in CHEATING_SIGNALS
               if signal in findings and findings[signal]["found"] and findings[signal]["round"] is not None]
     return min(rounds) if rounds else None
 
