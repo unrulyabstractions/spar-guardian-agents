@@ -7,34 +7,42 @@ These scripts run a screen on rented vast.ai boxes, one box per (task, model). A
 ```
 uv run python -m scripts.box.fleet offers                       # the offers that can hold a box, cheapest first
 uv run python -m scripts.box.fleet create --count 15 --dry-run  # the requests create would send
-uv run python -m scripts.box.fleet create --count 15            # rents and registers (runs/boxes.json)
+uv run python -m scripts.box.fleet create --count 15            # pins the launch, rents and registers (runs/boxes.json)
 uv run python -m scripts.box.fleet status                       # the account with the registry; writes the ssh configs
-scripts/box/box_setup.sh <id> <task>                            # the clone, the .venv, the task's rows and images
-scripts/box/box_run.sh <id> <task> <model> <suffix>             # the key, then every cell x 3 samples at once
-scripts/box/watch.sh                                            # every 3 minutes: pull runs/ logs/ out/, print each box
+scripts/box/box_setup.sh <id>                                   # the box's id, the clone at the launch's commit, the .venv, the task's build
+scripts/box/box_run.sh <id>                                     # the key, then every cell x 3 samples at once
+scripts/box/watch.sh                                            # every 3 minutes: pull runs/ logs/ out/ and the box's logs, print each box
 scripts/box/capture_check.sh <id> --pull                        # every file on the box has a local copy
-uv run python -m scripts.box.fleet destroy <id>                 # only after a fresh capture check
+uv run python -m scripts.box.fleet destroy <id>                 # only after a fresh capture check; snapshots first
 ```
 
-The pilot is one box per task on one model, with one sample of two cells: `create --count 5 --models deepseek-flash-openrouter`, then `box_run.sh <id> <task> deepseek-flash-openrouter pilot --samples 1 --kinds solo_cheat minimal_regulated`.
+The pilot is one box per task on one model, with one sample of two cells: `create --count 5 --models deepseek-flash-openrouter`, then `box_run.sh <id> --samples 1 --kinds solo_cheat minimal_regulated`. Before box_run.sh, set `BOX_OPENROUTER_API_KEY` (or the model's own key name with `BOX_` in front) to a key made for the screen with a spend cap, and revoke it after the destroys.
 
 | file | what it does | bills or destroys |
 |---|---|---|
-| `fleet.py` | offers, create, status, ids and destroy against the vast.ai API; the registry; the destroy gates | create bills, destroy destroys |
-| `fleet_layout.py` | the tasks, models and cell kinds, the labels, the paths; standard library only | no |
+| `fleet.py` | offers, create, status, ids, entry, run-args and destroy against the vast.ai API; the registry and the launch pins; the destroy gates | create bills, destroy destroys |
+| `fleet_layout.py` | the tasks, models and cell kinds, the labels and run names, the paths; standard library only | no |
 | `box_ssh.sh`, `box_scp.sh` | ssh and scp to a box by its id, through `logs/boxes/<id>/ssh_config` | no |
-| `box_setup.sh` | the baseline of the host image, the clone at a pushed commit, lucy as a bundle, the .venv from the Mac's package list, the task's build | no |
-| `box_run.sh` | the model's key through ssh's standard input, then the runner under `nohup setsid` | no |
-| `box_runner.py` | on the box: build a task, run its cells with the hung-run guard, report status | no |
-| `watch.sh` | pulls each box's outputs and prints its runs; never starts, stops or destroys | no |
-| `capture_check.sh`, `box_capture.py`, `box_sweep.py` | the sweep of the box and its comparison with this machine; the marker destroy needs | no |
+| `box_setup.sh` | the box's id, the baseline of the host image, its cores, RAM and disk, the clone at the launch's commit, lucy's commit as a bundle, the .venv from the launch's package list, the task's build | no |
+| `box_run.sh` | the screen's key through ssh's standard input, then the runner under `nohup setsid` with the registry's task, model and commit | no |
+| `box_runner.py` | on the box: build a task, run its cells with the hung-run guard, resume what did not finish, report status | no |
+| `watch.sh` | pulls each box's outputs and logs and prints its runs; never starts, stops or destroys | no |
+| `capture_check.sh`, `box_capture.py`, `box_sweep.py` | the sweep of the box and its comparison with this machine; the manifest and the marker destroy needs; the snapshot | no |
 
 ## The rules the scripts hold
 
-- create searches and rents in one step, since offer ids expire within minutes. It refuses a count that does not match the boxes asked for, labels the account holds already, and offers dearer than `--max-dph` (1.00 $/h by default). Each instance enters the registry when vast.ai returns its id. A failure that may have created an instance stops the launch, and an audit of the account registers what this launch asked for and fails on any other spar-screen instance outside the registry.
+- create refuses tasks without every cell, two tasks with one cell stem, a count that does not match the boxes asked for, and a (task, model) the account holds a box of already. It pins the launch in `logs/boxes/launch-<launch>/` before the first rent: HEAD (which origin/main must hold), the .venv's package list, the Python and uv versions. Every box of the launch deploys those, whatever this checkout does later.
+- create searches and rents in one step, since offer ids expire within minutes. It takes no offer dearer than `--max-dph` (1.00 $/h by default) and stops before the fleet's $/h, its registered boxes included, would pass `--max-fleet-dph` (15 $/h by default). A label ends with the launch's id, so a launch adopts only its own instances.
+- Each instance enters the registry when vast.ai returns its id. Any outcome that may have created an instance stops the launch: an error, a reply it cannot read, an interrupt. However the launch ends, an audit of the account then registers what this launch asked for and fails on any other spar-screen instance outside the registry.
 - A dry run sends only reads. Its client refuses any other request.
-- The API key goes only into the Authorization header. A model key goes only through ssh's standard input into `/root/.box_env` (mode 600). No GitHub token goes to a box.
-- The box clones this repository at a commit origin/main holds, and cheatbench and orbit from GitHub. Lucy's private repository goes up as a bundle. The Mac's uplink is slow, so nothing large goes up.
-- The runner stops a run that is alive 20 minutes past Inspect's time limit with nothing written for 20 minutes, or alive at twice that limit, and records it as hung.
-- The capture sweeps every regular file under the clone, `/root` and `/tmp`, without following links, and compares size and sha256. It counts, and does not require, what is provably reproducible: tracked files unchanged at their work tree's HEAD, git's stores, the .venv, `build/`, the editable install's metadata, package, font and tiktoken caches, uv's Pythons, binaries and receipt, the bundle and package list, bytecode caches, the keys file, `authorized_keys`, and the host image's own files from the baseline. Docker's images and volumes and apt's caches lie outside the swept roots. The check fails while a runner or an example still runs.
-- destroy refuses a box outside the registry, a label other than `spar-screen-*`, and a capture marker older than 10 minutes. It runs the capture check once more, destroys, waits until the account no longer lists the box, and appends the entry for `VERIFICATION_LOG.md` to `logs/boxes/destroyed.jsonl`.
+- The API key goes only into the Authorization header, which urllib drops on a redirect. A model key goes only through ssh's standard input into `/root/.box_env` (mode 600): `BOX_<NAME>` when set, the main key only with `--allow-main-key`. No GitHub token goes to a box.
+- The box clones this repository at the launch's commit, and cheatbench and orbit from GitHub. Lucy's private repository goes up as a bundle of the pinned commit's history, at most 20 MB. The Mac's uplink is slow, so nothing large goes up.
+- box_setup.sh writes the instance id into `/root/box_id` at first contact. box_run.sh, watch.sh and the capture refuse a box that names another id. box_setup.sh refuses a box with fewer than 32 cores, 57 GB of RAM or 170 GB on `/`.
+- box_run.sh takes the task, the model and the commit from the registry. A `--suffix` must start with the model's, and a run name this machine holds from a run made elsewhere is refused.
+- The runner stops a run that is alive 20 minutes past Inspect's time limit for its task's domain with nothing written for 20 minutes, or alive at twice that, and records it as hung. A resume skips only runs whose eval log says success with no episode failed in the harness or at the provider. It starts the others again and sets the earlier screen log and plan aside under `logs/screen/attempts/`.
+- status on the box flags a runner that ended while runs are alive, and says when all runs have ended. watch.sh then flags the box, since it bills until it is captured and destroyed.
+- The capture sweeps every regular file under the clone, `/root` and `/tmp`, without following links, and compares size and sha256. It counts, and does not require, what is provably reproducible: tracked files unchanged at their work tree's HEAD, git's stores, the .venv, `build/`, the editable install's metadata, package, font and tiktoken caches, uv's Pythons, binaries and receipt, the bundle and package list, bytecode caches, the keys file and its temporary copy, `/root/box_id`, `authorized_keys`, and the host image's own files outside the clone from the baseline. A baseline is taken only at first contact.
+- The check fails while a runner, an example or `python -m src` still runs, or while any process holds a file under the swept roots open for writing. It also fails on a link to something outside the swept roots, on Docker's state unknown, and on Docker holding containers or volumes unless `--accept-docker REASON` says why they may go. Docker's images, `/var`, `/home`, `/opt` and the rest of the box are never swept; destroy prints that list.
+- `--pull` never overwrites a newer local file: the box's bytes go to `logs/boxes/<id>/conflicts/` and count as captured. Files in a box run's local folder that the box lacks are listed as local only.
+- destroy refuses a box outside the registry, a label other than the registry's, and a capture marker older than 10 minutes. It runs the capture check once more, writes a read-only `snapshot.tar.gz` of the manifest's local copies and reads it back against the manifest, then destroys. It marks the box destroyed only once the account no longer lists it. Until then status, ids and watch.sh keep showing it. It appends the entry for `VERIFICATION_LOG.md` to `logs/boxes/destroyed.jsonl`.
+- `destroy --accept-loss REASON` is for a box that can never pass the capture. It keeps the registry and label gates and logs the reason with what the check found lost.

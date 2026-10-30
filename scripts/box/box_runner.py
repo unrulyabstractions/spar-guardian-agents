@@ -2,27 +2,34 @@
 
     .venv/bin/python -m scripts.box.box_runner build --task knowledge_work
     .venv/bin/python -m scripts.box.box_runner run --task knowledge_work --model deepseek-flash-openrouter
-                                                   --suffix dsflash [--samples 3] [--kinds solo_cheat ...]
+                                                   --suffix dsflash --commit <sha> [--samples 3] [--kinds solo ...]
     .venv/bin/python -m scripts.box.box_runner status
 
-box_setup.sh runs build, box_run.sh starts run under nohup setsid, watch.sh asks for status.
+box_setup.sh runs build, box_run.sh starts run under nohup setsid with what the registry holds for the box, watch.sh
+asks for status.
 
 build makes what a task's first run would make, before its runs start together: the rows CheatBench's build writes
 and the Docker images the task's sandbox needs, each by the domain's own builder, then loads the rows back. A task
 without an entry in BUILDS is refused until its domain's steps are added there.
 
-run starts every cell of the task (fleet_layout.cells: one example script per kind) times every sample at once, each
-`python -m examples.<package>.<cell> --model <model> --name <cell>_<suffix><k>` in its own session with its output in
-logs/screen/<name>.log, the run names of scripts.screen; a run whose runs/<name>/signals.jsonl exists is skipped. It
-refuses to start without the model's key in its environment (box_run.sh sources /root/.box_env). It records its
-plan and each run's pid, start, end and exit in logs/screen/box_<task>_<suffix>.json, and its own pid in
-~/screen.pid. Every minute it looks at each live run. A run is hung when it is alive GRACE_S past Inspect's time
-limit and nothing under logs/<name>/, runs/<name>/ or its log changed for GRACE_S, or when it is alive at twice that
-whatever it writes. The runner then stops the run's process group (SIGTERM, SIGKILL a minute later), notes it in the
-run's log and records it as hung; the run's containers stay until the box goes.
+run refuses unless the clone is at --commit (the commit the fleet's launch pinned) and the model's key is in its
+environment (box_run.sh sources /root/.box_env). It starts every cell of the task (fleet_layout.cells: one example
+script per kind) times every sample at once, each `python -m examples.<package>.<cell> --model <model> --name
+<cell>_<suffix><k>` in its own session with its output in logs/screen/<name>.log. A run counts as done before, and is
+skipped, only when its export exists, its eval log says success and none of its episodes failed in the harness or at
+the provider; any other run starts again, its earlier screen log set aside under logs/screen/attempts/. The plan
+(logs/screen/box_<task>_<suffix>.json: each run's pid, start, end and exit) of an earlier runner is set aside there
+too, never overwritten. The runner's own pid goes to ~/screen.pid. Every minute it looks at each live run. A run is
+hung when it is alive GRACE_S past Inspect's time limit for the task's domain and nothing under logs/<name>/,
+runs/<name>/ or its log changed for GRACE_S, or when it is alive at twice that whatever it writes. The runner then
+stops the run's process group (SIGTERM, SIGKILL a minute later), notes it in the run's log and records it as hung; the
+run's containers stay until the box goes, and the capture check refuses while they do.
 
-status prints, for each plan on the box, the runner's state and the runs finished, running, failed, hung and lost
-(not alive, no exit recorded), then one line for each run that is neither finished nor running.
+status prints, for each plan on the box, the runner's state and the runs finished, running, failed, incomplete (an
+episode failed in the harness or at the provider), hung, lost (not alive, no exit recorded) and waiting, then one line
+for each run that is neither finished nor running. A runner that ended while runs are alive or waiting is trouble: no
+guard watches them. When the runner has ended and nothing runs, it prints "all runs ended", which watch.sh turns into
+an alert, since the box bills until it is captured and destroyed. It exits 1 on any trouble.
 """
 from __future__ import annotations
 
@@ -36,10 +43,13 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from scripts.box.fleet_layout import KINDS, TASKS, cells
-from scripts.screen import done, run_name, summary
+from inspect_ai.log import read_eval_log
+
+from scripts.box.fleet_layout import KINDS, TASKS, cells, run_name
+from scripts.screen import summary
 from src.configuration import settings
 from src.configuration.presets import add_config_arguments, build_config, config_pairs
+from src.configuration.settings import INCOMPLETE_FAILURES
 from src.domains import DOMAINS
 from src.domains.knowledge import knowledge_sandbox
 from src.domains.knowledge.knowledge_settings import BUILD as KNOWLEDGE_BUILD
@@ -51,12 +61,15 @@ from src.domains.swe.swe_settings import DEFAULT_ROW as SWE_ROW
 from src.models.model_registry import key_env, resolve
 from src.sandbox import cheatbench_task_files as task_files
 from src.sandbox.machines import agent_machines
+from src.utils.json_files import read_json, read_jsonl
 
 SCREEN_LOGS = settings.LOGS / "screen"
+ATTEMPTS = SCREEN_LOGS / "attempts"
 PID_FILE = Path.home() / "screen.pid"
 GRACE_S = 20 * 60
 POLL_S = 60
 STOP_WAIT_S = 60
+BEFORE = "before this runner"
 
 
 # ---- build ----
@@ -97,16 +110,19 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 # ---- the hung-run guard ----
 
-def inspect_limit_s() -> int:
-    """Inspect's time limit of a run on the examples' config: ORBIT's halt plus the largest grace any domain takes."""
+def inspect_limit_s(task: str) -> int:
+    """Inspect's time limit of a run of the task on the examples' config: ORBIT's halt plus the grace of the task's
+    domain (src/tasks.py: the domain's time_grace_s, else the config's)."""
+    domain = TASKS[task]
+    if domain not in DOMAINS:
+        raise ValueError(f"no domain {domain!r} in src.domains.DOMAINS for task {task}")
     parser = argparse.ArgumentParser()
     add_config_arguments(parser)
     defaults = parser.parse_args([])
     config = build_config(defaults.preset, defaults.scale, config_pairs(defaults))
     if not config.time_limit_s:
         raise ValueError("the examples' config sets no time_limit_s: the guard has no limit to hold runs to")
-    grace = max([config.time_grace_s, *(cls.time_grace_s or 0 for cls in DOMAINS.values())])
-    return config.time_limit_s + grace
+    return config.time_limit_s + (DOMAINS[domain].time_grace_s or config.time_grace_s)
 
 
 def hung(now: float, started: float, last_write: float, limit_s: float, grace_s: float = GRACE_S) -> str | None:
@@ -149,10 +165,51 @@ def stop(process: subprocess.Popen) -> None:
             continue
 
 
+# ---- what a run left ----
+
+def eval_status(path: Path) -> str:
+    """The status an eval log's header records (success, error, cancelled, started)."""
+    return read_eval_log(str(path), header_only=True).status
+
+
+def outcome(name: str) -> tuple[str, str]:
+    """(finished | incomplete | failed, why) from what the run left in runs/<name>/: finished needs the code
+    ladder's signals.jsonl, run.json, its eval log with status success, and no episode that failed in the harness or
+    at the provider (incomplete, as the results browser counts it)."""
+    run_dir = settings.RUNS / name
+    if not (run_dir / "signals.jsonl").is_file():
+        return "failed", "no signals.jsonl"
+    run = read_json(run_dir / "run.json")
+    eval_log = Path(run["eval_log"]) if run and run.get("eval_log") else None
+    if eval_log is None or not eval_log.is_file():
+        return "failed", "no eval log on disk"
+    status = eval_status(eval_log)
+    if status != "success":
+        return "failed", f"its eval ended {status}"
+    failed = [e.get("failure") for e in read_jsonl(run_dir / "episodes.jsonl")
+              if e.get("failure") in INCOMPLETE_FAILURES]
+    if failed:
+        return "incomplete", f"{len(failed)} episodes failed ({', '.join(sorted(set(failed)))})"
+    return "finished", "its eval succeeded"
+
+
 # ---- run ----
 
 def plan_path(task: str, suffix: str) -> Path:
     return SCREEN_LOGS / f"box_{task}_{suffix}.json"
+
+
+def set_aside(path: Path) -> Path | None:
+    """Move an earlier attempt's file to logs/screen/attempts/<stem>.<n><suffix>, n the first free number."""
+    if not path.exists():
+        return None
+    ATTEMPTS.mkdir(parents=True, exist_ok=True)
+    n = 1
+    while (ATTEMPTS / f"{path.stem}.{n}{path.suffix}").exists():
+        n += 1
+    target = ATTEMPTS / f"{path.stem}.{n}{path.suffix}"
+    os.replace(path, target)
+    return target
 
 
 def save(path: Path, plan: dict) -> None:
@@ -166,46 +223,58 @@ def now_iso() -> str:
 
 
 def launch(cell: str, name: str, model: str) -> subprocess.Popen:
-    """One run in its own session, so the guard can stop its whole process group."""
+    """One run in its own session, so the guard can stop its whole process group. Its screen log is new: an earlier
+    attempt's was set aside."""
     command = [sys.executable, "-m", f"examples.{cell}", "--model", model, "--name", name]
-    with open(SCREEN_LOGS / f"{name}.log", "w") as log:
+    with open(SCREEN_LOGS / f"{name}.log", "x") as log:
         log.write(" ".join(command) + "\n")
         log.flush()
         return subprocess.Popen(command, cwd=settings.ROOT, stdout=log, stderr=subprocess.STDOUT,
                                 stdin=subprocess.DEVNULL, start_new_session=True)
 
 
+def clone_head() -> str:
+    result = subprocess.run(["git", "rev-parse", "HEAD"], cwd=settings.ROOT, capture_output=True, text=True)
+    return result.stdout.strip()
+
+
 def cmd_run(args: argparse.Namespace) -> int:
+    head = clone_head()
+    if head != args.commit:
+        print(f"refused: the clone is at {head or '(unknown)'}, the fleet pinned {args.commit}")
+        return 1
     try:
         keys = key_env(resolve(args.model))
+        task_cells = cells(args.task, tuple(args.kinds))
+        limit = inspect_limit_s(args.task)
     except ValueError as error:
         print(f"refused: {error}")
         return 1
     if keys and not any(os.environ.get(key) for key in keys):
         print(f"refused: none of {keys} is set; box_run.sh writes it to /root/.box_env")
         return 1
-    try:
-        task_cells = cells(args.task, tuple(args.kinds))
-    except ValueError as error:
-        print(f"refused: {error}")
-        return 1
     jobs = [(cell, run_name(cell, args.suffix, k)) for k in range(1, args.samples + 1) for cell in task_cells]
-    limit = inspect_limit_s()
     for folder in (SCREEN_LOGS, settings.RUNS, settings.ROOT / "out"):
         folder.mkdir(parents=True, exist_ok=True)
     PID_FILE.write_text(f"{os.getpid()}\n")
-    commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=settings.ROOT, capture_output=True, text=True).stdout
-    plan = {"task": args.task, "model": args.model, "suffix": args.suffix, "commit": commit.strip(),
-            "started": now_iso(), "limit_s": limit, "grace_s": GRACE_S, "runner_pid": os.getpid(),
-            "runs": {name: {"cell": cell, "pid": None, "started": None, "ended": None, "exit": None, "hung": None}
-                     for cell, name in jobs}}
     path = plan_path(args.task, args.suffix)
+    earlier = set_aside(path)
+    plan = {"task": args.task, "model": args.model, "suffix": args.suffix, "commit": args.commit,
+            "started": now_iso(), "limit_s": limit, "grace_s": GRACE_S, "runner_pid": os.getpid(),
+            "earlier_plan": str(earlier) if earlier else None,
+            "runs": {name: {"cell": cell, "pid": None, "started": None, "ended": None, "exit": None, "hung": None,
+                            "again": None} for cell, name in jobs}}
     processes, starts = {}, {}
     for cell, name in jobs:
         record = plan["runs"][name]
-        if done(name):
-            record.update(exit=0, ended="before this runner")
+        left, why = outcome(name)
+        if left == "finished":
+            record.update(exit=0, ended=BEFORE)
             continue
+        log = set_aside(SCREEN_LOGS / f"{name}.log")
+        if log or (settings.RUNS / name).exists():
+            record["again"] = f"{why}; earlier log {log}"
+            print(f"   {name:40s} again: {why}", flush=True)
         processes[name] = launch(cell, name, args.model)
         starts[name] = time.time()
         record.update(pid=processes[name].pid, started=now_iso())
@@ -232,7 +301,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             del processes[name]
         save(path, plan)
     print(summary([name for _, name in jobs]), flush=True)
-    return 0 if all(r["exit"] == 0 and not r["hung"] for r in plan["runs"].values()) else 1
+    return 0 if all(state(name, r) == "finished" for name, r in plan["runs"].items()) else 1
 
 
 # ---- status ----
@@ -251,10 +320,13 @@ def state(name: str, record: dict) -> str:
     if record["hung"]:
         return "hung"
     if record["exit"] is not None:
-        return "finished" if record["exit"] == 0 and done(name) else "failed"
+        return outcome(name)[0] if record["exit"] == 0 else "failed"
     if record["pid"] is None:
         return "waiting"
     return "running" if alive(record["pid"], name) else "lost"
+
+
+STATES = ("finished", "running", "failed", "incomplete", "hung", "lost", "waiting")
 
 
 def cmd_status(args: argparse.Namespace) -> int:
@@ -266,16 +338,23 @@ def cmd_status(args: argparse.Namespace) -> int:
     for path in plans:
         plan = json.loads(path.read_text())
         states = {name: state(name, record) for name, record in plan["runs"].items()}
-        counts = {s: list(states.values()).count(s) for s in ("finished", "running", "failed", "hung", "lost",
-                                                                "waiting")}
-        runner = "alive" if alive(plan["runner_pid"], "scripts.box.box_runner") else "ended"
-        print(f"{plan['task']} {plan['model']} {plan['suffix']}: runner {runner}; "
+        counts = {s: list(states.values()).count(s) for s in STATES}
+        runner_alive = alive(plan["runner_pid"], "scripts.box.box_runner")
+        print(f"{plan['task']} {plan['model']} {plan['suffix']}: runner {'alive' if runner_alive else 'ended'}; "
               + ", ".join(f"{n} {s}" for s, n in counts.items() if n or s in ("finished", "running")))
         for name, s in states.items():
             if s not in ("finished", "running"):
                 record = plan["runs"][name]
-                print(f"   {s:8s} {name} exit={record['exit']} {record['hung'] or ''}")
-        trouble += counts["failed"] + counts["hung"] + counts["lost"]
+                print(f"   {s:10s} {name} exit={record['exit']} {record['hung'] or ''}")
+        trouble += counts["failed"] + counts["incomplete"] + counts["hung"] + counts["lost"]
+        if not runner_alive and (counts["running"] or counts["waiting"]):
+            print(f"!! the runner ended with {counts['running']} runs running and {counts['waiting']} waiting: no "
+                  f"hung guard watches them")
+            trouble += 1
+        elif not runner_alive:
+            ended = [r["ended"] for r in plan["runs"].values() if r["ended"] and r["ended"] != BEFORE]
+            print(f"   all runs ended{', the last at ' + max(ended) if ended else ''}: capture this box and destroy "
+                  f"it")
     return 1 if trouble else 0
 
 
@@ -289,6 +368,7 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--model", required=True, help="a registry entry (the screen's: fleet_layout.MODELS) or an "
                                                     "Inspect model string, such as mockllm/model for a rehearsal")
     run.add_argument("--suffix", required=True, help="run names are <cell>_<suffix><k>")
+    run.add_argument("--commit", required=True, help="the commit the fleet's launch pinned; the clone must be at it")
     run.add_argument("--samples", type=int, default=3)
     run.add_argument("--kinds", nargs="+", default=list(KINDS), choices=list(KINDS))
     commands.add_parser("status", help="the runs of every plan on this box")

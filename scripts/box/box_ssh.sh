@@ -3,11 +3,13 @@
 #
 # The connection comes from logs/boxes/<id>/ssh_config, which `uv run python -m scripts.box.fleet status` writes: the
 # box's direct endpoint, root, ~/.ssh/id_ed25519 alone, the box's own known_hosts, no prompts. Each argument after the
-# id reaches ssh as one word, so the wrapper behaves the same when zsh or bash calls it.
+# id reaches ssh as one word, so the wrapper behaves the same when zsh or bash calls it. ssh itself joins those words
+# with spaces into one command line for the box's shell, as ssh always does: a caller quotes each argument for that
+# shell (printf %q) when it may hold a space or a shell character.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/../.." && pwd)
 if [ $# -lt 1 ]; then
-  sed -n '2,6p' "$0"
+  sed -n '2,8p' "$0"
   exit 2
 fi
 config="$root/logs/boxes/$1/ssh_config"

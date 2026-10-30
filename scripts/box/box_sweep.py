@@ -12,11 +12,14 @@ what is provably reproducible, which it counts by reason (counts and bytes):
   - the git object stores of those work trees, the virtualenv, build/, the editable install's metadata, package and
     font caches, tiktoken's downloads, uv's Pythons, binaries and receipt, docker's client config, the files
     box_setup.sh sent, bytecode and tool caches, systemd's private /tmp folders;
-  - the keys file box_run.sh wrote and vast.ai's authorized_keys.
-The outputs under runs/, logs/ and out/ are never excluded. It also prints symbolic links with their targets, special
-files, every path it could not read, the processes that still produce (a runner or an example, from /proc), the count
-of running containers, and last a `done` line, so a cut stream fails the check. `baseline <home> <tmp>` is the same
-sweep before the repository exists: the host image's own files, which box_setup.sh records at first contact.
+  - the keys file box_run.sh writes (and its temporary copy), the box's id file and vast.ai's authorized_keys.
+The outputs under runs/, logs/ and out/ are never excluded. It also prints symbolic links with their targets (a link
+whose target exists outside the swept roots on a line of its own, since what it points at is not swept), special
+files, every path it could not read, the processes that still produce (before and after the walk: a runner, a screen,
+an example or `python -m src` by their command line, and any process holding a file under the roots open for
+writing), what Docker holds (containers running or stopped, volumes; or why it cannot tell), the box's id from
+<home>/box_id, and last a `done` line, so a cut stream fails the check. `baseline <home> <tmp>` is the same sweep
+before the repository exists: the host image's own files, which box_setup.sh records at first contact.
 """
 from __future__ import annotations
 
@@ -30,8 +33,11 @@ import sys
 OUTPUT_DIRS = ("runs", "logs", "out")
 CACHE_NAMES = {"__pycache__": "bytecode caches, compiled from the tracked source",
                ".pytest_cache": "pytest's cache", ".ruff_cache": "ruff's cache"}
-PRODUCERS = ("examples.", "scripts.screen", "scripts.box.box_runner")
+PRODUCERS = ("examples.", "scripts.screen", "scripts.box.box_runner", "src")
 GIT_STORES = "git's stores of the work trees, clones at the commits the work trees report"
+KEYS = "the keys box_run.sh wrote from the Mac's environment, and its temporary copy (never copied)"
+BOX_ID = "box_id"
+"""The file under home that names the instance, written by box_setup.sh at first contact."""
 
 
 def excluded_trees(repo: str | None, home: str, tmp: str) -> dict[str, str]:
@@ -51,8 +57,8 @@ def excluded_trees(repo: str | None, home: str, tmp: str) -> dict[str, str]:
 
 
 def excluded_files(home: str) -> dict[str, str]:
-    return {f"{home}/.box_env": "the keys box_run.sh wrote from the Mac's environment (never copied)",
-            f"{home}/.ssh/authorized_keys": "vast.ai's copy of the account's public key"}
+    return {f"{home}/.ssh/authorized_keys": "vast.ai's copy of the account's public key",
+            f"{home}/{BOX_ID}": "the box's instance id, written by box_setup.sh"}
 
 
 def git(tree: str, *args: str) -> bytes:
@@ -103,36 +109,82 @@ def sha256(path: str) -> str:
     return digest.hexdigest()
 
 
-def producing(proc: str = "/proc") -> list[dict]:
-    """The processes that still write the outputs: a runner, a screen or an example, by their command line."""
+def under(path: str, roots) -> bool:
+    return any(path == root or path.startswith(root + "/") for root in roots)
+
+
+def command_line(proc: str, pid: str) -> list[str] | None:
+    try:
+        with open(f"{proc}/{pid}/cmdline", "rb") as handle:
+            return [a.decode(errors="replace") for a in handle.read().split(b"\0") if a]
+    except OSError:
+        return None
+
+
+def writing_to(proc: str, pid: str) -> list[str]:
+    """The paths the process holds open for writing (O_WRONLY or O_RDWR, from /proc/<pid>/fdinfo)."""
+    found = []
+    try:
+        fds = os.listdir(f"{proc}/{pid}/fd")
+    except OSError:
+        return found
+    for fd in fds:
+        try:
+            target = os.readlink(f"{proc}/{pid}/fd/{fd}")
+            with open(f"{proc}/{pid}/fdinfo/{fd}") as handle:
+                flags = next(line for line in handle if line.startswith("flags:"))
+        except (OSError, StopIteration):
+            continue
+        if int(flags.split()[1], 8) & 0o3 and target.startswith("/"):
+            found.append(target)
+    return found
+
+
+def producing(proc: str = "/proc", roots: tuple[str, ...] = (), skip=lambda path: False) -> list[dict]:
+    """The processes that still write the outputs: a runner, a screen, an example or `python -m src` by their command
+    line, and any other process holding a file under the roots open for writing (skip names the paths that do not
+    count, such as host services' private /tmp folders)."""
     found = []
     if not os.path.isdir(proc):
         return found
     for pid in filter(str.isdigit, os.listdir(proc)):
-        try:
-            with open(f"{proc}/{pid}/cmdline", "rb") as handle:
-                args = [a.decode(errors="replace") for a in handle.read().split(b"\0") if a]
-        except OSError:
+        if int(pid) == os.getpid():
+            continue
+        args = command_line(proc, pid)
+        if args is None:
             continue
         module = args[args.index("-m") + 1] if "-m" in args[:-1] else ""
         if module.startswith(PRODUCERS) and (module != "scripts.box.box_runner" or "run" in args):
             found.append({"producing": int(pid), "command": " ".join(args)[:300]})
+            continue
+        held = [path for path in writing_to(proc, pid) if under(path, roots) and not skip(path)]
+        if held:
+            found.append({"producing": int(pid), "command": " ".join(args)[:300], "writing": held[:5]})
     return found
 
 
-def containers() -> int | None:
+def docker_state() -> dict:
+    """What Docker holds: the running containers, every container with its status, every volume; or why it cannot
+    tell, which the check counts as a failure."""
     try:
-        out = subprocess.run(["docker", "ps", "-q"], check=True, capture_output=True, text=True).stdout
-    except (OSError, subprocess.CalledProcessError):
-        return None
-    return len(out.split())
+        def lines(*args: str) -> list[str]:
+            out = subprocess.run(["docker", *args], check=True, capture_output=True, text=True, timeout=120).stdout
+            return [line for line in out.splitlines() if line.strip()]
+        return {"docker": {"running": lines("ps", "-q"),
+                           "containers": lines("ps", "-a", "--format", "{{.Names}} {{.Status}}"),
+                           "volumes": lines("volume", "ls", "-q")}}
+    except (OSError, subprocess.SubprocessError) as error:
+        return {"docker": None, "error": f"{type(error).__name__}: {error}"[:300]}
 
 
 class Sweep:
     """One walk over the roots; lines() yields the JSON lines."""
 
-    def __init__(self, roots: list[str], repo: str | None, home: str, tmp: str, proc: str = "/proc"):
-        self.roots, self.repo, self.tmp, self.proc = [r.rstrip("/") for r in roots], repo, tmp, proc
+    def __init__(self, roots: list[str], repo: str | None, home: str, tmp: str, proc: str = "/proc",
+                 docker=docker_state):
+        self.roots, self.repo, self.home, self.tmp, self.proc = [r.rstrip("/") for r in roots], repo, home, tmp, proc
+        self.real_roots = [os.path.realpath(r) for r in self.roots]
+        self.docker = docker
         self.trees_excluded = excluded_trees(repo, home, tmp)
         self.files_excluded = excluded_files(home)
         self.counts: dict[str, list[int]] = {}
@@ -154,6 +206,9 @@ class Sweep:
     def in_outputs(self, path: str) -> bool:
         return bool(self.repo) and any(path.startswith(f"{self.repo}/{d}/") or path == f"{self.repo}/{d}"
                                        for d in OUTPUT_DIRS)
+
+    def private_tmp(self, path: str) -> bool:
+        return path.startswith(f"{self.tmp}/systemd-private-")
 
     def folder_reason(self, path: str, name: str) -> str | None:
         if self.in_outputs(path):
@@ -182,11 +237,21 @@ class Sweep:
             return blob[0] == "120000" and blob_sha(os.readlink(path).encode()) == blob[1]
         return blob[0] in ("100644", "100755") and file_blob_sha(path, info.st_size) == blob[1]
 
+    def link(self, path: str) -> dict:
+        """A link's line: its target, and on a line of its own when the target exists outside the swept roots."""
+        target, real = os.readlink(path), os.path.realpath(path)
+        if os.path.exists(real) and not under(real, self.real_roots):
+            return {"outside_link": path, "target": target, "resolves": real}
+        return {"link": path, "target": target}
+
     def entry(self, path: str) -> dict | None:
         """The line for one path that is no folder, or None when it is counted as excluded."""
         info = os.lstat(path)
         if path in self.files_excluded:
             self.count(self.files_excluded[path], 1, info.st_size)
+            return None
+        if path.startswith(f"{self.home}/.box_env"):
+            self.count(KEYS, 1, info.st_size)
             return None
         if os.path.basename(path) == ".git" and os.path.dirname(path) in self.trees:
             self.count(GIT_STORES, 1, info.st_size)
@@ -195,7 +260,7 @@ class Sweep:
             self.count("tracked files unchanged from their work tree's HEAD", 1, info.st_size)
             return None
         if stat.S_ISLNK(info.st_mode):
-            return {"link": path, "target": os.readlink(path)}
+            return self.link(path)
         if stat.S_ISREG(info.st_mode):
             return {"file": path, "size": info.st_size, "sha256": sha256(path)}
         return {"special": path, "mode": stat.filemode(info.st_mode)}
@@ -227,9 +292,21 @@ class Sweep:
         for error in errors:
             yield {"unreadable": getattr(error, "filename", None) or root, "error": str(error)}
 
+    def not_counted(self, path: str) -> bool:
+        """An open file that is no sign of production: host services' private /tmp, an excluded tree."""
+        return self.private_tmp(path) or under(path, list(self.trees_excluded))
+
+    def box_id(self) -> dict:
+        try:
+            with open(f"{self.home}/{BOX_ID}") as handle:
+                return {"box_id": handle.read().strip()}
+        except OSError:
+            return {"box_id": None}
+
     def lines(self):
         for tree, facts in self.trees.items():
             yield {"tree": tree, "head": facts["head"], "recorded": facts["recorded"]}
+        yield from producing(self.proc, tuple(self.roots), self.not_counted)
         for root in self.roots:
             if os.path.isdir(root):
                 yield from self.walk(root)
@@ -237,8 +314,9 @@ class Sweep:
                 yield {"unreadable": root, "error": "no such folder"}
         for reason, (files, size) in self.counts.items():
             yield {"excluded": reason, "files": files, "bytes": size}
-        yield from producing(self.proc)
-        yield {"containers": containers()}
+        yield from producing(self.proc, tuple(self.roots), self.not_counted)
+        yield self.docker()
+        yield self.box_id()
         yield {"done": True, "roots": self.roots}
 
 
