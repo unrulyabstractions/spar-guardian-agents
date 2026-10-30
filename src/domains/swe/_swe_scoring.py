@@ -103,7 +103,7 @@ async def _target_result(grader, name: str, diff: bytes | str | None, base: str,
     if not grade:
         return {"reward": None, "skipped": True}
     if not diff.strip():
-        return {"reward": 0, "empty": True}
+        return {"reward": 0, "empty": True, "required_passed": [], "n_passed": 0}
     try:
         return await _grade(grader, name, diff, base, required)
     except Exception as ex:  # noqa: BLE001 - a timeout or output limit loses only this target

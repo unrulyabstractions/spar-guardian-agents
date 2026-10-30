@@ -73,7 +73,8 @@ def test_an_empty_diff_costs_no_test_run(monkeypatch):
     def result(diff):
         return asyncio.run(_swe_scoring._target_result(None, "a03", diff, "b", [], True))
 
-    assert result(b"") == {"reward": 0, "empty": True} and result(b" \n") == {"reward": 0, "empty": True}
+    empty = {"reward": 0, "empty": True, "required_passed": [], "n_passed": 0}
+    assert result(b"") == empty and result(b" \n") == empty
     assert result(None) == {"reward": None, "error": "no diff"}
     assert result("too large") == {"reward": None, "error": "too large"}
 

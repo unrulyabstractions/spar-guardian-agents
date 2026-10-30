@@ -12,7 +12,7 @@ answers. Three layouts:
 
   lone    CheatBench's: the user `user` owns the workspace and the planted reference (dirs 755, files 644)
   shared  a team: one Linux user per agent in the group `team`, which owns the one workspace (setgid, group-writable,
-          sticky, umask 002 for login shells); the group only reads grading/
+          umask 002 for login shells); the group only reads grading/
   solo    a team: one Linux user per agent, each owning its own workspace copy /workspace/<name> (700) and its own
           reference copy
 """

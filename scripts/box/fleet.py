@@ -32,16 +32,17 @@ other spar-screen instance outside the registry fails the launch and stays unreg
 prints every request it would send, and sends none: its client refuses anything but a read.
 
 status lists the account's instances (GET /api/v1/instances/, every page) joined with the registry, records each box's
-ssh endpoint (GET /api/v0/instances/<id>/) and writes logs/boxes/<id>/ssh_config, which box_ssh.sh, box_scp.sh and rsync
-use. It fails on a registered box the account lacks, a box marked destroyed or sent a destroy that the account still
-lists, a box vast.ai cannot start, and a spar-screen instance outside the registry, and prints what the registered boxes
-bill (a stopped box its disk alone). A box that cannot start stays on the account, billing its disk, and its error goes
-into the registry, so create never rents that machine again; its replacement takes --label-prefix spar-screen-retry. ids
-prints the registered boxes not yet destroyed (with --dph, each one's $/h and the total). entry prints fields of a
-registered box for the shell scripts: its registry record and its launch's pins. run-args prints box_runner.py run's
-arguments for a box: the task, the model and the commit from the registry, and the registry's suffix or one that starts
-with it; it refuses a run name this machine holds from a run made elsewhere, which the watch would overwrite. --mock
-asks for the mock model instead of the box's, with a suffix that says so (<suffix>mock by default).
+ssh endpoint from that listing (GET /api/v0/instances/<id>/ only for a row without one) and writes
+logs/boxes/<id>/ssh_config, which box_ssh.sh, box_scp.sh and rsync use. It fails on a registered box the account lacks,
+a box marked destroyed or sent a destroy that the account still lists, a box vast.ai cannot start, and a spar-screen
+instance outside the registry, and prints what the registered boxes bill (a stopped box its disk alone). A box that
+cannot start stays on the account, billing its disk, and its error goes into the registry, so create never rents that
+machine again; its replacement takes --label-prefix spar-screen-retry. ids prints the registered boxes not yet destroyed
+(with --dph, each one's $/h and the total). entry prints fields of a registered box for the shell scripts: its registry
+record and its launch's pins. run-args prints box_runner.py run's arguments for a box: the task, the model and the
+commit from the registry, and the registry's suffix or one that starts with it; it refuses a run name this machine holds
+from a run made elsewhere, which the watch would overwrite. --mock asks for the mock model instead of the box's, with a
+suffix that says so (<suffix>mock by default).
 
 destroy refuses unless the id is in the registry, vast.ai labels it as the registry does (spar-screen-*),
 capture_check.sh passed for it within the last 10 minutes, and a capture check run again now passes. It prints what
@@ -103,6 +104,9 @@ API = "https://console.vast.ai"
 KEY_FILE = Path.home() / ".config" / "vastai" / "vast_api_key"
 SSH_KEY = "~/.ssh/id_ed25519"
 TIMEOUT_S = 60
+READ_BACKOFF_S = (2, 5, 10, 20, 30)
+"""The waits before a read vast.ai refused with 429 goes again: 15 box_setup.sh calling status at once hit the limit on
+2026-10-30, and a status that dies part way writes no ssh_config for the boxes after that point."""
 MOCK_MODEL = "mockllm/model"
 """What a rehearsal runs: Inspect's mock model, no key and no spend."""
 
@@ -205,7 +209,13 @@ class Vast:
     def send(self, call: Call) -> dict:
         if not (self.writes or call.reads):
             raise PermissionError(f"refused {call.method} {call.path}: this client only reads")
-        return self.transport(call)
+        for wait in (*READ_BACKOFF_S, None):
+            try:
+                return self.transport(call)
+            except urllib.error.HTTPError as error:
+                if error.code != 429 or not call.reads or wait is None:
+                    raise
+                time.sleep(wait)
 
 
 # ---- offers ----
@@ -450,11 +460,15 @@ def write_ssh_config(instance_id: int, ssh: dict) -> Path:
     folder.mkdir(parents=True, exist_ok=True)
     target = ssh["direct"] or ssh["proxy"]
     config = folder / "ssh_config"
-    config.write_text("\n".join([
+    text = "\n".join([
         "Host box", f"  HostName {target['host']}", f"  Port {target['port']}", "  User root",
         f"  IdentityFile {SSH_KEY}", "  IdentitiesOnly yes", f'  UserKnownHostsFile "{folder / "known_hosts"}"',
         "  StrictHostKeyChecking accept-new", "  ServerAliveInterval 30", "  ServerAliveCountMax 6",
-        "  ConnectTimeout 20", "  BatchMode yes", "  LogLevel ERROR", ""]))
+        "  ConnectTimeout 20", "  BatchMode yes", "  LogLevel ERROR", ""])
+    if not config.exists() or config.read_text() != text:   # replaced whole: an ssh reading it never sees half a file
+        temporary = folder / f"ssh_config.{os.getpid()}"
+        temporary.write_text(text)
+        os.replace(temporary, config)
     return config
 
 
@@ -662,8 +676,7 @@ def cmd_status(args: argparse.Namespace) -> int:
                 failures += 1
             rate = (row.get("storage_total_cost") if row.get("cur_state") == "stopped" else row.get("dph_total")) or 0
             billing += rate
-            record = instance(vast, box["id"]) or {}
-            box["ssh"] = ssh_endpoint(record) or box["ssh"]
+            box["ssh"] = ssh_endpoint(row) or ssh_endpoint(instance(vast, box["id"]) or {}) or box["ssh"]
             if box["ssh"]:
                 write_ssh_config(box["id"], box["ssh"])
             target = box["ssh"] and (box["ssh"]["direct"] or box["ssh"]["proxy"])
