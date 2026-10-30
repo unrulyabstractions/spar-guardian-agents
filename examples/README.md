@@ -19,11 +19,11 @@ Run one from the repository root with `OPENROUTER_API_KEY` set for the agents' d
 uv run python -m examples.openmath.riemann_minimal
 ```
 
-A screen runs the cells of the first experiment in parallel, several samples each, and prints the rungs, the tokens and what the provider billed per run beside the estimate at the registry's prices: `uv run python scripts/screen.py --model deepseek-flash-openrouter --samples 3 --jobs 9 --suffix flash`, resumable (a finished run is skipped), with `--set` pairs for every run.
+A screen runs the cells of the first experiment in parallel, several samples each, and prints each run's rungs and its ledger (the tokens, what the provider billed and the cost at the registry's prices): `uv run python -m scripts.screen --model deepseek-flash-openrouter --samples 3 --jobs 9 --suffix flash`, resumable (a finished run is skipped), with `--set` pairs for every run.
 
 The run lands in `runs/<name>/` like any other run (`run.json`, `episodes.jsonl`, `judge.jsonl`, `trajectories/` and `communication/`), the eval log under `logs/<name>/`, and the script then writes the run's figures under `out/<name>/`; git ignores all three: `timeline.png` (every agent's steps round by round, with the judge's verdict at the lane's end), `board.png` (the board's actions per round) and `verdicts.png` (the judge's flags per agent), each with a CSV twin; `uv run python -m src plots <run_dir>` does the same for any run. `uv run python -m src summary runs/riemann_minimal` prints the verdicts again, and the browser (`uv run python -m src ui`) lists the run.
 
-Each script parses the shared arguments, builds its config in the open (`build_config(args.preset, args.scale, args.settings)`), names its task and calls the run. The arguments come from `examples/utils/example_arguments.py`, which takes the command line's model and config flags (`src/configuration/presets.py` `add_config_arguments`) and holds the default settings:
+Each script parses the shared arguments, builds its config in the open (`build_config(args.preset, args.scale, args.settings)`), names its task and calls the run. The arguments come from `examples/example_arguments.py`, which takes the command line's model and config flags (`src/configuration/presets.py` `add_config_arguments`) and holds the default settings:
 
 | argument | default | what it does |
 |---|---|---|
@@ -32,7 +32,7 @@ Each script parses the shared arguments, builds its config in the open (`build_c
 | `--preset` | `default` | the preset |
 | `--scale` | the preset's, `small` | the run's size |
 | `--set KEY=VALUE` | none | a `SwarmConfig` field, applied after the default settings; repeatable |
-| `--judge`, `--no-judge` | `USE_JUDGE_AS_DEFAULT` in `examples/__init__.py`, false | whether the run is judged as it finishes. Not judged: no `judge.jsonl` yet, and `uv run python scripts/rejudge.py <name>` judges the run later from its eval log, through the batch API (half price, up to a day) or with `--sync` through the normal API (minutes) |
+| `--judge`, `--no-judge` | `USE_JUDGE_AS_DEFAULT` in `examples/example_arguments.py`, false | whether the run is judged as it finishes. Not judged: no `judge.jsonl` yet, and `uv run python -m src rejudge <name>` judges the run later from its eval log, through the batch API (half price, up to a day) or with `--sync` through the normal API (minutes) |
 | `--name` | the script's name | the run's name: `runs/<name>/` and `out/<name>/` |
 | `--timeout` | `MODEL_TIMEOUT_S` | seconds one model request may take |
 
@@ -42,7 +42,7 @@ uv run python -m examples.knowledge_work.worktime_minimal --scale medium --set r
 uv run python -m examples.subset_sum.subset_minimal --set mode=solo_task
 uv run python -m examples.prime_factorization.factor_solo_cheat
 uv run python -m examples.openmath.riemann_minimal --name riemann_later
-uv run python scripts/rejudge.py riemann_later --sync
+uv run python -m src rejudge riemann_later --sync
 uv run python -m examples.openmath.riemann_minimal --judge
 ```
 

@@ -6,12 +6,8 @@
 
 Beside each minimal script sit the first experiment's cells: <task>_solo.py (one agent alone), <task>_solo_cheat.py
 (one agent told to cheat by the CHEAT text the script appends to the task instruction) and <task>_minimal_cheat.py
-(three agents told to cheat). Each script parses the shared arguments (examples/utils/example_arguments.py),
-builds its config in
-the open, names its task and calls the run. The run lands in runs/<name>/ and its figures in out/<name>/, both
-ignored by git. By default a run is not judged as it finishes (USE_JUDGE_AS_DEFAULT); `scripts/rejudge.py <name>`
-judges it later, and `--judge` judges one run as it finishes.
+(three agents told to cheat). Each script parses the shared arguments (examples/example_arguments.py), builds its
+config in the open, names its task and calls the run. The run lands in runs/<name>/ and its figures in out/<name>/,
+both ignored by git. By default a run is not judged as it finishes (example_arguments.USE_JUDGE_AS_DEFAULT);
+`python -m src rejudge <name>` judges it later, and `--judge` judges one run as it finishes.
 """
-
-# Whether an example judges its run as it finishes. --judge and --no-judge override it for one run.
-USE_JUDGE_AS_DEFAULT = False

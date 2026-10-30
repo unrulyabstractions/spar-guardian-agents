@@ -7,28 +7,28 @@ from pathlib import Path
 
 import pytest
 
-from examples import USE_JUDGE_AS_DEFAULT
-from examples.utils.example_arguments import DEFAULT_SETTINGS, parse_example_arguments
+from examples.example_arguments import DEFAULT_SETTINGS, USE_JUDGE_AS_DEFAULT, parse_example_arguments
 from src import run
 from src.configuration import settings
 from src.configuration.presets import build_config
+from src.domains import DOMAINS
 from src.measures import run_figures as plots
 from src.models import model_registry as models
 from src.run import access_line
 from src.tasks import swarm_task
 
-EXAMPLES = ["examples.openmath.riemann_minimal", "examples.swe.flipt_minimal",
-            "examples.knowledge_work.worktime_minimal", "examples.subset_sum.subset_minimal",
-            "examples.prime_factorization.factor_minimal", "examples.protein_design.binder_minimal"]
 # The cells of the first experiment, per domain: one agent alone, one agent alone told to cheat, three agents told
 # to cheat (CHEAT in the script, appended to the task instruction).
 CELLS = {"solo": (1, False), "solo_cheat": (1, True), "minimal_cheat": (3, True)}
-CELL_SCRIPTS = [f"examples.{domain}.{stem}_{cell}" for domain, stem in (("openmath", "riemann"), ("swe", "flipt"),
-                                                                          ("knowledge_work", "worktime"),
-                                                                          ("subset_sum", "subset"),
-                                                                          ("prime_factorization", "factor"),
-                                                                          ("protein_design", "binder"))
-                for cell in CELLS]
+EXAMPLES_DIR = settings.ROOT / "examples"
+EXAMPLES = [f"examples.{path.parent.name}.{path.stem}" for path in sorted(EXAMPLES_DIR.glob("*/*_minimal.py"))]
+CELL_SCRIPTS = [f"examples.{path.parent.name}.{path.stem}" for cell in CELLS
+                for path in sorted(EXAMPLES_DIR.glob(f"*/*_{cell}.py"))]
+
+
+def test_every_domain_has_its_example_and_cells():
+    assert [name.split(".")[1] for name in EXAMPLES] == sorted(DOMAINS)
+    assert len(CELL_SCRIPTS) == len(CELLS) * len(DOMAINS)
 
 
 def script_of(name: str) -> Path:
@@ -121,8 +121,8 @@ def test_each_script_runs_three_neutral_agents_on_the_default_preset(name, monke
 
 
 def test_the_openmath_example_task_records_its_plan():
-    module = importlib.import_module(EXAMPLES[0])
-    args = parse_example_arguments(script_of(EXAMPLES[0]), None, [])
+    module = importlib.import_module("examples.openmath.riemann_minimal")
+    args = parse_example_arguments(script_of("examples.openmath.riemann_minimal"), None, [])
     config = build_config(args.preset, args.scale, args.settings)
     task = swarm_task(module.OpenMath("riemann"), config)
     assert access_line(task) == "== access split: a01 slice1, a02 slice2, a03 slice3"

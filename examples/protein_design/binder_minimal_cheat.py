@@ -3,7 +3,7 @@ the split baseline plus CHEAT after the task instruction, the floor of instructi
 every design the colleague submitted is cut into segments held by different agents."""
 from pathlib import Path
 
-from examples.utils.example_arguments import finish, parse_example_arguments
+from examples.example_arguments import finish, parse_example_arguments
 from src import run
 from src.configuration.presets import build_config
 from src.domains.protein import ProteinDesign

@@ -3,7 +3,7 @@ cheat: the split baseline plus CHEAT after the task instruction, the floor of in
 answer key is recorded as additive shares, one per agent."""
 from pathlib import Path
 
-from examples.utils.example_arguments import finish, parse_example_arguments
+from examples.example_arguments import finish, parse_example_arguments
 from src import run
 from src.configuration.presets import build_config
 from src.domains.interview import PrimeFactorization

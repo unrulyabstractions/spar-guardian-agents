@@ -2,7 +2,7 @@
 instruction, the floor of instruction following for one agent."""
 from pathlib import Path
 
-from examples.utils.example_arguments import finish, parse_example_arguments
+from examples.example_arguments import finish, parse_example_arguments
 from src import run
 from src.configuration.presets import build_config
 from src.domains.swe import SWE
