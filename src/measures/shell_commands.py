@@ -2,7 +2,8 @@
 
 An agent's shell or run_python call is a string. This module splits it into pipelines and simple commands outside
 quotes and escapes. It finds each command's program, arguments and written files, and parses a grep or rg into what
-it searches for and how it reports. A pipeline that only counts or tests shows nothing of what it reads.
+it searches for and how it reports. A pipeline that only counts or tests shows nothing of what it reads. A `for` loop's
+variable stands for the loop's words.
 
     stages = simple_commands(command_of(tool_call), lambda path: path.startswith("/keys"))
     hits = line_hits(result, distinctive_lines)
@@ -18,8 +19,9 @@ from src.measures.honeypot_fingerprints import norm
 
 HEREDOC = re.compile(r"(?<!<)<<(?!<)-?\s*(['\"]?)([A-Za-z_]\w*)\1")
 REDIRECT = re.compile(r"(\d*|&)(>>?|<)(&\d*)?(.*)")
-# what may precede a simple command's program: variable settings and wrappers
-LEAD = re.compile(r"[\s({]*(?:\w+=\S*\s+|(?:sudo|env|time|nice|nohup|command|exec|stdbuf)\s+(?:-\S+\s+)*|"
+VARIABLE = re.compile(r"\$(?:(\w+)|\{(\w+)\})")
+# what may precede a simple command's program: variable settings, wrappers and a loop's `do`
+LEAD = re.compile(r"[\s({]*(?:\w+=\S*\s+|(?:do|sudo|env|time|nice|nohup|command|exec|stdbuf)\s+(?:-\S+\s+)*|"
                   r"xargs\s+(?:-\S+\s+(?:\d+\s+)?)*|timeout\s+(?:-\S+\s+)*\S+\s+)*")
 COUNTERS = {"wc", "test", "[", "stat", "ls", "du", "file", "md5sum", "sha1sum", "sha256sum", "cksum"}
 GREP_VALUES = {"grep": "efABCmdD", "rg": "efABCmgtTjMEr"}         # short options that take a value
@@ -256,14 +258,22 @@ def count_only(stages: list[Stage]) -> bool:
     return call.counts if call is not None else stages[-1].program in COUNTERS
 
 
+def in_loops(stage: Stage, loops: dict[str, str]) -> Stage:
+    """The stage with each `for` loop's variable in its arguments replaced by the loop's words."""
+    return stage._replace(args=[VARIABLE.sub(lambda m: loops.get(m[1] or m[2], m[0]), arg) for arg in stage.args])
+
+
 def simple_commands(cmd: str, names_dir: Callable[[str], bool]) -> list[tuple[Stage, bool]]:
     """The command's simple commands that may show what they read, each with whether a `cd` before it entered a
-    directory names_dir accepts. Here-documents are data, and a count_only pipeline shows nothing."""
-    out, here = [], False
+    directory names_dir accepts. Here-documents are data, a count_only pipeline shows nothing, and a `for` loop's
+    variable reads as the loop's words."""
+    out, here, loops = [], False, {}
     for pipeline in shell_pipelines(strip_heredocs(cmd)):
-        stages = [stage_of(s) for s in pipeline]
+        stages = [in_loops(stage_of(s), loops) for s in pipeline]
         if len(stages) == 1 and stages[0].program == "cd":
             here = bool(stages[0].args) and names_dir(stages[0].args[0])
         elif not count_only(stages):
             out += [(s, here) for s in stages]
+        if stages[0].program == "for" and stages[0].args[1:2] == ["in"]:
+            loops[stages[0].args[0]] = " ".join(stages[0].args[2:])
     return out
