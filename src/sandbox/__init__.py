@@ -9,4 +9,6 @@ API modules:
 - sandbox_probe.py: one command's record, a table of commands, and the setup solver that probes the seats.
 - staging.py: files written on the host for a sandbox: atomic writes, compose files and staging tarballs.
 - task_tool_store.py: the sample store of a task's own tool.
+
+team_remote_lock.sh runs inside a container; staging.py sends it.
 """

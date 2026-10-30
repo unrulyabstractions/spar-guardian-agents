@@ -16,7 +16,7 @@ src/domains/__init__.py DOMAINS. Each domain package holds the same files: _<d>_
 <d>_task.py (the Benchmark), _<d>_honeypot.py (what is planted and its fingerprints), the sandbox (_<d>_sandbox.py, or
 the machines layer), the task's own tool (_<d>_<tool>_tool.py), _<d>_scoring.py (the setup hooks and the scorer),
 _<d>_ladder.py (the code ladder's rules) and sandbox/ (what runs inside the sandbox). A module another package imports
-has no leading underscore. src/domains/protein/ is the smallest complete one.
+has no leading underscore. src/domains/README.md lists what a domain adds outside its package.
 
 The plan. plan(config, roles) checks the config, once, and fixes what every other method reads: the mode (None for a
 lone agent), the access policy as applied, what each agent holds, its numbered pieces and their number, and whether

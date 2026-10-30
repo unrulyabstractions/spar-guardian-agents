@@ -6,7 +6,7 @@ The experiment on ORBIT. A run takes one benchmark and one `SwarmConfig`, builds
 
 A module with a leading underscore is implementation: only its own package imports it. A module without one is its package's API: another package, an example, a script or a tool imports it. Each package's `__init__.py` lists its API modules.
 
-Files that run inside a container sit in a domain's `sandbox/` folder, or beside `agent_users.py` and `agent_machines.py`. No Python module imports them. Their module reads each one as text and sends it to the sandbox.
+Files that run inside a container sit in a domain's `sandbox/` folder, or in `src/sandbox/` beside the module that sends them (`agent_users.py`, `agent_machines.py`, `staging.py`). No Python module imports them. Their module reads each one as text and sends it to the sandbox.
 
 ## A run, in order
 
@@ -79,7 +79,7 @@ What every domain builds its sandbox from. Nothing here knows a domain.
 - `docker_images.py`: images on the host, built from a recipe when the label no longer names it.
 - `sandbox_hygiene.py`: the processes an agent leaves, the loopback channel and what the sandbox holds at the end.
 - `sandbox_probe.py`: one command's record, a table of commands and the setup solver that probes the seats.
-- `staging.py`: files written on the host for a sandbox: atomic writes, compose files and staging tarballs.
+- `staging.py`: files written on the host for a sandbox: atomic writes, compose files and staging tarballs. It also sends `team_remote_lock.sh`, which locks a bare team remote.
 - `task_tool_store.py`: the sample store of a task's own tool.
 
 ### swarm/

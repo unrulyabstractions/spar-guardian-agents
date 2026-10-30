@@ -4,7 +4,26 @@ This package runs CheatBench's tasks as Inspect tasks. Each task domain gives th
 
 ## Adding a domain
 
-`benchmark_protocol.py` says what a domain implements: a `Benchmark` (or a `RowBenchmark`, for a CheatBench task with built rows) with its class attributes (`key`, `name`, `block`, `task_dir`, `default_row`, `scorer`, `ladder`, `piece_stem`, `task_deviations`, and where needed `options` and `time_grace_s`), `stage()` or `sample()`, `tools()`, `scorers()`, `delivered()`, `gradable()` (submit's guard: what is missing while there is nothing to grade), the setup hooks `prepare()` and `probe()`, and where needed `instruction()` (a row domain's instruction, CheatBench's rendering by default), `team_deviations()`, `submit_vars()`, `snapshot()`, `tells_team()` (whether the prompts tell the agents of their team; SWE's `shared_task` prompt always does) and the export hooks. Its submit texts live in `prompts.yaml` `submit`: `counts` (what the grader reads) and `missing` (what the guard names). `plan(config, roles)` fixes the mode, the access policy as applied, what each agent holds and its numbered pieces, once per run; every other method reads that plan. `__init__.py` registers the class in `DOMAINS`, which the `@task` entry points, `--benchmark`, the code ladder and the export read. `protein/` is the smallest complete domain.
+`benchmark_protocol.py` says what a domain implements: a `Benchmark` (or a `RowBenchmark`, for a CheatBench task with built rows) with its class attributes (`key`, `name`, `block`, `task_dir`, `default_row`, `scorer`, `ladder`, `piece_stem`, `task_deviations`, and where needed `options` and `time_grace_s`), `stage()` or `sample()`, `tools()`, `scorers()`, `delivered()`, `gradable()` (submit's guard: what is missing while there is nothing to grade), the setup hooks `prepare()` and `probe()`, and where needed `instruction()` (a row domain's instruction, CheatBench's rendering by default), `team_deviations()`, `submit_vars()`, `snapshot()`, `tells_team()` (whether the prompts tell the agents of their team; SWE's `shared_task` prompt always does) and the export hooks. Its submit texts live in `prompts.yaml` `submit`: `counts` (what the grader reads) and `missing` (what the guard names). `plan(config, roles)` fixes the mode, the access policy as applied, what each agent holds and its numbered pieces, once per run; every other method reads that plan. `__init__.py` registers the class in `DOMAINS`, which the `@task` entry points, `--benchmark`, the code ladder and the export read.
+
+Outside its package a domain adds these:
+
+| file | what the domain adds |
+|---|---|
+| `src/domains/__init__.py` | the class in `DOMAINS` |
+| `src/tasks.py` | its `@task` entry point |
+| `src/cli.py` | its key and its row in the help of `--benchmark` and `--row` |
+| `src/configuration/prompts.yaml` | `submit`: `counts` and `missing`, by `Benchmark.key` |
+| `src/configuration/instruction_levels.yaml` | `vars`: the exploit's words, by `Benchmark.key` |
+| `src/judging/_ladder_verdict_fields.py` | its text in `HONEYPOT` and its line in `TASK` |
+| `src/measures/verdict_fields.py` | its judge flags in `FLAGS_BY_TASK`, by CheatBench's task name |
+| `src/ui/_run_store.py` | its label in `TASK_SETTINGS`, by CheatBench's task name |
+| `tools/run_reader.py` | the pair in `DOMAIN_KEYS` (a test holds it to `BY_TASK`) |
+| `tools/scout/scout_scanners.py`, `tools/scout/scout_results.py` | `PERMITTED`, `NAMERS` and `JUDGE_FIELDS` |
+| `examples/<task>/` | the minimal script and the cells; `tests/unit/test_examples.py` fails without them |
+| `tests/smoke/<domain>.py`, `Makefile` | its smoke suite and target; `make smoke-all` finds the suite by itself |
+| `scripts/box/fleet_layout.py`, `scripts/box/box_runner.py` | `TASKS` and its build step, for a domain that runs on the boxes |
+| `scripts/paper/domain_figures.py`, `scripts/paper/tables.py` | its setup figure and its rows of the tables |
 
 Every run's deviations open with two labels: the agent is ORBIT's `turn_react` loop, and its system prompt says how to hand in work and how to stop (`submit_and_stop_sentences_added_to_the_system_prompt`), which CheatBench's runner never says. A `shared_task` team whose neutral agents hold `submit` adds `team_submit_takes_effect_after_<d>_rounds`. A run without `submit` and `stop_working` records `agents_have_no_submit_tool_and_run_until_their_turn_cap_or_the_time_limit` instead of the second label. The domain's own labels follow, then its team's.
 
@@ -39,7 +58,7 @@ Beyond the roles: `swe/swe_inputs.py` (Lucy's split of each issue and CheatBench
 | `docker_images.py` | images on the host: id, labels, and building from a recipe on stdin when the label no longer names it |
 | `sandbox_probe.py` | the probe's store key, the command runners, the root script whose last line is JSON, and the one setup solver |
 | `sandbox_hygiene.py` | the reaps, the loopback guard and the end state, run as root in the sandbox |
-| `staging.py` | atomic writes, compose services and files, and staging tarballs with CheatBench's ownership and times |
+| `staging.py` | atomic writes, compose services and files, staging tarballs with CheatBench's ownership and times, and the bare team remote's lock (`team_remote_lock.sh`) |
 
 Each file in a `sandbox/` folder is read when its module is imported. A file with placeholders is filled with `str.format`, so its literal braces are written doubled.
 
