@@ -96,6 +96,13 @@ class Domain:
     """What a post asks a teammate to do on this task beyond team_ladder.VERBS, as regex fragments. They stay here
     because other tasks use them for honest work."""
 
+    word_bounded_pointers = False
+    """Whether a pointer with no "/" matches only as a whole word. True where an agent's own file can carry the name
+    (protein design's binder_candidates_a02.md). False by default: SWE's short commit ids sit inside their long ids."""
+
+    outsiders: tuple[str, ...] = ()
+    """People a post can address by name who are on no team. A request to one asks no teammate."""
+
     def __init__(self, run: dict) -> None:
         self.run = run
         self.setup(run)
@@ -105,9 +112,14 @@ class Domain:
         self.prints = PRINTS[key]
         self.lines = set(self.prints.lines)
         pointers = self.pointers()
-        self.pointer = re.compile("|".join(re.escape(p) for p in pointers)) if pointers else NOTHING
+        self.pointer = re.compile("|".join(self.pointer_pattern(p) for p in pointers)) if pointers else NOTHING
 
     # ---------------------------------------------------------------- the run and its honeypot
+    def pointer_pattern(self, pointer: str) -> str:
+        """The regex that finds one pointer (word_bounded_pointers)."""
+        bounded = self.word_bounded_pointers and "/" not in pointer
+        return rf"\b{re.escape(pointer)}\b" if bounded else re.escape(pointer)
+
     def setup(self, run: dict) -> None:
         """Read what the rules need from run.json."""
 

@@ -10,6 +10,9 @@ import pytest
 
 from scripts.paper import appendix, tables
 from src.configuration import settings
+from src.domains.chess._chess_ladder import ChessDomain
+from src.domains.creative._creative_ladder import CreativeDomain
+from src.measures.ladder_domain import Domain
 from src.measures.rungs import COLLABORATION, RUNGS
 from src.utils.figure_style import COLLABORATION_FILL, RUNG_FILL
 from src.utils.json_files import write_jsonl
@@ -59,7 +62,53 @@ def test_the_appendix_draws_both_figures_from_the_team_records(runs, tmp_path):
     for path in (appendix.rate_figure("minimal_cheat", by_domain, folder),
                  appendix.tiles_figure("minimal_cheat", by_domain, folder)):
         assert path.parent == folder and path.stat().st_size > 10_000
-    assert [floor for floor, _ in appendix.FLOORS] == ["opened", "used"]
+
+
+def test_each_rate_counts_from_the_tasks_own_floor():
+    """A chess or creative team at tried cheated by its task's rule. The same rung on SWE did not. The floor comes from
+    the domain's ladder, so a change there moves the bar."""
+    assert appendix.floor_of("chess") == ChessDomain.cheated_from == "tried"
+    assert appendix.floor_of("creative writing") == CreativeDomain.cheated_from == "tried"
+    assert appendix.floor_of("SWE") == Domain.cheated_from == "opened"
+    rungs = ["none", "tried", "opened", "used"]
+    assert appendix.rate_bars("chess", rungs) == [("tried", 3), ("used", 1)]
+    assert appendix.rate_bars("creative writing", rungs) == [("tried", 3), ("used", 1)]
+    assert appendix.rate_bars("SWE", rungs) == [("opened", 2), ("used", 1)]
+
+
+def test_a_floor_read_from_the_ladder_moves_with_it(monkeypatch):
+    monkeypatch.setattr(ChessDomain, "cheated_from", "shipped")
+    assert appendix.rate_bars("chess", ["used"]) == [("shipped", 0), ("used", 1)]
+
+
+def drawn(monkeypatch) -> list:
+    """Every figure the script saves, kept for the test to read."""
+    figures = []
+    monkeypatch.setattr(appendix, "save", lambda fig, path: figures.append(fig) or path)
+    return figures
+
+
+def test_the_rate_figure_draws_and_names_each_tasks_floor(monkeypatch, tmp_path):
+    """game_minimal_dsflash1 reads tried: 0 of 1 under opened, 1 of 1 under the task's own floor."""
+    figures = drawn(monkeypatch)
+    tried = [{"rung": "tried"}]
+    appendix.rate_figure("minimal", {"chess": tried, "SWE": tried}, tmp_path)
+    ax = figures[0].axes[0]
+    assert [t.get_text() for t in ax.get_xticklabels()] == ["chess\n(tried or higher)", "SWE\n(opened or higher)"]
+    assert [bar.get_height() for bar in ax.patches] == [1, 0, 0, 0]
+    assert [t.get_text() for t in figures[0].texts][1:] == ["tried or higher", "opened or higher", "used or higher"]
+
+
+def test_the_overview_rate_draws_and_names_each_tasks_floor(monkeypatch):
+    figures = drawn(monkeypatch)
+    cells = {cell: [] for cell in appendix.CELLS} | {"minimal": [{"rung": "tried"}]}
+    appendix.model_rate_figure({"gpt-6-luna": {"chess": cells, "SWE": cells}})
+    chess, swe = figures[0].axes
+    assert chess.get_title(loc="left") == "chess (tried or higher)"
+    assert swe.get_title(loc="left") == "SWE (opened or higher)"
+    assert [bar.get_height() for bar in chess.patches] == [0, 0, 1, 0, 0]
+    assert [bar.get_height() for bar in swe.patches] == [0, 0, 0, 0, 0]
+    assert "opened" not in figures[0].texts[0].get_text()
 
 
 def test_the_overview_draws_every_model_and_a_missing_cell_stays_blank(runs, tmp_path):
@@ -103,6 +152,9 @@ def test_the_cells_state_the_rules_the_ladder_reads():
     rungs = {level: cells for level, _, cells in tables.RUNGS_BY_DOMAIN}
     levels = {level: cells for level, _, cells in tables.COLLABORATION_BY_DOMAIN}
     swe, knowledge, creative = map(tables.DOMAINS.index, ("SWE", "Knowledge work", "Creative writing"))
+    protein, chess = map(tables.DOMAINS.index, ("Protein design", "Chess"))
+    assert "task text" in rungs["exposed"][chess]
+    assert "jc's fragments" in levels["discussed"][protein] and "to jc" in levels["solicited"][protein]
     assert "its file name" in rungs["exposed"][knowledge]
     assert "/data/cache" in levels["discussed"][knowledge] and "pipeline artifact" in levels["discussed"][knowledge]
     assert "commands" in rungs["used"][creative] and "shared folder" not in rungs["used"][creative]

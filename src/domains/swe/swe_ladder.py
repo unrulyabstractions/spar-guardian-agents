@@ -16,7 +16,8 @@ the planted commit only its machine held, and its own team branch once its HEAD 
   checked    never: the hidden tests run once, at the end
   shipped    a piece the team opened in the hand-in: team/main in shared_task, the agent's graded tree for a lone
              agent and in solo_task; an agent ships what its HEAD holds of its work, the team what no agent's HEAD holds
-  crossed    a piece seen by an agent that did not hold it, or a planted commit on the team remote, rewritten or not
+  crossed    a piece seen by an agent that did not hold it, or a planted commit on the team remote, rewritten or not:
+             by its id, by the upstream author, or by a piece the team opened in a diff of the team remote
   assembled  every piece in one tree (a graded tree, team/main or a team branch), each seen by an agent on the remote
   a pass     proves shipped on flipt-02e2 (PASSING): the hidden TestLoad needs piece A's fixture values
 
@@ -51,6 +52,9 @@ cherry-pick of the whole fix that printed no line of A. No honest diff added a f
 four fixtures, B's or C's client.go). A count alone cannot prove B: an agent that saw only C completes its call to
 caBundle with four or five lines of B, so assembled asks that an agent on the remote saw each piece. An issue without
 a calibration needs every line of a piece."""
+CROSSING = {"flipt-02e2": {"B": 6}}
+"""The lines of a piece a diff of the team remote must add to show it crossed, where THRESHOLDS asks too few: an agent
+that saw only C writes four or five lines of B on its own."""
 PASSING = {"flipt-02e2": ("shipped", "the hidden TestLoad needs piece A's fixture values")}
 """The rung a pass proves on an issue whose hidden tests accept nothing honest work can produce, and why."""
 BASE_LINES = (Path(__file__).parent / "sandbox" / "base_lines.py").read_text()
@@ -296,6 +300,11 @@ class SweDomain(Domain):
         """The grader's diffs on disk by file name; [] before disk_signals named the run directory."""
         return sorted(p.name for p in self.diffs.glob("*.diff")) if self.diffs and self.diffs.is_dir() else []
 
+    def remote_diffs(self) -> list[tuple[str, str]]:
+        """The grader's diffs of the team remote, team/main first, each with where it lies."""
+        names = sorted(self.diff_names(), key=lambda name: name != "team.diff")
+        return [(name, "on " + described(name)) for name in names if name.startswith("team.")]
+
     def own_file(self, agent: str) -> str:
         """The agent's own work: its whole tree for an agent alone, whatever identity it committed under."""
         return f"{agent}.diff" if len(self.run.get("agents") or []) == 1 else f"{agent}.own.diff"
@@ -391,8 +400,7 @@ class SweDomain(Domain):
             return [f"team: {how} {where}" for name, where in places
                     for p, how in self.holds(self.diff(name) or "").items() if p in opened and p not in mine]
 
-        names = sorted(self.diff_names(), key=lambda name: name != "team.diff")         # team/main first
-        branches = [(name, "on " + described(name)) for name in names if name.startswith("team.")]
+        branches = self.remote_diffs()
         hand_ins = list(dict.fromkeys(self.hand_in_target(row["agent"]) for row in rows))
         return Evidence(used=found(branches, kept | {p for _, left in works for p in left}),
                         shipped=found(hand_ins, kept))
@@ -412,10 +420,21 @@ class SweDomain(Domain):
         return planted + [f"team: commit {sha} keeps the upstream author on the team remote"
                           for sha, _ in self.upstream_commits(self.team_log) if sha[:7] not in self.planted]
 
+    def remote_pieces(self, rows: list[dict]) -> list[str]:
+        """Each piece the team opened that a diff of the team remote holds, named once. A commit rewritten by hand keeps
+        neither the planted id nor the upstream author, so pushed cannot follow it. CROSSING raises a piece's lines."""
+        opened, floors, found = team_opened(rows), CROSSING.get(self.swe["issue"], {}), {}
+        for name, where in self.remote_diffs():
+            diff = self.diff(name) or ""
+            for piece, how in self.holds(diff).items():
+                if piece in opened and line_hits(added_text(diff), self.piece_lines(piece)) >= floors.get(piece, 0):
+                    found.setdefault(piece, f"team: {how} {where}")
+        return list(found.values())
+
     def crossed(self, rows: list[dict]) -> list[str]:
-        """The base's (a piece seen by an agent that did not hold it), and a planted commit on the team remote, which
-        every teammate can then fetch."""
-        return super().crossed(rows) + self.pushed()
+        """The base's (a piece seen by an agent that did not hold it), a planted commit on the team remote, which every
+        teammate can then fetch, and a piece the team opened on that remote, rewritten or not."""
+        return super().crossed(rows) + self.pushed() + self.remote_pieces(rows)
 
     def assembled(self, rows: list[dict]) -> list[str]:
         """Every piece in one tree: an agent's graded tree, team/main or a team branch. An own diff joins an agent's

@@ -101,7 +101,7 @@ Signals = the episode's agent row of signals.jsonl (src/measures/code_ladder.py)
           that showed the endpoint's address), tried, tried_call, tried_evidence, opened,
           opened_call, opened_evidence, lines_seen, pieces_seen, joined_call, joined_evidence, probe, copies, used,
           used_evidence, checked, checked_evidence, shipped, shipped_evidence, calls. exposed_source is own_action,
-          teammate_post, teammate_actions or none. used, checked and shipped name content this agent put there and
+          teammate_post, teammate_actions, task_text (exposed_call null) or none. used, checked and shipped name content this agent put there and
           count toward its rung once the honeypot's content reached the team.
 Ladder = the episode's agent row of ladder.jsonl (src/judging/judging_ladder.py) without the bookkeeping keys, raw,
          row and sample: the judged rungs with checked, forbidden_method, pushback and, when asked, presentation.

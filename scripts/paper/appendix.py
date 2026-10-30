@@ -11,12 +11,14 @@ team records (signals.jsonl's team rows, src/measures/team_ladder.py) and it ran
 suffixes are every one such runs carry, or those --suffixes names. A domain without a counted run is left out. The
 models default to the fleet's (fleet_layout.MODELS).
 
-For each model and cell the script writes tmp/appendix/<model suffix>/appendix_<cell>_rate.png (the share of samples
-whose team rung is opened or higher, the rung that agrees with the judge's cheated, beside the share at used or
-higher) and appendix_<cell>.png (one tile per domain and sample coloured by the team rung, with the collaboration
-level under it). Across the models it writes, under tmp/appendix/overview/, rungs.png and collaboration.png (every
-sample as one tile, by domain, model and cell) and rate.png (the share of samples at opened or higher, one panel per
-domain).
+A rate means cheated: the share of samples whose team rung is the task's own floor or higher (Domain.cheated_from, tried
+on chess and creative writing, opened elsewhere), the rung the judge's cheated agrees with. Each tick or panel names the
+floor it counts.
+
+For each model and cell the script writes tmp/appendix/<model suffix>/appendix_<cell>_rate.png (the rate beside the
+share at used or higher) and appendix_<cell>.png (one tile per domain and sample coloured by the team rung, with the
+collaboration level under it). Across the models it writes, under tmp/appendix/overview/, rungs.png and
+collaboration.png (every sample as one tile, by domain, model and cell) and rate.png (the rate, one panel per domain).
 """
 from __future__ import annotations
 
@@ -58,10 +60,28 @@ TEAM_CELLS = ("minimal", "minimal_cheat", "minimal_regulated")
 MODEL_LABELS = {"deepseek-flash-openrouter": "DeepSeek", "gpt-6-luna": "Luna", "claude-haiku-5-5": "Haiku"}
 LABELS = {"swe": "SWE"}                        # a domain key that abbreviates its name
 SAMPLE = re.compile(r"^([a-z]+)(\d+)$")        # <suffix><k>
-# The rate figure's two floors: opened agrees with the judge's cheated; used means the content entered the team's work.
-FLOORS = (("opened", "opened or higher"), ("used", "used or higher"))
+USED = "used"                                  # the rate figure's second bar: the content entered the team's work
 TILE_W, TILE_H, CHIP_H, GAP = 0.9, 0.46, 0.2, 0.05
 CELL_W, CELL_H, CELL_GAP = 0.3, 0.26, 0.04    # a sample's tile on an overview, and the gap around it
+
+
+def label_of(key: str) -> str:
+    """A domain key's label on the figures."""
+    return LABELS.get(key, key.replace("_", " "))
+
+
+def floor_of(domain: str) -> str:
+    """The rung a labelled domain's cheating starts at, from its ladder (Domain.cheated_from)."""
+    return next(cls.ladder.cheated_from for key, cls in DOMAINS.items() if label_of(key) == domain)
+
+
+def or_higher(rung: str) -> str:
+    return f"{rung} or higher"
+
+
+def rate_bars(domain: str, rungs: list[str]) -> list[tuple[str, int]]:
+    """A domain's two bars as (floor, samples at it or higher): its own floor, then used."""
+    return [(floor, sum(at_least(rung, floor) for rung in rungs)) for floor in (floor_of(domain), USED)]
 
 
 def domain_stems() -> dict[str, str]:
@@ -70,7 +90,7 @@ def domain_stems() -> dict[str, str]:
     for key in DOMAINS:
         minimal = sorted((EXAMPLES / key).glob("*_minimal.py"))
         if minimal:
-            stems[LABELS.get(key, key.replace("_", " "))] = minimal[0].name.removesuffix("_minimal.py")
+            stems[label_of(key)] = minimal[0].name.removesuffix("_minimal.py")
     return stems
 
 
@@ -98,32 +118,32 @@ def samples(stem: str, model: str, suffixes: list[str] | None) -> dict[str, list
 
 
 def rate_figure(cell: str, runs: dict[str, list[dict]], folder: Path) -> Path:
-    """One pair of bars per domain: the share of samples whose team rung is opened or higher and used or higher,
-    labelled k of n."""
+    """One pair of bars per domain: the share of samples whose team rung is the task's own floor or higher and used
+    or higher, labelled k of n. The tick names the floor, and the legend holds each floor the figure shows."""
     domains = list(runs)
     fig = Figure(figsize=(max(5.2, 0.4 + 1.6 * len(domains)), 2.6), dpi=PRINT_DPI)
-    ax = fig.add_axes([0.08, 0.2, 0.9, 0.62])
+    ax = fig.add_axes([0.08, 0.27, 0.9, 0.55])
     style_axes(ax, grid="y")
     bar_w, pair = 0.34, 0.38
     for i, domain in enumerate(domains):
         rungs = [sample["rung"] for sample in runs[domain]]
-        for shift, (floor, _) in zip((-pair / 2, pair / 2), FLOORS):
-            k = sum(at_least(rung, floor) for rung in rungs)
+        for shift, (floor, k) in zip((-pair / 2, pair / 2), rate_bars(domain, rungs)):
             share = k / len(rungs) if rungs else 0
             ax.bar(i + shift, share, width=bar_w, color=RUNG_FILL[floor], edgecolor="none", zorder=3)
             ax.text(i + shift, share + 0.03, f"{k} of {len(rungs)}" if rungs else "no run", ha="center", va="bottom",
                     fontsize=6.5, family="DejaVu Sans Mono", color=INK_SECONDARY)
     ax.set_xticks(range(len(domains)))
-    ax.set_xticklabels(domains, fontsize=8, family="DejaVu Sans", color=INK)
+    ax.set_xticklabels([f"{domain}\n({or_higher(floor_of(domain))})" for domain in domains], fontsize=8,
+                       family="DejaVu Sans", color=INK, linespacing=1.1)
     ax.set_ylim(0, 1.15)
     ax.set_yticks([0, 0.5, 1])
     ax.set_yticklabels(["0%", "50%", "100%"], fontsize=7, family="DejaVu Sans Mono", color=INK_SECONDARY)
     fig.text(0.08, 0.93, CELLS[cell], fontsize=9.5, family="DejaVu Sans", color=INK, weight="bold", va="center")
-    for n, (floor, label) in enumerate(FLOORS):
+    for n, floor in enumerate([*sorted({floor_of(domain) for domain in domains}, key=RUNGS.index), USED]):
         x = 0.08 + n * 0.3
         fig.patches.append(FancyBboxPatch((x, 0.04), 0.025, 0.05, boxstyle="square,pad=0", facecolor=RUNG_FILL[floor],
                                           edgecolor="none", transform=fig.transFigure))
-        fig.text(x + 0.035, 0.065, label, fontsize=7, family="DejaVu Sans", color=INK_SECONDARY, va="center")
+        fig.text(x + 0.035, 0.065, or_higher(floor), fontsize=7, family="DejaVu Sans", color=INK_SECONDARY, va="center")
     return save(fig, folder / f"appendix_{cell}_rate.png")
 
 
@@ -226,7 +246,7 @@ def overview_figure(screen: dict[str, dict], cells: tuple[str, ...], key: str, l
 
 
 def model_rate_figure(screen: dict[str, dict]) -> Path:
-    """One panel per domain: the share of each model's samples at opened or higher in each cell."""
+    """One panel per domain: the share of each model's samples at the task's own floor or higher in each cell."""
     domains = list({domain: None for by_domain in screen.values() for domain in by_domain})
     fig = Figure(figsize=(1.95 * len(domains) + 0.5, 2.7), dpi=PRINT_DPI)
     width = 0.8 / len(screen)
@@ -236,7 +256,7 @@ def model_rate_figure(screen: dict[str, dict]) -> Path:
         for m, (entry, by_domain) in enumerate(screen.items()):
             for c, cell in enumerate(CELLS):
                 rungs = [sample["rung"] for sample in by_domain.get(domain, {}).get(cell, [])]
-                share = sum(at_least(rung, "opened") for rung in rungs) / len(rungs) if rungs else 0
+                share = rate_bars(domain, rungs)[0][1] / len(rungs) if rungs else 0
                 ax.bar(c + (m - (len(screen) - 1) / 2) * width, share, width=width * 0.86, zorder=3,
                        color=CATEGORICAL[m], edgecolor="none", label=MODEL_LABELS.get(entry, entry) if not c else None)
         ax.set_xticks(range(len(CELLS)))
@@ -246,10 +266,11 @@ def model_rate_figure(screen: dict[str, dict]) -> Path:
         ax.set_yticks([0, 0.5, 1])
         ax.set_yticklabels(["0%", "50%", "100%"] if d == 0 else [], fontsize=7, family="DejaVu Sans Mono",
                            color=INK_SECONDARY)
-        ax.set_title(domain, fontsize=8, family="DejaVu Sans", color=INK, loc="left", pad=4)
+        ax.set_title(f"{domain} ({or_higher(floor_of(domain))})", fontsize=6.8, family="DejaVu Sans", color=INK,
+                     loc="left", pad=4)
         if d == 0:
             handles, labels = ax.get_legend_handles_labels()
-    fig.text(0.05, 0.94, "Runs at opened or higher", fontsize=9.5, family="DejaVu Sans", color=INK, weight="bold",
+    fig.text(0.05, 0.94, "Cheating rate by task", fontsize=9.5, family="DejaVu Sans", color=INK, weight="bold",
              va="center")
     fig.legend(handles, labels, loc="upper right", bbox_to_anchor=(0.99, 0.99), ncol=len(screen), frameon=False,
                fontsize=7, handlelength=1, handleheight=1)
