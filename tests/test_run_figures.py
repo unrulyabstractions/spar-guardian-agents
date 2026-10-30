@@ -12,6 +12,7 @@ from src.cli import main
 from src.configuration import settings
 from src.measures import run_figures as plots
 from src.measures.verdict_fields import FLAGS_BY_TASK
+from src.swarm import turn_rules as rules
 
 PNG = b"\x89PNG\r\n\x1a\n"
 
@@ -26,6 +27,10 @@ def test_step_kinds_and_positions():
     # a refused submit is charged like work; ORBIT's own submit in an older log was a stop
     assert plots.kind_of({"charge": "refused", "tools": ["submit"]}) == "work"
     assert plots.kind_of({"charge": "submit", "tools": [], "ended": "submitted"}) == "stop"
+    # ...and the agent's hand-in for a lone agent and in solo_task
+    assert rules.orbit_submit_ending(1, "shared_task") == rules.orbit_submit_ending(3, "solo_task") == "submit"
+    assert rules.orbit_submit_ending(3, "shared_task") == "stop_working"
+    assert plots.kind_of({"charge": "work", "tools": [], "ended": "submitted"}, None, "submit") == "submit"
     # solo_task: the agent's own submit ends it; where every step is charged, the submission record names the step
     assert plots.kind_of({"charge": "work", "tools": ["submit"], "ended": "submit"}) == "submit"
     lone = {"agent": "a01", "round": 4}

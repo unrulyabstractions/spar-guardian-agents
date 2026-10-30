@@ -112,12 +112,12 @@ def tool(agent: str, call_id: str, seconds: float, function: str = "shell", erro
                  result="", error=error, completed=T0 + timedelta(seconds=seconds + 1))
 
 
-def fake_log(*calls: SimpleNamespace) -> SimpleNamespace:
+def fake_log(*calls: SimpleNamespace, metadata: dict | None = None) -> SimpleNamespace:
     """An eval log of the two agents: one agent span each, then their tool calls in time order."""
     spans = [event("span_begin", 0, id=a, type="agent", name=a, parent_id=None, span_id=None) for a in CALL_IDS]
     calls = calls or (tool("a01", "c1", 5), tool("a02", "d1", 6), tool("a02", "d2", 9), tool("a01", "c2", 10),
                       tool("a01", "c3", 20))
-    sample = SimpleNamespace(events=[*spans, *calls], total_time=30.0, limit=None, id="s", epoch=1)
+    sample = SimpleNamespace(events=[*spans, *calls], total_time=30.0, limit=None, id="s", epoch=1, metadata=metadata)
     return SimpleNamespace(samples=[sample])
 
 
@@ -141,6 +141,11 @@ def test_the_timeline_marks_a_submit_or_stop_that_went_through(runs, monkeypatch
     monkeypatch.setattr(store, "eval_log", lambda name: fake_log(*calls))
     kinds = {e["id"]: e["kind"] for e in LogViews(store).timeline("board_run")["events"]}
     assert kinds == {"c1": "tool", "d1": "stop", "c2": "submit", "c3": "tool"}
+    # In a log whose agents held ORBIT's own submit, a call named submit was that tool: no kind is read from a name.
+    older = {"experiment": {"setup": {"agents": [{"name": a, "submit": True} for a in CALL_IDS]}}}
+    monkeypatch.setattr(store, "eval_log", lambda name: fake_log(*calls, metadata=older))
+    kinds = {e["id"]: e["kind"] for e in LogViews(store).timeline("board_run")["events"]}
+    assert kinds == {"c1": "tool", "d1": "tool", "c2": "tool", "c3": "tool"}
 
 
 @pytest.fixture

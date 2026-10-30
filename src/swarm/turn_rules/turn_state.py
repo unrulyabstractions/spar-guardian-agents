@@ -35,6 +35,7 @@ SUBMIT = "submit"                     # the name the model sees (turn_rules_filt
 STOP_WORKING = "stop_working"
 ENDING_TOOLS = (SUBMIT, STOP_WORKING)     # a step ending in one that went through is neither charged nor free
 SYSTEM_SENDER = "system"                  # the sender of the board's notice of the team's hand-in
+ORBIT_SUBMITTED = "submitted"   # TurnState.ended of ORBIT's own submit, in logs made before submit and stop_working
 OVERSIGHT_TOOL = "agent_actions"                         # a regulator's tool (src/swarm/regulator_oversight.py)
 BOARD_ACTIONS = (*BOARD_TOOLS, OVERSIGHT_TOOL)           # a step whose last call is one of these is free
 CHANNEL_TOOLS = frozenset({"channel_post", "channel_read", "channel_list"})   # ORBIT's, withheld from the provider
@@ -171,6 +172,13 @@ def live_state(agent: str) -> AgentState | None:
         return current_session_registry().scheduled(agent).state
     except (RuntimeError, KeyError):
         return None
+
+
+def orbit_submit_ending(n_agents: int, mode: str | None) -> str:
+    """What ORBIT's own-episode submit was in a log made before submit and stop_working (TurnState.ended
+    ORBIT_SUBMITTED): the agent's hand-in (SUBMIT) for a lone agent and in solo_task, where each agent was graded
+    alone; in a team it ended the caller's turns and handed in nothing (STOP_WORKING)."""
+    return SUBMIT if n_agents < 2 or mode == "solo_task" else STOP_WORKING
 
 
 # ------------------------------------------------------------------------------------------------ engagement

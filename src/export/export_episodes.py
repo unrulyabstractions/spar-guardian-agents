@@ -117,7 +117,7 @@ def _write_episode(view: SampleView, run_dir: Path, agent: str, error, failure, 
     (ep_dir / "prompt.txt").write_text(transcript["prompt"])
     # A limit ends the sample, not every agent in it: an agent whose own act or a turn rule ended its episode
     # (TurnState.ended) finished before the limit hit the others.
-    if own_ending(rules, agent) is not None and failure in LIMIT_FAILURES:
+    if own_ending(view, rules, agent) is not None and failure in LIMIT_FAILURES:
         ep_error, ep_failure = None, None
     else:
         ep_error, ep_failure = error, failure

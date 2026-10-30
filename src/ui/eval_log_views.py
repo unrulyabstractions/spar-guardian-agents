@@ -26,7 +26,7 @@ from src.export.atif_transcripts import (
     tool_result_text,
     turn_rule_kinds,
 )
-from src.export.eval_sample_view import blocked_message_ids, span_owners, usage_dict
+from src.export.eval_sample_view import blocked_message_ids, held_orbit_submit, span_owners, usage_dict
 from src.sandbox import task_tool_store
 from src.swarm.turn_rules import STOP_WORKING, SUBMIT, TURN_RULES_TAG, provider_system_text
 from src.ui.run_store import Store
@@ -43,7 +43,8 @@ SAMPLE_STORE_KEYS = (
 # pointer to the honeypot, and the call that first showed it the honeypot's content.
 SIGNAL_RUNGS = ("exposed", "opened")
 # The timeline kind of a tool call that succeeded and ended work: submit handed in, stop_working stopped. A refused
-# call stays a "tool".
+# call stays a "tool", and so does every call of a log whose agents held ORBIT's own submit (held_orbit_submit), where
+# a call named submit was that tool.
 ENDING_KINDS = {SUBMIT: "submit", STOP_WORKING: "stop"}
 TOOL_KINDS = ("tool", *ENDING_KINDS.values())
 
@@ -209,10 +210,11 @@ class LogViews:
         eps = self.store.episodes(name)
         marks = self._signal_marks(eps)
         blocked = blocked_message_ids(sample, "model_output")
+        endings = {} if held_orbit_submit(sample) else ENDING_KINDS
         events = []
         for e in sample.events:
             if e.event == "tool":
-                events.append(_tool_item(e, owner(e.span_id)[0], t0, marks.get(e.id, set())))
+                events.append(_tool_item(e, owner(e.span_id)[0], t0, marks.get(e.id, set()), endings))
             elif e.event == "model":
                 events.append(_model_item(e, *owner(e.span_id), t0, blocked))
             elif e.event == "info" and isinstance(e.data, dict) and e.data.get("event") == "defense_intervention":
@@ -255,7 +257,7 @@ def _secs(ts, t0) -> float | None:
     return (ts - t0).total_seconds() if ts else None
 
 
-def _tool_item(e, agent, t0, rungs: set) -> dict:
+def _tool_item(e, agent, t0, rungs: set, endings: dict[str, str]) -> dict:
     args = e.arguments if isinstance(e.arguments, dict) else {}
     shown = args.get("command") or args.get("code") or args.get("message") or args.get("answer")
     err = e.error.message if e.error else None
@@ -263,7 +265,7 @@ def _tool_item(e, agent, t0, rungs: set) -> dict:
         "t": _secs(e.timestamp, t0),
         "t_end": _secs(e.completed, t0),
         "agent": agent,
-        "kind": "tool" if err else ENDING_KINDS.get(e.function, "tool"),
+        "kind": "tool" if err else endings.get(e.function, "tool"),
         "function": e.function,
         "id": e.id,
         "preview": str(shown or " ".join(str(v) for v in args.values()))[:160],

@@ -97,9 +97,19 @@ def _live_model_usage() -> dict | None:
 # --------------------------------------------------------------------------
 # which agent owns which messages and events
 # --------------------------------------------------------------------------
+def agent_specs(view: SampleView) -> list[dict]:
+    """The agents as metadata["experiment"]["setup"]["agents"] recorded them (ORBIT AgentSpec fields)."""
+    return ((view.metadata or {}).get("experiment") or {}).get("setup", {}).get("agents") or []
+
+
 def roster(view: SampleView) -> list[str]:
-    exp = (view.metadata or {}).get("experiment", {})
-    return [a["name"] for a in exp.get("setup", {}).get("agents", [])]
+    return [a["name"] for a in agent_specs(view)]
+
+
+def held_orbit_submit(view: SampleView) -> bool:
+    """Whether an agent held ORBIT's own submit (AgentSpec.submit): a log made before submit and stop_working, where
+    a call named submit was ORBIT's tool and TurnState.ended "submitted" its end (turn_rules.orbit_submit_ending)."""
+    return any(spec.get("submit") for spec in agent_specs(view))
 
 
 def topology(view: SampleView) -> str:

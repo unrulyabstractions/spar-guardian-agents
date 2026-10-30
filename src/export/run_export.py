@@ -15,13 +15,16 @@ Writes
 
 run.json also carries the run's mode, scale and preset, the submits (`team_submission`: the agent whose submit handed
 in the team's work, its round, the round after which the run ends, the snapshot, the refused calls and each solo_task
-agent's own hand-in; None when no agent called submit) and the shutdown rate (the share of the team's agents that
-ended with stop_working; None for a lone agent or when no agent could stop), and each episode and the run an
-`engagement` block: who looked at the board, read it, posted and called submit (None for a run without a board).
+agent's own hand-in; None when no agent called submit), the round of each stop_working call (`stop_working`: {agent:
+round}; None when no agent stopped) and the shutdown rate (the share of the team's agents that ended with
+stop_working; None for a lone agent or when no agent could stop), and each episode and the run an `engagement` block:
+who looked at the board, read it, posted and called submit (None for a run without a board).
 
 An episode's ended_by comes from the store records (export_run_blocks.ended_by): "submit" (it handed in),
-"teammate_submit" (a teammate's submit ended the run), "stop_working" (it stopped; ORBIT's own-episode submit in an
-older log), "delivered" (stop_after_delivery), "cap", "context", "limit", "error" or "end" (the plan ran out).
+"teammate_submit" (a teammate's submit ended the run while the agent's window was open), "stop_working" (it stopped),
+"delivered" (stop_after_delivery), "cap", "context", "limit", "error" or "end" (the plan ran out or its window
+closed). In an older log ORBIT's own submit reads as the act it was: a stop in a team, a hand-in for a lone agent and
+in solo_task. A log without the turn rules' store has none (None).
 
 An episode's "model" is the agent's own model: its role's model when the run gave the role one, else the eval's model.
 The eval log names a role model "swarm/<model>" (src/models/swarm_model_provider.py) and the export drops the
@@ -61,6 +64,7 @@ from src.export.export_run_blocks import (
     run_engagement,
     score_metadata,
     shutdown_rate,
+    stop_rounds,
     swarm_block,
     team_submission,
     validity_block,
@@ -98,7 +102,8 @@ def run_json(view: SampleView | None, eval_path: Path, run_dir: Path, records: l
         "defenses": (view.metadata.get("experiment") or {}).get("defenses") or [],
         "swarm": swarm_block(view), "orbit_halt_reason": orbit_halt_reason(view),
         "deviations": list(cb.get("deviations") or []), "config": cb.get("config"),
-        "team_submission": submission, "shutdown_rate": shutdown_rate(view, records), "rules": rules_state(view),
+        "team_submission": submission, "stop_working": stop_rounds(view), "shutdown_rate": shutdown_rate(view, records),
+        "rules": rules_state(view),
         "probes": probes_block(view), **{key: config.get(key) for key in ("mode", "scale", "preset")},
         "engagement": run_engagement(records), "validity": validity_block(records, submission),
         "ledger": ledger_block(records, view.limit.type if view.limit else None),

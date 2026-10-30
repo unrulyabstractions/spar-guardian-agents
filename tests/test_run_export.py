@@ -38,12 +38,14 @@ def test_usage_totals_add_cache_reads_and_bill_only_the_calls_the_log_kept():
     assert billed_cost(SimpleNamespace(call=None)) is None
 
 
-def view(store: dict, limit=None, agents: dict | None = None, board: bool = True) -> SimpleNamespace:
-    """A sample with the store, the limit, and the agents as the experiment recorded them ({name: spec fields})."""
+def view(store: dict, limit=None, agents: dict | None = None, board: bool = True,
+         mode: str | None = None) -> SimpleNamespace:
+    """A sample with the store, the limit, the agents as the experiment recorded them ({name: spec fields}) and the
+    config's mode."""
     experiment = {"setup": {"agents": [{"name": name, **spec} for name, spec in (agents or {}).items()]},
                   "communication": {"channels": [{"id": "board"}]} if board else None}
-    return SimpleNamespace(store_get=store.get, metadata={"experiment": experiment}, scores={}, limit=limit,
-                           error=None)
+    return SimpleNamespace(store_get=store.get, metadata={"experiment": experiment, "cheatbench": {"config": {
+        "mode": mode}}}, scores={}, limit=limit, error=None)
 
 
 DELIVERED = {"TurnState:agents": ["a01", "a02"], "TurnState:ended": {"a01": "delivered", "a02": "submitted"},
@@ -138,11 +140,28 @@ def test_the_shutdown_rate_counts_team_agents_that_stopped():
     holds_none = {a: {"tools": ["board_read", "team_submit"], "submit": False} for a in TEAM}
     assert blocks.shutdown_rate(view(HANDED_IN, agents=holds_none), records) is None
     # a lone agent has no rate
-    lone = view({"TeamSubmission:agent": "a01", "TeamSubmission:round": 4}, agents={"a01": {"tools": ["team_submit"]}},
-                board=False)
-    lone_records = [{"orbit_agent": "a01", "ended_by": blocks.ended_by(lone, "a01", None, blocks.team_submission(lone),
-                                                                       None)}]
+    lone = view({"TurnState:agents": ["a01"], "TurnState:ended": {}, "TeamSubmission:agent": "a01",
+                 "TeamSubmission:round": 4}, agents={"a01": {"tools": ["team_submit"]}}, board=False)
+    lone_records = [{"orbit_agent": "a01", "ended_by": blocks.ended_by(lone, "a01", blocks.rules_state(lone),
+                                                                       blocks.team_submission(lone), None)}]
     assert lone_records[0]["ended_by"] == "submit" and blocks.shutdown_rate(lone, lone_records) is None
+
+
+def test_a_teammate_submit_ends_only_the_agents_whose_window_outlasted_it():
+    """An agent whose window of rounds closed by the hand-in's last round left by its window ("end")."""
+    windows = {"a03": [1, 2], "a04": [1, 5]}
+    v = view({**HANDED_IN, "TurnState:ended": {}, "TurnState:windows": windows}, agents=TEAM)
+    assert endings(v) == {"a01": "submit", "a02": "teammate_submit", "a03": "end", "a04": "end"}
+    later = view({**HANDED_IN, "TurnState:ended": {}, "TurnState:windows": {"a04": [3, 6]}}, agents=TEAM)
+    assert endings(later)["a04"] == "teammate_submit"
+
+
+def test_the_stop_rounds_and_a_log_without_the_turn_rules():
+    v = view({**HANDED_IN, "StopWorking:rounds": {"a02": 2}}, agents=TEAM)
+    assert blocks.stop_rounds(v) == {"a02": 2} and blocks.stop_rounds(view(HANDED_IN, agents=TEAM)) is None
+    # a log made before the turn rules records no ending at all
+    bare = view({"TeamSubmission:agent": None}, agents=TEAM)
+    assert blocks.ended_by(bare, "a01", blocks.rules_state(bare), None, None) is None
 
 
 def test_an_older_log_reads_orbits_own_submit_as_a_stop():
@@ -161,6 +180,22 @@ def test_an_older_log_reads_orbits_own_submit_as_a_stop():
     block = blocks.team_submission(old_submit)
     assert (block["agent"], block["round"], block["ends_after_round"], block["snapshot"]) == ("a03", 30, None, None)
     assert blocks.ended_by(old_submit, "a03", rules, block, None) == "submit"
+
+
+def test_an_older_log_reads_orbits_own_submit_as_a_hand_in_alone_and_in_solo_task():
+    """A lone agent's or a solo_task agent's ORBIT submit handed in its own work, so it reads as submit, and no
+    agent of such a run could stop."""
+    lone = view({"TurnState:agents": ["a01"], "TurnState:ended": {"a01": "submitted"}},
+                agents={"a01": {"tools": [], "submit": True}}, board=False)
+    records = [{"orbit_agent": "a01", "ended_by": blocks.ended_by(lone, "a01", blocks.rules_state(lone), None, None)}]
+    assert records[0]["ended_by"] == "submit" and blocks.shutdown_rate(lone, records) is None
+    agents = {a: {"tools": ["board_read"], "submit": True} for a in ("a01", "a02")}
+    solo = view({"TurnState:agents": list(agents), "TurnState:ended": {"a01": "submitted", "a02": "submitted"}},
+                agents=agents, mode="solo_task")
+    records = [{"orbit_agent": a, "ended_by": blocks.ended_by(solo, a, blocks.rules_state(solo), None, None)}
+               for a in agents]
+    assert [r["ended_by"] for r in records] == ["submit", "submit"] and not blocks.could_stop(solo)
+    assert blocks.shutdown_rate(solo, records) is None
 
 
 def sample_with_system(rewrite_logged: bool) -> SampleView:
