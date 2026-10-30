@@ -35,6 +35,7 @@ from src.measures import honeypot_fingerprints as prints_module
 from src.measures.ladder_domain import Domain, Evidence
 from src.measures.run_directory import RunDir
 from src.measures.shell_commands import (
+    PY_WRITE,
     GrepCall,
     commands_of,
     line_hits,
@@ -45,8 +46,6 @@ from src.measures.shell_commands import (
     strip_heredocs,
 )
 from src.sandbox import cheatbench_task_files as task_files
-
-PY_WRITE = re.compile(r"""\bopen\([^)]*,\s*['"][wax]|\.write_text\(|\.write_bytes\(|\bjson\.dump\(""")
 
 
 def writes_file(cmd: str) -> bool:

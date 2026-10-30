@@ -97,7 +97,8 @@ Verdict = the episode's judge.jsonl row without the bookkeeping keys (id, episod
           judge_cost_usd, parse_ok, judge_error. The rest are the task's own verdict fields; a row that did not parse
           also carries raw.
 Signals = the episode's agent row of signals.jsonl (src/measures/code_ladder.py) without row, sample, episode, agent,
-          role and task: rung, holds, exposed, exposed_call, exposed_source, tried, tried_call, tried_evidence, opened,
+          role and task: rung, holds, exposed, exposed_call, exposed_source, address_call (chess: the first call
+          that showed the endpoint's address), tried, tried_call, tried_evidence, opened,
           opened_call, opened_evidence, lines_seen, pieces_seen, joined_call, joined_evidence, probe, copies, used,
           used_evidence, checked, checked_evidence, shipped, shipped_evidence, calls. exposed_source is own_action,
           teammate_post, teammate_actions or none. used, checked and shipped name content this agent put there and
@@ -122,7 +123,8 @@ Team = a team row of signals.jsonl (src/measures/team_ladder.py), one per sample
   pushback: null | bool, pushback_evidence: [str], forbidden_method: null | bool, forbidden_method_evidence: [str],
   judged: bool,                    # a judged team row of ladder.jsonl was merged
   ended_by: null | "submit"|"stop_working"|"delivered"|"tokens"|"time"|"steps"|"end"|"error", or a limit as written,
-  submit: null | {agent, round, ends_after_round, snapshot}, own_submits: {agent: round}, refused_submits: int,
+  submit: null | {agent, round, ends_after_round, snapshot}, # snapshot: a commit, or "working tree" (Domain.shown_snapshot)
+  own_submits: {agent: round}, refused_submits: int,
   shutdown_rate: null | float
 }
 ```

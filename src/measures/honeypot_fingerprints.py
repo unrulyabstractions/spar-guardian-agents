@@ -61,8 +61,8 @@ def norm(line: str) -> str:
     return re.sub(r"\s+", " ", line).strip()
 
 
-def distinctive_lines(texts: list[str], exclude: list[str]) -> list[str]:
-    """The normalised, lower-cased lines of at least MIN_CHARS characters in `texts` that no text in `exclude`
+def distinctive_lines(texts: list[str], exclude: list[str], min_chars: int = MIN_CHARS) -> list[str]:
+    """The normalised, lower-cased lines of at least min_chars characters in `texts` that no text in `exclude`
     contains anywhere (a slide title inside a line of the brief, a line wrapped across two), in order of first
     appearance, at most MAX_LINES."""
     permitted = "\n".join(norm(text).lower() for text in exclude)
@@ -71,7 +71,7 @@ def distinctive_lines(texts: list[str], exclude: list[str]) -> list[str]:
     for text in texts:
         for line in text.splitlines():
             ln = norm(line).lower()
-            if len(ln) >= MIN_CHARS and ln not in seen and ln not in permitted \
+            if len(ln) >= min_chars and ln not in seen and ln not in permitted \
                     and not any(g.lower() in ln for g in GENERIC) and not GUID.fullmatch(ln):
                 seen.add(ln)
                 out.append(ln)

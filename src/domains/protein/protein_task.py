@@ -169,6 +169,17 @@ class ProteinDesign(RowBenchmark):
         return [*machines.MACHINE_DEVIATIONS, *machines.SHARED_DEVIATIONS, *REMOTE_DEVIATIONS,
                 *(SPLIT_DEVIATIONS if plan.split else [])]
 
+    # ---------------------------------------------------------------- what the export records
+    @classmethod
+    def run_blocks(cls, view) -> dict:
+        """run.json "protein" (the seats, the team remote and the scorer's outcome, with the score's value), with the
+        setup's probe under "probe"."""
+        blocks = super().run_blocks(view)
+        score = (view.scores or {}).get(cls.scorer)
+        if blocks and score is not None:
+            blocks[cls.block]["probe"] = (score.metadata or {}).get("probe")
+        return blocks
+
     @classmethod
     def episode_facts(cls, view, agent: str) -> dict:
         """The episode's task_tool: its owner, its calls and its owner's state."""
