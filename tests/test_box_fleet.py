@@ -127,7 +127,7 @@ def registry(tmp_path, monkeypatch):
     monkeypatch.setattr(fleet, "REGISTRY", path)
     monkeypatch.setattr(fleet, "BOXES", tmp_path / "boxes")
     monkeypatch.setattr(box_capture, "BOXES", tmp_path / "boxes")
-    monkeypatch.setattr(fleet, "fleet_pin", lambda: dict(PIN))
+    monkeypatch.setattr(fleet, "fleet_pin", lambda commit="HEAD": dict(PIN))
     monkeypatch.setattr(fleet, "layout_problems", lambda tasks: [])
     return path
 
@@ -455,6 +455,19 @@ def test_status_flags_a_destroyed_box_the_account_still_lists(registry, monkeypa
     assert "marked destroyed at 2026-10-30T00:00:00Z, still on the account" in capsys.readouterr().out
 
 
+def test_status_flags_a_box_vast_ai_cannot_start_and_create_avoids_its_machine(registry, monkeypatch, capsys):
+    error = "Error: GPU error, unable to start instance."
+    fake = FakeVast(instances=[{"id": 7, "label": LABEL, "dph_total": 0.5, "status_msg": error}])
+    monkeypatch.setattr(fleet, "http", fake)
+    add_box()                                                                   # on 57970273, the cheapest offer
+    assert fleet.main(["status"]) == 1
+    assert f"!! 7 {LABEL}: vast.ai cannot start it ({error})" in capsys.readouterr().out
+    assert json.loads(registry.read_text())["boxes"][0]["start_error"] == error
+    assert fleet.main(["create", "--count", "1", "--tasks", "chess", "--models", "gpt-6-luna", "--label-prefix",
+                       "spar-screen-retry"]) == 0
+    assert json.loads(registry.read_text())["boxes"][-1]["offer"] == 57143771
+
+
 def test_accept_loss_takes_a_reason_and_logs_what_is_lost(registry, monkeypatch, capsys):
     fake = FakeVast(instances=[{"id": 7, "label": LABEL, "start_date": time.time() - 3600, "dph_total": 0.5}])
     monkeypatch.setattr(fleet, "http", fake)
@@ -497,6 +510,16 @@ def test_run_args_come_from_the_registry(registry, chess_cells, capsys):
     assert fleet.main(["run-args", "7", "--suffix", "haiku"]) == 1
     assert "starting with 'luna'" in capsys.readouterr().err
     assert fleet.main(["run-args", "8"]) == 1
+
+
+def test_run_args_mock_says_so_in_the_run_names(registry, chess_cells, capsys):
+    add_box()
+    assert fleet.main(["run-args", "7", "--mock", "--samples", "1", "--kinds", "solo"]) == 0
+    assert capsys.readouterr().out.split("\n")[:-1] == [
+        "--task", "chess", "--model", "mockllm/model", "--suffix", "lunamock", "--commit", PIN["commit"], "--samples",
+        "1", "--kinds", "solo"]
+    assert fleet.main(["run-args", "7", "--mock", "--suffix", "lunapilot"]) == 1  # would pass for the screen's runs
+    assert "must say mock" in capsys.readouterr().err
 
 
 def test_run_args_refuse_a_run_name_made_elsewhere(registry, chess_cells, capsys):

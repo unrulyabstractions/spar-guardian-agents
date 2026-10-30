@@ -9,22 +9,23 @@ uv run python -m scripts.box.fleet offers                       # the offers tha
 uv run python -m scripts.box.fleet create --count 15 --dry-run  # the requests create would send
 uv run python -m scripts.box.fleet create --count 15            # pins the launch, rents and registers (runs/boxes.json)
 uv run python -m scripts.box.fleet status                       # the account with the registry; writes the ssh configs
-scripts/box/box_setup.sh <id>                                   # the box's id, the clone at the launch's commit, the .venv, the task's build
+scripts/box/box_setup.sh <id>                                   # waits for ssh; the box's id, the clone at the launch's commit, the .venv, the task's build
 scripts/box/box_run.sh <id>                                     # the key, then every cell x 3 samples at once
 scripts/box/watch.sh                                            # every 3 minutes: pull runs/ logs/ out/ and the box's logs, print each box
 scripts/box/capture_check.sh <id> --pull                        # every file on the box has a local copy
 uv run python -m scripts.box.fleet destroy <id>                 # only after a fresh capture check; snapshots first
 ```
 
-The pilot is one box per task on one model, with one sample of two cells: `create --count 5 --models deepseek-flash-openrouter`, then `box_run.sh <id> --samples 1 --kinds solo_cheat minimal_regulated`. Before box_run.sh, set `BOX_OPENROUTER_API_KEY` (or the model's own key name with `BOX_` in front) to a key made for the screen with a spend cap, and revoke it after the destroys.
+The pilot is one box per task on one model, with one sample of two cells: `create --count 5 --models deepseek-flash-openrouter`, then `box_run.sh <id> --samples 1 --kinds solo_cheat minimal_regulated`. Before box_run.sh, set `BOX_OPENROUTER_API_KEY` (or the model's own key name with `BOX_` in front) to a key made for the screen with a spend cap, and revoke it after the destroys. A rehearsal adds `--mock` to box_run.sh: Inspect's mock model, no key on the box, nothing paid, and run names ending in `<suffix>mock`.
 
 | file | what it does | bills or destroys |
 |---|---|---|
 | `fleet.py` | offers, create, status, ids, entry, run-args and destroy against the vast.ai API; the registry and the launch pins; the destroy gates | create bills, destroy destroys |
 | `fleet_layout.py` | the tasks, models and cell kinds, the labels and run names, the paths; standard library only | no |
 | `box_ssh.sh`, `box_scp.sh` | ssh and scp to a box by its id, through `logs/boxes/<id>/ssh_config` | no |
-| `box_setup.sh` | the box's id, the baseline of the host image, its cores, RAM and disk, the clone at the launch's commit, lucy's commit as a bundle, the .venv from the launch's package list, the task's build | no |
-| `box_run.sh` | the screen's key through ssh's standard input, then the runner under `nohup setsid` with the registry's task, model and commit | no |
+| `box_setup.sh` | waits for ssh, the box's id, the baseline of the host image, lucy's commit as a bundle and the package list, then starts `box_setup_remote.sh` and prints its log | no |
+| `box_setup_remote.sh` | on the box, detached from ssh: its cores, RAM and disk, the clone at the launch's commit, the .venv from the launch's package list, the task's build | no |
+| `box_run.sh` | the screen's key through ssh's standard input (none with `--mock`), then the runner under `nohup setsid` with the registry's task, model and commit and the .venv on `PATH` | no |
 | `box_runner.py` | on the box: build a task, run its cells with the hung-run guard, resume what did not finish, report status | no |
 | `watch.sh` | pulls each box's outputs and logs and prints its runs; never starts, stops or destroys | no |
 | `capture_check.sh`, `box_capture.py`, `box_sweep.py` | the sweep of the box and its comparison with this machine; the manifest and the marker destroy needs; the snapshot | no |
@@ -32,10 +33,14 @@ The pilot is one box per task on one model, with one sample of two cells: `creat
 ## The rules the scripts hold
 
 - create refuses tasks without every cell, two tasks with one cell stem, a count that does not match the boxes asked for, and a (task, model) the account holds a box of already. It pins the launch in `logs/boxes/launch-<launch>/` before the first rent: HEAD (which origin/main must hold), the .venv's package list, the Python and uv versions. Every box of the launch deploys those, whatever this checkout does later.
+- HEAD moves while others commit to this checkout, and create refuses a HEAD origin/main lacks: `--commit origin/main` pins what origin holds.
 - create searches and rents in one step, since offer ids expire within minutes. It takes no offer dearer than `--max-dph` (1.00 $/h by default) and stops before the fleet's $/h, its registered boxes included, would pass `--max-fleet-dph` (15 $/h by default). A label ends with the launch's id, so a launch adopts only its own instances.
 - Each instance enters the registry when vast.ai returns its id. Any outcome that may have created an instance stops the launch: an error, a reply it cannot read, an interrupt. However the launch ends, an audit of the account then registers what this launch asked for and fails on any other spar-screen instance outside the registry.
 - A dry run sends only reads. Its client refuses any other request.
 - The API key goes only into the Authorization header, which urllib drops on a redirect. A model key goes only through ssh's standard input into `/root/.box_env` (mode 600): `BOX_<NAME>` when set, the main key only with `--allow-main-key`. No GitHub token goes to a box.
+- status fails on a box vast.ai cannot start (its status message says `Error: ...` or `retries exceeded`) and records the error in the registry. box_setup.sh refuses it, create never rents that machine again, and a replacement takes `--label-prefix spar-screen-retry`, since create refuses a second box of a (task, model). Such a box bills its disk (0.056 $/h for 200 GB at a 0.20 $/GB/month host) until it goes, and it can never pass the capture.
+- A VM boots behind its port: another sshd answers first, then the VM with a different host key. box_setup.sh therefore waits up to 30 minutes for ssh, with an empty `known_hosts` until the baseline exists. After the baseline a changed key stays refused.
+- The setup on the box runs under `nohup setsid`, with its log in `/root/setup.log`, its pid in `/root/setup.pid` and its exit code in `/root/setup.exit`. A drop of the Mac's network costs nothing, as `Can't assign requested address` on the Mac's Wi-Fi showed on 2026-10-30. box_setup.sh polls the box, and running it again follows a setup alive there.
 - The box clones this repository at the launch's commit, and cheatbench and orbit from GitHub. Lucy's private repository goes up as a bundle of the pinned commit's history, at most 20 MB. The Mac's uplink is slow, so nothing large goes up.
 - box_setup.sh writes the instance id into `/root/box_id` at first contact. box_run.sh, watch.sh and the capture refuse a box that names another id. box_setup.sh refuses a box with fewer than 32 cores, 57 GB of RAM or 170 GB on `/`.
 - box_run.sh takes the task, the model and the commit from the registry. A `--suffix` must start with the model's, and a run name this machine holds from a run made elsewhere is refused.

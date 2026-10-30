@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Set up a rented box for its task: scripts/box/box_setup.sh <instance-id> [<task>]
 #
-# Runs on the Mac once `fleet.py status` has written the box's ssh config. The task and what to deploy come from the
-# registry and the box's launch (fleet.py entry); a task given here must be the registry's. In order:
+# Runs on the Mac right after `fleet.py create`. The task and what to deploy come from the registry and the box's launch
+# (fleet.py entry); a task given here must be the registry's. In order:
+#  0. the box's ssh, waited for up to 30 minutes with `fleet.py status` refreshing the endpoint each pass. A VM boots
+#     behind its port: another sshd answers first and its host key would lock the VM out, so until the baseline exists
+#     each try starts from an empty known_hosts. After the baseline a changed key stays refused;
 #  1. the box's id into /root/box_id at first contact (a later run requires the same id), then the baseline of the
 #     box's home and /tmp before anything else changes (box_capture.py baseline; a box past first contact gets none,
 #     and its capture then requires the host's files too);
@@ -10,22 +13,22 @@
 #     checkout's HEAD and local edits are listed, since the box gets the pinned commit alone;
 #  3. what only the Mac has goes up through ssh, both small: the lucy submodule's pinned commit as a git bundle (that
 #     commit's history and no other branch, at most 20 MB) and the package list the launch pinned;
-#  4. on the box: its cores, RAM and disk held to the fleet's minimums; docker-compose-v2, git and rsync from apt, uv
-#     at the launch's version, this repository cloned from GitHub at the commit with cheatbench and orbit from GitHub
-#     and lucy from the bundle, the .venv at the launch's Python from the package list without dependency resolution
-#     (ORBIT editable from its submodule), held to the list package by package, and an import check;
-#  5. on the box: the task's rows and images (box_runner.py build).
+#  4. and 5. box_setup_remote.sh, sent to the box and started there under nohup setsid: the box's cores, RAM and disk,
+#     its packages, the clone, the .venv and the task's rows and images (box_runner.py build). This script prints
+#     /root/setup.log as it grows and exits with the setup's exit code. A drop of this machine's network costs nothing:
+#     the setup goes on, and running this again follows a setup alive on the box, or resumes one that ended.
 # The box clones what is public itself, since the Mac's uplink is slow. No GitHub token and no model key goes to the
-# box here; box_run.sh sends the model's key. The box keeps its own log in /root/setup.log. Running it again resumes.
+# box here; box_run.sh sends the model's key.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 cd "$root"
 if [ $# -lt 1 ] || [ $# -gt 2 ]; then
-  sed -n '2,20p' "$0"
+  sed -n '2,22p' "$0"
   exit 2
 fi
 id=$1
+setup_limit_s=7200
 
 fields=$(uv run python -m scripts.box.fleet entry "$id" task commit requirements requirements_sha256 uv_version \
   python_version cores ram_gb min_cores min_ram_gb min_disk_gb)
@@ -54,6 +57,29 @@ case $url in
   https://*) ;;
   *) echo "refused: origin is $url; the box clones over https without credentials"; exit 1 ;;
 esac
+
+echo "== 0. the box's ssh"
+known=logs/boxes/$id/known_hosts
+waited=0
+while true; do
+  account=$(uv run python -m scripts.box.fleet status 2>&1 || true)
+  case $account in
+    *"!! $id "*"cannot start"*)
+      echo "refused: $(grep "^!! $id " <<< "$account")"
+      exit 1 ;;
+  esac
+  [ -f "logs/boxes/$id/baseline.jsonl" ] || rm -f "$known"
+  if [ -f "logs/boxes/$id/ssh_config" ] && "$here/box_ssh.sh" "$id" true 2> /dev/null; then
+    break
+  fi
+  if [ "$waited" -ge 1800 ]; then
+    echo "refused: no ssh into $id after $waited s of waiting; it bills while it stays: look at fleet.py status"
+    exit 1
+  fi
+  sleep 20
+  waited=$((waited + 20))
+done
+echo "   answered after about $waited s"
 
 echo "== 1. the box's id and the host image's own files"
 qid=$(printf %q "$id")
@@ -120,70 +146,53 @@ ls -l "$ship"
 "$here/box_scp.sh" "$id" "$ship/lucy.bundle" "$ship/requirements.txt" box:/root/ship/
 
 echo "== 4. and 5. on the box"
+"$here/box_scp.sh" "$id" "$here/box_setup_remote.sh" box:/root/ship/
 # ssh joins its arguments into one command line for the box's shell, so each one is quoted for that shell first.
-# bash reads the whole function before it runs it, so no command inside can eat the script from standard input.
-"$here/box_ssh.sh" "$id" "bash -s -- $(printf '%q ' "$commit" "$cheatbench" "$orbit" "$lucy" "$uv_version" \
-  "$python_version" "$task" "$url" "$cores" "$ram_gb" "$min_cores" "$min_ram_gb" "$min_disk_gb")" <<'REMOTE'
-set -euo pipefail
-setup() {
-  exec > >(tee -a /root/setup.log) 2>&1
-  local commit=$1 cheatbench=$2 orbit=$3 lucy=$4 uv_version=$5 python_version=$6 task=$7 url=$8 cores=$9
-  local ram_gb=${10} min_cores=${11} min_ram_gb=${12} min_disk_gb=${13}
-  local repo=/root/work
-  echo "== setup $(date -u +%FT%TZ): $commit for $task"
-  if [ -f /root/screen.pid ] && grep -qs box_runner "/proc/$(cat /root/screen.pid)/cmdline"; then
-    echo "refused: a runner is alive (pid $(cat /root/screen.pid))"
-    exit 1
-  fi
-  local ncpu mem_gb disk_gb
-  ncpu=$(nproc)
-  mem_gb=$(awk '/^MemTotal:/ {printf "%d", $2 * 1024 / 1e9}' /proc/meminfo)
-  disk_gb=$(df -B1 --output=size / | tail -n 1 | awk '{printf "%d", $1 / 1e9}')
-  echo "   $ncpu cores, $mem_gb GB of RAM, $disk_gb GB on /; the offer: ${cores:-?} cores, ${ram_gb:-?} GB (assumed)"
-  if [ "$ncpu" -lt "$min_cores" ] || [ "$mem_gb" -lt "$min_ram_gb" ] || [ "$disk_gb" -lt "$min_disk_gb" ]; then
-    echo "refused: the box needs $min_cores cores, $min_ram_gb GB of RAM and $min_disk_gb GB on /"
-    exit 1
-  fi
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get -o DPkg::Lock::Timeout=900 update -qq
-  apt-get -o DPkg::Lock::Timeout=900 install -y -qq docker-compose-v2 git rsync curl ca-certificates python3
-  echo "docker $(docker info --format '{{.ServerVersion}}'), $(docker compose version)"
-  export PATH=/root/.local/bin:$PATH
-  if [ "$(uv --version 2>/dev/null | cut -d' ' -f2)" != "$uv_version" ]; then
-    curl -LsSf "https://astral.sh/uv/$uv_version/install.sh" | env UV_NO_MODIFY_PATH=1 INSTALLER_NO_MODIFY_PATH=1 sh
-  fi
-  uv --version
+# Detached from this ssh, so a drop of this machine's network never kills a build; a setup alive on the box is
+# followed, never started twice.
+start=$("$here/box_ssh.sh" "$id" "if grep -qs box_setup_remote /proc/\$(cat /root/setup.pid 2> /dev/null)/cmdline; then \
+cat /root/setup.log | wc -l; else rm -f /root/setup.exit; echo \$(cat /root/setup.log 2> /dev/null | wc -l) started; \
+nohup setsid bash /root/ship/box_setup_remote.sh $(printf '%q ' "$commit" "$cheatbench" "$orbit" "$lucy" \
+  "$uv_version" "$python_version" "$task" "$url" "$cores" "$ram_gb" "$min_cores" "$min_ram_gb" "$min_disk_gb") \
+> /dev/null 2>&1 < /dev/null & fi")
+seen=${start%% *}
+case $start in
+  *started*) echo "   started" ;;
+  *) echo "   a setup is alive on the box; following it" ;;
+esac
 
-  [ -d "$repo/.git" ] || git clone --quiet "$url" "$repo"
-  git -C "$repo" fetch --quiet origin
-  git -C "$repo" checkout --quiet --detach "$commit"
-  git -C "$repo" submodule update --init --quiet submodules/cheatbench submodules/orbit
-  [ -d "$repo/submodules/lucy/.git" ] || git clone --quiet --no-checkout /root/ship/lucy.bundle "$repo/submodules/lucy"
-  git -C "$repo/submodules/lucy" fetch --quiet /root/ship/lucy.bundle '+refs/*:refs/bundle/*'
-  git -C "$repo/submodules/lucy" checkout --quiet --detach "$lucy"
-  local pair
-  for pair in "$repo:$commit" "$repo/submodules/cheatbench:$cheatbench" "$repo/submodules/orbit:$orbit" \
-              "$repo/submodules/lucy:$lucy"; do
-    if [ "$(git -C "${pair%%:*}" rev-parse HEAD)" != "${pair##*:}" ]; then
-      echo "!! ${pair%%:*} is not at ${pair##*:}"
-      exit 1
+# Each pass prints the new lines of /root/setup.log. The exit code is read first, so a pass that sees it has the whole
+# log. A pass that fails is a drop of the network and costs nothing but the wait: the box goes on.
+deadline=$(($(date +%s) + setup_limit_s))
+misses=0
+while true; do
+  if page=$("$here/box_ssh.sh" "$id" "code=\$(cat /root/setup.exit 2> /dev/null); \
+if grep -qs box_setup_remote /proc/\$(cat /root/setup.pid 2> /dev/null)/cmdline; then alive=yes; else alive=no; fi; \
+n=\$(wc -l < /root/setup.log); sed -n \"$((seen + 1)),\$n p\" /root/setup.log; echo \"@@ \$n \$alive \$code\"" 2> /dev/null)
+  then
+    misses=0
+    last=${page##*$'\n'}
+    [ "$page" = "$last" ] || printf '%s\n' "${page%$'\n'*}"
+    read -r _ seen alive code <<< "$last"
+    if [ -n "${code:-}" ]; then
+      echo "== the box's setup exited $code"
+      exit "$code"
     fi
-  done
-  git -C "$repo" submodule status
-
-  cd "$repo"
-  [ -x .venv/bin/python ] || uv venv --quiet --python "$python_version" .venv
-  uv pip install --quiet --python .venv/bin/python --no-deps -r /root/ship/requirements.txt
-  uv pip install --quiet --python .venv/bin/python --no-deps -e submodules/orbit
-  if ! diff <(uv pip freeze --python .venv/bin/python --exclude-editable) /root/ship/requirements.txt; then
-    echo "!! the box's packages differ from the launch's list (above)"
+    if [ "$alive" = no ]; then
+      sleep 5
+      if [ -z "$("$here/box_ssh.sh" "$id" "cat /root/setup.exit 2> /dev/null")" ]; then
+        echo "!! the box's setup is gone with no exit code: see /root/setup.log, then run this again"
+        exit 1
+      fi
+      continue
+    fi
+  else
+    misses=$((misses + 1))
+    echo "   $(date -u +%H:%M:%S) no answer from the box ($misses in a row); the setup goes on there"
+  fi
+  if [ "$(date +%s)" -gt "$deadline" ]; then
+    echo "!! the box's setup still runs after $setup_limit_s s; it goes on there: run this again to follow it"
     exit 1
   fi
-  .venv/bin/python -c 'import inspect_ai, orbit, src.cli, examples.example_arguments; print("imports ok")'
-
-  .venv/bin/python -m scripts.box.box_runner build --task "$task"
-  echo "== setup done $(date -u +%FT%TZ); disk: $(df -h /root | tail -1)"
-  docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}'
-}
-setup "$@" < /dev/null
-REMOTE
+  sleep 15
+done

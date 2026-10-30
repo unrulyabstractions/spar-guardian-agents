@@ -51,7 +51,7 @@ SWEEP = Path(__file__).with_name("box_sweep.py")
 OUTPUT_DIRS = ("runs", "logs", "out")
 HOME, TMP = "/root", "/tmp"
 """The box's home and /tmp, swept with the clone at REMOTE_REPO."""
-SETUP_FILES = ("setup.log", "screen.log", "screen.pid")
+SETUP_FILES = ("setup.log", "setup.pid", "setup.exit", "screen.log", "screen.pid")
 """What box_setup.sh and box_run.sh write in the box's home: a baseline that holds one is not of first contact."""
 SWEEP_TIMEOUT_S = 3600
 SNAPSHOT_MARGIN_BYTES = 5 * 10**9

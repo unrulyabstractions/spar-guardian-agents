@@ -2,11 +2,11 @@
 
     uv run python -m scripts.box.fleet offers [--top 20] [--max-dph 1.0] [--saved search.json]
     uv run python -m scripts.box.fleet create --count 15 [--tasks ...] [--models ...] [--label-prefix spar-screen]
-                                              [--max-dph 1.0] [--max-fleet-dph 15] [--dry-run]
+                                              [--max-dph 1.0] [--max-fleet-dph 15] [--commit SHA] [--dry-run]
     uv run python -m scripts.box.fleet status
     uv run python -m scripts.box.fleet ids [--dph] [<id> ...]
     uv run python -m scripts.box.fleet entry <id> <field> ...
-    uv run python -m scripts.box.fleet run-args <id> [--suffix S] [--samples N] [--kinds KIND ...]
+    uv run python -m scripts.box.fleet run-args <id> [--suffix S] [--samples N] [--kinds KIND ...] [--mock]
     uv run python -m scripts.box.fleet destroy <id> [--dry-run] [--accept-loss REASON]
 
 offers searches the on-demand offers (POST /api/v0/bundles/, the request `vastai search offers` sends) and keeps the
@@ -17,8 +17,8 @@ offer's share of the machine's cores (cpu_cores_effective); the RAM share is ass
 the machine's), and box_setup.sh checks the RAM each box really has.
 
 create refuses a task without every cell or with a cell stem another task has, a count that does not match the boxes
-asked for, and a (task, model) the account holds a box of already. It pins the launch before the first rent: HEAD,
-which origin/main must hold, the .venv's package list, the Python and uv versions, in logs/boxes/launch-<launch>/, so
+asked for, and a (task, model) the account holds a box of already. It pins the launch before the first rent: HEAD (or
+--commit, when others commit to this checkout), which origin/main must hold, the .venv's package list, the Python and uv versions, in logs/boxes/launch-<launch>/, so
 every box of the launch runs the same code and packages whatever this checkout does later. It rents one offer per box
 in the same step as the search, since offer ids expire within minutes: PUT /api/v0/asks/<offer>/ with the kvm image
 as a VM, 200 GB and direct ssh, labelled spar-screen-<task>-<model>-<launch>. It takes no offer above --max-dph and
@@ -33,11 +33,14 @@ client refuses anything but a read.
 status lists the account's instances (GET /api/v1/instances/, every page) joined with the registry, records each
 box's ssh endpoint (GET /api/v0/instances/<id>/) and writes logs/boxes/<id>/ssh_config, which box_ssh.sh, box_scp.sh
 and rsync use. It fails on a registered box the account lacks, a box marked destroyed or sent a destroy that the
-account still lists, and a spar-screen instance outside the registry, and prints what the registered boxes bill. ids
+account still lists, a box vast.ai cannot start, and a spar-screen instance outside the registry, and prints what the
+registered boxes bill. A box that cannot start stays on the account, billing its disk, and its error goes into the
+registry, so create never rents that machine again; its replacement takes --label-prefix spar-screen-retry. ids
 prints the registered boxes not yet destroyed (with --dph, each one's $/h and the total). entry prints fields of a
 registered box for the shell scripts: its registry record and its launch's pins. run-args prints box_runner.py run's
 arguments for a box: the task, the model and the commit from the registry, and the registry's suffix or one that
 starts with it; it refuses a run name this machine holds from a run made elsewhere, which the watch would overwrite.
+--mock asks for the mock model instead of the box's, with a suffix that says so (<suffix>mock by default).
 
 destroy refuses unless the id is in the registry, vast.ai labels it as the registry does (spar-screen-*),
 capture_check.sh passed for it within the last 10 minutes, and a capture check run again now passes. It prints what
@@ -97,6 +100,8 @@ API = "https://console.vast.ai"
 KEY_FILE = Path.home() / ".config" / "vastai" / "vast_api_key"
 SSH_KEY = "~/.ssh/id_ed25519"
 TIMEOUT_S = 60
+MOCK_MODEL = "mockllm/model"
+"""What a rehearsal runs: Inspect's mock model, no key and no spend."""
 
 IMAGE = "docker.io/vastai/kvm:ubuntu_terminal"
 DISK_GB = 200
@@ -334,17 +339,17 @@ def launch_dir(launch: str) -> Path:
     return BOXES / f"launch-{launch}"
 
 
-def fleet_pin() -> dict:
-    """What every box of a launch runs: HEAD, which origin/main must hold since the boxes clone it from GitHub, the
-    .venv's package list (uv pip freeze, editable installs left out), and the Python and uv versions."""
+def fleet_pin(commit: str = "HEAD") -> dict:
+    """What every box of a launch runs: the commit, which origin/main must hold since the boxes clone it from GitHub,
+    the .venv's package list (uv pip freeze, editable installs left out), and the Python and uv versions."""
     def run(*command: str) -> subprocess.CompletedProcess:
         return subprocess.run(command, cwd=ROOT, capture_output=True)
 
     if run("git", "fetch", "--quiet", "origin").returncode:
         raise RuntimeError("git fetch origin failed")
-    commit = run("git", "rev-parse", "HEAD").stdout.decode().strip()
+    commit = run("git", "rev-parse", commit).stdout.decode().strip()
     if run("git", "merge-base", "--is-ancestor", commit, "origin/main").returncode:
-        raise RuntimeError(f"HEAD {commit} is not on origin/main: push it first, since every box clones it")
+        raise RuntimeError(f"{commit} is not on origin/main: push it first, since every box clones it")
     freeze = run("uv", "pip", "freeze", "--python", ".venv", "--exclude-editable")
     if freeze.returncode or not re.search(rb"^inspect-ai==", freeze.stdout, re.M):
         raise RuntimeError(f"the .venv's package list could not be read or lacks inspect-ai: {freeze.stderr[-300:]}")
@@ -411,6 +416,13 @@ def instance(vast: Vast, instance_id: int) -> dict | None:
 def credit(vast: Vast) -> float | None:
     """The account's credit; the rest of the account record is never kept."""
     return vast.send(Call("GET", "/api/v0/users/current/")).get("credit")
+
+
+def start_error(row: dict) -> str | None:
+    """Why vast.ai cannot start an instance, from its status message; None when it does not say so. A failed start
+    says "Error: ...", and a start tried again after it "retries exceeded"."""
+    message = (row.get("status_msg") or "").strip()
+    return message if message.startswith("Error") or "retries exceeded" in message else None
 
 
 def ssh_endpoint(record: dict) -> dict | None:
@@ -563,15 +575,18 @@ def cmd_create(args: argparse.Namespace) -> int:
               + ", ".join(f"{row['id']} {row['label']}" for row in clash))
         return 1
     try:
-        pin = fleet_pin()
+        pin = fleet_pin(args.commit)
     except (RuntimeError, OSError) as error:
         print(f"refused: {error}")
         return 1
     print(f"== launch {launch}: commit {pin['commit']}, package list sha256 {pin['requirements_sha256'][:16]}, "
           f"Python {pin['python_version']}, uv {pin['uv_version']}")
     print(f"== credit ${credit(vast) or 0:.2f}; {args.count} boxes; search: {search_call().show()}")
-    offers = candidates(vast.send(search_call())["offers"], args.max_dph)
-    held = open_dph(load_registry())
+    registry = load_registry()
+    dead = {box["machine_id"] for box in registry["boxes"] if box.get("start_error")}
+    offers = [offer for offer in candidates(vast.send(search_call())["offers"], args.max_dph)
+              if offer.get("machine_id") not in dead]
+    held = open_dph(registry)
     planned = sum(offer["dph_total"] for offer in offers[:args.count])
     print(f"== {len(offers)} offers can hold a box at ${args.max_dph:.2f}/h or less; the cheapest "
           f"{min(args.count, len(offers))} bill ${planned:.3f}/h, the fleet with them ${held + planned:.3f}/h "
@@ -627,6 +642,12 @@ def cmd_status(args: argparse.Namespace) -> int:
                 continue
             if box.get("destroy_sent"):
                 print(f"!! {box['id']} {box['label']}: destroy sent at {box['destroy_sent']}, still on the account")
+                failures += 1
+            why = start_error(row)
+            if why:
+                box["start_error"] = why
+                print(f"!! {box['id']} {box['label']}: vast.ai cannot start it ({why}); rent another with "
+                      f"--label-prefix {LABEL_PREFIX}-retry, and this one bills its disk until it goes")
                 failures += 1
             billing += row.get("dph_total") or 0
             record = instance(vast, box["id"]) or {}
@@ -705,10 +726,12 @@ def made_elsewhere(name: str) -> str | None:
 def cmd_run_args(args: argparse.Namespace) -> int:
     try:
         values = open_entry(args.id)
-        suffix = args.suffix or values["suffix"]
+        suffix = args.suffix or (values["suffix"] + "mock" if args.mock else values["suffix"])
         if not re.fullmatch(r"[a-z0-9]+", suffix) or not suffix.startswith(values["suffix"]):
             raise RuntimeError(f"the suffix {suffix!r} must be lowercase letters and digits starting with "
                                f"{values['suffix']!r}, the model's, so the run names say which model ran them")
+        if args.mock and "mock" not in suffix:
+            raise RuntimeError(f"the suffix {suffix!r} must say mock: a mock run must not stand in for the screen's")
         if args.samples < 1:
             raise RuntimeError("--samples must be 1 or more")
         task_cells = cells(values["task"], tuple(args.kinds))
@@ -721,7 +744,8 @@ def cmd_run_args(args: argparse.Namespace) -> int:
         print("refused: this machine holds runs of these names made elsewhere, which the watch would overwrite: "
               + ", ".join(clashes), file=sys.stderr)
         return 1
-    print("\n".join(["--task", values["task"], "--model", values["model"], "--suffix", suffix, "--commit",
+    model = MOCK_MODEL if args.mock else values["model"]
+    print("\n".join(["--task", values["task"], "--model", model, "--suffix", suffix, "--commit",
                      values["commit"], "--samples", str(args.samples), "--kinds", *args.kinds]))
     return 0
 
@@ -883,6 +907,7 @@ def main(argv: list[str] | None = None) -> int:
     create.add_argument("--max-dph", type=float, default=MAX_DPH, help="the dearest offer, $/h with the disk")
     create.add_argument("--max-fleet-dph", type=float, default=MAX_FLEET_DPH,
                         help="what the fleet may bill per hour in all, its registered boxes included")
+    create.add_argument("--commit", default="HEAD", help="what the boxes run, a commit origin/main holds")
     create.add_argument("--dry-run", action="store_true", help="search and print every request; send none")
     commands.add_parser("status", help="the account's instances with the registry; writes each box's ssh_config")
     ids = commands.add_parser("ids", help="the registered boxes not yet destroyed")
@@ -896,6 +921,7 @@ def main(argv: list[str] | None = None) -> int:
     run_args.add_argument("--suffix", help="the run names' suffix: the registry's, or one that starts with it")
     run_args.add_argument("--samples", type=int, default=3)
     run_args.add_argument("--kinds", nargs="+", default=list(KINDS), choices=list(KINDS))
+    run_args.add_argument("--mock", action="store_true", help="the mock model instead of the box's")
     destroy = commands.add_parser("destroy", help="destroy one box once its capture holds")
     destroy.add_argument("id", type=int)
     destroy.add_argument("--dry-run", action="store_true", help="every gate, the capture check and the snapshot; no "
