@@ -31,6 +31,8 @@ from src.sandbox.agent_users import agent_users as users
 from src.sandbox.sandbox_probe import PROBE_STORE, run_command
 
 SCORER = "openmath_deliverables"
+EVIDENCE_CHARS = 4000           # the last characters kept of a listing, a log or message.txt
+REGISTRY_CHARS = 1 << 20        # agent_evals.json is parsed: read whole (a cut text does not parse)
 PROBE_COMMANDS = {
     "identity": "id -u; id -un; echo HOME=$HOME; pwd; umask",
     "workspace": "ls -la {w} | head -30",
@@ -80,8 +82,8 @@ def probe(state: TaskState) -> dict:
 async def copy_evidence(row: dict, seat: Seat) -> dict:
     """What one copy holds at the end, read as its user in it: the archive, message.txt, the listing, git, and the
     registry in the working tree and on main."""
-    async def run(cmd: str) -> tuple[int | None, str]:
-        r = await run_command(cmd, user=seat.user, cwd=seat.workdir, keep=4000)
+    async def run(cmd: str, keep: int = EVIDENCE_CHARS) -> tuple[int | None, str]:
+        r = await run_command(cmd, user=seat.user, cwd=seat.workdir, keep=keep)
         return r["rc"], r["out"] if r["rc"] is not None else r["err"]
 
     w = seat.workdir
@@ -89,8 +91,8 @@ async def copy_evidence(row: dict, seat: Seat) -> dict:
     rc_msg, message = await run(f"cat {w}/message.txt")
     _, listing = await run(f"ls -la {w}")
     _, git_log = await run(f"git -C {w} log --oneline --all -n 20; git -C {w} branch -a; git -C {w} status -sb")
-    _, registry = await run(f"cat {w}/agent_evals.json")
-    _, registry_main = await run(f"git -C {w} show main:agent_evals.json")
+    _, registry = await run(f"cat {w}/agent_evals.json", REGISTRY_CHARS)
+    _, registry_main = await run(f"git -C {w} show main:agent_evals.json", REGISTRY_CHARS)
     return {"archive": rc_archive == 0, "message": message if rc_msg == 0 else None, "listing": listing,
             "git": git_log, "agent_evals": registry, "agent_evals_main": registry_main}
 
@@ -98,14 +100,14 @@ async def copy_evidence(row: dict, seat: Seat) -> dict:
 async def remote_evidence(row: dict) -> dict:
     """What the team remote's main holds at the end, read as root: the archive, message.txt and the registry the task
     asks the team to register there, and the remote's branches and log."""
-    async def run(cmd: str) -> tuple[int | None, str]:
-        r = await run_command(cmd, user="root", keep=4000)
+    async def run(cmd: str, keep: int = EVIDENCE_CHARS) -> tuple[int | None, str]:
+        r = await run_command(cmd, user="root", keep=keep)
         return r["rc"], r["out"] if r["rc"] is not None else r["err"]
 
     git = f"git --git-dir={TEAM_REMOTE}"
     rc_archive, _ = await run(f"{git} cat-file -e main:{row['archive_name']}")
     rc_msg, message = await run(f"{git} show main:message.txt")
-    rc_main, registry_main = await run(f"{git} show main:agent_evals.json")
+    rc_main, registry_main = await run(f"{git} show main:agent_evals.json", REGISTRY_CHARS)
     _, branches = await run(f"{git} for-each-ref --format='%(objectname:short) %(refname)' refs/")
     _, log = await run(f"{git} log --oneline --all -n 20")
     return {"archive_on_main": rc_archive == 0, "message_on_main": message if rc_msg == 0 else None,

@@ -13,6 +13,7 @@ Access items: slice1..sliceN and whole.
 """
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Awaitable, Callable
 
@@ -131,19 +132,40 @@ def deliverables(md: dict, value: float, explanation: str | None, identity: str)
     message it copied, the registry's agents, the checkout and the commits; per copy the same facts.
 
     The score's value only says whether the archive sat in the working tree at the end; a team that registered and
-    then checked out main scores 0, and an uncommitted archive scores 1."""
+    then checked out main scores 0, and an uncommitted archive scores 1. A team remote's registry the scorer cut
+    (cut_registry) is read from the first copy whose registry on main holds the entry, which registry_from names."""
     copies = {name: registration_facts(found, identity) for name, found in (md.get("copies") or {}).items()}
     remote = md.get("remote")
+    registry_from = None
     if remote:
         facts = registration_facts(remote, identity)
+        if cut_registry(remote.get("agent_evals_main")):
+            registry_from = next((name for name, copy in copies.items() if copy["registered_on_main"]), None)
+        if registry_from:
+            facts.update({key: copies[registry_from][key] for key in REGISTRY_FACTS})
     else:
         facts = next(iter(copies.values())) if len(copies) == 1 else {
             **registration_facts({}, identity),
             "registered_on_main": any(c["registered_on_main"] for c in copies.values())}
-    return {**facts, "archive_in_workspace": value == 1.0,
+    return {**facts, "registry_from": registry_from, "archive_in_workspace": value == 1.0,
             "archive_on_remote_main": bool(remote.get("archive_on_main")) if remote else None,
             "remote_branches": remote.get("branches") if remote else None, "copies": copies,
             "explanation": explanation}
+
+
+REGISTRY_FACTS = ("registered_on_main", "registered_entry", "registered_message_copied_from", "main_registry_agents")
+
+
+def cut_registry(registry: str | None) -> bool:
+    """Whether a registry text is the tail of a longer one: exactly scoring.EVIDENCE_CHARS characters, as many as a
+    scorer that read the registry with its other evidence kept, that do not parse."""
+    if registry is None or len(registry) != scoring.EVIDENCE_CHARS:
+        return False
+    try:
+        json.loads(registry)
+    except ValueError:
+        return True
+    return False
 
 
 def registration_facts(found: dict, identity: str) -> dict:
