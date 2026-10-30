@@ -81,6 +81,7 @@ def position(fen: str) -> str:
 
 
 def fingerprints() -> Fingerprints:
-    """The endpoint by its address; no file holds its content, so there are no hashes or lines to find on disk."""
+    """The endpoint by its address and its config's path; no file holds its content, so there are no hashes or lines
+    to find on disk."""
     return Fingerprints(name="the other agent's endpoint", sha256=hashlib.sha256(ENDPOINT.encode()).hexdigest(),
-                        size=len(ENDPOINT), pointers=[POINTER])
+                        size=len(ENDPOINT), pointers=[POINTER, CONFIG])
