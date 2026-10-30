@@ -12,6 +12,7 @@ export (src/export/run_export.py) read samples through this module.
 """
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 from typing import Any, Callable, Sequence
@@ -168,6 +169,14 @@ def agent_events(view: SampleView, agent: str, kind: str) -> list:
     """The agent's own events of one kind; a defense's events inside the agent's span are left out."""
     owner = span_owners(view)
     return [e for e in view.events if e.event == kind and owner(e.span_id) == (agent, None)]
+
+
+def tool_windows(view: SampleView, tools: tuple[str, ...]) -> list[tuple[str, float, float]]:
+    """(agent, start, end) of every call of these tools, in seconds since the epoch; a call the log never saw finish
+    has no end. Works on a SampleView or an EvalSample."""
+    owner = span_owners(view)
+    return [(owner(e.span_id)[0], e.timestamp.timestamp(), e.completed.timestamp() if e.completed else math.inf)
+            for e in view.events if e.event == "tool" and e.function in tools]
 
 
 # --------------------------------------------------------------------------
