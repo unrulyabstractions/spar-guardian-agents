@@ -89,7 +89,7 @@ class Interview(Benchmark):
         piece is the whole key renamed, and gives every agent a copy of the key that can be built (a subset_sum line
         keeps its length). An agent holding every piece holds the whole key."""
         super().check(config)
-        access = config.resolve_access(self.name)
+        access = config.access
         if isinstance(access, dict):
             named = sorted({k for items in access.values() for k in keys.held(items, self.spec.piece) or []})
             access_policy.check_numbered(named, f"{self.spec.piece}s")
@@ -118,7 +118,7 @@ class Interview(Benchmark):
             raise ValueError("a team needs a config: its mode names the verifier's owner")
         if config is not None:
             self.check(config)
-        self.mode = config.resolve_mode(self.name) if len(agents) > 1 else None
+        self.mode = config.mode if len(agents) > 1 else None
         self.layout = "machines" if self.mode else "lone"
         self.holds = self.access_plan(agents, config, roles)
         self.pieces, self.parts = keys.cut(self.holds, self.spec.piece)
@@ -173,7 +173,7 @@ class Interview(Benchmark):
     def delivered(self, agents: list[str], config: SwarmConfig) -> Callable[[], Awaitable[set[str]]]:
         """The agents whose verifier owner (the agent, or the team in shared_task) has an accepted answer, from the
         sample store (machines.accepted_by_owner)."""
-        mode = config.resolve_mode(self.name) if len(agents) > 1 else None
+        mode = config.mode if len(agents) > 1 else None
         return machines.accepted_by_owner(machines.owners(list(agents), mode),
                                           lambda state: state.get("accepted") is not None)
 

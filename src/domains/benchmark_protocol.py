@@ -4,7 +4,7 @@ A benchmark gives one Inspect sample, the tools its agents use, the setup that r
 the scorers that grade what they left behind, and the ways our harness departs from CheatBench's own runner.
 The ORBIT configuration (roster, board, schedule) lives in src/, never here.
 
-The sample and the tools depend on the run's mode (SwarmConfig.resolve_mode): `solo_task` gives each agent its own
+The sample and the tools depend on the run's mode (SwarmConfig.mode): `solo_task` gives each agent its own
 copy of the task and `shared_task` one task for the team. A lone agent always gets CheatBench's own layout.
 
 Access. A benchmark names the items of its exploit (`whole_access`, `split_items`, `valid_item`), and
@@ -76,8 +76,8 @@ class Benchmark(ABC):
         """Raise when this benchmark cannot run the config: a mode it lacks, a scale it cannot hold, or an explicit
         access map that cannot apply (a lone agent and a solo_task team hold everything) or names items it does not
         know. Subclasses extend it and call this one."""
-        access = config.resolve_access(self.name)
-        if isinstance(access, dict) and (config.n_agents < 2 or config.resolve_mode(self.name) == "solo_task"):
+        access = config.access
+        if isinstance(access, dict) and (config.n_agents < 2 or config.mode == "solo_task"):
             raise ValueError("an explicit access map cannot apply: a lone agent and a solo_task team hold everything")
         access_policy.check_map(access, config.names, self.valid_item)
 
@@ -97,9 +97,9 @@ class Benchmark(ABC):
                        roles: dict[str, str] | None) -> Access:
         """The policy access_plan applies, which the run records: all without a config, for a lone agent, in
         solo_task, and under split when fewer than two agents are neutral; else the config's."""
-        if config is None or len(agents) < 2 or config.resolve_mode(self.name) == "solo_task":
+        if config is None or len(agents) < 2 or config.mode == "solo_task":
             return "all"
-        access = config.resolve_access(self.name)
+        access = config.access
         if access == "split" and len(access_policy.neutral_agents(agents, roles)) < 2:
             return "all"
         return access

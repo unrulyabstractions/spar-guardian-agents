@@ -1,1 +1,1 @@
-"""Shared helpers: the Gemini 402 retry and the JSON file readers."""
+"""Shared helpers: the JSON file readers."""

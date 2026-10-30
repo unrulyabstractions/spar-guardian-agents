@@ -7,7 +7,8 @@ import pytest
 from pydantic import ValidationError
 
 from src.configuration import access_policy as access
-from src.configuration.swarm_config import PRESETS, SwarmConfig, agent_names, build_config
+from src.configuration.presets import PRESETS, build_config
+from src.configuration.swarm_config import SwarmConfig, agent_names
 from src.domains.knowledge import KnowledgeWork
 from src.domains.knowledge.knowledge_sandbox import is_split, split_items
 from src.domains.openmath import OpenMath
@@ -82,19 +83,14 @@ def test_plan_under_each_policy():
 
 def test_the_config_field_parses_the_command_line_and_names_the_roster():
     assert SwarmConfig().access == "split" and PRESETS["default"].access == "split"
-    by_domain = SwarmConfig(access={"openmath": "all", "swe": "split", "knowledge_work": "all"})
-    assert by_domain.resolve_access("openmath_agent") == "all" and by_domain.resolve_access("swe") == "split"
     config = build_config("default", "small", ["access=a01:slice1+slice2,a02:slice3,a03:"])
     assert config.access == {"a01": ["slice1", "slice2"], "a02": ["slice3"], "a03": []}
-    assert config.resolve_access("openmath") == config.access
     assert build_config("default", "small", ["access=all"]).access == "all"
-    by_domain = build_config("default", "small", ["access=swe:all,openmath:split"])
-    assert by_domain.access == {"swe": "all", "openmath": "split"}
-    assert [by_domain.resolve_access(d) for d in ("swe", "openmath", "knowledge_work")] == ["all", "split", "split"]
-    assert build_config("default", "small", ["access=openmath_agent:all"]).access == {"openmath": "all"}
-    with pytest.raises(ValidationError, match="keys are domains"):
-        build_config("default", "small", ["access=chess:all"])
-    with pytest.raises(ValidationError, match="empty"):
+    # access takes one value for the run: a policy per domain is no map of the roster
+    for text in ("swe:all,openmath:split", "openmath_agent:all"):
+        with pytest.raises(ValidationError, match="every agent of the roster"):
+            build_config("default", "small", [f"access={text}"])
+    with pytest.raises(ValidationError, match="every agent of the roster"):
         SwarmConfig(access={})
     with pytest.raises(ValidationError, match="every agent of the roster"):
         build_config("default", "small", ["access=a01:slice1,a02:slice2"])
@@ -109,7 +105,7 @@ def test_the_config_field_parses_the_command_line_and_names_the_roster():
 def test_openmath_slices_follow_the_plan():
     bench = OpenMath()
     config = build_config("default", "small", ["regulators=1", "seed=2"])
-    roles = hidden_roles(bench, config)
+    roles = hidden_roles(config)
     neutral = [a for a in THREE if roles[a] == "worker"]
     regulator = next(a for a in THREE if roles[a] == "regulator")
     plan = bench.access_plan(THREE, config, roles)
@@ -160,7 +156,7 @@ def test_the_applied_policy_is_the_one_recorded():
     lone = swarm_task(bench, build_config("default", "small", ["n_agents=1"]))
     assert lone.dataset[0].metadata["cheatbench"]["access"] == {"policy": "all", "agents": {"a01": ["whole"]}}
     one_neutral = build_config("default", "small", ["regulators=1", "disregulators=1"])
-    assert bench.applied_access(THREE, one_neutral, hidden_roles(bench, one_neutral)) == "all"
+    assert bench.applied_access(THREE, one_neutral, hidden_roles(one_neutral)) == "all"
     for pairs in (["mode=solo_task", "access=a01:slice1,a02:slice2,a03:"], ["n_agents=1", "access=a01:whole"]):
         with pytest.raises(ValueError, match="cannot apply"):
             bench.check(build_config("default", "small", pairs))
@@ -170,7 +166,7 @@ def test_the_applied_policy_is_the_one_recorded():
     assert own.access_plan(THREE, team, None) == {"a01": ["A"], "a02": ["B"], "a03": ["C"]}
     # own_piece with a regulator: A, B and C go to the two neutral agents round robin; the regulator holds nothing
     with_role = build_config("default", "small", ["regulators=1", "seed=2"])
-    roles = hidden_roles(own, with_role)
+    roles = hidden_roles(with_role)
     neutral = [a for a in THREE if roles[a] == "worker"]
     regulator = next(a for a in THREE if roles[a] == "regulator")
     assert own.access_plan(THREE, with_role, roles) == {neutral[0]: ["A", "C"], neutral[1]: ["B"], regulator: []}
@@ -179,7 +175,7 @@ def test_the_applied_policy_is_the_one_recorded():
     assert "parts" not in swe and "shares" not in swe and swe["first_message"] == {a: swe["instruction"] for a in THREE}
     # one neutral agent among three: the whole fix for everyone
     two_roles = build_config("default", "small", ["regulators=1", "disregulators=1"])
-    roles = hidden_roles(own, two_roles)
+    roles = hidden_roles(two_roles)
     assert own.access_plan(THREE, two_roles, roles) == {a: ["whole"] for a in THREE}
     assert SWE("flipt-02e2", "jigsaw").applied_access(THREE, build_config("default", "small", ["access=all"]),
                                                      None) == "all"
@@ -237,12 +233,12 @@ def test_own_piece_deals_every_piece_over_the_neutral_agents_in_shared_task(n):
 def test_the_swe_sample_deals_jigsaw_by_role():
     """build_swe (no Docker) passes the hidden roles to the jigsaw deal."""
     config = build_config("default", "small", ["n_agents=5", "regulators=1", "disregulators=1"])
-    roles = hidden_roles(SWE("flipt-02e2", "jigsaw"), config)
+    roles = hidden_roles(config)
     swe = build_swe("flipt-02e2", "jigsaw", config.names, config, roles=roles)
     neutral = [a for a in config.names if roles[a] == "worker"]
     assert [swe["pieces"][a] for a in neutral] == [["B"], ["C"], ["A"]]
     config = build_config("default", "small", ["n_agents=3", "regulators=1"])
-    roles = hidden_roles(SWE("flipt-02e2", "jigsaw"), config)
+    roles = hidden_roles(config)
     swe = build_swe("flipt-02e2", "jigsaw", config.names, config, roles=roles)
     assert [swe["pieces"][a] for a in config.names if roles[a] == "worker"] == [["B", "A"], ["C"]]
     assert all(swe["pieces"][a] == [] for a in config.names if roles[a] != "worker")

@@ -18,7 +18,7 @@ import yaml
 
 from src import tasks
 from src.cli import build_parser
-from src.configuration.swarm_config import build_config
+from src.configuration.presets import build_config
 from src.domains.protein import ProteinDesign
 from src.domains.protein import protein_honeypot as honeypot
 from src.domains.protein.protein_checker_tool import DESCRIPTION, GRADER, PARAMETERS, TOOL, make_call

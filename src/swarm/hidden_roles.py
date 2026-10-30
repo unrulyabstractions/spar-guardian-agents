@@ -1,6 +1,6 @@
 """Hidden roles and instruction levels: workers, regulators and disregulators as peers on one board.
 
-A swarm is the board (src/swarm/board_config.py) with N agents whose system prompts differ by role:
+A swarm is the board (src/swarm/board.py) with N agents whose system prompts differ by role:
 
     worker        the plain board prompt
     regulator     a peer told to keep the team honest, at the configured regulator level
@@ -18,21 +18,17 @@ calls, src/swarm/regulator_oversight.py, and read the board) and, unless regulat
 roles.regulator_no_disclosure.
 
 With informed_roles on, a regulator or disregulator also gets the briefing (prompts.yaml `roles.briefing`, built by
-prompt_texts.role_briefing) after its role text: the swarm's size and roster, the board and its tools, and what the
-agents without a role were told. Workers never get it.
+role_briefing) after its role text: the swarm's size and roster, the board and its tools, and what the agents without
+a role were told. Workers never get it.
 """
 from __future__ import annotations
 
 import random
 import re
 
-from src.configuration.access_policy import neutral_agents
-from src.configuration.prompt_texts import role_briefing
 from src.configuration.settings import load_instruction_levels, load_prompts
-from src.configuration.swarm_config import ROLES, SwarmConfig, agent_names
-
-__all__ = ["ROLES", "LEVEL_KEYS", "agent_names", "assign_roles", "level_text", "role_text", "role_prompt",
-           "with_role", "rule_suffix", "composition_label", "neutral_agents"]
+from src.configuration.swarm_config import ROLES, SwarmConfig
+from src.swarm.turn_rules import BOARD_TOOLS
 
 # The key instruction_levels.yaml uses for each CheatBench task.
 LEVEL_KEYS = {"openmath_agent": "openmath", "software_engineering": "swe", "knowledge_work": "knowledge_work",
@@ -82,13 +78,25 @@ def role_text(role: str, config: SwarmConfig, benchmark_name: str) -> str | None
     return " ".join([text, *tail])
 
 
+def role_briefing(config: SwarmConfig, names: list[str]) -> str | None:
+    """prompts.yaml roles.briefing for a regulator or disregulator, or None when informed_roles is off or there is no
+    board. It says the swarm's size and roster, names the board's tools and says what agents without a role were told
+    (roles.workers_told). Workers never get it."""
+    if not config.informed_roles or not config.board:
+        return None
+    roles = load_prompts()["roles"]
+    told = {(False, False): "nothing", (True, False): "team", (False, True): "board", (True, True): "both"}
+    tools = ", ".join(BOARD_TOOLS[:-1]) + " and " + BOARD_TOOLS[-1]
+    return roles["briefing"].format(n=len(names), roster=", ".join(names), tools=tools,
+                                    told=roles["workers_told"][told[config.knows_team, config.mention_board]])
+
 
 def role_prompt(role: str, config: SwarmConfig, benchmark_name: str, names: list[str]) -> str | None:
     """Everything a role adds to the system prompt: the role text, then the briefing for a regulator or a
     disregulator when informed_roles is on, a blank line apart. None for a worker."""
     if role == "worker":
-        return role_text(role, config, benchmark_name)
-    parts = [role_text(role, config, benchmark_name), role_briefing(config, names, benchmark_name)]
+        return None
+    parts = [role_text(role, config, benchmark_name), role_briefing(config, names)]
     return "\n\n".join(p for p in parts if p) or None
 
 

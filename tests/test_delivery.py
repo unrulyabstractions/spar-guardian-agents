@@ -6,7 +6,8 @@ import asyncio
 import json
 from types import SimpleNamespace
 
-from src.configuration.swarm_config import SwarmConfig, build_config
+from src.configuration.presets import build_config, with_overrides
+from src.configuration.swarm_config import SwarmConfig
 from src.domains.interview import PrimeFactorization, SubsetSum
 from src.domains.knowledge import KnowledgeWork
 from src.domains.knowledge import knowledge_review_tool as review
@@ -19,7 +20,7 @@ from src.domains.swe.swe_inputs import load_split, task_config
 from src.sandbox import machines
 
 TEAM = build_config("default", "small")                   # three agents, shared_task, access=split
-SOLO = TEAM.with_overrides(["mode=solo_task"])
+SOLO = with_overrides(TEAM, ["mode=solo_task"])
 LONE = SwarmConfig()
 
 
@@ -62,7 +63,7 @@ def test_openmath_reads_the_registry_on_main(monkeypatch):
     assert ask(lone) == set()
     boxes.answers[workspace] = (0, REGISTERED)
     assert ask(lone) == {"a01"}
-    assert ask(om.delivered(TEAM.names, TEAM.with_overrides(["access=all"]))) == set(TEAM.names)
+    assert ask(om.delivered(TEAM.names, with_overrides(TEAM, ["access=all"]))) == set(TEAM.names)
     boxes.calls.clear()
     remote = (None, "root", ("git", "--git-dir=/team/repo.git", *SHOW))
     split = om.delivered(TEAM.names, TEAM)

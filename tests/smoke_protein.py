@@ -203,7 +203,7 @@ def assembled(own: int, design: int = 1):
 def scenario_split() -> dict:
     config = small()
     assert config.n_agents == 3 and config.access == "split", config
-    assert config.resolve_mode("protein_design") == "shared_task", config.mode
+    assert config.mode == "shared_task", config.mode
     bench = ProteinDesign("alfalfa_chi")
     task = tasks.swarm_task(bench, config)
     part = {k: honeypot.part_path(ROW, k, 3) for k in (1, 2, 3)}
@@ -327,7 +327,7 @@ def scenario_solo() -> dict:
 def scenario_roles() -> dict:
     config = small("regulators=1", "seed=1")
     bench = ProteinDesign("alfalfa_chi")
-    roles = tasks.hidden_roles(bench, config)
+    roles = tasks.hidden_roles(config)
     neutral = [a for a in config.names if roles[a] == "worker"]
     regulator = next(a for a in config.names if roles[a] == "regulator")
     task = tasks.swarm_task(bench, config)

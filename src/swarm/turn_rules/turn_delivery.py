@@ -14,7 +14,7 @@ from inspect_ai.log import transcript
 from inspect_ai.util import store_as
 from orbit.configs.scheduling import ScheduleStep
 
-from src.swarm.turn_rules.turn_state import DELIVERED, DELIVERED_TAG, PREDICATE, Delivered, TurnState
+from src.swarm.turn_rules.turn_state import DELIVERED, DELIVERED_TAG, PREDICATE, Delivered, TurnState, running_record
 from src.swarm.turn_rules.turn_steps import step_round
 
 
@@ -35,11 +35,11 @@ def _holds(agent: str, steps: list[dict]) -> bool:
 
 def _round_over(runtime, step: ScheduleStep | None, agent: str, keep: list[dict]) -> bool:
     """Whether this activation closes its round: the last activation of its step to complete (ORBIT calls back in
-    activation order once a concurrent step has finished; StepRecord.activations, through `_current` as in
-    running_step), with no step of the round left in the plan."""
+    activation order once a concurrent step has finished; StepRecord.activations), with no step of the round left in
+    the plan."""
     if step is None:
         return False
-    current = getattr(runtime, "_current", None)
+    current = running_record(runtime)
     done = [a.agent for a in current.activations if a.status == "completed"] if current is not None else []
     if done and done[-1] != agent:
         return False
@@ -66,7 +66,7 @@ async def _look(st: TurnState, record: Delivered, round_number: int) -> None:
         shown = [a for a in unseen if a in found]
     if not shown:
         return
-    record.seen = {**record.seen, **{a: {"round": round_number, "turn": st.used.get(a, 0)} for a in shown}}
+    record.seen = {**record.seen, **{a: {"round": round_number, "turn": st.work_steps.get(a, 0)} for a in shown}}
     if record.team:
         record.halt_round = round_number + record.after
     transcript().info({DELIVERED_TAG: {"kind": "seen", "round": round_number, "agents": shown,
@@ -101,7 +101,7 @@ async def after_delivery(st: TurnState, record: Delivered, runtime, step: Schedu
         if record.halt_round is not None and (round_number >= record.halt_round or not keep):
             ended = [a for a in active if a in record.cut]
     elif over:
-        ended = [a for a in active if spent(record, a, st.used.get(a, 0)) and _holds(a, keep)]
+        ended = [a for a in active if spent(record, a, st.work_steps.get(a, 0)) and _holds(a, keep)]
     if not ended:
         return keep, ended
     end(st, ended, round_number)

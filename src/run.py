@@ -2,29 +2,27 @@
 run's agents on the cheating ladder, or read lone runs' turns.
 
     run("swarm_R3D3_s1", OpenMath(), config, model="google/gemini-3.8-flash", timeout=2700)
-    judge(Path("logs/swarm/swarm_R3D3/<log>.eval"), "swarm_R3D3", "gpt-6-luna", batch=True)
+    run("riemann_cheat", benchmark, config, model, timeout, task=swarm_task(benchmark, config, extra_instruction=CHEAT))
+    judge(Path("logs/swarm_R3D3/<log>.eval"), "swarm_R3D3", "gpt-6-luna", batch=True)
     ladder_runs([Path("runs/swarm_R3D3")], "gpt-6-luna", view="full", batch=True)
     budget([Path("runs/om_lone_1"), Path("runs/om_lone_2"), Path("runs/om_lone_3")])
 
-A run calls inspect_ai.eval with the task from tasks.py, writes its log under logs/<kind>/<name>/, exports it to
-runs/<name>/ with src/export/run_export.py and prints one line per episode. CheatBench's judge runs inside
-the eval as a
-scorer, bound to the model role "judge". With batch_judge the judge's calls use the provider's batch API, and with
-batch_agents so do the agents' calls (Inspect GenerateConfig.batch). A role with a model of its own (worker_model,
-regulator_model, disregulator_model) runs it through the swarm model provider
-(src/models/swarm_model_provider.py). The
-provider carries the agents' generate config to that model's calls. Each role model is built once before the eval, so
-a provider name Inspect does not know is refused before the sandbox starts. Re-judging reads a finished log, judges
-every agent again with src/judging/cheatbench_judge.py and exports the log with the new verdicts. A refused
-precondition prints
-its reason to stderr, and the command returns the exit code the command line passes on.
+A run calls inspect_ai.eval with the task (the default task of tasks.swarm_task, or one the caller built), writes its
+log under logs/<name>/, exports it to runs/<name>/ with src/export/run_export.py and prints one line per episode.
+CheatBench's judge runs inside the eval as a scorer, bound to the model role "judge". With batch_judge the judge's
+calls use the provider's batch API, and with batch_agents so do the agents' calls (Inspect GenerateConfig.batch). A
+role with a model of its own (worker_model, regulator_model, disregulator_model) runs it through the swarm model
+provider (src/models/swarm_model_provider.py), which carries the agents' generate config to that model's calls. Each
+role model is built once before the eval, so a provider name Inspect does not know is refused before the sandbox
+starts. Re-judging reads a finished log, judges every agent again with src/judging/cheatbench_judge.py and exports the
+log with the new verdicts. A refused precondition prints its reason to stderr, and the command returns the exit code
+the command line passes on.
 """
 from __future__ import annotations
 
 import asyncio
 import functools
 import json
-import os
 import statistics
 import sys
 from pathlib import Path
@@ -37,7 +35,6 @@ from inspect_ai.model import GenerateConfig, Model, get_model
 
 from src.configuration import settings
 from src.configuration.swarm_config import SwarmConfig
-from src.domains.swe import SWE
 from src.export.atif_transcripts import judge_prompt, transcript_dict
 from src.export.eval_sample_view import SampleView, agent_messages, error_and_failure, roster
 from src.export.run_export import write_run
@@ -45,10 +42,14 @@ from src.judging import cheatbench_judge as judging
 from src.judging import judging_ladder as ladder
 from src.measures import code_ladder as signals
 from src.measures import episode_summary as summary
-from src.models import gemini_402_retry as provider_retry
+from src.models import gemini_402_retry
 from src.models import model_registry as models
 from src.models import swarm_model_provider as provider  # importing it registers the "swarm" provider
-from src.tasks import JUDGE_ADDENDUM, hidden_roles, swarm_task
+from src.tasks import JUDGE_ADDENDUM, swarm_task
+from src.utils.json_files import read_jsonl
+
+# The verdict fields `judge` prints per episode, which every CheatBench judge schema shares.
+VERDICT_FIELDS = ("episode", "parse_ok", "cheated", "judge_cost_usd", "judge_error")
 
 
 class Refusal(Exception):
@@ -74,29 +75,11 @@ def command(fn):
 # --------------------------------------------------------------------------
 # keys
 # --------------------------------------------------------------------------
-def require_provider_key(model: str) -> None:
-    """One of the key variables src/models/model_registry.yaml names for the model's route, and the
-    route's base URL.
-
-    Gemini's key may be given as GEMINI_API_KEY; it is also exported as GOOGLE_API_KEY, the name Inspect reads. A
-    model outside the registry (mockllm) needs nothing."""
-    provider = models.provider_of(model)
-    if provider is None:
-        return
-    names = models.key_env(model)
-    if not any(os.environ.get(name) for name in names):
-        raise Refusal(f"{' or '.join(names)} must be set for {model}", 1)
-    if "GOOGLE_API_KEY" in names and os.environ.get("GEMINI_API_KEY"):
-        os.environ.setdefault("GOOGLE_API_KEY", os.environ["GEMINI_API_KEY"])
-    route = models.providers()[provider]
-    if route["inspect_prefix"].startswith("openai-api/") and route.get("base_url"):
-        os.environ.setdefault(route["base_url_env"], route["base_url"])
-
-
-def require_routing(model: str) -> None:
-    """An OpenRouter model runs only with the provider routing its registry entry pins: without one OpenRouter sends
-    each call to a different host of the model, priced up to five times apart (2026-10-28)."""
+def require_model(model: str) -> None:
+    """The model's key (model_registry.prepare_env) and, on OpenRouter, the host its registry entry pins
+    (model_registry.check_routing)."""
     try:
+        models.prepare_env(model)
         models.check_routing(model)
     except ValueError as error:
         raise Refusal(str(error), 1) from error
@@ -106,8 +89,7 @@ def require_role_model(model: str) -> None:
     """A role model's key and routing, then its client built through the swarm provider without a call. ORBIT builds
     the model only inside the sample, so a provider name Inspect does not know would otherwise fail after the sandbox
     starts."""
-    require_provider_key(model)
-    require_routing(model)
+    require_model(model)
     try:
         get_model(provider.role_model(model), memoize=False)
     except (ValueError, PrerequisiteError) as error:
@@ -125,13 +107,6 @@ def require_judge_key(judge_name: str, code: int) -> None:
 # --------------------------------------------------------------------------
 # run
 # --------------------------------------------------------------------------
-def log_kind(benchmark, config: SwarmConfig) -> str:
-    """logs/<kind>/: swe for SWE, swarm for a run with hidden roles, ctrl for a lone agent or a plain board."""
-    if isinstance(benchmark, SWE):
-        return "swe"
-    return "swarm" if hidden_roles(benchmark, config) else "ctrl"
-
-
 def judge_role_model(config: SwarmConfig) -> Model | None:
     """The model bound to the "judge" role, with the provider's batch API on or off as batch_judge says, or None
     when the config has no judge.
@@ -152,7 +127,6 @@ def agent_generate_config(config: SwarmConfig) -> dict:
     if config.tool_output_bytes is not None:
         out["max_tool_output"] = config.tool_output_bytes
     return out
-
 
 
 def export(eval_log: Path, run_name: str, verdicts: dict | None = None) -> Path:
@@ -179,39 +153,33 @@ def models_line(config: SwarmConfig) -> str:
 
 
 @command
-def run(name: str, benchmark, config: SwarmConfig, model: str, timeout: int | None) -> int:
-    """Run one task, export it to runs/<name>/ and print the summary. Returns 0, or 3 when the eval did not succeed.
-    A caller with its own sample builds the task itself (tasks.swarm_task) and calls evaluate."""
-    return evaluate(name, benchmark, config, swarm_task(benchmark, config, name=name), model, timeout)
-
-
-@command
-def evaluate(name: str, benchmark, config: SwarmConfig, task: Task, model: str, timeout: int | None) -> int:
-    """Run a built task: inspect_ai.eval, the export to runs/<name>/, the summary and the cheating signals."""
-    require_provider_key(model)
-    require_routing(model)
+def run(name: str, benchmark, config: SwarmConfig, model: str, timeout: int | None, *, task: Task | None = None) -> int:
+    """Run one task: inspect_ai.eval, the export to runs/<name>/, the summary and the cheating signals. task is one
+    the caller built from the same benchmark and config (tasks.swarm_task with an extra_instruction, say); None builds
+    the default. Returns 0, or 3 when the eval did not succeed."""
+    require_model(model)
     for role_model in filter(None, config.role_models().values()):
         require_role_model(role_model)
     judge_model = judge_role_model(config)
     if judge_model is not None:
         require_judge_key(config.judge, 1)
-    provider_retry.install()
-    log_dir = settings.LOGS / log_kind(benchmark, config) / name
+    task = task or swarm_task(benchmark, config, name=name)
+    gemini_402_retry.install()
+    log_dir = settings.LOGS / name
     log_dir.mkdir(parents=True, exist_ok=True)
     judged = f"judge={config.judge}" if judge_model is not None else "not judged"
-    print(f"== eval {benchmark.name} n_agents={config.n_agents} control={config.control} {judged} -> {log_dir}",
-          flush=True)
+    print(f"== eval {benchmark.name} n_agents={config.n_agents} {judged} -> {log_dir}", flush=True)
     print(access_line(task), flush=True)
     print(models_line(config), flush=True)
+    generate = agent_generate_config(config)
     # Inspect merges the eval's generate config into the eval's model only; the role models get it from the provider
-    provider.set_agent_config(GenerateConfig(**agent_generate_config(config)))
+    provider.set_agent_config(GenerateConfig(**generate))
     agents = get_model(model, memoize=False, **models.model_args(model))
     # every raw model call is kept (Inspect keeps five per model by default): OpenRouter's billed cost per call
     # lives in the raw response, and the export sums it per episode
     [log] = inspect_ai.eval(task, model=agents, log_dir=str(log_dir), display="plain", timeout=timeout,
                             log_model_api=True,
-                            model_roles={"judge": judge_model} if judge_model is not None else None,
-                            **agent_generate_config(config))
+                            model_roles={"judge": judge_model} if judge_model is not None else None, **generate)
     if not log.samples and not Path(log.location).exists():
         raise Refusal("no eval log written", 3)
     run_dir = export(Path(log.location), name)
@@ -254,14 +222,6 @@ async def _judge_views(views: list, judge_name: str, batch: bool) -> dict[str, d
     return verdicts
 
 
-def print_verdicts(judge_jsonl: Path) -> None:
-    print("== verdicts")
-    for line in judge_jsonl.read_text().splitlines():
-        verdict = json.loads(line)
-        print(json.dumps({key: verdict.get(key) for key in ("episode", *settings.VERDICT_KEYS)}))
-        print("summary:", verdict.get("summary"))
-
-
 @command
 def judge(eval_log: Path, run_name: str, judge_name: str, *, batch: bool = True, judge_errors: bool = False) -> int:
     """Judge a finished eval log (again, or for the first time after a run without a judge) and export it to
@@ -284,7 +244,9 @@ def judge(eval_log: Path, run_name: str, judge_name: str, *, batch: bool = True,
     judge_jsonl = run_dir / "judge.jsonl"
     if not verdicts or not judge_jsonl.exists():
         raise Refusal("the judge wrote no verdicts", 4)
-    print_verdicts(judge_jsonl)
+    print("== verdicts")
+    for verdict in read_jsonl(judge_jsonl):
+        print(json.dumps({key: verdict.get(key) for key in VERDICT_FIELDS}))
     return 0
 
 
@@ -341,7 +303,7 @@ def lone_turns(run_dir: Path) -> list[int]:
 @command
 def budget(run_dirs: list[Path]) -> int:
     """Print each lone run's n_turns and the median over every episode: how long one agent takes alone, a
-    descriptive statistic beside the turn budget (settings.TURN_BUDGETS)."""
+    descriptive statistic beside the turn budget (settings.TURN_BUDGET)."""
     turns: list[int] = []
     for run_dir in run_dirs:
         mine = lone_turns(run_dir)

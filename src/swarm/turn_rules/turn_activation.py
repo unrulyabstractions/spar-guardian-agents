@@ -15,25 +15,36 @@ from inspect_ai.log import transcript
 from inspect_ai.model import ChatMessageAssistant, ChatMessageTool
 from inspect_ai.util import store_as
 from orbit.configs.scheduling import ScheduleStep
-from orbit.execution.sessions import current_session_registry
 
 from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import Window
 from src.swarm.turn_rules.turn_delivery import after_delivery, delivery, end, spent
 from src.swarm.turn_rules.turn_state import (
     ACTOR,
+    BOARD_ACTIONS,
     DELIVERED,
     HALT_TAG,
     OVERSIGHT_TOOL,
     SUBMIT_TOOLS,
     Delivered,
+    TeamSubmission,
     TurnState,
     bump,
+    live_state,
     running_step,
 )
-from src.swarm.turn_rules.turn_steps import FREE_ID, concurrent_step, free_index, is_round_step, round_order, step_round
+from src.swarm.turn_rules.turn_steps import (
+    concurrent_step,
+    follow_up_id,
+    free_index,
+    is_round_step,
+    round_order,
+    single_step,
+    step_id,
+    step_round,
+)
 
-CHARGED = ("work", "refused")       # the step_charge values charged against steps_per_agent
+CHARGED = ("work", "refused")       # the step_charge values charged against the working steps
 
 
 def _window(st: TurnState, agent: str) -> Window:
@@ -42,30 +53,15 @@ def _window(st: TurnState, agent: str) -> Window:
 
 
 def _out_of_context(agent: str) -> bool:
-    """Whether the agent's last generation stopped at the context limit.
-
-    The live AgentState is reachable through ORBIT's session registry, which the orchestrator installs for the whole
-    sample (orbit/solvers/orchestrator.py solve, session_registry_scope).
-    """
-    try:
-        output = current_session_registry().scheduled(agent).state.output
-    except (RuntimeError, KeyError):
-        return False
-    return output is not None and output.stop_reason == "model_length"
+    """Whether the agent's last generation stopped at the context limit."""
+    state = live_state(agent)
+    return state is not None and state.output is not None and state.output.stop_reason == "model_length"
 
 
 def _activation_messages(agent: str, result) -> list:
-    """The messages the activation added to the agent's conversation, from ORBIT's session registry."""
-    try:
-        messages = current_session_registry().scheduled(agent).state.messages
-    except (RuntimeError, KeyError):
-        return []
-    return list(messages[result.messages_before:result.messages_after])
-
-
-def free_cap_of(st: TurnState, agent: str | None) -> int:
-    """The agent's K: its free_caps entry, else the team's free_cap."""
-    return st.free_caps.get(agent, st.free_cap) if agent is not None else st.free_cap
+    """The messages the activation added to the agent's conversation, from its live state."""
+    state = live_state(agent)
+    return list(state.messages[result.messages_before:result.messages_after]) if state is not None else []
 
 
 def last_call_refused(messages: list) -> bool:
@@ -84,18 +80,16 @@ def last_call_refused(messages: list) -> bool:
     return call.function == OVERSIGHT_TOOL and result.text == load_prompts()["oversight_output"]["no_such_agent"]
 
 
-def step_charge(st: TurnState, tools: list[str], submitted: bool, agent: str | None = None,
-                refused: bool = False) -> str:
+def step_charge(st: TurnState, tools: list[str], submitted: bool, agent: str, refused: bool = False) -> str:
     """What a completed step counts as: "free" (it ended with a board action that succeeded), "refused" (it ended
     with a board action that failed; charged like work), "submit" (it ended with submit or team_submit) or "work"
-    (charged against steps_per_agent).
+    (charged against the working steps).
 
-    With K 0 (the agent's free_caps entry, else free_cap) there are no free board actions and every step is
-    charged."""
-    if not free_cap_of(st, agent):
+    With K 0 (the agent's free_caps entry) there are no free board actions and every step is charged."""
+    if not st.free_caps.get(agent, 0):
         return "work"
     last = tools[-1] if tools else None
-    if last in st.board_actions:
+    if last in BOARD_ACTIONS:
         return "refused" if refused else "free"
     if submitted or last in SUBMIT_TOOLS:
         return "submit"
@@ -129,9 +123,9 @@ def _pooled_steps(st: TurnState, active: list[str], count: int, revision: int) -
         order = round_order(eligible, st.turn_order, st.seed, st.rounds)[:left]
         left -= len(order)
         if st.concurrent:
-            steps.append(concurrent_step(f"r{st.rounds}-v{revision}", order, st.max_concurrency))
+            steps.append(concurrent_step(step_id(st.rounds, revision=revision), order, st.max_concurrency))
         else:
-            steps += [{"id": f"r{st.rounds}-{agent}-v{revision}", "agents": [agent]} for agent in order]
+            steps += [single_step(step_id(st.rounds, agent, revision), agent) for agent in order]
     return steps
 
 
@@ -140,30 +134,28 @@ def _follow_up(st: TurnState, keep: list[dict], step: ScheduleStep, agent: str) 
 
     Under concurrent rounds a regulator with a larger K holds the later follow-ups `r<r>-free<k>` alone."""
     k = free_index(step.id) + 1
-    if k > free_cap_of(st, agent):
+    if k > st.free_caps.get(agent, 0):
         return False
     if st.concurrent:
-        step_id = f"r{step_round(step.id)}-free{k}"
-        if keep and keep[0]["id"] == step_id:
+        follow_up = follow_up_id(step_id(step_round(step.id)), k)
+        if keep and keep[0]["id"] == follow_up:
             keep[0] = {**keep[0], "agents": [*keep[0]["agents"], agent]}
         else:
-            keep.insert(0, concurrent_step(step_id, [agent], st.max_concurrency))
+            keep.insert(0, concurrent_step(follow_up, [agent], st.max_concurrency))
     else:
-        base = FREE_ID.sub("", step.id)
-        keep.insert(0, {"id": f"{base}-free{k}", "agents": [agent]})
+        keep.insert(0, single_step(follow_up_id(step.id, k), agent))
     return True
 
 
-def _halt(st: TurnState, keep: list[dict]) -> list[dict]:
+def _halt(st: TurnState, submission: TeamSubmission, keep: list[dict]) -> list[dict]:
     """After a team submission: keep the steps of the submission's round, drop every later one."""
-    submitted_round = st.team_submission.get("round") if st.team_submission else None
-    if submitted_round is None:
+    if submission.round is None:
         return []
     if st.halted_after_round is None:
-        st.halted_after_round = submitted_round
-        transcript().info({HALT_TAG: {"round": submitted_round, "agent": st.team_submission.get("agent"),
-                                      "dropped": [s["id"] for s in keep if step_round(s["id"]) > submitted_round]}})
-    return [s for s in keep if step_round(s["id"]) <= submitted_round]
+        st.halted_after_round = submission.round
+        transcript().info({HALT_TAG: {"round": submission.round, "agent": submission.agent,
+                                      "dropped": [s["id"] for s in keep if step_round(s["id"]) > submission.round]}})
+    return [s for s in keep if step_round(s["id"]) <= submission.round]
 
 
 def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | None:
@@ -176,7 +168,7 @@ def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | Non
     holds no more steps ("left").
 
     Under stop_after_delivery it returns a coroutine, which ORBIT awaits: the rule may await the delivery predicate
-    before the plan is amended (after_delivery). Without the rule it returns None, as before.
+    before the plan is amended (after_delivery). Without the rule it returns None.
     """
     st = store_as(TurnState)
     agent = result.agent_name
@@ -189,9 +181,8 @@ def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | Non
                         agent: [*st.history_marks.get(agent, []), [result.messages_after, round_number]]}
     charge = step_charge(st, tools, result.submitted, agent, last_call_refused(messages))
     working, free = charge in CHARGED, charge == "free"
-    used = st.used.get(agent, 0) + (1 if working else 0)
+    used = st.work_steps.get(agent, 0) + (1 if working else 0)
     st.activations = {**st.activations, agent: activation}
-    st.used = {**st.used, agent: used}
     st.work_steps = {**st.work_steps, agent: used}
     if free:
         st.free_steps = bump(st.free_steps, agent)
@@ -220,11 +211,12 @@ def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | Non
         elif agents:
             keep.append(s.model_copy(update={"agents": tuple(agents)}).model_dump(mode="json"))
     before = [s.model_dump(mode="json") for s in pending]
-    halted = st.team_submission is not None
+    submission = store_as(TeamSubmission)
+    halted = submission.agent is not None
     if step is not None and free and agent in active:
         _follow_up(st, keep, step, agent)
     if halted:
-        keep = _halt(st, keep)
+        keep = _halt(st, submission, keep)
     elif st.pooled and dropped:
         keep += _pooled_steps(st, active, dropped, runtime.revision)
     if record is not None and not halted:     # team_submit ends the run itself; the rule stays out of it

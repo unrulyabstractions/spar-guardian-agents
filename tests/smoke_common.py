@@ -27,15 +27,17 @@ from inspect_ai.model import ModelOutput, get_model
 from orbit.communication.runtime import current_identity
 
 from src.configuration import settings
-from src.configuration.swarm_config import SwarmConfig, build_config
+from src.configuration.presets import build_config
+from src.configuration.swarm_config import SwarmConfig
 from src.export.run_export import write_run
 from src.sandbox import machines
+from src.swarm import turn_rules as rules
 from src.tasks import swarm_task
 from src.utils.json_files import read_jsonl
 
 MODEL = "mockllm/model"
 TIME_LIMIT_S = 1200
-BOARD_TOOLS = set(settings.BOARD_TOOLS)
+BOARD_TOOLS = set(rules.BOARD_TOOLS)
 
 
 def suite_dirs(suite: str, *, stamped: bool = True) -> tuple[Path, Path]:

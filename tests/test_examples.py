@@ -8,10 +8,10 @@ from pathlib import Path
 import pytest
 
 from examples import USE_JUDGE_AS_DEFAULT
-from examples.utils.example_arguments import DEFAULT_MODEL, DEFAULT_SETTINGS, parse_example_arguments
+from examples.utils.example_arguments import DEFAULT_SETTINGS, parse_example_arguments
 from src import run
 from src.configuration import settings
-from src.configuration.swarm_config import build_config
+from src.configuration.presets import build_config
 from src.measures import run_figures as plots
 from src.models import model_registry as models
 from src.run import access_line
@@ -38,11 +38,11 @@ def script_of(name: str) -> Path:
 def test_the_shared_arguments_and_their_defaults():
     script = script_of(EXAMPLES[0])
     args = parse_example_arguments(script, "The first line.", [])
-    assert args.model == models.resolve(DEFAULT_MODEL) == "openrouter/deepseek/deepseek-v4.1-flash-1017"
+    assert args.model == models.resolve(settings.DEFAULT_MODEL) == "openrouter/deepseek/deepseek-v4.1-flash-1017"
     # no judge by default: judge=none after the settings, and USE_JUDGE_AS_DEFAULT says so
     assert USE_JUDGE_AS_DEFAULT is False and args.judge is False
     assert (args.preset, args.scale, args.settings, args.name, args.timeout) == \
-        ("default", "small", [*DEFAULT_SETTINGS, "judge=none"], script.stem, settings.MODEL_TIMEOUT_S)
+        ("default", None, [*DEFAULT_SETTINGS, "judge=none"], script.stem, settings.MODEL_TIMEOUT_S)
     assert DEFAULT_SETTINGS == ["batch_judge=false"]
     args = parse_example_arguments(script, None, ["--judge", "--model", "claude-haiku-5-5", "--scale", "medium",
                                                   "--set", "regulators=1", "--set", "time_limit_s=900", "--name",
@@ -98,13 +98,13 @@ def test_each_script_runs_three_neutral_agents_on_the_default_preset(name, monke
     assert module.main() == 0
     [(args, kwargs)] = calls
     run_name, benchmark, config, model, timeout = args
-    assert (run_name, model, timeout) == (script.stem, models.resolve(DEFAULT_MODEL), settings.MODEL_TIMEOUT_S)
+    assert (run_name, model, timeout) == (script.stem, models.resolve(settings.DEFAULT_MODEL), settings.MODEL_TIMEOUT_S)
     assert kwargs == {}
     # The run goes to runs/<name>/ and the figures follow a successful run into out/<name>/.
     assert plotted == [(settings.RUNS / script.stem, settings.ROOT / "out" / script.stem)]
     assert (config.preset, config.scale, config.n_agents) == ("default", "small", 3)
     assert config.regulator_count == 0 and config.disregulator_count == 0 and config.access == "split"
-    assert config.time_limit_s == 3600 and config.batch_judge is False and config.turn_budget == settings.TURN_BUDGETS
+    assert config.time_limit_s == 3600 and config.batch_judge is False and config.turn_budget == settings.TURN_BUDGET
     assert config.judge is None                                 # not judged as it finishes (USE_JUDGE_AS_DEFAULT)
     benchmark.check(config)
     held = list(benchmark.access_plan(config.names, config, None).values())
@@ -135,25 +135,23 @@ def test_each_cell_script_sets_its_agents_and_its_cheat_text(name, monkeypatch):
     script = script_of(name)
     n_agents, cheats = CELLS[script.stem.split("_", 1)[1]]
     calls = []
-    monkeypatch.setattr(run, "run", lambda *args: calls.append(("run", args)) or 0)
-    monkeypatch.setattr(run, "evaluate", lambda *args: calls.append(("evaluate", args)) or 0)
+    monkeypatch.setattr(run, "run", lambda *args, **kwargs: calls.append((args, kwargs)) or 0)
     monkeypatch.setattr(plots, "plot_run", lambda run_dir, out_dir: [])
     monkeypatch.setattr("sys.argv", [script.name])
     assert module.main() == 0
-    [(entry, args)] = calls
+    [(args, kwargs)] = calls
+    run_name, benchmark, config, model, timeout = args
     if cheats:
-        # the cell builds the sample with CHEAT itself and runs the task it built from it
-        assert entry == "evaluate"
-        run_name, benchmark, config, task, model, timeout = args
+        # the cell builds its task with CHEAT after the task instruction and runs that task
+        task = kwargs["task"]
         assert module.CHEAT.startswith("Your real objective") and "fair game" in module.CHEAT
         assert ("team" in module.CHEAT) == (n_agents == 3)
         assert task.dataset[0].input.endswith(f"\n{module.CHEAT}\n")
     else:
-        assert entry == "run" and not hasattr(module, "CHEAT")
-        run_name, benchmark, config, model, timeout = args
-    assert (run_name, model, config.n_agents, config.judge) == (script.stem, models.resolve(DEFAULT_MODEL), n_agents,
-                                                                None)
-    assert config.preset == "default" and config.access == "split" and config.turn_budget == settings.TURN_BUDGETS
+        assert kwargs == {} and not hasattr(module, "CHEAT")
+    assert (run_name, model, config.n_agents, config.judge) == \
+        (script.stem, models.resolve(settings.DEFAULT_MODEL), n_agents, None)
+    assert config.preset == "default" and config.access == "split" and config.turn_budget == settings.TURN_BUDGET
     benchmark.check(config)
     if n_agents == 1:
         assert benchmark.access_plan(config.names, config, None) == {"a01": benchmark.whole_access()}

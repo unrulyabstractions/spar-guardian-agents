@@ -402,7 +402,7 @@ def scenario_team_submit() -> dict:
     is dropped, and the grader grades the team's main. The disregulator has no team_submit."""
     config = small("disregulators=1", "seed=1")
     benchmark = SWE(ISSUE, "as_released", grade=True)
-    roles = hidden_roles(benchmark, config)
+    roles = hidden_roles(config)
     dis = next(a for a, r in roles.items() if r == "disregulator")
     submitter = next(a for a in config.names if roles[a] == "worker")
     script = Script({a: [sh(f"echo {a} step {i}", f"{a}-t{i}") for i in range(1, 9)] for a in config.names})

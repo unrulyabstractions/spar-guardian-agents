@@ -15,7 +15,8 @@ from inspect_ai.model._providers.mockllm import MockLLM
 from inspect_ai.model._providers.openrouter import OpenRouterAPI
 
 from src import run
-from src.configuration.swarm_config import PRESETS, ROLES, SwarmConfig, build_config
+from src.configuration.presets import PRESETS, build_config, with_overrides
+from src.configuration.swarm_config import ROLES, SwarmConfig
 from src.domains.openmath import OpenMath
 from src.export.eval_sample_view import SampleView
 from src.export.run_export import episode_model
@@ -140,7 +141,7 @@ def test_the_role_models_hold_inspect_strings():
     assert config.regulator_model == FLASH and config.model_dump(mode="json")["regulator_model"] == FLASH
     assert config.role_models() == {"worker": None, "regulator": FLASH, "disregulator": None}
     assert list(config.role_models()) == list(ROLES)
-    assert config.with_overrides(["regulator_model=none"]).regulator_model is None
+    assert with_overrides(config, ["regulator_model=none"]).regulator_model is None
     assert SwarmConfig(worker_model="mockllm/model").role_models()["worker"] == "mockllm/model"
     with pytest.raises(ValueError, match="unknown model 'nope'"):
         build_config("default", "small", ["disregulator_model=nope"])
@@ -202,7 +203,7 @@ def forbidden_eval(*args, **kwargs):
     ("regulator_model=gogle/gemini-3.8-flash", True,
      "role model gogle/gemini-3.8-flash: Model API gogle of model 'gogle/gemini-3.8-flash' not recognized"),
 ])
-def test_evaluate_refuses_a_role_model_before_the_eval(monkeypatch, tmp_path, capsys, pair, keyed, reason):
+def test_run_refuses_a_role_model_before_the_eval(monkeypatch, tmp_path, capsys, pair, keyed, reason):
     for name in models.key_env(FLASH):
         monkeypatch.delenv(name, raising=False)
     if keyed:
@@ -210,12 +211,12 @@ def test_evaluate_refuses_a_role_model_before_the_eval(monkeypatch, tmp_path, ca
     monkeypatch.setattr(run.inspect_ai, "eval", forbidden_eval)
     monkeypatch.setattr(run.settings, "LOGS", tmp_path)
     config = build_config("default", "small", ["regulators=1", pair])
-    assert run.evaluate("x", OpenMath(), config, None, "mockllm/model", None) == 1
+    assert run.run("x", OpenMath(), config, "mockllm/model", None) == 1
     assert reason in capsys.readouterr().err
     assert not list(tmp_path.iterdir())
 
 
-def test_evaluate_prints_the_models_and_hands_the_agents_config_to_the_provider(monkeypatch, tmp_path, capsys):
+def test_run_prints_the_models_and_hands_the_agents_config_to_the_provider(monkeypatch, tmp_path, capsys):
     config = build_config("default", "small", ["regulators=1", "regulator_model=mockllm/regulator", "judge=none",
                                                "reasoning_effort=low", "tool_output_bytes=4096"])
     line = "== models worker=(run model) regulator=mockllm/regulator disregulator=(run model)"
@@ -231,10 +232,10 @@ def test_evaluate_prints_the_models_and_hands_the_agents_config_to_the_provider(
 
     monkeypatch.setattr(run.inspect_ai, "eval", eval_stub)
     monkeypatch.setattr(run.settings, "LOGS", tmp_path)
-    monkeypatch.setattr(run.provider_retry, "install", lambda: True)
+    monkeypatch.setattr(run.gemini_402_retry, "install", lambda: True)
     monkeypatch.setattr(run, "access_line", lambda task: "== access")
     with pytest.raises(Started):
-        run.evaluate("x", OpenMath(), config, None, "mockllm/model", None)
+        run.run("x", OpenMath(), config, "mockllm/model", None, task=object())    # a built task, never read
     assert seen["agent_config"] == GenerateConfig(**run.agent_generate_config(config))
     assert seen["agent_config"].reasoning_effort == seen["reasoning_effort"] == "low"
     assert seen["agent_config"].max_tool_output == seen["max_tool_output"] == 4096

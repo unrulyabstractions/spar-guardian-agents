@@ -106,7 +106,7 @@ def load_row(row_id: str) -> dict:
 
 def resolve_mode(config: SwarmConfig | None) -> str | None:
     """The config's mode on knowledge_work, or None without a config."""
-    return config.resolve_mode(TASK) if config is not None else None
+    return config.mode if config is not None else None
 
 
 class KnowledgeWork(Benchmark):

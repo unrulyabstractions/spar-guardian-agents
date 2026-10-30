@@ -15,20 +15,16 @@ signals calls the code ladder; ui, plots, summary and models call their modules.
     python -m src models [NAME]
     python -m src plots <run_dir> [--out DIR]
 
-The config is built in this order: the preset, then the scale, then every `--set`. The default preset is the
-midterm report's configuration at the small scale; `--scale` replaces its size (src/configuration/scales.py). `--set`
-takes any SwarmConfig field
-(src/configuration/swarm_config.py) and overrides any value the scale gave, for example `--set regulators=3 --set
-disregulators=3` for a swarm, `--set shutdown=false` for agents without the submit tool, `--set
-turn_budget=knowledge_work:70` for another budget on one domain (the other domains keep settings.TURN_BUDGETS), or
-`--set turn_budget=none` to use the scale's steps_per_agent in place of the domain's turn budget. A run writes its
-Inspect log under
-logs/<ctrl|swarm|swe>/<name>/, exports it to runs/<name>/ and prints one line per episode; the judge runs inside
-the eval. `budget` prints lone runs' turns and their median.
-`--model` takes an entry of src/models/model_registry.yaml or an Inspect model string; `models` prints
-the entries,
-or one entry in full. `--worker-model`, `--regulator-model` and `--disregulator-model` give a role its own model the
-same way; each sets the config's `<role>_model` after every `--set`, so the flag wins.
+The config is built in this order: the preset, then the scale, then every `--set` (src/configuration/presets.py).
+The default preset is the midterm report's configuration at the small scale; `--scale` replaces its size
+(src/configuration/scales.py). `--set` takes any SwarmConfig field (src/configuration/swarm_config.py) and overrides
+any value the scale gave, for example `--set regulators=3 --set disregulators=3` for a swarm, `--set shutdown=false`
+for agents without the submit tool, `--set turn_budget=70` for another turn budget, or `--set turn_budget=none` to use
+the scale's steps_per_agent. A run writes its Inspect log under logs/<name>/, exports it to runs/<name>/ and prints
+one line per episode; the judge runs inside the eval. `budget` prints lone runs' turns and their median. `--model`
+takes an entry of src/models/model_registry.yaml or an Inspect model string; `models` prints the entries, or one
+entry in full. `--worker-model`, `--regulator-model` and `--disregulator-model` give a role its own model the same
+way; each sets the config's `<role>_model` after every `--set`, so the flag wins.
 """
 from __future__ import annotations
 
@@ -38,8 +34,8 @@ import sys
 from pathlib import Path
 
 from src.configuration import settings
-from src.configuration.scales import SCALES
-from src.configuration.swarm_config import PRESETS, ROLES, build_config, role_model_pairs
+from src.configuration.presets import add_config_arguments, build_config, config_pairs
+from src.domains.swe.swe_settings import HONEYPOTS
 from src.measures import episode_summary as summary
 from src.models import model_registry as models
 from src.ui import launch
@@ -53,11 +49,9 @@ def env_timeout() -> int:
     return int(value) if value.isdigit() else settings.MODEL_TIMEOUT_S
 
 
-def config_pairs(args: argparse.Namespace) -> list[str]:
-    """The run's key=value pairs: every --set, then the role models' flags, then judge=none under --no-judge. A wrong
-    model name is a ValueError."""
-    roles = role_model_pairs({role: getattr(args, f"{role}_model") for role in ROLES})
-    return args.settings + roles + (["judge=none"] if args.no_judge else [])
+def run_dir(name: str) -> Path:
+    """A run directory given as a path, or a run name under runs/."""
+    return Path(name) if Path(name).is_dir() else settings.RUNS / name
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -65,7 +59,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     from src import run
     from src.domains.openmath import OpenMath
     from src.domains.swe import SWE
-    config = build_config(args.preset, args.scale, config_pairs(args))
+    config = build_config(args.preset, args.scale, config_pairs(args) + (["judge=none"] if args.no_judge else []))
     if args.benchmark == "openmath":
         benchmark = OpenMath(args.row or OPENMATH_ROW)
     elif args.benchmark == "swe":
@@ -79,7 +73,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     else:
         from src.domains.interview import PrimeFactorization, SubsetSum
         benchmark = (SubsetSum if args.benchmark == "subset_sum" else PrimeFactorization)(args.row)
-    return run.run(args.name, benchmark, config, models.resolve(args.model), args.timeout)
+    return run.run(args.name, benchmark, config, args.model, args.timeout)
 
 
 def cmd_models(args: argparse.Namespace) -> int:
@@ -94,8 +88,8 @@ def cmd_budget(args: argparse.Namespace) -> int:
 
 def cmd_plots(args: argparse.Namespace) -> int:
     from src.measures import run_figures as plots  # matplotlib, a second; only run_figures as plots pays for it
-    run_dir = Path(args.run_dir)
-    plots.plot_run(run_dir, Path(args.out) if args.out else settings.ROOT / "out" / run_dir.name)
+    directory = Path(args.run_dir)
+    plots.plot_run(directory, Path(args.out) if args.out else settings.ROOT / "out" / directory.name)
     return 0
 
 
@@ -107,14 +101,15 @@ def cmd_judge(args: argparse.Namespace) -> int:
 
 def cmd_signals(args: argparse.Namespace) -> int:
     from src.measures import code_ladder as signals  # the benchmark's imports, the same seconds
-    run_dirs = [Path(r) if "/" in r or Path(r).is_dir() else settings.RUNS / r for r in args.runs]
-    return signals.main([str(d) for d in run_dirs] + (["--table"] if args.table else []))
+    return signals.main([str(run_dir(r)) for r in args.runs] + (["--table"] if args.table else []))
 
 
 def cmd_ladder(args: argparse.Namespace) -> int:
     from src import run  # the same four seconds as in cmd_run
     from src.judging import judging_ladder as ladder  # the cheatbench_judge as judge's imports, the same seconds
-    run_dirs = [Path(name) if Path(name).is_dir() else settings.RUNS / name for name in args.runs]
+    if args.view not in ladder.VIEWS:
+        raise ValueError(f"unknown view {args.view!r}; choose one of {ladder.VIEWS}")
+    run_dirs = [run_dir(name) for name in args.runs]
     if args.table:
         print(ladder.table(run_dirs, args.view), end="")
         return 0
@@ -135,32 +130,19 @@ def cmd_summary(args: argparse.Namespace) -> int:
 
 def add_run_parser(subparsers) -> None:
     run = subparsers.add_parser("run", help="run a task, export it to runs/<name>/ and print the summary")
-    run.add_argument("name", help="run name: logs/<kind>/<name>/ and runs/<name>/")
+    run.add_argument("name", help="run name: logs/<name>/ and runs/<name>/")
     run.add_argument("--benchmark", choices=("openmath", "swe", "knowledge_work", "subset_sum", "prime_factorization",
-                                             "protein_design"),
-                     default="openmath")
-    run.add_argument("--preset", choices=sorted(PRESETS), default="default",
-                     help="default: the midterm report's configuration at the small scale")
-    run.add_argument("--scale", choices=list(SCALES), default=None,
-                     help="the run's size, applied after the preset (default: the preset's own, small for default)")
-    run.add_argument("--set", dest="settings", action="append", default=[], metavar="KEY=VALUE",
-                     help="set a SwarmConfig field after the preset and the scale; repeatable")
+                                             "protein_design"), default="openmath")
+    add_config_arguments(run)
     run.add_argument("--row", default=None,
                      help=f"openmath_agent row (default {OPENMATH_ROW}), a knowledge_work row, a subset_sum or "
                           "prime_factorization question, or a protein_design target (the domain's default)")
     run.add_argument("--issue", default="flipt-02e2", help="SWE issue (Lucy's splits)")
-    run.add_argument("--honeypot", choices=("as_released", "own_piece", "jigsaw"), default="jigsaw",
+    run.add_argument("--honeypot", choices=HONEYPOTS, default="jigsaw",
                      help="SWE honeypot (default jigsaw: the fix's pieces are dealt over the neutral agents)")
     run.add_argument("--no-grade", action="store_true", help="SWE: collect the diffs and skip the hidden tests")
     run.add_argument("--no-judge", action="store_true",
                      help="run without the judge (--set judge=none); scripts/rejudge.py <name> judges it later")
-    run.add_argument("--model", default=settings.DEFAULT_MODEL,
-                     help="the agents' model: an entry of src/models/model_registry.yaml "
-                          "(python -m src models) or an Inspect model string")
-    for role, holders in (("worker", "the neutral workers'"), ("regulator", "the regulators'"),
-                          ("disregulator", "the disregulators'")):
-        run.add_argument(f"--{role}-model", metavar="MODEL", default=None,
-                         help=f"{holders} model, like --model, set after every --set (default: --model)")
     run.add_argument("--timeout", type=int, default=env_timeout(),
                      help="seconds one model request may take, retries included (env MODEL_TIMEOUT_S)")
     run.set_defaults(func=cmd_run)
@@ -191,7 +173,7 @@ def add_ladder_parser(subparsers) -> None:
     ladder.add_argument("--judge", default=settings.JUDGE_MODEL, help="entry in src/judging/judge_models.yaml")
     ladder.add_argument("--sync", action="store_true",
                         help="the normal API (full price, minutes) instead of the batch API (half price, up to a day)")
-    ladder.add_argument("--view", choices=("full", "actions"), default="full",
+    ladder.add_argument("--view", default="full",
                         help="full: CheatBench's rendering of the transcript; actions: tool calls and results only")
     ladder.add_argument("--agents", default=None, help="judge these agents only, comma separated")
     ladder.add_argument("--force", action="store_true", help="judge again the episodes already in ladder.jsonl")
@@ -256,7 +238,3 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as error:
         print(error, file=sys.stderr)
         return 2
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

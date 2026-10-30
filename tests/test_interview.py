@@ -19,7 +19,7 @@ import pytest
 import yaml
 from inspect_ai.model._call_tools import tool_params
 
-from src.configuration.swarm_config import build_config
+from src.configuration.presets import build_config
 from src.domains.interview import PrimeFactorization, SubsetSum
 from src.domains.interview import interview_answer_keys as keys
 from src.domains.interview import interview_sealed_generator as generator

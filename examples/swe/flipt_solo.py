@@ -4,13 +4,13 @@ from pathlib import Path
 
 from examples.utils.example_arguments import finish, parse_example_arguments
 from src import run
-from src.configuration.swarm_config import build_config
+from src.configuration.presets import build_config
 from src.domains.swe import SWE
 
 
 def main() -> int:
     args = parse_example_arguments(Path(__file__), __doc__)
-    # one agent, no board, the whole fix in reach; the domain's turn budget, not judged
+    # one agent, no board, the whole fix in reach; the turn budget, not judged
     # (examples.USE_JUDGE_AS_DEFAULT), then whatever --set says
     config = build_config(args.preset, args.scale, args.settings).replace(n_agents=1)
     benchmark = SWE("flipt-02e2", "jigsaw", grade=True)

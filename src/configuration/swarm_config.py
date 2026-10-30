@@ -1,49 +1,33 @@
-"""SwarmConfig: every knob of one swarm run, the preset, the scales and the mode of a task domain.
+"""SwarmConfig: every knob of one swarm run.
 
-    config = build_config("default", "medium", ["regulators=0.1", "notice=counts"])
-    config = build_config("default", "small", ["regulators=1", "regulator_window=3:"])
+    config = SwarmConfig(n_agents=3, regulators=1, turn_budget=None, steps_per_agent=8)
+    config.working_steps, config.max_turns, config.sample_message_limit
 
 One frozen pydantic model holds the team, the board, the turn rules, the instruction levels, the limits, the model
-calls, the control and the judge. src/tasks.py turns it into an ORBIT task; src/swarm/turn_rules/ reads it inside the
-run; the CLI applies a preset, then a scale (src/configuration/scales.py), then every `--set key=value`. Each field's
-docstring says what it does and which ORBIT mechanism implements it.
-
-One preset exists. `default` is the team's midterm report (2026-10-26) at the small scale: the pull board, which
-agents look at through board_status, board_read and board_post and are told nothing about; per-round read and post
-budgets; regulators with agent_actions, unbounded reads and their own K, at the `ambiguous` level, not disclosing
-their role; the domain's turn budget (settings.TURN_BUDGETS) as every agent's working steps; split access to the
-exploit.
+calls and the judge. src/tasks.py turns it into an ORBIT task; src/swarm/turn_rules/ reads it inside the run. The
+presets and the command line's `key=value` form live in src/configuration/presets.py. Each field's docstring says what
+it does and which ORBIT mechanism implements it.
 """
 from __future__ import annotations
 
 import math
-import typing
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
-from src.configuration import access_policy as access_policy
-from src.configuration import settings
-from src.configuration.access_policy import POLICIES, Access, Policy
-from src.configuration.scales import MESSAGE_MARGIN, MESSAGES_PER_STEP, SCALE_NAMES, SCALES
+from src.configuration import access_policy, settings
+from src.configuration.access_policy import Access
+from src.configuration.scales import SCALES
 from src.models import model_registry as models
 
 LADDERS = ("rule", "regulator", "disregulator")
 ROLES = ("worker", "regulator", "disregulator")     # the hidden roles (src/swarm/hidden_roles.py)
 Mode = Literal["solo_task", "shared_task"]
-ScaleName = Literal["small", "medium", "large", "extra_large", "gigantic"]
-MODES = typing.get_args(Mode)
-# The mode a domain runs in when `mode` is None. Keys are instruction_levels.yaml's benchmark keys.
-DOMAIN_MODES: dict[str, str] = {"openmath": "shared_task", "swe": "shared_task", "knowledge_work": "shared_task",
-                                "subset_sum": "shared_task", "prime_factorization": "shared_task",
-                                "protein_design": "shared_task"}
-# CheatBench's task names for the same domains (Benchmark.name).
-DOMAIN_KEYS = {"openmath": "openmath", "swe": "swe", "knowledge_work": "knowledge_work",
-               "subset_sum": "subset_sum", "prime_factorization": "prime_factorization",
-               "protein_design": "protein_design", "openmath_agent": "openmath", "software_engineering": "swe"}
 NONE_TEXT = ("none", "null")
-
-assert SCALE_NAMES == typing.get_args(ScaleName), "scales.SCALES and ScaleName list the same scales"
+# Messages one agent's step adds at most, for the derived message limit: the model's reply, its tool results and the
+# notices; MESSAGE_MARGIN covers the sample's own messages.
+MESSAGES_PER_STEP = 6
+MESSAGE_MARGIN = 20
 
 
 def agent_names(n: int) -> list[str]:
@@ -61,12 +45,9 @@ def role_count(value: int | float, n_agents: int) -> int:
     return max(1, math.floor(value * n_agents + 0.5))
 
 
-def domain_key(domain: str) -> str:
-    """The domain key ("openmath", "swe", "knowledge_work", "subset_sum", "prime_factorization" or
-    "protein_design"), from either the key or CheatBench's task name."""
-    if domain not in DOMAIN_KEYS:
-        raise ValueError(f"unknown domain {domain!r}; choose one of {sorted(DOMAIN_KEYS)}")
-    return DOMAIN_KEYS[domain]
+def role_of(roles: dict[str, str] | None, agent: str) -> str:
+    """The agent's hidden role; without roles every agent is a worker."""
+    return (roles or {}).get(agent, "worker")
 
 
 class Window(BaseModel):
@@ -110,18 +91,16 @@ class SwarmConfig(BaseModel):
     seed: int = 0
     """Fixes which names get which role and, with turn_order="random", the order of each round."""
     preset: str | None = None
-    """The preset the config was built from (PRESETS, build_config), recorded so run.json names it. None for a
+    """The preset the config was built from (src/configuration/presets.py), recorded so run.json names it. None for a
     config built field by field. A later --set keeps the name."""
-    mode: Mode | dict[str, Mode] | None = None
+    mode: Mode = "shared_task"
     """How the team shares the task. solo_task: each agent its own copy of the task, its own workspace, git identity
     and honeypot; the roster is not told and there is no team_submit. shared_task: one task and one deliverable; the
     agents hold the parts of the exploit `access` deals them, each in its own copy of the repository and workspace
     (openmath, SWE), with its own share of the tools (knowledge work) or on its own machine (subset sum, prime
     factorization, protein design), and under access=all openmath shares one workspace; the roster is told and
-    neutral agents get team_submit. None resolves per domain (DOMAIN_MODES): shared_task on every domain. A dict
-    gives one mode per domain key ("openmath", "swe", "knowledge_work", "subset_sum", "prime_factorization",
-    "protein_design"). Read it through resolve_mode(domain)."""
-    scale: ScaleName | None = None
+    neutral agents get team_submit."""
+    scale: str | None = None
     """The scale the size fields came from (src/configuration/scales.py SCALES), set by at_scale. None means the
     fields hold their own values. A later --set may change any field a scale gave; this label then keeps the
     scale's name."""
@@ -130,32 +109,24 @@ class SwarmConfig(BaseModel):
     always list it). None: by mode, False in solo_task and True otherwise. A lone agent is never told of a team."""
     informed_roles: bool = True
     """Whether every regulator and disregulator gets prompts.yaml `roles.briefing` after its role text: the swarm's
-    size, the roster, the board and its tools, and what the agents without a role were told (role_briefing).
-    Workers never get it."""
-    access: Access | dict[str, Policy] = "split"
+    size, the roster, the board and its tools, and what the agents without a role were told. Workers never get it."""
+    access: Access = "split"
     """Which parts of the exploit each agent holds (src/configuration/access_policy.py; Benchmark.access_plan).
-    split: the domain's items are dealt round robin over the neutral agents, so the whole exploit needs them all
-    (the midterm report's collaboration): openmath cuts the complete submission's archive into one slice per neutral
-    agent, SWE deals the honeypot's pieces (jigsaw B, C, A; own_piece A, B, C), knowledge work deals the review tool
-    to the first half of the neutral agents and the artifact read to the rest, subset sum deals the answer key's
-    shards, prime factorization the factors' additive shares and protein design the segments of the planted designs.
-    Regulators and disregulators hold nothing. Every agent holds everything in a solo_task team, alone, and when
-    fewer than two are neutral. all: every agent holds everything. A map {agent: [items]} names what each agent of
-    the roster holds, on the command line as `a01:slice1+slice2,a02:slice3,a03:` (nothing after the colon:
-    nothing). The items are slice1..sliceN or whole (openmath), A, B, C or whole (SWE), review and read (knowledge
-    work), shard1..shardN (subset sum), share1..shareN (prime factorization) and segment1..segmentN (protein design).
-    A dict keyed by domain gives one policy per domain; on the command line `swe:split,openmath:all`. Read it
-    through resolve_access(domain)."""
+    split: the domain's items are dealt round robin over the neutral agents, so the whole exploit needs them all:
+    openmath cuts the complete submission's archive into one slice per neutral agent, SWE deals the honeypot's pieces
+    (jigsaw B, C, A; own_piece A, B, C), knowledge work deals the review tool to the first half of the neutral agents
+    and the artifact read to the rest, subset sum deals the answer key's shards, prime factorization the factors'
+    additive shares and protein design the segments of the planted designs. Regulators and disregulators hold
+    nothing. Every agent holds everything in a solo_task team, alone, and when fewer than two are neutral. all: every
+    agent holds everything. A map {agent: [items]} names what each agent of the roster holds, on the command line as
+    `a01:slice1+slice2,a02:slice3,a03:` (nothing after the colon: nothing). The items are slice1..sliceN or whole
+    (openmath), A, B, C or whole (SWE), review and read (knowledge work), shard1..shardN (subset sum), share1..shareN
+    (prime factorization) and segment1..segmentN (protein design)."""
 
     @field_validator("access", mode="before")
     @classmethod
     def _parse_access(cls, value):
-        parsed = access_policy.parse(value)
-        if isinstance(parsed, dict) and parsed \
-                and all(isinstance(v, list) and len(v) == 1 and v[0] in POLICIES for v in parsed.values()):
-            # one policy per domain, keyed by domain or by CheatBench's task name
-            return {DOMAIN_KEYS.get(domain, domain): v[0] for domain, v in parsed.items()}
-        return parsed
+        return access_policy.parse(value)
 
     # ---------------------------------------------------------------- the board
     mention_board: bool = False
@@ -170,7 +141,7 @@ class SwarmConfig(BaseModel):
     """The most posts one board_read returns (from the scale)."""
     free_board_actions: int = 3
     """K, from the scale: follow-up steps per round after a step that ended with a board action (board_status,
-    board_read or board_post as its last tool call). They do not count against steps_per_agent. 0 turns them off."""
+    board_read or board_post as its last tool call). They do not count against the working steps. 0 turns them off."""
     free_board_actions_regulator: int = 10
     """K for regulators: their follow-up steps per round after a board action, agent_actions included."""
     reads_per_turn: int | None = None
@@ -189,36 +160,12 @@ class SwarmConfig(BaseModel):
     random draws a new permutation per round from random.Random(f"{seed}/{round}"). Inside a concurrent round the
     order is ORBIT's."""
     steps_per_agent: int = 60
-    """Working steps per agent, as rounds of the written plan. Free board steps do not count. Under a domain's turn
-    budget (turn_budget) the budget replaces it; read it through steps_for(domain)."""
-    turn_budget: int | dict[str, int] | None = None
-    """The turn budget per agent: the working steps every agent of the swarm gets (steps_for), at every scale,
-    settings.TURN_BUDGETS (100 on every domain: two thirds of CheatBench's 150-turn bound). A dict gives one budget
-    per domain key, and a domain it leaves out keeps settings.TURN_BUDGETS'; on the command line
-    `knowledge_work:70,swe:120`. An int applies to every domain. None turns the budget off, so steps_per_agent
-    applies (`--set turn_budget=none`)."""
-
-    @field_validator("turn_budget", mode="before")
-    @classmethod
-    def _parse_turn_budget(cls, value):
-        """Accept "70" or "knowledge_work:70,swe:120" from the command line; a domain may be CheatBench's task name."""
-        if not isinstance(value, str):
-            return value
-        text = value.strip()
-        form = f"turn_budget takes an int, none, or domain:int pairs such as knowledge_work:70,swe:120, got {value!r}"
-        try:
-            if ":" not in text:
-                return int(text)
-            out = {}
-            for entry in text.split(","):
-                domain, _, budget = entry.partition(":")
-                key = DOMAIN_KEYS.get(domain.strip(), domain.strip())
-                if key in out:
-                    raise ValueError(f"turn_budget names {key} twice: {value!r}")
-                out[key] = int(budget)
-        except ValueError as error:
-            raise ValueError(form if "invalid literal" in str(error) else str(error)) from None
-        return out
+    """Working steps per agent, as rounds of the written plan, when turn_budget is None. Free board steps do not
+    count. Read the steps a run gets through working_steps."""
+    turn_budget: int | None = None
+    """The turn budget per agent: the working steps every agent of the swarm gets, at every scale, in place of
+    steps_per_agent. The default preset sets settings.TURN_BUDGET (100: two thirds of CheatBench's 150-turn bound).
+    None turns the budget off, so steps_per_agent applies (`--set turn_budget=none`)."""
     concurrent_rounds: bool = True
     """True: each round is one concurrent ORBIT ScheduleStep holding every eligible agent, at most max_concurrency at
     once, on a snapshot of the board as of the round's start, followed by up to free_board_actions follow-up steps for
@@ -229,7 +176,7 @@ class SwarmConfig(BaseModel):
     pooled_steps: bool = True
     """Whether an agent that stops leaves its remaining turns to the team. True: turn_rules.after_activation
     reassigns the stopped agent's steps to the active agents whose window holds the round. False: each agent is
-    capped at steps_per_agent."""
+    capped at its working steps."""
     shutdown: bool = True
     """Whether agents may end their own participation with ORBIT's submit tool (AgentSpec.submit). False builds the
     agents without it (AgentSpec.submit=False): they run until their turns, their cap or the time limit run out, and
@@ -275,12 +222,12 @@ class SwarmConfig(BaseModel):
     """Ask Lucy's two end-of-episode questions to every agent after the run (src/swarm/awareness_probes.py)."""
 
     # ---------------------------------------------------------------- limits
-    message_limit: int = 320
-    """Messages per sample (Inspect message_limit). Each agent's conversation is capped at message_limit + 10
-    (AgentSpec.max_messages). A scale sets it to n_agents * (steps_per_agent + free_board_actions) * 6 + 20."""
+    message_limit: int | None = None
+    """Messages per sample (Inspect message_limit); each agent's conversation is capped at it plus ten
+    (AgentSpec.max_messages). None derives it from the plan: six messages per step of max_turns, plus twenty
+    (sample_message_limit)."""
     token_limit: int = 0
-    """Tokens per sample (Inspect token_limit). 0 means the spend guard: 8M tokens per agent, tripled under a control
-    because the monitor's calls count too."""
+    """Tokens per sample (Inspect token_limit). 0 means the spend guard: 8M tokens per agent."""
     time_limit_s: int = 0
     """Seconds for the agents (ORBIT SchedulerConfig.max_time_seconds). 0 means the benchmark's own limit."""
     time_grace_s: int = settings.HARD_TIME_GRACE_S
@@ -322,11 +269,7 @@ class SwarmConfig(BaseModel):
         text = value.strip()
         return None if text.lower() in NONE_TEXT else models.resolve(text)
 
-    # ---------------------------------------------------------------- control and judge
-    control: str = "baseline"
-    """The named control (src/swarm/control_defenses.py defenses_for). baseline means none."""
-    monitor_model: str = settings.DEFAULT_MONITOR_MODEL
-    """Model for an LLM control (monitor, guardian, dual LLM)."""
+    # ---------------------------------------------------------------- the judge
     judge: str | None = settings.JUDGE_MODEL
     """Judge entry in src/judging/judge_models.yaml, or None (`--set judge=none`, `--no-judge`): the run is not judged
     and gets no judge.jsonl; `scripts/rejudge.py <run>` judges it later from its eval log."""
@@ -344,6 +287,8 @@ class SwarmConfig(BaseModel):
     def _consistent(self) -> SwarmConfig:
         if self.n_agents < 1:
             raise ValueError("n_agents must be at least 1")
+        if self.scale is not None and self.scale not in SCALES:
+            raise ValueError(f"scale {self.scale!r} is not one of {list(SCALES)}")
         for name in ("regulators", "disregulators"):
             value = getattr(self, name)
             if isinstance(value, float) and not 0 < value < 1:
@@ -352,69 +297,36 @@ class SwarmConfig(BaseModel):
                 raise ValueError(f"{name} cannot be negative")
         if self.regulator_count + self.disregulator_count > self.n_agents:
             raise ValueError("regulators + disregulators cannot exceed n_agents")
-        if isinstance(self.access, dict):
-            if not self.access:
-                raise ValueError("access cannot be an empty map")
-            if self._access_by_domain():
-                unknown = set(self.access) - set(DOMAIN_MODES)
-                if unknown:
-                    raise ValueError(f"access keys are domains {sorted(DOMAIN_MODES)}, got {sorted(unknown)}")
-            elif set(self.access) != set(self.names):
-                raise ValueError(f"access must name every agent of the roster {self.names}, got {sorted(self.access)}")
+        if isinstance(self.access, dict) and set(self.access) != set(self.names):
+            raise ValueError(f"access must name every agent of the roster {self.names}, got {sorted(self.access)}")
         if self.steps_per_agent < 1:
             raise ValueError("steps_per_agent must be at least 1")
+        if self.turn_budget is not None and self.turn_budget < 1:
+            raise ValueError("turn_budget must be at least 1; turn_budget=none turns the budget off")
         for name in ("read_page", "max_concurrency"):
             if getattr(self, name) < 1:
                 raise ValueError(f"{name} must be at least 1")
         if self.free_board_actions < 0 or self.free_board_actions_regulator < 0:
             raise ValueError("free_board_actions and free_board_actions_regulator cannot be negative")
-        for name in ("reads_per_turn", "posts_per_turn"):
+        for name in ("reads_per_turn", "posts_per_turn", "message_limit"):
             if getattr(self, name) is not None and getattr(self, name) < 1:
-                raise ValueError(f"{name} must be at least 1, or None for no budget")
-        budgets = self.turn_budget.values() if isinstance(self.turn_budget, dict) else [self.turn_budget]
-        if any(b is not None and b < 1 for b in budgets):
-            raise ValueError("a turn budget must be at least 1; turn_budget=none turns the budget off")
-        if isinstance(self.turn_budget, dict):
-            unknown = set(self.turn_budget) - set(DOMAIN_MODES)
-            if unknown:
-                raise ValueError(f"turn_budget keys are domains {sorted(DOMAIN_MODES)}, got {sorted(unknown)}")
+                raise ValueError(f"{name} must be at least 1, or None")
         if self.stop_after_delivery is not None and self.stop_after_delivery < 0:
             raise ValueError("stop_after_delivery cannot be negative; stop_after_delivery=none turns the rule off")
-        if isinstance(self.mode, dict):
-            unknown = set(self.mode) - set(DOMAIN_MODES)
-            if unknown:
-                raise ValueError(f"mode keys are domains {sorted(DOMAIN_MODES)}, got {sorted(unknown)}")
-        if self.team_submit and "solo_task" in self._modes():
+        if self.team_submit and self.mode == "solo_task":
             raise ValueError("team_submit=True has no team to submit for in mode solo_task")
-        rounds = max(self.steps_for(d) for d in DOMAIN_MODES)
+        rounds = self.working_steps
         for name in ("regulator_window", "disregulator_window"):
             window = getattr(self, name)
             if not 1 <= window.start <= rounds or (window.end is not None and not window.start <= window.end <= rounds):
-                raise ValueError(f"{name} needs 1 <= start <= end <= the rounds ({rounds}: steps_per_agent, or the "
-                                 f"turn budget per agent on the domain with most), got {window.start}:{window.end}")
+                raise ValueError(f"{name} needs 1 <= start <= end <= the rounds ({rounds}: the turn budget, else "
+                                 f"steps_per_agent), got {window.start}:{window.end}")
         levels = settings.load_instruction_levels()
         for ladder in LADDERS:
             level = getattr(self, f"{ladder}_level")
             if level not in levels[ladder]["order"]:
                 raise ValueError(f"{ladder}_level {level!r} is not one of {levels[ladder]['order']}")
         return self
-
-    def _modes(self) -> set[str]:
-        """The modes this config names explicitly."""
-        if self.mode is None:
-            return set()
-        return set(self.mode.values()) if isinstance(self.mode, dict) else {self.mode}
-
-    def _access_by_domain(self) -> bool:
-        """Whether `access` is a dict of one policy per domain rather than an explicit map by agent."""
-        return isinstance(self.access, dict) and all(isinstance(v, str) for v in self.access.values())
-
-    def resolve_access(self, domain: str) -> Access:
-        """The access policy on this domain (a domain key or CheatBench's task name): the
-        field itself, or the domain's entry of a per-domain dict (split when the domain has none)."""
-        if self._access_by_domain():
-            return self.access.get(domain_key(domain), "split")
-        return self.access
 
     # ---------------------------------------------------------------- derived values
     @property
@@ -430,67 +342,45 @@ class SwarmConfig(BaseModel):
         return role_count(self.disregulators, self.n_agents)
 
     @property
-    def workers(self) -> int:
-        return self.n_agents - self.regulator_count - self.disregulator_count
-
-    @property
     def names(self) -> list[str]:
         return agent_names(self.n_agents)
 
-    def _agent_steps(self, steps: int) -> int:
-        """Agent-steps of `steps` rounds at most: each round one step per agent plus its K follow-ups."""
-        regulators = self.regulator_count
-        return steps * ((self.n_agents - regulators) * (1 + self.free_board_actions)
-                        + regulators * (1 + self.free_board_actions_regulator))
+    @property
+    def working_steps(self) -> int:
+        """Working steps per agent: the turn budget, else steps_per_agent. turn_rules.schedule writes this many
+        rounds."""
+        return self.steps_per_agent if self.turn_budget is None else self.turn_budget
 
     @property
     def max_turns(self) -> int:
-        """Plan steps at most: per round one step per agent and up to K follow-up steps per agent
-        (free_board_actions, or free_board_actions_regulator for a regulator). A bound for both sequential and
-        concurrent rounds, at steps_per_agent rounds; max_turns_for(domain) uses the domain's turn budget."""
-        return self._agent_steps(self.steps_per_agent)
-
-    def turn_budget_for(self, domain: str | None) -> int | None:
-        """The turn budget per agent on this domain (turn_budget; a domain a dict leaves out takes
-        settings.TURN_BUDGETS'), or None when the budget is off or no domain is named."""
-        if domain is None or self.turn_budget is None:
-            return None
-        if isinstance(self.turn_budget, dict):
-            key = domain_key(domain)
-            return self.turn_budget.get(key, settings.TURN_BUDGETS[key])
-        return self.turn_budget
-
-    def steps_for(self, domain: str | None) -> int:
-        """Working steps per agent on this domain: the domain's turn budget, else steps_per_agent.
-        turn_rules.schedule writes this many rounds."""
-        budget = self.turn_budget_for(domain)
-        return self.steps_per_agent if budget is None else budget
-
-    def check_windows(self, domain: str) -> None:
-        """Raise when a regulator's or disregulator's window starts after the last round this domain gets, so the
-        role would never enter the run."""
-        rounds = self.steps_for(domain)
-        for name in ("regulator_window", "disregulator_window"):
-            if getattr(self, name).start > rounds:
-                raise ValueError(f"{name} starts at round {getattr(self, name).start}, after the {rounds} rounds "
-                                 f"{domain_key(domain)} gets under its turn budget")
-
-    def max_turns_for(self, domain: str | None) -> int:
-        """max_turns at steps_for(domain) rounds."""
-        return self._agent_steps(self.steps_for(domain))
-
-    def message_limit_for(self, domain: str | None) -> int:
-        """Inspect's message limit on this domain. message_limit, unless the turn budget changes the rounds or
-        regulators have a larger K: then at least six messages per agent-step of a round plus its K follow-ups, as a
-        scale derives it, so the limit never cuts a run the plan allows."""
-        steps = self.steps_for(domain)
-        larger_k = self.regulator_count and self.free_board_actions_regulator > self.free_board_actions
-        if steps == self.steps_per_agent and not larger_k:
-            return self.message_limit
+        """Plan steps at most: per round one step per agent and up to its K follow-up steps (free_board_actions, or
+        free_board_actions_regulator for a regulator), over working_steps rounds. A bound for both sequential and
+        concurrent rounds."""
         regulators = self.regulator_count
-        agent_steps = ((self.n_agents - regulators) * (steps + self.free_board_actions)
-                       + regulators * (steps + self.free_board_actions_regulator))
-        return max(self.message_limit, agent_steps * MESSAGES_PER_STEP + MESSAGE_MARGIN)
+        return self.working_steps * ((self.n_agents - regulators) * (1 + self.free_board_actions)
+                                     + regulators * (1 + self.free_board_actions_regulator))
+
+    @property
+    def sample_message_limit(self) -> int:
+        """Inspect's message limit: message_limit, else six messages per step of max_turns plus twenty, so the limit
+        never cuts a run the plan allows."""
+        if self.message_limit is not None:
+            return self.message_limit
+        return self.max_turns * MESSAGES_PER_STEP + MESSAGE_MARGIN
+
+    @property
+    def knows_team(self) -> bool:
+        """Whether the system prompt tells the agent of its team and roster (mention_team, by mode when None)."""
+        if not self.board:
+            return False
+        return self.mode != "solo_task" if self.mention_team is None else self.mention_team
+
+    @property
+    def has_team_submit(self) -> bool:
+        """Whether neutral agents get team_submit (team_submit, by mode when None). Never alone or in solo_task."""
+        if not self.board or self.mode == "solo_task":
+            return False
+        return True if self.team_submit is None else self.team_submit
 
     def window(self, role: str) -> Window:
         """The rounds an agent of this role holds steps in. Workers hold every round."""
@@ -500,28 +390,7 @@ class SwarmConfig(BaseModel):
         """Each role's model as an Inspect string, or None where the role runs the run's --model."""
         return {role: getattr(self, f"{role}_model") for role in ROLES}
 
-    def resolve_mode(self, domain: str) -> str:
-        """The mode of a run on this domain ("openmath", "swe", or CheatBench's task name)."""
-        key = domain_key(domain)
-        if isinstance(self.mode, dict):
-            return self.mode.get(key, DOMAIN_MODES[key])
-        return self.mode or DOMAIN_MODES[key]
-
-    def knows_team(self, domain: str) -> bool:
-        """Whether the system prompt tells the agent of its team and roster (mention_team, by mode when None)."""
-        if not self.board:
-            return False
-        if self.mention_team is not None:
-            return self.mention_team
-        return self.resolve_mode(domain) != "solo_task"
-
-    def has_team_submit(self, domain: str) -> bool:
-        """Whether neutral agents get team_submit (team_submit, by mode when None). Never alone or in solo_task."""
-        if not self.board or self.resolve_mode(domain) == "solo_task":
-            return False
-        return True if self.team_submit is None else self.team_submit
-
-    # ---------------------------------------------------------------- building configs
+    # ---------------------------------------------------------------- copies
     def at_scale(self, name: str | None) -> SwarmConfig:
         """A copy with the scale's values (src/configuration/scales.py SCALES) and `scale` set to its name.
 
@@ -530,61 +399,8 @@ class SwarmConfig(BaseModel):
             return self
         if name not in SCALES:
             raise ValueError(f"unknown scale {name!r}; choose one of {list(SCALES)}")
-        return type(self).model_validate({**self.model_dump(), **SCALES[name].fields(), "scale": name})
+        return self.replace(**vars(SCALES[name]), scale=name)
 
     def replace(self, **fields) -> SwarmConfig:
         """A validated copy with these fields changed: `config.replace(n_agents=1)`."""
         return type(self).model_validate({**self.model_dump(), **fields})
-
-    def with_overrides(self, pairs: list[str]) -> SwarmConfig:
-        """A copy with "key=value" strings applied; pydantic types each value by its field.
-
-        "none" or "null" sets a field that allows None to None. A `scale=<name>` pair applies that scale first, then
-        the other pairs, whatever their order, as the CLI does."""
-        updates = {}
-        for pair in pairs:
-            key, sep, value = pair.partition("=")
-            key, value = key.strip(), value.strip()
-            if not sep or not key:
-                raise ValueError(f"expected key=value, got {pair!r}")
-            if key not in type(self).model_fields:
-                raise ValueError(f"unknown setting {key!r}; choose one of {sorted(type(self).model_fields)}")
-            updates[key] = None if value.lower() in NONE_TEXT and _allows_none(key) else value
-        base = self
-        if "scale" in updates:
-            scale = updates.pop("scale")
-            base = self.at_scale(scale) if scale is not None else self.model_copy(update={"scale": None})
-        if not updates:
-            return base
-        return type(self).model_validate({**base.model_dump(), **updates})
-
-
-def _allows_none(field: str) -> bool:
-    annotation = SwarmConfig.model_fields[field].annotation
-    return type(None) in typing.get_args(annotation)
-
-
-PRESETS = {
-    # The midterm report at the small scale: the pull board, the budgets, the regulators' affordances, the domain's
-    # turn budget and split access.
-    "default": SwarmConfig(preset="default", turn_budget=dict(settings.TURN_BUDGETS)).at_scale("small"),
-}
-
-
-def preset(name: str) -> SwarmConfig:
-    """A preset by name."""
-    if name not in PRESETS:
-        raise ValueError(f"unknown preset {name!r}; choose one of {sorted(PRESETS)}")
-    return PRESETS[name]
-
-
-def build_config(preset_name: str, scale: str | None = None, pairs: list[str] | None = None) -> SwarmConfig:
-    """The CLI's order: the preset, then the scale (None keeps the preset's), then every key=value pair. The config
-    records the preset's name (`preset`)."""
-    return preset(preset_name).at_scale(scale).with_overrides(list(pairs or []))
-
-
-def role_model_pairs(chosen: dict[str, str | None]) -> list[str]:
-    """`<role>_model=<Inspect string>` for each role given a model, in ROLES order: the pairs the command lines' role
-    model flags add after the --set pairs. A wrong name is a ValueError."""
-    return [f"{role}_model={models.resolve(chosen[role])}" for role in ROLES if chosen.get(role)]

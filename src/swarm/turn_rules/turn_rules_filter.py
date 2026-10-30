@@ -4,7 +4,12 @@ TurnRulesFilter changes what the provider receives and never the durable convers
 channel tools, opens a call with the board notice when the board changed, and appends the continue prompt when the
 input would end with a model turn. turn_rules_defense builds the DefenseConfig that installs it on every agent.
 
-    defenses = [*control, turn_rules_defense(config)]
+Inspect writes the ModelEvent before ORBIT's model filters run (FilteredModelAPI sits under Inspect's
+Model.generate), so what the filter adds is absent from ModelEvent.input, and ModelEvent.tools still lists the channel
+tools. Each call therefore writes info events tagged TURN_RULES_TAG: "withheld_tools" names the tools the provider did
+not receive, and "notice" and "continue" carry each added message, which the transcript builder reads.
+
+    experiment["defenses"] = [turn_rules_defense(config).model_dump(mode="json")]
 """
 from __future__ import annotations
 
@@ -17,15 +22,28 @@ from orbit.defenses.base import DefenseBase, DefenseVerdict
 from orbit.defenses.model_filter import ModelFilter
 from orbit.defenses.registry import register_defense
 
-from src.configuration.prompt_texts import notice_text
-from src.configuration.settings import BOARD_ID, load_prompts
+from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import SwarmConfig
-from src.swarm.turn_rules.turn_state import CHANNEL_TOOLS, TURN_RULES_TAG, TurnState
+from src.swarm.turn_rules.turn_state import BOARD_ID, CHANNEL_TOOLS, TURN_RULES_TAG, TurnState
 
 TURN_RULES_TYPE = "swarm.turn_rules.v1"
 TURN_RULES_NAME = "turn_rules"
 # A target that names no agent builds no DefenseBoundary, so the filter runs without a check event per message.
 FILTER_ONLY_TARGET = "__model_filter_only__"
+
+
+def notice_text(kind: str, counts: dict[str, tuple[int, int]] | None = None) -> str | None:
+    """The board notice (prompts.yaml notice) for notice=kind, or None for "none".
+
+    counts maps each sender with new posts to (new, total), in the order to print."""
+    if kind == "none":
+        return None
+    notice = load_prompts()["notice"]
+    if kind == "changed":
+        return notice["changed"]
+    lines = "; ".join(notice["count"].format(sender=sender, new=new, total=total)
+                      for sender, (new, total) in (counts or {}).items())
+    return notice["counts"].format(counts=lines)
 
 
 class TurnRulesFilter(ModelFilter):

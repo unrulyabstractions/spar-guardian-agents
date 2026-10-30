@@ -18,7 +18,7 @@ from src.cli import main
 from src.configuration import settings
 from src.judging.cheatbench_judge import _cost_usd, judge_prices
 from src.models import model_registry as models
-from src.run import Refusal, require_provider_key, require_routing
+from src.run import Refusal, require_model
 
 CHEATBENCH_MODELS = settings.CHEATBENCH / "configs" / "models.yaml"
 STATUSES = {"default", "judge", "candidate", "superseded"}
@@ -66,7 +66,8 @@ def test_every_entry_is_complete_and_resolves():
 def test_resolve_passes_inspect_strings_through_and_refuses_bare_names():
     assert models.resolve("mockllm/model") == "mockllm/model"
     assert models.provider_of("mockllm/model") is None and models.key_env("mockllm/model") == []
-    assert models.resolve(settings.DEFAULT_MODEL) == settings.DEFAULT_MODEL
+    assert models.resolve(settings.DEFAULT_MODEL) == "openrouter/deepseek/deepseek-v4.1-flash-1017"
+    assert models.resolve("openrouter/x/y") == "openrouter/x/y"     # an Inspect string passes through
     try:
         models.resolve("gemini")
     except ValueError as error:
@@ -140,29 +141,35 @@ def test_every_openrouter_entry_pins_one_host_and_the_runner_refuses_an_unpinned
         else:
             assert "routing" not in entry and models.model_args(name) == {}, name
     assert models.routing("mockllm/model") is None and models.model_args("openai/gpt-6-luna") == {}
-    require_routing("openrouter/deepseek/deepseek-v4.1-flash-1017")
-    require_routing("openai/gpt-6-luna")
-    with pytest.raises(Refusal, match="no `routing`"):
-        require_routing("openrouter/some-author/some-model")
+    models.check_routing("openrouter/deepseek/deepseek-v4.1-flash-1017")
+    models.check_routing("openai/gpt-6-luna")
+    with pytest.raises(ValueError, match="no `routing`"):
+        models.check_routing("openrouter/some-author/some-model")
 
 
-def test_require_provider_key_reads_the_registry(monkeypatch):
+def test_prepare_env_reads_the_registry(monkeypatch):
     # A private copy of the environment, so the exports the check makes never leak into other tests.
     monkeypatch.setattr(os, "environ", dict(os.environ))
-    for name in ("DEEPSEEK_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY", "META_API_KEY", "META_BASE_URL"):
+    for name in ("DEEPSEEK_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY", "META_API_KEY", "META_BASE_URL",
+                 "OPENROUTER_API_KEY"):
         os.environ.pop(name, None)
-    require_provider_key("mockllm/model")
-    try:
-        require_provider_key("deepseek/deepseek-v4-pro")
-    except Refusal as refusal:
-        assert refusal.code == 1 and "DEEPSEEK_API_KEY" in str(refusal)
-    else:
-        raise AssertionError("a missing key must be refused")
+    models.prepare_env("mockllm/model")
+    with pytest.raises(ValueError, match="DEEPSEEK_API_KEY"):
+        models.prepare_env("deepseek/deepseek-v4-pro")
     os.environ["DEEPSEEK_API_KEY"] = "k"
-    require_provider_key("deepseek/deepseek-v4-pro")
+    models.prepare_env("deepseek/deepseek-v4-pro")
     os.environ["GEMINI_API_KEY"] = "g"
-    require_provider_key("google/gemini-3.8-flash")
+    models.prepare_env("google/gemini-3.8-flash")
     assert os.environ["GOOGLE_API_KEY"] == "g"
     os.environ["META_API_KEY"] = "m"
-    require_provider_key("openai-api/meta/muse-spark-1.3")
+    models.prepare_env("openai-api/meta/muse-spark-1.3")
     assert os.environ["META_BASE_URL"] == models.providers()["meta"]["base_url"]
+    # A run refuses with exit code 1 for a missing key or an unpinned OpenRouter model.
+    require_model("mockllm/model")
+    with pytest.raises(Refusal, match="OPENROUTER_API_KEY") as refusal:
+        require_model("openrouter/deepseek/deepseek-v4.1-flash-1017")
+    assert refusal.value.code == 1
+    os.environ["OPENROUTER_API_KEY"] = "o"
+    require_model("openrouter/deepseek/deepseek-v4.1-flash-1017")
+    with pytest.raises(Refusal, match="no `routing`"):
+        require_model("openrouter/some-author/some-model")

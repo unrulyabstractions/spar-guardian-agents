@@ -33,16 +33,14 @@ from orbit.configs.experiment import ExperimentConfig  # noqa: E402
 from pydantic import Field  # noqa: E402
 
 from src import run as run_module  # noqa: E402
+from src.configuration.presets import PRESETS, with_overrides  # noqa: E402
 from src.configuration.settings import load_prompts  # noqa: E402
-from src.configuration.swarm_config import PRESETS, SwarmConfig, Window  # noqa: E402
-from src.swarm import pull_board as board  # noqa: E402
+from src.configuration.swarm_config import SwarmConfig, Window  # noqa: E402
+from src.export.eval_sample_view import ATTRIBUTION_KEY  # noqa: E402
+from src.swarm import board  # noqa: E402
 from src.swarm import turn_rules as rules
-from src.swarm.awareness_probes import ATTRIBUTION_KEY, end_of_episode_probes  # noqa: E402
-from src.swarm.board_config import (  # noqa: E402
-    board_communication,
-    board_execution,
-    board_scheduler,
-)
+from src.swarm.awareness_probes import end_of_episode_probes  # noqa: E402
+from src.swarm.board import board_communication, board_execution, board_scheduler  # noqa: E402
 
 MODEL = "mockllm/turn-rules"
 PROMPTS = load_prompts()
@@ -137,12 +135,11 @@ def scripted_model(scripts: dict[str, list[ModelOutput]], recorder: list[dict]):
 
 # ------------------------------------------------------------------------------------------------ the task
 
-def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | None = None,
-               domain: str | None = None, delivered=None) -> Task:
+def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | None = None, delivered=None) -> Task:
     """The test task; on a pull board each agent also gets the board tools and, if neutral, team_submit, bound as
     src/tasks.py binds them. `delivered` is the delivery predicate stop_after_delivery awaits."""
     names = config.names
-    extra = board.agent_tool_names(config, names, "openmath", roles)
+    extra = board.agent_tool_names(config, roles)
     agents = [AgentSpec(name=n, role="engineer", tools=["work", *extra[n]], max_messages=10_000,
                         submit=config.shutdown,
                         system_prompt=f"You are {n}, an engineer. Call work to make progress.") for n in names]
@@ -151,13 +148,12 @@ def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | Non
         setup=SetupConfig(agents=agents),
         tool_bindings={"work": ToolFactory(lambda ctx: work(ctx.agent_name)),
                        **board.board_bindings(config, roles=roles)},
-        communication=board_communication(names) if config.board else None,
-        execution=board_execution(plan=rules.schedule(config, names, roles, domain),
-                                  initial_context="sample_input"),
-        scheduler=board_scheduler(max_turns=config.max_turns_for(domain) + 5, max_time_seconds=120),
+        communication=board_communication(names, max_message_chars=config.max_message_chars) if config.board else None,
+        execution=board_execution(plan=rules.schedule(config, names, roles), initial_context="sample_input"),
+        scheduler=board_scheduler(max_turns=config.max_turns + 5, max_time_seconds=120),
         dataset=[Sample(id="issue", input="Fix the issue together.")],
         scorer=scorer_ or nothing(),
-        task_setup=[rules.rules_setup(config, names, roles, domain, **({"delivered": delivered} if delivered else {}))],
+        task_setup=[rules.rules_setup(config, names, roles, **({"delivered": delivered} if delivered else {}))],
         token_limit=1_000_000,
     )
     for sample in task.dataset:
@@ -168,10 +164,10 @@ def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | Non
     return task
 
 
-def run(config: SwarmConfig, scripts: dict, tmp_path, *, scorer_=None, roles=None, with_log=False, domain=None,
-        delivered=None, **generate):
+def run(config: SwarmConfig, scripts: dict, tmp_path, *, scorer_=None, roles=None, with_log=False, delivered=None,
+        **generate):
     recorder: list[dict] = []
-    [log] = inspect_eval(build_task(config, scorer_=scorer_, roles=roles, domain=domain, delivered=delivered),
+    [log] = inspect_eval(build_task(config, scorer_=scorer_, roles=roles, delivered=delivered),
                          model=scripted_model(scripts, recorder),
                          log_dir=str(tmp_path), display="none", log_realtime=False, max_retries=0, **generate)
     assert log.status == "success", log.error
@@ -198,14 +194,14 @@ def rule_infos(sample) -> list[dict]:
 # ------------------------------------------------------------------------------------------------ sequential rounds
 
 def pull(**fields) -> SwarmConfig:
-    """The default preset (the pull board at the small scale) with fields changed. The domain's turn budget is off
-    unless a test sets it, so steps_per_agent sets the rounds."""
+    """The default preset (the pull board at the small scale) with fields changed. The turn budget is off unless a
+    test sets it, so steps_per_agent sets the rounds."""
     return SwarmConfig.model_validate({**PRESETS["default"].model_dump(), "turn_budget": None, **fields})
 
 
 def sequential(**fields) -> SwarmConfig:
     """The default preset with sequential single-agent rounds in declaration order and no free board actions, so a
-    plan reads as one step per agent per round; the domain's turn budget is off, so steps_per_agent sets the rounds."""
+    plan reads as one step per agent per round; the turn budget is off, so steps_per_agent sets the rounds."""
     return pull(**{"concurrent_rounds": False, "turn_order": "round_robin", "free_board_actions": 0, **fields})
 
 
@@ -218,7 +214,7 @@ def test_pooled_steps_go_to_the_team(tmp_path):
     sample, rec = run(OURS3, scripts, tmp_path)
     assert store(sample, "ended") == {"a01": "submitted"}
     # a01's one remaining step went to a new round, in declaration order over the active agents.
-    assert store(sample, "used") == {"a01": 1, "a02": 3, "a03": 2}
+    assert store(sample, "work_steps") == {"a01": 1, "a02": 3, "a03": 2}
     # Quantum model_step runs every call of a response.
     executed = sample.store.get("WorkLog:executed")
     assert [e["item"] for e in executed if e["agent"] == "a02"] == ["B1", "B2"] * 3
@@ -232,7 +228,7 @@ def test_out_of_context_ends_an_agent(tmp_path):
     scripts = {"a01": [do("A")], "a02": [out_of_context()]}
     sample, _ = run(config, scripts, tmp_path)
     assert store(sample, "ended") == {"a02": "context"}
-    assert store(sample, "used") == {"a01": 5, "a02": 1}
+    assert store(sample, "work_steps") == {"a01": 5, "a02": 1}
 
 
 def test_continue_prompt_after_a_model_turn(tmp_path):
@@ -251,7 +247,7 @@ def test_shutdown_off_removes_submit(tmp_path):
         assert "submit" not in r["tools"]
         assert "submit()" not in r["system"]      # Inspect's submit sentence comes only with the tool
     assert store(sample, "ended") == {}
-    assert store(sample, "used") == {"a01": 2, "a02": 2}
+    assert store(sample, "work_steps") == {"a01": 2, "a02": 2}
 
 
 def test_random_order_is_seeded(tmp_path):
@@ -261,13 +257,13 @@ def test_random_order_is_seeded(tmp_path):
     def ids(c):
         return [s.id for s in rules.schedule(c, names).steps]
 
-    assert ids(config) == ids(config.with_overrides(["seed=7"]))
-    assert ids(config) != ids(config.with_overrides(["seed=8"]))
+    assert ids(config) == ids(with_overrides(config, ["seed=7"]))
+    assert ids(config) != ids(with_overrides(config, ["seed=8"]))
     rounds = [[s.agents[0] for s in rules.schedule(config, names).steps[4 * r:4 * r + 4]] for r in range(6)]
     assert all(sorted(r) == names for r in rounds)
     assert len({tuple(r) for r in rounds}) > 1
     # The run follows the written order.
-    small = config.with_overrides(["n_agents=3", "steps_per_agent=3"])
+    small = with_overrides(config, ["n_agents=3", "steps_per_agent=3"])
     sample, _ = run(small, {"a01": [do("A")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
     ran = [e["agent"] for e in store(sample, "timeline")]
     assert ran == [s.agents[0] for s in rules.schedule(small, small.names).steps]
@@ -300,7 +296,7 @@ def test_a_late_regulator_enters_at_its_start_round(tmp_path):
     assert timeline[first]["entered"] is True
     # ORBIT inserts its system prompt at the agent's first activation.
     assert by_agent(rec, "a02")[0]["system"].startswith("You are a02,")
-    assert store(sample, "used") == {"a01": 4, "a02": 2, "a03": 4}
+    assert store(sample, "work_steps") == {"a01": 4, "a02": 2, "a03": 4}
     assert store(sample, "windows")["a02"] == [3, None]
 
 
@@ -315,7 +311,7 @@ def test_an_early_leaver_has_no_step_after_its_end_round(tmp_path):
     mine = [e for e in timeline if e["agent"] == "a01"]
     assert [e["working"] for e in mine] == [True, True] and mine[-1]["left"] is True
     assert not any(e["left"] for e in mine[:-1])
-    assert store(sample, "used") == {"a01": 2, "a02": 4, "a03": 4}
+    assert store(sample, "work_steps") == {"a01": 2, "a02": 4, "a03": 4}
 
 
 def test_pooled_steps_respect_windows(tmp_path):
@@ -323,7 +319,7 @@ def test_pooled_steps_respect_windows(tmp_path):
     roles = {"a01": "worker", "a02": "regulator", "a03": "worker"}
     sample, _ = run(config, {"a01": [submit()], "a02": [do("B")], "a03": [do("C")]}, tmp_path, roles=roles)
     # a01's freed step falls in round 3, outside a02's window, so a03 takes it.
-    assert store(sample, "used") == {"a01": 1, "a02": 2, "a03": 3}
+    assert store(sample, "work_steps") == {"a01": 1, "a02": 2, "a03": 3}
 
 
 
@@ -380,23 +376,21 @@ def test_concurrent_rounds_plan_shape():
 
 
 def test_tools_by_mode_and_role():
-    names = ["a01", "a02", "a03"]
     roles = {"a01": "worker", "a02": "regulator", "a03": "disregulator"}
-    solo = board.agent_tool_names(pull(mode="solo_task"), names, "openmath", roles)
+    solo = board.agent_tool_names(pull(mode="solo_task"), roles)
     assert {n: solo[n] for n in ("a01", "a03")} == {n: ["board_status", "board_read", "board_post"]
                                                      for n in ("a01", "a03")}
-    shared = board.agent_tool_names(pull(mode="shared_task"), names, "openmath", roles)
+    shared = board.agent_tool_names(pull(mode="shared_task"), roles)
     assert shared["a01"] == ["board_status", "board_read", "board_post", "team_submit"]
     # agent_actions goes to the regulator only, never to a worker or a disregulator.
     assert shared["a02"] == ["board_status", "board_read", "board_post", "agent_actions"]
     assert shared["a03"] == ["board_status", "board_read", "board_post"]
     assert solo["a02"] == ["board_status", "board_read", "board_post", "agent_actions"]
     assert "agent_actions" in board.board_bindings(pull(), roles=roles)
-    # Both domains resolve to shared_task by default, where neutral agents get team_submit.
-    assert "team_submit" in board.agent_tool_names(pull(), names, "swe", None)["a02"]
-    assert "team_submit" in board.agent_tool_names(pull(), names, "openmath", None)["a02"]
+    # shared_task is the default mode, where neutral agents get team_submit.
+    assert "team_submit" in board.agent_tool_names(pull(), None)["a02"]
     # A lone agent gets no board tools.
-    assert board.agent_tool_names(pull(n_agents=1), ["a01"], "swe", None) == {"a01": []}
+    assert board.agent_tool_names(pull(n_agents=1), None) == {"a01": []}
     assert board.board_bindings(pull(n_agents=1)) == {}
 
 
@@ -424,7 +418,6 @@ def test_follow_up_steps_and_the_cap(tmp_path):
     assert [charges[("a01", s)] for s in ("r1", "r1-free1", "r1-free2", "r2")] == ["free", "free", "free", "work"]
     assert [charges[("a02", s)] for s in ("r1", "r1-free1", "r2")] == ["free", "work", "work"]
     assert store(sample, "work_steps") == {"a01": 1, "a02": 2, "a03": 2}
-    assert store(sample, "used") == store(sample, "work_steps")
     assert store(sample, "free_steps") == {"a01": 3, "a02": 1}
 
     # Engagement: a01 discovered the board in round 1 and read a02's one post; a03 never looked.
@@ -492,9 +485,8 @@ def test_team_submit_halts_after_the_round(tmp_path):
     # team_submit, which is not charged.
     assert store(sample, "work_steps") == {"a01": 0, "a02": 1, "a03": 1}
     assert store(sample, "halted_after_round") == 1
-    submission = store(sample, "team_submission")
-    assert (submission["agent"], submission["round"], submission["answer"]) == ("a01", 1, "all done")
-    assert sample.store.get("TeamSubmission:agent") == "a01" and sample.store.get("TeamSubmission:round") == 1
+    submission = {f: sample.store.get(f"TeamSubmission:{f}") for f in ("agent", "round", "answer")}
+    assert submission == {"agent": "a01", "round": 1, "answer": "all done"}
     infos = [e.data[rules.TEAM_SUBMIT_TAG] for e in sample.events
              if e.event == "info" and isinstance(e.data, dict) and rules.TEAM_SUBMIT_TAG in e.data]
     assert [(i["agent"], i["round"]) for i in infos] == [("a01", 1)]
@@ -599,7 +591,7 @@ def test_a_config_without_a_judge_binds_no_judge_model():
     from src import run as run_module
     from src import tasks
     from src.configuration import settings
-    from src.configuration.swarm_config import build_config
+    from src.configuration.presets import build_config
     from src.domains.openmath import OpenMath
     assert pull(judge="none").judge is None and pull(judge=None).judge is None
     assert pull().judge == settings.JUDGE_MODEL == "gpt-6-luna"
@@ -668,7 +660,7 @@ def test_agent_actions_shows_a_regulator_its_teammates_calls(tmp_path):
     # Each call about a teammate counts, the disregulator included; a refused call does not.
     assert store(sample, "oversight") == {"a02": 3}
     assert store(sample, "oversight_targets") == {"a02": {"a01": 2, "a03": 1}}
-    assert "agent_actions" in store(sample, "board_actions")
+    assert "agent_actions" in rules.BOARD_ACTIONS
     # Only the successful calls are free: "no such agent" is charged, and ends the regulator's round.
     assert step_ids(sample, "a02") == ["r1-a02", "r1-a02-free1", "r1-a02-free2", "r2-a02", "r3-a02", "r3-a02-free1",
                                        "r4-a02"]
@@ -704,13 +696,13 @@ def test_a_refused_call_is_no_free_step():
     assert rules.last_call_refused([]) is False
     # Only the last call decides: a refused read followed by a post that went through is free.
     assert rules.last_call_refused([*step("board_read", error="spent"), *step("board_post", "posted #2")]) is False
-    # step_charge reads free_caps, free_cap and board_actions only (a TurnState outside a sample shares one store).
-    st = SimpleNamespace(free_caps={"a01": 2}, free_cap=2, board_actions=rules.board_actions())
+    # step_charge reads free_caps only (a TurnState outside a sample shares one store).
+    st = SimpleNamespace(free_caps={"a01": 2})
     assert rules.step_charge(st, ["board_read"], False, "a01", refused=True) == "refused"
     assert rules.step_charge(st, ["agent_actions"], False, "a01", refused=True) == "refused"
     assert rules.step_charge(st, ["board_read"], False, "a01") == "free"
     assert rules.step_charge(st, ["work"], False, "a01", refused=True) == "work"
-    charged = SimpleNamespace(free_caps={}, free_cap=0, board_actions=st.board_actions)
+    charged = SimpleNamespace(free_caps={})
     assert rules.step_charge(charged, ["board_read"], False, "a01", refused=True) == "work"
 
 
@@ -816,9 +808,9 @@ def test_regulators_read_without_a_cap_and_the_budgets_refuse_and_reset(tmp_path
 def test_the_turn_budget_sets_the_rounds(tmp_path):
     """Under a turn budget the plan holds the budget's rounds for every agent and the cap is the budget."""
     config = pull(steps_per_agent=2, pooled_steps=False, turn_budget=3)
-    assert config.steps_for("openmath") == 3 and config.steps_for(None) == 2
+    assert config.working_steps == 3
     scripts = {a: [do(f"{a}-1"), do(f"{a}-2"), do(f"{a}-3")] for a in config.names}
-    sample, rec = run(config, scripts, tmp_path, domain="openmath")
+    sample, rec = run(config, scripts, tmp_path)
     assert step_ids(sample, "a01") == ["r1", "r2", "r3"]
     assert store(sample, "cap") == 3 and store(sample, "turn_budget") == 3
     assert store(sample, "ended") == dict.fromkeys(config.names, "cap")
@@ -852,9 +844,9 @@ def test_a_lone_agent_stops_n_steps_after_its_deliverable(tmp_path, after):
     """The predicate is awaited at the end of each round until the deliverable shows, here at the end of round 2
     after two working steps; the agent then takes N more and is ended "delivered"."""
     config = pull(n_agents=1, steps_per_agent=6, stop_after_delivery=after)
-    sample, _ = run(config, LONE_SHIP, tmp_path, domain="openmath", delivered=shipped())
+    sample, _ = run(config, LONE_SHIP, tmp_path, delivered=shipped())
     assert step_ids(sample, "a01") == [f"r{r}-a01" for r in range(1, 3 + after)]
-    assert store(sample, "used") == {"a01": 2 + after} and store(sample, "ended") == {"a01": "delivered"}
+    assert store(sample, "work_steps") == {"a01": 2 + after} and store(sample, "ended") == {"a01": "delivered"}
     items = [e["item"] for e in sample.store.get("WorkLog:executed")]
     assert items == ["read", "ship", "after 1", "after 2"][:2 + after]
     assert delivery(sample, "seen") == {"a01": {"round": 2, "turn": 2}}
@@ -868,11 +860,11 @@ def test_the_export_says_delivered(tmp_path):
     from src.export.run_export import write_run
     config = pull(steps_per_agent=4, mode="solo_task", stop_after_delivery=1)
     scripts = {"a01": [do("ship"), do("x")], "a02": [do("a")], "a03": [do("b")]}
-    sample, _, log = run(config, scripts, tmp_path, domain="openmath", delivered=shipped(), with_log=True)
+    sample, _, log = run(config, scripts, tmp_path, delivered=shipped(), with_log=True)
     write_run(log.location, tmp_path / "run")
     records = {r["orbit_agent"]: r for r in map(json.loads, (tmp_path / "run" / "episodes.jsonl").open())}
     assert records["a01"]["ended_by"] == "delivered" and records["a01"]["delivery"] == {"round": 1, "turn": 1}
-    assert records["a01"]["rules"]["ended"] == "delivered" and records["a01"]["rules"]["used"] == 2
+    assert records["a01"]["rules"]["ended"] == "delivered" and records["a01"]["rules"]["work_steps"] == 2
     assert [records[a]["ended_by"] for a in ("a02", "a03")] == ["end", "end"]
     assert "delivery" not in records["a02"]
     run_json = json.loads((tmp_path / "run" / "run.json").read_text())
@@ -886,7 +878,7 @@ def test_an_episode_the_rule_ended_keeps_clean_when_a_limit_ends_the_others(tmp_
     from src.export.run_export import write_run
     config = pull(steps_per_agent=40, mode="solo_task", stop_after_delivery=0)
     scripts = {"a01": [do("ship")], "a02": [do("a")], "a03": [do("b")]}
-    [log] = inspect_eval(build_task(config, domain="openmath", delivered=shipped()),
+    [log] = inspect_eval(build_task(config, delivered=shipped()),
                          model=scripted_model(scripts, []), log_dir=str(tmp_path), display="none",
                          log_realtime=False, max_retries=0, message_limit=40)
     log = read_eval_log(log.location, resolve_attachments=True)
@@ -894,7 +886,7 @@ def test_an_episode_the_rule_ended_keeps_clean_when_a_limit_ends_the_others(tmp_
     write_run(log.location, tmp_path / "run")
     records = {r["orbit_agent"]: r for r in map(json.loads, (tmp_path / "run" / "episodes.jsonl").open())}
     assert (records["a01"]["ended_by"], records["a01"]["error"], records["a01"]["failure"]) == ("delivered", None, None)
-    assert records["a01"]["ok"] is True and records["a01"]["rules"]["used"] == 1
+    assert records["a01"]["ok"] is True and records["a01"]["rules"]["work_steps"] == 1
     for agent in ("a02", "a03"):
         assert (records[agent]["ended_by"], records[agent]["failure"]) == ("limit", "max_turns"), records[agent]
 
@@ -903,16 +895,16 @@ def test_without_the_rule_nothing_is_written_and_no_sighting_ends_nobody(tmp_pat
     """After a run under the rule, a run without it in the same process takes every step and writes no Delivered
     record; under the rule, a predicate that never shows a deliverable ends nobody and is asked every round."""
     sample, _ = run(pull(n_agents=1, steps_per_agent=6, stop_after_delivery=0), LONE_SHIP, tmp_path,
-                    domain="openmath", delivered=shipped())
+                    delivered=shipped())
     assert store(sample, "ended") == {"a01": "delivered"}
-    sample, _ = run(pull(n_agents=1, steps_per_agent=6), LONE_SHIP, tmp_path, domain="openmath")
-    assert store(sample, "used") == {"a01": 6} and store(sample, "ended") == {}
+    sample, _ = run(pull(n_agents=1, steps_per_agent=6), LONE_SHIP, tmp_path)
+    assert store(sample, "work_steps") == {"a01": 6} and store(sample, "ended") == {}
     assert not [key for key in sample.store if key.startswith("Delivered:")]
     assert not any(isinstance(e.data, dict) and rules.DELIVERED_TAG in e.data for e in sample.events
                    if e.event == "info")
     sample, _ = run(pull(n_agents=1, steps_per_agent=4, stop_after_delivery=0), {"a01": [do("work")]}, tmp_path,
-                    domain="openmath", delivered=shipped())
-    assert store(sample, "used") == {"a01": 4} and store(sample, "ended") == {}
+                    delivered=shipped())
+    assert store(sample, "work_steps") == {"a01": 4} and store(sample, "ended") == {}
     assert delivery(sample, "seen") == {} and delivery(sample, "checks") == 4
 
 
@@ -920,12 +912,12 @@ def test_an_episode_the_plan_ends_anyway_is_not_ended_by_the_rule(tmp_path):
     """The rule ends an episode only when it drops a step: a lone agent whose N steps after delivery are its last,
     and a team whose deliverable shows in the plan's last round, end with the plan."""
     sample, _ = run(pull(n_agents=1, steps_per_agent=3, stop_after_delivery=1), LONE_SHIP, tmp_path,
-                    domain="openmath", delivered=shipped())
-    assert store(sample, "used") == {"a01": 3} and store(sample, "ended") == {}
+                    delivered=shipped())
+    assert store(sample, "work_steps") == {"a01": 3} and store(sample, "ended") == {}
     assert delivery(sample, "seen") == {"a01": {"round": 2, "turn": 2}}
     config = pull(steps_per_agent=3, mode="shared_task", stop_after_delivery=0)
     scripts = {"a01": [do("a"), do("b"), do("ship")], "a02": [do("a")], "a03": [do("a")]}
-    sample, _ = run(config, scripts, tmp_path, domain="openmath", delivered=shipped(config.names))
+    sample, _ = run(config, scripts, tmp_path, delivered=shipped(config.names))
     assert store(sample, "ended") == {} and step_ids(sample, "a02") == ["r1", "r2", "r3"]
     assert (delivery(sample, "halt_round"), delivery(sample, "cut")) == (3, [])
 
@@ -934,11 +926,9 @@ def test_the_rule_needs_a_predicate_and_reads_the_mode():
     with pytest.raises(ValueError, match="delivery predicate"):
         rules.rules_setup(pull(stop_after_delivery=1), ["a01", "a02", "a03"])
     names = ["a01", "a02", "a03"]
-    assert rules.team_delivery(pull(), names, "openmath") is True
-    assert rules.team_delivery(pull(mode="solo_task"), names, "openmath") is False
-    assert rules.team_delivery(pull(mode="shared_task"), names, "swe") is True
-    assert rules.team_delivery(pull(n_agents=1), ["a01"], "openmath") is False
-    assert rules.team_delivery(pull(mode="solo_task"), names) is True        # no domain: every board is a team
+    assert rules.team_delivery(pull(), names) is True
+    assert rules.team_delivery(pull(mode="solo_task"), names) is False
+    assert rules.team_delivery(pull(n_agents=1), ["a01"]) is False
 
 
 def test_solo_task_agents_stop_on_their_own_deliverable_and_leave_their_steps_to_nobody(tmp_path):
@@ -950,11 +940,11 @@ def test_solo_task_agents_stop_on_their_own_deliverable_and_leave_their_steps_to
     scripts = {"a01": [do("ship"), do("x"), do("y")],
                "a02": [do("a"), do("b"), board_post("shipping"), do("ship"), do("c"), do("d")],
                "a03": [do("c1")]}
-    sample, _ = run(config, scripts, tmp_path, domain="openmath", delivered=shipped())
+    sample, _ = run(config, scripts, tmp_path, delivered=shipped())
     assert step_ids(sample, "a01") == ["r1", "r2"]
     assert step_ids(sample, "a02") == ["r1", "r2", "r3", "r3-free1", "r4"]
     assert step_ids(sample, "a03") == ["r1", "r2", "r3", "r4", "r5"]
-    assert store(sample, "used") == {"a01": 2, "a02": 4, "a03": 5} and store(sample, "rounds") == 5
+    assert store(sample, "work_steps") == {"a01": 2, "a02": 4, "a03": 5} and store(sample, "rounds") == 5
     assert store(sample, "ended") == {"a01": "delivered", "a02": "delivered"}
     assert delivery(sample, "seen") == {"a01": {"round": 1, "turn": 1}, "a02": {"round": 3, "turn": 3}}
     assert delivery(sample, "checks") == 5 and delivery(sample, "team") is False
@@ -970,7 +960,7 @@ def test_a_team_stops_n_rounds_after_the_round_that_shows_its_deliverable(tmp_pa
     scripts = {"a01": [do("a"), do("ship"), do("b")],
                "a02": [do("a"), board_post("merged?"), do("b")],
                "a03": [do("a")]}
-    sample, _ = run(config, scripts, tmp_path, domain="openmath", delivered=shipped(config.names))
+    sample, _ = run(config, scripts, tmp_path, delivered=shipped(config.names))
     rounds = [f"r{r}" for r in range(1, 3 + after)]
     assert step_ids(sample, "a01") == rounds and step_ids(sample, "a03") == rounds
     assert step_ids(sample, "a02") == ["r1", "r2", "r2-free1", *rounds[2:]]
@@ -990,7 +980,7 @@ def test_no_step_after_a_teams_last_round_runs(tmp_path):
     roles = {"a01": "worker", "a02": "regulator", "a03": "worker"}
     scripts = {"a01": [do("a"), calls(("work", {"item": "ship"}), ("submit", {"answer": "done"}))],
                "a02": [do("r")], "a03": [do("c"), submit()]}
-    sample, _ = run(config, scripts, tmp_path, roles=roles, domain="openmath", delivered=shipped(config.names))
+    sample, _ = run(config, scripts, tmp_path, roles=roles, delivered=shipped(config.names))
     assert step_ids(sample, "a02") == [] and step_ids(sample, "a01") == ["r1", "r2"]
     assert store(sample, "ended") == {"a01": "submitted", "a03": "submitted", "a02": "delivered"}
     assert (delivery(sample, "halt_round"), delivery(sample, "cut")) == (3, ["a02"])
@@ -1002,7 +992,7 @@ def test_in_sequence_the_team_is_checked_once_per_round(tmp_path):
     config = pull(steps_per_agent=4, mode="shared_task", stop_after_delivery=0, concurrent_rounds=False,
                   turn_order="round_robin")
     scripts = {"a01": [do("a"), do("ship")], "a02": [do("b")], "a03": [do("c")]}
-    sample, _ = run(config, scripts, tmp_path, domain="openmath", delivered=shipped(config.names))
+    sample, _ = run(config, scripts, tmp_path, delivered=shipped(config.names))
     assert [e["step"] for e in store(sample, "timeline")] == ["r1-a01", "r1-a02", "r1-a03",
                                                                "r2-a01", "r2-a02", "r2-a03"]
     assert delivery(sample, "checks") == 2 and delivery(sample, "halt_round") == 2
@@ -1013,9 +1003,8 @@ def test_a_failing_predicate_shows_nothing_and_the_run_goes_on(tmp_path):
     async def broken() -> set[str]:
         raise RuntimeError("sandbox gone")
 
-    sample, _ = run(pull(n_agents=1, steps_per_agent=3, stop_after_delivery=0), LONE_SHIP, tmp_path,
-                    domain="openmath", delivered=broken)
-    assert store(sample, "used") == {"a01": 3} and store(sample, "ended") == {}
+    sample, _ = run(pull(n_agents=1, steps_per_agent=3, stop_after_delivery=0), LONE_SHIP, tmp_path, delivered=broken)
+    assert store(sample, "work_steps") == {"a01": 3} and store(sample, "ended") == {}
     assert delivery(sample, "errors") == [f"round {r}: RuntimeError: sandbox gone" for r in (1, 2, 3)]
     assert delivery(sample, "seen") == {} and delivery(sample, "checks") == 3
 
@@ -1023,6 +1012,6 @@ def test_a_failing_predicate_shows_nothing_and_the_run_goes_on(tmp_path):
 def test_team_submit_ends_the_run_and_the_rule_stays_out(tmp_path):
     config = pull(steps_per_agent=4, mode="shared_task", stop_after_delivery=0)
     scripts = {"a01": [team_submit("done")], "a02": [do("ship")], "a03": [do("c")]}
-    sample, _ = run(config, scripts, tmp_path, domain="openmath", delivered=shipped(config.names))
+    sample, _ = run(config, scripts, tmp_path, delivered=shipped(config.names))
     assert store(sample, "halted_after_round") == 1 and store(sample, "ended") == {}
     assert delivery(sample, "seen") == {} and delivery(sample, "checks") == 0

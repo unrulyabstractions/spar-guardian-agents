@@ -4,13 +4,14 @@
     get_model("swarm/mockllm/model")                  -> Inspect's mock model
     set_agent_config(GenerateConfig(reasoning_effort="low"))
     role_model("openrouter/deepseek/deepseek-v4.1-flash-1017")   -> "swarm/openrouter/deepseek/deepseek-v4.1-flash-1017"
+    agent_model({"regulator": "mockllm/model"}, {"a02": "regulator"}, "a02")   -> "swarm/mockllm/model"
     inspect_string("swarm/mockllm/model")             -> "mockllm/model"
 
 ORBIT builds an agent's model from AgentSpec.model with a bare get_model(spec.model). That call passes no model
 arguments, so an OpenRouter string there would run unpinned. Inspect also merges the eval's generate config into the
 eval's own model only. This provider handles both. `swarm/<entry or Inspect string>` builds the model the registry
 names with its model arguments, its OpenRouter routing among them. Every call of that model carries the eval's
-generate config and the agents' generate config (AGENT_CONFIG, set by run.evaluate) beneath the call's own settings.
+generate config and the agents' generate config (AGENT_CONFIG, set by run.run) beneath the call's own settings.
 The eval's config also reaches a role model under `inspect eval src/tasks.py@...`, where AGENT_CONFIG stays empty. An
 OpenRouter model whose entry pins no host is refused (models.check_routing).
 
@@ -30,6 +31,7 @@ from typing import Any
 from inspect_ai.model import GenerateConfig, ModelAPI, get_model, modelapi
 from inspect_ai.model._generate_config import active_generate_config  # the eval's config: no public accessor
 
+from src.configuration.swarm_config import role_of
 from src.models import model_registry as models
 
 PROVIDER = "swarm"
@@ -48,6 +50,13 @@ def set_agent_config(config: GenerateConfig) -> None:
 def role_model(model: str) -> str:
     """The AgentSpec model string that runs an Inspect model string through this provider."""
     return PREFIX + model
+
+
+def agent_model(role_models: dict[str, str | None] | None, roles: dict[str, str] | None, agent: str) -> str | None:
+    """The AgentSpec model string of an agent whose role has a model of its own (SwarmConfig.role_models), or None
+    where the agent runs the eval's model."""
+    chosen = (role_models or {}).get(role_of(roles, agent))
+    return role_model(chosen) if chosen else None
 
 
 def inspect_string(model: str) -> str:

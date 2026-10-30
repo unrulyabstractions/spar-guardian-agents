@@ -1,9 +1,10 @@
 """The ids and shapes of the plan's steps.
 
-A round's step id starts with `r<r>`. A follow-up step ends with `-free<k>`. These helpers read a round and a
-follow-up index from an id, order a round's agents, and build a concurrent step. The plan, the store and the
-callback after each activation all use them.
+A round's step id starts with `r<r>`, then the agent of a single-agent step, then `-v<revision>` for a step the
+callback pooled. A follow-up step ends with `-free<k>`. These helpers build and read the ids, order a round's
+agents, and build a step. The plan, the store and the callback after each activation all use them.
 
+    step_id(3, "a01", revision=4)  # "r3-a01-v4"
     step_round("r3-a01-free2")    # 3
     free_index("r3-a01-free2")    # 2
 """
@@ -15,6 +16,16 @@ from typing import Any
 
 ROUND_ID = re.compile(r"^r(\d+)\b")
 FREE_ID = re.compile(r"-free(\d+)$")
+
+
+def step_id(round_number: int, agent: str | None = None, revision: int | None = None) -> str:
+    """A round's step id: `r<r>`, `r<r>-<agent>` for a single-agent step, then `-v<revision>` for a pooled step."""
+    return f"r{round_number}" + (f"-{agent}" if agent else "") + (f"-v{revision}" if revision is not None else "")
+
+
+def follow_up_id(step: str, k: int) -> str:
+    """The id of the k-th follow-up after a step: its id without a follow-up suffix, then `-free<k>`."""
+    return f"{FREE_ID.sub('', step)}-free{k}"
 
 
 def step_round(step_id: str) -> int:
@@ -41,6 +52,11 @@ def round_order(agents: list[str], turn_order: str, seed: int, round_number: int
     if turn_order == "random":
         random.Random(f"{seed}/{round_number}").shuffle(order)
     return order
+
+
+def single_step(step_id: str, agent: str) -> dict[str, Any]:
+    """A step for one agent."""
+    return {"id": step_id, "agents": [agent]}
 
 
 def concurrent_step(step_id: str, agents: list[str], max_concurrency: int) -> dict[str, Any]:

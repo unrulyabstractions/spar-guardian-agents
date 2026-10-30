@@ -20,7 +20,7 @@ def install() -> bool:
         from inspect_ai.model._model import RetryDecision
         from inspect_ai.model._providers.google import GoogleGenAIAPI
     except ImportError as e:  # pragma: no cover - only when the provider is absent
-        print(f"provider_retry: not installed ({e})", file=sys.stderr)
+        print(f"gemini_402_retry: not installed ({e})", file=sys.stderr)
         return False
     if getattr(GoogleGenAIAPI.should_retry, "_retry_402", False):
         return True

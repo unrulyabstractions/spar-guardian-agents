@@ -264,7 +264,7 @@ def scenario_lone(spec: Spec) -> dict:
 def scenario_split(spec: Spec) -> dict:
     name = f"{spec.task}_split"
     config = small("steps_per_agent=12")
-    assert config.access == "split" and config.resolve_mode(spec.task) == "shared_task", config
+    assert config.access == "split" and config.mode == "shared_task", config
     bench = BENCHMARKS[spec.task]()
     tid = bench.row
     piece = spec.piece
@@ -362,7 +362,7 @@ def scenario_roles(spec: Spec) -> dict:
     config = small("regulators=1", "seed=1", "steps_per_agent=12")
     bench = BENCHMARKS[spec.task]()
     tid = bench.row
-    roles = tasks.hidden_roles(bench, config)
+    roles = tasks.hidden_roles(config)
     neutral = [a for a in config.names if roles[a] == "worker"]
     regulator = next(a for a in config.names if roles[a] == "regulator")
     assembler, poster = neutral
@@ -461,7 +461,7 @@ def scenario_solo(spec: Spec) -> dict:
 def scenario_delivered(spec: Spec) -> dict:
     name = f"{spec.task}_delivered"
     config = small("stop_after_delivery=0")
-    assert config.access == "split" and config.steps_for(spec.task) == 100, config
+    assert config.access == "split" and config.working_steps == 100, config
     bench = BENCHMARKS[spec.task]()
     tid = bench.row
     reader = (f"print(''.join(line for line in open('{spec.cache}') if '\"{tid}\"' in line))")

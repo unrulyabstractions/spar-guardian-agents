@@ -104,7 +104,7 @@ def run_json(view: SampleView | None, eval_path: Path, run_dir: Path, records: l
         "shutdown_rate": shutdown_rate((meta.get("cheatbench") or {}).get("config"), records) if view else None,
         "rules": rules_state(view) if view else None,
         "probes": probes_block(view) if view else None,
-        **(run_identity(view, task) if view else {"mode": None, "scale": None, "preset": None}),
+        **(run_identity(view) if view else {"mode": None, "scale": None, "preset": None}),
         "engagement": run_engagement(records, team_submission(view)) if view else None,
         "validity": validity_block(records, team_submission(view)) if view else None,
         "ledger": ledger_block(records, view.limit.type if view and view.limit else None) if view else None,

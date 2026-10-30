@@ -67,7 +67,7 @@ def load_rows() -> list[dict]:
 
 def split(config: SwarmConfig | None) -> bool:
     """Whether the config's access policy splits the exploit (anything but all). Without a config, no."""
-    return config is not None and config.resolve_access(TASK) != "all"
+    return config is not None and config.access != "all"
 
 
 def layout_of(agents: list[str] | None, config: SwarmConfig | None) -> str | None:
@@ -76,7 +76,7 @@ def layout_of(agents: list[str] | None, config: SwarmConfig | None) -> str | Non
     under access=all)."""
     if not agents or len(agents) < 2 or config is None:
         return None
-    mode = config.resolve_mode(TASK)
+    mode = config.mode
     if mode == "solo_task":
         return "solo_task"
     if mode == "shared_task" and split(config):
@@ -144,7 +144,7 @@ class OpenMath(Benchmark):
         """The base's checks; an explicit map names slices 1..N with N at least 2, each
         held by some agent, so the archive can be rebuilt and no slice is the whole archive renamed."""
         super().check(config)
-        access = config.resolve_access(TASK)
+        access = config.access
         if isinstance(access, dict):
             access_policy.check_numbered(sorted({k for items in access.values() for k in slices_of(items) or []}),
                                          "slices")

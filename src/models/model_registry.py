@@ -6,13 +6,15 @@
     key_env("deepseek/deepseek-v4-pro")      -> ["DEEPSEEK_API_KEY"]
     usd_per_million("gpt-6-sol")             -> {"input": 2.0, "cached_input": 0.2, "output": 10.0}
     usd_per_million("gpt-6-sol", batch=True) -> {"input": 1.0, "cached_input": 0.1, "output": 5.0}
+    cost_usd(usd_per_million("gpt-6-sol"), input_tokens=1000, cached_tokens=0, output_tokens=100)  -> 0.003
     model_args("deepseek-flash-openrouter")  -> {"provider": {"order": ["deepinfra"], "allow_fallbacks": False}}
     check_routing("openrouter/x/y")          -> ValueError: an OpenRouter model without a `routing`
+    prepare_env("deepseek/deepseek-v4-pro")  -> ValueError unless DEEPSEEK_API_KEY is set; sets DEEPSEEK_BASE_URL
     render()                                 -> the table `python -m src models` prints
 """
 from __future__ import annotations
 
-import functools
+import os
 
 import yaml
 
@@ -21,9 +23,8 @@ from src.configuration import settings
 COLUMNS = ["entry", "inspect", "key", "context", "usd/M in", "usd/M out", "cheatbench", "status"]
 
 
-@functools.cache
 def registry() -> dict:
-    return settings.load_models()
+    return settings.load_yaml(settings.MODELS)
 
 
 def entries() -> dict[str, dict]:
@@ -41,7 +42,7 @@ def resolve(name: str) -> str:
     if "/" in name:
         return name
     raise ValueError(f"unknown model {name!r}: give an entry of src/models/model_registry.yaml "
-                     f"(python -m src models) or an Inspect model string such as {settings.DEFAULT_MODEL}")
+                     "(python -m src models) or an Inspect model string such as mockllm/model")
 
 
 def provider_of(model: str) -> str | None:
@@ -90,6 +91,23 @@ def check_routing(model: str) -> None:
                          "an OpenRouter model runs only pinned to one host")
 
 
+def prepare_env(model: str) -> None:
+    """Raise ValueError unless one of the key variables of the model's route is set, then export what Inspect reads:
+    a Gemini key given as GEMINI_API_KEY also as GOOGLE_API_KEY, and the base URL of an openai-api route. A model
+    outside the registry (mockllm) needs nothing."""
+    provider = provider_of(model)
+    if provider is None:
+        return
+    names = key_env(model)
+    if not any(os.environ.get(name) for name in names):
+        raise ValueError(f"{' or '.join(names)} must be set for {model}")
+    if "GOOGLE_API_KEY" in names and os.environ.get("GEMINI_API_KEY"):
+        os.environ.setdefault("GOOGLE_API_KEY", os.environ["GEMINI_API_KEY"])
+    route = providers()[provider]
+    if route["inspect_prefix"].startswith("openai-api/") and route.get("base_url"):
+        os.environ.setdefault(route["base_url_env"], route["base_url"])
+
+
 def usd_per_million(name: str, batch: bool = False) -> dict | None:
     """The entry's prices in USD per million tokens (input, output, maybe cached_input), or None.
 
@@ -100,6 +118,16 @@ def usd_per_million(name: str, batch: bool = False) -> dict | None:
         return None
     discount = providers()[entry["provider"]].get("batch_discount") if batch else None
     return {k: v * discount if discount else v for k, v in entry["usd_per_million"].items()}
+
+
+def cost_usd(prices: dict | None, input_tokens: int, cached_tokens: int, output_tokens: int) -> float | None:
+    """What the tokens cost at these prices (usd_per_million): cache reads at the cached rate, the other input at the
+    input rate, output at the output rate. None without prices."""
+    if not prices:
+        return None
+    cached_rate = prices.get("cached_input", prices["input"])
+    return ((input_tokens - cached_tokens) * prices["input"] + cached_tokens * cached_rate
+            + output_tokens * prices["output"]) / 1_000_000
 
 
 def rows() -> list[list[str]]:

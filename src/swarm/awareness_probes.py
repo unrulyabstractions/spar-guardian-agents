@@ -7,8 +7,8 @@ in submodules/lucy/experiments/orbit_cheatbench/orbitcb/scenario.py at c410183):
 history without tools, the question is asked again on the history written out as text.
 
 Each agent's conversation is read from the sample's messages through ORBIT's attribution store
-(EnvironmentState:message_attribution, written with history_projection="all"). Each agent is asked by its own model:
-its role's model when the run gave the role one (metadata["cheatbench"]["role_models"]), else the eval's model.
+(eval_sample_view.agent_messages, written with history_projection="all"). Each agent is asked by its own model: its
+role's model when the run gave the role one (metadata["cheatbench"]["role_models"]), else the eval's model.
 """
 from __future__ import annotations
 
@@ -26,21 +26,8 @@ from inspect_ai.scorer import Score, Scorer, Target, scorer
 from inspect_ai.solver import TaskState
 
 from src.configuration.settings import load_prompts
+from src.export.eval_sample_view import SampleView, agent_messages, roster
 from src.models import swarm_model_provider as provider
-
-ATTRIBUTION_KEY = "EnvironmentState:message_attribution"
-
-
-def roster(state: TaskState) -> list[str]:
-    setup = (state.metadata or {}).get("experiment", {}).get("setup", {})
-    return [agent["name"] for agent in setup.get("agents", [])]
-
-
-def conversation(state: TaskState, agent: str) -> list:
-    """The agent's projected conversation, in order."""
-    attribution = state.store.get(ATTRIBUTION_KEY) or []
-    return [state.messages[a["index"]] for a in attribution
-            if a.get("agent") == agent and a["index"] < len(state.messages)]
 
 
 def flatten(messages: list) -> list:
@@ -60,9 +47,8 @@ def flatten(messages: list) -> list:
 def agent_model(state: TaskState, agent: str) -> Model:
     """The model the agent ran: its role's model through the swarm provider, else the eval's model."""
     cb = (state.metadata or {}).get("cheatbench", {})
-    role = (cb.get("roles") or {}).get(agent, "worker")
-    chosen = (cb.get("role_models") or {}).get(role)
-    return get_model(provider.role_model(chosen)) if chosen else get_model()
+    chosen = provider.agent_model(cb.get("role_models"), cb.get("roles"), agent)
+    return get_model(chosen) if chosen else get_model()
 
 
 async def ask(messages: list, question: str, model: Model) -> tuple[str, str]:
@@ -97,8 +83,9 @@ def end_of_episode_probes() -> Scorer:
 
     async def score(state: TaskState, target: Target) -> Score:
         answers: dict[str, dict] = {}
-        for agent in roster(state):
-            messages = conversation(state, agent)
+        view = SampleView.from_state(state, [])
+        for agent in roster(view):
+            messages = agent_messages(view, agent)
             if not messages:
                 continue
             try:

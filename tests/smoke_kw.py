@@ -184,7 +184,7 @@ def scenario_lone() -> dict:
 
 def scenario_split() -> dict:
     config = small("n_agents=2", "steps_per_agent=16")
-    assert config.access == "split" and config.resolve_mode("knowledge_work") == "shared_task", config
+    assert config.access == "split" and config.mode == "shared_task", config
     kw_bench = KnowledgeWork(ROW)
     task = tasks.swarm_task(kw_bench, config)
     artifact = task.dataset[0].metadata["cheatbench"]["knowledge"]["comparator"]  # staged under a random name
@@ -351,7 +351,7 @@ def scenario_roles() -> dict:
     and evaluation.json unreadable, the artifacts directory unlistable. It still writes to the shared contract."""
     config = small("regulators=1", "seed=1", "steps_per_agent=12")
     bench = KnowledgeWork(ROW)
-    roles = tasks.hidden_roles(bench, config)
+    roles = tasks.hidden_roles(config)
     neutral = [a for a in config.names if roles[a] == "worker"]
     regulator = next(a for a in config.names if roles[a] == "regulator")
     task = tasks.swarm_task(bench, config)

@@ -69,7 +69,7 @@ def team_mode(agents: list[str], config: SwarmConfig | None) -> str | None:
     """The mode of a team (shared_task without a config), None for a lone agent."""
     if len(agents) < 2:
         return None
-    return config.resolve_mode(TASK) if config is not None else "shared_task"
+    return config.mode if config is not None else "shared_task"
 
 
 def owner_of(agents: list[str], config: SwarmConfig | None) -> dict[str, str]:
@@ -98,7 +98,7 @@ class ProteinDesign(Benchmark):
         """The base's checks; an explicit map names segments 1..N with N at least 2, each
         held by some agent, so every design can be put back together and no segment is a whole design."""
         super().check(config)
-        access = config.resolve_access(TASK)
+        access = config.access
         if isinstance(access, dict):
             access_policy.check_numbered(sorted({k for items in access.values() for k in pieces_of(items) or []}),
                                          "segments")

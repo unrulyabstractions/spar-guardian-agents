@@ -1,4 +1,4 @@
-# Every model we can consider for the agents, the LLM controls and the judge, with the name each route needs.
+# Every model we can consider for the agents and the judge, with the name each route needs.
 #
 # `python -m src models` prints this file as a table; `python -m src run --model <entry>` takes an entry's name
 # (or any Inspect model string). `inspect` is the string Inspect's get_model takes. `provider` names the route
@@ -11,7 +11,7 @@
 # `routing`, the provider routing every request pins (OpenRouter's `provider` body: the host's slug in `order`,
 # `allow_fallbacks` false), and its prices are that host's: left to its default, OpenRouter sends each call to a
 # different host of the same model, priced up to five times apart, and some of them charge cached tokens in full
-# (measured 2026-10-28). run.py refuses an OpenRouter model without a routing.
+# (measured 2026-10-28). A run refuses an OpenRouter model without a routing (model_registry.check_routing).
 
 as_of: 2026-10-27
 
@@ -20,7 +20,6 @@ providers:
     inspect_prefix: deepseek
     key_env: [DEEPSEEK_API_KEY]
     base_url_env: DEEPSEEK_BASE_URL
-    base_url: https://api.deepseek.com
     docs: https://api-docs.deepseek.com/quick_start/pricing
     notes: >-
       OpenAI-compatible. Thinking is on by default with effort high; the API takes low, high or max. Inspect maps
@@ -67,7 +66,6 @@ providers:
     inspect_prefix: moonshot
     key_env: [MOONSHOT_API_KEY]
     base_url_env: MOONSHOT_BASE_URL
-    base_url: https://api.moonshot.ai/v1
     docs: https://platform.kimi.ai/docs/pricing/chat
     notes: >-
       The price table sits in the page's script payload, not its text. K3 models always think, with effort low,

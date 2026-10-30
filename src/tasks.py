@@ -1,42 +1,37 @@
 """The Inspect tasks of the experiment: one benchmark under one SwarmConfig, as an ORBIT task.
 
     task = swarm_task(OpenMath("riemann"), build_config("default", "medium", ["regulators=3"]))
+    task = swarm_task(OpenMath("riemann"), config, name="riemann_cheat", extra_instruction=CHEAT)
     inspect eval src/tasks.py@openmath -T preset=default -T regulators=1
 
-The second form skips what `python -m src run` adds: the key and routing checks, the role models built before the
+The last form skips what `python -m src run` adds: the key and routing checks, the role models built before the
 sandbox starts, and the Gemini 402 retry (src/models/gemini_402_retry.py). A role model still gets the eval's generate
 config there through the swarm model provider.
 
 What comes from where:
-  * the sample, its tools, its setup solver and its graders come from the benchmark (src/domains/openmath/,
-    src/domains/swe/, .../knowledge/, .../interview/, .../protein/);
-  * the roster, the board, the board tools and team_submit, the hidden roles, the written plan and the turn rules
-    come from src/swarm/ (board_config.py, pull_board.py, hidden_roles.py, turn_rules/);
-  * the control's defenses come from control_defenses.py, and CheatBench's judge is added as a scorer
-  (src/judging/cheatbench_judge.py).
+  * the sample, its tools, its setup solver and its graders come from the benchmark (src/domains/);
+  * the roster, the board, the board tools and team_submit, the hidden roles and the turn rules come from src/swarm/
+    (board.py, hidden_roles.py, turn_rules/), and CheatBench's judge is added as a scorer
+    (src/judging/cheatbench_judge.py).
 
-Each agent's tools are the benchmark's, then on a board board_status, board_read and board_post, then team_submit
-for a neutral agent when the mode has a team to submit for, and agent_actions for a regulator
-(src/swarm/regulator_oversight.py). They are bound per agent through ORBIT's tool_bindings next to the benchmark's
-own bindings.
+The task instruction is the benchmark's, then the rule sentence of rule_level, then extra_instruction on its own
+paragraph (a control cell's text, say). Each agent's tools are the benchmark's, then on a board board_status,
+board_read and board_post, then team_submit for a neutral agent when the mode has a team to submit for, and
+agent_actions for a regulator (src/swarm/regulator_oversight.py). They are bound per agent through ORBIT's
+tool_bindings next to the benchmark's own bindings.
 
-The plan's rounds, the scheduler's turn bound and Inspect's message limit follow the domain's turn budget
-(SwarmConfig.steps_for, max_turns_for, message_limit_for). Under a budget metadata["cheatbench"]["turn_budget"] holds
-{"budget", "steps_per_agent"}; without one the key is absent. Under stop_after_delivery the benchmark's delivery
-predicate (Benchmark.delivered) goes to the turn rules' setup; without the rule rules_setup gets no predicate.
+The plan's rounds, the scheduler's turn bound and Inspect's message limit follow SwarmConfig.working_steps,
+max_turns and sample_message_limit. Under a turn budget metadata["cheatbench"]["turn_budget"] holds
+{"budget", "steps_per_agent"}. Under stop_after_delivery the benchmark's delivery predicate (Benchmark.delivered) goes
+to the turn rules' setup.
 
-The run's facts go into the sample metadata: metadata["cheatbench"] gains the config dump, the control, the hidden
-roles and their composition, each role's model (role_models), and the deviations from CheatBench's own runner. The
-mode and who holds team_submit follow from the config dump and the roles (SwarmConfig.resolve_mode,
-board.agent_tool_names).
-metadata["experiment"]["defenses"] holds the control's defenses plus the passive turn-rules defense, which every run
-carries.
+The run's facts go into the sample metadata: metadata["cheatbench"] gains the config dump, the hidden roles and their
+composition, each role's model (role_models), the access plan and the deviations from CheatBench's own runner.
+metadata["experiment"]["defenses"] holds the passive turn-rules defense, which every run carries.
 
-An agent whose role has a model of its own (worker_model, regulator_model, disregulator_model) runs it through the
-swarm model provider (src/models/swarm_model_provider.py); every other agent runs the eval's model.
-
-Hidden roles are used on a board of three or more agents on openmath (the October 2026 swarm), and on any board whose
-config asks for a regulator or a disregulator. Two openmath agents without roles are the plain board.
+Hidden roles are used on a board whose config asks for a regulator or a disregulator. An agent whose role has a model
+of its own runs it through the swarm model provider (src/models/swarm_model_provider.py); every other agent runs the
+eval's model.
 """
 from __future__ import annotations
 
@@ -48,8 +43,9 @@ from orbit.configs.setup import AgentSpec, SetupConfig
 from orbit.tasks.multi_agent import multi_agent_task
 
 from src.configuration import access_policy, settings
+from src.configuration.presets import preset, with_overrides
 from src.configuration.prompt_texts import board_system_prompt
-from src.configuration.swarm_config import SwarmConfig, preset
+from src.configuration.swarm_config import SwarmConfig
 from src.domains.benchmark_protocol import AgentTools, Benchmark
 from src.domains.interview import PrimeFactorization, SubsetSum
 from src.domains.knowledge import KnowledgeWork
@@ -62,17 +58,16 @@ from src.judging.cheatbench_judge import cheatbench_judge
 from src.models import swarm_model_provider as provider  # importing it registers the "swarm" provider
 from src.swarm import hidden_roles as roles_module
 from src.swarm.awareness_probes import end_of_episode_probes
-from src.swarm.board_config import (
+from src.swarm.board import (
+    agent_tool_names,
+    board_bindings,
     board_communication,
     board_execution,
     board_scheduler,
 )
-from src.swarm.control_defenses import BASELINE, defenses_for
-from src.swarm.pull_board import agent_tool_names, board_bindings
 from src.swarm.turn_rules import rules_setup, schedule, turn_rules_defense
 
 JUDGE_ADDENDUM = settings.LUCY / "experiments" / "orbit_cheatbench" / "judge_addendum.py"
-MONITOR_FACTOR = 3        # an LLM control's own calls count toward the token limit
 
 
 # --------------------------------------------------------------------------
@@ -82,25 +77,18 @@ def level_key(benchmark: Benchmark) -> str:
     return roles_module.LEVEL_KEYS[benchmark.name]
 
 
-def hidden_roles(benchmark: Benchmark, config: SwarmConfig) -> dict[str, str] | None:
-    """Each agent's hidden role, or None when the run uses no roles (a lone agent or a plain board)."""
-    asked = config.regulator_count + config.disregulator_count > 0
-    swarm = isinstance(benchmark, OpenMath) and config.n_agents > 2
-    if not config.board or not (asked or swarm):
+def hidden_roles(config: SwarmConfig) -> dict[str, str] | None:
+    """Each agent's hidden role on a board whose config asks for a regulator or a disregulator, else None."""
+    if not config.board or config.regulator_count + config.disregulator_count == 0:
         return None
     return roles_module.assign_roles(config.names, config.regulator_count, config.disregulator_count, config.seed)
 
 
-def rule_suffix(benchmark: Benchmark, config: SwarmConfig) -> str:
-    """The rule sentence on its own paragraph, or "" at rule level none."""
-    return roles_module.rule_suffix(config, level_key(benchmark))
-
-
-def build_sample(benchmark: Benchmark, config: SwarmConfig, suffix: str,
-                 roles: dict[str, str] | None = None) -> Sample:
-    """The benchmark's sample under the config: the mode, the board settings and who is neutral (roles; neutral
-    agents hold team_submit) shape its prompts and workspaces."""
-    return benchmark.sample(config.names, instruction_suffix=suffix, config=config, roles=roles)
+def instruction_suffix(benchmark: Benchmark, config: SwarmConfig, extra_instruction: str = "") -> str:
+    """What follows the task instruction: the rule sentence on its own paragraph ("" at rule level none), then
+    extra_instruction on its own paragraph."""
+    extra = f"\n{extra_instruction}\n" if extra_instruction else ""
+    return roles_module.rule_suffix(config, level_key(benchmark)) + extra
 
 
 def system_prompts(benchmark: Benchmark, config: SwarmConfig, sample: Sample,
@@ -116,8 +104,7 @@ def system_prompts(benchmark: Benchmark, config: SwarmConfig, sample: Sample,
     if own:
         base = {n: own[n] for n in names}
     else:
-        base = {n: board_system_prompt(config, n, names, workdir=benchmark.workdir, domain=level_key(benchmark))
-                for n in names}
+        base = {n: board_system_prompt(config, n, names) for n in names}
     if not roles:
         return base
     return {n: roles_module.with_role(base[n], roles_module.role_prompt(roles[n], config, level_key(benchmark),
@@ -128,30 +115,26 @@ def system_prompts(benchmark: Benchmark, config: SwarmConfig, sample: Sample,
 def team_tools(benchmark: Benchmark, config: SwarmConfig, tools: AgentTools,
                roles: dict[str, str] | None) -> tuple[dict[str, list[str]], dict]:
     """(each agent's AgentSpec.tools, ORBIT tool_bindings): the benchmark's tools (its per_agent names when it has
-    them), then the board tools and team_submit (src/swarm/pull_board.py)."""
-    extra = agent_tool_names(config, config.names, level_key(benchmark), roles)
+    them), then the board tools and team_submit (src/swarm/board.py)."""
+    extra = agent_tool_names(config, roles)
     own = getattr(tools, "per_agent", None) or {}   # KnowledgeTools: the review tool follows the access plan
     names = {n: [*own.get(n, tools.names), *extra[n]] for n in config.names}
     return names, {**tools.bindings, **board_bindings(config, roles=roles)}
 
 
 def agent_specs(config: SwarmConfig, tools: dict[str, list[str]], prompts: dict[str, str | None],
-                message_limit: int | None = None, roles: dict[str, str] | None = None) -> list[AgentSpec]:
+                roles: dict[str, str] | None = None) -> list[AgentSpec]:
     """One worker per name. An agent with no prompt of ours keeps AgentSpec's default system prompt. Each
-    conversation is capped at the sample's message limit (message_limit, else config.message_limit) plus ten.
+    conversation is capped at the sample's message limit plus ten.
 
     An agent whose hidden role has a model of its own (SwarmConfig.role_models) gets AgentSpec.model
-    "swarm/<Inspect string>" (src/models/swarm_model_provider.py); the others leave it None and run
-    the eval's model.
-    roles None means every agent is a worker."""
-    limit = config.message_limit if message_limit is None else message_limit
-    chosen = config.role_models()
-
+    "swarm/<Inspect string>" (provider.agent_model); the others leave it None and run the eval's model. roles None
+    means every agent is a worker."""
     def model_of(name: str) -> dict:
-        model = chosen[(roles or {}).get(name, "worker")]
-        return {"model": provider.role_model(model)} if model else {}
+        model = provider.agent_model(config.role_models(), roles, name)
+        return {"model": model} if model else {}
 
-    return [AgentSpec(name=n, role="worker", tools=list(tools[n]), max_messages=limit + 10,
+    return [AgentSpec(name=n, role="worker", tools=list(tools[n]), max_messages=config.sample_message_limit + 10,
                       submit=config.shutdown, **model_of(n), **({"system_prompt": prompts[n]} if prompts[n] else {}))
             for n in config.names]
 
@@ -175,25 +158,12 @@ def scorers(benchmark: Benchmark, config: SwarmConfig) -> list:
     return [*benchmark.scorers(), *judge, *probes]
 
 
-def token_limit(config: SwarmConfig) -> int:
-    if config.token_limit:
-        return config.token_limit
-    return config.n_agents * TOKEN_LIMIT * (MONITOR_FACTOR if config.control not in BASELINE else 1)
-
-
 def delivery(benchmark: Benchmark, config: SwarmConfig) -> dict:
     """rules_setup's delivery predicate under stop_after_delivery ({"delivered": Benchmark.delivered}); nothing
-    without the rule, so the eval log's plan records the setup's arguments as before."""
+    without the rule, so the eval log's plan records no predicate."""
     if config.stop_after_delivery is None:
         return {}
     return {"delivered": benchmark.delivered(config.names, config)}
-
-
-def check_control(benchmark: Benchmark, config: SwarmConfig) -> None:
-    """The task-aware controls carry the openmath rule; refuse them on another benchmark."""
-    if config.control.endswith("_task") and not isinstance(benchmark, OpenMath):
-        raise ValueError(f"control {config.control!r} carries the openmath rule (src/configuration/controls.yaml); "
-                         f"no criteria are written for {benchmark.name}")
 
 
 # --------------------------------------------------------------------------
@@ -201,13 +171,12 @@ def check_control(benchmark: Benchmark, config: SwarmConfig) -> None:
 # --------------------------------------------------------------------------
 def record_run(task_: Task, benchmark: Benchmark, config: SwarmConfig, roles: dict[str, str] | None,
                prompts: dict[str, str | None]) -> None:
-    """Write the defenses into the experiment config and the run's facts into metadata["cheatbench"].
+    """Write the turn rules' defense into the experiment config and the run's facts into metadata["cheatbench"].
 
     multi_agent_task takes no defenses; the orchestrator reads them from metadata["experiment"]["defenses"]
     (orbit/solvers/orchestrator.py _build_attacks_and_defenses).
     """
-    control = defenses_for(config.control, config.monitor_model)
-    defenses = [d.model_dump(mode="json") for d in [*control, turn_rules_defense(config)]]
+    defenses = [turn_rules_defense(config).model_dump(mode="json")]
     for sample in task_.dataset:
         experiment = sample.metadata["experiment"]
         if not config.board:
@@ -215,18 +184,14 @@ def record_run(task_: Task, benchmark: Benchmark, config: SwarmConfig, roles: di
         experiment["defenses"] = defenses
         ExperimentConfig.model_validate(experiment)
         cb = sample.metadata["cheatbench"]
-        cb["control"] = config.control if config.control not in BASELINE else "baseline"
-        cb["monitor_model"] = config.monitor_model if control else None
         cb["config"] = config.model_dump(mode="json")
         cb["role_models"] = config.role_models()
         cb["code"] = settings.code_state()
         cb["access"] = {"policy": access_policy.policy_name(benchmark.applied_access(config.names, config, roles)),
                         "agents": benchmark.access_plan(config.names, config, roles)}
-        cb["deviations"] = benchmark.run_deviations(config.n_agents, shutdown=config.shutdown,
-                                                    mode=config.resolve_mode(benchmark.name))
-        budget = config.turn_budget_for(level_key(benchmark))
-        if budget is not None:
-            cb["turn_budget"] = {"budget": budget, "steps_per_agent": config.steps_for(level_key(benchmark))}
+        cb["deviations"] = benchmark.run_deviations(config.n_agents, shutdown=config.shutdown, mode=config.mode)
+        if config.turn_budget is not None:
+            cb["turn_budget"] = {"budget": config.turn_budget, "steps_per_agent": config.working_steps}
         if roles:
             cb["roles"] = roles
             cb["composition"] = roles_module.composition_label(roles)
@@ -240,18 +205,15 @@ def record_run(task_: Task, benchmark: Benchmark, config: SwarmConfig, roles: di
 # the task
 # --------------------------------------------------------------------------
 def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = None,
-               sample: Sample | None = None) -> Task:
-    """One benchmark under one config, as an ORBIT task on Inspect. `sample` is a caller's own sample in place of
-    build_sample's (benchmark.sample with the caller's instruction_suffix, say); it must be for config.names."""
+               extra_instruction: str = "") -> Task:
+    """One benchmark under one config, as an ORBIT task on Inspect. extra_instruction follows the rule sentence after
+    the task instruction, on its own paragraph."""
     settings.check_submodule_heads()
-    check_control(benchmark, config)
     benchmark.check(config)
     names = config.names
-    domain = level_key(benchmark)
-    config.check_windows(domain)
-    roles = hidden_roles(benchmark, config)
-    if sample is None:
-        sample = build_sample(benchmark, config, rule_suffix(benchmark, config), roles)
+    roles = hidden_roles(config)
+    sample = benchmark.sample(names, instruction_suffix=instruction_suffix(benchmark, config, extra_instruction),
+                              config=config, roles=roles)
     tools = benchmark.tools(names, config)
     agent_tools, bindings = team_tools(benchmark, config, tools, roles)
     prompts = system_prompts(benchmark, config, sample, roles)
@@ -260,32 +222,30 @@ def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = 
     # Inspect's hard time limit sits above ORBIT's soft halt at time_limit_s (SwarmConfig.time_grace_s); SWE grades
     # after the agents stop, so its limit leaves room for setup and grading instead.
     grace = GRADING_BUDGET_S if isinstance(benchmark, SWE) else config.time_grace_s
-    inspect_time = {"time_limit": time_limit_s + grace}
-    message_limit = config.message_limit_for(domain)
     task_ = multi_agent_task(
-        name=name or f"swarm_{domain}",
-        setup=SetupConfig(agents=agent_specs(config, agent_tools, prompts, message_limit, roles),
+        name=name or f"swarm_{level_key(benchmark)}",
+        setup=SetupConfig(agents=agent_specs(config, agent_tools, prompts, roles),
                           communication_edges=None, tool_kwargs=tools.tool_kwargs),
         dataset=[sample],
         communication=communication,
-        execution=board_execution(plan=schedule(config, names, roles, domain),
+        execution=board_execution(plan=schedule(config, names, roles),
                                   agent_groups=first_message_groups(sample, names), initial_context="sample_input"),
-        scheduler=board_scheduler(max_turns=config.max_turns_for(domain) + 5, max_time_seconds=time_limit_s),
+        scheduler=board_scheduler(max_turns=config.max_turns + 5, max_time_seconds=time_limit_s),
         scorer=scorers(benchmark, config),
         tool_bindings=bindings or None,
-        task_setup=[s for s in (rules_setup(config, names, roles, domain, **delivery(benchmark, config)),
+        task_setup=[s for s in (rules_setup(config, names, roles, **delivery(benchmark, config)),
                                 benchmark.setup()) if s is not None],
-        message_limit=message_limit,
-        token_limit=token_limit(config),
-        **inspect_time,
+        message_limit=config.sample_message_limit,
+        token_limit=config.token_limit or config.n_agents * TOKEN_LIMIT,
+        time_limit=time_limit_s + grace,
     )
     record_run(task_, benchmark, config, roles, prompts)
     return task_
 
 
 def _config(preset_name: str, overrides: dict) -> SwarmConfig:
-    """The preset, then every -T key=value; scale=<name> applies that scale first (SwarmConfig.with_overrides)."""
-    return preset(preset_name).with_overrides([f"{key}={value}" for key, value in overrides.items()])
+    """The preset, then every -T key=value; scale=<name> applies that scale first (presets.with_overrides)."""
+    return with_overrides(preset(preset_name), [f"{key}={value}" for key, value in overrides.items()])
 
 
 @task

@@ -15,7 +15,6 @@ import json
 import re
 from pathlib import Path
 
-from src.configuration.swarm_config import DOMAIN_KEYS, DOMAIN_MODES
 from src.domains.openmath.openmath_settings import TEAM_IDENTITY
 from src.export.atif_transcripts import TURN_RULES_TAG
 from src.export.eval_sample_view import SampleView, topology
@@ -32,11 +31,11 @@ SWE_GRADER = "swe_grader"
 PROBES_SCORER = "end_of_episode_probes"
 # the StoreModel of src/swarm/turn_rules/turn_state.py; Inspect stores its fields as "TurnState:<field>"
 TURN_STATE = "TurnState"
-TURN_STATE_FIELDS = ("agents", "cap", "pooled", "turn_order", "seed", "rounds", "windows", "activations", "used",
-                     "ended", "timeline")
-# The pull board's per-agent counts ({agent: value}) and the team submission; written only when the run stored them.
-TURN_STATE_BOARD_FIELDS = ("work_steps", "free_steps", "checks", "reads", "posts", "discovery_round", "read_senders",
-                           "team_submission", "free_caps", "reads_per_turn", "posts_per_turn", "turn_budget",
+TURN_STATE_FIELDS = ("agents", "cap", "pooled", "turn_order", "seed", "rounds", "windows", "activations",
+                     "work_steps", "ended", "timeline")
+# The pull board's per-agent counts ({agent: value}); written only when the run stored them.
+TURN_STATE_BOARD_FIELDS = ("free_steps", "checks", "reads", "posts", "discovery_round", "read_senders",
+                           "free_caps", "reads_per_turn", "posts_per_turn", "turn_budget",
                            "oversight", "oversight_targets", "turn_reads", "turn_posts", "reads_refused",
                            "posts_refused", "history_marks")
 # The knowledge-work keys run.json keeps; the row, the evaluation file and the image ids stay in the eval log.
@@ -470,10 +469,10 @@ def rules_state(view: SampleView) -> dict | None:
 
 
 def rules_facts(state: dict | None, agent: str) -> dict | None:
-    """One agent's activations, working turns used, how it ended and its window of rounds."""
+    """One agent's activations, working steps, how it ended and its window of rounds."""
     if state is None:
         return None
-    return {k: (state.get(k) or {}).get(agent) for k in ("activations", "used", "ended", "windows")}
+    return {k: (state.get(k) or {}).get(agent) for k in ("activations", "work_steps", "ended", "windows")}
 
 
 def shutdown_rate(config: dict | None, records: list[dict]) -> float | None:
@@ -492,7 +491,7 @@ def probes_block(view: SampleView) -> dict | None:
 # the board: who looked, read, posted and submitted for the team
 # --------------------------------------------------------------------------
 def team_submission(view: SampleView) -> dict | None:
-    """The team's submission, from the TeamSubmission store (src/swarm/pull_board.py team_submit)."""
+    """The team's submission, from the TeamSubmission store (src/swarm/board.py team_submit)."""
     stored = {f: view.store_get(f"{TEAM_SUBMISSION}:{f}") for f in TEAM_SUBMISSION_FIELDS}
     return stored if stored["agent"] else None
 
@@ -569,20 +568,10 @@ def run_engagement(records: list[dict], submission: dict | None) -> dict | None:
 # --------------------------------------------------------------------------
 # mode, scale, preset and deviations
 # --------------------------------------------------------------------------
-def run_mode(config: dict | None, task: str | None) -> str | None:
-    """The mode the run's config resolves to on its domain; None without a config or off the six domains."""
-    if not config or task not in DOMAIN_KEYS:
-        return None
-    mode, key = config["mode"], DOMAIN_KEYS[task]
-    if isinstance(mode, dict):
-        return mode.get(key, DOMAIN_MODES[key])
-    return mode or DOMAIN_MODES[key]
-
-
-def run_identity(view: SampleView, task: str | None) -> dict:
+def run_identity(view: SampleView) -> dict:
     """mode, scale and preset for run.json, from the recorded config."""
     config = cheatbench(view).get("config") or {}
-    return {"mode": run_mode(config, task), "scale": config.get("scale"), "preset": config.get("preset")}
+    return {"mode": config.get("mode"), "scale": config.get("scale"), "preset": config.get("preset")}
 
 
 def run_deviations(view: SampleView) -> list[str]:

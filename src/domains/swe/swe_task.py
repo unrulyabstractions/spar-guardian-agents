@@ -3,7 +3,7 @@
 Holds the sample (build_swe), each agent's pieces of the honeypot, and the texts each agent reads: the system prompts
 from prompts.yaml `swe`.
 
-Modes of a team (SwarmConfig.resolve_mode, `shared_task` when mode is None):
+Modes of a team (SwarmConfig.mode, `shared_task` by default):
   * shared_task: every agent gets the whole issue on its own machine. The team's main is graded. The own_piece and
     jigsaw honeypots' pieces go to the clones as the config's access policy deals them (pieces_by_agent).
   * solo_task: every agent gets the whole issue and its own repository, with no team remote. Each agent's working
@@ -118,11 +118,11 @@ def system_prompts(split: dict, agents: list[str], config: SwarmConfig, *, mode:
         for a in agents:
             text = prompts["system_solo"].format(name=a, repo=split["repo"], branch=a, timeout=TOOL_TIMEOUT_S,
                                                  submit=submit)
-            board = board_system_prompt(config, a, agents, workdir=WORKDIR, domain="swe")
+            board = board_system_prompt(config, a, agents)
             out[a] = f"{text}\n\n{board}" if board else text
         return out
     submit = submit_line(True, config.shutdown)
-    submits = config.has_team_submit("swe")
+    submits = config.has_team_submit
     out = {}
     for a in agents:
         roster = "\n".join(prompts["roster_line"].format(name=o) for o in agents if o != a)
@@ -143,8 +143,8 @@ def build_swe(issue: str, honeypot: str, agents: list[str], config: SwarmConfig,
     issue_text = (task_dir(instance) / "instruction.md").read_text()
     instruction = issue_text + instruction_suffix
     team = len(agents) > 1
-    mode = config.resolve_mode("swe") if team else SHARED
-    pieces = pieces_by_agent(agents, honeypot, mode, roles, config.resolve_access("swe"))
+    mode = config.mode if team else SHARED
+    pieces = pieces_by_agent(agents, honeypot, mode, roles, config.access)
     neutral = set(access_policy.neutral_agents(agents, roles))
     system = system_prompts(split, agents, config, mode=mode, neutral=neutral)
     swe = {
@@ -187,7 +187,7 @@ class SWE(Benchmark):
         when the honeypot plants none."""
         super().check(config)
         check_scale(config)
-        access = config.resolve_access("swe")
+        access = config.access
         if self.honeypot == "as_released" and isinstance(access, dict) and any(access.values()):
             raise ValueError("the as_released honeypot plants no pieces, so no access map can name any")
 
@@ -206,7 +206,7 @@ class SWE(Benchmark):
         """The pieces each clone holds (pieces_by_agent): a lone agent or a run without a config holds the whole fix,
         a team as its mode and the applied policy say."""
         team = len(agents) > 1 and config is not None
-        mode = config.resolve_mode("swe") if team else SHARED
+        mode = config.mode if team else SHARED
         return pieces_by_agent(list(agents), self.honeypot, mode, roles, self.applied_access(agents, config, roles))
 
     def time_limit_s(self) -> int:
@@ -246,7 +246,7 @@ class SWE(Benchmark):
     def delivered(self, agents: list[str], config: SwarmConfig) -> Callable[[], Awaitable[set[str]]]:
         """A team with the team remote (outside solo_task): its main moved past the base, for every agent. A lone
         agent and a solo_task agent: a commit past the base on its own branch (grader.committed)."""
-        team = len(agents) > 1 and config.resolve_mode("swe") != "solo_task"
+        team = len(agents) > 1 and config.mode != "solo_task"
         return committed(list(agents), task_config(load_split(self.issue)["task"])["base_commit"], team)
 
     def deviations(self, n_agents: int, mode: str | None = None) -> list[str]:
