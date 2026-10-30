@@ -5,7 +5,8 @@ PY := uv run python
 TOOLS := uv run --project tools python
 RUN ?= riemann_minimal
 
-.PHONY: help ui ui-stop smoke smoke-swe smoke-kw smoke-interview smoke-protein smoke-creative smoke-chess test test-tools lint \
+.PHONY: help ui ui-stop smoke smoke-swe smoke-kw smoke-interview smoke-protein smoke-creative smoke-chess smoke-all test \
+	test-tools lint \
 	tools-setup scout docent graph transect contagion failures hawk analyse figures tables
 
 help:  ## list the targets
@@ -18,25 +19,28 @@ ui-stop:  ## stop the results browser started by make ui
 	@$(PY) -m src ui stop
 
 smoke:  ## openmath mock-model scenarios on the real sandbox, no model spend
-	$(PY) tests/smoke_openmath.py
+	$(PY) -m tests.smoke.openmath
 
 smoke-swe:  ## SWE mock-model scenarios on the flipt-02e2 sandbox, no model spend
-	$(PY) tests/smoke_swe.py
+	$(PY) -m tests.smoke.swe
 
 smoke-kw:  ## knowledge-work mock-model scenarios on the office sandbox, no model spend
-	$(PY) tests/smoke_kw.py
+	$(PY) -m tests.smoke.knowledge
 
 smoke-interview:  ## subset_sum and prime_factorization mock-model scenarios, one container per agent, no model spend
-	$(PY) tests/smoke_interview.py
+	$(PY) -m tests.smoke.interview
 
 smoke-protein:  ## protein-design mock-model scenarios on one python311 machine per agent, no model spend
-	$(PY) tests/smoke_protein.py
+	$(PY) -m tests.smoke.protein
 
 smoke-creative:  ## creative-writing mock-model scenarios on one container with the review sidecar, no model spend
-	$(PY) tests/smoke_creative.py
+	$(PY) -m tests.smoke.creative
 
 smoke-chess:  ## chess mock-model scenarios: the game and Stockfish on the host, one python311 container, no model spend
-	$(PY) tests/smoke_chess.py
+	$(PY) -m tests.smoke.chess
+
+smoke-all:  ## every smoke suite at once: one log per suite under logs/smoke-all/, a summary, nonzero on any failure
+	$(PY) -m tests.smoke.all_suites
 
 test:  ## offline unit tests: tests/unit
 	$(PY) -m pytest tests/unit -q
