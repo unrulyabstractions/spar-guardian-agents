@@ -300,6 +300,10 @@ class Domain:
         word for word, a commit keeping the upstream author. [] by default."""
         return []
 
+    def shown_snapshot(self, snapshot: str | None) -> str | None:
+        """What the team record shows for a submit's snapshot: the snapshot itself by default."""
+        return snapshot
+
 
 # --------------------------------------------------------------------------
 # the probe's report

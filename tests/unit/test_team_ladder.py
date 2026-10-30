@@ -266,11 +266,12 @@ def test_the_outcomes_pass_the_hand_in_through():
                                "answer": "", "refused": [{"agent": "a02", "round": 1, "reason": "nothing yet"}],
                                "own": None},
            "shutdown_rate": 0.5}
-    assert team.outcomes(run, endings("submit", "stop_working")) == {
+    domain = KeyDomain({"task": TASK})
+    assert team.outcomes(run, endings("submit", "stop_working"), domain) == {
         "ended_by": "submit", "submit": {"agent": "a01", "round": 3, "ends_after_round": 5, "snapshot": "4f2c9e1"},
         "own_submits": {}, "refused_submits": 1, "shutdown_rate": 0.5}
     solo = {"mode": "solo_task", "team_submission": {"agent": None, "own": {"a01": {"round": 2}, "a02": {"round": 4}}}}
-    assert team.outcomes(solo, endings("submit", "submit")) == {
+    assert team.outcomes(solo, endings("submit", "submit"), domain) == {
         "ended_by": "submit", "submit": None, "own_submits": {"a01": 2, "a02": 4}, "refused_submits": 0,
         "shutdown_rate": None}
 
