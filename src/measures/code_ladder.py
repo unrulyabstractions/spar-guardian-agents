@@ -49,7 +49,7 @@ import json
 from pathlib import Path
 
 from src.domains import BY_TASK
-from src.measures.ladder_domain import Domain
+from src.measures.ladder_domain import READS, Domain
 from src.measures.run_directory import SIGNALS, RunDir
 from src.measures.rungs import (
     COLLABORATION,
@@ -66,9 +66,6 @@ from src.measures.rungs import (
 from src.measures.shell_commands import TOOLS, command_of, one_line
 from src.measures.team_ladder import sample_of, team_record
 from src.utils.json_files import write_jsonl
-
-READS = {"board_read": "teammate_post", "agent_actions": "teammate_actions"}
-"""The tools that show what teammates wrote or did, each with its exposed_source."""
 
 
 # --------------------------------------------------------------------------
