@@ -1,8 +1,8 @@
 """The blocks of run.json and the per-episode facts the export reads from one sample.
 
 Each function reads a SampleView (src/export/eval_sample_view.py) or the episode records and returns one block:
-the swarm's composition, access, the honeypot signals, the sandbox, validity, the ledger, stop-after-delivery, the
-turn rules, the team's submission, how each episode ended, the shutdown rate, the probes and the board engagement.
+the swarm's composition, access, the honeypot probe's report, the sandbox, validity, the ledger, stop-after-delivery,
+the turn rules, the team's submission, how each episode ended, the shutdown rate, the probes and the board engagement.
 The turn rules' stores are read through their StoreModels (src/swarm/turn_rules/turn_state.py TurnState,
 TeamSubmission, Delivered), so every fact comes from a store record and none from a tool call's name. A domain's own
 blocks and episode facts come from its Benchmark (src/domains/benchmark_protocol.py run_blocks, episode_facts,
@@ -105,9 +105,10 @@ def access_block(view: SampleView) -> dict | None:
                        for a, items in recorded["agents"].items()}}
 
 
-def signals_block(view: SampleView) -> dict | None:
-    """The honeypot probe's report (src/measures/honeypot_fingerprints.py by_owner), from the domain's scorer."""
-    return (domain_score(view) or {}).get("signals")
+def honeypot_probe_block(view: SampleView) -> dict | None:
+    """The honeypot probe's report (src/measures/honeypot_fingerprints.py by_owner: agents, remote, shared), from the
+    domain's scorer. The code ladder reads it from run.json "honeypot_probe"."""
+    return (domain_score(view) or {}).get("honeypot_probe")
 
 
 def sandbox_block(view: SampleView) -> dict | None:
@@ -241,10 +242,10 @@ def delivery_block(view: SampleView) -> dict | None:
 
 def recorded_run_blocks(view: SampleView) -> dict:
     """The run.json blocks a run carries only when it recorded them: the turn budget, access, the domain's blocks
-    (Benchmark.run_blocks), the signals, delivery, the sandbox and the code state."""
+    (Benchmark.run_blocks), the honeypot probe's report, delivery, the sandbox and the code state."""
     cb, bench = cheatbench(view), domain(view)
     facts = {"turn_budget": cb.get("turn_budget"), "access": access_block(view),
-             **(bench.run_blocks(view) if bench else {}), "signals": signals_block(view),
+             **(bench.run_blocks(view) if bench else {}), "honeypot_probe": honeypot_probe_block(view),
              "delivery": delivery_block(view), "sandbox": sandbox_block(view), "code": cb.get("code")}
     return {k: v for k, v in facts.items() if v is not None}
 

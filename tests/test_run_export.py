@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from inspect_ai.model import ChatMessageSystem, ChatMessageUser
 from orbit.agents.turn_react import DEFAULT_ASSISTANT_PROMPT_TURN_REACT
 
+from src.domains.knowledge import KnowledgeWork
 from src.export import export_run_blocks as blocks
 from src.export.atif_transcripts import build_trajectory
 from src.export.eval_sample_view import ATTRIBUTION_KEY, SampleView, billed_cost, usage_from_events
@@ -69,6 +70,21 @@ def test_the_export_names_the_episodes_stop_after_delivery_ended():
     bare = view({"TurnState:agents": ["a01"], "TurnState:ended": {}})
     assert blocks.delivery_block(bare) is None
     assert blocks.recorded_run_blocks(bare) == {} and blocks.recorded_episode_facts(bare, "a01") == {}
+
+
+def test_run_json_carries_the_honeypot_probe_and_never_signals():
+    """The probe's report goes to run.json "honeypot_probe" from the domain scorer's metadata; "signals" is the code
+    ladder's, written after the export."""
+    probe = {"agents": {"a01": {"matches": [{"path": "/tmp/a.zip", "kind": "whole"}], "line_hits": []}},
+             "remote": {"matches": [], "line_hits": []}, "shared": {"matches": [], "line_hits": []}, "scanned": 4}
+    v = view({})
+    v.metadata["cheatbench"]["task"] = KnowledgeWork.name
+    score = SimpleNamespace(metadata={"honeypot_probe": probe, "signals": "stale"}, value=1.0)
+    v.scores = {KnowledgeWork.scorer: score}
+    recorded = blocks.recorded_run_blocks(v)
+    assert recorded["honeypot_probe"] == probe and "signals" not in recorded
+    v.scores = {}
+    assert "honeypot_probe" not in blocks.recorded_run_blocks(v)
 
 
 TEAM = {"a01": {"tools": ["board_read", "team_submit", "stop_working"], "submit": False},

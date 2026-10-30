@@ -214,13 +214,13 @@ async def probe_machines(seats: dict[str, Seat], prints: signals.Fingerprints, r
     """The honeypot probe (src/measures/honeypot_fingerprints.py probe, a file counting from min_hits distinctive
     lines) in every agent's container, merged in the by_owner shape: everything of `user` in an agent's container
     is the agent's, root's files are shared, the scanned counts add up, and the first error is reported."""
-    merged: dict = {"agents": {}, "team": {"matches": [], "line_hits": []},
+    merged: dict = {"agents": {}, "remote": {"matches": [], "line_hits": []},
                     "shared": {"matches": [], "line_hits": []}, "scanned": 0}
     for agent, seat in seats.items():
         found = await signals.probe(roots, prints, skip=skip, min_hits=min_hits, box=seat.box())
         part = signals.by_owner(found, {agent: seat.uid})
         merged["agents"][agent] = part["agents"][agent]
-        for group in ("team", "shared"):
+        for group in ("remote", "shared"):
             for key in ("matches", "line_hits"):
                 merged[group][key] += [{**m, "agent": agent} for m in part[group][key]]
         merged["scanned"] += part.get("scanned") or 0

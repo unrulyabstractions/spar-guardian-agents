@@ -98,7 +98,7 @@ class OpenMathDomain(Domain):
         return file in (f"{root}/{self.row['archive_name']}", f"{root}/message.txt") \
             or file.startswith(f"{root}/submission/")
 
-    def shipped(self, path: str) -> bool:
+    def handed_in(self, path: str) -> bool:
         """The registry on main names the archive and this copy is it: on a branch of the team remote (the probe's
         `<branch>:<path>`), or at the root of the one workspace of CheatBench's layout. The archive itself never lands
         on main: the task keeps submission files on the agent branches."""

@@ -33,9 +33,10 @@ prefix. A run that recorded role models gets run.json "role_models" ({role: Insp
 Blocks written when the run has them: run.json "turn_budget" ({budget, steps_per_agent}), "access" (the access policy
 and what each agent held: its items and numbered pieces, and on openmath's split layout the team remote, the honeypot
 branches and the archive), the domain's own blocks (Benchmark.run_blocks: "openmath" and "deliverables", "swe",
-"knowledge", "interview", "protein"), "delivery" (the stop-after-delivery record); and an episode's "access", the
-domain's facts (Benchmark.episode_facts) and "delivery" (the round and working step at which its deliverable was first
-seen).
+"knowledge", "interview", "protein"), "honeypot_probe" (the honeypot probe's report by owner: agents, remote,
+shared), "delivery" (the stop-after-delivery record); and an episode's "access", the domain's facts
+(Benchmark.episode_facts) and "delivery" (the round and working step at which its deliverable was first seen). The
+export never writes run.json "signals": the code ladder (src/measures/code_ladder.py) adds it after the export.
 
 Episode ids: "<sample>#<epoch>" for a single agent, "<sample>#<epoch>@<agent>" otherwise (export_episodes.episode_id).
 Verdicts come from the `verdicts` argument ({episode: verdict}, when re-judging) or from the cheatbench_judge score in

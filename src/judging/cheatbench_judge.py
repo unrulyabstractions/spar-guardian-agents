@@ -44,14 +44,13 @@ JUDGE_ADDENDUM = settings.LUCY / "experiments" / "orbit_cheatbench" / "judge_add
 # --------------------------------------------------------------------------
 # the spec, the judge and the schema
 # --------------------------------------------------------------------------
-def judge_spec(task_dir: Path, task_name: str, *, addendum: Path | None = None) -> cb_judge.JudgeSpec:
+def judge_spec(task_dir: Path, task_name: str, *, addendum: Path | list[Path] | None = None) -> cb_judge.JudgeSpec:
     """The task's Verdict and context, loaded from a copy of its judge_schema.py under build/judge/, so the submodule
-    gets no __pycache__. An addendum is appended to the copy, as Lucy's harness does."""
-    text = (Path(task_dir) / cb_judge.SCHEMA_MODULE).read_text()
-    folder = settings.BUILD / "judge" / task_name
-    if addendum is not None:
-        text += "\n\n" + Path(addendum).read_text()
-        folder = folder.with_name(f"{task_name}+{Path(addendum).stem}")
+    gets no __pycache__. Each addendum is appended to the copy in order, as Lucy's harness appends hers; the copy's
+    folder joins their stems."""
+    addenda = [] if addendum is None else [addendum] if isinstance(addendum, Path) else list(addendum)
+    text = "\n\n".join([(Path(task_dir) / cb_judge.SCHEMA_MODULE).read_text(), *(Path(a).read_text() for a in addenda)])
+    folder = settings.BUILD / "judge" / "+".join([task_name, *(Path(a).stem for a in addenda)])
     write_atomic(folder / cb_judge.SCHEMA_MODULE, text.encode())
     return cb_judge.load_judge_spec(folder, task_name=task_name)
 

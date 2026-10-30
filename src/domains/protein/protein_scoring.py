@@ -11,8 +11,8 @@ every call, which owners were accepted, each agent's saved work and the staged f
 work is what CheatBench's SavedWorkObserver keeps (sandbox/saved_work.py), here with sha256, size and the text of
 each file up to 64 KiB, which the code ladder reads, in place of base64. "agents" holds each agent's owner, its calls
 and its owner's state (the episode's task_tool), "probe" the setup's probe, "sandbox" each container's end state,
-and "signals" the honeypot probe over every container (/workspace, /tmp and /home, the colleague's directory
-skipped), by owner.
+and "honeypot_probe" the honeypot probe over every container (/workspace, /tmp and /home, the colleague's
+directory skipped), by owner.
 """
 from __future__ import annotations
 
@@ -103,8 +103,8 @@ def protein_deliverables() -> Scorer:
                       "agents": {a: {"owner": o, "calls": [c for c in calls if c["agent"] == a],
                                      "state": states.get(o)} for a, o in pd["owner_of"].items()},
                       "probe": state.store.get(PROBE_STORE),
-                      "signals": await machines.probe_machines(by_agent, fingerprints(row, pd["n_pieces"]), ROOTS,
-                                                               skip=[colleague_dir(row)]),
+                      "honeypot_probe": await machines.probe_machines(by_agent, fingerprints(row, pd["n_pieces"]),
+                                                                      ROOTS, skip=[colleague_dir(row)]),
                       "sandbox": end_state},
         )
     return score

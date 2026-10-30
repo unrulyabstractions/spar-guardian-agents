@@ -92,7 +92,7 @@ def assert_run_json(name: str, sample, records: list[dict]) -> dict:
     assert run["task"] == "protein_design", run["task"]
     assert run["protein"] == json.loads(json.dumps({**pd, **md["protein"], "value": sample.scores[SCORER].value})), \
         sorted(run["protein"])
-    assert run["signals"] == json.loads(json.dumps(md["signals"])), run["signals"]
+    assert run["honeypot_probe"] == json.loads(json.dumps(md["honeypot_probe"])), run["honeypot_probe"]
     for a, seat in pd["agents"].items():
         held = run["access"]["agents"][a]
         assert (held["holds"], held["pieces"]) == (seat["holds"], seat["pieces"]), held
@@ -171,7 +171,7 @@ def scenario_lone() -> dict:
     assert md["protein"]["changed_files"] == {"a01": []}, md["protein"]["changed_files"]
     assert md["agents"]["a01"]["owner"] == "a01" and len(md["agents"]["a01"]["calls"]) == 4, md["agents"]
     assert_probe(md["probe"], "a01", [PAYLOAD])
-    report = md["signals"]
+    report = md["honeypot_probe"]
     assert report.get("error") is None and report["scanned"] > 0, report
     assert [(m["path"], m["kind"]) for m in report["agents"]["a01"]["matches"]] == [(copy, "whole")], report
     run = assert_run_json("lone", sample, records)
@@ -270,7 +270,7 @@ def scenario_split() -> dict:
     assert md["protein"]["changed_files"] == dict.fromkeys(config.names, []), md["protein"]["changed_files"]
     for a, k in (("a01", 1), ("a02", 2), ("a03", 3)):
         assert_probe(md["probe"], a, [part[k]])
-    report = md["signals"]
+    report = md["honeypot_probe"]
     assert report.get("error") is None and all(not report["agents"][a]["matches"] for a in config.names), report
     run = assert_run_json("split", sample, records)
     assert run["protein"]["payload_paths"] == {f"a0{k}": part[k] for k in (1, 2, 3)}, run["protein"]["payload_paths"]

@@ -8,3 +8,4 @@ extend-select = ["I", "E501"]
 # appended to CheatBench's judge_schema.py: Verdict, EXTRA_CONTEXT and Field come from that file
 # and its Field descriptions stay on one line each, as CheatBench writes them
 "src/judging/ladder_verdict_fields.py" = ["F821", "E501"]
+"src/judging/presentation_verdict_fields.py" = ["F821", "E501"]

@@ -110,15 +110,32 @@ def test_the_engagement_funnel(tmp_path, capsys):
     assert main(["engagement", str(tmp_path / "missing")]) == 2
 
 
-def test_the_signals_table_counts_rungs_and_the_judge_agreement(tmp_path):
-    rows = [{"episode": "s#1@a01", "agent": "a01", "rung": "opened", "searched": True, "probe": True},
-            {"episode": "s#1@a02", "agent": "a02", "rung": "exposed", "searched": False, "probe": False}]
+TEAMS = [{"row": "team", "sample": "s#1", "rung": "checked", "collaboration": "solicited", "passed": True,
+          "raised_by_proof": True},
+         {"row": "team", "sample": "s#2", "rung": "opened", "collaboration": None, "passed": None,
+          "raised_by_proof": False}]
+
+
+def test_the_signals_table_counts_rungs_and_the_judge_agreement(tmp_path, capsys):
+    rows = [{"row": "agent", "episode": "s#1@a01", "agent": "a01", "rung": "checked", "probe": True},
+            {"row": "agent", "episode": "s#1@a02", "agent": "a02", "rung": "exposed", "probe": False}]
     judged = [{"episode": "s#1@a01", "parse_ok": True, "cheated": True},
               {"episode": "s#1@a02", "parse_ok": True, "cheated": True}]
-    make_run(tmp_path, verdicts=judged, signals=rows)
+    make_run(tmp_path, verdicts=judged, signals=[*rows, *TEAMS])
     lines = code_ladder.signals_table([tmp_path / "r", tmp_path / "missing"]).splitlines()
     cols, values = lines[0].split(), lines[1].split()
-    assert len(cols) == len(values) and values[:2] == ["r", "2"]
-    assert [values[cols.index(c)] for c in ("opened", "exposed", "searched", "probe", "judged", "agree")] == \
-        ["1", "1", "1", "1", "2", "1"]
+    assert len(cols) == len(values) and values[:2] == ["r", "2"] and "searched" not in cols
+    assert [values[cols.index(c)] for c in ("checked", "exposed", "probe", "judged", "agree")] == \
+        ["1", "1", "1", "2", "1"]
     assert "(no signals)" in lines[2] and lines[3].split()[:2] == ["all", "2"]
+    # the team table: one row per team record, its rung, its collaboration level, the pass and the raise
+    lines = code_ladder.team_table([tmp_path / "r", tmp_path / "missing"]).splitlines()
+    cols, values = lines[0].split(), lines[1].split()
+    assert len(cols) == len(values) and values[:2] == ["r", "2"]
+    assert [values[cols.index(c)] for c in ("checked", "opened", "solicited", "isolated", "passed", "raised")] == \
+        ["1", "1", "1", "0", "1", "1"]
+    assert "(no team records)" in lines[2] and lines[3].split()[:2] == ["all", "2"]
+    assert main(["signals", "--table", str(tmp_path / "r")]) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert out[0].split()[:3] == ["run", "n", "none"] and out[3].split()[:3] == ["run", "n", "none"]
+    assert "assembled" in out[3].split() and "assembled" not in out[0].split()

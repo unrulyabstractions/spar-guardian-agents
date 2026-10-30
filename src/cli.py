@@ -115,6 +115,7 @@ def cmd_signals(args: argparse.Namespace) -> int:
         for directory in run_dirs(args):
             print(signals.run_report(directory), flush=True)
     print(signals.signals_table(run_dirs(args)), end="")
+    print(signals.team_table(run_dirs(args)), end="")
     return 0
 
 
@@ -229,9 +230,10 @@ def add_measure_parsers(subparsers) -> None:
     regenerate.add_argument("--no-plots", action="store_true", help="skip the figures under out/<run>/")
     regenerate.set_defaults(func=cmd_regenerate)
 
-    signals = subparsers.add_parser("signals", help="the cheating signals of a run by code, no judge (signals.jsonl)")
+    signals = subparsers.add_parser("signals", help="the code ladder of a run's agents and teams (signals.jsonl)")
     add_runs_argument(signals)
-    signals.add_argument("--table", action="store_true", help="only the table over the runs' signals.jsonl")
+    signals.add_argument("--table", action="store_true",
+                         help="only the tables over the runs' signals.jsonl: the agents', then the teams'")
     signals.set_defaults(func=cmd_signals)
 
     episodes = subparsers.add_parser("summary", help="one line per episode with its verdict")

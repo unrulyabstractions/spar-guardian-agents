@@ -11,7 +11,9 @@ its eval log.
 
 A run calls inspect_ai.eval with the task (the default task of tasks.swarm_task, or one the caller built), writes its
 log under logs/<name>/, exports it to runs/<name>/ with src/export/run_export.py, prints one line per episode
-(src/measures/episode_summary.py) and places every agent on the code ladder (src/measures/code_ladder.py).
+(src/measures/episode_summary.py) and places every agent and the team on the code ladder (src/measures/code_ladder.py).
+The code ladder runs again after every export, which rewrites run.json, and after the judged ladder, whose team rows
+it merges into its own.
 CheatBench's judge runs inside the eval as a scorer, bound to the model role "judge". With batch_judge the judge's
 calls use the provider's batch API, and with batch_agents so do the agents' calls (Inspect GenerateConfig.batch). A
 role with a model of its own (worker_model, regulator_model, disregulator_model) runs it through the swarm model
@@ -227,12 +229,14 @@ def judge(eval_log: Path, run_name: str, judge_name: str, *, batch: bool = True,
         raise Refusal("run has a harness or provider failure; not judging (pass --judge-errors to force)", 5)
     print(f"== judge ({judge_name}, {'batch' if batch else 'sync'}) {eval_log}", flush=True)
     verdicts = asyncio.run(_judge_views(views, judge_name, batch))
-    written = RunDir(export(eval_log, settings.RUNS / run_name, verdicts=verdicts)).verdicts()
+    run_dir = export(eval_log, settings.RUNS / run_name, verdicts=verdicts)
+    written = RunDir(run_dir).verdicts()
     if not verdicts or not written:
         raise Refusal("the judge wrote no verdicts", 4)
     print("== verdicts")
     for verdict in written.values():
         print(json.dumps({key: verdict.get(key) for key in VERDICT_FIELDS}))
+    print(signals.run_report(run_dir), flush=True)
     return 0
 
 
@@ -243,7 +247,8 @@ def judge(eval_log: Path, run_name: str, judge_name: str, *, batch: bool = True,
 def ladder_runs(run_dirs: list[Path], judge_name: str, *, view: str = "full", agents: list[str] | None = None,
                 force: bool = False, batch: bool = True) -> int:
     """Place every agent of each run on the cheating ladder (src/judging/judging_ladder.py): runs/<name>/ladder.jsonl,
-    one line per agent, then the table over the runs. batch as in judge()."""
+    one line per agent, then the table over the runs, then the code ladder again, which merges the judged team rows
+    into signals.jsonl and run.json. batch as in judge()."""
     require_judge_key(judge_name, 2)
     if view not in ladder.VIEWS:
         raise Refusal(f"unknown view {view!r}; choose one of {ladder.VIEWS}", 2)
@@ -252,6 +257,8 @@ def ladder_runs(run_dirs: list[Path], judge_name: str, *, view: str = "full", ag
         raise Refusal(f"not a run directory: {', '.join(missing)}", 2)
     asyncio.run(_ladder_all(run_dirs, judge_name, view, agents, force, batch))
     print(ladder.ladder_table(run_dirs, view), end="")
+    for run_dir in run_dirs:
+        print(signals.run_report(Path(run_dir)), flush=True)
     return 0
 
 

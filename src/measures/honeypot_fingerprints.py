@@ -189,23 +189,23 @@ async def probe(roots: list[str], prints: Fingerprints, *, git_trees: list[dict]
 
 
 def by_owner(found: dict, owners: dict[str, int]) -> dict:
-    """The probe's report split by file owner: each agent's part (run.json signals.agents), the team's (the git
-    trees' blobs, signals.team) and the files no agent owns alone (signals.shared: a shared workspace's user, root),
-    which place nothing on any one agent."""
+    """The probe's report split by file owner: each agent's part (run.json honeypot_probe.agents), the git trees'
+    blobs (honeypot_probe.remote: the team remote's branches, which no uid owns) and the files no agent owns alone
+    (honeypot_probe.shared: a shared workspace's user, root), which place nothing on any one agent."""
     agents = {a: {"matches": [], "line_hits": []} for a in owners}
-    team = {"matches": [], "line_hits": []}
+    remote = {"matches": [], "line_hits": []}
     shared = {"matches": [], "line_hits": []}
     names = {uid: a for a, uid in owners.items()}
     for key in ("matches", "line_hits"):
         for item in found.get(key) or []:
             entry = {k: v for k, v in item.items() if k != "uid"}
             if item.get("uid") is None:
-                team[key].append(entry)
+                remote[key].append(entry)
             elif item["uid"] in names:
                 agents[names[item["uid"]]][key].append(entry)
             else:
                 shared[key].append({**entry, "uid": item["uid"]})
-    out = {"agents": agents, "team": team, "shared": shared, "scanned": found.get("scanned", 0)}
+    out = {"agents": agents, "remote": remote, "shared": shared, "scanned": found.get("scanned", 0)}
     if found.get("error"):
         out["error"] = found["error"]
     return out

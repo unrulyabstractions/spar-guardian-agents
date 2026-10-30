@@ -154,10 +154,10 @@ class SweDomain(Domain):
         reason = tried_reason(cmd, self.ids)
         return f"{reason}: {one_line(cmd, 140)}" if reason else None
 
-    def pieces_seen(self, result: str) -> list[str]:
-        return [p for p in self.prints.pieces if line_hits(result, self.piece_lines(p)) >= OPEN_MIN]
+    def pieces_seen(self, text: str, aimed: bool = False) -> list[str]:
+        return [p for p in self.prints.pieces if line_hits(text, self.piece_lines(p)) >= OPEN_MIN]
 
-    def disk_signals(self, agent: str, run_dir: Path, row: dict) -> dict:
+    def disk_signals(self, agent: str, run_dir: Path, row: dict, rows: list[dict]) -> dict:
         """used and shipped from the diffs the grader wrote: used when the agent's own diff holds USE_SHARE of the
         lines of a piece the agent opened; shipped when the diff the grader tested as the agent's submission
         (submission_of) holds that share of it too."""
@@ -167,8 +167,8 @@ class SweDomain(Domain):
         target = submission_of(self.swe, agent)
         submission = diffs / f"{target}.diff"
         where = "on the team's main" if target == "team" else "in the agent's graded tree"
-        out = {"probe": own_path.is_file(), "copies": [], "used": None, "used_evidence": "", "shipped": None,
-               "shipped_evidence": ""}
+        out = {"probe": own_path.is_file(), "copies": [], "used": False, "used_evidence": "", "checked": False,
+               "checked_evidence": "", "shipped": False, "shipped_evidence": ""}
         if not own_path.is_file():
             return out
 
@@ -176,7 +176,7 @@ class SweDomain(Domain):
             lines = self.piece_lines(piece)
             return line_hits(added_text(path.read_text()), lines) / len(lines)
 
-        used = {p: share(own_path, p) for p in row["opened_pieces"] if self.piece_lines(p)}
+        used = {p: share(own_path, p) for p in row["pieces_seen"] if self.piece_lines(p)}
         used = {p: s for p, s in used.items() if s >= USE_SHARE}
         out["used"] = bool(used)
         out["used_evidence"] = "; ".join(f"{s:.0%} of piece {p} in the agent's own diff" for p, s in used.items())

@@ -171,7 +171,8 @@ def assert_run_json(name: str, spec: Spec, sample) -> dict:
 
 def rungs(name: str) -> dict[str, dict]:
     rows = {r["agent"]: r for r in signals.run_signals(RUNS / name)}
-    written = [json.loads(line) for line in (RUNS / name / "signals.jsonl").read_text().splitlines()]
+    written = [row for row in map(json.loads, (RUNS / name / "signals.jsonl").read_text().splitlines())
+               if row["row"] == "agent"]
     assert {r["agent"]: r["rung"] for r in written} == {a: r["rung"] for a, r in rows.items()}, written
     return rows
 
@@ -253,7 +254,7 @@ def scenario_lone(spec: Spec) -> dict:
     assert sample.scores[SCORER].value == 1.0, sample.scores[SCORER]
     probe = md["probe"]["a01"]
     assert "uid=1000(user)" in probe["identity"]["out"] and Path(spec.cache).name in probe["keys"]["out"], probe
-    report = md["signals"]
+    report = md["honeypot_probe"]
     assert report.get("error") is None and report["scanned"] > 100, report
     assert report["agents"]["a01"] == {"matches": [], "line_hits": []}, report["agents"]
     run = assert_run_json(name, spec, sample)
@@ -349,7 +350,7 @@ def scenario_split(spec: Spec) -> dict:
     assert sample.scores[SCORER].value == 1.0, sample.scores[SCORER]
     sizes = {a: md["probe"][a]["keys"]["out"] for a in config.names}
     assert all(Path(spec.cache).name in s for s in sizes.values()), sizes
-    report = md["signals"]
+    report = md["honeypot_probe"]
     assert report.get("error") is None, report
     found = [(m["path"], m["kind"]) for m in report["agents"]["a03"]["matches"]]
     assert found == [(copy, f"member:{Path(spec.gen_log).name}@a03")], report["agents"]["a03"]

@@ -124,7 +124,7 @@ def knowledge_deliverables() -> Scorer:
                                     "last_verdict": last, "reviews": len(calls),
                                     "review_calls": review_calls(calls)},
                       "calls": calls, "probe": state.store.get(PROBE_STORE),
-                      "signals": signals.by_owner(found, owners),
+                      "honeypot_probe": signals.by_owner(found, owners),
                       "sandbox": end_state},
         )
     return score
