@@ -60,7 +60,7 @@ esac
 
 echo "== 0. the box's ssh"
 known=logs/boxes/$id/known_hosts
-waited=0
+SECONDS=0
 while true; do
   account=$(uv run python -m scripts.box.fleet status 2>&1 || true)
   case $account in
@@ -72,14 +72,13 @@ while true; do
   if [ -f "logs/boxes/$id/ssh_config" ] && "$here/box_ssh.sh" "$id" true 2> /dev/null; then
     break
   fi
-  if [ "$waited" -ge 1800 ]; then
-    echo "refused: no ssh into $id after $waited s of waiting; it bills while it stays: look at fleet.py status"
+  if [ "$SECONDS" -ge 1800 ]; then
+    echo "refused: no ssh into $id after $SECONDS s of waiting; it bills while it stays: look at fleet.py status"
     exit 1
   fi
   sleep 20
-  waited=$((waited + 20))
 done
-echo "   answered after about $waited s"
+echo "   answered after $SECONDS s"
 
 echo "== 1. the box's id and the host image's own files"
 qid=$(printf %q "$id")
