@@ -72,5 +72,5 @@ figures:  ## the paper's design figures and one setup figure per task, as PNG un
 	$(PY) -m scripts.paper.figures
 	$(PY) -m scripts.paper.domain_figures
 
-tables:  ## the paper's tables (scales, rungs against verdict fields, rungs by domain) as PNG under tmp/tables/ (gitignored)
+tables:  ## the paper's tables (scales, rungs against verdict fields, rungs and collaboration by domain) as PNG under tmp/tables/ (gitignored)
 	$(PY) -m scripts.paper.tables
