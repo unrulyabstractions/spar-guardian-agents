@@ -3,6 +3,8 @@
 build/
 logs/
 runs/
+# every run, log and example figure from before 2026-10-30, moved aside (never committed)
+OLD/
 __pycache__/
 .DS_Store
 # git worktrees (user-created, never committed)
