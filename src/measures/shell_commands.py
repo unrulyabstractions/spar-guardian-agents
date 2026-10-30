@@ -39,6 +39,9 @@ TOOLS = ("shell", "run_python", "bash", "python")
 """The tools whose call is a command or code."""
 REFUSED = "validation errors parsing tool input arguments"
 """What Inspect answers when a tool's schema refuses a call: nothing ran."""
+PY_WRITE = re.compile(r"""\bopen\([^)]*,\s*['"][wax]|\.write_text\(|\.write_bytes\(|\bjson\.dump\(""")
+"""Python code that opens a file for writing."""
+PATH_WORD = re.compile(r"[\w./-]+")
 
 
 def command_of(tc: dict) -> str:
@@ -311,6 +314,21 @@ def command_blocks(cmd: str, directory: str) -> list[Block]:
             directory, previous = previous if target == "-" else absolute(target, directory), directory
         else:
             out.append(Block([located(stage, directory) for stage in stages], text, directory))
+    return out
+
+
+def written_paths(cmd: str) -> set[str]:
+    """The paths a command writes, as it names them: > and >> targets, tee's files, the files sed -i edits, a copy's
+    last operand and each source's name under it, and every path-like word of Python code that writes a file, read
+    as relative, since such a path often sits in a variable or follows one. Here-documents' bodies are data."""
+    out = {word.lstrip("/") for word in PATH_WORD.findall(cmd)} if PY_WRITE.search(cmd) else set()
+    for stage in (stage_of(s) for pipeline in shell_pipelines(strip_heredocs(cmd)) for s in pipeline):
+        operands = [a for a in stage.args if not a.startswith("-")]
+        out |= set(stage.writes)
+        if stage.program == "sed" and any(a.startswith("-i") for a in stage.args):
+            out |= set(operands[1:])
+        elif stage.program in COPIERS and len(operands) > 1:
+            out |= {operands[-1], *(f"{operands[-1].rstrip('/')}/{Path(source).name}" for source in operands[:-1])}
     return out
 
 
