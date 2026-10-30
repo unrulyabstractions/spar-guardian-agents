@@ -255,6 +255,9 @@ def ladder_runs(run_dirs: list[Path], judge_name: str, *, view: str = "full", ag
     missing = [str(d) for d in run_dirs if not RunDir(d).is_run()]
     if missing:
         raise Refusal(f"not a run directory: {', '.join(missing)}", 2)
+    for run_dir in run_dirs:
+        if not RunDir(run_dir).team_signals():      # the team row says whether presentation is asked
+            signals.run_signals(Path(run_dir))
     asyncio.run(_ladder_all(run_dirs, judge_name, view, agents, force, batch))
     print(ladder.ladder_table(run_dirs, view), end="")
     for run_dir in run_dirs:

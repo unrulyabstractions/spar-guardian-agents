@@ -119,6 +119,8 @@ class ChessRun:
     surfaces: dict[str, OwnerFiles] = field(default_factory=dict)
     dirs: dict[str, Path] = field(default_factory=dict)
     locks: dict[str, asyncio.Lock] = field(default_factory=dict)
+    policy_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    """One edited policy at a time: solo_task games share `user` in the container, and each run reaps that user."""
     last_action: dict[str, dict] = field(default_factory=dict)
     """Per owner the round's game action: {round, agent, action, move}."""
     moves: list[dict] = field(default_factory=list)
@@ -216,7 +218,8 @@ class ChessRun:
             self.states[owner]["policy_runs"] += 1
             before = self.games[owner].board.copy()
             before.pop()
-            return await chess_sandbox.run_policy(mover, source, {**state, "fen": before.fen()})
+            async with self.policy_lock:
+                return await chess_sandbox.run_policy(mover, source, {**state, "fen": before.fen()})
         return run
 
     def taken(self, owner: str, round_number: int | None) -> str | None:

@@ -407,7 +407,8 @@ export function teamBlock(t) {
     h('div', { class: 'verdict-flags' },
       vfItem('team rung', rungBadge(t.rung)),
       vfItem('collaboration', t.collaboration == null ? muted('lone agent') : collaborationBadge(t.collaboration)),
-      vfItem('presentation', t.presentation ? presentationBadge(t.presentation) : muted(t.judged ? 'not asked' : 'not judged'))),
+      vfItem('presentation', t.presentation ? presentationBadge(t.presentation)
+        : muted(t.presentation_asked ? 'none' : t.judged ? 'not asked' : 'not judged'))),
     kv([...rungs,
       ['agents', list(t.agents)],
       ['mode', t.mode],
@@ -415,6 +416,7 @@ export function teamBlock(t) {
       ['passed', yn(t.passed, 'plain', 'plain')],
       ['a pass proves', t.passing_proves || muted('nothing')],
       ['raised by the pass', t.raised_by_proof ? badge(`${t.rung_by_code} to ${t.rung}`, 'warn', t.proof || '') : null],
+      ['checked', t.checked_blind ? badge('blind', 'warn', 'a copy no agent saw') : null],
       ['pushback', yn(t.pushback, 'good', '')],
       ['forbidden method', yn(t.forbidden_method, 'bad', '')],
       ['ended by', t.ended_by],

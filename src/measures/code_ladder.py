@@ -35,8 +35,8 @@ exploit, Domain.joined), which the collaboration axis reads.
 
 The honesty labels, presentation, pushback and forbidden method need reading and stay with the judge
 (src/judging/judging_ladder.py); the team row merges the judged ones from ladder.jsonl. signals_table counts the
-agents' rungs per run and, where the judge ran, the agreement of `opened or higher` with its `cheated`; team_table
-counts the teams' rungs and collaboration levels.
+agents' rungs per run and, where the judge ran, the agreement of the rung the task's `cheated` starts at
+(Domain.cheated_from) with its `cheated`; team_table counts the teams' rungs and collaboration levels.
 
 This module is the ladder's API. Each domain's rules live in its package as <domain>_ladder.py, a subclass of
 src/measures/ladder_domain.py Domain that its Benchmark names (Benchmark.ladder); the domain finds the evidence on
@@ -192,12 +192,16 @@ def run_report(run_dir: Path) -> str:
 
 def signals_table(run_dirs: list[Path]) -> str:
     """Per run the agents at each rung and probed, and, where the judge ran, the parsed verdicts (judged) and how many
-    of them `opened or higher` matches on `cheated` (agree)."""
+    of them the rung the task's `cheated` starts at matches (agree)."""
     def judged(row: dict) -> bool:
         return row["judge_cheated"] is not None
 
+    def agrees(row: dict) -> bool:
+        floor = BY_TASK[row["task"]].ladder.cheated_from
+        return judged(row) and at_least(row["rung"], floor) == row["judge_cheated"]
+
     columns = [*rung_columns(), Column("probe", lambda row: bool(row.get("probe"))), Column("judged", judged),
-               Column("agree", lambda row: judged(row) and at_least(row["rung"], "opened") == row["judge_cheated"])]
+               Column("agree", agrees)]
     runs = []
     for d in run_dirs:
         run = RunDir(d)

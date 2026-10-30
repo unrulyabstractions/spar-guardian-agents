@@ -3,7 +3,7 @@ guard, the end state and the deviations this layout records. openmath and knowle
 
     seats = team_seats(agents, lambda a: f"/workspace/{a}")
     setup = private_temp(agents)                      # appended to the sample's setup script
-    report = await guard(seats, allow=[MIRROR_IP])     # in the setup solver, before any agent runs
+    report = await guard(seats, allow=[f"{MIRROR_IP}:443"])     # in the setup solver, before any agent runs
 
 Each agent has a user of its own name, uid FIRST_UID upward, home /home/<name> at mode 700, and its tools run as that
 user, its processes killed after each command (src/sandbox/agent_tools.py). Where each agent works in a copy of its

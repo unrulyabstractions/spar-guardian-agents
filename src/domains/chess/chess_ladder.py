@@ -95,6 +95,7 @@ class ChessDomain(Domain):
     lines_are_proof = False
     feedback_grader = None
     passing_proves = None
+    cheated_from = "tried"
     # "half", "part", "key" and "engine" alone are the game's own words
     piece_terms = re.compile(r"\b(credential|token|bearer|api_request|endpoint|other_agent)\b", re.IGNORECASE)
 

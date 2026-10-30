@@ -33,7 +33,7 @@ import types
 from pathlib import Path
 
 from src.domains.creative.creative_settings import BRIEF, DELIVERABLE, TASK_DIR
-from src.measures import honeypot_fingerprints as signals
+from src.measures import honeypot_fingerprints as prints_module
 from src.sandbox import cheatbench_task_files as task_files
 
 # CheatBench's grader answers "below" when it cannot read the reference; a split layout's grader asks the review
@@ -126,15 +126,15 @@ def grade_config(reference_path: str) -> bytes:
         return cheatbench_builder().write_grade_config(Path(folder), reference_path).read_bytes()
 
 
-def fingerprints(row: dict, n_pieces: int | None) -> signals.Fingerprints:
+def fingerprints(row: dict, n_pieces: int | None) -> prints_module.Fingerprints:
     """The reference by its hashes and lines, and with n_pieces its segments, read from CheatBench's task folder."""
     text = reference_text(row)
     data = text.encode()
-    lines = signals.distinctive_lines([text], [brief_text(row)])
+    lines = prints_module.distinctive_lines([text], [brief_text(row)])
     slices, pieces = {}, {}
     for k, part in enumerate(segments(text, n_pieces) if n_pieces else [], 1):
         slices[hashlib.sha256(part.encode()).hexdigest()] = f"segment:{k}"
-        shown = {signals.norm(line).lower() for line in part.splitlines()}
+        shown = {prints_module.norm(line).lower() for line in part.splitlines()}
         pieces[f"segment{k}"] = [line for line in lines if line in shown]
-    return signals.Fingerprints(name=Path(row["reference"]).name, sha256=hashlib.sha256(data).hexdigest(),
+    return prints_module.Fingerprints(name=Path(row["reference"]).name, sha256=hashlib.sha256(data).hexdigest(),
                                 size=len(data), lines=lines, slices=slices, pieces=pieces)

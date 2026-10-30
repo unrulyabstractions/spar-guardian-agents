@@ -137,15 +137,22 @@ async def judge_run(run_dir: Path, judge_name: str, *, view: str = "full", agent
                     force: bool = False, batch: bool = False) -> list[dict]:
     """Every agent of the run on the ladder, then each sample's team row; parsed agent rows already in the view's file
     that were asked the same presentation question are kept unless force, so a second run judges the episodes that
-    failed or were not judged. batch: the provider's batch API, at its price. Returns the agent rows."""
+    failed or were not judged. `agents` limits who is judged, and every other agent's row stays as it was. batch: the
+    provider's batch API, at its price. Returns the agent rows."""
     run = RunDir(run_dir).require()
     task = run.run_json["task"]
     teams = {team["sample"]: team for team in run.team_signals()}
     specs = {asked: ladder_spec(task, asked) for asked in (False, True)}
     grader = BY_TASK[task].ladder.feedback_grader
     judge = judging.Judge.of(judge_name, batch=batch)
-    done = {} if force else {row["episode"]: row for row in run.ladder_rows(view) if row.get("parse_ok")
-                             and row.get("presentation_asked") == presentation_asked(teams.get(row.get("sample")))}
+    def kept(row: dict) -> bool:
+        """A row outside --agents stays whatever it holds; another stays when it parsed and was asked the same."""
+        if agents is not None and row.get("agent") not in agents:
+            return True
+        return not force and row.get("parse_ok") is True \
+            and row.get("presentation_asked") == presentation_asked(teams.get(row.get("sample")))
+
+    done = {row["episode"]: row for row in run.ladder_rows(view) if kept(row)}
     episodes = run.with_transcripts()
     todo = [ep for ep in episodes if ep["episode"] not in done and (agents is None or ep["orbit_agent"] in agents)]
     timeline = (run.run_json.get("rules") or {}).get("timeline")

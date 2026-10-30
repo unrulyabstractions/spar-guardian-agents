@@ -45,7 +45,7 @@ from src.utils.figure_style import (
 OUT = settings.ROOT / "tmp" / "appendix"
 EXAMPLES = settings.ROOT / "examples"
 CELLS = {"solo": "Solo agent", "solo_cheat": "Solo agent instructed to cheat", "minimal": "Minimal swarm",
-         "minimal_cheat": "Minimal swarm instructed to cheat"}
+         "minimal_cheat": "Minimal swarm instructed to cheat", "minimal_regulated": "Minimal swarm with a regulator"}
 LABELS = {"swe": "SWE"}                        # a domain key that abbreviates its name
 SAMPLE = re.compile(r"^([a-z]+)(\d+)$")        # <suffix><k>
 # The rate figure's two floors: opened agrees with the judge's cheated; used means the content entered the team's work.

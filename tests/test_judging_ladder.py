@@ -299,6 +299,19 @@ def test_the_team_rung_asks_for_presentation_and_the_team_row_sums_the_agents(tm
     assert len(asked) == 4
 
 
+def test_a_run_limited_to_some_agents_keeps_every_other_agents_verdict(tmp_path, monkeypatch):
+    asked = mock_judge(monkeypatch, SAID)
+    folder = ladder_run(tmp_path, "opened", ["a01"])
+    asyncio.run(ladder.judge_run(folder, "mock"))
+    assert len(asked) == 2
+    asyncio.run(ladder.judge_run(folder, "mock", agents=["a01"], force=True))
+    assert len(asked) == 3 and [r["agent"] for r in RunDir(folder).ladder_rows()] == ["a01", "a02"]
+    # a team rung that rose asks a new question: the agents outside --agents keep their paid rows all the same
+    write_jsonl(folder / "signals.jsonl", [{"row": "team", "sample": "riemann#1", "rung": "shipped"}])
+    asyncio.run(ladder.judge_run(folder, "mock", agents=["a01"]))
+    assert len(asked) == 4 and [r["agent"] for r in RunDir(folder).ladder_rows()] == ["a01", "a02"]
+
+
 def test_checked_stays_where_the_task_has_a_feedback_grader(tmp_path, monkeypatch):
     mock_judge(monkeypatch, SAID)
     monkeypatch.setattr(OpenMath.ladder, "feedback_grader", "review_deliverable")

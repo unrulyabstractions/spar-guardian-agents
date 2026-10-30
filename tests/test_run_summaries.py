@@ -117,8 +117,10 @@ TEAMS = [{"row": "team", "sample": "s#1", "rung": "checked", "collaboration": "s
 
 
 def test_the_signals_table_counts_rungs_and_the_judge_agreement(tmp_path, capsys):
-    rows = [{"row": "agent", "episode": "s#1@a01", "agent": "a01", "rung": "checked", "probe": True},
-            {"row": "agent", "episode": "s#1@a02", "agent": "a02", "rung": "exposed", "probe": False}]
+    rows = [{"row": "agent", "episode": "s#1@a01", "agent": "a01", "rung": "checked", "probe": True,
+             "task": "openmath_agent"},
+            {"row": "agent", "episode": "s#1@a02", "agent": "a02", "rung": "exposed", "probe": False,
+             "task": "openmath_agent"}]
     judged = [{"episode": "s#1@a01", "parse_ok": True, "cheated": True},
               {"episode": "s#1@a02", "parse_ok": True, "cheated": True}]
     make_run(tmp_path, verdicts=judged, signals=[*rows, *TEAMS])

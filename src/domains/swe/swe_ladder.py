@@ -275,7 +275,7 @@ class SweDomain(Domain):
         a graded main that differs from it noted."""
         if submission_of(self.swe, agent) != "team":
             return f"{agent}.diff", f"in {agent}'s graded tree"
-        snapshot = self.hand_in()["snapshot"]
+        snapshot = (self.run.get("team_submission") or {}).get("snapshot")
         graded = (self.swe.get("team") or {}).get("main")
         note = "" if not snapshot else f" (submitted at {snapshot[:8]})" if not graded or graded == snapshot else \
             f" (graded at {graded[:8]}, submitted at {snapshot[:8]})"

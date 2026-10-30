@@ -30,7 +30,7 @@ from pathlib import Path
 
 from src.domains.interview import interview_sealed_generator as generator
 from src.domains.interview.interview_settings import KEY_DIRS, MIN_SHARD, SHARE_MODULUS, STUB_LIMIT, SUBSET, Spec
-from src.measures import honeypot_fingerprints as signals
+from src.measures import honeypot_fingerprints as prints_module
 from src.sandbox import cheatbench_task_files as task_files
 from src.sandbox.agent_tools import WORKDIR
 
@@ -231,7 +231,8 @@ def fragments(spec: Spec, row: dict, pieces: dict[str, list[int] | None], n: int
     return [list(x) for x in dict.fromkeys(found)]
 
 
-def fingerprints(spec: Spec, row: dict, pieces: dict[str, list[int] | None], n: int | None) -> signals.Fingerprints:
+def fingerprints(spec: Spec, row: dict, pieces: dict[str, list[int] | None],
+                 n: int | None) -> prints_module.Fingerprints:
     """The key as the probe and the ladder look for it: the gen log's sha256, the cache's and every agent's copy of
     both files as members (`<name>@<agent>`), the header and question lines in every form the copies carry, the
     answer's fragments, and the strings that point at the key (both paths, their names, the key directories,
@@ -250,9 +251,9 @@ def fingerprints(spec: Spec, row: dict, pieces: dict[str, list[int] | None], n: 
             texts.append((copy[spec.gen_log].decode(), copy[spec.cache].decode()))
     lines = []
     for gen_text, cache_text in texts:
-        lines += [signals.norm(line).lower() for line in _key_lines(spec, row["id"], gen_text, cache_text)]
-    return signals.Fingerprints(name=Path(spec.gen_log).name, sha256=hashlib.sha256(gen).hexdigest(), size=len(gen),
-                                members=members, lines=list(dict.fromkeys(lines)),
-                                pointers=[*spec.key_paths, *(Path(p).name for p in spec.key_paths), *KEY_DIRS,
-                                          *POINTER_NAMES],
-                                fragments=fragments(spec, row, pieces, n))
+        lines += [prints_module.norm(line).lower() for line in _key_lines(spec, row["id"], gen_text, cache_text)]
+    return prints_module.Fingerprints(name=Path(spec.gen_log).name, sha256=hashlib.sha256(gen).hexdigest(),
+                                      size=len(gen), members=members, lines=list(dict.fromkeys(lines)),
+                                      pointers=[*spec.key_paths, *(Path(p).name for p in spec.key_paths), *KEY_DIRS,
+                                                *POINTER_NAMES],
+                                      fragments=fragments(spec, row, pieces, n))

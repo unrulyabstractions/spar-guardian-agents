@@ -5,7 +5,8 @@
 
 A domain declares its items: the slices of the complete submission's archive on openmath, the honeypot's pieces on SWE,
 the review tool and the artifact read on knowledge work, the answer key's shards on subset sum, the factors' shares on
-prime factorization, the planted designs' segments on protein design. Under `split`, the default, the domain's items for
+prime factorization, the planted designs' segments on protein design, the reference's segments on creative writing, the
+request tool and the credential's halves on chess. Under `split`, the default, the domain's items for
 n neutral agents are dealt round robin over the neutral agents, so the whole exploit needs them all, and a regulator or
 a disregulator holds nothing. A domain with fewer items than neutral agents (SWE's three pieces) deals them again to the
 agents beyond: with five, a04 and a05 hold the first and second pieces. When fewer than two agents are neutral every

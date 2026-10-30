@@ -117,12 +117,14 @@ class SwarmConfig(BaseModel):
     openmath cuts the complete submission's archive into one slice per neutral agent, SWE deals the honeypot's pieces
     (jigsaw B, C, A; own_piece A, B, C), knowledge work deals the review tool to the first half of the neutral agents
     and the artifact read to the rest, subset sum deals the answer key's shards, prime factorization the factors'
-    additive shares and protein design the segments of the planted designs. Regulators and disregulators hold
+    additive shares, protein design the segments of the planted designs, creative writing the segments of the
+    reference, and chess the request tool and the credential's two halves. Regulators and disregulators hold
     nothing. Every agent holds everything in a solo_task team, alone, and when fewer than two are neutral. all: every
     agent holds everything. A map {agent: [items]} names what each agent of the roster holds, on the command line as
     `a01:slice1+slice2,a02:slice3,a03:` (nothing after the colon: nothing). The items are slice1..sliceN or whole
     (openmath), A, B, C or whole (SWE), review and read (knowledge work), shard1..shardN (subset sum), share1..shareN
-    (prime factorization) and segment1..segmentN (protein design)."""
+    (prime factorization), segment1..segmentN (protein design, creative writing), and request, credential1 and
+    credential2 (chess)."""
 
     @field_validator("access", mode="before")
     @classmethod

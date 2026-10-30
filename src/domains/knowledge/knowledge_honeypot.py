@@ -20,7 +20,7 @@ import zipfile
 from pathlib import Path
 
 from src.domains.knowledge.knowledge_settings import BUILD
-from src.measures import honeypot_fingerprints as signals
+from src.measures import honeypot_fingerprints as prints_module
 
 # Members every Office file of the same tool shares: the package plumbing, the theme, the layouts and the masters.
 GENERIC_MEMBERS = re.compile(r"(^\[Content_Types\]\.xml$|^_rels/|^docProps/|\.rels$|/theme/|/slideLayouts/|"
@@ -37,7 +37,7 @@ MIN_RUN = 8                 # a shorter text run is a number or a word any deck 
 def xml_text(data: bytes) -> str:
     """The text content of an XML document, one run per line (a pptx or docx member)."""
     text = data.decode("utf-8", errors="replace")
-    return "\n".join(signals.norm(t) for t in re.split(r"<[^>]+>", text) if signals.norm(t))
+    return "\n".join(prints_module.norm(t) for t in re.split(r"<[^>]+>", text) if prints_module.norm(t))
 
 
 def office_text(data: bytes) -> list[str]:
@@ -74,17 +74,17 @@ def body_runs(row: dict) -> set[str]:
         return set()
     titles = title_lines(row)
     runs = {line.lower() for text in office_text(data) for line in text.splitlines() if len(line) >= MIN_RUN}
-    return {run for run in runs if not signals.GUID.fullmatch(run) and not any(run in title for title in titles)}
+    return {run for run in runs if not prints_module.GUID.fullmatch(run) and not any(run in title for title in titles)}
 
 
-def fingerprints(row: dict) -> signals.Fingerprints:
+def fingerprints(row: dict) -> prints_module.Fingerprints:
     """The client's current pipeline deliverable, read from the build on the host, with its members and its lines."""
     env = BUILD / "environment"
     destination, data = deliverable(row)
     if data[:4] != ZIP:
-        return signals.Fingerprints(name=Path(destination).name, sha256=hashlib.sha256(data).hexdigest(),
-                                    size=len(data), pointers=[destination])
-    members = {name: m for name, m in signals.zip_members(data)[0].items() if not GENERIC_MEMBERS.search(name)}
+        return prints_module.Fingerprints(name=Path(destination).name, sha256=hashlib.sha256(data).hexdigest(),
+                                          size=len(data), pointers=[destination])
+    members = {name: m for name, m in prints_module.zip_members(data)[0].items() if not GENERIC_MEMBERS.search(name)}
     permitted = []
     for file_source in row["files"].values():
         path = env / file_source
@@ -94,6 +94,6 @@ def fingerprints(row: dict) -> signals.Fingerprints:
             permitted += office_text(path.read_bytes())
         else:
             permitted.append(path.read_text(errors="replace"))
-    return signals.Fingerprints(name=Path(destination).name, sha256=hashlib.sha256(data).hexdigest(), size=len(data),
-                                members=members, lines=signals.distinctive_lines(office_text(data), permitted),
-                                pointers=[destination])
+    return prints_module.Fingerprints(name=Path(destination).name, sha256=hashlib.sha256(data).hexdigest(),
+                                      size=len(data), members=members, pointers=[destination],
+                                      lines=prints_module.distinctive_lines(office_text(data), permitted))

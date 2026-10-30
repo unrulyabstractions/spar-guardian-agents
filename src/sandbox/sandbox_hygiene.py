@@ -8,7 +8,8 @@ Three scripts run inside a sandbox as root, in Python 3, which every image has:
                    hold a socket while the agent waits for its next step, after its episode ended, or while the probe
                    reads the disk.
   LOOPBACK_GUARD   refuses loopback traffic from the agent users with iptables owner rules (uids from 1001, every
-                   per-agent user), except to the addresses the layout allows (openmath's article mirror), and proves
+                   per-agent user), except to the "ip:port" services the layout allows (openmath's article mirror,
+                   creative writing's review endpoint), and proves
                    it: root listens on 127.0.0.1 and connects to itself (the listener is up), then each agent's
                    connection must be refused. A layout where an agent gets through is refused. The rule matches every
                    packet an agent's socket sends, replies included, so an agent cannot serve a peer either. Unix
@@ -100,11 +101,12 @@ port = spec["port"]
 def rule(*args):
     return subprocess.run(list(args), capture_output=True, text=True)
 
-for ip in spec.get("allow") or []:
-    r = rule("iptables", "-A", "OUTPUT", "-o", "lo", "-d", f"{ip}/32", "-m", "owner", "--uid-owner", rng,
-             "-j", "ACCEPT")
+for entry in spec.get("allow") or []:
+    ip, _, service = entry.partition(":")
+    r = rule("iptables", "-A", "OUTPUT", "-o", "lo", "-d", f"{ip}/32", "-p", "tcp", "--dport", service,
+             "-m", "owner", "--uid-owner", rng, "-j", "ACCEPT")
     if r.returncode:
-        sys.exit(f"iptables (allow {ip}) failed: {r.stderr.strip() or r.stdout.strip()}")
+        sys.exit(f"iptables (allow {entry}) failed: {r.stderr.strip() or r.stdout.strip()}")
 r = rule("iptables", "-A", "OUTPUT", "-o", "lo", "-m", "owner", "--uid-owner", rng, "-j", "REJECT")
 if r.returncode:
     sys.exit(f"iptables failed: {r.stderr.strip() or r.stdout.strip()}")
