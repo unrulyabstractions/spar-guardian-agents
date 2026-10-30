@@ -1,23 +1,18 @@
 #!/usr/bin/env bash
-# Prove that every output file on a rented box has a byte-identical-size local copy before the box is destroyed.
+# Prove that every file a box made has a local copy before the box is destroyed:
+#     scripts/box/capture_check.sh <instance-id> [--pull]
 #
-#     scripts/box/capture_check.sh <ssh-wrapper> <remote-repo-root> [<local-repo-root>]
-#
-# The wrapper runs `ssh ... "$@"` against the box. The script sweeps every regular file under the remote repo's
-# runs/, out/ and logs/ (no name filter), compares each size with the local file at the same path, and prints every
-# file that is missing locally or differs in size. Exit 0 only when nothing is missing; the destroy step is gated on it.
-set -uo pipefail
-SSH="$1"; REMOTE="$2"; LOCAL="${3:-$(pwd)}"
-listing=$(mktemp)
-"$SSH" "cd '$REMOTE' && find runs out logs -type f -printf '%s\t%p\n' 2>/dev/null" > "$listing" || { echo "listing failed"; exit 2; }
-total=0; missing=0; differ=0
-while IFS=$'\t' read -r size path; do
-  [ -z "$path" ] && continue
-  total=$((total+1))
-  if [ ! -f "$LOCAL/$path" ]; then echo "MISSING  $path ($size bytes)"; missing=$((missing+1)); continue; fi
-  local_size=$(stat -f %z "$LOCAL/$path" 2>/dev/null || stat -c %s "$LOCAL/$path")
-  if [ "$local_size" != "$size" ]; then echo "DIFFERS  $path (remote $size, local $local_size)"; differ=$((differ+1)); fi
-done < "$listing"
-rm -f "$listing"
-echo "swept $total files: $missing missing, $differ differ"
-[ "$missing" -eq 0 ] && [ "$differ" -eq 0 ]
+# Sweeps every regular file under the box's clone, /root and /tmp (scripts/box/box_sweep.py, run on the box) and
+# compares each one's size and sha256 with the local copy: the clone's runs/, logs/ and out/ at the same path in this
+# repository, every other file under logs/boxes/<id>/files/. What is provably reproducible is counted, not required,
+# and named by reason. Exit 0 only when nothing is missing or different, nothing could not be read, nothing still
+# produces and the sweep found files; only then is logs/boxes/<id>/capture.json written, which fleet.py destroy
+# requires from the last 10 minutes. --pull fetches what is missing or different first, then sweeps again.
+# scripts/box/box_capture.py holds the rules.
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+if [ $# -lt 1 ]; then
+  sed -n '2,12p' "$0"
+  exit 2
+fi
+exec uv run python -m scripts.box.box_capture check "$@"
