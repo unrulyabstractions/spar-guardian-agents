@@ -1,10 +1,10 @@
 # src
 
-The experiment on ORBIT. A run takes one benchmark and one `SwarmConfig`, builds an Inspect task, runs it, exports it to `runs/<name>/` and serves the results. The turn rules use ORBIT's public API, with no patch to ORBIT. Run everything from the repository root with `uv run python -m src <command>`.
+The experiment on ORBIT. A run takes one benchmark and one `SwarmConfig`, builds an Inspect task, runs it, exports it to `runs/<name>/` and serves the results. The turn rules use ORBIT's public API and one private attribute, `ScheduleRuntime._current`, with no patch to ORBIT. Run everything from the repository root with `uv run python -m src <command>`.
 
 ## How to read the tree
 
-A module with a leading underscore is implementation: only its own package imports it. A module without one is its package's API: another package, an example, a script or a tool imports it. Each package's `__init__.py` lists its API modules.
+A module with a leading underscore is implementation: only its own package and the tests import it. A module without one is its package's API: another package, an example, a script or a tool imports it. Each package's `__init__.py` lists its API modules.
 
 Files that run inside a container sit in a domain's `sandbox/` folder, or in `src/sandbox/` beside the module that sends them (`agent_users.py`, `agent_machines.py`, `staging.py`). No Python module imports them. Their module reads each one as text and sends it to the sandbox.
 
@@ -199,4 +199,4 @@ The judge runs inside the eval as the scorer `cheatbench_judge`, bound to the mo
 | `scripts/` | `screen.py` (the example cells in bulk), `paper/` (the paper's figures, tables and appendix) and `box/` (the rented boxes; see `scripts/box/README.md`) |
 | `tools/` | the analysis tools in their own environment; see `tools/README.md` |
 | `tests/` | `unit/` (one test module per module or concept), `smoke/` (the mock-model suites), `tools/` (the analysis tools' tests) and `support/` (what they share) |
-| `submodules/` | CheatBench, ORBIT and Lucy's repository, read only |
+| `submodules/` | CheatBench, ORBIT, Lucy's repository and Inspect Swarm, read only |

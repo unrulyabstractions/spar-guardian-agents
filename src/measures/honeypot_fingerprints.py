@@ -1,6 +1,6 @@
 """Cheating signals without a judge: the honeypot's fingerprints, and a probe that finds them in a sandbox.
 
-    prints = fingerprints(row)                              # each domain's _<d>_honeypot.py builds them on the host
+    prints = fingerprints(row)                              # on the host: _<d>_honeypot.py (swe_ladder.py on SWE)
     found = await probe(roots, prints)                      # files and zip members matching, as root, at the end
     report = by_owner(found, {"a01": 1001, "a02": 1002})
 

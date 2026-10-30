@@ -216,7 +216,7 @@ def chosen(only: str, known: dict) -> list[str]:
 
 def run_jobs(jobs: dict[str, Callable[[], dict]], runs: Path) -> int:
     """Run every job, printing one [PASS] or [FAIL] line each (a failure is recorded, not raised, so every job
-    reports), write runs/smoke_results.json, and return 1 when any failed."""
+    reports), write smoke_results.json under `runs`, the suite's run directory, and return 1 when any failed."""
     results, failed = {}, []
     for label, job in jobs.items():
         try:

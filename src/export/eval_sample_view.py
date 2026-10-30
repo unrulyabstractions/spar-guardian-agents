@@ -278,7 +278,7 @@ def billed_cost(ev) -> float | None:
 
 def usage_from_events(model_events) -> dict:
     """The episode's token totals, plus billed_usd and billed_calls: what the provider charged for the calls whose
-    raw response the log kept (every call since run.evaluate logs them all; the first five per model before)."""
+    raw response the log kept (every call in a log run.run made, the first five per model in any other)."""
     usages, billed, calls = [], 0.0, 0
     for ev in model_events:
         usage = getattr(ev.output, "usage", None) if ev.output else None

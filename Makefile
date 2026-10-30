@@ -73,7 +73,7 @@ contagion:  ## NDlib and EoN: how dishonest and honest behaviour spread, against
 failures:  ## MAST and Who&When: how the swarm failed and which agent was responsible
 	$(TOOLS) -m tools failures $(RUN)
 
-hawk:  ## Hawk: the scan config for one run's log, and the command to run it
+hawk:  ## Hawk: the scan config for one run's transcripts, and the command to run it
 	$(TOOLS) -m tools hawk $(RUN)
 
 analyse: scout graph transect contagion failures hawk  ## every tool but docent over one run, in order; scout, transect and failures call a paid model

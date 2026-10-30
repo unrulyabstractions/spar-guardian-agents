@@ -4,12 +4,13 @@
     uv run --project tools python -m tools contagion --synthetic 100
 
 The observed curves are shares of agents by round. An agent is dishonest from its cheating onset and honest from the
-first round its regulator_intervened signal appears, or from the last round when the judge's verdict says it
-disclosed its access (scout has no disclosure scanner). Onsets come from runs/<name>/tools/scout/summary.json
-when present: its "onset" field for cheating, and the found round of regulator_intervened under "agents" for
-honesty. A disclosure the judge saw counts at the last round, and summary notes say so. Without scout, or with a
-scout that ran grep only or none of the opened, used and submitted scanners, the onsets come from the judge, which
-gives no round, so a cheated (or disclosing) agent counts as adopted at the last round. The graph is the read edges
+first round its regulator_intervened signal appears, or from the last round when its judge row sets disclosed_access
+(scout has no disclosure scanner). Only openmath's and protein design's verdicts carry that flag, so another task's
+disclosure flag never counts. Onsets come from runs/<name>/tools/scout/summary.json when present: its "onset" field
+for cheating, and the found round of regulator_intervened under "agents" for honesty. A disclosed_access flag counts
+at the last round, and summary notes say so. Without scout, or with a scout that ran grep only or none of the opened,
+used and submitted scanners, the onsets come from the judge, which gives no round, so a cheated agent or one with
+disclosed_access counts as adopted at the last round. The graph is the read edges
 of runs/<name>/tools/graphs/graph.gexf, made undirected, when present; otherwise the complete graph on the agents,
 since a board is broadcast. Each model is seeded with the first adopters, runs from their round to the last, and has its
 parameter fitted by least squares of its mean curve on the observed curve over a grid. The models: SI and the linear

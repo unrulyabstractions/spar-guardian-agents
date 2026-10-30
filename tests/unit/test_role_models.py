@@ -1,7 +1,7 @@
 """The swarm model provider and the role models: a role's own model runs pinned to its host and with the eval's and
 the agents' generate config, every method of Inspect's ModelAPI forwards to the inner model, the config fields hold
 Inspect strings, the agent specs carry the provider's model string, the run checks each role model before the eval,
-a probe asks each agent its own model, and the export names each episode's own model."""
+the run hands the agents' config to the provider, and the export names each episode's own model."""
 from __future__ import annotations
 
 import asyncio

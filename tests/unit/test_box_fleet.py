@@ -1,8 +1,9 @@
 """The vast.ai fleet without vast.ai: offer filtering and ranking on offers from a real search, the registry and the
 launch pins, the create, status and destroy paths against a fake API (a launch cut short, a destroy vast.ai does not
-carry out, the fleet's $/h cap), the key on a redirect, the destroy gate, run-args, the capture's sweep and comparison
-on two fake trees (also end to end through a stand-in ssh and rsync, with the manifest, the snapshot and a conflict),
-and the runner's hung-run guard, resume and status."""
+carry out, the fleet's $/h cap), the key on a redirect, the destroy gate, run-args, entry and repin, the layout's cells,
+labels and run names, the capture's sweep and comparison on two fake trees (also end to end through a stand-in ssh
+with the real rsync, with the manifest, the snapshot and a conflict), the runner's hung-run guard, resume and status,
+and the watch's interval check."""
 from __future__ import annotations
 
 import hashlib

@@ -1,5 +1,6 @@
 /* Results browser styles. No external fonts; light and dark follow prefers-color-scheme. Every colour is a token
-   on :root; the dark blocks only redefine tokens. */
+   on :root but two literals: the tooltip's shadow and the white behind tool figures. The dark block only
+   redefines tokens. */
 
 :root {
   color-scheme: light;

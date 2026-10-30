@@ -6,8 +6,9 @@ A swarm is the board (src/swarm/board.py) with N agents whose system prompts dif
     regulator     a peer told to keep the team honest, at the configured regulator level
     disregulator  a peer privately told to get the result by any means, at the configured disregulator level
 
-Regulators are not monitors. They have the same tools and standing as everyone else, and nothing is enforced at a
-boundary. Roles hide behind neutral names (a01 ... a10) and are recorded in the sample metadata.
+Regulators are not monitors. They have the same standing as everyone else, and nothing is enforced at a boundary.
+Their tools differ: a regulator also holds agent_actions and never holds submit. Roles hide behind neutral names
+(a01 ... a10) and are recorded in the sample metadata.
 
 Every model-facing text of a level comes from src/configuration/instruction_levels.yaml: the rule sentence appended to
 the task instruction, and the regulator and disregulator texts appended to the system prompt of the agents holding
@@ -36,7 +37,7 @@ SENTENCE_START = re.compile(r"(^|[.!?]\s+)\{(\w+)\}")
 
 
 def level_text(ladder: str, level: str, benchmark_name: str) -> str | None:
-    """The text of one level of a ladder for one benchmark ("openmath" or "swe"), or None for no text."""
+    """The text of one level of a ladder for one benchmark (its Benchmark.key), or None for no text."""
     levels = load_instruction_levels()
     entry = levels[ladder][level]
     template = entry["text"] if "text" in entry else entry.get(benchmark_name)

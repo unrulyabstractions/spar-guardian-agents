@@ -227,7 +227,7 @@ scripts/                 screen.py (the example cells in bulk), paper/ (the pape
 tools/                   the analysis tools in their own environment; see tools/README.md
 tests/                   unit/ (make test), tools/ (make test-tools), smoke/ (the mock-model suites, make smoke-all) and
                          support/ (what they share)
-submodules/              cheatbench, orbit and lucy (Lucy's repository covertpersonashifts), read only
+submodules/              cheatbench, orbit, lucy (Lucy's repository covertpersonashifts) and inspect_swarm (no code imports it), read only
 VERIFICATION_LOG.md      every output, how it was verified, and the result
 build/, runs/, logs/     staged tasks, one directory per run, Inspect eval logs as logs/<name>/ (gitignored)
 out/, tmp/               the run figures and the paper's PNGs (gitignored)

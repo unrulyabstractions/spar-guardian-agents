@@ -6,7 +6,8 @@ to a seat (a Linux user in a directory of a sandbox service), with that user's p
 
 ORBIT reserves the names bash and python for its built-in tools, which take one user for every agent, so a layout
 with a seat per agent binds these two under other names. A lone agent keeps ORBIT's built-in tools as the sandbox
-user. The descriptions are Inspect's own, unless a domain gives its own. Every domain builds its tools here.
+user. The descriptions are Inspect's own, unless a domain gives its own. Every domain but chess builds its tools with
+roster_tools. Chess has no shell and builds its AgentTools from CheatBench's nine tools.
 """
 from __future__ import annotations
 

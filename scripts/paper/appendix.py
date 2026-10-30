@@ -4,7 +4,8 @@ sample's team record on the code ladder per domain.
     uv run python -m scripts.paper.appendix [--model deepseek-flash-openrouter] [--suffixes flashpin flashbox]
 
 The domains are the registry's (src/domains/__init__.py DOMAINS) with an example folder, examples/<domain>/, whose
-<stem>_minimal.py names the domain's cells: <stem>_solo, <stem>_solo_cheat, <stem>_minimal and <stem>_minimal_cheat.
+<stem>_minimal.py names the domain's cells: <stem>_solo, <stem>_solo_cheat, <stem>_minimal, <stem>_minimal_cheat and
+<stem>_minimal_regulated.
 Sample k of a cell under a suffix is the run runs/<cell>_<suffix><k>/. A run counts when the code ladder wrote its
 team records (signals.jsonl's team rows, src/measures/team_ladder.py) and it ran on --model (run.json model). The
 suffixes are every one such runs carry, or those --suffixes names. A domain without a counted run is left out.

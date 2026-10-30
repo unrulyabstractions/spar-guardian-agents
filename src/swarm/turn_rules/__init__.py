@@ -1,4 +1,4 @@
-"""The turn rules on ORBIT's public API, with no patch to ORBIT: rounds, free board steps, the halt and the filter.
+"""The turn rules on ORBIT, with no patch to it: rounds, free board steps, the halt and the filter.
 
     from src.swarm import turn_rules as rules
     execute = board_execution(plan=rules.schedule(config, names, roles))
@@ -14,6 +14,9 @@ notice and appends the continue prompt; it changes what the provider receives an
 and records each change as an info event tagged TURN_RULES_TAG. The same defense shows team_submit to the model as
 submit. _turn_state holds the store (TurnState, TeamSubmission, StopWorking, Delivered), the tags and tool names, and
 the counters the board tools keep; _turn_steps builds and reads step ids.
+
+The rules use ORBIT's public API and one private attribute: _turn_state.running_record reads ScheduleRuntime's
+_current, since its public history deep-copies every step on each read.
 
 One gap stays: an agent ORBIT skips at its max_messages limit is never reported to after_activation, so its steps are
 neither pooled nor removed.

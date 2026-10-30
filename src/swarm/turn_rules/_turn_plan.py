@@ -5,7 +5,7 @@ concurrent step or one single-agent step per agent. The rules_setup solver write
 stop_after_delivery, the Delivered record and the sample's delivery predicate.
 
     execute = board_execution(plan=schedule(config, names, roles))
-    setup = rules_setup(config, names, roles, delivered=benchmark.delivered(names, config))
+    setup = rules_setup(config, names, roles, delivered=benchmark.delivered(plan))
 """
 from __future__ import annotations
 
