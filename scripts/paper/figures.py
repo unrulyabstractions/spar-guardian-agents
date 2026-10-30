@@ -197,7 +197,7 @@ def fig_round_structure():
         "f1": {"a01": "work", "a03": "read", "a05": "post"},
         "f2": {"a03": "post", "a05": "work"},
         "f3": {"a03": "read"},
-        "r1": {"a01": "work", "a02": "agent_actions", "a03": "work", "a04": "read", "a05": "team_submit"},
+        "r1": {"a01": "work", "a02": "agent_actions", "a03": "work", "a04": "read", "a05": "submit"},
     }
     for j, n in enumerate(names):
         y = top - j * lane_h
@@ -213,8 +213,8 @@ def fig_round_structure():
             step(ax, a, x, y - lane_h / 2 + 0.04, w, lane_h - 0.08)
     ax.add_patch(Rectangle((13.6, top - 4 * lane_h - lane_h / 2 + 0.04), 2.2, 5 * lane_h - 0.08, fc="none",
                            ec=AXIS, hatch="////", lw=0, zorder=1))
-    ax.text(14.7, top - 2 * lane_h, "run over", ha="center", va="center", fontsize=7, color=INK_SECONDARY, zorder=4,
-            bbox=dict(fc=SURFACE, ec="none", pad=1.5))
+    ax.text(14.7, top - 2 * lane_h, "two more rounds,\nthen the run ends", ha="center", va="center", fontsize=7,
+            color=INK_SECONDARY, zorder=4, bbox=dict(fc=SURFACE, ec="none", pad=1.5))
     # a round is each agent's step and, for an agent whose step ended with a board action, its free follow-up steps
     hy = top + lane_h / 2 + 0.12
     for label, x0, x1 in (("round r", 1.2, 9.55), ("round r + 1", 9.85, 13.45)):
@@ -238,12 +238,12 @@ def step(ax, a, x, y, w, h, text=True):
     """One step of the round diagram: dashed if it ends with a board action (free), solid grey if charged."""
     if a in BOARD_ACTIONS:
         style = dict(fc=PLANE, ec=MUTED, ls=DASH, color=INK)
-    elif a == "team_submit":
+    elif a == "submit":
         style = dict(fc=WHITE, ec=INK_SECONDARY, ls="-", color=INK)
     else:
         style = dict(fc=TOOL, ec=INK_SECONDARY, ls="-", color=INK_SECONDARY)
     box(ax, x, y, w, h, a if text else None, fc=style["fc"], ec=style["ec"], ls=style["ls"], fs=6.5,
-        color=style["color"], weight="bold" if a == "team_submit" else "normal")
+        color=style["color"], weight="bold" if a == "submit" else "normal")
 
 
 # ---------------------------------------------------------------- the context ledger
@@ -311,7 +311,7 @@ def fig_engagement_funnel():
     ax.axis("off")
     ax.text(0.15, 3.3, "Board engagement funnel", fontsize=8.5, weight="bold", va="center")
     stages = [("on the board", "has the board tools"), ("looked", "board_status\nor board_read"),
-              ("read", "board_read"), ("posted", "board_post"), ("submitted", "team_submit")]
+              ("read", "board_read"), ("posted", "board_post"), ("submitted", "submit")]
     sw, gap, y0, h, tip = 3.26, 0.1, 0.3, 2.4, 0.45
     for i, (name, tool) in enumerate(stages):
         x = 0.15 + i * (sw + gap)
@@ -347,7 +347,7 @@ def fig_read_graph():
 # ---------------------------------------------------------------- the access split
 def fig_access():
     """access=split: the exploit cut into one piece per worker, each in its own box; the regulator and the
-    disregulator outside with nothing and without team_submit; everyone on the board, the workers' pieces into the
+    disregulator outside with nothing and without submit; everyone on the board, the workers' pieces into the
     submitted work."""
     fig = plt.figure(figsize=(HALF, 2.3))
     ax = fig.add_axes([0.02, 0.17, 0.96, 0.82])
@@ -380,7 +380,7 @@ def fig_access():
     def dmark(ax, x, y):
         ax.scatter([x], [y], marker="D", s=16, c=INK, zorder=3)
 
-    role_legend(fig, 0.07, extra=[(dmark, "team_submit")], compact=True)
+    role_legend(fig, 0.07, extra=[(dmark, "submit")], compact=True)
     save(fig, "access")
 
 

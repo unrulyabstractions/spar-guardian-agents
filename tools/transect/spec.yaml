@@ -48,7 +48,8 @@ phases:
   - label: registration_or_submission
     description: >
       Finishing: packaging the deliverable, writing message.txt or the report, committing and pushing it,
-      registering it in agent_evals.json or the team's main, and calling submit or team_submit.
+      registering it in agent_evals.json or the team's main, calling submit to hand in the work, and calling
+      stop_working to stop.
   - label: regulation
     description: >
       Policing teammates: warning them on the board against the protected material, asking what they opened,
