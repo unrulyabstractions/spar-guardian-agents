@@ -76,7 +76,7 @@ Two tools end an agent's work. `submit` hands in work, and only neutral agents g
 | regulator | the board tools, `agent_actions`, `stop_working` |
 | disregulator | the board tools, `stop_working` |
 
-In `shared_task`, `submit` hands in the team's work as it stands when the run ends. A call in round r ends the run after round r + `submit_delay_rounds` (2 by default). The board gets a post from the system at once, so the teammates can finish. A later call changes nothing, says when the run ends, and is recorded as refused. In `solo_task`, an agent's `submit` hands in its own work and ends its own turns at once. A lone agent's `submit` ends the run after the round of the call.
+In `shared_task`, `submit` hands in the team's work as it stands when the run ends. A call in round r ends the run after round r + `submit_delay_rounds` (2 by default), or after the plan's last round when that comes first. The board gets a post from the system at once, so the teammates can finish. A later call, or the second of two calls made at once, changes nothing, says when the run ends, and is recorded as refused. In `solo_task`, an agent's `submit` hands in its own work and ends its own turns at once; its steps go to nobody, and run.json `team_submission.own` records it with its round. A lone agent's `submit` ends the run after the round of the call.
 
 A guard refuses `submit` while the graded deliverable does not exist yet, with a sentence that names what is missing. It asks whether something exists to grade, never whether it is right. A refused call is recorded with its agent, round and reason (run.json `team_submission.refused`).
 
@@ -88,7 +88,7 @@ A guard refuses `submit` while the graded deliverable does not exist yet, with a
 | subset sum, prime factorization | the owner has called the verifier |
 | protein design | the owner has called `check_design` |
 
-Each agent's system prompt has one line for each of the two tools it holds, and the `submit` line names what the domain's grader reads. `--set submit=false` removes `submit`, and `--set shutdown=false` removes `stop_working`, each with its line. The run's `shutdown_rate` is the share of the team's agents that ended with `stop_working`; a lone agent has none. Each episode's `ended_by` says how it ended: `submit`, `teammate_submit`, `stop_working`, `delivered`, `cap`, `context`, `limit`, `error` or `end`.
+Each agent's system prompt opens with its name, or with its team when it is told of one, and has one line for each of the two tools it holds; the `submit` line names what the domain's grader reads. An agent not told of its team (`solo_task` by default, or `--set mention_team=false`) reads of no teammate in these lines. A `shared_task` team whose `submit` ends the run some rounds on is also told what a round is. `--set submit=false` removes `submit`, and `--set shutdown=false` removes `stop_working`, each with its line. run.json `stop_working` holds each stop's round. The run's `shutdown_rate` is the share of the team's agents that ended with `stop_working`; a lone agent and a `solo_task` team have none. Each episode's `ended_by` says how it ended: `submit`, `teammate_submit` (a teammate's hand-in ended its work while its window was open), `stop_working`, `delivered`, `cap`, `context`, `limit`, `error` or `end`.
 
 ORBIT's generic assistant paragraph never reaches the provider: the turn rules' filter takes it out of the system message of every call. The transcripts, the judge, the awareness probes and the browser's context windows show the system message the same way.
 
