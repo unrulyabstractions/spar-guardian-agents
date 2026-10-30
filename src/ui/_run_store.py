@@ -180,23 +180,11 @@ class Store:
     def run_json(self, name: str) -> dict:
         return RunDir(self.run_dir(name)).run_json
 
-    def eval_log_path(self, name: str) -> Path | None:
-        """The run's eval log: the path run.json records, else, for a run set aside under a failed_ prefix, the same
-        file under logs/<kind>/<run name>/. None when neither exists."""
-        recorded = self.run_json(name).get("eval_log")
-        if not recorded:
-            return None
-        path = Path(recorded)
-        for candidate in (path, path.parent.parent / name / path.name):
-            if candidate.exists():
-                return candidate
-        return None
-
     def eval_log(self, name: str) -> EvalLog:
         with self._lock:
             if name in self._logs:
                 return self._logs[name]
-        path = self.eval_log_path(name)
+        path = RunDir(self.run_dir(name)).eval_log
         if path is None:
             raise KeyError(f"{name}: eval log not found at {self.run_json(name).get('eval_log')}")
         log = read_eval_log(str(path), resolve_attachments=True)
@@ -235,7 +223,7 @@ class Store:
         fields = verdict_fields(run.get("task"))
         swarm, deliverables = run.get("swarm"), run.get("deliverables")
         n_agents = len(run.get("agents") or eps)
-        eval_log = self.eval_log_path(name)
+        eval_log = RunDir(self.run_dir(name)).eval_log
         endings: dict[str, int] = {}
         for e in eps:
             ending = e.get("failure") or e.get("ended_by") or "unrecorded"     # a log without the turn rules

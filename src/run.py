@@ -197,10 +197,9 @@ def run(name: str, benchmark: Benchmark, config: SwarmConfig, model: str, timeou
 # --------------------------------------------------------------------------
 # judge an existing log
 # --------------------------------------------------------------------------
-async def _judge_views(views: list[SampleView], judge_name: str, batch: bool) -> dict[str, dict]:
+async def _judge_views(views: list[SampleView], judge: judging.Judge) -> dict[str, dict]:
     """Every agent of every sample judged again with the spec the sample was judged with (its task's schema, Lucy's
-    addendum when its config asked for it), through the provider's batch API or the normal one; by episode."""
-    judge = judging.Judge.of(judge_name, batch=batch)
+    addendum when its config asked for it); by episode."""
     verdicts = {}
     for view in views:
         cb = view.metadata["cheatbench"]
@@ -211,15 +210,17 @@ async def _judge_views(views: list[SampleView], judge_name: str, batch: bool) ->
     return verdicts
 
 
-@command
-def judge(eval_log: Path, run_name: str, judge_name: str, *, batch: bool = True, judge_errors: bool = False) -> int:
-    """Judge a finished eval log (again, or for the first time after a run without a judge) and export it to
-    runs/<run_name>/ with the verdicts. batch: the provider's batch API, half price, up to a day; else the normal
-    API, full price, minutes."""
-    require_judge_key(judge_name, 2)
-    eval_log = eval_log.resolve()
-    if not eval_log.is_file():
-        raise Refusal(f"no such eval log: {eval_log}", 2)
+async def _judge_all(views: dict[str, list[SampleView]], judge_name: str, batch: bool) -> dict[str, dict]:
+    """The runs together on one event loop and one client, so that a batch holds every run's episodes; {run: verdicts
+    by episode}. batch: the provider's batch API, half price, up to a day; else the normal API, full price, minutes."""
+    judge = judging.Judge.of(judge_name, batch=batch)
+    results = await asyncio.gather(*(_judge_views(run_views, judge) for run_views in views.values()))
+    return dict(zip(views, results))
+
+
+def _log_views(eval_log: Path, judge_errors: bool) -> list[SampleView]:
+    """A finished log's samples, ready for the judge. Refuses a log with no sample and, unless judge_errors, a run with
+    a harness or provider failure."""
     log = read_eval_log(str(eval_log), resolve_attachments=True)
     views = [SampleView.from_eval_sample(sample, log) for sample in log.samples or []]
     if not views:
@@ -227,8 +228,11 @@ def judge(eval_log: Path, run_name: str, judge_name: str, *, batch: bool = True,
     failures = [error_and_failure(view)[1] for view in views]
     if not judge_errors and any(f in settings.INCOMPLETE_FAILURES for f in failures):
         raise Refusal("run has a harness or provider failure; not judging (pass --judge-errors to force)", 5)
-    print(f"== judge ({judge_name}, {'batch' if batch else 'sync'}) {eval_log}", flush=True)
-    verdicts = asyncio.run(_judge_views(views, judge_name, batch))
+    return views
+
+
+def _write_verdicts(eval_log: Path, run_name: str, verdicts: dict[str, dict]) -> None:
+    """Export the log to runs/<run_name>/ with its verdicts and print them. Refuses when no verdict reached the file."""
     run_dir = export(eval_log, settings.RUNS / run_name, verdicts=verdicts)
     written = RunDir(run_dir).verdicts()
     if not verdicts or not written:
@@ -237,6 +241,19 @@ def judge(eval_log: Path, run_name: str, judge_name: str, *, batch: bool = True,
     for verdict in written.values():
         print(json.dumps({key: verdict.get(key) for key in VERDICT_FIELDS}))
     print(signals.run_report(run_dir), flush=True)
+
+
+@command
+def judge(eval_log: Path, run_name: str, judge_name: str, *, batch: bool = True, judge_errors: bool = False) -> int:
+    """Judge a finished eval log (again, or for the first time after a run without a judge) and export it to
+    runs/<run_name>/ with the verdicts."""
+    require_judge_key(judge_name, 2)
+    eval_log = eval_log.resolve()
+    if not eval_log.is_file():
+        raise Refusal(f"no such eval log: {eval_log}", 2)
+    views = {run_name: _log_views(eval_log, judge_errors)}
+    print(f"== judge ({judge_name}, {'batch' if batch else 'sync'}) {eval_log}", flush=True)
+    _write_verdicts(eval_log, run_name, asyncio.run(_judge_all(views, judge_name, batch))[run_name])
     return 0
 
 
@@ -286,21 +303,39 @@ async def _ladder_all(run_dirs: list[Path], judge_name: str, view: str, agents: 
 @command
 def rejudge(run_dirs: list[Path], judge_name: str, *, with_judge: bool = True, with_ladder: bool = True,
             view: str = "full", judge_errors: bool = False, batch: bool = True) -> int:
-    """CheatBench's judge over each run's eval log (run.json eval_log, re-exported to runs/<name>/), then the ladder
-    over its transcripts, every episode again. A run whose log is gone gets the ladder only, which needs the
-    transcripts alone. Returns the worst exit code."""
-    codes = [0]
-    for run_dir in run_dirs:
-        run = RunDir(run_dir).require()
-        eval_log = run.run_json.get("eval_log")
-        code = 0
-        if with_judge and eval_log and Path(eval_log).is_file():
-            code = judge(Path(eval_log), run.name, judge_name, batch=batch, judge_errors=judge_errors)
-        elif with_judge:
+    """CheatBench's judge over the runs' eval logs (RunDir.eval_log, re-exported to runs/<name>/), then the ladder over
+    their transcripts, every episode again, all the runs in one batch. A run whose log is gone gets the ladder only,
+    which needs the transcripts alone. A run the judge refuses gets no ladder. Returns the worst exit code."""
+    runs = [RunDir(run_dir).require() for run_dir in run_dirs]
+    if with_judge:
+        require_judge_key(judge_name, 2)
+    codes, refused, views = [0], set(), {}
+
+    def refuse(name: str, refusal: Refusal) -> None:
+        print(f"{name}: {refusal}", file=sys.stderr)
+        codes.append(refusal.code)
+        refused.add(name)
+
+    for run in runs if with_judge else []:
+        if run.eval_log is None:
             print(f"{run.name}: no eval log on disk, skipping CheatBench's judge", file=sys.stderr)
-        if not code and with_ladder:
-            code = ladder_runs([run.path], judge_name, view=view, force=True, batch=batch)
-        codes.append(code)
+            continue
+        try:
+            views[run.name] = _log_views(run.eval_log, judge_errors)
+        except Refusal as refusal:
+            refuse(run.name, refusal)
+    if views:
+        print(f"== judge ({judge_name}, {'batch' if batch else 'sync'}) {len(views)} runs", flush=True)
+    verdicts = asyncio.run(_judge_all(views, judge_name, batch)) if views else {}
+    for run in runs:
+        if run.name in verdicts:
+            try:
+                _write_verdicts(run.eval_log, run.name, verdicts[run.name])
+            except Refusal as refusal:
+                refuse(run.name, refusal)
+    ladder_dirs = [run.path for run in runs if run.name not in refused]
+    if with_ladder and ladder_dirs:
+        codes.append(ladder_runs(ladder_dirs, judge_name, view=view, force=True, batch=batch))
     return max(codes)
 
 
@@ -311,9 +346,8 @@ def regenerate(run_dirs: list[Path], *, export_log: bool = True, measures: bool 
     (swe_summary.json); the figures under out/<run>/. ladder.jsonl is never cleared."""
     for run_dir in run_dirs:
         run = RunDir(run_dir).require()
-        eval_log = run.run_json.get("eval_log")
-        if export_log and eval_log and Path(eval_log).is_file():
-            export(Path(eval_log), run.path, verdicts=run.verdicts() or None)
+        if export_log and run.eval_log:
+            export(run.eval_log, run.path, verdicts=run.verdicts() or None)
         elif export_log:
             print(f"{run.name}: no eval log on disk, keeping the export as it is", file=sys.stderr)
         if measures:

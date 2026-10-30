@@ -18,6 +18,7 @@ import json
 from functools import cached_property
 from pathlib import Path
 
+from src.configuration import settings
 from src.utils.json_files import read_json, read_jsonl
 
 RUN_JSON = "run.json"
@@ -48,6 +49,19 @@ class RunDir:
     def run_json(self) -> dict:
         """run.json, {} when absent."""
         return read_json(self.path / RUN_JSON) or {}
+
+    @property
+    def eval_log(self) -> Path | None:
+        """The run's eval log: the path run.json records, else the same file under this checkout's logs/<run>/, where
+        a run pulled from a box keeps it, else under the run's name beside the recorded folder, for a run set aside
+        under another name. None when none exists."""
+        recorded = self.run_json.get("eval_log")
+        if not recorded:
+            return None
+        path = Path(recorded)
+        return next((candidate for candidate in (path, settings.LOGS / self.name / path.name,
+                                                 path.parent.parent / self.name / path.name) if candidate.is_file()),
+                    None)
 
     def episodes(self) -> list[dict]:
         """episodes.jsonl: one record per (sample, agent)."""
