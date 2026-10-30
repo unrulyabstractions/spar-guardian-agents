@@ -37,6 +37,11 @@ MODELS = {"deepseek-flash-openrouter": "dsflash", "gpt-6-luna": "luna", "claude-
 """Each model's registry entry and the suffix of its run names."""
 KINDS = ("solo", "solo_cheat", "minimal", "minimal_cheat", "minimal_regulated")
 """The cells of a task, as the last part of each example script's name."""
+FLOORS = {"software_engineering": (32, 64)}
+"""A box's cores and GB of RAM where the task needs more than LIGHT_FLOOR: SWE builds and tests Go on one machine per
+agent, and 15 such runs share the box."""
+LIGHT_FLOOR = (16, 32)
+"""A box's cores and GB of RAM for the other tasks: their agents wait on a model most of the time."""
 LAUNCH = re.compile(r"^l[0-9a-f]{6}$")
 
 
@@ -46,6 +51,11 @@ def boxes(tasks: list[str], models: list[str]) -> list[tuple[str, str]]:
     if unknown:
         raise ValueError(f"unknown task or model: {', '.join(unknown)}; tasks {list(TASKS)}, models {list(MODELS)}")
     return [(task, model) for task in tasks for model in models]
+
+
+def floor_of(task: str) -> tuple[int, int]:
+    """The cores and GB of RAM a task's box needs."""
+    return FLOORS.get(task, LIGHT_FLOOR)
 
 
 def new_launch() -> str:

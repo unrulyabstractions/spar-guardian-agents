@@ -255,10 +255,11 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def launch(cell: str, name: str, model: str) -> subprocess.Popen:
+def launch(cell: str, name: str, model: str, seed: int) -> subprocess.Popen:
     """One run in its own session, so the guard can stop its whole process group. Its screen log is new: an earlier
-    attempt's was set aside."""
-    command = [sys.executable, "-m", f"examples.{cell}", "--model", model, "--name", name]
+    attempt's was set aside. The seed is the sample's number, so the samples of a cell are independent: it draws the
+    hidden roles, the turn order and SWE's planted hashes."""
+    command = [sys.executable, "-m", f"examples.{cell}", "--model", model, "--name", name, "--set", f"seed={seed}"]
     with open(SCREEN_LOGS / f"{name}.log", "x") as log:
         log.write(" ".join(command) + "\n")
         log.flush()
@@ -286,7 +287,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     if keys and not any(os.environ.get(key) for key in keys):
         print(f"refused: none of {keys} is set; box_run.sh writes it to /root/.box_env")
         return 1
-    jobs = [(cell, run_name(cell, args.suffix, k)) for k in range(1, args.samples + 1) for cell in task_cells]
+    jobs = [(cell, run_name(cell, args.suffix, k), k) for k in range(1, args.samples + 1) for cell in task_cells]
     for folder in (SCREEN_LOGS, settings.RUNS, settings.ROOT / "out"):
         folder.mkdir(parents=True, exist_ok=True)
     PID_FILE.write_text(f"{os.getpid()}\n")
@@ -296,9 +297,9 @@ def cmd_run(args: argparse.Namespace) -> int:
             "started": now_iso(), "limit_s": limit, "grace_s": GRACE_S, "runner_pid": os.getpid(),
             "earlier_plan": str(earlier) if earlier else None,
             "runs": {name: {"cell": cell, "pid": None, "started": None, "ended": None, "exit": None, "hung": None,
-                            "again": None} for cell, name in jobs}}
+                            "again": None} for cell, name, _ in jobs}}
     processes, starts = {}, {}
-    for cell, name in jobs:
+    for cell, name, sample in jobs:
         record = plan["runs"][name]
         left, why = outcome(name)
         left, why = derive(name) if left == "derive" else (left, why)
@@ -313,7 +314,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         if log or (settings.RUNS / name).exists():
             record["again"] = f"{why}; earlier log {log}"
             print(f"   {name:40s} again: {why}", flush=True)
-        processes[name] = launch(cell, name, args.model)
+        processes[name] = launch(cell, name, args.model, sample)
         starts[name] = time.time()
         record.update(pid=processes[name].pid, started=now_iso())
     save(path, plan)
@@ -338,7 +339,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             record["ended"] = now_iso()
             del processes[name]
         save(path, plan)
-    print(summary([name for _, name in jobs]), flush=True)
+    print(summary([name for _, name, _ in jobs]), flush=True)
     return 0 if all(state(name, r) == "finished" for name, r in plan["runs"].items()) else 1
 
 

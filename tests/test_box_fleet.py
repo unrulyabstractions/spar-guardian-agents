@@ -60,8 +60,17 @@ def test_candidates_keep_what_can_hold_a_box_cheapest_first():
     assert [o["id"] for o in fleet.candidates(SAVED_SEARCH, max_dph=2.0)][-1] == 58339037
 
 
+def test_each_task_rents_at_its_own_floor():
+    assert fleet_layout.floor_of("software_engineering") == (32, 64) and fleet_layout.floor_of("chess") == (16, 32)
+    assert fleet.minimums("software_engineering")["min_cores"] == 30 and fleet.minimums("chess")["min_cores"] == 14
+    small = {**SAVED_SEARCH[0], "cpu_cores_effective": 16, "cpu_cores": 16, "cpu_ram": 40000}
+    assert fleet.rejections(small, floor=fleet_layout.floor_of("chess")) == []
+    assert fleet.rejections(small, floor=fleet_layout.floor_of("software_engineering")) == [
+        "fewer than 32 cores", "less than 64 GB of RAM in its share"]
+
+
 def test_each_rejected_offer_says_why():
-    why = {o["id"]: fleet.rejections(o) for o in SAVED_SEARCH}
+    why = {o["id"]: fleet.rejections(o, floor=(32, 64)) for o in SAVED_SEARCH}
     assert why[58339037] == ["dearer than $1.00/h"]
     assert why[54902714] == ["less than 64 GB of RAM in its share"]          # 32 of 256 cores: 8 GB of 64
     assert why[58272073] == ["less than 64 GB of RAM in its share", "a country the model providers do not serve"]
@@ -489,7 +498,7 @@ def test_accept_loss_takes_a_reason_and_logs_what_is_lost(registry, monkeypatch,
 def test_entry_prints_a_boxs_fields_and_its_launchs_pins(registry, capsys):
     add_box()
     assert fleet.main(["entry", "7", "task", "commit", "requirements_sha256", "min_ram_gb"]) == 0
-    assert capsys.readouterr().out.split() == ["chess", PIN["commit"], PIN["requirements_sha256"], "57"]
+    assert capsys.readouterr().out.split() == ["chess", PIN["commit"], PIN["requirements_sha256"], "28"]
     (fleet.launch_dir(LAUNCH) / "requirements.txt").write_bytes(b"inspect-ai==9\n")    # changed after the launch
     assert fleet.main(["entry", "7", "task"]) == 1
     assert "not the package list launch" in capsys.readouterr().err
@@ -1003,7 +1012,7 @@ def test_a_resume_reruns_what_did_not_finish_and_keeps_the_earlier_attempt(runne
                         ("failed", "its eval ended error"))
     launched = []
 
-    def launch(cell, name, model):
+    def launch(cell, name, model, seed):
         with open(logs / f"{name}.log", "x") as log:
             log.write("second attempt\n")
         launched.append(name)

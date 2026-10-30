@@ -81,6 +81,7 @@ from scripts.box.fleet_layout import (
     BOXES,
     KINDS,
     LABEL_PREFIX,
+    LIGHT_FLOOR,
     MODELS,
     REGISTRY,
     REMOTE_REPO,
@@ -89,6 +90,7 @@ from scripts.box.fleet_layout import (
     box_label,
     boxes,
     cells,
+    floor_of,
     is_fleet_label,
     label_base,
     layout_problems,
@@ -105,8 +107,8 @@ MOCK_MODEL = "mockllm/model"
 
 IMAGE = "docker.io/vastai/kvm:ubuntu_terminal"
 DISK_GB = 200
-MIN_CORES = 32
-MIN_RAM_GB = 64
+MIN_CORES, MIN_RAM_GB = LIGHT_FLOOR
+"""The least a box of any task needs; a task's own floor is fleet_layout.floor_of."""
 MIN_RELIABILITY = 0.98
 MAX_DPH = 1.00
 """The dearest offer, in $/h with the disk, that offers and create take unless --max-dph says otherwise."""
@@ -125,9 +127,14 @@ NOT_SWEPT = ("Docker's images, and its containers and volumes unless the capture
 """What the capture never sweeps, printed before every destroy."""
 ENTRY_FIELDS = ("task", "model", "suffix", "label", "launch", "commit", "requirements", "requirements_sha256",
                 "python_version", "uv_version", "cores", "ram_gb", "dph", "min_cores", "min_ram_gb", "min_disk_gb")
-MINIMUMS = {"min_cores": MIN_CORES - 2, "min_ram_gb": int(0.9 * MIN_RAM_GB), "min_disk_gb": int(0.85 * DISK_GB)}
-"""What box_setup.sh requires the box to have (nproc, MemTotal, the root filesystem; GB of 10^9 bytes): the offer's
-minimums, less what a VM's kernel and filesystem take. A VM on a 32-core share has 30 cores (instance 58388038)."""
+
+
+def minimums(task: str) -> dict[str, int]:
+    """What box_setup.sh requires a box of the task to have (nproc, MemTotal, the root filesystem; GB of 10^9 bytes):
+    the offer's floor, less what a VM's kernel and filesystem take. A VM on a 32-core share has 30 cores (instance
+    58388038)."""
+    cores, ram_gb = floor_of(task)
+    return {"min_cores": cores - 2, "min_ram_gb": int(0.9 * ram_gb), "min_disk_gb": int(0.85 * DISK_GB)}
 
 
 @dataclass(frozen=True)
@@ -228,14 +235,15 @@ def country(offer: dict) -> str | None:
     return code if len(code) == 2 else None
 
 
-def rejections(offer: dict, max_dph: float = MAX_DPH) -> list[str]:
-    """Why an offer cannot hold a box; empty when it can."""
+def rejections(offer: dict, max_dph: float = MAX_DPH, floor: tuple[int, int] = LIGHT_FLOOR) -> list[str]:
+    """Why an offer cannot hold a box of that floor (cores, GB of RAM); empty when it can."""
+    min_cores, min_ram_gb = floor
     checks = [
         (offer.get("cpu_arch") == "amd64", "not x86_64"),
         (offer.get("vms_enabled") is True, "no VM support"),
         (not offer.get("is_vm_deverified"), "VM support deverified"),
-        ((offer.get("cpu_cores_effective") or 0) >= MIN_CORES, f"fewer than {MIN_CORES} cores"),
-        (ram_share_gb(offer) >= MIN_RAM_GB, f"less than {MIN_RAM_GB} GB of RAM in its share"),
+        ((offer.get("cpu_cores_effective") or 0) >= min_cores, f"fewer than {min_cores} cores"),
+        (ram_share_gb(offer) >= min_ram_gb, f"less than {min_ram_gb} GB of RAM in its share"),
         ((offer.get("disk_space") or 0) >= DISK_GB, f"less than {DISK_GB} GB of disk"),
         ((offer.get("reliability") or 0) >= MIN_RELIABILITY, f"reliability below {MIN_RELIABILITY}"),
         ((offer.get("direct_port_count") or 0) >= 1, "no open port for direct ssh"),
@@ -509,16 +517,18 @@ def audit(vast: Vast, asked: dict[str, tuple[str, str]]) -> int:
 
 def rent(vast: Vast, asked: dict[str, tuple[str, str]], offers: list[dict], args: argparse.Namespace, launch: str,
          held: float, sent: list[int]) -> int:
-    """One offer per label, cheapest first, never past the fleet's cap; sent[0] counts the rents sent."""
-    remaining, rejected, spent, placed = iter(offers), 0, 0.0, []
+    """One offer per label, the cheapest that meets its task's floor, never past the fleet's cap; sent[0] counts the
+    rents sent."""
+    remaining, rejected, spent, placed = list(offers), 0, 0.0, []
     for label, (task, model) in asked.items():
         over_cap = False
-        for offer in remaining:
+        for offer in [o for o in remaining if not rejections(o, args.max_dph, floor_of(task))]:
             if held + spent + offer["dph_total"] > args.max_fleet_dph:
                 over_cap = True
                 print(f"== stopped: offer {offer['id']} at ${offer['dph_total']:.3f}/h takes the fleet to "
                       f"${held + spent + offer['dph_total']:.3f}/h, past its cap ${args.max_fleet_dph:.2f}/h")
                 break
+            remaining.remove(offer)
             call = create_call(offer["id"], label)
             if args.dry_run:
                 print(f"   would send: {call.show()}\n      offer {offer_row(offer)}")
@@ -551,7 +561,7 @@ def rent(vast: Vast, asked: dict[str, tuple[str, str]], offers: list[dict], args
 
 
 def cmd_create(args: argparse.Namespace) -> int:
-    pairs = boxes(args.tasks, args.models)
+    pairs = sorted(boxes(args.tasks, args.models), key=lambda pair: floor_of(pair[0]), reverse=True)    # heavy first
     if len(pairs) != args.count:
         print(f"--count {args.count} but the tasks and models make {len(pairs)} boxes: say the count you mean")
         return 2
@@ -694,7 +704,7 @@ def open_entry(instance_id: int) -> dict:
     entry = registered(load_registry(), instance_id)
     if entry is None or entry["destroyed"]:
         raise RuntimeError(f"{instance_id} is not a registered box that is not destroyed")
-    return entry | load_launch(entry["launch"]) | MINIMUMS
+    return entry | load_launch(entry["launch"]) | minimums(entry["task"])
 
 
 def cmd_entry(args: argparse.Namespace) -> int:

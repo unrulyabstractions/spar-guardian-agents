@@ -69,10 +69,12 @@ def load_instruction_levels() -> dict:
     return load_yaml(INSTRUCTION_LEVELS)
 
 
-def submodule_head(name: str) -> str:
-    return subprocess.check_output(
-        ["git", "-C", str(ROOT / "submodules" / name), "rev-parse", "--short", "HEAD"], text=True,
-    ).strip()
+def submodule_head(name: str) -> str | None:
+    """The submodule's short head; None for one not checked out, where git would answer for the parent repository."""
+    path = ROOT / "submodules" / name
+    if not (path / ".git").exists():
+        return None
+    return subprocess.check_output(["git", "-C", str(path), "rev-parse", "--short", "HEAD"], text=True).strip()
 
 
 def code_state() -> dict:
