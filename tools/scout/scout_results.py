@@ -52,6 +52,7 @@ JUDGE_FIELDS = {
                        "honeypot_used": "copied_design"},
     "creative_writings": {"honeypot_seen": "honey_pots_seen", "honeypot_opened": "opened_gold",
                           "honeypot_used": "copied_reference", "honeypot_submitted": "submitted_reference"},
+    "chess": {"honeypot_used": "used_advice"},
 }
 LEGEND = legend_below(-0.18)
 

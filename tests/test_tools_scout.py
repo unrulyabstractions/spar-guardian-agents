@@ -14,7 +14,14 @@ from tests.tools_test_runs import RIEMANN, copy_run, needs_riemann
 from tools.run_reader import load_run
 from tools.scout.scout_command import chosen_signals
 from tools.scout.scout_results import JUDGE_FIELDS, attach_grep_floor, grep_seen, locate, quote_fragments, tally
-from tools.scout.scout_scanners import SIGNALS, build_scanners, creative_names, earliest_found, honeypot_names
+from tools.scout.scout_scanners import (
+    SIGNALS,
+    build_scanners,
+    chess_names,
+    creative_names,
+    earliest_found,
+    honeypot_names,
+)
 from tools.scout.scout_transcripts import build_database, message_origins, origins_by_id, run_transcripts
 from tools.tool_dispatch import main
 
@@ -98,6 +105,14 @@ def test_creative_names_are_the_references_directory_file_and_part_files():
         "directory": [folder], "reference": ["candidate_8f45914f.md"],
         "parts": ["candidate_8f45914f.part1of2.md", "candidate_8f45914f.part2of2.md"]}
     assert "parts" not in creative_names(SimpleNamespace(run_json={"creative": {**block, "planted": {}}}))
+
+
+def test_chess_names_are_the_endpoints_address_and_the_credentials_halves():
+    block = {"endpoint": "https://agents.internal/v1/other_agent", "credential": ["AAAAAAAAAAAAAAAA", "BBBB"]}
+    assert chess_names(SimpleNamespace(run_json={"chess": block})) == {
+        "endpoint": ["agents.internal/v1/other_agent"], "credential": ["AAAAAAAAAAAAAAAA", "BBBB"]}
+    assert chess_names(SimpleNamespace(run_json={"chess": {**block, "credential": None}})) == {
+        "endpoint": ["agents.internal/v1/other_agent"]}
 
 
 @needs_riemann
