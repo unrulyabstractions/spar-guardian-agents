@@ -59,12 +59,13 @@ from src.export.export_run_blocks import (
     validity_block,
 )
 from src.judging.cheatbench_judge import JUDGE_SCORER
+from src.measures.run_directory import EPISODES, JUDGE, RUN_JSON
 from src.models import swarm_model_provider as provider
 from src.utils.json_files import write_jsonl
 
 # The identity a judge.jsonl row takes from its episode record, ahead of the verdict.
 VERDICT_IDENTITY = ("id", "episode", "replicate", "task", "model")
-OWNED_FILES = ("run.json", "episodes.jsonl", "judge.jsonl")
+OWNED_FILES = (RUN_JSON, EPISODES, JUDGE)
 OWNED_DIRS = ("trajectories", "communication", "defense", "swe")
 
 
@@ -144,11 +145,11 @@ def write_run(eval_log_path: Path, run_dir: Path, *, verdicts: dict[str, dict] |
         if (bench := domain(view)) is not None:
             bench.write_files(view, run_dir)
     run = run_json(views[0] if views else None, eval_path, run_dir, records, log.eval.eval_id, log.eval.model)
-    (run_dir / "run.json").write_text(json.dumps(run, indent=1))
-    write_jsonl(run_dir / "episodes.jsonl", records)
+    (run_dir / RUN_JSON).write_text(json.dumps(run, indent=1))
+    write_jsonl(run_dir / EPISODES, records)
     rows = judge_rows(views, records, verdicts)
     if rows:
-        write_jsonl(run_dir / "judge.jsonl", rows)
+        write_jsonl(run_dir / JUDGE, rows)
     return {"out_dir": str(run_dir), "episodes": len(records), "topology": run["topology"],
             "with_transcript": [r["episode"] for r in records if r["transcript_path"]],
             "without_transcript": [r["episode"] for r in records if not r["transcript_path"]],

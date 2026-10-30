@@ -2,7 +2,6 @@
 and the setting-dependent prompt texts."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -282,30 +281,6 @@ def test_the_turn_budget_reaches_the_plan_the_bounds_and_the_store():
     off = build_config("default", "small", ["turn_budget=none", "message_limit=40"])
     assert [s.id for s in rules.schedule(off, off.names).steps] == [f"r{r}" for r in range(1, 9)]
     assert off.max_turns == 8 * 3 * 4 and off.sample_message_limit == 40
-
-
-def test_budget_command(tmp_path, capsys):
-    from src import run as run_module
-    lone, other = tmp_path / "lone", tmp_path / "other"
-    for folder, turns in ((lone, 55), (other, 13)):
-        folder.mkdir()
-        (folder / "episodes.jsonl").write_text(json.dumps({"episode": "riemann#1", "orbit_roster": ["solver"],
-                                                           "orbit_agent": "solver", "n_turns": turns}) + "\n")
-    args = build_parser().parse_args(["budget", str(lone)])
-    assert args.func(args) == 0
-    out = capsys.readouterr().out
-    assert "n_turns 55" in out and "median 55 over 1 lone episode(s)" in out
-    args = build_parser().parse_args(["budget", str(lone), str(other)])
-    assert args.func(args) == 0
-    assert "median 34 over 2 lone episode(s)" in capsys.readouterr().out
-    # A run of several agents, or a folder without episodes, is refused.
-    team = tmp_path / "team"
-    team.mkdir()
-    (team / "episodes.jsonl").write_text(json.dumps({"orbit_roster": ["a01", "a02"], "n_turns": 9}) + "\n")
-    assert run_module.budget([team]) == 2 and run_module.budget([tmp_path / "missing"]) == 2
-    assert "not a lone agent's run" in capsys.readouterr().err
-    if (ROOT / "runs" / "om_lone_1" / "episodes.jsonl").exists():
-        assert run_module.lone_turns(ROOT / "runs" / "om_lone_1") == [11]
 
 
 def test_cli_defaults_to_the_jigsaw_honeypot():

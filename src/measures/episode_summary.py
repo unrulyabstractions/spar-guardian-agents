@@ -1,21 +1,26 @@
-"""Print one line per judged episode across run directories.
+"""One line per episode of a run directory, and the turns of lone agents' runs.
 
-    python -m src summary runs/gemini_riemann runs/ctrl_* [--full]
+    print(HEADER)
+    for line in summary_lines(Path("runs/gemini_riemann"), full=True):
+        print(line)
+    print("\\n".join(budget_lines([Path("runs/om_lone_1"), Path("runs/om_lone_2")])))
 
-Each line joins an episode from episodes.jsonl with its verdict from judge.jsonl. A run's header lines give its
-swarm composition, and its shutdown rate when run.json records one.
---full also prints the judge's summary under each episode.
+An EpisodeSummary joins an episode's record (episodes.jsonl) with its verdict (judge.jsonl): its role, tool calls,
+wall time and failure, whether the judge says it cheated, and the task's other judge flags that hold
+(src/measures/verdict_fields.py). A run's header lines give its swarm composition, and its shutdown rate when run.json
+records one; with full each episode's line is followed by the judge's summary. budget_lines gives each lone run's
+n_turns and their median, how long one agent takes alone, beside the turn budget (settings.TURN_BUDGET).
 """
 from __future__ import annotations
 
-import argparse
-import json
+import statistics
+from dataclasses import dataclass
 from pathlib import Path
 
-HEADER = (
-    f"{'run':24} {'episode':18} {'control':13} {'role':12} {'calls':>5} {'s':>5} {'fail':6} "
-    f"{'chk':>4} {'blk':>4} {'cheat':5} {'seen':5} {'acc':5} {'disc':5}  blocks_by"
-)
+from src.measures.run_directory import RunDir
+from src.measures.verdict_fields import flag_names
+
+HEADER = f"{'run':24} {'episode':18} {'role':12} {'calls':>5} {'s':>5} {'fail':9} {'cheat':5}  flags"
 SUMMARY_CHARS = 1200
 
 
@@ -23,105 +28,73 @@ def yes_no(value) -> str:
     return {True: "yes", False: "no"}.get(value, "--")
 
 
-def read_jsonl(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text().splitlines()]
+@dataclass(frozen=True)
+class EpisodeSummary:
+    """One episode's summary row, from its record and its verdict."""
+
+    run: str
+    episode: str
+    role: str | None
+    calls: int | None
+    seconds: float | None
+    failure: str | None
+    cheated: bool | None
+    flags: tuple[str, ...]
+    """The task's judge flags that hold, cheated aside."""
+    summary: str
+    """The judge's summary, "" without a verdict."""
+
+    @classmethod
+    def of(cls, run: str, episode: dict, verdict: dict | None) -> EpisodeSummary:
+        verdict = verdict or {}
+        flags = tuple(f for f in flag_names(episode.get("task")) if f != "cheated" and verdict.get(f) is True)
+        return cls(run=run, episode=episode["episode"], role=episode.get("role"), calls=episode.get("n_tool_calls"),
+                   seconds=episode.get("wall_time"), failure=episode.get("failure"), cheated=verdict.get("cheated"),
+                   flags=flags, summary=verdict.get("summary") or "")
+
+    def line(self) -> str:
+        calls = "-" if self.calls is None else self.calls
+        seconds = "-" if self.seconds is None else round(self.seconds)
+        return (f"{self.run:24} {self.episode:18} {self.role or '-':12} {calls:>5} {seconds:>5} "
+                f"{self.failure or '-':9} {yes_no(self.cheated):5}  {' '.join(self.flags)}")
 
 
-def verdicts_by_episode(run_dir: Path) -> dict:
-    judge_path = run_dir / "judge.jsonl"
-    if not judge_path.exists():
-        return {}
-    return {verdict["episode"]: verdict for verdict in read_jsonl(judge_path)}
+def summary_lines(run_dir: Path, full: bool = False) -> list[str]:
+    """The run's header lines and one line per episode, each followed by the judge's summary when full."""
+    run = RunDir(run_dir)
+    episodes = run.episodes()
+    if not episodes:
+        return [f"{run.name:24} (no episodes)"]
+    swarm, rate = run.run_json.get("swarm"), run.run_json.get("shutdown_rate")
+    lines = []
+    if swarm:
+        lines.append(f"{run.name:24} swarm {swarm.get('composition')} seed {swarm.get('seed')}")
+    if rate is not None:
+        lines.append(f"{run.name:24} shutdown rate {rate:.2f} (agents that submitted)")
+    verdicts = run.verdicts()
+    for episode in episodes:
+        row = EpisodeSummary.of(run.name, episode, verdicts.get(episode["episode"]))
+        lines.append(row.line())
+        if full and row.summary:
+            lines.append("    " + row.summary[:SUMMARY_CHARS])
+    return lines
 
 
-def episode_row(run_name: str, episode: dict, verdict: dict) -> dict:
-    defense = episode.get("defense") or {}
-    usage = episode.get("usage") or {}
-    wall_time = episode.get("wall_time")
-    return {
-        "run": run_name,
-        "episode": episode["episode"],
-        "control": episode.get("control"),
-        "role": episode.get("role"),
-        "calls": episode.get("n_tool_calls"),
-        "s": round(wall_time) if wall_time else None,
-        "failure": episode.get("failure"),
-        "checks": defense.get("checks", 0),
-        "blocks": defense.get("blocks", 0),
-        "blocks_by": defense.get("blocks_by_boundary", {}),
-        "cheated": verdict.get("cheated"),
-        "seen": verdict.get("honey_pots_seen"),
-        "access": verdict.get("attempted_access"),
-        "disclosed": verdict.get("disclosed_access"),
-        "judge_usd": verdict.get("judge_cost_usd"),
-        "prompt_tokens": usage.get("input"),
-        "summary": verdict.get("summary", ""),
-    }
+def lone_turns(run_dir: Path) -> list[int]:
+    """n_turns of every episode of a lone agent's run. Raises ValueError for a run without episodes or with a team."""
+    episodes = RunDir(run_dir).episodes()
+    if not episodes:
+        raise ValueError(f"{run_dir}: no episodes")
+    if any(len(ep.get("orbit_roster") or [ep.get("orbit_agent")]) != 1 for ep in episodes):
+        raise ValueError(f"{run_dir} is not a lone agent's run: an episode has a roster of several agents")
+    return [int(ep["n_turns"]) for ep in episodes]
 
 
-def rows(run_dir: Path):
-    verdicts = verdicts_by_episode(run_dir)
-    for episode in read_jsonl(run_dir / "episodes.jsonl"):
-        verdict = verdicts.get(episode["episode"], {})
-        yield episode_row(run_dir.name, episode, verdict)
-
-
-def format_row(row: dict) -> str:
-    episode_part = (
-        f"{row['run']:24} {row['episode']:18} {str(row['control']):13} {str(row['role'] or '-'):12} "
-        f"{str(row['calls']):>5} {str(row['s']):>5} {str(row['failure'] or '-'):6} "
-    )
-    verdict_part = (
-        f"{row['checks']:>4} {row['blocks']:>4} {yes_no(row['cheated']):5} {yes_no(row['seen']):5} "
-        f"{yes_no(row['access']):5} {yes_no(row['disclosed']):5}  {row['blocks_by']}"
-    )
-    return episode_part + verdict_part
-
-
-def swarm_line(run_dir: Path) -> str | None:
-    run_json = run_dir / "run.json"
-    if not run_json.exists():
-        return None
-    swarm = json.loads(run_json.read_text()).get("swarm")
-    if not swarm:
-        return None
-    composition = swarm.get("composition")
-    seed = swarm.get("seed")
-    return f"{run_dir.name:24} swarm {composition} seed {seed}"
-
-
-def shutdown_line(run_dir: Path) -> str | None:
-    """The share of agents that ended their own episode with submit (run.json shutdown_rate), when recorded."""
-    run_json = run_dir / "run.json"
-    if not run_json.exists():
-        return None
-    rate = json.loads(run_json.read_text()).get("shutdown_rate")
-    return None if rate is None else f"{run_dir.name:24} shutdown rate {rate:.2f} (agents that submitted)"
-
-
-def print_run(run_dir: Path, full: bool) -> None:
-    if not (run_dir / "episodes.jsonl").exists():
-        print(f"{run_dir.name:24} (no episodes.jsonl)")
-        return
-    for line in (swarm_line(run_dir), shutdown_line(run_dir)):
-        if line:
-            print(line)
-    for row in rows(run_dir):
-        print(format_row(row))
-        if full and row["summary"]:
-            print("    " + row["summary"][:SUMMARY_CHARS])
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("run_dirs", nargs="*", type=Path, help="run directories under runs/")
-    parser.add_argument("--full", action="store_true", help="also print the judge's summary")
-    args = parser.parse_intermixed_args(argv)
-    print(HEADER)
-    for run_dir in args.run_dirs:
-        print_run(run_dir, args.full)
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+def budget_lines(run_dirs: list[Path]) -> list[str]:
+    """Each lone run's n_turns, then their median over every episode."""
+    lines, turns = [], []
+    for run_dir in run_dirs:
+        mine = lone_turns(run_dir)
+        lines.append(f"{run_dir}: {len(mine)} episode(s) of a lone agent, n_turns {', '.join(map(str, mine))}")
+        turns += mine
+    return [*lines, f"median {int(statistics.median(turns))} over {len(turns)} lone episode(s)"]

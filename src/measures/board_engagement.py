@@ -1,29 +1,24 @@
-"""Print the board engagement funnel of run directories, per agent and per role.
+"""The board engagement funnel of a run directory, per agent and per role.
 
-    python -m src.measures.board_engagement runs/<run> [runs/<run> ...] [--json]
+    measures = run_measures(Path("runs/swarm_R3D3"))
+    print(format_run(measures))
 
-The funnel counts the agents of a role that were on a board, then those that looked at it (board_status or
-board_read), read it, posted to it, and submitted for the team. Each agent line gives its round of discovery, its
-checks, reads and posts, its working and free steps, the board_read and board_post calls the per-turn budgets
-refused, its agent_actions queries (a regulator's oversight), and whom it read and queried; "--" stands for a value
-the run did not record. The numbers come from the `engagement` blocks src/export/run_export.py writes into
-episodes.jsonl and run.json. A run without a board prints a line saying so.
+`python -m src engagement <run ...> [--json]` prints it. The funnel counts the agents of a role that were on a board,
+then those that looked at it (board_status or board_read), read it, posted to it, and submitted for the team. Each
+agent line gives its round of discovery, its checks, reads and posts, its working and free steps, the board_read and
+board_post calls the per-turn budgets refused, its agent_actions queries (a regulator's oversight), and whom it read
+and queried; "--" stands for a value the run did not record. The numbers come from the `engagement` blocks
+src/export/run_export.py writes into episodes.jsonl and run.json. A run without a board says so in one line.
 """
 from __future__ import annotations
 
-import argparse
-import json
 from pathlib import Path
+
+from src.measures.run_directory import RunDir
 
 STAGES = ("on_board", "looked", "read", "posted", "team_submitted")
 AGENT_HEADER = (f"{'agent':8} {'role':12} {'found':>5} {'chk':>4} {'read':>4} {'post':>4} {'work':>4} {'free':>4} "
                 f"{'rref':>4} {'pref':>4} {'ovs':>4} {'team':4}  read_from; queried")
-
-
-def read_jsonl(path: Path) -> list[dict]:
-    if not path.exists():
-        return []
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
 def stage_flags(engagement: dict) -> dict[str, bool]:
@@ -59,11 +54,10 @@ def funnel(rows: list[dict]) -> dict[str, dict[str, int]]:
 
 def run_measures(run_dir: Path) -> dict:
     """The run's engagement: its run.json block, the funnel and the agent rows."""
-    run_path = run_dir / "run.json"
-    run = json.loads(run_path.read_text()) if run_path.exists() else {}
-    rows = agent_rows(read_jsonl(run_dir / "episodes.jsonl"))
-    return {"run": run_dir.name, "mode": run.get("mode"), "scale": run.get("scale"), "preset": run.get("preset"),
-            "engagement": run.get("engagement"), "funnel": funnel(rows), "agents": rows}
+    run = RunDir(run_dir).require()
+    rows = agent_rows(run.episodes())
+    return {"run": run.name, **{key: run.run_json.get(key) for key in ("mode", "scale", "preset", "engagement")},
+            "funnel": funnel(rows), "agents": rows}
 
 
 def _cell(value) -> str:
@@ -97,23 +91,3 @@ def format_run(measures: dict) -> str:
                      f"{'yes' if row.get('team_submitted') else 'no':4}  {read_from}"
                      f"{'; ' + queried if queried else ''}")
     return "\n".join(lines)
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("run_dirs", nargs="+", type=Path, help="run directories under runs/")
-    parser.add_argument("--json", action="store_true", help="print the measures as JSON")
-    args = parser.parse_args(argv)
-    missing = [str(d) for d in args.run_dirs if not (d / "episodes.jsonl").exists()]
-    if missing:
-        parser.error(f"no episodes.jsonl in {', '.join(missing)}")
-    measures = [run_measures(d) for d in args.run_dirs]
-    if args.json:
-        print(json.dumps(measures, indent=1))
-    else:
-        print("\n\n".join(format_run(m) for m in measures))
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
