@@ -13,15 +13,19 @@ reserves "submit", and the turn-rules defense shows it to the model as submit (T
 Both tools are built with parallel=False, so a call never runs beside the other calls of its batch.
 
 submit first awaits the benchmark's guard (Deliverable.missing, Benchmark.gradable). With nothing to grade it raises a
-ToolError naming what is missing and records the call in TeamSubmission.refused. Otherwise:
+ToolError naming what is missing and records the call in TeamSubmission.refused. A submit made after the hand-in it
+would make is refused and recorded the same way; it is checked again after the guard's await, so of two concurrent
+submits one goes through. Otherwise:
   * shared_task: the team's work. TeamSubmission records the hand-in, the board gets a notice from the system, and
-    turn_rules.after_activation cuts the plan after round r + submit_delay_rounds. A later submit is refused and
-    recorded.
+    turn_rules.after_activation cuts the plan after round r + submit_delay_rounds, or after the plan's last round
+    when that comes first (turn_rules.last_round).
   * lone agent: the same record; the run ends after the round of the call.
-  * solo_task: the agent's own work. Its turns end at once (TurnState.ended "submit"); its teammates continue.
+  * solo_task: the agent's own work, recorded in TeamSubmission.own. Its turns end at once (TurnState.ended
+    "submit"); its teammates continue.
 stop_working ends its caller's turns at once (TurnState.ended "stop_working", StopWorking.rounds) and hands in
 nothing; under pooled_steps its steps go to the team. An info event tagged TEAM_SUBMIT_TAG records each submit that
-went through. The texts come from src/configuration/prompts.yaml `submit` and `stop_working`.
+went through. A guard or snapshot that loses the sandbox raises, so ORBIT ends the sample as for any tool. The texts
+come from src/configuration/prompts.yaml `submit` and `stop_working`.
 
     bindings = submit_bindings(config, Deliverable(text, missing, snapshot))
     names = ending_tools(config, "worker")       # ["team_submit", "stop_working"]
@@ -35,7 +39,7 @@ from typing import NoReturn
 
 from inspect_ai.log import transcript
 from inspect_ai.tool import ToolDef, ToolError
-from inspect_ai.util import store_as
+from inspect_ai.util import SandboxUnavailableError, store_as
 from orbit.tools import ToolFactory
 
 from src.configuration.prompt_texts import described
@@ -51,6 +55,7 @@ from src.swarm.turn_rules import (
     TeamSubmission,
     TurnState,
     current_round,
+    last_round,
 )
 
 
@@ -88,18 +93,33 @@ def _refuse(submission: TeamSubmission, agent: str, round_number: int | None, re
 
 
 async def _missing(deliverable: Deliverable, agent: str) -> str | None:
-    """The guard's answer; a guard that raises names the error, so the call is refused and the run goes on."""
+    """The guard's answer. A lost sandbox raises, as in any tool; any other error names itself as what is missing,
+    so the call is refused and the run goes on."""
     try:
         return await deliverable.missing(agent)
+    except SandboxUnavailableError:
+        raise
     except Exception as error:  # noqa: BLE001 - a failed check hands in nothing; the agent may try again
         return load_prompts()["submit"]["check_failed"].format(error=f"{type(error).__name__}: {error}"[:300])
 
 
 async def _snapshot(deliverable: Deliverable, agent: str) -> str | None:
+    """The snapshot id, or None when it fails; a lost sandbox raises, as in any tool."""
     try:
         return await deliverable.snapshot(agent)
+    except SandboxUnavailableError:
+        raise
     except Exception:  # noqa: BLE001 - the snapshot is a convenience; the hand-in stands without it
         return None
+
+
+def _ends_after(round_number: int | None, delay: int) -> int | None:
+    """The last round a hand-in in this round leaves running: delay rounds on, never past the plan's last round
+    (turn_rules.last_round), so no text promises a round that will not run."""
+    if round_number is None:
+        return None
+    last = last_round()
+    return round_number + delay if last is None else min(round_number + delay, last)
 
 
 def submit(agent: str, config: SwarmConfig, deliverable: Deliverable) -> ToolDef:
@@ -110,24 +130,34 @@ def submit(agent: str, config: SwarmConfig, deliverable: Deliverable) -> ToolDef
     async def execute(answer: str = "") -> str:
         submission = store_as(TeamSubmission)
         round_number = current_round()
-        if kind != "solo" and submission.agent is not None:
-            _refuse(submission, agent, round_number, texts["already"].format(
-                agent=submission.agent, round=submission.round, end=submission.ends_after_round))
+
+        def refuse_a_second_hand_in() -> None:
+            """Refuse the call when the hand-in it would make exists: the team's or the lone agent's, or in solo_task
+            the agent's own."""
+            if kind == "solo" and agent in submission.own:
+                _refuse(submission, agent, round_number,
+                        texts["already_own"].format(round=submission.own[agent]["round"]))
+            if kind != "solo" and submission.agent is not None:
+                _refuse(submission, agent, round_number, texts["already" if kind == "team" else "already_own"].format(
+                    agent=submission.agent, round=submission.round, end=submission.ends_after_round))
+
+        refuse_a_second_hand_in()
         missing = await _missing(deliverable, agent)
         if missing is not None:
             _refuse(submission, agent, round_number, texts["refused"].format(missing=missing))
         snapshot = await _snapshot(deliverable, agent)
+        refuse_a_second_hand_in()      # a teammate's submit may have gone through while this call awaited the sandbox
         time = datetime.now(timezone.utc).isoformat()
-        record = {"agent": agent, "round": round_number, "answer": answer, "snapshot": snapshot, "time": time,
-                  "kind": kind}
+        record = {"round": round_number, "answer": answer, "snapshot": snapshot, "time": time}
         if kind == "solo":
+            submission.own = {**submission.own, agent: record}
             end_turns(agent, SUBMIT)
-            transcript().info({TEAM_SUBMIT_TAG: record})
+            transcript().info({TEAM_SUBMIT_TAG: {"agent": agent, **record, "kind": kind}})
             return texts["handed_in_own"]
-        end = None if round_number is None else round_number + (config.submit_delay_rounds if kind == "team" else 0)
+        end = _ends_after(round_number, config.submit_delay_rounds if kind == "team" else 0)
         submission.agent, submission.round, submission.answer, submission.time = agent, round_number, answer, time
         submission.ends_after_round, submission.snapshot = end, snapshot
-        transcript().info({TEAM_SUBMIT_TAG: {**record, "ends_after_round": end}})
+        transcript().info({TEAM_SUBMIT_TAG: {"agent": agent, **record, "kind": kind, "ends_after_round": end}})
         if kind == "lone":
             return texts["handed_in_lone"]
         system_post(texts["notice"].format(agent=agent, round=round_number, end=end), config.names)

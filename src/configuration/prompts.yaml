@@ -113,6 +113,8 @@ submit:
   refused: "Nothing to hand in yet: {missing}."
   check_failed: "the check for work to grade failed ({error})"
   already: "{agent} already handed in the team's work in round {round}. The run ends after round {end}."
+  # A lone agent's or a solo_task agent's second submit.
+  already_own: "You already handed in your work in round {round}."
   handed_in: "Handed in. The run ends after round {end}."
   handed_in_own: "Handed in. You take no more turns; your teammates continue."
   handed_in_lone: "Handed in. The run ends."

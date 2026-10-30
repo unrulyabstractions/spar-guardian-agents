@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 from inspect_ai.tool import ToolDef
-from inspect_ai.util import store
+from inspect_ai.util import SandboxUnavailableError, store
 from orbit.agents.turn_react import DEFAULT_ASSISTANT_PROMPT_TURN_REACT as ORBIT_ASSISTANT_PROMPT
 
 from src import tasks
@@ -23,7 +23,7 @@ from src.domains.protein import ProteinDesign
 from src.domains.swe import SWE, swe_scoring
 from src.sandbox import task_tool_store as tool_store
 from src.swarm import board
-from src.swarm.submit_and_stop import ending_tools, stop_working, submit
+from src.swarm.submit_and_stop import Deliverable, ending_tools, stop_working, submit
 from src.swarm.turn_rules import provider_system_text
 from src.swarm.turn_rules.turn_rules_filter import TurnRulesDefense, shown_as_submit, turn_rules_defense
 
@@ -220,6 +220,40 @@ def test_knowledge_work_hands_in_a_file_in_to_send(monkeypatch):
     assert ask(kw.gradable(team, "a03")) is None
     solo = kw.plan(SOLO)
     assert ask(kw.gradable(solo, "a02")) == "to_send/ holds no file" and boxes.calls[-1] == find("/workspace/a02")
+
+
+def test_a_lost_sandbox_is_not_a_refusal():
+    """A guard or a snapshot that loses the sandbox raises out of submit, as any tool does, so ORBIT ends the sample;
+    another error refuses the call and records it."""
+    async def lost(agent: str):
+        raise SandboxUnavailableError("the grader container is gone")
+
+    async def found(agent: str):
+        return None
+
+    async def broken(agent: str):
+        raise RuntimeError("git failed")
+
+    def reset() -> None:
+        for field, empty in (("agent", None), ("refused", [])):     # outside a sample every test shares one store
+            store().set(f"TeamSubmission:{field}", empty)
+
+    async def call(missing, snapshot) -> tuple:
+        reset()
+        tool = submit("a01", LONE, Deliverable("hand in.", missing, snapshot))
+        try:
+            return await tool.tool(answer=""), store().get("TeamSubmission:refused")
+        except Exception as error:  # noqa: BLE001 - the test reads what the call raised and recorded
+            return error, store().get("TeamSubmission:refused")
+
+    for missing, snapshot in ((lost, found), (found, lost)):
+        error, refused = ask(call(missing, snapshot))
+        assert isinstance(error, SandboxUnavailableError) and not refused
+    error, refused = ask(call(broken, found))
+    assert [r["reason"] for r in refused] == [
+        "Nothing to hand in yet: the check for work to grade failed (RuntimeError: git failed)."]
+    assert ask(call(found, broken))[0] == load_prompts()["submit"]["handed_in_lone"]
+    reset()
 
 
 @pytest.mark.parametrize(("benchmark", "tool", "missing"), [

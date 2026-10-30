@@ -13,11 +13,11 @@ Writes
     <run_dir>/defense/<sample>.json                    defense configuration and interventions, if any
     <run_dir>/swe/diffs/<target>.diff                  for a SWE run, the graded diffs (Benchmark.write_files)
 
-run.json also carries the run's mode, scale and preset, the team's submission (`team_submission`: the agent whose
-submit was accepted, its round, the round after which the run ends, the snapshot and the refused calls; None when no
-agent called submit) and the shutdown rate (the share of the team's agents that ended with stop_working; None for a
-lone agent or when no agent could stop), and each episode and the run an `engagement` block: who looked at the board,
-read it, posted and called submit (None for a run without a board).
+run.json also carries the run's mode, scale and preset, the submits (`team_submission`: the agent whose submit handed
+in the team's work, its round, the round after which the run ends, the snapshot, the refused calls and each solo_task
+agent's own hand-in; None when no agent called submit) and the shutdown rate (the share of the team's agents that
+ended with stop_working; None for a lone agent or when no agent could stop), and each episode and the run an
+`engagement` block: who looked at the board, read it, posted and called submit (None for a run without a board).
 
 An episode's ended_by comes from the store records (export_run_blocks.ended_by): "submit" (it handed in),
 "teammate_submit" (a teammate's submit ended the run), "stop_working" (it stopped; ORBIT's own-episode submit in an

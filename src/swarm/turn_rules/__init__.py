@@ -43,6 +43,7 @@ from src.swarm.turn_rules.turn_state import (
     TurnState,
     budget_used,
     current_round,
+    last_round,
     live_state,
     record_board_action,
     refuse,
@@ -55,6 +56,6 @@ __all__ = [
     "BOARD_ACTIONS", "OVERSIGHT_TOOL", "TEAM_SUBMIT", "SUBMIT", "STOP_WORKING", "ENDING_TOOLS", "SYSTEM_SENDER",
     "CHANNEL_TOOLS", "TurnState", "TeamSubmission", "StopWorking", "Delivered",
     "schedule", "initial_state", "rules_setup", "after_activation", "turn_rules_defense", "record_board_action",
-    "budget_used", "spend", "refuse", "current_round", "live_state", "step_round", "free_index", "step_charge",
-    "last_call_refused", "team_delivery", "TurnRulesFilter", "provider_system_text",
+    "budget_used", "spend", "refuse", "current_round", "last_round", "live_state", "step_round", "free_index",
+    "step_charge", "last_call_refused", "team_delivery", "TurnRulesFilter", "provider_system_text",
 ]

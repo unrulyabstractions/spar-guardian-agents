@@ -86,8 +86,9 @@ class TurnState(StoreModel):
 
 
 class TeamSubmission(StoreModel):
-    """The team's hand-in: the first submit that went through (src/swarm/submit_and_stop.py), by a neutral agent of a
-    shared_task team or by a lone agent; the run ends after ends_after_round. refused holds every submit that handed
+    """The submits of the run (src/swarm/submit_and_stop.py). The first fields are the team's hand-in: the first
+    submit that went through, by a neutral agent of a shared_task team or by a lone agent; the run ends after
+    ends_after_round. own holds each solo_task agent's hand-in of its own work. refused holds every submit that handed
     in nothing, in any mode: refused by the guard (Benchmark.gradable) or made after the hand-in."""
 
     agent: str | None = None
@@ -97,6 +98,7 @@ class TeamSubmission(StoreModel):
     ends_after_round: int | None = None                     # the last round that runs
     snapshot: str | None = None                             # an id of what was graded at the call (Benchmark.snapshot)
     refused: list[dict] = Field(default_factory=list)       # {"agent", "round", "reason"}
+    own: dict[str, dict] = Field(default_factory=dict)      # solo_task: agent -> {round, answer, snapshot, time}
 
 
 class StopWorking(StoreModel):
@@ -151,6 +153,17 @@ def current_round() -> int | None:
     return step_round(step.id) if step is not None else None
 
 
+def last_round() -> int | None:
+    """The last round of ORBIT's live plan: the latest round of the step under way and the pending steps; None outside
+    a planned activation."""
+    try:
+        runtime = current_schedule()
+    except RuntimeError:
+        return None
+    steps = [*runtime.pending_steps, running_step(runtime)]
+    return max((step_round(s.id) for s in steps if s is not None), default=None)
+
+
 def live_state(agent: str) -> AgentState | None:
     """The agent's live AgentState from ORBIT's session registry, which the orchestrator installs for the whole
     sample (orbit/solvers/orchestrator.py solve, session_registry_scope); None outside a run."""
@@ -170,7 +183,8 @@ def bump(counts: dict[str, int], agent: str, by: int = 1) -> dict[str, int]:
 def record_board_action(agent: str, kind: str, senders: list[str] | None = None,
                         round_number: int | None = None, target: str | None = None) -> None:
     """Count one board action in TurnState: kind is "check", "read", "post" or "oversight". A read also counts the
-    posts returned per sender, the agent's own left out; an oversight call counts its target in oversight_targets.
+    posts returned per sender, the agent's own and the system's notices (SYSTEM_SENDER) left out, so read_senders
+    names agents only; an oversight call counts its target in oversight_targets.
     The first check or read sets the agent's discovery round (round_number, or the round of the step under way).
     Called by the board tools and agent_actions."""
     st = store_as(TurnState)
@@ -181,7 +195,7 @@ def record_board_action(agent: str, kind: str, senders: list[str] | None = None,
     if kind in ("check", "read") and agent not in st.discovery_round:
         found = round_number if round_number is not None else current_round()
         st.discovery_round = {**st.discovery_round, agent: found or 0}
-    others = [sender for sender in senders or [] if sender != agent]
+    others = [sender for sender in senders or [] if sender not in (agent, SYSTEM_SENDER)]
     if others:
         mine = dict(st.read_senders.get(agent, {}))
         for sender in others:

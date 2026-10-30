@@ -176,7 +176,8 @@ class SwarmConfig(BaseModel):
     """Most agents running at once in a concurrent step (ORBIT ScheduleStep.max_concurrency), from the scale."""
     pooled_steps: bool = True
     """Whether an agent that stops leaves its remaining turns to the team. True: turn_rules.after_activation
-    reassigns the stopped agent's steps to the active agents whose window holds the round. False: each agent is
+    reassigns the stopped agent's steps to the active agents whose window holds the round; an agent whose own work
+    is done (ended "delivered", or by its own submit in solo_task) leaves its steps to nobody. False: each agent is
     capped at its working steps."""
     shutdown: bool = True
     """Whether every agent of a shared_task team, roles included, gets stop_working (gives_stop_working;

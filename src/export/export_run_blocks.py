@@ -141,8 +141,8 @@ def validity_record(steps: list[dict], model_calls: int, engagement: dict | None
 
 def validity_block(records: list[dict], submission: dict | None) -> dict:
     """The run's validity: each agent's facts (validity_record) and the flags a reader should see before trusting
-    the run: an agent that never called a model or a tool, a stuck agent, a board never touched, a submit accepted
-    in the first rounds with a token answer. `ok` when nothing is flagged."""
+    the run: an agent that never called a model or a tool, a stuck agent, a board never touched, a hand-in
+    (hand_ins) in the first rounds with a token answer. `ok` when nothing is flagged."""
     agents = {r["orbit_agent"]: r["validity"] for r in records if r.get("validity")}
     flags = []
     for agent, v in agents.items():
@@ -154,11 +154,10 @@ def validity_block(records: list[dict], submission: dict | None) -> dict:
             flags.append(f"{agent}: {v['identical_tool_run']} identical tool calls in a row")
         if v["board_unused"]:
             flags.append(f"{agent}: never used the board")
-    sub_round = (submission or {}).get("round")
-    answer = str((submission or {}).get("answer") or "")
-    if (submission or {}).get("agent") is not None and isinstance(sub_round, int) and sub_round <= EARLY_SUBMIT_ROUND \
-            and len(answer) < SHORT_ANSWER:
-        flags.append(f"submit in round {sub_round} with a {len(answer)}-character answer")
+    for agent, hand_in in hand_ins(submission).items():
+        sub_round, answer = hand_in.get("round"), str(hand_in.get("answer") or "")
+        if isinstance(sub_round, int) and sub_round <= EARLY_SUBMIT_ROUND and len(answer) < SHORT_ANSWER:
+            flags.append(f"{agent}: submit in round {sub_round} with a {len(answer)}-character answer")
     return {"agents": agents, "flags": flags, "ok": not flags}
 
 
@@ -318,11 +317,20 @@ def probes_block(view: SampleView) -> dict | None:
 # the submission and the board: who handed in, looked, read and posted
 # --------------------------------------------------------------------------
 def team_submission(view: SampleView) -> dict | None:
-    """The submission record (TeamSubmission, written by the submit tool in src/swarm/board.py): the agent whose
-    submit was accepted, its round, the round after which the run ends, the snapshot handed in and the refused calls
-    ({agent, round, reason}). None when no agent called submit."""
+    """The submission record (TeamSubmission, written by the submit tool in src/swarm/submit_and_stop.py): the agent
+    whose submit handed in the team's work (or the lone agent's), its round, the round after which the run ends, the
+    snapshot handed in, the refused calls ({agent, round, reason}) and each solo_task agent's own hand-in (own:
+    {agent: {round, answer, snapshot, time}}). None when no agent called submit."""
     record = store_fields(view, TeamSubmission)
-    return record if record["agent"] is not None or record.get("refused") else None
+    return record if record["agent"] is not None or record.get("refused") or record.get("own") else None
+
+
+def hand_ins(submission: dict | None) -> dict[str, dict]:
+    """Every submit that went through, by agent ({round, answer, snapshot, time}): the team's or the lone agent's
+    hand-in, and each solo_task agent's own."""
+    sub = submission or {}
+    team = {sub["agent"]: {k: sub.get(k) for k in ("round", "answer", "snapshot", "time")}} if sub.get("agent") else {}
+    return {**team, **(sub.get("own") or {})}
 
 
 def notice_counts(view: SampleView) -> dict[str, int]:
@@ -343,7 +351,7 @@ def engagement_record(view: SampleView, agent: str, rules: dict | None, submissi
     tool calls (posts that went through); read_senders holds the senders of the posts board_read returned, the agent
     itself left out; free_steps and work_steps are its steps by charge; oversight and oversight_targets count a
     regulator's agent_actions calls; reads_refused and posts_refused the calls the per-round budgets refused;
-    called_submit whether it called submit (the submission's agent, or a call the tool refused); notices the board
+    called_submit whether it called submit (a hand-in, or a call the tool refused); notices the board
     notices its calls opened with."""
     if topology(view) == "single":
         return None
@@ -360,7 +368,7 @@ def engagement_record(view: SampleView, agent: str, rules: dict | None, submissi
         "read_senders": recorded("read_senders", {}),
         "free_steps": recorded("free_steps", 0),
         "work_steps": recorded("work_steps", 0),
-        "called_submit": bool(submission) and (submission.get("agent") == agent or agent in refused),
+        "called_submit": agent in hand_ins(submission) or agent in refused,
         "notices": notices.get(agent, 0),
         "oversight": recorded("oversight", 0), "oversight_targets": recorded("oversight_targets", {}),
         "reads_refused": recorded("reads_refused", 0), "posts_refused": recorded("posts_refused", 0),

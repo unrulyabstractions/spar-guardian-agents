@@ -397,14 +397,16 @@ function knowledgeView(kw) {
   h('h3', null, 'Contracts'), dataTable(['contract', 'candidate', 'files in to_send/', 'copied the artifact'], contracts));
 }
 
-// The team's submission (run.json team_submission): who handed in, in which round, when the run ends, and the calls
-// refused before or after.
+// The submits (run.json team_submission): who handed in the team's work, in which round, when the run ends, each
+// solo_task agent's own hand-in, and the calls refused before or after.
 function submissionText(sub) {
   if (!sub) return null;
   const round = r => (r == null ? DASH : r);
   const refused = (sub.refused || []).map(x => `${x.agent} r${round(x.round)}`).join(', ');
-  return [sub.agent ? `${sub.agent} in round ${round(sub.round)}` : 'none accepted',
+  const own = Object.entries(sub.own || {}).map(([agent, x]) => `${agent} r${round(x.round)}`).join(', ');
+  return [sub.agent ? `${sub.agent} in round ${round(sub.round)}` : own ? null : 'none accepted',
     sub.ends_after_round != null ? `the run ends after round ${sub.ends_after_round}` : null,
+    own ? `own work handed in: ${own}` : null,
     refused ? `refused: ${refused}` : null].filter(Boolean).join('; ');
 }
 

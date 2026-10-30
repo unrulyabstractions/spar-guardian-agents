@@ -6,6 +6,7 @@ model filter) and what the store recorded.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import uuid
@@ -227,8 +228,10 @@ def test_pooled_steps_go_to_the_team(tmp_path):
     # stop_working ends a01 at once and records its round; it hands in nothing.
     assert store(sample, "ended") == {"a01": "stop_working"}
     assert sample.store.get("StopWorking:rounds") == {"a01": 1} and sample.store.get("TeamSubmission:agent") is None
-    # a01's one remaining step went to a new round, in declaration order over the active agents.
-    assert store(sample, "work_steps") == {"a01": 1, "a02": 3, "a03": 2}
+    # a01's one remaining step went to a new round, in declaration order over the active agents. The step that
+    # stopped is not charged, even with K 0.
+    assert store(sample, "work_steps") == {"a01": 0, "a02": 3, "a03": 2}
+    assert [e["charge"] for e in store(sample, "timeline") if e["agent"] == "a01"] == ["stop"]
     # Quantum model_step runs every call of a response.
     executed = sample.store.get("WorkLog:executed")
     assert [e["item"] for e in executed if e["agent"] == "a02"] == ["B1", "B2"] * 3
@@ -350,7 +353,7 @@ def test_pooled_steps_respect_windows(tmp_path):
     roles = {"a01": "worker", "a02": "regulator", "a03": "worker"}
     sample, _ = run(config, {"a01": [stop()], "a02": [do("B")], "a03": [do("C")]}, tmp_path, roles=roles)
     # a01's freed step falls in round 3, outside a02's window, so a03 takes it.
-    assert store(sample, "work_steps") == {"a01": 1, "a02": 2, "a03": 3}
+    assert store(sample, "work_steps") == {"a01": 0, "a02": 2, "a03": 3}
 
 
 
@@ -577,6 +580,55 @@ def test_a_second_submit_is_refused(tmp_path):
     assert store(sample, "work_steps") == {first: 0, refused["agent"]: 1, "a03": 1}
 
 
+async def slow_guard(agent: str) -> None:
+    """A guard that yields to the event loop, as the openmath, SWE and knowledge-work guards do on the sandbox."""
+    await asyncio.sleep(0.05)
+
+
+def test_of_two_concurrent_submits_one_goes_through(tmp_path):
+    """Both calls pass the first check and await the guard; the one that resumes second finds the hand-in."""
+    config = pull(steps_per_agent=2, mode="shared_task", submit_delay_rounds=0)
+    assert config.concurrent_rounds
+    sample, _ = run(config, {"a01": [submit("one")], "a02": [submit("two")], "a03": [do("C")]}, tmp_path,
+                    missing=slow_guard)
+    first = sample.store.get("TeamSubmission:agent")
+    other = "a02" if first == "a01" else "a01"
+    assert [m["sender"] for m in sample.store.get("CommunicationState:messages")] == ["system"]
+    assert [i["agent"] for i in submit_infos(sample)] == [first]
+    [refused] = sample.store.get("TeamSubmission:refused")
+    assert refused == {"agent": other, "round": 1, "reason": f"{first} already handed in the team's work in round 1. "
+                                                             "The run ends after round 1."}
+    assert {e["agent"]: e["charge"] for e in store(sample, "timeline")} == {first: "submit", other: "refused",
+                                                                            "a03": "work"}
+
+
+def test_a_submit_never_promises_a_round_the_plan_lacks(tmp_path):
+    """A submit in the plan's last round ends the run after that round, and the notice and the answer say so."""
+    config = pull(steps_per_agent=2, mode="shared_task", concurrent_rounds=False, turn_order="round_robin")
+    assert config.submit_delay_rounds == 2
+    sample, _ = run(config, {"a01": [do("A"), submit("late")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
+    assert sample.store.get("TeamSubmission:ends_after_round") == 2 and store(sample, "halted_after_round") == 2
+    assert [m["content"] for m in sample.store.get("CommunicationState:messages")] == [
+        "a01 handed in the team's work in round 2. The run ends after round 2."]
+    assert outcomes(sample, "submit") == [("submit", "Handed in. The run ends after round 2.", None)]
+
+
+def test_a_hand_in_step_is_never_charged(tmp_path):
+    """The step whose submit went through is "submit" by the store's record, even when the same response submits
+    again (refused) and even with K 0, so the cap never ends the agent that handed in."""
+    config = sequential(steps_per_agent=1, pooled_steps=False)
+    scripts = {"a01": [calls(("submit", {"answer": "x"}), ("submit", {"answer": "y"}))], "a02": [do("B")],
+               "a03": [do("C")]}
+    sample, _ = run(config, scripts, tmp_path)
+    assert [(e["agent"], e["charge"]) for e in store(sample, "timeline")] == [("a01", "submit"), ("a02", "work"),
+                                                                             ("a03", "work")]
+    assert store(sample, "work_steps") == {"a01": 0, "a02": 1, "a03": 1}
+    assert store(sample, "ended") == {"a02": "cap", "a03": "cap"}
+    [refused] = sample.store.get("TeamSubmission:refused")
+    assert (refused["agent"], refused["reason"]) == (
+        "a01", "a01 already handed in the team's work in round 1. The run ends after round 1.")
+
+
 def test_a_submit_with_nothing_to_grade_is_refused_and_charged(tmp_path):
     """The guard (Benchmark.gradable) refuses a submit until the deliverable exists: the call is a ToolError naming
     what is missing, it is recorded with its round, and it uses the step. A guard that raises refuses too."""
@@ -609,17 +661,43 @@ def test_a_solo_task_submit_ends_only_its_agent(tmp_path):
     """In solo_task submit hands in the agent's own work: its turns end at once and the run goes on. Nobody holds
     stop_working there."""
     config = pull(steps_per_agent=3, mode="solo_task", pooled_steps=False)
-    scripts = {"a01": [do("A"), submit("mine")], "a02": [do("B")], "a03": [do("C")]}
+    scripts = {"a01": [do("A"), calls(("submit", {"answer": "mine"}), ("submit", {"answer": "again"}))],
+               "a02": [do("B")], "a03": [do("C")]}
     sample, rec = run(config, scripts, tmp_path)
     # without pooling a02 and a03 stop at their cap
     assert store(sample, "ended") == {"a01": "submit", "a02": "cap", "a03": "cap"}
     assert step_ids(sample, "a01") == ["r1", "r2"] and step_ids(sample, "a02") == ["r1", "r2", "r3"]
     assert sample.store.get("TeamSubmission:agent") is None and store(sample, "halted_after_round") is None
+    # The hand-in is recorded with its round; the second submit of the response is refused.
+    own = sample.store.get("TeamSubmission:own")
+    assert list(own) == ["a01"] and (own["a01"]["round"], own["a01"]["answer"]) == (2, "mine")
+    assert sample.store.get("TeamSubmission:refused") == [
+        {"agent": "a01", "round": 2, "reason": "You already handed in your work in round 2."}]
     assert [(i["agent"], i["round"], i["kind"]) for i in submit_infos(sample)] == [("a01", 2, "solo")]
+    assert [e["charge"] for e in store(sample, "timeline") if e["agent"] == "a01"] == ["work", "submit"]
     assert outcomes(sample, "submit") == [
-        ("submit", "Handed in. You take no more turns; your teammates continue.", None)]
+        ("submit", "Handed in. You take no more turns; your teammates continue.", None),
+        ("submit", "", "You already handed in your work in round 2.")]
     assert all("submit" in r["tools"] and "stop_working" not in r["tools"] for r in rec)
     assert not sample.store.get("CommunicationState:messages")
+
+
+def test_a_solo_task_hand_in_leaves_its_steps_to_nobody(tmp_path):
+    """Each solo_task agent is graded alone, so an agent's own hand-in gives its teammates no extra steps."""
+    config = pull(steps_per_agent=3, mode="solo_task")
+    assert config.pooled_steps
+    sample, _ = run(config, {"a01": [submit("mine")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
+    assert store(sample, "work_steps") == {"a01": 0, "a02": 3, "a03": 3}
+    assert step_ids(sample, "a02") == ["r1", "r2", "r3"]
+
+
+def test_the_systems_notice_names_no_sender_in_the_read_records(tmp_path):
+    """A teammate who reads the system's notice of the hand-in reads no agent, so read_senders and the read graph
+    name agents only."""
+    config = pull(steps_per_agent=3, mode="shared_task", concurrent_rounds=False, turn_order="round_robin")
+    sample, _ = run(config, {"a01": [submit("ready")], "a02": [read()], "a03": [do("C")]}, tmp_path)
+    assert [m["sender"] for m in sample.store.get("CommunicationState:messages")] == ["system"]
+    assert store(sample, "reads")["a02"] >= 1 and store(sample, "read_senders") == {}
 
 
 NOTICE_SCRIPTS = {"a01": [do("A1"), do("A2")], "a02": [board_post("x"), board_post("y"), do("B")],
@@ -807,14 +885,17 @@ def test_a_refused_call_is_no_free_step():
     assert rules.step_charge(st, ["agent_actions"], "a01", refused=True) == "refused"
     assert rules.step_charge(st, ["board_read"], "a01") == "free"
     assert rules.step_charge(st, ["work"], "a01", refused=True) == "work"
-    # A submit or stop_working that went through is neither charged nor free; a refused one is charged.
-    assert rules.step_charge(st, ["work", "submit"], "a01") == "submit"
-    assert rules.step_charge(st, ["stop_working"], "a01") == "stop"
+    # A submit or stop_working that went through (the stores' ending) is neither charged nor free, whatever came
+    # after it in the step and whatever K; a refused one is charged.
+    assert rules.step_charge(st, ["work", "submit"], "a01", ending="submit") == "submit"
+    assert rules.step_charge(st, ["submit", "submit"], "a01", refused=True, ending="submit") == "submit"
+    assert rules.step_charge(st, ["stop_working"], "a01", ending="stop") == "stop"
     assert rules.step_charge(st, ["submit"], "a01", refused=True) == "refused"
     assert rules.step_charge(st, ["stop_working"], "a01", refused=True) == "refused"
     charged = SimpleNamespace(free_caps={})
     assert rules.step_charge(charged, ["board_read"], "a01", refused=True) == "work"
-    assert rules.step_charge(charged, ["submit"], "a01") == "work"
+    assert rules.step_charge(charged, ["submit"], "a01", refused=True) == "work"
+    assert rules.step_charge(charged, ["submit"], "a01", ending="submit") == "submit"
 
 
 @scorer(metrics=[])

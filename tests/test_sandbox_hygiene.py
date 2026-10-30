@@ -58,7 +58,7 @@ def test_identical_tool_runs_and_validity_flags():
     block = export.validity_block([{"orbit_agent": "a01", "validity": rec}, {"orbit_agent": "a02", "validity": idle}],
                                   {"agent": "a01", "round": 1, "answer": "placeholder"})
     assert block["flags"] == ["a01: 8 identical tool calls in a row", "a01: never used the board",
-                              "a02: no model call", "submit in round 1 with a 11-character answer"]
+                              "a02: no model call", "a01: submit in round 1 with a 11-character answer"]
     assert not block["ok"]
     fine = export.validity_record([step(("shell", {"command": "ls"}))], 3, {"checks": 1, "reads": 2, "posts": 1}, True)
     assert export.validity_block([{"orbit_agent": "a01", "validity": fine}], None)["ok"]

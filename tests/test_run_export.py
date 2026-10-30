@@ -102,7 +102,8 @@ def test_endings_come_from_the_store_records():
 def test_the_submission_block_keeps_its_refused_calls():
     v = view(HANDED_IN, agents=TEAM)
     assert blocks.team_submission(v) == {"agent": "a01", "round": 3, "answer": "", "time": None,
-                                         "ends_after_round": 5, "snapshot": "4f2c9e1", "refused": REFUSED}
+                                         "ends_after_round": 5, "snapshot": "4f2c9e1", "refused": REFUSED,
+                                         "own": None}
     refused_only = view({"TeamSubmission:agent": None, "TeamSubmission:refused": REFUSED}, agents=TEAM)
     assert blocks.team_submission(refused_only)["refused"] == REFUSED
     assert blocks.team_submission(refused_only)["agent"] is None
@@ -112,6 +113,21 @@ def test_the_submission_block_keeps_its_refused_calls():
     assert called == {"a01": True, "a02": False, "a03": False, "a04": True}
     # a submit the guard refused is not a hand-in, so it raises no early-submit flag
     assert blocks.validity_block([], blocks.team_submission(refused_only))["ok"]
+
+
+def test_solo_task_hand_ins_are_facts_of_their_agents():
+    """In solo_task each agent's own hand-in is recorded with its round (TeamSubmission.own): it ended the agent's
+    turns, the agent called submit, and an early one with a token answer is flagged."""
+    own = {"a02": {"round": 2, "answer": "", "snapshot": None, "time": None},
+           "a04": {"round": 9, "answer": "the full write-up", "snapshot": None, "time": None}}
+    solo = view({"TurnState:agents": list(TEAM), "TurnState:ended": {"a02": "submit", "a04": "submit"},
+                 "TeamSubmission:agent": None, "TeamSubmission:refused": [], "TeamSubmission:own": own}, agents=TEAM)
+    rules, submission = blocks.rules_state(solo), blocks.team_submission(solo)
+    assert submission["agent"] is None and submission["own"] == own and blocks.hand_ins(submission) == own
+    assert endings(solo) == {"a01": "end", "a02": "submit", "a03": "end", "a04": "submit"}
+    called = {a: blocks.engagement_record(solo, a, rules, submission, {})["called_submit"] for a in TEAM}
+    assert called == {"a01": False, "a02": True, "a03": False, "a04": True}
+    assert blocks.validity_block([], submission)["flags"] == ["a02: submit in round 2 with a 0-character answer"]
 
 
 def test_the_shutdown_rate_counts_team_agents_that_stopped():

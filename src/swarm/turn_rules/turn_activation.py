@@ -6,6 +6,7 @@ Under stop_after_delivery it hands the amended plan to the rule in turn_delivery
 
     schedule = ScheduleConfig(steps=steps, after_activation=f"{turn_activation.__name__}.after_activation")
     step_charge(st, ["board_read"], agent="a01")    # "free" when the agent's K is above 0
+    step_charge(st, ["submit", "submit"], "a01", ending="submit")   # the hand-in went through; the second was refused
 """
 from __future__ import annotations
 
@@ -26,6 +27,7 @@ from src.swarm.turn_rules.turn_state import (
     ENDING_TOOLS,
     HALT_TAG,
     OVERSIGHT_TOOL,
+    STOP_WORKING,
     SUBMIT,
     Delivered,
     TeamSubmission,
@@ -46,6 +48,7 @@ from src.swarm.turn_rules.turn_steps import (
 )
 
 CHARGED = ("work", "refused")       # the step_charge values charged against the working steps
+HANDED_OFF = (DELIVERED, SUBMIT)    # TurnState.ended reasons whose steps go to nobody: the agent's own work is done
 
 
 def _window(st: TurnState, agent: str) -> Window:
@@ -81,22 +84,34 @@ def last_call_refused(messages: list) -> bool:
     return call.function == OVERSIGHT_TOOL and result.text == load_prompts()["oversight_output"]["no_such_agent"]
 
 
-def step_charge(st: TurnState, tools: list[str], agent: str, refused: bool = False) -> str:
-    """What a completed step counts as, by its last tool call: "free" (a board action that succeeded), "refused" (a
-    board action, submit or stop_working that failed or was refused; charged like work), "submit" or "stop" (a submit
-    or stop_working that went through; neither charged nor free) or "work" (charged against the working steps).
+def ending_of(st: TurnState, submission: TeamSubmission, agent: str, round_number: int) -> str | None:
+    """"stop" or "submit" when the agent's stop_working or submit went through in the step just completed, read from
+    the records: its turns ended by its own call (TurnState.ended), or the team's hand-in names it in this round. An
+    agent takes no later step in the round of its hand-in, since that step is never free. None otherwise."""
+    ended = st.ended.get(agent)
+    if ended == STOP_WORKING:
+        return "stop"
+    if ended == SUBMIT or (submission.agent == agent and submission.round == round_number):
+        return "submit"
+    return None
 
-    With K 0 (the agent's free_caps entry) there are no free board actions and every step is charged."""
+
+def step_charge(st: TurnState, tools: list[str], agent: str, refused: bool = False, ending: str | None = None) -> str:
+    """What a completed step counts as. "submit" or "stop" when the agent's submit or stop_working went through in it
+    (ending, from ending_of), whatever else the step called: neither charged nor free. Otherwise by its last tool
+    call: "free" (a board action that succeeded), "refused" (a board action, submit or stop_working that failed or
+    was refused; charged like work) or "work" (charged against the working steps).
+
+    With K 0 (the agent's free_caps entry) there are no free board actions, and every step that did not end the
+    agent's work is charged."""
+    if ending is not None:
+        return ending
     if not st.free_caps.get(agent, 0):
         return "work"
     last = tools[-1] if tools else None
     if last in (*BOARD_ACTIONS, *ENDING_TOOLS) and refused:
         return "refused"
-    if last in BOARD_ACTIONS:
-        return "free"
-    if last in ENDING_TOOLS:
-        return "submit" if last == SUBMIT else "stop"
-    return "work"
+    return "free" if last in BOARD_ACTIONS else "work"
 
 
 def _stop_reason(st: TurnState, agent: str, used: int) -> str | None:
@@ -167,8 +182,10 @@ def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | Non
 
     Charges the step by what it did (step_charge), records why the agent stopped, and amends the pending plan: a
     stopped agent's steps (TurnState.ended, which submit and stop_working also write) are removed and, with pooling,
-    its round steps go to the active agents in new rounds at the end; a free step gets its follow-up step while the
-    round's K lasts; the team's hand-in (TeamSubmission) cuts every step after its last round, and pooling stops.
+    its round steps go to the active agents in new rounds at the end, unless its own work was done (HANDED_OFF:
+    delivered, or its own hand-in in solo_task, where each agent is graded alone); a free step gets its follow-up
+    step while the round's K lasts; the team's hand-in (TeamSubmission) cuts every step after its last round, and
+    pooling stops.
     The timeline marks an agent's first activation ("entered") and the activation after which its window holds no
     more steps ("left").
 
@@ -184,7 +201,8 @@ def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | Non
     messages = _activation_messages(agent, result)
     st.history_marks = {**st.history_marks,
                         agent: [*st.history_marks.get(agent, []), [result.messages_after, round_number]]}
-    charge = step_charge(st, tools, agent, last_call_refused(messages))
+    submission = store_as(TeamSubmission)
+    charge = step_charge(st, tools, agent, last_call_refused(messages), ending_of(st, submission, agent, round_number))
     working, free = charge in CHARGED, charge == "free"
     used = st.work_steps.get(agent, 0) + (1 if working else 0)
     st.activations = {**st.activations, agent: activation}
@@ -209,14 +227,13 @@ def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | Non
     keep, dropped = [], 0
     for s in pending:
         agents = [name for name in s.agents if name in active]
-        if is_round_step(s.id):     # an agent ended "delivered" leaves its steps to nobody
-            dropped += sum(1 for name in s.agents if name not in active and st.ended.get(name) != DELIVERED)
+        if is_round_step(s.id):     # an agent ended "delivered" or by its own hand-in leaves its steps to nobody
+            dropped += sum(1 for name in s.agents if name not in active and st.ended.get(name) not in HANDED_OFF)
         if len(agents) == len(s.agents):
             keep.append(s.model_dump(mode="json"))
         elif agents:
             keep.append(s.model_copy(update={"agents": tuple(agents)}).model_dump(mode="json"))
     before = [s.model_dump(mode="json") for s in pending]
-    submission = store_as(TeamSubmission)
     halted = submission.agent is not None
     if step is not None and free and agent in active:
         _follow_up(st, keep, step, agent)
