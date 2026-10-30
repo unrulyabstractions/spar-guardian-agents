@@ -33,11 +33,13 @@ CONVERTERS = ("libreoffice", "soffice")
 
 
 def located(path: str, cwd: str | None) -> str:
-    """Where the shell finds the path: absolute when written so or after a cd into a known directory, else as
-    written."""
+    """Where the shell finds the path: absolute when written so or after a cd into a known directory; as written when
+    it starts at home or a variable (~, $HOME), which no cd moves, or when the directory is unknown."""
     if path.startswith("/"):
         return posixpath.normpath(path)
-    return posixpath.normpath(posixpath.join(cwd, path)) if cwd else path
+    if path.startswith(("~", "$")) or not cwd:
+        return path
+    return posixpath.normpath(posixpath.join(cwd, path))
 
 
 def resolved(text: str, cwd: str | None) -> str:

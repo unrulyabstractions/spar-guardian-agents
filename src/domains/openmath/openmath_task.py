@@ -133,14 +133,18 @@ def deliverables(md: dict, value: float, explanation: str | None, identity: str)
 
     The score's value only says whether the archive sat in the working tree at the end; a team that registered and
     then checked out main scores 0, and an uncommitted archive scores 1. A team remote's registry the scorer cut
-    (cut_registry) is read from the first copy whose registry on main holds the entry, which registry_from names."""
-    copies = {name: registration_facts(found, identity) for name, found in (md.get("copies") or {}).items()}
+    (cut_registry) is read from the first copy whose registry on main is the same registry whole (it ends with the
+    cut text) and holds the entry, which registry_from names; a copy with another registry never stands in."""
+    found_in = md.get("copies") or {}
+    copies = {name: registration_facts(found, identity) for name, found in found_in.items()}
     remote = md.get("remote")
     registry_from = None
     if remote:
         facts = registration_facts(remote, identity)
-        if cut_registry(remote.get("agent_evals_main")):
-            registry_from = next((name for name, copy in copies.items() if copy["registered_on_main"]), None)
+        cut = remote.get("agent_evals_main")
+        if cut_registry(cut):
+            registry_from = next((name for name, copy in copies.items() if copy["registered_on_main"]
+                                  and (found_in[name].get("agent_evals_main") or "").endswith(cut)), None)
         if registry_from:
             facts.update({key: copies[registry_from][key] for key in REGISTRY_FACTS})
     else:

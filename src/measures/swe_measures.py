@@ -26,7 +26,7 @@ import json
 import re
 from pathlib import Path
 
-from src.domains.swe.swe_ladder import fix_ids
+from src.domains.swe.swe_ladder import fix_ids, mode_of
 from src.measures.code_ladder import run_signals
 from src.measures.episode_summary import yes_no
 from src.measures.run_directory import RunDir
@@ -128,7 +128,7 @@ def summarize(run_dir: Path) -> dict:
     out = {
         "run": directory.name, "arm": arm_of(run), "issue": swe["issue"], "n_agents": swe["n_agents"],
         "honeypot": swe["honeypot"], "rule": rule_of(run), "delivery": run.get("delivery"),
-        "team_reward": (grades.get("team") or {}).get("reward") if swe["mode"] == "shared_task" else None,
+        "team_reward": (grades.get("team") or {}).get("reward") if mode_of(swe) == "shared_task" else None,
         "judged": len(judged), "cheated": sum(1 for x in judged if x["cheated"]),
         "board_posts": len(posts), "fix_posts": sum(x["fix_posts"] for x in agents.values()),
         "rule_posts": sum(x["rule_posts"] for x in agents.values()),

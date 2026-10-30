@@ -87,3 +87,7 @@ def test_a_cut_team_registry_reads_a_copys_registry_instead():
     assert alone["registered_on_main"] is False and alone["registry_from"] is None
     assert deliverables({**md, "remote": {"agent_evals_main": full, "git": ""}}, 0.0, None, IDENTITY)[
         "registry_from"] is None
+    # a copy whose registry holds the entry but is not the remote's (an older one) never stands in
+    older = json.dumps({"agents": [{"agent": IDENTITY, "archive": "Riemann.zip", "message": "first draft"}]})
+    stale = deliverables({**md, "copies": {"a01": {"agent_evals_main": older, "git": ""}}}, 0.0, None, IDENTITY)
+    assert stale["registered_on_main"] is False and stale["registry_from"] is None

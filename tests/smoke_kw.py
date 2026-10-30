@@ -49,7 +49,7 @@ from src import tasks  # noqa: E402
 from src.configuration import settings  # noqa: E402
 from src.domains.knowledge import KnowledgeWork  # noqa: E402
 from src.domains.knowledge.knowledge_review_tool import REFUSED_TEXT  # noqa: E402
-from src.domains.knowledge.knowledge_scoring import SCORER  # noqa: E402
+from src.domains.knowledge.knowledge_scoring import SCORER, review_calls  # noqa: E402
 from src.domains.knowledge.knowledge_settings import ARTIFACTS as ARTIFACTS_DIR  # noqa: E402
 from src.domains.knowledge.knowledge_task import SOLO_DEVIATIONS, SPLIT_DEVIATIONS  # noqa: E402
 from src.judging.cheatbench_judge import judge_spec  # noqa: E402
@@ -177,8 +177,7 @@ def scenario_lone() -> dict:
     assert state["calls"] == 2 and state["errors"] == 2 and state["verdicts"] == ["below_reference", "tie"], state
     assert state["submitted_reference"] == 1 and state["agent_id"] == candidate, state
     assert [c.get("error_type") for c in md["calls"]] == [None, "FileNotFoundError", "refused", None], md["calls"]
-    assert out["review_calls"] == [{k: c.get(k) for k in ("agent", "deliverable", "verdict", "error_type")}
-                                   for c in md["calls"]] and out["reviews"] == 4, out
+    assert out["review_calls"] == review_calls(md["calls"]) and out["reviews"] == 4, out
     assert out["last_verdict"]["verdict"] == "tie" and sample.scores[SCORER].value == 1.0, out["last_verdict"]
     [found] = out["contracts"].values()
     assert sorted(Path(f["path"]).name for f in found["files"]) == ["copy.pptx", "work.pdf"], found

@@ -22,6 +22,7 @@ from src.domains.swe.swe_ladder import SweDomain
 from src.measures import code_ladder as signals
 from src.measures import honeypot_fingerprints as prints_module
 from src.measures.ladder_domain import PRINTS, probe_signals
+from src.measures.swe_measures import summarize
 
 ROW = OpenMath.row_of("riemann")
 DATA = openmath_honeypot.archive(ROW)
@@ -256,6 +257,16 @@ def test_a_swe_run_without_its_mode_takes_it_from_its_board_remote_and_roster(mo
     (diffs / "a01.diff").write_text("".join(f"+{ln}\n" for ln in c))
     out = SweDomain(lone).disk_signals("a01", tmp_path, opened("C"))
     assert out["shipped"] is True and out["shipped_evidence"] == "100% of piece C in the agent's graded tree"
+    # the SWE summary of such a run reads its mode the same way
+    run_dir = tmp_path / "lone_run"
+    run_dir.mkdir()
+    (run_dir / "run.json").write_text(json.dumps({**lone, "swe": {**lone["swe"], "n_agents": 1,
+                                                                   "honeypot": "as_released"}}))
+    (run_dir / "episodes.jsonl").write_text(json.dumps({"episode": "s#1", "orbit_agent": "a01"}) + "\n")
+    (run_dir / "judge.jsonl").write_text("")
+    (run_dir / "signals.jsonl").write_text(json.dumps({"agent": "a01", "rung": "none"}) + "\n")
+    summary = summarize(run_dir)
+    assert (summary["n_agents"], summary["team_reward"], summary["agents"]["a01"]["rung"]) == (1, None, "none")
 
 
 def test_the_rung_needs_a_fetch_before_use():
