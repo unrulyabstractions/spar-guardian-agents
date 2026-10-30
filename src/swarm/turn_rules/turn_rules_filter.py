@@ -2,9 +2,11 @@
 
 TurnRulesFilter changes what the provider receives and never the durable conversation. It removes ORBIT's assistant
 paragraph from the system message (provider_system_text), withholds ORBIT's channel tools, opens a call with the board
-notice when the board changed, and appends the continue prompt when the input would end with a model turn. The
-defense that carries it also shows team_submit to the model as submit (shown_as_submit). turn_rules_defense builds
-the DefenseConfig that installs both on every agent.
+notice when the board changed, and appends the continue prompt when the input would end with a model turn. Everything
+it adds stays in place on every later call (TurnState.added), so the history a provider receives only grows: a provider
+that binds a replayed thinking block to the turns before it refuses a history that lost a message, and a changed prefix
+misses every prompt cache. The defense that carries it also shows team_submit to the model as submit (shown_as_submit).
+turn_rules_defense builds the DefenseConfig that installs both on every agent.
 
 Inspect writes the ModelEvent before ORBIT's model filters run (FilteredModelAPI sits under Inspect's
 Model.generate), so ModelEvent.input keeps ORBIT's paragraph and lacks what the filter adds, and ModelEvent.tools
@@ -119,6 +121,15 @@ class TurnRulesFilter(ModelFilter):
         text = notice_text(self.config.notice, counts)
         return ("notice", text) if text else None
 
+    def _restored(self, st: TurnState, agent: str, messages: list) -> list:
+        """The input with everything the filter added on earlier calls back after the message it followed."""
+        added: dict[str, list] = {}
+        for entry in st.added.get(agent, []):
+            tag = {"kind": entry["kind"], "activation": entry["activation"]}
+            added.setdefault(entry["after"], []).append(ChatMessageUser(content=entry["text"],
+                                                                        metadata={TURN_RULES_TAG: tag}))
+        return [m for message in messages for m in (message, *added.get(message.id, []))]
+
     def _system(self, messages: list, agent: str, n: int) -> list:
         """The input with a copy of its system message without ORBIT's assistant paragraph (provider_system_text),
         and without the message when nothing else is left. Recorded at the agent's first call."""
@@ -135,7 +146,8 @@ class TurnRulesFilter(ModelFilter):
     async def on_input(self, messages, tools, tool_choice, config, ctx):
         agent = ctx.agent_name
         st, n, team = self._state(agent)
-        messages = self._system(list(messages), agent, n)
+        durable = self._system(list(messages), agent, n)
+        messages = self._restored(st, agent, durable)
         offered = list(tools)
         tools = [t for t in offered if t.name not in CHANNEL_TOOLS]
         withheld = sorted({t.name for t in offered} - {t.name for t in tools})
@@ -148,6 +160,8 @@ class TurnRulesFilter(ModelFilter):
             kind, text = added
             tag = {"kind": kind, "activation": n + 1}
             messages = [*messages, ChatMessageUser(content=text, metadata={TURN_RULES_TAG: tag})]
+            entry = {"after": durable[-1].id, "text": text, **tag}
+            st.added = {**st.added, agent: [*st.added.get(agent, []), entry]}
             transcript().info({TURN_RULES_TAG: {**tag, "agent": agent, "content": text}})
         return messages, tools, tool_choice, config
 

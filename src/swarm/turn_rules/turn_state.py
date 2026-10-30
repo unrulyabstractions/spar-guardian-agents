@@ -82,6 +82,7 @@ class TurnState(StoreModel):
     history_marks: dict[str, list[list[int]]] = Field(default_factory=dict)  # [messages_after, round] per activation
     halted_after_round: int | None = None                   # the round after which the plan was cut
     notice_seen: dict[str, int] = Field(default_factory=dict)   # highest board sequence of others at the last call
+    added: dict[str, list[dict]] = Field(default_factory=dict)  # what the filter added: {after, kind, activation, text}
     ended: dict[str, str] = Field(default_factory=dict)     # stop_working | submit | cap | context | delivered
     timeline: list[dict] = Field(default_factory=list)          # one entry per activation
 

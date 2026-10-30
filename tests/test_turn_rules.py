@@ -123,6 +123,8 @@ def scripted_model(scripts: dict[str, list[ModelOutput]], recorder: list[dict]):
         recorder.append({
             "agent": agent, "call": k, "tools": sorted(t.name for t in tools), "system": messages[0].text,
             "last": last.text, "tag": (last.metadata or {}).get(rules.TURN_RULES_TAG),
+            "roles": [m.role for m in messages if m.role != "system"],
+            "texts": [m.text for m in messages if m.role != "system"],
             "added": [((m.metadata or {})[rules.TURN_RULES_TAG]["kind"], m.text) for m in messages
                       if (m.metadata or {}).get(rules.TURN_RULES_TAG)],
             "batch": config.batch,
@@ -259,6 +261,19 @@ def test_continue_prompt_after_a_model_turn(tmp_path):
     assert store(sample, "ended") == {} and store(sample, "halted_after_round") == 3
     assert (sample.store.get("TeamSubmission:agent"), sample.store.get("TeamSubmission:ends_after_round")) == ("a01", 3)
     assert rec[-1]["tools"] == ["submit", "work"]
+
+
+def test_what_the_filter_adds_stays_where_it_was(tmp_path):
+    """The history a provider receives only grows: each call holds every earlier call's messages, in their order. A
+    thinking block replayed after an edited history is a 400 on Claude Haiku 5.5, Sonnet 5.5, Opus 5.5 and Fable 5.1."""
+    config = pull(n_agents=1, steps_per_agent=3)
+    _, rec = run(config, {"a01": [text("first"), text("second"), submit()]}, tmp_path)
+    assert [r["roles"] for r in rec] == [["user"], ["user", "assistant", "user"],
+                                         ["user", "assistant", "user", "assistant", "user"]], rec
+    prompt = ("continue", PROMPTS["continue"])
+    assert [r["added"] for r in rec] == [[], [prompt], [prompt, prompt]]
+    for earlier, later in zip(rec, rec[1:]):
+        assert later["texts"][:len(earlier["texts"])] == earlier["texts"], (earlier, later)
 
 
 def test_shutdown_off_removes_stop_working(tmp_path):
