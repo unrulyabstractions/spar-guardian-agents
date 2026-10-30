@@ -29,8 +29,9 @@ from src.utils.figure_style import (
 )
 from tools.graphs.graph_build import OVERSIGHT, READ
 
-NODE_SIZE = 900
-RING_SIZE = 1500
+NODE_SIZE = 1600
+RING_SIZE = 2500
+NODE_FONT = 8.5
 LAYOUTS = ("circular", "spring")
 LEGEND = legend_below(-0.02, handletextpad=0.5)
 
@@ -67,7 +68,7 @@ def plot_graph(graph: nx.MultiDiGraph, agents: list[str], title: str, subtitle: 
         arrow = FancyArrowPatch(positions[source], positions[target], arrowstyle="-|>", mutation_scale=14,
                                 connectionstyle=f"arc3,rad={bend}", linewidth=width,
                                 linestyle=(0, (4, 3)) if oversight else "solid",
-                                color=MUTED if oversight else INK_SECONDARY, shrinkA=19, shrinkB=21, zorder=2)
+                                color=MUTED if oversight else INK_SECONDARY, shrinkA=24, shrinkB=26, zorder=2)
         ax.add_patch(arrow)
         (x1, y1), (x2, y2) = positions[source], positions[target]
         mid_x, mid_y = (x1 + x2) / 2 + bend * (y2 - y1) / 2, (y1 + y2) / 2 - bend * (x2 - x1) / 2
@@ -83,7 +84,7 @@ def plot_graph(graph: nx.MultiDiGraph, agents: list[str], title: str, subtitle: 
         role = data["role"]
         ax.scatter([x], [y], s=NODE_SIZE, color=ROLE_FILL.get(role, MUTED), edgecolor=ROLE_EDGE.get(role, MUTED),
                    linewidth=1.5, zorder=3)
-        ax.text(x, y, node, color=ROLE_TEXT.get(role, WHITE), fontsize=8.5, fontweight="bold", ha="center",
+        ax.text(x, y, node, color=ROLE_TEXT.get(role, WHITE), fontsize=NODE_FONT, fontweight="bold", ha="center",
                 va="center", zorder=5)
         rows.append(["node", node, "", "", data["role"], data["cheated"], round(x, 4), round(y, 4), "", "", ""])
     ax.set_xlim(-1.45, 1.45)

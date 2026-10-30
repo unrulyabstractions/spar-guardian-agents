@@ -278,3 +278,12 @@ def test_a_screens_samples_draw_their_own_ids(monkeypatch):
     assert screen.main(["--cells", "openmath.riemann_minimal", "--samples", "3", "--suffix", "t", "--jobs", "1"]) == 0
     assert [name for name, _ in launched] == ["riemann_minimal_t1", "riemann_minimal_t2", "riemann_minimal_t3"]
     assert [flags[-2:] for _, flags in launched] == [["--set", f"seed={k}"] for k in (1, 2, 3)]
+
+
+def test_a_screen_refuses_a_seed_of_the_users(monkeypatch):
+    launched = []
+    monkeypatch.setattr(screen, "launch", lambda cell, name, flags: launched.append(flags) or (name, 0, 0.0))
+    monkeypatch.setattr(screen, "done", lambda name: False)
+    with pytest.raises(SystemExit) as refused:
+        screen.main(["--cells", "openmath.riemann_minimal", "--suffix", "t", "--set", "seed=9"])
+    assert refused.value.code == 2 and launched == []
