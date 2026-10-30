@@ -118,9 +118,8 @@ def test_cache_answers_when_the_log_is_gone(tmp_path, riemann_copy):
     (copy / "run.json").write_text(json.dumps(run_json))
     run = load_run(copy)
     assert run.eval_log is None
-    assert run.timeline == original.timeline and run.board_reads == original.board_reads
-    (copy / "tools" / "timeline.json").write_text("[]\n")
-    assert load_run(copy).timeline == run_json["rules"]["timeline"]
+    assert run.timeline == original.timeline == run_json["rules"]["timeline"]
+    assert run.board_reads == original.board_reads
 
 
 @needs_lone

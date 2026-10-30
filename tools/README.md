@@ -5,9 +5,8 @@ EoN, MAST and Who&When, and Hawk. Each tool reads one or more run directories un
 `runs/<name>/tools/<tool>/`: a `summary.json` with `tool`, `run`, `written_at` and the tool's own fields, plus its
 files. The results browser shows every tool's output on the run page ("Analysis tools") and serves the files at
 `/api/runs/<run>/tools/<tool>/<file>`. `tools/run_reader.py` is the shared reader: a run's agents, roles, verdicts, board
-posts, transcripts, the turn timeline (cached in `runs/<name>/tools/timeline.json`), each agent's steps with their
-rounds, its board reads, and the domain's exploit vocabulary. Every tool refuses a missing run with exit code 2
-before it does any work. The tools import what they share with the run code from `src/` (the paths, the model
+posts, transcripts, the turn timeline (run.json `rules.timeline`), each agent's steps with their rounds, its board
+reads, and the domain's exploit vocabulary. Every tool refuses a missing run with exit code 2 before it does any work. The tools import what they share with the run code from `src/` (the paths, the model
 registry, the JSON readers, the figure style and the judge's flags per task); they never import ORBIT, which their
 environment lacks.
 

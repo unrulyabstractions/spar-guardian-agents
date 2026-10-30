@@ -8,11 +8,10 @@
     write_summary(run, "graphs", {"nodes": 3})  # runs/riemann_minimal/tools/graphs/summary.json
 
 A run directory holds run.json, episodes.jsonl, judge.jsonl, trajectories/<episode>/transcript.json and
-communication/<sample>.json. The eval log named by run.json holds the turn rules' timeline in the sample store
-(`TurnState:timeline`) and every board_read result. Both are cached under runs/<name>/tools/ (timeline.json and
-board_reads.json) the first time a run is loaded, so later tools need not reopen the log. A run whose log is gone
-reads the cache when there is one. A log or cache without a timeline falls back to the timeline that run.json keeps
-under rules, and then to an empty one.
+communication/<sample>.json, read through src/measures/run_directory.py RunDir. The turn rules' timeline is run.json
+rules.timeline. The eval log named by run.json holds every board_read result as the agent saw it. They are cached in
+runs/<name>/tools/board_reads.json the first time a run is loaded, so later tools need not reopen the log. A run whose
+log is gone reads the cache when there is one, else the transcripts answer.
 
 Rounds come from the timeline. The k-th agent step of an agent's ATIF transcript is the k-th activation of that agent
 in the timeline, and the round is the integer after "r" in the activation's step id ("r3", "r3-free1", "r12-v4").
@@ -31,15 +30,15 @@ from typing import Protocol
 from inspect_ai.log import read_eval_log
 
 from src.configuration import settings
-from src.utils.json_files import read_json, read_jsonl
+from src.measures.run_directory import RunDir
+from src.utils.json_files import read_json
 
 # The registry's domain key of each CheatBench task (src/domains/__init__.py BY_TASK), the key of
 # instruction_levels.yaml vars. src.domains imports ORBIT, which tools/.venv lacks, so the six pairs are written here.
 DOMAIN_KEYS = {"openmath_agent": "openmath", "software_engineering": "swe", "knowledge_work": "knowledge_work",
                "subset_sum": "subset_sum", "prime_factorization": "prime_factorization",
                "protein_design": "protein_design"}
-# The turn rules' store key and the board's channel id (src/swarm/turn_rules/, which imports ORBIT).
-TIMELINE_KEY = "TurnState:timeline"
+# The board's channel id (src/swarm/turn_rules/, which imports ORBIT).
 BOARD_ID = "board"
 BOARD_READ_TOOLS = ("board_read",)
 UNREADABLE = (FileNotFoundError, ValueError, KeyError)   # what reading a missing or malformed run raises
@@ -136,7 +135,7 @@ class Run:
     board: list[Post]  # every board post, by sample then board number
     transcripts: dict[str, dict]  # agent -> the transcript.json document
     rounds: int  # run.json rules.rounds; 0 for a run without turn rules
-    timeline: list[dict]  # TurnState:timeline entries {turn, agent, activation, step, tools, charge, ...}
+    timeline: list[dict]  # run.json rules.timeline entries {turn, agent, activation, step, tools, charge, ...}
     exploit: dict  # the domain's vars plus "access" (run.json access) and "holds" {agent: items}
     board_reads: dict[str, str] = field(default_factory=dict)  # tool call id -> board_read result, from the log
 
@@ -216,15 +215,16 @@ def load_runs(names: list[str | Path], tool: str) -> list[Run] | None:
 def load_run(name_or_path: str | Path) -> Run:
     """Read one run from a name under runs/ or a path to its directory."""
     directory = run_directory(name_or_path)
-    run_json = read_json(directory / "run.json")
+    stored = RunDir(directory)
+    run_json = stored.run_json
     agents = list(run_json["agents"])
-    episode_rows = read_jsonl(directory / "episodes.jsonl")
-    judge_rows = read_jsonl(directory / "judge.jsonl")
+    episode_rows = stored.episodes()
     lone = lone_agent(agents, episode_rows)
     episodes = {agent_of(row["episode"], lone): row for row in episode_rows}
-    judge = {agent_of(row["episode"], lone): row for row in judge_rows}
+    judge = {agent_of(episode, lone): row for episode, row in stored.verdicts().items()}
     eval_log = eval_log_path(run_json.get("eval_log"))
-    timeline, board_reads = eval_log_data(directory, eval_log, run_json)
+    timeline = list((run_json.get("rules") or {}).get("timeline") or [])
+    board_reads = board_read_results(directory, eval_log)
     task = run_json["task"]
     domain = DOMAIN_KEYS[task]
     return Run(
@@ -383,42 +383,33 @@ def eval_log_path(value: str | None) -> Path | None:
     return path if path.is_file() else None
 
 
-def eval_log_data(directory: Path, eval_log: Path | None, run_json: dict) -> tuple[list[dict], dict[str, str]]:
-    """The timeline and the board_read results, from the cache, else the eval log; run.json's timeline when empty."""
-    cache = directory / "tools"
-    timeline_cache, reads_cache = cache / "timeline.json", cache / "board_reads.json"
-    cached = timeline_cache.is_file() and reads_cache.is_file()
-    if eval_log is not None:
-        logged = eval_log.stat().st_mtime
-        fresh = cached and all(path.stat().st_mtime >= logged for path in (timeline_cache, reads_cache))
-        if fresh:
-            timeline, board_reads = read_json(timeline_cache), read_json(reads_cache)
-        else:
-            timeline, board_reads = read_log(eval_log)
-            cache.mkdir(parents=True, exist_ok=True)
-            timeline_cache.write_text(json.dumps(timeline, indent=1) + "\n")
-            reads_cache.write_text(json.dumps(board_reads, indent=1, ensure_ascii=False) + "\n")
-    elif cached:
-        timeline, board_reads = read_json(timeline_cache), read_json(reads_cache)
-    else:
-        timeline, board_reads = [], {}
-    return timeline or list((run_json.get("rules") or {}).get("timeline") or []), board_reads
+def board_read_results(directory: Path, eval_log: Path | None) -> dict[str, str]:
+    """The board_read results by tool call id, from the cache when it is as new as the eval log, else from the log
+    (then cached); the cache alone when the log is gone, else {}."""
+    cache = directory / "tools" / "board_reads.json"
+    if eval_log is None:
+        return read_json(cache) if cache.is_file() else {}
+    if cache.is_file() and cache.stat().st_mtime >= eval_log.stat().st_mtime:
+        return read_json(cache)
+    results = read_log(eval_log)
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(json.dumps(results, indent=1, ensure_ascii=False) + "\n")
+    return results
 
 
-def read_log(eval_log: Path) -> tuple[list[dict], dict[str, str]]:
-    """TurnState:timeline from every sample's store, and every board_read result by tool call id.
+def read_log(eval_log: Path) -> dict[str, str]:
+    """Every board_read result of every sample by tool call id.
 
     A call id that occurs twice in the log (mock models reuse "c1") is left out, so the transcript answers for it.
     """
     log = read_eval_log(str(eval_log))
-    timeline, results, seen = [], {}, {}
+    results, seen = {}, {}
     for sample in log.samples or []:
-        timeline.extend(sample.store.get(TIMELINE_KEY) or [])
         for event in sample.events:
             if event.event == "tool" and event.function in BOARD_READ_TOOLS:
                 seen[event.id] = seen.get(event.id, 0) + 1
                 results[event.id] = message_text(event.result)
-    return timeline, {call_id: text for call_id, text in results.items() if seen[call_id] == 1}
+    return {call_id: text for call_id, text in results.items() if seen[call_id] == 1}
 
 
 def read_board(directory: Path, timeline: list[dict]) -> list[Post]:
