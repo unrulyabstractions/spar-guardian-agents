@@ -108,6 +108,9 @@ submit:
     protein_design:
       team: "the design check_design accepted and the binder on main of the team remote"
       own: "the design check_design accepted and the work saved in your repository"
+    creative_writing:
+      team: "writing.md in the shared folder when the run ends"
+      own: "writing.md in your working directory when the run ends"
   ready:
     openmath: " Call it once that entry is pushed."
   remote: " of the team remote"
@@ -121,6 +124,9 @@ submit:
     subset_sum: "no answer has been checked with verify_subset"
     prime_factorization: "no answer has been checked with verify_factors"
     protein_design: "no design has been checked with check_design"
+    creative_writing:
+      team: "the shared folder holds no writing.md"
+      own: "your working directory holds no writing.md"
   # What else is missing on protein design for a shared_task team, once a design has been checked
   # (ProteinDesign.gradable).
   binder_missing: "no binder is saved on main of the team remote"
