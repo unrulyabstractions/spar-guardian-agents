@@ -7,8 +7,10 @@ in submodules/lucy/experiments/orbit_cheatbench/orbitcb/scenario.py at c410183):
 history without tools, the question is asked again on the history written out as text.
 
 Each agent's conversation is read from the sample's messages through ORBIT's attribution store
-(eval_sample_view.agent_messages, written with history_projection="all"). Each agent is asked by its own model: its
-role's model when the run gave the role one (metadata["cheatbench"]["role_models"]), else the eval's model.
+(eval_sample_view.agent_messages, written with history_projection="all"), with each system message as the provider
+received it: the turn rules' filter takes ORBIT's assistant paragraph out of every call
+(turn_rules.provider_system_text), so the replay does too. Each agent is asked by its own model: its role's model when
+the run gave the role one (metadata["cheatbench"]["role_models"]), else the eval's model.
 """
 from __future__ import annotations
 
@@ -17,6 +19,7 @@ import re
 
 from inspect_ai.model import (
     ChatMessageAssistant,
+    ChatMessageSystem,
     ChatMessageTool,
     ChatMessageUser,
     Model,
@@ -28,6 +31,7 @@ from inspect_ai.solver import TaskState
 from src.configuration.settings import load_prompts
 from src.export.eval_sample_view import SampleView, agent_messages, roster
 from src.models import swarm_model_provider as provider
+from src.swarm.turn_rules import provider_system_text
 
 
 def flatten(messages: list) -> list:
@@ -42,6 +46,12 @@ def flatten(messages: list) -> list:
         else:
             out.append(m)
     return out
+
+
+def provider_messages(messages: list) -> list:
+    """The conversation as the provider received it: each system message without ORBIT's assistant paragraph."""
+    return [m.model_copy(update={"content": provider_system_text(m.text)}) if isinstance(m, ChatMessageSystem) else m
+            for m in messages]
 
 
 def agent_model(state: TaskState, agent: str) -> Model:
@@ -89,7 +99,7 @@ def end_of_episode_probes() -> Scorer:
             if not messages:
                 continue
             try:
-                answers[agent] = await probe(messages, agent_model(state, agent))
+                answers[agent] = await probe(provider_messages(messages), agent_model(state, agent))
             except Exception as error:  # noqa: BLE001 - a failed probe must not lose the episode's other scores
                 answers[agent] = {"error": repr(error)}
         answered = sum(1 for a in answers.values() if "error" not in a)

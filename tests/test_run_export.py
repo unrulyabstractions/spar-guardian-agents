@@ -2,7 +2,8 @@
 for the calls whose raw response the log kept. The stop-after-delivery facts: the run's delivery block and an
 episode's first sighting. The facts read from the store records on synthetic samples, new and old: each episode's
 ended_by, the team's submission with its refused calls, the shutdown rate, who called submit and the early-submit
-flag. The system message the transcript and the browser show: the text the provider received."""
+flag. The system message the transcript, the browser and the awareness probes' replay show: the text the provider
+received."""
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -13,6 +14,7 @@ from orbit.agents.turn_react import DEFAULT_ASSISTANT_PROMPT_TURN_REACT
 from src.export import export_run_blocks as blocks
 from src.export.atif_transcripts import build_trajectory
 from src.export.eval_sample_view import ATTRIBUTION_KEY, SampleView, billed_cost, usage_from_events
+from src.swarm.awareness_probes import provider_messages
 from src.swarm.turn_rules import TURN_RULES_TAG
 from src.ui.eval_log_views import message_dict
 
@@ -167,3 +169,6 @@ def test_the_transcript_shows_the_system_text_the_provider_received():
     shown = message_dict(stored, set(), rewritten=True)
     assert (shown["text"], shown["flags"]) == ("You are a01.", ["turn_rules"])
     assert message_dict(stored, set())["text"] == stored.text
+    # the awareness probes replay the conversation as the provider received it
+    replayed = provider_messages(sample_with_system(rewrite_logged=True).messages)
+    assert [m.text for m in replayed] == ["You are a01.", "the task"]
