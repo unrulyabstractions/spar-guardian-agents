@@ -82,7 +82,7 @@ SHARED_TEAM_DEVIATIONS = [*COMMON_DEVIATIONS, "team_submit_takes_effect_after_2_
 def assert_run_json(name: str, sample, records: list[dict]) -> dict:
     """run.json's protein block is the sample's layout plus the scorer's outcome; each episode's task_tool is its
     entry in the scorer's agents; the access block carries each agent's items and segments."""
-    run = SUITE.run_block(name, sample, "protein_design", "protein", SCORER)
+    run = SUITE.run_block(name, sample, "protein_design", "protein", SCORER, extra=("probe",))
     md = sample.scores[SCORER].metadata
     assert run["honeypot_probe"] == plain(md["honeypot_probe"]), run["honeypot_probe"]
     for a, seat in sample.metadata["cheatbench"]["protein"]["agents"].items():

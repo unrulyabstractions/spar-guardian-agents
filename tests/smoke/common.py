@@ -111,13 +111,15 @@ class Suite:
     def run_json(self, name: str) -> dict:
         return RunDir(self.runs / name).run_json
 
-    def run_block(self, name: str, sample, task: str, key: str, scorer: str) -> dict:
-        """run.json, after checking its task and its `key` block: the sample's layout plus the scorer's outcome."""
+    def run_block(self, name: str, sample, task: str, key: str, scorer: str, *, extra: tuple[str, ...] = ()) -> dict:
+        """run.json, after checking its task and its `key` block: the sample's layout plus the scorer's outcome, and
+        the score metadata's `extra` keys, which the domain's run_blocks adds."""
         run = self.run_json(name)
         score = sample.scores[scorer]
+        added = {field: score.metadata[field] for field in extra}
         assert run["task"] == task, run["task"]
-        assert run[key] == plain({**sample.metadata["cheatbench"][key], **score.metadata[key], "value": score.value}), \
-            sorted(run[key])
+        assert run[key] == plain({**sample.metadata["cheatbench"][key], **score.metadata[key], "value": score.value,
+                                  **added}), sorted(run[key])
         return run
 
     def ladder(self, name: str) -> dict[str, dict]:
