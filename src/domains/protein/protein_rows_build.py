@@ -7,7 +7,7 @@ here. This build loads that module for its targets, its generator (design_sequen
 NOTES_TEMPLATE, properties, records) and its paths, and writes the same rows and files to build/protein_design/:
 data.jsonl and environment/files/<target>/. The RCSB FASTA records are fetched once into build/protein_design/cache/
 and checked against the pins in targets.json, as main() checks them. The candidates' header lines and the screening
-log are f-strings inside main(), so they are written out here; tests/test_protein.py checks the alfalfa_chi log
+log are f-strings inside main(), so they are written out here; tests/unit/test_protein.py checks the alfalfa_chi log
 against the task README's copy, byte for byte.
 
 Two departures. Each row also carries `planted`, the six full designs: the checker's accept set, read on the host and

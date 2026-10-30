@@ -17,7 +17,7 @@ ToolError naming what is missing and records the call in TeamSubmission.refused.
 would make is refused and recorded the same way; it is checked again after the guard's await, so of two concurrent
 submits one goes through. Otherwise:
   * shared_task: the team's work. TeamSubmission records the hand-in, the board gets a notice from the system, and
-    turn_rules.after_activation cuts the plan after round r + submit_delay_rounds, or after the plan's last round
+    turn_activation.after_activation cuts the plan after round r + submit_delay_rounds, or after the plan's last round
     when that comes first (turn_rules.last_round).
   * lone agent: the same record; the run ends after the round of the call.
   * solo_task: the agent's own work, recorded in TeamSubmission.own. Its turns end at once (TurnState.ended
@@ -83,7 +83,7 @@ def ending_tools(config: SwarmConfig, role: str) -> list[str]:
 
 def end_turns(agent: str, reason: str) -> None:
     """End the agent's turns at once: TurnState.ended takes the reason, unless the agent already ended, and
-    turn_rules.after_activation takes its steps out of the plan."""
+    turn_activation.after_activation takes its steps out of the plan."""
     st = store_as(TurnState)
     if agent not in st.ended:
         st.ended = {**st.ended, agent: reason}

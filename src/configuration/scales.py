@@ -8,8 +8,8 @@ model calls use the provider's batch API. The command line applies the preset, t
 a `--set` overrides any value a scale gave.
 
 Under the turn budget (SwarmConfig.turn_budget, settings.TURN_BUDGET) every agent's working steps are the budget, in
-place of the scale's steps_per_agent (SwarmConfig.steps), at every scale. The small scale's time limit is CheatBench's
-hour per episode; the larger scales' grow with the waves a round takes.
+place of the scale's steps_per_agent (SwarmConfig.working_steps), at every scale. The small scale's time limit is
+CheatBench's hour per episode; the larger scales' grow with the waves a round takes.
 """
 from __future__ import annotations
 

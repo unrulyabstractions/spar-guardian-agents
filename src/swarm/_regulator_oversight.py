@@ -13,9 +13,9 @@ and the start of its result, each cut to CUT characters (prompts.yaml `oversight
 name, or about the regulator itself, returns "no such agent".
 
 The calls come from the agent's own conversation. During the run that is its live state in ORBIT's session registry
-(turn_rules.live_state), the same source turn_rules.after_activation reads. ORBIT writes the attributed conversation
-(eval_sample_view.agent_messages) only when the run ends (AgentScheduler.sync_to_task_state), so it is the fallback
-outside a live run. The round of each call comes from
+(turn_rules.live_state), the same source turn_activation.after_activation reads. ORBIT writes the attributed
+conversation (eval_sample_view.agent_messages) only when the run ends (AgentScheduler.sync_to_task_state), so it is
+the fallback outside a live run. The round of each call comes from
 TurnState.history_marks, which after_activation writes; a call after the last mark belongs to the step under way.
 
 A call counts as a board action of kind "oversight" (turn_rules.record_board_action): TurnState.oversight per regulator

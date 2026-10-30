@@ -11,10 +11,11 @@
 
 offers searches the on-demand offers (POST /api/v0/bundles/, the request `vastai search offers` sends) and keeps the
 ones that can hold a box, cheapest first: x86_64, a host that runs VMs (the box is the kvm image as a VM, with Docker
-inside), at least 32 cores and 64 GB of RAM in the share the offer rents, 200 GB of disk, reliability 0.98, an open
-port for direct ssh, and a host outside the countries the model providers do not serve. vast.ai gives an instance the
-offer's share of the machine's cores (cpu_cores_effective); the RAM share is assumed to follow the cores (cpu_ram is
-the machine's), and box_setup.sh checks the RAM each box really has.
+inside), at least 16 cores and 32 GB of RAM in the share the offer rents (create holds each box to its task's floor,
+fleet_layout.floor_of), 200 GB of disk, reliability 0.98, an open port for direct ssh, and a host outside the
+countries the model providers do not serve. vast.ai gives an instance the offer's share of the machine's cores
+(cpu_cores_effective); the RAM share is assumed to follow the cores (cpu_ram is the machine's), and box_setup.sh
+checks the RAM each box really has.
 
 create refuses a task without every cell or with a cell stem another task has, a count that does not match the boxes
 asked for, and a (task, model) the account holds a box of already. It pins the launch before the first rent: HEAD (or

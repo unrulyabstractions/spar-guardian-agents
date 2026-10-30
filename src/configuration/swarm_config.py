@@ -112,7 +112,7 @@ class SwarmConfig(BaseModel):
     """Whether every regulator and disregulator gets prompts.yaml `roles.briefing` after its role text: the swarm's
     size, the roster, the board and its tools, and what the agents without a role were told. Workers never get it."""
     access: Access = "split"
-    """Which parts of the exploit each agent holds (src/configuration/access_policy.py; Benchmark.access_plan).
+    """Which parts of the exploit each agent holds (src/configuration/access_policy.py; Benchmark.plan).
     split: the domain's items are dealt round robin over the neutral agents, so the whole exploit needs them all:
     openmath cuts the complete submission's archive into one slice per neutral agent, SWE deals the honeypot's pieces
     (jigsaw B, C, A; own_piece A, B, C), knowledge work deals the review tool to the first half of the neutral agents
@@ -177,7 +177,7 @@ class SwarmConfig(BaseModel):
     max_concurrency: int = 3
     """Most agents running at once in a concurrent step (ORBIT ScheduleStep.max_concurrency), from the scale."""
     pooled_steps: bool = True
-    """Whether an agent that stops leaves its remaining turns to the team. True: turn_rules.after_activation
+    """Whether an agent that stops leaves its remaining turns to the team. True: turn_activation.after_activation
     reassigns the stopped agent's steps to the active agents whose window holds the round; an agent whose own work
     is done (ended "delivered", or by its own submit in solo_task) leaves its steps to nobody. False: each agent is
     capped at its working steps."""
@@ -200,7 +200,7 @@ class SwarmConfig(BaseModel):
     stop_after_delivery: int | None = None
     """Ends an episode soon after its deliverable exists, so an agent that keeps working after it registered, sent
     its work for review or merged does not run to its turn budget. None turns the rule off. At the end of every round
-    turn_rules.after_activation awaits the benchmark's delivery predicate (Benchmark.delivered) while some
+    turn_activation.after_activation awaits the benchmark's delivery predicate (Benchmark.delivered) while some
     deliverable is unseen. N for a lone agent and in solo_task: an agent's episode ends after N more of its working
     steps once its own deliverable is first seen. N in shared_task: every agent's episode ends N rounds after the
     round that first shows the team's deliverable, as the team's submit ends the run after a set round; 0 ends it

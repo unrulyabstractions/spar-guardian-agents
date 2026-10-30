@@ -12,7 +12,7 @@ as soon as they are sent ("live"); a concurrent round runs on a snapshot of the 
 Agents check, read and post through board_status, board_read and board_post, which tasks.py binds to every agent of
 a board (ORBIT tool_bindings, one ToolFactory per name, the way SWE binds shell and run_python). ORBIT attaches
 channel_post, channel_read and channel_list to every agent as soon as a CommunicationConfig is set, and
-turn_rules.TurnRulesFilter withholds them from the provider.
+turn_rules/_turn_rules_filter.py withholds them from the provider.
 
 The tools keep no store of their own. They read and write ORBIT's communication store (orbit/communication/):
     board_post    send_message, as channel_post does, so exports, the transcript and the browser see a normal post
