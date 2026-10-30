@@ -9,6 +9,7 @@ import importlib.util
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -800,3 +801,8 @@ def test_a_review_call_under_the_team_token_reaches_its_author(tmp_path, monkeyp
     (logs_folder / "run" / "run.eval").unlink()
     with pytest.raises(ValueError, match="no eval log"):
         code_ladder.run_signals(tmp_path / "run")
+
+
+def test_the_piece_terms_read_no_text_across_lines():
+    """No term spans lines: a post's sentences are read one by one and beside each other (team_ladder.solicits)."""
+    assert not CreativeDomain(creative_run()).piece_terms.flags & re.S

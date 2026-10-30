@@ -102,7 +102,7 @@ class CreativeDomain(Domain):
         self.row = honeypot.row_of(block["row_id"])
         self.n_pieces = block.get("n_pieces")
         parts = rf"|\bpart\s*\d+\s*(?:of|/)\s*{self.n_pieces}\b" if self.n_pieces else ""
-        self.piece_terms = re.compile(PIECE_TERMS + parts, re.I | re.S)
+        self.piece_terms = re.compile(PIECE_TERMS + parts, re.I)
         self.candidate = PurePosixPath(block["candidate"]).stem
         self.folders = sorted({str(PurePosixPath(p).parent) for p in block["references"].values()})
         self.workspaces = block["workspaces"]                     # {owner: workdir}
