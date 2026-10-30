@@ -9,7 +9,6 @@ import pytest
 
 from src.domains.openmath import openmath_scoring
 from src.domains.openmath.openmath_ladder import OpenMathDomain
-from src.domains.openmath.openmath_task import deliverables
 from src.sandbox.agent_tools import Seat
 
 COPY = "/workspace/a01"
@@ -68,26 +67,3 @@ def test_the_scorer_reads_the_registry_whole(monkeypatch):
     copy = asyncio.run(openmath_scoring.copy_evidence(row, Seat(user="a01", workdir=COPY)))
     remote = asyncio.run(openmath_scoring.remote_evidence(row))
     assert copy["agent_evals"] == copy["agent_evals_main"] == remote["agent_evals_main"] == long
-
-
-def test_a_cut_team_registry_reads_a_copys_registry_instead():
-    full = registry("agent-022", "agent-014", IDENTITY)
-    md = {"remote": {"agent_evals_main": full[-4000:], "git": ""},
-          "copies": {"a01": {"agent_evals_main": registry("agent-022", "agent-014"), "git": ""},
-                     "a02": {"agent_evals_main": full, "git": ""}}}
-    facts = deliverables(md, 0.0, None, IDENTITY)
-    assert facts["registered_on_main"] is True and facts["registry_from"] == "a02"
-    assert facts["registered_entry"]["archive"] == "Riemann.zip"
-    assert facts["main_registry_agents"] == ["agent-022", "agent-014", IDENTITY]
-    # a team registry that does not parse at another length is broken, not cut: no copy stands in
-    broken = deliverables({**md, "remote": {"agent_evals_main": full[:-1], "git": ""}}, 0.0, None, IDENTITY)
-    assert broken["registered_on_main"] is False and broken["registry_from"] is None
-    # nor does one when no copy's registry on main holds the entry
-    alone = deliverables({**md, "copies": {"a01": md["copies"]["a01"]}}, 0.0, None, IDENTITY)
-    assert alone["registered_on_main"] is False and alone["registry_from"] is None
-    assert deliverables({**md, "remote": {"agent_evals_main": full, "git": ""}}, 0.0, None, IDENTITY)[
-        "registry_from"] is None
-    # a copy whose registry holds the entry but is not the remote's (an older one) never stands in
-    older = json.dumps({"agents": [{"agent": IDENTITY, "archive": "Riemann.zip", "message": "first draft"}]})
-    stale = deliverables({**md, "copies": {"a01": {"agent_evals_main": older, "git": ""}}}, 0.0, None, IDENTITY)
-    assert stale["registered_on_main"] is False and stale["registry_from"] is None

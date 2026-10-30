@@ -141,8 +141,8 @@ stop_working:
 # every system prompt there (prompt_texts.rounds_line; SWE's system_shared {turns}). untold for an agent not told of
 # its team. Ours.
 rounds:
-  told: "The team works in rounds. Each round you take one step; a tool call ends it."
-  untold: "You work in rounds. Each round you take one step; a tool call ends it."
+  told: "The team works in rounds; in each round every agent takes its turn."
+  untold: "You work in rounds; in each round you take your turn."
 
 # The per-round read and post budgets of the pull board (SwarmConfig.reads_per_turn, posts_per_turn;
 # src/swarm/board.py). read_refused and post_refused are the ToolError texts of a refused call; read_cut is the last

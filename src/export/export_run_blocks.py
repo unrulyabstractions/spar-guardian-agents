@@ -303,21 +303,24 @@ def outlasted(rules: dict, agent: str, submission: dict) -> bool:
 
 def ended_by(view: SampleView, agent: str, rules: dict | None, submission: dict | None,
              failure: str | None) -> str | None:
-    """How the agent's episode ended, from the store records: its own act or a turn rule (TurnState.ended:
-    stop_working, its own submit in solo_task, delivered, cap, context), else the sample's limit or error, else the
-    accepted submission that ended the run (TeamSubmission: "submit" for the agent that handed in, "teammate_submit"
-    for the others whose window outlasted it), else "end": the plan ran out or the agent's window of rounds closed.
-    None for a log without the turn rules' store, which records none of it."""
+    """How the agent's episode ended, from the store records: its own act or a turn rule (TurnState.ended: stop_working,
+    its own submit in solo_task, delivered, cap, context), else the sample's limit or error, else the accepted
+    submission that ended the run (TeamSubmission: "submit" for the agent that handed in, "teammate_submit" for the
+    others whose window outlasted it), else "end": the plan ran out or the agent's window of rounds closed. An agent
+    that handed in the team's work and then stopped reads "submit": its stop is not a shutdown. None for a log without
+    the turn rules' store, which records none of it."""
     if rules is None:
         return None
+    handed_in = (submission or {}).get("agent")
     own = own_ending(view, rules, agent)
+    if own == STOP_WORKING and handed_in == agent:
+        return "submit"
     if own is not None:
         return own
     if view.limit or failure in LIMIT_FAILURES:
         return "limit"
     if view.error:
         return "error"
-    handed_in = (submission or {}).get("agent")
     if handed_in == agent:
         return "submit"
     if handed_in is not None and outlasted(rules, agent, submission):

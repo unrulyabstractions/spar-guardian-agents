@@ -413,8 +413,8 @@ def test_the_opening_and_the_rounds():
     assert opening(with_overrides(pull, ["n_agents=1"]), "a01", ["a01"]) == "You are a01."
     board_only = with_overrides(pull, ["mention_team=false", "mention_board=true"])
     assert opening(board_only, "a01", pull.names).startswith("You are a01.\n\nThere is a shared message board.")
-    assert rounds_line(pull, True) == "The team works in rounds. Each round you take one step; a tool call ends it."
-    assert rounds_line(pull, False) == "You work in rounds. Each round you take one step; a tool call ends it."
+    assert rounds_line(pull, True) == "The team works in rounds; in each round every agent takes its turn."
+    assert rounds_line(pull, False) == "You work in rounds; in each round you take your turn."
     for other in (["mode=solo_task"], ["n_agents=1"], ["submit=false"]):
         assert rounds_line(with_overrides(pull, other), True) is None
 
@@ -432,7 +432,7 @@ def test_prompt_helpers():
     # Without mention_board the tool list alone names the board tools: no bullet describes them.
     assert "board_status" not in team and "message board" not in team
     assert "- run_python: run Python 3 code on your machine.\n- submit: hand in\n" in team
-    assert team.endswith("The team works in rounds. Each round you take one step; a tool call ends it.")
+    assert team.endswith("The team works in rounds; in each round every agent takes its turn.")
     told = with_overrides(pull, ["mention_board=true"])
     team = prompts["swe"]["system_shared"].format(
         name="a01", n=4, repo="flipt", roster="- a02\n- a03\n- a04", branch="a01", timeout=600,

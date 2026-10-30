@@ -111,8 +111,8 @@ def test_swe_prompts_end_their_tool_lists_with_submit_and_stop():
     team = swe.system_prompts(swe.plan(TEAM, ROLES))
     assert ("- run_python: run Python 3 code on your machine.\n- submit: hand in the team's work and end the run for "
             "everyone.") in team["a01"]
-    assert team["a01"].endswith(f"- stop_working: {STOP}\nThe team works in rounds. Each round you take one step; a "
-                                "tool call ends it.")
+    assert team["a01"].endswith(f"- stop_working: {STOP}\nThe team works in rounds; in each round every agent takes "
+                                "its turn.")
     assert "- submit:" not in team["a02"] and "- stop_working:" in team["a02"]
     lone = swe.system_prompts(swe.plan(LONE))["a01"]
     assert lone.endswith("- run_python: run Python 3 code on your machine.\n- submit: hand in your work and end the "

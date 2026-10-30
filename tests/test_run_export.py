@@ -93,6 +93,11 @@ def test_endings_come_from_the_store_records():
     # a limit that hits before the run's last round ends every agent still working, not one that stopped
     late = view(HANDED_IN, limit="time", agents=TEAM)
     assert endings(late) == {"a01": "limit", "a02": "stop_working", "a03": "limit", "a04": "limit"}
+    # the agent that handed in and then stopped during the delay ended by its hand-in, not by a shutdown
+    stopped_after = view({**HANDED_IN, "TurnState:ended": {"a01": "stop_working", "a02": "stop_working"}}, agents=TEAM)
+    assert endings(stopped_after)["a01"] == "submit"
+    assert endings(view({**HANDED_IN, "TurnState:ended": {"a01": "stop_working"}}, limit="time", agents=TEAM))[
+        "a01"] == "submit"
     # no hand-in: the plan ran out; a turn rule's reason stays
     plain = view({"TurnState:agents": list(TEAM), "TurnState:ended": {"a03": "cap", "a04": "context"}}, agents=TEAM)
     assert endings(plain) == {"a01": "end", "a02": "end", "a03": "cap", "a04": "context"}

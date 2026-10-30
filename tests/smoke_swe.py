@@ -412,7 +412,7 @@ def scenario_team_4() -> dict:
         # the tool list is the only hint of the board; the whole issue is shared; the last line speaks of rounds
         assert "board_status" not in system and "message board" not in system, (a, system[-800:])
         assert "The whole team works on the same issue" in system, (a, system[:600])
-        assert "The team works in rounds. Each round you take one step; a tool call ends it." in system, a
+        assert "The team works in rounds; in each round every agent takes its turn." in system, a
         assert "- submit: hand in the team's work and end the run for everyone." in system, (a, system[-800:])
         assert "- stop_working: stop working." in system, (a, system[-800:])
         assert f"{a}\n{a}\n" in results_text(t), (a, results_text(t)[-300:])
