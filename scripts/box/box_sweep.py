@@ -9,8 +9,9 @@ the home folder and /tmp, without following links, and prints one line per file 
 what is provably reproducible, which it counts by reason (counts and bytes):
   - a tracked file whose bytes are its blob at the HEAD of its work tree (the repository, each submodule); the work
     trees are printed with their HEAD and the commit the repository records, for the check to hold them to;
-  - the git object stores of those work trees, the virtualenv, build/, package caches, uv's Pythons and binaries,
-    docker's client config, the files box_setup.sh sent, bytecode and tool caches, systemd's private /tmp folders;
+  - the git object stores of those work trees, the virtualenv, build/, the editable install's metadata, package and
+    font caches, uv's Pythons, binaries and receipt, docker's client config, the files box_setup.sh sent, bytecode and
+    tool caches, systemd's private /tmp folders;
   - the keys file box_run.sh wrote and vast.ai's authorized_keys.
 The outputs under runs/, logs/ and out/ are never excluded. It also prints symbolic links with their targets, special
 files, every path it could not read, the processes that still produce (a runner or an example, from /proc), the count
@@ -38,7 +39,8 @@ def excluded_trees(repo: str | None, home: str, tmp: str) -> dict[str, str]:
     trees = {
         f"{home}/.cache/uv": "uv's package cache", f"{home}/.cache/pip": "pip's package cache",
         f"{home}/.cache/huggingface": "Hugging Face downloads", f"{home}/.local/share/uv": "uv's Python installs",
-        f"{home}/.local/bin": "uv's installer binaries", f"{home}/.docker": "docker's client config",
+        f"{home}/.local/bin": "uv's installer binaries", f"{home}/.config/uv": "uv's installer receipt",
+        f"{home}/.cache/matplotlib": "matplotlib's font cache", f"{home}/.docker": "docker's client config",
         f"{home}/ship": "the files box_setup.sh sent from the Mac (the lucy bundle, the package list)",
     }
     if repo:
@@ -161,6 +163,8 @@ class Sweep:
             return GIT_STORES
         if name in CACHE_NAMES:
             return CACHE_NAMES[name]
+        if name.endswith(".egg-info"):
+            return "the editable install's metadata, written by box_setup.sh"
         if os.path.dirname(path) == self.tmp and name.startswith("systemd-private-"):
             return "systemd's private /tmp folders of host services"
         return None

@@ -281,12 +281,14 @@ def box(tmp_path, monkeypatch):
         work / ".venv" / "lib" / "x.py": "venv", work / "build" / "rows.jsonl": "{}\n",
         home / "screen.log": "== screen\n", home / ".box_env": "export KEY=secret\n",
         home / ".cache" / "uv" / "wheel": "w", home / ".bashrc": "# image\n",
+        work / "orbit.egg-info" / "PKG-INFO": "m", home / ".cache" / "matplotlib" / "fontlist.json": "{}",
+        home / ".config" / "uv" / "uv-receipt.json": "{}",
         tmp / "inspect.tmp": "t", tmp / "systemd-private-abc" / "x": "s",
     }
     for path, text in files.items():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
-    (work / ".gitignore").write_text("runs/\nlogs/\nout/\n.venv/\nbuild/\n__pycache__/\n")
+    (work / ".gitignore").write_text("runs/\nlogs/\nout/\n.venv/\nbuild/\n__pycache__/\n*.egg-info/\n")
     git(work, "init", "-q")
     git(work, "add", ".gitignore", "src/tracked.py", "src/edited.py")
     git(work, "commit", "-q", "-m", "c")
@@ -331,7 +333,9 @@ def test_the_sweep_lists_what_is_not_reproducible_and_counts_the_rest(box):
     assert excluded == {"tracked files unchanged from their work tree's HEAD": 2,      # .gitignore, src/tracked.py
                         box_sweep.CACHE_NAMES["__pycache__"]: 1, trees[f"{work}/.venv"]: 1, trees[f"{work}/build"]: 1,
                         trees[f"{home}/.cache/uv"]: 1, files[f"{home}/.box_env"]: 1,
-                        "systemd's private /tmp folders of host services": 1}
+                        "systemd's private /tmp folders of host services": 1,
+                        "the editable install's metadata, written by box_setup.sh": 1,
+                        trees[f"{home}/.cache/matplotlib"]: 1, trees[f"{home}/.config/uv"]: 1}
     assert not any("secret" in json.dumps(line) for line in lines)
     assert lines[-1]["done"] is True
 

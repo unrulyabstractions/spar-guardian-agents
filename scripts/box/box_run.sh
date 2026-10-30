@@ -68,7 +68,7 @@ start() {
   # shellcheck disable=SC2016  # the inner bash expands $0, $1, $2 and ${@:3}
   nohup setsid bash -c '. /root/.box_env && exec .venv/bin/python -m scripts.box.box_runner run \
     --task "$0" --model "$1" --suffix "$2" "${@:3}"' "$task" "$model" "$suffix" "$@" >> /root/screen.log 2>&1 &
-  local waited
+  local launched=$! waited
   for waited in $(seq 1 60); do
     if [ -f /root/screen.pid ] && grep -qs box_runner "/proc/$(cat /root/screen.pid)/cmdline"; then
       echo "   runner pid $(cat /root/screen.pid), started after ${waited} s"
@@ -77,9 +77,10 @@ start() {
       grep -qs box_runner "/proc/$(cat /root/screen.pid)/cmdline" || { echo "!! the runner ended at once"; exit 1; }
       exit 0
     fi
+    kill -0 "$launched" 2> /dev/null || break
     sleep 1
   done
-  echo "!! no runner after 60 s; the end of /root/screen.log:"
+  echo "!! no runner; the end of /root/screen.log:"
   tail -n 30 /root/screen.log
   exit 1
 }

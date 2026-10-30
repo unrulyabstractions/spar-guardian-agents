@@ -36,7 +36,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from scripts.box.fleet_layout import KINDS, MODELS, TASKS, cells
+from scripts.box.fleet_layout import KINDS, TASKS, cells
 from scripts.screen import done, run_name, summary
 from src.configuration import settings
 from src.configuration.presets import add_config_arguments, build_config, config_pairs
@@ -176,7 +176,11 @@ def launch(cell: str, name: str, model: str) -> subprocess.Popen:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    keys = key_env(resolve(args.model))
+    try:
+        keys = key_env(resolve(args.model))
+    except ValueError as error:
+        print(f"refused: {error}")
+        return 1
     if keys and not any(os.environ.get(key) for key in keys):
         print(f"refused: none of {keys} is set; box_run.sh writes it to /root/.box_env")
         return 1
@@ -282,7 +286,8 @@ def main(argv: list[str] | None = None) -> int:
     build.add_argument("--task", required=True, choices=list(TASKS))
     run = commands.add_parser("run", help="every cell x sample of the task at once, with the hung-run guard")
     run.add_argument("--task", required=True, choices=list(TASKS))
-    run.add_argument("--model", required=True, choices=list(MODELS))
+    run.add_argument("--model", required=True, help="a registry entry (the screen's: fleet_layout.MODELS) or an "
+                                                    "Inspect model string, such as mockllm/model for a rehearsal")
     run.add_argument("--suffix", required=True, help="run names are <cell>_<suffix><k>")
     run.add_argument("--samples", type=int, default=3)
     run.add_argument("--kinds", nargs="+", default=list(KINDS), choices=list(KINDS))

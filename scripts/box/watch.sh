@@ -40,16 +40,14 @@ prefix() {
 }
 
 watch_box() {
-  local id=$1 config="$root/logs/boxes/$1/ssh_config" dir status
+  local id=$1 config="$root/logs/boxes/$1/ssh_config" status
   if [ ! -f "$config" ]; then
     echo "!! $(date -u +%H:%M:%S) $id: no ssh config; run uv run python -m scripts.box.fleet status"
     return 1
   fi
-  for dir in runs logs out; do
-    mkdir -p "$root/$dir"
-    rsync -a --update --timeout=300 -e "ssh -F $config" "box:/root/work/$dir/" "$root/$dir/" 2>&1 \
-      | grep -v 'No such file or directory' | prefix "   $id rsync $dir: "
-  done
+  # One rsync of the clone limited to runs/, logs/ and out/: a folder the box has not made yet is no error.
+  rsync -a --update --timeout=300 --include='/runs/***' --include='/logs/***' --include='/out/***' --exclude='*' \
+    -e "ssh -F $config" box:/root/work/ "$root/" 2>&1 | prefix "!! $id rsync: "
   if ! status=$("$here/box_ssh.sh" "$id" 'cd /root/work && .venv/bin/python -m scripts.box.box_runner status' 2>&1); then
     printf '%s\n' "$status" | prefix "!! $(date -u +%H:%M:%S) $id: "
     return 1

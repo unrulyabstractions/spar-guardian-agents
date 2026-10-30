@@ -86,8 +86,8 @@ setup() {
     exit 1
   fi
   export DEBIAN_FRONTEND=noninteractive
-  apt-get -o DPkg::Lock::Timeout=900 update -q
-  apt-get -o DPkg::Lock::Timeout=900 install -y -q docker-compose-v2 git rsync curl ca-certificates python3
+  apt-get -o DPkg::Lock::Timeout=900 update -qq
+  apt-get -o DPkg::Lock::Timeout=900 install -y -qq docker-compose-v2 git rsync curl ca-certificates python3
   echo "docker $(docker info --format '{{.ServerVersion}}'), $(docker compose version)"
   export PATH=/root/.local/bin:$PATH
   if [ "$(uv --version 2>/dev/null | cut -d' ' -f2)" != "$uv_version" ]; then
