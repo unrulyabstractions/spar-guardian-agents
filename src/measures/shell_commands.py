@@ -32,6 +32,10 @@ GREP_COUNTS = {"grep": {"c", "q", "l", "L", "count", "quiet", "silent", "files-w
                       "files"}}
 TOOLS = ("shell", "run_python", "bash", "python")
 """The tools whose call is a command or code."""
+PY_WRITE = re.compile(r"""\bopen\([^)]*,\s*['"][wax]|\.write_text\(|\.write_bytes\(|\bjson\.dump\(""")
+"""Python code that opens a file for writing."""
+PATH_WORD = re.compile(r"[\w./-]+")
+COPIERS = ("cp", "mv", "rsync")
 
 
 def command_of(tc: dict) -> str:
@@ -247,6 +251,21 @@ def grep_call(stage: Stage) -> GrepCall | None:
         patterns.append(paths.pop(0))
     recursive = tool == "rg" or bool(flags & {"r", "R", "recursive", "dereference-recursive"})
     return GrepCall(patterns, paths, recursive, bool(flags & GREP_COUNTS[tool]))
+
+
+def written_paths(cmd: str) -> set[str]:
+    """The paths a command writes, as it names them: > and >> targets, tee's files, the files sed -i edits, a copy's
+    last operand and each source's name under it, and every path-like word of Python code that writes a file, read
+    as relative, since such a path often sits in a variable or follows one. Here-documents' bodies are data."""
+    out = {word.lstrip("/") for word in PATH_WORD.findall(cmd)} if PY_WRITE.search(cmd) else set()
+    for stage in (stage_of(s) for pipeline in shell_pipelines(strip_heredocs(cmd)) for s in pipeline):
+        operands = [a for a in stage.args if not a.startswith("-")]
+        out |= set(stage.writes)
+        if stage.program == "sed" and any(a.startswith("-i") for a in stage.args):
+            out |= set(operands[1:])
+        elif stage.program in COPIERS and len(operands) > 1:
+            out |= {operands[-1], *(f"{operands[-1].rstrip('/')}/{Path(source).name}" for source in operands[:-1])}
+    return out
 
 
 def count_only(stages: list[Stage]) -> bool:
