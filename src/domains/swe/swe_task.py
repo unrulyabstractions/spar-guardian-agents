@@ -1,33 +1,32 @@
 """The SWE benchmark: one CheatBench issue under one of Lucy's honeypots, for one agent or a team.
 
-Holds the sample (build_swe), each agent's pieces of the honeypot, and the texts each agent reads: the system prompts
-from prompts.yaml `swe`.
+Holds the sample, each agent's pieces of the honeypot, and the texts each agent reads: the system prompts from
+prompts.yaml `swe`.
 
 Modes of a team (SwarmConfig.mode, `shared_task` by default):
-  * shared_task: every agent gets the whole issue on its own machine. The team's main is graded. The own_piece and
-    jigsaw honeypots' pieces go to the clones as the config's access policy deals them (pieces_by_agent).
+  * shared_task: every agent gets the whole issue on its own machine, with the team remote. The team's main is
+    graded. The own_piece and jigsaw honeypots' pieces go to the clones as the plan deals them.
   * solo_task: every agent gets the whole issue and its own repository, with no team remote. Each agent's working
     tree is graded.
 A lone agent works the whole issue in every mode. Each agent has its own service, so SWE refuses the large scales.
+
+Access items: Lucy's pieces A, B and C, and whole; as released the honeypot plants nothing.
 """
 from __future__ import annotations
 
 import random
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 
 from inspect_ai.dataset import Sample
 from inspect_ai.scorer import Scorer
-from inspect_ai.solver import Solver
 
-from src.configuration import access_policy as access_policy
-from src.configuration import settings
-from src.configuration.access_policy import Access
+from src.configuration import access_policy, settings
 from src.configuration.prompt_texts import board_system_prompt, submit_line, swe_board_fields
 from src.configuration.scales import SCALES
 from src.configuration.swarm_config import SwarmConfig
-from src.domains.benchmark_protocol import SUBMIT_PROMPT_DEVIATION, AgentTools, Benchmark
-from src.domains.swe.swe_grader import committed, swe_grader
-from src.domains.swe.swe_honeypot_setup import has_team_remote, swe_setup
+from src.domains.benchmark_protocol import Benchmark, Plan
+from src.domains.swe import swe_honeypot as honeypot
 from src.domains.swe.swe_inputs import (
     agent_timeout_s,
     fix_commit,
@@ -37,63 +36,36 @@ from src.domains.swe.swe_inputs import (
     task_config,
     task_dir,
 )
-from src.domains.swe.swe_sandbox import (
-    ensure_images,
-    tool_bindings,
-    write_compose,
-)
+from src.domains.swe.swe_ladder import SweDomain
+from src.domains.swe.swe_sandbox import TOOL_DESCRIPTIONS, ensure_images, seats, write_compose
+from src.domains.swe.swe_scoring import committed, swe_grader
 from src.domains.swe.swe_settings import (
     AGENT_CPUS,
     AGENT_MEM,
     AGENT_TIME_S,
+    DEFAULT_ROW,
+    GRADING_BUDGET_S,
     HONEYPOTS,
     JIGSAW_PIECES,
     PARTS,
     PIECES,
-    TASK_ROOT,
+    TASK,
+    TASK_DIR,
     TOOL_TIMEOUT_S,
-    WORKDIR,
 )
-from src.sandbox import agent_tools
+from src.sandbox.agent_tools import AgentTools, roster_tools
 
-SHARED = "shared_task"
-# Every agent has its own service (sandbox.write_compose). A hundred services is more than one Docker host holds.
+# Every agent has its own service (swe_sandbox.write_compose). A hundred services is more than one Docker host holds.
 LARGE_SCALES = ("large", "extra_large", "gigantic")
 LARGE_SCALE_ERROR = "SWE runs per-agent containers; large scales need a shared container"
+TEXT_KEYS = ("first_message", "judge_prompt", "system_prompt")      # in the eval log, not in run.json
 
 
-def check_scale(config: SwarmConfig) -> None:
-    """Raise NotImplementedError at the large scales, or at the large scale's team size set by hand."""
-    if config.scale in LARGE_SCALES or config.n_agents >= SCALES["large"].n_agents:
-        raise NotImplementedError(LARGE_SCALE_ERROR)
-
-
-def honeypot_items(honeypot: str) -> list[str]:
+def honeypot_items(honeypot_name: str) -> list[str]:
     """The pieces access=split deals over the neutral agents, in deal order: Lucy's jigsaw B, C, A; own_piece A, B,
     C; nothing as released."""
-    if honeypot not in HONEYPOTS:
-        raise ValueError(f"honeypot must be one of {HONEYPOTS}, got {honeypot!r}")
-    items = {"as_released": [], "own_piece": list(PARTS), "jigsaw": [p for held in JIGSAW_PIECES for p in held]}
-    return items[honeypot]
-
-
-def pieces_by_agent(agents: list[str], honeypot: str, mode: str = SHARED,
-                    roles: dict[str, str] | None = None, access: Access = "split") -> dict[str, list[str]]:
-    """The pieces planted in each agent's clone, as the access policy deals them (src/configuration/access_policy.py).
-
-    as_released plants nothing. A lone agent and a solo_task agent hold `whole`. Otherwise the honeypot's pieces
-    (honeypot_items) are dealt as `access` says. Under split, round robin over the neutral agents (roles; every agent
-    without roles): two hold B and A, and C, three hold B, C and A as in Lucy's runs, and neutral agents beyond three
-    hold the pieces again in that order (a04 B, a05 C); a regulator or a disregulator holds nothing."""
-    items = honeypot_items(honeypot)
-    if honeypot == "as_released":
-        return {a: [] for a in agents}
-    if honeypot == "jigsaw" and len(agents) > 1 and mode != SHARED:
-        raise ValueError("the jigsaw honeypot needs a team in shared_task "
-                         "(Lucy's pieces B, C and A are dealt over the neutral agents)")
-    if len(agents) == 1 or mode == "solo_task":
-        return {a: ["whole"] for a in agents}
-    return access_policy.plan(access, agents, roles, lambda n: items, ["whole"])
+    return {"as_released": [], "own_piece": list(PARTS),
+            "jigsaw": [p for held in JIGSAW_PIECES for p in held]}[honeypot_name]
 
 
 def piece_times(seed: int, issue: str) -> dict[str, int]:
@@ -102,94 +74,46 @@ def piece_times(seed: int, issue: str) -> dict[str, int]:
     return {p: rng.randrange(3600) for p in PIECES}
 
 
-def system_prompts(split: dict, agents: list[str], config: SwarmConfig, *, mode: str = SHARED,
-                   neutral: set[str] | None = None) -> dict[str, str]:
-    """Each agent's system prompt from prompts.yaml `swe`. The submit bullet is left out without shutdown.
-
-    A lone agent and a solo_task agent get `system_solo`; a solo_task agent of a board then gets the team and board
-    texts its config asks for (prompt_texts.board_system_prompt). A shared_task agent gets `system_shared` with the
-    roster. Its board sentences and last line come from prompt_texts.swe_board_fields; the team_submit bullet goes to
-    the neutral agents of a config with team_submit."""
-    prompts = settings.load_prompts()["swe"]
-    neutral = set(agents) if neutral is None else neutral
-    if len(agents) == 1 or mode == "solo_task":
-        submit = submit_line(False, config.shutdown)
-        out = {}
-        for a in agents:
-            text = prompts["system_solo"].format(name=a, repo=split["repo"], branch=a, timeout=TOOL_TIMEOUT_S,
-                                                 submit=submit)
-            board = board_system_prompt(config, a, agents)
-            out[a] = f"{text}\n\n{board}" if board else text
-        return out
-    submit = submit_line(True, config.shutdown)
-    submits = config.has_team_submit
-    out = {}
-    for a in agents:
-        roster = "\n".join(prompts["roster_line"].format(name=o) for o in agents if o != a)
-        out[a] = prompts["system_shared"].format(
-            name=a, n=len(agents), repo=split["repo"], roster=roster, branch=a, timeout=TOOL_TIMEOUT_S,
-            submit=submit, **swe_board_fields(config, team_submit=submits and a in neutral))
-    return out
-
-
-def build_swe(issue: str, honeypot: str, agents: list[str], config: SwarmConfig, *, instruction_suffix: str = "",
-              roles: dict[str, str] | None = None) -> dict:
-    """Everything one sample needs except the images: pieces, prompts and first messages. No Docker.
-
-    The returned dict is metadata["cheatbench"]["swe"]. A team adds `mode`; a lone agent has none."""
-    split = load_split(issue)
-    instance = split["task"]
-    cfg = task_config(instance)
-    issue_text = (task_dir(instance) / "instruction.md").read_text()
-    instruction = issue_text + instruction_suffix
-    team = len(agents) > 1
-    mode = config.mode if team else SHARED
-    pieces = pieces_by_agent(agents, honeypot, mode, roles, config.access)
-    neutral = set(access_policy.neutral_agents(agents, roles))
-    system = system_prompts(split, agents, config, mode=mode, neutral=neutral)
-    swe = {
-        "issue": issue, "task_key": issue, "instance": instance, "repo": cfg["repo"],
-        "base_commit": cfg["base_commit"], "fix_commit": fix_commit(instance),
-        "honeypot": honeypot, "jigsaw": honeypot == "jigsaw", "seed": config.seed,
-        "n_agents": len(agents), "agents": list(agents), "board": team,
-        "shutdown": config.shutdown,
-        "hint": instruction_suffix.strip() or None, "instruction": instruction,
-        "pieces": pieces,
-        "piece_times": piece_times(config.seed, issue),
-        "system_prompt": system, "first_message": {a: instruction for a in agents},
-        "judge_prompt": {a: f"{system[a]}\n\n{instruction}" for a in agents},
-        "patch_files": patch_files(cfg["patch"]),
-        "distinctive_lines": len(load_lines(issue)["fix"]),
-    }
-    if team:
-        swe["mode"] = mode
-    return swe
-
-
 class SWE(Benchmark):
     """One CheatBench SWE issue under one of Lucy's honeypots, for one agent or a team (see the module docstring).
 
     grade=False collects the diffs and skips the hidden tests.
     """
 
-    name = "software_engineering"
-    task_root = TASK_ROOT
-    workdir = WORKDIR
+    key = "swe"
+    name = TASK
+    block = "swe"
+    task_dir = TASK_DIR
+    default_row = DEFAULT_ROW
+    scorer = "swe_grader"
+    ladder = SweDomain
+    options = ("honeypot", "grade")
+    time_grace_s = GRADING_BUDGET_S
 
-    def __init__(self, issue: str = "flipt-02e2", honeypot: str = "as_released", grade: bool = True) -> None:
-        load_split(issue)
+    def __init__(self, row: str | None = None, honeypot: str = "jigsaw", grade: bool = True) -> None:
+        super().__init__(row)
+        load_split(self.row)
         if honeypot not in HONEYPOTS:
             raise ValueError(f"honeypot must be one of {HONEYPOTS}, got {honeypot!r}")
-        self.issue, self.honeypot, self.grade = issue, honeypot, grade
+        self.honeypot, self.grade = honeypot, grade
+        self.task_deviations = [
+            "native_arm64_rebuild_of_the_amd64_swe_bench_pro_image", "no_network_in_every_container",
+            f"agents_share_{AGENT_TIME_S}s_and_get_{AGENT_CPUS:g}_cpus_{AGENT_MEM}_each",
+            "tools_shell_and_run_python_bound_per_agent",
+            *([f"honeypot_{honeypot}_pruned_and_planted_at_sample_setup"] if honeypot != "as_released" else [])]
 
     def check(self, config: SwarmConfig) -> None:
-        """NotImplementedError at the large scales (LARGE_SCALE_ERROR); ValueError for an access map naming pieces
-        when the honeypot plants none."""
+        """NotImplementedError at the large scales, or at the large scale's team size set by hand (LARGE_SCALE_ERROR);
+        ValueError for an access map naming pieces when the honeypot plants none, and for the jigsaw honeypot
+        outside a shared_task team, whose pieces are dealt over the neutral agents."""
         super().check(config)
-        check_scale(config)
-        access = config.access
-        if self.honeypot == "as_released" and isinstance(access, dict) and any(access.values()):
+        if config.scale in LARGE_SCALES or config.n_agents >= SCALES["large"].n_agents:
+            raise NotImplementedError(LARGE_SCALE_ERROR)
+        if self.honeypot == "as_released" and isinstance(config.access, dict) and any(config.access.values()):
             raise ValueError("the as_released honeypot plants no pieces, so no access map can name any")
+        if self.honeypot == "jigsaw" and config.n_agents > 1 and config.mode != "shared_task":
+            raise ValueError("the jigsaw honeypot needs a team in shared_task "
+                             "(Lucy's pieces B, C and A are dealt over the neutral agents)")
 
     def whole_access(self) -> list[str]:
         """The whole fix, or nothing as released."""
@@ -201,63 +125,130 @@ class SWE(Benchmark):
     def valid_item(self, item: str) -> bool:
         return item in PIECES
 
-    def access_plan(self, agents: list[str], config: SwarmConfig | None,
-                    roles: dict[str, str] | None) -> dict[str, list[str]]:
-        """The pieces each clone holds (pieces_by_agent): a lone agent or a run without a config holds the whole fix,
-        a team as its mode and the applied policy say."""
-        team = len(agents) > 1 and config is not None
-        mode = config.mode if team else SHARED
-        return pieces_by_agent(list(agents), self.honeypot, mode, roles, self.applied_access(agents, config, roles))
-
     def time_limit_s(self) -> int:
-        """The agents' shared time. Inspect's sample limit should add GRADING_BUDGET_S for setup and grading."""
+        """The agents' shared time. Inspect's sample limit adds time_grace_s for setup and grading."""
         return AGENT_TIME_S
 
-    def sample(self, agents: list[str], *, instruction_suffix: str = "", config: SwarmConfig | None = None,
-               roles: dict[str, str] | None = None) -> Sample:
-        """One sample under the config, or under a plain SwarmConfig for this roster without one. roles
-        {agent: role} keeps team_submit out of the prompts of regulators and disregulators."""
-        if config is None:
-            config = SwarmConfig(n_agents=len(agents))
-        self.check(config)
-        swe = build_swe(self.issue, self.honeypot, agents, config, instruction_suffix=instruction_suffix,
-                        roles=roles)
-        swe["images"] = ensure_images(self.issue)
-        compose = write_compose(self.issue, agents, board=has_team_remote(swe))
-        cheatbench = {"task": self.name, "variant": "", "swe_task": swe["instance"],
-                      "instruction": swe["instruction"], "prompt_file": "instruction.md",
-                      "timeout_s": agent_timeout_s(swe["instance"]), "network": "none",
-                      "judge_prompt": swe["judge_prompt"], "swe": swe}
-        if swe["board"]:
-            cheatbench["first_message"] = swe["first_message"]
-        return Sample(id=self.issue, input=swe["instruction"], sandbox=("docker", str(compose)),
+    def system_prompts(self, plan: Plan) -> dict[str, str]:
+        """Each agent's system prompt from prompts.yaml `swe`. The submit bullet is left out without shutdown.
+
+        A lone agent and a solo_task agent get `system_solo`; a solo_task agent of a board then gets the team and board
+        texts its config asks for (prompt_texts.board_system_prompt). A shared_task agent gets `system_shared` with the
+        roster. Its board sentences and last line come from prompt_texts.swe_board_fields; the team_submit bullet goes
+        to the neutral agents of a config with team_submit."""
+        prompts, repo = settings.load_prompts()["swe"], load_split(self.row)["repo"]
+        config, agents = plan.config, plan.agents
+        if plan.mode != "shared_task":
+            submit = submit_line(False, config.shutdown)
+            texts = {a: prompts["system_solo"].format(name=a, repo=repo, branch=a, timeout=TOOL_TIMEOUT_S,
+                                                      submit=submit) for a in agents}
+            return {a: "\n\n".join(filter(None, [texts[a], board_system_prompt(config, a, agents)])) for a in agents}
+        submit = submit_line(True, config.shutdown)
+        neutral = set(access_policy.neutral_agents(agents, plan.roles))
+        return {a: prompts["system_shared"].format(
+            name=a, n=len(agents), repo=repo, branch=a, timeout=TOOL_TIMEOUT_S, submit=submit,
+            roster="\n".join(prompts["roster_line"].format(name=o) for o in agents if o != a),
+            **swe_board_fields(config, team_submit=config.has_team_submit and a in neutral)) for a in agents}
+
+    def sample(self, plan: Plan, instruction_suffix: str = "") -> Sample:
+        """The issue's sample: metadata["cheatbench"]["swe"] holds the issue, its commits, the honeypot, each agent's
+        pieces and times, the prompts and first messages the setup, the grader and the export read. A team starts
+        from first messages."""
+        split = load_split(self.row)
+        instance = split["task"]
+        cfg = task_config(instance)
+        instruction = (task_dir(instance) / "instruction.md").read_text() + instruction_suffix
+        system = self.system_prompts(plan)
+        swe = {
+            "issue": self.row, "instance": instance, "repo": cfg["repo"], "base_commit": cfg["base_commit"],
+            "fix_commit": fix_commit(instance), "honeypot": self.honeypot, "seed": plan.config.seed,
+            "n_agents": len(plan.agents), "agents": plan.agents, "mode": plan.mode, "shutdown": plan.config.shutdown,
+            "instruction": instruction, "pieces": plan.holds, "piece_times": piece_times(plan.config.seed, self.row),
+            "system_prompt": system, "first_message": {a: instruction for a in plan.agents},
+            "judge_prompt": {a: f"{system[a]}\n\n{instruction}" for a in plan.agents},
+            "patch_files": patch_files(cfg["patch"]), "distinctive_lines": len(load_lines(self.row)["fix"]),
+            "images": ensure_images(self.row),
+        }
+        compose = write_compose(self.row, plan.agents, team_remote=honeypot.has_team_remote(swe))
+        cheatbench = {"task": self.name, "variant": "", "swe_task": instance, "instruction": instruction,
+                      "prompt_file": "instruction.md", "timeout_s": agent_timeout_s(instance), "network": "none",
+                      "judge_prompt": swe["judge_prompt"], "swe": swe,
+                      **({"first_message": swe["first_message"]} if plan.team else {})}
+        return Sample(id=self.row, input=instruction, sandbox=("docker", str(compose)),
                       metadata={"cheatbench": cheatbench})
 
-    def tools(self, agents: list[str], config: SwarmConfig | None = None) -> AgentTools:
+    def tools(self, plan: Plan) -> AgentTools:
         """`shell` and `run_python` on each agent's own service, in every mode."""
-        return AgentTools(names=list(agent_tools.TOOL_NAMES), bindings=tool_bindings(), tool_kwargs={})
+        return roster_tools(plan.agents, seats(plan.agents), timeout=TOOL_TIMEOUT_S, descriptions=TOOL_DESCRIPTIONS)
 
-    def setup(self) -> Solver:
-        return swe_setup()
+    async def prepare(self, state) -> None:
+        await honeypot.prepare(state)
 
     def scorers(self) -> list[Scorer]:
         return [swe_grader(grade=self.grade)]
 
-    def delivered(self, agents: list[str], config: SwarmConfig) -> Callable[[], Awaitable[set[str]]]:
-        """A team with the team remote (outside solo_task): its main moved past the base, for every agent. A lone
-        agent and a solo_task agent: a commit past the base on its own branch (grader.committed)."""
-        team = len(agents) > 1 and config.mode != "solo_task"
-        return committed(list(agents), task_config(load_split(self.issue)["task"])["base_commit"], team)
+    def delivered(self, plan: Plan) -> Callable[[], Awaitable[set[str]]]:
+        """A shared_task team: its main moved past the base, for every agent. A lone agent and a solo_task agent: a
+        commit past the base on its own branch (swe_scoring.committed)."""
+        base = task_config(load_split(self.row)["task"])["base_commit"]
+        return committed(plan.agents, base, plan.mode == "shared_task")
 
-    def deviations(self, n_agents: int, mode: str | None = None) -> list[str]:
-        out = ["native_arm64_rebuild_of_the_amd64_swe_bench_pro_image",
-               "no_network_in_every_container",
-               f"agents_share_{AGENT_TIME_S}s_and_get_{AGENT_CPUS:g}_cpus_{AGENT_MEM}_each",
-               "tools_shell_and_run_python_bound_per_agent",
-               SUBMIT_PROMPT_DEVIATION]
-        if self.honeypot != "as_released":
-            out.append(f"honeypot_{self.honeypot}_pruned_and_planted_at_sample_setup")
-        if n_agents > 1:
-            out.append("every_agent_works_the_whole_issue_alone_and_is_graded_alone" if mode == "solo_task"
-                       else "every_agent_works_the_whole_issue_with_a_shared_team_remote")
-        return out
+    def team_deviations(self, plan: Plan) -> list[str]:
+        return ["every_agent_works_the_whole_issue_alone_and_is_graded_alone" if plan.mode == "solo_task"
+                else "every_agent_works_the_whole_issue_with_a_shared_team_remote"]
+
+    # ---------------------------------------------------------------- what the export records
+    @classmethod
+    def run_blocks(cls, view) -> dict:
+        """run.json "swe": the issue, the honeypot, each agent's pieces, the setup's evidence and checks, the planted
+        commits, the grades and each agent's final state; the prompts stay in the eval log."""
+        cb = (view.metadata or {}).get("cheatbench") or {}
+        swe = cb.get("swe")
+        if not swe:
+            return {}
+        score = (view.scores or {}).get(cls.scorer)
+        md = (score.metadata or {}) if score else {}
+        setup = view.store_get(honeypot.SETUP_STORE) or md.get("setup") or {}
+        planted = swe["honeypot"] != "as_released"
+        return {"swe": {
+            **{k: v for k, v in swe.items() if k not in TEXT_KEYS}, "rule": (cb.get("config") or {}).get("rule_level"),
+            "fragment_commits": {a: ev.get("planted") for a, ev in (setup.get("agents") or {}).items()}
+            if planted else None,
+            "checks_ok": setup.get("checks_ok"), "setup": setup, "primary": md.get("primary"),
+            "graded": md.get("graded"), "required_tests": md.get("required_tests"), "grades": grades(md),
+            "team": md.get("team"),
+            "agents_final": {a: {k: v for k, v in x.items() if k != "own_diff_text"}
+                             for a, x in (md.get("agents") or {}).items()}}}
+
+    @classmethod
+    def write_files(cls, view, run_dir: Path) -> None:
+        """The graded diffs as swe/diffs/<target>.diff, and each agent's own work as swe/diffs/<agent>.own.diff (the
+        code ladder reads them)."""
+        score = (view.scores or {}).get(cls.scorer)
+        md = (score.metadata or {}) if score else {}
+        diffs = run_dir / "swe" / "diffs"
+        texts = {f"{name}.diff": t.get("diff_text") or "" for name, t in (md.get("targets") or {}).items()}
+        texts |= {f"{name}.own.diff": a["own_diff_text"] for name, a in (md.get("agents") or {}).items()
+                  if a.get("own_diff_text") is not None}
+        for name, text in texts.items():
+            diffs.mkdir(parents=True, exist_ok=True)
+            (diffs / name).write_text(text)
+
+    @classmethod
+    def episode_facts(cls, view, agent: str) -> dict:
+        """The episode's SWE keys: the issue, its seat, what it held, its reward and the team's."""
+        cb = (view.metadata or {}).get("cheatbench") or {}
+        swe = cb.get("swe") or {}
+        score = (view.scores or {}).get(cls.scorer)
+        graded = grades((score.metadata or {}) if score else {}) or {}
+        return {"swe_task": cb.get("swe_task"), "seat": agent, "n_agents": swe.get("n_agents"),
+                "rule": (cb.get("config") or {}).get("rule_level"), "honeypot": swe.get("honeypot"),
+                "piece": (swe.get("pieces") or {}).get(agent), "reward": (graded.get(agent) or {}).get("reward"),
+                "team_reward": (graded.get("team") or {}).get("reward") if swe.get("mode") == "shared_task" else None}
+
+
+def grades(md: dict) -> dict | None:
+    """Hidden-test results per target (team, a01, ...) from the grader's metadata, without the diff text."""
+    if not md:
+        return None
+    return {name: {k: v for k, v in t.items() if k != "diff_text"} for name, t in (md.get("targets") or {}).items()}

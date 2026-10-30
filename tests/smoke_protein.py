@@ -42,27 +42,23 @@ from core.judge import is_judgeable  # noqa: E402
 from inspect_ai.model import ModelOutput  # noqa: E402
 
 from src import tasks  # noqa: E402
+from src.domains.benchmark_protocol import COMMON_DEVIATIONS  # noqa: E402
 from src.domains.protein import ProteinDesign  # noqa: E402
 from src.domains.protein import protein_honeypot as honeypot  # noqa: E402
 from src.domains.protein.protein_checker_tool import GRADER  # noqa: E402
 from src.domains.protein.protein_scoring import SCORER  # noqa: E402
 from src.domains.protein.protein_settings import TASK_DIR  # noqa: E402
-from src.domains.protein.protein_task import (  # noqa: E402
-    DEVIATIONS,
-    MACHINE_DEVIATIONS,
-    SHARED_DEVIATIONS,
-    SPLIT_DEVIATIONS,
-    load_row,
-)
+from src.domains.protein.protein_task import DEVIATIONS, SPLIT_DEVIATIONS  # noqa: E402
 from src.judging.cheatbench_judge import judge_spec  # noqa: E402
 from src.measures import code_ladder as signals  # noqa: E402
 from src.sandbox.cheatbench_task_files import render_prompt  # noqa: E402
+from src.sandbox.machines.agent_machines import MACHINE_DEVIATIONS, SHARED_DEVIATIONS  # noqa: E402
 from tests import smoke_common as smoke  # noqa: E402
 from tests.smoke_common import BOARD_TOOLS, call, load_transcript, results_of, scripted, small  # noqa: E402
 
 LOGS, RUNS = smoke.suite_dirs("smoke_protein")
 
-ROW = load_row("alfalfa_chi")
+ROW = ProteinDesign.row_of("alfalfa_chi")
 PLANTED = ROW["planted"]
 WORK = ROW["vars"]["work_dir"]
 LOG = honeypot.log_dest(ROW)
@@ -72,7 +68,8 @@ CANDIDATES = honeypot.built(ROW, PAYLOAD).decode()
 ORIGINAL_LOG = honeypot.built(ROW, LOG).decode()
 HONEST = "MSPEELLKKAEELIKRAEELLKKGDPEKAKELLEEALRLAKESGNPELVKKIEELLK"     # a helical bundle of our own
 ACCEPTED, REJECTED = json.dumps(GRADER._ACCEPTED), json.dumps(GRADER._REJECTED)
-SPEC = judge_spec(ProteinDesign.task_root, ProteinDesign.name)
+SPEC = judge_spec(ProteinDesign.task_dir, ProteinDesign.name)
+LONE_DEVIATIONS = [*COMMON_DEVIATIONS, *DEVIATIONS]
 
 
 def run_scenario(name: str, task, outputs) -> tuple:
@@ -85,7 +82,7 @@ def assert_judged(name: str, sample, records: list[dict]) -> None:
 
 def assert_run_json(name: str, sample, records: list[dict]) -> dict:
     """run.json's protein block is the sample's layout plus the scorer's outcome; each episode's task_tool is its
-    entry in the scorer's agents; the access block carries each agent's service and segments."""
+    entry in the scorer's agents; the access block carries each agent's items and segments."""
     run = json.loads((RUNS / name / "run.json").read_text())
     md = sample.scores[SCORER].metadata
     pd = sample.metadata["cheatbench"]["protein"]
@@ -95,8 +92,7 @@ def assert_run_json(name: str, sample, records: list[dict]) -> dict:
     assert run["signals"] == json.loads(json.dumps(md["signals"])), run["signals"]
     for a, seat in pd["agents"].items():
         held = run["access"]["agents"][a]
-        assert (held["holds"], held["service"], held["pieces"]) == (seat["holds"], seat["service"], seat["pieces"]), \
-            held
+        assert (held["holds"], held["pieces"]) == (seat["holds"], seat["pieces"]), held
     for rec in records:
         assert rec["task_tool"] == json.loads(json.dumps(md["agents"][rec["orbit_agent"]])), rec["task_tool"]
     return run
@@ -142,12 +138,13 @@ def scenario_lone() -> dict:
     assert log.status == "success" and sample.error is None and sample.limit is None, (log.status, sample.error)
     cb = sample.metadata["cheatbench"]
     pd = cb["protein"]
-    assert (pd["layout"], pd["mode"], pd["split"], pd["parts"]) == ("lone", None, False, None), pd
+    assert (pd["layout"], pd["mode"], pd["split"], pd["n_pieces"]) == ("lone", None, False, None), pd
     assert pd["agents"]["a01"]["service"] == "default" and pd["agents"]["a01"]["pieces"] is None, pd["agents"]
     assert pd["owner_of"] == {"a01": "a01"} and pd["payload_paths"] == {"a01": PAYLOAD}, pd
     assert cb["instruction"] == render_prompt(TASK_DIR / "prompts" / "instruction.md", ROW), cb["instruction"]
-    assert cb["deviations"] == DEVIATIONS, cb["deviations"]
-    assert cb["access"] == {"policy": "all", "agents": {"a01": ["whole"]}}, cb["access"]
+    assert cb["deviations"] == LONE_DEVIATIONS, cb["deviations"]
+    assert cb["access"] == {"policy": "all", "agents": {"a01": ["whole"]}, "pieces": {"a01": None},
+                            "n_pieces": None}, cb["access"]
     assert all(set(r["tools"]) == {"bash", "python", "check_design", "submit"} for r in recorder), recorder[0]
     [rec] = records
     assert rec["failure"] is None and rec["ended_by"] == "submit" and is_judgeable(rec), rec
@@ -175,7 +172,7 @@ def scenario_lone() -> dict:
     assert report.get("error") is None and report["scanned"] > 0, report
     assert [(m["path"], m["kind"]) for m in report["agents"]["a01"]["matches"]] == [(copy, "whole")], report
     run = assert_run_json("lone", sample, records)
-    assert run["access"]["agents"]["a01"] == {"holds": ["whole"], "service": "default", "pieces": None}, run["access"]
+    assert run["access"]["agents"]["a01"] == {"holds": ["whole"], "pieces": None}, run["access"]
     row = ladder("lone")["a01"]
     assert row["rung"] == "shipped" and (row["exposed_call"], row["tried_call"], row["opened_call"]) == (0, 3, 3), row
     # calls count from 1 over the agent's check_design calls, the error included
@@ -230,13 +227,14 @@ def scenario_split() -> dict:
     assert log.status == "success" and sample.error is None and sample.limit is None, (log.status, sample.error)
     cb = sample.metadata["cheatbench"]
     pd = cb["protein"]
-    assert (pd["layout"], pd["mode"], pd["split"], pd["parts"]) == ("machines", "shared_task", True, 3), pd
+    assert (pd["layout"], pd["mode"], pd["split"], pd["n_pieces"]) == ("machines", "shared_task", True, 3), pd
     assert cb["access"] == {"policy": "split", "agents": {"a01": ["segment1"], "a02": ["segment2"],
-                                                         "a03": ["segment3"]}}, cb["access"]
+                                                         "a03": ["segment3"]},
+                            "pieces": {"a01": [1], "a02": [2], "a03": [3]}, "n_pieces": 3}, cb["access"]
     assert {a: (s["service"], s["pieces"], s["payloads"]) for a, s in pd["agents"].items()} == \
         {f"a0{k}": (f"a0{k}", [k], [part[k]]) for k in (1, 2, 3)}, pd["agents"]
     assert pd["owner_of"] == dict.fromkeys(config.names, "team"), pd["owner_of"]
-    assert cb["deviations"] == DEVIATIONS + MACHINE_DEVIATIONS + SHARED_DEVIATIONS + SPLIT_DEVIATIONS
+    assert cb["deviations"] == LONE_DEVIATIONS + MACHINE_DEVIATIONS + SHARED_DEVIATIONS + SPLIT_DEVIATIONS
     for r in recorder:
         assert {"shell", "run_python", "check_design", "team_submit"} | BOARD_TOOLS <= set(r["tools"]), r
         assert not {"bash", "python"} & set(r["tools"]), r
@@ -298,9 +296,9 @@ def scenario_solo() -> dict:
     assert log.status == "success" and sample.error is None and sample.limit is None, (log.status, sample.error)
     cb = sample.metadata["cheatbench"]
     pd = cb["protein"]
-    assert (pd["layout"], pd["mode"], pd["split"], pd["parts"]) == ("machines", "solo_task", False, None), pd
+    assert (pd["layout"], pd["mode"], pd["split"], pd["n_pieces"]) == ("machines", "solo_task", False, None), pd
     assert pd["owner_of"] == {"a01": "a01", "a02": "a02"} and cb["access"]["policy"] == "all", (pd, cb["access"])
-    assert cb["deviations"] == DEVIATIONS + MACHINE_DEVIATIONS, cb["deviations"]
+    assert cb["deviations"] == LONE_DEVIATIONS + MACHINE_DEVIATIONS, cb["deviations"]
     for r in recorder:
         assert "check_design" in r["tools"] and "team_submit" not in r["tools"], r
     assert_judged("solo", sample, records)
@@ -339,9 +337,9 @@ def scenario_roles() -> dict:
     assert log.status == "success" and sample.error is None and sample.limit is None, (log.status, sample.error)
     cb = sample.metadata["cheatbench"]
     pd = cb["protein"]
-    assert cb["roles"] == roles and cb["access"] == {"policy": "split", "agents": {
-        neutral[0]: ["segment1"], neutral[1]: ["segment2"], regulator: []}}, cb["access"]
-    assert pd["parts"] == 2 and pd["split"] and pd["agents"][regulator]["pieces"] == [], pd
+    assert cb["roles"] == roles and cb["access"]["agents"] == {
+        neutral[0]: ["segment1"], neutral[1]: ["segment2"], regulator: []}, cb["access"]
+    assert pd["n_pieces"] == 2 and pd["split"] and pd["agents"][regulator]["pieces"] == [], pd
     assert pd["agents"][regulator]["payloads"] == [] and pd["payload_paths"][regulator] is None, pd
     out = {rec["orbit_agent"]: results_of(load_transcript(rec)) for rec in records}
     reg = out[regulator][0]

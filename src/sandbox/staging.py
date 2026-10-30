@@ -1,6 +1,9 @@
 """Files written on the host for a sandbox: atomic writes, compose files, and staging tarballs with CheatBench's
 ownership and times (core/stage.py).
 
+    compose = write_compose(path, {"default": compose_service(working_dir="/workspace", image="cbtask:python311")})
+    tar = stage_tar(files, out_path, mtimes=mtimes, dirs=parent_dirs(files, mtimes, stop=IMAGE_DIRS, default=now()))
+
 Every file is written through a private temporary name and renamed into place: several task builds may run at once,
 and a reader must never see a partial file.
 """
@@ -28,6 +31,21 @@ def write_atomic(path: Path, data: bytes) -> Path:
 def write_yaml(path: Path, document: dict) -> Path:
     """A YAML document in its own key order, written atomically."""
     return write_atomic(path, yaml.safe_dump(document, sort_keys=False).encode())
+
+
+def compose_service(*, working_dir: str, image: str | None = None, **extra) -> dict:
+    """One compose service without a network: an init process, an idle command and a one-second stop. `image` names a
+    local image; `extra` adds or replaces keys (a build, capabilities, limits)."""
+    service = {"init": True, "command": ["tail", "-f", "/dev/null"], "working_dir": working_dir,
+               "network_mode": "none", "stop_grace_period": "1s"}
+    if image:
+        service.update({"image": image, "x-local": True})
+    return {**service, **extra}
+
+
+def write_compose(path: Path, services: dict[str, dict], volumes: dict | None = None) -> Path:
+    """A compose file of these services and volumes, written atomically."""
+    return write_yaml(path, {"services": services, **({"volumes": volumes} if volumes else {})})
 
 
 def source_path(env_dir: Path, src: str) -> Path:
@@ -90,24 +108,31 @@ def write_tar(members: list[Member], out_path: Path, *, dirs: dict[str, int] | N
               uname: str = "root") -> Path:
     """A gzipped tarball of `dirs` ({path: mtime}, created 0755, shallowest first) and `members`, everything owned by
     uid/gid `uid` as `uname`, written atomically."""
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = out_path.with_name(f"{out_path.name}.tmp{os.getpid()}")
-    with tarfile.open(tmp, "w:gz") as tar:
+    def owned(info: tarfile.TarInfo, mode: int, mtime: int) -> tarfile.TarInfo:
+        info.mode, info.mtime = mode, mtime
+        info.uid = info.gid = uid
+        info.uname = info.gname = uname
+        return info
+
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
         for d in sorted(dirs or {}, key=lambda p: (p.count("/"), p)):
             info = tarfile.TarInfo(d.lstrip("/"))
             info.type = tarfile.DIRTYPE
-            info.mode = 0o755
-            info.uid = info.gid = uid
-            info.uname = info.gname = uname
-            info.mtime = dirs[d]
-            tar.addfile(info)
+            tar.addfile(owned(info, 0o755, dirs[d]))
         for m in members:
             info = tarfile.TarInfo(m.name.lstrip("/"))
             info.size = len(m.data)
-            info.mode = m.mode
-            info.uid = info.gid = uid
-            info.uname = info.gname = uname
-            info.mtime = m.mtime
-            tar.addfile(info, io.BytesIO(m.data))
-    os.replace(tmp, out_path)
-    return out_path
+            tar.addfile(owned(info, m.mode, m.mtime), io.BytesIO(m.data))
+    return write_atomic(out_path, buffer.getvalue())
+
+
+def stage_tar(files: dict[str, bytes], out_path: Path, *, mtimes: dict[str, int] | None = None,
+              modes: dict[str, int] | None = None, dirs: dict[str, int] | None = None, uid: int = 0,
+              uname: str = "root") -> Path:
+    """A staging tarball of `files` ({destination: bytes}): each file 0644 unless `modes` says otherwise, its mtime
+    now unless `mtimes` says otherwise, and the directories `dirs` (parent_dirs) created first."""
+    when = now()
+    members = [Member(dest, files[dest], (modes or {}).get(dest, 0o644), (mtimes or {}).get(dest, when))
+               for dest in sorted(files)]
+    return write_tar(members, out_path, dirs=dirs, uid=uid, uname=uname)

@@ -1,6 +1,6 @@
 """Stage one knowledge-work row inside the sandbox, as root, before any agent runs.
 
-    python3 kw_setup.py /opt/stage
+    python3 knowledge_setup.py /opt/stage
 
 The stage directory holds contract/ (README.md template, brief.md, inputs/), artifacts/<pipeline deliverable>,
 review/ (CheatBench's grader.py and review_runner.py) and layout.json, written by
@@ -10,7 +10,7 @@ src/domains/knowledge/knowledge_sandbox.py. Three layouts:
   shared  a team: one Linux user per agent, one contract directory /workspace owned by root and the group `team`
           (setgid, group-writable, umask 002 for login shells)
   solo    a team: one Linux user per agent, each with its own contract copy /workspace/<name> (mode 700) and its own
-          candidate id
+          candidate id; the sample's setup then makes the temporary directories private (agent_users.private_temp)
 
 On a team the pipeline artifact belongs to the group `pipeline`, whose members are the seats with `read`, and
 evaluation.json and the review logs to the group `review`, whose members are the seats with `review`. When the
@@ -78,7 +78,8 @@ def main(stage):
             run("useradd", "--uid", str(seat["uid"]), "--create-home", "--home-dir", seat["home"],
                 "--shell", "/bin/bash", "--groups", ",".join(groups), seat["user"])
             os.chmod(seat["home"], 0o700)
-        Path("/etc/profile.d/kw_umask.sh").write_text("umask 002\n")
+    if kind == "shared":
+        Path("/etc/profile.d/team_umask.sh").write_text("umask 002\n")
 
     external.mkdir(parents=True, exist_ok=True)
     os.chmod(external, 0o755)
@@ -90,7 +91,7 @@ def main(stage):
         os.chmod(workdir, 0o711)
         os.chmod("/home", 0o711)
     for contract, seat in contracts.items():
-        dest = Path(seat["root"])
+        dest = Path(seat["workdir"])
         dest.mkdir(parents=True, exist_ok=True)
         stage_contract(stage, dest, contract)
         if kind == "lone":
@@ -138,7 +139,7 @@ def main(stage):
     shutil.copy2(stage / "artifacts" / comparator.name, reference)
     meta = {"reference": str(reference), "comparator": str(comparator), "cache": str(cache),
             "log_group": layout["review_group"] if kind != "lone" else None,
-            "seats": {name: {"root": seat["root"], "contract": seat["contract"], "user": seat["user"],
+            "seats": {name: {"workdir": seat["workdir"], "contract": seat["contract"], "user": seat["user"],
                               "candidate": seat["candidate"]} for name, seat in seats.items()}}
     (review / "meta.json").write_text(json.dumps(meta, indent=1))
     chown_tree(review, 0, 0, 0o700, 0o600)

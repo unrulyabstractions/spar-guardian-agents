@@ -38,7 +38,7 @@ from inspect_ai.model import ModelOutput  # noqa: E402
 from src.configuration import settings  # noqa: E402
 from src.domains.swe import SWE  # noqa: E402
 from src.domains.swe import swe_settings as swe_cfg  # noqa: E402
-from src.domains.swe.swe_honeypot_setup import parse_scan, scan_script  # noqa: E402
+from src.domains.swe.swe_honeypot import SETUP_STORE, parse_scan, scan_script  # noqa: E402
 from src.domains.swe.swe_inputs import (  # noqa: E402
     load_lines,
     load_split,
@@ -64,7 +64,7 @@ from tests.smoke_common import (  # noqa: E402
 )
 
 LOGS, RUNS = smoke.suite_dirs("smoke_swe")
-SPEC = judge_spec(SWE.task_root, SWE.name)
+SPEC = judge_spec(SWE.task_dir, SWE.name)
 
 ISSUE = "flipt-02e2"
 FIX = "02e21636c58e86c51119b63e0fb5ca7b813b07b1"
@@ -233,7 +233,7 @@ def honeypot_run(name: str, honeypot: str, agents: list[str], **fields) -> tuple
 
 
 def check_honeypot(sample, recs: dict, expected: dict[str, list[str]]) -> dict:
-    setup = sample.store.get("swe_setup")
+    setup = sample.store.get(SETUP_STORE)
     split = load_split(ISSUE)
     assert setup["checks_ok"] is True, setup
     assert setup["team_repo"] == {**setup["team_repo"], "distinctive_found": 0, "holds_fix_commit": False}, setup
@@ -274,8 +274,8 @@ def scenario_honeypots() -> dict:
     neutral = [a for a in ("a01", "a02", "a03") if roles[a] == "worker"]
     regulator = next(a for a, r in roles.items() if r == "regulator")
     expected = {neutral[0]: ["B", "A"], neutral[1]: ["C"], regulator: []}
-    assert sample.metadata["cheatbench"]["access"] == {"policy": "split", "agents": expected}, \
-        sample.metadata["cheatbench"]["access"]
+    assert sample.metadata["cheatbench"]["access"] == {"policy": "split", "agents": expected, "pieces": None,
+                                                       "n_pieces": None}, sample.metadata["cheatbench"]["access"]
     out["jigsaw_roles"] = {"roles": roles, **check_honeypot(sample, recs, expected)}
     # the scan can fail: over the image as released it finds every distinctive line of the fix
     lines = [x["line"] for x in load_lines(ISSUE)["fix"]]

@@ -106,8 +106,7 @@ def test_each_script_runs_three_neutral_agents_on_the_default_preset(name, monke
     assert config.regulator_count == 0 and config.disregulator_count == 0 and config.access == "split"
     assert config.time_limit_s == 3600 and config.batch_judge is False and config.turn_budget == settings.TURN_BUDGET
     assert config.judge is None                                 # not judged as it finishes (USE_JUDGE_AS_DEFAULT)
-    benchmark.check(config)
-    held = list(benchmark.access_plan(config.names, config, None).values())
+    held = list(benchmark.plan(config).holds.values())
     assert all(len(items) == 1 for items in held) and len({i for items in held for i in items}) >= 2
     monkeypatch.setattr("sys.argv", [script.name, "--model", "gemini-3.8-flash", "--name", "gemini",
                                      "--set", "regulators=1"])
@@ -152,6 +151,6 @@ def test_each_cell_script_sets_its_agents_and_its_cheat_text(name, monkeypatch):
     assert (run_name, model, config.n_agents, config.judge) == \
         (script.stem, models.resolve(settings.DEFAULT_MODEL), n_agents, None)
     assert config.preset == "default" and config.access == "split" and config.turn_budget == settings.TURN_BUDGET
-    benchmark.check(config)
+    plan = benchmark.plan(config)
     if n_agents == 1:
-        assert benchmark.access_plan(config.names, config, None) == {"a01": benchmark.whole_access()}
+        assert plan.holds == {"a01": benchmark.whole_access()}

@@ -4,7 +4,7 @@ signals calls the code ladder; ui, plots, summary and models call their modules.
     python -m src run <name> [--benchmark openmath|swe|knowledge_work|subset_sum|prime_factorization|protein_design]
                              [--preset default]
                              [--scale small|medium|large|extra_large|gigantic] [--set key=value ...]
-                             [--row R] [--issue I] [--honeypot H] [--no-grade] [--model M] [--timeout S]
+                             [--row R] [--honeypot H] [--no-grade] [--model M] [--timeout S]
                              [--worker-model M] [--regulator-model M] [--disregulator-model M]
     python -m src judge <eval_log> <run_name> [--judge MODEL] [--sync] [--judge-errors]
     python -m src signals <run ...> [--table]
@@ -35,12 +35,9 @@ from pathlib import Path
 
 from src.configuration import settings
 from src.configuration.presets import add_config_arguments, build_config, config_pairs
-from src.domains.swe.swe_settings import HONEYPOTS
 from src.measures import episode_summary as summary
 from src.models import model_registry as models
 from src.ui import launch
-
-OPENMATH_ROW = "riemann"
 
 
 def env_timeout() -> int:
@@ -57,22 +54,13 @@ def run_dir(name: str) -> Path:
 def cmd_run(args: argparse.Namespace) -> int:
     # run.py imports Inspect, ORBIT and CheatBench, four seconds; only run and judge pay for them.
     from src import run
-    from src.domains.openmath import OpenMath
-    from src.domains.swe import SWE
+    from src.domains import DOMAINS
+    if args.benchmark not in DOMAINS:
+        raise ValueError(f"unknown benchmark {args.benchmark!r}; choose one of {', '.join(DOMAINS)}")
+    cls = DOMAINS[args.benchmark]
+    options = {"honeypot": args.honeypot, "grade": not args.no_grade}
+    benchmark = cls(args.row, **{k: v for k, v in options.items() if k in cls.options})
     config = build_config(args.preset, args.scale, config_pairs(args) + (["judge=none"] if args.no_judge else []))
-    if args.benchmark == "openmath":
-        benchmark = OpenMath(args.row or OPENMATH_ROW)
-    elif args.benchmark == "swe":
-        benchmark = SWE(args.issue, args.honeypot, not args.no_grade)
-    elif args.benchmark == "protein_design":
-        from src.domains.protein import ProteinDesign
-        benchmark = ProteinDesign(args.row) if args.row else ProteinDesign()
-    elif args.benchmark == "knowledge_work":
-        from src.domains.knowledge import KnowledgeWork
-        benchmark = KnowledgeWork(args.row) if args.row else KnowledgeWork()
-    else:
-        from src.domains.interview import PrimeFactorization, SubsetSum
-        benchmark = (SubsetSum if args.benchmark == "subset_sum" else PrimeFactorization)(args.row)
     return run.run(args.name, benchmark, config, args.model, args.timeout)
 
 
@@ -131,15 +119,16 @@ def cmd_summary(args: argparse.Namespace) -> int:
 def add_run_parser(subparsers) -> None:
     run = subparsers.add_parser("run", help="run a task, export it to runs/<name>/ and print the summary")
     run.add_argument("name", help="run name: logs/<name>/ and runs/<name>/")
-    run.add_argument("--benchmark", choices=("openmath", "swe", "knowledge_work", "subset_sum", "prime_factorization",
-                                             "protein_design"), default="openmath")
+    run.add_argument("--benchmark", default="openmath",
+                     help="a key of src/domains/__init__.py DOMAINS: openmath, swe, knowledge_work, subset_sum, "
+                          "prime_factorization or protein_design")
     add_config_arguments(run)
     run.add_argument("--row", default=None,
-                     help=f"openmath_agent row (default {OPENMATH_ROW}), a knowledge_work row, a subset_sum or "
-                          "prime_factorization question, or a protein_design target (the domain's default)")
-    run.add_argument("--issue", default="flipt-02e2", help="SWE issue (Lucy's splits)")
-    run.add_argument("--honeypot", choices=HONEYPOTS, default="jigsaw",
-                     help="SWE honeypot (default jigsaw: the fix's pieces are dealt over the neutral agents)")
+                     help="the benchmark's row: an openmath_agent row, a SWE issue (Lucy's splits), a knowledge_work "
+                          "row, an interview question or a protein_design target (the domain's default)")
+    run.add_argument("--honeypot", default="jigsaw",
+                     help="SWE honeypot: as_released, own_piece or jigsaw (the default: the fix's pieces are dealt "
+                          "over the neutral agents)")
     run.add_argument("--no-grade", action="store_true", help="SWE: collect the diffs and skip the hidden tests")
     run.add_argument("--no-judge", action="store_true",
                      help="run without the judge (--set judge=none); scripts/rejudge.py <name> judges it later")

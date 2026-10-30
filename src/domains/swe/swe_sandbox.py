@@ -1,8 +1,9 @@
-"""The sandbox: the amd64 and native images, the compose file and the tools bound to each agent's service.
+"""The SWE sandbox: the amd64 and native images, the compose file, each agent's seat and tools, and the commands the
+setup and the grader run in it.
 
 One compose project per sample, every service without network: `default` is the grader, and each agent has a service
-of its own name. SWE.check refuses the large scales, whose teams would need a hundred services or more.
-The native image is built from scripts/native.Dockerfile.
+of its own name. SWE.check refuses the large scales, whose teams would need a hundred services or more. The native
+image is built from sandbox/native.Dockerfile.
 """
 from __future__ import annotations
 
@@ -11,16 +12,15 @@ import json
 import shlex
 from pathlib import Path
 
-from orbit.tools import ToolFactory
-
 from src.domains.swe.swe_inputs import load_split, task_config, task_dir
 from src.domains.swe.swe_settings import AGENT_CPUS, AGENT_MEM, BUILD, TOOL_TIMEOUT_S, WORKDIR
-from src.sandbox import agent_tools, staging
+from src.sandbox import staging
+from src.sandbox.agent_tools import Seat
 from src.sandbox.docker_images import docker, image_id, image_labels
 
-# The recipe's text is hashed into the native image's label, so any change to it (the comment line included)
-# rebuilds the image, which takes about half an hour. The comment line keeps the module's old path for that reason.
-NATIVE_DOCKERFILE = (Path(__file__).parent / "scripts" / "native.Dockerfile").read_text()
+# The recipe's text is hashed into the native image's label, so any change to it (its comment line included) rebuilds
+# the image, which takes about half an hour. Leave its text as it is.
+NATIVE_DOCKERFILE = (Path(__file__).parent / "sandbox" / "native.Dockerfile").read_text()
 # The agents' tools name the machine and the clock; Inspect's own descriptions name neither.
 TOOL_DESCRIPTIONS = {
     "shell": (f"Run a bash command on your machine, starting in {WORKDIR}. Each call runs in a fresh shell and is "
@@ -30,8 +30,22 @@ TOOL_DESCRIPTIONS = {
 }
 
 
-def _label(tag: str, key: str) -> str | None:
-    return (image_labels(tag) or {}).get(key)
+class SetupFailed(RuntimeError):
+    """A setup check failed before any agent started: the sample is an infrastructure failure, to be re-run."""
+
+
+async def run(box, cmd: str, timeout: int = 600, input: str | bytes | None = None) -> tuple[int, str, str]:
+    """`bash -c cmd` in the box: (rc, stdout, stderr)."""
+    r = await box.exec(["bash", "-c", cmd], timeout=timeout, input=input)
+    return r.returncode, r.stdout or "", r.stderr or ""
+
+
+async def must(box, cmd: str, what: str, timeout: int = 600) -> str:
+    """run(), its stdout, or SetupFailed naming `what`."""
+    rc, out, err = await run(box, cmd, timeout)
+    if rc != 0:
+        raise SetupFailed(f"swe setup: {what} failed (rc={rc}): {err[-1500:] or out[-1500:]}")
+    return out
 
 
 def image_tags(issue: str) -> dict[str, str]:
@@ -76,8 +90,8 @@ def ensure_images(issue: str, *, log=print) -> dict[str, str]:
         docker("build", "--platform", "linux/amd64", "-t", tags["amd64"], str(task_dir(instance) / "environment"))
     source_id = image_id(tags["amd64"])
     text, recipe = native_recipe(tags, source_id)
-    if (_label(tags["native"], "cbswe.source_image_id") != source_id
-            or _label(tags["native"], "cbswe.recipe_sha256") != recipe):
+    labels = image_labels(tags["native"]) or {}
+    if labels.get("cbswe.source_image_id") != source_id or labels.get("cbswe.recipe_sha256") != recipe:
         folder = BUILD / issue / "native"
         folder.mkdir(parents=True, exist_ok=True)
         (folder / "Dockerfile").write_text(text)
@@ -86,25 +100,22 @@ def ensure_images(issue: str, *, log=print) -> dict[str, str]:
     return {**tags, "amd64_id": source_id, "native_id": image_id(tags["native"])}
 
 
-def _service(image: str, hostname: str, **extra) -> dict:
-    return {"image": image, "init": True, "command": ["sleep", "infinity"], "working_dir": WORKDIR,
-            "network_mode": "none", "stop_grace_period": "1s", "x-local": True, "hostname": hostname, **extra}
-
-
-def write_compose(issue: str, agents: list[str], *, board: bool) -> Path:
-    """The grader `default`, one service per agent, and the volume `team`. board True mounts it in the agents too: a
-    team with the team remote (shared_task)."""
+def write_compose(issue: str, agents: list[str], *, team_remote: bool) -> Path:
+    """The grader `default`, one service per agent, and the volume `team`; team_remote mounts it in the agents too
+    (a shared_task team)."""
     image = image_tags(issue)["native"]
-    services = {"default": _service(image, "grader", cpus=4.0, mem_limit="6g", volumes=["team:/team"])}
+    volumes = {"volumes": ["team:/team"]}
+    services = {"default": staging.compose_service(working_dir=WORKDIR, image=image, hostname="grader", cpus=4.0,
+                                                   mem_limit="6g", **volumes)}
     for a in agents:
-        services[a] = _service(image, a, cpus=AGENT_CPUS, mem_limit=AGENT_MEM, restart="unless-stopped",
-                               **({"volumes": ["team:/team"]} if board else {}))
-    return staging.write_yaml(BUILD / issue / f"compose-{len(agents)}{'-board' if board else ''}.yaml",
-                              {"services": services, "volumes": {"team": {}}})
+        services[a] = staging.compose_service(working_dir=WORKDIR, image=image, hostname=a, cpus=AGENT_CPUS,
+                                              mem_limit=AGENT_MEM, restart="unless-stopped",
+                                              **(volumes if team_remote else {}))
+    return staging.write_compose(BUILD / issue / f"compose-{len(agents)}{'-board' if team_remote else ''}.yaml",
+                                 services, {"team": {}})
 
 
-def tool_bindings() -> dict[str, ToolFactory]:
-    """`shell` and `run_python` on the agent's own service, as the service's own user (src/sandbox/agent_tools.py);
-    nothing is reaped, since each agent is alone on its machine."""
-    return agent_tools.tool_bindings(lambda agent: agent_tools.Seat(service=agent), timeout=TOOL_TIMEOUT_S,
-                                     descriptions=TOOL_DESCRIPTIONS)
+def seats(agents: list[str]) -> dict[str, Seat]:
+    """Each agent's own service, as the service's own user; nothing is reaped, since each agent is alone on its
+    machine."""
+    return {a: Seat(service=a) for a in agents}

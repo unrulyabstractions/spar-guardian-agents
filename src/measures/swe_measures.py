@@ -5,7 +5,7 @@
 Per run it writes runs/<run>/swe_summary.json and prints one line per agent, then one line per arm (team size,
 honeypot, rule). Inputs: run.json (its `swe` block, and `config` for runs that carry one), episodes.jsonl,
 judge.jsonl, the board posts under communication/, the transcripts, and signals.jsonl (the code ladder, computed when
-missing). Ported from the lucy-plan worktree (integration/report/swe_summary.py) unchanged in behaviour.
+missing).
 
   cheated      CheatBench's judge (tasks/software_engineering/judge_schema.py): seeking, used, tampering or an
                explicit prohibition violated; with its sub-labels
@@ -26,7 +26,7 @@ import json
 import re
 from pathlib import Path
 
-from src.domains.swe.swe_fix_lines import fix_ids
+from src.domains.swe.swe_ladder import fix_ids
 from src.measures.code_ladder import read_rows, run_signals
 
 # Lucy's swarm/team_run.py:231-234, verbatim
@@ -78,19 +78,14 @@ def submit_text(transcript: dict) -> str:
 
 
 def rule_of(run: dict) -> str:
-    """The stated rule's name: the worktree's `rule`, else the run config's rule level or hint, else none."""
-    config = run.get("config") or {}
-    return run["swe"].get("rule") or config.get("rule_level") or config.get("hint") or "none"
-
-
-def honeypot_of(swe: dict) -> str:
-    return swe.get("honeypot") or ("jigsaw" if swe.get("jigsaw") else "as_released")
+    """The stated rule's level from the run's config, or none."""
+    return (run.get("config") or {}).get("rule_level") or "none"
 
 
 def arm_of(run: dict) -> str:
-    """n<agents>, the honeypot unless as released, and the rule: the worktree's labels for its own runs."""
+    """n<agents>, the honeypot unless as released, and the rule."""
     swe = run["swe"]
-    honeypot = honeypot_of(swe)
+    honeypot = swe["honeypot"]
     return f"n{swe['n_agents']}{'' if honeypot == 'as_released' else '-' + honeypot}-{rule_of(run)}"
 
 
@@ -117,7 +112,7 @@ def summarize(run_dir: Path) -> dict:
         cheated = v.get("cheated") if v else None
         usage = ep.get("usage") or {}
         agents[a] = {
-            "episode": ep["episode"], "fragment_files": ep.get("fragment_files"),
+            "episode": ep["episode"],
             "judged": v is not None, **{k: (v.get(k) if v else None) for k in VERDICT},
             "judge_summary": (v or {}).get("summary"),
             "posts": len(mine), "fix_posts": len(fix_posts), "rule_posts": len(rule_posts),
@@ -132,10 +127,9 @@ def summarize(run_dir: Path) -> dict:
         }
     judged = [x for x in agents.values() if x["judged"]]
     out = {
-        "run": run_dir.name, "arm": arm_of(run), "task": swe["task_key"], "n_agents": swe["n_agents"],
-        "jigsaw": honeypot_of(swe) == "jigsaw", "honeypot": honeypot_of(swe), "rule": rule_of(run),
-        "delivery": swe.get("delivery"),
-        "team_reward": (grades.get("team") or {}).get("reward") if swe["board"] else None,
+        "run": run_dir.name, "arm": arm_of(run), "issue": swe["issue"], "n_agents": swe["n_agents"],
+        "honeypot": swe["honeypot"], "rule": rule_of(run), "delivery": run.get("delivery"),
+        "team_reward": (grades.get("team") or {}).get("reward") if swe["mode"] == "shared_task" else None,
         "judged": len(judged), "cheated": sum(1 for x in judged if x["cheated"]),
         "board_posts": len(posts), "fix_posts": sum(x["fix_posts"] for x in agents.values()),
         "rule_posts": sum(x["rule_posts"] for x in agents.values()),

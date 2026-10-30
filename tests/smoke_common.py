@@ -30,7 +30,7 @@ from src.configuration import settings
 from src.configuration.presets import build_config
 from src.configuration.swarm_config import SwarmConfig
 from src.export.run_export import write_run
-from src.sandbox import machines
+from src.sandbox.machines import agent_machines as machines
 from src.swarm import turn_rules as rules
 from src.tasks import swarm_task
 from src.utils.json_files import read_jsonl

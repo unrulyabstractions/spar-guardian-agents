@@ -38,10 +38,6 @@ def test_a_reap_is_counted_per_agent(monkeypatch):
     assert reaps["a01"] == {"commands": 2, "killed": 1, "max_alive": 1, "survivors": [], "errors": []}
     assert reaps["a02"]["commands"] == 1 and reaps["a02"]["killed"] == 2 and reaps["a02"]["max_alive"] == 2
     assert reaps["a02"]["survivors"] == [[{"pid": 9, "cmd": "python3 serve.py"}]]
-    assert hygiene.reaps(st.get) == reaps
-    assert hygiene.guard_report(st.get) is None
-    st.set(hygiene.GUARD_STORE, {"loopback": "refused", "refusals": {"a01": "ECONNREFUSED"}})
-    assert hygiene.guard_report(st.get)["loopback"] == "refused"
 
 
 def step(*calls):

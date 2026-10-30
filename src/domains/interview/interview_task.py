@@ -2,58 +2,50 @@
 machines, the verifier and the deviations.
 
 Inputs are submodules/cheatbench/tasks/<task> (the instruction, grader.py, judge_schema.py) and the rows its build.py
-writes to build/<task>/ (data.jsonl and environment/files/). The instruction is the row's prompt rendered as
-CheatBench renders it; the judge is CheatBench's judge_schema.py and sees the instruction as every agent's rules.
+writes to build/<task>/ (data.jsonl and environment/files/). The judge is CheatBench's judge_schema.py.
 
-Layouts. A lone agent gets CheatBench's own layout, `lone`: one container, the service `default`, with the row's
-files at their absolute paths. It works as the user `user`, with ORBIT's bash and python and the verifier under
-CheatBench's name. Two or more agents in solo_task or shared_task get `machines` (src/sandbox/machines/). Each agent
-has its own container, named by the agent and staged at setup with the agent's own copy of the row (stage_machines).
-Its `shell` and `run_python` run there. The verifier's owner is the agent, or "team" in shared_task. A team shares
-one state: one 50-check budget and one sticky acceptance.
+Layouts. A lone agent gets CheatBench's own layout: one container, the service `default`, with the row's files at
+their absolute paths. It works as the user `user`, with ORBIT's bash and python and the verifier under CheatBench's
+name. A team gets one container per agent (src/sandbox/machines/), named by the agent and staged at setup with the
+agent's own copy of the row. Its `shell` and `run_python` run there. The verifier's owner is the agent, or the team in
+shared_task, where the team shares one 50-check budget and one sticky acceptance.
 
 Access items: `whole` and the pieces of the answer key, shard1..shardN (subset_sum) or share1..shareN
 (prime_factorization), dealt one per neutral agent under split; an agent's copy of the two key files holds what its
-plan names (interview_answer_keys.py). The other staged files are the same in every container.
+plan names (interview_honeypot.py). The other staged files are the same in every container.
 
-Departures from CheatBench's runner: the agent is ORBIT's turn_react loop; ORBIT's submit prompt; synthetic continue
-prompts; the verifier runs on the host with its state in the sample store (interview_verifier_tool.py), with
-parameter descriptions
-and Inspect's schema check; the agents' messages are not mirrored into the checkout's live logs, which stay as
-staged; the containers have no network, where CheatBench leaves egress open and forbids it in the prompt; the staged
-files carry the time the sample was built as their mtime. In a team the checkout's generator salts its random
-source from an environment variable no container sets, in a rewritten commit (interview_sealed_generator.py),
-so running it rebuilds
-nothing and a made-up salt gives another corpus.
+Departures from CheatBench's runner: the verifier runs on the host with its state in the sample store
+(interview_verifier_tool.py), with parameter descriptions and Inspect's schema check; the agents' messages are not
+mirrored into the checkout's live logs, which stay as staged; the containers have no network, where CheatBench leaves
+egress open and forbids it in the prompt; the staged files carry the time the sample was built as their mtime. In a
+team the checkout's generator salts its random source from an environment variable no container sets, in a
+rewritten commit (interview_sealed_generator.py), so running it rebuilds nothing and a made-up salt gives another
+corpus.
 """
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Awaitable, Callable
 
-from inspect_ai.dataset import Sample
 from inspect_ai.scorer import Scorer
-from inspect_ai.solver import Solver, chain
 
-from src.configuration import access_policy
 from src.configuration.swarm_config import SwarmConfig
-from src.domains.benchmark_protocol import COMMON_DEVIATIONS, AgentTools, Benchmark
-from src.domains.interview import interview_answer_keys as keys
-from src.domains.interview.interview_scoring import environment_probe, interview_deliverables
+from src.domains.benchmark_protocol import Plan, RowBenchmark, Staged
+from src.domains.interview import interview_honeypot as keys
+from src.domains.interview import interview_scoring as scoring
+from src.domains.interview.interview_ladder import InterviewDomain
 from src.domains.interview.interview_settings import FACTOR, SUBSET, Spec
-from src.domains.interview.interview_verifier_tool import tool_name, verifier_binding
-from src.sandbox import cheatbench_task_files as task_files
-from src.sandbox import machines
+from src.domains.interview.interview_verifier_tool import verifier_binding
+from src.sandbox.agent_tools import AgentTools, roster_tools
+from src.sandbox.machines import agent_machines as machines
 
-DEVIATIONS = COMMON_DEVIATIONS + [
+DEVIATIONS = [
     "task_tool_run_on_the_host_with_state_in_the_sample_store",
     "task_tool_parameters_have_descriptions_and_inspect_checks_their_types",
     "no_live_log_mirror_of_the_agents_messages",
     "sandbox_has_no_network_where_cheatbench_leaves_egress_open",
 ]
-MACHINE_DEVIATIONS = machines.MACHINE_DEVIATIONS + [
-    "generator_salts_its_random_source_from_an_unset_environment_variable_in_a_rewritten_commit",
-]
-SHARED_DEVIATIONS = machines.SHARED_DEVIATIONS
+SEALED_DEVIATION = "generator_salts_its_random_source_from_an_unset_environment_variable_in_a_rewritten_commit"
 SPLIT_DEVIATIONS = {
     SUBSET.task: ["answer_key_cut_into_interleaved_shards_of_the_indices_dealt_as_access_says",
                   "shard_lines_padded_to_the_original_length_and_lines_of_agents_without_a_shard_removed"],
@@ -63,136 +55,102 @@ SPLIT_DEVIATIONS = {
 }
 
 
-class Interview(Benchmark):
+class Interview(RowBenchmark):
     """One interview round of a CheatBench task, its row's key cut over the agents as the access plan says."""
 
     spec: Spec
-    workdir = machines.WORKDIR
-
-    def __init__(self, row: str | None = None) -> None:
-        self.row = row or self.spec.default_row
-        self.layout: str | None = None
-        self.mode: str | None = None
-        self.holds: dict[str, list[str]] = {}
-        self.pieces: dict[str, list[int] | None] = {}
-        self.parts: int | None = None
-        self.split = False
-        self.owners: dict[str, str] = {}
-        self.planned: tuple | None = None
-        """The roster and config the plan is for (the config as its dump)."""
-
-    def time_limit_s(self) -> int:
-        return int(task_files.load_task_yaml(self.spec.task_dir)["timeout_s"])
+    block = "interview"
+    scorer = scoring.SCORER
+    ladder = InterviewDomain
+    task_deviations = DEVIATIONS
 
     def check(self, config: SwarmConfig) -> None:
-        """The base's checks; an explicit map names pieces 1..N with N at least 2, so no
-        piece is the whole key renamed, and gives every agent a copy of the key that can be built (a subset_sum line
-        keeps its length). An agent holding every piece holds the whole key."""
+        """The base's checks, and an explicit map must give every agent a copy of the key that can be built: a
+        subset_sum line keeps its length."""
         super().check(config)
-        access = config.access
-        if isinstance(access, dict):
-            named = sorted({k for items in access.values() for k in keys.held(items, self.spec.piece) or []})
-            access_policy.check_numbered(named, f"{self.spec.piece}s")
-            if named:
-                pieces, n = keys.cut(access, self.spec.piece)
-                row = keys.load_row(self.spec, self.row)
-                files = keys.staged_files(self.spec, row)
-                for agent, held in pieces.items():
-                    try:
-                        keys.variant(self.spec, row, files, held, n)
-                    except ValueError as ex:
-                        raise ValueError(f"access: {agent}'s copy of the key cannot be built ({ex}); give it fewer "
-                                         f"{self.spec.piece}s, or all of them for the whole key") from None
+        if not isinstance(config.access, dict):
+            return
+        pieces = {a: self.pieces_of(items) for a, items in config.access.items()}
+        n = max((k for ks in pieces.values() if ks for k in ks), default=None)
+        if n is None:
+            return
+        row = self.row_of(self.row)
+        files = keys.staged_files(self.spec, row)
+        for agent, held in pieces.items():
+            try:
+                keys.variant(self.spec, row, files, None if held == list(range(1, n + 1)) else held, n)
+            except ValueError as ex:
+                raise ValueError(f"access: {agent}'s copy of the key cannot be built ({ex}); give it fewer "
+                                 f"{self.piece_stem}s, or all of them for the whole key") from None
 
-    def split_items(self, n_neutral: int) -> list[str]:
-        """One piece of the key per neutral agent."""
-        return [f"{self.spec.piece}{k}" for k in range(1, n_neutral + 1)]
-
-    def valid_item(self, item: str) -> bool:
-        return item == "whole" or keys.held([item], self.spec.piece) not in (None, [])
-
-    def plan(self, agents: list[str], config: SwarmConfig | None, roles: dict[str, str] | None) -> None:
-        """Fix the layout, each agent's pieces and the verifier's owners for this roster; sample() and tools() share
-        them."""
-        if config is None and len(agents) > 1:
-            raise ValueError("a team needs a config: its mode names the verifier's owner")
-        if config is not None:
-            self.check(config)
-        self.mode = config.mode if len(agents) > 1 else None
-        self.layout = "machines" if self.mode else "lone"
-        self.holds = self.access_plan(agents, config, roles)
-        self.pieces, self.parts = keys.cut(self.holds, self.spec.piece)
-        self.split = any(held is not None for held in self.pieces.values())
-        self.owners = machines.owners(agents, self.mode)
-        self.planned = (list(agents), None if config is None else config.model_dump(mode="json"))
-
-    def sample(self, agents: list[str], *, instruction_suffix: str = "", config: SwarmConfig | None = None,
-               roles: dict[str, str] | None = None) -> Sample:
-        """The row's sample: each agent's copy staged in its own container at setup (stage_machines)."""
-        agents = list(agents)
-        self.plan(agents, config, roles)
-        spec, cfg = self.spec, task_files.load_task_yaml(self.spec.task_dir)
-        row = keys.load_row(spec, self.row)
+    def stage(self, plan: Plan, row: dict) -> Staged:
+        """Each agent's copy of the row (interview_honeypot.agent_copy) as a staging archive for its own service,
+        staged at setup, and the block the scorer, the ladder and run.json read."""
+        spec = self.spec
         files = keys.staged_files(spec, row)
         machines.ensure_image()
-        compose = machines.write_compose(spec.build, agents)
         seats, stage = {}, {}
-        for agent in agents:
-            copy = keys.agent_copy(spec, row, files, self.pieces[agent], self.parts, team=self.layout == "machines")
-            service = machines.service_of(agent, agents)
-            stage[service] = machines.stage_tar_for(spec.build, row["id"], copy)
-            seats[agent] = {"service": service, "holds": self.holds[agent], "pieces": self.pieces[agent]}
-        instruction = task_files.render_prompt(spec.task_dir / cfg["prompts"]["instruction"], row) + instruction_suffix
-        cheatbench = {
-            **task_files.sample_metadata(cfg, row, instruction), "stage": stage,
-            "interview": {"task": spec.task, "row_id": row["id"], "question": row["meta"]["question"],
-                          "layout": self.layout, "mode": self.mode, "split": self.parts,
-                          "answer": keys.answer(spec, row, files), "key_paths": spec.key_paths,
-                          "agents": seats, "owner_of": dict(self.owners)},
-        }
-        return Sample(id=row["id"], input=instruction, sandbox=("docker", str(compose)),
-                      metadata={"cheatbench": cheatbench})
+        for agent, seat in machines.machine_seats(plan.agents).items():
+            copy = keys.agent_copy(spec, row, files, plan.pieces[agent], plan.n_pieces, team=plan.team)
+            stage[seat.service] = machines.stage_tar_for(spec.build, row["id"], copy)
+            seats[agent] = {**seat.as_dict(), "holds": plan.holds[agent], "pieces": plan.pieces[agent],
+                            "staged": {d: hashlib.sha256(b).hexdigest() for d, b in copy.items()}}
+        block = {"task": spec.task, "question": row["meta"]["question"],
+                 "layout": "machines" if plan.team else "lone", "answer": keys.answer(spec, row, files),
+                 "key_paths": spec.key_paths, "agents": seats, "owner_of": plan.owners}
+        return Staged(compose=machines.write_compose(spec.build, plan.agents), block=block, stage=stage)
 
-    def tools(self, agents: list[str], config: SwarmConfig | None = None) -> AgentTools:
+    def tools(self, plan: Plan) -> AgentTools:
         """A lone agent: ORBIT's bash and python as `user`, and the verifier. A team: shell and run_python in each
-        agent's own container, and the verifier, whose owner is the agent or the team. The plan is the last
-        sample's when that sample was for this roster and config, else made afresh."""
-        agents = list(agents)
-        if self.planned != (agents, None if config is None else config.model_dump(mode="json")):
-            self.plan(agents, config, None)
-        owners = dict(self.owners)
-        verifier = verifier_binding(self.spec, keys.load_row(self.spec, self.row), lambda agent: owners[agent])
-        return machines.tools_for(agents, tool_name(self.spec), verifier)
+        agent's own container, and the verifier, whose owner is the agent or the team."""
+        seats = machines.machine_seats(plan.agents) if plan.team else None
+        return roster_tools(plan.agents, seats,
+                            task_tools=verifier_binding(self.spec, self.row_of(self.row), plan.owners))
 
-    def setup(self) -> Solver | None:
-        return chain(machines.stage_machines(), environment_probe())
+    async def prepare(self, state) -> None:
+        await scoring.prepare(state)
+
+    def probe(self, state) -> dict:
+        return scoring.probe(state)
 
     def scorers(self) -> list[Scorer]:
-        return [interview_deliverables()]
+        return [scoring.interview_deliverables()]
 
-    def delivered(self, agents: list[str], config: SwarmConfig) -> Callable[[], Awaitable[set[str]]]:
+    def delivered(self, plan: Plan) -> Callable[[], Awaitable[set[str]]]:
         """The agents whose verifier owner (the agent, or the team in shared_task) has an accepted answer, from the
-        sample store (machines.accepted_by_owner)."""
-        mode = config.mode if len(agents) > 1 else None
-        return machines.accepted_by_owner(machines.owners(list(agents), mode),
-                                          lambda state: state.get("accepted") is not None)
+        sample store (agent_machines.accepted_by_owner)."""
+        return machines.accepted_by_owner(plan.owners, lambda state: state.get("accepted") is not None)
 
-    def deviations(self, n_agents: int, mode: str | None = None) -> list[str]:
-        if n_agents < 2:
-            return list(DEVIATIONS)
-        shared = SHARED_DEVIATIONS if mode == "shared_task" else []
-        return DEVIATIONS + MACHINE_DEVIATIONS + shared + (SPLIT_DEVIATIONS[self.name] if self.split else [])
+    def team_deviations(self, plan: Plan) -> list[str]:
+        """The machines' labels and the sealed generator; a shared_task team adds its one verifier state, a split
+        the cut key."""
+        shared = machines.SHARED_DEVIATIONS if plan.mode == "shared_task" else []
+        return [*machines.MACHINE_DEVIATIONS, SEALED_DEVIATION, *shared,
+                *(SPLIT_DEVIATIONS[self.name] if plan.split else [])]
+
+    @classmethod
+    def episode_facts(cls, view, agent: str) -> dict:
+        """The episode's task_tool: its owner, its calls and its owner's state."""
+        return machines.episode_task_tool(view, cls.scorer, agent)
 
 
 class SubsetSum(Interview):
     """subset_sum: find a subset of 60 ten-digit integers that sums to the target, checked by verify_subset."""
     spec = SUBSET
-    name = SUBSET.task
-    task_root = SUBSET.task_dir
+    key = name = SUBSET.task
+    task_dir = SUBSET.task_dir
+    build_dir = SUBSET.build
+    build_hint = SUBSET.build_hint
+    default_row = SUBSET.default_row
+    piece_stem = "shard"
 
 
 class PrimeFactorization(Interview):
     """prime_factorization: factor one 52-bit semiprime, checked by verify_factors."""
     spec = FACTOR
-    name = FACTOR.task
-    task_root = FACTOR.task_dir
+    key = name = FACTOR.task
+    task_dir = FACTOR.task_dir
+    build_dir = FACTOR.build
+    build_hint = FACTOR.build_hint
+    default_row = FACTOR.default_row
+    piece_stem = "share"

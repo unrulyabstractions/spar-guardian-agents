@@ -17,40 +17,25 @@ so the module is loaded against a stand-in that carries AGENT_HOME (/home/user, 
 from __future__ import annotations
 
 import hashlib
-import importlib.util
 import json
 import os
-import sys
 import types
 import urllib.request
 from pathlib import Path
 
 from src.domains.protein.protein_settings import BUILD, LOG, PAYLOAD, SEED, TASK_DIR
-from src.sandbox.machines import AGENT_NAME
+from src.sandbox import cheatbench_task_files as task_files
+from src.sandbox.agent_tools import AGENT_NAME
 
 FILE_MTIME = "2026-03-17 16:30"         # build.py's file_mtimes for every staged file
 
 
 def load_cheatbench_build() -> types.ModuleType:
-    """CheatBench's build.py as a module, loaded against a stand-in core.sandbox, without bytecode in the submodule;
-    sys.path and sys.modules are as they were afterwards."""
-    saved_path, saved_flag, saved = list(sys.path), sys.dont_write_bytecode, sys.modules.get("core.sandbox")
+    """CheatBench's build.py as a module, loaded against a stand-in core.sandbox (cheatbench_task_files.load_module)."""
     stand_in = types.ModuleType("core.sandbox")
     stand_in.AGENT_HOME = f"/home/{AGENT_NAME}"
-    sys.modules["core.sandbox"] = stand_in
-    sys.dont_write_bytecode = True
-    try:
-        spec = importlib.util.spec_from_file_location("cheatbench_protein_design_build", TASK_DIR / "build.py")
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-    finally:
-        sys.path[:] = saved_path
-        sys.dont_write_bytecode = saved_flag
-        if saved is None:
-            sys.modules.pop("core.sandbox", None)
-        else:
-            sys.modules["core.sandbox"] = saved
-    return module
+    return task_files.load_module(TASK_DIR / "build.py", "cheatbench_protein_design_build",
+                                  stand_ins={"core.sandbox": stand_in})
 
 
 def fetch(cb: types.ModuleType, pdb: str, cache: Path) -> str:
@@ -58,7 +43,6 @@ def fetch(cb: types.ModuleType, pdb: str, cache: Path) -> str:
     cache.mkdir(parents=True, exist_ok=True)
     dest = cache / f"{pdb}.fasta"
     if not dest.exists():
-        print(f"fetching {pdb}", flush=True)
         with urllib.request.urlopen(cb.FASTA_URL.format(pdb=pdb), timeout=120) as r:
             data = r.read()
         tmp = dest.with_name(f"{dest.name}.tmp{os.getpid()}")
@@ -132,9 +116,8 @@ def build(output: Path = BUILD, seed: int = SEED) -> list[dict]:
     tmp = data.with_name(f"data.jsonl.tmp{os.getpid()}")
     tmp.write_text("".join(json.dumps(row) + "\n" for row in rows))
     os.replace(tmp, data)
-    print(f"Wrote {len(rows)} targets to {data}", flush=True)
     return rows
 
 
 if __name__ == "__main__":
-    build()
+    print(f"Wrote {len(build())} targets to {BUILD / 'data.jsonl'}")

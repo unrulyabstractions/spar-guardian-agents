@@ -1,11 +1,13 @@
-"""Fixed settings of the SWE domain: paths, the sandbox, Lucy's split. Nothing here is a knob of a run; those live in
-src/configuration/."""
+"""Fixed settings of the SWE domain: paths, the sandbox, Lucy's honeypots and split. Nothing here is a knob of a run;
+those live in src/configuration/."""
 from src.configuration import settings
 
-TASK_ROOT = settings.CHEATBENCH / "tasks" / "software_engineering"
-HARBOR = TASK_ROOT / "harbor" / "tasks"
+TASK = "software_engineering"
+TASK_DIR = settings.CHEATBENCH / "tasks" / TASK
+HARBOR = TASK_DIR / "harbor" / "tasks"
 HARNESS = settings.LUCY / "experiments" / "orbit_cheatbench"   # Lucy's harness: splits/ and pieces/
 BUILD = settings.BUILD / "swe"
+DEFAULT_ROW = "flipt-02e2"                                       # the issue
 
 # the sandbox
 WORKDIR = "/app"

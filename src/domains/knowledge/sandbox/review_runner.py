@@ -63,7 +63,7 @@ def to_send_parts(seat, path):
     parts = [p for p in path.parts[1:] if p not in ("", ".")]
     if ".." in parts:
         raise Refused(str(path))
-    for base in (seat["root"], seat.get("contract"), os.path.realpath(seat["root"])):
+    for base in (seat["workdir"], seat.get("contract"), os.path.realpath(seat["workdir"])):
         if not base:
             continue
         head = [p for p in Path(base).parts[1:] if p not in ("", ".")]
@@ -78,7 +78,7 @@ def read_as_agent(seat, rest):
     """The file's bytes (at most grader.MAX_BYTES + 1), read by a child running as the seat's own Linux user, which
     opens each component with O_NOFOLLOW from the contract directory and accepts only a regular file. A missing file
     raises FileNotFoundError, as CheatBench's read does; anything else it cannot open is Refused."""
-    top = os.path.realpath(seat["root"])
+    top = os.path.realpath(seat["workdir"])
     rd, wr = os.pipe()
     pid = os.fork()
     if pid == 0:
@@ -123,7 +123,7 @@ def read_as_agent(seat, rest):
 
 def review(args):
     seat = META["seats"][args["agent"]]
-    root = Path(seat["root"])
+    root = Path(seat["workdir"])
     reference_path = Path(META["comparator"])
     reference_bytes, pages_ref = reference()
     path = None

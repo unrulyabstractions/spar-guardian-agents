@@ -1,10 +1,11 @@
 """The blocks of run.json and the per-episode facts the export reads from one sample.
 
 Each function reads a SampleView (src/export/eval_sample_view.py) or the episode records and returns one block:
-what the team left behind, the swarm's composition, access, knowledge work, the machines domains, the honeypot
-signals, the sandbox, validity, the ledger, stop-after-delivery, SWE, the turn rules, the probes and the board
-engagement. A block is None when the run did not record it. The export (src/export/run_export.py) assembles
-them into run.json and episodes.jsonl.
+the swarm's composition, access, the honeypot signals, the sandbox, validity, the ledger, stop-after-delivery, the
+turn rules, the probes and the board engagement. A domain's own blocks and episode facts come from its Benchmark
+(src/domains/benchmark_protocol.py run_blocks, episode_facts, access_facts, write_files), found by the sample's
+CheatBench task in the registry. A block is None when the run did not record it. The export
+(src/export/run_export.py) assembles them into run.json and episodes.jsonl.
 
     block = delivery_block(view)
     facts = newer_episode_facts(view, "a01")
@@ -12,22 +13,15 @@ them into run.json and episodes.jsonl.
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 
-from src.domains.openmath.openmath_settings import TEAM_IDENTITY
+from src.domains import BY_TASK
+from src.domains.benchmark_protocol import Benchmark
 from src.export.atif_transcripts import TURN_RULES_TAG
 from src.export.eval_sample_view import SampleView, topology
 from src.models import model_registry as models
 from src.sandbox import sandbox_hygiene as hygiene
 
-DELIVERABLES_SCORER = "deliverables_scorer"
-KNOWLEDGE_SCORER = "knowledge_deliverables"   # src/domains/knowledge/knowledge_scoring.py
-INTERVIEW_SCORER = "interview_deliverables"   # src/domains/interview/interview_scoring.py
-PROTEIN_SCORER = "protein_deliverables"       # src/domains/protein/protein_scoring.py
-# The machines domains (one container per agent): run.json key and scorer name.
-MACHINE_BLOCKS = {"interview": INTERVIEW_SCORER, "protein": PROTEIN_SCORER}
-SWE_GRADER = "swe_grader"
 PROBES_SCORER = "end_of_episode_probes"
 # the StoreModel of src/swarm/turn_rules/turn_state.py; Inspect stores its fields as "TurnState:<field>"
 TURN_STATE = "TurnState"
@@ -38,16 +32,12 @@ TURN_STATE_BOARD_FIELDS = ("free_steps", "checks", "reads", "posts", "discovery_
                            "free_caps", "reads_per_turn", "posts_per_turn", "turn_budget",
                            "oversight", "oversight_targets", "turn_reads", "turn_posts", "reads_refused",
                            "posts_refused", "history_marks")
-# The knowledge-work keys run.json keeps; the row, the evaluation file and the image ids stay in the eval log.
-KNOWLEDGE_SAMPLE_KEYS = ("layout", "mode", "split", "row_id", "meta", "comparator", "seats")
-KNOWLEDGE_SCORE_KEYS = ("contracts", "grader_state", "last_verdict", "access")
 TEAM_SUBMISSION = "TeamSubmission"        # its StoreModel: agent, round, answer, time, refused
 TEAM_SUBMISSION_FIELDS = ("agent", "round", "answer", "time", "refused")
 # src/swarm/turn_rules/turn_state.py's stop-after-delivery record, kept only under the rule
 DELIVERED_STORE = "Delivered"
 DELIVERED_FIELDS = ("after", "team", "seen", "halt_round", "cut", "checks", "errors")
 DELIVERED = "delivered"                   # its TurnState.ended reason and an episode's ended_by
-SWE_TEXT_KEYS = ("first_message", "judge_prompt", "system_prompt")
 
 
 def cheatbench(view: SampleView) -> dict:
@@ -59,74 +49,6 @@ def score_metadata(view: SampleView, name: str) -> dict | None:
     """The metadata of the sample's score `name`, or None when that scorer did not score the sample."""
     sc = (view.scores or {}).get(name)
     return None if sc is None else (sc.metadata or {})
-
-
-# --------------------------------------------------------------------------
-# what the team left behind (openmath)
-# --------------------------------------------------------------------------
-def _registry_entries(md: dict) -> list[dict]:
-    try:
-        registry = json.loads(md.get("agent_evals_main") or "{}")
-        return [a for a in (registry.get("agents") or []) if isinstance(a, dict)]
-    except (ValueError, AttributeError):
-        return []
-
-
-def deliverables_block(view: SampleView) -> dict | None:
-    """What the team left behind, from the deliverables scorer's evidence.
-
-    The score value only says whether the archive sat in the working tree at the end; a
-    team that registered and then checked out main scores 0, and an uncommitted archive
-    scores 1. The registry on main and the git summary say whether the team registered.
-    """
-    sc = (view.scores or {}).get(DELIVERABLES_SCORER)
-    if sc is None:
-        return None
-    md = sc.metadata or {}
-    per_agent = md.get("agents")
-    if isinstance(per_agent, dict):
-        # openmath solo_task or split access: one copy of the row per agent. The top-level keys summarise the copies.
-        blocks = {name: _deliverables_facts(found or {}, bool((found or {}).get("archive")))
-                  for name, found in per_agent.items()}
-        remote = md.get("remote")
-        if isinstance(remote, dict):
-            # split access: the team registers by pushing main to the bare team remote, which the scorer read
-            facts = _deliverables_facts(remote, bool(remote.get("archive_on_main")))
-            facts["archive_on_remote_main"] = facts["archive_in_workspace"]
-            facts["archive_in_workspace"] = sc.value == 1.0
-            return {**facts, "remote_branches": remote.get("branches"), "agents": blocks,
-                    "explanation": sc.explanation}
-        return {"archive_in_workspace": sc.value == 1.0,
-                "registered_on_main": any(b["registered_on_main"] for b in blocks.values()),
-                "registered_entry": None, "registered_message_copied_from": None, "main_registry_agents": [],
-                "checkout": None, "commits": [], "agents": blocks, "explanation": sc.explanation}
-    return {**_deliverables_facts(md, sc.value == 1.0), "explanation": sc.explanation}
-
-
-def _deliverables_facts(md: dict, archive_present: bool) -> dict:
-    """The registry on main, the checkout and the commits of one workspace's deliverables evidence."""
-    entries = _registry_entries(md)
-    agents = [a.get("agent") for a in entries]
-    team = next((a for a in entries if a.get("agent") == TEAM_IDENTITY), None)
-    # A registration that carries another agent's message verbatim registered that agent's work.
-    copied_from = None
-    if team and (team.get("message") or "").strip():
-        for other in entries:
-            if other is not team and (other.get("message") or "").strip() == team["message"].strip():
-                copied_from = other.get("agent")
-    registered_entry = None
-    if team:
-        registered_entry = {"archive": team.get("archive"), "commits": team.get("commits"),
-                            "message_head": (team.get("message") or "")[:200]}
-    lines = (md.get("git") or "").splitlines()
-    status = next((line for line in lines if line.startswith("## ")), "")
-    return {"archive_in_workspace": archive_present,
-            "registered_on_main": TEAM_IDENTITY in agents,
-            "registered_entry": registered_entry,
-            "registered_message_copied_from": copied_from,
-            "main_registry_agents": agents,
-            "checkout": status[3:].split("...")[0] if status else None,
-            "commits": [line for line in lines if re.match(r"^[0-9a-f]{7,} ", line)]}
 
 
 def swarm_facts(cb: dict) -> dict | None:
@@ -147,89 +69,56 @@ def swarm_block(view: SampleView) -> dict | None:
     return swarm_facts(cheatbench(view))
 
 
+def domain(view: SampleView) -> type[Benchmark] | None:
+    """The sample's domain (src/domains/__init__.py BY_TASK), or None for a task outside the registry."""
+    return BY_TASK.get(cheatbench(view).get("task"))
+
+
+def domain_score(view: SampleView) -> dict | None:
+    """The metadata of the domain's deliverables scorer (Benchmark.scorer), or None."""
+    bench = domain(view)
+    return score_metadata(view, bench.scorer) if bench else None
+
+
 # --------------------------------------------------------------------------
-# access, the turn budget and knowledge work (runs that record them)
+# access, the honeypot probe and the sandbox
 # --------------------------------------------------------------------------
 def access_block(view: SampleView) -> dict | None:
-    """The access policy and what each agent held, when the run recorded them: "policy" (split, all or explicit)
-    and per agent "holds" (its items) from metadata["cheatbench"]["access"]; on openmath in the split layout also the
-    team remote, the honeypot branches each copy kept, the archive and the slices each copy held (None: the whole
-    archive); on knowledge work the review tool and the read permission on the pipeline artifact. None for a run
-    that recorded none of it."""
-    cb = cheatbench(view)
-    recorded = cb.get("access") or {}
-    block = {"policy": recorded.get("policy"), "agents": {a: {"holds": items}
-                                                           for a, items in (recorded.get("agents") or {}).items()}}
-    om = cb.get("openmath") or {}
-    if om.get("layout") == "split":
-        block.update({"remote": om.get("remote"), "honeypot_branches": om.get("honeypot_branches"),
-                      "archive": om.get("archive")})
-        for a, seat in (om.get("agents") or {}).items():
-            block["agents"].setdefault(a, {}).update({"branches": seat.get("branches"), "slices": seat.get("slices")})
-    kw = cb.get("knowledge") or {}
-    for a, seat in (kw.get("seats") or {}).items():
-        block["agents"].setdefault(a, {}).update({"review": seat.get("review"), "read": seat.get("read")})
-    for key in MACHINE_BLOCKS:
-        for a, seat in ((cb.get(key) or {}).get("agents") or {}).items():
-            block["agents"].setdefault(a, {}).update({"service": seat.get("service"), "pieces": seat.get("pieces")})
-    return block if block["agents"] else None
-
-
-def knowledge_block(view: SampleView) -> dict | None:
-    """The knowledge-work sample (layout, mode, seats, the pipeline artifact) and what its reviews found: each
-    contract's to_send/ files, the grader state per agent, the last verdict, the number of review calls and each
-    call's agent, deliverable, verdict and error (review_calls). None for another task."""
-    kw = cheatbench(view).get("knowledge")
-    if not kw:
+    """The access policy and what each agent held, when the run recorded them: "policy" (split, all or explicit),
+    "n_pieces" and per agent "holds" (its items) and "pieces" (its numbered pieces, None for the whole) from
+    metadata["cheatbench"]["access"], with the domain's own facts (Benchmark.access_facts: on openmath's split layout
+    the team remote, the honeypot branches and the archive). None for a run that recorded none of it."""
+    recorded = cheatbench(view).get("access") or {}
+    if not recorded.get("agents"):
         return None
-    md = score_metadata(view, KNOWLEDGE_SCORER) or {}
-    sc = (view.scores or {}).get(KNOWLEDGE_SCORER)
-    calls = md.get("reviews") or []
-    return {**{k: kw.get(k) for k in KNOWLEDGE_SAMPLE_KEYS}, **{k: md.get(k) for k in KNOWLEDGE_SCORE_KEYS},
-            "share_delivered": None if sc is None else sc.value, "reviews": len(calls),
-            "review_calls": [{k: c.get(k) for k in ("agent", "deliverable", "verdict", "error_type")}
-                             for c in calls]}
-
-
-def machine_block(view: SampleView, key: str) -> dict | None:
-    """run.json[key] for a machines domain (interview, protein): the sample's layout facts
-    (metadata["cheatbench"][key]) merged with the scorer's outcome facts (its metadata[key]: the tool's states and
-    calls, what the agents left behind) and the score as "value". None for another task."""
-    facts = cheatbench(view).get(key)
-    if not facts:
-        return None
-    scorer = MACHINE_BLOCKS[key]
-    sc = (view.scores or {}).get(scorer)
-    return {**facts, **((score_metadata(view, scorer) or {}).get(key) or {}),
-            "value": None if sc is None else sc.value}
+    pieces = recorded.get("pieces") or {}
+    run_facts, agent_facts = domain(view).access_facts(view) if domain(view) else ({}, {})
+    return {"policy": recorded.get("policy"), "n_pieces": recorded.get("n_pieces"), **run_facts,
+            "agents": {a: {"holds": items, **({"pieces": pieces.get(a)} if pieces else {}), **agent_facts.get(a, {})}
+                       for a, items in recorded["agents"].items()}}
 
 
 def signals_block(view: SampleView) -> dict | None:
-    """The honeypot probe's report (src/measures/honeypot_fingerprints.py by_owner), from whichever scorer ran it."""
-    for name in (DELIVERABLES_SCORER, KNOWLEDGE_SCORER, *MACHINE_BLOCKS.values()):
-        found = (score_metadata(view, name) or {}).get("signals")
-        if found is not None:
-            return found
-    return None
+    """The honeypot probe's report (src/measures/honeypot_fingerprints.py by_owner), from the domain's scorer."""
+    return (domain_score(view) or {}).get("signals")
 
 
 def sandbox_block(view: SampleView) -> dict | None:
-    """What the sandbox held at the end of the run (src/sandbox/sandbox_hygiene.py STATE, from the domain's
-    deliverables
-    scorer; per container on the machines domains), the reaps after the agents' commands (hygiene.REAP_STORE:
-    {agent: {commands, killed, max_alive, survivors, errors}}) and the loopback guard's report (hygiene.GUARD_STORE).
-    None for a run that recorded none of them."""
-    end = None
-    for name in (DELIVERABLES_SCORER, KNOWLEDGE_SCORER, *MACHINE_BLOCKS.values()):
-        found = (score_metadata(view, name) or {}).get("sandbox")
-        if found is not None:
-            end = found
-            break
-    reaps = hygiene.reaps(view.store_get)
-    guard = hygiene.guard_report(view.store_get)
+    """What the sandbox held at the end of the run (src/sandbox/sandbox_hygiene.py STATE, from the domain's scorer;
+    per container on the machines domains), the reaps after the agents' commands (hygiene.REAP_STORE: {agent:
+    {commands, killed, max_alive, survivors, errors}}) and the loopback guard's report (hygiene.GUARD_STORE). None for
+    a run that recorded none of them."""
+    end = (domain_score(view) or {}).get("sandbox")
+    reaps, guard = view.store_get(hygiene.REAP_STORE), view.store_get(hygiene.GUARD_STORE)
     if end is None and reaps is None and guard is None:
         return None
     return {"end": end, "reaps": reaps, "loopback": guard}
+
+
+def domain_files(view: SampleView, run_dir: Path) -> None:
+    """The domain's own files of the sample in the run directory (Benchmark.write_files)."""
+    if domain(view):
+        domain(view).write_files(view, run_dir)
 
 
 IDENTICAL_RUN_FLAG = 8      # this many identical tool calls in a row flag a stuck agent
@@ -361,99 +250,23 @@ def ended_by_delivery(view: SampleView, agent: str) -> bool:
 
 
 def newer_run_facts(view: SampleView) -> dict:
-    """run.json keys that only newer runs carry, each present only when the run recorded it."""
+    """run.json keys that only newer runs carry, each present only when the run recorded it: the turn budget, access,
+    the domain's blocks (Benchmark.run_blocks), the signals, delivery, the sandbox and the code state."""
     cb = cheatbench(view)
-    facts = {"turn_budget": cb.get("turn_budget"), "access": access_block(view), "knowledge": knowledge_block(view),
-             **{key: machine_block(view, key) for key in MACHINE_BLOCKS}, "signals": signals_block(view),
+    facts = {"turn_budget": cb.get("turn_budget"), "access": access_block(view),
+             **(domain(view).run_blocks(view) if domain(view) else {}), "signals": signals_block(view),
              "delivery": delivery_block(view), "sandbox": sandbox_block(view), "code": cb.get("code")}
     return {k: v for k, v in facts.items() if v is not None}
 
 
 def newer_episode_facts(view: SampleView, agent: str) -> dict:
-    """An episode's access (what it held), review (its knowledge-work grader state), task_tool (its owner's
-    state and its calls of the task's tool on a machines domain) and delivery (the round and working step at which
-    its deliverable was first seen), when the run recorded them."""
+    """An episode's access (what it held), the domain's facts (Benchmark.episode_facts: its review on knowledge work,
+    its task_tool on a machines domain, its SWE keys) and delivery (the round and working step at which its
+    deliverable was first seen), when the run recorded them."""
     facts = {"access": ((access_block(view) or {}).get("agents") or {}).get(agent),
-             "review": ((score_metadata(view, KNOWLEDGE_SCORER) or {}).get("grader_state") or {}).get(agent),
-             "task_tool": next((md["agents"][agent] for md in map(lambda s: score_metadata(view, s),
-                                                                   MACHINE_BLOCKS.values())
-                                if md and agent in (md.get("agents") or {})), None),
+             **(domain(view).episode_facts(view, agent) if domain(view) else {}),
              "delivery": ((delivery_block(view) or {}).get("seen") or {}).get(agent)}
     return {k: v for k, v in facts.items() if v is not None}
-
-
-# --------------------------------------------------------------------------
-# SWE (CheatBench software_engineering under Lucy's plan)
-# --------------------------------------------------------------------------
-def swe_grades(view: SampleView) -> dict | None:
-    """Hidden-test results per target (team, a01, ...) from the SWE grader, without the diff text."""
-    md = score_metadata(view, SWE_GRADER)
-    if md is None:
-        return None
-    return {name: {k: v for k, v in t.items() if k != "diff_text"} for name, t in (md.get("targets") or {}).items()}
-
-
-def _config_rule(cb: dict) -> str | None:
-    """The rule level of the run's config."""
-    return (cb.get("config") or {}).get("rule_level")
-
-
-def _swe_jigsaw(swe: dict) -> bool:
-    return swe.get("honeypot") == "jigsaw"
-
-
-def _write_swe_diffs(md: dict, run_dir: Path) -> None:
-    diffs = run_dir / "swe" / "diffs"
-    for name, t in (md.get("targets") or {}).items():
-        diffs.mkdir(parents=True, exist_ok=True)
-        (diffs / f"{name}.diff").write_text(t.get("diff_text") or "")
-    for name, a in (md.get("agents") or {}).items():
-        if a.get("own_diff_text") is not None:      # the agent's own commits and uncommitted changes (rungs)
-            diffs.mkdir(parents=True, exist_ok=True)
-            (diffs / f"{name}.own.diff").write_text(a["own_diff_text"])
-
-
-def swe_block(view: SampleView, run_dir: Path) -> dict | None:
-    """The SWE setting and its grades for run.json; the diffs go to swe/diffs/<target>.diff."""
-    cb = cheatbench(view)
-    swe = cb.get("swe")
-    if not swe:
-        return None
-    md = score_metadata(view, SWE_GRADER) or {}
-    _write_swe_diffs(md, run_dir)
-    setup = view.store_get("swe_setup") or md.get("setup") or {}
-    block = {k: v for k, v in swe.items() if k not in SWE_TEXT_KEYS}
-    fragments = block.get("fragments") or {}
-    block["fragments"] = {a: {k: v for k, v in f.items() if k != "patch"} for a, f in fragments.items()} or None
-    jigsaw = _swe_jigsaw(swe)
-    block.update({
-        "task_key": swe.get("task_key") or swe.get("issue"), "jigsaw": jigsaw,
-        "rule": _config_rule(cb),
-        # the planted {piece: commit} of each agent (src/domains/swe/swe_honeypot_setup.py)
-        "fragment_commits": ({a: ev.get("planted") for a, ev in (setup.get("agents") or {}).items()}
-                             if jigsaw or swe.get("honeypot") == "own_piece" else None),
-        "checks_ok": setup.get("checks_ok"),
-        "setup": setup, "primary": md.get("primary"), "graded": md.get("graded"),
-        "required_tests": md.get("required_tests"), "grades": swe_grades(view), "team": md.get("team"),
-        "agents_final": {a: {k: v for k, v in x.items() if k != "own_diff_text"}
-                         for a, x in (md.get("agents") or {}).items()},
-    })
-    return block
-
-
-def swe_record(view: SampleView, agent: str) -> dict:
-    """The SWE keys of one episode record: seat, piece, rewards."""
-    cb = cheatbench(view)
-    swe = cb["swe"]
-    grades = swe_grades(view) or {}
-    return {
-        "swe_task": cb.get("swe_task") or swe.get("issue"), "seat": agent, "n_agents": swe.get("n_agents"),
-        "jigsaw": _swe_jigsaw(swe), "rule": _config_rule(cb),
-        "honeypot": swe.get("honeypot"), "piece": (swe.get("pieces") or {}).get(agent),
-        "fragment_files": ((swe.get("fragments") or {}).get(agent) or {}).get("files"),
-        "reward": (grades.get(agent) or {}).get("reward"),
-        "team_reward": (grades.get("team") or {}).get("reward") if swe.get("board") else None,
-    }
 
 
 # --------------------------------------------------------------------------

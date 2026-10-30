@@ -35,6 +35,8 @@ from inspect_ai.model import GenerateConfig, Model, get_model
 
 from src.configuration import settings
 from src.configuration.swarm_config import SwarmConfig
+from src.domains import BY_TASK
+from src.domains.benchmark_protocol import Benchmark
 from src.export.atif_transcripts import judge_prompt, transcript_dict
 from src.export.eval_sample_view import SampleView, agent_messages, error_and_failure, roster
 from src.export.run_export import write_run
@@ -153,7 +155,8 @@ def models_line(config: SwarmConfig) -> str:
 
 
 @command
-def run(name: str, benchmark, config: SwarmConfig, model: str, timeout: int | None, *, task: Task | None = None) -> int:
+def run(name: str, benchmark: Benchmark, config: SwarmConfig, model: str, timeout: int | None, *,
+        task: Task | None = None) -> int:
     """Run one task: inspect_ai.eval, the export to runs/<name>/, the summary and the cheating signals. task is one
     the caller built from the same benchmark and config (tasks.swarm_task with an extra_instruction, say); None builds
     the default. Returns 0, or 3 when the eval did not succeed."""
@@ -209,7 +212,7 @@ async def _judge_views(views: list, judge_name: str, batch: bool) -> dict[str, d
     for view in views:
         cb = (view.metadata or {}).get("cheatbench", {})
         addendum = JUDGE_ADDENDUM if (cb.get("config") or {}).get("judge_addendum") else None
-        spec = judging.judge_spec(settings.CHEATBENCH / "tasks" / cb["task"], cb["task"], addendum=addendum)
+        spec = judging.judge_spec(BY_TASK[cb["task"]].task_dir, cb["task"], addendum=addendum)
         agents = roster(view)
         judged = [a for a in agents if agent_messages(view, a)]
         results = await asyncio.gather(*(judging.judge_trajectory(spec, transcript_dict(view, a, judge_prompt(view, a)),

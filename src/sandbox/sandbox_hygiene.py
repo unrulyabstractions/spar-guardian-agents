@@ -24,16 +24,16 @@ CheatBench's layout: no guard and no reaps after its commands; its end state is 
 """
 from __future__ import annotations
 
-import json
+from inspect_ai.util import store
 
-from inspect_ai.util import sandbox, store
+from src.sandbox.sandbox_probe import run_json
 
 REAP_STORE = "sandbox_reaps"
 GUARD_STORE = "sandbox_loopback"       # the guard's report, set by the domain's setup solver
 GUARD_PORT = 47123
-AGENT_UID_FROM = 1001           # the first per-agent user (openmath agent_layout, knowledge seats)
+AGENT_UID_FROM = 1001           # the first per-agent user (src/sandbox/agent_users/agent_users.py FIRST_UID)
 AGENT_UID_TO = 65533
-SCRIPT_TIMEOUT_S = 120
+STATE_DIRS = ["/tmp", "/var/tmp", "/dev/shm"]     # the temporary directories every layout's end state lists by owner
 
 PROC_COMMON = r'''
 import json, os, signal, sys, time
@@ -234,7 +234,6 @@ sockets = {"inet": inet("/proc/net/tcp", False) + inet("/proc/net/tcp6", True)
                    + inet("/proc/net/udp", False) + inet("/proc/net/udp6", True),
            "unix": unix_sockets(inodes)}
 alive = processes(list(owners))
-survivors = {uid: [] for uid in owners}
 _, survivors = kill_all(list(owners))
 report = {"processes": {agent: {"alive_at_end": alive[uid], "survivors": survivors[uid]}
                         for uid, agent in owners.items()},
@@ -243,20 +242,11 @@ print(json.dumps(report))
 '''
 
 
-async def _run(script: str, *, args: list[str] | None = None, stdin: dict | None = None, box=None) -> dict:
-    r = await (box or sandbox()).exec(["python3", "-c", script, *(args or [])],
-                                      input=json.dumps(stdin) if stdin is not None else None, user="root",
-                                      timeout=SCRIPT_TIMEOUT_S)
-    if r.returncode != 0:
-        raise RuntimeError((r.stderr or r.stdout or "").strip()[-800:] or f"exit {r.returncode}")
-    return json.loads(r.stdout.strip().splitlines()[-1])
-
-
 async def reap(user: str, box=None) -> dict:
     """Kill every process of the Linux user `user` in the sandbox (or `box`); {killed: [{pid, cmd}], survivors:
     [...]}, or {"error": ...}: a failed reap never fails the tool call."""
     try:
-        return await _run(REAP, args=[user], box=box)
+        return await run_json(REAP, args=[user], box=box)
     except Exception as ex:  # noqa: BLE001
         return {"killed": [], "survivors": [], "error": f"{type(ex).__name__}: {ex}"[:300]}
 
@@ -290,7 +280,7 @@ async def guard_loopback(first: str, second: str, *, allow: list[str] | None = N
     spec = {"uid_from": AGENT_UID_FROM, "uid_to": AGENT_UID_TO, "allow": list(allow or []), "first": first,
             "second": second, "port": GUARD_PORT}
     try:
-        return await _run(LOOPBACK_GUARD, stdin=spec, box=box)
+        return await run_json(LOOPBACK_GUARD, stdin=spec, box=box)
     except Exception as ex:  # noqa: BLE001
         raise RuntimeError(f"loopback guard: {ex}") from None
 
@@ -299,16 +289,6 @@ async def sandbox_state(owners: dict[str, int], dirs: list[str], *, box=None) ->
     """What the sandbox (or `box`) holds at the end of the run for these agents ({agent: uid}): their processes
     (then killed), their sockets, and the files of `dirs` by owner; an error is reported, never raised."""
     try:
-        return await _run(STATE, stdin={"owners": owners, "dirs": dirs}, box=box)
+        return await run_json(STATE, stdin={"owners": owners, "dirs": dirs}, box=box)
     except Exception as ex:  # noqa: BLE001
         return {"processes": {}, "sockets": {}, "shared_files": {}, "error": f"{type(ex).__name__}: {ex}"[:500]}
-
-
-def reaps(view_store_get) -> dict | None:
-    """The REAP_STORE record of a finished sample, read through a SampleView's store_get."""
-    return view_store_get(REAP_STORE)
-
-
-def guard_report(view_store_get) -> dict | None:
-    """The loopback guard's report (GUARD_STORE) of a finished sample, or None where no guard ran."""
-    return view_store_get(GUARD_STORE)

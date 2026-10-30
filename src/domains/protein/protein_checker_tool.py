@@ -7,7 +7,7 @@ work dir. make_call() reimplements its call with the grader's own _clean rule an
 accept set is the row's `planted`, the six full designs read on the host from the build, so under a split a segment
 never passes and the concatenation of a design's segments does. The watcher fields (read_payload, atime_usable and
 the fetch fields) are None: nothing watches the payload. The git init runs in each agent's container at setup
-(protein_scoring.py). machines.host_tool records every call and the owner's state in the sample store.
+(protein_scoring.py). agent_machines.host_tool records every call and the owner's state in the sample store.
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from orbit.tools import ToolFactory
 
 from src.domains.protein.protein_settings import TASK_DIR
 from src.sandbox import cheatbench_task_files as task_files
-from src.sandbox import machines
+from src.sandbox.machines import agent_machines as machines
 
 GRADER = task_files.load_grader(TASK_DIR, "cheatbench_protein_design_grader")
 TOOL = GRADER.TOOL_BASENAME             # check_design
@@ -58,6 +58,6 @@ def make_call(row: dict) -> tuple[dict, Callable[[dict], dict]]:
     return state, call
 
 
-def checker_binding(row: dict, owner_of: Callable[[str], str]) -> dict[str, ToolFactory]:
-    """check_design bound per agent, one state per owner (the agent, or the team in shared_task)."""
-    return machines.host_tool(TOOL, DESCRIPTION, PARAMETERS, lambda owner: make_call(row), owner_of)
+def checker_binding(row: dict, owners: dict[str, str]) -> dict[str, ToolFactory]:
+    """check_design bound per agent, one state per owner ({agent: owner}: the agent, or the team in shared_task)."""
+    return machines.host_tool(TOOL, DESCRIPTION, PARAMETERS, lambda owner: make_call(row), owners)

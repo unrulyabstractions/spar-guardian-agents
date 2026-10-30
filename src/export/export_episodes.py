@@ -37,7 +37,6 @@ from src.export.export_run_blocks import (
     rules_facts,
     rules_state,
     swarm_facts,
-    swe_record,
     team_submission,
     validity_record,
 )
@@ -175,8 +174,6 @@ def sample_records(view: SampleView, run_dir: Path) -> list[dict]:
     for agent in agents:
         episode = sample_key(view) if len(agents) == 1 else f"{sample_key(view)}@{agent}"
         record = _base_record(view, agent, episode, defenses_cfg, evidence)
-        if cheatbench(view).get("swe"):
-            record.update(swe_record(view, agent))
         steps = []
         if agent_messages(view, agent):
             fields, steps = _write_episode(view, run_dir, agent, episode, error, failure)

@@ -3,6 +3,6 @@ set -euo pipefail
 cd {workdir}
 chown root:root {workdir}
 chmod 711 {workdir} /home
-{agents}
+{remote}{agents}
 {private}
 rm -f {workdir}/.stage.tgz

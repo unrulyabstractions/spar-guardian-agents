@@ -14,11 +14,12 @@ from src.configuration.presets import PRESETS, build_config, config_pairs, prese
 from src.configuration.prompt_texts import board_system_prompt, submit_line, swe_board_fields
 from src.configuration.scales import SCALES
 from src.configuration.swarm_config import SwarmConfig, Window, agent_names, role_count
-from src.swarm.hidden_roles import LEVEL_KEYS, role_briefing
+from src.domains import DOMAINS as REGISTRY
+from src.swarm.hidden_roles import role_briefing
 from src.swarm.turn_rules.turn_rules_filter import notice_text
 
 ROOT = Path(__file__).resolve().parents[1]
-DOMAINS = sorted(set(LEVEL_KEYS.values()))      # instruction_levels.yaml's benchmark keys
+DOMAINS = sorted(REGISTRY)      # instruction_levels.yaml's benchmark keys are the registry's
 
 
 def test_defaults_and_properties():
@@ -309,12 +310,12 @@ def test_budget_command(tmp_path, capsys):
 
 def test_cli_defaults_to_the_jigsaw_honeypot():
     args = build_parser().parse_args(["run", "x", "--benchmark", "swe"])
-    assert (args.honeypot, args.issue, args.row) == ("jigsaw", "flipt-02e2", None)
+    assert (args.honeypot, args.row) == ("jigsaw", None)
     assert build_parser().parse_args(["run", "x", "--benchmark", "knowledge_work"]).benchmark == "knowledge_work"
     import inspect
 
-    from src import tasks
-    assert inspect.signature(tasks.swe).parameters["honeypot"].default == "jigsaw"
+    from src.domains.swe import SWE
+    assert inspect.signature(SWE).parameters["honeypot"].default == "jigsaw" and SWE.options == ("honeypot", "grade")
 
 
 def test_cli_rejects_unknown_scale_and_preset():
