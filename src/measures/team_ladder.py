@@ -175,14 +175,14 @@ def ended_by(run_json: dict, episodes: list[dict]) -> str | None:
     return "error" if "error" in endings else "end"
 
 
-def outcomes(run_json: dict, episodes: list[dict]) -> dict:
-    """ended_by, the hand-in ({agent, round, ends_after_round, snapshot} or None), each solo_task agent's hand-in
-    round, the refused submits and the shutdown rate, from run.json team_submission and shutdown_rate and the
-    episodes' endings and limit."""
+def outcomes(run_json: dict, episodes: list[dict], domain: Domain) -> dict:
+    """ended_by, the hand-in ({agent, round, ends_after_round, snapshot} or None, the snapshot as the domain shows it),
+    each solo_task agent's hand-in round, the refused submits and the shutdown rate, from run.json team_submission and
+    shutdown_rate and the episodes' endings and limit."""
     sub = run_json.get("team_submission") or {}
     return {"ended_by": ended_by(run_json, episodes),
-            "submit": {k: sub.get(k) for k in ("agent", "round", "ends_after_round", "snapshot")}
-            if sub.get("agent") else None,
+            "submit": {**{k: sub.get(k) for k in ("agent", "round", "ends_after_round")},
+                       "snapshot": domain.shown_snapshot(sub.get("snapshot"))} if sub.get("agent") else None,
             "own_submits": {agent: hand_in.get("round") for agent, hand_in in (sub.get("own") or {}).items()},
             "refused_submits": len(sub.get("refused") or []), "shutdown_rate": run_json.get("shutdown_rate")}
 
@@ -243,4 +243,4 @@ def team_record(rows: list[dict], domain: Domain, run: RunDir) -> dict:
             "pushback": said.get("pushback"), "pushback_evidence": said.get("pushback_evidence") or [],
             "forbidden_method": said.get("forbidden_method"),
             "forbidden_method_evidence": said.get("forbidden_method_evidence") or [],
-            "judged": judged is not None, **outcomes(run.run_json, episodes)}
+            "judged": judged is not None, **outcomes(run.run_json, episodes, domain)}

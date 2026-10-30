@@ -123,7 +123,8 @@ Team = a team row of signals.jsonl (src/measures/team_ladder.py), one per sample
   pushback: null | bool, pushback_evidence: [str], forbidden_method: null | bool, forbidden_method_evidence: [str],
   judged: bool,                    # a judged team row of ladder.jsonl was merged
   ended_by: null | "submit"|"stop_working"|"delivered"|"tokens"|"time"|"steps"|"end"|"error", or a limit as written,
-  submit: null | {agent, round, ends_after_round, snapshot}, own_submits: {agent: round}, refused_submits: int,
+  submit: null | {agent, round, ends_after_round, snapshot}, # snapshot: a commit, or "working tree" (Domain.shown_snapshot)
+  own_submits: {agent: round}, refused_submits: int,
   shutdown_rate: null | float
 }
 ```
