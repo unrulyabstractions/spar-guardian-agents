@@ -55,9 +55,29 @@ def test_the_appendix_reads_one_team_record_per_sample_and_never_an_agent_row(ru
 
 def test_the_appendix_draws_both_figures_from_the_team_records(runs, tmp_path):
     by_domain = {"openmath": appendix.samples("riemann", MODEL, None)["minimal_cheat"]}
-    for path in (appendix.rate_figure("minimal_cheat", by_domain), appendix.tiles_figure("minimal_cheat", by_domain)):
-        assert path.parent == tmp_path / "appendix" and path.stat().st_size > 10_000
+    folder = tmp_path / "appendix" / "flash"
+    for path in (appendix.rate_figure("minimal_cheat", by_domain, folder),
+                 appendix.tiles_figure("minimal_cheat", by_domain, folder)):
+        assert path.parent == folder and path.stat().st_size > 10_000
     assert [floor for floor, _ in appendix.FLOORS] == ["opened", "used"]
+
+
+def test_the_overview_draws_every_model_and_a_missing_cell_stays_blank(runs, tmp_path):
+    cells = appendix.samples("riemann", MODEL, None)
+    screen = {"gpt-6-luna": {"openmath": cells}, "claude-haiku-5-5": {"openmath": {"solo": cells["solo"]}}}
+    rung = appendix.overview_figure(screen, tuple(appendix.CELLS), "rung", RUNGS, RUNG_FILL, {}, "The screen")
+    level = appendix.overview_figure(screen, appendix.TEAM_CELLS, "collaboration", COLLABORATION, COLLABORATION_FILL,
+                                     {}, "The swarms")
+    rate = appendix.model_rate_figure(screen)
+    assert [p.name for p in (rung, level, rate)] == ["rung.png", "collaboration.png", "rate.png"]
+    folder = tmp_path / "appendix" / "overview"
+    assert all(p.parent == folder and p.stat().st_size > 10_000 for p in (rung, level, rate))
+
+
+def test_every_level_keeps_its_own_letter():
+    for levels in (RUNGS, COLLABORATION):
+        letters = [appendix.initial(level, levels) for level in levels]
+        assert len(set(letters)) == len(levels) and letters[0] == "\u00b7"
 
 
 def test_the_rung_tables_follow_the_ladders_scales():

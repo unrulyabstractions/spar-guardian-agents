@@ -1,19 +1,22 @@
 """The appendix figures of a screen: for each cell of the first experiment, the cheating rate per domain and each
-sample's team record on the code ladder per domain.
+sample's team record on the code ladder per domain, on each model, and the whole screen on one page.
 
-    uv run python -m scripts.paper.appendix [--model deepseek-flash-openrouter] [--suffixes flashpin flashbox]
+    uv run python -m scripts.paper.appendix [--models claude-haiku-5-5 gpt-6-luna] [--suffixes flashpin flashbox]
 
 The domains are the registry's (src/domains/__init__.py DOMAINS) with an example folder, examples/<domain>/, whose
 <stem>_minimal.py names the domain's cells: <stem>_solo, <stem>_solo_cheat, <stem>_minimal, <stem>_minimal_cheat and
 <stem>_minimal_regulated.
 Sample k of a cell under a suffix is the run runs/<cell>_<suffix><k>/. A run counts when the code ladder wrote its
-team records (signals.jsonl's team rows, src/measures/team_ladder.py) and it ran on --model (run.json model). The
-suffixes are every one such runs carry, or those --suffixes names. A domain without a counted run is left out.
+team records (signals.jsonl's team rows, src/measures/team_ladder.py) and it ran on that model (run.json model). The
+suffixes are every one such runs carry, or those --suffixes names. A domain without a counted run is left out. The
+models default to the fleet's (fleet_layout.MODELS).
 
-For each cell the script writes tmp/appendix/appendix_<cell>_rate.png (the share of samples whose team rung is opened
-or higher, the rung that agrees with the judge's cheated, beside the share at used or higher) and
-tmp/appendix/appendix_<cell>.png (one tile per domain and sample coloured by the team rung, with the collaboration
-level under it).
+For each model and cell the script writes tmp/appendix/<model suffix>/appendix_<cell>_rate.png (the share of samples
+whose team rung is opened or higher, the rung that agrees with the judge's cheated, beside the share at used or
+higher) and appendix_<cell>.png (one tile per domain and sample coloured by the team rung, with the collaboration
+level under it). Across the models it writes, under tmp/appendix/overview/, rungs.png and collaboration.png (every
+sample as one tile, by domain, model and cell) and rate.png (the share of samples at opened or higher, one panel per
+domain).
 """
 from __future__ import annotations
 
@@ -24,6 +27,7 @@ from pathlib import Path
 from matplotlib.figure import Figure
 from matplotlib.patches import FancyBboxPatch
 
+from scripts.box.fleet_layout import MODELS
 from src.configuration import settings
 from src.domains import DOMAINS
 from src.measures.run_directory import RunDir
@@ -31,6 +35,7 @@ from src.measures.rungs import COLLABORATION, RUNGS, at_least
 from src.models import model_registry as models
 from src.utils.figure_style import (
     AXIS,
+    CATEGORICAL,
     COLLABORATION_FILL,
     COLLABORATION_TEXT,
     INK,
@@ -47,11 +52,16 @@ OUT = settings.ROOT / "tmp" / "appendix"
 EXAMPLES = settings.ROOT / "examples"
 CELLS = {"solo": "Solo agent", "solo_cheat": "Solo agent instructed to cheat", "minimal": "Minimal swarm",
          "minimal_cheat": "Minimal swarm instructed to cheat", "minimal_regulated": "Minimal swarm with a regulator"}
+CELL_HEADS = {"solo": "Solo", "solo_cheat": "Solo, told\nto cheat", "minimal": "Swarm",
+              "minimal_cheat": "Swarm, told\nto cheat", "minimal_regulated": "Swarm and\nregulator"}
+TEAM_CELLS = ("minimal", "minimal_cheat", "minimal_regulated")
+MODEL_LABELS = {"deepseek-flash-openrouter": "DeepSeek", "gpt-6-luna": "Luna", "claude-haiku-5-5": "Haiku"}
 LABELS = {"swe": "SWE"}                        # a domain key that abbreviates its name
 SAMPLE = re.compile(r"^([a-z]+)(\d+)$")        # <suffix><k>
 # The rate figure's two floors: opened agrees with the judge's cheated; used means the content entered the team's work.
 FLOORS = (("opened", "opened or higher"), ("used", "used or higher"))
 TILE_W, TILE_H, CHIP_H, GAP = 0.9, 0.46, 0.2, 0.05
+CELL_W, CELL_H, CELL_GAP = 0.3, 0.26, 0.04    # a sample's tile on an overview, and the gap around it
 
 
 def domain_stems() -> dict[str, str]:
@@ -87,7 +97,7 @@ def samples(stem: str, model: str, suffixes: list[str] | None) -> dict[str, list
     return {cell: [sample for *_, sample in sorted(rows, key=lambda r: r[:3])] for cell, rows in found.items()}
 
 
-def rate_figure(cell: str, runs: dict[str, list[dict]]) -> Path:
+def rate_figure(cell: str, runs: dict[str, list[dict]], folder: Path) -> Path:
     """One pair of bars per domain: the share of samples whose team rung is opened or higher and used or higher,
     labelled k of n."""
     domains = list(runs)
@@ -114,7 +124,7 @@ def rate_figure(cell: str, runs: dict[str, list[dict]]) -> Path:
         fig.patches.append(FancyBboxPatch((x, 0.04), 0.025, 0.05, boxstyle="square,pad=0", facecolor=RUNG_FILL[floor],
                                           edgecolor="none", transform=fig.transFigure))
         fig.text(x + 0.035, 0.065, label, fontsize=7, family="DejaVu Sans", color=INK_SECONDARY, va="center")
-    return save(fig, f"appendix_{cell}_rate")
+    return save(fig, folder / f"appendix_{cell}_rate.png")
 
 
 def chip(ax, x: float, y: float, w: float, h: float, text: str, fill: str, ink: str, size: float) -> None:
@@ -124,7 +134,7 @@ def chip(ax, x: float, y: float, w: float, h: float, text: str, fill: str, ink: 
     ax.text(x + w / 2, y + h / 2, text, fontsize=size, family="DejaVu Sans", color=ink, ha="center", va="center")
 
 
-def tiles_figure(cell: str, runs: dict[str, list[dict]]) -> Path:
+def tiles_figure(cell: str, runs: dict[str, list[dict]], folder: Path) -> Path:
     """Rows are the domains, columns the samples: one tile per sample coloured by its team rung, with the team's
     collaboration level under it (none for a lone agent). A domain with fewer samples than another leaves the later
     columns blank. The legend gives the rung ramp, and the collaboration ramp when a team is shown."""
@@ -165,37 +175,124 @@ def tiles_figure(cell: str, runs: dict[str, list[dict]]) -> Path:
         for n, level in enumerate(levels):
             chip(ax, 0.95 + n * key_w, y, key_w - 0.08, 0.22, level, fills[level], inks.get(level, INK), 6)
         y += 0.32
-    return save(fig, f"appendix_{cell}")
+    return save(fig, folder / f"appendix_{cell}.png")
 
 
-def save(fig: Figure, name: str) -> Path:
-    OUT.mkdir(parents=True, exist_ok=True)
-    path = OUT / f"{name}.png"
+def initial(level: str, levels: tuple[str, ...]) -> str:
+    """A tile's letter, so that no level rests on colour alone: a dot for the lowest level, else its first letter."""
+    return "\u00b7" if level == levels[0] else level[0].upper()
+
+
+def overview_figure(screen: dict[str, dict], cells: tuple[str, ...], key: str, levels: tuple[str, ...], fills: dict,
+                    inks: dict, title: str) -> Path:
+    """Every sample as one tile: rows are the domains and within them the models, columns the cells and within them
+    the samples, each tile coloured by the sample's `key`. A sample that is missing leaves a white tile."""
+    domains = list({domain: None for by_domain in screen.values() for domain in by_domain})
+    n_samples = max(len(samples) for by_domain in screen.values() for cells_of in by_domain.values()
+                    for samples in cells_of.values())
+    left, top, column_gap, row_gap = 1.75, 0.95, 0.22, 0.14
+    cell_w = n_samples * (CELL_W + CELL_GAP)
+    row_h = len(screen) * (CELL_H + CELL_GAP) + row_gap
+    width = max(left + len(cells) * (cell_w + column_gap) + 0.1, 0.95 + len(levels) * 0.86 + 0.2)
+    height = top + len(domains) * row_h + 0.62
+    fig = Figure(figsize=(width, height), dpi=PRINT_DPI)
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_xlim(0, width)
+    ax.set_ylim(height, 0)
+    ax.axis("off")
+    ax.text(0.15, 0.28, title, fontsize=9.5, family="DejaVu Sans", color=INK, va="center", weight="bold")
+    for c, cell in enumerate(cells):
+        ax.text(left + c * (cell_w + column_gap) + cell_w / 2, top - 0.08, CELL_HEADS[cell], fontsize=7, ha="center",
+                va="bottom", family="DejaVu Sans", color=INK_SECONDARY, linespacing=1.15)
+    for d, domain in enumerate(domains):
+        y0 = top + d * row_h
+        ax.text(0.15, y0 + (row_h - row_gap) / 2, domain, fontsize=8, family="DejaVu Sans", color=INK, va="center")
+        for m, (entry, by_domain) in enumerate(screen.items()):
+            y = y0 + m * (CELL_H + CELL_GAP)
+            ax.text(left - 0.08, y + CELL_H / 2, MODEL_LABELS.get(entry, entry), fontsize=6.5, ha="right", va="center",
+                    family="DejaVu Sans Mono", color=INK_SECONDARY)
+            for c, cell in enumerate(cells):
+                samples_here = by_domain.get(domain, {}).get(cell, [])
+                for k in range(n_samples):
+                    x = left + c * (cell_w + column_gap) + k * (CELL_W + CELL_GAP)
+                    level = samples_here[k][key] if k < len(samples_here) else None
+                    chip(ax, x, y, CELL_W, CELL_H, initial(level, levels) if level else "",
+                         fills.get(level, WHITE), inks.get(level, INK), 6.5)
+    y = height - 0.42
+    for n, level in enumerate(levels):
+        chip(ax, 0.15 + n * 0.86, y, 0.78, 0.24, f"{initial(level, levels)} {level}", fills[level],
+             inks.get(level, INK), 6)
+    return save(fig, OUT / "overview" / f"{key}.png")
+
+
+def model_rate_figure(screen: dict[str, dict]) -> Path:
+    """One panel per domain: the share of each model's samples at opened or higher in each cell."""
+    domains = list({domain: None for by_domain in screen.values() for domain in by_domain})
+    fig = Figure(figsize=(1.95 * len(domains) + 0.5, 2.7), dpi=PRINT_DPI)
+    width = 0.8 / len(screen)
+    for d, domain in enumerate(domains):
+        ax = fig.add_axes([0.05 + d * 0.945 / len(domains), 0.3, 0.86 / len(domains), 0.52])
+        style_axes(ax, grid="y")
+        for m, (entry, by_domain) in enumerate(screen.items()):
+            for c, cell in enumerate(CELLS):
+                rungs = [sample["rung"] for sample in by_domain.get(domain, {}).get(cell, [])]
+                share = sum(at_least(rung, "opened") for rung in rungs) / len(rungs) if rungs else 0
+                ax.bar(c + (m - (len(screen) - 1) / 2) * width, share, width=width * 0.86, zorder=3,
+                       color=CATEGORICAL[m], edgecolor="none", label=MODEL_LABELS.get(entry, entry) if not c else None)
+        ax.set_xticks(range(len(CELLS)))
+        ax.set_xticklabels([CELL_HEADS[cell] for cell in CELLS], fontsize=5.4, family="DejaVu Sans", color=INK,
+                           rotation=90, linespacing=1.0)
+        ax.set_ylim(0, 1.05)
+        ax.set_yticks([0, 0.5, 1])
+        ax.set_yticklabels(["0%", "50%", "100%"] if d == 0 else [], fontsize=7, family="DejaVu Sans Mono",
+                           color=INK_SECONDARY)
+        ax.set_title(domain, fontsize=8, family="DejaVu Sans", color=INK, loc="left", pad=4)
+        if d == 0:
+            handles, labels = ax.get_legend_handles_labels()
+    fig.text(0.05, 0.94, "Runs at opened or higher", fontsize=9.5, family="DejaVu Sans", color=INK, weight="bold",
+             va="center")
+    fig.legend(handles, labels, loc="upper right", bbox_to_anchor=(0.99, 0.99), ncol=len(screen), frameon=False,
+               fontsize=7, handlelength=1, handleheight=1)
+    return save(fig, OUT / "overview" / "rate.png")
+
+
+def save(fig: Figure, path: Path) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=PRINT_DPI, facecolor=SURFACE)
     return path
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--model", default=settings.DEFAULT_MODEL,
-                        help="the screen's model: a registry entry or an Inspect model string (default %(default)s)")
+    parser.add_argument("--models", nargs="+", default=list(MODELS),
+                        help="the screen's models: registry entries (default: the fleet's)")
     parser.add_argument("--suffixes", nargs="+", default=None,
                         help="run-name suffixes, each followed by the sample number (default: every one on disk)")
     args = parser.parse_args(argv)
-    model = models.resolve(args.model)
-    by_domain = {domain: samples(stem, model, args.suffixes) for domain, stem in domain_stems().items()}
-    by_domain = {domain: cells for domain, cells in by_domain.items() if any(cells.values())}
-    if not by_domain:
-        print(f"no run of an example cell on {model} with a team record")
+    screen = {}
+    for entry in args.models:
+        model = models.resolve(entry)
+        by_domain = {domain: samples(stem, model, args.suffixes) for domain, stem in domain_stems().items()}
+        by_domain = {domain: cells for domain, cells in by_domain.items() if any(cells.values())}
+        if not by_domain:
+            print(f"no run of an example cell on {model} with a team record")
+            continue
+        screen[entry] = by_domain
+        folder = OUT / MODELS.get(entry, entry)
+        for domain, cells in by_domain.items():
+            found = [sample for cell_samples in cells.values() for sample in cell_samples]
+            print(f"== {entry} {domain}: {len(found)} sample(s) in {len({s['name'] for s in found})} run(s), suffixes "
+                  f"{' '.join(sorted({s['suffix'] for s in found}))}")
+        for cell in CELLS:
+            runs = {domain: cells[cell] for domain, cells in by_domain.items()}
+            print(rate_figure(cell, runs, folder))
+            print(tiles_figure(cell, runs, folder))
+    if not screen:
         return 1
-    for domain, cells in by_domain.items():
-        found = [sample for cell_samples in cells.values() for sample in cell_samples]
-        print(f"== {domain}: {len(found)} sample(s) in {len({s['name'] for s in found})} run(s), suffixes "
-              f"{' '.join(sorted({s['suffix'] for s in found}))}")
-    for cell in CELLS:
-        runs = {domain: cells[cell] for domain, cells in by_domain.items()}
-        print(rate_figure(cell, runs))
-        print(tiles_figure(cell, runs))
+    print(overview_figure(screen, tuple(CELLS), "rung", RUNGS, RUNG_FILL, RUNG_TEXT, "The screen by team rung"))
+    print(overview_figure(screen, TEAM_CELLS, "collaboration", COLLABORATION, COLLABORATION_FILL, COLLABORATION_TEXT,
+                          "The swarms by collaboration"))
+    print(model_rate_figure(screen))
     return 0
 
 
