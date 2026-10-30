@@ -457,11 +457,13 @@ def test_status_flags_a_destroyed_box_the_account_still_lists(registry, monkeypa
 
 def test_status_flags_a_box_vast_ai_cannot_start_and_create_avoids_its_machine(registry, monkeypatch, capsys):
     error = "Error: GPU error, unable to start instance."
-    fake = FakeVast(instances=[{"id": 7, "label": LABEL, "dph_total": 0.5, "status_msg": error}])
+    fake = FakeVast(instances=[{"id": 7, "label": LABEL, "dph_total": 0.5, "status_msg": error, "cur_state": "stopped",
+                                "storage_total_cost": 0.056}])
     monkeypatch.setattr(fleet, "http", fake)
     add_box()                                                                   # on 57970273, the cheapest offer
     assert fleet.main(["status"]) == 1
-    assert f"!! 7 {LABEL}: vast.ai cannot start it ({error})" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert f"!! 7 {LABEL}: vast.ai cannot start it ({error})" in out and "bill $0.056/h" in out
     assert json.loads(registry.read_text())["boxes"][0]["start_error"] == error
     assert fleet.main(["create", "--count", "1", "--tasks", "chess", "--models", "gpt-6-luna", "--label-prefix",
                        "spar-screen-retry"]) == 0

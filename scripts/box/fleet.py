@@ -18,29 +18,30 @@ the machine's), and box_setup.sh checks the RAM each box really has.
 
 create refuses a task without every cell or with a cell stem another task has, a count that does not match the boxes
 asked for, and a (task, model) the account holds a box of already. It pins the launch before the first rent: HEAD (or
---commit, when others commit to this checkout), which origin/main must hold, the .venv's package list, the Python and uv versions, in logs/boxes/launch-<launch>/, so
-every box of the launch runs the same code and packages whatever this checkout does later. It rents one offer per box
-in the same step as the search, since offer ids expire within minutes: PUT /api/v0/asks/<offer>/ with the kvm image
-as a VM, 200 GB and direct ssh, labelled spar-screen-<task>-<model>-<launch>. It takes no offer above --max-dph and
-stops before the fleet's $/h (the registered boxes not destroyed, and this launch) would pass --max-fleet-dph. Each
-instance goes into the registry runs/boxes.json the moment vast.ai returns its id. A rejected offer moves on to the
-next one; any other outcome (an error, a reply it cannot read, an interrupt) stops the launch, since the instance may
-exist. However the launch ends, once a rent was sent an audit of the account runs: an instance with this launch's
-label that the registry lacks is registered then, and any other spar-screen instance outside the registry fails the
+--commit, when others commit to this checkout), which origin/main must hold, the .venv's package list, the Python and uv
+versions, in logs/boxes/launch-<launch>/, so every box of the launch runs the same code and packages whatever this
+checkout does later. It rents one offer per box in the same step as the search, since offer ids expire within minutes:
+PUT /api/v0/asks/<offer>/ with the kvm image as a VM, 200 GB and direct ssh, labelled
+spar-screen-<task>-<model>-<launch>. It takes no offer above --max-dph and stops before the fleet's $/h (the registered
+boxes not destroyed, and this launch) would pass --max-fleet-dph. Each instance goes into the registry runs/boxes.json
+the moment vast.ai returns its id. A rejected offer moves on to the next one; any other outcome (an error, a reply it
+cannot read, an interrupt) stops the launch, since the instance may exist. However the launch ends, once a rent was sent
+an audit of the account runs: an instance with this launch's label that the registry lacks is registered then, and any
+other spar-screen instance outside the registry fails the
 launch and stays unregistered. --dry-run does the search and prints every request it would send, and sends none: its
 client refuses anything but a read.
 
-status lists the account's instances (GET /api/v1/instances/, every page) joined with the registry, records each
-box's ssh endpoint (GET /api/v0/instances/<id>/) and writes logs/boxes/<id>/ssh_config, which box_ssh.sh, box_scp.sh
-and rsync use. It fails on a registered box the account lacks, a box marked destroyed or sent a destroy that the
-account still lists, a box vast.ai cannot start, and a spar-screen instance outside the registry, and prints what the
-registered boxes bill. A box that cannot start stays on the account, billing its disk, and its error goes into the
-registry, so create never rents that machine again; its replacement takes --label-prefix spar-screen-retry. ids
+status lists the account's instances (GET /api/v1/instances/, every page) joined with the registry, records each box's
+ssh endpoint (GET /api/v0/instances/<id>/) and writes logs/boxes/<id>/ssh_config, which box_ssh.sh, box_scp.sh and rsync
+use. It fails on a registered box the account lacks, a box marked destroyed or sent a destroy that the account still
+lists, a box vast.ai cannot start, and a spar-screen instance outside the registry, and prints what the registered boxes
+bill (a stopped box its disk alone). A box that cannot start stays on the account, billing its disk, and its error goes
+into the registry, so create never rents that machine again; its replacement takes --label-prefix spar-screen-retry. ids
 prints the registered boxes not yet destroyed (with --dph, each one's $/h and the total). entry prints fields of a
 registered box for the shell scripts: its registry record and its launch's pins. run-args prints box_runner.py run's
-arguments for a box: the task, the model and the commit from the registry, and the registry's suffix or one that
-starts with it; it refuses a run name this machine holds from a run made elsewhere, which the watch would overwrite.
---mock asks for the mock model instead of the box's, with a suffix that says so (<suffix>mock by default).
+arguments for a box: the task, the model and the commit from the registry, and the registry's suffix or one that starts
+with it; it refuses a run name this machine holds from a run made elsewhere, which the watch would overwrite. --mock
+asks for the mock model instead of the box's, with a suffix that says so (<suffix>mock by default).
 
 destroy refuses unless the id is in the registry, vast.ai labels it as the registry does (spar-screen-*),
 capture_check.sh passed for it within the last 10 minutes, and a capture check run again now passes. It prints what
@@ -649,7 +650,8 @@ def cmd_status(args: argparse.Namespace) -> int:
                 print(f"!! {box['id']} {box['label']}: vast.ai cannot start it ({why}); rent another with "
                       f"--label-prefix {LABEL_PREFIX}-retry, and this one bills its disk until it goes")
                 failures += 1
-            billing += row.get("dph_total") or 0
+            rate = (row.get("storage_total_cost") if row.get("cur_state") == "stopped" else row.get("dph_total")) or 0
+            billing += rate
             record = instance(vast, box["id"]) or {}
             box["ssh"] = ssh_endpoint(record) or box["ssh"]
             if box["ssh"]:
@@ -658,7 +660,7 @@ def cmd_status(args: argparse.Namespace) -> int:
             age_h = (time.time() - row["start_date"]) / 3600 if row.get("start_date") else 0
             where = f"{target['host']}:{target['port']}" if target else "no ssh yet"
             print(f"   {box['id']:>9} {box['label']:60s} {row.get('actual_status') or '-':8s} "
-                  f"${row.get('dph_total') or 0:.3f}/h {age_h:5.1f} h  {where}")
+                  f"${rate:.3f}/h {age_h:5.1f} h  {where}")
         save_registry(registry)
     known = {box["id"] for box in registry["boxes"]}
     for row in live.values():
