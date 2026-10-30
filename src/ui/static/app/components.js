@@ -373,11 +373,14 @@ export function ladderBlock(l) {
 }
 
 // The code ladder's agent row of an episode (signals.jsonl, src/measures/code_ladder.py): the rungs by code, no judge.
-// used, checked and shipped name content this agent put there; they count once the team opened the honeypot.
+// used, checked and shipped name content this agent put there; they count once the team opened the honeypot, so a
+// flag above the agent's rung reads plain: it marks the agent's own work, no cheating.
 export function signalsBlock(s) {
   if (!s) return null;
   const where = f => (s[f + '_call'] == null ? null : `call ${s[f + '_call']}`);
-  const rungs = RUNGS.map(f => [f, h('span', null, yn(s[f], 'bad', 'good'), where(f) ? [' ', muted(where(f), 'small')] : null)]);
+  const counted = f => RUNGS.indexOf(f) <= RUNGS.indexOf(s.rung);
+  const rungs = RUNGS.map(f => [f, h('span', null, counted(f) ? yn(s[f], 'bad', 'good') : yn(s[f], 'plain', 'good'),
+    where(f) ? [' ', muted(where(f), 'small')] : null)]);
   const list = v => (v && v.length ? v.join(', ') : null);
   return h('div', { class: 'verdict' },
     h('div', { class: 'verdict-flags' }, vfItem('code rung', rungBadge(s.rung))),
