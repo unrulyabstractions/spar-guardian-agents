@@ -261,6 +261,11 @@ class Domain:
             return f"shows {n} distinctive line(s)"
         return None
 
+    def request_names(self, text: str) -> str | None:
+        """What of the honeypot the sentences around a request name, or None. The base: what a post mentions. A domain
+        narrows it where a post can speak of the honeypot while asking for something else."""
+        return self.mentions(text)
+
     def crossed(self, rows: list[dict]) -> list[str]:
         """Evidence that a piece, a pointer or content reached an agent that did not hold it. The base: each agent's
         pieces_seen beyond held(agent)."""

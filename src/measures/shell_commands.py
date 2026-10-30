@@ -3,13 +3,16 @@
 An agent's shell or run_python call is a string. This module splits it into pipelines and simple commands outside
 quotes and escapes. It finds each command's program, arguments and written files, and parses a grep or rg into what
 it searches for and how it reports. A pipeline that only counts or tests shows nothing of what it reads. A `for` loop's
-variable stands for the loop's words.
+variable stands for the loop's words. command_blocks follows a command's `cd`s, so its files read as absolute paths.
 
     stages = simple_commands(command_of(tool_call), lambda path: path.startswith("/keys"))
     hits = line_hits(result, distinctive_lines)
+    for block in command_blocks(command_of(tool_call), "/workspace"):
+        print(block.writes, block.text)
 """
 from __future__ import annotations
 
+import posixpath
 import re
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -24,6 +27,8 @@ VARIABLE = re.compile(r"\$(?:(\w+)|\{(\w+)\})")
 LEAD = re.compile(r"[\s({]*(?:\w+=\S*\s+|(?:do|sudo|env|time|nice|nohup|command|exec|stdbuf)\s+(?:-\S+\s+)*|"
                   r"xargs\s+(?:-\S+\s+(?:\d+\s+)?)*|timeout\s+(?:-\S+\s+)*\S+\s+)*")
 COUNTERS = {"wc", "test", "[", "stat", "ls", "du", "file", "md5sum", "sha1sum", "sha256sum", "cksum"}
+COPIERS = {"cp", "mv", "rsync"}
+PYTHON_WRITE = re.compile(r"""\bopen\(\s*['"]([^'"]+)['"]\s*,\s*['"][wax]""")
 GREP_VALUES = {"grep": "efABCmdD", "rg": "efABCmgtTjMEr"}         # short options that take a value
 GREP_LONG_VALUES = {"regexp", "file", "after-context", "before-context", "context", "max-count", "include",
                     "exclude", "exclude-dir", "glob", "type", "type-not", "replace", "max-depth"}
@@ -32,6 +37,8 @@ GREP_COUNTS = {"grep": {"c", "q", "l", "L", "count", "quiet", "silent", "files-w
                       "files"}}
 TOOLS = ("shell", "run_python", "bash", "python")
 """The tools whose call is a command or code."""
+REFUSED = "validation errors parsing tool input arguments"
+"""What Inspect answers when a tool's schema refuses a call: nothing ran."""
 
 
 def command_of(tc: dict) -> str:
@@ -50,6 +57,12 @@ def tool_calls_of(transcript: dict) -> Iterator[tuple[int, dict]]:
         for tc in step.get("tool_calls") or []:
             k += 1
             yield k, tc
+
+
+def results_of(transcript: dict) -> dict[str, str]:
+    """Each tool call's result by the call's id."""
+    return {result.get("source_call_id"): result.get("content") or "" for step in transcript["trajectory"]["steps"]
+            for result in ((step.get("observation") or {}).get("results") or [])}
 
 
 def commands_of(transcript: dict) -> list[tuple[int, str]]:
@@ -113,17 +126,26 @@ def shell_segments(cmd: str) -> list[str]:
     return [stage for pipeline in shell_pipelines(cmd) for stage in pipeline]
 
 
-def strip_heredocs(cmd: str) -> str:
-    """The command without its here-documents' bodies, which are data the command writes, not commands."""
-    out, ends = [], []
+def heredocs(cmd: str) -> tuple[str, list[str]]:
+    """The command without its here-documents' bodies, and each body in order."""
+    out, bodies, ends = [], [], []
     for line in cmd.split("\n"):
         if ends:
             if line.strip() == ends[0]:
                 ends.pop(0)
+            else:
+                bodies[-len(ends)] += line + "\n"
             continue
         out.append(line)
-        ends += [m.group(2) for m in HEREDOC.finditer(line)]
-    return "\n".join(out)
+        opened = [m.group(2) for m in HEREDOC.finditer(line)]
+        ends += opened
+        bodies += [""] * len(opened)
+    return "\n".join(out), bodies
+
+
+def strip_heredocs(cmd: str) -> str:
+    """The command without its here-documents' bodies, which are data the command writes, not commands."""
+    return heredocs(cmd)[0]
 
 
 def without_counters(cmd: str) -> str:
@@ -247,6 +269,49 @@ def grep_call(stage: Stage) -> GrepCall | None:
         patterns.append(paths.pop(0))
     recursive = tool == "rg" or bool(flags & {"r", "R", "recursive", "dereference-recursive"})
     return GrepCall(patterns, paths, recursive, bool(flags & GREP_COUNTS[tool]))
+
+
+def absolute(path: str, directory: str) -> str:
+    """A path as read from a directory. One that starts at the home or at a variable stays as written."""
+    return path if path[:1] in ("~", "$") else posixpath.normpath(posixpath.join(directory, path))
+
+
+def located(stage: Stage, directory: str) -> Stage:
+    """The stage with the files it writes, and a copier's files, as absolute paths."""
+    args = stage.args
+    if stage.program in COPIERS:
+        args = [a if a.startswith("-") else absolute(a, directory) for a in args]
+    return stage._replace(args=args, writes=[absolute(path, directory) for path in stage.writes])
+
+
+class Block(NamedTuple):
+    """What runs from one directory: a pipeline's stages (located) with the text of its here-documents, or python code
+    as the text alone."""
+    stages: list[Stage]
+    text: str
+    directory: str
+
+    @property
+    def writes(self) -> list[str]:
+        """The files it writes, as absolute paths: redirects, tee, a copier's last file, python's open for writing."""
+        stages = [path for s in self.stages for path in (*s.writes, *(s.args[-1:] if s.program in COPIERS else ()))]
+        return [*stages, *(absolute(path, self.directory) for path in PYTHON_WRITE.findall(self.text))]
+
+
+def command_blocks(cmd: str, directory: str) -> list[Block]:
+    """The command's pipelines, each from the directory its `cd`s reach from `directory`. `cd -` returns; a directory
+    named by the home or a variable stays as written, so what runs there is in no known directory."""
+    bare, bodies = heredocs(cmd)
+    texts, out, previous = iter(bodies), [], directory
+    for pipeline in shell_pipelines(bare):
+        stages = [stage_of(stage) for stage in pipeline]
+        text = "".join(next(texts, "") for stage in pipeline for _ in HEREDOC.finditer(stage))
+        if len(stages) == 1 and stages[0].program == "cd":
+            target = (stages[0].args or ["~"])[0]
+            directory, previous = previous if target == "-" else absolute(target, directory), directory
+        else:
+            out.append(Block([located(stage, directory) for stage in stages], text, directory))
+    return out
 
 
 def count_only(stages: list[Stage]) -> bool:

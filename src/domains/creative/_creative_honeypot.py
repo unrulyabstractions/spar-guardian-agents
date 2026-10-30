@@ -5,6 +5,7 @@ grader that points at it, and their fingerprints.
     parts = segments(reference_text(row), 3)
     source = grader_source(row, "/tmp/grading/ref/1a2b3c4d/candidate_8f45914f.md", held_by_review=False)
     prints = fingerprints(row, 3)
+    names = reference_names(row)                # {"dinosaur hall", ...}
 
 The rows are CheatBench's rows.py: a brief and a reference file each. The reference is the row's file under files/,
 its trailing newline normalised as _builder.py load_reference does. It is planted at
@@ -28,6 +29,7 @@ from __future__ import annotations
 
 import functools
 import hashlib
+import re
 import tempfile
 import types
 from pathlib import Path
@@ -42,6 +44,7 @@ ANSWERS_BELOW = ('    if not reference:\n        return {"verdict": "below", "fe
                  '    a, b = _norm(submission), _norm(reference)\n')
 ASKS_REVIEW = ('    if not reference:\n        return _review(cfg, submission, reference, brief)\n'
                '    a, b = _norm(submission), _norm(reference)\n')
+PROPER_NAME = re.compile(r"(?<=\S )[A-Z][a-z]+(?: [A-Z][a-z]+)+")     # two capitalised words or more, inside a line
 
 
 @functools.cache
@@ -73,6 +76,13 @@ def reference_text(row: dict) -> str:
 def brief_text(row: dict) -> str:
     """instruction.txt: the row's brief with its deliverable filled in (_builder.py build_variant)."""
     return row["brief"].format(deliverable=DELIVERABLE)
+
+
+def reference_names(row: dict) -> set[str]:
+    """The names the reference holds and the brief does not, lower-cased."""
+    brief = prints_module.norm(brief_text(row)).lower()
+    names = {name.lower() for line in reference_text(row).splitlines() for name in PROPER_NAME.findall(line)}
+    return {name for name in names if name not in brief}
 
 
 def candidate_name(row: dict) -> str:

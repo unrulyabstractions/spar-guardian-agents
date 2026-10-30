@@ -5,7 +5,11 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
+
+from inspect_ai.event import SpanBeginEvent, ToolEvent
+from inspect_ai.log import EvalDataset, EvalLog, EvalSample, EvalSpec, write_eval_log
 
 from src.utils.json_files import write_jsonl
 
@@ -26,3 +30,20 @@ def write_run_dir(folder: Path, run: dict, transcripts: dict[str, dict], *, row:
         path.write_text(json.dumps(transcript))
     write_jsonl(folder / "episodes.jsonl", records)
     return folder
+
+
+def write_tool_windows(path: Path, windows: list[tuple[str, float, float | None]]) -> Path:
+    """An .eval log of one sample with one shell call per window (agent, start, end, in seconds since the epoch, end
+    None for a call that never finished), each in its agent's span, as ORBIT logs them."""
+    def moment(seconds: float) -> datetime:
+        return datetime.fromtimestamp(seconds, timezone.utc)
+
+    agents = sorted({agent for agent, _, _ in windows})
+    events = [SpanBeginEvent(id=agent, name=agent, type="agent") for agent in agents]
+    events += [ToolEvent(id=f"call{k}", function="shell", arguments={}, span_id=agent, timestamp=moment(start),
+                         completed=moment(end) if end else None) for k, (agent, start, end) in enumerate(windows)]
+    spec = EvalSpec(created="2026-10-30T14:00:00+00:00", task="poem", dataset=EvalDataset(), model="mockllm/model",
+                    config={})
+    write_eval_log(EvalLog(eval=spec, samples=[EvalSample(id="museum_poem", epoch=1, input="", target="",
+                                                          events=events)]), str(path))
+    return path
