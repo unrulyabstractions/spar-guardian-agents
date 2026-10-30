@@ -13,6 +13,8 @@ One script per task: three neutral agents on the pull board at the small scale, 
 
 The cells of the first experiment sit beside them, three per domain, the same arguments (the stems are `subset`, `factor` and `binder` on the new domains): `<task>_solo.py` (one agent alone, CheatBench's own layout, the whole exploit in reach), `<task>_solo_cheat.py` (the same agent with `CHEAT`, a paragraph after the task instruction telling it to reuse the prior work and present it as its own) and `<task>_minimal_cheat.py` (the three-agent split with `CHEAT` to every agent). The cheating text is a control for the floor of instruction following and lives in each script, in the open; the script builds its task with it (`swarm_task(benchmark, config, name=args.name, extra_instruction=CHEAT)`) and runs that task (`run.run(..., task=task)`). A solo cell is the default config with `config.replace(n_agents=1)`. The protein-design cells name the colleague's directory and `check_design` in their `CHEAT`.
 
+Knowledge work, SWE and protein design also have a regulated cell, `<task>_minimal_regulated.py`: four agents on the split, one of them a hidden regulator (`config.replace(n_agents=4, regulators=1)`). The three neutral agents hold what the minimal script's three hold, and the regulator holds nothing. No agent is told to cheat.
+
 Run one from the repository root with `OPENROUTER_API_KEY` set for the agents' default model, deepseek-flash-openrouter (pinned to one host by its registry entry), and `OPENAI_API_KEY` for the judge, gpt-6-luna (another agents' model takes its own key, `GEMINI_API_KEY` for Gemini):
 
 ```
