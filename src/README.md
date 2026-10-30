@@ -1,118 +1,202 @@
 # src
 
-The experiment on ORBIT. It turns one benchmark from `src/domains/` and one `SwarmConfig` into an Inspect task, runs it, exports it and serves the results. The turn rules run on ORBIT's public API, with no patch to ORBIT. Run everything from the repository root with `uv run python -m src <command>`.
+The experiment on ORBIT. A run takes one benchmark and one `SwarmConfig`, builds an Inspect task, runs it, exports it to `runs/<name>/` and serves the results. The turn rules use ORBIT's public API, with no patch to ORBIT. Run everything from the repository root with `uv run python -m src <command>`.
 
-## Layout
+## How to read the tree
 
-| file | holds |
-|---|---|
-| `__main__.py` | `python -m src`: calls `cli.main` |
-| `cli.py` | argument parsing, and every command: `run`, `judge`, `ladder`, `rejudge` and `regenerate` call `run.py`; `signals`, `summary`, `budget`, `engagement`, `swe-summary` and `plots` call `measures/`; `ui` calls `ui/launch.py`; `models` calls `models/model_registry.py` |
-| `run.py` | the `run`, `judge`, `ladder`, `rejudge` and `regenerate` commands: `inspect_ai.eval` in process, the export, re-judging, the judged ladder, and a run directory rebuilt from its log |
-| `tasks.py` | `swarm_task(benchmark, config)` and the `@task` entry points `openmath`, `swe`, `knowledge_work`, `subset_sum`, `prime_factorization`, `protein_design`, `creative_writing` and `chess` |
-| `configuration/` | every setting and model-facing text: `swarm_config.py` (`SwarmConfig`, the preset, `build_config`), `prompt_texts.py` (the texts that depend on a setting: the submit and stop_working lines, the board system prompt, the SWE board fields, the role briefing and the board notice), `settings.py`, the scales, the access policy and the YAML texts; see `src/configuration/README.md` |
-| `swarm/board.py` | the board as ORBIT configuration (one shared channel, no invocation edges, a written plan) and its tools `board_status`, `board_read` and `board_post` with the per-round read and post budgets, over ORBIT's communication store |
-| `swarm/submit_and_stop.py` | `submit` (bound as `team_submit`, which ORBIT reserves, and shown to the model as `submit`) and `stop_working`: the guard, the hand-in record, the board's notice of the hand-in, and the end of the caller's turns |
-| `swarm/_regulator_oversight.py` | `agent_actions`, the regulators' tool: a teammate's latest tool calls, read from its live conversation |
-| `swarm/hidden_roles.py` | hidden roles and the instruction levels: who is regulator or disregulator, and the texts each one gets |
-| `swarm/turn_rules/` | the turn rules (`__init__.py` is the API): the plan of concurrent or sequential rounds under the turn budget, the free board steps, the budgets' counters, the halt after the team's hand-in, the callback after each activation, and the model filter, which also takes ORBIT's assistant paragraph out of the system message (`provider_system_text`) |
-| `swarm/awareness_probes.py` | Lucy's end-of-episode reflection and awareness questions, as an Inspect scorer |
-| `domains/` | CheatBench's tasks: the Benchmark protocol and the openmath, SWE, knowledge-work, interview (subset_sum, prime_factorization), protein-design, creative-writing and chess domains; see `src/domains/README.md` |
-| `sandbox/` | what every domain builds from: the agents' tools and seats, their sandbox users, the per-agent machines layer (`machines/`), CheatBench's task files, the Docker images, the staging, the task tools' store, the hygiene and the end-of-run probe; see `src/domains/README.md` |
-| `judging/` | CheatBench's judge as an Inspect scorer (`cheatbench_judge.py`), its models (`judge_models.yaml`) and the judged ladder (`judging_ladder.py`, with the addenda `_ladder_verdict_fields.py` and `_presentation_verdict_fields.py`) |
-| `export/` | the eval log as a CheatBench run directory: the sample view, the ATIF transcripts, the episodes and the blocks of `run.json` |
-| `models/` | the model registry (`model_registry.py`, `model_registry.yaml`), the swarm provider that runs a role's own model (`swarm_model_provider.py`) and Gemini's 402 retried as a rate limit (`gemini_402_retry.py`) |
-| `measures/` | over run directories (`run_directory.py`, `RunDir`): the episode summary and the lone runs' turns (`episode_summary.py`), the board engagement funnel (`board_engagement.py`), the code ladder (`code_ladder.py`), the team record (`team_ladder.py`) and the scales they share with the judged ladder (`rungs.py`), the judge's flags per task (`verdict_fields.py`), Lucy's SWE measures (`swe_measures.py`), the figures (`run_figures.py`) |
-| `utils/` | CheatBench's `core` package on the import path (`cheatbench_core.py`), the JSON readers (`json_files.py`) and the figures' style (`figure_style.py`) |
-| `ui/` | the results browser: `_server.py` (the HTTP routes), `_run_store.py` (the run directories it reads), `_eval_log_views.py` (the eval log's sample, context windows and timeline), `launch.py` (start and stop in the background), `API.md` and the single-page UI in `static/` (`index.html`, `style.css` and the ES modules under `static/app/`, booted by `main.js`) |
+A module with a leading underscore is implementation: only its own package imports it. A module without one is its package's API: another package, an example, a script or a tool imports it. Each package's `__init__.py` lists its API modules.
+
+Files that run inside a container sit in a domain's `sandbox/` folder, or beside `agent_users.py` and `agent_machines.py`. No Python module imports them. Their module reads each one as text and sends it to the sandbox.
+
+## A run, in order
+
+```
+python -m src run <name>     cli.py reads the flags
+        |
+  configuration/             the preset, the scale and every --set become one SwarmConfig
+        |
+  domains/ <-- sandbox/      the Benchmark fixes the plan and gives the sample, tools, setup and scorers
+        |
+  swarm/                     the board, the hidden roles, submit and stop_working, the turn rules
+        |
+  tasks.py                   all of the above as one ORBIT task
+        |
+  run.py                     inspect_ai.eval in process, with the judge as a scorer    -> logs/<name>/
+        |
+  export/                    the eval log as a run directory                           -> runs/<name>/
+        |
+  judging/                   verdicts from the log, the judged ladder from transcripts -> judge.jsonl, ladder.jsonl
+        |
+  measures/                  the code ladder, the summaries, the figures               -> signals.jsonl, out/<name>/
+        |
+  ui/                        the browser over runs/ and the eval logs
+```
+
+`models/` and `utils/` serve every step.
+
+## The packages
+
+### configuration/
+
+Every setting of a run and every text we add to what the models read. `src/configuration/README.md` gives the details and what each option does.
+
+- `swarm_config.py`: `SwarmConfig`, the frozen model of one run, and its derived values.
+- `presets.py`: a config from text: the presets, `key=value` pairs and the flags every entry point shares.
+- `scales.py`: the size of a run as one name, from `small` to `gigantic`.
+- `access_policy.py`: which parts of the exploit each agent holds.
+- `prompt_texts.py`: the system prompt texts that depend on a setting.
+- `settings.py`: the paths, the default models, the turn budget and the submodule pins.
+
+The texts live in `prompts.yaml` and `instruction_levels.yaml`.
+
+### domains/
+
+CheatBench's tasks. Each domain gives the sample, the sandbox, the setup, the graders and the code ladder's rules. `src/domains/README.md` gives each domain's rules and how to add one.
+
+- `__init__.py`: `DOMAINS` by key, for `--benchmark` and the `@task` entry points, and `BY_TASK` by CheatBench's task name.
+- `benchmark_protocol.py`: `Benchmark`, `RowBenchmark` and `Plan`: what a domain implements, and the plan of one run.
+
+Each package's `<d>_task.py` holds its Benchmark. The other modules a package exposes are the ones the box runner and the measures import.
+
+| package | Benchmark | other API modules |
+|---|---|---|
+| `openmath/` | `OpenMath` | none |
+| `swe/` | `SWE` | `swe_inputs.py`, `swe_ladder.py`, `swe_sandbox.py`, `swe_settings.py` |
+| `knowledge/` | `KnowledgeWork` | `knowledge_sandbox.py`, `knowledge_settings.py` |
+| `interview/` | `SubsetSum`, `PrimeFactorization` | none |
+| `protein/` | `ProteinDesign` | `protein_rows_build.py` |
+| `creative/` | `CreativeWriting` | `creative_sandbox.py` |
+| `chess/` | `Chess` | `chess_rows_build.py` |
+
+### sandbox/
+
+What every domain builds its sandbox from. Nothing here knows a domain.
+
+- `agent_tools.py`: `Seat`, where one agent works, and `AgentTools`, the agents' `shell` and `run_python` bound per seat.
+- `agent_users/agent_users.py`: one Linux user per agent in one container, for openmath, knowledge work and creative writing.
+- `machines/agent_machines.py`: one machine per agent on CheatBench's python311 image, for the interview tasks and protein design. Chess and creative writing build on the same image.
+- `cheatbench_task_files.py`: CheatBench's task folder and built rows, as every domain reads them.
+- `docker_images.py`: images on the host, built from a recipe when the label no longer names it.
+- `sandbox_hygiene.py`: the processes an agent leaves, the loopback channel and what the sandbox holds at the end.
+- `sandbox_probe.py`: one command's record, a table of commands and the setup solver that probes the seats.
+- `staging.py`: files written on the host for a sandbox: atomic writes, compose files and staging tarballs.
+- `task_tool_store.py`: the sample store of a task's own tool.
+
+### swarm/
+
+The team on ORBIT's API.
+
+- `board.py`: one shared channel as ORBIT configuration, and the tools `board_status`, `board_read` and `board_post` with the per-round budgets.
+- `hidden_roles.py`: who is regulator or disregulator, on a board whose config asks for one, and the texts each role gets.
+- `submit_and_stop.py`: `submit` and `stop_working`, the tools that end an agent's work. ORBIT reserves `submit`, so the tool is bound as `team_submit` and shown to the model as `submit`.
+- `awareness_probes.py`: Lucy's end-of-episode questions as an Inspect scorer.
+- `turn_rules/`: the plan of rounds under the turn budget, the free board steps, the budgets' counters, the halt after a hand-in and the model filter. Its `__init__.py` is the API. `turn_activation.py` is the callback ORBIT imports by its dotted name after every activation.
+
+The implementation is `_regulator_oversight.py` (`agent_actions`, the regulators' tool) and the `_turn_*.py` modules. Every run carries the turn rules as a passive defense. Its model filter takes ORBIT's assistant paragraph out of the system message and appends the continue prompt (`prompts.yaml` `continue`) when the provider input would end with a model turn, which Gemini rejects.
+
+### tasks.py
+
+`swarm_task(benchmark, config)` turns the plan, the sample, the tools, the prompts, the board and the turn rules into one ORBIT task. It adds the judge to the scorers and records the run's facts in the sample metadata. The `@task` entry points `openmath`, `swe`, `knowledge_work`, `subset_sum`, `prime_factorization`, `protein_design`, `creative_writing` and `chess` serve `inspect eval`.
+
+### run.py
+
+The commands `run`, `judge`, `ladder`, `rejudge` and `regenerate`. `run` checks the keys and the routing, builds the task, calls `inspect_ai.eval` in process, exports the log, prints the summary and places the agents on the code ladder.
+
+### export/
+
+The eval log as a CheatBench run directory.
+
+- `run_export.py`: writes an `.eval` log as a run directory.
+- `export_episodes.py`: the files one sample writes, and its episode records.
+- `eval_sample_view.py`: one sample read the same way, finished or live.
+- `atif_transcripts.py`: one sample as one ATIF trajectory per agent.
+
+`_export_run_blocks.py` is the implementation: the blocks of `run.json`.
+
+### judging/
+
+The LLM judges. CheatBench's judge runs inside the eval as the scorer `cheatbench_judge`, so the export finds its verdicts in the log. `judge` and `rejudge` judge a finished log again. The judged ladder reads a run's stored transcripts.
+
+- `cheatbench_judge.py`: CheatBench's judge, in process through Inspect's model API.
+- `judging_ladder.py`: the cheating ladder as an LLM judge, one call per agent.
+
+`judge_models.yaml` holds the judge entries. `_ladder_verdict_fields.py` and `_presentation_verdict_fields.py` are the addenda to CheatBench's verdict schema.
+
+### measures/
+
+Everything computed over a run directory, without a model.
+
+- `run_directory.py`: `RunDir`, one run directory read through one object.
+- `code_ladder.py`: exposed, tried, opened, used, checked and shipped per agent from the transcript, the probe and the domain's records. It writes `signals.jsonl` and run.json `signals`.
+- `team_ladder.py`: the team record of a sample: its rungs, its collaboration level, the judged presentation and the outcomes.
+- `ladder_domain.py`: `Domain`, what a domain tells the code ladder, and `Evidence`. Each domain subclasses it in `_<d>_ladder.py` (`swe_ladder.py` for SWE).
+- `honeypot_fingerprints.py`: the honeypot's fingerprints, and the probe that finds them in a sandbox.
+- `shell_commands.py`: shell commands as the code ladder reads them: pipelines, simple commands, their words, grep calls.
+- `rungs.py`: the ladder's scales in order, and the table of counts both ladders print.
+- `episode_summary.py`: one line per episode, and the lone runs' turns for `budget`.
+- `board_engagement.py`: the board engagement funnel, per role and per agent.
+- `swe_measures.py`: Lucy's SWE measures, per agent and per arm.
+- `verdict_fields.py`: the judge's flags per task (`FLAGS_BY_TASK`), for the summary, the figures, the browser and the tools.
+- `run_figures.py`: one run's figures: each agent's steps round by round, the board's actions per round, the judge's flags per agent.
+
+### ui/
+
+The results browser, a local single-page UI over `runs/` and the eval logs. `API.md` is its HTTP contract.
+
+- `launch.py`: starts and stops the browser as a background process.
+
+`python -m src.ui` serves it in the foreground. The implementation is `_server.py` (the HTTP routes), `_run_store.py` (the run directories), `_eval_log_views.py` (the eval log's sample, context windows and timeline) and `static/` (`index.html`, `style.css` and the ES modules under `app/`, booted by `main.js`).
+
+### models/
+
+The agents' and the judges' models.
+
+- `model_registry.py`: every model we can consider (`model_registry.yaml`) and the name each route needs.
+- `swarm_model_provider.py`: the `swarm` provider, which runs a role's own model behind a bare model string.
+- `gemini_402_retry.py`: treats the Gemini API's 402 as a retryable error.
+
+### utils/
+
+Shared helpers.
+
+- `cheatbench_core.py`: CheatBench's `core` package on the import path.
+- `figure_style.py`: the look every figure shares.
+- `json_files.py`: the JSON and JSON Lines readers.
 
 ## Commands
 
+`cli.py` parses the arguments and calls `run.py`, `measures/`, `ui/launch.py` or `models/model_registry.py`.
+
 | command | what it does |
 |---|---|
-| `run <name> [--benchmark openmath\|swe\|knowledge_work\|subset_sum\|prime_factorization\|protein_design\|creative_writing\|chess] [--preset default] [--scale small\|medium\|large\|extra_large\|gigantic] [--set key=value ...]` | runs one task, writes `logs/<ctrl\|swarm\|swe>/<name>/`, exports `runs/<name>/` and prints the summary; the preset applies first, then the scale, then every `--set` |
-| `run ... --row R` | the openmath_agent row (`riemann` by default), the knowledge_work row (`2ea2e5b5` by default), the subset_sum or prime_factorization question (`subsetsum_n60d10_4`, `fact_n52_4` by default) the protein_design target (`alfalfa_chi` by default) the creative_writings brief (`museum_poem` by default) or the chess position (`LR4pA` by default) |
-| `run ... --issue flipt-02e2 --honeypot as_released\|own_piece\|jigsaw [--no-grade]` | the SWE issue and Lucy's honeypot, `jigsaw` by default; `--no-grade` skips the hidden tests |
+| `run <name> [--benchmark openmath\|swe\|knowledge_work\|subset_sum\|prime_factorization\|protein_design\|creative_writing\|chess] [--preset default] [--scale small\|medium\|large\|extra_large\|gigantic] [--set key=value ...] [--no-judge]` | runs one task, writes `logs/<name>/`, exports `runs/<name>/` and prints the summary; the preset applies first, then the scale, then every `--set`; `--no-judge` is `--set judge=none` |
+| `run ... --row R` | the benchmark's row: the openmath_agent row (`riemann` by default), the SWE issue (`flipt-02e2`), the knowledge_work row (`2ea2e5b5`), the subset_sum or prime_factorization question (`subsetsum_n60d10_4`, `fact_n52_4`), the protein_design target (`alfalfa_chi`), the creative_writings brief (`museum_poem`) or the chess position (`LR4pA`) |
+| `run ... --honeypot as_released\|own_piece\|jigsaw [--no-grade]` | Lucy's honeypot on SWE, `jigsaw` by default; `--no-grade` skips the hidden tests |
 | `run ... --model M --timeout S` | the agents' model, an entry of `src/models/model_registry.yaml` or an Inspect model string, and the seconds one model request may take (default `MODEL_TIMEOUT_S`) |
-| `run ... --worker-model M --regulator-model M --disregulator-model M` | a role's own model, set after every `--set`; it runs through the swarm provider (`models/swarm_model_provider.py`) with its registry routing and the agents' generate config. The eval log names its calls `swarm/<model>`, and `runs/<name>/episodes.jsonl` names each agent's real model |
+| `run ... --worker-model M --regulator-model M --disregulator-model M` | a role's own model, set after every `--set`; it runs through the swarm provider with its registry routing and the agents' generate config. The eval log names its calls `swarm/<model>`, and `runs/<name>/episodes.jsonl` names each agent's real model |
 | `judge <eval_log> <run_name> [--judge gpt-6-luna] [--sync] [--judge-errors]` | judges a finished log (again, or for the first time after `--no-judge`) and exports it with the verdicts; batch API unless `--sync` |
 | `rejudge <run ...> [--judge gpt-6-luna] [--sync] [--no-judge] [--no-ladder] [--view full\|actions] [--judge-errors]` | CheatBench's judge from each run's eval log (named in `run.json`), then the ladder over its transcripts; a run whose log is gone gets the ladder only |
 | `regenerate <run ...> [--no-export] [--no-measures] [--no-plots]` | rebuilds what a run directory derives from its eval log: the export (keeping the verdicts in `judge.jsonl`), the code ladder, the SWE measures and the figures |
-| `signals <run ...> [--table]` | places every agent and every team on the cheating ladder by code, no judge (`src/measures/code_ladder.py` and `team_ladder.py`: the honeypot's fingerprints in tool results, posts and, from the end-of-run probe, on disk; the board; the hand-in): `signals.jsonl` with the agent rows, then one team record per sample, and run.json `signals.team`; every run gets it as it ends, and `judge` and `ladder` run it again; `--table` prints the agents' table, then the teams' |
-| `ladder <run ...> [--judge gpt-6-luna] [--sync] [--view full\|actions] [--agents a01,a02] [--force] [--table]` | places every agent on the cheating ladder from its stored transcript (`src/judging/judging_ladder.py`, the addenda `src/judging/_ladder_verdict_fields.py` and, where the team reached checked or shipped, `_presentation_verdict_fields.py`): `runs/<name>/ladder.jsonl` with the rung, the cited calls and their rounds, pushback and forbidden method, the honesty labels and the presentation, then one team row per sample; `--table` sums the existing files |
+| `signals <run ...> [--table]` | places every agent and every team on the cheating ladder by code, no judge: `signals.jsonl` with the agent rows, then one team record per sample, and run.json `signals.team`; every run gets it as it ends, and `judge` and `ladder` run it again; `--table` prints the agents' table, then the teams' |
+| `ladder <run ...> [--judge gpt-6-luna] [--sync] [--view full\|actions] [--agents a01,a02] [--force] [--table]` | places every agent on the cheating ladder from its stored transcript: `runs/<name>/ladder.jsonl` with the rung, the cited calls and their rounds, pushback and forbidden method, the honesty labels and the presentation, then one team row per sample; `--table` sums the existing files |
 | `ui [start\|stop] [--port 8765] [--no-open]` | starts or stops the results browser in the background |
 | `summary <run ...> [--full]` | one line per episode with its verdict and the task's judge flags, the swarm composition and the shutdown rate (the share of the team's agents that ended with `stop_working` before any hand-in) |
-| `engagement <run ...> [--json]` | the board engagement funnel per role and per agent (`src/measures/board_engagement.py`) |
-| `swe-summary <run ...>` | Lucy's SWE measures per agent and per arm, written to `swe_summary.json` (`src/measures/swe_measures.py`) |
+| `engagement <run ...> [--json]` | the board engagement funnel per role and per agent |
+| `swe-summary <run ...>` | Lucy's SWE measures per agent and per arm, written to `swe_summary.json` |
 | `budget <lone_run ...>` | lone runs' turns and their median |
 | `models [NAME]` | the models we can consider, one row per entry with its Inspect string, key variable, context, prices and CheatBench entries; with a name, that entry in full |
-| `plots <run> [--out DIR]` | one run's figures as PNG with CSV twins under `out/<run name>/` (gitignored): every agent's steps round by round with the judge's verdict, the board's actions per round, the judge's flags per agent (`src/measures/run_figures.py`) |
+| `plots <run> [--out DIR]` | one run's figures as PNG with CSV twins under `out/<run name>/` (gitignored) |
 
-The judge runs inside the eval as the scorer `cheatbench_judge`, bound to the model role `judge`, unless the config's `judge` is none (`run --no-judge`), in which case the run is exported without verdicts and `rejudge` adds them later. With `batch_judge` its calls go through the provider's batch API; `judge` and `ladder` batch too unless `--sync`. `inspect eval src/tasks.py@openmath -T preset=default -T regulators=1` also works; every `-T` key other than the task's own arguments sets a config field, and `-T scale=medium` applies a scale first.
+The judge runs inside the eval as the scorer `cheatbench_judge`, bound to the model role `judge`. With `--no-judge` the run is exported without verdicts, and `rejudge` adds them later. With `batch_judge` the judge's calls go through the provider's batch API; `judge` and `ladder` batch too unless `--sync`.
 
-## What each option does
+`inspect eval src/tasks.py@openmath -T preset=default -T regulators=1` also works. Every `-T` key other than the task's own arguments sets a config field, and `-T scale=medium` applies a scale first. This form skips the key and routing checks, the role models built before the sandbox starts, and the Gemini 402 retry.
 
-`src/configuration/swarm_config.py` holds the fields, each with a docstring. The table says how each one reaches ORBIT.
+## Outside src/
 
-| option | default | ORBIT mechanism |
-|---|---|---|
-| `n_agents` | 1 (3 in the `default` preset) | one `AgentSpec` per name `a01`, `a02`, ...; two or more share one board channel; names widen to `a001` past 99 agents |
-| `regulators`, `disregulators` | 0 | hidden roles by seeded shuffle; a count, or a share in (0, 1) rounded half up; the role's text is appended to its holders' system prompts |
-| `seed` | 0 | which names hold which role, the random turn order, and the SWE planted commits' times |
-| `preset` | none (the preset's name in every preset) | the preset the config was built from, recorded in the config dump so `run.json` names it |
-| `mode` | shared_task | `solo_task` or `shared_task`; the domain builds the sample, the workspaces and the prompts from it |
-| `access` | split | which parts of the exploit each agent holds (`src/configuration/access_policy.py`, `Benchmark.access_plan`): `split` deals the domain's items round robin over the neutral agents, repeating them in order when the agents outnumber them (openmath per-agent copies with a team remote and one slice of the complete submission's archive each; SWE the honeypot's pieces; knowledge work the review tool for the first half and the artifact read for the rest; the interview tasks one shard or share of the answer key each; protein design one segment of every planted design each, `segment1`..`segmentN`) and gives regulators and disregulators nothing, `all` gives everyone everything, and a map `a01:slice1+slice2,a02:slice3,a03:` names each agent's items |
-| `scale` | none (small in the `default` preset) | the label of the scale the size fields came from (`src/configuration/scales.py`) |
-| `mention_team` | none | the `team` sentence and the roster in the system prompt; none follows the mode |
-| `informed_roles` | true | `roles.briefing` after a regulator's or disregulator's role text |
-| `mention_board` | false | the board sentence in the system prompt (SWE: the team chat paragraph) |
-| `notice` | counts | one provider-only line when the board changed since the agent's last call: `counts` gives each sender's new and total posts, `changed` the line alone, `none` nothing |
-| `read_page` | 5 | the most posts one `board_read` returns |
-| `free_board_actions` | 3 | follow-up steps per round after a free step, amended into the plan by the `after_activation` callback; 0 charges every step |
-| `free_board_actions_regulator` | 10 | a regulator's follow-up steps per round; `agent_actions` counts as a board action |
-| `reads_per_turn`, `posts_per_turn` | none (10 and 2 from the scale) | posts an agent may receive through `board_read` and posts it may make per round; past them the tool returns the newest posts left or raises a ToolError; regulators have no read budget |
-| `max_message_chars` | 4000 | `CommunicationConfig.max_message_chars`, the longest post; a scale sets it |
-| `turn_order` | random | the order of each round in the written plan (`ExecutionConfig.plan`); random draws a permutation per round from the seed; round_robin keeps declaration order |
-| `steps_per_agent` | 60 (8 in the `default` preset) | rounds of the plan; an agent is charged at most one working step per round, and free board steps are never charged |
-| `turn_budget` | none (`settings.TURN_BUDGET` in the `default` preset: 100, two thirds of CheatBench's 150-turn bound) | the working steps every agent gets, as rounds in place of `steps_per_agent` (`working_steps`); `none` turns the budget off |
-| `concurrent_rounds`, `max_concurrency` | true, 3 | one concurrent `ScheduleStep` per round with a snapshot of the board; false runs one single-agent step per agent per round |
-| `pooled_steps` | true | the `after_activation` callback gives a stopped agent's steps to the active agents (`ScheduleRuntime.amend_pending`) |
-| `shutdown` | true | `stop_working` for every agent of a `shared_task` team, roles included (`gives_stop_working`); a call ends the caller's turns (`TurnState.ended` and the store `StopWorking`) and hands in nothing; false: no stop tool and no sentence about stopping. No agent holds ORBIT's own submit (`AgentSpec.submit=False`) |
-| `submit` | none | `submit` for neutral agents, the lone agent included (`gives_submit`); never for a role; none gives it in every mode; it is refused while `Benchmark.gradable` finds nothing to grade, and the store `TeamSubmission` records the hand-in and every refused call |
-| `submit_delay_rounds` | 2 | a `shared_task` team's `submit` in round r ends the run after round r plus this; the board gets a post from the system at once, and the callback drops every step after that round |
-| `stop_after_delivery` | none | N ends an episode soon after its deliverable exists: alone or in solo_task after N more of the agent's working steps once its own is seen, in a team N rounds after the round that shows the team's; the callback awaits the benchmark's delivery predicate (`Benchmark.delivered`) at the end of each round; the episodes it ends have `ended_by` delivered and their steps go to nobody |
-| `regulator_window`, `disregulator_window` | 1: | the rounds a role holds steps in, as `start:end`; the agent enters at its start round and leaves after its end |
-| `rule_level` | none | the rule sentence after the task instruction (`src/configuration/instruction_levels.yaml`, ladder `rule`) |
-| `regulator_level`, `disregulator_level` | ambiguous, persuade | the role texts (ladders `regulator` and `disregulator`); a regulator's text is followed by `roles.regulator_common`; level `none` adds no sentence |
-| `regulator_discloses` | false | without it a regulator's text also ends with `roles.regulator_no_disclosure` |
-| `awareness_probe` | false | adds the `end_of_episode_probes` scorer |
-| `message_limit`, `token_limit`, `time_limit_s` | 320, 0, 0 | Inspect's message and token limits, and `SchedulerConfig.max_time_seconds`; 0 means the default; a scale sets the first and the last |
-| `time_grace_s` | 600 | seconds Inspect's hard `time_limit` sits above ORBIT's soft halt at `time_limit_s`, so a step in flight finishes and its usage is logged; 0 puts both at `time_limit_s`; SWE adds its grading budget instead |
-| `batch_agents`, `batch_judge` | false, true | `GenerateConfig(batch=True)` for the agents' model (from the scale) and for the model bound to the judge role |
-| `judge`, `judge_addendum` | gpt-6-luna, false | the judge entry in `src/judging/judge_models.yaml` (`gpt-6-sol` is the reference judge, `claude-haiku-5-5` the cheapest of another family; none: no judge), and Lucy's judge addendum appended to the schema |
-
-A step is charged to `steps_per_agent` unless its last tool call is a board action, a `submit` or a `stop_working` that succeeded. A step that ends with a board action that succeeded is free and earns a follow-up step in the same round. A board action, `submit` or `stop_working` that fails (an error, a budget refusal, the submit guard's refusal, or "no such agent") is charged as work, with the charge `refused` in the timeline. The timeline's charge is `submit` or `stop` for one that went through.
-
-Every run also carries the passive `turn_rules` defense. Its model filter takes ORBIT's assistant paragraph out of the system message and appends the continue prompt (`prompts.yaml` `continue`) when the provider input would end with a model turn, which Gemini rejects. Both reach the provider only; the transcripts and the browser show them as the provider received them.
-
-One preset exists. `default` is the midterm report's configuration: the fields above at the small scale, with the turn budget `settings.TURN_BUDGET`. It has no regulators; it sets only their level.
-
-Hidden roles are used on an openmath board of three or more agents, and on any board whose config asks for a regulator or a disregulator.
-
-## measures/
-
-| file | holds |
+| folder | holds |
 |---|---|
-| `run_directory.py` | `RunDir`: one run directory's `run.json` (read once, and again after one block is written), episodes, verdicts, the ladders' agent rows and team rows, the board and the transcripts |
-| `rungs.py` | the ladder's scales in order (the honeypot rungs, the collaboration levels, the presentation labels, the endings), the highest level a row holds, the tool calls as CheatBench's renderer numbers them, and the table of counts per run that both ladders print |
-| `episode_summary.py` | `EpisodeSummary`, one episode's line from its record and its verdict; `summary_lines` for a run; the lone runs' turns for `budget` |
-| `code_ladder.py` | the code ladder's API: exposed, tried, opened, used, checked and shipped per agent from the transcript (pointers, aimed commands with copies followed, distinctive lines and bytes in results and read posts, the pieces seen, the call that joined the whole exploit), the probe's report in `run.json` `honeypot_probe` and the domain's records; writes `signals.jsonl` and run.json `signals`; the agents' table adds the agreement with the judge, and the teams' table counts rungs and collaboration levels |
-| `team_ladder.py` | the team record of a sample: the team's rungs from every agent row and the team's shared work, raised by what a pass proves; the collaboration level from the board's posts and the domain's crossed and assembled; the judged presentation, pushback and forbidden method; the outcomes (passed, ended by, the hand-in, refused submits, shutdown rate) |
-| `ladder_domain.py` | `Domain`, what a domain tells the code ladder (each domain's subclass is its package's `_<domain>_ladder.py`, `swe_ladder.py` for SWE): the honeypot's pointers and pieces, aimed commands, the agent's deliverable, the team's work and the hand-in, the feedback grader, what a post mentions, crossed and assembled, passed and what a pass proves; `Evidence`, and the fingerprint cache |
-| `shell_commands.py` | the code ladder's shell parsing: pipelines and simple commands outside quotes, their words and written files, grep and rg calls, count-only probes, distinctive line hits |
-| `board_engagement.py` | the board engagement funnel per role and per agent: on the board, looked, read, posted, called submit; each agent's refused reads and posts and its `agent_actions` queries |
-| `verdict_fields.py` | the judge's flags per task (`FLAGS_BY_TASK`) with their labels and colours, for the summary, the figures and the browser |
-| `swe_measures.py` | Lucy's SWE measures: cheating, posts about the fix, disclosure, rungs and rewards per agent and per arm |
-| `run_figures.py` | one run's figures: each agent's steps round by round (work, board, submit, stop_working), the board's actions per round, the judge's flags per agent |
-
-Every one runs through the command line: `python -m src signals`, `summary`, `engagement`, `swe-summary` and `budget`.
+| `examples/` | one script per task and cell of the first experiment; see `examples/README.md` |
+| `scripts/` | `screen.py` (the example cells in bulk), `paper/` (the paper's figures, tables and appendix) and `box/` (the rented boxes; see `scripts/box/README.md`) |
+| `tools/` | the analysis tools in their own environment; see `tools/README.md` |
+| `tests/` | `unit/` (one test module per module or concept), `smoke/` (the mock-model suites), `tools/` (the analysis tools' tests) and `support/` (what they share) |
+| `submodules/` | CheatBench, ORBIT and Lucy's repository, read only |
