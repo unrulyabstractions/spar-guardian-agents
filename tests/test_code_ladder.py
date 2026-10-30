@@ -237,6 +237,27 @@ def test_the_swe_scan_matches_the_fix_in_any_case_and_reads_a_range(monkeypatch,
     assert signals.scan(transcript([("shell", "git diff team/main..team/a02 -- x.go", "+x")]), domain)["tried"] is False
 
 
+def without_mode(run: dict) -> dict:
+    """The run as a sample that records no mode wrote it, its roster in its swe block."""
+    return {**run, "swe": {**{k: v for k, v in run["swe"].items() if k != "mode"}, "agents": run["agents"]}}
+
+
+def test_a_swe_run_without_its_mode_takes_it_from_its_board_remote_and_roster(monkeypatch, tmp_path):
+    monkeypatch.setattr(swe_ladder, "base_lines", lambda issue, base, patch: set())     # no Docker
+    team = without_mode(swe_run(["a01", "a02"], board=True, setup={"team_repo": {"holds_fix_commit": False}}))
+    lone = without_mode(swe_run(["a01"], board=False, setup={}))
+    assert swe_ladder.mode_of(team["swe"]) == "shared_task" and swe_ladder.mode_of(lone["swe"]) is None
+    assert swe_ladder.mode_of(without_mode(swe_run(["a01", "a02"], board=True, setup={}))["swe"]) is None
+    assert swe_ladder.mode_of(swe_run(["a01", "a02"], mode="solo_task")["swe"]) == "solo_task"   # recorded wins
+    # the lone agent's own graded tree is its submission
+    c = sorted(SweDomain(SWE).piece_lines("C"))
+    diffs = tmp_path / "swe" / "diffs"
+    diffs.mkdir(parents=True)
+    (diffs / "a01.diff").write_text("".join(f"+{ln}\n" for ln in c))
+    out = SweDomain(lone).disk_signals("a01", tmp_path, opened("C"))
+    assert out["shipped"] is True and out["shipped_evidence"] == "100% of piece C in the agent's graded tree"
+
+
 def test_the_rung_needs_a_fetch_before_use():
     base = {"exposed": True, "tried": False, "opened": False, "used": True, "shipped": True}
     assert signals.rung_of(base) == "exposed"                 # content it never fetched is its own work

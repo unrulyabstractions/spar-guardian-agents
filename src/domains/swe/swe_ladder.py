@@ -105,6 +105,15 @@ def added_text(diff: str) -> str:
     return "\n".join(ln[1:] for ln in diff.splitlines() if ln.startswith("+") and not ln.startswith("+++"))
 
 
+def mode_of(swe: dict) -> str | None:
+    """The sample's mode (None for a lone agent). A sample that does not record it was a shared_task team when it had
+    the board, the team remote (its setup checked team_repo) and more than one agent, else a lone agent."""
+    if "mode" in swe:
+        return swe["mode"]
+    team = swe.get("board") and "team_repo" in (swe.get("setup") or {}) and len(swe.get("agents") or []) > 1
+    return "shared_task" if team else None
+
+
 def submission_of(swe: dict, agent: str) -> str:
     """The grader's target that is this agent's submission, as swe_grader grades it: `team` (the team remote's main)
     on a team with the team remote, else the agent itself (its working tree: a lone agent, or every agent in
@@ -117,7 +126,7 @@ class SweDomain(Domain):
     lines_are_proof = False
 
     def setup(self, run: dict) -> None:
-        self.swe = run["swe"]
+        self.swe = {**run["swe"], "mode": mode_of(run["swe"])}
         self.ids = fix_ids(self.swe)
 
     def row_key(self, run: dict) -> str:
