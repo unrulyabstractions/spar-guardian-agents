@@ -193,7 +193,7 @@ Post = {sequence, sender, id, t, content, read_by: [{agent, t}]}
 Call k is the agent's k-th tool call in its transcript, from 0, matched to the eval log's tool event by its id.
 
 ### `GET /api/runs/<run>/tools/<tool>/<path>` → one file an analysis tool wrote
-Serves `runs/<run>/tools/<tool>/<path>`, where `<path>` may have subdirectories (`transect/a01/report.html`). Only `.png`,
+Serves `runs/<run>/tools/<tool>/<path>`, where `<path>` may have subdirectories (`judged/a01/report.html` under `transect`). Only `.png`,
 `.csv`, `.html`, `.gexf`, `.json` and `.yaml` are served, with their media type. The run page uses it for figures
 (graph.png, contagion.png, onset.png), reports (transect report.html), downloads (graph.gexf) and the failures tool's
 mast.json and who_when.json.

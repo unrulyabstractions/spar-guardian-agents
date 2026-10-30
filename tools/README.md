@@ -3,12 +3,15 @@
 The analysis layer of the midterm report: Inspect Scout, Docent, NetworkX with a Gephi export, Transect, NDlib and
 EoN, MAST and Who&When, and Hawk. Each tool reads one or more run directories under `runs/` and writes under
 `runs/<name>/tools/<tool>/`: a `summary.json` with `tool`, `run`, `written_at` and the tool's own fields, plus its
-files. The results browser shows every tool's output on the run page ("Analysis tools") and serves the files at
-`/api/runs/<run>/tools/<tool>/<file>`. `tools/run_reader.py` is the shared reader: a run's agents, roles, verdicts, board
-posts, transcripts, the turn timeline (run.json `rules.timeline`), each agent's steps with their rounds, its board
-reads, and the domain's exploit vocabulary. Every tool refuses a missing run with exit code 2 before it does any work. The tools import what they share with the run code from `src/` (the paths, the model
-registry, the JSON readers, the figure style and the judge's flags per task); they never import ORBIT, which their
-environment lacks.
+files. The graph tool's folder is `graphs`. The results browser shows every tool's output on the run page ("Analysis
+tools") and serves the files at `/api/runs/<run>/tools/<tool>/<file>`.
+
+`tools/tool_dispatch.py` holds the command line, one subcommand per tool package, and each package's `<tool>_command.py`
+adds its arguments. `tools/run_reader.py` is the shared reader: a run's agents, roles, verdicts, board posts,
+transcripts, the turn timeline (run.json `rules.timeline`), each agent's steps with their rounds, its board reads, and
+the domain's exploit vocabulary. Every tool refuses a missing run with exit code 2 before it does any work. The tools
+import what they share with the run code from `src/` (the paths, the model registry, the run directory reader, the JSON
+readers, the figure style and the judge's flags per task). They never import ORBIT, which their environment lacks.
 
 ## Setup
 
@@ -30,7 +33,7 @@ make <tool> RUN=<run>
 make analyse RUN=<run>
 ```
 
-Tests: `make test-tools`. Lint: `make lint` covers `tools/`.
+Tests: `make test-tools` runs `tests/tools/`. Lint: `make lint` covers `tools/`.
 
 Keys: the LLM tools (scout, transect, failures, and hawk with `--run`) default to the judge's model,
 `settings.JUDGE_MODEL` (`gpt-6-luna`, through `OPENAI_API_KEY`); `--model` or `--judge` take any entry of
@@ -101,7 +104,7 @@ A deployed Hawk (`hawk scan run`, `HAWK_API_URL`, login) is not used.
 ## Caveats
 
 - Every LLM tool (scout, transect, failures) is one sample at the model's default temperature. Repeated runs move
-  a step or a label; the figures above record what was seen on the three example runs.
+  a step or a label.
 - Outputs accumulate: scout's `scans/`, transect's `scan_id=*` folders and hawk's `results/` keep every invocation;
   each `summary.json` names the current one.
 - `tools/run_reader.py` reads board reads from `board_read` calls.

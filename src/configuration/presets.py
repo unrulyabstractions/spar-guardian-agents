@@ -13,7 +13,8 @@ budgets; regulators with agent_actions, unbounded reads and their own K, at the 
 their role; the turn budget (settings.TURN_BUDGET) as every agent's working steps; split access to the exploit.
 
 The command line applies the preset, then the scale, then every `key=value` pair. `src/cli.py`, the example scripts
-(examples/utils/example_arguments.py) and `scripts/screen.py` take the same flags through add_config_arguments.
+(examples/example_arguments.py) and the screen (`python -m scripts.screen`) take the same flags through
+add_config_arguments.
 """
 from __future__ import annotations
 

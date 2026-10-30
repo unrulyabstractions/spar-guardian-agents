@@ -1,4 +1,5 @@
 """The peer-pressure experiment: CheatBench domains and the swarm on ORBIT's API, the CLI and the results browser.
+src/README.md maps the packages in the order of a run.
 
 API modules:
 - cli.py: the command line, `python -m src`.

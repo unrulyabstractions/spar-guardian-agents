@@ -6,4 +6,5 @@ API modules:
 - hidden_roles.py: workers, regulators and disregulators as peers on one board, and the instruction levels.
 - submit_and_stop.py: the tools that end an agent's work.
 - awareness_probes.py: Lucy's end-of-episode questions as an Inspect scorer.
+- turn_rules/: the plan of rounds, the free board steps, the halt and the model filter.
 """
