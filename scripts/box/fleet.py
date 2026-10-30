@@ -125,9 +125,9 @@ NOT_SWEPT = ("Docker's images, and its containers and volumes unless the capture
 """What the capture never sweeps, printed before every destroy."""
 ENTRY_FIELDS = ("task", "model", "suffix", "label", "launch", "commit", "requirements", "requirements_sha256",
                 "python_version", "uv_version", "cores", "ram_gb", "dph", "min_cores", "min_ram_gb", "min_disk_gb")
-MINIMUMS = {"min_cores": MIN_CORES, "min_ram_gb": int(0.9 * MIN_RAM_GB), "min_disk_gb": int(0.85 * DISK_GB)}
+MINIMUMS = {"min_cores": MIN_CORES - 2, "min_ram_gb": int(0.9 * MIN_RAM_GB), "min_disk_gb": int(0.85 * DISK_GB)}
 """What box_setup.sh requires the box to have (nproc, MemTotal, the root filesystem; GB of 10^9 bytes): the offer's
-minimums, less what a VM's kernel and filesystem take."""
+minimums, less what a VM's kernel and filesystem take. A VM on a 32-core share has 30 cores (instance 58388038)."""
 
 
 @dataclass(frozen=True)

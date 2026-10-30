@@ -726,6 +726,15 @@ def test_the_check_fails_on_anything_it_cannot_vouch_for(box, change, words):
     assert not report.ok and any(words in problem for problem in report.problems)
 
 
+def test_a_clone_that_never_was_is_no_failure_and_a_missing_home_is(box):
+    shutil.rmtree(box["work"])                                                  # a setup stopped before the clone
+    lines = sweep(box)
+    copy_missing(box, compare(box, lines))
+    assert compare(box, lines, instance_id=7).ok
+    shutil.rmtree(box["home"])
+    assert {line["unreadable"] for line in sweep(box) if "unreadable" in line} == {str(box["work"]), str(box["home"])}
+
+
 def test_docker_s_containers_may_go_only_for_a_stated_reason(box):
     held = {"docker": {"running": [], "containers": ["agent1 Exited (137)"], "volumes": ["team"]}}
     lines = sweep(box, docker=lambda: held)

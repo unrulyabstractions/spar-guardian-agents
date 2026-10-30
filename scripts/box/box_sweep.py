@@ -13,7 +13,8 @@ what is provably reproducible, which it counts by reason (counts and bytes):
     font caches, tiktoken's downloads, uv's Pythons, binaries and receipt, docker's client config, the files
     box_setup.sh sent, bytecode and tool caches, systemd's private /tmp folders;
   - the keys file box_run.sh writes (and its temporary copy), the box's id file and vast.ai's authorized_keys.
-The outputs under runs/, logs/ and out/ are never excluded. It also prints symbolic links with their targets (a link
+The outputs under runs/, logs/ and out/ are never excluded. A clone under the home that does not exist is no failure,
+since a setup can stop before it and the walk of the home would reach anything there. It also prints symbolic links with their targets (a link
 whose target exists outside the swept roots on a line of its own, since what it points at is not swept), special
 files, every path it could not read, the processes that still produce (before and after the walk: a runner, a screen,
 an example or `python -m src` by their command line, and any process holding a file under the roots open for
@@ -310,7 +311,7 @@ class Sweep:
         for root in self.roots:
             if os.path.isdir(root):
                 yield from self.walk(root)
-            else:
+            elif not (root == self.repo and os.path.isdir(self.home) and under(root, [self.home])):
                 yield {"unreadable": root, "error": "no such folder"}
         for reason, (files, size) in self.counts.items():
             yield {"excluded": reason, "files": files, "bytes": size}
