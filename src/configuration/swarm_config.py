@@ -8,8 +8,9 @@ calls and the judge. src/tasks.py turns it into an ORBIT task; src/swarm/turn_ru
 presets and the command line's `key=value` form live in src/configuration/presets.py. Each field's docstring says what
 it does and which ORBIT mechanism implements it.
 
-Agents. Every run draws its agents' IDs at random from its seed (agent_ids), lone agents and teams alike. `seats` holds
-the IDs as drawn: an agent's position there is its seat, which only the hidden roles and the deal of access read.
+Agents. Every run draws its agents' IDs at random from its seed and its name (agent_ids, id_salt), lone agents and teams
+alike. `seats` holds the IDs as drawn: an agent's position there is its seat, which only the hidden roles and the deal
+of access read.
 `names` holds them sorted: the roster, and the order of everything an agent can read. So neither an ID nor a list of
 IDs tells an agent its seat, its role or its place in any order. A given ID means nothing in another run.
 """
@@ -44,12 +45,13 @@ ID_DIGITS = "23456789"
 ID_POOL = tuple(map("".join, itertools.product(ID_LETTERS, ID_DIGITS, ID_LETTERS, ID_DIGITS, ID_LETTERS)))
 
 
-def agent_ids(n: int, seed: int) -> list[str]:
-    """The run's n agent IDs in seat order, drawn from ID_POOL without repeats. The same n and seed give the same IDs.
+def agent_ids(n: int, seed: int, salt: str = "") -> list[str]:
+    """The run's n agent IDs in seat order, drawn from ID_POOL without repeats. The same n, seed and salt give the same
+    IDs.
 
     The draw has a random stream of its own, apart from the hidden roles' and the turn order's. Tests swap this function
     for tests/support/ordered_ids.py; nothing in a real run can."""
-    return random.Random(f"agent-ids/{seed}").sample(ID_POOL, n)
+    return random.Random(f"agent-ids/{salt}/{seed}").sample(ID_POOL, n)
 
 
 def role_count(value: int | float, n_agents: int) -> int:
@@ -104,7 +106,10 @@ class SwarmConfig(BaseModel):
     """Agents given the hidden disregulator role, as a count or a share, like regulators."""
     seed: int = 0
     """Draws the agents' IDs (agent_ids) and fixes which seats get which role and, with turn_order="random", the order
-    of each round. Two runs with one seed and team size get the same IDs."""
+    of each round."""
+    id_salt: str = ""
+    """Mixed into the draw of the IDs and nothing else, so runs that share a seed share their hidden seats and turn
+    order and still get IDs of their own. `python -m src run` and the examples set it to the run's name."""
     preset: str | None = None
     """The preset the config was built from (src/configuration/presets.py), recorded so run.json names it. None for a
     config built field by field. A later --set keeps the name."""
@@ -370,7 +375,7 @@ class SwarmConfig(BaseModel):
     @property
     def seats(self) -> list[str]:
         """The agents' IDs in seat order, as drawn. Only the hidden roles and the deal of access read this order."""
-        return agent_ids(self.n_agents, self.seed)
+        return agent_ids(self.n_agents, self.seed, self.id_salt)
 
     @property
     def names(self) -> list[str]:

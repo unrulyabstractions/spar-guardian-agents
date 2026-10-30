@@ -46,19 +46,21 @@ def test_the_shared_arguments_and_their_defaults():
     # no judge by default: judge=none after the settings, and USE_JUDGE_AS_DEFAULT says so
     assert USE_JUDGE_AS_DEFAULT is False and args.judge is False
     assert (args.preset, args.scale, args.settings, args.name, args.timeout) == \
-        ("default", None, [*DEFAULT_SETTINGS, "judge=none"], script.stem, settings.MODEL_TIMEOUT_S)
+        ("default", None, [f"id_salt={script.stem}", *DEFAULT_SETTINGS, "judge=none"], script.stem,
+         settings.MODEL_TIMEOUT_S)
     assert DEFAULT_SETTINGS == ["batch_judge=false"]
     args = parse_example_arguments(script, None, ["--judge", "--model", "claude-haiku-5-5", "--scale", "medium",
                                                   "--set", "regulators=1", "--set", "time_limit_s=900", "--name",
                                                   "trial", "--timeout", "60"])
     assert args.model == "anthropic/claude-haiku-5-5" and (args.name, args.timeout) == ("trial", 60)
-    assert args.judge is True and args.settings == [*DEFAULT_SETTINGS, "regulators=1", "time_limit_s=900"]
+    assert args.judge is True and args.settings == ["id_salt=trial", *DEFAULT_SETTINGS, "regulators=1",
+                                                    "time_limit_s=900"]
     config = build_config(args.preset, args.scale, args.settings)
     assert (config.scale, config.n_agents, config.regulator_count, config.time_limit_s) == ("medium", 10, 1, 900)
     assert config.batch_judge is False and config.judge == settings.JUDGE_MODEL
     # --no-judge, the default spelled out: judge=none after every other setting, so the run is not judged
     args = parse_example_arguments(script, None, ["--no-judge", "--set", "judge=gpt-6-sol"])
-    assert args.settings == [*DEFAULT_SETTINGS, "judge=gpt-6-sol", "judge=none"]
+    assert args.settings == [f"id_salt={script.stem}", *DEFAULT_SETTINGS, "judge=gpt-6-sol", "judge=none"]
     assert build_config(args.preset, args.scale, args.settings).judge is None
     with pytest.raises(SystemExit) as stop:
         parse_example_arguments(script, None, ["--judge", "--no-judge"])
@@ -77,13 +79,13 @@ def test_a_role_model_flag_comes_after_the_set_pairs():
     flash = models.resolve("deepseek-flash-openrouter")
     args = parse_example_arguments(script, None, ["--regulator-model", "deepseek-flash-openrouter",
                                                   "--set", "regulator_model=mockllm/model"])
-    assert args.settings == [*DEFAULT_SETTINGS, "regulator_model=mockllm/model", f"regulator_model={flash}",
-                             "judge=none"]
+    assert args.settings == [f"id_salt={script.stem}", *DEFAULT_SETTINGS, "regulator_model=mockllm/model",
+                             f"regulator_model={flash}", "judge=none"]
     config = build_config(args.preset, args.scale, args.settings)
     assert config.role_models() == {"worker": None, "regulator": flash, "disregulator": None}
     args = parse_example_arguments(script, None, ["--worker-model", "mockllm/model", "--disregulator-model",
                                                   "gemini-3.8-flash"])
-    assert args.settings == [*DEFAULT_SETTINGS, "worker_model=mockllm/model",
+    assert args.settings == [f"id_salt={script.stem}", *DEFAULT_SETTINGS, "worker_model=mockllm/model",
                              "disregulator_model=google/gemini-3.8-flash", "judge=none"]
     with pytest.raises(SystemExit) as stop:
         parse_example_arguments(script, None, ["--worker-model", "nope"])

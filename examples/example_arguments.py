@@ -5,8 +5,8 @@
     return finish(args, run.run(args.name, OpenMath("riemann"), config, args.model, args.timeout))
 
 The model and config flags are the command line's (presets.add_config_arguments): --model and the role-model flags
-come back as Inspect strings, and args.settings holds DEFAULT_SETTINGS, then every --set, then each role model as
-`<role>_model=<Inspect string>`. --judge and --no-judge say whether the run is judged as it finishes
+come back as Inspect strings, and args.settings holds the run's name as `id_salt`, DEFAULT_SETTINGS, every --set, then
+each role model as `<role>_model=<Inspect string>`. --judge and --no-judge say whether the run is judged as it finishes
 (USE_JUDGE_AS_DEFAULT otherwise); a run that is not adds `judge=none` last, and `python -m src rejudge <name>` judges
 it later. --name is the run's name and --timeout bounds one model request. A wrong model or field is an argument
 error (exit 2). finish() ends every script: after a run that succeeded it draws the run's figures under out/<name>/
@@ -50,7 +50,8 @@ def parse_example_arguments(script: Path, description: str | None, argv: list[st
         key, sep, _ = pair.partition("=")
         if not sep or key.strip() not in SwarmConfig.model_fields:
             parser.error(f"--set takes a SwarmConfig field as key=value, got {pair!r}")
-    args.settings = DEFAULT_SETTINGS + config_pairs(args) + ([] if args.judge else ["judge=none"])
+    args.settings = [f"id_salt={args.name}", *DEFAULT_SETTINGS, *config_pairs(args),
+                     *([] if args.judge else ["judge=none"])]
     return args
 
 

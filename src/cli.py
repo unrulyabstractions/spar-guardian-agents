@@ -76,7 +76,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     cls = DOMAINS[args.benchmark]
     options = {"honeypot": args.honeypot, "grade": not args.no_grade}
     benchmark = cls(args.row, **{k: v for k, v in options.items() if k in cls.options})
-    config = build_config(args.preset, args.scale, config_pairs(args) + (["judge=none"] if args.no_judge else []))
+    pairs = [f"id_salt={args.name}", *config_pairs(args), *(["judge=none"] if args.no_judge else [])]
+    config = build_config(args.preset, args.scale, pairs)
     return run.run(args.name, benchmark, config, args.model, args.timeout)
 
 

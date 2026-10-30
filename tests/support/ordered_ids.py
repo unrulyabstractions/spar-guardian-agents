@@ -18,9 +18,9 @@ from src.configuration import swarm_config
 DRAWN = swarm_config.agent_ids
 
 
-def ordered_ids(n: int, seed: int = 0) -> list[str]:
-    """a01..a99, then a001..a999, then a0001.. for a thousand, each name of one run as wide as the longest. The seed is
-    ignored: a test's names stay put."""
+def ordered_ids(n: int, seed: int = 0, salt: str = "") -> list[str]:
+    """a01..a99, then a001..a999, then a0001.. for a thousand, each name of one run as wide as the longest. The seed and
+    the salt are ignored: a test's names stay put."""
     width = max(2, len(str(n)))
     return [f"a{i:0{width}d}" for i in range(1, n + 1)]
 

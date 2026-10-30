@@ -258,7 +258,7 @@ def now_iso() -> str:
 def launch(cell: str, name: str, model: str, seed: int) -> subprocess.Popen:
     """One run in its own session, so the guard can stop its whole process group. Its screen log is new: an earlier
     attempt's was set aside. The seed is the sample's number, so the samples of a cell are independent: it draws the
-    agent IDs, the hidden roles, the turn order and SWE's planted hashes."""
+    hidden roles, the turn order and SWE's planted hashes. The agent IDs also take the run's name."""
     command = [sys.executable, "-m", f"examples.{cell}", "--model", model, "--name", name, "--set", f"seed={seed}"]
     with open(SCREEN_LOGS / f"{name}.log", "x") as log:
         log.write(" ".join(command) + "\n")

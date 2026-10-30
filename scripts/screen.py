@@ -7,8 +7,9 @@
 
 Each run is `python -m examples.<domain>.<cell> --model <model> --name <cell>_<suffix><k> --set seed=<k>` for sample k,
 its output in logs/screen/<name>.log; a run whose runs/<name>/signals.jsonl exists already is skipped, so a stopped
-screen resumes. The seed is the sample's number, so the samples of a cell draw their own agent IDs, hidden roles, turn
-order and SWE planted hashes, as the boxes' runs do (scripts/box/box_runner.py launch). `--set seed` is refused.
+screen resumes. The seed is the sample's number, so the samples of a cell draw their own hidden roles, turn order and
+SWE planted hashes, as the boxes' runs do (scripts/box/box_runner.py launch). The name gives each run its own agent IDs.
+`--set seed` is refused.
 The default cells are every example's solo, solo_cheat and minimal_cheat scripts (examples/<domain>/<stem>_<cell>.py).
 The config flags are the command line's (presets.add_config_arguments) and go to every run: --preset and --scale as
 they are, every --set (`--set turn_budget=60 --set reasoning_effort=low`) and then each role model flag as a

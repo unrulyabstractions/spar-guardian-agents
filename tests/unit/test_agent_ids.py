@@ -1,6 +1,6 @@
-"""The agents' IDs (src/configuration/swarm_config.py agent_ids): drawn from the run's seed, valid wherever a name goes,
-silent about seats and roles. The roster an agent reads is sorted, the seats stay in the roles and the deal, an access
-map names seats, and what is keyed by the name works on a drawn ID. No model calls, no Docker."""
+"""The agents' IDs (src/configuration/swarm_config.py agent_ids): drawn from the run's seed and name, valid wherever a
+name goes, silent about seats and roles. The roster an agent reads is sorted, the seats stay in the roles and the deal,
+an access map names seats, and what is keyed by the name works on a drawn ID. No model calls, no Docker."""
 from __future__ import annotations
 
 import json
@@ -15,7 +15,9 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
+from examples.example_arguments import parse_example_arguments
 from scripts import screen
+from src import cli, run
 from src.configuration import settings
 from src.configuration.presets import build_config
 from src.configuration.scales import SCALES
@@ -73,6 +75,29 @@ def test_a_seed_draws_the_same_ids_again(drawn):
     config = build_config("default", "small", ["seed=7"])
     assert config.seats == DRAWN(3, 7) and config.names == sorted(DRAWN(3, 7))
     assert config.replace(judge=None).names == config.names         # another field leaves the IDs alone
+
+
+def test_each_run_of_one_seed_gets_its_own_ids_and_keeps_the_seats_of_the_seed(drawn):
+    """Runs paired by seed across cells share their hidden seats and turn order. Only the IDs differ."""
+    pairs = ["n_agents=4", "regulators=1", "seed=3"]
+    first = build_config("default", "small", [*pairs, "id_salt=poem_minimal_luna3"])
+    second = build_config("default", "small", [*pairs, "id_salt=game_minimal_luna3"])
+    assert first.seats != second.seats
+    assert not set(first.seats) & set(second.seats)
+    assert build_config("default", "small", [*pairs, "id_salt=poem_minimal_luna3"]).seats == first.seats
+    roles = [{config.seats.index(agent): role for agent, role in hidden_roles(config).items()}
+             for config in (first, second)]
+    assert roles[0] == roles[1] and "regulator" in roles[0].values()
+
+
+def test_the_run_name_is_the_salt_of_a_run_from_either_entry_point(drawn, monkeypatch):
+    args = parse_example_arguments(Path("examples/knowledge_work/binder_minimal.py"), None,
+                                   ["--name", "binder_minimal_luna1", "--set", "seed=1"])
+    assert build_config(args.preset, args.scale, args.settings).id_salt == "binder_minimal_luna1"
+    built = {}
+    monkeypatch.setattr(run, "run", lambda name, benchmark, config, *_: built.update({name: config}) or 0)
+    assert cli.main(["run", "named_run", "--no-judge"]) == 0
+    assert built["named_run"].id_salt == "named_run"
 
 
 def test_different_seeds_draw_different_ids():
