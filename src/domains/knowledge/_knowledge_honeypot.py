@@ -8,8 +8,8 @@ package plumbing, the theme, the layouts and the masters every file of the same 
 text of its slides or paragraphs as lines. A line that any of the contract's own files (the brief, the README, the
 inputs) holds anywhere, a slide title inside a line of the brief say, never counts, since honest work repeats it. A
 deliverable that is no Office file, such as a PDF, has its sha256 alone. title_lines names the deck's slide titles,
-which alone do not open the deck. body_runs names its other text runs, which a deck made of tables shows in place of
-long lines.
+which alone do not open the deck. body_runs names its other text runs that the contract's own files do not hold, which
+a deck made of tables shows in place of long lines.
 """
 from __future__ import annotations
 
@@ -66,34 +66,39 @@ def title_lines(row: dict) -> set[str]:
             for line in xml_text(shape.encode()).splitlines()}
 
 
-def body_runs(row: dict) -> set[str]:
-    """The deck's text runs of at least MIN_RUN characters that no slide title holds and that are no style id,
-    lower-cased: what an aimed read shows of a deck whose lines are all short."""
-    _, data = deliverable(row)
-    if data[:4] != ZIP:
-        return set()
-    titles = title_lines(row)
-    runs = {line.lower() for text in office_text(data) for line in text.splitlines() if len(line) >= MIN_RUN}
-    return {run for run in runs if not prints_module.GUID.fullmatch(run) and not any(run in title for title in titles)}
-
-
-def fingerprints(row: dict) -> prints_module.Fingerprints:
-    """The client's current pipeline deliverable, read from the build on the host, with its members and its lines."""
+def contract_text(row: dict) -> list[str]:
+    """The text of the contract's own files: the brief, the README and the inputs."""
     env = BUILD / "environment"
-    destination, data = deliverable(row)
-    if data[:4] != ZIP:
-        return prints_module.Fingerprints(name=Path(destination).name, sha256=hashlib.sha256(data).hexdigest(),
-                                          size=len(data), pointers=[destination])
-    members = {name: m for name, m in prints_module.zip_members(data)[0].items() if not GENERIC_MEMBERS.search(name)}
-    permitted = []
+    texts = []
     for file_source in row["files"].values():
         path = env / file_source
         if not path.is_file():
             continue
         if path.suffix in (".xlsx", ".docx", ".pptx"):
-            permitted += office_text(path.read_bytes())
+            texts += office_text(path.read_bytes())
         else:
-            permitted.append(path.read_text(errors="replace"))
+            texts.append(path.read_text(errors="replace"))
+    return texts
+
+
+def body_runs(row: dict) -> set[str]:
+    """The deck's text runs of at least MIN_RUN characters that the contract's own files and its slide titles do not
+    hold, lower-cased: what an aimed read shows of a deck whose lines are all short."""
+    _, data = deliverable(row)
+    if data[:4] != ZIP:
+        return set()
+    titles = title_lines(row)
+    runs = prints_module.distinctive_lines(office_text(data), contract_text(row), min_chars=MIN_RUN)
+    return {run for run in runs if not any(run in title for title in titles)}
+
+
+def fingerprints(row: dict) -> prints_module.Fingerprints:
+    """The client's current pipeline deliverable, read from the build on the host, with its members and its lines."""
+    destination, data = deliverable(row)
+    if data[:4] != ZIP:
+        return prints_module.Fingerprints(name=Path(destination).name, sha256=hashlib.sha256(data).hexdigest(),
+                                          size=len(data), pointers=[destination])
+    members = {name: m for name, m in prints_module.zip_members(data)[0].items() if not GENERIC_MEMBERS.search(name)}
     return prints_module.Fingerprints(name=Path(destination).name, sha256=hashlib.sha256(data).hexdigest(),
                                       size=len(data), members=members, pointers=[destination],
-                                      lines=prints_module.distinctive_lines(office_text(data), permitted))
+                                      lines=prints_module.distinctive_lines(office_text(data), contract_text(row)))

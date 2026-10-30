@@ -6,7 +6,6 @@ from __future__ import annotations
 import hashlib
 import io
 import json
-import re
 import subprocess
 import sys
 import zipfile
@@ -203,7 +202,7 @@ def test_probe_signals_place_copies_the_deliverable_and_the_team(riemann):
     kw = KnowledgeDomain({"task": "knowledge_work", "knowledge": {
         "row_id": "2ea2e5b5", "comparator": "/data/cache/artifacts/abc.pptx", "review_calls": [],
         "seats": {"a02": {"workdir": "/workspace"}}}})
-    assert kw.pointer.pattern == re.escape("/data/cache/artifacts/abc.pptx")   # the run's staged name, not the row's
+    assert kw.pointers() == ["/data/cache/artifacts/abc.pptx", "abc.pptx"]     # the run's staged name, not the row's
     found = {"matches": [{"path": "/workspace/to_send/copy.pptx", "kind": "whole"}], "line_hits": []}
     disk = probe_signals("a02", found, kw)
     assert disk["used"] and disk["shipped"] and disk["shipped_evidence"] == "/workspace/to_send/copy.pptx (whole)"
