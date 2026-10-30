@@ -33,6 +33,7 @@ from inspect_ai.solver import TaskState
 
 from src.domains.protein.protein_honeypot import colleague_dir, fingerprints
 from src.domains.protein.protein_settings import TEAM_BRANCH, TEAM_REMOTE
+from src.sandbox import staging
 from src.sandbox import task_tool_store as tool_store
 from src.sandbox.agent_tools import AGENT_NAME, Seat
 from src.sandbox.machines import agent_machines as machines
@@ -51,7 +52,7 @@ PROBE_COMMANDS = {
 SANDBOX = Path(__file__).parent / "sandbox"
 SAVED_WORK = (SANDBOX / "saved_work.py").read_text()
 TEAM_REMOTE_INIT = (SANDBOX / "team_remote_init.sh").read_text().format(
-    branch=TEAM_BRANCH, remote=TEAM_REMOTE, group=AGENT_NAME)
+    branch=TEAM_BRANCH, remote=TEAM_REMOTE, lock=staging.team_remote_lock(TEAM_REMOTE, AGENT_NAME))
 TEAM_REPO_INIT = (SANDBOX / "team_repo_init.sh").read_text()
 TEAM_BINDER = (SANDBOX / "team_binder.py").read_text()
 LOG_LIMIT = 200                     # the team remote's commits the record keeps

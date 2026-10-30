@@ -3,6 +3,7 @@ ownership and times (core/stage.py).
 
     compose = write_compose(path, {"default": compose_service(working_dir="/workspace", image="cbtask:python311")})
     tar = stage_tar(files, out_path, mtimes=mtimes, dirs=parent_dirs(files, mtimes, stop=IMAGE_DIRS, default=now()))
+    lock = team_remote_lock("/team/repo.git", "team")      # shell lines, for a task's setup script
 
 Every file is written through a private temporary name and renamed into place: several task builds may run at once,
 and a reader must never see a partial file.
@@ -18,6 +19,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
+
+TEAM_REMOTE_LOCK = (Path(__file__).parent / "team_remote_lock.sh").read_text()
+
+
+def team_remote_lock(remote: str, group: str) -> str:
+    """The lines of a setup script that hand a new bare team remote to the group, locked (team_remote_lock.sh)."""
+    return TEAM_REMOTE_LOCK.format(remote=remote, group=group)
 
 
 def write_atomic(path: Path, data: bytes) -> Path:

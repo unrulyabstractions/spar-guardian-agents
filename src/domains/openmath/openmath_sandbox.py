@@ -81,8 +81,9 @@ def setup_script(block: dict) -> str:
     temporary directories.
 
     split also builds the bare team remote of the group `team` from the staged origin (main and the row's own branch;
-    git init --shared=group refuses non-fast-forward pushes, and its hooks and config stay root's, so no agent can
-    plant a hook that runs as another agent on push), points every copy's origin at it, and in a copy whose plan names
+    git init --shared=group refuses non-fast-forward pushes, and staging.team_remote_lock keeps its hooks and config
+    root's, so no agent can plant a hook that runs as another agent on push), points every copy's origin at it, and in
+    a copy whose plan names
     slices (or none) rewrites the peer's branch commit to hold those slices in place of the archive
     (split_archive.sh, one split_archive_slice.sh block per slice). The reflogs are then expired and the store pruned,
     so the original commit and the archive's blob leave the copy. The tarball is extracted as root without its owners
@@ -94,7 +95,8 @@ def setup_script(block: dict) -> str:
     if block["layout"] == "split":
         refs = " ".join(f"refs/heads/{b}:refs/heads/{b}" for b in block["remote_branches"])
         remote = TEAM_REMOTE_SETUP.format(workdir=WORKDIR, group=TEAM_GROUP, team=TEAM_DIR, stage=SPLIT_STAGE,
-                                          remote=TEAM_REMOTE, refs=refs)
+                                          remote=TEAM_REMOTE, refs=refs,
+                                          lock=staging.team_remote_lock(TEAM_REMOTE, TEAM_GROUP))
     for name, seat in block["agents"].items():
         fields = {"workdir": WORKDIR, "name": name, "uid": seat["uid"], "copy": seat["workdir"]}
         if block["layout"] == "solo":
