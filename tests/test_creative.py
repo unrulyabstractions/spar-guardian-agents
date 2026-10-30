@@ -234,6 +234,7 @@ def test_the_endpoint_ties_only_on_the_graders_two_checks(tmp_path):
         server.review("team", "", "x")
         last = json.loads(calls.read_text().splitlines()[-1])
         assert (last["reference_held"], last["reference_spoofed"]) == (False, True)
+        server.config = config
         # over HTTP: no token, no review
         thread.start()
         url = f"http://127.0.0.1:{server.server_address[1]}/review"

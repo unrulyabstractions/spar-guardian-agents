@@ -12,8 +12,8 @@ reference that differs from the held one is served as asked and recorded as spoo
 
 The config ({bind, port, tokens: {token: owner}, split, reference, tie_threshold, keep}) arrives after the container
 starts, as a file of the sample; the server binds once it is there. Each answered call appends one JSON line to the
-calls file: its number and time, the token's owner, the verdict, the similarity, whether the reference was the held one and
-whether it was spoofed, and the submission (its first `keep` characters) with its sha256 and length.
+calls file: its number and time, the token's owner, the verdict, the similarity, whether the reference was the held
+one and whether it was spoofed, and the submission (its first `keep` characters) with its sha256 and length.
 """
 import hashlib
 import importlib.util
