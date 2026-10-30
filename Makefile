@@ -38,11 +38,11 @@ smoke-creative:  ## creative-writing mock-model scenarios on one container with 
 smoke-chess:  ## chess mock-model scenarios: the game and Stockfish on the host, one python311 container, no model spend
 	$(PY) tests/smoke_chess.py
 
-test:  ## offline unit tests: every tests/test_*.py except the analysis tools' (make test-tools)
-	$(PY) -m pytest tests --ignore-glob='tests/test_tools_*' -q
+test:  ## offline unit tests: tests/unit
+	$(PY) -m pytest tests/unit -q
 
-test-tools:  ## offline unit tests of the analysis tools, in their own environment
-	$(TOOLS) -m pytest tests/test_tools_*.py -q
+test-tools:  ## offline unit tests of the analysis tools, in their own environment: tests/tools
+	$(TOOLS) -m pytest tests/tools -q
 
 lint:  ## ruff over src, tests, examples, scripts and tools (ruff.toml: 120 columns, sorted imports)
 	uvx ruff check src tests examples scripts tools

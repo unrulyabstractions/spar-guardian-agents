@@ -15,7 +15,6 @@ import datetime as dt
 import json
 import shutil
 import traceback
-import typing
 from collections.abc import Callable
 from pathlib import Path
 
@@ -23,8 +22,7 @@ from core.agents import trajectory_from_transcript
 from core.render import render_trajectory
 from inspect_ai import eval as inspect_eval
 from inspect_ai.log import read_eval_log
-from inspect_ai.model import ModelOutput, get_model
-from orbit.communication.runtime import current_identity
+from inspect_ai.model import get_model
 
 from src.configuration import settings
 from src.configuration.presets import build_config
@@ -34,8 +32,8 @@ from src.sandbox.machines import agent_machines as machines
 from src.swarm import turn_rules as rules
 from src.tasks import swarm_task
 from src.utils.json_files import read_jsonl
+from tests.support.mock_model import MODEL, call, honest_judge, mock_verdict, scripted, text  # noqa: F401
 
-MODEL = "mockllm/model"
 TIME_LIMIT_S = 1200
 BOARD_TOOLS = set(rules.BOARD_TOOLS)
 
@@ -49,63 +47,6 @@ def suite_dirs(suite: str, *, stamped: bool = True) -> tuple[Path, Path]:
 
 
 # ------------------------------------------------------------------------------------------------ the mock models
-
-def call(name: str, args: dict, call_id: str) -> ModelOutput:
-    """One model turn that calls one tool."""
-    return ModelOutput.for_tool_call(MODEL, name, args, tool_call_id=call_id)
-
-
-def text(content: str) -> ModelOutput:
-    """One model turn of plain text."""
-    return ModelOutput.from_content(MODEL, content)
-
-
-def mock_value(annotation):
-    """A Verdict field's value in the mock judge's answer: None for an optional field, "smoke" for a string, False for
-    a flag, 0 for a count."""
-    if type(None) in typing.get_args(annotation):
-        return None
-    return {str: "smoke", bool: False, int: 0}[annotation]
-
-
-def mock_verdict(spec) -> dict:
-    """The task's Verdict with every flag false and the summary "smoke: mock judge"."""
-    verdict = {name: mock_value(f.annotation) for name, f in spec.verdict.model_fields.items()}
-    verdict["summary"] = "smoke: mock judge"
-    return verdict
-
-
-def honest_judge(spec) -> Callable:
-    """The mock judge's outputs: mock_verdict(spec) as JSON on every call."""
-    verdict = json.dumps(mock_verdict(spec))
-
-    def outputs(messages, tools, tool_choice, config) -> ModelOutput:
-        return text(verdict)
-    return outputs
-
-
-def scripted(script: dict, recorder: list | None = None) -> Callable:
-    """Each agent follows its own script by its count of model turns; an entry may be a function of the messages.
-    The agent is named by its team system prompt ("You are a01.") or by ORBIT's identity; a lone agent is the one
-    script. A recorder gets one entry per call: agent, step, the tools offered, the last message, the system texts."""
-    def outputs(messages, tools, _tool_choice, _config) -> ModelOutput:
-        system = next((m.text for m in messages if m.role == "system" and m.text.startswith("You are ")), "")
-        who = system.split()[2].rstrip(".,") if system else "?"
-        if who not in script and current_identity() is not None:
-            who = current_identity().agent_id
-        if who not in script and len(script) == 1:
-            who = next(iter(script))
-        assert who in script, f"cannot tell which agent is asking from {system[:60]!r}"
-        step = sum(1 for m in messages if m.role == "assistant")
-        if recorder is not None:
-            recorder.append({"agent": who, "step": step, "tools": sorted(t.name for t in tools),
-                             "last": messages[-1].text, "system": system,
-                             "system_texts": [m.text for m in messages if m.role == "system"]})
-        plan = script[who]
-        out = plan[min(step, len(plan) - 1)]
-        return out(messages) if callable(out) else out
-    return outputs
-
 
 # ------------------------------------------------------------------------------------------------ configs and tasks
 
