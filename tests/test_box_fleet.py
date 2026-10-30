@@ -893,10 +893,11 @@ def test_a_run_that_never_wrote_is_quiet_since_its_start():
 
 
 def test_the_limit_is_the_tasks_domains(monkeypatch):
-    """Only SWE grades after the agents stop: a non-SWE run is hung 90 minutes in, not 110."""
+    """Only SWE grades after the agents stop, and Inspect gives its scorer half the sample's limit again: a non-SWE run
+    is hung 90 minutes in, an SWE run 155."""
     protein, swe = box_runner.inspect_limit_s("protein_design"), box_runner.inspect_limit_s("software_engineering")
-    assert swe - protein == 1800 - settings.HARD_TIME_GRACE_S
-    assert (protein + box_runner.GRACE_S) / 60 == 90
+    assert swe == (protein - settings.HARD_TIME_GRACE_S + 1800) * 3 // 2
+    assert (protein + box_runner.GRACE_S) / 60 == 90 and (swe + box_runner.GRACE_S) / 60 == 155
     assert box_runner.inspect_limit_s("chess") == protein
     monkeypatch.setitem(box_runner.TASKS, "go", "go")
     with pytest.raises(ValueError, match="no domain"):
@@ -953,7 +954,10 @@ def test_a_run_is_done_only_when_its_eval_succeeded_and_no_episode_failed(runner
     assert box_runner.outcome("ok") == ("finished", "its eval succeeded")
     assert box_runner.outcome("erred") == ("failed", "its eval ended error")
     assert box_runner.outcome("crashed") == ("incomplete", "1 episodes failed (harness)")
-    assert box_runner.outcome("never") == ("failed", "no signals.jsonl")
+    assert box_runner.outcome("never") == ("failed", "no run.json")
+    left_run(runner_dirs, "derived")
+    (runner_dirs / "runs" / "derived" / "signals.jsonl").unlink()
+    assert box_runner.outcome("derived") == ("derive", "its eval succeeded, no signals.jsonl")
 
 
 class Ended:
@@ -964,6 +968,28 @@ class Ended:
 
     def poll(self) -> int:
         return self.code
+
+
+def test_a_resume_rebuilds_a_finished_evals_ladder_and_never_pays_for_it_again(runner_dirs, monkeypatch, capsys):
+    (runner_dirs / "logs" / "screen").mkdir(parents=True)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
+    monkeypatch.setattr(box_runner, "cells", lambda task, kinds: [f"protein_design.binder_{k}" for k in kinds])
+    states = {"binder_solo_dsflash1": "derive", "binder_solo_cheat_dsflash1": "derive"}
+    monkeypatch.setattr(box_runner, "outcome", lambda name: (states[name], "why"))
+    rebuilt = []
+
+    def regenerate(command, **kwargs):
+        rebuilt.append(command[command.index("regenerate") + 1])
+        if "cheat" not in rebuilt[-1]:
+            states[rebuilt[-1]] = "finished"
+
+    monkeypatch.setattr(box_runner.subprocess, "run", regenerate)
+    monkeypatch.setattr(box_runner, "launch", lambda *args: pytest.fail("a finished eval ran again"))
+    code = box_runner.main(["run", "--task", "protein_design", "--model", "deepseek-flash-openrouter", "--suffix",
+                            "dsflash", "--commit", PIN["commit"], "--samples", "1", "--kinds", "solo", "solo_cheat"])
+    assert code == 1 and rebuilt == ["binder_solo_dsflash1", "binder_solo_cheat_dsflash1"]
+    plan = json.loads((runner_dirs / "logs" / "screen" / "box_protein_design_dsflash.json").read_text())
+    assert plan["runs"]["binder_solo_dsflash1"]["exit"] == 0 and plan["runs"]["binder_solo_cheat_dsflash1"]["exit"] == 1
 
 
 def test_a_resume_reruns_what_did_not_finish_and_keeps_the_earlier_attempt(runner_dirs, monkeypatch, capsys):

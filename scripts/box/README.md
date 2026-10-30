@@ -16,7 +16,7 @@ scripts/box/capture_check.sh <id> --pull                        # every file on 
 uv run python -m scripts.box.fleet destroy <id>                 # only after a fresh capture check; snapshots first
 ```
 
-The pilot is one box per task on one model, with one sample of two cells: `create --count 5 --models deepseek-flash-openrouter`, then `box_run.sh <id> --samples 1 --kinds solo_cheat minimal_regulated`. Before box_run.sh, set `BOX_OPENROUTER_API_KEY` (or the model's own key name with `BOX_` in front) to a key made for the screen with a spend cap, and revoke it after the destroys. A rehearsal adds `--mock` to box_run.sh: Inspect's mock model, no key on the box, nothing paid, and run names ending in `<suffix>mock`.
+The pilot is one box per task and model, with one sample of two cells: `create --count 15`, then `box_run.sh <id> --samples 1 --kinds solo_cheat minimal_regulated`. Every model pilots: a model that has never run as an agent shows its provider's refusals and rejections only there. Before box_run.sh, set `BOX_OPENROUTER_API_KEY` (or the model's own key name with `BOX_` in front) to a key made for the screen with a spend cap, and revoke it after the destroys. A rehearsal adds `--mock` to box_run.sh: Inspect's mock model, no key on the box, nothing paid, and run names ending in `<suffix>mock`.
 
 | file | what it does | bills or destroys |
 |---|---|---|

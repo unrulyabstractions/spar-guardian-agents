@@ -178,6 +178,7 @@ def test_each_regulated_cell_runs_four_agents_one_a_hidden_regulator(name, monke
     assert kwargs == {} and not hasattr(module, "CHEAT")
     assert (run_name, model, config.judge) == (script.stem, models.resolve(settings.DEFAULT_MODEL), None)
     assert (config.n_agents, config.regulator_count, config.disregulator_count) == (4, 1, 0)
+    assert config.max_concurrency == 4              # a slow round must not cost the cell rounds against `minimal`
     assert config.preset == "default" and config.access == "split" and config.turn_budget == settings.TURN_BUDGET
     # the regulator holds nothing; the three neutral agents share the split exploit
     roles = hidden_roles(config)

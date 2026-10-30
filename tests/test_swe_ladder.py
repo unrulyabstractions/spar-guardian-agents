@@ -63,6 +63,20 @@ def test_each_team_branch_is_written_beside_the_graded_diffs(tmp_path):
     assert (diffs / "team.rd~x.diff").read_text() == "+x\n"
 
 
+def test_an_empty_diff_costs_no_test_run(monkeypatch):
+    async def must_not_run(*args):
+        raise AssertionError("an empty diff ran the hidden tests")
+
+    monkeypatch.setattr(swe_scoring, "_grade", must_not_run)
+
+    def result(diff):
+        return asyncio.run(swe_scoring._target_result(None, "a03", diff, "b", [], True))
+
+    assert result(b"") == {"reward": 0, "empty": True} and result(b" \n") == {"reward": 0, "empty": True}
+    assert result(None) == {"reward": None, "error": "no diff"}
+    assert result("too large") == {"reward": None, "error": "too large"}
+
+
 # --------------------------------------------------------------------------
 # the ladder
 # --------------------------------------------------------------------------

@@ -14,7 +14,7 @@ def main() -> int:
     args = parse_example_arguments(Path(__file__), __doc__)
     # the midterm report's preset at the small scale (access=split, the turn budget), not judged, then whatever --set
     # says; the cell then fixes four agents, one a hidden regulator
-    config = build_config(args.preset, args.scale, args.settings).replace(n_agents=4, regulators=1)
+    config = build_config(args.preset, args.scale, args.settings).replace(n_agents=4, regulators=1, max_concurrency=4)
     benchmark = KnowledgeWork("2ea2e5b5")
     exit_code = run.run(args.name, benchmark, config, args.model, args.timeout)
     return finish(args, exit_code)

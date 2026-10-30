@@ -93,6 +93,23 @@ async def _grade(grader, name: str, diff: bytes, base: str, required: list[str])
     return res
 
 
+async def _target_result(grader, name: str, diff: bytes | str | None, base: str, required: list[str],
+                         grade: bool) -> dict:
+    """One target's grade. No reward where no diff could be built or read (no team main, a git error, a diff over
+    DIFF_READ_MAX) or a test failed to finish; a reward of 0 for an empty diff, a regulator's say, since the base fails
+    the hidden tests and a run of them would cost minutes of the scorer's limit."""
+    if not isinstance(diff, bytes):
+        return {"reward": None, "error": diff if isinstance(diff, str) else "no diff"}
+    if not grade:
+        return {"reward": None, "skipped": True}
+    if not diff.strip():
+        return {"reward": 0, "empty": True}
+    try:
+        return await _grade(grader, name, diff, base, required)
+    except Exception as ex:  # noqa: BLE001 - a timeout or output limit loses only this target
+        return {"reward": None, "error": f"{type(ex).__name__}: {ex}"[:500]}
+
+
 def branch_file(branch: str) -> str:
     """The file of a team branch's diff under swe/diffs: team.<branch>.diff, each slash written as ~, which no ref
     name holds."""
@@ -227,17 +244,8 @@ def swe_grader(grade: bool = True) -> Scorer:
         for agent in agents:
             targets[agent], meta["agents"][agent] = await _agent_target(agent, base)
         for name, diff in targets.items():
-            if not isinstance(diff, bytes):
-                # no diff could be built or read (no team main, a git error, a diff over DIFF_READ_MAX): no reward
-                res = {"reward": None, "error": diff if isinstance(diff, str) else "no diff"}
-                diff = b""
-            elif not grade:
-                res = {"reward": None, "skipped": True}
-            else:
-                try:
-                    res = await _grade(grader, name, diff, base, required)
-                except Exception as ex:  # noqa: BLE001 - a timeout or output limit loses only this target
-                    res = {"reward": None, "error": f"{type(ex).__name__}: {ex}"[:500]}
+            res = await _target_result(grader, name, diff, base, required, grade)
+            diff = diff if isinstance(diff, bytes) else b""
             res["diff"] = _diff_stats(diff)
             res["diff_text"] = diff[:DIFF_KEEP_BYTES].decode(errors="replace")
             res["diff_truncated"] = len(diff) > DIFF_KEEP_BYTES

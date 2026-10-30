@@ -17,7 +17,9 @@ environment (box_run.sh sources /root/.box_env). It starts every cell of the tas
 script per kind) times every sample at once, each `python -m examples.<package>.<cell> --model <model> --name
 <cell>_<suffix><k>` in its own session with its output in logs/screen/<name>.log. A run counts as done before, and is
 skipped, only when its export exists, its eval log says success and none of its episodes failed in the harness or at
-the provider; any other run starts again, its earlier screen log set aside under logs/screen/attempts/. The plan
+the provider. A run whose eval succeeded and that lacks only its code ladder gets it rebuilt, which costs no model
+call, and is never run again; any other run starts again, its earlier screen log set aside under
+logs/screen/attempts/. The plan
 (logs/screen/box_<task>_<suffix>.json: each run's pid, start, end and exit) of an earlier runner is set aside there
 too, never overwritten. The runner's own pid goes to ~/screen.pid. Every minute it looks at each live run. A run is
 hung when it is alive GRACE_S past Inspect's time limit for the task's domain and nothing under logs/<name>/,
@@ -129,8 +131,9 @@ def cmd_build(args: argparse.Namespace) -> int:
 # ---- the hung-run guard ----
 
 def inspect_limit_s(task: str) -> int:
-    """Inspect's time limit of a run of the task on the examples' config: ORBIT's halt plus the grace of the task's
-    domain (src/tasks.py: the domain's time_grace_s, else the config's)."""
+    """The longest a run of the task on the examples' config may rightly live: ORBIT's halt plus the grace of the
+    task's domain (src/tasks.py: the domain's time_grace_s, else the config's). A domain with a grace of its own grades
+    after the agents stop, and Inspect gives scorers half the sample's limit again."""
     domain = TASKS[task]
     if domain not in DOMAINS:
         raise ValueError(f"no domain {domain!r} in src.domains.DOMAINS for task {task}")
@@ -140,7 +143,9 @@ def inspect_limit_s(task: str) -> int:
     config = build_config(defaults.preset, defaults.scale, config_pairs(defaults))
     if not config.time_limit_s:
         raise ValueError("the examples' config sets no time_limit_s: the guard has no limit to hold runs to")
-    return config.time_limit_s + (DOMAINS[domain].time_grace_s or config.time_grace_s)
+    own = DOMAINS[domain].time_grace_s
+    limit = config.time_limit_s + (own or config.time_grace_s)
+    return limit * 3 // 2 if own else limit
 
 
 def hung(now: float, started: float, last_write: float, limit_s: float, grace_s: float = GRACE_S) -> str | None:
@@ -191,24 +196,34 @@ def eval_status(path: Path) -> str:
 
 
 def outcome(name: str) -> tuple[str, str]:
-    """(finished | incomplete | failed, why) from what the run left in runs/<name>/: finished needs the code
-    ladder's signals.jsonl, run.json, its eval log with status success, and no episode that failed in the harness or
-    at the provider (incomplete, as the results browser counts it)."""
+    """(finished | derive | incomplete | failed, why) from what the run left in runs/<name>/: finished needs run.json,
+    its eval log with status success, the code ladder's signals.jsonl, and no episode that failed in the harness or at
+    the provider (incomplete, as the results browser counts it). derive: the eval succeeded and only signals.jsonl is
+    missing, which a rebuild gives with no model call."""
     run_dir = settings.RUNS / name
-    if not (run_dir / "signals.jsonl").is_file():
-        return "failed", "no signals.jsonl"
-    run = read_json(run_dir / "run.json")
-    eval_log = Path(run["eval_log"]) if run and run.get("eval_log") else None
+    run = read_json(run_dir / "run.json") if (run_dir / "run.json").is_file() else None
+    if run is None:
+        return "failed", "no run.json"
+    eval_log = Path(run["eval_log"]) if run.get("eval_log") else None
     if eval_log is None or not eval_log.is_file():
         return "failed", "no eval log on disk"
     status = eval_status(eval_log)
     if status != "success":
         return "failed", f"its eval ended {status}"
+    if not (run_dir / "signals.jsonl").is_file():
+        return "derive", "its eval succeeded, no signals.jsonl"
     failed = [e.get("failure") for e in read_jsonl(run_dir / "episodes.jsonl")
               if e.get("failure") in INCOMPLETE_FAILURES]
     if failed:
         return "incomplete", f"{len(failed)} episodes failed ({', '.join(sorted(set(failed)))})"
     return "finished", "its eval succeeded"
+
+
+def derive(name: str) -> tuple[str, str]:
+    """Rebuild the code ladder of a run whose eval succeeded, with no model call, and read the run again."""
+    subprocess.run([sys.executable, "-m", "src", "regenerate", name, "--no-export", "--no-plots"], cwd=settings.ROOT,
+                   check=False)
+    return outcome(name)
 
 
 # ---- run ----
@@ -286,8 +301,13 @@ def cmd_run(args: argparse.Namespace) -> int:
     for cell, name in jobs:
         record = plan["runs"][name]
         left, why = outcome(name)
+        left, why = derive(name) if left == "derive" else (left, why)
         if left == "finished":
             record.update(exit=0, ended=BEFORE)
+            continue
+        if left == "derive":                    # its paid eval stands: a person reads why the ladder fails on it
+            record.update(exit=1, ended=BEFORE, again=why)
+            print(f"   {name:40s} not run again: {why}", flush=True)
             continue
         log = set_aside(SCREEN_LOGS / f"{name}.log")
         if log or (settings.RUNS / name).exists():
