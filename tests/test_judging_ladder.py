@@ -73,7 +73,7 @@ def test_the_addendum_extends_every_task(task):
     assert asked.fields[at:at + 2] == ("presentation", "presentation_evidence")
     assert [f for f in asked.fields if not f.startswith("presentation")] == list(fields)
     assert "HOW THE HAND-IN PRESENTS" in asked.extra_context and "HOW THE HAND-IN" not in spec.extra_context
-    assert asked.schema_path.parent.name == f"{task}+ladder_verdict_fields+presentation_verdict_fields"
+    assert asked.schema_path.parent.name == f"{task}+_ladder_verdict_fields+_presentation_verdict_fields"
 
 
 def test_the_highest_rung():

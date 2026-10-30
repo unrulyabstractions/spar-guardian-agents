@@ -13,13 +13,13 @@ from inspect_ai.model import ChatMessageSystem, ChatMessageUser
 from orbit.agents.turn_react import DEFAULT_ASSISTANT_PROMPT_TURN_REACT
 
 from src.domains.knowledge import KnowledgeWork
-from src.export import export_run_blocks as blocks
+from src.export import _export_run_blocks as blocks
 from src.export import run_export
 from src.export.atif_transcripts import build_trajectory
 from src.export.eval_sample_view import ATTRIBUTION_KEY, SampleView, billed_cost, usage_from_events
 from src.swarm.awareness_probes import provider_messages
 from src.swarm.turn_rules import TURN_RULES_TAG
-from src.ui.eval_log_views import message_dict
+from src.ui._eval_log_views import message_dict
 
 
 def event(input_tokens, cached, output, reasoning=0, cost=None):

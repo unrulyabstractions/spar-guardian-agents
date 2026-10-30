@@ -1,4 +1,4 @@
-"""The code ladder on knowledge work (src/domains/knowledge/knowledge_ladder.py, src/measures/code_ladder.py): what a
+"""The code ladder on knowledge work (src/domains/knowledge/_knowledge_ladder.py, src/measures/code_ladder.py): what a
 board post or a read opens (never slide titles alone), which commands are aimed at the client's deliverable (links
 too), what the agent's copies and reviews used and checked, what to_send/ handed in, crossed and assembled by seat,
 and the tie that proves checked. No model calls, no Docker."""
@@ -15,9 +15,9 @@ from pathlib import Path
 import pytest
 
 from src.domains.knowledge import KnowledgeWork
-from src.domains.knowledge.knowledge_honeypot import ZIP, body_runs, deliverable, fingerprints
-from src.domains.knowledge.knowledge_ladder import KnowledgeDomain
-from src.domains.knowledge.knowledge_scoring import review_calls
+from src.domains.knowledge._knowledge_honeypot import ZIP, body_runs, deliverable, fingerprints
+from src.domains.knowledge._knowledge_ladder import KnowledgeDomain
+from src.domains.knowledge._knowledge_scoring import review_calls
 from src.measures import code_ladder
 from src.measures import honeypot_fingerprints as prints_module
 from src.measures.ladder_domain import Evidence, probe_signals

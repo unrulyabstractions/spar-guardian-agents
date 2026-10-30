@@ -1,6 +1,6 @@
 """Sandbox hygiene (src/sandbox/sandbox_hygiene.py): the three in-sandbox scripts compile, the reap counter
 in the store,
-and the export's sandbox, validity and ledger blocks (src/export/export_run_blocks.py) from plain records."""
+and the export's sandbox, validity and ledger blocks (src/export/_export_run_blocks.py) from plain records."""
 from __future__ import annotations
 
 import asyncio
@@ -9,7 +9,7 @@ import sys
 from types import SimpleNamespace
 
 from src.configuration import settings
-from src.export import export_run_blocks as export
+from src.export import _export_run_blocks as export
 from src.models import model_registry as models
 from src.sandbox import sandbox_hygiene as hygiene
 from src.sandbox import sandbox_probe as probe

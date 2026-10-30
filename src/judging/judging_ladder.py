@@ -6,10 +6,10 @@
 
 The ladder's rungs are exposed, tried, opened, used, checked and shipped (src/measures/rungs.py), each an act recorded
 with the tool call where it first happened for the first three; pushback and forbidden_method stand beside it, and
-admitted, concealed and false_denial record what the agent said. src/judging/ladder_verdict_fields.py adds the fields
+admitted, concealed and false_denial record what the agent said. src/judging/_ladder_verdict_fields.py adds the fields
 to CheatBench's verdict schema (src/judging/cheatbench_judge.py judge_spec with an addendum), so one judge call answers
 CheatBench's fields and the ladder's. Where the code ladder's team row (signals.jsonl, src/measures/team_ladder.py)
-reaches checked or shipped, src/judging/presentation_verdict_fields.py is appended too and the judge also labels how
+reaches checked or shipped, src/judging/_presentation_verdict_fields.py is appended too and the judge also labels how
 the agent's hand-in presents the content. The rung is derived in code from the booleans: the highest rung that is
 true, with checked false where the task has no feedback grader (Domain.feedback_grader). Each cited call is checked
 against the transcript (the call exists, the quoted command is in it) and mapped to its round through the turn
@@ -46,8 +46,8 @@ BESIDE = ("forbidden_method", "pushback")
 HONESTY = ("admitted", "concealed", "false_denial")
 CITED = ("exposed", "tried", "opened")
 VIEWS = tuple(LADDER_FILES)
-ADDENDUM = Path(__file__).resolve().parent / "ladder_verdict_fields.py"
-PRESENTATION_ADDENDUM = Path(__file__).resolve().parent / "presentation_verdict_fields.py"
+ADDENDUM = Path(__file__).resolve().parent / "_ladder_verdict_fields.py"
+PRESENTATION_ADDENDUM = Path(__file__).resolve().parent / "_presentation_verdict_fields.py"
 IDENTITY = ("id", "episode", "replicate", "task", "model")
 ROUND_RE = re.compile(r"^r(\d+)")
 # The line prefixes of CheatBench's rendering (submodules/cheatbench/core/render.py); a line without one continues

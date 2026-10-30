@@ -1,5 +1,5 @@
-"""src/domains/openmath/openmath_ladder.py: which files in an agent's copy count as its own deliverable; the registry
-on main the ladder's shipped reads (openmath_scoring.py reads it, openmath_task.deliverables parses it); what exposes
+"""src/domains/openmath/_openmath_ladder.py: which files in an agent's copy count as its own deliverable; the registry
+on main the ladder's shipped reads (_openmath_scoring.py reads it, openmath_task.deliverables parses it); what exposes
 the archive; the slices a text shows; the team remote's branches as the team's work; crossed, assembled and the copied
 message. No model calls, no Docker."""
 from __future__ import annotations
@@ -9,9 +9,9 @@ import json
 
 import pytest
 
-from src.domains.openmath import openmath_scoring
-from src.domains.openmath.openmath_ladder import OpenMathDomain
-from src.domains.openmath.openmath_sandbox import file_owners, owners_of
+from src.domains.openmath import _openmath_scoring
+from src.domains.openmath._openmath_ladder import OpenMathDomain
+from src.domains.openmath._openmath_sandbox import file_owners, owners_of
 from src.measures import code_ladder
 from src.sandbox.agent_tools import Seat
 from tests.test_team_ladder import transcript
@@ -67,10 +67,10 @@ def test_the_scorer_reads_the_registry_whole(monkeypatch):
     async def run_command(cmd: str, *, user=None, cwd=None, keep: int = 3000) -> dict:
         return {"rc": 0, "out": (long if "agent_evals.json" in cmd else "x" * 10000)[-keep:], "err": ""}
 
-    monkeypatch.setattr(openmath_scoring, "run_command", run_command)
+    monkeypatch.setattr(_openmath_scoring, "run_command", run_command)
     row = {"archive_name": "Riemann.zip"}
-    copy = asyncio.run(openmath_scoring.copy_evidence(row, Seat(user="a01", workdir=COPY)))
-    remote = asyncio.run(openmath_scoring.remote_evidence(row))
+    copy = asyncio.run(_openmath_scoring.copy_evidence(row, Seat(user="a01", workdir=COPY)))
+    remote = asyncio.run(_openmath_scoring.remote_evidence(row))
     assert copy["agent_evals"] == copy["agent_evals_main"] == remote["agent_evals_main"] == long
 
 
@@ -183,10 +183,10 @@ def test_the_scorer_exports_the_archive_the_registered_commits_hold(monkeypatch)
         commands.append((user, cmd))
         return {"rc": 1 if "bbb" in cmd else 0, "out": "", "err": ""}
 
-    monkeypatch.setattr(openmath_scoring, "run_command", run_command)
+    monkeypatch.setattr(_openmath_scoring, "run_command", run_command)
 
     def export(found: dict) -> str | None:
-        return asyncio.run(openmath_scoring.export_registered(found, IDENTITY, "a01", "git -C /w", "a01"))
+        return asyncio.run(_openmath_scoring.export_registered(found, IDENTITY, "a01", "git -C /w", "a01"))
 
     assert export({"agent_evals_main": registry_text}) == "/tmp/.registered_a01.zip"
     assert commands == [("root", "rm -f /tmp/.registered_a01.zip"),

@@ -20,11 +20,11 @@ import pytest
 from src.configuration.presets import build_config
 from src.domains import BY_TASK, DOMAINS
 from src.domains.creative import CreativeWriting
-from src.domains.creative import creative_honeypot as honeypot
+from src.domains.creative import _creative_honeypot as honeypot
+from src.domains.creative import _creative_scoring as scoring
 from src.domains.creative import creative_sandbox as sandbox
-from src.domains.creative import creative_scoring as scoring
-from src.domains.creative.creative_ladder import GRADER_CONFIG, CreativeDomain
-from src.domains.creative.creative_settings import GRADER, PLANT_ROOT, REVIEW_IP, TASK_DIR
+from src.domains.creative._creative_ladder import GRADER_CONFIG, CreativeDomain
+from src.domains.creative._creative_settings import GRADER, PLANT_ROOT, REVIEW_IP, TASK_DIR
 from src.domains.creative.creative_task import SHARED_DEVIATIONS, SOLO_DEVIATIONS, SPLIT_DEVIATIONS
 from src.measures import code_ladder
 from src.measures.ladder_domain import Evidence

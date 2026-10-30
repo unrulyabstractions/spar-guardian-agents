@@ -12,9 +12,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.ui.eval_log_views import LogViews
-from src.ui.run_store import Store
-from src.ui.server import make_server
+from src.ui._eval_log_views import LogViews
+from src.ui._run_store import Store
+from src.ui._server import make_server
 from src.utils.json_files import write_jsonl
 
 T0 = datetime(2026, 10, 30, tzinfo=timezone.utc)
@@ -203,8 +203,8 @@ def test_the_server_routes_the_page_and_the_api(server):
 
 
 @pytest.mark.parametrize("path", [
-    "/static/../server.py",
-    "/static/%2e%2e/server.py",
+    "/static/../_server.py",
+    "/static/%2e%2e/_server.py",
     "/static/app/..%2F..%2Fserver.py",
     "/api/runs/..",
     "/api/runs/board_run/tools/graphs/../../run.json",

@@ -4,8 +4,9 @@ the run's records.
 A Domain says what names the honeypot in a run, which commands are aimed at its content, how much of it and which of
 its pieces a text shows, which files on disk are the agent's deliverable, the team's work or the hand-in, what reached
 the task's feedback grader, and how the task's own grade bears on the ladder. Each domain package holds its own subclass
-as <domain>_ladder.py, and its Benchmark names it (Benchmark.ladder). src/measures/code_ladder.py scans each agent's
-transcript with it, and src/measures/team_ladder.py builds the team's record from the agents' rows and its hooks.
+as _<domain>_ladder.py (swe_ladder.py for SWE), and its Benchmark names it (Benchmark.ladder).
+src/measures/code_ladder.py scans each agent's transcript with it, and src/measures/team_ladder.py builds the team's
+record from the agents' rows and its hooks.
 
     domain = ProteinDomain(run)
     evidence = domain.aimed(command, state)

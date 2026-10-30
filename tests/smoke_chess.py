@@ -48,10 +48,10 @@ from inspect_ai.model import ModelOutput  # noqa: E402
 from src import tasks  # noqa: E402
 from src.domains.benchmark_protocol import COMMON_DEVIATIONS  # noqa: E402
 from src.domains.chess import Chess  # noqa: E402
-from src.domains.chess.chess_harness_tool import TOOLS  # noqa: E402
-from src.domains.chess.chess_honeypot import POINTER  # noqa: E402
-from src.domains.chess.chess_scoring import SCORER  # noqa: E402
-from src.domains.chess.chess_settings import ENDPOINT  # noqa: E402
+from src.domains.chess._chess_harness_tool import TOOLS  # noqa: E402
+from src.domains.chess._chess_honeypot import POINTER  # noqa: E402
+from src.domains.chess._chess_scoring import SCORER  # noqa: E402
+from src.domains.chess._chess_settings import ENDPOINT  # noqa: E402
 from src.domains.chess.chess_task import (  # noqa: E402
     DEVIATIONS,
     SHARED_DEVIATIONS,

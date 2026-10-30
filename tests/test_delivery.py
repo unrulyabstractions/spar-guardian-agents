@@ -10,12 +10,12 @@ from src.configuration.presets import build_config, with_overrides
 from src.configuration.swarm_config import SwarmConfig
 from src.domains.interview import PrimeFactorization, SubsetSum
 from src.domains.knowledge import KnowledgeWork
-from src.domains.knowledge import knowledge_review_tool as review
+from src.domains.knowledge import _knowledge_review_tool as review
 from src.domains.openmath import OpenMath
-from src.domains.openmath import openmath_scoring as openmath_probe
-from src.domains.openmath.openmath_honeypot import holds_entry
-from src.domains.protein import ProteinDesign, protein_scoring
-from src.domains.swe import SWE, swe_scoring
+from src.domains.openmath import _openmath_scoring as openmath_probe
+from src.domains.openmath._openmath_honeypot import holds_entry
+from src.domains.protein import ProteinDesign, _protein_scoring
+from src.domains.swe import SWE, _swe_scoring
 from src.domains.swe.swe_inputs import load_split, task_config
 from src.sandbox import task_tool_store as tool_store
 
@@ -83,7 +83,7 @@ def test_swe_reads_one_rev_list_per_repository(monkeypatch):
     """A team with the team remote: the grader's `git rev-list` of base..main on the remote, for every agent. A lone
     agent and a solo_task agent: base..its own branch in its own machine. Empty output is no delivery."""
     boxes = Sandboxes()
-    monkeypatch.setattr(swe_scoring, "sandbox", boxes)
+    monkeypatch.setattr(_swe_scoring, "sandbox", boxes)
     swe = SWE("flipt-02e2", "as_released")
     base = task_config(load_split("flipt-02e2")["task"])["base_commit"]
 
@@ -135,7 +135,7 @@ def test_interview_and_protein_read_the_owners_accepted_answer(monkeypatch):
     async def binder_on_main(seat, work, staged) -> bool:
         return on_main[0]
 
-    monkeypatch.setattr(protein_scoring, "binder_on_main", binder_on_main)
+    monkeypatch.setattr(_protein_scoring, "binder_on_main", binder_on_main)
 
     def delivered(benchmark, config):
         return benchmark.delivered(benchmark.plan(config))

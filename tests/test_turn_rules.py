@@ -43,6 +43,9 @@ from src.swarm import turn_rules as rules
 from src.swarm.awareness_probes import end_of_episode_probes  # noqa: E402
 from src.swarm.board import board_communication, board_execution, board_scheduler  # noqa: E402
 from src.swarm.submit_and_stop import Deliverable, ending_tools, submit_bindings  # noqa: E402
+from src.swarm.turn_rules._turn_plan import team_delivery  # noqa: E402
+from src.swarm.turn_rules._turn_state import BOARD_ACTIONS, DELIVERED_TAG  # noqa: E402
+from src.swarm.turn_rules.turn_activation import last_call_refused, step_charge  # noqa: E402
 
 MODEL = "mockllm/turn-rules"
 PROMPTS = load_prompts()
@@ -858,7 +861,7 @@ def test_agent_actions_shows_a_regulator_its_teammates_calls(tmp_path):
     # Each call about a teammate counts, the disregulator included; a refused call does not.
     assert store(sample, "oversight") == {"a02": 3}
     assert store(sample, "oversight_targets") == {"a02": {"a01": 2, "a03": 1}}
-    assert "agent_actions" in rules.BOARD_ACTIONS
+    assert "agent_actions" in BOARD_ACTIONS
     # Only the successful calls are free: "no such agent" is charged, and ends the regulator's round.
     assert step_ids(sample, "a02") == ["r1-a02", "r1-a02-free1", "r1-a02-free2", "r2-a02", "r3-a02", "r3-a02-free1",
                                        "r4-a02"]
@@ -886,31 +889,31 @@ def test_a_refused_call_is_no_free_step():
                                 error=ToolCallError("parsing", error) if error else None)]
 
     no_such = PROMPTS["oversight_output"]["no_such_agent"]
-    assert rules.last_call_refused(step("board_read", error="Read budget spent")) is True
-    assert rules.last_call_refused(step("agent_actions", error="Tool agent_actions not found")) is True
-    assert rules.last_call_refused(step("agent_actions", no_such)) is True
-    assert rules.last_call_refused(step("agent_actions", "r1 work({}) -> done")) is False
-    assert rules.last_call_refused(step("board_post", "posted #1")) is False
-    assert rules.last_call_refused([]) is False
+    assert last_call_refused(step("board_read", error="Read budget spent")) is True
+    assert last_call_refused(step("agent_actions", error="Tool agent_actions not found")) is True
+    assert last_call_refused(step("agent_actions", no_such)) is True
+    assert last_call_refused(step("agent_actions", "r1 work({}) -> done")) is False
+    assert last_call_refused(step("board_post", "posted #1")) is False
+    assert last_call_refused([]) is False
     # Only the last call decides: a refused read followed by a post that went through is free.
-    assert rules.last_call_refused([*step("board_read", error="spent"), *step("board_post", "posted #2")]) is False
+    assert last_call_refused([*step("board_read", error="spent"), *step("board_post", "posted #2")]) is False
     # step_charge reads free_caps only (a TurnState outside a sample shares one store).
     st = SimpleNamespace(free_caps={"a01": 2})
-    assert rules.step_charge(st, ["board_read"], "a01", refused=True) == "refused"
-    assert rules.step_charge(st, ["agent_actions"], "a01", refused=True) == "refused"
-    assert rules.step_charge(st, ["board_read"], "a01") == "free"
-    assert rules.step_charge(st, ["work"], "a01", refused=True) == "work"
+    assert step_charge(st, ["board_read"], "a01", refused=True) == "refused"
+    assert step_charge(st, ["agent_actions"], "a01", refused=True) == "refused"
+    assert step_charge(st, ["board_read"], "a01") == "free"
+    assert step_charge(st, ["work"], "a01", refused=True) == "work"
     # A submit or stop_working that went through (the stores' ending) is neither charged nor free, whatever came
     # after it in the step and whatever K; a refused one is charged.
-    assert rules.step_charge(st, ["work", "submit"], "a01", ending="submit") == "submit"
-    assert rules.step_charge(st, ["submit", "submit"], "a01", refused=True, ending="submit") == "submit"
-    assert rules.step_charge(st, ["stop_working"], "a01", ending="stop") == "stop"
-    assert rules.step_charge(st, ["submit"], "a01", refused=True) == "refused"
-    assert rules.step_charge(st, ["stop_working"], "a01", refused=True) == "refused"
+    assert step_charge(st, ["work", "submit"], "a01", ending="submit") == "submit"
+    assert step_charge(st, ["submit", "submit"], "a01", refused=True, ending="submit") == "submit"
+    assert step_charge(st, ["stop_working"], "a01", ending="stop") == "stop"
+    assert step_charge(st, ["submit"], "a01", refused=True) == "refused"
+    assert step_charge(st, ["stop_working"], "a01", refused=True) == "refused"
     charged = SimpleNamespace(free_caps={})
-    assert rules.step_charge(charged, ["board_read"], "a01", refused=True) == "work"
-    assert rules.step_charge(charged, ["submit"], "a01", refused=True) == "work"
-    assert rules.step_charge(charged, ["submit"], "a01", ending="submit") == "submit"
+    assert step_charge(charged, ["board_read"], "a01", refused=True) == "work"
+    assert step_charge(charged, ["submit"], "a01", refused=True) == "work"
+    assert step_charge(charged, ["submit"], "a01", ending="submit") == "submit"
 
 
 @scorer(metrics=[])
@@ -920,7 +923,7 @@ def actions_after_the_run():
     async def score(state, target: Target) -> Score:
         from orbit.execution.sessions import current_session_registry
 
-        from src.swarm import regulator_oversight as oversight
+        from src.swarm import _regulator_oversight as oversight
         try:
             current_session_registry()
             live = True
@@ -1039,8 +1042,8 @@ def delivery(sample, field: str):
 
 
 def delivery_infos(sample) -> list[tuple]:
-    return [(i["kind"], i["round"], i["agents"]) for i in (e.data[rules.DELIVERED_TAG] for e in sample.events
-            if e.event == "info" and isinstance(e.data, dict) and rules.DELIVERED_TAG in e.data)]
+    return [(i["kind"], i["round"], i["agents"]) for i in (e.data[DELIVERED_TAG] for e in sample.events
+            if e.event == "info" and isinstance(e.data, dict) and DELIVERED_TAG in e.data)]
 
 
 LONE_SHIP = {"a01": [do("read"), do("ship"), do("after 1"), do("after 2"), do("after 3"), do("after 4")]}
@@ -1107,7 +1110,7 @@ def test_without_the_rule_nothing_is_written_and_no_sighting_ends_nobody(tmp_pat
     sample, _ = run(pull(n_agents=1, steps_per_agent=6), LONE_SHIP, tmp_path)
     assert store(sample, "work_steps") == {"a01": 6} and store(sample, "ended") == {}
     assert not [key for key in sample.store if key.startswith("Delivered:")]
-    assert not any(isinstance(e.data, dict) and rules.DELIVERED_TAG in e.data for e in sample.events
+    assert not any(isinstance(e.data, dict) and DELIVERED_TAG in e.data for e in sample.events
                    if e.event == "info")
     sample, _ = run(pull(n_agents=1, steps_per_agent=4, stop_after_delivery=0), {"a01": [do("work")]}, tmp_path,
                     delivered=shipped())
@@ -1133,9 +1136,9 @@ def test_the_rule_needs_a_predicate_and_reads_the_mode():
     with pytest.raises(ValueError, match="delivery predicate"):
         rules.rules_setup(pull(stop_after_delivery=1), ["a01", "a02", "a03"])
     names = ["a01", "a02", "a03"]
-    assert rules.team_delivery(pull(), names) is True
-    assert rules.team_delivery(pull(mode="solo_task"), names) is False
-    assert rules.team_delivery(pull(n_agents=1), ["a01"]) is False
+    assert team_delivery(pull(), names) is True
+    assert team_delivery(pull(mode="solo_task"), names) is False
+    assert team_delivery(pull(n_agents=1), ["a01"]) is False
 
 
 def test_solo_task_agents_stop_on_their_own_deliverable_and_leave_their_steps_to_nobody(tmp_path):

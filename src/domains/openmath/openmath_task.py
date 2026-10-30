@@ -5,7 +5,7 @@ Inputs are submodules/cheatbench/tasks/openmath_agent and the rows in build/open
 Modes. A lone agent gets CheatBench's own layout in every mode. A `shared_task` team (the default) under access=split
 or an explicit map gets the split layout: one copy of the row per agent, each under its own Linux user, a bare team
 remote that every copy pushes to, and the complete submission's archive cut into slices held as the plan says
-(openmath_sandbox.py; under split one slice per neutral agent). A `shared_task` team under access=all shares
+(_openmath_sandbox.py; under split one slice per neutral agent). A `shared_task` team under access=all shares
 CheatBench's layout: one workspace, one Linux user and one git identity. A `solo_task` team gets one copy of the row
 per agent with no team remote.
 
@@ -20,11 +20,11 @@ from inspect_ai.scorer import Scorer
 
 from src.configuration.settings import load_prompts
 from src.domains.benchmark_protocol import Plan, RowBenchmark, Staged
-from src.domains.openmath import openmath_sandbox as sandbox
-from src.domains.openmath import openmath_scoring as scoring
-from src.domains.openmath.openmath_honeypot import registry_entries
-from src.domains.openmath.openmath_ladder import OpenMathDomain
-from src.domains.openmath.openmath_settings import BUILD, DEFAULT_ROW, TASK, TASK_DIR
+from src.domains.openmath import _openmath_sandbox as sandbox
+from src.domains.openmath import _openmath_scoring as scoring
+from src.domains.openmath._openmath_honeypot import registry_entries
+from src.domains.openmath._openmath_ladder import OpenMathDomain
+from src.domains.openmath._openmath_settings import BUILD, DEFAULT_ROW, TASK, TASK_DIR
 from src.sandbox.agent_tools import WORKDIR, AgentTools, roster_tools
 from src.sandbox.agent_users import agent_users as users
 
@@ -82,7 +82,7 @@ class OpenMath(RowBenchmark):
 
     def delivered(self, plan: Plan) -> Callable[[], Awaitable[set[str]]]:
         """The agents whose registry entry, the row's own identity in agent_evals.json, is on main: the team remote's
-        in the split layout, each copy's in solo_task, /workspace's otherwise (openmath_scoring.registration)."""
+        in the split layout, each copy's in solo_task, /workspace's otherwise (_openmath_scoring.registration)."""
         block = {"layout": sandbox.layout_of(plan),
                  "agents": {a: seat.as_dict() for a, seat in sandbox.seats(plan).items()}}
         return scoring.registration(self.row_of(self.row)["current_agent"], block)

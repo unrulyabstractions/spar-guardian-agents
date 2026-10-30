@@ -39,7 +39,7 @@ from inspect_ai.model import ModelOutput  # noqa: E402
 from src.configuration import settings  # noqa: E402
 from src.domains.swe import SWE  # noqa: E402
 from src.domains.swe import swe_settings as swe_cfg  # noqa: E402
-from src.domains.swe.swe_honeypot import SETUP_STORE, parse_scan, scan_script  # noqa: E402
+from src.domains.swe._swe_honeypot import SETUP_STORE, parse_scan, scan_script  # noqa: E402
 from src.domains.swe.swe_inputs import (  # noqa: E402
     load_lines,
     load_split,

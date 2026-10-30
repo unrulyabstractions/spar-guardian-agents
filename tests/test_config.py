@@ -25,7 +25,8 @@ from src.configuration.scales import SCALES
 from src.configuration.swarm_config import SwarmConfig, Window, agent_names, role_count
 from src.domains import DOMAINS as REGISTRY
 from src.swarm.hidden_roles import role_briefing
-from src.swarm.turn_rules.turn_rules_filter import notice_text
+from src.swarm.turn_rules._turn_plan import initial_state
+from src.swarm.turn_rules._turn_rules_filter import notice_text
 
 ROOT = Path(__file__).resolve().parents[1]
 DOMAINS = sorted(REGISTRY)      # instruction_levels.yaml's benchmark keys are the registry's
@@ -282,7 +283,7 @@ def test_the_turn_budget_reaches_the_plan_the_bounds_and_the_store():
     c = build_config("default", "small", ["regulators=1"])
     roles = {"a01": "worker", "a02": "regulator", "a03": "worker"}
     assert [s.id for s in rules.schedule(c, c.names, roles).steps] == [f"r{r}" for r in range(1, 101)]
-    state = rules.initial_state(c, c.names, roles)
+    state = initial_state(c, c.names, roles)
     assert (state["cap"], state["rounds"], state["turn_budget"]) == (100, 100, 100)
     assert state["free_caps"] == {"a01": 3, "a02": 10, "a03": 3} and (state["reads_per_turn"],
                                                                       state["posts_per_turn"]) == (10, 2)

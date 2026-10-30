@@ -4,8 +4,8 @@ Start: `make ui`, or `uv run python -m src ui [--port 8765] [--no-open]` from th
 it. The foreground server alone is `uv run python -m src.ui [--runs runs] [--port 8765]`.
 
 The page is served at `/` and its assets at `/static/<path>` from `src/ui/static/` (`index.html`, `style.css` and the ES
-modules under `app/`, which `index.html` loads through `app/main.js`). `server.py` routes every request; `run_store.py`
-reads the run directories and `eval_log_views.py` the eval logs. Every API answer is JSON. A path that matches no route,
+modules under `app/`, which `index.html` loads through `app/main.js`). `_server.py` routes every request; `_run_store.py`
+reads the run directories and `_eval_log_views.py` the eval logs. Every API answer is JSON. A path that matches no route,
 names an unknown run, episode, call or tool, or leaves the directory it names (a `.` or `..` segment, an encoded
 separator) gets 404 `{"error"}`; a server fault gets 500 `{"error", "traceback"}`.
 

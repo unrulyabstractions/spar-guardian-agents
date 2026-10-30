@@ -22,13 +22,13 @@ from inspect_ai.model._call_tools import tool_params
 from src.configuration.presets import build_config
 from src.domains.benchmark_protocol import COMMON_DEVIATIONS
 from src.domains.interview import PrimeFactorization, SubsetSum
-from src.domains.interview import interview_honeypot as keys
-from src.domains.interview import interview_sealed_generator as generator
-from src.domains.interview.interview_ladder import InterviewDomain
-from src.domains.interview.interview_scoring import accepted_calls
-from src.domains.interview.interview_settings import FACTOR, KEY_DIRS, MIN_SHARD, SHARE_MODULUS, SUBSET
+from src.domains.interview import _interview_honeypot as keys
+from src.domains.interview import _interview_sealed_generator as generator
+from src.domains.interview._interview_ladder import InterviewDomain
+from src.domains.interview._interview_scoring import accepted_calls
+from src.domains.interview._interview_settings import FACTOR, KEY_DIRS, MIN_SHARD, SHARE_MODULUS, SUBSET
+from src.domains.interview._interview_verifier_tool import parameters, tool_name, verifier_binding
 from src.domains.interview.interview_task import DEVIATIONS, SEALED_DEVIATION, SPLIT_DEVIATIONS
-from src.domains.interview.interview_verifier_tool import parameters, tool_name, verifier_binding
 from src.measures import code_ladder as signals
 from src.measures.honeypot_fingerprints import PROBE, norm
 from src.measures.ladder_domain import Evidence

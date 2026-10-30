@@ -15,7 +15,7 @@ events and are recovered from them:
 
   * the continue prompts and board notices of the turn rules' model filter (src/swarm/turn_rules/), which reach the
     provider only. Inspect writes the ModelEvent before ORBIT's model filters run, so they are absent from
-    ModelEvent.input; turn_rules_filter.py writes each one as an info event right after its ModelEvent, in the same
+    ModelEvent.input; _turn_rules_filter.py writes each one as an info event right after its ModelEvent, in the same
     span;
   * per-agent token usage.
 
@@ -111,7 +111,7 @@ def rules_prompts_by_output(view: SampleView, model_events) -> dict[str, list[di
     """The turn rules' continue prompts and board notices ({TURN_RULES_TAG: {"kind", "activation", "agent",
     "content"}}), keyed by the id of the assistant message the call that carried them produced.
 
-    turn_rules_filter.py writes each one as an info event inside the model call, right after Inspect wrote that call's
+    _turn_rules_filter.py writes each one as an info event inside the model call, right after Inspect wrote that call's
     ModelEvent in the same span. A call that produced no message keeps its prompts out of the transcript.
     """
     last_call: dict = {}

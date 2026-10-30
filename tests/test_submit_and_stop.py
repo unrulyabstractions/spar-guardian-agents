@@ -17,15 +17,15 @@ from src.configuration.presets import build_config, with_overrides
 from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import role_of
 from src.domains.interview import PrimeFactorization, SubsetSum
-from src.domains.knowledge import KnowledgeWork, knowledge_scoring
+from src.domains.knowledge import KnowledgeWork, _knowledge_scoring
 from src.domains.openmath import OpenMath
-from src.domains.protein import ProteinDesign, protein_scoring
-from src.domains.swe import SWE, swe_scoring
+from src.domains.protein import ProteinDesign, _protein_scoring
+from src.domains.swe import SWE, _swe_scoring
 from src.sandbox import task_tool_store as tool_store
 from src.swarm import board
 from src.swarm.submit_and_stop import Deliverable, ending_tools, stop_working, submit
 from src.swarm.turn_rules import provider_system_text
-from src.swarm.turn_rules.turn_rules_filter import TurnRulesDefense, shown_as_submit, turn_rules_defense
+from src.swarm.turn_rules._turn_rules_filter import TurnRulesDefense, shown_as_submit, turn_rules_defense
 
 TEAM = build_config("default", "small")                   # three agents, shared_task, access=split
 SOLO = with_overrides(TEAM, ["mode=solo_task"])
@@ -196,7 +196,7 @@ def test_swe_hands_in_a_change_from_the_base(monkeypatch):
     """shared_task: team/main's tree differs from the base's, read from the grader. A lone or solo_task agent: its
     /app differs from the base. The snapshot is the commit graded now."""
     boxes = Sandboxes()
-    monkeypatch.setattr(swe_scoring, "sandbox", boxes)
+    monkeypatch.setattr(_swe_scoring, "sandbox", boxes)
     swe = SWE("flipt-02e2", "as_released")
     base = swe.base_commit()
     git = (None, ("git", "--git-dir=/var/lib/team_view.git", "rev-parse"))
@@ -209,7 +209,7 @@ def test_swe_hands_in_a_change_from_the_base(monkeypatch):
     assert ask(swe.gradable(team, "a02")) is None
     boxes.answers[(None, (*git[1], "--verify", "-q", "refs/heads/main"))] = (0, "9a8b7c6d\n")
     assert ask(swe.snapshot(team, "a02")) == "9a8b7c6d"
-    work = ("a01", ("bash", "-c", swe_scoring.WORK_CHANGED.format(base=base)))
+    work = ("a01", ("bash", "-c", _swe_scoring.WORK_CHANGED.format(base=base)))
     lone = swe.plan(LONE)
     boxes.answers[work] = (0, "")
     assert ask(swe.gradable(lone, "a01")) == "/app holds no change from the base"
@@ -221,7 +221,7 @@ def test_swe_hands_in_a_change_from_the_base(monkeypatch):
 
 def test_knowledge_work_hands_in_a_file_in_to_send(monkeypatch):
     boxes = Sandboxes()
-    monkeypatch.setattr(knowledge_scoring, "sandbox", boxes)
+    monkeypatch.setattr(_knowledge_scoring, "sandbox", boxes)
     kw = KnowledgeWork()
 
     def find(workdir: str) -> tuple:
@@ -280,7 +280,7 @@ def test_the_machines_domains_hand_in_once_the_owner_checked(benchmark, tool, mi
     async def binder_on_main(seat, work, staged) -> bool:
         return True
 
-    monkeypatch.setattr(protein_scoring, "binder_on_main", binder_on_main)
+    monkeypatch.setattr(_protein_scoring, "binder_on_main", binder_on_main)
     store().set(tool_store.CALLS, [])
     team, solo = benchmark.plan(TEAM), benchmark.plan(SOLO)
     assert ask(benchmark.gradable(team, "a01")) == missing

@@ -20,7 +20,7 @@ Three scripts run inside a sandbox as root, in Python 3, which every image has:
 
 The counts of REAP go to the sample store under REAP_STORE ({agent: {commands, killed, max_alive, survivors}}) and
 the guard's report under GUARD_STORE; STATE's report goes to the domain's deliverables scorer under "sandbox"; the
-export writes all three as run.json "sandbox" (src/export/export_run_blocks.py sandbox_block). A lone agent keeps
+export writes all three as run.json "sandbox" (src/export/_export_run_blocks.py sandbox_block). A lone agent keeps
 CheatBench's layout: no guard and no reaps after its commands; its end state is still recorded.
 """
 from __future__ import annotations

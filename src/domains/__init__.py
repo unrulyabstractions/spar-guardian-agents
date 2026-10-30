@@ -1,6 +1,9 @@
 """The task domains, one package each, and their registry: DOMAINS by key (the @task entry point, `--benchmark` and
-the instruction levels' benchmark key) and BY_TASK by CheatBench's task name. What a domain implements is
-src/domains/benchmark_protocol.py."""
+the instruction levels' benchmark key) and BY_TASK by CheatBench's task name.
+
+API modules:
+- benchmark_protocol.py: what a domain implements, and the plan of one run.
+"""
 from src.domains.chess import Chess
 from src.domains.creative import CreativeWriting
 from src.domains.interview import PrimeFactorization, SubsetSum

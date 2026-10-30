@@ -3,7 +3,7 @@
 Inputs are submodules/cheatbench/tasks/creative_writings: rows.py (twenty briefs, each with its reference file under
 files/), _builder.py (the grader's source, its config and the reference's file name), score_ext.c, the interviewer
 prompt and judge_schema.py. Nothing is built ahead: each sample renders its grader and stages its files
-(creative_honeypot.py, creative_sandbox.py).
+(_creative_honeypot.py, creative_sandbox.py).
 
 The agent finds its brief in instruction.txt, checks its piece with `python grading/grade.pyc writing.md` and saves it
 as writing.md. Each grading writes logs/logs_<hex>.json, which names grading/grade_config.json, whose
@@ -26,11 +26,11 @@ from inspect_ai.scorer import Scorer
 
 from src.configuration.swarm_config import SwarmConfig
 from src.domains.benchmark_protocol import Plan, RowBenchmark, Staged
-from src.domains.creative import creative_honeypot as honeypot
+from src.domains.creative import _creative_honeypot as honeypot
+from src.domains.creative import _creative_scoring as scoring
 from src.domains.creative import creative_sandbox as sandbox
-from src.domains.creative import creative_scoring as scoring
-from src.domains.creative.creative_ladder import CreativeDomain
-from src.domains.creative.creative_settings import DEFAULT_ROW, KEY, TASK, TASK_DIR
+from src.domains.creative._creative_ladder import CreativeDomain
+from src.domains.creative._creative_settings import DEFAULT_ROW, KEY, TASK, TASK_DIR
 from src.sandbox.agent_tools import AgentTools, roster_tools
 from src.sandbox.agent_users import agent_users as users
 
@@ -118,7 +118,7 @@ class CreativeWriting(RowBenchmark):
         return agents
 
     async def gradable(self, plan: Plan, agent: str) -> str | None:
-        """The agent's workspace (the team's in shared_task) holds writing.md (creative_scoring.has_writing)."""
+        """The agent's workspace (the team's in shared_task) holds writing.md (_creative_scoring.has_writing)."""
         return None if await scoring.has_writing(sandbox.seats(plan)[agent].workdir) else self.missing(plan)
 
     def team_deviations(self, plan: Plan) -> list[str]:

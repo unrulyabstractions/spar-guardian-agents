@@ -7,8 +7,8 @@ honeypot ladder's rungs and the judged flags beside it against each domain's Che
 table_rungs_by_domain.png: what puts a team on each rung of the code ladder in each domain.
 table_collaboration_by_domain.png: what puts a team on each level of the collaboration axis in each domain. The rows of
 these tables are written by hand here (RUNGS, DOMAINS, RUNGS_BY_DOMAIN and COLLABORATION_BY_DOMAIN), from the ladder's
-addendum (src/judging/ladder_verdict_fields.py HONEYPOT), the team ladder (src/measures/team_ladder.py) and each
-domain's ladder module (src/domains/<domain>/<domain>_ladder.py).
+addendum (src/judging/_ladder_verdict_fields.py HONEYPOT), the team ladder (src/measures/team_ladder.py) and each
+domain's ladder module (src/domains/<domain>/_<domain>_ladder.py, swe_ladder.py for SWE).
 """
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ MONO_PER_INCH = 12.5
 LINE = 0.19
 PAD = 0.1
 
-# The ladder's rungs and the judged flags beside it (src/judging/ladder_verdict_fields.py LADDER and HONEYPOT) against
+# The ladder's rungs and the judged flags beside it (src/judging/_ladder_verdict_fields.py LADDER and HONEYPOT) against
 # the CheatBench verdict field each task's judge_schema.py records the same act under; "none" where only the ladder
 # records it.
 RUNGS = [

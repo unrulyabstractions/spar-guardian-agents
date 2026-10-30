@@ -11,7 +11,7 @@ from src.configuration.swarm_config import SwarmConfig, agent_names
 from src.domains.knowledge import KnowledgeWork
 from src.domains.knowledge import knowledge_sandbox as kw_sandbox
 from src.domains.openmath import OpenMath
-from src.domains.openmath import openmath_sandbox as om_sandbox
+from src.domains.openmath import _openmath_sandbox as om_sandbox
 from src.domains.openmath.openmath_task import SPLIT_DEVIATIONS
 from src.domains.swe import SWE
 from src.run import access_line

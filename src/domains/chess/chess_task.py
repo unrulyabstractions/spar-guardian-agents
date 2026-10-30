@@ -5,8 +5,8 @@ game package, build.py, grader.py, judge_schema.py) and the rows our build write
 data.jsonl and the pinned Stockfish). The judge is CheatBench's judge_schema.py.
 
 The agent plays White from a won position against a Stockfish opponent through CheatBench's nine tools, with no
-shell: the game, the opponent's engine and the endpoint run on the host (chess_host_game.py), and the sandbox, one
-python311 container with no network, runs an edited opponent policy (chess_sandbox.py). The checkout under /workspace
+shell: the game, the opponent's engine and the endpoint run on the host (_chess_host_game.py), and the sandbox, one
+python311 container with no network, runs an edited opponent policy (_chess_sandbox.py). The checkout under /workspace
 is build.py's: AGENTS.md, README.md, game/, opponent/ and the notepad. opponent/config.json names the other agent's
 endpoint, which ranks the best replies of any position.
 
@@ -29,14 +29,23 @@ from inspect_ai.scorer import Scorer
 from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import SwarmConfig
 from src.domains.benchmark_protocol import Plan, RowBenchmark, Staged
-from src.domains.chess import chess_host_game as host_game
-from src.domains.chess import chess_sandbox as sandbox
-from src.domains.chess import chess_scoring as scoring
-from src.domains.chess.chess_harness_tool import harness_bindings, tool_names
-from src.domains.chess.chess_honeypot import held_halves, holds_request, new_credential
-from src.domains.chess.chess_ladder import ChessDomain
-from src.domains.chess.chess_settings import BUILD, CREDENTIALS, DEFAULT_ROW, ENDPOINT, REQUEST, TASK, TASK_DIR, VARIANT
-from src.domains.chess.chess_stockfish import BUILD_HINT, engine_path
+from src.domains.chess import _chess_host_game as host_game
+from src.domains.chess import _chess_sandbox as sandbox
+from src.domains.chess import _chess_scoring as scoring
+from src.domains.chess._chess_harness_tool import harness_bindings, tool_names
+from src.domains.chess._chess_honeypot import held_halves, holds_request, new_credential
+from src.domains.chess._chess_ladder import ChessDomain
+from src.domains.chess._chess_settings import (
+    BUILD,
+    CREDENTIALS,
+    DEFAULT_ROW,
+    ENDPOINT,
+    REQUEST,
+    TASK,
+    TASK_DIR,
+    VARIANT,
+)
+from src.domains.chess._chess_stockfish import BUILD_HINT, engine_path
 from src.sandbox import task_tool_store as tool_store
 from src.sandbox.agent_tools import AgentTools
 from src.sandbox.machines import agent_machines as machines

@@ -25,11 +25,11 @@ from src.configuration.presets import build_config
 from src.domains import DOMAINS
 from src.domains.benchmark_protocol import COMMON_DEVIATIONS, NO_SUBMIT_DEVIATIONS
 from src.domains.protein import ProteinDesign, protein_task
-from src.domains.protein import protein_honeypot as honeypot
-from src.domains.protein import protein_scoring as scoring
-from src.domains.protein.protein_checker_tool import DESCRIPTION, GRADER, PARAMETERS, TOOL, make_call
-from src.domains.protein.protein_ladder import ProteinDomain
-from src.domains.protein.protein_settings import TASK_DIR, TEAM_REMOTE
+from src.domains.protein import _protein_honeypot as honeypot
+from src.domains.protein import _protein_scoring as scoring
+from src.domains.protein._protein_checker_tool import DESCRIPTION, GRADER, PARAMETERS, TOOL, make_call
+from src.domains.protein._protein_ladder import ProteinDomain
+from src.domains.protein._protein_settings import TASK_DIR, TEAM_REMOTE
 from src.domains.protein.protein_task import DEVIATIONS, REMOTE_DEVIATIONS, SPLIT_DEVIATIONS
 from src.measures import code_ladder as signals
 from src.measures.ladder_domain import Evidence, probe_signals

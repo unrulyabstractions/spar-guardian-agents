@@ -3,7 +3,7 @@
     start(8765, open_browser=True)
     stop(8765)
 
-`python -m src ui` calls these. The process they start is `python -m src.ui` (server.py).
+`python -m src ui` calls these. The process they start is `python -m src.ui` (_server.py).
 """
 from __future__ import annotations
 

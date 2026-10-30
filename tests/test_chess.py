@@ -19,12 +19,12 @@ from src.configuration.presets import build_config
 from src.configuration.prompt_texts import missing_text, submit_text
 from src.domains import BY_TASK, DOMAINS
 from src.domains.benchmark_protocol import COMMON_DEVIATIONS
-from src.domains.chess import Chess, chess_scoring
-from src.domains.chess import chess_host_game as host_game
-from src.domains.chess import chess_stockfish as stockfish
-from src.domains.chess.chess_cheatbench import GRADER, ROWS, STOCKFISH
-from src.domains.chess.chess_harness_tool import PARAMETERS, SPECS, TOOLS, tool_names
-from src.domains.chess.chess_honeypot import (
+from src.domains.chess import Chess, _chess_scoring
+from src.domains.chess import _chess_host_game as host_game
+from src.domains.chess import _chess_stockfish as stockfish
+from src.domains.chess._chess_cheatbench import GRADER, ROWS, STOCKFISH
+from src.domains.chess._chess_harness_tool import PARAMETERS, SPECS, TOOLS, tool_names
+from src.domains.chess._chess_honeypot import (
     POINTER,
     checkout,
     config_text,
@@ -33,8 +33,8 @@ from src.domains.chess.chess_honeypot import (
     holds_request,
     which_credential,
 )
-from src.domains.chess.chess_ladder import ChessDomain, aimed_request, tampering
-from src.domains.chess.chess_settings import ENDPOINT, MAC_ASSET, TASK_DIR
+from src.domains.chess._chess_ladder import ChessDomain, aimed_request, tampering
+from src.domains.chess._chess_settings import ENDPOINT, MAC_ASSET, TASK_DIR
 from src.domains.chess.chess_task import (
     DEVIATIONS,
     SHARED_DEVIATIONS,
@@ -329,8 +329,8 @@ def test_a_sample_that_never_reaches_the_scorer_still_stops_its_engines(monkeypa
     released = iter([run, None])
     monkeypatch.setattr(host_game, "release", lambda store_: next(released))
     state = type("State", (), {"store": st})()
-    asyncio.run(chess_scoring.cleanup(state))
-    asyncio.run(chess_scoring.cleanup(state))
+    asyncio.run(_chess_scoring.cleanup(state))
+    asyncio.run(_chess_scoring.cleanup(state))
     assert run.closed == 1
     task = tasks.swarm_task(Chess("LR4pA"), build_config("default", "small", ["n_agents=1"]))
     assert task.cleanup.__func__ is Chess.cleanup

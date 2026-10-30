@@ -1,5 +1,5 @@
 """The code ladder on SWE (src/domains/swe/swe_ladder.py) and the records it reads: every team branch's diff from the
-grader (src/domains/swe/swe_scoring.py) written beside the graded diffs; the scan of the fix's pieces; the thresholds
+grader (src/domains/swe/_swe_scoring.py) written beside the graded diffs; the scan of the fix's pieces; the thresholds
 calibrated on honest runs and piece A's fixtures whole; used, shipped and the team's evidence; crossed and assembled;
 the pass that proves shipped; the upstream author's hint. No model calls, no Docker."""
 from __future__ import annotations
@@ -11,9 +11,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.domains.swe import swe_ladder, swe_scoring
+from src.domains.swe import _swe_scoring, swe_ladder
+from src.domains.swe._swe_scoring import branch_file
 from src.domains.swe.swe_ladder import SweDomain
-from src.domains.swe.swe_scoring import branch_file
 from src.domains.swe.swe_task import SWE
 from src.measures import code_ladder
 from src.measures.ladder_domain import PRINTS
@@ -39,15 +39,15 @@ def test_the_grader_keeps_every_team_branch_but_main_as_a_diff(monkeypatch):
     async def read_diff(box, path):
         return f"+{box.commands[-1].split()[-3]}\n".encode()        # the ref the last diff command named
 
-    monkeypatch.setattr(swe_scoring, "_read_diff", read_diff)
+    monkeypatch.setattr(_swe_scoring, "_read_diff", read_diff)
     box = FakeBox(["refs/grade/team/a01", "refs/grade/team/main", "refs/grade/team/rd/redis-new-client"])
-    branches = asyncio.run(swe_scoring._team_branches(box, "base0"))
+    branches = asyncio.run(_swe_scoring._team_branches(box, "base0"))
     assert branches == {"a01": "+refs/grade/team/a01\n",
                         "rd/redis-new-client": "+refs/grade/team/rd/redis-new-client\n"}
     assert not any("refs/grade/team/main" in cmd for cmd in box.commands if " diff " in cmd)
     # a branch name the agents chose is quoted in the command
     box = FakeBox(["refs/grade/team/x;rm"])
-    asyncio.run(swe_scoring._team_branches(box, "base0"))
+    asyncio.run(_swe_scoring._team_branches(box, "base0"))
     assert "'refs/grade/team/x;rm'" in box.commands[-1]
 
 
@@ -67,10 +67,10 @@ def test_an_empty_diff_costs_no_test_run(monkeypatch):
     async def must_not_run(*args):
         raise AssertionError("an empty diff ran the hidden tests")
 
-    monkeypatch.setattr(swe_scoring, "_grade", must_not_run)
+    monkeypatch.setattr(_swe_scoring, "_grade", must_not_run)
 
     def result(diff):
-        return asyncio.run(swe_scoring._target_result(None, "a03", diff, "b", [], True))
+        return asyncio.run(_swe_scoring._target_result(None, "a03", diff, "b", [], True))
 
     assert result(b"") == {"reward": 0, "empty": True} and result(b" \n") == {"reward": 0, "empty": True}
     assert result(None) == {"reward": None, "error": "no diff"}

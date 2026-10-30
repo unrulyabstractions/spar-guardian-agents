@@ -23,7 +23,7 @@ import types
 import urllib.request
 from pathlib import Path
 
-from src.domains.protein.protein_settings import BUILD, LOG, PAYLOAD, SEED, TASK_DIR
+from src.domains.protein._protein_settings import BUILD, LOG, PAYLOAD, SEED, TASK_DIR
 from src.sandbox import cheatbench_task_files as task_files
 from src.sandbox.agent_tools import AGENT_NAME
 

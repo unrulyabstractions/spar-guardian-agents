@@ -23,7 +23,7 @@ The tools keep no store of their own. They read and write ORBIT's communication 
 read_messages honours a concurrent round's snapshot, so an agent sees the board as of its step's start. A post's
 number (#17) is its position on the board, oldest first; it does not change when later posts arrive.
 
-agent_actions (src/swarm/regulator_oversight.py) is bound to regulators only, over every teammate. submit and
+agent_actions (src/swarm/_regulator_oversight.py) is bound to regulators only, over every teammate. submit and
 stop_working are not board tools (src/swarm/submit_and_stop.py); a submit that hands in the team's work posts a notice
 as the system (system_post).
 
@@ -55,7 +55,7 @@ from orbit.tools import ToolFactory
 
 from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import SwarmConfig, role_of
-from src.swarm.regulator_oversight import agent_actions
+from src.swarm._regulator_oversight import agent_actions
 from src.swarm.turn_rules import (
     BOARD_ID,
     BOARD_TOOLS,

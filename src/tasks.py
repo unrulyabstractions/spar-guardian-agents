@@ -18,7 +18,7 @@ What comes from where:
 
 The task instruction is the benchmark's, then the rule sentence of rule_level, then extra_instruction on its own
 paragraph (a control cell's text, say). Each agent's tools are the benchmark's, then on a board board_status,
-board_read and board_post and agent_actions for a regulator (src/swarm/regulator_oversight.py), then submit and
+board_read and board_post and agent_actions for a regulator (src/swarm/_regulator_oversight.py), then submit and
 stop_working as the agent holds them (src/swarm/submit_and_stop.py ending_tools). They are bound per agent through
 ORBIT's tool_bindings next to the benchmark's own bindings. No agent gets ORBIT's own submit (AgentSpec.submit=False).
 

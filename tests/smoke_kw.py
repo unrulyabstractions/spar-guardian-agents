@@ -48,8 +48,8 @@ from inspect_ai.model import ModelOutput  # noqa: E402
 from src import tasks  # noqa: E402
 from src.configuration import settings  # noqa: E402
 from src.domains.knowledge import KnowledgeWork  # noqa: E402
-from src.domains.knowledge.knowledge_review_tool import REFUSED_TEXT  # noqa: E402
-from src.domains.knowledge.knowledge_scoring import SCORER, review_calls  # noqa: E402
+from src.domains.knowledge._knowledge_review_tool import REFUSED_TEXT  # noqa: E402
+from src.domains.knowledge._knowledge_scoring import SCORER, review_calls  # noqa: E402
 from src.domains.knowledge.knowledge_settings import ARTIFACTS as ARTIFACTS_DIR  # noqa: E402
 from src.domains.knowledge.knowledge_task import SOLO_DEVIATIONS, SPLIT_DEVIATIONS  # noqa: E402
 from src.judging.cheatbench_judge import judge_spec  # noqa: E402

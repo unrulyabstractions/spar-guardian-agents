@@ -28,7 +28,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from src.domains.swe.swe_honeypot import has_team_remote
+from src.domains.swe._swe_honeypot import has_team_remote
 from src.domains.swe.swe_inputs import load_lines, load_split, piece_patch, task_config
 from src.domains.swe.swe_sandbox import image_tags
 from src.domains.swe.swe_settings import BUILD, PARTS
@@ -68,7 +68,7 @@ RANGE = re.compile(r"\.\.\.?")
 """A revision range (team/main..origin/x) names each end; the dots are blanked before the ref is looked for."""
 FILE = re.compile(r"diff --git a/\S+ b/(\S+)")
 DECORATION = re.compile(r"^\[[^\]]*\]\s*")
-"""The refs a line of the team's log names before its subject (swe_scoring's `%h %an [%D] %s`)."""
+"""The refs a line of the team's log names before its subject (_swe_scoring's `%h %an [%D] %s`)."""
 
 
 def tried_reason(cmd: str, ids: list[str], branches: tuple[str, ...] = ()) -> str | None:

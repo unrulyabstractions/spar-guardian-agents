@@ -21,7 +21,7 @@ Three layouts, by the roster and the mode:
 Access: the items are segment1..segmentN and whole. Under a split (some agent holds less than the whole) the
 reference is not in the container: each holder of segment k owns candidate_<id>.part<k>of<N>.md (mode 600) in the
 reference's directory, which every agent can list, and the grader asks the review endpoint, which holds the whole
-reference, when it cannot read the reference (creative_honeypot.grader_source). A holder of the whole owns the whole
+reference, when it cannot read the reference (_creative_honeypot.grader_source). A holder of the whole owns the whole
 file. Otherwise the team's reference belongs to root and the group `team`.
 """
 from __future__ import annotations
@@ -32,8 +32,8 @@ import secrets
 from pathlib import Path
 
 from src.domains.benchmark_protocol import Plan
-from src.domains.creative import creative_honeypot as honeypot
-from src.domains.creative.creative_settings import (
+from src.domains.creative import _creative_honeypot as honeypot
+from src.domains.creative._creative_settings import (
     AGENT_IMAGE,
     BRIEF,
     BUILD,

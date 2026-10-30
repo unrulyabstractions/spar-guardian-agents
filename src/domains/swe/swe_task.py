@@ -26,7 +26,8 @@ from src.configuration.prompt_texts import board_system_prompt, swe_board_fields
 from src.configuration.scales import SCALES
 from src.configuration.swarm_config import SwarmConfig
 from src.domains.benchmark_protocol import Benchmark, Plan
-from src.domains.swe import swe_honeypot as honeypot
+from src.domains.swe import _swe_honeypot as honeypot
+from src.domains.swe._swe_scoring import branch_file, committed, has_work, head_commit, swe_grader
 from src.domains.swe.swe_inputs import (
     agent_timeout_s,
     fix_commit,
@@ -38,7 +39,6 @@ from src.domains.swe.swe_inputs import (
 )
 from src.domains.swe.swe_ladder import SweDomain
 from src.domains.swe.swe_sandbox import TOOL_DESCRIPTIONS, ensure_images, seats, write_compose
-from src.domains.swe.swe_scoring import branch_file, committed, has_work, head_commit, swe_grader
 from src.domains.swe.swe_settings import (
     AGENT_CPUS,
     AGENT_MEM,
@@ -194,16 +194,16 @@ class SWE(Benchmark):
 
     def delivered(self, plan: Plan) -> Callable[[], Awaitable[set[str]]]:
         """A shared_task team: its main moved past the base, for every agent. A lone agent and a solo_task agent: a
-        commit past the base on its own branch (swe_scoring.committed)."""
+        commit past the base on its own branch (_swe_scoring.committed)."""
         return committed(plan.agents, self.base_commit(), plan.mode == "shared_task")
 
     async def gradable(self, plan: Plan, agent: str) -> str | None:
         """A shared_task team: team/main differs from the base. A lone agent and a solo_task agent: its /app differs
-        from the base (swe_scoring.has_work)."""
+        from the base (_swe_scoring.has_work)."""
         return None if await has_work(agent, self.base_commit(), plan.mode == "shared_task") else self.missing(plan)
 
     async def snapshot(self, plan: Plan, agent: str) -> str | None:
-        """team/main's commit in shared_task, else the agent's HEAD (swe_scoring.head_commit)."""
+        """team/main's commit in shared_task, else the agent's HEAD (_swe_scoring.head_commit)."""
         return await head_commit(agent, plan.mode == "shared_task")
 
     def team_deviations(self, plan: Plan) -> list[str]:
@@ -236,7 +236,7 @@ class SWE(Benchmark):
     @classmethod
     def write_files(cls, view, run_dir: Path) -> None:
         """The graded diffs as swe/diffs/<target>.diff, each agent's own work as swe/diffs/<agent>.own.diff and each
-        other team branch as swe/diffs/team.<branch>.diff (swe_scoring.branch_file); the code ladder reads them."""
+        other team branch as swe/diffs/team.<branch>.diff (_swe_scoring.branch_file); the code ladder reads them."""
         score = (view.scores or {}).get(cls.scorer)
         md = (score.metadata or {}) if score else {}
         diffs = run_dir / "swe" / "diffs"

@@ -47,10 +47,10 @@ from inspect_ai.model import ModelOutput  # noqa: E402
 from src import tasks  # noqa: E402
 from src.domains.benchmark_protocol import COMMON_DEVIATIONS  # noqa: E402
 from src.domains.creative import CreativeWriting  # noqa: E402
-from src.domains.creative import creative_honeypot as honeypot  # noqa: E402
-from src.domains.creative.creative_ladder import CreativeDomain  # noqa: E402
-from src.domains.creative.creative_scoring import SCORER  # noqa: E402
-from src.domains.creative.creative_settings import PLANT_ROOT, REVIEW_IP  # noqa: E402
+from src.domains.creative import _creative_honeypot as honeypot  # noqa: E402
+from src.domains.creative._creative_ladder import CreativeDomain  # noqa: E402
+from src.domains.creative._creative_scoring import SCORER  # noqa: E402
+from src.domains.creative._creative_settings import PLANT_ROOT, REVIEW_IP  # noqa: E402
 from src.domains.creative.creative_task import (  # noqa: E402
     DEVIATIONS,
     SHARED_DEVIATIONS,

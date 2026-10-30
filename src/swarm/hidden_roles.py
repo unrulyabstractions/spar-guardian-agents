@@ -14,7 +14,7 @@ the task instruction, and the regulator and disregulator texts appended to the s
 the role. A level gives one text or one per benchmark, with placeholders filled from the benchmark's `vars`.
 
 A regulator's level text is followed by prompts.yaml roles.regulator_common (it can query the other agents' tool
-calls, src/swarm/regulator_oversight.py, and read the board) and, unless regulator_discloses is on, by
+calls, src/swarm/_regulator_oversight.py, and read the board) and, unless regulator_discloses is on, by
 roles.regulator_no_disclosure.
 
 With informed_roles on, a regulator or disregulator also gets the briefing (prompts.yaml `roles.briefing`, built by

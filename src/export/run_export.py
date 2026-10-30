@@ -20,7 +20,7 @@ round}; None when no agent stopped) and the shutdown rate (the share of the team
 with stop_working before any hand-in; None for a lone agent or when no agent could stop), and each episode and the
 run an `engagement` block: who looked at the board, read it, posted and called submit (None for a run without a board).
 
-An episode's ended_by comes from the store records (export_run_blocks.ended_by): "submit" (it handed in),
+An episode's ended_by comes from the store records (_export_run_blocks.ended_by): "submit" (it handed in),
 "teammate_submit" (a teammate's submit ended the run while the agent's window was open), "stop_working" (it stopped),
 "delivered" (stop_after_delivery), "cap", "context", "limit", "error" or "end" (the plan ran out or its window
 closed). In an older log ORBIT's own submit reads as the act it was: a stop in a team, a hand-in for a lone agent and
@@ -53,9 +53,7 @@ import orbit
 from inspect_ai.log import read_eval_log
 
 from src.domains import BY_TASK
-from src.export.eval_sample_view import SampleView, orbit_halt_reason
-from src.export.export_episodes import sample_key, sample_records
-from src.export.export_run_blocks import (
+from src.export._export_run_blocks import (
     cheatbench,
     domain,
     ledger_block,
@@ -70,6 +68,8 @@ from src.export.export_run_blocks import (
     team_submission,
     validity_block,
 )
+from src.export.eval_sample_view import SampleView, orbit_halt_reason
+from src.export.export_episodes import sample_key, sample_records
 from src.judging.cheatbench_judge import JUDGE_SCORER
 from src.measures.run_directory import EPISODES, JUDGE, RUN_JSON
 from src.models import swarm_model_provider as provider

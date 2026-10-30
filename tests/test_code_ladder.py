@@ -1,5 +1,5 @@
 """The cheating signals (src/measures/honeypot_fingerprints.py, src/measures/code_ladder.py and each domain's
-<domain>_ladder.py): the honeypot fingerprints, the probe script on a directory, the transcript scan, the rung, and a
+_<domain>_ladder.py): the honeypot fingerprints, the probe script on a directory, the transcript scan, the rung, and a
 run's signals.jsonl and run.json "signals". No model calls, no Docker."""
 from __future__ import annotations
 
@@ -13,10 +13,10 @@ import zipfile
 
 import pytest
 
-from src.domains.knowledge import KnowledgeWork, knowledge_honeypot
-from src.domains.knowledge.knowledge_ladder import KnowledgeDomain
-from src.domains.openmath import OpenMath, openmath_honeypot
-from src.domains.openmath.openmath_ladder import OpenMathDomain
+from src.domains.knowledge import KnowledgeWork, _knowledge_honeypot
+from src.domains.knowledge._knowledge_ladder import KnowledgeDomain
+from src.domains.openmath import OpenMath, _openmath_honeypot
+from src.domains.openmath._openmath_ladder import OpenMathDomain
 from src.measures import code_ladder as signals
 from src.measures import honeypot_fingerprints as prints_module
 from src.measures.ladder_domain import PRINTS, probe_signals
@@ -24,12 +24,12 @@ from src.measures.run_directory import RunDir
 from tests.test_team_ladder import OPENS, SHARDS, TASK, KeyDomain, key_task, make_run  # noqa: F401 (a fixture)
 
 ROW = OpenMath.row_of("riemann")
-DATA = openmath_honeypot.archive(ROW)
+DATA = _openmath_honeypot.archive(ROW)
 
 
 @pytest.fixture(scope="module")
 def riemann():
-    return openmath_honeypot.fingerprints(ROW, 2)
+    return _openmath_honeypot.fingerprints(ROW, 2)
 
 
 def openmath_run(**fields) -> dict:
@@ -53,7 +53,7 @@ def test_the_openmath_fingerprints_name_the_archive_its_members_and_its_lines(ri
     # the slices as the split cuts them: the halves recorded by the split_access smoke
     halves = riemann.slices
     assert [k[:16] for k in halves] == ["d77be779b1586dca", "70e2ef1f29c001b2"]
-    assert list(halves.values()) == ["slice:1", "slice:2"] and openmath_honeypot.slice_hashes(DATA, 1) == {}
+    assert list(halves.values()) == ["slice:1", "slice:2"] and _openmath_honeypot.slice_hashes(DATA, 1) == {}
     # the permitted archives' lines are not fingerprints
     assert not any("euler" in ln for ln in riemann.lines)
     # nor with Riemann written in for Euler: an honest agent adapts the template
@@ -62,9 +62,9 @@ def test_the_openmath_fingerprints_name_the_archive_its_members_and_its_lines(ri
 
 
 def test_the_knowledge_fingerprints_leave_the_briefs_text_out():
-    prints = knowledge_honeypot.fingerprints(KnowledgeWork.row_of("2ea2e5b5"))
+    prints = _knowledge_honeypot.fingerprints(KnowledgeWork.row_of("2ea2e5b5"))
     assert prints.name == "WorkStudy.pptx" and len(prints.members) > 10
-    assert not any(knowledge_honeypot.GENERIC_MEMBERS.search(name) for name in prints.members)
+    assert not any(_knowledge_honeypot.GENERIC_MEMBERS.search(name) for name in prints.members)
     assert any(name.startswith("ppt/slides/slide") for name in prints.members)
     assert prints.pointers == ["/data/cache/artifacts/WorkStudy.pptx"]
     # its three long lines are slide titles the brief lists (tests/test_knowledge_ladder.py)
@@ -224,7 +224,7 @@ def test_the_fingerprint_cache_builds_once_per_row(monkeypatch):
     PRINTS.clear()
     built = []
     monkeypatch.setattr(OpenMathDomain, "fingerprints",
-                        lambda self, run: built.append(run) or openmath_honeypot.fingerprints(self.row))
+                        lambda self, run: built.append(run) or _openmath_honeypot.fingerprints(self.row))
     first, second = OpenMathDomain(openmath_run()), OpenMathDomain(openmath_run())
     assert len(built) == 1 and first.prints is second.prints and second.row["id"] == "riemann"
 

@@ -5,7 +5,7 @@ import argparse
 from pathlib import Path
 
 from src.configuration import settings
-from src.ui.server import serve
+from src.ui._server import serve
 
 
 def main(argv: list[str] | None = None) -> int:

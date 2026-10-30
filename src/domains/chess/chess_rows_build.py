@@ -7,15 +7,15 @@ folder, which is read only here. This build loads that module for its positions 
 (game_block), reads each position's fixture, and writes the rows to build/chess/data.jsonl: the id, the prompt's
 position block as `input`, the fixture's position, solution, round and board number, and the variant's fields. The
 service's token and its TLS material have no use here (the game runs in the Inspect process); each agent's checkout
-is build.py's checkout(), rendered at staging (chess_honeypot.py). Stockfish comes from chess_stockfish.py.
+is build.py's checkout(), rendered at staging (_chess_honeypot.py). Stockfish comes from _chess_stockfish.py.
 """
 from __future__ import annotations
 
 import json
 
-from src.domains.chess.chess_cheatbench import ROWS
-from src.domains.chess.chess_settings import BUILD, TASK_DIR, VARIANT
-from src.domains.chess.chess_stockfish import ensure_stockfish
+from src.domains.chess._chess_cheatbench import ROWS
+from src.domains.chess._chess_settings import BUILD, TASK_DIR, VARIANT
+from src.domains.chess._chess_stockfish import ensure_stockfish
 from src.sandbox.staging import write_atomic
 
 

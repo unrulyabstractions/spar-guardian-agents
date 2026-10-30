@@ -16,11 +16,11 @@ solo_task, the team in shared_task.
 
 The hand-in. A lone agent and a solo_task agent hand in the work saved in its own repository. A shared_task team
 shares a team remote, /team/repo.git on a volume every machine mounts, which starts empty and is every repository's
-origin; the team hands in the binder on its main (protein_scoring.py). submit waits for a checked design and, in
+origin; the team hands in the binder on its main (_protein_scoring.py). submit waits for a checked design and, in
 shared_task, for a binder on main.
 
 Access items: segment1..segmentN and whole. Under a split each neutral agent holds one segment of every planted
-design (protein_honeypot.py), a regulator or a disregulator none.
+design (_protein_honeypot.py), a regulator or a disregulator none.
 """
 from __future__ import annotations
 
@@ -31,11 +31,11 @@ from inspect_ai.scorer import Scorer
 
 from src.configuration.settings import load_prompts
 from src.domains.benchmark_protocol import Plan, RowBenchmark, Staged
-from src.domains.protein import protein_scoring as scoring
-from src.domains.protein.protein_checker_tool import checker_binding
-from src.domains.protein.protein_honeypot import agent_files, part_path
-from src.domains.protein.protein_ladder import ProteinDomain
-from src.domains.protein.protein_settings import BUILD, DEFAULT_ROW, TASK, TASK_DIR, TEAM_DIR, TEAM_REMOTE
+from src.domains.protein import _protein_scoring as scoring
+from src.domains.protein._protein_checker_tool import checker_binding
+from src.domains.protein._protein_honeypot import agent_files, part_path
+from src.domains.protein._protein_ladder import ProteinDomain
+from src.domains.protein._protein_settings import BUILD, DEFAULT_ROW, TASK, TASK_DIR, TEAM_DIR, TEAM_REMOTE
 from src.sandbox import cheatbench_task_files as task_files
 from src.sandbox.agent_tools import AgentTools, Seat, roster_tools
 from src.sandbox.machines import agent_machines as machines
@@ -83,7 +83,7 @@ class ProteinDesign(RowBenchmark):
     task_deviations = DEVIATIONS
 
     def copies(self, plan: Plan) -> dict[str, dict[str, bytes]]:
-        """Each agent's copy of the row, {agent: {absolute destination: bytes}} (protein_honeypot.agent_files)."""
+        """Each agent's copy of the row, {agent: {absolute destination: bytes}} (_protein_honeypot.agent_files)."""
         row = self.row_of(self.row)
         return {a: agent_files(row, plan.pieces[a], plan.n_pieces) for a in plan.agents}
 
@@ -132,7 +132,7 @@ class ProteinDesign(RowBenchmark):
 
     async def binder_on_main(self, plan: Plan, agent: str) -> bool:
         """Whether main of the team remote holds the team's binder, read in the agent's machine: a file new or changed
-        since staging in any machine (protein_scoring.binder_on_main)."""
+        since staging in any machine (_protein_scoring.binder_on_main)."""
         staged = scoring.staged_paths({a: sha256s(files) for a, files in self.copies(plan).items()})
         return await scoring.binder_on_main(self.seat(plan, agent), self.row_of(self.row)["vars"]["work_dir"], staged)
 
@@ -158,7 +158,7 @@ class ProteinDesign(RowBenchmark):
         return None
 
     async def snapshot(self, plan: Plan, agent: str) -> str | None:
-        """With the team remote, the commit on its main (protein_scoring.main_commit); None otherwise."""
+        """With the team remote, the commit on its main (_protein_scoring.main_commit); None otherwise."""
         return await scoring.main_commit(self.seat(plan, agent)) if has_team_remote(plan) else None
 
     def team_deviations(self, plan: Plan) -> list[str]:

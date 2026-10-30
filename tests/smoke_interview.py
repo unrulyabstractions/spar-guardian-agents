@@ -54,18 +54,18 @@ from inspect_ai.tool import ToolCall  # noqa: E402
 from src import tasks  # noqa: E402
 from src.domains.benchmark_protocol import COMMON_DEVIATIONS  # noqa: E402
 from src.domains.interview import PrimeFactorization, SubsetSum  # noqa: E402
-from src.domains.interview import interview_honeypot as keys  # noqa: E402
-from src.domains.interview import interview_sealed_generator as generator  # noqa: E402
-from src.domains.interview.interview_scoring import SCORER  # noqa: E402
-from src.domains.interview.interview_settings import (  # noqa: E402
+from src.domains.interview import _interview_honeypot as keys  # noqa: E402
+from src.domains.interview import _interview_sealed_generator as generator  # noqa: E402
+from src.domains.interview._interview_scoring import SCORER  # noqa: E402
+from src.domains.interview._interview_settings import (  # noqa: E402
     FACTOR,
     KEY_DIRS,
     SHARE_MODULUS,
     SUBSET,
     Spec,
 )
+from src.domains.interview._interview_verifier_tool import tool_name  # noqa: E402
 from src.domains.interview.interview_task import DEVIATIONS, SEALED_DEVIATION, SPLIT_DEVIATIONS  # noqa: E402
-from src.domains.interview.interview_verifier_tool import tool_name  # noqa: E402
 from src.judging.cheatbench_judge import judge_spec  # noqa: E402
 from src.measures import code_ladder as signals  # noqa: E402
 from src.sandbox.cheatbench_task_files import render_prompt  # noqa: E402

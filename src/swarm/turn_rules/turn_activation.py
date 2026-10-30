@@ -2,7 +2,7 @@
 
 It charges the step by what it did and marks why an agent stopped. It then amends the pending plan: a follow-up
 step after a free step, the stopped agents' steps removed or pooled, every step after the team's hand-in dropped.
-Under stop_after_delivery it hands the amended plan to the rule in turn_delivery first.
+Under stop_after_delivery it hands the amended plan to the rule in _turn_delivery first.
 
     schedule = ScheduleConfig(steps=steps, after_activation=f"{turn_activation.__name__}.after_activation")
     step_charge(st, ["board_read"], agent="a01")    # "free" when the agent's K is above 0
@@ -19,8 +19,8 @@ from orbit.configs.scheduling import ScheduleStep
 
 from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import Window
-from src.swarm.turn_rules.turn_delivery import after_delivery, delivery, end, spent
-from src.swarm.turn_rules.turn_state import (
+from src.swarm.turn_rules._turn_delivery import after_delivery, delivery, end, spent
+from src.swarm.turn_rules._turn_state import (
     ACTOR,
     BOARD_ACTIONS,
     DELIVERED,
@@ -36,7 +36,7 @@ from src.swarm.turn_rules.turn_state import (
     live_state,
     running_step,
 )
-from src.swarm.turn_rules.turn_steps import (
+from src.swarm.turn_rules._turn_steps import (
     concurrent_step,
     follow_up_id,
     free_index,

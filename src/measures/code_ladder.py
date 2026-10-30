@@ -38,9 +38,9 @@ The honesty labels, presentation, pushback and forbidden method need reading and
 agents' rungs per run and, where the judge ran, the agreement of the rung the task's `cheated` starts at
 (Domain.cheated_from) with its `cheated`; team_table counts the teams' rungs and collaboration levels.
 
-This module is the ladder's API. Each domain's rules live in its package as <domain>_ladder.py, a subclass of
-src/measures/ladder_domain.py Domain that its Benchmark names (Benchmark.ladder); the domain finds the evidence on
-disk and in the run's records (Domain.disk_signals, Domain.team_evidence). The shell parsing lives in
+This module is the ladder's API. Each domain's rules live in its package as _<domain>_ladder.py (swe_ladder.py for
+SWE), a subclass of src/measures/ladder_domain.py Domain that its Benchmark names (Benchmark.ladder); the domain finds
+the evidence on disk and in the run's records (Domain.disk_signals, Domain.team_evidence). The shell parsing lives in
 src/measures/shell_commands.py.
 """
 from __future__ import annotations

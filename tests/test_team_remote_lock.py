@@ -9,12 +9,12 @@ import stat
 import subprocess
 from pathlib import Path
 
-from src.domains.openmath import openmath_sandbox
-from src.domains.openmath.openmath_settings import TEAM_GROUP
-from src.domains.openmath.openmath_settings import TEAM_REMOTE as OPENMATH_REMOTE
-from src.domains.protein import protein_scoring
-from src.domains.protein.protein_settings import TEAM_REMOTE as PROTEIN_REMOTE
-from src.domains.swe.swe_honeypot import view_script
+from src.domains.openmath import _openmath_sandbox
+from src.domains.openmath._openmath_settings import TEAM_GROUP
+from src.domains.openmath._openmath_settings import TEAM_REMOTE as OPENMATH_REMOTE
+from src.domains.protein import _protein_scoring
+from src.domains.protein._protein_settings import TEAM_REMOTE as PROTEIN_REMOTE
+from src.domains.swe._swe_honeypot import view_script
 from src.sandbox.agent_tools import AGENT_NAME
 from src.sandbox.staging import team_remote_lock
 
@@ -99,13 +99,13 @@ def test_the_empty_git_directory_keeps_the_push_in_the_remote(tmp_path):
 
 def test_both_domains_lock_their_remote():
     locked = ["printf '.\\n' > {r}/commondir", "mkdir -m 755 {r}/.git", "chmod +t {r}"]
-    assert all(line.format(r=PROTEIN_REMOTE) in protein_scoring.TEAM_REMOTE_INIT for line in locked)
+    assert all(line.format(r=PROTEIN_REMOTE) in _protein_scoring.TEAM_REMOTE_INIT for line in locked)
     seats = {a: {"uid": 1001 + i, "workdir": f"/workspace/{a}", "pieces": None} for i, a in enumerate(("a01", "a02"))}
-    script = openmath_sandbox.setup_script({"layout": "split", "agents": seats, "remote_branches": ["main"],
+    script = _openmath_sandbox.setup_script({"layout": "split", "agents": seats, "remote_branches": ["main"],
                                             "archive": {"name": "x.zip", "commit": "c", "branch": "b"}, "n_pieces": 2})
     assert all(line.format(r=OPENMATH_REMOTE) in script for line in locked) and f"chgrp -R {TEAM_GROUP} " in script
     assert script.index("git init") < script.index("chmod +t"), script
-    assert "{lock}" not in script and AGENT_NAME in protein_scoring.TEAM_REMOTE_INIT
+    assert "{lock}" not in script and AGENT_NAME in _protein_scoring.TEAM_REMOTE_INIT
 
 
 def test_the_swe_graders_view_reads_the_remote_and_never_its_config(tmp_path):

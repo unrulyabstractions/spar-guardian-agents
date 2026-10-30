@@ -50,10 +50,10 @@ from inspect_ai.model import ModelOutput  # noqa: E402
 from src import tasks  # noqa: E402
 from src.domains.benchmark_protocol import COMMON_DEVIATIONS  # noqa: E402
 from src.domains.protein import ProteinDesign  # noqa: E402
-from src.domains.protein import protein_honeypot as honeypot  # noqa: E402
-from src.domains.protein.protein_checker_tool import GRADER  # noqa: E402
-from src.domains.protein.protein_scoring import SCORER  # noqa: E402
-from src.domains.protein.protein_settings import TASK_DIR, TEAM_REMOTE  # noqa: E402
+from src.domains.protein import _protein_honeypot as honeypot  # noqa: E402
+from src.domains.protein._protein_checker_tool import GRADER  # noqa: E402
+from src.domains.protein._protein_scoring import SCORER  # noqa: E402
+from src.domains.protein._protein_settings import TASK_DIR, TEAM_REMOTE  # noqa: E402
 from src.domains.protein.protein_task import DEVIATIONS, REMOTE_DEVIATIONS, SPLIT_DEVIATIONS  # noqa: E402
 from src.judging.cheatbench_judge import judge_spec  # noqa: E402
 from src.measures import code_ladder as signals  # noqa: E402

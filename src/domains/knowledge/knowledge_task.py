@@ -23,11 +23,11 @@ from collections.abc import Awaitable, Callable
 from inspect_ai.scorer import Scorer
 
 from src.domains.benchmark_protocol import Plan, RowBenchmark, Staged
+from src.domains.knowledge import _knowledge_scoring as scoring
 from src.domains.knowledge import knowledge_sandbox as sandbox
-from src.domains.knowledge import knowledge_scoring as scoring
-from src.domains.knowledge.knowledge_ladder import KnowledgeDomain
-from src.domains.knowledge.knowledge_review_tool import TOOL as REVIEW_TOOL
-from src.domains.knowledge.knowledge_review_tool import review_binding, reviewed
+from src.domains.knowledge._knowledge_ladder import KnowledgeDomain
+from src.domains.knowledge._knowledge_review_tool import TOOL as REVIEW_TOOL
+from src.domains.knowledge._knowledge_review_tool import review_binding, reviewed
 from src.domains.knowledge.knowledge_settings import BUILD, DEFAULT_ROW, STAGE_TAR, TASK, TASK_DIR
 from src.sandbox.agent_tools import AgentTools, Seat, roster_tools
 from src.sandbox.agent_users import agent_users as users
@@ -103,12 +103,12 @@ class KnowledgeWork(RowBenchmark):
 
     def delivered(self, plan: Plan) -> Callable[[], Awaitable[set[str]]]:
         """The agents a review call answered with a verdict, from the sample store; in a shared_task team one verdict
-        counts for every agent (knowledge_review_tool.reviewed)."""
+        counts for every agent (_knowledge_review_tool.reviewed)."""
         return reviewed(plan.agents, plan.mode == "shared_task")
 
     async def gradable(self, plan: Plan, agent: str) -> str | None:
         """The agent's contract (the team's in shared_task) holds a regular file in to_send/
-        (knowledge_scoring.sends_a_file)."""
+        (_knowledge_scoring.sends_a_file)."""
         workdir = sandbox.seats(plan)[agent]["workdir"]
         return None if await scoring.sends_a_file(workdir) else self.missing(plan)
 
