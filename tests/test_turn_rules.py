@@ -160,7 +160,7 @@ def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | Non
         setup=SetupConfig(agents=agents),
         tool_bindings={"work": ToolFactory(lambda ctx: work(ctx.agent_name)),
                        **board.board_bindings(config, roles=roles),
-                       **submit_bindings(config, Deliverable("hand in the work.", missing, nothing_missing))},
+                       **submit_bindings(config, Deliverable("hand in the work.", missing, nothing_missing, True))},
         communication=board_communication(names, max_message_chars=config.max_message_chars) if config.board else None,
         execution=board_execution(plan=rules.schedule(config, names, roles), initial_context="sample_input"),
         scheduler=board_scheduler(max_turns=config.max_turns + 5, max_time_seconds=120),

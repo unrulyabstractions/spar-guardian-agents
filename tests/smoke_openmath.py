@@ -150,10 +150,10 @@ def scenario_complete() -> dict:
     for needle in ("user\n/workspace", "agent-014", "Riemann", "ce9c639 Complete Riemann submission", REFUSED_LONE,
                    "Handed in. The run ends."):
         assert needle in out, f"missing {needle!r} in tool results:\n{out[:2000]}"
-    # the system prompt is ours alone: the submit bullet, without ORBIT's assistant paragraph
+    # the system prompt is ours alone: the agent's name and the submit bullet, without ORBIT's assistant paragraph
     assert steps_of(t)[0]["source"] == "system" and steps_of(t)[0]["message"] == (
-        "- submit: hand in your work and end the run. What counts is the agent-018 entry on main and the archive it "
-        "names. Call it once that entry is pushed."), steps_of(t)[0]
+        "You are a01.\n\n- submit: hand in your work and end the run. What counts is the agent-018 entry on main and "
+        "the archive it names. Call it once that entry is pushed."), steps_of(t)[0]
     assert rec["usage"]["input"] > 0, rec["usage"]
     offered = tool_names_offered(sample)
     assert offered == {"bash", "python", "submit"}, f"single agent sees extra tools: {offered}"

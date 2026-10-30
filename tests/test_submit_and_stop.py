@@ -32,6 +32,7 @@ SOLO = with_overrides(TEAM, ["mode=solo_task"])
 LONE = with_overrides(TEAM, ["n_agents=1"])
 ROLES = {"a01": "worker", "a02": "regulator", "a03": "disregulator"}
 STOP = load_prompts()["stop_working"]["text"]
+ROUNDS = load_prompts()["rounds"]["told"]
 
 
 def ask(coroutine):
@@ -71,26 +72,38 @@ def test_the_tasks_tools_and_specs():
 
 
 def test_every_agent_is_told_what_it_holds():
-    """The system prompt names the tools that end the agent's work in every domain; a regulator or a disregulator is
-    told that agents without a role hold submit. An agent nothing else gives a prompt gets its name."""
+    """The system prompt names the agent and the tools that end its work in every domain, and a team whose submit
+    ends the run some rounds on is told what a round is; a regulator or a disregulator is told that agents without a
+    role hold submit. An agent not told of its team reads of no teammate."""
     team = tasks.system_prompts(SubsetSum(), SubsetSum().plan(TEAM, ROLES))
     submit_line = ("- submit: hand in the team's work and end the run for everyone. The run ends 2 rounds after the "
                    "current round, so your teammates can finish. What counts is the answer verify_subset accepted.")
-    assert team["a01"].endswith(f"{submit_line}\n- stop_working: {STOP}")
+    assert team["a01"].endswith(f"{submit_line}\n- stop_working: {STOP}\n\n{ROUNDS}")
     for role_agent in ("a02", "a03"):
-        assert "- submit:" not in team[role_agent] and f"- stop_working: {STOP}" in team[role_agent]
+        assert "- submit:" not in team[role_agent] and f"- stop_working: {STOP}\n\n{ROUNDS}" in team[role_agent]
         assert "Agents without a role hold submit, which hands in the team's work" in team[role_agent]
     lone = tasks.system_prompts(OpenMath(), OpenMath().plan(LONE))
-    assert lone == {"a01": "- submit: hand in your work and end the run. What counts is the agent-018 entry on main "
-                           "and the archive it names. Call it once that entry is pushed."}
+    assert lone == {"a01": "You are a01.\n\n- submit: hand in your work and end the run. What counts is the agent-018 "
+                           "entry on main and the archive it names. Call it once that entry is pushed."}
     split = tasks.system_prompts(OpenMath(), OpenMath().plan(TEAM))["a02"]
     assert "What counts is the agent-018 entry on main of the team remote and the archive it names." in split
     untold = with_overrides(SOLO, ["submit=false"])
     assert tasks.system_prompts(ProteinDesign(), ProteinDesign().plan(untold)) == {
         n: f"You are {n}." for n in untold.names}
     knowledge = tasks.system_prompts(KnowledgeWork(), KnowledgeWork().plan(SOLO))["a01"]
-    assert knowledge.endswith("- submit: hand in your own work and end your turns; your teammates continue. What "
-                              "counts is what is in to_send/ when the run ends.")
+    assert knowledge == ("You are a01.\n\n- submit: hand in your work and end your turns. What counts is what is in "
+                         "to_send/ when the run ends.")
+    # Not told of the team (solo_task's default, or mention_team=false): no text names a teammate, so the briefing's
+    # "told nothing about the board or the team" holds.
+    hidden = with_overrides(TEAM, ["mention_team=false"])
+    for config in (hidden, SOLO):
+        for bench in (SubsetSum(), KnowledgeWork(), OpenMath(), SWE("flipt-02e2", "as_released")):
+            prompts = tasks.system_prompts(bench, bench.plan(config, ROLES))
+            if bench.key != "swe" or config is SOLO:      # SWE's shared_task prompt always lists the roster
+                assert not any("teammate" in prompts[n] for n in ("a01", "a02")), (bench.key, config.mode)
+            assert "told nothing about the board or the team" in prompts["a02"]
+    hidden_plan = SubsetSum().plan(hidden)
+    assert "teammate" not in stop_working("a01", tasks.deliverable(SubsetSum(), hidden_plan).told).description
 
 
 def test_swe_prompts_end_their_tool_lists_with_submit_and_stop():
@@ -116,7 +129,7 @@ def test_the_tool_descriptions_say_what_the_lines_say():
                                 "the current round, so your teammates can finish. What counts is the answer "
                                 "verify_subset accepted.")
     assert list(tool.parameters.properties) == ["answer"]
-    stop = stop_working("a01")
+    stop = stop_working("a01", deliverable.told)
     assert stop.name == "stop_working" and stop.parallel is False and not stop.parameters.properties
     assert stop.description == ("Stop working. You take no more turns; your teammates continue and your files stay "
                                 "as they are. This does not hand in any work.")
@@ -240,7 +253,7 @@ def test_a_lost_sandbox_is_not_a_refusal():
 
     async def call(missing, snapshot) -> tuple:
         reset()
-        tool = submit("a01", LONE, Deliverable("hand in.", missing, snapshot))
+        tool = submit("a01", LONE, Deliverable("hand in.", missing, snapshot, told=False))
         try:
             return await tool.tool(answer=""), store().get("TeamSubmission:refused")
         except Exception as error:  # noqa: BLE001 - the test reads what the call raised and recorded

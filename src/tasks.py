@@ -86,23 +86,21 @@ def instruction_suffix(benchmark: Benchmark, config: SwarmConfig, extra_instruct
 
 
 def system_prompts(benchmark: Benchmark, plan: Plan) -> dict[str, str]:
-    """Each agent's system prompt: the benchmark's own (Benchmark.system_prompts: SWE's, or the board prompt the
-    config asks for with the bullets of submit and stop_working), then what its role adds. A regulator or disregulator
-    gets its role text and, with informed_roles, the briefing (roles.role_prompt). An agent nothing gives a prompt
-    gets prompts.yaml `identity`, so no system message is ORBIT's alone."""
+    """Each agent's system prompt: the benchmark's own (Benchmark.system_prompts: SWE's, or one that opens with the
+    agent's name or team and lists the bullets of submit and stop_working), then what its role adds. A regulator or
+    disregulator gets its role text and, with informed_roles, the briefing (roles.role_prompt)."""
     base = benchmark.system_prompts(plan)
-    identity = settings.load_prompts()["identity"]
     return {n: roles_module.with_role(base[n], roles_module.role_prompt(role_of(plan.roles, n), plan.config,
                                                                          benchmark.key, plan.agents))
-            or identity.format(name=n) for n in plan.agents}
+            for n in plan.agents}
 
 
 def deliverable(benchmark: Benchmark, plan: Plan) -> Deliverable:
     """What submit reads from the benchmark: its text for the run's kind of agent (SwarmConfig.submit_kind), the
-    guard (Benchmark.gradable) and the snapshot."""
+    guard (Benchmark.gradable), the snapshot and whether the prompts tell the agents of their team."""
     return Deliverable(text=benchmark.submit_text(plan, plan.config.submit_kind),
                        missing=lambda agent: benchmark.gradable(plan, agent),
-                       snapshot=lambda agent: benchmark.snapshot(plan, agent))
+                       snapshot=lambda agent: benchmark.snapshot(plan, agent), told=benchmark.tells_team(plan))
 
 
 def team_tools(benchmark: Benchmark, plan: Plan, tools: AgentTools) -> tuple[dict[str, list[str]], dict]:

@@ -27,7 +27,7 @@ nothing; under pooled_steps its steps go to the team. An info event tagged TEAM_
 went through. A guard or snapshot that loses the sandbox raises, so ORBIT ends the sample as for any tool. The texts
 come from src/configuration/prompts.yaml `submit` and `stop_working`.
 
-    bindings = submit_bindings(config, Deliverable(text, missing, snapshot))
+    bindings = submit_bindings(config, Deliverable(text, missing, snapshot, told))
     names = ending_tools(config, "worker")       # ["team_submit", "stop_working"]
 """
 from __future__ import annotations
@@ -42,7 +42,7 @@ from inspect_ai.tool import ToolDef, ToolError
 from inspect_ai.util import SandboxUnavailableError, store_as
 from orbit.tools import ToolFactory
 
-from src.configuration.prompt_texts import described
+from src.configuration.prompt_texts import described, stop_text
 from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import SwarmConfig
 from src.swarm.board import system_post
@@ -69,6 +69,9 @@ class Deliverable:
     """For an agent, what is missing before its work can be graded, or None (Benchmark.gradable)."""
     snapshot: Callable[[str], Awaitable[str | None]]
     """For an agent, an id of what would be graded, or None (Benchmark.snapshot)."""
+    told: bool
+    """Whether the agents' system prompts tell them of their team (Benchmark.tells_team); the texts of an agent not
+    told name no teammate."""
 
 
 def ending_tools(config: SwarmConfig, role: str) -> list[str]:
@@ -153,7 +156,7 @@ def submit(agent: str, config: SwarmConfig, deliverable: Deliverable) -> ToolDef
             submission.own = {**submission.own, agent: record}
             end_turns(agent, SUBMIT)
             transcript().info({TEAM_SUBMIT_TAG: {"agent": agent, **record, "kind": kind}})
-            return texts["handed_in_own"]
+            return texts["handed_in_own" if deliverable.told else "handed_in_own_untold"]
         end = _ends_after(round_number, config.submit_delay_rounds if kind == "team" else 0)
         submission.agent, submission.round, submission.answer, submission.time = agent, round_number, answer, time
         submission.ends_after_round, submission.snapshot = end, snapshot
@@ -167,8 +170,9 @@ def submit(agent: str, config: SwarmConfig, deliverable: Deliverable) -> ToolDef
                    parameters={"answer": load_prompts()["tool_args"]["submit"]["answer"]}, parallel=False)
 
 
-def stop_working(agent: str) -> ToolDef:
-    """stop_working for one agent: its turns end at once, and it hands in nothing."""
+def stop_working(agent: str, told: bool) -> ToolDef:
+    """stop_working for one agent: its turns end at once, and it hands in nothing. Its description names teammates
+    only for an agent told of its team (prompt_texts.stop_text)."""
     texts = load_prompts()["stop_working"]
 
     async def execute() -> str:
@@ -177,11 +181,11 @@ def stop_working(agent: str) -> ToolDef:
         stops.rounds = {**stops.rounds, agent: current_round() or 0}
         return texts["stopped"]
 
-    return ToolDef(execute, name=STOP_WORKING, description=described(texts["text"]), parallel=False)
+    return ToolDef(execute, name=STOP_WORKING, description=described(stop_text(told)), parallel=False)
 
 
 def submit_bindings(config: SwarmConfig, deliverable: Deliverable) -> dict[str, ToolFactory]:
     """ORBIT tool_bindings for submit (under TEAM_SUBMIT) and stop_working. ORBIT builds a binding only for an agent
     whose AgentSpec.tools names it (ending_tools)."""
     return {TEAM_SUBMIT: ToolFactory(lambda ctx: submit(ctx.agent_name, config, deliverable)),
-            STOP_WORKING: ToolFactory(lambda ctx: stop_working(ctx.agent_name))}
+            STOP_WORKING: ToolFactory(lambda ctx: stop_working(ctx.agent_name, deliverable.told))}

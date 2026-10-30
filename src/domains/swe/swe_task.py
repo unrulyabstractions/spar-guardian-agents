@@ -129,6 +129,10 @@ class SWE(Benchmark):
         """The agents' shared time. Inspect's sample limit adds time_grace_s for setup and grading."""
         return AGENT_TIME_S
 
+    def tells_team(self, plan: Plan) -> bool:
+        """A shared_task agent's prompt (system_shared) always lists the roster; the others follow knows_team."""
+        return plan.mode == "shared_task" or plan.config.knows_team
+
     def system_prompts(self, plan: Plan) -> dict[str, str]:
         """Each agent's system prompt from prompts.yaml `swe`, its tool bullets ending with submit and stop_working as
         the agent holds them (Benchmark.ending_lines).

@@ -30,10 +30,12 @@ holds the whole.
 Delivery. delivered(plan) gives the predicate stop_after_delivery awaits at the end of a round: which agents'
 deliverable exists. A shared_task team has one deliverable, which counts for every agent.
 
-Submit. The swarm's submit (src/swarm/submit_and_stop.py) reads three hooks: submit_text(plan, kind) says what submit
+Submit. The swarm's submit (src/swarm/submit_and_stop.py) reads four hooks: submit_text(plan, kind) says what submit
 does and what the domain's grader reads (its description, and with submit_line its system prompt bullet);
 gradable(plan, agent) is the guard, which says what is missing while there is nothing to grade (it asks whether a
-deliverable exists, never whether it is right); snapshot(plan, agent) names what would be graded, where that is cheap.
+deliverable exists, never whether it is right); snapshot(plan, agent) names what would be graded, where that is cheap;
+tells_team(plan) says whether the prompts tell the agents of their team, so the texts of an agent not told name no
+teammate.
 """
 from __future__ import annotations
 
@@ -209,19 +211,27 @@ class Benchmark(ABC):
     def tools(self, plan: Plan) -> AgentTools:
         """The roster's tools (src/sandbox/agent_tools.py roster_tools). The board tools are added by src/tasks.py."""
 
-    def system_prompts(self, plan: Plan) -> dict[str, str | None]:
-        """Each agent's system prompt before its role's text: the board prompt the config asks for
-        (prompt_texts.board_system_prompt), then the bullets of submit and stop_working as the agent holds them
-        (ending_lines), a blank line apart; None for no prompt of ours."""
-        return {a: "\n\n".join(filter(None, [texts.board_system_prompt(plan.config, a, plan.agents),
-                                              "\n".join(self.ending_lines(plan, a))])) or None
+    def system_prompts(self, plan: Plan) -> dict[str, str]:
+        """Each agent's system prompt before its role's text, a blank line apart: who it is (prompt_texts.opening:
+        the team sentence when it knows its team, else its name, then the board sentence when mention_board), the
+        bullets of submit and stop_working as it holds them (ending_lines), and what a round is when a team's submit
+        counts rounds (prompt_texts.rounds_line)."""
+        config, rounds = plan.config, texts.rounds_line(plan.config, self.tells_team(plan))
+        return {a: "\n\n".join(filter(None, [texts.opening(config, a, plan.agents),
+                                              "\n".join(self.ending_lines(plan, a)), rounds]))
                 for a in plan.agents}
+
+    def tells_team(self, plan: Plan) -> bool:
+        """Whether the agents' system prompts tell them of their team (SwarmConfig.knows_team). It picks the submit
+        and stop_working texts, which name teammates only for an agent that was told."""
+        return plan.config.knows_team
 
     def ending_lines(self, plan: Plan, agent: str) -> list[str]:
         """The agent's bullets for the tools that end its work: submit (submit_line) for a neutral agent of a config
         that gives it, stop_working for a config that gives it (prompt_texts.ending_lines)."""
         config = plan.config
-        return texts.ending_lines(config, role_of(plan.roles, agent), self.submit_line(plan, config.submit_kind))
+        return texts.ending_lines(config, role_of(plan.roles, agent), self.submit_line(plan, config.submit_kind),
+                                  self.tells_team(plan))
 
     # ---------------------------------------------------------------- submit
     def submit_vars(self, plan: Plan) -> dict[str, str]:
@@ -231,7 +241,8 @@ class Benchmark(ABC):
     def submit_text(self, plan: Plan, kind: str) -> str:
         """What submit does for an agent of this kind (SwarmConfig.submit_kind: team, solo or lone) and what the
         domain's grader reads (prompt_texts.submit_text). The tool's description says the same."""
-        return texts.submit_text(self.key, kind, plan.config.submit_delay_rounds, self.submit_vars(plan))
+        return texts.submit_text(self.key, kind, plan.config.submit_delay_rounds, self.submit_vars(plan),
+                                 self.tells_team(plan))
 
     def submit_line(self, plan: Plan, kind: str) -> str:
         """submit's bullet in a system prompt, for an agent of this kind."""

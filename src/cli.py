@@ -25,7 +25,7 @@ A run is a run name under runs/ or a run directory. The config is built in this 
 then every `--set` (src/configuration/presets.py). The default preset is the midterm report's configuration at the
 small scale; `--scale` replaces its size (src/configuration/scales.py). `--set` takes any SwarmConfig field
 (src/configuration/swarm_config.py) and overrides any value the scale gave, for example `--set regulators=3 --set
-disregulators=3` for a swarm, `--set shutdown=false` for agents without the submit tool, `--set turn_budget=70` for
+disregulators=3` for a swarm, `--set shutdown=false` for a team without stop_working, `--set turn_budget=70` for
 another turn budget, or `--set turn_budget=none` to use the scale's steps_per_agent. A run writes its Inspect log under
 logs/<name>/, exports it to runs/<name>/ and prints one line per episode; the judge runs inside the eval. `rejudge`
 judges finished runs from their eval logs and places them on the ladder; `regenerate` rebuilds a run directory from

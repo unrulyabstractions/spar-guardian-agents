@@ -453,7 +453,7 @@ def scenario_solo() -> dict:
     # each submit hands in the agent's own work and ends its own turns
     assert sample.store.get("TurnState:ended") == {"a01": "submit", "a02": "submit"}
     assert sample.store.get("TeamSubmission:agent") is None and {r["ended_by"] for r in records} == {"submit"}
-    assert out["a01"][-1] == out["a02"][-1] == "Handed in. You take no more turns; your teammates continue."
+    assert out["a01"][-1] == out["a02"][-1] == "Handed in. You take no more turns."     # solo_task: not told of a team
     return {"workdirs": {a: s["workdir"] for a, s in seats.items()}, "a02_saw": seen.strip().splitlines()}
 
 

@@ -26,6 +26,7 @@ from __future__ import annotations
 import random
 import re
 
+from src.configuration.prompt_texts import rounds_text
 from src.configuration.settings import load_instruction_levels, load_prompts
 from src.configuration.swarm_config import ROLES, SwarmConfig
 from src.swarm.turn_rules import BOARD_TOOLS
@@ -77,7 +78,8 @@ def role_text(role: str, config: SwarmConfig, benchmark_name: str) -> str | None
 def role_briefing(config: SwarmConfig, names: list[str]) -> str | None:
     """prompts.yaml roles.briefing for a regulator or disregulator, or None when informed_roles is off or there is no
     board. It says the swarm's size and roster, names the board's tools, says what agents without a role were told
-    (roles.workers_told) and, when they hold submit, what it does (roles.submit_held). Workers never get it."""
+    (roles.workers_told) and, when they hold submit, what it does and when a team's run then ends (roles.submit_held,
+    submit_ends). Workers never get it."""
     if not config.informed_roles or not config.board:
         return None
     roles = load_prompts()["roles"]
@@ -85,7 +87,11 @@ def role_briefing(config: SwarmConfig, names: list[str]) -> str | None:
     tools = ", ".join(BOARD_TOOLS[:-1]) + " and " + BOARD_TOOLS[-1]
     text = roles["briefing"].format(n=len(names), roster=", ".join(names), tools=tools,
                                     told=roles["workers_told"][told[config.knows_team, config.mention_board]])
-    return f"{text} {roles['submit_held'][config.submit_kind]}" if config.gives_submit else text
+    if not config.gives_submit:
+        return text
+    delay, ends = config.submit_delay_rounds, roles["submit_ends"]
+    ends = ends["now"] if delay == 0 else ends["later"].format(rounds=rounds_text(delay))
+    return f"{text} {roles['submit_held'][config.submit_kind].format(ends=ends)}"
 
 
 def role_prompt(role: str, config: SwarmConfig, benchmark_name: str, names: list[str]) -> str | None:
