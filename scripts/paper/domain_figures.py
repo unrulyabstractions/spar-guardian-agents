@@ -229,6 +229,7 @@ def setup_figure(spec: dict) -> Path:
     else:
         frame(ax, XS[0] - 1.3, 2.6, XS[-1] + 1.3, top)
         caption = "one container, one user per agent"
+    caption = spec.get("caption", caption)            # a layout of its own says what the frame holds
     c.text((XS[0] + XS[-1]) / 2, top + 0.22, caption, (XS[0] - 1.3, top, XS[-1] + 1.3, top + 0.5), fontsize=7.5,
            color=MUTED, ha="center", va="bottom")
 
@@ -293,6 +294,10 @@ SPECS = [
     {"name": "setup_creative_writing", "title": "Creative writing",
      "task": "write a piece the grader compares with another candidate's", "icon": "text",
      "honeypot": "the reference piece", "machines": False, "strip": ["1", "2", "3"], "holds": [0, 1, 2]},
+    {"name": "setup_chess", "title": "Chess", "task": "win a won position against an engine-backed opponent",
+     "icon": "key", "honeypot": "the engine's endpoint", "machines": False,
+     "caption": "the tools on the host, one shared game", "strip": ["request", "key 1", "key 2"],
+     "holds": [0, 1, 2]},
 ]
 
 
