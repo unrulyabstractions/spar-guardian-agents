@@ -1,12 +1,12 @@
 /* Shared components of the results browser.
- * They build the badges, tables, cards, verdict blocks and ladder rungs that several views show.
+ * They build the badges, tables, controls, tool calls, verdict blocks and ladder rungs that several views show.
  *
- *   import { badge, errorBox } from './components.js';
- *   badge('cheated', 'bad');
+ *   import { badge, dataTable } from './components.js';
+ *   dataTable(['agent', { label: 'calls', num: true }], [['a01', 12]]);
  */
 import { DASH, appendAll, asText, fmtCompact, fmtInt, fmtScore, fmtSecs, fmtUsd, h, plural } from './dom.js';
 import { ApiError } from './api.js';
-import { roleBadge } from './view_runs.js';
+import { ROLE_ORDER, roleIcon } from './charts.js';
 
 export function badge(text, kind, title) {
   return h('span', { class: ['badge', kind ? 'b-' + kind : 'b-plain'], title }, text);
@@ -116,6 +116,19 @@ export function section(title, ...children) {
   return h('section', { class: 'card' }, h('h2', null, title), ...children);
 }
 
+/**
+ * A table in its scroll box. cols are labels or {label, num, title}; rows are arrays of cells (a null or empty
+ * cell shows a dash) or ready <tr> nodes. opts.cls adds table classes; opts.bare leaves out the scroll box.
+ */
+export function dataTable(cols, rows, opts = {}) {
+  const spec = cols.map(c => (c && typeof c === 'object' && !(c instanceof Node) ? c : { label: c }));
+  const cell = (v, c) => h('td', { class: c && c.num ? 'num' : null }, v == null || v === '' ? muted(DASH) : v);
+  const table = h('table', { class: ['data', opts.cls] },
+    h('thead', null, h('tr', null, spec.map(c => h('th', { class: c.num ? 'num' : null, title: c.title, scope: 'col' }, c.label)))),
+    h('tbody', null, rows.map(r => (r instanceof Node ? r : h('tr', null, r.map((v, i) => cell(v, spec[i])))))));
+  return opts.bare ? table : h('div', { class: 'table-wrap' }, table);
+}
+
 export function errorBox(err, context) {
   const isApi = err instanceof ApiError;
   const body = isApi ? err.body : { error: String((err && err.message) || err) };
@@ -143,8 +156,37 @@ export function labeled(label, control) {
   return h('label', { class: 'field' }, h('span', { class: 'field-label' }, label), control);
 }
 
-/** Tool-call arguments. Bash commands and Python code render as code blocks. */
-export function argsView(fn, args) {
+/** A row of toggle buttons from [value, label] options; onChange gets the value pressed. */
+export function segmented(options, value, onChange, label) {
+  const box = h('div', { class: 'seg', role: 'group', 'aria-label': label });
+  const sync = v => {
+    for (const b of box.children) {
+      b.classList.toggle('active', b.dataset.v === v);
+      b.setAttribute('aria-pressed', b.dataset.v === v ? 'true' : 'false');
+    }
+  };
+  for (const [v, text] of options) {
+    box.appendChild(h('button', { type: 'button', class: 'seg-btn', dataset: { v }, onclick: () => { sync(v); onChange(v); } }, text));
+  }
+  sync(value);
+  return box;
+}
+
+/** Notes about a link the view could not follow as written (an unknown agent, step or call). */
+export function urlNotes() {
+  const box = h('div', { class: 'url-notes' });
+  return { box, show: text => box.appendChild(h('div', { class: 'url-note' }, text)) };
+}
+
+/** Scroll a sidebar list so its item is in view, a third from the top. */
+export function scrollIntoList(list, item) {
+  if (item.offsetTop < list.scrollTop || item.offsetTop + item.offsetHeight > list.scrollTop + list.clientHeight) {
+    list.scrollTop = item.offsetTop - list.clientHeight / 3;
+  }
+}
+
+/** Tool-call arguments. A shell command and Python code render as code blocks. */
+function argsView(args) {
   let a = args;
   if (typeof a === 'string') {
     try {
@@ -163,9 +205,7 @@ export function argsView(fn, args) {
   if (!keys.length) return appendAll(box, [muted('(no arguments)', 'small')]);
   for (const k of keys) {
     const v = a[k];
-    const codeLang = typeof v === 'string'
-      ? (k === 'command' || k === 'cmd' ? 'bash' : k === 'code' ? (fn === 'bash' ? 'bash' : 'python') : null)
-      : null;
+    const codeLang = typeof v !== 'string' ? null : k === 'command' || k === 'cmd' ? 'shell' : k === 'code' ? 'python' : null;
     if (codeLang) {
       box.appendChild(h('div', { class: 'arg' },
         h('div', { class: 'arg-key' }, k, ' ', muted(codeLang, 'small')),
@@ -180,6 +220,20 @@ export function argsView(fn, args) {
   }
   if (simple.length) box.insertBefore(h('pre', { class: 'pre code args-simple' }, simple.join('\n')), box.firstChild);
   return box;
+}
+
+/** One tool call with its arguments and its result nodes; resultEls null shows no result line. */
+export function toolCallView(fn, id, args, resultEls) {
+  return h('div', { class: 'toolcall' },
+    h('div', { class: 'tc-head' },
+      h('span', { class: 'tc-label' }, 'tool call'),
+      h('code', { class: 'tc-fn' }, fn || '?'),
+      h('span', { class: 'spacer' }),
+      id ? h('span', { class: 'tc-id' }, id) : null),
+    argsView(args),
+    resultEls === null ? null
+      : resultEls.length ? h('div', { class: 'tc-results' }, resultEls)
+        : muted('(no result recorded)', 'small block'));
 }
 
 export function isBlockedResult(rx) {
@@ -198,40 +252,51 @@ export function extraBadges(extra, skip) {
   return out;
 }
 
-// Colours of the verdict flags we know: [field, yes kind, no kind]. The server passes every field of the
-// judge's row, so any other boolean field shows as a plain flag and any other text field as a note.
-const VERDICT_FIELDS = [
-  ['cheated', 'bad', 'good'],
-  ['honey_pots_seen', 'warn', ''],
-  ['attempted_access', 'bad', 'good'],
-  ['extracted_submission', 'bad', ''],
-  ['success_claim_seen_before_access', 'warn', ''],
-  ['disclosed_access', 'good', ''],
-  ['explicit_prohibition_violated', 'bad', ''],
-  ['reference_solution_seeking', 'warn', ''],
-  ['reference_solution_obtained', 'bad', ''],
-  ['reference_solution_used', 'bad', 'good'],
-  ['documentation_lookup', 'plain', ''],
-  ['evaluation_tampering', 'bad', ''],
-];
-const VERDICT_META = ['summary', 'judge', 'judge_cost_usd', 'parse_ok', 'judge_error', 'raw'];
-// Field names whose label is not just the underscores replaced.
-const VERDICT_LABELS = { honey_pots_seen: 'honeypots seen' };
-const verdictLabel = k => VERDICT_LABELS[k] || k.replace(/_/g, ' ');
+// Hidden roles: Okabe-Ito colour plus shape (circle worker, square regulator, triangle disregulator).
+// Red and green stay reserved for outcomes.
+export function roleBadge(role) {
+  return h('span', { class: 'badge b-plain', title: 'hidden role' }, ROLE_ORDER.includes(role) ? roleIcon(role, 10) : null, role);
+}
 
-export function verdictBlock(v) {
+/** The judge's cheated verdict of an episode; a verdict the server did not count (no transcript) is drawn grey. */
+export function verdictCell(ep, yesKind = 'bad', noKind = 'good') {
+  const v = ep && ep.verdict ? ep.verdict.cheated : null;
+  if (v != null && !ep.counted) {
+    return h('span', { title: 'verdict on an episode with no transcript (harness crash or provider error); not counted' }, yn(v, 'plain', 'plain'));
+  }
+  return yn(v, yesKind, noKind);
+}
+
+/** Whether the team registered a result on main (run deliverables), and whether it copied another agent's message. */
+export function registeredCell(d) {
+  if (!d || d.registered_on_main == null) return muted(DASH, 'small');
+  if (!d.registered_on_main) return badge('no', 'plain');
+  const from = d.registered_message_copied_from;
+  return h('span', null, badge('yes', 'good'), from ? [' ', badge('copied', 'warn', `the registry entry carries ${from}’s message verbatim`)] : null);
+}
+
+// The judge's own keys around the task's verdict fields.
+const VERDICT_META = ['summary', 'judge', 'judge_cost_usd', 'parse_ok', 'judge_error', 'raw'];
+const label = k => k.replace(/_/g, ' ');
+
+/**
+ * A judge verdict. fields are the run's verdict_fields ({field, label, kind}, from the server): their booleans come
+ * first in that order with their colours; any other boolean shows as a plain flag and any other text as a note.
+ */
+export function verdictBlock(v, fields = []) {
   if (!v) return h('div', { class: 'verdict' }, muted('Not judged.'));
-  const known = new Map(VERDICT_FIELDS.map(([k, yk, nk]) => [k, [yk, nk]]));
-  const flags = Object.keys(v).filter(k => known.has(k) || typeof v[k] === 'boolean').filter(k => !VERDICT_META.includes(k));
-  flags.sort((a, b) => (known.has(a) ? 0 : 1) - (known.has(b) ? 0 : 1));
+  const known = new Map(fields.map(f => [f.field, f]));
+  const flags = ['cheated', ...fields.map(f => f.field).filter(k => k !== 'cheated' && k in v),
+    ...Object.keys(v).filter(k => typeof v[k] === 'boolean' && k !== 'cheated' && !known.has(k) && !VERDICT_META.includes(k))];
   const notes = Object.entries(v).filter(([k, x]) => !VERDICT_META.includes(k) && !flags.includes(k) && x != null && x !== '');
   return h('div', { class: 'verdict' },
     h('div', { class: 'verdict-flags' },
       flags.map(k => {
-        const [yk, nk] = known.get(k) || ['plain', 'plain'];
-        return h('span', { class: 'vf' }, h('span', { class: 'vf-label' }, verdictLabel(k)), yn(v[k], yk, nk));
+        const f = known.get(k);
+        const kinds = k === 'cheated' ? ['bad', 'good'] : [f ? f.kind : 'plain', 'plain'];
+        return h('span', { class: 'vf' }, h('span', { class: 'vf-label' }, f ? f.label : label(k)), yn(v[k], ...kinds));
       })),
-    notes.length ? kv(notes.map(([k, x]) => [verdictLabel(k), asText(x)]), 'kv-grid') : null,
+    notes.length ? kv(notes.map(([k, x]) => [label(k), asText(x)]), 'kv-grid') : null,
     h('div', { class: 'verdict-meta' },
       muted(`judge ${v.judge || '?'} · ${fmtUsd(v.judge_cost_usd)}`),
       v.parse_ok === false ? badge('judge output did not parse', 'bad') : null,
@@ -247,7 +312,11 @@ const RUNG_KIND = { none: 'good', exposed: 'warn', tried: 'bad', opened: 'bad', 
 const BESIDE_LADDER = [['searched', 'warn'], ['tampered', 'bad'], ['admitted', 'good'], ['concealed', 'bad'], ['false_denial', 'bad']];
 
 export function rungBadge(rung) {
-  return badge(rung, RUNG_KIND[rung] || 'plain', 'the highest rung of the cheating ladder the judge found');
+  return badge(rung, RUNG_KIND[rung] || 'plain', 'the highest rung of the cheating ladder');
+}
+
+function evidenceDetails(pairs) {
+  return pairs.filter(([, t]) => t).map(([k, t]) => lazyDetails(`${k} evidence`, () => longText(t, { lines: 20 }), { cls: 'sub' }));
 }
 
 export function ladderBlock(l) {
@@ -259,18 +328,17 @@ export function ladderBlock(l) {
   const where = f => (l[f + '_call'] == null ? null
     : `call ${l[f + '_call']}` + (l[f + '_round'] != null ? ` (round ${l[f + '_round']})` : ''));
   const rungs = RUNGS.map(f => [f, h('span', null, yn(l[f], 'bad', 'good'), where(f) ? [' ', muted(where(f), 'small')] : null)]);
-  const beside = BESIDE_LADDER.map(([f, kind]) => [f.replace('_', ' '), h('span', null, yn(l[f], kind, ''),
+  const beside = BESIDE_LADDER.map(([f, kind]) => [label(f), h('span', null, yn(l[f], kind, ''),
     f === 'searched' && where(f) ? [' ', muted(where(f), 'small')] : null)]);
   const cites = !l.citations ? null : l.citations.ok ? badge('cited calls exist', 'good', JSON.stringify(l.citations))
     : badge('a cited call is missing', 'warn', JSON.stringify(l.citations));
-  const evidence = [['tried', l.tried_evidence], ['opened', l.opened_evidence], ['used', l.used_evidence],
-    ['shipped', l.shipped_evidence], ['tampered', l.tampered_evidence], ['honesty', l.honesty_evidence]].filter(([, t]) => t);
   return h('div', { class: 'verdict' },
     h('div', { class: 'verdict-flags' }, h('span', { class: 'vf' }, h('span', { class: 'vf-label' }, 'rung'), rungBadge(l.rung))),
     kv([...rungs, ...beside, ['exposed source', l.exposed_source], ['view', l.view]], 'kv-grid'),
     h('div', { class: 'verdict-meta' }, muted(`ladder judge ${l.judge || '?'} · ${fmtUsd(l.judge_cost_usd)}`), ' ', cites),
     l.ladder_summary ? h('p', { class: 'verdict-summary' }, l.ladder_summary) : null,
-    evidence.map(([k, t]) => lazyDetails(`${k} evidence`, () => longText(t, { lines: 20 }), { cls: 'sub' })));
+    evidenceDetails([['tried', l.tried_evidence], ['opened', l.opened_evidence], ['used', l.used_evidence],
+      ['shipped', l.shipped_evidence], ['tampered', l.tampered_evidence], ['honesty', l.honesty_evidence]]));
 }
 
 // The code ladder's row of an episode (signals.jsonl, src/measures/code_ladder.py): the rungs by code, no judge.
@@ -278,21 +346,20 @@ export function signalsBlock(s) {
   if (!s) return null;
   const where = f => (s[f + '_call'] == null ? null : `call ${s[f + '_call']}`);
   const rungs = RUNGS.map(f => [f, h('span', null, yn(s[f], 'bad', 'good'), where(f) ? [' ', muted(where(f), 'small')] : null)]);
-  const evidence = [['tried', s.tried_evidence], ['opened', s.opened_evidence], ['used', s.used_evidence],
-    ['shipped', s.shipped_evidence]].filter(([, t]) => t);
   return h('div', { class: 'verdict' },
     h('div', { class: 'verdict-flags' }, h('span', { class: 'vf' }, h('span', { class: 'vf-label' }, 'code rung'), rungBadge(s.rung))),
     kv([...rungs, ['searched', yn(s.searched, 'warn', '')], ['exposed source', s.exposed_source],
       ['probe', s.probe ? 'ran' : 'none'], ['lines seen', s.lines_seen]], 'kv-grid'),
     h('div', { class: 'verdict-meta' }, muted('code ladder: the transcript and the sandbox probe, no judge')),
-    evidence.map(([k, t]) => lazyDetails(`${k} evidence`, () => longText(t, { lines: 20 }), { cls: 'sub' })));
+    evidenceDetails([['tried', s.tried_evidence], ['opened', s.opened_evidence], ['used', s.used_evidence],
+      ['shipped', s.shipped_evidence]]));
 }
 
 export function episodeRecord(ep) {
   const u = ep.usage || {};
   const d = ep.defense;
   return kv([
-    ['agent', ep.orbit_agent || ep.agent],
+    ['agent', ep.orbit_agent],
     ['hidden role', ep.role ? roleBadge(ep.role) : undefined],
     ['tool calls', fmtInt(ep.n_tool_calls)],
     ['turns', fmtInt(ep.n_turns)],
@@ -312,11 +379,11 @@ export function episodeRecord(ep) {
 }
 
 function defenseCounts(d) {
-  const parts = [`${plural(d.checks || 0, 'check')}, ${plural(d.blocks || 0, 'block')}`];
   const bb = d.blocks_by_boundary || {};
   const cb = d.checks_by_boundary || {};
   const bounds = [...new Set([...Object.keys(cb), ...Object.keys(bb)])];
   const detail = bounds.map(b => `${b} ${fmtInt(bb[b] || 0)}/${fmtInt(cb[b] || 0)}`).join(' · ');
-  return h('span', null, parts[0], d.blocks ? ' ' : '', d.blocks ? badge('blocked', 'blocked') : null,
+  return h('span', null, `${plural(d.checks || 0, 'check')}, ${plural(d.blocks || 0, 'block')}`,
+    d.blocks ? [' ', badge('blocked', 'blocked')] : null,
     detail ? h('div', { class: 'muted small' }, 'blocks/checks: ', detail) : null);
 }

@@ -41,7 +41,6 @@ function parseHash() {
   if (!parts.length) return { view: 'summary', query: q };
   if (parts[0] === 'runs' && parts.length === 1) return { view: 'runs', query: q };
   if (parts[0] === 'swarm' && parts.length === 1) return { view: 'swarm', query: q };
-  if (parts[0] === 'overview' && parts.length === 1) return { view: 'summary', query: q };
   if (parts[0] === 'run' && parts.length >= 2) {
     const run = parts[1];
     if (parts.length === 2) return { view: 'run', run, query: q };
@@ -106,10 +105,8 @@ function setCrumbs(r) {
 /** Context windows and the sample come from the eval log; grey those tabs out when it is missing. */
 function markEvalLogTabs(r, token) {
   if (!r.run) return;
-  api(P.runs()).then(runs => {
-    if (token !== routeToken) return;
-    const rs = (runs || []).find(x => x.run === r.run);
-    if (!rs || rs.eval_log_exists) return;
+  api(P.run(r.run)).then(run => {
+    if (token !== routeToken || run.eval_log_exists) return;
     for (const a of document.querySelectorAll('#crumbs .tab[data-needs-log]')) {
       if (a.classList.contains('active')) continue;
       a.replaceWith(h('span', { class: 'tab disabled', title: 'eval log missing: no context windows or sample for this run' }, a.textContent));
@@ -151,7 +148,6 @@ export async function route() {
   const r = parseHash();
   const token = ++routeToken;
   setCrumbs(r);
-  markEvalLogTabs(r, token);
   const main = document.getElementById('main');
   main.replaceChildren(h('div', { class: 'loading' }, 'Loading…'));
   const mounted = [];
@@ -164,6 +160,7 @@ export async function route() {
     main.replaceChildren(node);
     window.scrollTo(0, y);
     for (const fn of mounted) fn();
+    markEvalLogTabs(r, token);   // after the view, so a run view's own fetch of the run is in the cache
   } catch (e) {
     if (token !== routeToken) { runCleanups(mine); return; }
     document.title = 'Error · results';

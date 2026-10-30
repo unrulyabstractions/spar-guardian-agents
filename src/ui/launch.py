@@ -3,7 +3,7 @@
     start(8765, open_browser=True)
     stop(8765)
 
-`python -m src ui` calls these. The server itself is server.py, run as `python -m src.ui`.
+`python -m src ui` calls these. The process they start is `python -m src.ui` (server.py).
 """
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ def _read_pid_file(pid_file: Path) -> int | None:
 
 def server_answers(url: str) -> bool:
     try:
-        with urllib.request.urlopen(url + "api/summary", timeout=5):
+        with urllib.request.urlopen(url + "api/runs", timeout=30):
             return True
     except OSError:
         return False

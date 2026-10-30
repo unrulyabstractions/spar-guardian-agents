@@ -6,11 +6,11 @@
  */
 import { asText, firstLine, fmtCompact, fmtInt, fmtSecs, fmtTime, h, plural } from './dom.js';
 import { P, R, api, apiCall, setHashQuietly } from './api.js';
-import { badge, errorBox, kv, labeled, lazyDetails, longText, muted, reasoningView, select } from './components.js';
-import { toolCallView } from './view_transcript.js';
+import { badge, errorBox, kv, labeled, lazyDetails, longText, muted, reasoningView, scrollIntoList, segmented, select,
+  toolCallView, urlNotes } from './components.js';
 
-// A call's flags are the union of its input messages' flags (plus the output being the
-// refusal sentence). They describe the history the call saw, not what happened to its output.
+// A call's flags are the union of its input messages' flags, plus output_blocked when a defense blocked the call's
+// own completion.
 const CALL_FLAG_LABEL = {
   turn_rules: ['turn rules in input', 'notice', 'the turn rules placed a board notice or continue prompt in this input'],
   redacted: ['redacted input', 'withheld', 'a defense withheld a message of this input from the model'],
@@ -59,27 +59,22 @@ function blockReasons(ivs) {
 }
 
 /**
- * Blocks from the run's defense evidence, indexed for the context view.
- * A model_output intervention carries the message id of the completion it checked, which is
- * the output id of the model call that produced it. The call index has no output ids, so the
- * sidebar aligns each agent's own calls with that agent's checked completions in order, and
- * only when the two counts agree. Opening a call checks the alignment against the real id.
+ * The blocking interventions of the run's defense evidence, by the id they name: the completion a model_output block
+ * checked (the output id of the call that produced it) and the tool call a tool_call block stopped. The calls' own
+ * flags say which outputs were blocked; these give the reasons shown inside a call.
  */
-function blockIndex(detail, calls) {
-  // Blocked outputs come from the API (call.output_blocked, matched by the raw output id on
-  // the server); interventions are kept by message id for the reasons shown inside a call.
-  const outBlocks = new Map();   // completion message id -> blocking interventions
-  const toolBlocks = new Map();  // tool call id -> blocking interventions
+function blockIndex(detail) {
+  const outBlocks = new Map();
+  const toolBlocks = new Map();
   const add = (m, k, x) => { if (!m.has(k)) m.set(k, []); m.get(k).push(x); };
-  for (const dv of Object.values((detail && detail.defense) || {})) {
-    for (const x of (dv && dv.interventions) || []) {
-      if (x.boundary === 'model_output' && x.message_id && x.allow === false) add(outBlocks, x.message_id, x);
-      else if (x.boundary === 'tool_call' && x.allow === false && x.tool_call_id) add(toolBlocks, x.tool_call_id, x);
+  for (const dv of Object.values(detail.defense)) {
+    for (const x of dv.interventions || []) {
+      if (x.allow !== false) continue;
+      if (x.boundary === 'model_output' && x.message_id) add(outBlocks, x.message_id, x);
+      else if (x.boundary === 'tool_call' && x.tool_call_id) add(toolBlocks, x.tool_call_id, x);
     }
   }
-  const blockedCalls = new Map(); // call index -> blocking interventions (unknown by id here)
-  for (const c of calls) if (c.output_blocked) blockedCalls.set(c.index, []);
-  return { outBlocks, toolBlocks, callOut: new Map(), blockedCalls, misaligned: [], distrusted: false };
+  return { outBlocks, toolBlocks };
 }
 
 function blockedToolResult(ivs) {
@@ -132,19 +127,18 @@ function messageView(m, i, status, opts = {}) {
 }
 
 export async function viewContext({ run, query: q }, view) {
-  const [idx, detail] = await Promise.all([
-    api(P.context(run)),
-    api(P.run(run)).catch(() => null),
-  ]);
-  const calls = idx.calls || [];
+  const [idx, detail] = await Promise.all([api(P.context(run)), api(P.run(run))]);
+  const calls = idx.calls;
   const byIndex = new Map(calls.map(c => [c.index, c]));
-  const bi = blockIndex(detail, calls);
+  const bi = blockIndex(detail);
+  const isBlocked = c => c.flags.includes('output_blocked');
+  const nBlocked = calls.filter(isBlocked).length;
   let live = false;
 
-  const noteBox = h('div', { class: 'url-notes' });
-  const showNote = text => noteBox.appendChild(h('div', { class: 'url-note' }, text));
+  const notes = urlNotes();
+  const showNote = notes.show;
 
-  const agentNames = [...new Set([...(idx.agents || []), ...calls.map(c => c.agent).filter(Boolean)])].sort();
+  const agentNames = idx.agents;
   const agentOpts = [['', 'all agents'], ...agentNames.map(a => [a, a])];
   if (calls.some(c => !c.agent)) agentOpts.push(['(none)', '(no agent)']);
   const nDef = calls.filter(c => c.defense).length;
@@ -160,16 +154,9 @@ export async function viewContext({ run, query: q }, view) {
   const urlFlag = q.get('flag') || '';
   if (urlFlag && CALL_FILTERS.some(([v]) => v === urlFlag)) st.flag = urlFlag;
   else if (urlFlag) showNote(`Unknown flag “${urlFlag}” in the link; showing calls with any flag.`);
-  if (!detail) showNote('Could not load the run’s defense evidence, so blocked outputs are not marked.');
-  if (bi.misaligned.length) {
-    showNote(`Blocked outputs are marked in this list only where an agent’s calls line up with its defense checks. ` +
-      `Not aligned: ${bi.misaligned.join('; ')}. Opening a call still shows its blocks.`);
-  }
 
   const items = calls.map(c => {
-    const blocked = bi.blockedCalls.get(c.index);
-    const blockedBadge = blocked ? badge('OUTPUT BLOCKED', 'blocked', blockReasons(blocked)) : null;
-    if (blockedBadge) blockedBadge.classList.add('ci-blocked');
+    const blocked = isBlocked(c);
     const el = h('button', {
       type: 'button', class: ['call-item', c.defense ? 'is-defense' : 'is-agent', c.error && 'has-error', blocked && 'is-blocked-call'],
       onclick: () => selectCall(c.index, { fromList: true }),
@@ -178,14 +165,14 @@ export async function viewContext({ run, query: q }, view) {
       h('span', { class: 'ci-idx' }, `#${c.index}`),
       h('span', { class: 'ci-who' }, c.agent || '(no agent)'),
       c.defense ? badge(c.defense, 'def') : badge('agent call', 'agent'),
-      blockedBadge),
+      blocked ? badge('OUTPUT BLOCKED', 'blocked') : null),
     h('div', { class: 'ci-line ci-meta' },
       `${plural(c.n_input, 'msg')} · ${usageText(c.usage)}`,
       (c.output_tool_calls || []).length ? ` · → ${c.output_tool_calls.join(', ')}` : ''),
     c.output_preview && !(c.output_tool_calls || []).length
       ? h('div', { class: 'ci-line ci-preview' }, firstLine(c.output_preview, 70)) : null,
-    (c.flags || []).length || c.error
-      ? h('div', { class: 'ci-line' }, (c.flags || []).map(callFlagBadge), c.error ? badge('error', 'bad', c.error) : null)
+    c.flags.length || c.error
+      ? h('div', { class: 'ci-line' }, c.flags.filter(f => f !== 'output_blocked').map(callFlagBadge), c.error ? badge('error', 'bad', c.error) : null)
       : null);
     return { c, el };
   });
@@ -199,9 +186,7 @@ export async function viewContext({ run, query: q }, view) {
   function matches(c) {
     return (!st.agent || (st.agent === '(none)' ? !c.agent : c.agent === st.agent)) &&
       (!st.kind || (st.kind === 'agent' ? !c.defense : !!c.defense)) &&
-      (!st.flag || (st.flag === 'error' ? !!c.error
-        : st.flag === 'output_blocked' ? bi.blockedCalls.has(c.index)
-          : (c.flags || []).includes(st.flag)));
+      (!st.flag || (st.flag === 'error' ? !!c.error : c.flags.includes(st.flag)));
   }
   function applyFilter() {
     let n = 0;
@@ -211,7 +196,7 @@ export async function viewContext({ run, query: q }, view) {
       if (ok) n++;
     }
     countEl.textContent = `${fmtInt(n)} of ${plural(calls.length, 'call')} shown`;
-    blockedCount.textContent = bi.blockedCalls.size ? ` · ${plural(bi.blockedCalls.size, 'output')} blocked` : '';
+    blockedCount.textContent = nBlocked ? ` · ${plural(nBlocked, 'output')} blocked` : '';
     updateUrl();
   }
 
@@ -223,15 +208,6 @@ export async function viewContext({ run, query: q }, view) {
     setHashQuietly(target);
   }
 
-  // If an opened call's real output id disagrees with the order alignment, drop the marks.
-  function checkAlignment() { /* blocked outputs are matched by id on the server */ }
-
-  function scrollItemIntoList(it) {
-    const e = it.el;
-    if (e.offsetTop < listBox.scrollTop || e.offsetTop + e.offsetHeight > listBox.scrollTop + listBox.clientHeight) {
-      listBox.scrollTop = e.offsetTop - listBox.clientHeight / 3;
-    }
-  }
 
   function prevSameCaller(c) {
     for (let j = c.index - 1; j >= 0; j--) {
@@ -248,7 +224,7 @@ export async function viewContext({ run, query: q }, view) {
     st.selected = i;
     for (const it of items) { it.el.classList.toggle('active', it.c.index === i); if (it.c.index === i) it.el.setAttribute('aria-current', 'true'); else it.el.removeAttribute('aria-current'); }
     const it = items.find(x => x.c.index === i);
-    if (it && !opts.fromList) scrollItemIntoList(it);
+    if (it && !opts.fromList) scrollIntoList(listBox, it.el);
     if (it && opts.focus) it.el.focus({ preventScroll: true });
     updateUrl();
     const tok = ++selToken;
@@ -265,7 +241,6 @@ export async function viewContext({ run, query: q }, view) {
         prev ? apiCall(P.call(run, prev.index)).catch(e => ({ __error: e })) : Promise.resolve(null),
       ]);
       if (tok !== selToken || !live) return;
-      checkAlignment(i, full);
       detailEl.replaceChildren(callDetail(c, full, prev, prevFull, selectCall, { bi, st }));
       const top = detailEl.getBoundingClientRect().top;
       if (top < 0 || top > window.innerHeight) window.scrollTo(0, 0);
@@ -304,16 +279,8 @@ export async function viewContext({ run, query: q }, view) {
     move(dir, inList);
   };
 
-  const kindBtns = h('div', { class: 'seg', role: 'group', 'aria-label': 'call kind' },
-    [['', 'all'], ['agent', 'agent calls only'], ['defense', 'defense calls only']].map(([v, label]) => {
-      const b = h('button', { type: 'button', class: ['seg-btn', st.kind === v && 'active'], 'aria-pressed': st.kind === v ? 'true' : 'false', dataset: { v } }, label);
-      b.addEventListener('click', () => {
-        st.kind = v;
-        for (const x of kindBtns.children) { x.classList.toggle('active', x.dataset.v === v); x.setAttribute('aria-pressed', x.dataset.v === v ? 'true' : 'false'); }
-        applyFilter();
-      });
-      return b;
-    }));
+  const kindBtns = segmented([['', 'all'], ['agent', 'agent calls only'], ['defense', 'defense calls only']], st.kind,
+    v => { st.kind = v; applyFilter(); }, 'call kind');
 
   const side = h('aside', { class: 'sidebar' },
     h('div', { class: 'side-tools' },
@@ -323,7 +290,7 @@ export async function viewContext({ run, query: q }, view) {
       kindBtns,
       labeled('flag', select(CALL_FILTERS, st.flag, v => { st.flag = v; applyFilter(); })),
       h('div', { class: 'muted small' }, 'keys: j / k move between calls; ↓ / ↑ do too while the list has focus'),
-      noteBox,
+      notes.box,
       countEl),
     listBox);
 
@@ -422,7 +389,7 @@ function callDetail(c, full, prev, prevFull, selectCall, ctx) {
       c.defense ? badge(c.defense, 'def') : badge('agent call', 'agent'),
       h('span', null, c.agent || '(no agent)'),
       outBlocks ? badge('OUTPUT BLOCKED', 'blocked', blockReasons(outBlocks)) : null,
-      (full.flags || []).map(callFlagBadge),
+      full.flags.filter(f => !(outBlocks && f === 'output_blocked')).map(callFlagBadge),
       full.error ? badge('error', 'bad') : null),
     kv([
       ['model', full.model],

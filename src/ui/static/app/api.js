@@ -68,7 +68,6 @@ export const P = {
   call: (r, i) => `/api/runs/${enc(r)}/context/${i}`,
   timeline: r => `/api/runs/${enc(r)}/timeline`,
   toolFile: (r, tool, file) => `/api/runs/${enc(r)}/tools/${enc(tool)}/` + String(file).split('/').map(enc).join('/'),
-  summary: () => '/api/summary',
 };
 
 /** Rewrite the hash without navigating; a frame that refuses URL state keeps the view as drawn. */

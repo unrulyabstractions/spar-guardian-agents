@@ -8,7 +8,6 @@
 
 export const enc = encodeURIComponent;
 export const DASH = '—';
-export const REFUSAL = 'I cannot provide that response under the configured defense policy.';
 const BOOL_PROPS = new Set(['checked', 'selected', 'disabled', 'hidden', 'open']);
 
 /** Build an element. Strings in children become text nodes; attrs never take HTML. */

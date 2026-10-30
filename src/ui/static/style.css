@@ -32,6 +32,26 @@
   --band: #fafaf7;
   --hover: #eef2fb;
   --shadow: 0 1px 2px rgba(0, 0, 0, .05);
+
+  /* Charts. Roles are Okabe-Ito and shape-coded; red is kept for cheated and blocked, green for honest. The code
+     ladder's marks take hues no role or outcome uses: azure for exposed, plum for opened; python ticks are olive.
+     Checked with the dataviz validator (OKLab dE x100) against every other mark of their chart, both schemes: each
+     pair is at least 15 apart, except python against the grey model-bar edge and control strip (12.5 and 13, light)
+     and, under colour blindness, the dark opened mark against grey cells, edges and strips (6.6 to 7.2); shape and
+     tooltip are the second cue there. The tokens are at least 3:1 on the panel; the light model-bar fill relies on
+     its 3:1 edge. */
+  --role-worker: #999999; --role-regulator: #0072B2; --role-disregulator: #E69F00;
+  --glyph-edge: rgba(0, 0, 0, .45);
+  --tl-shell: #77776f; --tl-python: #a39200; --tl-post: #e87ba4; --tl-read: #4a3aa7;
+  --tl-model: #d3d3ca; --tl-model-edge: #8f8f87; --tl-defcall: #9c9c94;
+  --tl-arrow: rgba(28, 28, 26, .5);
+  --tl-refusal: #b02a20;
+  --exposed: #2e94dc; --opened: #750459;
+  --grid: #e9e9e3;
+  --seq-lo: #fde8e5; --seq-hi: #a3170e;
+  --out-unknown: #8c8c84;
+  --raster-none: #e4e4de; --raster-work: #77776f;
+  --bar-fill: #1c5cab;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -62,6 +82,18 @@
     --band: #1a1c21;
     --hover: #252c3a;
     --shadow: none;
+
+    --glyph-edge: rgba(255, 255, 255, .35);
+    --tl-shell: #9a9a94; --tl-python: #cfc226; --tl-post: #e87ba4; --tl-read: #9085e9;
+    --tl-model: #4a4e57; --tl-model-edge: #7c808a; --tl-defcall: #777a82;
+    --tl-arrow: rgba(228, 228, 224, .5);
+    --tl-refusal: #d62d20;
+    --exposed: #43befd; --opened: #a44ca3;
+    --grid: #2c2f36;
+    --seq-lo: #3b2321; --seq-hi: #ff8a7e;
+    --out-unknown: #7d8088;
+    --raster-none: #474c56; --raster-work: #8a8e96;
+    --bar-fill: #6da7ec;
   }
 }
 
@@ -110,11 +142,19 @@ code, .mono { font-family: var(--mono); font-size: 13px; }
 .crumbs::-webkit-scrollbar { display: none; }
 .crumb.current { font-weight: 600; }
 .sep { color: var(--muted); }
-.tabs { display: inline-flex; gap: 2px; margin-left: 12px; padding: 2px; border-radius: 8px; background: var(--panel-2); }
-.tab { padding: 2px 10px; border-radius: 6px; color: var(--muted); font-size: 13px; }
-.tab:hover { text-decoration: none; color: var(--text); }
-.tab.active { background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
+/* The section tabs (Summary, Runs, Swarm) and a run's view tabs share one strip style. */
+.nav-tabs, .tabs { display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--panel-2); }
+.nav-tabs { flex: none; }
+.tabs { margin-left: 12px; }
+.nav-tab, .tab { border-radius: 6px; color: var(--muted); white-space: nowrap; }
+.nav-tab { padding: 3px 12px; font-size: 14px; font-weight: 600; }
+.tab { padding: 2px 10px; font-size: 13px; }
+.nav-tab:hover, .tab:hover { text-decoration: none; color: var(--text); }
+.nav-tab.active, .tab.active { background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
 .tab.disabled { opacity: .5; cursor: not-allowed; }
+.skip-link { position: absolute; left: -9999px; top: 4px; z-index: 30; padding: 6px 10px; background: var(--panel); color: var(--text); border: 2px solid var(--accent); border-radius: 6px; font-weight: 600; }
+.skip-link:focus { left: 8px; }
+#main:focus { outline: none; }
 
 #main { padding: calc(var(--header-h) + 16px) 16px 48px; }
 .page { max-width: 1280px; margin: 0 auto; }
@@ -205,7 +245,7 @@ details[open] > summary { margin-bottom: 6px; }
 }
 .pre.msg-text { background: transparent; border-color: transparent; padding: 2px 0; font-family: var(--sans); font-size: 15px; max-width: 100ch; }
 .pre.code { background: var(--code-bg); }
-.pre.lang-bash { border-left: 3px solid var(--good); }
+.pre.lang-shell { border-left: 3px solid var(--good); }
 .pre.lang-python { border-left: 3px solid var(--accent); }
 .pre.errtext { background: var(--bad-bg); color: var(--bad); border-color: transparent; }
 .pre.traceback { font-size: 11.5px; color: var(--muted); }
@@ -266,10 +306,8 @@ table.eps-table th { background: var(--panel-2); }
 .summary-line strong { color: var(--text); }
 .summary-line strong.text-bad { color: var(--bad); }
 td.reason { min-width: 240px; max-width: 560px; }
-td.reason .pre { margin: 0; padding: 4px 6px; font-size: 12px; }
-td.reason .pre { background: transparent; border-color: transparent; padding: 0; }
+td.reason .pre { margin: 0; padding: 0; font-size: 12px; background: transparent; border-color: transparent; }
 td.reason .expand { border: 0; background: transparent; padding: 0; }
-td.per-agent { min-width: 240px; }
 table.data th.num { text-align: right; }
 tr.row-blocked td { background: var(--bad-bg); }
 
@@ -432,44 +470,7 @@ details.reasoning .pre { font-family: var(--sans); font-size: 13px; color: var(-
   .brand { display: none; }
 }
 
-/* ---------- charts: timeline, exposure cascade, raster, overview ---------- */
-/* Roles are Okabe-Ito and shape-coded; red is kept for cheated and blocked, green for honest.
-   The honeypot marks take hues no role or outcome uses: azure for a touch, plum for a member read;
-   python ticks are olive. Checked with the dataviz validator (OKLab dE x100) against every other
-   mark of their chart, both schemes: each pair is at least 15 apart, except python against the grey
-   model-bar edge and control strip (12.5 and 13, light) and, under colour blindness, the dark member
-   read against grey cells, edges and strips (6.6 to 7.2); shape and tooltip are the second cue there.
-   The retuned tokens are at least 3:1 on the panel; the light model-bar fill relies on its 3:1 edge. */
-:root {
-  --role-worker: #999999; --role-regulator: #0072B2; --role-disregulator: #E69F00;
-  --glyph-edge: rgba(0, 0, 0, .45);
-  --tl-bash: #77776f; --tl-python: #a39200; --tl-post: #e87ba4; --tl-read: #4a3aa7;
-  --tl-model: #d3d3ca; --tl-model-edge: #8f8f87; --tl-defcall: #9c9c94;
-  --tl-arrow: rgba(28, 28, 26, .5);
-  --tl-refusal: #b02a20;
-  --hp-touch: #2e94dc;
-  --grid: #e9e9e3;
-  --seq-lo: #fde8e5; --seq-hi: #a3170e;
-  --out-unknown: #8c8c84;
-  --raster-none: #e4e4de; --raster-work: #77776f; --member: #750459;
-  --bar-single: #1c5cab; --bar-board: #4a90e2;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --glyph-edge: rgba(255, 255, 255, .35);
-    --tl-bash: #9a9a94; --tl-python: #cfc226; --tl-post: #e87ba4; --tl-read: #9085e9;
-    --tl-model: #4a4e57; --tl-model-edge: #7c808a; --tl-defcall: #777a82;
-    --tl-arrow: rgba(228, 228, 224, .5);
-    --tl-refusal: #d62d20;
-    --hp-touch: #43befd;
-    --grid: #2c2f36;
-    --seq-lo: #3b2321; --seq-hi: #ff8a7e;
-    --out-unknown: #7d8088;
-    --raster-none: #474c56; --raster-work: #8a8e96; --member: #a44ca3;
-    --bar-single: #6da7ec; --bar-board: #2771d0;
-  }
-}
-
+/* ---------- charts: timeline, exposure cascade, raster, summary ---------- */
 .viz-host { width: 100%; min-width: 0; overflow-x: auto; }
 .viz { display: block; font: 11px var(--sans); user-select: none; -webkit-user-select: none; }
 .viz text { fill: var(--text); }
@@ -503,17 +504,17 @@ details.reasoning .pre { font-family: var(--sans); font-size: 13px; color: var(-
 .viz .m-model.err { stroke: var(--bad); stroke-width: 1; }
 .viz .m-defcall { fill: var(--tl-defcall); }
 .viz .tk { stroke-width: 1.5; }
-.viz .tk-bash { stroke: var(--tl-bash); }
+.viz .tk-shell { stroke: var(--tl-shell); }
 .viz .tk-python { stroke: var(--tl-python); stroke-width: 1.8; }
 .viz .tk-board_post { stroke: var(--tl-post); stroke-width: 2.2; }
 .viz .tk-board_read { stroke: var(--tl-read); stroke-width: 2.2; }
 .viz .tk-submit { stroke: var(--text); stroke-width: 2; }
-.viz .tk-other { stroke: var(--tl-bash); stroke-dasharray: 2 2; }
+.viz .tk-other { stroke: var(--tl-shell); stroke-dasharray: 2 2; }
 .viz .dur { stroke-width: 1; opacity: .55; }
 .viz .fill-ink { fill: var(--text); }
 .viz .fill-python { fill: var(--tl-python); }
-.viz .m-touch { fill: none; stroke: var(--hp-touch); stroke-width: 2; }
-.viz .m-member { fill: var(--member); stroke: var(--panel); stroke-width: 1; }
+.viz .m-exposed { fill: none; stroke: var(--exposed); stroke-width: 2; }
+.viz .m-opened { fill: var(--opened); stroke: var(--panel); stroke-width: 1; }
 .viz .m-x { fill: none; stroke: var(--bad); stroke-width: 2; stroke-linecap: round; }
 .viz .m-block { fill: var(--bad); opacity: .16; }
 .viz .m-block-line { stroke: var(--bad); stroke-width: 1.5; }
@@ -570,8 +571,8 @@ details.reasoning .pre { font-family: var(--sans); font-size: 13px; color: var(-
 .sw-work { background: var(--raster-work); }
 .sw-post { background: var(--tl-post); }
 .sw-read { background: var(--tl-read); }
-.sw-touch { background: var(--hp-touch); }
-.sw-member { background: var(--member); }
+.sw-exposed { background: var(--exposed); }
+.sw-opened { background: var(--opened); }
 .sw-submit { background: var(--text); }
 .sw-refusal { background: linear-gradient(var(--tl-refusal) 50%, var(--raster-none) 50%); }
 .sw-none { background: var(--raster-none); }
@@ -595,21 +596,11 @@ canvas.raster.clickable { cursor: pointer; }
 .comp-grid { max-width: 100%; height: auto; }   /* scales down at phone width; the viewBox keeps the drawing */
 .comp-fig figcaption { font-size: 12.5px; color: var(--muted); margin-bottom: 4px; }
 .chart-scroll { overflow-x: auto; max-width: 100%; }
-.swarm-table td { white-space: nowrap; }
-.swarm-table td { vertical-align: middle; }
+.swarm-table td { white-space: nowrap; vertical-align: middle; }
 .swarm-table tr.failed td { color: var(--muted); }
 .swarm-table tr.failed td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
 
-/* ---------- header navigation ---------- */
-.nav-tabs { display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--panel-2); flex: none; }
-.nav-tab { padding: 3px 12px; border-radius: 6px; color: var(--muted); font-size: 14px; font-weight: 600; white-space: nowrap; }
-.nav-tab:hover { text-decoration: none; color: var(--text); }
-.nav-tab.active { background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
-.skip-link { position: absolute; left: -9999px; top: 4px; z-index: 30; padding: 6px 10px; background: var(--panel); color: var(--text); border: 2px solid var(--accent); border-radius: 6px; font-weight: 600; }
-.skip-link:focus { left: 8px; }
-#main:focus { outline: none; }
-
-/* ---------- summary ---------- */
+/* ---------- summary and swarm ---------- */
 .headline { display: flex; flex-wrap: wrap; gap: 10px 14px; margin: 0 0 14px; }
 .hl { display: block; min-width: 150px; max-width: 320px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); color: var(--text); }
 a.hl:hover { text-decoration: none; background: var(--hover); }
@@ -620,7 +611,7 @@ a.hl:hover { text-decoration: none; background: var(--hover); }
 .viz .bar-row:focus-visible .bar-hit { fill: var(--accent-bg); }
 .viz .bar-name { font-size: 12.5px; fill: var(--text); }
 .viz .bar-track { fill: var(--grid); }
-.viz .bar-fill { fill: var(--bar-single); }
+.viz .bar-fill { fill: var(--bar-fill); }
 .viz .bar-row { cursor: pointer; }
 .viz .fn-bar.role-worker { fill: var(--role-worker); }
 .viz .fn-bar.role-regulator { fill: var(--role-regulator); }

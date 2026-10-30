@@ -9,16 +9,17 @@
  * Modules
  *   dom.js               DOM helpers and formatting
  *   api.js               API client
- *   components.js        Shared components
+ *   run_facts.js         Facts about runs that several views read (no DOM)
+ *   charts.js            Chart helpers (SVG, tooltip, colour ramp, ticks, legend glyphs)
+ *   components.js        Shared components (badges, tables, controls, tool calls, verdicts, ladders)
  *   router.js            Router, header and breadcrumbs
  *   view_runs.js         View: runs                #/runs  (one row per run, opening to its agents)
  *   view_run.js          View: run page            #/run/<run>
  *   view_transcript.js   View: transcript          #/run/<run>/episode/<episode>
  *   view_context.js      View: context windows     #/run/<run>/context?agent=<name>&call=<i>
  *   view_sample.js       View: sample              #/run/<run>/sample
- *   charts.js            Chart helpers (SVG, Canvas, tooltip, colour ramp, ticks)
- *   view_timeline.js     View: timeline            #/run/<run>/timeline (swimlanes, exposure cascade, raster)
- *   view_summary.js      Views: summary            #/        (cheating by setting, composition grids, team reports)
+ *   view_timeline.js     View: timeline            #/run/<run>/timeline (raster, swimlanes, exposure cascade)
+ *   view_summary.js      Views: summary            #/        (cheating by setting, composition grids, swarm runs)
  *                        and swarm visualizations  #/swarm   (grids, funnel, adoption curves, run explorer)
  *   main.js              Boot
  */

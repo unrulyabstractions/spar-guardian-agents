@@ -121,37 +121,43 @@ def agent_messages(view: SampleView, agent: str) -> list:
     return [view.messages[i] for i in indices]
 
 
-def span_owner(view: SampleView):
-    """span_id -> name of the nearest enclosing span of type 'agent' (ORBIT names it after the spec).
+def span_owners(view: SampleView):
+    """A function from span id to (agent, defense): the nearest enclosing span of type 'agent' (ORBIT names it after
+    the spec), and the defense whose span holds the event, or None for the agent's own events.
 
-    Events inside an ``orbit.defense`` span (a monitor's or guardian's own model
-    calls) or inside a ``tool`` span (a model call made while a tool runs, such as
-    the dual-LLM quarantine summariser) belong to the defense, not to the agent,
-    and get owner None. ToolEvents themselves sit directly in the agent span.
+    An ``orbit.defense`` span holds a monitor's or guardian's own model calls; a ``tool`` span holds a model call made
+    while a tool runs (the dual-LLM quarantine summariser), named "inside tool <name>". ToolEvents themselves sit
+    directly in the agent span. Works on a SampleView or an EvalSample.
     """
     begins = {e.id: e for e in view.events if e.event == "span_begin"}
     cache: dict = {}
+
+    def parent(e):
+        return owner(e.parent_id) if e.parent_id else (None, None)
 
     def owner(span_id):
         if span_id in cache:
             return cache[span_id]
         e = begins.get(span_id)
         if e is None:
-            result = None
-        elif e.type in ("orbit.defense", "tool"):
-            result = None
+            result = (None, None)
+        elif e.type == "orbit.defense":
+            result = (parent(e)[0], e.name)
+        elif e.type == "tool":
+            result = (parent(e)[0], f"inside tool {e.name}")
         elif e.type == "agent":
-            result = e.name
+            result = (e.name, None)
         else:
-            result = owner(e.parent_id) if e.parent_id else None
+            result = parent(e)
         cache[span_id] = result
         return result
     return owner
 
 
 def agent_events(view: SampleView, agent: str, kind: str) -> list:
-    owner = span_owner(view)
-    return [e for e in view.events if e.event == kind and owner(e.span_id) == agent]
+    """The agent's own events of one kind; a defense's events inside the agent's span are left out."""
+    owner = span_owners(view)
+    return [e for e in view.events if e.event == kind and owner(e.span_id) == (agent, None)]
 
 
 # --------------------------------------------------------------------------
@@ -192,7 +198,8 @@ def defense_counts(evidence: dict, agent: str) -> dict:
 
 
 def blocked_message_ids(view: SampleView, boundary: str) -> set:
-    """Ids of messages a defense blocked at one boundary, from the defense_intervention events."""
+    """Ids of messages a defense blocked at one boundary (model_input or model_output), from the defense_intervention
+    events. Works on a SampleView or an EvalSample."""
     ids = set()
     for e in view.events:
         d = getattr(e, "data", None)
@@ -234,20 +241,26 @@ def redacted_message_ids(model_events, view: SampleView) -> set:
 # --------------------------------------------------------------------------
 # usage
 # --------------------------------------------------------------------------
+def usage_dict(usage) -> dict:
+    """One Inspect ModelUsage as {input, cache_read, output, reasoning}. Prompt tokens (input) include cache reads:
+    Inspect reports them apart from input_tokens. Output tokens include the reasoning tokens, which Inspect also
+    reports on their own."""
+    cached = getattr(usage, "input_tokens_cache_read", 0) or 0
+    return {"input": (getattr(usage, "input_tokens", 0) or 0) + cached, "cache_read": cached,
+            "output": getattr(usage, "output_tokens", 0) or 0, "reasoning": getattr(usage, "reasoning_tokens", 0) or 0}
+
+
 def _usage_totals(usages) -> dict:
-    """Prompt tokens include cache reads: Inspect reports them apart from input_tokens. Output tokens include the
-    reasoning tokens, which Inspect also reports on their own (reasoning, when any)."""
-    total_in = total_out = cache_read = reasoning = 0
+    """The sum of usage_dict over the usages, with reasoning only when there is any; {} for no tokens."""
+    totals = {"input": 0, "output": 0, "cache_read": 0, "reasoning": 0}
     for usage in usages:
-        cached = getattr(usage, "input_tokens_cache_read", 0) or 0
-        total_in += (getattr(usage, "input_tokens", 0) or 0) + cached
-        cache_read += cached
-        total_out += getattr(usage, "output_tokens", 0) or 0
-        reasoning += getattr(usage, "reasoning_tokens", 0) or 0
-    if not (total_in or total_out):
+        for key, value in usage_dict(usage).items():
+            totals[key] += value
+    if not (totals["input"] or totals["output"]):
         return {}
-    totals = {"input": total_in, "output": total_out, "cache_read": cache_read}
-    return {**totals, "reasoning": reasoning} if reasoning else totals
+    if not totals["reasoning"]:
+        del totals["reasoning"]
+    return totals
 
 
 def billed_cost(ev) -> float | None:

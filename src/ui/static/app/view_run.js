@@ -6,16 +6,16 @@
  */
 import { DASH, appendAll, asText, debounce, fmtInt, fmtTime, h, plural } from './dom.js';
 import { P, R, apiFresh, fetchJson } from './api.js';
-import { badge, episodeRecord, kv, labeled, ladderBlock, lazyDetails, link, logLink, longText, mono, muted, section,
-  select, signalsBlock, verdictBlock, yn } from './components.js';
-import { roleBadge, settingOf, verdictCell } from './view_runs.js';
+import { badge, dataTable, episodeRecord, kv, labeled, ladderBlock, lazyDetails, link, logLink, longText, mono, muted,
+  roleBadge, section, select, signalsBlock, verdictBlock, verdictCell, yn } from './components.js';
+import { endingsText, episodeOf } from './run_facts.js';
 
 export async function viewRun({ run }, view) {
   const d = await apiFresh(P.run(run));
   view.mounted(() => { document.title = `${run} · results`; });
-  const rj = d.run_json || {};
-  const eps = d.episodes || [];
-  const logOk = !!d.eval_log_exists;
+  const rj = d.run_json;
+  const eps = d.episodes;
+  const logOk = d.eval_log_exists;
   const epFailures = [...new Set(eps.map(e => e.failure).filter(Boolean))];
 
   const head = h('div', { class: 'page-head' },
@@ -24,8 +24,8 @@ export async function viewRun({ run }, view) {
       d.failed ? badge('failed run', 'bad')
         : epFailures.length ? badge(`episode failure: ${epFailures.join(', ')}`, 'warn', 'not a harness crash, but an episode ended with a failure')
           : badge('completed', 'good'),
-      badge(settingOf(d).label, 'plain', `topology in run.json: ${d.topology || '?'}`),
-      badge(`control: ${d.control || 'baseline'}`, 'def')),
+      badge(d.setting.label, 'plain', `topology in run.json: ${d.topology || '?'}`),
+      badge(`control: ${d.control}`, 'def')),
     h('div', { class: 'links' },
       eps.map(ep => (ep.has_transcript
         ? link(R.episode(run, ep.episode), `transcript ${ep.episode}`, 'btn')
@@ -37,7 +37,7 @@ export async function viewRun({ run }, view) {
   const meta = section('Run metadata', kv([
     ['task', d.task],
     ['model', d.model],
-    ['setting', settingOf(d).label],
+    ['setting', d.setting.label],
     ['topology in run.json', d.topology],
     ['agents', (d.agents || []).join(', ')],
     ['control', d.control],
@@ -45,7 +45,6 @@ export async function viewRun({ run }, view) {
     ['mode', d.mode],
     ['scale', d.scale],
     ['preset', d.preset],
-    // the access policy and the turn budget: shown only for runs that recorded them
     ['access', d.access && d.access.policy ? d.access.policy : undefined],
     ['turn budget', d.turn_budget ? `${d.turn_budget.budget} turns, ${d.turn_budget.steps_per_agent} working steps per agent` : undefined],
     ['eval id', rj.eval_id ? mono(rj.eval_id) : null],
@@ -60,20 +59,20 @@ export async function viewRun({ run }, view) {
       ? h('ul', { class: 'plain-list' }, rj.deviations.map(x => h('li', null, mono(x)))) : null],
   ]));
 
-  const defs = Array.isArray(rj.defenses) ? rj.defenses : [];
+  const defs = rj.defenses || [];
   const defSection = section('Defenses', defs.length ? defensesTable(defs) : muted('No defenses configured (baseline).'));
 
   const epSection = section(`Episodes (${eps.length})`,
-    eps.length ? eps.map(ep => episodeCard(run, ep, logOk, d.eval_log)) : muted('No episodes recorded.'));
+    eps.length ? eps.map(ep => episodeCard(run, ep, d)) : muted('No episodes recorded.'));
 
-  const boardSection = section('Board messages', communicationView(d.communication, run));
+  const boardSection = section('Board messages', communicationView(d.communication));
   const evidence = section('Defense evidence', defenseEvidence(d.defense, defs));
-  const swarmSection = rj.swarm ? section('Swarm', swarmView(rj.swarm, eps, rj.deliverables)) : null;
-  const sweSection = d.swe ? section('SWE task', sweView(d.swe, eps)) : null;
+  const swarmSection = rj.swarm ? section('Swarm', swarmView(rj.swarm, d)) : null;
+  const sweSection = d.swe ? section('SWE task', sweView(d.swe, d)) : null;
   const configSection = d.config ? section('Configuration', configKv(d.config)) : null;
   const rulesSection = d.rules ? section('Turn rules', rulesTable(d.rules)) : null;
   const engagementSection = d.engagement ? section('Board engagement', engagementView(d.engagement, eps)) : null;
-  const accessSection = d.access ? section('Access', accessView(d.access, eps)) : null;
+  const accessSection = d.access ? section('Access', accessView(d.access, d)) : null;
   const knowledgeSection = d.knowledge ? section('Knowledge work', knowledgeView(d.knowledge)) : null;
   const toolsSection = section('Analysis tools', toolsView(run, d.tools));
 
@@ -104,12 +103,7 @@ function toolFigure(run, tool, file, alt) {
   return h('figure', { class: 'tool-fig' }, h('a', { href: src, target: '_blank', rel: 'noopener' }, h('img', { src, alt })));
 }
 
-function toolTable(cols, rows) {
-  const cell = v => (v == null || v === '' ? muted(DASH) : v);
-  return h('div', { class: 'table-wrap' }, h('table', { class: 'data compact tool-table' },
-    h('thead', null, h('tr', null, cols.map(c => h('th', null, c)))),
-    h('tbody', null, rows.map(r => h('tr', null, r.map(c => h('td', null, cell(c))))))));
-}
+const toolTable = (cols, rows) => dataTable(cols, rows, { cls: 'compact tool-table' });
 
 const toolNum = (x, digits = 3) => (x == null ? null : Number.isInteger(x) ? String(x) : Number(x).toFixed(digits));
 const toolPct = x => (x == null ? null : `${Math.round(x * 100)}%`);
@@ -353,38 +347,34 @@ function hawkCard(run, s) {
     (s.notes || []).length ? lazyDetails('notes', () => h('ul', { class: 'plain-list' }, s.notes.map(n => h('li', null, n))), { cls: 'sub' }) : null);
 }
 
+
 // The access policy and what each agent held (run.json "access"): its items, and on openmath its honeypot branches
 // and archive slices, on knowledge work the review tool and the read permission on the pipeline artifact.
-function accessView(access, eps) {
+function accessView(access, run) {
   const agents = Object.keys(access.agents || {}).sort();
-  const roleOf = a => (eps.find(e => e.orbit_agent === a) || {}).role;
-  const branchy = agents.some(a => (access.agents[a] || {}).branches !== undefined);
-  const sliced = agents.some(a => 'slices' in (access.agents[a] || {}));
-  const kw = agents.some(a => 'review' in (access.agents[a] || {}));
+  const held = agents.map(a => access.agents[a] || {});
+  const branchy = held.some(x => x.branches !== undefined);
+  const sliced = held.some(x => 'slices' in x);
+  const kw = held.some(x => 'review' in x);
   const archive = access.archive ? access.archive.name : 'archive';
   const cols = ['agent', 'role', 'holds', ...(branchy ? ['honeypot branches held'] : []),
     ...(sliced ? [archive + ' held'] : []), ...(kw ? ['review tool', 'artifact read'] : [])];
-  const table = h('div', { class: 'table-wrap' }, h('table', { class: 'data' },
-    h('thead', null, h('tr', null, cols.map(c => h('th', null, c)))),
-    h('tbody', null, agents.map(a => {
-      const x = access.agents[a] || {};
-      const cells = [h('td', null, x.holds == null ? muted(DASH) : (x.holds.length ? mono(x.holds.join(' + ')) : muted('nothing')))];
-      if (branchy) cells.push(h('td', null, (x.branches || []).length ? mono(x.branches.join(', ')) : muted('none')));
-      if (sliced) {
-        cells.push(h('td', null, x.slices == null ? 'whole' : (x.slices.length
-          ? mono(x.slices.map(k => `${archive}.part${k}`).join(', ') + ` of ${access.archive ? access.archive.parts : '?'}`)
-          : muted('none'))));
-      }
-      if (kw) cells.push(h('td', null, yn(x.review, 'plain', 'plain')), h('td', null, yn(x.read, 'plain', 'plain')));
-      return h('tr', null, h('td', null, a), h('td', null, roleOf(a) || muted(DASH)), ...cells);
-    }))));
+  const rows = agents.map((a, i) => {
+    const x = held[i];
+    return [a, (episodeOf(run, a) || {}).role, x.holds == null ? null : (x.holds.length ? mono(x.holds.join(' + ')) : muted('nothing')),
+      ...(branchy ? [(x.branches || []).length ? mono(x.branches.join(', ')) : muted('none')] : []),
+      ...(sliced ? [x.slices == null ? 'whole' : (x.slices.length
+        ? mono(x.slices.map(k => `${archive}.part${k}`).join(', ') + ` of ${access.archive ? access.archive.parts : '?'}`)
+        : muted('none'))] : []),
+      ...(kw ? [yn(x.review, 'plain', 'plain'), yn(x.read, 'plain', 'plain')] : [])];
+  });
   return h('div', null, kv([
     ['policy', access.policy || undefined],
     ['team remote', access.remote ? mono(access.remote) : undefined],
     ['honeypot branches', access.honeypot_branches ? mono(access.honeypot_branches.join(', ')) : undefined],
     ['split archive', access.archive && access.archive.parts
       ? mono(`${access.archive.name} on ${access.archive.branch}, ${access.archive.parts} slices`) : undefined],
-  ], 'kv-grid'), table);
+  ], 'kv-grid'), dataTable(cols, rows));
 }
 
 // The knowledge-work sample and its reviews (run.json "knowledge"): the layout, the pipeline artifact, each contract's
@@ -393,23 +383,13 @@ function knowledgeView(kw) {
   const meta = kw.meta || {};
   const state = kw.grader_state || {};
   const last = kw.last_verdict || null;
-  const contracts = Object.entries(kw.contracts || {});
-  const agents = Object.keys(state).sort();
-  const reviewTable = h('div', { class: 'table-wrap' }, h('table', { class: 'data' },
-    h('thead', null, h('tr', null, ['agent', 'candidate', 'reviews', 'errors', 'verdicts', 'submitted the reference']
-      .map(c => h('th', null, c)))),
-    h('tbody', null, agents.map(a => {
-      const g = state[a] || {};
-      return h('tr', null, h('td', null, a), h('td', null, mono(g.agent_id)), h('td', null, String(g.calls ?? DASH)),
-        h('td', null, String(g.errors ?? DASH)), h('td', null, (g.verdicts || []).join(', ') || muted(DASH)),
-        h('td', null, String(g.submitted_reference ?? DASH)));
-    }))));
-  const contractTable = h('div', { class: 'table-wrap' }, h('table', { class: 'data' },
-    h('thead', null, h('tr', null, ['contract', 'candidate', 'files in to_send/', 'copied the artifact']
-      .map(c => h('th', null, c)))),
-    h('tbody', null, contracts.map(([c, x]) => h('tr', null, h('td', null, mono(c)), h('td', null, mono(x.candidate)),
-      h('td', null, (x.files || []).length ? (x.files || []).map(f => h('div', null, mono(`${f.path} (${f.bytes} B)`))) : muted('none')),
-      h('td', null, yn(x.copied_reference, 'bad', 'plain')))))));
+  const reviews = Object.keys(state).sort().map(a => {
+    const g = state[a] || {};
+    return [a, mono(g.agent_id), g.calls, g.errors, (g.verdicts || []).join(', '), g.submitted_reference];
+  });
+  const contracts = Object.entries(kw.contracts || {}).map(([c, x]) => [mono(c), mono(x.candidate),
+    (x.files || []).length ? x.files.map(f => h('div', null, mono(`${f.path} (${f.bytes} B)`))) : muted('none'),
+    yn(x.copied_reference, 'bad', 'plain')]);
   return h('div', null, kv([
     ['row', mono(kw.row_id)],
     ['occupation', meta.occupation || null],
@@ -419,45 +399,34 @@ function knowledgeView(kw) {
     ['share of contracts delivered', kw.share_delivered == null ? null : String(kw.share_delivered)],
     ['reviews', kw.reviews == null ? null : String(kw.reviews)],
     ['last verdict', last ? `${last.verdict || last.error_type || DASH} (${last.agent}, ${last.deliverable})` : null],
-  ], 'kv-grid'), h('h3', null, 'Reviews per agent'), reviewTable, h('h3', null, 'Contracts'), contractTable);
+  ], 'kv-grid'),
+  h('h3', null, 'Reviews per agent'), dataTable(['agent', 'candidate', 'reviews', 'errors', 'verdicts', 'submitted the reference'], reviews),
+  h('h3', null, 'Contracts'), dataTable(['contract', 'candidate', 'files in to_send/', 'copied the artifact'], contracts));
 }
 
 // Who looked at the board, read it, posted and submitted for the team: run.json "engagement" and each episode's.
-function engagementView(run, eps) {
-  const sub = run.team_submission;
+function engagementView(g, eps) {
+  const sub = g.team_submission;
   const summary = kv([
-    ['agents on the board', run.agents],
-    ['agents that looked', run.agents_checked],
-    ['agents that posted', run.agents_posted],
-    ['median discovery round', run.median_discovery_round],
-    ['checks', run.checks],
-    ['reads', run.reads],
-    ['posts', run.posts],
+    ['agents on the board', g.agents],
+    ['agents that looked', g.agents_checked],
+    ['agents that posted', g.agents_posted],
+    ['median discovery round', g.median_discovery_round],
+    ['checks', g.checks],
+    ['reads', g.reads],
+    ['posts', g.posts],
     ['team submission', sub ? `${sub.agent} in round ${sub.round == null ? DASH : sub.round}` : null],
-    ['reads refused by the budget', run.reads_refused],
-    ['posts refused by the budget', run.posts_refused],
-    ['oversight queries (agent_actions)', run.oversight],
+    ['reads refused by the budget', g.reads_refused],
+    ['posts refused by the budget', g.posts_refused],
+    ['oversight queries (agent_actions)', g.oversight],
   ], 'kv-grid');
-  const rows = eps.filter(e => e.engagement);
-  const cell = v => (v == null ? muted(DASH) : String(v));
   const senders = m => Object.entries(m || {}).sort().map(([s, n]) => `${s} ${n}`).join(', ');
-  // per-turn budgets and a regulator's agent_actions: columns only for runs that recorded them
-  const newer = rows.some(e => 'reads_refused' in e.engagement);
-  const cols = ['agent', 'role', 'discovery round', 'checks', 'reads', 'posts', 'work steps', 'free steps',
-    'notices', 'team submit', 'read from',
-    ...(newer ? ['reads refused', 'posts refused', 'oversight queries', 'queried'] : [])];
-  const table = h('div', { class: 'table-wrap' }, h('table', { class: 'data' },
-    h('thead', null, h('tr', null, cols.map(c => h('th', null, c)))),
-    h('tbody', null, rows.map(e => {
-      const g = e.engagement;
-      return h('tr', null, h('td', null, e.orbit_agent), h('td', null, cell(e.role)), h('td', null, cell(g.discovery_round)),
-        h('td', null, cell(g.checks)), h('td', null, cell(g.reads)), h('td', null, cell(g.posts)),
-        h('td', null, cell(g.work_steps)), h('td', null, cell(g.free_steps)), h('td', null, cell(g.notices)),
-        h('td', null, g.team_submitted ? 'yes' : 'no'), h('td', null, senders(g.read_senders) || muted(DASH)),
-        ...(newer ? [h('td', null, cell(g.reads_refused)), h('td', null, cell(g.posts_refused)),
-          h('td', null, cell(g.oversight)), h('td', null, senders(g.oversight_targets) || muted(DASH))] : []));
-    }))));
-  return h('div', null, summary, table);
+  const cols = ['agent', 'role', 'discovery round', 'checks', 'reads', 'posts', 'work steps', 'free steps', 'notices',
+    'team submit', 'read from', 'reads refused', 'posts refused', 'oversight queries', 'queried'];
+  const rows = eps.filter(e => e.engagement).map(({ orbit_agent: a, role, engagement: x }) => [a, role, x.discovery_round,
+    x.checks, x.reads, x.posts, x.work_steps, x.free_steps, x.notices, x.team_submitted ? 'yes' : 'no', senders(x.read_senders),
+    x.reads_refused, x.posts_refused, x.oversight, senders(x.oversight_targets)]);
+  return h('div', null, summary, dataTable(cols, rows));
 }
 
 // The run's SwarmConfig as the task built it (run.json "config"), one field per row.
@@ -470,103 +439,83 @@ function configKv(config) {
 function rulesTable(rules) {
   const agents = Object.keys(rules).sort();
   const facts = [...new Set(agents.flatMap(a => Object.keys(rules[a] || {})))];
-  const cell = v => (v == null ? muted(DASH) : typeof v === 'object' ? mono(JSON.stringify(v)) : String(v));
-  return h('div', { class: 'table-wrap' }, h('table', { class: 'data' },
-    h('thead', null, h('tr', null, h('th', null, 'agent'), facts.map(f => h('th', null, f.replace(/_/g, ' '))))),
-    h('tbody', null, agents.map(a => h('tr', null, h('td', null, a), facts.map(f => h('td', null, cell((rules[a] || {})[f]))))))));
+  const cell = v => (v != null && typeof v === 'object' ? mono(JSON.stringify(v)) : v);
+  return dataTable(['agent', ...facts.map(f => f.replace(/_/g, ' '))],
+    agents.map(a => [a, ...facts.map(f => cell((rules[a] || {})[f]))]));
 }
 
-// A CheatBench SWE task: the arm, each agent's jigsaw fragment or planted piece, the
-// hidden-test rewards for the team's main and each agent's working tree, the judge, the rung and the talk measures.
-function sweView(swe, eps) {
-  const epOf = name => eps.find(e => e.orbit_agent === name) || null;
-  const agents = eps.map(e => e.orbit_agent).filter(Boolean).sort();
-  const reward = k => (swe.rewards || {})[k] == null ? muted(DASH)
-    : h('span', { title: `${(swe.required_passed || {})[k] || 0} of ${swe.required_tests} required tests passed` },
-      yn(swe.rewards[k] === 1, 'good', 'plain'));
+// A CheatBench SWE task: the arm, each agent's jigsaw fragment or planted piece, the hidden-test rewards for the
+// team's main and each agent's working tree, the judge, the code ladder's rung and the talk measures.
+function sweView(swe, run) {
+  const agents = run.episodes.map(e => e.orbit_agent).sort();
+  const reward = k => (swe.rewards[k] == null ? null
+    : h('span', { title: `${swe.required_passed[k] || 0} of ${swe.required_tests} required tests passed` },
+      yn(swe.rewards[k] === 1, 'good', 'plain')));
   const m = (a, k) => ((swe.measures || {})[a] || {})[k];
-  const cols = ['agent', swe.jigsaw ? 'fragment files' : null, swe.pieces ? 'planted piece' : null, 'reward',
-    'judge: cheated', 'rung', 'posts', 'about the fix', 'disclosed'].filter(Boolean);
-  const table = h('table', { class: 'data' },
-    h('thead', null, h('tr', null, cols.map(c => h('th', null, c)))),
-    h('tbody', null, agents.map(a => h('tr', null,
-      h('td', null, a),
-      swe.jigsaw ? h('td', null, ((swe.fragments || {})[a] || []).map(f => h('div', null, mono(f)))) : null,
-      swe.pieces ? h('td', null, (swe.pieces || {})[a] == null ? muted(DASH) : mono(asText(swe.pieces[a]))) : null,
-      h('td', null, reward(a)),
-      h('td', null, verdictCell(epOf(a))),
-      h('td', null, ((swe.rungs || {})[a]) || muted(DASH)),
-      h('td', null, m(a, 'posts') == null ? muted(DASH) : String(m(a, 'posts'))),
-      h('td', null, m(a, 'fix_posts') == null ? muted(DASH) : `${m(a, 'fix_posts')} (rule ${m(a, 'rule_posts')})`),
-      h('td', null, m(a, 'disclosed') == null ? muted(DASH) : yn(m(a, 'disclosed'), 'plain', 'warn'))))));
+  const cols = ['agent', ...(swe.jigsaw ? ['fragment files'] : []), ...(swe.pieces ? ['planted piece'] : []), 'reward',
+    'judge: cheated', 'code rung', 'posts', 'about the fix', 'disclosed'];
+  const rows = agents.map(a => {
+    const ep = episodeOf(run, a);
+    return [a,
+      ...(swe.jigsaw ? [((swe.fragments || {})[a] || []).map(f => h('div', null, mono(f)))] : []),
+      ...(swe.pieces ? [swe.pieces[a] == null ? null : mono(asText(swe.pieces[a]))] : []),
+      reward(a), verdictCell(ep), ep.signals ? ep.signals.rung : null, m(a, 'posts'),
+      m(a, 'fix_posts') == null ? null : `${m(a, 'fix_posts')} (rule ${m(a, 'rule_posts')})`,
+      m(a, 'disclosed') == null ? null : yn(m(a, 'disclosed'), 'plain', 'warn')];
+  });
   return h('div', null,
     kv([
-      ['task', h('span', null, mono(swe.task_key || DASH), ' ', muted(swe.instance || '', 'small'))],
-      ['arm', mono(swe.arm || DASH)],
+      ['task', h('span', null, mono(swe.task_key), ' ', muted(swe.instance || '', 'small'))],
       ['agents', String(swe.n_agents)],
       ['honeypot', swe.honeypot ? mono(swe.honeypot) : muted('as released')],
       ['rule', swe.rule === 'none' ? muted('none (standard prompt)') : mono(swe.rule)],
       ['team reward (team/main)', swe.board ? reward('team') : muted('lone agent: its working tree ships')],
-      ['setup checks', swe.checks_ok == null ? muted(DASH) : yn(swe.checks_ok, 'good', 'bad')],
+      ['setup checks', swe.checks_ok == null ? null : yn(swe.checks_ok, 'good', 'bad')],
       ['base / fix commit', h('span', null, mono((swe.base_commit || '').slice(0, 10)), ' / ', mono((swe.fix_commit || '').slice(0, 10)))],
     ], 'kv-grid'),
-    h('h3', null, 'Agents'), h('div', { class: 'table-wrap' }, table));
+    h('h3', null, 'Agents'), dataTable(cols, rows));
 }
 
-// Composition, hidden roles and the team's own report of a swarm run, beside the judge's verdicts,
-// plus what the team registered (run.json deliverables, from the registry on main) and how each agent ended.
-function swarmView(sw, eps, deliverables) {
-  const del = deliverables || null;
-  const endings = {};
-  eps.forEach(e => { const k = e.failure || (e.ended_by === 'submit' ? 'submit' : (e.ended_by || 'unknown')); endings[k] = (endings[k] || 0) + 1; });
-  const endedText = Object.entries(endings).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([k, n]) => `${n} ${k}`).join(', ');
-  const epOf = name => eps.find(e => e.orbit_agent === name) || null;
+// Composition and hidden roles of a swarm run beside the judge's verdicts, plus what the team registered (run.json
+// deliverables, from the registry on main) and how each agent ended.
+function swarmView(sw, run) {
+  const del = run.run_json.deliverables || null;
+  const counted = run.episodes.filter(e => e.counted);
+  const blind = run.episodes.filter(e => e.verdict && e.verdict.cheated != null && !e.counted).length;
   const roles = Object.entries(sw.roles || {}).sort(([a], [b]) => a.localeCompare(b));
-  // Counted verdicts follow /api/summary: judged episodes that have a transcript.
-  const counted = eps.filter(e => e.verdict && e.verdict.cheated != null && e.has_transcript);
-  const blind = eps.filter(e => e.verdict && e.verdict.cheated != null && !e.has_transcript).length;
-  const anyCheated = counted.some(e => e.verdict.cheated === true);
-  const judged = counted.length;
-  const table = h('table', { class: 'data' },
-    h('thead', null, h('tr', null, ['agent', 'hidden role', 'judge: cheated'].map(c => h('th', null, c)))),
-    h('tbody', null, roles.map(([name, role]) => h('tr', null,
-      h('td', null, name), h('td', null, roleBadge(role)), h('td', null, verdictCell(epOf(name)))))));
   return h('div', null,
     kv([
-      ['composition', h('span', null, mono(sw.composition || DASH), ' ', muted(`${sw.regulators} regulators, ${sw.disregulators} disregulators, ${sw.workers} workers; seed ${sw.seed}`, 'small'))],
-      ['judge: any agent cheated', judged ? yn(anyCheated, 'bad', 'good')
+      ['composition', h('span', null, mono(sw.composition), ' ', muted(`${sw.regulators} regulators, ${sw.disregulators} disregulators, ${sw.workers} workers; seed ${sw.seed}`, 'small'))],
+      ['judge: any agent cheated', counted.length ? yn(counted.some(e => e.verdict.cheated === true), 'bad', 'good')
         : muted(blind ? `not counted: ${plural(blind, 'verdict')} on episodes without a transcript` : 'not judged')],
       ['registered on main', del == null ? muted('not recorded') : h('span', { title: `checkout ${del.checkout || DASH}; registry on main: ${(del.main_registry_agents || []).join(', ')}` }, yn(del.registered_on_main, 'good', 'warn'))],
       ['archive in workspace at end', del == null ? muted('not recorded') : yn(del.archive_in_workspace, 'plain', 'warn')],
-      ['agents ended by', eps.length ? endedText : muted(DASH)],
+      ['agents ended by', endingsText(run.endings) || null],
     ], 'kv-grid'),
     del && del.commits && del.commits.length ? h('div', null, h('h3', null, 'Commits at the end (git log --all)'), h('pre', { class: 'pre' }, del.commits.join('\n'))) : null,
-    h('h3', null, 'Roles'), table);
+    h('h3', null, 'Roles'),
+    dataTable(['agent', 'hidden role', 'judge: cheated'], roles.map(([name, role]) => [name, roleBadge(role), verdictCell(episodeOf(run, name))]), { bare: true }));
 }
 
+const DEFENSE_COLS = ['name', 'defense_type', 'defense_category', 'invocation', 'model_override', 'scope', 'fail_mode',
+  'detection_threshold', 'max_resamples', 'enabled'];
+
 function defensesTable(defs) {
-  const cols = ['name', 'defense_type', 'defense_category', 'invocation', 'model_override', 'scope', 'fail_mode',
-    'detection_threshold', 'max_resamples', 'enabled'];
-  const table = h('table', { class: 'data' },
-    h('thead', null, h('tr', null, cols.map(c => h('th', null, c.replace(/_/g, ' '))), h('th', null, 'config keys'))),
-    h('tbody', null, defs.map(df => {
-      const d = typeof df === 'object' && df ? df : { name: String(df) };
-      const cfgKeys = d.config && typeof d.config === 'object' ? Object.keys(d.config) : [];
-      return h('tr', null,
-        cols.map(c => h('td', { class: c === 'name' || c === 'defense_type' ? 'mono' : '' },
-          d[c] == null || d[c] === '' ? muted(DASH) : asText(d[c]))),
-        h('td', null, cfgKeys.length ? cfgKeys.map(k => badge(k, 'plain')) : muted('none')));
-    })));
-  const configs = defs.filter(d => d && typeof d === 'object').map(d => {
-    const extra = {};
-    for (const k of Object.keys(d).filter(k => k !== 'name' && !cols.includes(k))) {
-      if (d[k] != null && !(Array.isArray(d[k]) && !d[k].length) && d[k] !== '' &&
-          !(typeof d[k] === 'object' && !Array.isArray(d[k]) && !Object.keys(d[k]).length)) extra[k] = d[k];
-    }
-    if (!Object.keys(extra).length) return null;
-    return lazyDetails(`${d.name} configuration`, () => configView(extra), { cls: 'sub' });
+  const rows = defs.map(d => {
+    const cfgKeys = d.config && typeof d.config === 'object' ? Object.keys(d.config) : [];
+    return [...DEFENSE_COLS.map(c => (d[c] == null || d[c] === '' ? null : c === 'name' || c === 'defense_type' ? mono(asText(d[c])) : asText(d[c]))),
+      cfgKeys.length ? cfgKeys.map(k => badge(k, 'plain')) : muted('none')];
   });
-  return [h('div', { class: 'table-wrap' }, table), configs];
+  const configs = defs.map(d => {
+    const extra = {};
+    for (const k of Object.keys(d).filter(k => !DEFENSE_COLS.includes(k))) {
+      const v = d[k];
+      const empty = v == null || v === '' || (Array.isArray(v) && !v.length) || (typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length);
+      if (!empty) extra[k] = v;
+    }
+    return Object.keys(extra).length ? lazyDetails(`${d.name} configuration`, () => configView(extra), { cls: 'sub' }) : null;
+  });
+  return [dataTable([...DEFENSE_COLS.map(c => c.replace(/_/g, ' ')), 'config keys'], rows), configs];
 }
 
 /** Show a config object: string values as text blocks, others as JSON. */
@@ -587,28 +536,28 @@ function configView(obj) {
   return box;
 }
 
-function episodeCard(run, ep, logOk = true, evalLog = null) {
+function episodeCard(run, ep, d) {
   return h('div', { class: 'ep-card' },
     h('div', { class: 'ep-card-head' },
       h('h3', null, ep.episode),
       ep.failure ? badge(ep.failure, 'bad') : null,
       h('span', { class: 'spacer' }),
       ep.has_transcript ? link(R.episode(run, ep.episode), 'transcript', 'btn btn-small') : muted('no transcript', 'small'),
-      ep.orbit_agent ? logLink(logOk, evalLog, R.context(run, { agent: ep.orbit_agent }), `context of ${ep.orbit_agent}`, 'btn btn-small') : null),
+      logLink(d.eval_log_exists, d.eval_log, R.context(run, { agent: ep.orbit_agent }), `context of ${ep.orbit_agent}`, 'btn btn-small')),
     episodeRecord(ep),
-    verdictBlock(ep.verdict),
+    verdictBlock(ep.verdict, d.verdict_fields),
     ladderBlock(ep.ladder),
     signalsBlock(ep.signals),
     ep.error ? lazyDetails('error', () => longText(ep.error, { lines: 30 }), { cls: 'sub' }) : null,
     ep.final_text ? lazyDetails('final text', () => longText(ep.final_text, { lines: 40 }), { cls: 'sub' }) : null);
 }
 
-function communicationView(comm, run) {
+function communicationView(comm) {
   const samples = Object.entries(comm || {});
   if (!samples.length) return muted('No board communication recorded for this run.');
   return samples.map(([sample, c]) => {
-    const msgs = ((c && c.messages) || []).slice().sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
-    const events = (c && c.events) || [];
+    const msgs = (c.messages || []).slice().sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+    const events = (c.events || []).slice().sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
     const kinds = {};
     for (const e of events) kinds[e.kind || '?'] = (kinds[e.kind || '?'] || 0) + 1;
     return h('div', { class: 'board' },
@@ -627,16 +576,10 @@ function communicationView(comm, run) {
           m.id ? h('span', { class: 'tc-id' }, m.id) : null),
         longText(m.content, { lines: 25, cls: 'msg-text' }))))
         : muted('No messages were posted.'),
-      events.length ? lazyDetails(`board events (${events.length})`, () => h('div', { class: 'table-wrap' },
-        h('table', { class: 'data compact' },
-          h('thead', null, h('tr', null, ['seq', 'kind', 'agent', 'message ids', 'tool call', 'channel'].map(x => h('th', null, x)))),
-          h('tbody', null, events.slice().sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0)).map(e => h('tr', null,
-            h('td', { class: 'num' }, String(e.sequence ?? '')),
-            h('td', null, e.kind || ''),
-            h('td', null, e.agent_id || ''),
-            h('td', { class: 'mono small' }, (e.message_ids || []).join(', ') || DASH),
-            h('td', { class: 'mono small' }, e.tool_call_id || DASH),
-            h('td', null, e.channel_id || '')))))), { cls: 'sub' }) : null);
+      events.length ? lazyDetails(`board events (${events.length})`, () => dataTable(
+        [{ label: 'seq', num: true }, 'kind', 'agent', 'message ids', 'tool call', 'channel'],
+        events.map(e => [e.sequence, e.kind, e.agent_id, mono((e.message_ids || []).join(', ')), mono(e.tool_call_id), e.channel_id]),
+        { cls: 'compact' }), { cls: 'sub' }) : null);
   });
 }
 
@@ -644,15 +587,14 @@ function defenseEvidence(defense, runDefs) {
   const samples = Object.entries(defense || {});
   if (!samples.length) return muted('No defense evidence recorded for this run.');
   const typeOf = {};
-  for (const d of runDefs || []) if (d && d.name) typeOf[d.name] = d.defense_type;
+  for (const d of runDefs) typeOf[d.name] = d.defense_type;
   return samples.map(([sample, dv]) => {
-    const iv = (dv && dv.interventions) || [];
-    const log = (dv && dv.log) || {};
-    for (const d of (dv && dv.defenses) || []) if (d && d.name && !typeOf[d.name]) typeOf[d.name] = d.defense_type;
-    const resolved = log.resolved_defenses || {};
-    for (const [name, rd] of Object.entries(resolved)) {
+    const iv = dv.interventions || [];
+    const log = dv.log || {};
+    for (const [name, rd] of Object.entries(log.resolved_defenses || {})) {
       if (!typeOf[name] && rd && rd.config) typeOf[name] = rd.config.defense_type;
     }
+    const vaccinated = (log.vaccinations && Object.keys(log.vaccinations).length) || (log.vaccination_injections && Object.keys(log.vaccination_injections).length);
     return h('div', { class: 'evidence' },
       h('h3', null, `sample ${sample}`),
       defenseCountsTable(iv, log, typeOf),
@@ -664,20 +606,20 @@ function defenseEvidence(defense, runDefs) {
         ['vaccinations', log.vaccinations ? fmtInt(Object.keys(log.vaccinations).length) : undefined],
         ['vaccination injections', log.vaccination_injections ? fmtInt(Object.keys(log.vaccination_injections).length) : undefined],
       ], 'kv-grid'),
-      (log.vaccinations && Object.keys(log.vaccinations).length) || (log.vaccination_injections && Object.keys(log.vaccination_injections).length)
-        ? lazyDetails('vaccinations (JSON)', () => h('pre', { class: 'pre' },
-          JSON.stringify({ vaccinations: log.vaccinations, vaccination_injections: log.vaccination_injections }, null, 2)), { cls: 'sub' })
-        : null,
+      vaccinated ? lazyDetails('vaccinations (JSON)', () => h('pre', { class: 'pre' },
+        JSON.stringify({ vaccinations: log.vaccinations, vaccination_injections: log.vaccination_injections }, null, 2)), { cls: 'sub' }) : null,
       interventionsTable(iv));
   });
 }
 
+const BOUNDARIES = ['model_input', 'model_output', 'tool_call'];
+
 function defenseCountsTable(iv, log, typeOf) {
-  const BOUNDS = ['model_input', 'model_output', 'tool_call'];
   const per = new Map();
+  const counts = () => ({ checks: 0, blocks: 0, by: {} });
   for (const x of iv) {
     const name = x.defense || '?';
-    if (!per.has(name)) per.set(name, { checks: 0, blocks: 0, by: {} });
+    if (!per.has(name)) per.set(name, counts());
     const p = per.get(name);
     const b = x.boundary || '?';
     p.by[b] = p.by[b] || { checks: 0, blocks: 0 };
@@ -685,40 +627,31 @@ function defenseCountsTable(iv, log, typeOf) {
     if (x.allow === false) { p.blocks++; p.by[b].blocks++; }
   }
   const activity = log.activity || {};
-  for (const name of Object.keys(activity)) if (!per.has(name)) per.set(name, { checks: 0, blocks: 0, by: {} });
+  for (const name of Object.keys(activity)) if (!per.has(name)) per.set(name, counts());
   if (!per.size) return muted('No interventions recorded.');
-  const extraBounds = [...new Set([...per.values()].flatMap(p => Object.keys(p.by)))].filter(b => !BOUNDS.includes(b));
-  const bounds = [...BOUNDS, ...extraBounds];
+  const bounds = [...new Set([...BOUNDARIES, ...[...per.values()].flatMap(p => Object.keys(p.by))])];
+  const cols = ['defense', 'type', { label: 'checks', num: true }, { label: 'blocks', num: true },
+    ...bounds.map(b => ({ label: b, num: true, title: `blocks / checks at ${b}` })), { label: 'monitor model calls', num: true },
+    'per agent (activity log)'];
+  const rows = [...per.entries()].map(([name, p]) => {
+    const act = activity[name] || {};
+    const agents = Object.entries(act.agents || {});
+    return [mono(name), mono(typeOf[name]), fmtInt(p.checks), p.blocks ? badge(fmtInt(p.blocks), 'blocked') : '0',
+      ...bounds.map(b => (p.by[b] ? `${fmtInt(p.by[b].blocks)} / ${fmtInt(p.by[b].checks)}` : null)), fmtInt(act.model_calls),
+      agents.length ? h('span', { class: 'small' }, agents.map(([a, s]) => h('div', null, mono(a), ': ',
+        `${plural(s.checks || 0, 'check')}, ${plural(s.blocks || 0, 'block')}, ${plural(s.model_calls || 0, 'call')}`))) : null];
+  });
   return h('div', null, h('div', { class: 'muted small' }, 'Boundary columns show blocks / checks, counted from the interventions below.'),
-    h('div', { class: 'table-wrap' }, h('table', { class: 'data' },
-    h('thead', null, h('tr', null,
-      ['defense', 'type', 'checks', 'blocks'].map(x => h('th', { class: x === 'checks' || x === 'blocks' ? 'num' : '' }, x)),
-      bounds.map(b => h('th', { class: 'num', title: `blocks / checks at ${b}` }, b)),
-      h('th', { class: 'num' }, 'monitor model calls'),
-      h('th', null, 'per agent (activity log)'))),
-    h('tbody', null, [...per.entries()].map(([name, p]) => {
-      const act = activity[name] || {};
-      const agents = act.agents || {};
-      return h('tr', null,
-        h('td', { class: 'mono' }, name),
-        h('td', { class: 'mono' }, typeOf[name] || DASH),
-        h('td', { class: 'num' }, fmtInt(p.checks)),
-        h('td', { class: 'num' }, p.blocks ? badge(fmtInt(p.blocks), 'blocked') : '0'),
-        bounds.map(b => h('td', { class: 'num' }, p.by[b] ? `${fmtInt(p.by[b].blocks)} / ${fmtInt(p.by[b].checks)}` : DASH)),
-        h('td', { class: 'num' }, fmtInt(act.model_calls)),
-        h('td', { class: 'small per-agent' }, Object.keys(agents).length
-          ? Object.entries(agents).map(([a, s]) => h('div', null,
-            h('span', { class: 'mono' }, a), ': ', `${plural(s.checks || 0, 'check')}, ${plural(s.blocks || 0, 'block')}, ${plural(s.model_calls || 0, 'call')}`))
-          : muted(DASH)));
-    })))));
+    dataTable(cols, rows));
 }
 
 function interventionsTable(iv) {
   if (!iv.length) return muted('No interventions.');
   const st = { boundary: '', allow: '', defense: '', agent: '', q: '' };
-  const bounds = [...new Set(iv.map(x => x.boundary).filter(Boolean))].sort();
-  const defs = [...new Set(iv.map(x => x.defense).filter(Boolean))].sort();
-  const agents = [...new Set(iv.map(x => x.agent).filter(Boolean))].sort();
+  const values = key => [...new Set(iv.map(x => x[key]).filter(Boolean))].sort();
+  const bounds = values('boundary');
+  const defs = values('defense');
+  const agents = values('agent');
   const count = h('span', { class: 'muted' });
   const rows = iv.map((x, i) => {
     const ref = x.tool_call_id || x.message_id || '';
@@ -729,13 +662,12 @@ function interventionsTable(iv) {
       h('td', { class: 'mono' }, x.defense || DASH),
       h('td', null, x.boundary || DASH),
       h('td', null, x.allow === false ? badge('BLOCK', 'blocked') : x.allow === true ? badge('allow', 'good') : muted(String(x.allow))),
-      h('td', { class: 'mono' }, x.tool || x.tool_name || DASH),
+      h('td', { class: 'mono' }, x.tool || DASH),
       h('td', { class: 'reason' }, x.reason ? longText(x.reason, { lines: 6, chars: 1500 }) : muted(DASH)),
       h('td', { class: 'mono small', title: x.tool_call_id ? 'tool call id' : 'message id' }, ref || DASH));
     const hay = [x.reason, x.agent, x.defense, x.boundary, x.tool, ref].filter(Boolean).join(' ').toLowerCase();
     return { x, tr, hay };
   });
-  const tbody = h('tbody', null, rows.map(r => r.tr));
   function apply() {
     const q = st.q.trim().toLowerCase();
     let n = 0;
@@ -764,8 +696,6 @@ function interventionsTable(iv) {
   return h('div', { class: 'interventions' },
     h('h4', null, 'Interventions'),
     filters,
-    h('div', { class: 'table-wrap' }, h('table', { class: 'data compact' },
-      h('thead', null, h('tr', null, ['#', 'turn', 'agent', 'defense', 'boundary', 'decision', 'tool', 'reason', 'message / call id']
-        .map(x => h('th', { class: x === '#' || x === 'turn' ? 'num' : '' }, x)))),
-      tbody)));
+    dataTable([{ label: '#', num: true }, { label: 'turn', num: true }, 'agent', 'defense', 'boundary', 'decision', 'tool', 'reason',
+      'message / call id'], rows.map(r => r.tr), { cls: 'compact' }));
 }

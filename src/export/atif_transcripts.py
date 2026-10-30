@@ -18,7 +18,8 @@ and are recovered from them:
     turn_rules_filter.py writes each one as an info event right after its ModelEvent, in the same span;
   * per-agent token usage.
 
-The text helpers split_content and tool_result_text are shared with the results browser.
+The results browser (src/ui) reads eval logs through the same helpers: split_content, tool_result_text,
+output_message and the defense texts here, span_owners, blocked_message_ids and usage_dict in eval_sample_view.py.
 """
 from __future__ import annotations
 
@@ -111,11 +112,16 @@ def tool_result_text(result) -> str:
     return text
 
 
-def output_message_id(model_event) -> str | None:
-    """Id of the assistant message a model call produced, or None when it produced no choice."""
+def output_message(model_event):
+    """The assistant message a model call produced, or None when it produced no choice."""
     if model_event.output and model_event.output.choices:
-        return model_event.output.message.id
+        return model_event.output.message
     return None
+
+
+def output_message_id(model_event) -> str | None:
+    message = output_message(model_event)
+    return message.id if message else None
 
 
 # --------------------------------------------------------------------------

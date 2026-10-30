@@ -35,7 +35,7 @@ export async function viewSample({ run }, view) {
     ['sample', s.sample_id != null ? `${s.sample_id} (epoch ${s.epoch})` : null],
     ['total time', fmtSecs(s.total_time)],
     ['working time', fmtSecs(s.working_time)],
-    ['limit', lim ? `${lim.type}${lim.limit != null ? ' ' + lim.limit : ''}${lim.message ? ': ' + lim.message : ''}` : null],
+    ['limit', lim ? `${lim.type}${lim.limit != null ? ' ' + lim.limit : ''}${lim.reason ? ': ' + lim.reason : ''}` : null],
     ['messages', fmtInt(s.n_messages)],
     ['events', fmtInt(s.n_events)],
   ], 'kv-grid'),

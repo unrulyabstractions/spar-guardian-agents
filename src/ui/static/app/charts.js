@@ -1,12 +1,11 @@
 /* Chart helpers of the results browser.
- * They hold the SVG builder, the role glyphs, the shared tooltip, the colour ramp and the axis ticks.
+ * They hold the SVG builder, the role glyphs, the shared tooltip, the colour ramp, the axis ticks, the legend
+ * glyphs and a small job queue.
  *
  *   import { svgEl, withTip } from './charts.js';
  *   const box = svgEl('svg', { width: 200, height: 40 });
  */
 import { appendAll, h } from './dom.js';
-import { R } from './api.js';
-import { lgSvgWide } from './view_summary.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 let vizUid = 0;
@@ -157,12 +156,14 @@ export function vizLegend(items, cls) {
   return h('div', { class: ['viz-legend', cls] }, items.filter(Boolean).map(([glyph, label, title]) =>
     h('span', { class: 'lg-item', title }, glyph, h('span', null, label))));
 }
+/** A legend glyph 14 px tall: lgSvg(...marks) is 20 px wide, lgSvg(width, ...marks) as wide as asked. */
 export function lgSvg(...children) {
-  return svgEl('svg', { class: 'lg-glyph viz', width: 20, height: 14, viewBox: '0 0 20 14', 'aria-hidden': 'true' }, ...children);
+  const w = typeof children[0] === 'number' ? children.shift() : 20;
+  return svgEl('svg', { class: 'lg-glyph viz', width: w, height: 14, viewBox: `0 0 ${w} 14`, 'aria-hidden': 'true' }, ...children);
 }
 /** Worker, regulator and disregulator shapes side by side; cls replaces the role fill (outcome fills). */
 export function lgRoles(cls) {
-  return lgSvgWide(38, roleGlyph('worker', 6, 7, 3.8, cls), roleGlyph('regulator', 19, 7, 3.8, cls), roleGlyph('disregulator', 32, 7.6, 3.8, cls));
+  return lgSvg(38, roleGlyph('worker', 6, 7, 3.8, cls), roleGlyph('regulator', 19, 7, 3.8, cls), roleGlyph('disregulator', 32, 7.6, 3.8, cls));
 }
 export function swatch(cls, title) { return h('span', { class: ['lg-swatch', cls], title, 'aria-hidden': 'true' }); }
 

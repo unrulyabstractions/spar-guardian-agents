@@ -4,11 +4,10 @@
  *   import { viewEpisode } from './view_transcript.js';
  *   const node = await viewEpisode(route, view);
  */
-import { REFUSAL, asText, debounce, firstLine, fmtInt, h, plural } from './dom.js';
+import { asText, debounce, firstLine, fmtInt, h, plural } from './dom.js';
 import { P, R, api, setHashQuietly } from './api.js';
-import { argsView, badge, episodeRecord, extraBadges, isBlockedResult, kv, lazyDetails, link, logLink, longText,
-  mono, muted, reasoningView, select, splitSignature, verdictBlock } from './components.js';
-import { roleBadge } from './view_runs.js';
+import { badge, episodeRecord, extraBadges, isBlockedResult, kv, lazyDetails, link, logLink, longText, mono, muted,
+  reasoningView, roleBadge, scrollIntoList, select, splitSignature, toolCallView, urlNotes, verdictBlock } from './components.js';
 
 const STEP_KINDS = [
   ['', 'all steps'],
@@ -68,19 +67,6 @@ function resultView(r, orphan) {
     content ? longText(content, { lines: 30 }) : muted('(empty output)', 'small block'));
 }
 
-export function toolCallView(fn, id, args, resultEls) {
-  return h('div', { class: 'toolcall' },
-    h('div', { class: 'tc-head' },
-      h('span', { class: 'tc-label' }, 'tool call'),
-      h('code', { class: 'tc-fn' }, fn || '?'),
-      h('span', { class: 'spacer' }),
-      id ? h('span', { class: 'tc-id' }, id) : null),
-    argsView(fn, args),
-    resultEls === null ? null
-      : resultEls.length ? h('div', { class: 'tc-results' }, resultEls)
-        : muted('(no result recorded)', 'small block'));
-}
-
 function renderStep(s) {
   const ex = s.extra || {};
   const results = (s.observation && s.observation.results) || [];
@@ -90,7 +76,7 @@ function renderStep(s) {
   if (ex.swarm_turn_rules) flags.add('rules');
   if (ex.withheld_from_model_by_defense) flags.add('withheld');
   if (ex.defense_refusal) flags.add('refusal');
-  else if (ex.refusal_text_written_by_model || (src === 'agent' && msg.trim() === REFUSAL)) flags.add('refusal-text');
+  else if (ex.refusal_text_written_by_model) flags.add('refusal-text');
   for (const r of results) {
     const rx = r.extra || {};
     if (isBlockedResult(rx)) flags.add('blocked');
@@ -159,21 +145,15 @@ function stepMatchesKind(e, k) {
 }
 
 export async function viewEpisode({ run, episode, query: q }, view) {
-  const [d, runs] = await Promise.all([
-    api(P.transcript(run, episode)),
-    api(P.runs()).catch(() => null),
-  ]);
-  const ep = d.episode || {};
-  const t = d.transcript || {};
-  const traj = t.trajectory || {};
-  const steps = traj.steps || [];
-  const orbit = t.orbit || {};
+  const [d, runInfo] = await Promise.all([api(P.transcript(run, episode)), api(P.run(run))]);
+  const ep = d.episode;
+  const t = d.transcript;
+  const traj = t.trajectory;
+  const steps = traj.steps;
+  const orbit = t.orbit;
 
-  const runSum = runs && runs.find(r => r.run === run);
-  // Prev / next step only through episodes that have a transcript to show.
-  const epNames = runSum ? (runSum.episodes || []).filter(e => e.has_transcript || e.episode === episode).map(e => e.episode) : [];
-  const logOk = !runSum || !!runSum.eval_log_exists;
-  const evalLog = runSum ? runSum.eval_log : null;
+  // Prev / next only through episodes that have a transcript to show.
+  const epNames = runInfo.episodes.filter(e => e.has_transcript).map(e => e.episode);
   const pos = epNames.indexOf(episode);
   const prev = pos > 0 ? epNames[pos - 1] : null;
   const next = pos >= 0 && pos < epNames.length - 1 ? epNames[pos + 1] : null;
@@ -192,7 +172,7 @@ export async function viewEpisode({ run, episode, query: q }, view) {
   const headerCard = h('section', { class: 'card ep-header' },
     h('div', { class: 'ep-title' },
       h('h1', null, episode),
-      badge(ep.orbit_agent || t.agent || '?', 'agent'),
+      badge(ep.orbit_agent, 'agent'),
       ep.role ? roleBadge(ep.role) : null,
       t.model ? muted(t.model) : null,
       h('span', { class: 'spacer' }),
@@ -201,8 +181,8 @@ export async function viewEpisode({ run, episode, query: q }, view) {
     h('div', { class: 'links' },
       link(R.run(run), 'run page', 'btn btn-small'),
       link(R.timeline(run), 'timeline', 'btn btn-small'),
-      logLink(logOk, evalLog, R.context(run, { agent: ep.orbit_agent || orbit.agent }), 'context windows for this agent', 'btn btn-small'),
-      logLink(logOk, evalLog, R.sample(run), 'sample and workspace', 'btn btn-small')),
+      logLink(runInfo.eval_log_exists, runInfo.eval_log, R.context(run, { agent: ep.orbit_agent }), 'context windows for this agent', 'btn btn-small'),
+      logLink(runInfo.eval_log_exists, runInfo.eval_log, R.sample(run), 'sample and workspace', 'btn btn-small')),
     episodeRecord(ep),
     h('div', { class: 'step-counts' },
       `${plural(steps.length, 'step')} · ${plural(counts.tools, 'tool call')}`,
@@ -212,7 +192,7 @@ export async function viewEpisode({ run, episode, query: q }, view) {
       counts.notice ? [' · ', badge(`${counts.notice} provider-only`, 'notice')] : null,
       counts.error ? [' · ', badge(`${counts.error} tool errors`, 'bad')] : null),
     h('h2', { class: 'sub-h' }, 'Judge verdict'),
-    verdictBlock(ep.verdict),
+    verdictBlock(ep.verdict, runInfo.verdict_fields),
     ep.error ? lazyDetails('episode error', () => longText(ep.error, { lines: 30 }), { cls: 'sub' }) : null,
     lazyDetails('ORBIT metadata and final metrics', () => h('div', null,
       kv([
@@ -240,10 +220,7 @@ export async function viewEpisode({ run, episode, query: q }, view) {
     if (!e) return;
     e.item.classList.add('active');
     e.item.setAttribute('aria-current', 'true');
-    const it = e.item;
-    if (it.offsetTop < listBox.scrollTop || it.offsetTop + it.offsetHeight > listBox.scrollTop + listBox.clientHeight) {
-      listBox.scrollTop = it.offsetTop - listBox.clientHeight / 3;
-    }
+    scrollIntoList(listBox, e.item);
   };
   const jump = e => {
     e.el.scrollIntoView({ block: 'start' });
@@ -267,9 +244,8 @@ export async function viewEpisode({ run, episode, query: q }, view) {
   const find = h('input', { type: 'search', class: 'search', placeholder: 'find in steps…', 'aria-label': 'Find in steps', value: q.get('find') || '' });
   const urlKind = q.get('kind') || '';
   let kindVal = STEP_KINDS.some(([k]) => k === urlKind) ? urlKind : '';
-  const noteBox = h('div', { class: 'url-notes' });
-  const showNote = text => noteBox.appendChild(h('div', { class: 'url-note' }, text));
-  if (kindVal !== urlKind) showNote(`Unknown step kind “${urlKind}” in the link; showing all steps.`);
+  const notes = urlNotes();
+  if (kindVal !== urlKind) notes.show(`Unknown step kind “${urlKind}” in the link; showing all steps.`);
   const kindSel = select(STEP_KINDS, kindVal, v => { kindVal = v; applyFilter(); }, { 'aria-label': 'Step kind' });
   let live = false;
   function updateUrl() {
@@ -299,7 +275,7 @@ export async function viewEpisode({ run, episode, query: q }, view) {
   applyFilter();
 
   const side = h('aside', { class: 'sidebar' },
-    h('div', { class: 'side-tools' }, find, kindSel, noteBox, countEl),
+    h('div', { class: 'side-tools' }, find, kindSel, notes.box, countEl),
     listBox);
   const stepsBox = h('div', { class: 'steps' }, entries.length ? entries.map(e => e.el) : muted('This transcript has no steps.'));
   const page = h('div', { class: 'split' }, side, h('div', { class: 'main-col' }, headerCard, stepsBox));
@@ -324,7 +300,7 @@ export async function viewEpisode({ run, episode, query: q }, view) {
     view.mounted(() => {
       const e = entries.find(x => String(x.step.step_id) === startStep);
       if (e) jump(e);
-      else showNote(`Step “${startStep}” is not in this transcript.`);
+      else notes.show(`Step “${startStep}” is not in this transcript.`);
     });
   }
   return page;

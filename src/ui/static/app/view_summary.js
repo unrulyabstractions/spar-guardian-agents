@@ -7,19 +7,17 @@
  */
 import { DASH, debounce, fmtInt, fmtSecs, h, plural } from './dom.js';
 import { P, R, apiFresh, setHashQuietly } from './api.js';
-import { badge, errorBox, labeled, link, muted, section, select } from './components.js';
-import { route } from './router.js';
-import { settingOf } from './view_runs.js';
+import { badge, errorBox, labeled, link, muted, registeredCell, section, select, urlNotes } from './components.js';
 import { ROLE_ORDER, TIME_STEPS, fmtTick, inkOn, jobQueue, lgSvg, nextVizUid, r2, roleGlyph, roleIcon, seqColor,
   svgEl, swatch, ticksFor, tip, vizLegend, withTip } from './charts.js';
+import { endingsText, isSwarmRun, swarmSize } from './run_facts.js';
 import { laneOrder, rasterCanvas, rasterLegend, timelinePanels } from './view_timeline.js';
 
-const swarmSize = x => ((x.regulators || 0) + (x.disregulators || 0) + (x.workers || 0)) || x.n_agents || 0;
+// x is a row of /api/runs; a hidden-roles run carries its composition in x.swarm and its counts in x.aggregate.
 const kOfN = (k, n) => (n ? `${fmtInt(k)}/${fmtInt(n)}` : DASH);
-const isSwarmRow = x => x.composition != null;
 
 /** A run the grid can place: it records a composition and has at least one agent. */
-const drawableComposition = x => x.regulators != null && x.disregulators != null && swarmSize(x) > 0;
+const drawableComposition = x => x.swarm.regulators != null && x.swarm.disregulators != null && swarmSize(x.swarm) > 0;
 
 /** One grid cell: completed runs are counted; failed runs of the same composition are only listed. */
 function cellAggregate(runs, failed = []) {
@@ -28,10 +26,10 @@ function cellAggregate(runs, failed = []) {
   let k = 0;
   let n = 0;
   for (const x of runs) {
-    k += x.cheated || 0;
-    n += x.judged || 0;
+    k += x.aggregate.cheated;
+    n += x.aggregate.judged;
     for (const role of ROLE_ORDER) {
-      const s = (x.by_role || {})[role];
+      const s = (x.aggregate.by_role || {})[role];
       if (s) { by[role].n += s.n || 0; by[role].cheated += s.cheated || 0; }
     }
   }
@@ -39,9 +37,10 @@ function cellAggregate(runs, failed = []) {
 }
 
 function runTipLines(x) {
-  return `${x.run} · seed ${x.seed ?? DASH} · ${x.judged ? `${x.cheated}/${x.judged} cheated` : 'not judged'} · ${plural(x.timeouts || 0, 'timeout')} · score ${x.score ?? DASH}`;
+  const a = x.aggregate;
+  return `${x.run} · seed ${x.swarm.seed ?? DASH} · ${a.judged ? `${a.cheated}/${a.judged} cheated` : 'not judged'} · ${plural(a.timeouts, 'timeout')} · score ${a.score ?? DASH}`;
 }
-const failedTipLine = x => `${x.run} · seed ${x.seed ?? DASH} · failed run (harness crash or provider error), not counted`;
+const failedTipLine = x => `${x.run} · seed ${x.swarm.seed ?? DASH} · failed run (harness crash or provider error), not counted`;
 const failedNote = cell => (cell.failed.length ? ` (${plural(cell.failed.length, 'failed run')} not counted)` : '');
 
 /** Regulators (y, up) by disregulators (x) grid for one swarm size; only cells with R + D <= N exist. */
@@ -137,11 +136,8 @@ function roleBarsCell(svg, cell, x, y, c, r, d, N) {
 function seqLegend() {
   const uid = nextVizUid();
   const stops = [0, 0.25, 0.5, 0.75, 1].map(t => svgEl('stop', { offset: `${t * 100}%`, style: `stop-color:${seqColor(t)}` }));
-  return lgSvgWide(120, svgEl('defs', null, svgEl('linearGradient', { id: `seq-${uid}` }, ...stops)),
+  return lgSvg(120, svgEl('defs', null, svgEl('linearGradient', { id: `seq-${uid}` }, ...stops)),
     svgEl('rect', { x: 0, y: 3, width: 120, height: 8, rx: 2, fill: `url(#seq-${uid})` }));
-}
-export function lgSvgWide(w, ...children) {
-  return svgEl('svg', { class: 'lg-glyph viz', width: w, height: 14, viewBox: `0 0 ${w} 14`, 'aria-hidden': 'true' }, ...children);
 }
 
 /**
@@ -152,14 +148,14 @@ function compositionSection(swarm, failed = []) {
   const drawn = swarm.filter(drawableComposition);
   const failedDrawn = failed.filter(drawableComposition);
   const notDrawn = swarm.concat(failed).filter(x => !drawableComposition(x));
-  const sizes = [...new Set(drawn.concat(failedDrawn).map(swarmSize))].sort((a, b) => a - b);
-  const bySeed = (a, b) => (a.seed ?? 0) - (b.seed ?? 0) || a.run.localeCompare(b.run);
+  const sizes = [...new Set(drawn.concat(failedDrawn).map(x => swarmSize(x.swarm)))].sort((a, b) => a - b);
+  const bySeed = (a, b) => (a.swarm.seed ?? 0) - (b.swarm.seed ?? 0) || a.run.localeCompare(b.run);
   const blocks = sizes.map(N => {
-    const runs = drawn.filter(x => swarmSize(x) === N);
-    const fails = failedDrawn.filter(x => swarmSize(x) === N);
+    const runs = drawn.filter(x => swarmSize(x.swarm) === N);
+    const fails = failedDrawn.filter(x => swarmSize(x.swarm) === N);
     const groups = new Map();
     const add = (x, which) => {
-      const k = `${x.regulators},${x.disregulators}`;
+      const k = `${x.swarm.regulators},${x.swarm.disregulators}`;
       if (!groups.has(k)) groups.set(k, { runs: [], failed: [] });
       groups.get(k)[which].push(x);
     };
@@ -196,18 +192,14 @@ function compositionSection(swarm, failed = []) {
     ]));
 }
 
-/** One row per swarm run: composition, verdicts by role, the team report, registration; thumbs(run) adds a raster column. */
+/** One row per swarm run: composition, verdicts by role, registration, endings; thumbs(run) adds a raster column. */
 function swarmTable(swarm, thumbs, onTimeline) {
-  const sorted = swarm.slice().sort((a, b) => (a.regulators ?? 99) - (b.regulators ?? 99) || (a.disregulators ?? 99) - (b.disregulators ?? 99) ||
-    (a.seed ?? 0) - (b.seed ?? 0) || a.run.localeCompare(b.run));
+  const key = x => [x.swarm.regulators ?? 99, x.swarm.disregulators ?? 99, x.swarm.seed ?? 0];
+  const sorted = swarm.slice().sort((a, b) => key(a).map((v, i) => v - key(b)[i]).find(Boolean) || a.run.localeCompare(b.run));
   const roleCell = (x, role) => {
-    const s = x.by_role && x.by_role[role];
+    const s = (x.aggregate.by_role || {})[role];
     return h('td', { class: 'num' }, s && s.n ? `${s.cheated}/${s.n}` : muted(DASH));
   };
-  const registered = x => (x.registered_on_main == null ? muted(DASH)
-    : !x.registered_on_main ? badge('no', 'plain')
-      : h('span', null, badge('yes', 'good'), x.registered_copied_from ? [' ', badge('copied', 'warn', `the registry entry carries ${x.registered_copied_from}’s message verbatim`)] : null));
-  const ended = x => Object.entries(x.endings || {}).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([k, c]) => `${c} ${k}`).join(', ') || DASH;
   return h('div', { class: 'table-wrap' }, h('table', { class: 'data compact swarm-table' },
     h('thead', null, h('tr', null,
       ['run', 'composition', 'seed', 'judged', 'cheated'].map((c, i) => h('th', { class: i >= 2 ? 'num' : '' }, c)),
@@ -217,30 +209,24 @@ function swarmTable(swarm, thumbs, onTimeline) {
     h('tbody', null, sorted.map(x => h('tr', { class: x.failed && 'failed', title: x.failed ? 'failed run (harness crash or provider error): not counted in the charts' : null },
       h('td', null, link(R.run(x.run), x.run, 'run-link'), x.failed ? [' ', badge('failed', 'bad')] : null, ' ',
         h('a', { href: R.swarm({ run: x.run }), class: 'small', onclick: onTimeline ? (e => { e.preventDefault(); onTimeline(x.run); }) : null }, 'timeline')),
-      h('td', { class: 'mono' }, x.composition || DASH),
-      h('td', { class: 'num' }, x.seed ?? DASH),
-      h('td', { class: 'num' }, fmtInt(x.judged)),
-      h('td', { class: 'num' }, x.judged ? (x.cheated ? badge(`${x.cheated}`, 'bad') : '0') : muted(DASH)),
+      h('td', { class: 'mono' }, x.swarm.composition),
+      h('td', { class: 'num' }, x.swarm.seed ?? DASH),
+      h('td', { class: 'num' }, fmtInt(x.aggregate.judged)),
+      h('td', { class: 'num' }, x.aggregate.judged ? (x.aggregate.cheated ? badge(`${x.aggregate.cheated}`, 'bad') : '0') : muted(DASH)),
       ROLE_ORDER.map(role => roleCell(x, role)),
-      h('td', null, registered(x)),
-      h('td', { class: 'small' }, ended(x)),
+      h('td', null, registeredCell(x.deliverables)),
+      h('td', { class: 'small' }, endingsText(x.endings) || DASH),
       thumbs ? h('td', { class: 'thumb-cell' }, thumbs(x.run)) : null)))));
 }
 
 // ---- summary: cheating by setting ----------------------------------------------------
 
-/** The setting of a /api/summary row, as settingOf() reads a run. */
-function settingOfRow(x) {
-  return settingOf({ graph: x.graph, n_agents: x.n_agents, swe: x.swe || null, task: x.task, swarm: x.composition != null
-    ? { composition: x.composition, regulators: x.regulators, disregulators: x.disregulators, workers: x.workers } : null });
-}
-
 /** Rows of the settings chart: baselines, then each control per setting, then each composition. */
 function settingRows(ok) {
   const rows = [];
-  const agg = list => ({ k: list.reduce((s, x) => s + (x.cheated || 0), 0), n: list.reduce((s, x) => s + (x.judged || 0), 0), runs: list.map(x => x.run) });
+  const agg = list => ({ k: list.reduce((s, x) => s + x.aggregate.cheated, 0), n: list.reduce((s, x) => s + x.aggregate.judged, 0), runs: list.map(x => x.run) });
   const push = (group, label, list, href) => { if (list.length) rows.push({ group, label, href, ...agg(list) }); };
-  const plain = ok.filter(x => !isSwarmRow(x)).map(x => ({ x, s: settingOfRow(x) }));
+  const plain = ok.filter(x => !isSwarmRun(x)).map(x => ({ x, s: x.setting }));
   const settings = [...new Map(plain.map(p => [p.s.key, p.s])).values()].sort((a, b) => a.order - b.order || a.n - b.n);
   for (const s of settings) {
     push('Baseline', s.label, plain.filter(p => p.s.key === s.key && p.x.control === 'baseline').map(p => p.x), R.runs({ setting: s.key, control: 'baseline' }));
@@ -249,7 +235,7 @@ function settingRows(ok) {
     const controls = [...new Set(plain.filter(p => p.s.key === s.key && p.x.control !== 'baseline').map(p => p.x.control))].sort();
     for (const c of controls) push(`Controls, ${s.label}`, c, plain.filter(p => p.s.key === s.key && p.x.control === c).map(p => p.x), R.runs({ setting: s.key, control: c }));
   }
-  const swarm = ok.filter(isSwarmRow).map(x => ({ x, s: settingOfRow(x) }))
+  const swarm = ok.filter(isSwarmRun).map(x => ({ x, s: x.setting }))
     .sort((a, b) => a.s.n - b.s.n || (a.s.R ?? 0) - (b.s.R ?? 0) || (a.s.D ?? 0) - (b.s.D ?? 0) || a.x.run.localeCompare(b.x.run));
   const comps = [...new Map(swarm.map(p => [`${p.s.key}|${p.s.composition}`, p])).values()];
   for (const p of comps) {
@@ -307,24 +293,22 @@ function headline(items) {
 }
 
 export async function viewSummary(r, view) {
-  const sum = await apiFresh(P.summary());
-  const all = sum.runs || [];
+  const all = await apiFresh(P.runs());
   const mock = all.filter(x => x.mock);
   const ok = all.filter(x => !x.failed && !x.mock);
   const failed = all.filter(x => x.failed && !x.mock);
-  const swarm = ok.filter(isSwarmRow);
-  const swarmFailed = failed.filter(isSwarmRow);
-  const judged = ok.reduce((s, x) => s + (x.judged || 0), 0);
-  const cheated = ok.reduce((s, x) => s + (x.cheated || 0), 0);
-  const nSingle = ok.filter(x => x.graph === 'single').length;
-  const nBoard = ok.filter(x => x.graph === 'board' && !isSwarmRow(x)).length;
+  const swarm = ok.filter(isSwarmRun);
+  const swarmFailed = failed.filter(isSwarmRun);
+  const judged = ok.reduce((s, x) => s + x.aggregate.judged, 0);
+  const cheated = ok.reduce((s, x) => s + x.aggregate.cheated, 0);
+  const nSingle = ok.filter(x => x.setting.n === 1).length;
+  const nBoard = ok.length - nSingle - swarm.length;
   const rows = settingRows(ok);
   const barsHost = h('div', { class: 'viz-host' });
   const draw = () => barsHost.replaceChildren(rows.length ? shareBars(rows, Math.max(640, barsHost.clientWidth || 900)) : muted('No judged run.'));
   const onResize = debounce(() => { tip.hide(); draw(); }, 150);
   view.mounted(() => {
     document.title = 'Summary · results';
-    if (location.hash.startsWith('#/overview')) setHashQuietly('#/');
     draw();
     window.addEventListener('resize', onResize);
   });
@@ -332,7 +316,6 @@ export async function viewSummary(r, view) {
   return h('div', { class: 'page' },
     h('div', { class: 'page-head' },
       h('h1', null, 'Summary'),
-      h('div', { class: 'links' }, h('button', { type: 'button', class: 'btn btn-small', onclick: () => route() }, 're-read')),
       muted('A judged agent has a verdict and a transcript. Failed runs (harness crash or provider error) are left out of every count and listed under Runs.' +
         (mock.length ? ` ${plural(mock.length, 'mock-model smoke run')} left out as well.` : ''))),
     headline([
@@ -352,11 +335,11 @@ export async function viewSummary(r, view) {
 
 // ---- swarm visualizations ------------------------------------------------------------
 
-const FUNNEL_STAGES = [['honey_pots_seen', 'saw honeypot'], ['attempted_access', 'attempted access'], ['cheated', 'cheated'], ['disclosed_access', 'disclosed']];
 const FUNNEL_ROLES = ['worker', 'regulator', 'disregulator'];
 
-/** Grouped bars: at each judge stage, the share of judged agents of each hidden role. */
-function funnelChart(agents, W) {
+/** Grouped bars: at each verdict flag of the task (stages, the server's verdict_fields), the share of judged agents of
+ * each hidden role. */
+function funnelChart(agents, stages, W) {
   const roles = FUNNEL_ROLES.filter(r => agents.some(a => a.role === r));
   if (!roles.length) return muted('No judged agent with a hidden role.');
   const n = Object.fromEntries(roles.map(r => [r, agents.filter(a => a.role === r).length]));
@@ -367,16 +350,16 @@ function funnelChart(agents, W) {
   const plotH = 220;
   const padB = 62;
   const H = padT + plotH + padB;
-  const groupW = (W - padL - padR) / FUNNEL_STAGES.length;
+  const groupW = (W - padL - padR) / stages.length;
   const bw = Math.min(36, (groupW - 28) / roles.length);
   const y = v => padT + plotH - v * plotH;
   const svg = svgEl('svg', { class: 'viz funnel-svg', width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: 'img',
-    'aria-label': 'Outcome funnel by hidden role: saw honeypot, attempted access, cheated, disclosed' });
+    'aria-label': `Outcome funnel by hidden role: ${stages.map(f => f.label).join(', ')}` });
   for (const v of [0, 0.25, 0.5, 0.75, 1]) {
     svg.appendChild(svgEl('line', { class: v ? 'grid' : 'baseline', x1: padL, x2: W - padR, y1: y(v), y2: y(v) }));
     svg.appendChild(svgEl('text', { class: 'tick-label', x: padL - 6, y: y(v) + 4, 'text-anchor': 'end' }, `${v * 100}%`));
   }
-  FUNNEL_STAGES.forEach(([key, label], si) => {
+  stages.forEach(({ field: key, label }, si) => {
     const gx = padL + si * groupW + groupW / 2;
     const left = gx - (roles.length * bw + (roles.length - 1) * 4) / 2;
     roles.forEach((role, j) => {
@@ -391,7 +374,7 @@ function funnelChart(agents, W) {
         () => [`${role} · ${label}`, `${k} of ${n[role]} judged ${role}s`]));
     });
     svg.appendChild(svgEl('text', { class: 'ctl-label', x: gx, y: y(0) + 34, 'text-anchor': 'middle' }, label));
-    if (si < FUNNEL_STAGES.length - 1) svg.appendChild(svgEl('text', { class: 'tick-label', x: padL + (si + 1) * groupW, y: y(0) + 34, 'text-anchor': 'middle' }, '→'));
+    if (si < stages.length - 1) svg.appendChild(svgEl('text', { class: 'tick-label', x: padL + (si + 1) * groupW, y: y(0) + 34, 'text-anchor': 'middle' }, '→'));
   });
   return h('div', null, h('div', { class: 'chart-scroll' }, svg),
     vizLegend(roles.map(role => [lgSvg(roleGlyph(role, 10, role === 'disregulator' ? 7.6 : 7, 4.2)), `${role} (n = ${n[role]})`])),
@@ -401,21 +384,21 @@ function funnelChart(agents, W) {
 /** Last moment on a run's clock: the sample's total time or the last event, whichever is later. */
 function runEnd(tl) {
   let end = tl.duration || 0;
-  for (const e of tl.events || []) { if (e.t != null) end = Math.max(end, e.t); if (e.t_end != null) end = Math.max(end, e.t_end); }
+  for (const e of tl.events) { if (e.t != null) end = Math.max(end, e.t); if (e.t_end != null) end = Math.max(end, e.t_end); }
   return end;
 }
 
-/** One adoption curve: the moments each agent first read the honeypot archive (timeline marker). */
+/** One adoption curve: the moments each agent first opened the honeypot (the code ladder's opened call). */
 function curveOf(x, tl) {
-  const lanes = tl.agents || [];
-  const roles = tl.roles || {};
-  const first = Object.entries(tl.first_member_read || {}).filter(([a, t]) => lanes.includes(a) && t != null).map(([, t]) => t).sort((a, b) => a - b);
-  const disPosts = (tl.board || []).filter(p => p.t != null && roles[p.sender] === 'disregulator').map(p => p.t);
-  return { run: x.run, R: x.regulators, D: x.disregulators, W: x.workers, n: lanes.length, reads: first, end: runEnd(tl),
+  const lanes = tl.agents;
+  const roles = tl.roles;
+  const first = Object.entries(tl.first_opened).filter(([a]) => lanes.includes(a)).map(([, t]) => t).sort((a, b) => a - b);
+  const disPosts = tl.board.filter(p => p.t != null && roles[p.sender] === 'disregulator').map(p => p.t);
+  return { run: x.run, R: x.swarm.regulators, D: x.swarm.disregulators, n: lanes.length, reads: first, end: runEnd(tl),
     disPost: disPosts.length ? Math.min(...disPosts) : null };
 }
 
-/** Small multiples, one per composition: share of agents that have read the archive against time. */
+/** Small multiples, one per composition: share of agents that have opened the honeypot against time. */
 function adoptionCurves(curves, noLog, onOpen) {
   if (!curves.length) return muted('No swarm run with a readable timeline.');
   const groups = new Map();
@@ -439,7 +422,7 @@ function adoptionCurves(curves, noLog, onOpen) {
     const runs = groups.get(k).sort((a, b) => a.run.localeCompare(b.run));
     const [R_, D_] = k.split(',').map(Number);
     const svg = svgEl('svg', { class: 'viz adopt-svg', width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: 'img',
-      'aria-label': `Adoption curve for R${R_} D${D_}: ${runs.map(c => `${c.reads.length} of ${c.n} agents read the archive`).join('; ')}` });
+      'aria-label': `Adoption curve for R${R_} D${D_}: ${runs.map(c => `${c.reads.length} of ${c.n} agents opened the honeypot`).join('; ')}` });
     for (const v of [0, 0.5, 1]) {
       svg.appendChild(svgEl('line', { class: v ? 'grid' : 'baseline', x1: padL, x2: W - padR, y1: sy(v), y2: sy(v) }));
       svg.appendChild(svgEl('text', { class: 'tick-label', x: padL - 4, y: sy(v) + 3, 'text-anchor': 'end' }, v === 1 ? '1' : v ? '.5' : '0'));
@@ -460,7 +443,7 @@ function adoptionCurves(curves, noLog, onOpen) {
       const share = c.reads.length / c.n;
       svg.appendChild(svgEl('text', { class: 'bar-label', x: W - padR, y: sy(share) + (share > 0.8 ? 12 : -4), 'text-anchor': 'end' }, `${c.reads.length}/${c.n}`));
       svg.appendChild(withTip(svgEl('path', { class: 'edge-hit', d: pts.map(([t, v], i) => `${i ? 'L' : 'M'}${r2(sx(t))},${r2(sy(v))}`).join('') }),
-        () => [c.run, `${c.reads.length} of ${c.n} agents read the archive`, c.reads.length ? `first at ${fmtSecs(c.reads[0])}, last at ${fmtSecs(c.reads[c.reads.length - 1])}` : null,
+        () => [c.run, `${c.reads.length} of ${c.n} agents opened the honeypot`, c.reads.length ? `first at ${fmtSecs(c.reads[0])}, last at ${fmtSecs(c.reads[c.reads.length - 1])}` : null,
           c.disPost != null ? `first disregulator post at ${fmtSecs(c.disPost)}` : 'no disregulator post', 'click opens the timeline']));
       svg.classList.add('clickable');
     }
@@ -472,26 +455,21 @@ function adoptionCurves(curves, noLog, onOpen) {
   return h('div', null,
     h('div', { class: 'panel-grid' }, panels),
     vizLegend([
-      [lgSvg(svgEl('line', { class: 'adopt-line', x1: 1, y1: 11, x2: 8, y2: 11 }), svgEl('line', { class: 'adopt-line', x1: 8, y1: 11, x2: 8, y2: 4 }), svgEl('line', { class: 'adopt-line', x1: 8, y1: 4, x2: 19, y2: 4 })), 'share of agents that have read the archive (end label: read / agents)'],
+      [lgSvg(svgEl('line', { class: 'adopt-line', x1: 1, y1: 11, x2: 8, y2: 11 }), svgEl('line', { class: 'adopt-line', x1: 8, y1: 11, x2: 8, y2: 4 }), svgEl('line', { class: 'adopt-line', x1: 8, y1: 4, x2: 19, y2: 4 })), 'share of agents that have opened the honeypot (end label: opened / agents)'],
       anyDis ? [lgSvg(svgEl('line', { class: 'adopt-dis', x1: 10, x2: 10, y1: 1, y2: 13 }), roleGlyph('disregulator', 10, 11, 3)), 'first board post by a disregulator'] : null,
     ]),
-    h('div', { class: 'muted small' }, 'An agent counts from its first successful bash or python call whose output holds text found only inside the honeypot archive (the timeline’s member-read marker). The x axis is seconds from the start of the run.' +
+    h('div', { class: 'muted small' }, 'An agent counts from the code ladder’s opened call: the first call whose result showed it the honeypot’s content (signals.jsonl). The x axis is seconds from the start of the run.' +
       (noLog.length ? ` No readable eval log: ${noLog.join(', ')}.` : '')));
 }
 
 export async function viewSwarm({ query: q }, view) {
-  const [sum, runs] = await Promise.all([apiFresh(P.summary()), apiFresh(P.runs())]);
-  const all = sum.runs || [];
-  const swarm = all.filter(x => !x.failed && isSwarmRow(x));
-  const swarmFailed = all.filter(x => x.failed && isSwarmRow(x));
+  const runs = await apiFresh(P.runs());
+  const swarm = runs.filter(x => !x.failed && isSwarmRun(x));
+  const swarmFailed = runs.filter(x => x.failed && isSwarmRun(x));
   const byName = new Map(runs.map(r => [r.run, r]));
-  const agents = [];
-  for (const x of swarm) {
-    const run = byName.get(x.run);
-    for (const ep of (run && run.episodes) || []) {
-      if (ep.verdict && ep.verdict.cheated != null && ep.has_transcript) agents.push({ run: x.run, agent: ep.orbit_agent, role: ep.role, v: ep.verdict });
-    }
-  }
+  const agents = swarm.flatMap(x => x.episodes.filter(ep => ep.counted).map(ep => ({ run: x.run, role: ep.role, v: ep.verdict })));
+  // The funnel's stages: the verdict flags of the swarm runs' task, cheated among them.
+  const stages = swarm.length ? swarm[0].verdict_fields : [];
   let live = true;
   const queue = jobQueue(2);
   const timelines = new Map();
@@ -523,7 +501,7 @@ export async function viewSwarm({ query: q }, view) {
 
   // Funnel.
   const funnelHost = h('div', { class: 'viz-host' });
-  const drawFunnel = () => funnelHost.replaceChildren(funnelChart(agents, funnelHost.clientWidth || 800));
+  const drawFunnel = () => funnelHost.replaceChildren(funnelChart(agents, stages, funnelHost.clientWidth || 800));
 
   // Adoption curves, drawn once every completed run's timeline has arrived.
   const adoptHost = h('div', { class: 'viz-host' }, muted(`reading ${plural(swarm.length, 'timeline')}…`));
@@ -535,9 +513,9 @@ export async function viewSwarm({ query: q }, view) {
   const names = swarm.map(x => x.run).concat(swarmFailed.map(x => x.run));
   const want = q.get('run');
   let current = names.includes(want) ? want : (names[0] || null);
-  const noteBox = h('div', { class: 'url-notes' });
-  if (want && !names.includes(want)) noteBox.appendChild(h('div', { class: 'url-note' }, `Run “${want}” is not a swarm run; showing ${current || 'nothing'}.`));
-  const sel = select(names.map(n => [n, n + (byName.get(n) && byName.get(n).failed ? ' (failed)' : '')]), current || '',
+  const notes = urlNotes();
+  if (want && !names.includes(want)) notes.show(`Run “${want}” is not a swarm run; showing ${current || 'nothing'}.`);
+  const sel = select(names.map(n => [n, n + (byName.get(n).failed ? ' (failed)' : '')]), current || '',
     v => showRun(v, false), { 'aria-label': 'swarm run to explore' });
   const exploreHost = h('div', null, muted('Choose a run.'));
   const exploreAnchor = h('div', { id: 'explore' });
@@ -552,15 +530,15 @@ export async function viewSwarm({ query: q }, view) {
     exploreHost.replaceChildren(h('div', { class: 'loading' }, `Loading ${name}…`));
     if (scroll) exploreAnchor.scrollIntoView({ block: 'start' });
     try {
-      const [tl, detail] = await Promise.all([apiFresh(P.timeline(name)), apiFresh(P.run(name)).catch(() => null)]);
+      const tl = await apiFresh(P.timeline(name));
       if (!live || tok !== showToken) return;
-      panels = timelinePanels(name, tl, detail);
-      const eps = (detail && detail.episodes) || [];
+      const run = byName.get(name);
+      panels = timelinePanels(name, tl, run);
       exploreHost.replaceChildren(
         h('div', { class: 'links' },
           link(R.run(name), 'run page', 'btn btn-small'),
           link(R.timeline(name), 'timeline page', 'btn btn-small'),
-          eps.filter(e => e.has_transcript).map(e => link(R.episode(name, e.episode), `transcript ${e.orbit_agent || e.episode}`, 'btn btn-small'))),
+          run.episodes.filter(e => e.has_transcript).map(e => link(R.episode(name, e.episode), `transcript ${e.orbit_agent}`, 'btn btn-small'))),
         panels.note, panels.node);
       panels.mount();
       // The sections above the explorer finish drawing on their own clock; scroll again once they have.
@@ -571,9 +549,7 @@ export async function viewSwarm({ query: q }, view) {
     }
   }
   function updateUrl() {
-    if (!live) return;
-    const target = R.swarm({ run: current });
-    setHashQuietly(target);
+    if (live) setHashQuietly(R.swarm({ run: current }));
   }
   const onResize = debounce(() => { tip.hide(); drawFunnel(); }, 150);
   view.mounted(() => {
@@ -588,15 +564,14 @@ export async function viewSwarm({ query: q }, view) {
   return h('div', { class: 'page wide' },
     h('div', { class: 'page-head' },
       h('h1', null, 'Swarm visualizations'),
-      h('div', { class: 'links' }, h('button', { type: 'button', class: 'btn btn-small', onclick: () => route() }, 're-read')),
       muted(`${plural(swarm.length, 'completed swarm run')}${swarmFailed.length ? ` and ${plural(swarmFailed.length, 'failed one')} (listed, never counted)` : ''}. ` +
         'A swarm is the board with hidden roles: workers, regulators (peers told to keep the team honest) and disregulators (peers privately told to register a result by any means).')),
     section('Compositions', swarm.length || swarmFailed.length ? compositionSection(swarm, swarmFailed) : none),
     section('Outcome funnel by hidden role', funnelHost),
-    section('Adoption of the honeypot archive over time', adoptHost),
+    section('Adoption of the honeypot over time', adoptHost),
     section('Swarm runs', swarm.length || swarmFailed.length ? [swarmTable(swarm.concat(swarmFailed), thumbs, name => showRun(name, true)), rasterLegend()] : none),
     h('section', { class: 'card', id: 'explore-card' }, exploreAnchor,
-      h('div', { class: 'sec-head' }, h('h2', null, 'Run explorer'), labeled('run', sel), noteBox),
+      h('div', { class: 'sec-head' }, h('h2', null, 'Run explorer'), labeled('run', sel), notes.box),
       h('div', { class: 'muted small' }, 'Agent by turn raster, swimlanes with board-message arrows, and the exposure cascade of the chosen run.'),
       exploreHost));
 }
