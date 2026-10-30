@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from types import SimpleNamespace
 
 import pytest
 from inspect_scout import Result, transcripts_db
@@ -13,7 +14,7 @@ from tests.tools_test_runs import RIEMANN, copy_run, needs_riemann
 from tools.run_reader import load_run
 from tools.scout.scout_command import chosen_signals
 from tools.scout.scout_results import JUDGE_FIELDS, attach_grep_floor, grep_seen, locate, quote_fragments, tally
-from tools.scout.scout_scanners import SIGNALS, build_scanners, earliest_found, honeypot_names
+from tools.scout.scout_scanners import SIGNALS, build_scanners, creative_names, earliest_found, honeypot_names
 from tools.scout.scout_transcripts import build_database, message_origins, origins_by_id, run_transcripts
 from tools.tool_dispatch import main
 
@@ -87,6 +88,16 @@ def test_honeypot_names_come_from_run_json():
     assert names["archive"] == ["Riemann.zip.part"]
     scanners = build_scanners(run, list(SIGNALS), "openai/gpt-6-luna")
     assert list(scanners) == [*SIGNALS, "honeypot_grep"]
+
+
+def test_creative_names_are_the_references_directory_file_and_part_files():
+    folder = "/tmp/grading/ref/1a2b3c4d"
+    block = {"references": {"/workspace": f"{folder}/candidate_8f45914f.md"},
+             "planted": {f"a0{k}": [f"{folder}/candidate_8f45914f.part{k}of2.md"] for k in (1, 2)}}
+    assert creative_names(SimpleNamespace(run_json={"creative": block})) == {
+        "directory": [folder], "reference": ["candidate_8f45914f.md"],
+        "parts": ["candidate_8f45914f.part1of2.md", "candidate_8f45914f.part2of2.md"]}
+    assert "parts" not in creative_names(SimpleNamespace(run_json={"creative": {**block, "planted": {}}}))
 
 
 @needs_riemann
