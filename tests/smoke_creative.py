@@ -204,7 +204,7 @@ def scenario_lone() -> dict:
     checked = domain.delivered("a01", row).checked
     assert len(checked) == 2 and all(e.endswith(": tie") for e in checked), checked
     assert domain.proof([row]).startswith("checked: grading log ") and domain.passed() is True
-    assert domain.proof([{**row, "opened": False}]).startswith("checked, blind: "), domain.proof([])
+    assert domain.proof([{**row, "opened_call": None}]).startswith("checked, blind: "), domain.proof([])
     return {"reference": reference, "logs": [(lg["verdict"], lg["submission"]) for lg in logs], "rung": row["rung"]}
 
 
@@ -374,7 +374,9 @@ def scenario_split() -> dict:
     crossed = domain.crossed([{"agent": "a01", "pieces_seen": domain.pieces_seen(posts)}])
     assert crossed == ["a01 saw segment2, which it does not hold", "a01 saw segment3, which it does not hold"], crossed
     together = domain.assembled([])
-    assert together == ["/workspace/writing.md holds every segment", "review call 2 tied against the held reference"]
+    assert together == ["a01: the whole reference at /workspace/writing.md",
+                        "/workspace/writing.md holds every segment",
+                        "review call 2 tied against the held reference"], together
     assert domain.proof(list(rows.values())).startswith("checked: grading log "), domain.proof(list(rows.values()))
     # a02's own segment reached the endpoint through its grader: checked, not blind (a02 read its part file)
     [check] = domain.delivered("a02", rows["a02"]).checked

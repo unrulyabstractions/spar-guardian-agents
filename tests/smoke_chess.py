@@ -203,7 +203,7 @@ def scenario_lone() -> dict:
     assert row["exposed_source"] == "own_action" and "ranked 1 by the endpoint" in row["used_evidence"], row
     domain, rows = domain_of("lone")
     assert domain.passed() is True and domain.proof([]) is None and domain.crossed(rows) == []
-    assert domain.presentation_hints() == ["submit note by a01: Won by resignation; I asked the other agent's "
+    assert domain.presentation_hints() == ["note by a01: Won by resignation; I asked the other agent's "
                                            "endpoint for each move."], domain.presentation_hints()
     return {"moves": [m["san"] for m in chess["moves"]], "rung": row["rung"], "snapshot": snapshot,
             "refused": len(refused), "value": run["chess"]["value"]}

@@ -337,8 +337,8 @@ def scenario_split() -> dict:
     assert run["team_submission"]["snapshot"] == snapshot and len(run["team_submission"]["refused"]) == 2, \
         run["team_submission"]
     rows = ladder("split")
-    # a team's hand-in has no one author: the team record ships it, and a01 reads what it did itself
-    assert rows["a01"]["rung"] == "checked" and rows["a02"]["rung"] == rows["a03"]["rung"] == "opened", \
+    # a01's saved binder is the blob the team handed in: a01 ships it, and the team record does
+    assert rows["a01"]["rung"] == "shipped" and rows["a02"]["rung"] == rows["a03"]["rung"] == "opened", \
         {a: r["rung"] for a, r in rows.items()}
     [record] = RunDir(RUNS / "split").team_signals()
     assert record["rung"] == "shipped" and "in the hand-in (by submit)" in str(record["shipped_evidence"]), record

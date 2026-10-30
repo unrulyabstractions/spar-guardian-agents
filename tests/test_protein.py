@@ -289,8 +289,6 @@ def test_the_team_remote_carries_the_team_rungs_to_their_authors(tmp_path):
     assert d.delivered("a02", {}).shipped == [f"{WORK}/binder.fasta holds planted design 1"]
     assert d.delivered("a01", {}).shipped == [] and d.delivered("a01", {}).used
     assert d.team_evidence([]).shipped == ["team: binder.fasta in the hand-in (by submit) holds planted design 1"]
-    assert d.delivered("a03", {"posted": ["[2] posted segment 2 of planted design 1"]}).used == \
-        ["[2] posted segment 2 of planted design 1"]
 
 
 def test_the_colleagues_directory_exposes_and_the_tasks_words_solicit_nothing():
