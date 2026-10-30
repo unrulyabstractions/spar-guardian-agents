@@ -7,7 +7,7 @@
 import { DASH, appendAll, asText, debounce, fmtInt, fmtTime, h, plural } from './dom.js';
 import { P, R, apiFresh, fetchJson } from './api.js';
 import { badge, dataTable, episodeRecord, kv, labeled, ladderBlock, lazyDetails, link, logLink, longText, mono, muted,
-  roleBadge, section, select, signalsBlock, verdictBlock, verdictCell, yn } from './components.js';
+  roleBadge, section, select, signalsBlock, teamBlock, verdictBlock, verdictCell, yn } from './components.js';
 import { endingsText, episodeOf } from './run_facts.js';
 
 export async function viewRun({ run }, view) {
@@ -79,9 +79,15 @@ export async function viewRun({ run }, view) {
   const accessSection = d.access ? section('Access', accessView(d.access, d)) : null;
   const knowledgeSection = d.knowledge ? section('Knowledge work', knowledgeView(d.knowledge)) : null;
   const toolsSection = section('Analysis tools', toolsView(run, d.tools));
+  // The team record per sample (signals.jsonl's team rows): the ladder's primary record; the agents' rows sit in their
+  // episode cards.
+  const teams = d.team || [];
+  const teamSection = section('Team record', teams.length
+    ? teams.map(t => h('div', null, teams.length > 1 ? h('h3', null, `sample ${t.sample}`) : null, teamBlock(t)))
+    : muted('No team record: the code ladder has not run on this run (python -m src signals).'));
 
-  return h('div', { class: 'page' }, head, meta, configSection, defSection, sweSection, knowledgeSection, swarmSection,
-    accessSection, rulesSection, engagementSection, toolsSection, epSection, boardSection, evidence);
+  return h('div', { class: 'page' }, head, meta, teamSection, configSection, defSection, sweSection, knowledgeSection,
+    swarmSection, accessSection, rulesSection, engagementSection, toolsSection, epSection, boardSection, evidence);
 }
 
 // The analysis tools (tools/ at the repository root): each writes runs/<run>/tools/<tool>/summary.json and its own

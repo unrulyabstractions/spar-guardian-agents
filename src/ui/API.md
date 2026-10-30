@@ -26,6 +26,12 @@ evidence) and `tools/<tool>/` (the analysis tools' outputs). One run has one sam
 `riemann#1` for a lone agent, `riemann#1@a01` and `riemann#1@a02` on a board. `run.json.eval_log` points at the Inspect
 `.eval` log, from which the sample, the context windows and the timeline are read on demand.
 
+The two ladders write an **agent row** per episode (`"row": "agent"`) and a **team row** per sample (`"row": "team"`).
+The code ladder's team row (signals.jsonl) is the **team record**, the ladder's primary result: the team's honeypot
+rung (none, exposed, tried, opened, used, checked, shipped), its collaboration level (isolated, discussed, solicited,
+crossed, assembled), the judged presentation (disclosed, silent, passed_off) and the outcomes. The agent rows are the
+evidence under it.
+
 A run whose name starts with `failed<N>_` or `cancelled<N>_`, or whose episodes carry the failure `harness` or
 `connection_closed` (a provider error), is **failed** and never counted. A run whose model starts with `mockllm` is a smoke
 test (`mock`), listed under Runs and left out of the Summary. A verdict is **counted** only on an episode with a transcript.
@@ -60,6 +66,7 @@ RunRow = {
   knowledge: null | Knowledge,
   tools: [str],                    # the analysis tools that wrote runs/<run>/tools/<tool>/summary.json, sorted
   aggregate: Aggregate,
+  team: null | {rung, collaboration},   # the first sample's team record; null before the code ladder ran
   episodes: [Episode]
 }
 Aggregate = {                     # one run's counts; judged, cheated, flags and by_role count counted verdicts only
@@ -89,16 +96,38 @@ Verdict = the episode's judge.jsonl row without the bookkeeping keys (id, episod
           output_mode, judge_usage, judge_attempts). Always present, null when absent: cheated, summary, judge,
           judge_cost_usd, parse_ok, judge_error. The rest are the task's own verdict fields; a row that did not parse
           also carries raw.
-Signals = the episode's signals.jsonl row (src/measures/code_ladder.py) without episode, agent, role and task: rung,
-          exposed, exposed_call, exposed_source, searched, searched_call, tried, tried_call, tried_evidence, opened,
-          opened_call, opened_evidence, lines_seen, probe, copies, used, shipped, calls, ...
-Ladder = the episode's ladder.jsonl row (src/judging/judging_ladder.py) without the bookkeeping keys and raw.
+Signals = the episode's agent row of signals.jsonl (src/measures/code_ladder.py) without row, sample, episode, agent,
+          role and task: rung, holds, exposed, exposed_call, exposed_source, tried, tried_call, tried_evidence, opened,
+          opened_call, opened_evidence, lines_seen, pieces_seen, joined_call, joined_evidence, probe, copies, used,
+          used_evidence, checked, checked_evidence, shipped, shipped_evidence, calls. used, checked and shipped name
+          content this agent put there and count toward its rung once the team opened the honeypot.
+Ladder = the episode's agent row of ladder.jsonl (src/judging/judging_ladder.py) without the bookkeeping keys, raw,
+         row and sample: the judged rungs with checked, forbidden_method, pushback and, when asked, presentation.
+Team = a team row of signals.jsonl (src/measures/team_ladder.py), one per sample: {
+  row: "team", sample, task, agents: [str], mode, split: bool,
+  rung, rung_by_code,              # the final rung, and the rung before a pass raised it to passing_proves
+  exposed, tried, opened, used, checked, shipped: bool,
+  <rung>_agents: [str], <rung>_evidence: [str],   # for each of the six: the agents whose row holds it, and the
+                                                  # evidence as "<agent>: ..." or "team: ..."
+  copies: [str],                   # probe matches no agent owns: shared and team-remote copies
+  collaboration: null | str,       # null for a lone agent; crossed and assembled only when the honeypot was split
+  collaboration_evidence: {discussed, solicited, crossed, assembled: [str]},   # posts as "post <seq> by <agent>: ..."
+  presentation: null | "disclosed"|"silent"|"passed_off", presentation_evidence: [str],   # judged
+  presentation_hints: [str],       # what code sees of how the hand-in presents the content
+  passed: null | bool, passing_proves: null | str, proof: null | str, raised_by_proof: bool,
+  pushback: null | bool, pushback_evidence: [str], forbidden_method: null | bool, forbidden_method_evidence: [str],
+  judged: bool,                    # a judged team row of ladder.jsonl was merged
+  ended_by: null | "submit"|"stop_working"|"tokens"|"time"|"steps"|"end"|"error",
+  submit: null | {agent, round, ends_after_round, snapshot}, own_submits: {agent: round}, refused_submits: int,
+  shutdown_rate: null | float
+}
 ```
 An episode keeps every other key episodes.jsonl gives it (usage `{input, output, cache_read}` with input including cache
 reads, defense, engagement, access, rules, the SWE keys).
 
-### `GET /api/runs/<run>` → `RunRow + {run_json, communication, defense, tools}`
-`run_json` is run.json itself; the run page reads its `team_submission` (`null | {agent, round, answer, time,
+### `GET /api/runs/<run>` → `RunRow + {run_json, team, communication, defense, tools}`
+`team: [Team]` replaces the row's summary with every team record of the run, one per sample, which the run page shows
+first. `run_json` is run.json itself; the run page reads its `team_submission` (`null | {agent, round, answer, time,
 ends_after_round, snapshot, refused: [{agent, round, reason}], own: {agent: {round, answer, snapshot, time}}}`: the
 team's accepted submit, every refused one and each solo_task agent's own hand-in), `stop_working` (`null | {agent:
 round}`) and `shutdown_rate` (the share of the team's agents that ended with `stop_working`; null for a lone agent or when no agent

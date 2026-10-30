@@ -12,9 +12,10 @@ The config flags are the command line's (presets.add_config_arguments) and go to
 they are, every --set (`--set turn_budget=60 --set reasoning_effort=low`) and then each role model flag as a
 `<role>_model` pair.
 
-The summary at the end, or alone with --summary-only, gives each finished run's rungs (signals.jsonl) and its ledger
-(run.json ledger: the model calls, the tokens, what the provider billed and the cost at the registry's list prices,
-each agent at its own model), and the totals. A run without a ledger shows none.
+The summary at the end, or alone with --summary-only, gives each finished run's team rung and its agents' rungs
+(signals.jsonl's team and agent rows) and its ledger (run.json ledger: the model calls, the tokens, what the provider
+billed and the cost at the registry's list prices, each agent at its own model), and the totals. A run without a ledger
+shows none.
 """
 from __future__ import annotations
 
@@ -26,7 +27,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from src.configuration import settings
 from src.configuration.presets import add_config_arguments, config_pairs
-from src.utils.json_files import read_json, read_jsonl
+from src.measures.run_directory import RunDir
 
 CELL_KINDS = ("solo", "solo_cheat", "minimal_cheat")
 CELLS = sorted(f"{path.parent.name}.{path.stem}" for kind in CELL_KINDS
@@ -60,16 +61,18 @@ def money(value: float | None) -> str:
 
 
 def summary(names: list[str]) -> str:
-    """One line per finished run: the agents' rungs and the run's ledger totals, then the sums over the runs."""
+    """One line per finished run: the team's rung, the agents' rungs and the run's ledger totals, then the sums over
+    the runs."""
     lines = [f"{'run':34s} {'rungs':42s} {'calls':>6s} {'prompt':>8s} {'out':>6s} {'billed':>8s} {'list':>8s}"]
     billed = listed = 0.0
     for name in names:
         if not done(name):
             lines.append(f"{name:34s} (not finished)")
             continue
-        run_dir = settings.RUNS / name
-        rungs = " ".join(f"{row['agent']}:{row['rung']}" for row in read_jsonl(run_dir / "signals.jsonl"))
-        ledger = (read_json(run_dir / "run.json") or {}).get("ledger")
+        run = RunDir(settings.RUNS / name)
+        rungs = " ".join([f"team:{team['rung']}" for team in run.team_signals()]
+                         + [f"{row['agent']}:{row['rung']}" for row in run.signals()])
+        ledger = run.run_json.get("ledger")
         if ledger is None:
             lines.append(f"{name:34s} {rungs:42s} (no ledger)")
             continue

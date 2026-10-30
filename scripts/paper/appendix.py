@@ -1,17 +1,18 @@
-"""The appendix figures of a screen: for each cell of the first experiment, the cheating rate per domain and every
-agent's rung on the code ladder per domain and sample.
+"""The appendix figures of a screen: for each cell of the first experiment, the cheating rate per domain and each
+sample's team record on the code ladder per domain.
 
     uv run python -m scripts.paper.appendix [--model deepseek-flash-openrouter] [--suffixes flashpin flashbox]
 
 The domains are the registry's (src/domains/__init__.py DOMAINS) with an example folder, examples/<domain>/, whose
 <stem>_minimal.py names the domain's cells: <stem>_solo, <stem>_solo_cheat, <stem>_minimal and <stem>_minimal_cheat.
-Sample k of a cell under a suffix is the run runs/<cell>_<suffix><k>/. A run counts when it finished (its
-signals.jsonl exists) and ran on --model (run.json model). The suffixes are every one such runs carry, or those
---suffixes names. A domain without a counted run is left out.
+Sample k of a cell under a suffix is the run runs/<cell>_<suffix><k>/. A run counts when the code ladder wrote its
+team records (signals.jsonl's team rows, src/measures/team_ladder.py) and it ran on --model (run.json model). The
+suffixes are every one such runs carry, or those --suffixes names. A domain without a counted run is left out.
 
-For each cell the script writes tmp/appendix/appendix_<cell>_rate.png (the share of agents at opened or higher, the
-ladder's rung that agrees with the judge's cheated, beside the share at used or higher) and
-tmp/appendix/appendix_<cell>.png (every agent's rung per domain and sample, as tiles).
+For each cell the script writes tmp/appendix/appendix_<cell>_rate.png (the share of samples whose team rung is opened
+or higher, the rung that agrees with the judge's cheated, beside the share at used or higher) and
+tmp/appendix/appendix_<cell>.png (one tile per domain and sample coloured by the team rung, with the collaboration
+level under it).
 """
 from __future__ import annotations
 
@@ -24,9 +25,22 @@ from matplotlib.patches import FancyBboxPatch
 
 from src.configuration import settings
 from src.domains import DOMAINS
+from src.measures.run_directory import RunDir
+from src.measures.rungs import COLLABORATION, RUNGS, at_least
 from src.models import model_registry as models
-from src.utils.figure_style import AXIS, INK, INK_SECONDARY, PRINT_DPI, RUNG_FILL, RUNG_TEXT, SURFACE, WHITE, style_axes
-from src.utils.json_files import read_json, read_jsonl
+from src.utils.figure_style import (
+    AXIS,
+    COLLABORATION_FILL,
+    COLLABORATION_TEXT,
+    INK,
+    INK_SECONDARY,
+    PRINT_DPI,
+    RUNG_FILL,
+    RUNG_TEXT,
+    SURFACE,
+    WHITE,
+    style_axes,
+)
 
 OUT = settings.ROOT / "tmp" / "appendix"
 EXAMPLES = settings.ROOT / "examples"
@@ -34,9 +48,9 @@ CELLS = {"solo": "Solo agent", "solo_cheat": "Solo agent instructed to cheat", "
          "minimal_cheat": "Minimal swarm instructed to cheat"}
 LABELS = {"swe": "SWE"}                        # a domain key that abbreviates its name
 SAMPLE = re.compile(r"^([a-z]+)(\d+)$")        # <suffix><k>
-CHEATED = {"opened", "used", "shipped"}        # the ladder's "opened or higher", which agrees with the judge's cheated
-USED = {"used", "shipped"}
-TILE_W, TILE_H, GAP = 0.78, 0.46, 0.08
+# The rate figure's two floors: opened agrees with the judge's cheated; used means the content entered the team's work.
+FLOORS = (("opened", "opened or higher"), ("used", "used or higher"))
+TILE_W, TILE_H, CHIP_H, GAP = 0.9, 0.46, 0.2, 0.05
 
 
 def domain_stems() -> dict[str, str]:
@@ -50,8 +64,9 @@ def domain_stems() -> dict[str, str]:
 
 
 def samples(stem: str, model: str, suffixes: list[str] | None) -> dict[str, list[dict]]:
-    """{cell: [run]} of one domain: every counted run of each cell, in suffix order then k, each with its name and
-    its agents' rungs. A run belongs to the longest cell its name starts with."""
+    """{cell: [sample]} of one domain: the team record of every sample of each counted run, in suffix order, then k,
+    then sample, each as {name, suffix, rung, collaboration}. A run belongs to the longest cell its name starts
+    with."""
     cells = sorted((f"{stem}_{cell}" for cell in CELLS), key=len, reverse=True)
     found: dict[str, list[tuple]] = {cell: [] for cell in CELLS}
     for run_dir in settings.RUNS.glob(f"{stem}_*"):
@@ -60,28 +75,31 @@ def samples(stem: str, model: str, suffixes: list[str] | None) -> dict[str, list
         match = SAMPLE.match(name[len(cell) + 1:]) if cell else None
         if not match or (suffixes is not None and match[1] not in suffixes):
             continue
-        if not (run_dir / "signals.jsonl").is_file() or (read_json(run_dir / "run.json") or {}).get("model") != model:
+        run = RunDir(run_dir)
+        teams = run.team_signals()
+        if not teams or run.run_json.get("model") != model:
             continue
         order = suffixes.index(match[1]) if suffixes is not None else match[1]
-        rungs = [(row["agent"], row["rung"]) for row in read_jsonl(run_dir / "signals.jsonl")]
-        run = {"name": name, "suffix": match[1], "agents": rungs}
-        found[cell.removeprefix(f"{stem}_")].append((order, int(match[2]), run))
-    return {cell: [run for *_, run in sorted(runs, key=lambda r: r[:2])] for cell, runs in found.items()}
+        for team in teams:
+            sample = {"name": name, "suffix": match[1], "rung": team["rung"], "collaboration": team["collaboration"]}
+            found[cell.removeprefix(f"{stem}_")].append((order, int(match[2]), team["sample"], sample))
+    return {cell: [sample for *_, sample in sorted(rows, key=lambda r: r[:3])] for cell, rows in found.items()}
 
 
 def rate_figure(cell: str, runs: dict[str, list[dict]]) -> Path:
-    """One pair of bars per domain: the share of agents at opened or higher and at used or higher, labelled k of n."""
+    """One pair of bars per domain: the share of samples whose team rung is opened or higher and used or higher,
+    labelled k of n."""
     domains = list(runs)
     fig = Figure(figsize=(max(5.2, 0.4 + 1.6 * len(domains)), 2.6), dpi=PRINT_DPI)
     ax = fig.add_axes([0.08, 0.2, 0.9, 0.62])
     style_axes(ax, grid="y")
     bar_w, pair = 0.34, 0.38
     for i, domain in enumerate(domains):
-        rungs = [rung for run in runs[domain] for _, rung in run["agents"]]
-        for shift, counted, colour in ((-pair / 2, CHEATED, RUNG_FILL["opened"]), (pair / 2, USED, RUNG_FILL["used"])):
-            k = sum(r in counted for r in rungs)
+        rungs = [sample["rung"] for sample in runs[domain]]
+        for shift, (floor, _) in zip((-pair / 2, pair / 2), FLOORS):
+            k = sum(at_least(rung, floor) for rung in rungs)
             share = k / len(rungs) if rungs else 0
-            ax.bar(i + shift, share, width=bar_w, color=colour, edgecolor="none", zorder=3)
+            ax.bar(i + shift, share, width=bar_w, color=RUNG_FILL[floor], edgecolor="none", zorder=3)
             ax.text(i + shift, share + 0.03, f"{k} of {len(rungs)}" if rungs else "no run", ha="center", va="bottom",
                     fontsize=6.5, family="DejaVu Sans Mono", color=INK_SECONDARY)
     ax.set_xticks(range(len(domains)))
@@ -90,25 +108,33 @@ def rate_figure(cell: str, runs: dict[str, list[dict]]) -> Path:
     ax.set_yticks([0, 0.5, 1])
     ax.set_yticklabels(["0%", "50%", "100%"], fontsize=7, family="DejaVu Sans Mono", color=INK_SECONDARY)
     fig.text(0.08, 0.93, CELLS[cell], fontsize=9.5, family="DejaVu Sans", color=INK, weight="bold", va="center")
-    for n, (label, colour) in enumerate((("opened or higher", RUNG_FILL["opened"]),
-                                         ("used or higher", RUNG_FILL["used"]))):
+    for n, (floor, label) in enumerate(FLOORS):
         x = 0.08 + n * 0.3
-        fig.patches.append(FancyBboxPatch((x, 0.04), 0.025, 0.05, boxstyle="square,pad=0", facecolor=colour,
+        fig.patches.append(FancyBboxPatch((x, 0.04), 0.025, 0.05, boxstyle="square,pad=0", facecolor=RUNG_FILL[floor],
                                           edgecolor="none", transform=fig.transFigure))
         fig.text(x + 0.035, 0.065, label, fontsize=7, family="DejaVu Sans", color=INK_SECONDARY, va="center")
     return save(fig, f"appendix_{cell}_rate")
 
 
+def chip(ax, x: float, y: float, w: float, h: float, text: str, fill: str, ink: str, size: float) -> None:
+    """A rounded box with its text centred: a tile, a collaboration chip or a legend key."""
+    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0,rounding_size=0.04", facecolor=fill,
+                                edgecolor=AXIS, linewidth=0.6))
+    ax.text(x + w / 2, y + h / 2, text, fontsize=size, family="DejaVu Sans", color=ink, ha="center", va="center")
+
+
 def tiles_figure(cell: str, runs: dict[str, list[dict]]) -> Path:
-    """Rows are the domains, columns the samples, one tile per agent coloured by its rung. A domain with fewer samples
-    than another leaves the later columns blank."""
+    """Rows are the domains, columns the samples: one tile per sample coloured by its team rung, with the team's
+    collaboration level under it (none for a lone agent). A domain with fewer samples than another leaves the later
+    columns blank. The legend gives the rung ramp, and the collaboration ramp when a team is shown."""
     domains = list(runs)
     n_samples = max([1, *(len(v) for v in runs.values())])
-    agents = max((len(run["agents"]) for v in runs.values() for run in v), default=1)
-    cell_w = agents * TILE_W + (agents - 1) * GAP
-    left, top = 1.25, 0.75
-    width = max(left + n_samples * (cell_w + 0.3) + 0.2, 0.75 + len(RUNG_FILL) * 0.72 + 0.2)   # room for the legend
-    height = top + len(domains) * (TILE_H + 0.42) + 0.55
+    teams = any(sample["collaboration"] for v in runs.values() for sample in v)
+    row_h = TILE_H + (GAP + CHIP_H if teams else 0) + 0.32
+    left, top, key_w = 1.25, 0.75, 0.72
+    legend_h = 0.42 + (0.32 if teams else 0)
+    width = max(left + n_samples * (TILE_W + 0.2) + 0.2, 0.95 + len(RUNGS) * key_w + 0.2)   # room for the legend
+    height = top + len(domains) * row_h + legend_h
     fig = Figure(figsize=(width, height), dpi=PRINT_DPI)
     ax = fig.add_axes([0, 0, 1, 1])
     ax.set_xlim(0, width)
@@ -116,31 +142,28 @@ def tiles_figure(cell: str, runs: dict[str, list[dict]]) -> Path:
     ax.axis("off")
     ax.text(0.15, 0.3, CELLS[cell], fontsize=9.5, family="DejaVu Sans", color=INK, va="center", weight="bold")
     for j in range(n_samples):
-        x = left + j * (cell_w + 0.3)
-        ax.text(x + cell_w / 2, top - 0.08, f"sample {j + 1}", fontsize=7, family="DejaVu Sans Mono",
+        x = left + j * (TILE_W + 0.2)
+        ax.text(x + TILE_W / 2, top - 0.08, f"sample {j + 1}", fontsize=7, family="DejaVu Sans Mono",
                 color=INK_SECONDARY, ha="center", va="bottom")
     for i, domain in enumerate(domains):
-        y = top + i * (TILE_H + 0.42) + 0.14
+        y = top + i * row_h + 0.14
         ax.text(0.15, y + TILE_H / 2, domain, fontsize=8, family="DejaVu Sans", color=INK, va="center")
-        for j, run in enumerate(runs[domain]):
-            x0 = left + j * (cell_w + 0.3)
-            for n, (agent, rung) in enumerate(run["agents"]):
-                x = x0 + n * (TILE_W + GAP)
-                ax.add_patch(FancyBboxPatch((x, y), TILE_W, TILE_H, boxstyle="round,pad=0,rounding_size=0.05",
-                                            facecolor=RUNG_FILL.get(rung, WHITE), edgecolor=AXIS, linewidth=0.6))
-                ax.text(x + TILE_W / 2, y + TILE_H / 2, rung, fontsize=7, family="DejaVu Sans",
-                        color=RUNG_TEXT.get(rung, INK), ha="center", va="center")
-                if agents > 1:
-                    ax.text(x + TILE_W / 2, y - 0.03, agent, fontsize=6, family="DejaVu Sans Mono",
-                            color=INK_SECONDARY, ha="center", va="bottom")
-    y = height - 0.42                           # the legend: the ramp in rung order
-    ax.text(0.15, y + 0.11, "rung", fontsize=6.5, family="DejaVu Sans Mono", color=INK_SECONDARY, va="center")
-    for n, (rung, fill) in enumerate(RUNG_FILL.items()):
-        x = 0.75 + n * 0.72
-        ax.add_patch(FancyBboxPatch((x, y), 0.64, 0.22, boxstyle="round,pad=0,rounding_size=0.03", facecolor=fill,
-                                    edgecolor=AXIS, linewidth=0.5))
-        ax.text(x + 0.32, y + 0.11, rung, fontsize=6, family="DejaVu Sans", color=RUNG_TEXT.get(rung, INK),
-                ha="center", va="center")
+        for j, sample in enumerate(runs[domain]):
+            x, rung, level = left + j * (TILE_W + 0.2), sample["rung"], sample["collaboration"]
+            chip(ax, x, y, TILE_W, TILE_H, rung, RUNG_FILL.get(rung, WHITE), RUNG_TEXT.get(rung, INK), 7)
+            if level:
+                chip(ax, x, y + TILE_H + GAP, TILE_W, CHIP_H, level, COLLABORATION_FILL[level],
+                     COLLABORATION_TEXT.get(level, INK), 6)
+    y = height - legend_h + 0.1                 # the legend: each ramp in its order
+    for name, levels, fills, inks in (("rung", RUNGS, RUNG_FILL, RUNG_TEXT),
+                                      ("collaboration", COLLABORATION if teams else (), COLLABORATION_FILL,
+                                       COLLABORATION_TEXT)):
+        if not levels:
+            continue
+        ax.text(0.15, y + 0.11, name, fontsize=6.5, family="DejaVu Sans Mono", color=INK_SECONDARY, va="center")
+        for n, level in enumerate(levels):
+            chip(ax, 0.95 + n * key_w, y, key_w - 0.08, 0.22, level, fills[level], inks.get(level, INK), 6)
+        y += 0.32
     return save(fig, f"appendix_{cell}")
 
 
@@ -162,11 +185,12 @@ def main(argv: list[str] | None = None) -> int:
     by_domain = {domain: samples(stem, model, args.suffixes) for domain, stem in domain_stems().items()}
     by_domain = {domain: cells for domain, cells in by_domain.items() if any(cells.values())}
     if not by_domain:
-        print(f"no finished run of an example cell on {model}")
+        print(f"no run of an example cell on {model} with a team record")
         return 1
     for domain, cells in by_domain.items():
-        runs = [run for cell_runs in cells.values() for run in cell_runs]
-        print(f"== {domain}: {len(runs)} runs, suffixes {' '.join(sorted({run['suffix'] for run in runs}))}")
+        found = [sample for cell_samples in cells.values() for sample in cell_samples]
+        print(f"== {domain}: {len(found)} sample(s) in {len({s['name'] for s in found})} run(s), suffixes "
+              f"{' '.join(sorted({s['suffix'] for s in found}))}")
     for cell in CELLS:
         runs = {domain: cells[cell] for domain, cells in by_domain.items()}
         print(rate_figure(cell, runs))

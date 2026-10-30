@@ -3,11 +3,12 @@
 `Store` reads run.json, episodes.jsonl, judge.jsonl, ladder.jsonl, signals.jsonl and the trajectories through
 src/measures/run_directory.py RunDir, and the communication and defense stores and the analysis tools' summaries
 itself; it loads a run's Inspect eval log once, on demand. The run directories are written by src/export/run_export.py
-and the SWE measures (swe_summary.json) by src/measures/swe_measures.py. eval_log_views.py reads the eval logs.
+and the SWE measures (swe_summary.json) by src/measures/swe_measures.py. eval_log_views.py reads the eval logs. Each
+episode carries its agent rows of the two ladders; the run carries the code ladder's team records.
 
     store = Store(Path("runs"))
     rows = [store.run_row(name) for name in store.run_names()]
-    rows[0]["aggregate"]["cheated"]
+    rows[0]["aggregate"]["cheated"], rows[0]["team"]["rung"]
 """
 from __future__ import annotations
 
@@ -33,8 +34,9 @@ VERDICT_BOOKKEEPING = frozenset({
     "output_mode", "judge_usage", "judge_attempts",
 })
 VERDICT_BASE = ("cheated", "summary", "judge", "judge_cost_usd", "parse_ok", "judge_error")
-LADDER_BOOKKEEPING = VERDICT_BOOKKEEPING | {"raw"}
-SIGNALS_IDENTITY = ("episode", "agent", "role", "task")
+LADDER_BOOKKEEPING = VERDICT_BOOKKEEPING | {"raw", "row", "sample"}
+SIGNALS_IDENTITY = ("row", "sample", "episode", "agent", "role", "task")
+TEAM_FIELDS = ("rung", "collaboration")          # what the runs list shows of the first sample's team record
 SWARM_FIELDS = ("n_agents", "regulators", "disregulators", "workers", "seed", "composition")
 DELIVERABLE_FIELDS = ("archive_in_workspace", "archive_on_remote_main", "registered_on_main",
                       "registered_message_copied_from")
@@ -228,6 +230,7 @@ class Store:
         d = self.run_dir(name)
         run = RunDir(d).run_json
         eps = self.episodes(name)
+        teams = RunDir(d).team_signals()
         fields = verdict_fields(run.get("task"))
         swarm, deliverables = run.get("swarm"), run.get("deliverables")
         n_agents = len(run.get("agents") or eps)
@@ -267,14 +270,17 @@ class Store:
             "tools": self.tool_names(name),
             "verdict_fields": fields,
             "aggregate": aggregate(run, eps, fields),
+            "team": {key: teams[0].get(key) for key in TEAM_FIELDS} if teams else None,
             "episodes": eps,
         }
 
     def run_detail(self, name: str) -> dict:
-        """The run row plus run.json itself, the board, the defense evidence and each analysis tool's summary."""
+        """The run row plus run.json itself, every team record, the board, the defense evidence and each analysis
+        tool's summary."""
         d = self.run_dir(name)
         detail = self.run_row(name)
         detail["run_json"] = RunDir(d).run_json
+        detail["team"] = RunDir(d).team_signals()
         detail["communication"] = read_json_dir(d / "communication")
         detail["defense"] = read_json_dir(d / "defense")
         detail["tools"] = {tool: _tool_summary(d / "tools" / tool / "summary.json") for tool in detail["tools"]}

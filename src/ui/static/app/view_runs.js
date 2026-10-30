@@ -6,8 +6,8 @@
  */
 import { DASH, debounce, firstLine, fmtCompact, fmtInt, fmtSecs, fmtUsd, h, plural } from './dom.js';
 import { P, R, apiFresh, setHashQuietly } from './api.js';
-import { badge, dataTable, endedByBadge, labeled, link, mono, muted, registeredCell, roleBadge, rungBadge, select,
-  verdictCell, yn } from './components.js';
+import { COLLABORATION, RUNG_ORDER, badge, collaborationBadge, dataTable, endedByBadge, labeled, link, mono, muted,
+  registeredCell, roleBadge, rungBadge, select, verdictCell, yn } from './components.js';
 import { endingsText, settingSortKey } from './run_facts.js';
 
 const runsState = { q: '', setting: '', control: '', cheated: '', failed: 'hide', sortKey: 'setting', sortDir: 1 };
@@ -31,6 +31,7 @@ function cmpNullsLast(a, b, dir) {
 }
 
 const agg = run => run.aggregate;
+const rank = (order, v) => (v == null ? null : order.indexOf(v));
 const RUN_COLS = [
   { key: 'run', label: 'Run', sort: run => run.run },
   { key: 'setting', label: 'Setting', sort: run => settingSortKey(run.setting, run.run), title: 'task, graph, roster size and hidden roles' },
@@ -38,6 +39,8 @@ const RUN_COLS = [
   { key: 'agents', label: 'Agents', num: true, sort: run => run.n_agents },
   { key: 'cheated', label: 'Cheated', num: true, sort: run => (agg(run).judged ? agg(run).cheated / agg(run).judged : null), title: 'agents the judge found cheated, over counted verdicts' },
   { key: 'flags', label: 'Verdict flags', sort: run => flagCounts(run).reduce((s, [, n]) => s + n, 0), title: 'counted agents with each of the task’s verdict flags' },
+  { key: 'rung', label: 'Team rung', sort: run => rank(RUNG_ORDER, run.team && run.team.rung), title: `the team record’s rung by code, raised when a pass proves more: ${RUNG_ORDER.join(', ')}` },
+  { key: 'collaboration', label: 'Collaboration', sort: run => rank(COLLABORATION, run.team && run.team.collaboration), title: `the team record’s collaboration level: ${COLLABORATION.join(', ')}; none for a lone agent` },
   { key: 'registered', label: 'Registered', sort: run => (run.deliverables || {}).registered_on_main, title: 'a registry entry on main at the end' },
   { key: 'ended', label: 'Ended', sort: run => endingsText(run.endings), title: 'how the agents’ episodes ended' },
   { key: 'blocks', label: 'Blocks / checks', num: true, sort: run => (agg(run).controlled ? agg(run).blocks : null) },
@@ -83,7 +86,9 @@ function endedCell(ep) {
 /** The agents of one run, one row each. */
 function episodesTable(run) {
   const flags = run.verdict_fields.filter(f => f.field !== 'cheated');
-  const cols = ['agent', 'role', { label: 'calls', num: true }, 'ended by', 'cheated', 'rung', ...flags.map(f => f.label),
+  const cols = ['agent', 'role', { label: 'calls', num: true }, 'ended by', 'cheated',
+    { label: 'judged rung', title: 'the judged ladder’s rung (ladder.jsonl)' },
+    { label: 'code rung', title: 'the code ladder’s agent row (signals.jsonl)' }, ...flags.map(f => f.label),
     { label: 'prompt tok', num: true }, { label: 'judge $', num: true }, h('span', { class: 'visually-hidden' }, 'links')];
   return dataTable(cols, run.episodes.map(ep => {
     const v = ep.verdict;
@@ -97,6 +102,7 @@ function episodesTable(run) {
       endedCell(ep),
       h('span', null, verdictCell(ep), v && (v.parse_ok === false || v.judge_error) ? [' ', badge('judge issue', 'warn', String(v.judge_error || 'parse failed'))] : null),
       ep.ladder && ep.ladder.rung ? rungBadge(ep.ladder.rung) : null,
+      ep.signals && ep.signals.rung ? rungBadge(ep.signals.rung) : null,
       ...flags.map(f => yn(v ? v[f.field] : null, f.kind)),
       h('span', { title: `${fmtInt(u.input)} prompt (${fmtInt(u.cache_read)} cache read), ${fmtInt(u.output)} completion` }, fmtCompact(u.input)),
       v ? fmtUsd(v.judge_cost_usd) : null,
@@ -121,6 +127,8 @@ function runRowCells(run) {
     td(a.judged ? h('span', { class: ['cheated-cell', a.cheated && 'text-bad'] }, `${a.cheated}/${a.judged}`) : muted('not judged', 'small'),
       { num: true, title: frac == null ? 'no counted verdict' : `${Math.round(frac * 100)}% of counted verdicts` }),
     td(a.judged ? flagged.map(([f, n]) => `${f.label} ${n}`).join(', ') || 'none' : DASH, { cls: 'wrap-cell small' }),
+    td(run.team ? rungBadge(run.team.rung) : muted(DASH)),
+    td(run.team && run.team.collaboration ? collaborationBadge(run.team.collaboration) : muted(DASH)),
     td(registeredCell(run.deliverables)),
     td(endingsText(run.endings) || DASH, { cls: 'wrap-cell small' }),
     td(a.controlled ? h('span', { class: a.blocks ? 'has-blocks' : '' }, `${fmtInt(a.blocks)} / ${fmtInt(a.checks)}`) : DASH, { num: true }),
