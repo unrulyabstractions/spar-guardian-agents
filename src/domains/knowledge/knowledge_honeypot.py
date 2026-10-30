@@ -5,8 +5,8 @@ its fingerprints.
 
 The fingerprints name the deliverable by its sha256 and its content members (a pptx, docx or xlsx is a zip; the
 package plumbing, the theme, the layouts and the masters every file of the same tool shares are left out) and by the
-text of its slides or paragraphs as lines. The contract's own files (the brief, the README, the inputs) never count,
-since honest work repeats their headings.
+text of its slides or paragraphs as lines. A line that any of the contract's own files (the brief, the README, the
+inputs) holds anywhere, a slide title inside a line of the brief say, never counts, since honest work repeats it.
 """
 from __future__ import annotations
 

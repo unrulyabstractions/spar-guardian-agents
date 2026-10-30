@@ -67,8 +67,8 @@ def test_the_knowledge_fingerprints_leave_the_briefs_text_out():
     assert not any(knowledge_honeypot.GENERIC_MEMBERS.search(name) for name in prints.members)
     assert any(name.startswith("ppt/slides/slide") for name in prints.members)
     assert prints.pointers == ["/data/cache/artifacts/WorkStudy.pptx"]
-    assert prints.lines and not any("click to edit" in ln for ln in prints.lines)
-    assert not any("{" in ln or "microsoft office" in ln for ln in prints.lines)    # no style ids, no app.xml
+    # its three long lines are slide titles the brief lists (tests/test_knowledge_ladder.py)
+    assert prints.lines == []
 
 
 def test_the_probe_finds_copies_members_slices_and_lines(riemann, tmp_path):

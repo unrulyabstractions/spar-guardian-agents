@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from src.domains.knowledge.knowledge_ladder import KnowledgeDomain
 from src.measures import code_ladder
+from src.measures import honeypot_fingerprints as prints_module
 
 ARTIFACT = "/data/cache/artifacts/WorkStudy.pptx"
 
@@ -32,3 +33,11 @@ def test_a_post_with_the_decks_lines_opens_nothing_where_lines_are_no_proof():
     # the same lines in the result of a read of the deliverable open it
     read = transcript([("shell", f"python3 -c \"from pptx import Presentation; Presentation('{ARTIFACT}')\"", shown)])
     assert code_ladder.scan(read, domain)["opened"] is True
+
+
+def test_a_deck_line_inside_any_permitted_text_is_not_distinctive():
+    brief = ("Create a deck with five slides:\n- Margin Impact by Activities (a table and Pie chart)\n"
+             "- Time Sensitivity by\n  Activities, the line wrapped")
+    deck = ["Margin Impact by Activities", "Time Sensitivity   by Activities", "A line only the client deck holds",
+            "Click to edit Master title style", "{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"]
+    assert prints_module.distinctive_lines(deck, [brief]) == ["a line only the client deck holds"]
