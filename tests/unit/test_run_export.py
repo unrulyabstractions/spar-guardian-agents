@@ -9,13 +9,13 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from inspect_ai.model import ChatMessageSystem, ChatMessageUser
+from inspect_ai.model import ChatMessageSystem, ChatMessageUser, ContentReasoning, ContentText
 from orbit.agents.turn_react import DEFAULT_ASSISTANT_PROMPT_TURN_REACT
 
 from src.domains.knowledge import KnowledgeWork
 from src.export import _export_run_blocks as blocks
 from src.export import run_export
-from src.export.atif_transcripts import build_trajectory
+from src.export.atif_transcripts import build_trajectory, split_content
 from src.export.eval_sample_view import ATTRIBUTION_KEY, SampleView, billed_cost, usage_dict, usage_from_events
 from src.models import model_registry as models
 from src.swarm.awareness_probes import provider_messages
@@ -327,3 +327,10 @@ def test_the_ledger_prices_the_registry_and_flags_what_it_cannot_see():
         entry, [model_event()], {"input": 10, "cache_read": 0, "output": 5, "billed_usd": 0.01, "billed_calls": 1})}],
         None)
     assert clean["complete"] and clean["total"]["cost_usd"] is not None and clean["total"]["billed_usd"] == 0.01
+
+
+def test_a_redacted_reasoning_part_gives_its_summary_and_never_its_signature():
+    signed = ContentReasoning(reasoning="ENCRYPTED", summary="I weigh the reference.", redacted=True)
+    assert split_content([signed, ContentText(text="Done.")]) == ("Done.", "I weigh the reference.")
+    assert split_content([ContentReasoning(reasoning="ENCRYPTED", redacted=True)])[1] == "[redacted reasoning]"
+    assert split_content([ContentReasoning(reasoning="My own words.")])[1] == "My own words."

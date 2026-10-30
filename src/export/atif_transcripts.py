@@ -56,7 +56,8 @@ def split_content(content) -> tuple[str, str | None]:
     """(text, reasoning) from an Inspect message content (str or content list).
 
     A redacted reasoning part carries the provider's encrypted signature (Gemini's thought signatures), which is
-    not readable reasoning, so it is never copied: it shows as "[redacted reasoning]" when nothing readable is left.
+    not readable reasoning, so it is never copied. Its summary, which OpenAI's Responses API sends beside the signature,
+    is readable and is kept. A step with nothing readable shows "[redacted reasoning]".
     """
     if content is None:
         return "", None
@@ -68,10 +69,10 @@ def split_content(content) -> tuple[str, str | None]:
         if kind == "text":
             texts.append(part.text)
         elif kind == "reasoning":
-            if getattr(part, "redacted", False):
-                redacted = True
-            elif getattr(part, "reasoning", ""):
-                reasoning.append(part.reasoning)
+            redacted = redacted or part.redacted
+            readable = part.summary if part.redacted else part.reasoning
+            if readable:
+                reasoning.append(readable)
         else:
             texts.append(f"[{kind} content omitted]")
     if not reasoning and redacted:
