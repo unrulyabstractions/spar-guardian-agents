@@ -28,9 +28,16 @@ setup() {
     echo "refused: the box needs $min_cores cores, $min_ram_gb GB of RAM and $min_disk_gb GB on /"
     exit 1
   fi
+  # Ubuntu's automatic upgrades stop here: they would change the host under running sandboxes, and one that reached
+  # install-info left dpkg half configured, since vast.ai's /etc/environment does not parse as a shell file. apt-get
+  # then fails for good, so a box that holds the tools skips it.
+  systemctl disable --now unattended-upgrades.service apt-daily.timer apt-daily-upgrade.timer || true
   export DEBIAN_FRONTEND=noninteractive
-  apt-get -o DPkg::Lock::Timeout=900 update -qq
-  apt-get -o DPkg::Lock::Timeout=900 install -y -qq docker-compose-v2 git rsync curl ca-certificates python3
+  if ! { docker compose version && git --version && rsync --version && curl --version && python3 --version; } \
+      > /dev/null 2>&1; then
+    apt-get -o DPkg::Lock::Timeout=900 update -qq
+    apt-get -o DPkg::Lock::Timeout=900 install -y -qq docker-compose-v2 git rsync curl ca-certificates python3
+  fi
   echo "docker $(docker info --format '{{.ServerVersion}}'), $(docker compose version)"
   export PATH=/root/.local/bin:$PATH
   if [ "$(uv --version 2>/dev/null | cut -d' ' -f2)" != "$uv_version" ]; then
