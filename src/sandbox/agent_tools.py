@@ -1,8 +1,8 @@
 """The agents' tools: ORBIT's built-in bash and python for a lone agent, and `shell` and `run_python` bound per agent
 to a seat (a Linux user in a directory of a sandbox service), with that user's processes killed after each command.
 
-    seats = {"a01": Seat(user="a01", uid=1001, home="/home/a01", workdir="/workspace/a01", reap=True)}
-    tools = roster_tools(["a01"], seats, task_tools=review_binding())
+    seats = {"k7q2m": Seat(user="k7q2m", uid=1001, home="/home/k7q2m", workdir="/workspace/k7q2m", reap=True)}
+    tools = roster_tools(["k7q2m"], seats, task_tools=review_binding())
 
 ORBIT reserves the names bash and python for its built-in tools, which take one user for every agent, so a layout
 with a seat per agent binds these two under other names. A lone agent keeps ORBIT's built-in tools as the sandbox

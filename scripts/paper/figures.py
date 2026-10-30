@@ -54,7 +54,7 @@ plt.rcParams.update(
     }
 )
 
-ROLES5 = {"a01": "worker", "a02": "regulator", "a03": "worker", "a04": "disregulator", "a05": "worker"}
+ROLES5 = {"k7q2m": "worker", "t4x9n": "regulator", "p8s3z": "worker", "n5j6q": "disregulator", "x2m7s": "worker"}
 
 
 def save(fig, name):
@@ -71,8 +71,13 @@ def blank(ax, xlim, ylim):
 
 
 def agent(ax, x, y, name, role="worker", r=0.36, fs=6.5, z=5):
+    """An agent as a circle of its role with its ID inside, the font shrunk until the ID fits the circle."""
     ax.add_patch(Circle((x, y), r, fc=ROLE_FILL[role], ec=ROLE_EDGE[role], lw=1.0, zorder=z))
-    ax.text(x, y, name, ha="center", va="center", fontsize=fs, color=ROLE_TEXT[role], zorder=z + 1)
+    label = ax.text(x, y, name, ha="center", va="center", fontsize=fs, color=ROLE_TEXT[role], zorder=z + 1)
+    ax.apply_aspect()
+    left, right = ax.transData.transform([(x - r, y), (x + r, y)])[:, 0]
+    width = label.get_window_extent(ax.figure.canvas.get_renderer()).width
+    label.set_fontsize(fs * min(1, 0.88 * (right - left) / width))
 
 
 def box(ax, x, y, w, h, text=None, fc=WHITE, ec=INK_SECONDARY, lw=0.8, ls="-", hatch=None, fs=7,
@@ -193,11 +198,11 @@ def fig_round_structure():
     lane_h, top = 0.62, 5.05
     cols = [("r", 1.2, 3.6), ("f1", 5.0, 1.45), ("f2", 6.55, 1.45), ("f3", 8.1, 1.45), ("r1", 9.85, 3.6)]
     acts = {
-        "r": {"a01": "post", "a02": "work", "a03": "status", "a04": "work", "a05": "read"},
-        "f1": {"a01": "work", "a03": "read", "a05": "post"},
-        "f2": {"a03": "post", "a05": "work"},
-        "f3": {"a03": "read"},
-        "r1": {"a01": "work", "a02": "agent_actions", "a03": "work", "a04": "read", "a05": "submit"},
+        "r": {"k7q2m": "post", "t4x9n": "work", "p8s3z": "status", "n5j6q": "work", "x2m7s": "read"},
+        "f1": {"k7q2m": "work", "p8s3z": "read", "x2m7s": "post"},
+        "f2": {"p8s3z": "post", "x2m7s": "work"},
+        "f3": {"p8s3z": "read"},
+        "r1": {"k7q2m": "work", "t4x9n": "agent_actions", "p8s3z": "work", "n5j6q": "read", "x2m7s": "submit"},
     }
     for j, n in enumerate(names):
         y = top - j * lane_h
@@ -253,14 +258,14 @@ def fig_context_ledger():
     ax.set_xlim(0, 17)
     ax.set_ylim(-0.65, 3.6)
     ax.axis("off")
-    names = ["a01", "a02", "a03"]
+    names = ["k7q2m", "t4x9n", "p8s3z"]
     seen = {
-        (1, "a01"): [("post", "posted #1")],
-        (1, "a02"): [("post", "posted #2")],
-        (2, "a01"): [("notice", "notice: a02 +1"), ("tool", "status"), ("tool", "read #2")],
-        (2, "a02"): [("notice", "notice: a01 +1"), ("tool", "status"), ("tool", "read #1")],
-        (2, "a03"): [("notice", "notice: a01 +1, a02 +1")],
-        (3, "a03"): [("tool", "status"), ("tool", "read #1, #2")],
+        (1, "k7q2m"): [("post", "posted #1")],
+        (1, "t4x9n"): [("post", "posted #2")],
+        (2, "k7q2m"): [("notice", "notice: t4x9n +1"), ("tool", "status"), ("tool", "read #2")],
+        (2, "t4x9n"): [("notice", "notice: k7q2m +1"), ("tool", "status"), ("tool", "read #1")],
+        (2, "p8s3z"): [("notice", "notice: k7q2m +1, t4x9n +1")],
+        (3, "p8s3z"): [("tool", "status"), ("tool", "read #1, #2")],
     }
     ax.text(0.15, 3.35, "What each agent sees, round by round", fontsize=8.5, weight="bold", va="center")
     keys = [("notice", "notice (not kept)"), ("tool", "tool result (kept)"), ("post", "own post")]
@@ -333,8 +338,8 @@ def fig_read_graph():
     gx = fig.add_axes([0.02, 0.02, 0.96, 0.96])
     blank(gx, (-2.6, 2.6), (-2.3, 2.2))
     pos = dict(zip(ROLES5, ring(5, 1.75)))
-    reads = {("a01", "a02"): 4, ("a02", "a01"): 1, ("a03", "a02"): 3, ("a05", "a02"): 2, ("a04", "a01"): 2,
-             ("a02", "a04"): 1, ("a05", "a03"): 1, ("a01", "a05"): 1}
+    reads = {("k7q2m", "t4x9n"): 4, ("t4x9n", "k7q2m"): 1, ("p8s3z", "t4x9n"): 3, ("x2m7s", "t4x9n"): 2,
+             ("n5j6q", "k7q2m"): 2, ("t4x9n", "n5j6q"): 1, ("x2m7s", "p8s3z"): 1, ("k7q2m", "x2m7s"): 1}
     for (reader, sender), count in reads.items():
         (x1, y1), (x2, y2) = pos[reader], pos[sender]
         arrow(gx, toward(x1, y1, x2, y2, 0.36), toward(x2, y2, x1, y1, 0.42), lw=0.6 + 0.65 * count, rad=0.18,

@@ -494,9 +494,9 @@ def test_the_access_plan_check_and_deviations():
     assert solo.holds == {"a01": ["whole"], "a02": ["whole"]} and not solo.split
     lone = bench.plan(build_config("default", "small", ["n_agents=1"]))
     assert lone.holds == {"a01": bench.whole_access()} == {"a01": ["whole"]}
-    bench.check(build_config("default", "small", ["access=a01:segment1+segment2,a02:segment3,a03:"]))
+    bench.check(build_config("default", "small", ["access=seat1:segment1+segment2,seat2:segment3,seat3:"]))
     # segments 1..N with N at least 2, and only this domain's items
-    for bad in ("a01:segment1,a02:segment3,a03:", "a01:segment1,a02:,a03:", "a01:slice1,a02:,a03:"):
+    for bad in ("seat1:segment1,seat2:segment3,seat3:", "seat1:segment1,seat2:,seat3:", "seat1:slice1,seat2:,seat3:"):
         with pytest.raises(ValueError):
             bench.check(build_config("default", "small", [f"access={bad}"]))
     assert bench.valid_item("segment12") and bench.valid_item("whole") and not bench.valid_item("segment0")
@@ -548,7 +548,7 @@ def test_the_compose_file_and_each_agents_staging_archive(tmp_path):
     # a team with the team remote: the volume `team` at /team in every machine, in a file of its own name
     path = machines.write_compose(tmp_path, ["a01", "a02"], shared="/team")
     shared = yaml.safe_load(path.read_text())
-    assert path.name == "compose-2-team.yaml" and shared["volumes"] == {"team": {}}
+    assert path.name.startswith("compose-team-") and shared["volumes"] == {"team": {}}
     assert [s["volumes"] for s in shared["services"].values()] == [["team:/team"], ["team:/team"]]
     assert {k: v for k, v in shared["services"]["a01"].items() if k != "volumes"} == compose["services"]["a01"]
     files = honeypot.agent_files(ROW, [1], 2)

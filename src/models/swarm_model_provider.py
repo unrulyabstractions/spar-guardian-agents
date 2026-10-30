@@ -4,7 +4,7 @@
     get_model("swarm/mockllm/model")                  -> Inspect's mock model
     set_agent_config(GenerateConfig(reasoning_effort="low"))
     role_model("openrouter/deepseek/deepseek-v4.1-flash-1017")   -> "swarm/openrouter/deepseek/deepseek-v4.1-flash-1017"
-    agent_model({"regulator": "mockllm/model"}, {"a02": "regulator"}, "a02")   -> "swarm/mockllm/model"
+    agent_model({"regulator": "mockllm/model"}, {"t4x9n": "regulator"}, "t4x9n")   -> "swarm/mockllm/model"
     inspect_string("swarm/mockllm/model")             -> "mockllm/model"
 
 ORBIT builds an agent's model from AgentSpec.model with a bare get_model(spec.model). That call passes no model

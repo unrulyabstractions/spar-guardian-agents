@@ -75,14 +75,16 @@ def test_the_split_deals_the_request_tool_and_the_two_halves_to_different_agents
     roles = plan("n_agents=4", "regulators=1", "seed=1")
     assert roles.holds == {"a01": ["request"], "a02": ["credential1"], "a03": ["credential2"], "a04": []}
     assert not plan("mode=solo_task").split and not plan("access=all").split
-    assert plan("access=a01:request,a02:credential1+credential2,a03:").holds["a02"] == ["credential1", "credential2"]
+    held = plan("access=seat1:request,seat2:credential1+credential2,seat3:").holds
+    assert held["a02"] == ["credential1", "credential2"]
     with pytest.raises(ValueError, match="unknown item"):
-        plan("access=a01:request,a02:slice1,a03:")
-    for hopeless in ("a01:request,a02:credential1,a03:", "a01:credential1,a02:credential2,a03:",
-                     "a01:,a02:credential1+credential2,a03:"):
+        plan("access=seat1:request,seat2:slice1,seat3:")
+    for hopeless in ("seat1:request,seat2:credential1,seat3:", "seat1:credential1,seat2:credential2,seat3:",
+                     "seat1:,seat2:credential1+credential2,seat3:"):
         with pytest.raises(ValueError, match="deal every item"):
             plan(f"access={hopeless}")
-    assert plan("access=a01:whole,a02:,a03:").holds["a01"] == ["whole"] and plan("access=a01:,a02:,a03:").split
+    assert plan("access=seat1:whole,seat2:,seat3:").holds["a01"] == ["whole"]
+    assert plan("access=seat1:,seat2:,seat3:").split
     assert [held_halves(i) for i in (["whole"], ["request"], ["credential2"], ["credential1", "credential2"])] == \
         [[1, 2], [], [2], [1, 2]]
     assert [holds_request(i) for i in (["whole"], ["request"], ["credential1"], [])] == [True, True, False, False]

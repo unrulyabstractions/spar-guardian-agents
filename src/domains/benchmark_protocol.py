@@ -78,7 +78,7 @@ class Plan:
     access: Access
     """The access policy as applied: all for a lone agent, a solo_task team and fewer than two neutral agents."""
     holds: dict[str, list[str]]
-    """The access plan: each agent's items."""
+    """The access plan: each agent's items, sorted by agent."""
     pieces: dict[str, list[int] | None]
     """Each agent's numbered pieces (None: the whole); {} for a domain without numbered pieces."""
     n_pieces: int | None
@@ -88,6 +88,7 @@ class Plan:
 
     @property
     def agents(self) -> list[str]:
+        """The roster, sorted by ID: domains build every prompt, user and machine in this order, which shows no seat."""
         return self.config.names
 
     @property
@@ -142,7 +143,7 @@ class Benchmark(ABC):
         access = config.access
         if isinstance(access, dict) and (config.n_agents < 2 or config.mode == "solo_task"):
             raise ValueError("an explicit access map cannot apply: a lone agent and a solo_task team hold everything")
-        access_policy.check_map(access, config.names, self.valid_item)
+        access_policy.check_map(access, self.valid_item)
         if self.piece_stem and isinstance(access, dict):
             named = sorted({k for items in access.values() for k in self.pieces_of(items) or []})
             access_policy.check_numbered(named, f"{self.piece_stem}s")
@@ -182,7 +183,7 @@ class Benchmark(ABC):
         self.check(config)
         access = self.applied_access(config, roles)
         whole = self.whole_access()
-        holds = access_policy.plan(access, config.names, roles, self.split_items, whole)
+        holds = access_policy.plan(access, config.seats, roles, self.split_items, whole)
         pieces: dict[str, list[int] | None] = {}
         n_pieces = None
         if self.piece_stem:

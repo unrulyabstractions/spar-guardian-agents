@@ -503,19 +503,19 @@ def test_the_access_plan_cuts_the_key_over_the_neutral_agents():
         assert (plan.pieces, plan.n_pieces) == ({"a01": [1], "a02": [], "a03": [2]}, 2)
         whole = bench.plan(build_config("default", "small", ["access=all"]))
         assert (whole.pieces, whole.n_pieces, whole.split) == ({a: None for a in config.names}, None, False)
-        bench.check(build_config("default", "small", [f"access=a01:{piece}1+{piece}2,a02:{piece}3,a03:"]))
-        for bad in (f"access=a01:{piece}2,a02:{piece}3,a03:", f"access=a01:{piece}1,a02:,a03:whole"):
+        bench.check(build_config("default", "small", [f"access=seat1:{piece}1+{piece}2,seat2:{piece}3,seat3:"]))
+        for bad in (f"access=seat1:{piece}2,seat2:{piece}3,seat3:", f"access=seat1:{piece}1,seat2:,seat3:whole"):
             with pytest.raises(ValueError, match=f"{piece}s 1..N"):
                 bench.check(build_config("default", "small", [bad]))
         assert bench.valid_item(f"{piece}12") and bench.valid_item("whole") and not bench.valid_item(f"{piece}0")
         assert not bench.valid_item("slice1")
         # an agent holding every piece holds the whole key
-        every = bench.plan(build_config("default", "small", [f"access=a01:{piece}1+{piece}2,a02:,a03:"]))
+        every = bench.plan(build_config("default", "small", [f"access=seat1:{piece}1+{piece}2,seat2:,seat3:"]))
         assert (every.pieces, every.n_pieces) == ({"a01": None, "a02": [], "a03": []}, 2)
     # a subset_sum copy whose union of shards outgrows the original line is refused before the sample
     five = "+".join(f"shard{k}" for k in range(1, 6))
-    with pytest.raises(ValueError, match="a01's copy of the key cannot be built"):
-        SubsetSum().check(build_config("default", "small", [f"access=a01:{five},a02:shard6,a03:"]))
+    with pytest.raises(ValueError, match="seat1's copy of the key cannot be built"):
+        SubsetSum().check(build_config("default", "small", [f"access=seat1:{five},seat2:shard6,seat3:"]))
 
 
 @pytest.mark.parametrize("spec", SPECS, ids=[s.task for s in SPECS])
@@ -523,7 +523,7 @@ def test_an_agent_holding_every_piece_gets_cheatbenchs_key_files(spec, monkeypat
     monkeypatch.setattr(machines, "ensure_image", lambda: "sha256:test")
     bench = BENCHMARKS[spec.task]()
     piece = bench.piece_stem
-    plan = bench.plan(build_config("default", "small", [f"access=a01:{piece}1+{piece}2,a02:,a03:"]))
+    plan = bench.plan(build_config("default", "small", [f"access=seat1:{piece}1+{piece}2,seat2:,seat3:"]))
     sample = bench.sample(plan)
     cb = sample.metadata["cheatbench"]
     assert {a: s["pieces"] for a, s in cb["interview"]["agents"].items()} == {"a01": None, "a02": [], "a03": []}

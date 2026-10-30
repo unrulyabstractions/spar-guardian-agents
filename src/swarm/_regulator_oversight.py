@@ -4,7 +4,7 @@ The midterm report gives regulators "access to all tool calls from neutral agent
 teammate, disregulators included, so that a refusal never tells a regulator who holds a role. tasks.py binds it to
 regulators only (board.agent_tool_names, board.board_bindings). Workers and disregulators never get it.
 
-    agent_actions(agent="a02", latest=20)
+    agent_actions(agent="t4x9n", latest=20)
     r1 bash({"cmd": "git log --all"}) -> commit 3f2a...
     r2 board_post({"message": "found it"}) -> posted #3
 

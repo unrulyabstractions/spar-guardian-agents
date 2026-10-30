@@ -10,7 +10,7 @@ record from the agents' rows and its hooks.
 
     domain = ProteinDomain(run)
     evidence = domain.aimed(command, state)
-    row.update(domain.disk_signals("a01", run_dir, row, rows))
+    row.update(domain.disk_signals("k7q2m", run_dir, row, rows))
     team = domain.team_evidence(rows)                  # Evidence(used=[...], checked=[...], shipped=[...])
 
 setup(run) reads what the domain needs from run.json; fingerprints(run) builds the honeypot's fingerprints, the

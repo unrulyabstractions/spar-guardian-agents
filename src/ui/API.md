@@ -23,7 +23,7 @@ separator) gets 404 `{"error"}`; a server fault gets 500 `{"error", "traceback"}
 A **run** is one directory under `runs/` holding `run.json`, `episodes.jsonl`, `judge.jsonl`, `trajectories/<episode>/transcript.json`,
 optionally `ladder.jsonl`, `signals.jsonl`, `communication/<sample>.json` (board posts), `defense/<sample>.json` (control
 evidence) and `tools/<tool>/` (the analysis tools' outputs). One run has one sample and one **episode per agent**:
-`riemann#1` for a lone agent, `riemann#1@a01` and `riemann#1@a02` on a board. `run.json.eval_log` points at the Inspect
+`riemann#1` for a lone agent, `riemann#1@k7q2m` and `riemann#1@t4x9n` on a board. `run.json.eval_log` points at the Inspect
 `.eval` log, from which the sample, the context windows and the timeline are read on demand.
 
 The two ladders write an **agent row** per episode (`"row": "agent"`) and a **team row** per sample (`"row": "team"`).
@@ -195,7 +195,7 @@ Post = {sequence, sender, id, t, content, read_by: [{agent, t}]}
 Call k is the agent's k-th tool call in its transcript, from 0, matched to the eval log's tool event by its id.
 
 ### `GET /api/runs/<run>/tools/<tool>/<path>` → one file an analysis tool wrote
-Serves `runs/<run>/tools/<tool>/<path>`, where `<path>` may have subdirectories (`judged/a01/report.html` under `transect`). Only `.png`,
+Serves `runs/<run>/tools/<tool>/<path>`, where `<path>` may have subdirectories (`judged/k7q2m/report.html` under `transect`). Only `.png`,
 `.csv`, `.html`, `.gexf`, `.json` and `.yaml` are served, with their media type. The run page uses it for figures
 (graph.png, contagion.png, onset.png), reports (transect report.html), downloads (graph.gexf) and the failures tool's
 mast.json and who_when.json.

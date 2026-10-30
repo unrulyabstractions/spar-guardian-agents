@@ -5,7 +5,7 @@ missing, the bullets of the tools that end an agent's work and the sentence on r
 prompts.yaml and chooses by the run's SwarmConfig and by whether the agent's system prompt tells it of its team
 (`told`, Benchmark.tells_team): an agent not told never reads of a teammate.
 
-    prompt = board_system_prompt(config, "a01", config.names)
+    prompt = board_system_prompt(config, "k7q2m", config.names)
     text = submit_text("swe", config.submit_kind, config.submit_delay_rounds, {}, told=True)
     lines = ending_lines(config, "worker", tool_line("submit", text), told=True)
 """

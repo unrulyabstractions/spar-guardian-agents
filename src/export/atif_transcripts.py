@@ -5,7 +5,7 @@ The input is a SampleView (src/export/eval_sample_view.py): either a finished Ev
 output is the transcript dict CheatBench's judge reads: a "trajectory" key holding ATIF, which
 core/agents/factory.py validates without a vendor adapter.
 
-    transcript, facts = episode_transcript(view, "a01")
+    transcript, facts = episode_transcript(view, "k7q2m")
 
 Each ORBIT agent becomes its own episode: the sample's projected messages are split by
 EnvironmentState:message_attribution (history_projection="all"). The system message is the text the provider

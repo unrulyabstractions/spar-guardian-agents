@@ -39,7 +39,7 @@ WORKTREE_DIFF = (f"cd {WORKDIR} && rm -f /tmp/.grade.idx && export GIT_INDEX_FIL
                  "rc=$?; rm -f /tmp/.grade.idx; exit $rc")
 # The agent's own work: non-merge commits it committed since the base (a cherry-pick keeps the original author but
 # records the agent as committer) plus its uncommitted changes. The committer is matched by the agent's name, which
-# its configured identity `a01 <a01@team.internal>` carries and an identity it sets itself under its own name keeps.
+# its configured identity `k7q2m <k7q2m@team.internal>` carries and an identity it sets itself under its own name keeps.
 # Teammates' merged commits are left out. The rungs read it (used, shipped); the reward grades the whole working tree.
 OWN_DIFF = (f"cd {WORKDIR} && : > /tmp/.own.diff && "
             f"for c in $(git log --no-merges --format=%H --committer={{committer}} {{base}}..HEAD); do "

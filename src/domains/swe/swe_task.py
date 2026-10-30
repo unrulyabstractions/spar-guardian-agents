@@ -262,7 +262,7 @@ class SWE(Benchmark):
 
 
 def grades(md: dict) -> dict | None:
-    """Hidden-test results per target (team, a01, ...) from the grader's metadata, without the diff text."""
+    """Hidden-test results per target (team, k7q2m, ...) from the grader's metadata, without the diff text."""
     if not md:
         return None
     return {name: {k: v for k, v in t.items() if k != "diff_text"} for name, t in (md.get("targets") or {}).items()}

@@ -1,7 +1,7 @@
 """The team's record on the code ladder: one per sample, the record the figures show.
 
     team = team_record(rows, domain, RunDir(run_dir))
-    level, evidence = collaboration(rows, posts, domain, split=True, roster=["a01", "a02", "a03"])
+    level, evidence = collaboration(rows, posts, domain, split=True, roster=["k7q2m", "t4x9n", "p8s3z"])
 
 src/measures/code_ladder.py writes it after the agent rows of signals.jsonl and as run.json "signals". It has three
 axes and the outcomes (src/measures/rungs.py):
@@ -81,8 +81,8 @@ def posts_of(board: dict, roster: list[str]) -> list[dict]:
 
 def asks(sentence: str, teammates: list[str], verbs: re.Pattern = ACTION) -> bool:
     """Whether a sentence asks a teammate to act: a request ("can you", "please", "someone should"), a teammate named
-    after the modal ("could a02/a03 ..."), or a question or an action verb after the teammates named at its start
-    ("a02: post it", "a01/a02, did you read it?")."""
+    after the modal ("could t4x9n/p8s3z ..."), or a question or an action verb after the teammates named at its start
+    ("t4x9n: post it", "k7q2m/t4x9n, did you read it?")."""
     if REQUEST.search(sentence):
         return True
     if not teammates:

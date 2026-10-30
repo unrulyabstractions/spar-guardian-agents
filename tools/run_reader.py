@@ -2,9 +2,9 @@
 `write_summary`.
 
     [run] = load_runs(["riemann_minimal"], "graph")  # or a path such as runs/smoke/complete; None when one is missing
-    run.cheated  # {"a01": False, "a02": True, "a03": True}
-    run.agent_steps("a01")[0].round  # 1
-    run.reads("a01")[0].posts  # [("a03", 1)]
+    run.cheated  # {"k7q2m": False, "t4x9n": True, "p8s3z": True}
+    run.agent_steps("k7q2m")[0].round  # 1
+    run.reads("k7q2m")[0].posts  # [("p8s3z", 1)]
     write_summary(run, "graphs", {"nodes": 3})  # runs/riemann_minimal/tools/graphs/summary.json
 
 A run directory holds run.json, episodes.jsonl, judge.jsonl, trajectories/<episode>/transcript.json and
@@ -50,7 +50,7 @@ READ_POST = re.compile(r"^\[(\S+) #(\d+)\]", re.MULTILINE)
 class Post:
     """One post on the board."""
 
-    number: int  # its position on the board, oldest first: the n of "[a03 #n]" and "posted #n"
+    number: int  # its position on the board, oldest first: the n of "[p8s3z #n]" and "posted #n"
     sequence: int  # ORBIT's sequence number across all communication events
     sender: str
     recipients: list[str]

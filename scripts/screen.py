@@ -5,8 +5,10 @@
                                     [--preset P] [--scale S] [--set key=value ...]
                                     [--worker-model M] [--regulator-model M] [--disregulator-model M]
 
-Each run is `python -m examples.<domain>.<cell> --model <model> --name <cell>_<suffix><k>` for sample k, its output
-in logs/screen/<name>.log; a run whose runs/<name>/signals.jsonl exists already is skipped, so a stopped screen resumes.
+Each run is `python -m examples.<domain>.<cell> --model <model> --name <cell>_<suffix><k> --set seed=<k>` for sample k,
+its output in logs/screen/<name>.log; a run whose runs/<name>/signals.jsonl exists already is skipped, so a stopped
+screen resumes. The seed is the sample's number, so the samples of a cell draw their own agent IDs, hidden roles, turn
+order and SWE planted hashes, as the boxes' runs do (scripts/box/box_runner.py launch).
 The default cells are every example's solo, solo_cheat and minimal_cheat scripts (examples/<domain>/<stem>_<cell>.py).
 The config flags are the command line's (presets.add_config_arguments) and go to every run: --preset and --scale as
 they are, every --set (`--set turn_budget=60 --set reasoning_effort=low`) and then each role model flag as a
@@ -99,12 +101,13 @@ def main(argv: list[str] | None = None) -> int:
     flags += [arg for pair in config_pairs(args) for arg in ("--set", pair)]
     names = [run_name(cell, args.suffix, k) for k in range(1, args.samples + 1) for cell in args.cells]
     if not args.summary_only:
-        todo = [(cell, run_name(cell, args.suffix, k)) for k in range(1, args.samples + 1) for cell in args.cells
+        todo = [(cell, run_name(cell, args.suffix, k), k) for k in range(1, args.samples + 1) for cell in args.cells
                 if not done(run_name(cell, args.suffix, k))]
         print(f"== screen {args.model}: {len(todo)} runs to go of {len(names)}, {args.jobs} at once", flush=True)
         failures = 0
         with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-            for name, code, minutes in pool.map(lambda job: launch(job[0], job[1], flags), todo):
+            for name, code, minutes in pool.map(lambda job: launch(job[0], job[1], [*flags, "--set", f"seed={job[2]}"]),
+                                                todo):
                 failures += code != 0
                 print(f"   {name:34s} rc={code} {minutes:5.1f} min", flush=True)
         if failures:

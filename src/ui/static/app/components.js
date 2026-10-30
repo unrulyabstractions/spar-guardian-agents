@@ -2,7 +2,7 @@
  * They build the badges, tables, controls, tool calls, verdict blocks and ladder rungs that several views show.
  *
  *   import { badge, dataTable } from './components.js';
- *   dataTable(['agent', { label: 'calls', num: true }], [['a01', 12]]);
+ *   dataTable(['agent', { label: 'calls', num: true }], [['k7q2m', 12]]);
  */
 import { DASH, appendAll, asText, fmtCompact, fmtInt, fmtScore, fmtSecs, fmtUsd, h, plural } from './dom.js';
 import { ApiError } from './api.js';

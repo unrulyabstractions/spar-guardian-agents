@@ -2,6 +2,7 @@
 ownership and times (core/stage.py).
 
     compose = write_compose(path, {"default": compose_service(working_dir="/workspace", image="cbtask:python311")})
+    compose = write_team_compose(folder, "compose", {a: compose_service(working_dir="/workspace") for a in agents})
     tar = stage_tar(files, out_path, mtimes=mtimes, dirs=parent_dirs(files, mtimes, stop=IMAGE_DIRS, default=now()))
     lock = team_remote_lock("/team/repo.git", "team")      # shell lines, for a task's setup script
 
@@ -11,6 +12,7 @@ and a reader must never see a partial file.
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import io
 import os
 import tarfile
@@ -54,6 +56,13 @@ def compose_service(*, working_dir: str, image: str | None = None, **extra) -> d
 def write_compose(path: Path, services: dict[str, dict], volumes: dict | None = None) -> Path:
     """A compose file of these services and volumes, written atomically."""
     return write_yaml(path, {"services": services, **({"volumes": volumes} if volumes else {})})
+
+
+def write_team_compose(folder: Path, stem: str, services: dict[str, dict], volumes: dict | None = None) -> Path:
+    """A compose file named by its services, <stem>-<digest>.yaml. A team's services carry the agents' IDs, which each
+    run draws, so runs at once on one machine need a file each."""
+    digest = hashlib.sha256(" ".join(services).encode()).hexdigest()[:12]
+    return write_compose(folder / f"{stem}-{digest}.yaml", services, volumes)
 
 
 def source_path(env_dir: Path, src: str) -> Path:

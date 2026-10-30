@@ -42,7 +42,7 @@ class MessageOrigin:
 
 
 def episode_of(run: Run, agent: str) -> str:
-    """The agent's episode id, such as "riemann#1@a02"; the run name and agent when episodes.jsonl lacks it."""
+    """The agent's episode id, such as "riemann#1@t4x9n"; the run name and agent when episodes.jsonl lacks it."""
     return (run.episodes.get(agent) or {}).get("episode") or f"{run.name}@{agent}"
 
 

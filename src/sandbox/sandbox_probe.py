@@ -2,7 +2,7 @@
 setup solver every domain probes its agents' seats with before they start.
 
     results = await run_commands(PROBE_COMMANDS, {"w": workdir}, user=user, cwd=workdir)
-    found = await run_json(SCRIPT, stdin={"paths": paths}, box=sandbox("a01"))
+    found = await run_json(SCRIPT, stdin={"paths": paths}, box=sandbox("k7q2m"))
 
 A probe never fails the sample: a command that cannot run records the error in place of a result. A script run by
 run_json raises on failure, and its caller decides.

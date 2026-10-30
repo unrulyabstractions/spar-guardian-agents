@@ -7,7 +7,7 @@ provider billed, and how the sample ended. The transcript builder (src/export/at
 export (src/export/run_export.py) read samples through this module.
 
     view = SampleView.from_eval_sample(sample, log)
-    messages = agent_messages(view, "a01")
+    messages = agent_messages(view, "k7q2m")
     error, failure = error_and_failure(view)
 """
 from __future__ import annotations

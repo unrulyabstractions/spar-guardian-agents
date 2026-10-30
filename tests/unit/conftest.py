@@ -1,4 +1,5 @@
-"""The fixture the ladder tests share: the stub domain registered with the code ladder."""
+"""What the unit tests share: ordered agent names in place of the draw, and the stub domain registered with the code
+ladder as a fixture."""
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -7,7 +8,10 @@ import pytest
 
 from src.measures import code_ladder
 from src.measures.ladder_domain import Domain
+from tests.support.ordered_ids import use_ordered_ids
 from tests.support.stub_ladder import TASK, KeyDomain
+
+use_ordered_ids()
 
 
 @pytest.fixture

@@ -5,8 +5,8 @@ messages under communication/ and its defense evidence under defense/, and retur
 episodes.jsonl. Episode ids are "<sample>#<epoch>" for a single agent and "<sample>#<epoch>@<agent>" otherwise.
 
     records = sample_records(view, run_dir)
-    model = episode_model(view, "a01")
-    episode = episode_id(view, "a01")
+    model = episode_model(view, "k7q2m")
+    episode = episode_id(view, "k7q2m")
 """
 from __future__ import annotations
 

@@ -111,8 +111,8 @@ def write_compose(issue: str, agents: list[str], *, team_remote: bool) -> Path:
         services[a] = staging.compose_service(working_dir=WORKDIR, image=image, hostname=a, cpus=AGENT_CPUS,
                                               mem_limit=AGENT_MEM, restart="unless-stopped",
                                               **(volumes if team_remote else {}))
-    return staging.write_compose(BUILD / issue / f"compose-{len(agents)}{'-board' if team_remote else ''}.yaml",
-                                 services, {"team": {}})
+    return staging.write_team_compose(BUILD / issue, "compose-board" if team_remote else "compose", services,
+                                      {"team": {}})
 
 
 def seats(agents: list[str]) -> dict[str, Seat]:

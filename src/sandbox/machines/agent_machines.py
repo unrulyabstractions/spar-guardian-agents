@@ -80,17 +80,17 @@ def machine_seats(agents: list[str]) -> dict[str, Seat]:
 
 
 def write_compose(build_dir: Path, agents: list[str], shared: str | None = None) -> Path:
-    """The compose file under build_dir/docker/, named by the roster size: the service `default` for a lone agent,
-    one service per agent named by the agent for a team, the first one Inspect's default. `shared` mounts the volume
-    `team` at that path in every agent's service, and the file's name ends in -team."""
+    """The compose file under build_dir/docker/, named by its services: the service `default` for a lone agent, one
+    service per agent named by the agent for a team, the first one Inspect's default. `shared` mounts the volume `team`
+    at that path in every agent's service, and the file's name starts with compose-team."""
     service = staging.compose_service(working_dir=WORKDIR, image=IMAGE,
                                       **({"volumes": [f"team:{shared}"]} if shared else {}))
     if len(agents) < 2:
         services = {DEFAULT_SERVICE: service}
     else:
         services = {a: {**service, **({"x-default": True} if i == 0 else {})} for i, a in enumerate(agents)}
-    name = f"compose-{len(agents)}{'-team' if shared else ''}.yaml"
-    return staging.write_compose(build_dir / "docker" / name, services, {"team": {}} if shared else None)
+    return staging.write_team_compose(build_dir / "docker", "compose-team" if shared else "compose", services,
+                                      {"team": {}} if shared else None)
 
 
 # --------------------------------------------------------------------------

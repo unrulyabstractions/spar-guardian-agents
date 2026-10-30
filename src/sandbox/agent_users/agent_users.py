@@ -40,7 +40,8 @@ def lone_seat(workdir: str = WORKDIR) -> Seat:
 
 
 def team_seats(agents: list[str], workdir_of: Callable[[str], str]) -> dict[str, Seat]:
-    """Each agent's user, uid, home and working directory, uids from FIRST_UID in roster order."""
+    """Each agent's user, uid, home and working directory, uids from FIRST_UID in roster order, which is sorted by ID,
+    so that a uid or the order of /etc/passwd shows no seat."""
     return {a: Seat(user=a, uid=FIRST_UID + i, home=f"/home/{a}", workdir=workdir_of(a), reap=True)
             for i, a in enumerate(agents)}
 

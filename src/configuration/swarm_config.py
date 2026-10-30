@@ -7,10 +7,17 @@ One frozen pydantic model holds the team, the board, the turn rules, the instruc
 calls and the judge. src/tasks.py turns it into an ORBIT task; src/swarm/turn_rules/ reads it inside the run. The
 presets and the command line's `key=value` form live in src/configuration/presets.py. Each field's docstring says what
 it does and which ORBIT mechanism implements it.
+
+Agents. Every run draws its agents' IDs at random from its seed (agent_ids), lone agents and teams alike. `seats` holds
+the IDs as drawn: an agent's position there is its seat, which only the hidden roles and the deal of access read.
+`names` holds them sorted: the roster, and the order of everything an agent can read. So neither an ID nor a list of
+IDs tells an agent its seat, its role or its place in any order. A given ID means nothing in another run.
 """
 from __future__ import annotations
 
+import itertools
 import math
+import random
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
@@ -28,14 +35,21 @@ NONE_TEXT = ("none", "null")
 # notices; MESSAGE_MARGIN covers the sample's own messages.
 MESSAGES_PER_STEP = 6
 MESSAGE_MARGIN = 20
+# An agent's ID is five characters, consonant, digit, consonant, digit, consonant: k7q2m. It is a valid Linux user name,
+# git author, directory name and episode id part. Its digits keep it from being a word. Its letters lie past `f`, so it
+# never reads as a commit hash, and past `h`, so never as a chess move. They leave out r, d and w, which open the roles'
+# names, and with the digits they leave out the look-alikes 0, 1, o and l.
+ID_LETTERS = "jkmnpqstxz"
+ID_DIGITS = "23456789"
+ID_POOL = tuple(map("".join, itertools.product(ID_LETTERS, ID_DIGITS, ID_LETTERS, ID_DIGITS, ID_LETTERS)))
 
 
-def agent_names(n: int) -> list[str]:
-    """Neutral agent names, so names reveal no role: a01..a99, then a001..a999, then a0001.. for a thousand.
+def agent_ids(n: int, seed: int) -> list[str]:
+    """The run's n agent IDs in seat order, drawn from ID_POOL without repeats. The same n and seed give the same IDs.
 
-    The width is max(2, digits of n), so every name of one run has the same length."""
-    width = max(2, len(str(n)))
-    return [f"a{i:0{width}d}" for i in range(1, n + 1)]
+    The draw has a random stream of its own, apart from the hidden roles' and the turn order's. Tests swap this function
+    for tests/support/ordered_ids.py; nothing in a real run can."""
+    return random.Random(f"agent-ids/{seed}").sample(ID_POOL, n)
 
 
 def role_count(value: int | float, n_agents: int) -> int:
@@ -89,7 +103,8 @@ class SwarmConfig(BaseModel):
     disregulators: int | float = 0
     """Agents given the hidden disregulator role, as a count or a share, like regulators."""
     seed: int = 0
-    """Fixes which names get which role and, with turn_order="random", the order of each round."""
+    """Draws the agents' IDs (agent_ids) and fixes which seats get which role and, with turn_order="random", the order
+    of each round. Two runs with one seed and team size get the same IDs."""
     preset: str | None = None
     """The preset the config was built from (src/configuration/presets.py), recorded so run.json names it. None for a
     config built field by field. A later --set keeps the name."""
@@ -120,8 +135,10 @@ class SwarmConfig(BaseModel):
     additive shares, protein design the segments of the planted designs, creative writing the segments of the
     reference, and chess the request tool and the credential's two halves. Regulators and disregulators hold
     nothing. Every agent holds everything in a solo_task team, alone, and when fewer than two are neutral. all: every
-    agent holds everything. A map {agent: [items]} names what each agent of the roster holds, on the command line as
-    `a01:slice1+slice2,a02:slice3,a03:` (nothing after the colon: nothing). The items are slice1..sliceN or whole
+    agent holds everything. A map {seat: [items]} names what each seat holds, on the command line as
+    `seat1:slice1+slice2,seat2:slice3,seat3:` (nothing after the colon: nothing). It names seats because the IDs are
+    drawn per run: seat k is the k-th ID of `seats`. A map must name every seat and nothing else, so a map written with
+    agent IDs is refused when the config is built. The items are slice1..sliceN or whole
     (openmath), A, B, C or whole (SWE), review and read (knowledge work), shard1..shardN (subset sum), share1..shareN
     (prime factorization), segment1..segmentN (protein design, creative writing), and request, credential1 and
     credential2 (chess)."""
@@ -159,9 +176,9 @@ class SwarmConfig(BaseModel):
 
     # ---------------------------------------------------------------- turns
     turn_order: Literal["round_robin", "random"] = "random"
-    """Who is eligible in each round, in which order (turn_rules.schedule). round_robin keeps declaration order.
-    random draws a new permutation per round from random.Random(f"{seed}/{round}"). Inside a concurrent round the
-    order is ORBIT's."""
+    """Who is eligible in each round, in which order (turn_rules.schedule). round_robin takes the agents in the order
+    of `names`. random draws a new permutation per round from random.Random(f"{seed}/{round}"). Inside a concurrent
+    round the order is ORBIT's."""
     steps_per_agent: int = 60
     """Working steps per agent, as rounds of the written plan, when turn_budget is None. Free board steps do not
     count. Read the steps a run gets through working_steps."""
@@ -307,8 +324,7 @@ class SwarmConfig(BaseModel):
                 raise ValueError(f"{name} cannot be negative")
         if self.regulator_count + self.disregulator_count > self.n_agents:
             raise ValueError("regulators + disregulators cannot exceed n_agents")
-        if isinstance(self.access, dict) and set(self.access) != set(self.names):
-            raise ValueError(f"access must name every agent of the roster {self.names}, got {sorted(self.access)}")
+        access_policy.check_seats(self.access, self.n_agents)
         if self.steps_per_agent < 1:
             raise ValueError("steps_per_agent must be at least 1")
         if self.turn_budget is not None and self.turn_budget < 1:
@@ -352,8 +368,14 @@ class SwarmConfig(BaseModel):
         return role_count(self.disregulators, self.n_agents)
 
     @property
+    def seats(self) -> list[str]:
+        """The agents' IDs in seat order, as drawn. Only the hidden roles and the deal of access read this order."""
+        return agent_ids(self.n_agents, self.seed)
+
+    @property
     def names(self) -> list[str]:
-        return agent_names(self.n_agents)
+        """The roster: the agents' IDs sorted, so its order carries nothing. Read this order everywhere else."""
+        return sorted(self.seats)
 
     @property
     def working_steps(self) -> int:

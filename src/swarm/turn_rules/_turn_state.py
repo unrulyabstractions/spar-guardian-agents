@@ -5,8 +5,8 @@ StopWorking the round of each stop_working call, and Delivered the stop-after-de
 their actions and spend the per-round budgets here. current_round reads the round of the step under way from ORBIT's
 live plan, and live_state an agent's live AgentState.
 
-    record_board_action("a01", "read", senders=["a02"])
-    if budget_used("a01", "post") < limit: spend("a01", "post", 1)
+    record_board_action("k7q2m", "read", senders=["t4x9n"])
+    if budget_used("k7q2m", "post") < limit: spend("k7q2m", "post", 1)
 """
 from __future__ import annotations
 

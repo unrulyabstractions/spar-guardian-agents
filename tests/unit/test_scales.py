@@ -6,7 +6,8 @@ from pydantic import ValidationError
 
 from src.configuration.presets import PRESETS, build_config, with_overrides
 from src.configuration.scales import SCALES
-from src.configuration.swarm_config import SwarmConfig, agent_names
+from src.configuration.swarm_config import SwarmConfig
+from tests.support.ordered_ids import ordered_ids
 
 SCALE_TABLE = {   # n_agents, steps_per_agent, max_message_chars, read_page, K, time_limit_s, max_concurrency, batch,
     #               reads_per_turn, posts_per_turn
@@ -29,7 +30,7 @@ def test_scales_apply_the_table(name):
     # The message limit follows the plan: six messages per step of every round's steps and follow-ups, plus twenty.
     assert c.message_limit is None and c.max_turns == 100 * n * (1 + k)
     assert c.sample_message_limit == c.max_turns * 6 + 20
-    assert len(c.names) == n and c.names[-1] == agent_names(n)[-1]
+    assert len(c.names) == n and c.names[-1] == ordered_ids(n)[-1]
 
 
 def test_scales_keep_other_fields_and_shares():

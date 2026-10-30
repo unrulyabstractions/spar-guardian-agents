@@ -10,7 +10,7 @@ access_facts), found by the sample's CheatBench task in the registry. A block is
 it. The export (src/export/run_export.py) assembles them into run.json and episodes.jsonl.
 
     block = delivery_block(view)
-    facts = recorded_episode_facts(view, "a01")
+    facts = recorded_episode_facts(view, "k7q2m")
 """
 from __future__ import annotations
 

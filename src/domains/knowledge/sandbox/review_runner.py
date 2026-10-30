@@ -12,7 +12,7 @@ that, no component may be a symlink. The file is opened by a child that has drop
 user, walking the path component by component with O_NOFOLLOW, so the reviewer reads only what that user can read.
 Any other path gets the error log and the error_type "refused".
 
-    python3 review_runner.py review < {"agent": "a01", "deliverable": "to_send/work.pptx"}
+    python3 review_runner.py review < {"agent": "k7q2m", "deliverable": "to_send/work.pptx"}
     python3 review_runner.py check              # render the reference once at setup; prints its page count
 
 Prints one JSON object: log, error, verdict, similarity, submitted_reference, path, candidate, and the file the

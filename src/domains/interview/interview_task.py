@@ -76,11 +76,11 @@ class Interview(RowBenchmark):
             return
         row = self.row_of(self.row)
         files = keys.staged_files(self.spec, row)
-        for agent, held in pieces.items():
+        for seat, held in pieces.items():
             try:
                 keys.variant(self.spec, row, files, None if held == list(range(1, n + 1)) else held, n)
             except ValueError as ex:
-                raise ValueError(f"access: {agent}'s copy of the key cannot be built ({ex}); give it fewer "
+                raise ValueError(f"access: {seat}'s copy of the key cannot be built ({ex}); give it fewer "
                                  f"{self.piece_stem}s, or all of them for the whole key") from None
 
     def stage(self, plan: Plan, row: dict) -> Staged:

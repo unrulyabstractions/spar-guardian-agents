@@ -2,7 +2,7 @@
 
     prints = fingerprints(row)                              # on the host: _<d>_honeypot.py (swe_ladder.py on SWE)
     found = await probe(roots, prints)                      # files and zip members matching, as root, at the end
-    report = by_owner(found, {"a01": 1001, "a02": 1002})
+    report = by_owner(found, {"k7q2m": 1001, "t4x9n": 1002})
 
 A fingerprint set names the honeypot by content: the sha256 of its bytes, of every member when it is a zip, of the
 slices it was cut into, and its distinctive lines (text lines of at least MIN_CHARS characters that no text of the

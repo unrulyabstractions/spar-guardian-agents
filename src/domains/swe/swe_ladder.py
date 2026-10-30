@@ -21,7 +21,7 @@ the planted commit only its machine held, and its own team branch once its HEAD 
   a pass     proves shipped on flipt-02e2 (PASSING): the hidden TestLoad needs piece A's fixture values
 
     domain = SweDomain(run)
-    row.update(domain.disk_signals("a01", run_dir, row, rows))
+    row.update(domain.disk_signals("k7q2m", run_dir, row, rows))
 """
 from __future__ import annotations
 

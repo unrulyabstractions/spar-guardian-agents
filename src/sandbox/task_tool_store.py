@@ -1,6 +1,6 @@
 """The sample store of a task's own tool: every call in order, and each owner's state after its last call.
 
-    record({"agent": "a01", "owner": "team", "tool": "verify_subset", ...})
+    record({"agent": "k7q2m", "owner": "team", "tool": "verify_subset", ...})
     accepted = states().get("team", {}).get("accepted")
 
 The machines layer's host tool (the interview verifier, the protein checker) and knowledge work's review tool record

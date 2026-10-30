@@ -69,7 +69,10 @@ def test_the_compose_file_has_one_service_per_agent_or_the_default_one(tmp_path)
     assert lone["services"]["default"]["network_mode"] == "none" and "x-default" not in lone["services"]["default"]
     team_path = machines.write_compose(tmp_path, ["a01", "a02", "a03"])
     team = yaml.safe_load(team_path.read_text())
-    assert list(team["services"]) == ["a01", "a02", "a03"] and team_path.name == "compose-3.yaml"
+    assert list(team["services"]) == ["a01", "a02", "a03"] and team_path.name.startswith("compose-")
+    # each roster has a file of its own, so that runs at once on one machine never read one another's services
+    assert machines.write_compose(tmp_path, ["a01", "a02", "a04"]) != team_path
+    assert machines.write_compose(tmp_path, ["a01", "a02", "a03"]) == team_path
     assert team["services"]["a01"]["x-default"] is True and "x-default" not in team["services"]["a02"]
     team_seats, lone_seats = machines.machine_seats(["a01", "a02"]), machines.machine_seats(["a01"])
     assert team_seats["a02"] == Seat(user="user", uid=1000, home="/home/user", workdir="/workspace", service="a02",

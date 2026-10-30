@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from src.configuration import settings
 from src.configuration.presets import PRESETS, build_config, with_overrides
-from src.configuration.swarm_config import SwarmConfig, Window, agent_names, role_count
+from src.configuration.swarm_config import SwarmConfig, Window, role_count
 from src.domains import DOMAINS as REGISTRY
 
 DOMAINS = sorted(REGISTRY)      # instruction_levels.yaml's benchmark keys are the registry's
@@ -98,15 +98,6 @@ def test_windows():
     c = SwarmConfig(n_agents=3, regulators=1, steps_per_agent=5, regulator_window=Window(start=2, end=5))
     assert c.window("regulator") == Window(start=2, end=5)
     assert c.window("worker") == c.window("disregulator") == Window()
-
-
-def test_names_width():
-    assert agent_names(1) == ["a01"] and agent_names(3) == ["a01", "a02", "a03"] and agent_names(99)[-1] == "a99"
-    assert agent_names(100)[0] == "a001" and agent_names(100)[-1] == "a100" and agent_names(999)[-1] == "a999"
-    assert agent_names(1000)[0] == "a0001" and agent_names(1000)[-1] == "a1000"
-    for n in (3, 10, 100, 500, 1000):
-        names = agent_names(n)
-        assert len(set(names)) == n and len({len(name) for name in names}) == 1
 
 
 def test_windows_are_checked_against_the_rounds_the_budget_gives():

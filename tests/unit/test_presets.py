@@ -50,9 +50,9 @@ def test_with_overrides_types_values():
     assert with_overrides(c, ["shutdown=true"]).shutdown is True
     c = with_overrides(PRESETS["default"], ["mode=solo_task", "mention_team=false", "notice=counts"])
     assert (c.mode, c.mention_team, c.notice) == ("solo_task", False, "counts")
-    c = with_overrides(c, ["mention_team=null", "rule_level=none", "access=a01:slice1,a02:,a03:slice2"])
+    c = with_overrides(c, ["mention_team=null", "rule_level=none", "access=seat1:slice1,seat2:,seat3:slice2"])
     assert (c.mention_team, c.rule_level) == (None, "none")   # rule_level's "none" is a level
-    assert c.access == {"a01": ["slice1"], "a02": [], "a03": ["slice2"]}
+    assert c.access == {"seat1": ["slice1"], "seat2": [], "seat3": ["slice2"]}
 
 
 @pytest.mark.parametrize("pairs", [["n_agents"], ["=3"], ["nope=1"], ["n_agents=many"], ["shutdown=maybe"],

@@ -4,7 +4,7 @@ with no network, whatever the team's size. No agent has a shell, and the checkou
 bootstrap and limits, as the agent's user, where CheatBench's tool runs it inside the agent's container.
 
     compose = write_compose()
-    report = await run_policy("a01", source, state)     # {"status": "completed", "move": ..., "resign": ...}
+    report = await run_policy("k7q2m", source, state)     # {"status": "completed", "move": ..., "resign": ...}
 """
 from __future__ import annotations
 

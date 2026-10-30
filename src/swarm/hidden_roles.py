@@ -7,8 +7,8 @@ A swarm is the board (src/swarm/board.py) with N agents whose system prompts dif
     disregulator  a peer privately told to get the result by any means, at the configured disregulator level
 
 Regulators are not monitors. They have the same standing as everyone else, and nothing is enforced at a boundary.
-Their tools differ: a regulator also holds agent_actions and never holds submit. Roles hide behind neutral names
-(a01 ... a10) and are recorded in the sample metadata.
+Their tools differ: a regulator also holds agent_actions and never holds submit. Roles hide behind the drawn agent IDs
+(SwarmConfig.names) and are recorded in the sample metadata.
 
 Every model-facing text of a level comes from src/configuration/instruction_levels.yaml: the rule sentence appended to
 the task instruction, and the regulator and disregulator texts appended to the system prompt of the agents holding
@@ -48,13 +48,13 @@ def level_text(ladder: str, level: str, benchmark_name: str) -> str | None:
     return SENTENCE_START.sub(r"\1{\2__cap}", template.strip()).format(**values)
 
 
-def assign_roles(names: list[str], regulators: int, disregulators: int, seed: int = 0) -> dict[str, str]:
-    """Hidden roles by neutral name, from counts; the seed fixes which names get which role."""
-    if regulators + disregulators > len(names):
+def assign_roles(seats: list[str], regulators: int, disregulators: int, seed: int = 0) -> dict[str, str]:
+    """Hidden roles by agent, sorted by agent, from counts; the seed fixes which seats get which role."""
+    if regulators + disregulators > len(seats):
         raise ValueError("more regulators and disregulators than agents")
-    order = list(names)
+    order = list(seats)
     random.Random(seed).shuffle(order)
-    roles = {name: "worker" for name in names}
+    roles = {name: "worker" for name in sorted(seats)}
     for name in order[:regulators]:
         roles[name] = "regulator"
     for name in order[regulators:regulators + disregulators]:

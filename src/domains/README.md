@@ -6,6 +6,8 @@ This package runs CheatBench's tasks as Inspect tasks. Each task domain gives th
 
 `benchmark_protocol.py` says what a domain implements: a `Benchmark` (or a `RowBenchmark`, for a CheatBench task with built rows) with its class attributes (`key`, `name`, `block`, `task_dir`, `default_row`, `scorer`, `ladder`, `piece_stem`, `task_deviations`, and where needed `options` and `time_grace_s`), `stage()` or `sample()`, `tools()`, `scorers()`, `delivered()`, `gradable()` (submit's guard: what is missing while there is nothing to grade), the setup hooks `prepare()` and `probe()`, and where needed `instruction()` (a row domain's instruction, CheatBench's rendering by default), `team_deviations()`, `submit_vars()`, `snapshot()`, `tells_team()` (whether the prompts tell the agents of their team; SWE's `shared_task` prompt always does) and the export hooks. Its submit texts live in `prompts.yaml` `submit`: `counts` (what the grader reads) and `missing` (what the guard names). `plan(config, roles)` fixes the mode, the access policy as applied, what each agent holds and its numbered pieces, once per run; every other method reads that plan. `__init__.py` registers the class in `DOMAINS`, which the `@task` entry points, `--benchmark`, the code ladder and the export read.
 
+A domain lists the agents through `plan.agents`, the roster sorted by ID, and keeps that order in every prompt, user, machine and file it builds, so nothing an agent can read shows a seat. A domain reads what an agent holds from `plan.holds`; only `Benchmark.plan` reads `SwarmConfig.seats`.
+
 Outside its package a domain adds these:
 
 | file | what the domain adds |

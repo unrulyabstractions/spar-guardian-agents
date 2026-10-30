@@ -41,6 +41,9 @@ from src.tasks import swarm_task
 from src.utils.cheatbench_core import judge as core_judge
 from src.utils.json_files import read_json_dir, read_jsonl
 from tests.support.mock_model import MODEL, honest_judge, tagged_infos
+from tests.support.ordered_ids import use_ordered_ids
+
+use_ordered_ids()       # scenarios script their agents by name; `drawn_ids` runs one on the real draw
 
 TIME_LIMIT_S = 1200
 BOARD_TOOLS = set(rules.BOARD_TOOLS)

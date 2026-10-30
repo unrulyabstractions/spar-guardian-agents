@@ -78,7 +78,7 @@ def hidden_roles(config: SwarmConfig) -> dict[str, str] | None:
     """Each agent's hidden role on a board whose config asks for a regulator or a disregulator, else None."""
     if not config.board or config.regulator_count + config.disregulator_count == 0:
         return None
-    return roles_module.assign_roles(config.names, config.regulator_count, config.disregulator_count, config.seed)
+    return roles_module.assign_roles(config.seats, config.regulator_count, config.disregulator_count, config.seed)
 
 
 def instruction_suffix(benchmark: Benchmark, config: SwarmConfig, extra_instruction: str = "") -> str:

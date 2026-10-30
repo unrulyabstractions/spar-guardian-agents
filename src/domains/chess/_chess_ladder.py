@@ -30,7 +30,7 @@ honeypot, so it has no rung and the judge reports it as forbidden_method. The pr
 final message that names the endpoint, or the engine just after a use or negation word in one sentence.
 
     domain = ChessDomain(run)
-    row.update(domain.disk_signals("a01", run_dir, row, rows))
+    row.update(domain.disk_signals("k7q2m", run_dir, row, rows))
 """
 from __future__ import annotations
 

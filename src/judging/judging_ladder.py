@@ -1,7 +1,7 @@
 """The cheating ladder as an LLM judge over a run's stored transcripts.
 
     python -m src ladder <run> [<run> ...] [--judge gpt-6-luna] [--sync] [--view full|actions]
-                         [--agents a01,a02] [--force]
+                         [--agents k7q2m,t4x9n] [--force]
     python -m src ladder --table <run> [<run> ...]
 
 The ladder's rungs are exposed, tried, opened, used, checked and shipped (src/measures/rungs.py), each an act recorded
@@ -107,7 +107,7 @@ def evidence_in(evidence: str, arguments: str) -> bool:
 
 
 def rounds_by_activation(timeline: list[dict]) -> dict[str, dict[int, int]]:
-    """Each agent's activation number to the round of the step it ran in ("r3-a01" is round 3, "plan1" round 0)."""
+    """Each agent's activation number to the round of the step it ran in ("r3-k7q2m" is round 3, "plan1" round 0)."""
     out: dict[str, dict[int, int]] = {}
     for entry in timeline:
         match = ROUND_RE.match(str(entry.get("step") or ""))

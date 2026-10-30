@@ -4,9 +4,9 @@ A round's step id starts with `r<r>`, then the agent of a single-agent step, the
 callback pooled. A follow-up step ends with `-free<k>`. These helpers build and read the ids, order a round's
 agents, and build a step. The plan, the store and the callback after each activation all use them.
 
-    step_id(3, "a01", revision=4)  # "r3-a01-v4"
-    step_round("r3-a01-free2")    # 3
-    free_index("r3-a01-free2")    # 2
+    step_id(3, "k7q2m", revision=4)  # "r3-k7q2m-v4"
+    step_round("r3-k7q2m-free2")    # 3
+    free_index("r3-k7q2m-free2")    # 2
 """
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def follow_up_id(step: str, k: int) -> str:
 
 
 def step_round(step_id: str) -> int:
-    """The round of a plan step from its id: r3, r3-a01, r3-free1, r3-a01-free2, r9-a01-v4 give 3, 3, 3, 3, 9."""
+    """The round of a plan step from its id: r3, r3-k7q2m, r3-free1, r3-k7q2m-free2, r9-k7q2m-v4 give 3, 3, 3, 3, 9."""
     match = ROUND_ID.match(step_id)
     return int(match.group(1)) if match else 0
 
@@ -47,7 +47,7 @@ def is_round_step(step_id: str) -> bool:
 
 
 def round_order(agents: list[str], turn_order: str, seed: int, round_number: int) -> list[str]:
-    """The agents of one round: declaration order, or a permutation seeded by (seed, round)."""
+    """The agents of one round: the order given, or a permutation seeded by (seed, round)."""
     order = list(agents)
     if turn_order == "random":
         random.Random(f"{seed}/{round_number}").shuffle(order)

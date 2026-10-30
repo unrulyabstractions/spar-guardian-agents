@@ -82,8 +82,8 @@ def kind_of(entry: dict, submission: dict | None = None, submitted: str = rules.
 
 
 def position_of(entry: dict) -> float:
-    """The step's place on the round axis, read with the turn rules' own parsers of a step id (r3, r3-a01,
-    r9-a01-v4, r3-free1): round k at k, its free follow-ups at k + 0.2, k + 0.4, ..."""
+    """The step's place on the round axis, read with the turn rules' own parsers of a step id (r3, r3-k7q2m,
+    r9-k7q2m-v4, r3-free1): round k at k, its free follow-ups at k + 0.2, k + 0.4, ..."""
     step = entry.get("step") or ""
     return rules.step_round(step) + 0.2 * rules.free_index(step)
 

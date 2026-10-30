@@ -20,7 +20,7 @@ lock, as CheatBench's tools hold one lock per episode.
     run = ChessRun.create(block, row, binary)                       # at setup
     register(run, state.store)
     await run.start()
-    text, error = await current().call("a01", "play_move", {"san": "Qf6+"})
+    text, error = await current().call("k7q2m", "play_move", {"san": "Qf6+"})
 """
 from __future__ import annotations
 

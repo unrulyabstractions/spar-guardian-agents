@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from src.configuration import access_policy as access
 from src.configuration.presets import PRESETS, build_config
-from src.configuration.swarm_config import SwarmConfig, agent_names
+from src.configuration.swarm_config import SwarmConfig
 from src.domains.knowledge import KnowledgeWork
 from src.domains.knowledge import knowledge_sandbox as kw_sandbox
 from src.domains.openmath import OpenMath
@@ -17,23 +17,24 @@ from src.domains.swe import SWE
 from src.run import access_line
 from src.swarm.hidden_roles import assign_roles
 from src.tasks import hidden_roles, swarm_task
+from tests.support.ordered_ids import ordered_ids
 
-THREE = agent_names(3)
-FOUR = agent_names(4)
+THREE = ordered_ids(3)
+FOUR = ordered_ids(4)
 
 
 def test_text_form_round_trips():
     assert access.parse("split") == "split" and access.parse(" all ") == "all"
-    explicit = {"a01": ["B", "C"], "a02": ["A"], "a03": []}
-    assert access.parse("a01:B+C,a02:A,a03:") == explicit and access.parse(explicit) is explicit
-    assert access.text(explicit) == "a01:B+C,a02:A,a03:" and access.text("split") == "split"
+    explicit = {"seat1": ["B", "C"], "seat2": ["A"], "seat3": []}
+    assert access.parse("seat1:B+C,seat2:A,seat3:") == explicit and access.parse(explicit) is explicit
+    assert access.text(explicit) == "seat1:B+C,seat2:A,seat3:" and access.text("split") == "split"
     assert access.policy_name(explicit) == "explicit" and access.policy_name("all") == "all"
-    with pytest.raises(ValueError, match="agent:item"):
-        access.parse("a01")
-    with pytest.raises(ValueError, match="agent:item"):
+    with pytest.raises(ValueError, match="seat:item"):
+        access.parse("seat1")
+    with pytest.raises(ValueError, match="seat:item"):
         access.parse("none")
     with pytest.raises(ValueError, match="twice"):
-        access.parse("a01:x,a01:y")
+        access.parse("seat1:x,seat1:y")
 
 
 def test_the_deal_is_round_robin_over_the_neutral_agents():
@@ -61,37 +62,44 @@ def test_plan_under_each_policy():
     # fewer than two neutral agents: everyone holds everything
     alone = {"a01": "worker", "a02": "regulator", "a03": "disregulator"}
     assert access.plan("split", THREE, alone, lambda n: items, whole) == {a: ["w"] for a in THREE}
-    explicit = {"a01": ["x", "y"], "a02": [], "a03": ["w"]}
-    assert access.plan(explicit, THREE, roles, lambda n: items, whole) == explicit
-    with pytest.raises(ValueError, match="every agent"):
-        access.check_map({"a01": ["x"]}, THREE, lambda i: True)
+    # a map names seats: seat k is the k-th agent drawn, and the plan is sorted by agent
+    explicit = {"seat1": ["x", "y"], "seat2": [], "seat3": ["w"]}
+    assert access.plan(explicit, THREE, roles, lambda n: items, whole) == {"a01": ["x", "y"], "a02": [], "a03": ["w"]}
+    drawn = access.plan(explicit, ["z", "m", "p"], None, lambda n: items, whole)
+    assert drawn == {"m": [], "p": ["w"], "z": ["x", "y"]} and list(drawn) == ["m", "p", "z"]
+    assert list(access.plan("split", ["z", "m", "p"], None, lambda n: items, whole)) == ["m", "p", "z"]
+    assert access.plan("split", ["z", "m", "p"], None, lambda n: items, whole) == {"z": ["x"], "m": ["y"], "p": ["x"]}
+    with pytest.raises(ValueError, match="every seat"):
+        access.check_seats({"seat1": ["x"]}, 3)
+    access.check_seats(explicit, 3)
+    access.check_seats("split", 3)
     with pytest.raises(ValueError, match="unknown item"):
-        access.check_map({"a01": ["q"], "a02": [], "a03": []}, THREE, lambda i: i == "x")
+        access.check_map({"seat1": ["q"], "seat2": [], "seat3": []}, lambda i: i == "x")
     with pytest.raises(ValueError, match="twice"):
-        access.check_map({"a01": ["x", "x"], "a02": [], "a03": []}, THREE, lambda i: True)
+        access.check_map({"seat1": ["x", "x"], "seat2": [], "seat3": []}, lambda i: True)
     with pytest.raises(ValueError, match="whole and more"):
-        access.check_map({"a01": ["whole", "x"], "a02": [], "a03": []}, THREE, lambda i: True)
-    access.check_map("split", THREE, lambda i: False)
+        access.check_map({"seat1": ["whole", "x"], "seat2": [], "seat3": []}, lambda i: True)
+    access.check_map("split", lambda i: False)
 
 
-def test_the_config_field_parses_the_command_line_and_names_the_roster():
+def test_the_config_field_parses_the_command_line_and_names_the_seats():
     assert SwarmConfig().access == "split" and PRESETS["default"].access == "split"
-    config = build_config("default", "small", ["access=a01:slice1+slice2,a02:slice3,a03:"])
-    assert config.access == {"a01": ["slice1", "slice2"], "a02": ["slice3"], "a03": []}
+    config = build_config("default", "small", ["access=seat1:slice1+slice2,seat2:slice3,seat3:"])
+    assert config.access == {"seat1": ["slice1", "slice2"], "seat2": ["slice3"], "seat3": []}
     assert build_config("default", "small", ["access=all"]).access == "all"
-    # access takes one value for the run: a policy per domain is no map of the roster
+    # access takes one value for the run: a policy per domain is no map of the seats
     for text in ("swe:all,openmath:split", "openmath_agent:all"):
-        with pytest.raises(ValidationError, match="every agent of the roster"):
+        with pytest.raises(ValidationError, match="every seat"):
             build_config("default", "small", [f"access={text}"])
-    with pytest.raises(ValidationError, match="every agent of the roster"):
+    with pytest.raises(ValidationError, match="every seat"):
         SwarmConfig(access={})
-    with pytest.raises(ValidationError, match="every agent of the roster"):
-        build_config("default", "small", ["access=a01:slice1,a02:slice2"])
-    with pytest.raises(ValidationError, match="every agent of the roster"):
-        build_config("default", "small", ["access=a01:,a02:,a03:,a04:"])
+    with pytest.raises(ValidationError, match="every seat"):
+        build_config("default", "small", ["access=seat1:slice1,seat2:slice2"])
+    with pytest.raises(ValidationError, match="every seat"):
+        build_config("default", "small", ["access=seat1:,seat2:,seat3:,seat4:"])
     with pytest.raises(ValidationError):
         build_config("default", "small", ["access=swe:sometimes"])
-    with pytest.raises(ValidationError, match="agent:item"):
+    with pytest.raises(ValidationError, match="seat:item"):
         build_config("default", "small", ["access=none"])
 
 
@@ -125,9 +133,10 @@ def test_openmath_slices_follow_the_plan():
         assert 'if runuser -u a02 -- bash -lc "cat $probe 2>/dev/null || ls /tmp 2>/dev/null"; then' in text, text
         assert text.index("chmod 1733") > text.index("chmod 700 /workspace/a03"), text
     # An explicit map: one agent holds two slices of three, one holds the third, one holds none.
-    explicit = build_config("default", "small", ["access=a01:slice1+slice3,a02:slice2,a03:"])
+    explicit = build_config("default", "small", ["access=seat1:slice1+slice3,seat2:slice2,seat3:"])
     plan = bench.plan(explicit)
-    assert plan.holds == explicit.access and plan.pieces == {"a01": [1, 3], "a02": [2], "a03": []}
+    assert plan.holds == {"a01": ["slice1", "slice3"], "a02": ["slice2"], "a03": []}
+    assert plan.pieces == {"a01": [1, 3], "a02": [2], "a03": []}
     assert plan.n_pieces == 3
     script = split_script(bench, plan)
     assert script.count("update-index --force-remove Riemann.zip") == 3    # every copy loses the archive
@@ -135,16 +144,16 @@ def test_openmath_slices_follow_the_plan():
     assert om_sandbox.layout_of(plan) == "split"
     assert om_sandbox.layout_of(bench.plan(build_config("default", "small", ["access=all"]))) == "shared"
     with pytest.raises(ValueError, match="unknown item"):
-        bench.check(build_config("default", "small", ["access=a01:B,a02:,a03:"]))
+        bench.check(build_config("default", "small", ["access=seat1:B,seat2:,seat3:"]))
     with pytest.raises(ValueError, match="slices 1..N"):
-        bench.check(build_config("default", "small", ["access=a01:slice1,a02:slice3,a03:"]))
+        bench.check(build_config("default", "small", ["access=seat1:slice1,seat2:slice3,seat3:"]))
     with pytest.raises(ValueError, match="slices 1..N"):
-        bench.check(build_config("default", "small", ["access=a01:slice1,a02:,a03:"]))
-    bench.check(build_config("default", "small", ["access=a01:,a02:,a03:whole"]))
+        bench.check(build_config("default", "small", ["access=seat1:slice1,seat2:,seat3:"]))
+    bench.check(build_config("default", "small", ["access=seat1:,seat2:,seat3:whole"]))
     assert bench.plan(build_config("default", "small", ["n_agents=1"])).holds == {"a01": ["whole"]}
     assert bench.plan(build_config("default", "small", ["mode=solo_task"])).holds == {a: ["whole"] for a in THREE}
     # an agent holding every slice holds the whole archive
-    every = bench.plan(build_config("default", "small", ["access=a01:slice1+slice2,a02:slice2,a03:slice1"]))
+    every = bench.plan(build_config("default", "small", ["access=seat1:slice1+slice2,seat2:slice2,seat3:slice1"]))
     assert every.pieces == {"a01": None, "a02": [2], "a03": [1]} and every.split
 
 
@@ -158,7 +167,7 @@ def test_the_applied_policy_is_the_one_recorded():
     assert lone.dataset[0].metadata["cheatbench"]["access"]["agents"] == {"a01": ["whole"]}
     one_neutral = build_config("default", "small", ["regulators=1", "disregulators=1"])
     assert bench.applied_access(one_neutral, hidden_roles(one_neutral)) == "all"
-    for pairs in (["mode=solo_task", "access=a01:slice1,a02:slice2,a03:"], ["n_agents=1", "access=a01:whole"]):
+    for pairs in (["mode=solo_task", "access=seat1:slice1,seat2:slice2,seat3:"], ["n_agents=1", "access=seat1:whole"]):
         with pytest.raises(ValueError, match="cannot apply"):
             bench.check(build_config("default", "small", pairs))
     own = SWE("flipt-02e2", "own_piece")
@@ -205,7 +214,7 @@ JIGSAW_DEAL = {1: [["whole"]], 2: [["B", "A"], ["C"]], 3: [["B"], ["C"], ["A"]],
 def test_jigsaw_deals_every_piece_over_the_neutral_agents(n):
     """Every piece is held by some neutral agent: a lone neutral holds the whole fix, neutral agents beyond three
     hold the pieces again in deal order, and a regulator or a disregulator holds nothing."""
-    names = agent_names(n)
+    names = ordered_ids(n)
     assert swe_holds(names, "jigsaw") == dict(zip(names, JIGSAW_DEAL[n]))
     for regulators, disregulators in ((1, 0), (0, 1), (1, 1)):
         if regulators + disregulators >= n:
@@ -224,7 +233,7 @@ def test_jigsaw_deals_every_piece_over_the_neutral_agents(n):
 
 @pytest.mark.parametrize("n", range(2, 7))
 def test_own_piece_deals_every_piece_over_the_neutral_agents_in_shared_task(n):
-    names = agent_names(n)
+    names = ordered_ids(n)
     deal = {2: [["A", "C"], ["B"]], 3: [["A"], ["B"], ["C"]]}.get(n, [[p] for p in "ABCABC"[:n]])
     assert swe_holds(names, "own_piece") == dict(zip(names, deal))
     roles = assign_roles(names, 1, 0, seed=n)
@@ -250,19 +259,19 @@ def test_swe_pieces_follow_the_plan():
     assert swe_holds(THREE, "jigsaw", policy="all") == {a: ["whole"] for a in THREE}
     roles = {"a01": "worker", "a02": "regulator", "a03": "worker"}
     assert swe_holds(THREE, "jigsaw", roles=roles) == {"a01": ["B", "A"], "a02": [], "a03": ["C"]}
-    explicit = {"a01": ["A", "B"], "a02": ["C"], "a03": []}
-    assert swe_holds(THREE, "jigsaw", policy=explicit) == explicit
+    explicit = {"seat1": ["A", "B"], "seat2": ["C"], "seat3": []}
+    assert swe_holds(THREE, "jigsaw", policy=explicit) == {"a01": ["A", "B"], "a02": ["C"], "a03": []}
     assert swe_holds(THREE, "as_released") == {a: [] for a in THREE}
     bench = SWE("flipt-02e2", "jigsaw")
-    config = build_config("default", "small", ["access=a01:A+B,a02:C,a03:"])
-    assert bench.plan(config).holds == explicit
+    config = build_config("default", "small", ["access=seat1:A+B,seat2:C,seat3:"])
+    assert bench.plan(config).holds == {"a01": ["A", "B"], "a02": ["C"], "a03": []}
     assert bench.whole_access() == ["whole"] and SWE("flipt-02e2", "as_released").whole_access() == []
     assert bench.split_items(3) == ["B", "C", "A"] and SWE("flipt-02e2", "own_piece").split_items(2) == ["A", "B", "C"]
     with pytest.raises(ValueError, match="unknown item"):
-        bench.check(build_config("default", "small", ["access=a01:slice1,a02:,a03:"]))
+        bench.check(build_config("default", "small", ["access=seat1:slice1,seat2:,seat3:"]))
     with pytest.raises(ValueError, match="plants no pieces"):
         SWE("flipt-02e2", "as_released").check(config)
-    SWE("flipt-02e2", "as_released").check(build_config("default", "small", ["access=a01:,a02:,a03:"]))
+    SWE("flipt-02e2", "as_released").check(build_config("default", "small", ["access=seat1:,seat2:,seat3:"]))
 
 
 def test_knowledge_work_tools_and_permissions_follow_the_plan():
@@ -286,7 +295,7 @@ def test_knowledge_work_tools_and_permissions_follow_the_plan():
     assert "review_deliverable" not in bench.tools(plan).per_agent[regulator]
     plan = bench.plan(build_config("default", "small", ["access=all"]))
     assert all(review and read for review, read in flags(plan)) and not plan.split
-    plan = bench.plan(build_config("default", "small", ["access=a01:review+read,a02:read,a03:"]))
+    plan = bench.plan(build_config("default", "small", ["access=seat1:review+read,seat2:read,seat3:"]))
     assert flags(plan) == [(True, True), (False, True), (False, False)] and plan.split
     tools = bench.tools(plan)
     assert tools.per_agent["a01"][-1] == "review_deliverable" and "review_deliverable" not in tools.per_agent["a02"]
@@ -294,7 +303,7 @@ def test_knowledge_work_tools_and_permissions_follow_the_plan():
     assert flags(plan) == [(True, True)] and not plan.split
     assert bench.tools(plan).per_agent["a01"] == ["bash", "python", "review_deliverable"]
     with pytest.raises(ValueError, match="unknown item"):
-        bench.check(build_config("default", "small", ["access=a01:whole,a02:,a03:"]))
+        bench.check(build_config("default", "small", ["access=seat1:whole,seat2:,seat3:"]))
 
 
 def test_every_task_records_the_plan():
@@ -313,5 +322,5 @@ def test_every_task_records_the_plan():
     shared = swarm_task(OpenMath(), build_config("default", "small", ["access=all"]))
     assert shared.dataset[0].metadata["cheatbench"]["access"]["agents"] == {a: ["whole"] for a in THREE}
     assert not any(label in shared.dataset[0].metadata["cheatbench"]["deviations"] for label in SPLIT_DEVIATIONS)
-    explicit = swarm_task(OpenMath(), build_config("default", "small", ["access=a01:slice1,a02:slice2,a03:"]))
+    explicit = swarm_task(OpenMath(), build_config("default", "small", ["access=seat1:slice1,seat2:slice2,seat3:"]))
     assert access_line(explicit) == "== access explicit: a01 slice1, a02 slice2, a03 nothing"

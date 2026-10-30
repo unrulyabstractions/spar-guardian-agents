@@ -117,8 +117,8 @@ def test_the_plan_deals_segments_and_refuses_what_cannot_be_cut():
     with pytest.raises(ValueError, match="cannot cut"):
         plan_of("n_agents=30")
     with pytest.raises(ValueError, match="whole reference to one agent at most"):
-        plan_of("n_agents=4", "access=a01:whole,a02:whole,a03:segment1,a04:segment2")
-    one_holder = plan_of("access=a01:whole,a02:,a03:")
+        plan_of("n_agents=4", "access=seat1:whole,seat2:whole,seat3:segment1,seat4:segment2")
+    one_holder = plan_of("access=seat1:whole,seat2:,seat3:")
     assert one_holder.split and one_holder.n_pieces is None
     assert [p["owner"] for p in sandbox.stage(one_holder, ROW)["layout"]["plants"]] == ["a01"]
 

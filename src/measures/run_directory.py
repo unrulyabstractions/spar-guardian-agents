@@ -4,7 +4,7 @@
     run.run_json["task"]
     for episode in run.with_transcripts():
         transcript = run.transcript(episode["episode"])
-    verdict = run.verdicts().get("riemann#1@a01")
+    verdict = run.verdicts().get("riemann#1@k7q2m")
     team = run.team_signals()[0]                    # the code ladder's team record of the first sample
 
 run.json is read once per RunDir and again after write_run_json_block. The JSON Lines files are read on every call, so

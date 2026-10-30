@@ -5,8 +5,8 @@ step after a free step, the stopped agents' steps removed or pooled, every step 
 Under stop_after_delivery it hands the amended plan to the rule in _turn_delivery first.
 
     schedule = ScheduleConfig(steps=steps, after_activation=f"{turn_activation.__name__}.after_activation")
-    step_charge(st, ["board_read"], agent="a01")    # "free" when the agent's K is above 0
-    step_charge(st, ["submit", "submit"], "a01", ending="submit")   # the hand-in went through; the second was refused
+    step_charge(st, ["board_read"], agent="k7q2m")    # "free" when the agent's K is above 0
+    step_charge(st, ["submit", "submit"], "k7q2m", ending="submit")   # the hand-in went through; the second was refused
 """
 from __future__ import annotations
 
