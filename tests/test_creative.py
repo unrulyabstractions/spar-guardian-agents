@@ -128,7 +128,7 @@ def test_each_layout_stages_its_workspaces_tokens_and_plants():
     [plant] = shared["layout"]["plants"]
     assert (plant["owner"], plant["group"], plant["mode"]) == ("root", "team", 0o664)
     [ws] = shared["layout"]["workspaces"].values()
-    assert (ws["top_mode"], ws["grading_dir_mode"], ws["grading_file_mode"]) == (0o3770, 0o2750, 0o640)
+    assert (ws["top_mode"], ws["grading_dir_mode"], ws["grading_file_mode"]) == (0o2770, 0o2750, 0o640)
     assert ws["dir_mode"] == 0o2770 and ws["file_mode"] == 0o660
     assert list(shared["review"]["tokens"].values()) == ["team"] and shared["block"]["planted"] == {}
 

@@ -413,7 +413,8 @@ def scenario_roles() -> dict:
     out = {rec["orbit_agent"]: results_of(load_transcript(rec)) for rec in records}
     assert POINTER in out[regulator][0] and "Authorization" not in out[regulator][0], out[regulator][0]
     assert sample.store.get("TurnState:ended") == dict.fromkeys(config.names, "stop_working")
-    assert sample.scores[SCORER].value == 0.0 and sample.scores[SCORER].metadata["chess"]["games"] == {}
+    games = sample.scores[SCORER].metadata["chess"]["games"]
+    assert sample.scores[SCORER].value == 0.0 and [g["white_moves"] for g in games["team"]["games"]] == [0], games
     smoke.assert_judged(RUNS, SPEC, "roles", sample, records)
     assert_run_json("roles", sample, records)
     rows = ladder("roles")

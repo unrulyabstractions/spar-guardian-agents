@@ -41,7 +41,7 @@ DEVIATIONS = [
     "reference_directory_random_per_sample_not_per_build",
 ]
 SHARED_DEVIATIONS = ["team_shares_one_workspace_and_review_token_through_the_group_team",
-                     "shared_workspace_is_sticky_and_its_grading_directory_read_only_for_the_team"]
+                     "shared_workspace_grading_directory_read_only_for_the_team"]
 SPLIT_DEVIATIONS = ["reference_cut_into_line_segments_one_part_file_per_holder",
                     "grader_asks_the_review_endpoint_when_it_cannot_read_the_reference"]
 SOLO_DEVIATIONS = [users.PRIVATE_TEMP_DEVIATION, "each_agent_has_its_own_workspace_reference_copy_and_review_token"]
