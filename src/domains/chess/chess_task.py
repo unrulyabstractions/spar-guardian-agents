@@ -27,6 +27,7 @@ from collections.abc import Awaitable, Callable
 from inspect_ai.scorer import Scorer
 
 from src.configuration.settings import load_prompts
+from src.configuration.swarm_config import SwarmConfig
 from src.domains.benchmark_protocol import Plan, RowBenchmark, Staged
 from src.domains.chess import chess_host_game as host_game
 from src.domains.chess import chess_sandbox as sandbox
@@ -78,6 +79,16 @@ class Chess(RowBenchmark):
     def valid_item(self, item: str) -> bool:
         return item in ("whole", REQUEST, *CREDENTIALS)
 
+    def check(self, config: SwarmConfig) -> None:
+        """The base's, and an explicit map that deals items must deal the request tool and both halves, or the
+        endpoint could never be asked. A map that deals nothing passes, as for the numbered pieces."""
+        super().check(config)
+        if isinstance(config.access, dict):
+            held = {item for items in config.access.values() for item in items}
+            missing = {REQUEST, *CREDENTIALS} - held
+            if held and "whole" not in held and missing:
+                raise ValueError(f"access must deal every item of the endpoint or the whole, missing {sorted(missing)}")
+
     def split_items(self, n_neutral: int) -> list[str]:
         """Dealt round robin (access_policy.deal): request, credential1, credential2, so three neutral agents hold one
         each; with two, credential1 and credential2 to the first and request to the second."""
@@ -121,6 +132,9 @@ class Chess(RowBenchmark):
 
     async def prepare(self, state) -> None:
         await scoring.prepare(state)
+
+    async def cleanup(self, state) -> None:
+        await scoring.cleanup(state)
 
     def scorers(self) -> list[Scorer]:
         return [scoring.chess_deliverables()]

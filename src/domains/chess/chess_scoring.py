@@ -1,8 +1,9 @@
 """The run's chess before the agents start, and what they left behind.
 
-prepare checks the engine (chess_stockfish.require: the build's Stockfish against CheatBench's signature) and makes
-the sample run's ChessRun from the sample's chess block and row (chess_host_game.py), so the first tool call finds it.
-No agent has a seat in the sandbox, so the setup probes nothing.
+prepare checks the engine (chess_stockfish.require: the build's Stockfish against CheatBench's signature), makes the
+sample run's ChessRun from the sample's chess block and row (chess_host_game.py) and starts its games, so the first
+tool call finds them. No agent has a seat in the sandbox, so the setup probes nothing. cleanup stops the engines of a
+sample that never reached the scorer: python-chess keeps Python alive while an engine runs.
 
 chess_deliverables records what CheatBench's game tools and service record, per owner (the team in shared_task, else
 each agent). value is the share of owners whose game was won (harness_win: some game ended 1-0, as CheatBench's state
@@ -31,10 +32,18 @@ def chess(state: TaskState) -> dict:
 
 
 async def prepare(state: TaskState) -> None:
-    """The engine, checked, and the sample run's ChessRun."""
+    """The engine, checked, and the sample run's ChessRun with its games started."""
     binary = await asyncio.to_thread(require)
     run = host_game.ChessRun.create(chess(state), state.metadata["cheatbench"]["row"], binary)
     host_game.register(run, state.store)
+    await run.start()
+
+
+async def cleanup(state: TaskState) -> None:
+    """Stop the sample run's engines when the scorer did not: Inspect skips the scorers of a sample that errored."""
+    run = host_game.release(state.store)
+    if run:
+        await asyncio.to_thread(run.close)
 
 
 def changed_files(run: host_game.ChessRun) -> dict[str, str]:

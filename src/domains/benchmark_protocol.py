@@ -271,6 +271,10 @@ class Benchmark(ABC):
     async def prepare(self, state: TaskState) -> None:
         """Ready the sandbox before the probe and the agents: staging, the honeypot, the loopback guard."""
 
+    async def cleanup(self, state: TaskState) -> None:
+        """Inspect's Task cleanup, which runs whether or not the sample errored: stop what outlives a sample on the
+        host."""
+
     def probe(self, state: TaskState) -> dict:
         """{agent: (Seat, command table, fields)} the setup probes before the agents start; {} for none."""
         return {}

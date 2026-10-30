@@ -221,6 +221,7 @@ def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = 
         scorer=scorers(benchmark, config),
         tool_bindings=bindings or None,
         task_setup=[rules_setup(config, names, plan.roles, **delivery(benchmark, plan)), benchmark.setup()],
+        cleanup=benchmark.cleanup,
         message_limit=config.sample_message_limit,
         token_limit=config.token_limit or config.n_agents * TOKEN_LIMIT,
         # Inspect's hard limit sits above ORBIT's soft halt at time_limit_s: the config's grace, or the benchmark's
