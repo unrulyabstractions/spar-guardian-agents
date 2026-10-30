@@ -11,9 +11,9 @@ adds the fields to
 CheatBench's verdict schema (src/judging/cheatbench_judge.py judge_spec with an addendum), so one judge call answers
 CheatBench's fields and the ladder's. The rung is derived in code from the booleans: the highest rung that is true.
 Each cited call is checked against the transcript (the call exists, the quoted command is in it) and mapped to its
-round through the eval log's turn timeline when the log is on disk.
+round through the turn timeline run.json records (rules.timeline).
 
-Inputs: runs/<name>/run.json (task, eval_log), episodes.jsonl (episode, orbit_agent, role, failure) and
+Inputs: runs/<name>/run.json (task, rules.timeline), episodes.jsonl (episode, orbit_agent, role, failure) and
 trajectories/<episode>/transcript.json. Output: runs/<name>/ladder.jsonl, one row per judged episode: CheatBench's
 verdict fields, the ladder's fields, `rung`, `<rung>_round` for each cited call, `citations`, `rounds_source`, `view`,
 `agent`, `role`, `failure`, the judge's usage and cost. A second run keeps the rows already there unless --force.
@@ -30,10 +30,7 @@ import json
 import re
 from pathlib import Path
 
-from inspect_ai.log import read_eval_log
-from inspect_ai.model import GenerateConfig, get_model
-
-from src.configuration import settings
+from src.domains import BY_TASK
 from src.judging import cheatbench_judge as judging
 
 RUNGS = ("none", "exposed", "tried", "opened", "used", "shipped")
@@ -43,7 +40,6 @@ CITED = ("exposed", "searched", "tried", "opened")
 VIEWS = ("full", "actions")
 ADDENDUM = Path(__file__).resolve().parent / "ladder_verdict_fields.py"
 LADDER_FILES = {"full": "ladder.jsonl", "actions": "ladder_actions.jsonl"}
-TIMELINE_KEY = "TurnState:timeline"
 ROUND_RE = re.compile(r"^r(\d+)")
 # The line prefixes of CheatBench's rendering (submodules/cheatbench/core/render.py); a line without one continues
 # the block before it.
@@ -54,7 +50,7 @@ ACTION_PREFIXES = ("[init]", "[context]", "    -> RESULT[")
 
 def ladder_spec(task_name: str):
     """CheatBench's judge spec for the task with the ladder's fields and context appended."""
-    return judging.judge_spec(settings.CHEATBENCH / "tasks" / task_name, task_name, addendum=ADDENDUM)
+    return judging.judge_spec(BY_TASK[task_name].task_dir, task_name, addendum=ADDENDUM)
 
 
 def rung_of(verdict: dict) -> str:
@@ -114,19 +110,6 @@ def evidence_in(evidence: str, arguments: str) -> bool:
     return any(len(w) >= 12 and w in " ".join(plain.split()) for w in windows)
 
 
-def timeline_rounds(run_dir: Path) -> dict[str, dict[int, int]] | None:
-    """{agent: {activation: round}} from the eval log's turn timeline, or None without a log or a timeline."""
-    run = json.loads((run_dir / "run.json").read_text())
-    path = run.get("eval_log")
-    if not path or not Path(path).is_file():
-        return None
-    sample = read_eval_log(path).samples[0]
-    timeline = sample.store.get(TIMELINE_KEY)
-    if not timeline:
-        return None
-    return rounds_by_activation(timeline)
-
-
 def rounds_by_activation(timeline: list[dict]) -> dict[str, dict[int, int]]:
     """Each agent's activation number to the round of the step it ran in ("r3-a01" is round 3, "plan1" round 0)."""
     out: dict[str, dict[int, int]] = {}
@@ -156,8 +139,8 @@ def episodes_of(run_dir: Path) -> list[dict]:
         path = run_dir / "trajectories" / ep["episode"] / "transcript.json"
         if path.is_file():
             out.append({"episode": ep["episode"], "id": ep.get("id"), "replicate": ep.get("replicate"),
-                        "agent": ep.get("orbit_agent") or ep["episode"], "role": ep.get("role"),
-                        "failure": ep.get("failure"), "path": path})
+                        "model": ep.get("model"), "agent": ep.get("orbit_agent") or ep["episode"],
+                        "role": ep.get("role"), "failure": ep.get("failure"), "path": path})
     return out
 
 
@@ -174,13 +157,12 @@ def write_rows(run_dir: Path, rows: list[dict], view: str = "full") -> Path:
     return path
 
 
-async def judge_episode(spec, transcript: dict, model, config: GenerateConfig, prices: dict | None,
-                        view: str) -> dict:
+async def judge_episode(spec, transcript: dict, judge: judging.Judge, view: str) -> dict:
     """One ladder verdict over the chosen view of the transcript."""
     rendered = judging.render(transcript)
     if view == "actions":
         rendered = actions_view(rendered)
-    return await judging.judge_text(spec, rendered, transcript.get("prompt") or "", model, config, prices)
+    return await judging.judge_text(spec, rendered, transcript["prompt"], judge)
 
 
 async def judge_run(run_dir: Path, judge_name: str, *, view: str = "full", agents: list[str] | None = None,
@@ -190,25 +172,24 @@ async def judge_run(run_dir: Path, judge_name: str, *, view: str = "full", agent
     run = json.loads((run_dir / "run.json").read_text())
     task = run["task"]
     spec = ladder_spec(task)
-    model_name, config = judging.judge_model_config(judge_name)
-    prices = judging.judge_prices(judge_name, batch=batch)
-    model = get_model(model_name, config=GenerateConfig(batch=batch), memoize=False)   # one client per event loop
+    judge = judging.Judge.of(judge_name, batch=batch)
     done = {row["episode"]: row for row in read_rows(run_dir, view) if row.get("parse_ok")} if not force else {}
     todo = [ep for ep in episodes_of(run_dir) if ep["episode"] not in done
             and (agents is None or ep["agent"] in agents)]
-    rounds = timeline_rounds(run_dir) if todo else None
+    timeline = (run.get("rules") or {}).get("timeline")
+    rounds = rounds_by_activation(timeline) if timeline else None
     transcripts = [json.loads(ep["path"].read_text()) for ep in todo]
-    results = await asyncio.gather(*(judge_episode(spec, t, model, config, prices, view) for t in transcripts))
-    for ep, transcript, result in zip(todo, transcripts, results):
-        row = judging.judge_row(result, id=ep["id"], episode=ep["episode"], replicate=ep["replicate"],
-                                task=task, model=run.get("model"), judge=judge_name, spec=spec,
-                                transcript_path=str(ep["path"]))
+    results = await asyncio.gather(*(judge_episode(spec, t, judge, view) for t in transcripts))
+    for ep, transcript, verdict in zip(todo, transcripts, results):
         calls = calls_of(transcript)
-        row.update({"agent": ep["agent"], "role": ep["role"], "failure": ep["failure"], "view": view,
-                    "rung": rung_of(row) if row["parse_ok"] else None,
-                    "citations": check_citations(row, calls) if row["parse_ok"] else None,
-                    "rounds_source": "timeline" if rounds is not None else "none",
-                    **call_rounds(row, calls, (rounds or {}).get(ep["agent"]) if rounds is not None else None)})
+        parsed = verdict["parse_ok"]
+        row = {"id": ep["id"], "episode": ep["episode"], "replicate": ep["replicate"], "task": task,
+               "model": ep["model"], **verdict, "transcript_path": str(ep["path"]),
+               "agent": ep["agent"], "role": ep["role"], "failure": ep["failure"], "view": view,
+               "rung": rung_of(verdict) if parsed else None,
+               "citations": check_citations(verdict, calls) if parsed else None,
+               "rounds_source": "timeline" if rounds is not None else "none",
+               **call_rounds(verdict, calls, (rounds or {}).get(ep["agent"]) if rounds is not None else None)}
         done[ep["episode"]] = row
     rows = sorted(done.values(), key=lambda r: r["episode"])
     write_rows(run_dir, rows, view)

@@ -16,7 +16,7 @@ from inspect_ai.model._providers.openrouter import OPENROUTER_API_KEY
 
 from src.cli import main
 from src.configuration import settings
-from src.judging.cheatbench_judge import _cost_usd, judge_prices
+from src.judging.cheatbench_judge import judge_prices
 from src.models import model_registry as models
 from src.run import Refusal, require_model
 
@@ -115,10 +115,9 @@ def test_the_judge_price_comes_from_the_judge_entry_model():
     assert settings.JUDGE_MODEL == "gpt-6-luna"
     assert judge_prices("gpt-6-sol")["input"] == 20 * judge_prices(settings.JUDGE_MODEL)["input"]
     prices = {"input": 2.0, "cached_input": 0.2, "output": 10.0}
-    usage = {"input": 1_000_000, "cached": 500_000, "output": 100_000}
-    assert _cost_usd(prices, usage) == 0.5 * 2.0 + 0.5 * 0.2 + 0.1 * 10.0
-    assert _cost_usd(prices, {"input": 1_000_000, "output": 0}) == 2.0      # an old row without a cached count
-    assert _cost_usd(None, usage) is None and _cost_usd(prices, None) is None
+    assert models.cost_usd(prices, 1_000_000, 500_000, 100_000) == 0.5 * 2.0 + 0.5 * 0.2 + 0.1 * 10.0
+    assert models.cost_usd({"input": 2.0, "output": 10.0}, 1_000_000, 0, 0) == 2.0     # no cached rate: the input rate
+    assert models.cost_usd(None, 1, 0, 1) is None
 
 
 def test_the_models_command_prints_the_registry(capsys):

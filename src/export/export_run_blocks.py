@@ -2,42 +2,29 @@
 
 Each function reads a SampleView (src/export/eval_sample_view.py) or the episode records and returns one block:
 the swarm's composition, access, the honeypot signals, the sandbox, validity, the ledger, stop-after-delivery, the
-turn rules, the probes and the board engagement. A domain's own blocks and episode facts come from its Benchmark
-(src/domains/benchmark_protocol.py run_blocks, episode_facts, access_facts, write_files), found by the sample's
-CheatBench task in the registry. A block is None when the run did not record it. The export
+turn rules, the probes and the board engagement. The turn rules' stores are read through their StoreModels
+(src/swarm/turn_rules/turn_state.py TurnState, TeamSubmission, Delivered). A domain's own blocks and episode facts
+come from its Benchmark (src/domains/benchmark_protocol.py run_blocks, episode_facts, access_facts), found by the
+sample's CheatBench task in the registry. A block is None when the run did not record it. The export
 (src/export/run_export.py) assembles them into run.json and episodes.jsonl.
 
     block = delivery_block(view)
-    facts = newer_episode_facts(view, "a01")
+    facts = recorded_episode_facts(view, "a01")
 """
 from __future__ import annotations
 
 import json
-from pathlib import Path
+
+from inspect_ai.util import StoreModel
 
 from src.domains import BY_TASK
 from src.domains.benchmark_protocol import Benchmark
-from src.export.atif_transcripts import TURN_RULES_TAG
 from src.export.eval_sample_view import SampleView, topology
 from src.models import model_registry as models
 from src.sandbox import sandbox_hygiene as hygiene
+from src.swarm.turn_rules.turn_state import DELIVERED, TURN_RULES_TAG, Delivered, TeamSubmission, TurnState
 
-PROBES_SCORER = "end_of_episode_probes"
-# the StoreModel of src/swarm/turn_rules/turn_state.py; Inspect stores its fields as "TurnState:<field>"
-TURN_STATE = "TurnState"
-TURN_STATE_FIELDS = ("agents", "cap", "pooled", "turn_order", "seed", "rounds", "windows", "activations",
-                     "work_steps", "ended", "timeline")
-# The pull board's per-agent counts ({agent: value}); written only when the run stored them.
-TURN_STATE_BOARD_FIELDS = ("free_steps", "checks", "reads", "posts", "discovery_round", "read_senders",
-                           "free_caps", "reads_per_turn", "posts_per_turn", "turn_budget",
-                           "oversight", "oversight_targets", "turn_reads", "turn_posts", "reads_refused",
-                           "posts_refused", "history_marks")
-TEAM_SUBMISSION = "TeamSubmission"        # its StoreModel: agent, round, answer, time, refused
-TEAM_SUBMISSION_FIELDS = ("agent", "round", "answer", "time", "refused")
-# src/swarm/turn_rules/turn_state.py's stop-after-delivery record, kept only under the rule
-DELIVERED_STORE = "Delivered"
-DELIVERED_FIELDS = ("after", "team", "seen", "halt_round", "cut", "checks", "errors")
-DELIVERED = "delivered"                   # its TurnState.ended reason and an episode's ended_by
+PROBES_SCORER = "end_of_episode_probes"     # src/swarm/awareness_probes.py
 
 
 def cheatbench(view: SampleView) -> dict:
@@ -51,22 +38,25 @@ def score_metadata(view: SampleView, name: str) -> dict | None:
     return None if sc is None else (sc.metadata or {})
 
 
-def swarm_facts(cb: dict) -> dict | None:
-    """Composition and hidden roles, from the roles and the config the sample recorded."""
-    roles = cb.get("roles")
-    if not roles:
-        return None
-    config = cb.get("config") or {}
-    regulators = sum(1 for r in roles.values() if r == "regulator")
-    disregulators = sum(1 for r in roles.values() if r == "disregulator")
-    return {"n_agents": len(roles), "regulators": regulators, "disregulators": disregulators,
-            "workers": len(roles) - regulators - disregulators, "seed": config.get("seed"), "roles": roles,
-            "composition": cb.get("composition")}
+def stored(view: SampleView, model: type[StoreModel]) -> dict | None:
+    """A StoreModel's fields as the sample stored them ("<Model>:<field>"), or None when its first field is unset:
+    the sample never made the store (TurnState, Delivered) or never filled it (TeamSubmission without a submission)."""
+    fields = [f for f in model.model_fields if f not in ("store", "instance")]
+    values = {f: view.store_get(f"{model.__name__}:{f}") for f in fields}
+    return values if values[fields[0]] is not None else None
 
 
 def swarm_block(view: SampleView) -> dict | None:
-    """Composition and hidden roles, for a swarm run."""
-    return swarm_facts(cheatbench(view))
+    """Composition and hidden roles, from the roles and the config the sample recorded; None without roles."""
+    cb = cheatbench(view)
+    roles = cb.get("roles")
+    if not roles:
+        return None
+    regulators = sum(1 for r in roles.values() if r == "regulator")
+    disregulators = sum(1 for r in roles.values() if r == "disregulator")
+    return {"n_agents": len(roles), "regulators": regulators, "disregulators": disregulators,
+            "workers": len(roles) - regulators - disregulators, "seed": (cb.get("config") or {}).get("seed"),
+            "roles": roles, "composition": cb.get("composition")}
 
 
 def domain(view: SampleView) -> type[Benchmark] | None:
@@ -92,7 +82,8 @@ def access_block(view: SampleView) -> dict | None:
     if not recorded.get("agents"):
         return None
     pieces = recorded.get("pieces") or {}
-    run_facts, agent_facts = domain(view).access_facts(view) if domain(view) else ({}, {})
+    bench = domain(view)
+    run_facts, agent_facts = bench.access_facts(view) if bench else ({}, {})
     return {"policy": recorded.get("policy"), "n_pieces": recorded.get("n_pieces"), **run_facts,
             "agents": {a: {"holds": items, **({"pieces": pieces.get(a)} if pieces else {}), **agent_facts.get(a, {})}
                        for a, items in recorded["agents"].items()}}
@@ -113,12 +104,6 @@ def sandbox_block(view: SampleView) -> dict | None:
     if end is None and reaps is None and guard is None:
         return None
     return {"end": end, "reaps": reaps, "loopback": guard}
-
-
-def domain_files(view: SampleView, run_dir: Path) -> None:
-    """The domain's own files of the sample in the run directory (Benchmark.write_files)."""
-    if domain(view):
-        domain(view).write_files(view, run_dir)
 
 
 IDENTICAL_RUN_FLAG = 8      # this many identical tool calls in a row flag a stuck agent
@@ -181,11 +166,8 @@ def ledger_record(model: str, events: list, usage: dict | None) -> dict:
     errored = sum(1 for e in events if getattr(e, "error", None))
     with_usage = sum(1 for e in events if getattr(getattr(e, "output", None), "usage", None))
     price = models.usd_per_million(model)
-    cost = None
-    if price and usage:
-        cached = price.get("cached_input", price["input"])
-        cost = ((usage.get("input", 0) - usage.get("cache_read", 0)) * price["input"]
-                + usage.get("cache_read", 0) * cached + usage.get("output", 0) * price["output"]) / 1e6
+    cost = models.cost_usd(price, usage.get("input", 0), usage.get("cache_read", 0), usage.get("output", 0)) \
+        if usage else None
     flags = []
     if price is None:
         flags.append("unpriced model")
@@ -234,37 +216,36 @@ def delivery_block(view: SampleView) -> dict | None:
     """The stop-after-delivery record (src/swarm/turn_rules/turn_state.py Delivered): N ("after"), whether one
     deliverable counted for the team, each agent's first sighting {round, turn}, the team's last round, the agents of
     a team whose later steps were cut, the predicate's calls and errors, and the agents the rule ended ("ended", from
-    TurnState.ended).
-    None for a run without the rule."""
-    if view.store_get(f"{DELIVERED_STORE}:after") is None:
+    TurnState.ended). None for a run without the rule."""
+    delivered = stored(view, Delivered)
+    if delivered is None:
         return None
-    ended = view.store_get(f"{TURN_STATE}:ended") or {}
-    return {**{f: view.store_get(f"{DELIVERED_STORE}:{f}") for f in DELIVERED_FIELDS},
-            "ended": [a for a, why in ended.items() if why == DELIVERED]}
+    ended = (rules_state(view) or {}).get("ended") or {}
+    return {**delivered, "ended": [a for a, why in ended.items() if why == DELIVERED]}
 
 
 def ended_by_delivery(view: SampleView, agent: str) -> bool:
     """Whether stop_after_delivery ended the agent's episode."""
-    return ((view.store_get(f"{TURN_STATE}:ended") or {}).get(agent) == DELIVERED
-            and view.store_get(f"{DELIVERED_STORE}:after") is not None)
+    return agent in (delivery_block(view) or {}).get("ended", [])
 
 
-def newer_run_facts(view: SampleView) -> dict:
-    """run.json keys that only newer runs carry, each present only when the run recorded it: the turn budget, access,
-    the domain's blocks (Benchmark.run_blocks), the signals, delivery, the sandbox and the code state."""
-    cb = cheatbench(view)
+def recorded_run_blocks(view: SampleView) -> dict:
+    """The run.json blocks a run carries only when it recorded them: the turn budget, access, the domain's blocks
+    (Benchmark.run_blocks), the signals, delivery, the sandbox and the code state."""
+    cb, bench = cheatbench(view), domain(view)
     facts = {"turn_budget": cb.get("turn_budget"), "access": access_block(view),
-             **(domain(view).run_blocks(view) if domain(view) else {}), "signals": signals_block(view),
+             **(bench.run_blocks(view) if bench else {}), "signals": signals_block(view),
              "delivery": delivery_block(view), "sandbox": sandbox_block(view), "code": cb.get("code")}
     return {k: v for k, v in facts.items() if v is not None}
 
 
-def newer_episode_facts(view: SampleView, agent: str) -> dict:
+def recorded_episode_facts(view: SampleView, agent: str) -> dict:
     """An episode's access (what it held), the domain's facts (Benchmark.episode_facts: its review on knowledge work,
     its task_tool on a machines domain, its SWE keys) and delivery (the round and working step at which its
     deliverable was first seen), when the run recorded them."""
+    bench = domain(view)
     facts = {"access": ((access_block(view) or {}).get("agents") or {}).get(agent),
-             **(domain(view).episode_facts(view, agent) if domain(view) else {}),
+             **(bench.episode_facts(view, agent) if bench else {}),
              "delivery": ((delivery_block(view) or {}).get("seen") or {}).get(agent)}
     return {k: v for k, v in facts.items() if v is not None}
 
@@ -274,11 +255,7 @@ def newer_episode_facts(view: SampleView, agent: str) -> dict:
 # --------------------------------------------------------------------------
 def rules_state(view: SampleView) -> dict | None:
     """The turn rules' store (src/swarm/turn_rules/turn_state.py TurnState), or None for a run without them."""
-    if view.store_get(f"{TURN_STATE}:agents") is None:
-        return None
-    state = {f: view.store_get(f"{TURN_STATE}:{f}") for f in TURN_STATE_FIELDS}
-    board = {f: view.store_get(f"{TURN_STATE}:{f}") for f in TURN_STATE_BOARD_FIELDS}
-    return {**state, **{f: v for f, v in board.items() if v is not None}}
+    return stored(view, TurnState)
 
 
 def rules_facts(state: dict | None, agent: str) -> dict | None:
@@ -305,8 +282,7 @@ def probes_block(view: SampleView) -> dict | None:
 # --------------------------------------------------------------------------
 def team_submission(view: SampleView) -> dict | None:
     """The team's submission, from the TeamSubmission store (src/swarm/board.py team_submit)."""
-    stored = {f: view.store_get(f"{TEAM_SUBMISSION}:{f}") for f in TEAM_SUBMISSION_FIELDS}
-    return stored if stored["agent"] else None
+    return stored(view, TeamSubmission)
 
 
 def notice_counts(view: SampleView) -> dict[str, int]:
@@ -376,17 +352,3 @@ def run_engagement(records: list[dict], submission: dict | None) -> dict | None:
         "posts_refused": sum(e["posts_refused"] for _, e in rows),
         "oversight_graph": {a: dict(e["oversight_targets"]) for a, e in rows if e.get("oversight_targets")},
     }
-
-
-# --------------------------------------------------------------------------
-# mode, scale, preset and deviations
-# --------------------------------------------------------------------------
-def run_identity(view: SampleView) -> dict:
-    """mode, scale and preset for run.json, from the recorded config."""
-    config = cheatbench(view).get("config") or {}
-    return {"mode": config.get("mode"), "scale": config.get("scale"), "preset": config.get("preset")}
-
-
-def run_deviations(view: SampleView) -> list[str]:
-    """The sample's own deviations (metadata["cheatbench"]["deviations"])."""
-    return list(cheatbench(view).get("deviations") or [])

@@ -50,7 +50,7 @@ from src.configuration.presets import preset, with_overrides
 from src.configuration.swarm_config import SwarmConfig
 from src.domains import DOMAINS
 from src.domains.benchmark_protocol import Benchmark, Plan
-from src.judging.cheatbench_judge import cheatbench_judge
+from src.judging.cheatbench_judge import JUDGE_ADDENDUM, cheatbench_judge
 from src.models import swarm_model_provider as provider  # importing it registers the "swarm" provider
 from src.sandbox.agent_tools import AgentTools
 from src.swarm import hidden_roles as roles_module
@@ -64,7 +64,6 @@ from src.swarm.board import (
 )
 from src.swarm.turn_rules import rules_setup, schedule, turn_rules_defense
 
-JUDGE_ADDENDUM = settings.LUCY / "experiments" / "orbit_cheatbench" / "judge_addendum.py"
 TOKEN_LIMIT = 8_000_000           # spend guard per agent; the episode stays judgeable if it trips
 
 

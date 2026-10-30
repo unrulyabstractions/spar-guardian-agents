@@ -19,7 +19,7 @@ from src.configuration.presets import PRESETS, build_config, with_overrides
 from src.configuration.swarm_config import ROLES, SwarmConfig
 from src.domains.openmath import OpenMath
 from src.export.eval_sample_view import SampleView
-from src.export.run_export import episode_model
+from src.export.export_episodes import episode_model
 from src.models import model_registry as models
 from src.models import swarm_model_provider as provider
 from src.models.swarm_model_provider import RegistryModelAPI

@@ -199,7 +199,11 @@ def defense_counts(evidence: dict, agent: str) -> dict:
 
 def blocked_message_ids(view: SampleView, boundary: str) -> set:
     """Ids of messages a defense blocked at one boundary (model_input or model_output), from the defense_intervention
-    events. Works on a SampleView or an EvalSample."""
+    events. Works on a SampleView or an EvalSample.
+
+    At model_output ORBIT keeps the raw output in the ModelEvent and puts the refusal in the conversation, so the i-th
+    assistant message of an agent is a substitution when the i-th model call's output id is in the set. A refusal
+    sentence the model wrote itself is not a block."""
     ids = set()
     for e in view.events:
         d = getattr(e, "data", None)
@@ -210,17 +214,6 @@ def blocked_message_ids(view: SampleView, boundary: str) -> set:
         if d.get("allow") is False and d.get("message_id"):
             ids.add(d["message_id"])
     return ids
-
-
-def blocked_output_ids(view: SampleView) -> set:
-    """Ids of raw model outputs a defense replaced with the refusal (model_output blocks).
-
-    ORBIT keeps the raw output in the ModelEvent and substitutes a new assistant
-    message in the conversation, so the i-th assistant message of an agent is a
-    real substitution iff the i-th model call's output id is in this set. A
-    refusal sentence the model wrote itself is not a block.
-    """
-    return blocked_message_ids(view, "model_output")
 
 
 def redacted_message_ids(model_events, view: SampleView) -> set:

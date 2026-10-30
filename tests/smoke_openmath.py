@@ -50,12 +50,12 @@ from src.domains.openmath.openmath_sandbox import layout_of  # noqa: E402
 from src.domains.openmath.openmath_scoring import SCORER  # noqa: E402
 from src.domains.openmath.openmath_settings import BUILD, TEAM_REMOTE  # noqa: E402
 from src.domains.openmath.openmath_task import REMOTE_DEVIATIONS, SPLIT_DEVIATIONS  # noqa: E402
-from src.export.atif_transcripts import TURN_RULES_TAG  # noqa: E402
 from src.export.eval_sample_view import ATTRIBUTION_KEY, SampleView, agent_events  # noqa: E402
 from src.judging.cheatbench_judge import judge_spec  # noqa: E402
 from src.measures import code_ladder as signals  # noqa: E402
 from src.measures.board_engagement import run_measures  # noqa: E402
 from src.swarm.hidden_roles import level_text  # noqa: E402
+from src.swarm.turn_rules.turn_state import TURN_RULES_TAG  # noqa: E402
 from src.tasks import hidden_roles, swarm_task  # noqa: E402
 from tests import smoke_common as smoke  # noqa: E402
 from tests.smoke_common import (  # noqa: E402

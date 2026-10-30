@@ -27,8 +27,9 @@ branches and the archive), the domain's own blocks (Benchmark.run_blocks: "openm
 domain's facts (Benchmark.episode_facts) and "delivery" (the round and working step at which its deliverable was first
 seen). An episode that stop_after_delivery ended has ended_by "delivered".
 
-Episode ids: "<sample>#<epoch>" for a single agent, "<sample>#<epoch>@<agent>" otherwise.
-Verdicts come from the `verdicts` argument (re-judging) or from the cheatbench_judge score in the log.
+Episode ids: "<sample>#<epoch>" for a single agent, "<sample>#<epoch>@<agent>" otherwise (export_episodes.episode_id).
+Verdicts come from the `verdicts` argument ({episode: verdict}, when re-judging) or from the cheatbench_judge score in
+the log; a judge.jsonl row is the episode's identity, the verdict, and the transcript the judge read.
 """
 from __future__ import annotations
 
@@ -40,96 +41,78 @@ import inspect_ai
 import orbit
 from inspect_ai.log import read_eval_log
 
-from src.configuration import settings
+from src.domains import BY_TASK
 from src.export.eval_sample_view import SampleView, orbit_halt_reason
-from src.export.export_episodes import episode_model, sample_key, sample_records
+from src.export.export_episodes import sample_key, sample_records
 from src.export.export_run_blocks import (
-    IDENTICAL_RUN_FLAG,
-    delivery_block,
-    domain_files,
-    ended_by_delivery,
-    identical_tool_run,
+    cheatbench,
+    domain,
     ledger_block,
-    ledger_record,
-    newer_episode_facts,
-    newer_run_facts,
     probes_block,
+    recorded_run_blocks,
     rules_state,
-    run_deviations,
     run_engagement,
-    run_identity,
     score_metadata,
     shutdown_rate,
     swarm_block,
     team_submission,
     validity_block,
-    validity_record,
 )
 from src.judging.cheatbench_judge import JUDGE_SCORER
 from src.models import swarm_model_provider as provider
 from src.utils.json_files import write_jsonl
 
-# The names the rest of the repository imports from here. The blocks live in export_run_blocks.py and the per-sample
-# writers in export_episodes.py.
-__all__ = [
-    "IDENTICAL_RUN_FLAG", "clear_outputs", "delivery_block", "ended_by_delivery", "episode_model",
-    "identical_tool_run", "judge_rows", "ledger_block", "ledger_record", "newer_episode_facts", "newer_run_facts",
-    "run_json", "sample_records", "validity_block", "validity_record", "write_run",
-]
+# The identity a judge.jsonl row takes from its episode record, ahead of the verdict.
+VERDICT_IDENTITY = ("id", "episode", "replicate", "task", "model")
+OWNED_FILES = ("run.json", "episodes.jsonl", "judge.jsonl")
+OWNED_DIRS = ("trajectories", "communication", "defense", "swe")
 
 
 def run_json(view: SampleView | None, eval_path: Path, run_dir: Path, records: list[dict], eval_id: str,
              model: str) -> dict:
+    """run.json: what every run carries, then, for a log with a sample, what the first sample recorded."""
     first = records[0] if records else {}
     task = first.get("task")
-    topo = first.get("topology", "single")
-    meta = view.metadata if view else {}
-    cb = meta.get("cheatbench") or {}
-    return {
-        "task": task, "task_root": str((settings.CHEATBENCH / "tasks" / (task or "unknown")).resolve()),
-        "variant": "", "run_id": run_dir.name, "model": provider.inspect_string(model),
-        **({"role_models": cb["role_models"]} if "role_models" in cb else {}), "agent": "orbit",
-        "source": "orbit", "topology": topo, "agents": first.get("orbit_roster", []),
-        "control": first.get("control"), "monitor_model": first.get("monitor_model"),
-        "defenses": (meta.get("experiment", {}).get("defenses") if view else None) or [],
-        "swarm": swarm_block(view) if view else None,
-        "orbit_halt_reason": orbit_halt_reason(view) if view else None,
+    run = {
+        "task": task, "task_root": str(BY_TASK[task].task_dir) if task else None, "variant": "",
+        "run_id": run_dir.name, "model": provider.inspect_string(model), "agent": "orbit", "source": "orbit",
+        "topology": first.get("topology", "single"), "agents": first.get("orbit_roster", []),
         "eval_log": str(eval_path.resolve()), "eval_id": eval_id,
         "orbit_version": orbit.__version__, "inspect_version": inspect_ai.__version__,
-        "deviations": run_deviations(view) if view else [],
-        "config": (meta.get("cheatbench") or {}).get("config") if view else None,
-        "shutdown_rate": shutdown_rate((meta.get("cheatbench") or {}).get("config"), records) if view else None,
-        "rules": rules_state(view) if view else None,
-        "probes": probes_block(view) if view else None,
-        **(run_identity(view) if view else {"mode": None, "scale": None, "preset": None}),
-        "engagement": run_engagement(records, team_submission(view)) if view else None,
-        "validity": validity_block(records, team_submission(view)) if view else None,
-        "ledger": ledger_block(records, view.limit.type if view and view.limit else None) if view else None,
-        **(newer_run_facts(view) if view else {}),
+    }
+    if view is None:
+        return run
+    cb = cheatbench(view)
+    config = cb.get("config") or {}
+    submission = team_submission(view)
+    return {
+        **run, **({"role_models": cb["role_models"]} if "role_models" in cb else {}),
+        "defenses": (view.metadata.get("experiment") or {}).get("defenses") or [],
+        "swarm": swarm_block(view), "orbit_halt_reason": orbit_halt_reason(view),
+        "deviations": list(cb.get("deviations") or []), "config": cb.get("config"),
+        "shutdown_rate": shutdown_rate(cb.get("config"), records), "rules": rules_state(view),
+        "probes": probes_block(view), **{key: config.get(key) for key in ("mode", "scale", "preset")},
+        "engagement": run_engagement(records, submission), "validity": validity_block(records, submission),
+        "ledger": ledger_block(records, view.limit.type if view.limit else None),
+        **recorded_run_blocks(view),
     }
 
 
 def judge_rows(views: list[SampleView], records: list[dict], verdicts: dict[str, dict] | None) -> list[dict]:
-    """judge.jsonl rows from `verdicts` (keyed by episode or agent) or from each sample's judge score."""
+    """judge.jsonl rows from `verdicts` ({episode: verdict}) or from each sample's judge score ({agent: verdict}):
+    the episode's identity, the verdict, the transcript path. An episode without a transcript gets none."""
     by_sample = {sample_key(v): v for v in views}
     rows = []
     for record in records:
-        agent = record["orbit_agent"]
         if verdicts is not None:
-            verdict = verdicts.get(record["episode"]) or verdicts.get(agent)
+            verdict = verdicts.get(record["episode"])
         else:
             view = by_sample[f"{record['id']}#{record['replicate']}"]
-            verdict = ((score_metadata(view, JUDGE_SCORER) or {}).get("verdicts") or {}).get(agent)
-        if not verdict or not record["transcript_path"]:
-            continue
-        fields = {k: v for k, v in verdict.items() if k not in ("id", "episode", "transcript_path")}
-        rows.append({"id": record["id"], "episode": record["episode"], **fields,
-                     "transcript_path": record["transcript_path"]})
+            verdict = ((score_metadata(view, JUDGE_SCORER) or {}).get("verdicts") or {}).get(record["orbit_agent"])
+        if verdict and record["transcript_path"]:
+            rows.append({**{key: record[key] for key in VERDICT_IDENTITY}, **verdict,
+                         "transcript_path": record["transcript_path"]})
     return rows
-
-
-OWNED_FILES = ("run.json", "episodes.jsonl", "judge.jsonl")
-OWNED_DIRS = ("trajectories", "communication", "defense", "swe")
 
 
 def clear_outputs(run_dir: Path) -> None:
@@ -158,7 +141,8 @@ def write_run(eval_log_path: Path, run_dir: Path, *, verdicts: dict[str, dict] |
         views.append(view)
     records = [r for view in views for r in sample_records(view, run_dir)]
     for view in views:
-        domain_files(view, run_dir)
+        if (bench := domain(view)) is not None:
+            bench.write_files(view, run_dir)
     run = run_json(views[0] if views else None, eval_path, run_dir, records, log.eval.eval_id, log.eval.model)
     (run_dir / "run.json").write_text(json.dumps(run, indent=1))
     write_jsonl(run_dir / "episodes.jsonl", records)

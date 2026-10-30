@@ -37,8 +37,8 @@ from src.configuration import settings
 from src.configuration.swarm_config import SwarmConfig
 from src.domains import BY_TASK
 from src.domains.benchmark_protocol import Benchmark
-from src.export.atif_transcripts import judge_prompt, transcript_dict
-from src.export.eval_sample_view import SampleView, agent_messages, error_and_failure, roster
+from src.export.eval_sample_view import SampleView, error_and_failure
+from src.export.export_episodes import episode_id
 from src.export.run_export import write_run
 from src.judging import cheatbench_judge as judging
 from src.judging import judging_ladder as ladder
@@ -47,7 +47,7 @@ from src.measures import episode_summary as summary
 from src.models import gemini_402_retry
 from src.models import model_registry as models
 from src.models import swarm_model_provider as provider  # importing it registers the "swarm" provider
-from src.tasks import JUDGE_ADDENDUM, swarm_task
+from src.tasks import swarm_task
 from src.utils.json_files import read_jsonl
 
 # The verdict fields `judge` prints per episode, which every CheatBench judge schema shares.
@@ -196,32 +196,17 @@ def run(name: str, benchmark: Benchmark, config: SwarmConfig, model: str, timeou
 # --------------------------------------------------------------------------
 # judge an existing log
 # --------------------------------------------------------------------------
-def _episode(view, agents: list[str], agent: str) -> str:
-    key = f"{view.id}#{view.epoch}"
-    return key if len(agents) == 1 else f"{key}@{agent}"
-
-
-async def _judge_views(views: list, judge_name: str, batch: bool) -> dict[str, dict]:
-    """Every agent of every sample judged again, through the provider's batch API or the normal one; verdict rows
-    keyed by episode."""
-    model_name, config = judging.judge_model_config(judge_name)
-    prices = judging.judge_prices(judge_name, batch=batch)
-    # a fresh client: a memoized one belongs to the event loop that first used it, and rejudge runs two
-    model = get_model(model_name, config=GenerateConfig(batch=batch), memoize=False)
+async def _judge_views(views: list[SampleView], judge_name: str, batch: bool) -> dict[str, dict]:
+    """Every agent of every sample judged again with the spec the sample was judged with (its task's schema, Lucy's
+    addendum when its config asked for it), through the provider's batch API or the normal one; by episode."""
+    judge = judging.Judge.of(judge_name, batch=batch)
     verdicts = {}
     for view in views:
-        cb = (view.metadata or {}).get("cheatbench", {})
-        addendum = JUDGE_ADDENDUM if (cb.get("config") or {}).get("judge_addendum") else None
+        cb = view.metadata["cheatbench"]
+        addendum = judging.JUDGE_ADDENDUM if (cb.get("config") or {}).get("judge_addendum") else None
         spec = judging.judge_spec(BY_TASK[cb["task"]].task_dir, cb["task"], addendum=addendum)
-        agents = roster(view)
-        judged = [a for a in agents if agent_messages(view, a)]
-        results = await asyncio.gather(*(judging.judge_trajectory(spec, transcript_dict(view, a, judge_prompt(view, a)),
-                                                                  model, config, prices) for a in judged))
-        for agent, result in zip(judged, results):
-            episode = _episode(view, agents, agent)
-            verdicts[episode] = judging.judge_row(result, id=view.id, episode=episode, replicate=view.epoch,
-                                                  task=spec.task, model=view.model, judge=judge_name, spec=spec,
-                                                  transcript_path=None)
+        by_agent = await judging.judge_sample(view, spec, judge)
+        verdicts |= {episode_id(view, agent): verdict for agent, verdict in by_agent.items()}
     return verdicts
 
 

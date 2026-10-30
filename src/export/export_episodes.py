@@ -6,13 +6,15 @@ episodes.jsonl. Episode ids are "<sample>#<epoch>" for a single agent and "<samp
 
     records = sample_records(view, run_dir)
     model = episode_model(view, "a01")
+    episode = episode_id(view, "a01")
 """
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-from src.export.atif_transcripts import episode_transcript, judge_prompt
+from src.configuration.swarm_config import role_of
+from src.export.atif_transcripts import episode_transcript
 from src.export.eval_sample_view import (
     LIMIT_FAILURES,
     SampleView,
@@ -26,21 +28,20 @@ from src.export.eval_sample_view import (
     topology,
 )
 from src.export.export_run_blocks import (
-    DELIVERED,
     cheatbench,
     ended_by_delivery,
     engagement_record,
     ledger_record,
-    newer_episode_facts,
     notice_counts,
     probes_block,
+    recorded_episode_facts,
     rules_facts,
     rules_state,
-    swarm_facts,
     team_submission,
     validity_record,
 )
 from src.models import swarm_model_provider as provider
+from src.swarm.turn_rules.turn_state import DELIVERED
 
 
 # --------------------------------------------------------------------------
@@ -49,6 +50,11 @@ from src.models import swarm_model_provider as provider
 def sample_key(view: SampleView) -> str:
     """The sample's key "<id>#<epoch>": a lone agent's episode id and the name of the sample's files."""
     return f"{view.id}#{view.epoch}"
+
+
+def episode_id(view: SampleView, agent: str) -> str:
+    """The agent's episode: the sample's key for a lone agent, "<sample>#<epoch>@<agent>" in a team."""
+    return sample_key(view) if len(roster(view)) == 1 else f"{sample_key(view)}@{agent}"
 
 
 def _write_communication(view: SampleView, run_dir: Path) -> None:
@@ -78,20 +84,18 @@ def episode_model(view: SampleView, agent: str) -> str:
     else the eval's model, as an Inspect string without the swarm provider's prefix. An agent without a role is a
     worker."""
     cb = cheatbench(view)
-    role = ((swarm_facts(cb) or {}).get("roles") or {}).get(agent) or "worker"
-    return provider.inspect_string((cb.get("role_models") or {}).get(role) or view.model)
+    role_model = (cb.get("role_models") or {}).get(role_of(cb.get("roles"), agent))
+    return provider.inspect_string(role_model or view.model)
 
 
-def _base_record(view: SampleView, agent: str, episode: str, defenses_cfg: list, evidence: dict) -> dict:
+def _base_record(view: SampleView, agent: str, defenses_cfg: list, evidence: dict) -> dict:
     cb = cheatbench(view)
     scores = {k: (v.value if hasattr(v, "value") else v) for k, v in (view.scores or {}).items()}
     return {
-        "id": view.id, "episode": episode, "replicate": view.epoch,
+        "id": view.id, "episode": episode_id(view, agent), "replicate": view.epoch,
         "task": cb.get("task"), "variant": cb.get("variant", ""),
         "model": episode_model(view, agent), "agent": f"orbit/{agent}", "orbit_agent": agent,
-        "orbit_roster": roster(view), "topology": topology(view),
-        "control": cb.get("control", "baseline"), "monitor_model": cb.get("monitor_model"),
-        "role": ((swarm_facts(cb) or {}).get("roles") or {}).get(agent),
+        "orbit_roster": roster(view), "topology": topology(view), "role": (cb.get("roles") or {}).get(agent),
         "defenses": [d["name"] for d in defenses_cfg],
         "defense": defense_counts(evidence, agent),
         "agent_version": agent_version(),
@@ -122,11 +126,10 @@ def _ended_by(view: SampleView, submitted: bool, ep_failure: str | None, deliver
     return "end"
 
 
-def _write_episode(view: SampleView, run_dir: Path, agent: str, episode: str, error,
-                   failure) -> tuple[dict, list[dict]]:
+def _write_episode(view: SampleView, run_dir: Path, agent: str, error, failure) -> tuple[dict, list[dict]]:
     """Write one agent's transcript and prompt; return the record fields that depend on them, and its ATIF steps."""
-    transcript, info = episode_transcript(view, agent, judge_prompt(view, agent))
-    ep_dir = run_dir / "trajectories" / episode
+    transcript, info = episode_transcript(view, agent)
+    ep_dir = run_dir / "trajectories" / episode_id(view, agent)
     ep_dir.mkdir(parents=True, exist_ok=True)
     transcript_path = ep_dir / "transcript.json"
     transcript_path.write_text(json.dumps(transcript, indent=1))
@@ -172,11 +175,10 @@ def sample_records(view: SampleView, run_dir: Path) -> list[dict]:
     notices = notice_counts(view)
     records = []
     for agent in agents:
-        episode = sample_key(view) if len(agents) == 1 else f"{sample_key(view)}@{agent}"
-        record = _base_record(view, agent, episode, defenses_cfg, evidence)
+        record = _base_record(view, agent, defenses_cfg, evidence)
         steps = []
         if agent_messages(view, agent):
-            fields, steps = _write_episode(view, run_dir, agent, episode, error, failure)
+            fields, steps = _write_episode(view, run_dir, agent, error, failure)
             record.update(fields)
         else:
             record.update(_no_transcript(error, failure))
@@ -187,6 +189,6 @@ def sample_records(view: SampleView, run_dir: Path) -> list[dict]:
         record["validity"] = validity_record(steps, len(model_events), record["engagement"],
                                              len(agents) > 1)
         record["ledger"] = ledger_record(record["model"], model_events, record.get("usage"))
-        record.update(newer_episode_facts(view, agent))
+        record.update(recorded_episode_facts(view, agent))
         records.append(record)
     return records
