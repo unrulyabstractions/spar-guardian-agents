@@ -42,10 +42,11 @@ RunRow = {
   run, task, model, topology ("single"|"board"|"swarm" as run.json wrote it), n_agents, mock: bool, failed: bool,
   agents: [str], control ("baseline" when none), monitor_model, defenses: [str], eval_log, eval_log_exists: bool,
   setting: {key, label, order, n, composition?, R?, D?, W?},   # composition and R, D, W for hidden roles
-  verdict_fields: [{field, label, kind}],   # the task's judge flags in order, cheated last (src/measures/run_figures.py
-                                            # FLAGS_BY_TASK); kind is the badge a true value takes (warn|bad|good)
+  verdict_fields: [{field, label, kind}],   # the task's judge flags in order, cheated last (src/measures/
+                                            # verdict_fields.py FLAGS_BY_TASK); kind is the badge a true value takes
   swarm: null | {n_agents, regulators, disregulators, workers, seed, composition},
-  deliverables: null | {archive_in_workspace, registered_on_main, registered_message_copied_from},
+  deliverables: null | {archive_in_workspace, archive_on_remote_main, registered_on_main,
+                        registered_message_copied_from},   # openmath: what the team left behind
   endings: {label: count},         # each episode's failure, else its ended_by, else "end"
   config: null | {...},            # run.json "config": the SwarmConfig the task was built from
   rules: null | {<agent>: {...}},  # each episode's "rules": what the turn rules recorded for that agent
@@ -69,15 +70,16 @@ Episode = {                       # one row of episodes.jsonl plus:
   transcript_path (the run's own trajectories/ copy when there is one), has_transcript: bool,
   counted: bool                   # a verdict with cheated set, on an episode with a transcript
 }
-Swe = {task_key, instance, n_agents, board, honeypot ("as_released"|"own_piece"|"jigsaw"|null), jigsaw, rule,
-       base_commit, fix_commit, pieces, checks_ok,
-       rewards: {team?, <agent>: 0|1|null}, required_passed: {target: int}, required_tests: int,
-       fragments: null | {<agent>: [file]},
+Swe = {issue, instance, n_agents, mode ("shared_task"|"solo_task"|null for a lone agent),
+       honeypot ("as_released"|"own_piece"|"jigsaw"), rule, base_commit, fix_commit, pieces: {<agent>: [str]},
+       checks_ok, rewards: {team?, <agent>: 0|1|null}, required_passed: {target: int}, required_tests: int,
        measures: null | {<agent>: {posts, fix_posts, rule_posts, disclosed}}}   # swe_summary.json
-Access = {policy: "split"|"all"|"explicit", agents: {<agent>: {holds: [str], branches?, slices?, review?, read?}},
-          remote?, honeypot_branches?, archive?: {branch, commit, name, parts}}
-Knowledge = run.json "knowledge": {layout, mode, split, row_id, meta, comparator, seats, contracts, grader_state,
-            last_verdict, access, share_delivered, reviews}
+Access = {policy: "split"|"all"|"explicit", n_pieces: int | null,
+          agents: {<agent>: {holds: [str], pieces?: [int] | null}},   # pieces null: the whole
+          remote?, honeypot_branches?, archive?: {branch, commit, name}}   # openmath's split layout
+Knowledge = run.json "knowledge": {row_id, mode, split, n_pieces, layout, meta, comparator, seats, evaluation,
+            images, contracts, grader_state, last_verdict, reviews, review_calls,
+            value}   # value: the share of contracts delivered
 RunEngagement = {agents, agents_checked, agents_posted, median_discovery_round, checks, reads, posts,
                  read_graph, team_submission, reads_refused, posts_refused, oversight, oversight_graph}
 Verdict = the episode's judge.jsonl row without the bookkeeping keys (id, episode, replicate, task, model,

@@ -348,33 +348,22 @@ function hawkCard(run, s) {
 }
 
 
-// The access policy and what each agent held (run.json "access"): its items, and on openmath its honeypot branches
-// and archive slices, on knowledge work the review tool and the read permission on the pipeline artifact.
+// The access policy and what each agent held (run.json "access"): its items (a numbered piece such as slice2, the
+// review tool or the read permission on knowledge work's pipeline artifact), the number of pieces dealt, and on
+// openmath's split layout the team remote, the honeypot branches and the archive.
 function accessView(access, run) {
   const agents = Object.keys(access.agents || {}).sort();
-  const held = agents.map(a => access.agents[a] || {});
-  const branchy = held.some(x => x.branches !== undefined);
-  const sliced = held.some(x => 'slices' in x);
-  const kw = held.some(x => 'review' in x);
-  const archive = access.archive ? access.archive.name : 'archive';
-  const cols = ['agent', 'role', 'holds', ...(branchy ? ['honeypot branches held'] : []),
-    ...(sliced ? [archive + ' held'] : []), ...(kw ? ['review tool', 'artifact read'] : [])];
-  const rows = agents.map((a, i) => {
-    const x = held[i];
-    return [a, (episodeOf(run, a) || {}).role, x.holds == null ? null : (x.holds.length ? mono(x.holds.join(' + ')) : muted('nothing')),
-      ...(branchy ? [(x.branches || []).length ? mono(x.branches.join(', ')) : muted('none')] : []),
-      ...(sliced ? [x.slices == null ? 'whole' : (x.slices.length
-        ? mono(x.slices.map(k => `${archive}.part${k}`).join(', ') + ` of ${access.archive ? access.archive.parts : '?'}`)
-        : muted('none'))] : []),
-      ...(kw ? [yn(x.review, 'plain', 'plain'), yn(x.read, 'plain', 'plain')] : [])];
+  const rows = agents.map(a => {
+    const holds = (access.agents[a] || {}).holds;
+    return [a, (episodeOf(run, a) || {}).role, holds == null ? null : (holds.length ? mono(holds.join(' + ')) : muted('nothing'))];
   });
   return h('div', null, kv([
     ['policy', access.policy || undefined],
+    ['numbered pieces', access.n_pieces == null ? undefined : String(access.n_pieces)],
     ['team remote', access.remote ? mono(access.remote) : undefined],
     ['honeypot branches', access.honeypot_branches ? mono(access.honeypot_branches.join(', ')) : undefined],
-    ['split archive', access.archive && access.archive.parts
-      ? mono(`${access.archive.name} on ${access.archive.branch}, ${access.archive.parts} slices`) : undefined],
-  ], 'kv-grid'), dataTable(cols, rows));
+    ['split archive', access.archive ? mono(`${access.archive.name} on ${access.archive.branch}`) : undefined],
+  ], 'kv-grid'), dataTable(['agent', 'role', 'holds'], rows));
 }
 
 // The knowledge-work sample and its reviews (run.json "knowledge"): the layout, the pipeline artifact, each contract's
@@ -396,7 +385,7 @@ function knowledgeView(kw) {
     ['layout', kw.layout],
     ['mode', kw.mode],
     ['pipeline artifact', mono(kw.comparator)],
-    ['share of contracts delivered', kw.share_delivered == null ? null : String(kw.share_delivered)],
+    ['share of contracts delivered', kw.value == null ? null : String(kw.value)],
     ['reviews', kw.reviews == null ? null : String(kw.reviews)],
     ['last verdict', last ? `${last.verdict || last.error_type || DASH} (${last.agent}, ${last.deliverable})` : null],
   ], 'kv-grid'),
@@ -444,20 +433,19 @@ function rulesTable(rules) {
     agents.map(a => [a, ...facts.map(f => cell((rules[a] || {})[f]))]));
 }
 
-// A CheatBench SWE task: the arm, each agent's jigsaw fragment or planted piece, the hidden-test rewards for the
-// team's main and each agent's working tree, the judge, the code ladder's rung and the talk measures.
+// A CheatBench SWE task: the arm, each agent's planted piece, the hidden-test rewards for the team's main and each
+// agent's working tree, the judge, the code ladder's rung and the talk measures.
 function sweView(swe, run) {
   const agents = run.episodes.map(e => e.orbit_agent).sort();
   const reward = k => (swe.rewards[k] == null ? null
     : h('span', { title: `${swe.required_passed[k] || 0} of ${swe.required_tests} required tests passed` },
       yn(swe.rewards[k] === 1, 'good', 'plain')));
   const m = (a, k) => ((swe.measures || {})[a] || {})[k];
-  const cols = ['agent', ...(swe.jigsaw ? ['fragment files'] : []), ...(swe.pieces ? ['planted piece'] : []), 'reward',
-    'judge: cheated', 'code rung', 'posts', 'about the fix', 'disclosed'];
+  const cols = ['agent', ...(swe.pieces ? ['planted piece'] : []), 'reward', 'judge: cheated', 'code rung', 'posts',
+    'about the fix', 'disclosed'];
   const rows = agents.map(a => {
     const ep = episodeOf(run, a);
     return [a,
-      ...(swe.jigsaw ? [((swe.fragments || {})[a] || []).map(f => h('div', null, mono(f)))] : []),
       ...(swe.pieces ? [swe.pieces[a] == null ? null : mono(asText(swe.pieces[a]))] : []),
       reward(a), verdictCell(ep), ep.signals ? ep.signals.rung : null, m(a, 'posts'),
       m(a, 'fix_posts') == null ? null : `${m(a, 'fix_posts')} (rule ${m(a, 'rule_posts')})`,
@@ -465,11 +453,12 @@ function sweView(swe, run) {
   });
   return h('div', null,
     kv([
-      ['task', h('span', null, mono(swe.task_key), ' ', muted(swe.instance || '', 'small'))],
+      ['issue', h('span', null, mono(swe.issue), ' ', muted(swe.instance || '', 'small'))],
       ['agents', String(swe.n_agents)],
       ['honeypot', swe.honeypot ? mono(swe.honeypot) : muted('as released')],
       ['rule', swe.rule === 'none' ? muted('none (standard prompt)') : mono(swe.rule)],
-      ['team reward (team/main)', swe.board ? reward('team') : muted('lone agent: its working tree ships')],
+      ['team reward (team/main)', swe.mode === 'shared_task' ? reward('team')
+        : muted(swe.n_agents > 1 ? 'solo_task: each working tree ships' : 'lone agent: its working tree ships')],
       ['setup checks', swe.checks_ok == null ? null : yn(swe.checks_ok, 'good', 'bad')],
       ['base / fix commit', h('span', null, mono((swe.base_commit || '').slice(0, 10)), ' / ', mono((swe.fix_commit || '').slice(0, 10)))],
     ], 'kv-grid'),

@@ -1,9 +1,9 @@
 """The results browser's run reader: the run directories under runs/ and the eval logs they point at.
 
-`Store` reads run.json, episodes.jsonl, judge.jsonl, ladder.jsonl, signals.jsonl, the trajectories, the
-communication and defense stores and the analysis tools' summaries, and loads a run's Inspect eval log once, on
-demand. The run directories are written by src/export/run_export.py and the SWE measures (swe_summary.json) by
-src/measures/swe_measures.py. eval_log_views.py reads the eval logs.
+`Store` reads run.json, episodes.jsonl, judge.jsonl, ladder.jsonl, signals.jsonl and the trajectories through
+src/measures/run_directory.py RunDir, and the communication and defense stores and the analysis tools' summaries
+itself; it loads a run's Inspect eval log once, on demand. The run directories are written by src/export/run_export.py
+and the SWE measures (swe_summary.json) by src/measures/swe_measures.py. eval_log_views.py reads the eval logs.
 
     store = Store(Path("runs"))
     rows = [store.run_row(name) for name in store.run_names()]
@@ -20,8 +20,9 @@ from inspect_ai.log import EvalLog, read_eval_log
 from src.configuration.settings import INCOMPLETE_FAILURES
 from src.configuration.swarm_config import ROLES
 from src.export.eval_sample_view import PASSIVE_DEFENSES
+from src.measures.run_directory import RUN_JSON, RunDir
 from src.measures.verdict_fields import CRITICAL, FLAGS_BY_TASK, GOOD, SERIOUS, WARNING
-from src.utils.json_files import read_json, read_json_dir, read_jsonl
+from src.utils.json_files import read_json, read_json_dir
 
 # A verdict is every key of the judge.jsonl row except these: the row's identity, how the judge was configured, its
 # usage, and the transcript it read. The task's own verdict fields pass through whatever they are. VERDICT_BASE is
@@ -35,9 +36,10 @@ VERDICT_BASE = ("cheated", "summary", "judge", "judge_cost_usd", "parse_ok", "ju
 LADDER_BOOKKEEPING = VERDICT_BOOKKEEPING | {"raw"}
 SIGNALS_IDENTITY = ("episode", "agent", "role", "task")
 SWARM_FIELDS = ("n_agents", "regulators", "disregulators", "workers", "seed", "composition")
-DELIVERABLE_FIELDS = ("archive_in_workspace", "registered_on_main", "registered_message_copied_from")
-SWE_FIELDS = ("task_key", "instance", "n_agents", "board", "honeypot", "jigsaw", "rule", "base_commit", "fix_commit",
-              "pieces", "checks_ok")
+DELIVERABLE_FIELDS = ("archive_in_workspace", "archive_on_remote_main", "registered_on_main",
+                      "registered_message_copied_from")
+SWE_FIELDS = ("issue", "instance", "n_agents", "mode", "honeypot", "rule", "base_commit", "fix_commit", "pieces",
+              "checks_ok")
 # The badge a true verdict flag takes, by the status colour the figures give it.
 FLAG_KIND = {WARNING: "warn", SERIOUS: "bad", GOOD: "good", CRITICAL: "bad"}
 # The tasks with a setting of their own, apart from openmath: the setting key's prefix, the label and the sort order.
@@ -101,8 +103,8 @@ def setting_of(run: dict, n_agents: int) -> dict:
         honeypot = swe.get("honeypot") if swe.get("honeypot") != "as_released" else None
         rule = swe.get("rule") or "none"
         bits = ", ".join(filter(None, [honeypot, f"rule: {rule}" if rule != "none" else None]))
-        return {"key": f"swe-{swe.get('task_key')}-n{n}-{swe.get('honeypot')}-{rule}", "order": 3, "n": n,
-                "label": f"SWE {swe.get('task_key')} {team}" + (f" ({bits})" if bits else "")}
+        return {"key": f"swe-{swe.get('issue')}-n{n}-{swe.get('honeypot')}-{rule}", "order": 3, "n": n,
+                "label": f"SWE {swe.get('issue')} {team}" + (f" ({bits})" if bits else "")}
     if run.get("task") in TASK_SETTINGS:
         prefix, label, order = TASK_SETTINGS[run["task"]]
         return {"key": f"{prefix}-{'roles' if hidden else 'board'}-{n}", "order": order, "n": n,
@@ -116,7 +118,7 @@ def setting_of(run: dict, n_agents: int) -> dict:
 
 def _swe_of(swe: dict, run_dir: Path) -> dict:
     """run.json "swe" as the page reads it: the issue and arm fields, each grade's reward and required tests passed,
-    each agent's jigsaw fragment files, and the talk measures of swe_summary.json when src/measures wrote one."""
+    and the talk measures of swe_summary.json when src/measures wrote one."""
     grades = swe.get("grades") or {}
     measures = (read_json(run_dir / "swe_summary.json") or {}).get("agents")
     keys = ("posts", "fix_posts", "rule_posts", "disclosed")
@@ -125,7 +127,6 @@ def _swe_of(swe: dict, run_dir: Path) -> dict:
         "rewards": {k: v.get("reward") for k, v in grades.items()},
         "required_passed": {k: len(v.get("required_passed") or []) for k, v in grades.items()},
         "required_tests": len(swe.get("required_tests") or []),
-        "fragments": {a: (f or {}).get("files") for a, f in (swe.get("fragments") or {}).items()} or None,
         "measures": {a: {k: m.get(k) for k in keys} for a, m in measures.items()} if measures else None,
     }
 
@@ -164,16 +165,16 @@ class Store:
         self._lock = threading.Lock()
 
     def run_names(self) -> list[str]:
-        return sorted(p.parent.name for p in self.runs_dir.glob("*/run.json"))
+        return sorted(p.parent.name for p in self.runs_dir.glob(f"*/{RUN_JSON}"))
 
     def run_dir(self, name: str) -> Path:
         """The run's directory. Raises KeyError for a name that is not a run under runs/."""
-        if not safe_part(name) or not (self.runs_dir / name / "run.json").is_file():
+        if not safe_part(name) or not RunDir(self.runs_dir / name).is_run():
             raise KeyError(name)
         return self.runs_dir / name
 
     def run_json(self, name: str) -> dict:
-        return read_json(self.run_dir(name) / "run.json") or {}
+        return RunDir(self.run_dir(name)).run_json
 
     def eval_log_path(self, name: str) -> Path | None:
         """The run's eval log: the path run.json records, else, for a run set aside under a failed_ prefix, the same
@@ -201,16 +202,15 @@ class Store:
 
     def episodes(self, name: str) -> list[dict]:
         """episodes.jsonl rows, each with its verdict, ladder and signals rows, has_transcript and counted."""
-        d = self.run_dir(name)
-        verdicts = {row["episode"]: row for row in read_jsonl(d / "judge.jsonl")}
-        ladder = {row["episode"]: row for row in read_jsonl(d / "ladder.jsonl")}
-        signals = {row["episode"]: row for row in read_jsonl(d / "signals.jsonl")}
+        run = RunDir(self.run_dir(name))
+        verdicts = run.verdicts()
+        ladder = {row["episode"]: row for row in run.ladder_rows()}
+        signals = {row["episode"]: row for row in run.signals()}
         out = []
-        for rec in read_jsonl(d / "episodes.jsonl"):
-            rec = dict(rec)
+        for rec in run.episodes():
             # A set-aside run keeps the transcript_path of its original name, which a newer run may own by now; the
             # copy under the run's own trajectories/ is its record.
-            own = d / "trajectories" / rec["episode"] / "transcript.json"
+            own = run.transcript_path(rec["episode"])
             if own.exists():
                 rec["transcript_path"] = str(own)
             rec["verdict"] = verdict_of(verdicts.get(rec["episode"]))
@@ -225,7 +225,7 @@ class Store:
         """One run for the runs list, the summary and the swarm page: run.json's facts, the setting, the episodes
         and the aggregate block."""
         d = self.run_dir(name)
-        run = read_json(d / "run.json") or {}
+        run = RunDir(d).run_json
         eps = self.episodes(name)
         fields = verdict_fields(run.get("task"))
         swarm, deliverables = run.get("swarm"), run.get("deliverables")
@@ -273,7 +273,7 @@ class Store:
         """The run row plus run.json itself, the board, the defense evidence and each analysis tool's summary."""
         d = self.run_dir(name)
         detail = self.run_row(name)
-        detail["run_json"] = read_json(d / "run.json")
+        detail["run_json"] = RunDir(d).run_json
         detail["communication"] = read_json_dir(d / "communication")
         detail["defense"] = read_json_dir(d / "defense")
         detail["tools"] = {tool: _tool_summary(d / "tools" / tool / "summary.json") for tool in detail["tools"]}

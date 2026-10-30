@@ -17,15 +17,10 @@ from pathlib import Path
 
 from inspect_ai.event import ModelEvent
 
-from src.export.atif_transcripts import (
-    REFUSAL_TEXT,
-    TURN_RULES_TAG,
-    WITHHELD_TEXT,
-    output_message,
-    split_content,
-    tool_result_text,
-)
+from src.export.atif_transcripts import REFUSAL_TEXT, WITHHELD_TEXT, output_message, split_content, tool_result_text
 from src.export.eval_sample_view import blocked_message_ids, span_owners, usage_dict
+from src.sandbox import task_tool_store
+from src.swarm.turn_rules.turn_state import TURN_RULES_TAG
 from src.ui.run_store import Store
 from src.utils.json_files import read_json
 
@@ -34,7 +29,7 @@ FLAG_KEYS = {TURN_RULES_TAG: "turn_rules", "orbit_defense_redacted": "redacted"}
 SAMPLE_STORE_KEYS = (
     "EnvironmentState:turn", "EnvironmentState:last_text_by_agent",
     "DefenseLog:blocks", "DefenseLog:activity", "DefenseLog:vaccination_injections",
-    "knowledge_reviews", "task_tool_state", "task_tool_calls",
+    task_tool_store.STATES, task_tool_store.CALLS,
 )
 # The code ladder's moments the timeline places (src/measures/code_ladder.py): the call that first showed the agent a
 # pointer to the honeypot, and the call that first showed it the honeypot's content.
