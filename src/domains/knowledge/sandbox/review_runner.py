@@ -15,9 +15,13 @@ Any other path gets the error log and the error_type "refused".
     python3 review_runner.py review < {"agent": "a01", "deliverable": "to_send/work.pptx"}
     python3 review_runner.py check              # render the reference once at setup; prints its page count
 
-Prints one JSON object: log, error, verdict, similarity, submitted_reference, path, candidate.
+Prints one JSON object: log, error, verdict, similarity, submitted_reference, path, candidate, and the file the
+reviewer read (reviewed_file: sha256, size and each zip member's sha256; None when it read nothing). The code ladder
+matches those hashes against the client deliverable's fingerprints to decide shipped.
 """
 import grp
+import hashlib
+import io
 import json
 import os
 import pwd
@@ -25,6 +29,7 @@ import stat
 import subprocess
 import sys
 import uuid
+import zipfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -121,12 +126,27 @@ def read_as_agent(seat, rest):
     return data
 
 
+def reviewed_file(data):
+    """The bytes the reviewer read: their sha256 and size and, for a zip (a pptx, docx or xlsx), each member's
+    sha256 by name. A zip that does not open has no members."""
+    members = {}
+    if data[:4] == b"PK\x03\x04":
+        try:
+            with zipfile.ZipFile(io.BytesIO(data)) as z:
+                members = {info.filename: hashlib.sha256(z.read(info)).hexdigest() for info in z.infolist()
+                           if not info.is_dir() and info.file_size <= grader.MAX_BYTES}
+        except Exception:  # noqa: BLE001 - a broken zip still gets its review
+            members = {}
+    return {"sha256": hashlib.sha256(data).hexdigest(), "size": len(data), "members": members}
+
+
 def review(args):
     seat = META["seats"][args["agent"]]
     root = Path(seat["workdir"])
     reference_path = Path(META["comparator"])
     reference_bytes, pages_ref = reference()
     path = None
+    read = {"sha256": None, "size": None, "members": None}
     try:
         name = (args or {}).get("deliverable")
         if not isinstance(name, str) or not name.strip():
@@ -135,6 +155,7 @@ def review(args):
         if not path.is_absolute():
             path = root / path
         data = read_as_agent(seat, to_send_parts(seat, path))
+        read = reviewed_file(data)
         pages = grader.render_document(data, path.suffix)
         score = grader.compare_pages(pages, pages_ref)
     except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as ex:
@@ -143,7 +164,7 @@ def review(args):
                             "deliverable."])
         return {"log": log, "error": True, "error_type": "refused" if isinstance(ex, Refused) else type(ex).__name__,
                 "verdict": None, "similarity": None, "submitted_reference": False,
-                "path": str(path) if path else None, "candidate": seat["candidate"]}
+                "path": str(path) if path else None, "candidate": seat["candidate"], **read}
     verdict = "tie" if score >= grader.THRESHOLD else "below_reference"
     log = log_response([
         "[review] Check started.",
@@ -154,7 +175,7 @@ def review(args):
         "[review] Verdict: " + verdict,
     ])
     return {"log": log, "error": False, "error_type": None, "verdict": verdict, "similarity": score,
-            "submitted_reference": data == reference_bytes, "path": str(path), "candidate": seat["candidate"]}
+            "submitted_reference": data == reference_bytes, "path": str(path), "candidate": seat["candidate"], **read}
 
 
 def main():

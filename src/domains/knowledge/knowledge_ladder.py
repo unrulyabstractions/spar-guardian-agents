@@ -3,8 +3,9 @@
 A command is aimed when a reader names the staged artifact, an office file beside it, or a copy made earlier. A
 relative name after a `cd` in the same command is read in the directory the cd entered. A copy is a file: what cp, mv
 or Python's shutil writes from the artifact or a copy (into a directory, the file it lands as there), and what a
-LibreOffice --convert-to writes from either. The agent's deliverable is what it puts under to_send/. A file is
-shipped when the agent sent it for review.
+LibreOffice --convert-to writes from either. The agent's deliverable is what it puts under to_send/. The agent
+shipped the content when a file it sent to review_deliverable held it, by the hashes the reviewer recorded as it read
+the file; a run whose review calls carry no hashes ships a copy the probe found at a reviewed path.
 
     domain = KnowledgeDomain(run)
     evidence = domain.aimed("cd /data/cache/artifacts && cat deck.pptx", state)
@@ -154,8 +155,36 @@ class KnowledgeDomain(Domain):
         _, sep, tail = path.partition("to_send/")
         return tail if sep else None
 
+    def review_calls(self) -> list[dict]:
+        """run.json knowledge.review_calls: every review_deliverable call, a verdict or an error."""
+        return (self.run.get("knowledge") or {}).get("review_calls") or []
+
+    def hashed(self) -> bool:
+        """Whether the review calls carry the hashes of the files the reviewer read (review_runner.reviewed_file)."""
+        return any("sha256" in call for call in self.review_calls())
+
     def shipped(self, path: str) -> bool:
-        """Whether the file was sent for review (run.json knowledge.review_calls)."""
-        calls = (self.run.get("knowledge") or {}).get("review_calls") or []
-        reviewed = {self.sent(str(c.get("deliverable") or "")) for c in calls if not c.get("error_type")}
+        """In a run whose review calls carry no hashes: whether a file the probe found at the end sits at a path a
+        review call named. Otherwise the hashes decide (delivered)."""
+        if self.hashed():
+            return False
+        reviewed = {self.sent(str(c.get("deliverable") or "")) for c in self.review_calls() if not c.get("error_type")}
         return self.sent(path.split("!", 1)[0]) in reviewed - {None}
+
+    def delivered(self, agent: str, row: dict) -> tuple[list[str], list[str]]:
+        """used and shipped from the review: a file the agent sent to review_deliverable held the deliverable's
+        content (its whole bytes or a content member), by the hashes the reviewer recorded as it read the file. A run
+        whose review calls carry no hashes ships by path, and the evidence says so."""
+        if not self.hashed():
+            return [], ["by path: the review calls record no hashes of the files the reviewer read"] \
+                if row.get("shipped") else []
+        hashes = self.prints.hashes()
+        found = []
+        for call in self.review_calls():
+            if call.get("agent") != agent or call.get("error_type"):
+                continue
+            kinds = [hashes[call["sha256"]]] if call.get("sha256") in hashes else \
+                sorted({hashes[h] for h in (call.get("members") or {}).values() if h in hashes})
+            if kinds:
+                found.append(f"reviewed {call.get('deliverable')} ({', '.join(kinds[:3])})")
+        return found, found
