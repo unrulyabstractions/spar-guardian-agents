@@ -73,7 +73,7 @@ from tests.smoke.common import (
 from tests.support.mock_model import MODEL, call, mock_verdict, scripted, tagged_infos, text
 from tests.support.ordered_ids import DRAWN, drawn_ids
 
-# fixed names: tests and the browser read runs/smoke/<name>
+# fixed names: the browser reads runs/smoke/<name>
 SUITE = Suite("smoke", judge_spec(OpenMath.task_dir, OpenMath.name), stamped=False)
 VERDICT = mock_verdict(SUITE.spec)
 

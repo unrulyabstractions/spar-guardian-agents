@@ -17,7 +17,7 @@ names the floor it counts.
 
 For each model and cell the script writes tmp/appendix/<model suffix>/appendix_<cell>_rate.png (the rate beside the
 share at used or higher) and appendix_<cell>.png (one tile per domain and sample coloured by the team rung, with the
-collaboration level under it). Across the models it writes, under tmp/appendix/overview/, rungs.png and
+collaboration level under it). Across the models it writes, under tmp/appendix/overview/, rung.png and
 collaboration.png (every sample as one tile, by domain, model and cell) and rate.png (the rate, one panel per domain).
 """
 from __future__ import annotations
