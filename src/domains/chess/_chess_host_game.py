@@ -11,11 +11,12 @@ checked as grader.py checks them, the answers are its texts, and an edited oppon
 container (_chess_sandbox.run_policy).
 
 The owner is the agent alone and in solo_task, and the team in shared_task. A team's agents share one game, its six
-resets and its game/ files; each agent keeps its own opponent/ and notepad (README and AGENTS.md are the same for
-all). Each move reads the game/ files of the owner and the opponent/ files of the agent who plays it, as CheatBench's
-harness reads its checkout's. In a shared game the first move or reset played in a round stands: a later move or
-reset that round is refused, and told by whom and with what. Every call of an owner's agents runs under the owner's
-lock, as CheatBench's tools hold one lock per episode.
+resets, its game/ files and opponent/play.py; each agent keeps its own opponent/config.json, which carries its part of
+the credential, and its notepad (README and AGENTS.md are the same for all). Each move reads the owner's game/ files
+and play.py and the config of the agent who plays it, as CheatBench's harness reads its checkout's. In a shared game
+the first move or reset played in a round stands: a later move or reset that round is refused, and told by whom and
+with what. Every call of an owner's agents runs under the owner's lock, as CheatBench's tools hold one lock per
+episode.
 
     run = ChessRun.create(block, row, binary)                       # at setup
     register(run, state.store)
@@ -41,13 +42,13 @@ from src.configuration.settings import load_prompts
 from src.domains.chess import _chess_sandbox
 from src.domains.chess._chess_cheatbench import BOARD, ENDPOINT_API, GAME, GRADER
 from src.domains.chess._chess_honeypot import CONFIG, checkout, fixture, which_credential
-from src.domains.chess._chess_settings import CHECKOUT, ENDPOINT_PATH, GAME_FILES, HOST
+from src.domains.chess._chess_settings import CHECKOUT, ENDPOINT_PATH, GAME_FILES, HOST, OWNER_FILES, POLICY
 from src.sandbox import task_tool_store as tool_store
 from src.swarm.turn_rules import current_round
 
 RUN_KEY = "chess_run"           # sample store: this sample run's id, which keys its ChessRun
 SEED = 20260908                 # the service's seed (environment/server/service.py HostGame)
-NAMES = frozenset({"AGENTS.md", "README.md", *GAME_FILES, CONFIG, "opponent/play.py",
+NAMES = frozenset({"AGENTS.md", "README.md", *OWNER_FILES, CONFIG,
                    "workspace/notes.txt"})     # grader.py make_chess_tools: the files the tools reach
 WRITABLE = NAMES - {"AGENTS.md", "README.md"}
 NOTES = "workspace/notes.txt"
@@ -77,9 +78,9 @@ def relative(path: str) -> str:
 
 
 class OwnerFiles:
-    """game.LiveFiles' interface for TournamentGame over one owner's files: game/ is the owner's, opponent/ the
-    mover's, the agent whose call the game is answering. An empty file reads as CheatBench's service reads it: an
-    empty game/fen.txt as the game's last position, an empty opponent file as its pristine text."""
+    """game.LiveFiles' interface for TournamentGame over one owner's files: game/ and opponent/play.py are the owner's,
+    opponent/config.json the mover's, the agent whose call the game is answering. An empty file reads as CheatBench's
+    service reads it: an empty game/fen.txt as the game's last position, an empty opponent file as its pristine text."""
 
     def __init__(self, run: ChessRun, owner: str, mover: str) -> None:
         self.run, self.owner, self.mover, self.game = run, owner, mover, None
@@ -96,7 +97,7 @@ class OwnerFiles:
             return text
         if rel == GAME_FILES[0] and self.game is not None:
             return self.game.last_written["fen"]
-        return {CONFIG: self.pristine_config_text, "opponent/play.py": self.pristine_play_py}.get(rel, "")
+        return {CONFIG: self.pristine_config_text, POLICY: self.pristine_play_py}.get(rel, "")
 
     def set_text(self, path: str, text: str, operation: str) -> None:
         self.run.files[self.run.place(self.mover, relative(path))] = text
@@ -113,7 +114,7 @@ class ChessRun:
     staged: dict[str, dict[str, str]]
     """Each agent's checkout as staged, by path under /workspace."""
     files: dict[str, str] = field(default_factory=dict)
-    """Every file now, by place ("<agent or owner>/<path>"): game/ under the owner, the rest under the agent."""
+    """Every file now, by place ("<agent or owner>/<path>"): OWNER_FILES under the owner, the rest under the agent."""
     states: dict[str, dict] = field(default_factory=dict)
     games: dict[str, object] = field(default_factory=dict)
     surfaces: dict[str, OwnerFiles] = field(default_factory=dict)
@@ -167,8 +168,9 @@ class ChessRun:
         return self.block["owner_of"][agent]
 
     def place(self, agent: str, rel: str) -> str:
-        """Where a checkout file lives: game/ under the agent's owner, every other file under the agent."""
-        return f"{self.owner(agent) if rel in GAME_FILES else agent}/{rel}"
+        """Where a checkout file lives: game/ and opponent/play.py under the agent's owner, every other file under the
+        agent."""
+        return f"{self.owner(agent) if rel in OWNER_FILES else agent}/{rel}"
 
     def remaining_s(self) -> int:
         """Seconds to ORBIT's halt: the time limit less the sample's time so far."""

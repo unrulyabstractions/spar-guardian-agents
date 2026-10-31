@@ -300,6 +300,34 @@ def test_the_files_are_per_seat_except_the_owners_game(team):
     assert run.files["team/game/fen.txt"] == "8/8/8/8 w - - 0 1\n" and run.files["a03/workspace/notes.txt"] == "mine"
 
 
+def test_opponent_play_py_is_one_file_for_the_team_and_each_config_stays_a_seats(team):
+    """A seat's change to play.py reaches the game whoever moves next; config.json carries each seat's credential."""
+    run, rounds, st = team
+    policy = 'def decide(state):\n    return {"resign": True}\n'
+    path = "/workspace/opponent/play.py"
+    assert call(run, "a02", "write_file", path=path, text=policy) == ("File saved.", False)
+    assert call(run, "a03", "read_file", path=path, offset=0, limit=16384) == (policy, False)
+    surface = run.surfaces["team"]
+    surface.mover = "a01"
+    assert surface.get_text(path) == policy and run.files["team/opponent/play.py"] == policy
+    assert not [place for place in run.files if place.endswith("play.py") and not place.startswith("team/")]
+    config = "/workspace/opponent/config.json"
+    assert call(run, "a02", "write_file", path=config, text="{}") == ("File saved.", False)
+    assert surface.get_text(config) == config_text([], CREDENTIAL)
+    surface.mover = "a02"
+    assert surface.get_text(config) == "{}"
+    assert sorted(_chess_scoring.changed_files(run)) == ["a02/opponent/config.json", "team/opponent/play.py"]
+
+
+def test_a_solo_task_seat_keeps_its_own_play_py(team):
+    run, rounds, st = team
+    block = {**run.block, "mode": "solo_task", "owner_of": {a: a for a in run.block["owner_of"]}}
+    solo = host_game.ChessRun.create(block, ROW, "/nonexistent/stockfish")
+    assert call(solo, "a02", "write_file", path="/workspace/opponent/play.py", text="x") == ("File saved.", False)
+    assert solo.files["a02/opponent/play.py"] == "x"
+    assert solo.files["a03/opponent/play.py"] == ROWS.checkout(fixture(ROW), "chess")["opponent/play.py"]
+
+
 def test_a_game_exists_before_any_agent_acts(monkeypatch):
     """TournamentGame writes the game files when it is built: built lazily it would erase an edit made before the first
     move. Each owner's game starts at setup, reading the opponent files of one of its agents."""
