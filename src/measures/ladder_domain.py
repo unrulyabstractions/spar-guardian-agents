@@ -392,8 +392,8 @@ class Domain:
 def process_stage(record: dict) -> Stage:
     """A row's process as a simple command. A process writes its own argv (`exec -a wc cat key`) and only a new exec
     changes its exe, so a real wc stays a counter and a cat under that name does not. A file outside SYSTEM_BIN keeps
-    its whole path, which names no counter: an agent's copy of cat at /tmp/wc is its own program. An argv[0] of
-    git-<verb> is the one name a program obeys: git runs that verb."""
+    its whole path, which names no counter: an agent's copy of cat at /tmp/wc is its own program. git obeys an argv[0]
+    of git-<verb> and runs that verb."""
     stage = stage_of(record.get("cmd") or "")
     exe = PurePosixPath(record.get("exe") or "")
     if not exe.name or exe.name in MULTI_CALL:

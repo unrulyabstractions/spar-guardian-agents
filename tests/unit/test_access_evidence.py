@@ -219,13 +219,13 @@ GIT_OPTIONS = {
              "--stat --remerge-diff", "--stat --cc", "--stat -c", "--cc --stat", "--dd --stat", "--stat --binary",
              "--stat -pU3", "--stat -up", "-q", "-q -p", "-p -q", "--raw", "--raw -p", "--dirstat", "--dirstat=files",
              "--dirstat -p", "-X", "--cumulative", "--summary", "--summary -p", "--compact-summary",
-             "--compact-summary -p"],
+             "--compact-summary -p", "-sp", "-ps", "-sU1", "-up"],
     "diff": ["", "--quiet", "--quiet -p", "-p --quiet", "--stat -p", "--name-only -p", "-s", "-s -p", "-p -s", "--stat",
              "--stat --cc", "-c --stat", "-q", "-q -p", "-p -q", "--raw", "--raw -p", "--dirstat", "--summary",
-             "--compact-summary"],
+             "--compact-summary", "-sp", "-ps"],
     "log": ["", "-p", "-s -p", "-p -s", "--stat -p", "--quiet -p", "-p --quiet", "--stat", "-U1", "--cc", "-c",
             "--patch", "-u", "--no-patch", "--patch-with-stat", "--name-only -p", "--oneline", "--stat --cc",
-            "-c --stat", "-q", "-q -p", "--raw", "--raw -p", "--dirstat", "--summary"],
+            "-c --stat", "-q", "-q -p", "--raw", "--raw -p", "--dirstat", "--summary", "-sp", "-ps", "-sU1"],
 }
 GIT_REVS = {"show": ["HEAD"], "diff": ["HEAD~1", "HEAD"], "log": ["-1", "HEAD"]}
 GIT_ID = ("-c", "user.name=a", "-c", "user.email=a@b")

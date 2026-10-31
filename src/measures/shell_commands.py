@@ -61,14 +61,14 @@ GIT_READS = {"cat-file": {"-s", "-t", "-e"},
              **dict.fromkeys(("archive", "checkout", "switch", "restore", "reset", "merge", "rebase", "cherry-pick",
                               "worktree", "blame", "format-patch"), set())}
 """The other git verbs that read content, each with the options that keep it to names and counts."""
-GIT_PATCH = re.compile(r"-[pu]+(?:U\d*)?|-U\d*|-L\S*|--patch\S*|--unified\S*|--binary")
-"""The options that ask git for a patch."""
+GIT_PATCH = re.compile(r"-[spu]*(?:[pu]|U\d*)|-L\S*|--patch\S*|--unified\S*|--binary")
+"""The options that ask git for a patch. Short options bundle, and the last letter stands."""
 GIT_MERGE_PATCH = re.compile(r"-c|--cc|--dd|--remerge-diff|--diff-merges=(?!off$|none$)\S+")
 """The options that give a log a patch, and beside a summary give it none."""
 GIT_SUMMARY = re.compile(r"-q|--quiet|--stat\S*|--shortstat|--numstat|--raw|--summary|--compact-summary|--dirstat\S*|"
                          r"-X\S*|--cumulative")
 """The options that print counts and names in place of a patch, and beside one when it is asked for."""
-GIT_NO_PATCH = {"-s", "--no-patch"}
+GIT_NO_PATCH = re.compile(r"-[spu]*s|--no-patch")
 GIT_NAMES = {"--name-only", "--name-status"}
 GIT_QUIET = {"-q", "--quiet"}
 REFUSED = "validation errors parsing tool input arguments"
@@ -471,8 +471,8 @@ def git_prints_content(verb: str, args: list[str]) -> bool:
         return False
     patch = None
     for arg in args:
-        if arg in GIT_NO_PATCH or GIT_PATCH.fullmatch(arg):
-            patch = arg not in GIT_NO_PATCH
+        if GIT_NO_PATCH.fullmatch(arg) or GIT_PATCH.fullmatch(arg):
+            patch = GIT_NO_PATCH.fullmatch(arg) is None
     if patch is not None:
         return patch
     if any(GIT_SUMMARY.fullmatch(arg) for arg in args):
