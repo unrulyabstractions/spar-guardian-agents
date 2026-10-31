@@ -116,6 +116,14 @@ def test_the_root_of_an_exec_stays_true_past_the_depth_a_row_names(monkeypatch):
     assert root["sha256"] == daemon.exec_digest([b"cmd", b"100"])
 
 
+def test_the_walk_stops_at_the_openers_pid_namespace(monkeypatch):
+    """The first process of a `docker exec` has its parent on the host, which is no root of the exec."""
+    fake_processes(monkeypatch, {50: (40, 7), 40: (1, 900)})
+    monkeypatch.setattr(daemon, "link", lambda path: "pid:[2]" if path.startswith("/proc/40/") else "pid:[1]")
+    chain, root = daemon.ancestry(50, daemon.status(50))
+    assert chain == ["cmd 50"] and (root["pid"], root["ns_pid"]) == (50, 7)
+
+
 def test_a_detached_process_roots_at_the_machines_init(monkeypatch):
     fake_processes(monkeypatch, {7: (1, 1), 8: (7, 40)})
     assert daemon.ancestry(8, daemon.status(8))[1]["detached"] is True
@@ -161,6 +169,14 @@ def test_an_object_lost_and_back_leaves_one_row_each_way(monkeypatch):
     for _ in range(4):
         watcher.poll()
     assert [row["row"] for row in rows_of(watcher.log.stream)] == ["object_gone", "object_armed"]
+
+
+def test_a_file_marked_at_a_new_inode_leaves_a_row(monkeypatch):
+    watcher = planned("k7q2m")
+    monkeypatch.setattr(daemon, "read_bytes", lambda path: b"0::/docker/id-k7q2m\n")
+    monkeypatch.setattr(watcher, "arm", lambda obj: "armed")
+    watcher.poll()
+    assert [row["row"] for row in rows_of(watcher.log.stream)] == ["object_armed"]
 
 
 def test_a_new_file_at_an_objects_path_is_named_on_the_openers_machine(tmp_path, monkeypatch):
@@ -336,7 +352,7 @@ def test_a_control_with_no_row_raises_and_the_table_stays(boxes):
     assert state.store[STORE]["pid"] == READY["pid"]
 
 
-def test_a_monitor_that_does_not_start_raises_with_its_stderr(boxes, monkeypatch):
+def test_a_monitor_that_does_not_start_raises_with_its_stderr_and_the_capture_keeps_what_there_is(boxes, monkeypatch):
     fake = boxes()
     state = SimpleNamespace(store=FakeStore())
 
@@ -346,6 +362,9 @@ def test_a_monitor_that_does_not_start_raises_with_its_stderr(boxes, monkeypatch
     monkeypatch.setattr(fake, "exec", refused)
     with pytest.raises(RuntimeError, match="EPERM"):
         start(state)
+    assert "pid" not in state.store[STORE] and state.store[STORE]["seats"]
+    asyncio.run(monitor.capture(state))
+    assert state.store[STORE]["rows"] == [READY] and "end control on" in state.store[STORE]["error"]
 
 
 def test_the_capture_runs_once_and_keeps_every_row(boxes):
@@ -359,6 +378,13 @@ def test_the_capture_runs_once_and_keeps_every_row(boxes):
     assert stops == [["bash", "-c", monitor.STOP, "stop", str(READY["pid"])]]
     asyncio.run(monitor.capture(state))
     assert sum(name == AUDITOR and command[2] == monitor.STOP for name, command in fake.commands) == 1
+
+
+def test_the_first_scorer_captures_and_gives_no_score(boxes):
+    boxes()
+    state = SimpleNamespace(store=FakeStore())
+    start(state)
+    assert asyncio.run(monitor.access_capture()(state, None)) is None and "rows" in state.store[STORE]
 
 
 def test_a_machine_that_is_down_costs_only_its_own_end_control(boxes):

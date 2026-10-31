@@ -115,6 +115,13 @@ def test_two_identical_commands_at_once_leave_the_row_on_the_team():
     assert row["candidates"] == ["k7q2m", "m3p4x"]
 
 
+def test_the_candidates_are_the_agents_whose_calls_match():
+    seats = [*SHARED, {"machine": "default", "uid": 1000, "user": "user", "agent": "t4x9n"}]
+    events = (call("c1", "k7q2m", "cat k"), call("c2", "m3p4x", "cat k"), call("c3", "t4x9n", "ls"))
+    _, [row] = exported(opened("cat k", machine="default", uid=1000), events=events, seats=seats)
+    assert row["agent"] is None and row["candidates"] == ["k7q2m", "m3p4x"]
+
+
 def test_a_detached_read_in_the_shared_layout_stays_open_over_the_seats():
     raw = opened("x", machine="default", uid=1000, root=root("x", cmd="/sbin/docker-init -- tail -f /dev/null",
                                                              detached=True))

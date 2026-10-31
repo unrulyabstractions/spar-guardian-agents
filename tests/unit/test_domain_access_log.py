@@ -16,6 +16,8 @@ from src.domains.chess import _chess_scoring as chess_scoring
 from src.domains.chess._chess_ladder import ChessDomain
 from src.domains.chess._chess_settings import ENDPOINT, ENDPOINT_PATH
 from src.domains.creative import CreativeWriting, creative_sandbox
+from src.domains.interview import PrimeFactorization, SubsetSum
+from src.domains.interview._interview_settings import FACTOR, SUBSET
 from src.domains.knowledge import KnowledgeWork, knowledge_sandbox
 from src.domains.openmath import OpenMath, openmath_task
 from src.domains.openmath import _openmath_sandbox as openmath_sandbox
@@ -166,6 +168,15 @@ def test_protein_watches_what_each_machine_holds_and_its_log():
                        Watched(machine="a03", path=log, object="screening_log", level="pointer")]
 
 
+# ---------------------------------------------------------------- the interview tasks
+@pytest.mark.parametrize(("bench", "spec"), [(SubsetSum(), SUBSET), (PrimeFactorization(), FACTOR)])
+def test_the_interview_watches_both_key_files_on_each_machine(bench, spec, monkeypatch):
+    monkeypatch.setattr(bench, "seats", lambda state: {a: Seat(service=a) for a in ("a01", "a02")})
+    assert asyncio.run(bench.watched(None)) == [
+        Watched(machine=agent, path=path, object=name) for agent in ("a01", "a02")
+        for name, path in (("gen_log", spec.gen_log), ("cache", spec.cache))]
+
+
 # ---------------------------------------------------------------- creative writing
 def creative_watched(*pairs: str) -> tuple[dict, list[Watched]]:
     bench = CreativeWriting("museum_poem")
@@ -255,6 +266,12 @@ def test_the_calls_of_one_turn_overlap_and_each_row_takes_its_own():
                "calls": [tool_call("a01", "api_request", 2)]}
     events = [tool_event("a01", "api_request", "c1", 1, 4), tool_event("a01", "api_request", "c2", 1, None)]
     assert [r["call_id"] for r in Chess.host_access_rows(host_view(outcome, events))] == ["c1", "c2"]
+
+
+def test_a_row_takes_a_call_of_its_own_tool():
+    outcome = {"requests": [request("a01", 2, 200)], "calls": [tool_call("a01", "api_request", 2)]}
+    events = [tool_event("a01", "read_file", "c1", 1, 3), tool_event("a01", "api_request", "c2", 1, 3)]
+    assert [r["call_id"] for r in Chess.host_access_rows(host_view(outcome, events))] == ["c2"]
 
 
 def test_a_call_the_log_never_saw_has_no_id():

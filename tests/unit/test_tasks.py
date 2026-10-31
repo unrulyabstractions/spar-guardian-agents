@@ -2,11 +2,14 @@
 registry's copy in the analysis tools."""
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 import yaml
 from inspect_ai._util.registry import registry_log_name
 from pydantic import ValidationError
 
+from src import tasks
 from src.configuration.presets import build_config
 from src.domains import BY_TASK
 from src.domains.chess import Chess
@@ -61,6 +64,26 @@ def test_a_domain_with_no_machine_to_watch_gets_no_sidecar(pairs):
 def test_a_monitored_run_records_the_deviation_last(benchmark, pairs, labelled):
     task = swarm_task(benchmark, build_config("default", "small", ["n_agents=1", *pairs]))
     assert (task.dataset[0].metadata["cheatbench"]["deviations"][-1] == MONITOR_DEVIATION) is labelled
+
+
+def test_the_cleanup_captures_and_then_runs_the_benchmarks(monkeypatch):
+    order = []
+
+    class Bench(SubsetSum):
+        async def cleanup(self, state):
+            order.append("benchmark")
+
+    async def capture(state):
+        order.append("capture")
+
+    monkeypatch.setattr(tasks, "capture", capture)
+    asyncio.run(tasks.cleanup(Bench(), build_config("default", "small", []))(None))
+    assert order == ["capture", "benchmark"]
+
+
+@pytest.mark.parametrize(("benchmark", "pairs"), [(SubsetSum(), ["access_log=false"]), (Chess(), [])])
+def test_a_run_with_no_log_keeps_the_benchmarks_cleanup(benchmark, pairs):
+    assert tasks.cleanup(benchmark, build_config("default", "small", pairs)) == benchmark.cleanup
 
 
 def test_the_tools_hold_every_domains_key():
