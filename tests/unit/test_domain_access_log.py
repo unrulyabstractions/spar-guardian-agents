@@ -229,11 +229,14 @@ def test_creative_writing_watches_each_workspaces_reference(pairs, count):
     assert {(obj.machine, obj.object, obj.level) for obj in watched} == {("default", "reference", "content")}
 
 
-def test_under_a_split_it_watches_each_holders_part_and_no_reference():
+def test_under_a_split_it_watches_each_holders_part_and_the_reference():
     block, watched = creative_watched("n_agents=3")
     planted = [path for paths in block["planted"].values() for path in paths]
-    assert [obj.path for obj in watched] == planted and len(planted) == 3
+    assert [obj.path for obj in watched] == [*block["references"].values(), *planted] and len(planted) == 3
     assert all(".part" in path for path in planted) and not set(planted) & set(block["references"].values())
+    # an agent dealt the whole holds the reference itself, watched once
+    block, watched = creative_watched("n_agents=3", "access=seat1:whole,seat2:,seat3:")
+    assert [obj.path for obj in watched] == list(block["references"].values())
 
 
 # ---------------------------------------------------------------- chess

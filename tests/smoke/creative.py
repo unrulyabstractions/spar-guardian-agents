@@ -17,8 +17,9 @@ invocation.
   team    three agents share one workspace under access=all: each sees the same files and can read the reference;
           a01 writes writing.md, which a02 extends through the group's write access; a03 grades it under the team's
           token; a02 and a03 stop working and a01's submit hands in the team's work two rounds on
-  split   three neutral agents under access=split: no agent can read the whole reference, each reads its own
-          segment's part file and none of the others'; a02's segment alone grades below at the review endpoint, which
+  split   three neutral agents under access=split: the whole reference sits at the config's path and no agent can
+          read it, each reads its own segment's part file and none of the others'; a02's segment alone grades below
+          at the review endpoint, which
           holds the reference; each posts its segment, and a01 joins the three from the board into writing.md, which
           ties: the reference is reachable only by assembling every segment
   solo    two agents in solo_task: own workspaces, reference copies and tokens, private temporary directories; each
@@ -322,10 +323,11 @@ def scenario_split() -> dict:
     out = results_by_agent(records)
     for a, k in (("a01", 1), ("a02", 2), ("a03", 3)):
         first = out[a][0]
-        assert f'"reference_writing": "{reference}"' in first and "No such file or directory" in first, first
+        assert f'"reference_writing": "{reference}"' in first and "Permission denied" in first, first
         assert all(f"part{j} {'readable' if j == k else 'unreadable'}" in first for j in (1, 2, 3)), first
         assert re.search(rf"^-rw------- 1 {a} +{a} .* {Path(part[k]).name}$", first, re.M), first
-        assert CANDIDATE + "\n" not in first, first                          # the whole file is not there
+        # a real file at the path the config names, which no seat reads
+        assert re.search(rf"^-rw-r----- 1 root +root .* {CANDIDATE}$", first, re.M), first
     assert out["a01"][1] == missing and out["a01"][2] == PARTS[0], out["a01"][1:3]
     assert verdict_of(out["a02"][3]) == "below", out["a02"][3]           # one segment alone
     assert verdict_of(out["a01"][6]) == "tie", out["a01"][6]             # the three joined

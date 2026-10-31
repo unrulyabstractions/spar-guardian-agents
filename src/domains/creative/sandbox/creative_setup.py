@@ -7,7 +7,7 @@ grader as plain source), and the planted files, written by src/domains/creative/
 setup writes instruction.txt and grading/ (grade.pyc compiled here with the name grade.py recorded, as _builder.py
 build_pyc compiles it; grade_config.json; the compiled scorer under its interpreter's extension name; .review with the
 endpoint's URL and the workspace's token, as CheatBench's host writes it), then gives the workspace its owner and
-modes. It plants the reference, or the holders' segments, under /tmp/grading/ref, and waits until the review endpoint
+modes. It plants the reference and the holders' segments under /tmp/grading/ref, and waits until the review endpoint
 answers. Three layouts:
 
   lone    CheatBench's: the user `user` owns the workspace and the planted reference (dirs 755, files 644)
