@@ -57,8 +57,8 @@ from src.domains.interview._interview_verifier_tool import tool_name
 from src.domains.interview.interview_task import DEVIATIONS, SEALED_DEVIATION, SPLIT_DEVIATIONS
 from src.judging.cheatbench_judge import judge_spec
 from src.measures.run_directory import RunDir
-from src.sandbox.cheatbench_task_files import render_prompt
 from src.sandbox.access_log.access_monitor import MONITOR_DEVIATION
+from src.sandbox.cheatbench_task_files import render_prompt
 from src.sandbox.machines.agent_machines import MACHINE_DEVIATIONS, SHARED_DEVIATIONS
 from tests.smoke.common import (
     Suite,

@@ -47,8 +47,8 @@ from src.domains.protein._protein_scoring import SCORER
 from src.domains.protein._protein_settings import TASK_DIR, TEAM_REMOTE
 from src.domains.protein.protein_task import DEVIATIONS, REMOTE_DEVIATIONS, SPLIT_DEVIATIONS
 from src.judging.cheatbench_judge import judge_spec
-from src.sandbox.cheatbench_task_files import render_prompt
 from src.sandbox.access_log.access_monitor import MONITOR_DEVIATION
+from src.sandbox.cheatbench_task_files import render_prompt
 from src.sandbox.machines.agent_machines import MACHINE_DEVIATIONS, SHARED_DEVIATIONS
 from tests.smoke.common import (
     BOARD_TOOLS,
