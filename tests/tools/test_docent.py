@@ -1,6 +1,5 @@
-"""tools/docent on a copy of runs/riemann_minimal (three workers, a02 and a03 judged cheated, two board posts): the dry
-run, the refusals without a usable key, and the upload path against a stand-in client. The copy keeps the real run's
-own docent outputs untouched. Run tests skip when the run is absent."""
+"""tools/docent on a copy of the generated riemann_minimal (three workers, a02 and a03 judged cheated, two board posts):
+the dry run, the refusals without a usable key, and the upload path against a stand-in client."""
 from __future__ import annotations
 
 import json
@@ -8,7 +7,6 @@ import json
 import pytest
 
 from src.utils.json_files import read_jsonl
-from tests.support.runs_on_disk import RIEMANN, needs_riemann
 from tools.docent import docent_command as command
 from tools.docent.docent_upload import key_problem
 from tools.tool_dispatch import main
@@ -36,7 +34,6 @@ def test_upload_without_key_exits_2(no_key, capsys):
     assert "no Docent API key found" in capsys.readouterr().err
 
 
-@needs_riemann
 def test_dry_run_on_riemann(no_key, riemann_copy):
     assert main(["docent", str(riemann_copy), "--dry-run", "--board"]) == 0
     out = riemann_copy / "tools" / "docent"
@@ -45,7 +42,7 @@ def test_dry_run_on_riemann(no_key, riemann_copy):
     assert summary["tool"] == "docent" and summary["dry_run"] is True
     assert summary["n_agent_runs"] == len(agent_runs) == 4
     assert [run["id"] for run in agent_runs] == [row["id"] for row in summary["agent_runs"]]
-    judge = {row["episode"].rsplit("@", 1)[1]: row for row in read_jsonl(RIEMANN / "judge.jsonl")}
+    judge = {row["episode"].rsplit("@", 1)[1]: row for row in read_jsonl(riemann_copy / "judge.jsonl")}
     for agent_run in agent_runs[:3]:
         metadata = agent_run["metadata"]
         agent = metadata["agent"]
@@ -53,7 +50,7 @@ def test_dry_run_on_riemann(no_key, riemann_copy):
         assert metadata["attempted_access"] == judge[agent]["attempted_access"]
         assert metadata["judge_summary"] == judge[agent]["summary"]
         assert metadata["roster"] == ["a01", "a02", "a03"]
-        steps = json.loads(next((RIEMANN / "trajectories").glob(f"*@{agent}/transcript.json")).read_text())
+        steps = json.loads(next((riemann_copy / "trajectories").glob(f"*@{agent}/transcript.json")).read_text())
         steps = steps["trajectory"]["steps"]
         results = sum(len((step.get("observation") or {}).get("results") or []) for step in steps)
         messages = agent_run["transcripts"][0]["messages"]
@@ -90,7 +87,6 @@ class StandInClient:
         return {"status": "success", "total_runs_added": len(agent_runs), "job_ids": ["job-1"]}
 
 
-@needs_riemann
 def test_upload_records_collection_and_ids(monkeypatch, capsys, riemann_copy):
     client = StandInClient()
     monkeypatch.setattr(command, "discovered_key", lambda: "dk_stand_in")
@@ -107,7 +103,6 @@ def test_upload_records_collection_and_ids(monkeypatch, capsys, riemann_copy):
     assert client.uploads[1][0] == "existing"
 
 
-@needs_riemann
 def test_failed_upload_names_the_collection(monkeypatch, capsys, riemann_copy):
     client = StandInClient(fail_on=0)
     monkeypatch.setattr(command, "discovered_key", lambda: "dk_stand_in")

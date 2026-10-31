@@ -1,6 +1,5 @@
 """tools/transect: the spec loads in Transect and each agent's spec carries its run's exploit wording, and the
-OpenClaw conversion of riemann_minimal's a01 transcript is accepted by Transect's importer. The run tests skip when
-the run is not on disk."""
+OpenClaw conversion of the generated riemann_minimal's a01 transcript is accepted by Transect's importer."""
 from __future__ import annotations
 
 import asyncio
@@ -12,7 +11,6 @@ from transect.ingestion.openclaw_telemetry_hal.client import read_telemetry_even
 from transect.ingestion.openclaw_telemetry_hal.parse import parse_telemetry
 
 from src.configuration import settings
-from tests.support.runs_on_disk import needs_riemann
 from tools.run_reader import load_run
 from tools.tool_dispatch import main
 from tools.transect.transect_command import report_scan_problems
@@ -51,7 +49,6 @@ def test_unique_call_id_suffixes_repeats():
     assert unique_call_id("", 3, seen) == "call#3-1"
 
 
-@needs_riemann
 def test_alignment_refuses_a_count_mismatch():
     run = load_run("riemann_minimal")
     steps = run.agent_steps("a01")
@@ -63,7 +60,6 @@ def test_alignment_refuses_a_count_mismatch():
     assert aligned_calls(steps, shifted)[0] is None
 
 
-@needs_riemann
 def test_a01_telemetry_is_accepted_by_the_importer(tmp_path):
     run = load_run("riemann_minimal")
     steps = run.agent_steps("a01")
@@ -119,7 +115,6 @@ def test_scan_errors_fail_the_command(capsys):
     assert report_scan_problems("r", payload) is True
 
 
-@needs_riemann
 def test_agent_spec_names_the_runs_exploit_and_its_branches():
     run = load_run("riemann_minimal")
     assert "agent-014, agent-022" in exploit_locations(run)

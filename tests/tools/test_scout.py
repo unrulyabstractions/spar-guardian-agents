@@ -1,5 +1,5 @@
-"""tools/scout on runs/riemann_minimal: the Scout transcripts database, the honeypot names, the message labels and an
-offline grep-only scan. Every test that reads the run skips when it is not on disk; none calls a model."""
+"""tools/scout on the generated riemann_minimal: the Scout transcripts database, the honeypot names, the message labels
+and an offline grep-only scan. No test calls a model."""
 from __future__ import annotations
 
 import asyncio
@@ -10,7 +10,7 @@ import pytest
 from inspect_scout import Result, transcripts_db
 
 from src.measures.verdict_fields import FLAGS_BY_TASK, flag_names
-from tests.support.runs_on_disk import RIEMANN, copy_run, needs_riemann
+from tests.support.sample_runs import copy_run
 from tools.run_reader import load_run
 from tools.scout.scout_command import chosen_signals
 from tools.scout.scout_results import JUDGE_FIELDS, attach_grep_floor, grep_seen, locate, quote_fragments, tally
@@ -38,7 +38,6 @@ async def stored_rows(location: str) -> list:
         return [row async for row in database.select()]
 
 
-@needs_riemann
 def test_transcripts_carry_every_step_and_the_judge(tmp_path):
     run = load_run("riemann_minimal")
     transcripts = build_database(run, tmp_path / "transcripts")
@@ -58,7 +57,6 @@ def test_transcripts_carry_every_step_and_the_judge(tmp_path):
     assert stored["riemann#1@a01"].metadata["judge_honey_pots_seen"] is True
 
 
-@needs_riemann
 def test_messages_keep_their_step_round_and_tool_calls():
     run = load_run("riemann_minimal")
     a02 = {transcript.agent: transcript for transcript in run_transcripts(run)}["a02"]
@@ -72,7 +70,6 @@ def test_messages_keep_their_step_round_and_tool_calls():
     assert [message.tool_call_id for message in results] == step.result_ids
 
 
-@needs_riemann
 def test_labels_skip_the_system_message_and_locate_quotes():
     run = load_run("riemann_minimal")
     a02 = {transcript.agent: transcript for transcript in run_transcripts(run)}["a02"]
@@ -87,7 +84,6 @@ def test_labels_skip_the_system_message_and_locate_quotes():
     assert (origin.message_id, how) == ("a02-6-0", "step")
 
 
-@needs_riemann
 def test_honeypot_names_come_from_run_json():
     run = load_run("riemann_minimal")
     names = honeypot_names(run)
@@ -115,9 +111,8 @@ def test_chess_names_are_the_endpoints_address_and_the_credentials_halves():
         "endpoint": ["agents.internal/v1/other_agent"]}
 
 
-@needs_riemann
-def test_grep_only_scan_runs_offline(tmp_path):
-    copy = copy_run(RIEMANN, tmp_path / "riemann_minimal", ignore=("scout",))
+def test_grep_only_scan_runs_offline(runs_folder, tmp_path):
+    copy = copy_run(runs_folder / "riemann_minimal", tmp_path / "riemann_minimal", ignore=("scout",))
     assert main(["scout", str(copy), "--grep-only"]) == 0
     summary = json.loads((copy / "tools" / "scout" / "summary.json").read_text())
     assert summary["tool"] == "scout" and summary["grep_only"] is True and summary["model"] is None

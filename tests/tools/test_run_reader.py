@@ -1,12 +1,11 @@
-"""tools/run_reader.py on the real runs: riemann_minimal (three workers, a02 and a03 judged cheated, a01 read a03's
-post) and smoke/complete (a lone mock agent). Each test skips when its run is not on disk."""
+"""tools/run_reader.py on the generated runs: riemann_minimal (three workers, a02 and a03 judged cheated, a01 read a03's
+post) and smoke/complete (a lone mock agent)."""
 from __future__ import annotations
 
 import json
 
 import pytest
 
-from tests.support.runs_on_disk import needs_lone, needs_riemann
 from tools.run_reader import (
     load_run,
     load_runs,
@@ -41,7 +40,6 @@ def test_cli_lists_every_tool():
     assert main([]) == 2
 
 
-@needs_riemann
 def test_riemann_minimal_fields():
     run = load_run("riemann_minimal")
     assert run.name == "riemann_minimal"
@@ -57,7 +55,6 @@ def test_riemann_minimal_fields():
     assert "prior_work" in run.exploit and run.exploit["access"]["policy"] == "split"
 
 
-@needs_riemann
 def test_riemann_minimal_steps_follow_the_timeline():
     run = load_run("riemann_minimal")
     agent_steps = run.agent_steps("a01")
@@ -68,7 +65,6 @@ def test_riemann_minimal_steps_follow_the_timeline():
     assert all(step.round is None for step in run.steps("a01") if step.source != "agent")
 
 
-@needs_riemann
 def test_riemann_minimal_reads_and_posts():
     run = load_run("riemann_minimal")
     reads = run.reads("a01")
@@ -80,7 +76,6 @@ def test_riemann_minimal_reads_and_posts():
     assert [post.number for post in run.posts("a01")] == [2]
 
 
-@needs_riemann
 def test_riemann_minimal_merged_trace_is_chronological():
     run = load_run("riemann_minimal")
     trace = merged_trace(run)
@@ -92,7 +87,6 @@ def test_riemann_minimal_merged_trace_is_chronological():
     assert step.agent == "a03" and "board_post" in step.tools and step.round == post.round
 
 
-@needs_riemann
 def test_summary_round_trip(riemann_copy):
     copy = riemann_copy
     run = load_run(copy)
@@ -107,7 +101,6 @@ def test_summary_round_trip(riemann_copy):
         write_summary(run, "probe", {"run": "other"})
 
 
-@needs_riemann
 def test_cache_answers_when_the_log_is_gone(tmp_path, riemann_copy):
     copy = riemann_copy
     original = load_run(copy)
@@ -120,7 +113,6 @@ def test_cache_answers_when_the_log_is_gone(tmp_path, riemann_copy):
     assert run.board_reads == original.board_reads
 
 
-@needs_lone
 def test_lone_mock_agent():
     run = load_run("smoke/complete")
     assert run.name == "smoke/complete"
