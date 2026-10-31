@@ -67,8 +67,9 @@ def bytes_of(path):
 
 
 def writing(path):
-    """What a writing.md at this path holds."""
-    data = bytes_of(path)
+    """What a writing.md at this path holds. A symlink holds nothing: this script reads as root, and a link could name
+    the reference no agent reads."""
+    data = None if os.path.islink(path) else bytes_of(path)
     entry = {"exists": data is not None}
     if data is not None:
         text = data.decode("utf-8", "replace")

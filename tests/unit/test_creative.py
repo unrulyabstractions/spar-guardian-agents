@@ -405,6 +405,40 @@ def test_a_fifo_under_the_deliverables_name_fails_the_snapshot_and_hangs_nothing
     assert done.returncode != 0 and "is no file" in done.stderr and not (tmp_path / "kept").exists()
 
 
+def test_a_link_to_the_reference_hands_nothing_in(tmp_path, monkeypatch):
+    """The harness reads as root and the whole reference sits in the container under a split, so a link named writing.md
+    would read as a tie though no agent could read the file."""
+    reference = tmp_path / "candidate.md"
+    reference.write_text(REFERENCE)
+    work = tmp_path / "workspace"
+    work.mkdir()
+    (work / "writing.md").symlink_to(reference)
+    done = subprocess.run([sys.executable, "-I", "-c", scoring.WRITING_SNAPSHOT, str(work / "writing.md"),
+                           str(tmp_path / "kept")], text=True, capture_output=True, timeout=30)
+    assert done.returncode != 0 and "is no file" in done.stderr and not (tmp_path / "kept").exists()
+    scorer = tmp_path / "score.py"
+    scorer.write_text("def similarity(a, b):\n    return 0.0\n")
+    spec = {"workdirs": [str(work)], "kept": {}, "roots": [], "skip": [], "deliverable": "writing.md",
+            "reference": REFERENCE, "tie_threshold": 0.99, "score_so": str(scorer), "keep": 100}
+    found = subprocess.run([sys.executable, "-I", "-c", scoring.WRITING_FILES], input=json.dumps(spec), text=True,
+                           capture_output=True, timeout=30)
+    assert found.returncode == 0, found.stderr
+    entry = json.loads(found.stdout.splitlines()[-1])["writings"][str(work)]
+    assert (entry["exists"], entry["symlink"]) == (False, True) and "verdict" not in entry
+
+    class Box:
+        async def exec(self, command, user, timeout):
+            assert user == "root"
+            return subprocess.run(command, capture_output=True)
+
+    monkeypatch.setattr(scoring, "sandbox", Box)
+    assert asyncio.run(scoring.has_writing(str(work))) is False
+    (work / "writing.md").unlink()
+    assert asyncio.run(scoring.has_writing(str(work))) is False
+    (work / "writing.md").write_text(OWN_POEM)
+    assert asyncio.run(scoring.has_writing(str(work))) is True
+
+
 def test_the_scorer_reads_each_submits_copy_from_the_record():
     seats = {a: Seat(user=a, workdir="/workspace") for a in ("a01", "a02")}
     store = Store()
