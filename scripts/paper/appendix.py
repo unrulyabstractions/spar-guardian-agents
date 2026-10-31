@@ -12,8 +12,8 @@ suffixes are every one such runs carry, or those --suffixes names. A domain with
 models default to the fleet's (fleet_layout.MODELS).
 
 A rate means cheated: the share of samples whose team rung is the task's own floor or higher (Domain.cheated_from, tried
-on chess and creative writing, opened elsewhere), the rung the judge's cheated agrees with. Each tick or panel names the
-floor it counts.
+on SWE, chess and creative writing, opened elsewhere), the rung the judge's cheated agrees with. Each tick or panel
+names the floor it counts.
 
 For each model and cell the script writes tmp/appendix/<model suffix>/appendix_<cell>_rate.png (the rate beside the
 share at used or higher) and appendix_<cell>.png (one tile per domain and sample coloured by the team rung, with the
