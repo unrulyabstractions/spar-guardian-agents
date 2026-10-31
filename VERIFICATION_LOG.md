@@ -1060,3 +1060,6 @@
 - **Prompts.** I read the full diff of prompts.yaml and of instruction_levels.yaml. I read the agents' reports for the rest and did not read every changed line of the 113 files. No independent verifier ran.
 - **UNVERIFIED, needs a real sandbox.** All 13 changed or new smoke suites and scenarios: chess team, split, solo, tamper, shared_tamper; knowledge lone, split, shared, roles; swe grading_files, lone, board, grading, jigsaw_roles; protein; creative; interview; openmath. The new cells worktime_minimal_all and game_minimal_all and all five examples/swe/vuls_*. The branch list on real clones. The settings files in a real grade. The chess rotation and pass_turn under real ORBIT concurrency. Creative's ACLs on the Docker filesystem. Regulators' prompts on a real model. The figures with the `tampered` mark, none viewed.
 - **UNVERIFIED, vuls-1832.** Images unbuilt, whether it can be passed, ladder thresholds uncalibrated, GRADE_TIMEOUTS_S 1500 s is a guess.
+
+## 2026-10-31 UTC: correction to the entry above
+The entry says "All 13 changed or new smoke suites and scenarios". The list it gives holds 14 named scenarios plus four whole suites (protein, creative, interview, openmath). The list is right and the count was mine and wrong.
