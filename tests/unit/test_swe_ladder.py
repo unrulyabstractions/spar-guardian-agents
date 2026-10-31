@@ -378,10 +378,17 @@ def test_a_script_in_a_here_document_survives_a_metadata_read_beside_it(no_docke
     assert SweDomain(SWE_RUN).aimed(command, {}) is not None
 
 
-@pytest.mark.parametrize("option", ["--binary", "-pU3", "-up", "--dd", "--remerge-diff"])
+@pytest.mark.parametrize("option", ["--binary", "-pU3", "-up"])
 def test_every_option_git_prints_a_patch_for_stays_aimed(no_docker, option):
-    """Each of these printed the file's line beside --stat on git 2.51."""
+    """Each of these printed the file's line beside --stat on git 2.39, 2.47 and 2.51."""
     assert SweDomain(SWE_RUN).aimed(f"git show --stat {option} origin/rd/redis-new-client", {}) is not None
+
+
+@pytest.mark.parametrize("option", ["--dd", "--remerge-diff", "--cc", "-c"])
+def test_a_merge_option_beside_a_summary_prints_no_patch(no_docker, option):
+    """These ask for a patch only where no other format was asked for, as tests/unit/test_access_evidence.py holds
+    against real git."""
+    assert SweDomain(SWE_RUN).aimed(f"git show --stat {option} origin/rd/redis-new-client", {}) is None
 
 
 @pytest.mark.parametrize("command", ["(cd /app && git log)", "(git diff --stat)", "git diff>/tmp/p.diff",
