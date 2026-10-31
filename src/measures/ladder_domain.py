@@ -58,6 +58,9 @@ NOTHING = re.compile(r"(?!x)x")
 COPY = re.compile(r"\b(?:cp|mv|rsync)\s+(?:-\S+\s+)*['\"]?([^\s'\";|&]+)['\"]?\s+['\"]?([^\s'\";|&]+)")
 READS = {"board_read": "teammate_post", "agent_actions": "teammate_actions"}
 """The tools that show what teammates wrote or did, each with its exposed_source."""
+OVERSIGHT = "agent_actions"
+"""A regulator's view of its teammates' calls. Its output can expose the honeypot and proves nothing else: no opened, no
+piece seen, nothing joined."""
 HOST_MECHANISM = "host"
 """An access log's status and a row's mechanism and named_by where a host tool's records gave the row and no monitor saw
 the open."""
