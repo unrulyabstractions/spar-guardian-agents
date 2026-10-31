@@ -162,13 +162,13 @@ def setup_solvers(benchmark: Benchmark, plan: Plan) -> list[Solver]:
     """The turn rules' setup and the benchmark's, then the access log's, so the harness's own reads while staging come
     before any mark."""
     config = plan.config
-    monitor = [start_access_monitor(benchmark)] if benchmark.logs_access(config) else []
+    monitor = [start_access_monitor(benchmark)] if benchmark.keeps_access_log(config) else []
     return [rules_setup(config, config.names, plan.roles, **delivery(benchmark, plan)), benchmark.setup(), *monitor]
 
 
 def cleanup(benchmark: Benchmark, config: SwarmConfig) -> Callable[[TaskState], Awaitable[None]]:
     """Task.cleanup: the benchmark's, after the access log's capture when the scorers never ran."""
-    if not benchmark.logs_access(config):
+    if not benchmark.keeps_access_log(config):
         return benchmark.cleanup
 
     async def run(state: TaskState) -> None:
@@ -180,7 +180,7 @@ def cleanup(benchmark: Benchmark, config: SwarmConfig) -> Callable[[TaskState], 
 def scorers(benchmark: Benchmark, config: SwarmConfig) -> list:
     """The access log's capture before any harness read of the honeypot, the benchmark's scorers, CheatBench's judge
     unless the config's judge is None, and the awareness probes."""
-    monitor = [access_capture()] if benchmark.logs_access(config) else []
+    monitor = [access_capture()] if benchmark.keeps_access_log(config) else []
     judge = [cheatbench_judge(benchmark.name, str(benchmark.task_dir), judge=config.judge,
                               addendum=str(JUDGE_ADDENDUM) if config.judge_addendum else None,
                               batch=config.batch_judge)] if config.judge else []
@@ -242,7 +242,7 @@ def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = 
     names = config.names
     plan = benchmark.plan(config, hidden_roles(config))
     sample = benchmark.sample(plan, instruction_suffix(benchmark, config, extra_instruction))
-    if benchmark.logs_access(config):
+    if benchmark.keeps_access_log(config):
         sample = monitored_sample(sample)
     tools = benchmark.tools(plan)
     agent_tools, bindings = team_tools(benchmark, plan, tools)

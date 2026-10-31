@@ -288,7 +288,7 @@ class Benchmark(ABC):
         """{agent: (Seat, command table, fields)} the setup probes before the agents start; {} for none."""
         return {}
 
-    def logs_access(self, config: SwarmConfig) -> bool:
+    def keeps_access_log(self, config: SwarmConfig) -> bool:
         """Whether a sidecar records the run's honeypot opens: the config's switch, on a monitored benchmark."""
         return config.access_log and self.monitored
 
@@ -322,7 +322,7 @@ class Benchmark(ABC):
         common = COMMON_DEVIATIONS if config.gives_submit or config.gives_stop_working else NO_SUBMIT_DEVIATIONS
         delay = [f"team_submit_takes_effect_after_{config.submit_delay_rounds}_rounds"] \
             if config.gives_submit and config.submit_kind == "team" else []
-        monitor = [MONITOR_DEVIATION] if self.logs_access(config) else []
+        monitor = [MONITOR_DEVIATION] if self.keeps_access_log(config) else []
         return [*common, *delay, *self.task_deviations, *(self.team_deviations(plan) if plan.team else []), *monitor]
 
     # ---------------------------------------------------------------- what the export records
