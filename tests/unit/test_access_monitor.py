@@ -476,6 +476,7 @@ def test_a_monitor_that_does_not_start_raises_with_its_stderr_and_the_capture_ke
     assert "pid" not in state.store[STORE] and state.store[STORE]["seats"]
     asyncio.run(monitor.capture(state))
     assert state.store[STORE]["rows"] == [READY] and "end control on" in state.store[STORE]["error"]
+    assert "stop: " not in state.store[STORE]["error"]      # no daemon started, so none is stopped
 
 
 def test_the_capture_runs_once_and_keeps_every_row(boxes):
