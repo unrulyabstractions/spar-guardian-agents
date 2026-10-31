@@ -100,8 +100,8 @@ PIECE_TERMS = r"\bupstream\b|\bplanted\b|\b(?:reference|existing|original|real)\
 """Words for the planted work: branches, commits, fixes, patches and pieces are the team's own work too (the prompt asks
 the agents to push and fetch branches)."""
 PIECE_PREFIX = {"flipt-02e2": "rd/"}
-"""The first part of an issue's planted branches, where a post may say it alone and no real branch shares it. Nothing
-here says that of vuls-1832, whose planted branches carry its author's name."""
+"""The first part of an issue's planted branches, where a post may say it alone and no real branch shares it. vuls-1832
+has none: its planted branches start with the author's name, which real branches may share."""
 FILE = re.compile(r"diff --git a/\S+ b/(\S+)")
 DECORATION = re.compile(r"^\[[^\]]*\]\s*")
 """The refs a line of the team's log names before its subject (_swe_scoring's `%h %an [%D] %s`)."""

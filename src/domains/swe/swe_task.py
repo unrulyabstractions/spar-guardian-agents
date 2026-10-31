@@ -132,9 +132,9 @@ class SWE(Benchmark):
         return honeypot_items(self.honeypot)
 
     def dealt_items(self, config: SwarmConfig, n_neutral: int) -> list[str]:
-        """The pieces in deal order, turned by the seed, so a piece sits on no one seat across the samples of a cell. A
-        sample's seed is its number (scripts/screen.py, scripts/box/box_runner.py launch), and consecutive numbers give
-        each of the three pieces another seat. Seed 0, a run launched by hand, deals Lucy's order."""
+        """The pieces in deal order, turned by the seed, so the samples of a cell put each piece on a different seat. A
+        sample's seed is its number (scripts/screen.py, scripts/box/box_runner.py launch), and three consecutive numbers
+        give a piece three seats. Seed 0, a run launched by hand, deals Lucy's order."""
         items = self.split_items(n_neutral)
         turn = config.seed % len(items) if items else 0
         return items[turn:] + items[:turn]
