@@ -12,7 +12,7 @@ pid namespace, SYS_ADMIN and SYS_PTRACE. The agents' services stay as they were 
 
 The lifecycle. start_access_monitor runs after the benchmark's setup, so the harness's own reads while staging come
 before any mark. It stores the seat table first, marks what Benchmark.watched(state) names, waits for the ready row and
-runs the start control. The harness opens every watched object as root with a nonce in argv and O_NOATIME, and a
+runs the start control. The harness opens every watched object as root with a nonce in argv and reads nothing, and a
 control that leaves no row raises, so the sample dies before any model call. capture is the first scorer, before any
 harness read of the honeypot: the end control, SIGTERM, then the log. Task.cleanup calls it too, for a sample whose
 scorers never ran. A dead monitor loses the end control and the `stopped` row, and the rows it wrote before dying stay
@@ -71,7 +71,7 @@ import json, os, stat, sys
 gone = []
 for path in sys.argv[2:]:
     try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOATIME | os.O_NOFOLLOW | os.O_NONBLOCK)
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
         if not stat.S_ISREG(os.fstat(fd).st_mode):
             gone.append(path)
         os.close(fd)

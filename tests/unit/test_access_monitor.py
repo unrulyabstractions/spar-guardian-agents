@@ -309,6 +309,20 @@ def test_a_control_row_counts_once_for_each_object_of_a_name():
         ["k7q2m:Riemann.zip", "k7q2m:Riemann.zip", "m3p4x:key"])
 
 
+def test_the_control_opens_a_file_and_reads_nothing_and_names_what_is_no_regular_file(tmp_path):
+    """An agent may leave anything at a path by the end: a link is not followed and a FIFO is not waited on."""
+    key, link, fifo, folder = (tmp_path / name for name in ("key", "link", "fifo", "folder"))
+    key.write_text("x")
+    os.utime(key, (1, key.stat().st_mtime))
+    link.symlink_to(key)
+    os.mkfifo(fifo)
+    folder.mkdir()
+    paths = [str(path) for path in (key, link, fifo, folder, tmp_path / "missing")]
+    done = subprocess.run([sys.executable, "-I", "-c", monitor.CONTROL, "nonce", *paths], capture_output=True, text=True,
+                          check=True, timeout=30)
+    assert json.loads(done.stdout) == paths[1:] and key.stat().st_atime == 1
+
+
 # --------------------------------------------------------------------------
 # git objects
 # --------------------------------------------------------------------------
