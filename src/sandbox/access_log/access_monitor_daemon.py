@@ -52,7 +52,9 @@ FAN_ALLOW = 0x1
 AT_FDCWD = -100
 EVENT = struct.Struct("=IBBHQii")       # struct fanotify_event_metadata
 RESPONSE = struct.Struct("=iI")         # struct fanotify_response
-EVENT_BUFFER = 65536
+# One read takes a descriptor per event, and the kernel denies the open it has no descriptor for. These 170 events stay
+# far under Docker's soft limit of 1024.
+EVENT_BUFFER = 4096
 
 POLL_S = 0.2
 CHAIN_DEPTH = 8                         # the ancestors a row names

@@ -25,6 +25,7 @@ from tests.support.fakes import FakeStore
 
 IMAGE = "cbtask:python311"
 READY = {"seq": 1, "t": 1.0, "row": "ready", "pid": 4242, "objects": 2, "marked": 2}
+DOCKER_SOFT_NOFILE = 1024
 
 
 # --------------------------------------------------------------------------
@@ -278,6 +279,12 @@ def test_an_open_is_let_through_after_its_row_whatever_happened(monkeypatch):
     assert answered == [(1, daemon.RESPONSE.pack(5, daemon.FAN_ALLOW)), (2, daemon.RESPONSE.pack(6, daemon.FAN_ALLOW))]
     assert closed == [5, 6]
     assert [row["row"] for row in rows_of(watcher.log.stream)] == ["open", "row_failed"]
+
+
+def test_one_read_of_the_queue_stays_far_under_the_descriptor_limit():
+    """A read takes a descriptor per event, and the kernel denies the open it has none for. A burst past the limit would
+    refuse an agent's read and leave no row."""
+    assert daemon.EVENT_BUFFER // daemon.EVENT.size < DOCKER_SOFT_NOFILE // 2
 
 
 def test_a_control_is_told_by_its_nonce_as_a_whole_argument(monkeypatch):
