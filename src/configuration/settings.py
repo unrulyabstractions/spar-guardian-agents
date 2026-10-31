@@ -9,6 +9,7 @@ read once through load_yaml.
 from __future__ import annotations
 
 import functools
+import os
 import subprocess
 from pathlib import Path
 
@@ -16,8 +17,11 @@ import yaml
 
 HERE = Path(__file__).resolve().parent          # src/configuration/
 ROOT = HERE.parents[1]                           # the repository root
-RUNS = ROOT / "runs"
-LOGS = ROOT / "logs"
+STUDY = os.environ.get("STUDY", "study_exploration_1")
+"""The study this process reads and writes: its runs under runs/<study>/ and its eval logs under logs/<study>/. The
+environment's STUDY reaches another, such as study_exploration_0, the first screen's."""
+RUNS = ROOT / "runs" / STUDY
+LOGS = ROOT / "logs" / STUDY
 BUILD = ROOT / "build"
 CHEATBENCH = ROOT / "submodules" / "cheatbench"
 ORBIT = ROOT / "submodules" / "orbit"

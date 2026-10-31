@@ -3,7 +3,7 @@
     uv run --project tools python -m tools.failures.fetch_mast_taxonomy
     uv run --project tools python -m tools failures riemann_minimal [--model gpt-6-luna] [--max-steps 60]
 
-It writes under runs/<name>/tools/failures/:
+It writes under runs/<study>/<name>/tools/failures/:
 
 mast.json: {modes: {"1.1": "yes"|"no", ... "3.3"}, summary, task_completed: "yes"|"no"|null, modes_strict:
 {"1.1": "yes"|"no"|null, ...}, disagreements: [mode], reply_names: {mode: name the reply gave|null}, renamed:

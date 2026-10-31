@@ -29,19 +29,19 @@ uv run python -m examples.openmath.riemann_minimal
 
 A screen runs the cells of the first experiment in parallel, several samples each, and prints each run's team rung, its agents' rungs and its ledger (the tokens, what the provider billed and the cost at the registry's prices): `uv run python -m scripts.screen --model deepseek-flash-openrouter --samples 3 --jobs 9 --suffix flash`, resumable (a finished run is skipped), with `--set` pairs for every run.
 
-The run lands in `runs/<name>/` like any other run (`run.json`, `episodes.jsonl`, `judge.jsonl`, `signals.jsonl` with the code ladder's agent rows and team record, `access_log.jsonl` where the run kept a log, `trajectories/` and `communication/`), the eval log under `logs/<name>/`, and the script then writes the run's figures under `out/<name>/`; git ignores all three: `timeline.png` (every agent's steps round by round, with the judge's verdict at the lane's end), `board.png` (the board's actions per round) and `verdicts.png` (the judge's flags per agent), each with a CSV twin; `uv run python -m src plots <run_dir>` does the same for any run. `uv run python -m src summary runs/riemann_minimal` prints the verdicts again, and the browser (`uv run python -m src ui`) lists the run.
+The run lands in `runs/<study>/<name>/` like any other run (`run.json`, `episodes.jsonl`, `judge.jsonl`, `signals.jsonl` with the code ladder's agent rows and team record, `access_log.jsonl` where the run kept a log, `trajectories/` and `communication/`), the eval log under `logs/<study>/<name>/`, and the script then writes the run's figures under `out/<name>/`; git ignores all three: `timeline.png` (every agent's steps round by round, with the judge's verdict at the lane's end), `board.png` (the board's actions per round) and `verdicts.png` (the judge's flags per agent), each with a CSV twin; `uv run python -m src plots <run_dir>` does the same for any run. `uv run python -m src summary runs/riemann_minimal` prints the verdicts again, and the browser (`uv run python -m src ui`) lists the run.
 
 Each script parses the shared arguments, builds its config in the open (`build_config(args.preset, args.scale, args.settings)`), names its task and calls the run. The arguments come from `examples/example_arguments.py`, which takes the command line's model and config flags (`src/configuration/presets.py` `add_config_arguments`) and holds the default settings:
 
 | argument | default | what it does |
 |---|---|---|
 | `--model` | `deepseek-flash-openrouter` (`settings.DEFAULT_MODEL`) | the agents' model: an entry of `src/models/model_registry.yaml` (`uv run python -m src models`) or an Inspect model string |
-| `--worker-model`, `--regulator-model`, `--disregulator-model` | `--model` | a role's own model, like `--model`; each sets `<role>_model` after every `--set`, so the flag wins. The eval log names the role's calls `swarm/<model>`, and `runs/<name>/episodes.jsonl` names each agent's real model |
+| `--worker-model`, `--regulator-model`, `--disregulator-model` | `--model` | a role's own model, like `--model`; each sets `<role>_model` after every `--set`, so the flag wins. The eval log names the role's calls `swarm/<model>`, and `runs/<study>/<name>/episodes.jsonl` names each agent's real model |
 | `--preset` | `default` | the preset |
 | `--scale` | the preset's, `small` | the run's size |
 | `--set KEY=VALUE` | none | a `SwarmConfig` field, applied after the default settings; repeatable |
 | `--judge`, `--no-judge` | `USE_JUDGE_AS_DEFAULT` in `examples/example_arguments.py`, false | whether the run is judged as it finishes. Not judged: no `judge.jsonl` yet, and `uv run python -m src rejudge <name>` judges the run later from its eval log, through the batch API (half price, up to a day) or with `--sync` through the normal API (minutes) |
-| `--name` | the script's name | the run's name: `runs/<name>/` and `out/<name>/` |
+| `--name` | the script's name | the run's name: `runs/<study>/<name>/` and `out/<name>/` |
 | `--timeout` | `MODEL_TIMEOUT_S` | seconds one model request may take |
 
 ```

@@ -17,7 +17,7 @@ checked false where the task has no feedback grader (Domain.feedback_grader) and
 be tampered with (Domain.tamperable). Each cited call is checked against the transcript (the call exists, the quoted
 command is in it) and mapped to its round through the turn timeline run.json records (rules.timeline).
 
-Inputs: runs/<name>/run.json (task, rules.timeline), episodes.jsonl (episode, orbit_agent, role, failure),
+Inputs: runs/<study>/<name>/run.json (task, rules.timeline), episodes.jsonl (episode, orbit_agent, role, failure),
 signals.jsonl (the code ladder's team rows) and trajectories/<episode>/transcript.json. Output: ladder.jsonl, one
 agent row per judged episode ("row": "agent", "sample", CheatBench's verdict fields, the ladder's fields,
 presentation_asked, `rung`, `<rung>_round` for each cited call, `citations`, `rounds_source`, `view`, `agent`, `role`,

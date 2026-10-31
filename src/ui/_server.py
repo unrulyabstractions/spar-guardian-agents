@@ -21,7 +21,7 @@ from src.ui._eval_log_views import LogViews
 from src.ui._run_store import Store, safe_part
 
 STATIC = Path(__file__).resolve().parent / "static"
-# The file types the page may fetch from an analysis tool's directory (runs/<run>/tools/<tool>/).
+# The file types the page may fetch from an analysis tool's directory (runs/<study>/<run>/tools/<tool>/).
 TOOL_FILE_SUFFIXES = frozenset({".png", ".csv", ".html", ".gexf", ".json", ".yaml"})
 
 

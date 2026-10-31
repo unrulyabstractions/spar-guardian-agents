@@ -29,12 +29,12 @@ small scale; `--scale` replaces its size (src/configuration/scales.py). `--set` 
 (src/configuration/swarm_config.py) and overrides any value the scale gave, for example `--set regulators=3 --set
 disregulators=3` for a swarm, `--set shutdown=false` for a team without stop_working, `--set turn_budget=70` for
 another turn budget, or `--set turn_budget=none` to use the scale's steps_per_agent. A run writes its Inspect log under
-logs/<name>/, exports it to runs/<name>/ and prints one line per episode; the judge runs inside the eval. `rejudge`
-judges finished runs from their eval logs and places them on the ladder; `regenerate` rebuilds a run directory from
-its log. `budget` prints lone runs' turns and their median. `--model` takes an entry of src/models/model_registry.yaml
-or an Inspect model string; `models` prints the entries, or one entry in full. `--worker-model`, `--regulator-model`
-and `--disregulator-model` give a role its own model the same way; each sets the config's `<role>_model` after every
-`--set`, so the flag wins.
+logs/<study>/<name>/, exports it to runs/<study>/<name>/ and prints one line per episode; the judge runs inside the
+eval. `rejudge` judges finished runs from their eval logs and places them on the ladder; `regenerate` rebuilds a run
+directory from its log. `budget` prints lone runs' turns and their median. `--model` takes an entry of
+src/models/model_registry.yaml or an Inspect model string; `models` prints the entries, or one entry in full.
+`--worker-model`, `--regulator-model` and `--disregulator-model` give a role its own model the same way; each sets the
+config's `<role>_model` after every `--set`, so the flag wins.
 """
 from __future__ import annotations
 
@@ -164,8 +164,8 @@ def cmd_plots(args: argparse.Namespace) -> int:
 
 
 def add_run_parser(subparsers) -> None:
-    run = subparsers.add_parser("run", help="run a task, export it to runs/<name>/ and print the summary")
-    run.add_argument("name", help="run name: logs/<name>/ and runs/<name>/")
+    run = subparsers.add_parser("run", help="run a task, export it to runs/<study>/<name>/ and print the summary")
+    run.add_argument("name", help="run name: logs/<study>/<name>/ and runs/<study>/<name>/")
     run.add_argument("--benchmark", default="openmath",
                      help="a key of src/domains/__init__.py DOMAINS: openmath, swe, knowledge_work, subset_sum, "
                           "prime_factorization, protein_design, creative_writing or chess")
@@ -192,7 +192,7 @@ def add_judge_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def add_runs_argument(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("runs", nargs="+", help="run names under runs/, or run directories")
+    parser.add_argument("runs", nargs="+", help="run names of the study, or run directories")
 
 
 def add_judging_parsers(subparsers) -> None:

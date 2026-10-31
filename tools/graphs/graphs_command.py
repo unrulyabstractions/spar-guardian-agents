@@ -1,5 +1,5 @@
 """`python -m tools graph <run>... [--layout circular|spring]`: the run's read and oversight graph, its onset metrics,
-and a Gephi export, written under runs/<name>/tools/graphs/."""
+and a Gephi export, written under runs/<study>/<name>/tools/graphs/."""
 from __future__ import annotations
 
 import argparse
@@ -28,7 +28,7 @@ MISSING = -1
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("runs", nargs="+", help="run names under runs/ or run directories")
+    parser.add_argument("runs", nargs="+", help="run names of the study or run directories")
     parser.add_argument("--layout", choices=LAYOUTS, default="circular",
                         help="graph.png's layout: agents on a ring in order, or a spring layout seeded at 0")
 

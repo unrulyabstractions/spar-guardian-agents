@@ -46,7 +46,7 @@ EVAL_LOG_NOTE = ("The eval log holds one sample for the whole swarm, so each sca
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
     """The runs, whether to run hawk, the model, the scanners and where their transcripts come from."""
-    parser.add_argument("runs", nargs="+", help="run names under runs/ or run directories")
+    parser.add_argument("runs", nargs="+", help="run names of the study or run directories")
     parser.add_argument("--run", action="store_true", help="run `hawk local scan` and record the outcome")
     parser.add_argument("--direct", action="store_true", help="pass --direct: install into the uvx environment")
     parser.add_argument("--model", default=JUDGE_MODEL, help="the scanners' model: registry entry or Inspect string")

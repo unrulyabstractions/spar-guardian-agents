@@ -13,7 +13,7 @@ engagement, board_posts, n_board_posts, ended_by, usage and score, next to the c
 --board each run also gets one AgentRun of kind "board": a system message naming the roster, then one user message
 per post, labelled with sender, role, board number and round.
 
-Outputs under runs/<name>/tools/docent/:
+Outputs under runs/<study>/<name>/tools/docent/:
     agent_runs.json  the AgentRuns as model_dump(mode="json") gives them, in upload order
     summary.json     {tool, run, written_at,
                       dry_run: bool, board: bool, n_agent_runs: int, agent_runs_file: "agent_runs.json",

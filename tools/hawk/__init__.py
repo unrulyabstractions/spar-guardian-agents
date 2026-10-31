@@ -1,15 +1,15 @@
 """The hawk tool: our Inspect Scout scanners run by Hawk (METR's eval platform) as a local scan.
 
-`python -m tools hawk <run>...` writes runs/<name>/tools/hawk/scan.yaml for each run and prints the
+`python -m tools hawk <run>...` writes runs/<study>/<name>/tools/hawk/scan.yaml for each run and prints the
 `hawk local scan` command; `--run` runs it in that directory, so Hawk's results land under results/. The scan reads
-the run's per-agent Scout transcripts database (runs/<name>/tools/scout/transcripts, else one built under
+the run's per-agent Scout transcripts database (runs/<study>/<name>/tools/scout/transcripts, else one built under
 tools/hawk/transcripts), or with `--source eval_log` the eval log's directory. Hawk reaches our scanners through the
 shim distribution in scanner_package/.
 
 summary.json, beside tool, run and written_at:
     config: str             the scan.yaml path
     command: str            the hawk command line, run from cwd
-    cwd: str                runs/<name>/tools/hawk
+    cwd: str                runs/<study>/<name>/tools/hawk
     ran: bool               whether --run ran it
     returncode: int | None  hawk's exit code (124 on our timeout); None when not run
     stdout_tail: [str]      the last lines of hawk's stdout and stderr

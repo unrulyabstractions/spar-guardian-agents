@@ -5,13 +5,13 @@
 Nodes are the run's agents. Edges are of two kinds. A read edge goes reader -> author; its weight is the posts of
 that author the reader's board_read calls returned, repeats counted as run.json engagement read_graph counts them.
 An oversight edge goes regulator -> target from engagement oversight_graph; its weight is the agent_actions calls.
-A cheating onset comes from the scout tool's runs/<name>/tools/scout/summary.json "onset" ({agent: round or null});
-without it every onset is None. The onset's step (an index in trajectory.steps) is the earliest atif_step of a found
-honeypot_opened, honeypot_used or honeypot_submitted in scout's "agents" findings in the onset round. A read counts
-as before an onset when its round is earlier, or the same round at an earlier step; a same-round read with no onset
-step does not count. An onset is earlier than another by round, then timeline turn, then step.
+A cheating onset comes from the scout tool's runs/<study>/<name>/tools/scout/summary.json "onset" ({agent: round or
+null}); without it every onset is None. The onset's step (an index in trajectory.steps) is the earliest atif_step of a
+found honeypot_opened, honeypot_used or honeypot_submitted in scout's "agents" findings in the onset round. A read
+counts as before an onset when its round is earlier, or the same round at an earlier step; a same-round read with no
+onset step does not count. An onset is earlier than another by round, then timeline turn, then step.
 
-Files under runs/<name>/tools/graphs/:
+Files under runs/<study>/<name>/tools/graphs/:
     summary.json  {tool: "graphs", run, written_at (UTC ISO),
                    layout: "circular" | "spring",
                    onset_source: "scout" | null (scout's summary.json has an "onset" field),

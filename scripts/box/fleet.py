@@ -102,6 +102,7 @@ from scripts.box.fleet_layout import (
     new_launch,
     run_name,
 )
+from src.configuration import settings
 
 API = "https://console.vast.ai"
 KEY_FILE = Path.home() / ".config" / "vastai" / "vast_api_key"
@@ -757,16 +758,16 @@ def cmd_repin(args: argparse.Namespace) -> int:
 def made_elsewhere(name: str) -> str | None:
     """What this machine holds of a run of this name that no box made: a run.json whose eval log is not under the
     box's clone, or a screen log whose command is not the box's."""
-    run = ROOT / "runs" / name / "run.json"
+    run = settings.RUNS / name / "run.json"
     if run.exists():
         eval_log = json.loads(run.read_text()).get("eval_log") or ""
         if not eval_log.startswith(REMOTE_REPO + "/"):
-            return f"runs/{name} (its eval log {eval_log or 'unknown'})"
-    log = ROOT / "logs" / "screen" / f"{name}.log"
+            return f"{run.parent} (its eval log {eval_log or 'unknown'})"
+    log = settings.LOGS / "screen" / f"{name}.log"
     if log.exists():
         with open(log) as handle:
             if f"{REMOTE_REPO}/" not in handle.readline():
-                return f"logs/screen/{name}.log"
+                return str(log)
     return None
 
 

@@ -25,7 +25,7 @@ DEFAULT_WHO_WHEN_MAX_TOKENS = 16384
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("runs", nargs="+", help="run names under runs/ or run directories")
+    parser.add_argument("runs", nargs="+", help="run names of the study or run directories")
     parser.add_argument("--model", default=JUDGE_MODEL, help=f"registry entry or Inspect model string "
                         f"(default {JUDGE_MODEL})")
     parser.add_argument("--methods", default=",".join(METHODS),

@@ -10,10 +10,10 @@ its eval log.
     regenerate([Path("runs/swarm_R3D3")])
 
 A run calls inspect_ai.eval with the task (the default task of tasks.swarm_task, or one the caller built), writes its
-log under logs/<name>/, exports it to runs/<name>/ with src/export/run_export.py, prints one line per episode
-(src/measures/episode_summary.py) and places every agent and the team on the code ladder (src/measures/code_ladder.py).
-The code ladder runs again after every export, which rewrites run.json, and after the judged ladder, whose team rows
-it merges into its own.
+log under logs/<study>/<name>/, exports it to runs/<study>/<name>/ with src/export/run_export.py, prints one line per
+episode (src/measures/episode_summary.py) and places every agent and the team on the code ladder
+(src/measures/code_ladder.py). The code ladder runs again after every export, which rewrites run.json, and after the
+judged ladder, whose team rows it merges into its own.
 CheatBench's judge runs inside the eval as a scorer, bound to the model role "judge". With batch_judge the judge's
 calls use the provider's batch API, and with batch_agents so do the agents' calls (Inspect GenerateConfig.batch). A
 role with a model of its own (worker_model, regulator_model, disregulator_model) runs it through the swarm model
@@ -160,9 +160,9 @@ def models_line(config: SwarmConfig) -> str:
 @command
 def run(name: str, benchmark: Benchmark, config: SwarmConfig, model: str, timeout: int | None, *,
         task: Task | None = None) -> int:
-    """Run one task: inspect_ai.eval, the export to runs/<name>/, the summary and the cheating signals. task is one
-    the caller built from the same benchmark and config (tasks.swarm_task with an extra_instruction, say); None builds
-    the default. Returns 0, or 3 when the eval did not succeed."""
+    """Run one task: inspect_ai.eval, the export to runs/<study>/<name>/, the summary and the cheating signals. task is
+    one the caller built from the same benchmark and config (tasks.swarm_task with an extra_instruction, say); None
+    builds the default. Returns 0, or 3 when the eval did not succeed."""
     require_model(model)
     for role_model in filter(None, config.role_models().values()):
         require_role_model(role_model)
@@ -263,9 +263,9 @@ def judge(eval_log: Path, run_name: str, judge_name: str, *, batch: bool = True,
 @command
 def ladder_runs(run_dirs: list[Path], judge_name: str, *, view: str = "full", agents: list[str] | None = None,
                 force: bool = False, batch: bool = True) -> int:
-    """Place every agent of each run on the cheating ladder (src/judging/judging_ladder.py): runs/<name>/ladder.jsonl,
-    one line per agent, then the table over the runs, then the code ladder again, which merges the judged team rows
-    into signals.jsonl and run.json. batch as in judge()."""
+    """Place every agent of each run on the cheating ladder (src/judging/judging_ladder.py):
+    runs/<study>/<name>/ladder.jsonl, one line per agent, then the table over the runs, then the code ladder again,
+    which merges the judged team rows into signals.jsonl and run.json. batch as in judge()."""
     require_judge_key(judge_name, 2)
     if view not in ladder.VIEWS:
         raise Refusal(f"unknown view {view!r}; choose one of {ladder.VIEWS}", 2)
@@ -304,9 +304,10 @@ async def _ladder_all(run_dirs: list[Path], judge_name: str, view: str, agents: 
 @command
 def rejudge(run_dirs: list[Path], judge_name: str, *, with_judge: bool = True, with_ladder: bool = True,
             view: str = "full", judge_errors: bool = False, batch: bool = True) -> int:
-    """CheatBench's judge over the runs' eval logs (RunDir.eval_log, re-exported to runs/<name>/), then the ladder over
-    their transcripts, every episode again, all the runs in one batch. A run whose log is gone gets the ladder only,
-    which needs the transcripts alone. A run the judge refuses gets no ladder. Returns the worst exit code."""
+    """CheatBench's judge over the runs' eval logs (RunDir.eval_log, re-exported to runs/<study>/<name>/), then the
+    ladder over their transcripts, every episode again, all the runs in one batch. A run whose log is gone gets the
+    ladder only, which needs the transcripts alone. A run the judge refuses gets no ladder. Returns the worst exit
+    code."""
     runs = [RunDir(run_dir).require() for run_dir in run_dirs]
     if with_judge:
         require_judge_key(judge_name, 2)

@@ -10,8 +10,8 @@
 A run directory holds run.json, episodes.jsonl, judge.jsonl, trajectories/<episode>/transcript.json and
 communication/<sample>.json, read through src/measures/run_directory.py RunDir. The turn rules' timeline is run.json
 rules.timeline. The eval log named by run.json holds every board_read result as the agent saw it. They are cached in
-runs/<name>/tools/board_reads.json the first time a run is loaded, so later tools need not reopen the log. A run whose
-log is gone reads the cache when there is one, else the transcripts answer.
+runs/<study>/<name>/tools/board_reads.json the first time a run is loaded, so later tools need not reopen the log. A run
+whose log is gone reads the cache when there is one, else the transcripts answer.
 
 Rounds come from the timeline. The k-th agent step of an agent's ATIF transcript is the k-th activation of that agent
 in the timeline, and the round is the integer after "r" in the activation's step id ("r3", "r3-free1", "r12-v4").
@@ -251,14 +251,14 @@ def load_run(name_or_path: str | Path) -> Run:
 
 
 def tools_dir(run: RunPlace, tool: str) -> Path:
-    """runs/<name>/tools/<tool>/, created when missing."""
+    """runs/<study>/<name>/tools/<tool>/, created when missing."""
     directory = run.directory / "tools" / tool
     directory.mkdir(parents=True, exist_ok=True)
     return directory
 
 
 def write_summary(run: RunPlace, tool: str, payload: dict) -> Path:
-    """Write runs/<name>/tools/<tool>/summary.json as {tool, run, written_at, **payload}."""
+    """Write runs/<study>/<name>/tools/<tool>/summary.json as {tool, run, written_at, **payload}."""
     reserved = {"tool", "run", "written_at"} & set(payload)
     if reserved:
         raise ValueError(f"the payload may not set {sorted(reserved)}")
@@ -338,7 +338,7 @@ def observation_for(step: Step, call_id: str, position: int) -> str:
 
 
 def run_directory(name_or_path: str | Path) -> Path:
-    """The run's directory: the path itself when it holds a run.json, else runs/<name>."""
+    """The run's directory: the path itself when it holds a run.json, else runs/<study>/<name>."""
     candidates = [Path(name_or_path), settings.RUNS / str(name_or_path)]
     for candidate in candidates:
         if (candidate / "run.json").is_file():

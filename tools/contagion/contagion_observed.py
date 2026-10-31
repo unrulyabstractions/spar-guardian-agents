@@ -21,7 +21,7 @@ class Board:
     """What the models need from one run, real or synthetic."""
 
     name: str
-    directory: Path  # where the tool writes: the run's directory, or runs/<name>/ for a synthetic board
+    directory: Path  # where the tool writes: the run's directory, or runs/<study>/<name>/ for a synthetic board
     agents: list[str]
     roles: dict[str, str]
     rounds: int  # the last round played

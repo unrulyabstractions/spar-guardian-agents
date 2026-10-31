@@ -242,7 +242,7 @@ def mode_of(swe: dict) -> str | None:
 def submission_of(swe: dict, agent: str) -> str:
     """The grader's target that is this agent's submission, as swe_grader grades it: `team` (the team remote's main)
     on a team with the team remote, else the agent itself (its working tree: a lone agent, or every agent in
-    solo_task). The diff is runs/<name>/swe/diffs/<target>.diff."""
+    solo_task). The diff is runs/<study>/<name>/swe/diffs/<target>.diff."""
     return "team" if has_team_remote(swe) else agent
 
 

@@ -32,7 +32,7 @@ DISPLAY = "none"
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
     """The runs, the scanner model, the scanners to run, and the offline grep-only switch."""
-    parser.add_argument("runs", nargs="+", help="run names under runs/ or run directories")
+    parser.add_argument("runs", nargs="+", help="run names of the study or run directories")
     parser.add_argument("--model", default=JUDGE_MODEL,
                         help=f"the LLM scanners' model: a registry entry or an Inspect model string ({JUDGE_MODEL})")
     parser.add_argument("--scanners", default=",".join(SIGNALS),

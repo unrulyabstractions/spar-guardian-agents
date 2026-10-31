@@ -22,7 +22,7 @@ marker, fresh, and makes a verified read-only snapshot of the manifest's local c
 the same ssh config, comparing checksums: the outputs into this repository with --update, as watch.sh does, so a newer
 local file is never overwritten, then the outputs still different into logs/boxes/<id>/conflicts/; the rest into
 logs/boxes/<id>/files/. It then sweeps the box again and holds the new sweep to the same rules. Files under a box run's
-runs/<name>/ or out/<name>/ that the box does not have are listed as local only; they do not fail the check.
+runs/<study>/<name>/ or out/<name>/ that the box does not have are listed as local only; they do not fail the check.
 
 baseline records the sweep of the box's home and /tmp before box_setup.sh changes anything. It runs once per box: a
 later call keeps the first, and a box that already holds the clone or the setup's logs is refused (exit 3), since its
@@ -273,17 +273,19 @@ def compare(lines: list[dict], locals_for: Callable[[str], list[Path]], baseline
 
 
 def local_only(lines: list[dict]) -> list[str]:
-    """Files under a box run's runs/<name>/ or out/<name>/ here that the box does not have: an earlier export's
+    """Files under a box run's runs/<study>/<name>/ or out/<name>/ here that the box does not have: an earlier export's
     leftovers, or what this machine added (a judge, a figure)."""
     on_box = {line.get("file") or line.get("link") or line.get("outside_link") for line in lines}
     folders = set()
     for path in filter(None, on_box):
         parts = (output_rel(path) or "").split("/")
-        if len(parts) >= 3 and parts[0] in ("runs", "out"):
-            folders.add((parts[0], parts[1]))
+        if parts[0] == "runs" and len(parts) >= 4:
+            folders.add(tuple(parts[:3]))
+        elif parts[0] == "out" and len(parts) >= 3:
+            folders.add(tuple(parts[:2]))
     extras = []
-    for top, name in sorted(folders):
-        for dirpath, _, filenames in os.walk(ROOT / top / name):
+    for folder in sorted(folders):
+        for dirpath, _, filenames in os.walk(ROOT.joinpath(*folder)):
             for filename in filenames:
                 rel = (Path(dirpath) / filename).relative_to(ROOT).as_posix()
                 if f"{REMOTE_REPO}/{rel}" not in on_box:

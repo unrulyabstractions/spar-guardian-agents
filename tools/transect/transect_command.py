@@ -1,5 +1,5 @@
 """`python -m tools transect <run>... [--judge ENTRY] [--structural]`: Transect reports of a run, one per agent,
-written under runs/<name>/tools/transect/."""
+written under runs/<study>/<name>/tools/transect/."""
 from __future__ import annotations
 
 import argparse
@@ -24,7 +24,7 @@ DIGEST = DigestSettings(text_chars=300, tool_call_chars=400, tool_result_chars=3
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("runs", nargs="+", help="run names under runs/ or run directories")
+    parser.add_argument("runs", nargs="+", help="run names of the study or run directories")
     parser.add_argument("--judge", default=None, metavar="ENTRY",
                         help=f"the phase judge: a model_registry.yaml entry or an Inspect string "
                              f"(default {JUDGE_MODEL})")

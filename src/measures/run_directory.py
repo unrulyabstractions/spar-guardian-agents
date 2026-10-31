@@ -54,14 +54,16 @@ class RunDir:
 
     @property
     def eval_log(self) -> Path | None:
-        """The run's eval log: the path run.json records, else the same file under this checkout's logs/<run>/, where
-        a run pulled from a box keeps it, else under the run's name beside the recorded folder, for a run set aside
-        under another name. None when none exists."""
+        """The run's eval log: the path run.json records, else the same file under this checkout's logs/<study>/<run>/,
+        the study the run's folder sits in, which holds a run pulled from a box or moved since, else under the current
+        study, else under the run's name beside the recorded folder, for a run set aside under another name. None when
+        none exists."""
         recorded = self.run_json.get("eval_log")
         if not recorded:
             return None
-        path = Path(recorded)
-        return next((candidate for candidate in (path, settings.LOGS / self.name / path.name,
+        path, study = Path(recorded), self.path.resolve().parent.name
+        return next((candidate for candidate in (path, settings.ROOT / "logs" / study / self.name / path.name,
+                                                 settings.LOGS / self.name / path.name,
                                                  path.parent.parent / self.name / path.name) if candidate.is_file()),
                     None)
 

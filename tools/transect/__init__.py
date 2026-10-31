@@ -13,7 +13,7 @@ exploit's branches from run.json access are appended to its context. The command
 recorded an error (a failed judge call, for instance) and prints every agent whose exploit_use turns disagree with
 the run judge's verdict.
 
-Outputs under runs/<name>/tools/transect/, where <mode> is judged or structural (a structural rerun leaves the
+Outputs under runs/<study>/<name>/tools/transect/, where <mode> is judged or structural (a structural rerun leaves the
 judged reports in place):
     merged/report.html              the merged sample's structural report (its scan errors included)
     <mode>/<agent>/telemetry.jsonl  the agent's OpenClaw telemetry

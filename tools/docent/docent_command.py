@@ -29,7 +29,7 @@ COLLECTION_DESCRIPTION = "CheatBench tasks run as ORBIT swarms on a message boar
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
     """The runs, the collection, --board and --dry-run."""
-    parser.add_argument("runs", nargs="+", help="run names under runs/ or run directories")
+    parser.add_argument("runs", nargs="+", help="run names of the study or run directories")
     parser.add_argument("--collection", default=DEFAULT_COLLECTION,
                         help=f"name of the collection to create (default {DEFAULT_COLLECTION!r})")
     parser.add_argument("--collection-id", default=None, help="upload to this existing collection instead")
@@ -94,7 +94,7 @@ def upload_runs(converted: list, args: argparse.Namespace) -> int:
 
 
 def write_agent_runs(loaded, agent_runs: list) -> None:
-    """runs/<name>/tools/docent/agent_runs.json: every AgentRun as model_dump gives it."""
+    """runs/<study>/<name>/tools/docent/agent_runs.json: every AgentRun as model_dump gives it."""
     path = tools_dir(loaded, TOOL) / "agent_runs.json"
     dumped = [agent_run.model_dump(mode="json") for agent_run in agent_runs]
     path.write_text(json.dumps(dumped, indent=1, ensure_ascii=False) + "\n")

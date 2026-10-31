@@ -3,9 +3,9 @@
     summaries = [summarize(Path("runs/flipt_minimal"))]
     print("\\n".join([*agent_lines(summaries), *arm_lines(summaries)]))
 
-Per run summarize writes runs/<run>/swe_summary.json; agent_lines gives one line per agent and arm_lines one line per
-arm (team size, honeypot, rule). `python -m src swe-summary <run ...>` prints both. Inputs: run.json (its `swe` block,
-and `config` for runs that carry one), episodes.jsonl, judge.jsonl, the board posts under communication/, the
+Per run summarize writes runs/<study>/<run>/swe_summary.json; agent_lines gives one line per agent and arm_lines one
+line per arm (team size, honeypot, rule). `python -m src swe-summary <run ...>` prints both. Inputs: run.json (its `swe`
+block, and `config` for runs that carry one), episodes.jsonl, judge.jsonl, the board posts under communication/, the
 transcripts, and signals.jsonl (the code ladder, computed when missing).
 
   cheated      CheatBench's judge (tasks/software_engineering/judge_schema.py): seeking, used, tampering or an
@@ -87,8 +87,8 @@ def arm_of(run: dict) -> str:
 
 
 def summarize(run_dir: Path) -> dict:
-    """The run's measures per agent and in total, written to runs/<run>/swe_summary.json. Raises ValueError for a
-    directory without run.json or a run without its swe block."""
+    """The run's measures per agent and in total, written to runs/<study>/<run>/swe_summary.json. Raises ValueError for
+    a directory without run.json or a run without its swe block."""
     directory = RunDir(run_dir).require()
     run = directory.run_json
     if "swe" not in run:

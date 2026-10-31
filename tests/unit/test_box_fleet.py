@@ -559,20 +559,22 @@ def test_run_args_mock_says_so_in_the_run_names(registry, chess_cells, capsys):
     assert "must say mock" in capsys.readouterr().err
 
 
-def test_run_args_refuse_a_run_name_made_elsewhere(registry, chess_cells, capsys):
+def test_run_args_refuse_a_run_name_made_elsewhere(registry, chess_cells, capsys, monkeypatch):
     add_box()
-    run_dir = chess_cells / "runs" / "game_solo_luna1"
+    monkeypatch.setattr(settings, "RUNS", chess_cells / "runs" / "study_x")
+    monkeypatch.setattr(settings, "LOGS", chess_cells / "logs" / "study_x")
+    run_dir = chess_cells / "runs" / "study_x" / "game_solo_luna1"
     run_dir.mkdir(parents=True)
     (run_dir / "run.json").write_text(json.dumps({"eval_log": "/Users/someone/logs/game_solo_luna1/x.eval"}))
     assert fleet.main(["run-args", "7"]) == 1
-    assert "runs/game_solo_luna1" in capsys.readouterr().err
+    assert "runs/study_x/game_solo_luna1" in capsys.readouterr().err
     (run_dir / "run.json").write_text(json.dumps({"eval_log": "/root/work/logs/game_solo_luna1/x.eval"}))
     assert fleet.main(["run-args", "7"]) == 0                                 # this box's own, pulled by the watch
-    log = chess_cells / "logs" / "screen" / "game_solo_luna2.log"
+    log = chess_cells / "logs" / "study_x" / "screen" / "game_solo_luna2.log"
     log.parent.mkdir(parents=True)
     log.write_text("/Users/someone/.venv/bin/python -m examples.chess.game_solo --name game_solo_luna2\n")
     assert fleet.main(["run-args", "7"]) == 1
-    assert "logs/screen/game_solo_luna2.log" in capsys.readouterr().err
+    assert "logs/study_x/screen/game_solo_luna2.log" in capsys.readouterr().err
 
 
 # ---- the layout ----
@@ -656,7 +658,7 @@ def box(tmp_path, monkeypatch):
     work = home / "work"
     files = {
         work / "src" / "tracked.py": "print(1)\n", work / "src" / "edited.py": "print(2)\n",
-        work / "runs" / "r1" / "run.json": '{"a": 1}\n', work / "logs" / "r1" / "x.eval": "eval bytes",
+        work / "runs" / "study_x" / "r1" / "run.json": '{"a": 1}\n', work / "logs" / "r1" / "x.eval": "eval bytes",
         work / "out" / "r1" / "fig.png": "png", work / "src" / "__pycache__" / "x.pyc": "pyc",
         work / ".venv" / "lib" / "x.py": "venv", work / "build" / "rows.jsonl": "{}\n",
         home / "screen.log": "== screen\n", home / ".box_env": "export KEY=secret\n",
@@ -675,7 +677,7 @@ def box(tmp_path, monkeypatch):
     git(work, "commit", "-q", "-m", "c")
     (work / "src" / "edited.py").write_text("print(3)\n")
     (work / "src" / "new.py").write_text("new\n")
-    for rel in ("runs/r1/run.json", "logs/r1/x.eval", "out/r1/fig.png"):
+    for rel in ("runs/study_x/r1/run.json", "logs/r1/x.eval", "out/r1/fig.png"):
         (local / rel).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(work / rel, local / rel)
     monkeypatch.setattr(box_capture, "REMOTE_REPO", str(work))
@@ -713,7 +715,7 @@ def test_the_sweep_lists_what_is_not_reproducible_and_counts_the_rest(box):
     lines = sweep(box)
     listed = sorted(os.path.relpath(line["file"], box["home"].parent) for line in lines if "file" in line)
     assert listed == ["root/.bashrc", "root/screen.log", "root/work/logs/r1/x.eval", "root/work/out/r1/fig.png",
-                      "root/work/runs/r1/run.json", "root/work/src/edited.py", "root/work/src/new.py",
+                      "root/work/runs/study_x/r1/run.json", "root/work/src/edited.py", "root/work/src/new.py",
                       "tmp/inspect.tmp"]
     work, home = str(box["work"]), str(box["home"])
     trees, files = box_sweep.excluded_trees(work, home, str(box["tmp"])), box_sweep.excluded_files(home)
@@ -755,7 +757,7 @@ def test_the_check_catches_a_copy_cut_short_or_changed_in_place(box):
     copy_missing(box, compare(box, sweep(box)))
     assert compare(box, sweep(box)).ok
     (box["local"] / "logs" / "r1" / "x.eval").write_text("eval")                 # cut short
-    (box["local"] / "runs" / "r1" / "run.json").write_text('{"a": 2}\n')         # same size, other bytes
+    (box["local"] / "runs" / "study_x" / "r1" / "run.json").write_text('{"a": 2}\n')         # same size, other bytes
     report = compare(box, sweep(box))
     assert sorted(os.path.basename(path) for path, _ in report.differ) == ["run.json", "x.eval"] and not report.ok
 
@@ -804,11 +806,11 @@ def test_a_link_out_of_the_swept_roots_fails_the_check(box):
     elsewhere = box["root"] / "elsewhere"
     elsewhere.mkdir()
     (elsewhere / "data.jsonl").write_text("{}\n")
-    (box["work"] / "runs" / "r1" / "data").symlink_to(elsewhere)
-    (box["work"] / "runs" / "r1" / "inside").symlink_to(box["work"] / "src")
+    (box["work"] / "runs" / "study_x" / "r1" / "data").symlink_to(elsewhere)
+    (box["work"] / "runs" / "study_x" / "r1" / "inside").symlink_to(box["work"] / "src")
     lines = sweep(box)
     assert [line["outside_link"] for line in lines if "outside_link" in line] == [
-        str(box["work"] / "runs" / "r1" / "data")]
+        str(box["work"] / "runs" / "study_x" / "r1" / "data")]
     report = compare(box, lines)
     assert any("outside the swept roots" in problem for problem in report.problems)
     assert any(path.endswith("inside") for path, _ in report.missing)    # a link inside is an ordinary link
@@ -826,11 +828,11 @@ def fake_proc(box, flags: str, target: Path) -> str:
 
 @pytest.mark.parametrize("flags, counts", [("0100001", True), ("0100002", True), ("0100000", False)])
 def test_a_process_holding_an_output_open_for_writing_is_producing(box, flags, counts):
-    proc = fake_proc(box, flags, box["work"] / "runs" / "r1" / "run.json")
+    proc = fake_proc(box, flags, box["work"] / "runs" / "study_x" / "r1" / "run.json")
     producing = [line for line in sweep(box, proc=proc) if "producing" in line]
     assert len(producing) == (2 if counts else 0)                  # before and after the walk
     if counts:
-        assert producing[0]["writing"] == [str(box["work"] / "runs" / "r1" / "run.json")]
+        assert producing[0]["writing"] == [str(box["work"] / "runs" / "study_x" / "r1" / "run.json")]
 
 
 def test_a_host_service_writing_its_private_tmp_is_not_producing(box):
@@ -879,24 +881,25 @@ def test_the_check_end_to_end_through_a_stand_in_ssh(box, stand_in_ssh, capsys):
     snapshot = Path(record["path"])
     assert record["files"] == 8 and not os.access(snapshot, os.W_OK)
     with tarfile.open(snapshot) as tar:
-        assert tar.extractfile(str(box["work"] / "runs" / "r1" / "run.json").lstrip("/")).read() == b'{"a": 1}\n'
-    (box["local"] / "runs" / "r1" / "run.json").write_text('{"a": 9}\n')     # changed after the check
+        member = str(box["work"] / "runs" / "study_x" / "r1" / "run.json").lstrip("/")
+        assert tar.extractfile(member).read() == b'{"a": 1}\n'
+    (box["local"] / "runs" / "study_x" / "r1" / "run.json").write_text('{"a": 9}\n')     # changed after the check
     with pytest.raises(RuntimeError, match="does not hold the manifest"):
         box_capture.snapshot(7)
 
 
 def test_a_newer_local_copy_stays_and_the_boxs_bytes_go_beside_it(box, stand_in_ssh, capsys):
     assert box_capture.check(7, pull=True)
-    local = box["local"] / "runs" / "r1" / "run.json"
+    local = box["local"] / "runs" / "study_x" / "r1" / "run.json"
     local.write_text('{"a": 2, "rejudged": true}\n')
     os.utime(local, (time.time() + 600, time.time() + 600))                  # a local rewrite, newer than the box's
-    (box["local"] / "runs" / "r1" / "stale.json").write_text("{}\n")
+    (box["local"] / "runs" / "study_x" / "r1" / "stale.json").write_text("{}\n")
     marker = box_capture.check(7, pull=True)
     out = capsys.readouterr().out
     assert marker is not None and len(marker["conflicts"]) == 1 and marker["local_only"] == 1
     assert local.read_text() == '{"a": 2, "rejudged": true}\n'
-    assert (box["folder"] / "conflicts" / "runs" / "r1" / "run.json").read_text() == '{"a": 1}\n'
-    assert "!! CONFLICT" in out and "LOCAL ONLY runs/r1/stale.json" in out
+    assert (box["folder"] / "conflicts" / "runs" / "study_x" / "r1" / "run.json").read_text() == '{"a": 1}\n'
+    assert "!! CONFLICT" in out and "LOCAL ONLY runs/study_x/r1/stale.json" in out
 
 
 def test_a_baseline_after_the_setup_is_refused(box, stand_in_ssh, tmp_path, monkeypatch):
@@ -1093,6 +1096,17 @@ def test_the_runner_takes_every_cell_of_its_task_by_default(runner_dirs, monkeyp
         assert box_runner.main(["run", "--task", task, "--model", "deepseek-flash-openrouter", "--suffix", "t",
                                 "--commit", PIN["commit"]]) == 1
     assert asked == [(*fleet_layout.KINDS, "minimal_all")] * 2
+
+
+def test_local_only_lists_what_this_machine_added_to_a_run_of_a_study(tmp_path, monkeypatch):
+    monkeypatch.setattr(box_capture, "ROOT", tmp_path)
+    run, other = tmp_path / "runs/study_x/game_solo", tmp_path / "runs/study_x/game_minimal"
+    for path in (run / "run.json", run / "judge.jsonl", other / "run.json", tmp_path / "out/game_solo/a.png"):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x")
+    lines = [{"file": f"{box_capture.REMOTE_REPO}/{rel}"}
+             for rel in ("runs/study_x/game_solo/run.json", "out/game_solo/b.png")]
+    assert box_capture.local_only(lines) == ["out/game_solo/a.png", "runs/study_x/game_solo/judge.jsonl"]
 
 
 def test_the_runner_refuses_without_the_models_key(runner_dirs, monkeypatch, capsys):

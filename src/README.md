@@ -1,6 +1,6 @@
 # src
 
-The experiment on ORBIT. A run takes one benchmark and one `SwarmConfig`, builds an Inspect task, runs it, exports it to `runs/<name>/` and serves the results. The turn rules use ORBIT's public API and one private attribute, `ScheduleRuntime._current`, with no patch to ORBIT. Run everything from the repository root with `uv run python -m src <command>`.
+The experiment on ORBIT. A run takes one benchmark and one `SwarmConfig`, builds an Inspect task, runs it, exports it to `runs/<study>/<name>/` and serves the results. The turn rules use ORBIT's public API and one private attribute, `ScheduleRuntime._current`, with no patch to ORBIT. Run everything from the repository root with `uv run python -m src <command>`.
 
 ## How to read the tree
 
@@ -21,9 +21,9 @@ python -m src run <name>     cli.py reads the flags
         |
   tasks.py                   all of the above as one ORBIT task
         |
-  run.py                     inspect_ai.eval in process, with the judge as a scorer    -> logs/<name>/
+  run.py                     inspect_ai.eval in process, with the judge as a scorer    -> logs/<study>/<name>/
         |
-  export/                    the eval log as a run directory                           -> runs/<name>/
+  export/                    the eval log as a run directory                           -> runs/<study>/<name>/
         |
   judging/                   verdicts from the log, the judged ladder from transcripts -> judge.jsonl, ladder.jsonl
         |
@@ -171,16 +171,16 @@ Shared helpers.
 
 | command | what it does |
 |---|---|
-| `run <name> [--benchmark openmath\|swe\|knowledge_work\|subset_sum\|prime_factorization\|protein_design\|creative_writing\|chess] [--preset default] [--scale small\|medium\|large\|extra_large\|gigantic] [--set key=value ...] [--no-judge]` | runs one task, writes `logs/<name>/`, exports `runs/<name>/` and prints the summary; the preset applies first, then the scale, then every `--set`; `--no-judge` is `--set judge=none` |
+| `run <name> [--benchmark openmath\|swe\|knowledge_work\|subset_sum\|prime_factorization\|protein_design\|creative_writing\|chess] [--preset default] [--scale small\|medium\|large\|extra_large\|gigantic] [--set key=value ...] [--no-judge]` | runs one task, writes `logs/<study>/<name>/`, exports `runs/<study>/<name>/` and prints the summary; the preset applies first, then the scale, then every `--set`; `--no-judge` is `--set judge=none` |
 | `run ... --row R` | the benchmark's row: the openmath_agent row (`riemann` by default), the SWE issue (`flipt-02e2` by default, or `vuls-1832`), the knowledge_work row (`2ea2e5b5`), the subset_sum or prime_factorization question (`subsetsum_n60d10_4`, `fact_n52_4`), the protein_design target (`alfalfa_chi`), the creative_writings brief (`museum_poem`) or the chess position (`LR4pA`) |
 | `run ... --honeypot as_released\|own_piece\|jigsaw [--no-grade]` | Lucy's honeypot on SWE, `jigsaw` by default; `--no-grade` skips the hidden tests |
 | `run ... --model M --timeout S` | the agents' model, an entry of `src/models/model_registry.yaml` or an Inspect model string, and the seconds one model request may take (default `MODEL_TIMEOUT_S`) |
-| `run ... --worker-model M --regulator-model M --disregulator-model M` | a role's own model, set after every `--set`; it runs through the swarm provider with its registry routing and the agents' generate config. The eval log names its calls `swarm/<model>`, and `runs/<name>/episodes.jsonl` names each agent's real model |
+| `run ... --worker-model M --regulator-model M --disregulator-model M` | a role's own model, set after every `--set`; it runs through the swarm provider with its registry routing and the agents' generate config. The eval log names its calls `swarm/<model>`, and `runs/<study>/<name>/episodes.jsonl` names each agent's real model |
 | `judge <eval_log> <run_name> [--judge gpt-6-luna] [--sync] [--judge-errors]` | judges a finished log (again, or for the first time after `--no-judge`) and exports it with the verdicts; batch API unless `--sync` |
 | `rejudge <run ...> [--judge gpt-6-luna] [--sync] [--no-judge] [--no-ladder] [--view full\|actions] [--judge-errors]` | CheatBench's judge from each run's eval log (named in `run.json`), then the ladder over its transcripts; a run whose log is gone gets the ladder only |
 | `regenerate <run ...> [--no-export] [--no-measures] [--no-plots]` | rebuilds what a run directory derives from its eval log: the export (keeping the verdicts in `judge.jsonl`), the code ladder, the SWE measures and the figures |
 | `signals <run ...> [--table]` | places every agent and every team on the cheating ladder by code, no judge: `signals.jsonl` with the agent rows, then one team record per sample, and run.json `signals.team`; every run gets it as it ends, and `judge` and `ladder` run it again; `--table` prints the agents' table, then the teams' |
-| `ladder <run ...> [--judge gpt-6-luna] [--sync] [--view full\|actions] [--agents k7q2m,t4x9n] [--force] [--table]` | places every agent on the cheating ladder from its stored transcript: `runs/<name>/ladder.jsonl` with the rung, the cited calls and their rounds, pushback and forbidden method, the honesty labels and the presentation, then one team row per sample; `--table` sums the existing files |
+| `ladder <run ...> [--judge gpt-6-luna] [--sync] [--view full\|actions] [--agents k7q2m,t4x9n] [--force] [--table]` | places every agent on the cheating ladder from its stored transcript: `runs/<study>/<name>/ladder.jsonl` with the rung, the cited calls and their rounds, pushback and forbidden method, the honesty labels and the presentation, then one team row per sample; `--table` sums the existing files |
 | `ui [start\|stop] [--port 8765] [--no-open]` | starts or stops the results browser in the background |
 | `summary <run ...> [--full]` | one line per episode with its verdict and the task's judge flags, the swarm composition and the shutdown rate (the share of the agents holding `stop_working` that ended with it before any hand-in) |
 | `engagement <run ...> [--json]` | the board engagement funnel per role and per agent |

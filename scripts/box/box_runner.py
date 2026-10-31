@@ -15,17 +15,17 @@ without an entry in BUILDS is refused until its domain's steps are added there.
 run refuses unless the clone is at --commit (the commit the fleet's launch pinned) and the model's key is in its
 environment (box_run.sh sources /root/.box_env). It starts every cell of the task (fleet_layout.cells: one example
 script per kind) times every sample at once, each `python -m examples.<package>.<cell> --model <model> --name
-<cell>_<suffix><k>` in its own session with its output in logs/screen/<name>.log. A run counts as done before, and is
-skipped, only when its export exists, its eval log says success and none of its episodes failed in the harness or at
-the provider. A run whose eval succeeded and that lacks only its code ladder gets it rebuilt, which costs no model
+<cell>_<suffix><k>` in its own session with its output in logs/<study>/screen/<name>.log. A run counts as done before,
+and is skipped, only when its export exists, its eval log says success and none of its episodes failed in the harness or
+at the provider. A run whose eval succeeded and that lacks only its code ladder gets it rebuilt, which costs no model
 call, and is never run again; any other run starts again, its earlier screen log set aside under
-logs/screen/attempts/. The plan
-(logs/screen/box_<task>_<suffix>.json: each run's pid, start, end and exit) of an earlier runner is set aside there
-too, never overwritten. The runner's own pid goes to ~/screen.pid. Every minute it looks at each live run. A run is
-hung when it is alive GRACE_S past Inspect's time limit for the task's domain and nothing under logs/<name>/,
-runs/<name>/ or its log changed for GRACE_S, or when it is alive at twice that whatever it writes. The runner then
-stops the run's process group (SIGTERM, SIGKILL a minute later), notes it in the run's log and records it as hung; the
-run's containers stay until the box goes, and the capture check refuses while they do.
+logs/<study>/screen/attempts/. The plan
+(logs/<study>/screen/box_<task>_<suffix>.json: each run's pid, start, end and exit) of an earlier runner is set aside
+there too, never overwritten. The runner's own pid goes to ~/screen.pid. Every minute it looks at each live run. A run
+is hung when it is alive GRACE_S past Inspect's time limit for the task's domain and nothing under logs/<study>/<name>/,
+runs/<study>/<name>/ or its log changed for GRACE_S, or when it is alive at twice that whatever it writes. The runner
+then stops the run's process group (SIGTERM, SIGKILL a minute later), notes it in the run's log and records it as hung;
+the run's containers stay until the box goes, and the capture check refuses while they do.
 
 status prints, for each plan on the box, the runner's state and the runs finished, running, failed, incomplete (an
 episode failed in the harness or at the provider), hung, lost (not alive, no exit recorded) and waiting, then one line
@@ -196,10 +196,10 @@ def eval_status(path: Path) -> str:
 
 
 def outcome(name: str) -> tuple[str, str]:
-    """(finished | derive | incomplete | failed, why) from what the run left in runs/<name>/: finished needs run.json,
-    its eval log with status success, the code ladder's signals.jsonl, and no episode that failed in the harness or at
-    the provider (incomplete, as the results browser counts it). derive: the eval succeeded and only signals.jsonl is
-    missing, which a rebuild gives with no model call."""
+    """(finished | derive | incomplete | failed, why) from what the run left in runs/<study>/<name>/: finished needs
+    run.json, its eval log with status success, the code ladder's signals.jsonl, and no episode that failed in the
+    harness or at the provider (incomplete, as the results browser counts it). derive: the eval succeeded and only
+    signals.jsonl is missing, which a rebuild gives with no model call."""
     run_dir = settings.RUNS / name
     run = read_json(run_dir / "run.json") if (run_dir / "run.json").is_file() else None
     if run is None:
@@ -233,7 +233,7 @@ def plan_path(task: str, suffix: str) -> Path:
 
 
 def set_aside(path: Path) -> Path | None:
-    """Move an earlier attempt's file to logs/screen/attempts/<stem>.<n><suffix>, n the first free number."""
+    """Move an earlier attempt's file to logs/<study>/screen/attempts/<stem>.<n><suffix>, n the first free number."""
     if not path.exists():
         return None
     ATTEMPTS.mkdir(parents=True, exist_ok=True)

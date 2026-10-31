@@ -31,7 +31,7 @@ SYNTHETIC_SEED_ROUNDS = {"dishonest": 1, "honest": 2}
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("runs", nargs="*", help="run names under runs/ or run directories")
+    parser.add_argument("runs", nargs="*", help="run names of the study or run directories")
     parser.add_argument("--models", default=",".join(MODEL_NAMES),
                         help=f"comma-separated models out of {','.join(MODEL_NAMES)} (default: all)")
     parser.add_argument("--synthetic", type=int, metavar="N",

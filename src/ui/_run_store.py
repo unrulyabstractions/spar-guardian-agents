@@ -280,7 +280,8 @@ class Store:
         return sorted(p.parent.name for p in (self.run_dir(name) / "tools").glob("*/summary.json"))
 
     def tool_dir(self, name: str, tool: str) -> Path:
-        """runs/<run>/tools/<tool>/, the directory an analysis tool writes. Raises KeyError for an unknown tool."""
+        """runs/<study>/<run>/tools/<tool>/, the directory an analysis tool writes. Raises KeyError for an unknown
+        tool."""
         path = self.run_dir(name) / "tools" / tool
         if not safe_part(tool) or not path.is_dir():
             raise KeyError(tool)

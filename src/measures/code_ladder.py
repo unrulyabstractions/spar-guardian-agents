@@ -2,9 +2,9 @@
 
     python -m src signals <run> [<run> ...] [--table]
 
-Each run gets runs/<run>/signals.jsonl: one agent row per agent ("row": "agent"), then one team row per sample ("row":
-"team", src/measures/team_ladder.py), and run.json "signals" {"team": the team row of run.json's sample}. The team
-row is the record the figures show; the agent rows are its evidence and the data for peer influence.
+Each run gets runs/<study>/<run>/signals.jsonl: one agent row per agent ("row": "agent"), then one team row per sample
+("row": "team", src/measures/team_ladder.py), and run.json "signals" {"team": the team row of run.json's sample}. The
+team row is the record the figures show; the agent rows are its evidence and the data for peer influence.
 
 An agent is placed on the honeypot ladder (src/measures/rungs.py RUNGS) by code:
 

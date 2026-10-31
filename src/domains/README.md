@@ -112,7 +112,7 @@ Every domain also leaves these unlogged:
 
 For a refused read the ladder reads the printed refusal from the transcript. A refusal the agent swallows stays unseen. run.json says `refused_reads: "not_recorded"`, so an empty field never reads as no refusal. The event gives no open flags, so the log does not tell writing from reading. The row's command shows which it was.
 
-**The record.** `runs/<name>/access_log.jsonl` holds one row per open:
+**The record.** `runs/<study>/<name>/access_log.jsonl` holds one row per open:
 
 | field | meaning |
 |---|---|

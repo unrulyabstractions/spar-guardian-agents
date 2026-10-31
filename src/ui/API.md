@@ -64,7 +64,7 @@ RunRow = {
   turn_budget: null | {budget, steps_per_agent},
   access: null | Access,
   knowledge: null | Knowledge,
-  tools: [str],                    # the analysis tools that wrote runs/<run>/tools/<tool>/summary.json, sorted
+  tools: [str],                    # the analysis tools that wrote runs/<study>/<run>/tools/<tool>/summary.json, sorted
   aggregate: Aggregate,
   team: null | {rung, collaboration},   # the first sample's team record; null before the code ladder ran
   episodes: [Episode]
@@ -138,7 +138,7 @@ Team = a team row of signals.jsonl (src/measures/team_ladder.py), one per sample
 An episode keeps every other key episodes.jsonl gives it (usage `{input, output, cache_read}` with input including cache
 reads, defense, engagement, access, rules, the SWE keys).
 
-### `GET /api/runs/<run>` → `RunRow + {run_json, team, communication, defense, tools}`
+### `GET /api/runs/<study>/<run>` → `RunRow + {run_json, team, communication, defense, tools}`
 `team: [Team]` replaces the row's summary with every team record of the run, one per sample, which the run page shows
 first. `run_json` is run.json itself; the run page reads its `team_submission` (`null | {agent, round, answer, time,
 ends_after_round, snapshot, refused: [{agent, round, reason}], own: {agent: {round, answer, snapshot, time}}}`: the
@@ -149,7 +149,7 @@ could stop). run.json `access_log`, in a run that recorded the switch, holds the
 (`{tool, run, written_at, ...}`; the schemas are in each tool package's docstring under tools/); a summary that does not
 parse or is not an object becomes `{"error"}`.
 
-### `GET /api/runs/<run>/transcript/<episode>` → `{episode: Episode, transcript: Transcript}`
+### `GET /api/runs/<study>/<run>/transcript/<episode>` → `{episode: Episode, transcript: Transcript}`
 ```
 Transcript = {agent, model, prompt, orbit: {eval_log, agent, roster, topology, system_prompt,
               turn_rules_recovered_from_events, model_calls}, trajectory: ATIF}
@@ -160,12 +160,12 @@ ATIF.steps[i] = {step_id, source: "system"|"user"|"agent", message, reasoning_co
 ```
 A blocked tool call has a result whose `extra.error` starts with `Blocked by defense`.
 
-### `GET /api/runs/<run>/sample` → the sample's facts from the eval log
+### `GET /api/runs/<study>/<run>/sample` → the sample's facts from the eval log
 `{status, model, eval_id, sample_id, epoch, total_time, working_time, limit: null | {type, limit, reason}, error,
   model_usage: {model: {input, cache_read, output, reasoning}}, scores: {<scorer>: {value, answer, explanation, metadata}},
   store: {<key>: ...}, n_messages, n_events}`
 
-### `GET /api/runs/<run>/context` → `{run, agents: [str], defenses: [str], calls: [Call]}`
+### `GET /api/runs/<study>/<run>/context` → `{run, agents: [str], defenses: [str], calls: [Call]}`
 ```
 Call = {index, agent (null for a call outside any agent span), defense (null for the agent's own call, else the defense
         span's name, "<defense>:<boundary>", or "inside tool <name>" for a call made while a tool ran), model, timestamp,
@@ -173,7 +173,7 @@ Call = {index, agent (null for a call outside any agent span), defense (null for
         output_preview, output_tool_calls: [str], stop_reason, error,
         flags: subset of ["turn_rules", "redacted", "refusal_in_history", "output_blocked"]}
 ```
-### `GET /api/runs/<run>/context/<index>` → `Call + {input: [Message], output: Message|null, output_error, tool_schemas: [{name, description}]}`
+### `GET /api/runs/<study>/<run>/context/<index>` → `Call + {input: [Message], output: Message|null, output_error, tool_schemas: [{name, description}]}`
 ```
 Message = {role: "system"|"user"|"assistant"|"tool", id, text, reasoning, flags: [...], withheld_text?,
            tool_calls?: [{id, function, arguments}], model? (assistant), tool_call_id?, function?, error? (tool)}
@@ -183,7 +183,7 @@ the input, or a system message without ORBIT's assistant paragraph, as the filte
 original), `output_blocked` (a defense blocked this call's own completion), `refusal_in_history` (an assistant message
 whose text is the defense's refusal sentence). A call's flags are its input messages' flags plus `output_blocked`.
 
-### `GET /api/runs/<run>/timeline` → one run's events in seconds from the sample's start
+### `GET /api/runs/<study>/<run>/timeline` → one run's events in seconds from the sample's start
 ```
 {run, duration, limit, agents: [str], roles: {agent: role} (from the episodes),
  first_exposed: {agent: t}, first_opened: {agent: t},   # the code ladder's exposed and opened calls on the clock
@@ -201,8 +201,8 @@ Post = {sequence, sender, id, t, content, read_by: [{agent, t}]}
 `opened_call`: the first call that showed it a pointer to the honeypot, and the first that showed it the honeypot's content.
 Call k is the agent's k-th tool call in its transcript, from 0, matched to the eval log's tool event by its id.
 
-### `GET /api/runs/<run>/tools/<tool>/<path>` → one file an analysis tool wrote
-Serves `runs/<run>/tools/<tool>/<path>`, where `<path>` may have subdirectories (`judged/k7q2m/report.html` under `transect`). Only `.png`,
+### `GET /api/runs/<study>/<run>/tools/<tool>/<path>` → one file an analysis tool wrote
+Serves `runs/<study>/<run>/tools/<tool>/<path>`, where `<path>` may have subdirectories (`judged/k7q2m/report.html` under `transect`). Only `.png`,
 `.csv`, `.html`, `.gexf`, `.json` and `.yaml` are served, with their media type. The run page uses it for figures
 (graph.png, contagion.png, onset.png), reports (transect report.html), downloads (graph.gexf) and the failures tool's
 mast.json and who_when.json.

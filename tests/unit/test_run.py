@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 
 import pytest
 from inspect_ai.model import GenerateConfig
@@ -70,6 +73,26 @@ def test_a_run_pulled_from_a_box_finds_its_log_in_this_checkout(tmp_path, monkey
     log.parent.mkdir(parents=True)
     log.write_text("")
     assert RunDir(run_dir).eval_log == log
+
+
+def test_a_run_finds_its_log_in_the_study_its_folder_sits_in(tmp_path, monkeypatch):
+    """A log moved with its run, or pulled from a box, is found from another study too."""
+    monkeypatch.setattr(settings, "ROOT", tmp_path)
+    run_dir = tmp_path / "runs" / "study_old" / "game_solo"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run.json").write_text(json.dumps({"eval_log": "/moved/logs/game_solo/a.eval"}))
+    assert RunDir(run_dir).eval_log is None
+    log = tmp_path / "logs" / "study_old" / "game_solo" / "a.eval"
+    log.parent.mkdir(parents=True)
+    log.write_text("log")
+    assert RunDir(run_dir).eval_log == log
+
+
+def test_a_study_is_the_folder_of_the_runs_and_the_logs():
+    code = "from src.configuration import settings; print(settings.STUDY, settings.RUNS, settings.LOGS)"
+    done = subprocess.run([sys.executable, "-c", code], env={**os.environ, "STUDY": "study_x"}, cwd=settings.ROOT,
+                          capture_output=True, text=True, check=True)
+    assert done.stdout.split() == ["study_x", str(settings.ROOT / "runs/study_x"), str(settings.ROOT / "logs/study_x")]
 
 
 def test_rejudge_holds_the_runs_on_one_client_and_a_refusal_stops_that_run_alone(tmp_path, monkeypatch):

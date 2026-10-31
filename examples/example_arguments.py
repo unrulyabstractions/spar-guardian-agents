@@ -42,7 +42,7 @@ def parse_example_arguments(script: Path, description: str | None, argv: list[st
     judging.add_argument("--no-judge", dest="judge", action="store_false",
                          help="run without the judge; `uv run python -m src rejudge <name>` judges it later"
                               + ("" if USE_JUDGE_AS_DEFAULT else " (default)"))
-    parser.add_argument("--name", default=script.stem, help="the run's name: runs/<name>/ and out/<name>/")
+    parser.add_argument("--name", default=script.stem, help="the run's name: runs/<study>/<name>/ and out/<name>/")
     parser.add_argument("--timeout", type=int, default=settings.MODEL_TIMEOUT_S,
                         help="seconds one model request may take, retries included")
     args = parser.parse_args(argv)
