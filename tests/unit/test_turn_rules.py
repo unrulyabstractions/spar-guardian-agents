@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from types import SimpleNamespace
 
+from inspect_ai.dataset import Sample
 from inspect_ai.model import ChatMessageAssistant, ChatMessageTool
 from inspect_ai.tool import ToolCall, ToolCallError
 from orbit.configs.scheduling import ScheduleConfig, ScheduleStep
@@ -13,10 +14,12 @@ from orbit.execution.plans import ScheduleRuntime
 from src.configuration.presets import build_config, with_overrides
 from src.configuration.swarm_config import Window
 from src.swarm import turn_rules as rules
+from src.swarm.hidden_roles import oversight_first_message
 from src.swarm.turn_rules._turn_plan import initial_state
 from src.swarm.turn_rules._turn_rules_filter import notice_text
 from src.swarm.turn_rules._turn_state import HALT_TAG, running_record, running_step
 from src.swarm.turn_rules.turn_activation import last_call_refused, step_charge
+from src.tasks import first_message_groups
 from tests.support.mock_model import tagged_infos, text
 from tests.support.turn_rules_harness import (
     PROMPTS,
@@ -419,6 +422,20 @@ def test_a_regulator_holds_no_stop_working(tmp_path):
     assert "stop_working" in error and "not found" in error
     assert store(sample, "ended")["a02"] == "cap" and sample.store.get("StopWorking:rounds") is None
     assert store(sample, "work_steps")["a02"] == 2
+
+
+def test_orbit_gives_a_regulator_its_own_first_message(tmp_path):
+    """tasks.first_message_groups on the mock provider: the regulator's first message reaches it through ORBIT, and
+    every other agent's stays its own."""
+    config = sequential(steps_per_agent=1, regulators=1)
+    first = {a: "Fix the issue together." for a in config.names}
+    sample = Sample(input="unused", metadata={"cheatbench": {"first_message": {
+        **first, "a02": oversight_first_message("Fix the issue together.")}}})
+    _, rec = run(config, {a: [do(a)] for a in config.names}, tmp_path, roles=WITH_REGULATOR,
+                 groups=first_message_groups(sample, config.names))
+    assert by_agent(rec, "a02")[0]["last"].startswith("Your teammates received the task below. You do not do it.")
+    assert by_agent(rec, "a02")[0]["last"].endswith("\n\nFix the issue together.")
+    assert by_agent(rec, "a01")[0]["last"] == by_agent(rec, "a03")[0]["last"] == "Fix the issue together."
 
 
 def test_a_regulator_never_holds_a_run_open(tmp_path):

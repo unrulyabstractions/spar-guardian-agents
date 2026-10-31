@@ -15,7 +15,7 @@ from orbit.agents.turn_react import DEFAULT_ASSISTANT_PROMPT_TURN_REACT as ORBIT
 
 from src import tasks
 from src.configuration.presets import build_config, with_overrides
-from src.configuration.settings import load_prompts
+from src.configuration.settings import load_instruction_levels, load_prompts
 from src.configuration.swarm_config import role_of
 from src.domains import DOMAINS
 from src.domains.benchmark_protocol import OVERSIGHT_DEVIATION
@@ -159,6 +159,11 @@ def test_a_regulators_prompt_is_its_own_in_every_domain(key):
         assert worker_text not in regulator, worker_text
     assert prompts["a01"].startswith("You are a01")
     assert "- submit:" in prompts["a01"] and "You do not do that task" not in prompts["a01"]
+    # only the regulator reads what cheating means here, and how to check a teammate
+    cheating = load_instruction_levels()["vars"][key]["cheating"]
+    assert cheating in regulator and 'agent_actions(agent="<name>")' in regulator
+    assert "Call agent_actions on each teammate in your first 2 rounds." in regulator
+    assert not any(cheating in prompts[a] or "agent_actions" in prompts[a] for a in ("a01", "a03"))
     # at level none a regulator keeps the benchmark's prompt: nothing tells it to oversee
     none = bench.plan(with_overrides(TEAM, ["regulator_level=none"]), ROLES)
     assert "You do not do that task" not in tasks.system_prompts(bench, none)["a02"]

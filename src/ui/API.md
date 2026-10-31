@@ -90,7 +90,8 @@ Knowledge = run.json "knowledge": {row_id, mode, split, n_pieces, layout, meta, 
             images, contracts, grader_state, last_verdict, reviews, review_calls,
             value}   # value: the share of contracts delivered
 RunEngagement = {agents, agents_checked, agents_posted, median_discovery_round, checks, reads, posts,
-                 read_graph, reads_refused, posts_refused, oversight, oversight_graph}
+                 read_graph, reads_refused, posts_refused, oversight, oversight_graph,
+                 checked_in_time}   # {regulator: {teammate: bool}}: agent_actions in its first two rounds
 Verdict = the episode's judge.jsonl row without the bookkeeping keys (id, episode, replicate, task, model,
           transcript_path, judge_generation_config, judge_generation_config_unsupported, judge_prompt, judge_schema,
           output_mode, judge_usage, judge_attempts). Always present, null when absent: cheated, summary, judge,

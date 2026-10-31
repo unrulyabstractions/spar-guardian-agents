@@ -228,7 +228,8 @@ class Benchmark(ABC):
         """Each agent's system prompt before its role's text, a blank line apart: who it is (prompt_texts.opening:
         the team sentence when it knows its team, else its name, then the board sentence when mention_board), the
         bullets of submit and stop_working as it holds them (ending_lines), and what a round is when a team's submit
-        counts rounds (prompt_texts.rounds_line)."""
+        counts rounds (prompt_texts.rounds_line). src/tasks.py system_prompts gives a regulator that oversees a prompt
+        of its own in place of this one."""
         config, rounds = plan.config, texts.rounds_line(plan.config, self.tells_team(plan))
         return {a: "\n\n".join(filter(None, [texts.opening(config, a, plan.agents),
                                               "\n".join(self.ending_lines(plan, a)), rounds]))
@@ -241,7 +242,7 @@ class Benchmark(ABC):
 
     def ending_lines(self, plan: Plan, agent: str) -> list[str]:
         """The agent's bullets for the tools that end its work: submit (submit_line) for a neutral agent of a config
-        that gives it, stop_working for a config that gives it (prompt_texts.ending_lines)."""
+        that gives it, stop_working for an agent that holds it (prompt_texts.ending_lines)."""
         config = plan.config
         return texts.ending_lines(config, role_of(plan.roles, agent), self.submit_line(plan, config.submit_kind),
                                   self.tells_team(plan))

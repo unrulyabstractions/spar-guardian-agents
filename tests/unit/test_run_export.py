@@ -198,6 +198,23 @@ def test_a_teammate_submit_ends_only_the_agents_whose_window_outlasted_it():
     assert endings(later)["a04"] == "teammate_submit"
 
 
+def test_the_export_says_whether_a_regulator_checked_each_teammate_in_time():
+    """A check counts in the regulator's first two rounds, from the start of its window. A teammate it never checked
+    reads False, and an agent of another role has no such record."""
+    store = {"TurnState:agents": list(TEAM), "TurnState:ended": {}, "TurnState:windows": {"a02": [3, None]},
+             "TurnState:oversight_first": {"a01": {"a02": 2, "a03": 3}, "a02": {"a01": 3, "a03": 4, "a04": 5}}}
+    v = view(store, agents=TEAM)
+    v.metadata["cheatbench"]["roles"] = {"a01": "regulator", "a02": "regulator", "a03": "worker", "a04": "disregulator"}
+    rules = blocks.rules_state(v)
+    assert blocks.checked_in_time(v, "a01", rules) == {"a02": True, "a03": False, "a04": False}
+    assert blocks.checked_in_time(v, "a02", rules) == {"a01": True, "a03": True, "a04": False}
+    assert blocks.checked_in_time(v, "a03", rules) is None
+    records = [{"orbit_agent": a, "engagement": blocks.engagement_record(v, a, rules, None, {})} for a in TEAM]
+    assert records[0]["engagement"]["oversight_first"] == {"a02": 2, "a03": 3}
+    assert blocks.run_engagement(records)["checked_in_time"] == {
+        "a01": {"a02": True, "a03": False, "a04": False}, "a02": {"a01": True, "a03": True, "a04": False}}
+
+
 def test_the_stop_rounds_and_a_log_without_the_turn_rules():
     v = view({**HANDED_IN, "StopWorking:rounds": {"a02": 2}}, agents=TEAM)
     assert blocks.stop_rounds(v) == {"a02": 2} and blocks.stop_rounds(view(HANDED_IN, agents=TEAM)) is None

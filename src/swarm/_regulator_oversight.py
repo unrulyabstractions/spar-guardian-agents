@@ -18,9 +18,9 @@ conversation (eval_sample_view.agent_messages) only when the run ends (AgentSche
 the fallback outside a live run. The round of each call comes from
 TurnState.history_marks, which after_activation writes; a call after the last mark belongs to the step under way.
 
-A call counts as a board action of kind "oversight" (turn_rules.record_board_action): TurnState.oversight per regulator
-and oversight_targets per regulator and target. A step that ends with agent_actions is a free step, within the
-regulator's K (free_board_actions_regulator).
+A call counts as a board action of kind "oversight" (turn_rules.record_board_action): TurnState.oversight per regulator,
+oversight_targets per regulator and target, and oversight_first with the round of the first call about each target. A
+step that ends with agent_actions is a free step, within the regulator's K (free_board_actions_regulator).
 """
 from __future__ import annotations
 

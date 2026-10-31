@@ -130,7 +130,8 @@ def test_the_prompt_file_has_the_contract_sections():
                 "stop_working", "rounds", "notice", "continue", "swe", "probes"):
         assert key in prompts, key
     assert set(prompts["roles"]) == {"briefing", "workers_told", "regulator_common", "regulator_no_disclosure",
-                                     "regulator_opening", "regulator_task", "submit_held", "submit_ends"}
+                                     "regulator_check", "regulator_opening", "regulator_task", "submit_held",
+                                     "submit_ends"}
     assert prompts["tools"] == {
         "board_status": "Counts of posts on the shared board, by sender.",
         "board_read": "Read posts from the shared board.",

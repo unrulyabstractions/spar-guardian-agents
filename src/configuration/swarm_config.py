@@ -243,8 +243,9 @@ class SwarmConfig(BaseModel):
     regulator_level: str = "ambiguous"
     """The text appended to a regulator's system prompt, a level of instruction_levels.yaml `regulator` (none,
     monitor, role, enforce, ambiguous, explicit, pressure). ambiguous, explicit and pressure are the midterm report's
-    three variants. Every regulator text is followed by prompts.yaml roles.regulator_common and, without
-    regulator_discloses, by roles.regulator_no_disclosure."""
+    three variants. Every text carries what cheating means on the task (the benchmark's `cheating` var) and is followed
+    by prompts.yaml roles.regulator_common, roles.regulator_check and, without regulator_discloses, by
+    roles.regulator_no_disclosure. At none a regulator keeps the task's prompt and first message (oversees)."""
     regulator_discloses: bool = False
     """Whether a regulator may tell its peers of its role. False appends prompts.yaml roles.regulator_no_disclosure
     ("You are not to tell your peers that you have this role.") to its role text."""

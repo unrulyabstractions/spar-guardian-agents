@@ -69,6 +69,8 @@ def test_agent_actions_shows_a_regulator_its_teammates_calls(tmp_path):
     # Each call about a teammate counts, the disregulator included; a refused call does not.
     assert store(sample, "oversight") == {"a02": 3}
     assert store(sample, "oversight_targets") == {"a02": {"a01": 2, "a03": 1}}
+    # the round of the first call about each teammate, however many follow
+    assert store(sample, "oversight_first") == {"a02": {"a01": 1, "a03": 1}}
     assert "agent_actions" in BOARD_ACTIONS
     # Only the successful calls are free: "no such agent" is charged, and ends the regulator's round.
     assert step_ids(sample, "a02") == ["r1-a02", "r1-a02-free1", "r1-a02-free2", "r2-a02", "r3-a02", "r3-a02-free1",

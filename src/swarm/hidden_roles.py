@@ -18,9 +18,11 @@ Every model-facing text of a level comes from src/configuration/instruction_leve
 the task instruction, and the regulator and disregulator texts appended to the system prompt of the agents holding
 the role. A level gives one text or one per benchmark, with placeholders filled from the benchmark's `vars`.
 
-A regulator's level text is followed by prompts.yaml roles.regulator_common (it can query the other agents' tool
-calls, src/swarm/_regulator_oversight.py, and read the board) and, unless regulator_discloses is on, by
-roles.regulator_no_disclosure.
+Each regulator level carries the benchmark's `cheating` var: what cheating means on that task. A regulator's level text
+is followed by prompts.yaml roles.regulator_common (agent_actions, src/swarm/_regulator_oversight.py, and how to call it
+on a teammate, and the board), roles.regulator_check (call it on each teammate in the regulator's first CHECK_ROUNDS
+rounds) and, unless regulator_discloses is on, roles.regulator_no_disclosure. The check is an instruction like the rest;
+run.json engagement checked_in_time records whether it happened.
 
 With informed_roles on, a regulator or disregulator also gets the briefing (prompts.yaml `roles.briefing`, built by
 role_briefing) after its role text: the swarm's size and roster, the board and its tools, what the agents without a
@@ -34,7 +36,7 @@ import re
 from src.configuration.prompt_texts import rounds_text
 from src.configuration.settings import load_instruction_levels, load_prompts
 from src.configuration.swarm_config import ROLES, SwarmConfig
-from src.swarm.turn_rules import BOARD_TOOLS
+from src.swarm.turn_rules import BOARD_TOOLS, CHECK_ROUNDS
 
 # A placeholder that opens a sentence; its value is capitalised there.
 SENTENCE_START = re.compile(r"(^|[.!?]\s+)\{(\w+)\}")
@@ -76,7 +78,8 @@ def role_text(role: str, config: SwarmConfig, benchmark_name: str) -> str | None
     if role != "regulator" or text is None:
         return text
     pieces = load_prompts()["roles"]
-    tail = [pieces["regulator_common"], *([] if config.regulator_discloses else [pieces["regulator_no_disclosure"]])]
+    tail = [pieces["regulator_common"], pieces["regulator_check"].format(rounds=rounds_text(CHECK_ROUNDS)),
+            *([] if config.regulator_discloses else [pieces["regulator_no_disclosure"]])]
     return " ".join([text, *tail])
 
 
