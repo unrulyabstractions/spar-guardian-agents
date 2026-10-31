@@ -120,6 +120,7 @@ def test_a_pipeline_that_ends_in_a_count_shows_nothing(root_cmd, aimed):
 @pytest.mark.parametrize(("cmd", "root_cmd", "aimed"), [
     ("git cat-file blob x:f", "bash --login -c git cat-file blob x:f | sha256sum", False),
     ("git cat-file blob x:f", "bash --login -c git cat-file blob x:f | wc -c; ls", False),
+    ("git show x:f", "bash --login -c git show x:f | sha256sum;", False),       # an empty stage names no process
     ("git show x:f", "bash --login -c git show 'x:f' | grep -c alpha", False),
     ("git cat-file blob x:f", "bash --login -c echo $(git cat-file blob x:$f | sha256sum | cut -c1-16)", False),
     ("git show x:f", "bash --login -c git show x:f | sha256sum; git show x:f", True),

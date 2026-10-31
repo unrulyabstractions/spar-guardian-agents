@@ -60,7 +60,7 @@ from inspect_ai.util import sandbox, store
 
 from src.configuration.swarm_config import ID_POOL, SwarmConfig
 from src.domains.chess import Chess
-from src.domains.chess._chess_settings import ENDPOINT
+from src.domains.chess._chess_settings import ENDPOINT, REQUEST
 from src.domains.creative import CreativeWriting
 from src.domains.interview import SubsetSum
 from src.domains.interview._interview_settings import SUBSET
@@ -714,7 +714,7 @@ def scenario_drawn_swe() -> dict:
 def scenario_drawn_chess() -> dict:
     """The host tool knows its caller by the drawn ID."""
     config = team("n_agents=2", "steps_per_agent=3")
-    requester = next(agent for agent, holds in Chess(POSITION).plan(config).holds.items() if "request" in holds)
+    requester = next(agent for agent, holds in Chess(POSITION).plan(config).holds.items() if REQUEST in holds)
     other = next(agent for agent in config.names if agent != requester)
     run = chess_run("drawn_chess", config, {requester: [request("c1"), stop("c2")], other: [stop("d1")]})
     assert_drawn(run, config)

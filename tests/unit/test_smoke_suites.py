@@ -67,6 +67,11 @@ def test_a_suite_passes_only_with_a_clean_exit_and_a_pass_line(tmp_path):
     assert lines[-1] == "== 1 of 4 suites passed"
 
 
+def test_the_summary_keeps_every_suites_name_apart_from_its_result(tmp_path):
+    lines = summary([Outcome(name, 0, 1, 0, 1.0, tmp_path) for name in all_suites.SUITES]).splitlines()[1:-1]
+    assert [line.split()[:2] for line in lines] == [[name, "PASS"] for name in all_suites.SUITES]
+
+
 def test_the_suites_run_at_once(tmp_path):
     """Each command waits for the other's file, so run one after the other both would give up."""
     wait = ("import pathlib, time\npathlib.Path({mine!r}).touch()\nfor _ in range(200):\n"

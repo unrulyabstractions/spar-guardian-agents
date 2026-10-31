@@ -38,7 +38,7 @@ class Outcome:
 
     def line(self) -> str:
         result = "PASS" if self.ok else "FAIL"
-        return (f"{self.suite:<12}{result:<8}{self.passed:>5}{self.failed:>6}{self.returncode:>5}{self.minutes:>9.1f}"
+        return (f"{self.suite:<16}{result:<8}{self.passed:>5}{self.failed:>6}{self.returncode:>5}{self.minutes:>9.1f}"
                 f"  {self.log}")
 
 
@@ -62,7 +62,7 @@ def run_all(commands: dict[str, list[str]], logs: Path) -> list[Outcome]:
 
 def summary(outcomes: list[Outcome]) -> str:
     """One line per suite, then the count."""
-    head = f"{'suite':<12}{'result':<8}{'pass':>5}{'fail':>6}{'rc':>5}{'minutes':>9}  log"
+    head = f"{'suite':<16}{'result':<8}{'pass':>5}{'fail':>6}{'rc':>5}{'minutes':>9}  log"
     passed = sum(o.ok for o in outcomes)
     return "\n".join([head, *(o.line() for o in outcomes), f"== {passed} of {len(outcomes)} suites passed"])
 

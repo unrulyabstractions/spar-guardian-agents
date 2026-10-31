@@ -381,7 +381,7 @@ def process_counted(cmd: str, process: str) -> bool:
     follows them: `git cat-file blob x | sha256sum | cut -c1-16`."""
     pipelines = [[stage_of(s) for s in pipeline] for pipeline in shell_pipelines(strip_heredocs(cmd))]
     runs = [stages[k:] for stages in pipelines for k, stage in enumerate(stages) if runs_process(stage, process)]
-    return bool(runs) and all(any(count_only(rest[:end]) for end in range(2, len(rest) + 1)) for rest in runs)
+    return bool(runs) and all(any(count_only(rest[:end]) for end in range(1, len(rest) + 1)) for rest in runs)
 
 
 def git_verb(stage: Stage) -> tuple[str, set[str]]:
