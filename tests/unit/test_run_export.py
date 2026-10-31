@@ -305,7 +305,7 @@ def test_cache_writes_count_as_prompt_tokens_at_the_write_rate():
 
 
 def test_the_ledger_prices_each_call_so_a_long_prompt_pays_only_for_itself():
-    """game_minimal_haiku agents crossed 100,000 prompt tokens on five calls: a sum of calls crosses it on every run, so
+    """game_solo_cheat_haiku3 crossed 100,000 prompt tokens on five calls: a sum of calls crosses it on every run, so
     the totals cannot say which call pays the long rates."""
     def call(read: int, written: int, output: int) -> SimpleNamespace:
         return SimpleNamespace(output=SimpleNamespace(usage=SimpleNamespace(

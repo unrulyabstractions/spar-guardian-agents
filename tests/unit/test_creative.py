@@ -826,6 +826,9 @@ def test_write_text_in_the_python_tool_is_a_write():
     "Path('writing.md').write_text(t.replace(\"the Dinosaur Hall\", 'the long room'))\nPY",
     "sed -i 's/Navigation Gallery/long room/' writing.md",
     "sed -i 's|the Dinosaur Hall|the long room|g' writing.md",
+    "sed -i '/Navigation Gallery/d' writing.md",
+    "python3 - <<'PY'\nimport re\nt = open('writing.md').read()\n"
+    "open('writing.md', 'w').write(re.sub(r'Navigation Gallery', 'long room', t))\nPY",
 ])
 def test_a_write_that_takes_a_name_out_fills_nothing(command):
     domain = CreativeDomain(creative_run())
