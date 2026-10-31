@@ -7,6 +7,7 @@ import asyncio
 import hashlib
 import io
 import json
+import os
 import subprocess
 import sys
 from types import SimpleNamespace
@@ -201,6 +202,30 @@ def test_an_object_lost_and_back_leaves_one_row_each_way(monkeypatch):
     assert [row["row"] for row in rows_of(watcher.log.stream)] == ["object_gone", "object_armed"]
 
 
+def test_only_a_regular_file_takes_a_mark_and_only_a_file_marks_its_directory(tmp_path, monkeypatch):
+    """An agent may leave anything at an object's path, and a mark on a link would watch something else."""
+    key, marks = tmp_path / "key", []
+    watcher = planned("k7q2m")
+    monkeypatch.setattr(watcher, "mark", lambda path, mask: marks.append(path))
+    monkeypatch.setattr(daemon, "os", SimpleNamespace(path=os.path, stat=lambda path, follow_symlinks: os.stat(
+        key, follow_symlinks=follow_symlinks)))
+    obj = watcher.objects[0]
+    key.write_text("x")
+    assert (watcher.arm(obj), watcher.arm(obj)) == ("armed", "same")
+    assert marks == ["/proc/10/root/k/key", "/proc/10/root/k"]
+    key.unlink()
+    assert watcher.arm(obj) == "gone"
+    key.symlink_to(tmp_path)
+    assert watcher.arm(obj) == "gone"
+    key.unlink()
+    key.mkdir()
+    assert watcher.arm(obj) == "gone"
+    key.rmdir()
+    key.write_text("y")
+    marks.clear()
+    assert watcher.arm({**obj, "kind": "blob", "inode": None}) == "armed" and marks == ["/proc/10/root/k/key"]
+
+
 def test_a_file_marked_at_a_new_inode_leaves_a_row(monkeypatch):
     watcher = planned("k7q2m")
     monkeypatch.setattr(daemon, "read_bytes", lambda path: b"0::/docker/id-k7q2m\n")
@@ -221,6 +246,28 @@ def test_a_new_file_at_an_objects_path_is_named_on_the_openers_machine(tmp_path,
     with open(tmp_path / "new") as f:
         place = watcher.where(5, f.fileno())
     assert (place["machine"], place["object"], place["level"]) == ("m3p4x", None, "sibling")
+
+
+def test_an_open_is_let_through_after_its_row_whatever_happened(monkeypatch):
+    watcher, answered = planned("k7q2m"), []
+    monkeypatch.setattr(daemon, "os", SimpleNamespace(
+        write=lambda group, data: answered.append((len(rows_of(watcher.log.stream)), data)), close=lambda fd: None))
+    monkeypatch.setattr(watcher, "where", lambda pid, fd: {"machine": "k7q2m"})
+    monkeypatch.setattr(watcher, "opener", lambda pid: {"uid": 1000})
+    watcher.answer(900, 5)
+    monkeypatch.setattr(watcher, "where", lambda pid, fd: 1 / 0)
+    watcher.answer(901, 6)
+    assert answered == [(1, daemon.RESPONSE.pack(5, daemon.FAN_ALLOW)), (2, daemon.RESPONSE.pack(6, daemon.FAN_ALLOW))]
+    assert [row["row"] for row in rows_of(watcher.log.stream)] == ["open", "row_failed"]
+
+
+def test_a_control_is_told_by_its_nonce_as_a_whole_argument(monkeypatch):
+    fake_processes(monkeypatch, {7: (0, 1)})
+    watcher = planned("k7q2m")
+    monkeypatch.setattr(daemon, "argv", lambda pid: [b"python3", b"-I", b"-c", b"code", b"bb", b"/k/key"])
+    assert watcher.opener(7)["control"] == "end"
+    monkeypatch.setattr(daemon, "argv", lambda pid: [b"cat", b"/k/bb"])
+    assert "control" not in watcher.opener(7)
 
 
 def test_a_cut_last_line_is_dropped_and_the_rows_before_it_stay():
