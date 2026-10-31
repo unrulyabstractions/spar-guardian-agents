@@ -296,7 +296,7 @@ def test_cache_writes_count_as_prompt_tokens_at_the_write_rate():
                               output_tokens=1_992, reasoning_tokens=0)
     assert usage_dict(written)["input"] == 20_995 and usage_dict(written)["cache_write"] == 5_225
     usage = {"input": 20_995, "cache_read": 15_756, "cache_write": 5_225, "output": 1_992}
-    rec = blocks.ledger_record("claude-haiku-5-5", [model_event()], usage)
+    rec = blocks.ledger_record("claude-haiku-5-5", [SimpleNamespace(output=SimpleNamespace(usage=written))], usage)
     assert rec["tokens"]["cache_write"] == 5_225
     assert rec["cost_usd"] == round((14 * 0.10 + 15_756 * 0.01 + 5_225 * 0.125 + 1_992 * 0.50) / 1e6, 6)
     # an entry that lists no write rate pays the input rate
@@ -304,15 +304,36 @@ def test_cache_writes_count_as_prompt_tokens_at_the_write_rate():
     assert rate == 2.0
 
 
+def test_the_ledger_prices_each_call_so_a_long_prompt_pays_only_for_itself():
+    """game_minimal_haiku agents crossed 100,000 prompt tokens on five calls: a sum of calls crosses it on every run, so
+    the totals cannot say which call pays the long rates."""
+    def call(read: int, written: int, output: int) -> SimpleNamespace:
+        return SimpleNamespace(output=SimpleNamespace(usage=SimpleNamespace(
+            input_tokens=2, input_tokens_cache_read=read, input_tokens_cache_write=written, output_tokens=output,
+            reasoning_tokens=0)))
+
+    usage = {"input": 165_004, "cache_read": 155_000, "cache_write": 10_000, "output": 2_000}
+    rec = blocks.ledger_record("claude-haiku-5-5", [call(60_000, 5_000, 1_000), call(95_000, 5_000, 1_000)], usage)
+    short = 2 * 0.10 + 60_000 * 0.01 + 5_000 * 0.125 + 1_000 * 0.50
+    long = 2 * 0.50 + 95_000 * 0.05 + 5_000 * 0.625 + 1_000 * 2.50
+    assert rec["cost_usd"] == round((short + long) / 1e6, 6)
+    # a log that kept no call's usage prices its totals at the normal rates
+    rec = blocks.ledger_record("claude-haiku-5-5", [SimpleNamespace(output=None)], usage)
+    total = 4 * 0.10 + 155_000 * 0.01 + 10_000 * 0.125 + 2_000 * 0.50
+    assert rec["cost_usd"] == round(total / 1e6, 6)
+
+
 def test_the_ledger_prices_the_registry_and_flags_what_it_cannot_see():
     entry = next(iter(models.entries()))
     usage = {"input": 1_000_000, "cache_read": 500_000, "output": 100_000, "billed_usd": 0.5, "billed_calls": 2}
-    rec = blocks.ledger_record(entry, [model_event(), model_event(), model_event(usage=False, error="boom")], usage)
+    rec = blocks.ledger_record(entry, [model_event(usage=False), model_event(usage=False),
+                                       model_event(usage=False, error="boom")], usage)
     price = models.usd_per_million(entry)
     cached = price.get("cached_input", price["input"])
     expect = (500_000 * price["input"] + 500_000 * cached + 100_000 * price["output"]) / 1e6
-    assert rec["calls"] == 3 and rec["errored"] == 1 and rec["with_usage"] == 2
-    assert rec["cost_usd"] == round(expect, 6) and rec["billed_usd"] == 0.5 and rec["flags"] == ["1 errored call(s)"]
+    assert rec["calls"] == 3 and rec["errored"] == 1 and rec["with_usage"] == 0
+    assert rec["cost_usd"] == round(expect, 6) and rec["billed_usd"] == 0.5
+    assert rec["flags"] == ["1 errored call(s)", "2 call(s) without usage"]
     unknown = blocks.ledger_record("mockllm/model", [model_event(), model_event(usage=False)],
                                    {"input": 1, "output": 1})
     assert unknown["cost_usd"] is None and unknown["flags"] == ["unpriced model", "1 call(s) without usage"]
