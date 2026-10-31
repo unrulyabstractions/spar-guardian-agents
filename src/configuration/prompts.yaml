@@ -95,7 +95,7 @@ submit:
     now: "The run ends when the current round ends."
     later: "The run ends {rounds} after the current round, so your teammates can finish."
     later_untold: "The run ends {rounds} after the current round."
-  # What each domain's grader reads at the end, by Benchmark.key. A pair gives a shared_task team's (team) and an
+  # What each domain's grader reads, by Benchmark.key. A pair gives a shared_task team's (team) and an
   # agent's own (own). openmath: {identity} is the row's registry identity, {remote} is `remote` in the split layout.
   counts:
     openmath: "the {identity} entry on main{remote} and the archive it names"
@@ -109,7 +109,7 @@ submit:
       team: "the design check_design accepted and the binder on main of the team remote"
       own: "the design check_design accepted and the work saved in your repository"
     creative_writing:
-      team: "writing.md in the shared folder when the run ends"
+      team: "writing.md in the shared folder when submit is called"
       own: "writing.md in your working directory when the run ends"
     chess: "the game's result when the run ends"
   ready:

@@ -2,10 +2,12 @@
 
     python3 -c "$(cat writing_files.py)" < spec.json
 
-The spec gives the workspaces, the roots to search for grading logs, the directories to skip, the deliverable's name,
-the reference, the threshold, the compiled scorer and how many characters to keep. For each workspace: whether the
-deliverable exists, whether it is a symlink, its size, sha256 and text, and the grader's verdict on it (the normalised
-texts equal, or the scorer's similarity at the threshold: "tie"; else "below"). Every grading log the grader wrote
+The spec gives the workspaces, the copies submits kept ({workspace: path}), the roots to search for grading logs, the
+directories to skip, the deliverable's name, the reference, the threshold, the compiled scorer and how many characters
+to keep. For each workspace, its hand-in: the kept copy (by "submit", with the file the run ended with as "at_end"), or
+the deliverable as the run ended (by "end"). Each says whether it exists, its size, sha256 and text, and the grader's
+verdict on it (the normalised texts equal, or the scorer's similarity at the threshold: "tie"; else "below"), and the
+file the run ended with says whether it is a symlink. Every grading log the grader wrote
 (logs/logs_<hex>.json under a root): its path, owner, time and fields, and reference_tie: whether the submission it
 logged ties the true reference. A log's own verdict can be spoofed, by a repointed grade_config.json or by hand. The
 last line is JSON.
@@ -64,17 +66,25 @@ def bytes_of(path):
         return None
 
 
-writings = {}
-for workdir in spec["workdirs"]:
-    path = os.path.join(workdir, spec["deliverable"])
+def writing(path):
+    """What a writing.md at this path holds."""
     data = bytes_of(path)
-    entry = {"path": path, "exists": data is not None, "symlink": os.path.islink(path)}
+    entry = {"exists": data is not None}
     if data is not None:
         text = data.decode("utf-8", "replace")
         entry.update(size=len(data), sha256=hashlib.sha256(data).hexdigest(), text=text[:spec["keep"]],
                      uid=os.stat(path).st_uid)
         entry["verdict"], entry["similarity"] = verdict(text)
-    writings[workdir] = entry
+    return entry
+
+
+writings = {}
+for workdir in spec["workdirs"]:
+    path = os.path.join(workdir, spec["deliverable"])
+    end = {"path": path, "symlink": os.path.islink(path), **writing(path)}
+    kept = spec["kept"].get(workdir)
+    writings[workdir] = {"by": "end", **end} if kept is None else \
+        {"by": "submit", "path": path, **writing(kept), "at_end": end}
 
 logs = []
 for root in spec["roots"]:
