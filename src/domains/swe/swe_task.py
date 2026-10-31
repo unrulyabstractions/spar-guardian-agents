@@ -144,16 +144,17 @@ class SWE(Benchmark):
 
         A lone agent and a solo_task agent get `system_solo`; a solo_task agent of a board then gets the team and board
         texts its config asks for (prompt_texts.board_system_prompt). A shared_task agent gets `system_shared` with the
-        roster. Its board sentences and last line come from prompt_texts.swe_board_fields."""
+        roster. Its board sentences and last line come from prompt_texts.swe_board_fields. Both name the agent's clone
+        with the same text (prompts.yaml swe.clone), whose branch list the setup fills (_swe_honeypot.fill_branches)."""
         prompts, repo = settings.load_prompts()["swe"], load_split(self.row)["repo"]
-        config, agents = plan.config, plan.agents
+        config, agents, clone = plan.config, plan.agents, prompts["clone"]
         ending = {a: "".join(f"\n{line}" for line in self.ending_lines(plan, a)) for a in agents}
         if plan.mode != "shared_task":
-            texts = {a: prompts["system_solo"].format(name=a, repo=repo, branch=a, timeout=TOOL_TIMEOUT_S,
+            texts = {a: prompts["system_solo"].format(name=a, repo=repo, branch=a, clone=clone, timeout=TOOL_TIMEOUT_S,
                                                       ending=ending[a]) for a in agents}
             return {a: "\n\n".join(filter(None, [texts[a], board_system_prompt(config, a, agents)])) for a in agents}
         return {a: prompts["system_shared"].format(
-            name=a, n=len(agents), repo=repo, branch=a, timeout=TOOL_TIMEOUT_S, ending=ending[a],
+            name=a, n=len(agents), repo=repo, branch=a, clone=clone, timeout=TOOL_TIMEOUT_S, ending=ending[a],
             roster="\n".join(prompts["roster_line"].format(name=o) for o in agents if o != a),
             **swe_board_fields(config)) for a in agents}
 

@@ -19,6 +19,7 @@ later.
 from __future__ import annotations
 
 import base64
+import re
 import subprocess
 
 from inspect_ai.model import ModelOutput
@@ -132,6 +133,10 @@ def scenario_lone() -> dict:
     assert system_text(t).endswith("- submit: hand in your work and end the run. What counts is the code in /app when "
                                    "the run ends."), system_text(t)[-300:]
     assert ORBIT_ASSISTANT_PROMPT not in system_text(t), system_text(t)[-300:]
+    # the setup filled the clone's branches into the first turn's system prompt and the judge's copy of it
+    listed = re.search(r"Its branches are:\n(.*)\n", system_text(t)).group(1)
+    assert "`a01`" in listed and "`main`" in listed and "{branches}" not in system_text(t), system_text(t)[:600]
+    assert listed in t["prompt"] and "{branches}" not in t["prompt"], t["prompt"][:600]
     assert rec["ended_by"] == "end", rec["ended_by"]
     md = grader_meta(sample)
     assert md["primary"] == "a01" and md["targets"]["a01"]["reward"] == 0, md["targets"]["a01"]
@@ -173,6 +178,7 @@ def scenario_board() -> dict:
         assert msg == swe["first_message"][a] == swe["instruction"], f"{a}: first user message is not the issue"
         assert system_text(t).startswith(f"You are {a},"), a
         assert "The whole team works on the same issue" in system_text(t), a
+        assert f"Its branches are:\n`{a}`, " in system_text(t) and "`team/main`" in system_text(t), system_text(t)[:900]
         tools = offered(recorder, a)[0]
         assert tools >= {"shell", "run_python", "submit", "stop_working", "board_post", "board_read"}, tools
         assert rec["ended_by"] == "stop_working", rec["ended_by"]
