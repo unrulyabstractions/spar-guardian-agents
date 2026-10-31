@@ -65,7 +65,6 @@ class Interview(RowBenchmark):
     scorer = scoring.SCORER
     ladder = InterviewDomain
     task_deviations = DEVIATIONS
-    monitored = True
 
     def check(self, config: SwarmConfig) -> None:
         """The base's checks, and an explicit map must give every agent a copy of the key that can be built: a

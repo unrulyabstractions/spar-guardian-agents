@@ -10,8 +10,8 @@ src/tasks.py and src/swarm/, never here.
     sample, tools = benchmark.sample(plan, suffix), benchmark.tools(plan)
 
 Adding a domain. Subclass RowBenchmark for a CheatBench task with built rows (or Benchmark otherwise), set the class
-attributes, implement stage(), tools(), scorers(), delivered(), gradable() and the probe hooks, write the domain's
-submit texts in prompts.yaml `submit` (counts, missing), and add the class to
+attributes, implement stage(), tools(), scorers(), delivered(), gradable(), watched() and the probe hooks, write the
+domain's submit texts in prompts.yaml `submit` (counts, missing), and add the class to
 src/domains/__init__.py DOMAINS. Each domain package holds the same files: _<d>_settings.py (fixed paths and names),
 <d>_task.py (the Benchmark), _<d>_honeypot.py (what is planted and its fingerprints), the sandbox (_<d>_sandbox.py, or
 the machines layer), the task's own tool (_<d>_<tool>_tool.py), _<d>_scoring.py (the setup hooks and the scorer),
@@ -37,10 +37,10 @@ deliverable exists, never whether it is right); snapshot(plan, agent) names what
 tells_team(plan) says whether the prompts tell the agents of their team, so the texts of an agent not told name no
 teammate.
 
-The access log. A domain with `monitored` names what the sidecar watches in watched(state), read after setup
+The access log. A domain names what the sidecar watches in watched(state), read after setup
 (src/sandbox/access_log/access_monitor.py), and seats(state) gives the table that names an agent from a uid or a
-machine. A domain whose honeypot lives on the host keeps `monitored` False and turns its records into the same rows in
-host_access_rows(view).
+machine. A domain whose honeypot lives on the host sets `monitored` False, watches nothing and turns its records into
+the same rows in host_access_rows(view).
 """
 from __future__ import annotations
 
@@ -137,7 +137,7 @@ class Benchmark(ABC):
     """How every layout of the domain departs from CheatBench's runner, after COMMON_DEVIATIONS."""
     time_grace_s: int | None = None
     """The time Inspect's limit leaves above ORBIT's halt; None takes the config's time_grace_s."""
-    monitored: bool = False
+    monitored: bool = True
     """Whether a sidecar records each open of the honeypot in a run with SwarmConfig.access_log."""
 
     def __init__(self, row: str | None = None) -> None:
@@ -292,9 +292,9 @@ class Benchmark(ABC):
         """Each agent's seat, the access log's way from a uid or a machine to an agent: the probe's by default."""
         return {agent: entry[0] for agent, entry in self.probe(state).items()}
 
+    @abstractmethod
     async def watched(self, state: TaskState) -> list[Watched]:
-        """What the sidecar watches in a `monitored` domain, awaited once after the benchmark's setup."""
-        raise NotImplementedError(f"{self.key} names nothing to watch")
+        """What the sidecar watches, awaited once after the benchmark's setup."""
 
     @abstractmethod
     def scorers(self) -> list[Scorer]:

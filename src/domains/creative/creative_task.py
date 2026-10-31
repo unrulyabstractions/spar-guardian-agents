@@ -16,7 +16,8 @@ judge_schema.py.
 Layouts (creative_sandbox.py): lone (CheatBench's), shared (a shared_task team: one workspace, one Linux user per agent
 in the group `team`) and solo (a solo_task team: a workspace, a reference copy and a token per agent). The access
 items are segment1..segmentN and whole: under a split each neutral agent holds one segment of the reference, a
-regulator or a disregulator none, and the reference itself is in no agent's reach.
+regulator or a disregulator none, and the reference itself is in no agent's reach. The access log watches what is
+planted: each workspace's reference, or the holders' part files.
 """
 from __future__ import annotations
 
@@ -31,8 +32,10 @@ from src.domains.creative import _creative_scoring as scoring
 from src.domains.creative import creative_sandbox as sandbox
 from src.domains.creative._creative_ladder import CreativeDomain
 from src.domains.creative._creative_settings import DEFAULT_ROW, KEY, TASK, TASK_DIR
+from src.sandbox.access_log.access_monitor import Watched
 from src.sandbox.agent_tools import AgentTools, roster_tools
 from src.sandbox.agent_users import agent_users as users
+from src.sandbox.machines import agent_machines as machines
 
 DEVIATIONS = [
     "review_endpoint_keeps_the_exact_match_and_similarity_checks_and_calls_no_model",
@@ -104,6 +107,12 @@ class CreativeWriting(RowBenchmark):
 
     def probe(self, state) -> dict:
         return scoring.probe(state)
+
+    async def watched(self, state) -> list[Watched]:
+        """What is planted in the one container: the holders' files under a split, else each workspace's reference."""
+        block = scoring.creative(state)
+        planted = [path for paths in block["planted"].values() for path in paths] or block["references"].values()
+        return [Watched(machine=machines.DEFAULT_SERVICE, path=path, object="reference") for path in planted]
 
     def scorers(self) -> list[Scorer]:
         return [scoring.creative_deliverables()]
