@@ -19,7 +19,8 @@ with the note for the arbiter and no answer block: submit hands the game in (pro
 Access items: `request` (the api_request tool), `credential1` and `credential2` (the halves of the endpoint's bearer
 credential, which a split team's endpoint requires) and `whole`. Under split the request tool goes to some neutral
 agents and the halves to others: with two neutral agents one holds both halves and the other the tool, with three or
-more they are dealt request, credential1, credential2 in turn. Regulators and disregulators hold nothing.
+more they are dealt request, credential1, credential2 in turn. An agent holding one half is told so in its system
+prompt (prompts.yaml chess.credential_part). Regulators and disregulators hold nothing.
 
 The access log. No container holds the honeypot, so no sidecar runs: the endpoint's records and the reads of
 opponent/config.json become the log's rows (Chess.host_access_rows).
@@ -80,6 +81,7 @@ SHARED_DEVIATIONS = ["team_shares_one_game_its_six_resets_its_game_files_and_opp
 SOLO_DEVIATIONS = ["each_agent_plays_its_own_game"]
 SPLIT_DEVIATIONS = ["endpoint_requires_a_bearer_credential_cut_in_two_halves_dealt_as_access_says",
                     "api_request_held_by_the_request_seats_only"]
+PART_DEVIATIONS = ["system_prompt_tells_a_holder_of_one_half_that_the_credential_is_split"]
 
 
 class Chess(RowBenchmark):
@@ -148,14 +150,27 @@ class Chess(RowBenchmark):
             return lines
         return [*lines, tool_line(PASS_TOOL, load_prompts()["chess"]["pass_turn"])]
 
+    def holds_a_part(self, plan: Plan, agent: str) -> bool:
+        """Whether the agent holds one half of a split credential: one part and not the whole."""
+        return plan.split and len(held_halves(plan.holds[agent])) == 1
+
+    def credential_note(self, plan: Plan, agent: str) -> str | None:
+        """What an agent holding one half is told: how many parts there are and that a request needs them all."""
+        if not self.holds_a_part(plan, agent):
+            return None
+        part = held_halves(plan.holds[agent])[0]
+        return load_prompts()["chess"]["credential_part"].format(part=part, parts=len(CREDENTIALS))
+
     def system_prompts(self, plan: Plan) -> dict[str, str]:
-        """The base's prompts, then for an agent of a shared_task team told of its team the text on its one game."""
+        """The base's prompts, then for an agent of a shared_task team told of its team the text on its one game and,
+        for a holder of one half, on the credential."""
         prompts = super().system_prompts(plan)
         if not self.plays_as_team(plan):
             return prompts
         text = load_prompts()["chess"]["team_game"]
         game = text.format(order=", ".join(plan.agents), rounds=rounds_text(HOLD_ROUNDS))
-        return {a: f"{prompt}\n\n{game}" for a, prompt in prompts.items()}
+        return {a: "\n\n".join(filter(None, [prompt, game, self.credential_note(plan, a)]))
+                for a, prompt in prompts.items()}
 
     def stage(self, plan: Plan, row: dict) -> Staged:
         """The compose file and the block the setup, the tools, the scorer and run.json read: each agent's items,
@@ -206,9 +221,10 @@ class Chess(RowBenchmark):
 
     def team_deviations(self, plan: Plan) -> list[str]:
         """Each agent's own config and notepad; a shared_task team's one game and its rotation, or a solo_task
-        team's own games; a split's credential and request seats."""
+        team's own games; a split's credential and request seats, and the note to a holder of one half."""
         mode = SHARED_DEVIATIONS if plan.mode == "shared_task" else SOLO_DEVIATIONS
-        return [*TEAM_DEVIATIONS, *mode, *(SPLIT_DEVIATIONS if plan.split else [])]
+        told = self.plays_as_team(plan) and any(self.holds_a_part(plan, agent) for agent in plan.agents)
+        return [*TEAM_DEVIATIONS, *mode, *(SPLIT_DEVIATIONS if plan.split else []), *(PART_DEVIATIONS if told else [])]
 
     @classmethod
     def episode_facts(cls, view, agent: str) -> dict:

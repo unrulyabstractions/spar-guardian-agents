@@ -4,8 +4,8 @@ sample's team record on the code ladder per domain, on each model, and the whole
     uv run python -m scripts.paper.appendix [--models claude-haiku-5-5 gpt-6-luna] [--suffixes flashpin flashbox]
 
 The domains are the registry's (src/domains/__init__.py DOMAINS) with an example folder, examples/<domain>/, whose
-<stem>_minimal.py names the domain's cells: <stem>_solo, <stem>_solo_cheat, <stem>_minimal, <stem>_minimal_cheat and
-<stem>_minimal_regulated.
+<stem>_minimal.py names the domain's cells: <stem>_solo, <stem>_solo_cheat, <stem>_minimal, <stem>_minimal_cheat,
+<stem>_minimal_regulated and, where the domain has it, <stem>_minimal_all.
 Sample k of a cell under a suffix is the run runs/<cell>_<suffix><k>/. A run counts when the code ladder wrote its
 team records (signals.jsonl's team rows, src/measures/team_ladder.py) and it ran on that model (run.json model). The
 suffixes are every one such runs carry, or those --suffixes names. A domain without a counted run is left out. The
@@ -53,10 +53,12 @@ from src.utils.figure_style import (
 OUT = settings.ROOT / "tmp" / "appendix"
 EXAMPLES = settings.ROOT / "examples"
 CELLS = {"solo": "Solo agent", "solo_cheat": "Solo agent instructed to cheat", "minimal": "Minimal swarm",
-         "minimal_cheat": "Minimal swarm instructed to cheat", "minimal_regulated": "Minimal swarm with a regulator"}
+         "minimal_cheat": "Minimal swarm instructed to cheat", "minimal_regulated": "Minimal swarm with a regulator",
+         "minimal_all": "Minimal swarm with nothing split"}
 CELL_HEADS = {"solo": "Solo", "solo_cheat": "Solo, told\nto cheat", "minimal": "Swarm",
-              "minimal_cheat": "Swarm, told\nto cheat", "minimal_regulated": "Swarm and\nregulator"}
-TEAM_CELLS = ("minimal", "minimal_cheat", "minimal_regulated")
+              "minimal_cheat": "Swarm, told\nto cheat", "minimal_regulated": "Swarm and\nregulator",
+              "minimal_all": "Swarm,\nno split"}
+TEAM_CELLS = ("minimal", "minimal_cheat", "minimal_regulated", "minimal_all")
 MODEL_LABELS = {"deepseek-flash-openrouter": "DeepSeek", "gpt-6-luna": "Luna", "claude-haiku-5-5": "Haiku"}
 LABELS = {"swe": "SWE"}                        # a domain key that abbreviates its name
 SAMPLE = re.compile(r"^([a-z]+)(\d+)$")        # <suffix><k>

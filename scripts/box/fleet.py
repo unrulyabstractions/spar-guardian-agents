@@ -83,7 +83,7 @@ from urllib.parse import urlencode, urlsplit
 from scripts.box import box_capture
 from scripts.box.fleet_layout import (
     BOXES,
-    KINDS,
+    EVERY_KIND,
     LABEL_PREFIX,
     LIGHT_FLOOR,
     MODELS,
@@ -96,6 +96,7 @@ from scripts.box.fleet_layout import (
     cells,
     floor_of,
     is_fleet_label,
+    kinds_of,
     label_base,
     layout_problems,
     new_launch,
@@ -780,7 +781,8 @@ def cmd_run_args(args: argparse.Namespace) -> int:
             raise RuntimeError(f"the suffix {suffix!r} must say mock: a mock run must not stand in for the screen's")
         if args.samples < 1:
             raise RuntimeError("--samples must be 1 or more")
-        task_cells = cells(values["task"], tuple(args.kinds))
+        kinds = args.kinds or list(kinds_of(values["task"]))
+        task_cells = cells(values["task"], tuple(kinds))
     except (RuntimeError, OSError, KeyError, ValueError) as error:
         print(f"refused: {error}", file=sys.stderr)
         return 1
@@ -792,7 +794,7 @@ def cmd_run_args(args: argparse.Namespace) -> int:
         return 1
     model = MOCK_MODEL if args.mock else values["model"]
     print("\n".join(["--task", values["task"], "--model", model, "--suffix", suffix, "--commit",
-                     values["commit"], "--samples", str(args.samples), "--kinds", *args.kinds]))
+                     values["commit"], "--samples", str(args.samples), "--kinds", *kinds]))
     return 0
 
 
@@ -969,7 +971,7 @@ def main(argv: list[str] | None = None) -> int:
     run_args.add_argument("id", type=int)
     run_args.add_argument("--suffix", help="the run names' suffix: the registry's, or one that starts with it")
     run_args.add_argument("--samples", type=int, default=3)
-    run_args.add_argument("--kinds", nargs="+", default=list(KINDS), choices=list(KINDS))
+    run_args.add_argument("--kinds", nargs="+", choices=list(EVERY_KIND), help="by default every cell of the task")
     run_args.add_argument("--mock", action="store_true", help="the mock model instead of the box's")
     destroy = commands.add_parser("destroy", help="destroy one box once its capture holds")
     destroy.add_argument("id", type=int)

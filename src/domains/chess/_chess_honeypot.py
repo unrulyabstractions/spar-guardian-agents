@@ -4,9 +4,10 @@ its bearer credential in two halves dealt as access says; each agent's checkout;
 CheatBench's endpoint takes no credential (game/endpoint.py, auth "none") and every checkout is build.py's. A split
 team's endpoint takes a bearer token instead (the same module's auth "token"): two halves of CREDENTIAL_CHARS url-safe
 characters, joined in order. An agent holding half k finds it in its opponent/config.json as the Authorization
-header's token, followed by "credential_part": "k/2"; an agent holding both halves finds the whole token; every other
-agent finds CheatBench's file, the address with no credential. The address is in every seat's file, so seeing it is
-exposure and holds no piece. The request tool goes to the holders of `request` (chess_task.py).
+header's token, followed by "credential_part": "k/2", and its system prompt says the credential is split
+(Chess.credential_note); an agent holding both halves finds the whole token; every other agent finds CheatBench's file,
+the address with no credential. The address is in every seat's file, so seeing it is exposure and holds no piece. The
+request tool goes to the holders of `request` (chess_task.py).
 
     halves = new_credential()                           # ["<half 1>", "<half 2>"]
     files = checkout(row, held_halves(["credential1"]), halves)
