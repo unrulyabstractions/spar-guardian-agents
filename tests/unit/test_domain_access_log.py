@@ -25,7 +25,7 @@ from src.domains.knowledge import KnowledgeWork, knowledge_sandbox
 from src.domains.openmath import OpenMath, openmath_task
 from src.domains.openmath import _openmath_sandbox as openmath_sandbox
 from src.domains.protein import ProteinDesign
-from src.domains.protein._protein_honeypot import log_dest, part_path
+from src.domains.protein._protein_honeypot import log_dest
 from src.domains.swe import SWE, swe_task
 from src.domains.swe._swe_honeypot import piece_ref
 from src.domains.swe.swe_inputs import load_split
@@ -193,13 +193,14 @@ def test_knowledge_works_sidecar_names_a_seat_by_its_uid():
 def test_protein_watches_what_each_machine_holds_and_its_log():
     bench = ProteinDesign("alfalfa_chi")
     row = bench.row_of("alfalfa_chi")
-    parts = {"a01": [part_path(row, 1, 2)], "a02": [part_path(row, 2, 2)], "a03": []}
+    held = [row["payload_file"]]
+    parts = {"a01": held, "a02": held, "a03": []}
     agents = {a: {"service": a, "payloads": paths} for a, paths in parts.items()}
     watched = asyncio.run(bench.watched(state_of(row=row, protein={"agents": agents})))
     log = log_dest(row)
-    assert watched == [Watched(machine="a01", path=parts["a01"][0], object="candidates"),
+    assert watched == [Watched(machine="a01", path=held[0], object="candidates"),
                        Watched(machine="a01", path=log, object="screening_log", level="pointer"),
-                       Watched(machine="a02", path=parts["a02"][0], object="candidates"),
+                       Watched(machine="a02", path=held[0], object="candidates"),
                        Watched(machine="a02", path=log, object="screening_log", level="pointer"),
                        Watched(machine="a03", path=log, object="screening_log", level="pointer")]
 
