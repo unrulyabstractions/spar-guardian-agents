@@ -4,6 +4,8 @@ An agent's shell or run_python call is a string. This module splits it into pipe
 quotes and escapes. It finds each command's program, arguments and written files, and parses a grep or rg into what
 it searches for and how it reports. A pipeline that only counts or tests shows nothing of what it reads. A `for` loop's
 variable stands for the loop's words. command_blocks follows a command's `cd`s, so its files read as absolute paths.
+The access log's rows go through the same parsing: git_shows_content reads a git process's verb, and file_counted
+finds a command that names a file only to count it.
 
     stages = simple_commands(command_of(tool_call), lambda path: path.startswith("/keys"))
     hits = line_hits(result, distinctive_lines)
@@ -37,6 +39,20 @@ GREP_COUNTS = {"grep": {"c", "q", "l", "L", "count", "quiet", "silent", "files-w
                       "files"}}
 TOOLS = ("shell", "run_python", "bash", "python")
 """The tools whose call is a command or code."""
+PYTHON_TOOLS = ("run_python", "python")
+"""The tools whose call is code, which the exec reads from stdin."""
+AGENT_EXEC = re.compile(r"(?:timeout -k \S+ \S+ )?bash --login -c(?: |$)")
+"""The root of an exec that only an agent's tool starts, as a text of its argv: `bash --login -c`, after Inspect's
+`timeout -k 5s Ns`. The harness uses `bash -lc`, `bash -c`, `python3 -I -c` or a plain program."""
+INTERPRETER = re.compile(r"(?:python|perl|ruby|node|php|lua|bash|dash|sh|zsh)[\d.]*")
+"""A program that can open a path it computes."""
+GIT_OPTION_VALUES = {"-C", "-c", "--git-dir", "--work-tree", "--namespace"}
+GIT_SUMMARIES = {"--stat", "--shortstat", "--numstat", "--name-only", "--name-status", "--no-patch", "-s"}
+GIT_READS = {"show": GIT_SUMMARIES, "diff": GIT_SUMMARIES, "cat-file": {"-s", "-t", "-e"},
+             "grep": {"-c", "--count", "-l", "--files-with-matches", "-L", "--files-without-match", "-q", "--quiet"},
+             "archive": set(), "checkout": set(), "restore": set(), "merge": set(), "cherry-pick": set()}
+"""The git verbs that read content, each with the options that keep it to names and counts."""
+GIT_PATCH = {"-p", "-u", "--patch"}
 REFUSED = "validation errors parsing tool input arguments"
 """What Inspect answers when a tool's schema refuses a call: nothing ran."""
 PY_WRITE = re.compile(r"""\bopen\([^)]*,\s*['"][wax]|\.write_text\(|\.write_bytes\(|\bjson\.dump\(""")
@@ -344,6 +360,33 @@ def count_only(stages: list[Stage]) -> bool:
         return False
     call = grep_call(stages[-1])
     return call.counts if call is not None else stages[-1].program in COUNTERS
+
+
+def file_counted(cmd: str, file: str) -> bool:
+    """Whether the command names the file only in pipelines that show nothing of it (count_only): `cat f | wc -l`."""
+    pipelines = [[stage_of(s) for s in pipeline] for pipeline in shell_pipelines(strip_heredocs(cmd))]
+    naming = [stages for stages in pipelines if any(file in stage.text for stage in stages)]
+    return bool(naming) and all(count_only(stages) for stages in naming)
+
+
+def git_verb(stage: Stage) -> tuple[str, set[str]]:
+    """A git process's verb, past git's own options, and the arguments after it."""
+    rest = iter(stage.args)
+    for arg in rest:
+        if arg in GIT_OPTION_VALUES:
+            next(rest, None)
+        elif not arg.startswith("-"):
+            return arg, set(rest)
+    return "", set()
+
+
+def git_shows_content(stage: Stage) -> bool:
+    """Whether a git process reads content for the agent: a verb of GIT_READS without its summary options, or `log -p`.
+    gc, fsck, repack and `log --stat` open the same objects and show none of them."""
+    verb, args = git_verb(stage)
+    if verb == "log":
+        return bool(args & GIT_PATCH)
+    return verb in GIT_READS and not args & GIT_READS[verb]
 
 
 def in_loops(stage: Stage, loops: dict[str, str]) -> Stage:

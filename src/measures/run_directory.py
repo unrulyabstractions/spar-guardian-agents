@@ -6,6 +6,7 @@
         transcript = run.transcript(episode["episode"])
     verdict = run.verdicts().get("riemann#1@k7q2m")
     team = run.team_signals()[0]                    # the code ladder's team record of the first sample
+    log = run.access_log()                          # run.json's block with its rows, or None
 
 run.json is read once per RunDir and again after write_run_json_block. The JSON Lines files are read on every call, so
 a measure that rewrites one (the code ladder's signals.jsonl, the judged ladder's ladder.jsonl) reads its own rows back.
@@ -25,6 +26,7 @@ RUN_JSON = "run.json"
 EPISODES = "episodes.jsonl"
 JUDGE = "judge.jsonl"
 SIGNALS = "signals.jsonl"
+ACCESS_LOG = "access_log.jsonl"
 LADDER_FILES = {"full": "ladder.jsonl", "actions": "ladder_actions.jsonl"}
 
 
@@ -100,6 +102,14 @@ class RunDir:
     def board(self, sample: str) -> dict:
         """The sample's board, communication/<sample>.json ({messages, events}); {} when the run had none."""
         return read_json(self.path / "communication" / f"{sample}.json") or {}
+
+    def access_log(self) -> dict | None:
+        """run.json "access_log" with access_log.jsonl's rows as "rows"; None for a run that kept no log: no block, as
+        in a run older than the log, or status off."""
+        block = self.run_json.get("access_log")
+        if block is None or block["status"] == "off":
+            return None
+        return {**block, "rows": read_jsonl(self.path / ACCESS_LOG)}
 
     def transcript_path(self, episode: str) -> Path:
         """Where the export stores the episode's transcript: trajectories/<episode>/transcript.json."""
