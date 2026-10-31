@@ -184,6 +184,14 @@ def test_the_load_run_needs_every_call_to_overlap():
     assert access_load.overlap_s([LOAD_RESULT, {**LOAD_RESULT, "window": [21.0, 30.0]}]) < 0
 
 
+def test_a_sample_that_died_releases_the_barrier(tmp_path):
+    def child(code: int | None) -> SimpleNamespace:
+        return SimpleNamespace(poll=lambda: code)
+
+    access_load.release_failed({1: child(None), 2: child(0), 3: child(1), 4: child(-9)}, tmp_path)
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["3", "4"]
+
+
 def test_the_load_run_stays_out_of_smoke_all():
     assert "access_load" not in all_suites.SUITES
 

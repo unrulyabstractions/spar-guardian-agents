@@ -6,7 +6,10 @@ Each run is one subset_sum sample under the mock model. A barrier holds every sa
 reached it, so the runs truly overlap. Then the odd samples read the key in a loop and the even ones wait. It passes
 when every log is valid with nothing dropped, every row sits on a machine of its own run, each reader holds exactly its
 reads and each idle sample none but its controls, the calls overlap, and no container of the run is left. Results go to
-runs/smoke_load/<stamp>/.
+runs/smoke_load/<stamp>/. A sample that dies releases the barrier for the others.
+
+Each sidecar holds one fanotify group, so fs.fanotify.max_user_groups caps the runs at once, 128 on Colima. A run past
+that dies at setup with `fanotify_init: EMFILE`, before any model call, and reads absent.
 """
 from __future__ import annotations
 
@@ -98,6 +101,13 @@ def overlap_s(results: list[dict]) -> float:
     return min(r["window"][1] for r in results) - max(r["window"][0] for r in results)
 
 
+def release_failed(children: dict[int, subprocess.Popen], barrier: Path) -> None:
+    """Mark the samples that died as at the barrier, so the others run on and the suite ends with their results."""
+    for sample, child in children.items():
+        if child.poll() not in (None, 0):
+            (barrier / str(sample)).touch()
+
+
 def containers(*filters: str) -> list[str]:
     """The names of the containers Docker holds, under `docker ps` filters."""
     return subprocess.run(["docker", "ps", *filters, "--format", "{{.Names}}"], capture_output=True, text=True,
@@ -121,6 +131,7 @@ def launch(samples: int, agents: int) -> int:
     peak = 0
     while any(child.poll() is None for child in children.values()) and time.monotonic() - started < LIMIT_S:
         peak = max(peak, len(containers()))
+        release_failed(children, barrier)
         time.sleep(POLL_S)
     failed = [sample for sample, child in children.items() if child.poll() != 0]
     for sample in failed:

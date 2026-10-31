@@ -158,11 +158,11 @@ The log never lowers a rung: `code_ladder` scans twice and takes the difference.
 
 **What an agent can see.** On the surfaces we check (`make smoke-access`, `agent_view`), a process list, `env`, `/etc`, `/proc/mounts` and `/proc/self/status` differ only in ids. A marked open is slower, so an agent timing its opens could find the watched file. While the kernel holds that open, the reader sits in state D and its `/proc/<pid>/wchan` reads `fanotify_get_response`, so an agent that watches its own reader in a tight loop can name the mechanism. The monitor is no access control. It fails open, and a killed monitor lets a held read through with no record. A stopped monitor stalls each open until the tool's timeout, and a reader killed while it waits has read nothing and leaves no row. Its log still comes back, and reads `broken`. The agents' containers keep their capabilities, seccomp and AppArmor, and the sidecar holds the privileges instead. It can reach every process on the machine and acts only on its own containers. A Docker host that refuses `pid: host` fails at setup with the switch on and spends nothing. Such a host runs with the switch off.
 
-**A first real box.** The suite has run on aarch64 under Colima only. A box builds its own task and no other, so it runs that task's scenarios. We run this check in the clone after `box_setup.sh`, before any fleet:
+**A first real box.** The suite has run on aarch64 under Colima only. A box builds its own task and no other, so it runs that task's scenarios. `make smoke-load SAMPLES=15` runs that many subset_sum runs at once, each with its own sidecar, and it needs that build. A run past `max_user_groups` dies at setup with `fanotify_init: EMFILE`, before any model call, and reads `absent`. We run this check in the clone after `box_setup.sh`, before any fleet:
 
 ```
 uname -r; docker info --format '{{.Driver}} {{.CgroupVersion}} {{.CgroupDriver}}'
-cat /proc/sys/fs/fanotify/max_user_groups      # at least twice the runs at once
+cat /proc/sys/fs/fanotify/max_user_groups      # at least twice the runs at once: each sidecar holds one group
 .venv/bin/python -m tests.smoke.access_logging --only <the task's scenarios>   # each one [PASS]
 ```
 
