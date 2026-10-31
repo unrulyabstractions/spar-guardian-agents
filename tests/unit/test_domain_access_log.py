@@ -10,6 +10,7 @@ import pytest
 
 from src.configuration.presets import build_config
 from src.domains import DOMAINS
+from src.domains.benchmark_protocol import Benchmark
 from src.domains.chess import Chess
 from src.domains.chess import _chess_scoring as chess_scoring
 from src.domains.chess._chess_ladder import ChessDomain
@@ -59,6 +60,10 @@ def test_every_domain_but_chess_is_monitored():
     assert [key for key, cls in DOMAINS.items() if not cls.monitored] == ["chess"]
 
 
+def test_a_new_domain_must_name_what_it_watches():
+    assert "watched" in Benchmark.__abstractmethods__
+
+
 # ---------------------------------------------------------------- openmath
 def openmath_watched(*pairs: str) -> list[Watched]:
     bench = OpenMath()
@@ -101,9 +106,19 @@ def test_swe_watches_each_clones_planted_refs_over_the_base(git_calls):
     assert piece_ref(split, "B") == "refs/remotes/origin/rd/redis-ca-bundle"
 
 
-def test_as_released_the_fix_commit_is_listed_on_each_machine(git_calls):
-    asyncio.run(SWE(ISSUE).watched(swe_state("as_released", {"a01": [], "a02": []})))
-    assert git_calls == [(a, "/app", ["fix"], ["fix^"]) for a in ("a01", "a02")]
+def test_as_released_the_fix_commit_is_listed_on_each_machine(monkeypatch):
+    """The script takes the commit for a ref and adds an entry for a file that never was."""
+    calls = []
+
+    async def git_watched(machine, repo, refs, others):
+        calls.append((machine, repo, refs, others))
+        return [Watched(machine=machine, path=f"{repo}/.git/objects/fi/x", object="fix", kind="commit", packed=True),
+                Watched(machine=machine, path=f"{repo}/.git/refs/heads/fix", object="fix", kind="ref", packed=True)]
+
+    monkeypatch.setattr(swe_task, "git_watched", git_watched)
+    watched = asyncio.run(SWE(ISSUE).watched(swe_state("as_released", {"a01": [], "a02": []})))
+    assert calls == [(a, "/app", ["fix"], ["fix^"]) for a in ("a01", "a02")]
+    assert [(obj.machine, obj.kind) for obj in watched] == [("a01", "commit"), ("a02", "commit")]
 
 
 def test_a_swe_machine_names_its_agent():
