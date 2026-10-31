@@ -176,10 +176,13 @@ async def control(machine: str, objects: list[dict], nonce: str) -> list[str]:
 @solver
 def start_access_monitor(benchmark) -> Solver:
     """Task setup, after the benchmark's own: store the seat table and the objects, start the monitor over them and
-    run the start control. Any failure raises, so a run with no monitor spends nothing."""
+    run the start control. Any failure raises, so a run with no monitor spends nothing, and so does a benchmark that
+    names nothing, whose empty log would read as no access."""
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         nonces = {"start": secrets.token_hex(8), "end": secrets.token_hex(8)}
         objects = [asdict(obj) for obj in await benchmark.watched(state)]
+        if not objects:
+            raise RuntimeError("access monitor: nothing to watch")
         record = {"seats": seat_table(benchmark.seats(state)), "objects": objects, "nonces": nonces}
         state.store.set(STORE, record)
         live = marked(record)
@@ -218,6 +221,9 @@ async def capture(state: TaskState) -> None:
     try:
         if "pid" in record:
             await box.exec(["bash", "-c", STOP, "stop", str(record["pid"])], user="root", timeout=MONITOR_TIMEOUT_S)
+    except Exception as ex:  # noqa: BLE001 - a wedged monitor must not lose the rows it wrote
+        errors.append(f"stop: {ex}"[:500])
+    try:
         rows = parse_rows(await box.read_file(LOG_PATH))
     except Exception as ex:  # noqa: BLE001 - no log is recorded as no rows
         errors.append(f"log: {ex}"[:500])

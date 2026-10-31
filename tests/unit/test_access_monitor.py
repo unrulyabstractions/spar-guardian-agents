@@ -99,9 +99,9 @@ def test_the_hash_of_an_exec_is_the_hash_of_the_tools_argv(monkeypatch):
 
 
 def fake_processes(monkeypatch, processes: dict[int, tuple[int, int]]) -> None:
-    """{pid: (parent, pid in its namespace)} in one pid namespace; every other pid lies outside it."""
-    monkeypatch.setattr(daemon, "status", lambda pid: {"uid": 1000, "ppid": processes[pid][0],
-                                                       "ns_pid": processes[pid][1]} if pid in processes else None)
+    """{pid: (parent, pid in its namespace)} in one pid namespace; every other pid lies outside it, on the host."""
+    monkeypatch.setattr(daemon, "status", lambda pid: {"uid": 1000, "ppid": processes.get(pid, (0, pid))[0],
+                                                       "ns_pid": processes.get(pid, (0, pid))[1]})
     monkeypatch.setattr(daemon, "argv", lambda pid: [b"cmd", str(pid).encode()])
     monkeypatch.setattr(daemon, "link", lambda path: "pid:[1]" if int(path.split("/")[2]) in processes else "pid:[2]")
 
@@ -124,9 +124,39 @@ def test_the_walk_stops_at_the_openers_pid_namespace(monkeypatch):
     assert chain == ["cmd 50"] and (root["pid"], root["ns_pid"]) == (50, 7)
 
 
+def test_a_parent_whose_namespace_cannot_be_read_stops_the_walk(monkeypatch):
+    """AppArmor refuses the sidecar the namespace of a process on the host, which /proc still lists."""
+    fake_processes(monkeypatch, {50: (40, 7), 40: (1, 900)})
+    monkeypatch.setattr(daemon, "link", lambda path: None if path.startswith("/proc/40/") else "pid:[1]")
+    assert daemon.ancestry(50, daemon.status(50))[1]["pid"] == 50
+
+
 def test_a_detached_process_roots_at_the_machines_init(monkeypatch):
     fake_processes(monkeypatch, {7: (1, 1), 8: (7, 40)})
     assert daemon.ancestry(8, daemon.status(8))[1]["detached"] is True
+
+
+def leaving(monkeypatch, parents) -> None:
+    """Process 8 in fake_processes reads each parent of `parents` in turn, and pid 20 has left: /proc no longer knows it."""
+    found, link, parents = daemon.status, daemon.link, iter(parents)
+    monkeypatch.setattr(daemon, "status", lambda pid: None if pid == 20 else
+                        {**found(8), "ppid": next(parents)} if pid == 8 else found(pid))
+    monkeypatch.setattr(daemon, "link", lambda path: None if path.startswith("/proc/20/") else link(path))
+
+
+def test_a_parent_that_leaves_during_the_walk_is_no_root(monkeypatch):
+    """The kernel holds the opener and none of its ancestors. By the time /proc forgets a parent it has handed its child
+    on, so the walk starts again. A read must never root halfway up its tree, which reads as the harness."""
+    fake_processes(monkeypatch, {7: (1, 1), 8: (0, 40)})
+    leaving(monkeypatch, [20, 7, 7])
+    root = planned("k7q2m").opener(8)["root"]
+    assert (root["pid"], root["detached"]) == (7, True)
+
+
+def test_an_opener_whose_tree_keeps_leaving_reads_gone(monkeypatch):
+    fake_processes(monkeypatch, {8: (0, 40)})
+    leaving(monkeypatch, [20] * daemon.WALKS)
+    assert planned("k7q2m").opener(8) == {"gone": True}
 
 
 def test_an_undecodable_process_name_does_not_stop_the_monitor(monkeypatch):
@@ -355,6 +385,18 @@ def test_a_control_with_no_row_raises_and_the_table_stays(boxes):
     assert state.store[STORE]["pid"] == READY["pid"]
 
 
+def test_a_benchmark_that_names_nothing_raises_before_any_mark(boxes):
+    """A log with no object holds no control, so it could read valid and empty whatever the agents did."""
+    class Nothing(Benchmark):
+        async def watched(self, state):
+            return []
+
+    fake, state = boxes(), SimpleNamespace(store=FakeStore())
+    with pytest.raises(RuntimeError, match="nothing to watch"):
+        asyncio.run(monitor.start_access_monitor(Nothing())(state, None))
+    assert not fake.commands
+
+
 def test_a_monitor_that_does_not_start_raises_with_its_stderr_and_the_capture_keeps_what_there_is(boxes, monkeypatch):
     fake = boxes()
     state = SimpleNamespace(store=FakeStore())
@@ -406,6 +448,24 @@ def test_a_missing_log_is_recorded_as_no_rows(boxes):
     fake.no_log = True
     asyncio.run(monitor.capture(state))
     assert state.store[STORE]["rows"] == [] and "log: " in state.store[STORE]["error"]
+
+
+def test_a_monitor_that_will_not_stop_still_gives_its_rows(boxes, monkeypatch):
+    """A wedged daemon outlives SIGTERM. The rows it wrote stay true, and it is the missing `stopped` row that shows it."""
+    fake, state = boxes(), SimpleNamespace(store=FakeStore())
+    start(state)
+    played = fake.exec
+
+    async def wedged(name, command, **kw):
+        if name == AUDITOR and command[2] == monitor.STOP:
+            raise TimeoutError("Command timed out after 60 seconds")
+        return await played(name, command, **kw)
+
+    monkeypatch.setattr(fake, "exec", wedged)
+    asyncio.run(monitor.capture(state))
+    record = state.store[STORE]
+    assert [row.get("control") for row in record["rows"]] == [None, "start", "start", "end", "end"]
+    assert "stop: " in record["error"]
 
 
 def test_a_sample_that_never_reached_the_monitor_has_nothing_to_capture(boxes):

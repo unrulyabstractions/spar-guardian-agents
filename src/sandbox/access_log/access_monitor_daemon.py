@@ -60,6 +60,7 @@ CMD_CHARS = 300
 CHAIN_CHARS = 120
 ROOT_CHARS = 200
 DIGEST_CHARS = 16
+WALKS = 8                               # the walks of an opener whose ancestors keep leaving
 
 
 # --------------------------------------------------------------------------
@@ -127,18 +128,24 @@ def exec_digest(args: list[bytes]) -> str:
     return hashlib.sha256(b"\0".join(command)).hexdigest()[:DIGEST_CHARS]
 
 
-def ancestry(pid: int, opener: dict) -> tuple[list[str], dict]:
+def ancestry(pid: int, opener: dict) -> tuple[list[str], dict] | None:
     """The opener and its ancestors, nearest first and at most CHAIN_DEPTH, and the root of its exec: the last process
-    in its pid namespace. That is what `docker exec` started, or the machine's init for a detached process."""
+    in its pid namespace. That is what `docker exec` started, or the machine's init for a detached process. None when an
+    ancestor left during the walk: the kernel holds the opener alone, and a process halfway up its tree is no root."""
     namespace = link(f"/proc/{pid}/ns/pid")
+    if namespace is None:
+        return None
     chain: list[str] = []
     root, root_status = pid, opener
     while True:
         if len(chain) < CHAIN_DEPTH:
             chain.append(text(argv(root), CHAIN_CHARS))
         parent = root_status["ppid"]
-        parent_status = status(parent) if parent and link(f"/proc/{parent}/ns/pid") == namespace else None
-        if parent_status is None:
+        space = link(f"/proc/{parent}/ns/pid")      # AppArmor refuses it for a process outside the sidecar's profile
+        parent_status = status(parent)
+        if parent and parent_status is None:
+            return None
+        if not parent or space != namespace:
             break
         root, root_status = parent, parent_status
     args = argv(root)
@@ -242,15 +249,19 @@ class Monitor:
         return next((name for name, machine in self.machines.items() if machine["container"].encode() in cgroup), None)
 
     def opener(self, pid: int) -> dict:
-        """Who opened: read from /proc while the kernel holds the process."""
-        found = status(pid)
-        if found is None:
-            return {"gone": True}
-        args = argv(pid)
-        chain, root = ancestry(pid, found)
-        control = next((name for name, nonce in self.nonces.items() if nonce in args), None)
-        return {"uid": found["uid"], "exe": link(f"/proc/{pid}/exe"), "cwd": link(f"/proc/{pid}/cwd"),
-                "cmd": text(args, CMD_CHARS), "chain": chain, "root": root, **({"control": control} if control else {})}
+        """Who opened: read from /proc while the kernel holds the process. A parent /proc no longer knows has handed its
+        children on, so a walk that met one starts again."""
+        for _ in range(WALKS):
+            found = status(pid)
+            walked = found and ancestry(pid, found)
+            if walked:
+                chain, root = walked
+                args = argv(pid)
+                control = next((name for name, nonce in self.nonces.items() if nonce in args), None)
+                return {"uid": found["uid"], "exe": link(f"/proc/{pid}/exe"), "cwd": link(f"/proc/{pid}/cwd"),
+                        "cmd": text(args, CMD_CHARS), "chain": chain, "root": root,
+                        **({"control": control} if control else {})}
+        return {"gone": True}
 
     def where(self, pid: int, fd: int) -> dict:
         """What was opened. The inode names a marked object. A new file at an object's path has no mark yet, so its
