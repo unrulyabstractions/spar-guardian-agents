@@ -174,13 +174,14 @@ def test_the_applied_policy_is_the_one_recorded():
     team = build_config("default", "small", [])
     assert own.applied_access(team, None) == "split"
     assert own.plan(team).holds == {"a01": ["A"], "a02": ["B"], "a03": ["C"]}
-    # own_piece with a regulator: A, B and C go to the two neutral agents round robin; the regulator holds nothing
+    # own_piece with a regulator: seed 2 turns A, B, C to C, A, B, which go to the two neutral agents round robin; the
+    # regulator holds nothing
     with_role = build_config("default", "small", ["regulators=1", "seed=2"])
     roles = hidden_roles(with_role)
     neutral = access.neutral_agents(THREE, roles)
     regulator = next(a for a in THREE if roles[a] == "regulator")
     plan = own.plan(with_role, roles)
-    assert plan.holds == {neutral[0]: ["A", "C"], neutral[1]: ["B"], regulator: []} and plan.mode == "shared_task"
+    assert plan.holds == {neutral[0]: ["C", "B"], neutral[1]: ["A"], regulator: []} and plan.mode == "shared_task"
     assert plan.pieces == {} and plan.split
     # one neutral agent among three: the whole fix for everyone
     two_roles = build_config("default", "small", ["regulators=1", "disregulators=1"])

@@ -34,6 +34,8 @@ TASKS = {
     "software_engineering": "swe",
 }
 """Each task and its package under examples/, which is also its domain's name in src.domains.DOMAINS."""
+STEMS = {"software_engineering": "flipt"}
+"""The stem of a task's cells where its package holds several: one box runs one issue."""
 MODELS = {"deepseek-flash-openrouter": "dsflash", "gpt-6-luna": "luna", "claude-haiku-5-5": "haiku"}
 """Each model's registry entry and the suffix of its run names."""
 KINDS = ("solo", "solo_cheat", "minimal", "minimal_cheat", "minimal_regulated")
@@ -101,7 +103,7 @@ def cells(task: str, kinds: tuple[str, ...] | None = None, examples: Path = ROOT
     package = TASKS[task]
     found, problems = [], []
     for kind in kinds or kinds_of(task):
-        scripts = sorted((examples / package).glob(f"*_{kind}.py"))
+        scripts = sorted((examples / package).glob(f"{STEMS.get(task, '*')}_{kind}.py"))
         if len(scripts) != 1:
             problems.append(f"{kind}: {len(scripts)} scripts")
         else:

@@ -598,7 +598,7 @@ def test_knowledge_work_and_chess_have_a_cell_no_other_task_has(tmp_path):
     assert fleet_layout.run_name("knowledge_work.worktime_minimal_all", "luna", 2) == "worktime_minimal_all_luna2"
     assert fleet_layout.cells("chess")[-1] == "chess.game_minimal_all"
     assert fleet_layout.run_name("chess.game_minimal_all", "luna", 2) == "game_minimal_all_luna2"
-    assert len(fleet_layout.cells("swe")) == len(fleet_layout.KINDS)
+    assert len(fleet_layout.cells("software_engineering")) == len(fleet_layout.KINDS)
     assert fleet_layout.EVERY_KIND == (*fleet_layout.KINDS, "minimal_all")
     assert fleet_layout.layout_problems(list(fleet_layout.TASKS)) == []
     # its own kinds are the rest of a task's cells: a task without them is refused, and no other task needs them

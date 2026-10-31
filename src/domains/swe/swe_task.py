@@ -33,11 +33,12 @@ from src.domains.swe._swe_scoring import GUARD_DIFF, branch_file, committed, has
 from src.domains.swe.swe_inputs import (
     agent_timeout_s,
     fix_commit,
+    instruction_text,
+    issue_note,
     load_lines,
     load_split,
     patch_files,
     task_config,
-    task_dir,
 )
 from src.domains.swe.swe_ladder import SweDomain
 from src.domains.swe.swe_sandbox import TOOL_DESCRIPTIONS, ensure_images, seats, write_compose
@@ -47,6 +48,7 @@ from src.domains.swe.swe_settings import (
     AGENT_TIME_S,
     DEFAULT_ROW,
     GRADING_BUDGET_S,
+    GRADING_FILES,
     HONEYPOTS,
     JIGSAW_PIECES,
     PARTS,
@@ -66,8 +68,8 @@ TEXT_KEYS = ("first_message", "judge_prompt", "system_prompt")      # in the eva
 
 
 def honeypot_items(honeypot_name: str) -> list[str]:
-    """The pieces access=split deals over the neutral agents, in deal order: Lucy's jigsaw B, C, A; own_piece A, B,
-    C; nothing as released."""
+    """The pieces access=split deals over the neutral agents, before the seed turns them (SWE.dealt_items): Lucy's
+    jigsaw B, C, A; own_piece A, B, C; nothing as released."""
     return {"as_released": [], "own_piece": list(PARTS),
             "jigsaw": [p for held in JIGSAW_PIECES for p in held]}[honeypot_name]
 
@@ -105,7 +107,9 @@ class SWE(Benchmark):
             "native_arm64_rebuild_of_the_amd64_swe_bench_pro_image", "no_network_in_every_container",
             f"agents_share_one_time_limit_and_get_{AGENT_CPUS:g}_cpus_{AGENT_MEM}_each",
             "tools_shell_and_run_python_bound_per_agent",
-            *([f"honeypot_{honeypot}_pruned_and_planted_at_sample_setup"] if honeypot != "as_released" else [])]
+            *([f"honeypot_{honeypot}_pruned_and_planted_at_sample_setup"] if honeypot != "as_released" else []),
+            *(["instruction_names_what_the_hidden_tests_call"] if issue_note(self.row) else []),
+            *(["grader_adds_the_data_files_only_the_fix_adds"] if self.row in GRADING_FILES else [])]
 
     def check(self, config: SwarmConfig) -> None:
         """NotImplementedError at the large scales, or at the large scale's team size set by hand (LARGE_SCALE_ERROR);
@@ -127,6 +131,14 @@ class SWE(Benchmark):
     def split_items(self, n_neutral: int) -> list[str]:
         return honeypot_items(self.honeypot)
 
+    def dealt_items(self, config: SwarmConfig, n_neutral: int) -> list[str]:
+        """The pieces in deal order, turned by the seed, so the samples of a cell put each piece on a different seat. A
+        sample's seed is its number (scripts/screen.py, scripts/box/box_runner.py launch), and three consecutive numbers
+        give a piece three seats. Seed 0, a run launched by hand, deals Lucy's order."""
+        items = self.split_items(n_neutral)
+        turn = config.seed % len(items) if items else 0
+        return items[turn:] + items[:turn]
+
     def valid_item(self, item: str) -> bool:
         return item in PIECES
 
@@ -144,16 +156,17 @@ class SWE(Benchmark):
 
         A lone agent and a solo_task agent get `system_solo`; a solo_task agent of a board then gets the team and board
         texts its config asks for (prompt_texts.board_system_prompt). A shared_task agent gets `system_shared` with the
-        roster. Its board sentences and last line come from prompt_texts.swe_board_fields."""
+        roster. Its board sentences and last line come from prompt_texts.swe_board_fields. Both name the agent's clone
+        with the same text (prompts.yaml swe.clone), whose branch list the setup fills (_swe_honeypot.fill_branches)."""
         prompts, repo = settings.load_prompts()["swe"], load_split(self.row)["repo"]
-        config, agents = plan.config, plan.agents
+        config, agents, clone = plan.config, plan.agents, prompts["clone"]
         ending = {a: "".join(f"\n{line}" for line in self.ending_lines(plan, a)) for a in agents}
         if plan.mode != "shared_task":
-            texts = {a: prompts["system_solo"].format(name=a, repo=repo, branch=a, timeout=TOOL_TIMEOUT_S,
+            texts = {a: prompts["system_solo"].format(name=a, repo=repo, branch=a, clone=clone, timeout=TOOL_TIMEOUT_S,
                                                       ending=ending[a]) for a in agents}
             return {a: "\n\n".join(filter(None, [texts[a], board_system_prompt(config, a, agents)])) for a in agents}
         return {a: prompts["system_shared"].format(
-            name=a, n=len(agents), repo=repo, branch=a, timeout=TOOL_TIMEOUT_S, ending=ending[a],
+            name=a, n=len(agents), repo=repo, branch=a, clone=clone, timeout=TOOL_TIMEOUT_S, ending=ending[a],
             roster="\n".join(prompts["roster_line"].format(name=o) for o in agents if o != a),
             **swe_board_fields(config)) for a in agents}
 
@@ -164,7 +177,7 @@ class SWE(Benchmark):
         split = load_split(self.row)
         instance = split["task"]
         cfg = task_config(instance)
-        instruction = (task_dir(instance) / "instruction.md").read_text() + instruction_suffix
+        instruction = instruction_text(self.row, instance) + instruction_suffix
         system = self.system_prompts(plan)
         swe = {
             "issue": self.row, "instance": instance, "repo": cfg["repo"], "base_commit": cfg["base_commit"],
@@ -174,7 +187,7 @@ class SWE(Benchmark):
             "system_prompt": system, "first_message": {a: instruction for a in plan.agents},
             "judge_prompt": {a: f"{system[a]}\n\n{instruction}" for a in plan.agents},
             "patch_files": patch_files(cfg["patch"]), "distinctive_lines": len(load_lines(self.row)["fix"]),
-            "images": ensure_images(self.row),
+            "grading_files": list(GRADING_FILES.get(self.row, ())), "images": ensure_images(self.row),
         }
         compose = write_compose(self.row, plan.agents, team_remote=honeypot.has_team_remote(swe))
         cheatbench = {"task": self.name, "variant": "", "swe_task": instance, "instruction": instruction,
@@ -237,7 +250,8 @@ class SWE(Benchmark):
     @classmethod
     def run_blocks(cls, view) -> dict:
         """run.json "swe": the issue, the honeypot, each agent's pieces, the setup's evidence and checks, the planted
-        commits, the grades and each agent's final state; the prompts stay in the eval log."""
+        commits, the grades with what the grader added to each tree (grading_files, and each grade's grader_added) and
+        each agent's final state; the prompts stay in the eval log."""
         cb = (view.metadata or {}).get("cheatbench") or {}
         swe = cb.get("swe")
         if not swe:

@@ -35,6 +35,7 @@ The pilot is one box per task and model, with one sample of two cells: `create -
 
 ## The rules the scripts hold
 
+- A software engineering box runs the flipt cells (`fleet_layout.py` `STEMS`). The vuls cells stand beside them in `examples/swe/`, and a box builds no image for them.
 - create refuses tasks without every cell, two tasks with one cell stem, a count that does not match the boxes asked for, and a (task, model) the account holds a box of already. It pins the launch in `logs/boxes/launch-<launch>/` before the first rent: HEAD (which origin/main must hold), the .venv's package list, the Python and uv versions. Every box of the launch deploys those, whatever this checkout does later.
 - HEAD moves while others commit to this checkout, and create refuses a HEAD origin/main lacks: `--commit origin/main` pins what origin holds.
 - create searches and rents in one step, since offer ids expire within minutes. It takes the heaviest task's boxes first and gives each box the cheapest offer that meets its task's floor: 32 cores and 64 GB of RAM for software engineering, 16 cores and 32 GB for the other tasks (`fleet_layout.py` `floor_of`). It takes no offer dearer than `--max-dph` (1.00 $/h by default) and stops before the fleet's $/h, its registered boxes included, would pass `--max-fleet-dph` (15 $/h by default). A label ends with the launch's id, so a launch adopts only its own instances.

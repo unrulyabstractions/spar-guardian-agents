@@ -1,8 +1,13 @@
 """Lucy's honeypots, built at sample setup: each agent's identity and branch, the pruned history, the planted pieces,
-the team remote and the setup checks.
+the team remote, the setup checks and the branch list in each agent's prompts.
 
 The prune, plant and scan scripts live in sandbox/ and are filled with str.format. A failed check raises SetupFailed
 before any agent starts.
+
+The branch list can only come from the clone, which does not exist when the sample is built. So a system prompt leaves
+the sample with BRANCHES in it (prompts.yaml swe.clone), and prepare fills it in the sample's metadata from the refs the
+checks read. ORBIT builds each agent from metadata["experiment"] after the setup, so an agent's first turn reads its
+own list, and the eval log and the judge read the same text.
 """
 from __future__ import annotations
 
@@ -14,6 +19,7 @@ from pathlib import Path
 from inspect_ai.solver import TaskState
 from inspect_ai.util import sandbox
 
+from src.configuration import settings
 from src.domains.swe.swe_inputs import load_lines, load_split, piece_patch
 from src.domains.swe.swe_sandbox import SetupFailed, must, run
 from src.domains.swe.swe_settings import PIECES, TEAM_REPO, TEAM_VIEW, WORKDIR
@@ -34,6 +40,7 @@ SELECT_ALL = "cat /tmp/.scan.all"
 SELECT_ONLY = "sort {ids} | comm -12 /tmp/.scan.all -"
 SELECT_EXCEPT = "sort {ids} | comm -23 /tmp/.scan.all -"
 SETUP_STORE = "swe_setup"       # the setup's evidence, which the grader and the export read
+BRANCHES = "{branches}"         # where a prompt holds the agent's branch list until the setup fills it
 
 
 def prune_script(split: dict, base: str, fix: str) -> str:
@@ -76,6 +83,26 @@ def own_lines(fix_lines: list[dict], pieces: list[str]) -> set[str]:
 def has_team_remote(swe: dict) -> bool:
     """Whether the sample has the team remote: a team in shared_task."""
     return swe["mode"] == "shared_task"
+
+
+def branch_names(refs: list[str]) -> list[str]:
+    """The branches among a clone's refs as `git branch -a` names them, without a remote's HEAD. Sorted by name, so the
+    order says nothing of how a branch got there."""
+    names = [ref.removeprefix("refs/heads/").removeprefix("refs/remotes/") for ref in refs
+             if ref.startswith(("refs/heads/", "refs/remotes/"))]
+    return sorted(name for name in names if not name.endswith("/HEAD"))
+
+
+def fill_branches(metadata: dict, refs: dict[str, list[str]]) -> None:
+    """Write each agent's branch list into everything that holds its prompt: the system prompt ORBIT builds the agent
+    from, the sample's record of it and the judge's copies. `refs` holds each agent's refs (_agent_state)."""
+    item = settings.load_prompts()["swe"]["branch_item"]
+    lists = {agent: ", ".join(item.format(name=name) for name in branch_names(held)) for agent, held in refs.items()}
+    swe = metadata["cheatbench"]["swe"]
+    for texts in (swe["system_prompt"], swe["judge_prompt"], metadata["cheatbench"]["judge_prompt"]):
+        texts.update({agent: text.replace(BRANCHES, lists[agent]) for agent, text in texts.items()})
+    for spec in metadata["experiment"]["setup"]["agents"]:
+        spec["system_prompt"] = spec["system_prompt"].replace(BRANCHES, lists[spec["name"]])
 
 
 async def _scan(box, repo: str, lines: list[str], select: str = SELECT_ALL, ids: list[str] | None = None,
@@ -193,7 +220,8 @@ async def _team_repo_check(swe: dict, lines: dict, evidence: dict) -> list[str]:
 
 async def prepare(state: TaskState) -> None:
     """Identities and branches, the honeypot, the team remote (none outside shared_task), then the checks; the
-    evidence goes to the store under SETUP_STORE. A failed check raises SetupFailed."""
+    evidence goes to the store under SETUP_STORE. A failed check raises SetupFailed. Last, each agent's branch list goes
+    into its prompts."""
     swe = state.metadata["cheatbench"]["swe"]
     base, fix, agents = swe["base_commit"], swe["fix_commit"], swe["agents"]
     split, lines = load_split(swe["issue"]), load_lines(swe["issue"])
@@ -227,3 +255,4 @@ async def prepare(state: TaskState) -> None:
     state.store.set(SETUP_STORE, evidence)
     if problems:
         raise SetupFailed("swe setup check failed: " + "; ".join(problems))
+    fill_branches(state.metadata, {a: evidence["agents"][a]["refs"] for a in agents})

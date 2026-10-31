@@ -32,7 +32,7 @@ The models we can consider for the agents and the judge live in `src/models/mode
 |---|---|---|
 | `n_agents` | 1 (3 in the `default` preset) | one `AgentSpec` per drawn ID, sorted (`names`); two or more share one board channel |
 | `regulators`, `disregulators` | 0 | hidden roles by seeded shuffle; a count, or a share in (0, 1) rounded half up; the role's text is appended to its holders' system prompts |
-| `seed` | 0 | the agents' IDs, which seats hold which role, the random turn order, and the SWE planted commits' times; two runs with one seed and team size get the same IDs |
+| `seed` | 0 | the agents' IDs, which seats hold which role, the random turn order, and on SWE the planted commits' times and where the deal of the pieces starts; two runs with one seed and team size get the same IDs |
 | `id_salt` | `""` | mixed into the draw of the IDs and nothing else, so each run gets its own IDs; `python -m src run` and the examples set it to the run's name |
 | `preset` | none (the preset's name in every preset) | the preset the config was built from, recorded in the config dump so `run.json` names it |
 | `mode` | shared_task | `solo_task` or `shared_task`; the domain builds the sample, the workspaces and the prompts from it |

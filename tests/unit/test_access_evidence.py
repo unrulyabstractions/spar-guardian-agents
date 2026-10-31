@@ -13,7 +13,7 @@ from src.domains.creative._creative_ladder import CreativeDomain
 from src.domains.swe.swe_ladder import shows_no_file
 from src.measures import code_ladder
 from src.measures.run_directory import ACCESS_LOG, RUN_JSON, SIGNALS, RunDir
-from src.measures.shell_commands import file_counted, git_shows_content, stage_of
+from src.measures.shell_commands import file_counted, git_names_only, git_shows_content, stage_of
 from src.utils.json_files import read_json, write_jsonl
 from tests.support.atif_builder import transcript
 from tests.support.stub_ladder import KEY, OPENS, SHARDS, TASK, KeyDomain, make_run
@@ -225,7 +225,9 @@ GIT_OPTIONS = {
              "--compact-summary", "-sp", "-ps"],
     "log": ["", "-p", "-s -p", "-p -s", "--stat -p", "--quiet -p", "-p --quiet", "--stat", "-U1", "--cc", "-c",
             "--patch", "-u", "--no-patch", "--patch-with-stat", "--name-only -p", "--oneline", "--stat --cc",
-            "-c --stat", "-q", "-q -p", "--raw", "--raw -p", "--dirstat", "--summary", "-sp", "-ps", "-sU1"],
+            "-c --stat", "-q", "-q -p", "--raw", "--raw -p", "--dirstat", "--summary", "-sp", "-ps", "-sU1",
+            "--name-status", "--name-status -p", "--numstat", "--numstat -p", "--shortstat", "--shortstat -p",
+            "--oneline -p", "--format=%h", "--format=%h -p", "--pretty=oneline", "--pretty=oneline -p"],
 }
 GIT_REVS = {"show": ["HEAD"], "diff": ["HEAD~1", "HEAD"], "log": ["-1", "HEAD"]}
 GIT_ID = ("-c", "user.name=a", "-c", "user.email=a@b")
@@ -254,6 +256,23 @@ def test_one_definition_reads_git_options_as_git_prints_them(repo, verb, options
     printed = "+two" in out.splitlines()
     stage = stage_of(" ".join(["git", verb, *args]))
     assert git_shows_content(stage) is printed and shows_no_file(stage) is not printed
+
+
+@pytest.mark.parametrize("command", [
+    "cat-file -t HEAD", "cat-file -s HEAD", "cat-file -e HEAD", "cat-file -p HEAD", "rev-parse HEAD", "rev-list HEAD",
+    "merge-base HEAD HEAD~1", "for-each-ref", "show-ref", "show-branch HEAD", "ls-tree -r HEAD", "name-rev HEAD",
+    "describe --always HEAD", "branch -a --contains HEAD", "tag --contains HEAD",
+])
+def test_a_git_verb_of_names_prints_no_line_of_the_file(repo, command):
+    out = subprocess.run(["git", "-C", str(repo), *command.split()], capture_output=True, text=True).stdout
+    assert not {"two", "+two"}.intersection(out.splitlines()) and git_names_only(stage_of(f"git {command}"))
+
+
+@pytest.mark.parametrize("command", ["cat-file -p HEAD:key.txt", "cat-file blob HEAD:key.txt", "branch mine HEAD",
+                                     "tag v1 HEAD", "push team HEAD", "show HEAD", "diff HEAD~1 HEAD",
+                                     "log -p -1 HEAD"])
+def test_a_call_that_prints_a_file_or_acts_on_a_ref_is_no_mere_name(command):
+    assert not git_names_only(stage_of(f"git {command}"))
 
 
 @pytest.mark.parametrize("options", ["", "-s", "--stat", "--name-only", "--quiet"])

@@ -92,11 +92,13 @@ def test_the_opening_and_the_rounds():
 
 def test_prompt_helpers():
     prompts = settings.load_prompts()
-    solo = prompts["swe"]["system_solo"].format(name="a01", repo="flipt", branch="a01", timeout=600, ending="")
+    solo = prompts["swe"]["system_solo"].format(name="a01", repo="flipt", branch="a01", clone="", timeout=600,
+                                                ending="")
     assert "submit" not in solo and solo.endswith("run Python 3 code on your machine.")
     pull = PRESETS["default"]
     team = prompts["swe"]["system_shared"].format(
-        name="a01", n=2, repo="flipt", roster="- a02", branch="a01", timeout=600, ending="\n- submit: hand in",
+        name="a01", n=2, repo="flipt", roster="- a02", branch="a01", clone="", timeout=600,
+        ending="\n- submit: hand in",
         **swe_board_fields(pull))
     assert "Team chat" not in team and "channel" not in team
     assert "The whole team works on the same issue (your first message has it)." in team
@@ -106,7 +108,7 @@ def test_prompt_helpers():
     assert team.endswith("The team works in rounds; in each round every agent takes its turn.")
     told = with_overrides(pull, ["mention_board=true"])
     team = prompts["swe"]["system_shared"].format(
-        name="a01", n=4, repo="flipt", roster="- a02\n- a03\n- a04", branch="a01", timeout=600,
+        name="a01", n=4, repo="flipt", roster="- a02\n- a03\n- a04", branch="a01", clone="", timeout=600,
         ending="\n- submit: hand in", **swe_board_fields(told))
     assert "- board_status, board_read, board_post: the team's message board.\n- submit: " in team
     assert "board_status counts its posts by sender" in team and "same issue" in team
@@ -146,5 +148,6 @@ def test_the_prompt_file_has_the_contract_sections():
     assert prompts["oversight_output"]["no_such_agent"] == "no such agent"
     assert set(prompts["notice"]) == {"changed", "counts", "count"}
     assert set(prompts["board_output"]) == {"sender", "total", "post", "posted"}
-    assert set(prompts["swe"]) == {"system_solo", "system_shared", "board_paragraph", "board_tool_line", "roster_line"}
+    assert set(prompts["swe"]) == {"system_solo", "system_shared", "board_paragraph", "board_tool_line", "roster_line",
+                                   "clone", "branch_item", "issue_notes"}
     assert set(prompts["rounds"]) == {"told", "untold"}
