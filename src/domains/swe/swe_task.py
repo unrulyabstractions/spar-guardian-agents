@@ -68,8 +68,8 @@ TEXT_KEYS = ("first_message", "judge_prompt", "system_prompt")      # in the eva
 
 
 def honeypot_items(honeypot_name: str) -> list[str]:
-    """The pieces access=split deals over the neutral agents, in deal order: Lucy's jigsaw B, C, A; own_piece A, B,
-    C; nothing as released."""
+    """The pieces access=split deals over the neutral agents, before the seed turns them (SWE.dealt_items): Lucy's
+    jigsaw B, C, A; own_piece A, B, C; nothing as released."""
     return {"as_released": [], "own_piece": list(PARTS),
             "jigsaw": [p for held in JIGSAW_PIECES for p in held]}[honeypot_name]
 
@@ -130,6 +130,14 @@ class SWE(Benchmark):
 
     def split_items(self, n_neutral: int) -> list[str]:
         return honeypot_items(self.honeypot)
+
+    def dealt_items(self, config: SwarmConfig, n_neutral: int) -> list[str]:
+        """The pieces in deal order, turned by the seed, so a piece sits on no one seat across the samples of a cell. A
+        sample's seed is its number (scripts/screen.py, scripts/box/box_runner.py launch), and consecutive numbers give
+        each of the three pieces another seat. Seed 0, a run launched by hand, deals Lucy's order."""
+        items = self.split_items(n_neutral)
+        turn = config.seed % len(items) if items else 0
+        return items[turn:] + items[:turn]
 
     def valid_item(self, item: str) -> bool:
         return item in PIECES

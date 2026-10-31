@@ -1,6 +1,7 @@
 """The SWE task, its setup and its grader (src/domains/swe/): the branch list in every agent's prompts, the issue's note
-on names, the files the grader adds. No model calls, no Docker: the sandbox is a fake that answers git by the command's
-words, ORBIT runs on Inspect's mock provider, or a script runs on a real git repository in a temporary folder."""
+on names, the files the grader adds, the deal the seed turns. No model calls, no Docker: the sandbox is a fake that
+answers git by the command's words, ORBIT runs on Inspect's mock provider, or a script runs on a real git repository in
+a temporary folder."""
 from __future__ import annotations
 
 import asyncio
@@ -13,13 +14,17 @@ from inspect_ai import eval as inspect_eval
 from inspect_ai.log import read_eval_log
 from inspect_ai.solver import solver
 
+from examples.example_arguments import parse_example_arguments
+from scripts.box import box_runner
+from src.configuration import settings
 from src.configuration.presets import build_config
 from src.domains.swe import SWE, _swe_honeypot, _swe_scoring
 from src.domains.swe._swe_honeypot import BRANCHES, branch_names, fill_branches
 from src.domains.swe._swe_scoring import add_script, swe_grader
 from src.domains.swe.swe_inputs import instruction_text, issue_note, load_split, task_config
 from src.domains.swe.swe_settings import GRADING_FILES
-from src.tasks import swarm_task
+from src.tasks import hidden_roles, swarm_task
+from tests.support.ordered_ids import drawn_ids
 from tests.support.turn_rules_harness import build_task, by_agent, do, scripted_model, sequential
 
 ISSUE = "flipt-02e2"
@@ -317,3 +322,52 @@ def test_only_files_the_fix_adds_are_grading_files():
     for path in GRADING_FILES[ISSUE]:
         assert f"diff --git a/{path} b/{path}\nnew file mode" in config["patch"]
         assert path.rsplit("/", 1)[1] in config["test_patch"]
+
+
+# ---------------------------------------------------------------- the deal
+def launched(cell: str, sample: int, monkeypatch, tmp_path) -> list[str]:
+    """The arguments the fleet's runner gives sample k of a cell (box_runner.launch), as scripts/screen.py does."""
+    commands = []
+    monkeypatch.setattr(box_runner, "SCREEN_LOGS", tmp_path)
+    monkeypatch.setattr(box_runner.subprocess, "Popen", lambda command, **kwargs: commands.append(command))
+    box_runner.launch(f"swe.{cell}", f"{cell}_luna{sample}_{id(commands)}", "gpt-6-luna", sample)
+    return commands[0][commands[0].index("--model"):]
+
+
+@pytest.mark.parametrize("cell", ["flipt_minimal", "flipt_minimal_cheat", "flipt_minimal_regulated"])
+def test_each_sample_of_a_cell_puts_piece_a_on_another_seat(cell, monkeypatch, tmp_path):
+    """On the seed and the name a real launch gives, with the real draw of the IDs."""
+    with drawn_ids():
+        seats = []
+        for sample in (1, 2, 3):
+            script = settings.ROOT / "examples" / "swe" / f"{cell}.py"
+            args = parse_example_arguments(script, None, launched(cell, sample, monkeypatch, tmp_path))
+            config = build_config(args.preset, args.scale, args.settings)
+            assert config.seed == sample and config.id_salt.startswith(f"{cell}_luna{sample}_")
+            if cell.endswith("regulated"):
+                config = config.replace(n_agents=4, regulators=1, max_concurrency=4)
+            plan = SWE(ISSUE, "jigsaw").plan(config, hidden_roles(config))
+            [holder] = [agent for agent, items in plan.holds.items() if "A" in items]
+            seats.append(config.seats.index(holder))
+    assert len(set(seats)) == 3, seats
+
+
+def test_the_deal_turns_by_the_seed_and_a_run_keeps_its_deal():
+    deals = {}
+    for seed in range(4):
+        config = team(seed=seed)
+        assert SWE(ISSUE, "jigsaw").plan(config).holds == SWE(ISSUE, "jigsaw").plan(config).holds
+        deals[seed] = [SWE(ISSUE, "jigsaw").plan(config).holds[a] for a in config.seats]
+    assert deals[0] == [["B"], ["C"], ["A"]], "seed 0 keeps Lucy's order"
+    assert deals[1] == [["C"], ["A"], ["B"]] and deals[2] == [["A"], ["B"], ["C"]] and deals[3] == deals[0]
+    own = SWE(ISSUE, "own_piece")
+    assert [own.plan(team(seed=1)).holds[a] for a in team(seed=1).seats] == [["B"], ["C"], ["A"]]
+
+
+def test_the_turn_holds_every_piece_when_the_neutral_agents_are_few_or_many():
+    for seed in range(6):
+        for size in (4, 5, 6):
+            config = team(seed=seed).replace(n_agents=size, max_concurrency=size)
+            assert {p for items in SWE(ISSUE, "jigsaw").plan(config).holds.values() for p in items} == set("ABC")
+        two = team(seed=seed).replace(n_agents=2)
+        assert sorted(p for items in SWE(ISSUE, "jigsaw").plan(two).holds.values() for p in items) == ["A", "B", "C"]

@@ -23,9 +23,9 @@ lone agent), the access policy as applied, what each agent holds, its numbered p
 the exploit is split. A lone agent, a solo_task team and a team with fewer than two neutral agents hold everything.
 
 Access. A benchmark names the items of its exploit: whole_access, split_items(n) dealt over the n neutral agents under
-access=split (src/configuration/access_policy.py), and valid_item for an explicit map. A domain whose pieces are
-numbered sets piece_stem ("slice" gives slice1..sliceN) and the base derives all three; an agent holding every piece
-holds the whole.
+access=split in the order dealt_items gives (src/configuration/access_policy.py), and valid_item for an explicit map. A
+domain whose pieces are numbered sets piece_stem ("slice" gives slice1..sliceN) and the base derives all three; an agent
+holding every piece holds the whole.
 
 Delivery. delivered(plan) gives the predicate stop_after_delivery awaits at the end of a round: which agents'
 deliverable exists. A shared_task team has one deliverable, which counts for every agent.
@@ -167,6 +167,11 @@ class Benchmark(ABC):
         piece each."""
         return [f"{self.piece_stem}{k}" for k in range(1, n_neutral + 1)]
 
+    def dealt_items(self, config: SwarmConfig, n_neutral: int) -> list[str]:
+        """The items of split_items in the order this config deals them over the neutral seats: as listed, unless a
+        domain turns them."""
+        return self.split_items(n_neutral)
+
     def valid_item(self, item: str) -> bool:
         """Whether an explicit access map may name this item."""
         return item in self.whole_access() or (
@@ -193,7 +198,7 @@ class Benchmark(ABC):
         self.check(config)
         access = self.applied_access(config, roles)
         whole = self.whole_access()
-        holds = access_policy.plan(access, config.seats, roles, self.split_items, whole)
+        holds = access_policy.plan(access, config.seats, roles, lambda n: self.dealt_items(config, n), whole)
         pieces: dict[str, list[int] | None] = {}
         n_pieces = None
         if self.piece_stem:
