@@ -61,7 +61,8 @@ READS = {"board_read": "teammate_post", "agent_actions": "teammate_actions"}
 HOST_MECHANISM = "host"
 """An access log's status and a row's mechanism and named_by where a host tool's records gave the row and no monitor saw
 the open."""
-SYSTEM_BIN = {"/bin", "/sbin", "/usr/bin", "/usr/sbin", "/usr/local/bin", "/usr/lib/git-core", "/usr/libexec/git-core"}
+SYSTEM_BIN = {"/bin", "/sbin", "/usr/bin", "/usr/sbin", "/usr/local/bin", "/usr/local/sbin", "/usr/lib/git-core",
+              "/usr/libexec/git-core", "/usr/local/libexec/git-core"}
 """Where an image keeps its programs, which only root can replace."""
 MULTI_CALL = {"busybox", "coreutils", "toybox"}
 """One file that runs what argv[0] names, so there argv[0] is the truth."""
@@ -391,12 +392,16 @@ class Domain:
 def process_stage(record: dict) -> Stage:
     """A row's process as a simple command. A process writes its own argv (`exec -a wc cat key`) and only a new exec
     changes its exe, so a real wc stays a counter and a cat under that name does not. A file outside SYSTEM_BIN keeps
-    its whole path, which names no counter: an agent's copy of cat at /tmp/wc is its own program."""
+    its whole path, which names no counter: an agent's copy of cat at /tmp/wc is its own program. An argv[0] of
+    git-<verb> is the one name a program obeys: git runs that verb."""
     stage = stage_of(record.get("cmd") or "")
     exe = PurePosixPath(record.get("exe") or "")
     if not exe.name or exe.name in MULTI_CALL:
         return stage
-    return stage._replace(program=exe.name if str(exe.parent) in SYSTEM_BIN else str(exe))
+    program = exe.name if str(exe.parent) in SYSTEM_BIN else str(exe)
+    args = [stage.program.removeprefix("git-"), *stage.args] \
+        if program == "git" and stage.program.startswith("git-") else stage.args
+    return stage._replace(program=program, args=args)
 
 
 # --------------------------------------------------------------------------

@@ -159,6 +159,11 @@ def test_a_shells_redirect_into_a_counter_shows_nothing():
     ("/usr/local/bin/python3.11", f"grep -c open('{KEY}')", f"exec -a grep python3 -c \"open('{KEY}')\"", True),
     ("/usr/bin/cat", f"wc {KEY}", "python3 -", True),                           # os.execv from Python code
     ("/usr/bin/cat", f"cat {KEY}", f"wc() {{ cat \"$@\"; }}; wc {KEY}", True),   # a function under a counter's name
+    ("/usr/bin/cat", f"cat {KEY}", f"wc() {{ cat; }}; cat {KEY} | wc -l", True),    # at the end of a real pipeline
+    ("/usr/bin/cat", f"cat {KEY}", f"function wc {{ cat; }}; cat {KEY} | wc -l", True),
+    ("/usr/bin/bash", f"bash --login -c wc() {{ cat; }}; wc < {KEY}", f"wc() {{ cat; }}; wc < {KEY}", True),
+    ("/usr/bin/grep", f"'grep -c' . {KEY}", f"exec -a 'grep -c' grep . {KEY}", True),   # argv[0] holds its own words
+    ("/usr/bin/grep", f"grep . {KEY} ' -c'", f"grep . {KEY} ' -c'", True),      # a word that only reads as an option
     ("/tmp/wc", f"/tmp/wc {KEY}", f"/tmp/wc {KEY}", True),                      # an agent's copy of cat
     ("/tmp/wc (deleted)", f"/tmp/wc {KEY}", f"/tmp/wc {KEY}", True),
     ("/tmp/g", "/tmp/g cat-file -p abc", "/tmp/g cat-file -p abc", True),       # a copy of git, or its own program
@@ -184,6 +189,22 @@ def test_a_shell_parses_the_name_exec_gives_a_program():
     assert stage_of("env -a wc cat /keys/key").text == "cat /keys/key"
 
 
+@pytest.mark.parametrize(("exe", "cmd", "root", "aimed"), [
+    ("/usr/bin/git", "git-show x:f", "exec -a git-show git x:f", True),         # argv[0] gives git its verb
+    ("/usr/lib/git-core/git", "/usr/lib/git-core/git-show x:f", "/usr/lib/git-core/git-show x:f", True),
+    ("/usr/bin/git", "'git log -s' show abc", "exec -a 'git log -s' git show abc", True),
+    ("/usr/bin/git", "git show x:f", "sha256sum() { cat; }; git show x:f | sha256sum", True),
+    ("/usr/bin/git", "git-show --stat abc", "exec -a git-show git --stat abc", False),
+    ("/usr/bin/git", "git-gc", "exec -a git-gc git", False),
+    ("/usr/bin/git", "git receive-pack /team/repo.git", "git push team main", False),
+    ("/usr/local/libexec/git-core/git", "git pack-objects x", "git gc", False),     # a git built from source
+])
+def test_a_git_process_takes_its_verb_from_its_real_words(exe, cmd, root, aimed):
+    root_cmd = f"timeout -k 5s 300s bash --login -c {root}"
+    record = read(cmd=cmd, root_cmd=root_cmd, exe=exe, path="/app/.git/objects/ab/cd")
+    assert domain().aimed_access(record) is aimed
+
+
 GIT_OPTIONS = {
     "show": ["", "-s", "-s -p", "-p -s", "--no-patch -p", "-p --no-patch", "--patch -s", "--stat -p", "-p --stat",
              "--stat", "--stat=80", "--name-only -p", "-p --name-only", "--name-only", "--name-status", "--quiet",
@@ -191,12 +212,15 @@ GIT_OPTIONS = {
              "-s -U0", "-s --patch-with-stat", "--patch-with-stat -s", "-s --cc", "--cc -s", "-c -s", "-s -c",
              "--binary -s", "-s --binary", "--oneline", "--format=%h -s", "-s --format=%h:%s", "--stat --dd",
              "--stat --remerge-diff", "--stat --cc", "--stat -c", "--cc --stat", "--dd --stat", "--stat --binary",
-             "--stat -pU3", "--stat -up"],
+             "--stat -pU3", "--stat -up", "-q", "-q -p", "-p -q", "--raw", "--raw -p", "--dirstat", "--dirstat=files",
+             "--dirstat -p", "-X", "--cumulative", "--summary", "--summary -p", "--compact-summary",
+             "--compact-summary -p"],
     "diff": ["", "--quiet", "--quiet -p", "-p --quiet", "--stat -p", "--name-only -p", "-s", "-s -p", "-p -s", "--stat",
-             "--stat --cc", "-c --stat"],
+             "--stat --cc", "-c --stat", "-q", "-q -p", "-p -q", "--raw", "--raw -p", "--dirstat", "--summary",
+             "--compact-summary"],
     "log": ["", "-p", "-s -p", "-p -s", "--stat -p", "--quiet -p", "-p --quiet", "--stat", "-U1", "--cc", "-c",
             "--patch", "-u", "--no-patch", "--patch-with-stat", "--name-only -p", "--oneline", "--stat --cc",
-            "-c --stat"],
+            "-c --stat", "-q", "-q -p", "--raw", "--raw -p", "--dirstat", "--summary"],
 }
 GIT_REVS = {"show": ["HEAD"], "diff": ["HEAD~1", "HEAD"], "log": ["-1", "HEAD"]}
 GIT_ID = ("-c", "user.name=a", "-c", "user.email=a@b")
@@ -240,6 +264,54 @@ def test_a_diff_of_two_blobs_held_to_counts_prints_none_of_them(repo):
     out = subprocess.run(["git", "-C", str(repo), "diff", *args], capture_output=True, text=True, check=True).stdout
     stage = stage_of(" ".join(["git", "diff", *args]))
     assert "+two" not in out.splitlines() and not git_shows_content(stage) and shows_no_file(stage)
+
+
+@pytest.mark.parametrize(("verb", "args"), [
+    ("show", ["HEAD", "--", ".", "-s"]), ("show", ["HEAD", "--", ".", "--stat"]), ("show", ["HEAD", "--", ".", "-q"]),
+    ("diff", ["HEAD~1", "HEAD", "--", ".", "--quiet"]), ("diff", ["HEAD~1", "HEAD", "--", ".", "--name-only"]),
+    ("log", ["-p", "-1", "HEAD", "--", ".", "-s"]),
+])
+def test_what_follows_a_double_dash_is_a_path_and_no_option(repo, verb, args):
+    out = subprocess.run(["git", "-C", str(repo), verb, *args], capture_output=True, text=True).stdout
+    stage = stage_of(" ".join(["git", verb, *args]))
+    assert "+two" in out.splitlines() and git_shows_content(stage) and not shows_no_file(stage)
+
+
+@pytest.fixture(scope="module")
+def merged(tmp_path_factory) -> Path:
+    """A repository whose last commit is a merge that adds the line `evil` of its own."""
+    path = tmp_path_factory.mktemp("merged")
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", *GIT_ID, "-C", str(path), *args], check=True, capture_output=True)
+
+    def commit(text: str) -> None:
+        (path / "key.txt").write_text(text)
+        git("add", "key.txt")
+        git("commit", "-qm", "a commit")
+
+    git("init", "-q", "-b", "main")
+    commit("one\nkeep\nlast\n")
+    git("checkout", "-q", "-b", "side")
+    commit("one\nkeep\nlast\nside\n")
+    git("checkout", "-q", "main")
+    commit("zero\none\nkeep\nlast\n")
+    git("merge", "-q", "--no-commit", "side")
+    commit("zero\none\nkeep\nlast\nside\nevil\n")
+    return path
+
+
+@pytest.mark.parametrize(("options", "printed"), [
+    ("--diff-merges=on", True), ("--diff-merges=cc", True), ("--diff-merges=separate", True),
+    ("--diff-merges=first-parent", True), ("--diff-merges=remerge", True), ("--cc", True), ("-c", True),
+    ("--diff-merges=off", False), ("--diff-merges=none", False), ("--no-diff-merges", False), ("-m", False),
+    ("--diff-merges=on --stat", False), ("--stat --diff-merges=on", False), ("-s --diff-merges=on", False),
+])
+def test_a_log_prints_a_merges_patch_as_its_options_say(merged, options, printed):
+    args = [*options.split(), "-1", "HEAD"]
+    out = subprocess.run(["git", "-C", str(merged), "log", *args], capture_output=True, text=True, check=True).stdout
+    stage = stage_of(" ".join(["git", "log", *args]))
+    assert ("evil" in out) is printed and git_shows_content(stage) is printed and shows_no_file(stage) is not printed
 
 
 @pytest.mark.parametrize("record", [
