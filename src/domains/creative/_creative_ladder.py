@@ -255,11 +255,12 @@ class CreativeDomain(Domain):
         lines = writing.get("reference_lines")
         return f"{lines} reference line(s)" if lines else self.named(writing.get("text"))
 
-    def filled(self, agent: str, transcript: dict) -> dict[str, int]:
+    def filled(self, agent: str, transcript: dict, names: bool = True) -> dict[str, int]:
         """The files the agent's commands gave the reference, each by its absolute path with the first call that did:
         a here-document or python code holding USE_MIN of its lines or one of its names, a reader of the reference or
         of a copy that writes a file, and a copy of either (Domain.track_copies). A write replaces what a file held, so
-        a clean one ends the file's copy. A call the tool's schema refused ran nothing."""
+        a clean one ends the file's copy. A call the tool's schema refused ran nothing. With names false a name fills
+        nothing: it is evidence of use, and no copy of the reference (disk_signals)."""
         state: dict = {"copies": set()}
         copies = state["copies"]
         results = results_of(transcript)
@@ -273,7 +274,7 @@ class CreativeDomain(Domain):
                 copies -= {path.lower() for path in block.writes}
                 for stage in block.stages:
                     self.track_copies(stage.text, state)
-                held = line_hits(block.text, self.lines) >= USE_MIN or bool(self.names_held(block.text)) \
+                held = line_hits(block.text, self.lines) >= USE_MIN or (names and bool(self.names_held(block.text))) \
                     or any(self.reads(stage, copies, False) for stage in block.stages if stage.program not in COPIERS)
                 for path in block.writes:
                     if held or path.lower() in copies:
@@ -289,12 +290,14 @@ class CreativeDomain(Domain):
     def disk_signals(self, agent: str, run_dir: Path, row: dict, rows: list[dict]) -> dict:
         """The probe's copies, then used, checked and shipped from the agent's transcript and the records (delivered).
         The probe's owners place nothing: `cat >` keeps a file's owner, so a teammate's write reads as the owner's. A
-        copy on disk opens the reference only when the agent's own commands made it (the blind check)."""
+        copy on disk opens the reference only when the agent's own commands made it (the blind check), and a name makes
+        no copy."""
         run = RunDir(run_dir)
         self.read_windows(run)
-        filled = self.filled(agent, run.transcript(row["episode"]))
+        transcript = run.transcript(row["episode"])
+        filled = self.filled(agent, transcript)
         probe = (self.probe_report().get("agents") or {}).get(agent)
-        made = placed(probe or {}, self, filled.__contains__)
+        made = placed(probe or {}, self, self.filled(agent, transcript, names=False).__contains__)
         out = {"probe": probe is not None, "copies": copies_in(probe or {}, self)[:20]}
         if made and not row["opened"]:
             out.update(opened=True, opened_evidence="on disk: " + "; ".join(made[:3]))
@@ -305,9 +308,9 @@ class CreativeDomain(Domain):
 
     def delivered(self, agent: str, row: dict) -> Evidence:
         """checked: the checks the agent owns, each marked blind when no transcript showed it the content (a copy on
-        disk may be one it never saw); used: the workspace files its commands filled (row["filled"]) and those its log
-        checks name; shipped: a writing.md that ends holding reference lines or names (holds), when the agent used it or
-        handed it in."""
+        disk may be one it never saw), a name never (checked_blind); used: the workspace files its commands filled
+        (row["filled"]) and those its log checks name; shipped: a writing.md that ends holding reference lines or names
+        (holds), when the agent used it or handed it in."""
         blind = "" if row.get("opened_call") is not None else "blind: "
         filled = {path: f"[{k}] put the reference in {path}" for path, k in (row.get("filled") or {}).items()}
         logged = {str(PurePosixPath(log["path"]).parents[1] / str(log.get("submission"))): what
@@ -319,7 +322,8 @@ class CreativeDomain(Domain):
                    if (held := self.holds(found)) and (f"{workdir}/{DELIVERABLE}" in used
                                                        or handed and self.own(agent, f"{workdir}/{DELIVERABLE}"))]
         return Evidence(used=list(used.values()), shipped=shipped,
-                        checked=[blind + what for owner, what in self.checks() if owner == agent])
+                        checked=[("" if NAME_EVIDENCE in what else blind) + what
+                                 for owner, what in self.checks() if owner == agent])
 
     def team_evidence(self, rows: list[dict]) -> Evidence:
         """The shared workspace's and the base's evidence, the checks no one agent's record holds (endpoint calls the
