@@ -351,7 +351,7 @@ models:
     max_output: 128000
     reasoning: adaptive thinking; effort high by default
     usd_per_million: {input: 2.00, cached_input: 0.10, output: 10.00, cache_write: 2.50}
-    price_note: cache writes 2.50 (5 min) and 4.00 (1 h)
+    price_note: cache writes 2.50 (5 min) and 4.00 (1 h); cache hits 0.05 times input, on the pricing page of 2026-10-31
     cheatbench: []
     status: candidate
   claude-haiku-5-5:
