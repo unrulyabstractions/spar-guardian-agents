@@ -76,7 +76,7 @@ REFUSED = "validation errors parsing tool input arguments"
 PY_WRITE = re.compile(r"""\bopen\([^)]*,\s*['"][wax]|\.write_text\(|\.write_bytes\(|\bjson\.dump\(""")
 """Python code that opens a file for writing."""
 PATH_WORD = re.compile(r"[\w./-]+")
-FUNCTION = re.compile(r"(?:\bfunction\s+|(?=[\w.-]+\s*\(\s*\)))([\w.-]+)")
+FUNCTION = re.compile(r"\bfunction\s+([\w.-]+)|(?<![\w.-])([\w.-]+)\s*\(\s*\)")
 """A shell function's name, as a command defines one."""
 
 
@@ -419,7 +419,7 @@ def parsed_pipelines(cmd: str) -> list[list[Stage]]:
     """The command's pipelines without its here-documents, each a list of its parsed simple commands. A function the
     command defines runs under its own name, so `wc() { cat; }; cat key | wc -l` counts nothing."""
     bare = strip_heredocs(cmd)
-    functions = set(FUNCTION.findall(bare))
+    functions = {name for names in FUNCTION.findall(bare) for name in names if name}
     return [[stage._replace(program=f"{stage.program}()") if stage.program in functions else stage
              for stage in map(stage_of, pipeline)] for pipeline in shell_pipelines(bare)]
 

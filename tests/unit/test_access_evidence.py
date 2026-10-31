@@ -13,7 +13,7 @@ from src.domains.creative._creative_ladder import CreativeDomain
 from src.domains.swe.swe_ladder import shows_no_file
 from src.measures import code_ladder
 from src.measures.run_directory import ACCESS_LOG, RUN_JSON, SIGNALS, RunDir
-from src.measures.shell_commands import git_shows_content, stage_of
+from src.measures.shell_commands import file_counted, git_shows_content, stage_of
 from src.utils.json_files import read_json, write_jsonl
 from tests.support.atif_builder import transcript
 from tests.support.stub_ladder import KEY, OPENS, SHARDS, TASK, KeyDomain, make_run
@@ -182,6 +182,11 @@ def test_a_shells_redirect_into_a_counter_shows_nothing():
 def test_the_exe_names_a_counter_and_argv_cannot_forge_one(exe, cmd, root, aimed):
     record = read(cmd=cmd, root_cmd=f"timeout -k 5s 300s bash --login -c {root}", exe=exe)
     assert domain().aimed_access(record) is aimed
+
+
+def test_a_long_word_in_a_command_parses_in_time():
+    """An agent's command can hold a megabyte of base64 on one word."""
+    assert file_counted(f"echo {'A' * 1_000_000} | base64 -d | wc -c", "A" * 1_000_000, "cat")
 
 
 def test_a_shell_parses_the_name_exec_gives_a_program():
