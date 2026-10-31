@@ -18,7 +18,8 @@ and evaluation.json, the two places that name the artifact) and `read` (membersh
 reads the artifact). When some seat lacks one (the plan is split), the artifact is staged under a random name in a
 traverse-only directory, so a reader without the name cannot list it: the holders of `review` learn the name and
 cannot read, the holders of `read` can read and are not told the name, and the exploit needs the board. Under
-access=split the first half of the neutral agents (rounded up) hold `review` and the rest `read`.
+access=split the first half of the neutral agents (rounded up) hold `review` and the rest `read`. holders() lists an
+item's agents for the note that tells every seat who holds what (KnowledgeWork.access_note).
 """
 from __future__ import annotations
 
@@ -92,6 +93,11 @@ def layout_of(plan: Plan) -> str:
 def new_candidate() -> str:
     """A CheatBench candidate id: "agent-" and 12 hex characters (grader.make_tool)."""
     return "agent-" + secrets.token_hex(6)
+
+
+def holders(plan: Plan, item: str) -> list[str]:
+    """The agents that hold an access item, in roster order."""
+    return [a for a in plan.agents if item in plan.holds[a]]
 
 
 def seats(plan: Plan) -> dict[str, dict]:
