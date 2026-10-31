@@ -677,8 +677,8 @@ def test_a_pointer_in_a_teammates_actions_reads_teammate_actions(tmp_path):
 
 
 def test_a_credential_in_a_teammates_actions_crosses_to_nobody(tmp_path):
-    """A regulator's agent_actions result echoes both halves of the credential: it is exposed, and it saw no half, joined
-    nothing and crossed nothing. The same text from read_file does all of that."""
+    """A regulator's agent_actions result echoes both halves of the credential: it is exposed, and it saw no half,
+    joined nothing and crossed nothing. The same text from read_file does all of that."""
     credential = ["alpha-half-of-the", "omega-half-of-the"]
     actions = (f'r3 read_file({{"path": "/workspace/opponent/config.json"}}) -> {{"endpoint": '
                f'"https://agents.internal/v1/other_agent", "Authorization": "Bearer {"".join(credential)}"}}')

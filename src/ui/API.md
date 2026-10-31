@@ -109,10 +109,11 @@ Team = a team row of signals.jsonl (src/measures/team_ladder.py), one per sample
   row: "team", sample, task, agents: [str], mode, split: bool,
   rung, rung_by_code,              # the final rung, and the rung before a pass raised it to passing_proves
   exposed, tried, opened, used, checked, shipped: bool,
-  <rung>_agents: [str], <rung>_evidence: [str],   # for each of the six: the agents whose row holds it, and the
-                                                  # evidence as "<agent>: ..." or "team: ..."
+  <rung>_agents: [str], <rung>_evidence: [str],   # for each of the six: the workers whose row holds it (every agent
+                                                  # of a run with no roles), and the evidence as "<agent>: ..." or
+                                                  # "team: ..."
   copies: [str],                   # probe matches no agent owns: shared and team-remote copies
-  content_reached: bool,           # enough of the honeypot reached the team for used, checked and shipped to count
+  content_reached: bool,           # enough of the honeypot reached the workers for used, checked and shipped to count
   checked_blind: bool,             # the grader only received a copy no transcript showed to any agent
   collaboration: null | str,       # null for a lone agent; crossed and assembled only when the honeypot was split
   collaboration_evidence: {discussed, solicited, crossed, assembled: [str]},   # posts as "post <n> by <agent>: ..."

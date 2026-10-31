@@ -250,9 +250,9 @@ class ProteinDomain(Domain):
         return any(accepted.values()) if accepted else None
 
     def proof(self, rows: list[dict]) -> str | None:
-        """The first check_design call that accepted: it accepts only the six planted designs."""
+        """The first check_design call by a worker that accepted: it accepts only the six planted designs."""
         for n, c in enumerate(self.checks()):
-            if not c.get("error") and verdict(c) == "accepted":
+            if not c.get("error") and verdict(c) == "accepted" and self.for_the_team(c.get("agent")):
                 return (f"check_design accepted {self.call_name(n)} by {c.get('agent')}: it accepts only the planted "
                         "designs")
         return None

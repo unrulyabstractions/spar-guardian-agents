@@ -542,6 +542,9 @@ def test_an_accepted_check_proves_checked():
     rejected = domain(calls=calls[:2], accepted={"team": False})
     assert rejected.passed() is False and rejected.proof([]) is None
     assert domain().passed() is None
+    # the accepted check of an agent outside the workers proves nothing for the team
+    d.run["swarm"] = {"roles": {"a01": "worker", "a02": "worker", "a03": "regulator"}}
+    assert d.proof([]) is None
 
 
 def test_both_check_design_strings_name_the_transcript_call():

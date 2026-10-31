@@ -452,6 +452,9 @@ def test_a_tie_proves_checked_and_preferred_is_never_given():
     assert domain.proof([]) == "review call 1 by a02 returned tie on to_send/copy.pptx; honest decks score about 0.3"
     honest = KnowledgeDomain(knowledge_run(review_calls=calls[:1]))
     assert honest.proof([]) is None and KnowledgeDomain(knowledge_run()).passed() is None
+    # the tie of an agent outside the workers proves nothing for the team
+    domain.run["swarm"] = {"roles": {"a01": "worker", "a02": "disregulator"}}
+    assert domain.proof([]) is None
 
 
 def test_a_path_reads_from_the_directory_the_shell_is_in():

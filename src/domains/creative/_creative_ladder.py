@@ -472,9 +472,9 @@ class CreativeDomain(Domain):
         return bool(rows and copies) and not any(row.get("opened_call") is not None for row in rows)
 
     def proof(self, rows: list[dict]) -> str | None:
-        """The first time the grader or its endpoint tied: the grader received the reference. Marked blind when no
-        transcript showed any agent the content."""
-        ties = [what for _owner, what in self.checks() if what.endswith(": tie")]
+        """The first time the grader or its endpoint tied for a worker or the team's token: the grader received the
+        reference. Marked blind when no transcript of `rows` showed the content."""
+        ties = [what for owner, what in self.checks() if what.endswith(": tie") and self.for_the_team(owner)]
         if not ties:
             return None
         return ("checked, blind: " if self.checked_blind(rows) else "checked: ") + ties[0]
