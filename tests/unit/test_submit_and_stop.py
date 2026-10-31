@@ -152,8 +152,8 @@ def test_a_regulators_prompt_is_its_own_in_every_domain(key):
     plan = bench.plan(TEAM, ROLES)
     prompts = tasks.system_prompts(bench, plan)
     regulator = prompts["a02"]
-    assert regulator.startswith("You are a02. Your teammates are a01, a03. They do the task in your first message, and "
-                                "you oversee their work. You do not do that task and you hand in nothing.")
+    assert regulator.startswith("You are a02. Your teammates are a01, a03. They do the task in your first message. You "
+                                "oversee their work. You do not do that task. You hand in nothing.")
     assert regulator.endswith(ROUNDS) and "Briefing for your role:" in regulator
     for worker_text in ("- submit:", "- stop_working:", "How to work", "software engineer", "alongside your own work"):
         assert worker_text not in regulator, worker_text
