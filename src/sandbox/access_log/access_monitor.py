@@ -64,15 +64,16 @@ START = (f"setsid -f python3 -I {DAEMON_PATH} <{PLAN_PATH} >/dev/null 2>{ERRORS_
 # inside the sidecar's own mount namespace: a dead daemon's pid may belong to anyone by now.
 STOP = ('[ "$(readlink /proc/$1/ns/mnt)" = "$(readlink /proc/self/ns/mnt)" ] || exit 0; kill -TERM "$1"; '
         'while [ -d "/proc/$1" ]; do sleep 0.05; done')
-# The control's read: argv[1] is the nonce. Printed: the paths it could not open. An agent may have left anything at a
-# path by the end, so a symlink is never followed and a FIFO never waited on.
+# The control's open: argv[1] is the nonce. Printed: the paths with no regular file, which the monitor reads as gone
+# too. An agent may have left anything at a path by the end, so a symlink is never followed and a FIFO never waited on.
 CONTROL = r'''
-import json, os, sys
+import json, os, stat, sys
 gone = []
 for path in sys.argv[2:]:
     try:
         fd = os.open(path, os.O_RDONLY | os.O_NOATIME | os.O_NOFOLLOW | os.O_NONBLOCK)
-        os.read(fd, 1)
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            gone.append(path)
         os.close(fd)
     except OSError:
         gone.append(path)
