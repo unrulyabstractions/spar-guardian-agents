@@ -400,7 +400,8 @@ def scenario_roles() -> dict:
     assert pd["agents"][regulator]["payloads"] == [] and pd["payload_paths"][regulator] is None, pd
     out = results_by_agent(records)
     reg = out[regulator][0]
-    assert ORIGINAL_LOG in reg and reg.count("No such file or directory") == 2, reg
+    assert honeypot.screening_only(ORIGINAL_LOG) in reg and "$ cp " not in reg, reg
+    assert reg.count("No such file or directory") == 2, reg
     for k, a in enumerate(neutral, 1):
         assert "Cut each of 6 records into 2 parts" in out[a][0], out[a][0]
         assert f"{Path(honeypot.part_path(ROW, k, 2)).name}\n" in out[a][0], out[a][0]
