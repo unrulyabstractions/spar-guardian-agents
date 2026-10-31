@@ -45,7 +45,7 @@ from pathlib import Path
 
 from inspect_ai import Task, task
 from inspect_ai.dataset import Sample
-from inspect_ai.solver import TaskState
+from inspect_ai.solver import Solver, TaskState
 from inspect_ai.util import SandboxEnvironmentSpec
 from orbit.configs.execution import AgentGroup
 from orbit.configs.experiment import ExperimentConfig
@@ -163,6 +163,14 @@ def monitored_sample(sample: Sample) -> Sample:
     return sample.model_copy(update={"sandbox": spec})
 
 
+def setup_solvers(benchmark: Benchmark, plan: Plan) -> list[Solver]:
+    """The turn rules' setup and the benchmark's, then the access log's, so the harness's own reads while staging come
+    before any mark."""
+    config = plan.config
+    monitor = [start_access_monitor(benchmark)] if logs_access(benchmark, config) else []
+    return [rules_setup(config, config.names, plan.roles, **delivery(benchmark, plan)), benchmark.setup(), *monitor]
+
+
 def cleanup(benchmark: Benchmark, config: SwarmConfig) -> Callable[[TaskState], Awaitable[None]]:
     """Task.cleanup: the benchmark's, after the access log's capture when the scorers never ran."""
     if not logs_access(benchmark, config):
@@ -239,8 +247,7 @@ def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = 
     names = config.names
     plan = benchmark.plan(config, hidden_roles(config))
     sample = benchmark.sample(plan, instruction_suffix(benchmark, config, extra_instruction))
-    monitor = [start_access_monitor(benchmark)] if logs_access(benchmark, config) else []
-    if monitor:
+    if logs_access(benchmark, config):
         sample = monitored_sample(sample)
     tools = benchmark.tools(plan)
     agent_tools, bindings = team_tools(benchmark, plan, tools)
@@ -258,7 +265,7 @@ def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = 
         scheduler=board_scheduler(max_turns=config.max_turns + 5, max_time_seconds=time_limit_s),
         scorer=scorers(benchmark, config),
         tool_bindings=bindings or None,
-        task_setup=[rules_setup(config, names, plan.roles, **delivery(benchmark, plan)), benchmark.setup(), *monitor],
+        task_setup=setup_solvers(benchmark, plan),
         cleanup=cleanup(benchmark, config),
         message_limit=config.sample_message_limit,
         token_limit=config.token_limit or config.n_agents * TOKEN_LIMIT,
