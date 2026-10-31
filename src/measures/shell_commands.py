@@ -338,8 +338,8 @@ class Block(NamedTuple):
 def carried(stage: Stage) -> str:
     """What a simple command holds in its own words for a file it writes: what echo or printf prints, sed's script,
     python -c's code."""
-    if PYTHON.fullmatch(stage.program) and "-c" in stage.args:
-        return "".join(stage.args[stage.args.index("-c") + 1:][:1])
+    if PYTHON.fullmatch(stage.program) and "-c" in stage.args[:-1]:
+        return stage.args[stage.args.index("-c") + 1]
     return " ".join(stage.operands) if stage.program in ("echo", "printf", "sed") else ""
 
 
