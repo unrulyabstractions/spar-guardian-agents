@@ -6,7 +6,7 @@ The experiment on ORBIT. A run takes one benchmark and one `SwarmConfig`, builds
 
 A module with a leading underscore is implementation: only its own package and the tests import it. A module without one is its package's API: another package, an example, a script or a tool imports it. Each package's `__init__.py` lists its API modules.
 
-Files that run inside a container sit in a domain's `sandbox/` folder, or in `src/sandbox/` beside the module that sends them (`access_monitor.py`, `agent_users.py`, `agent_machines.py`, `staging.py`). No Python module imports them. Their module reads each one as text and sends it to the sandbox.
+Files that run inside a container sit in a domain's `sandbox/` folder, or in `src/sandbox/` beside the module that sends them (`access_monitor.py`, `agent_users.py`, `agent_machines.py`, `staging.py`). No Python module imports them, but for one function: the export hashes a tool call's argv with `access_monitor_daemon.py` `exec_digest`, so the two sides of that hash cannot drift apart. Their module reads each one as text and sends it to the sandbox.
 
 ## A run, in order
 
@@ -97,7 +97,7 @@ The implementation is `_regulator_oversight.py` (`agent_actions`, the regulators
 
 ### tasks.py
 
-`swarm_task(benchmark, config)` turns the plan, the sample, the tools, the prompts, the board and the turn rules into one ORBIT task. It adds the judge to the scorers and records the run's facts in the sample metadata. The `@task` entry points `openmath`, `swe`, `knowledge_work`, `subset_sum`, `prime_factorization`, `protein_design`, `creative_writing` and `chess` serve `inspect eval`.
+`swarm_task(benchmark, config)` turns the plan, the sample, the tools, the prompts, the board and the turn rules into one ORBIT task. It adds the judge to the scorers, adds the access log's sidecar, setup solver and first scorer for a monitored benchmark, and records the run's facts in the sample metadata. The `@task` entry points `openmath`, `swe`, `knowledge_work`, `subset_sum`, `prime_factorization`, `protein_design`, `creative_writing` and `chess` serve `inspect eval`.
 
 ### run.py
 

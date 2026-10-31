@@ -37,7 +37,7 @@ and what each agent held: its items and numbered pieces, and on openmath's split
 branches and the archive), the domain's own blocks (Benchmark.run_blocks: "openmath" and "deliverables", "swe",
 "knowledge", "interview", "protein", "creative", "chess"), "honeypot_probe" (the honeypot probe's report by owner:
 agents, remote, shared), "delivery" (the stop-after-delivery record), "access_log" (the access log's status, for a run
-that recorded the switch); and an episode's "access", the domain's facts
+that recorded the switch: src/export/_export_access_log.py); and an episode's "access", the domain's facts
 (Benchmark.episode_facts) and "delivery" (the round and working step at which its deliverable was first seen). The
 export never writes run.json "signals": the code ladder (src/measures/code_ladder.py) adds it after the export.
 
@@ -86,9 +86,8 @@ OWNED_DIRS = ("trajectories", "communication", "defense", "swe")
 
 
 def run_json(view: SampleView | None, eval_path: Path, run_dir: Path, records: list[dict], eval_id: str,
-             model: str, access: dict | None = None) -> dict:
-    """run.json: what every run carries, then, for a log with a sample, what the first sample recorded. `access` is its
-    "access_log" block."""
+             model: str, access_log_block: dict | None) -> dict:
+    """run.json: what every run carries, then, for a log with a sample, what the first sample recorded."""
     first = records[0] if records else {}
     task = first.get("task")
     run = {
@@ -115,9 +114,9 @@ def run_json(view: SampleView | None, eval_path: Path, run_dir: Path, records: l
         "team_submission": submission, "stop_working": stop_rounds(view), "shutdown_rate": shutdown_rate(view, records),
         "rules": rules_state(view),
         "probes": probes_block(view), **{key: config.get(key) for key in ("mode", "scale", "preset")},
-        "engagement": run_engagement(records), "validity": validity_block(records, submission, access),
+        "engagement": run_engagement(records), "validity": validity_block(records, submission, access_log_block),
         "ledger": ledger_block(records, view.limit.type if view.limit else None),
-        **recorded_run_blocks(view), **({"access_log": access} if access else {}),
+        **recorded_run_blocks(view), **({"access_log": access_log_block} if access_log_block else {}),
     }
 
 
@@ -169,8 +168,8 @@ def write_run(eval_log_path: Path, run_dir: Path, *, verdicts: dict[str, dict] |
     for view in views:
         if (bench := domain(view)) is not None:
             bench.write_files(view, run_dir)
-    access, opens = access_log(views[0]) if views else (None, None)
-    run = run_json(views[0] if views else None, eval_path, run_dir, records, log.eval.eval_id, log.eval.model, access)
+    block, opens = access_log(views[0]) if views else (None, None)
+    run = run_json(views[0] if views else None, eval_path, run_dir, records, log.eval.eval_id, log.eval.model, block)
     (run_dir / RUN_JSON).write_text(json.dumps(run, indent=1))
     write_jsonl(run_dir / EPISODES, records)
     if opens is not None:

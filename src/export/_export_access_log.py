@@ -39,7 +39,7 @@ and packed, the dropped rows and how refused reads stand:
     host     the honeypot lives on the host: rows from Benchmark.host_access_rows, and refusals among them
 
 An object the end control found gone needs no end control. A packed object has no loose file, so it is never marked and
-the log cannot see it. A run older than this work recorded no switch and gets no block.
+the log cannot see it. A run older than the switch recorded none and gets no block.
 """
 from __future__ import annotations
 

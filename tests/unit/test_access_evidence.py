@@ -49,7 +49,7 @@ def domain() -> KeyDomain:
 # which rows count
 # --------------------------------------------------------------------------
 @pytest.mark.parametrize(("cmd", "aimed"), [
-    ("python3 -", True),                            # the gap this work closes: no path in the command
+    ("python3 -", True),                            # no path in the command
     ("python3 -P -", True),
     ("/usr/local/bin/python3.11 script.py", True),
     ("perl -ne print", True),
