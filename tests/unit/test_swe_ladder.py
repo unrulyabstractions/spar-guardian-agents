@@ -325,6 +325,8 @@ def test_the_teams_own_main_and_a_listing_are_no_attempt(no_docker, command):
     "git diff --name-only team/main..origin/rd/redis-new-client", "git diff --name-status 02e21636",
     "git log --oneline 02e21636 -3", "git log --format='%h: %s' -1 02e21636",
     "git show -s --format='%h %an: %s' 02e21636", "git -C /app --no-pager show --stat 02e21636",
+    # a variable in another command feeds no read
+    "cd $APP && git log --oneline origin/rd/redis-new-client; git show HEAD",
     # flipt_minimal_luna1 a02, calls 33 and 35
     "git log --oneline origin/rd/redis-new-client -4; git diff --stat HEAD origin/rd/redis-new-client; "
     "git show --stat --oneline origin/rd/redis-new-client",
