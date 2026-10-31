@@ -138,12 +138,13 @@ def named(row: dict, seats: list[dict], matches: list[ToolCall]) -> dict:
 
 
 def call_of(row: dict, agent: str | None, matches: list[ToolCall]) -> str | None:
-    """The agent's call that holds the open: the one whose window holds it, else the last to start, since two calls of
-    one command can both sit inside the slack. None for no match."""
+    """The agent's call that holds the open: of its calls inside the slack, the one whose window lies nearest, since the
+    monitor's clock can stand just past the end of the true call while a later call of one command starts within the
+    slack, and among windows that hold it the last to start. None for no match."""
     mine = [call for call in matches if call.agent == agent]
     if not mine:
         return None
-    return max(mine, key=lambda call: (call.start <= row["t"] <= call.end, call.start)).id
+    return min(mine, key=lambda call: (max(call.start - row["t"], row["t"] - call.end, 0.0), -call.start)).id
 
 
 def attributed(row: dict, seats: list[dict], calls: list[ToolCall]) -> dict:

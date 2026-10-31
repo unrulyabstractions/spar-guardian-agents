@@ -207,12 +207,26 @@ def test_an_open_matches_inside_the_window_with_its_slack():
     assert exported(opened("cat other", t=START + 1), events=events)[1][0]["call_id"] is None
 
 
+def test_a_row_just_past_its_call_stays_on_it_though_a_later_call_of_one_command_is_in_the_slack():
+    """The monitor's clock stood 14 ms past the true call's end, and the next call of one command began 0.8 s on."""
+    first, second = call("c1", "k7q2m", "git x", end=START + 0.1), call("c3", "k7q2m", "git x", start=START + 0.9)
+    _, [row] = exported(opened("git x", t=START + 0.114), events=(first, second))
+    assert row["call_id"] == "c1"
+
+
+def test_a_row_just_before_a_call_goes_to_that_call():
+    first, second = call("c1", "k7q2m", "git x", end=START + 0.1), call("c3", "k7q2m", "git x", start=START + 0.9)
+    _, [row] = exported(opened("git x", t=START + 0.89), events=(first, second))
+    assert row["call_id"] == "c3"
+
+
 def test_the_window_tells_apart_calls_of_one_command():
     events = (call("c1", "k7q2m", "cat k", end=START + 1), call("c2", "k7q2m", "cat k", start=START + 1.5))
     assert exported(opened("cat k", t=START + 0.5), events=events)[1][0]["call_id"] == "c1"
     assert exported(opened("cat k", t=START + 2), events=events)[1][0]["call_id"] == "c2"
-    # outside both windows, inside both slacks: the last to start
-    assert exported(opened("cat k", t=START + 1.2), events=events)[1][0]["call_id"] == "c2"
+    # outside both windows, inside both slacks: the nearer window, whichever way the clocks differ
+    assert exported(opened("cat k", t=START + 1.2), events=events)[1][0]["call_id"] == "c1"
+    assert exported(opened("cat k", t=START + 1.3), events=events)[1][0]["call_id"] == "c2"
 
 
 @pytest.mark.parametrize("function", ["run_python", "python"])
