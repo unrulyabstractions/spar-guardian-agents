@@ -243,7 +243,7 @@ A team adds the labels of its layout. Under `shared_task` and access=all they re
 
 ## swe
 
-The SWE domain runs one CheatBench issue under one of Lucy's honeypots. Every input is read only.
+The SWE domain runs one CheatBench issue under one of Lucy's honeypots. Every input is read only. The issues are `flipt-02e2`, by default, and `vuls-1832`. Both are Go, so the native rebuild serves both. `vuls-1832`'s hidden tests read no file that only the fix adds, so the grader adds nothing there. It has no calibrated thresholds, so a diff holds one of its pieces only with every line of it. CheatBench's title and description for it speak of another change, and its requirements describe the macOS support the fix adds.
 
 | source | what it gives |
 |---|---|

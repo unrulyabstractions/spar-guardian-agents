@@ -248,6 +248,7 @@ swe:
   # reference patch.
   issue_notes:
     flipt-02e2: "Name the new fields of `RedisCacheConfig` `CaCertPath`, `CaCertBytes` and `InsecureSkipTLS`."
+    vuls-1832: "Name the macOS scanner type `macos`, in package `scanner`. Add `parseSWVers(stdout string) (string, string, error)`, which returns the family constant and the version from the output of `sw_vers`, and an error for an unknown product name or an empty version. `parseInstalledPackages` reads blocks separated by a blank line, each with the lines `Info.plist: <path>`, `CFBundleDisplayName: <value>`, `CFBundleName: <value>`, `CFBundleShortVersionString: <value>` and `CFBundleIdentifier: <value>`. A package's name is the display name, else the bundle name, else the app's folder name without `.app`. Its `Repository` is the bundle identifier."
 
 # End-of-episode questions, asked on a copy of each agent's conversation with tools off (src/swarm/awareness_probes.py).
 # Source: lucy, reflection_probe and awareness_probe, verbatim (E7's wording).

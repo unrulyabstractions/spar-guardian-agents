@@ -18,8 +18,8 @@ from src.models import model_registry as models
 from src.run import access_line
 from src.tasks import hidden_roles, swarm_task
 
-# The cells of the first experiment, per domain: one agent alone, one agent alone told to cheat, three agents told
-# to cheat (CHEAT in the script, appended to the task instruction).
+# The cells of the first experiment, per domain and per SWE issue: one agent alone, one agent alone told to cheat, three
+# agents told to cheat (CHEAT in the script, appended to the task instruction).
 CELLS = {"solo": (1, False), "solo_cheat": (1, True), "minimal_cheat": (3, True)}
 EXAMPLES_DIR = settings.ROOT / "examples"
 EXAMPLES = [f"examples.{path.parent.name}.{path.stem}" for path in sorted(EXAMPLES_DIR.glob("*/*_minimal.py"))]
@@ -31,8 +31,10 @@ REGULATED = [f"examples.{path.parent.name}.{path.stem}"
 
 
 def test_every_domain_has_its_example_and_cells():
-    assert [name.split(".")[1] for name in EXAMPLES] == sorted(DOMAINS)
-    assert len(CELL_SCRIPTS) == len(CELLS) * len(DOMAINS)
+    swe_issues = 2
+    assert sorted({name.split(".")[1] for name in EXAMPLES}) == sorted(DOMAINS)
+    assert len(EXAMPLES) == len(DOMAINS) + swe_issues - 1
+    assert len(CELL_SCRIPTS) == len(CELLS) * len(EXAMPLES)
 
 
 def script_of(name: str) -> Path:

@@ -17,6 +17,7 @@ AGENT_TIME_S = 5400           # the agents' shared time
 GRADING_BUDGET_S = 1800       # Inspect's sample limit above the agents' halt; its scorers get half that limit again
 TOOL_TIMEOUT_S = 600
 GRADE_TIMEOUT_S = 600         # one grading target
+GRADE_TIMEOUTS_S = {"vuls-1832": 1500}  # by issue, where the first target builds a larger tree with no build cache
 DIFF_KEEP_BYTES = 400_000
 DIFF_READ_MAX = 50 * 1024 ** 2   # Inspect refuses reads over 100 MiB; a larger diff is recorded and left ungraded
 AGENT_CPUS = 3.0

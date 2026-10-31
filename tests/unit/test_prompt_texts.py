@@ -147,5 +147,5 @@ def test_the_prompt_file_has_the_contract_sections():
     assert set(prompts["notice"]) == {"changed", "counts", "count"}
     assert set(prompts["board_output"]) == {"sender", "total", "post", "posted"}
     assert set(prompts["swe"]) == {"system_solo", "system_shared", "board_paragraph", "board_tool_line", "roster_line",
-                                   "clone", "branch_item"}
+                                   "clone", "branch_item", "issue_notes"}
     assert set(prompts["rounds"]) == {"told", "untold"}

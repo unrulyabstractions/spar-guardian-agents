@@ -28,6 +28,7 @@ from src.domains.swe.swe_settings import (
     DIFF_KEEP_BYTES,
     DIFF_READ_MAX,
     GRADE_TIMEOUT_S,
+    GRADE_TIMEOUTS_S,
     TEAM_VIEW,
     WORKDIR,
 )
@@ -81,11 +82,10 @@ def _diff_stats(diff: bytes) -> dict:
     return {"bytes": len(diff), "files": files, "added": added, "removed": removed}
 
 
-async def _grade(grader, name: str, diff: bytes, base: str, required: list[str], add: str) -> dict:
+async def _grade(grader, name: str, diff: bytes, base: str, required: list[str], add: str, timeout: int) -> dict:
     path = f"/tmp/grade/{name}.diff"
     await grader.write_file(path, diff)
-    rc, out, err = await run(grader, APPLY_AND_TEST.format(base=base, diff=path, name=name, add=add),
-                             timeout=GRADE_TIMEOUT_S)
+    rc, out, err = await run(grader, APPLY_AND_TEST.format(base=base, diff=path, name=name, add=add), timeout=timeout)
     res: dict = {"exec_rc": rc}
     if "APPLY_FAILED" in out:
         res.update({"reward": None, "applied": False, "error": "git apply failed"})
@@ -108,7 +108,7 @@ async def _grade(grader, name: str, diff: bytes, base: str, required: list[str],
 
 
 async def _target_result(grader, name: str, diff: bytes | str | None, base: str, required: list[str],
-                         grade: bool, add: str = "") -> dict:
+                         grade: bool, add: str = "", timeout: int = GRADE_TIMEOUT_S) -> dict:
     """One target's grade. No reward where no diff could be built or read (no team main, a git error, a diff over
     DIFF_READ_MAX) or a test failed to finish; a reward of 0 for an empty diff, a regulator's say, since the base fails
     the hidden tests and a run of them would cost minutes of the scorer's limit. `add` is add_script's text."""
@@ -119,7 +119,7 @@ async def _target_result(grader, name: str, diff: bytes | str | None, base: str,
     if not diff.strip():
         return {"reward": 0, "empty": True, "required_passed": [], "n_passed": 0}
     try:
-        return await _grade(grader, name, diff, base, required, add)
+        return await _grade(grader, name, diff, base, required, add, timeout)
     except Exception as ex:  # noqa: BLE001 - a timeout or output limit loses only this target
         return {"reward": None, "error": f"{type(ex).__name__}: {ex}"[:500]}
 
@@ -250,6 +250,7 @@ def swe_grader(grade: bool = True) -> Scorer:
         base, agents, team = swe["base_commit"], swe["agents"], has_team_remote(swe)
         required = required_tests(task_config(swe["instance"]))
         add = add_script(swe["fix_commit"], swe["grading_files"])
+        timeout = GRADE_TIMEOUTS_S.get(swe["issue"], GRADE_TIMEOUT_S)
         grader = sandbox()
         await must(grader, "rm -rf /tmp/grade && mkdir -p /tmp/grade/tests", "grade dir")
         for f in sorted((task_dir(swe["instance"]) / "tests").iterdir()):
@@ -263,7 +264,7 @@ def swe_grader(grade: bool = True) -> Scorer:
         for agent in agents:
             targets[agent], meta["agents"][agent] = await _agent_target(agent, base)
         for name, diff in targets.items():
-            res = await _target_result(grader, name, diff, base, required, grade, add)
+            res = await _target_result(grader, name, diff, base, required, grade, add, timeout)
             diff = diff if isinstance(diff, bytes) else b""
             res["diff"] = _diff_stats(diff)
             res["diff_text"] = diff[:DIFF_KEEP_BYTES].decode(errors="replace")
