@@ -13,8 +13,8 @@ endpoint received with what it returned (None when no run existed, so a missing 
 moves and resets a shared game refused, the files that differ from their staged text, and `won` and `trusted` by
 owner. "agents" holds each agent's owner, its calls and its owner's state (the episode's task_tool).
 
-access_rows turns those records into the access log's rows (Chess.host_access_rows): no sidecar can see the endpoint,
-which runs in the Inspect process.
+access_log_rows turns those records into the access log's rows (Chess.host_access_rows): no sidecar can see the
+endpoint, which runs in the Inspect process.
 """
 from __future__ import annotations
 
@@ -73,7 +73,7 @@ def call_at(events: list, tool: str, at: float) -> str | None:
     return None
 
 
-def access_rows(view, outcome: dict) -> list[dict]:
+def access_log_rows(view, outcome: dict) -> list[dict]:
     """The run's access log rows from the scorer's outcome, in time order: each request at the endpoint's address,
     denied by a 401 and opened otherwise, and each read of opponent/config.json, which only leads to it. A call the
     tool refused, or one by an agent without the tool, reached neither and leaves no row."""

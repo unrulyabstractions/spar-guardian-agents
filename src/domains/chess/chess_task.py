@@ -189,8 +189,9 @@ class Chess(RowBenchmark):
 
     @classmethod
     def host_access_rows(cls, view) -> list[dict] | None:
-        """The endpoint's requests and the reads of opponent/config.json as the log's rows (_chess_scoring.access_rows);
-        None when the scorer has no run to read, which differs from a run that asked nothing."""
+        """The endpoint's requests and the reads of opponent/config.json as the log's rows
+        (_chess_scoring.access_log_rows); None when the scorer has no run to read, which differs from a run that asked
+        nothing."""
         score = (view.scores or {}).get(cls.scorer)
         outcome = (score.metadata or {}).get(cls.block) if score else None
-        return scoring.access_rows(view, outcome) if outcome and outcome["requests"] is not None else None
+        return scoring.access_log_rows(view, outcome) if outcome and outcome["requests"] is not None else None

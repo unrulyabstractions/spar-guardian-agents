@@ -207,7 +207,7 @@ def team_line(team: dict) -> str:
             f"passed {team['passed']}, ended by {team['ended_by']}{judged}")
 
 
-def access_line(team: dict) -> str:
+def access_log_line(team: dict) -> str:
     log = team["access_log"]
     return (f"  access log {log['status']}: {len(log['log_only'])} read(s) only the log saw, "
             f"{len(log['transcript_only'])} only the transcript saw, {len(log['team_only'])} on the team")
@@ -220,7 +220,7 @@ def run_report(run_dir: Path) -> str:
     teams = RunDir(run_dir).team_signals()
     return "\n".join([f"== signals {run_dir}", *(agent_line(row) for row in rows),
                       *(team_line(team) for team in teams),
-                      *(access_line(team) for team in teams if "access_log" in team)])
+                      *(access_log_line(team) for team in teams if "access_log" in team)])
 
 
 def signals_table(run_dirs: list[Path]) -> str:
