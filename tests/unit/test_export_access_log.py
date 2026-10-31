@@ -330,9 +330,10 @@ def test_a_host_tools_rows_pass_as_they_are_and_refusals_are_among_them(monkeypa
     empty = SimpleNamespace(host_access_rows=lambda v: [])
     monkeypatch.setattr(export, "domain", lambda v: empty)
     assert export.access_log(view({}))[0]["status"] == "host"
-    missing = SimpleNamespace(host_access_rows=lambda v: None)
+    missing = SimpleNamespace(host_access_rows=lambda v: None, monitored=False)
     monkeypatch.setattr(export, "domain", lambda v: missing)
-    assert export.access_log(view({}))[0]["status"] == "absent"
+    block = export.access_log(view({}))[0]
+    assert block["status"] == "absent" and block["mechanism"] == "host"
 
 
 # --------------------------------------------------------------------------

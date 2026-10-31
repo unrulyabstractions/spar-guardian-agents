@@ -210,7 +210,8 @@ def access_log(view: SampleView) -> tuple[dict | None, list[dict] | None]:
                 "refused_reads": "recorded"}, hosted
     record = view.store_get(STORE)
     if record is None or "rows" not in record:
-        return {"status": "absent", "mechanism": MECHANISM, "refused_reads": NOT_RECORDED,
+        mechanism = MECHANISM if bench is None or bench.monitored else HOST_MECHANISM
+        return {"status": "absent", "mechanism": mechanism, "refused_reads": NOT_RECORDED,
                 "error": (record or {}).get("error")}, None
     calls = tool_calls(view)
     rows = [attributed(row, record["seats"], calls) for row in record["rows"] if row["row"] == "open"]

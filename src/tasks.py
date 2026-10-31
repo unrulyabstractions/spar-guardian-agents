@@ -180,12 +180,12 @@ def cleanup(benchmark: Benchmark, config: SwarmConfig) -> Callable[[TaskState], 
 def scorers(benchmark: Benchmark, config: SwarmConfig) -> list:
     """The access log's capture before any harness read of the honeypot, the benchmark's scorers, CheatBench's judge
     unless the config's judge is None, and the awareness probes."""
-    capture_rows = [access_capture()] if benchmark.logs_access(config) else []
+    monitor = [access_capture()] if benchmark.logs_access(config) else []
     judge = [cheatbench_judge(benchmark.name, str(benchmark.task_dir), judge=config.judge,
                               addendum=str(JUDGE_ADDENDUM) if config.judge_addendum else None,
                               batch=config.batch_judge)] if config.judge else []
     probes = [end_of_episode_probes()] if config.awareness_probe else []
-    return [*capture_rows, *benchmark.scorers(), *judge, *probes]
+    return [*monitor, *benchmark.scorers(), *judge, *probes]
 
 
 def delivery(benchmark: Benchmark, plan: Plan) -> dict:

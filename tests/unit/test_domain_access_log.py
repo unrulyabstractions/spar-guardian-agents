@@ -65,6 +65,13 @@ def test_a_new_domain_must_name_what_it_watches():
     assert "watched" in Benchmark.__abstractmethods__
 
 
+@pytest.mark.parametrize("key", DOMAINS)
+def test_a_monitored_domain_has_seats_to_name_its_agents_by(key):
+    """Benchmark.seats reads the probe. A domain with neither would log rows that name no one, with a valid status."""
+    cls = DOMAINS[key]
+    assert not cls.monitored or cls.probe is not Benchmark.probe or cls.seats is not Benchmark.seats
+
+
 # ---------------------------------------------------------------- openmath
 def openmath_watched(*pairs: str) -> list[Watched]:
     bench = OpenMath()

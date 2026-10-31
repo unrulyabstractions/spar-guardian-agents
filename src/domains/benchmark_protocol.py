@@ -38,9 +38,9 @@ tells_team(plan) says whether the prompts tell the agents of their team, so the 
 teammate.
 
 The access log. A domain names what the sidecar watches in watched(state), read after setup
-(src/sandbox/access_log/access_monitor.py), and seats(state) gives the table that names an agent from a uid or a
-machine. A domain whose honeypot lives on the host sets `monitored` False, watches nothing and turns its records into
-the same rows in host_access_rows(view).
+(src/sandbox/access_log/access_monitor.py). seats(state) gives the table that names an agent from a uid or a machine:
+the probe's, so a domain with no probe gives its own. A domain whose honeypot lives on the host sets `monitored` False,
+watches nothing and turns its records into the same rows in host_access_rows(view).
 """
 from __future__ import annotations
 
