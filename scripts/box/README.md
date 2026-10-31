@@ -24,6 +24,7 @@ The pilot is one box per task and model, with one sample of two cells: `create -
 | `fleet_layout.py` | the tasks, models and cell kinds, the labels and run names, the paths; standard library only | no |
 | `box_ssh.sh`, `box_scp.sh` | ssh and scp to a box by its id, through `logs/boxes/<id>/ssh_config` | no |
 | `box_setup.sh` | waits for ssh, the box's id, the baseline of the host image, lucy's commit as a bundle and the package list, then starts `box_setup_remote.sh` and prints its log | no |
+| `box_kernel.sh` | on the box, before its setup: a kernel with fanotify permission events, which the access log needs. vast.ai's `-kvm` kernel has none, so it starts Ubuntu's generic kernel by kexec. A reboot into it through grub did not come back |
 | `box_setup_remote.sh` | on the box, detached from ssh: its cores, RAM and disk, the clone at the launch's commit, the .venv from the launch's package list, the task's build | no |
 | `box_run.sh` | the screen's key through ssh's standard input (none with `--mock`), then the runner under `nohup setsid` with the registry's task, model and commit and the .venv on `PATH` | no |
 | `box_runner.py` | on the box: build a task, run its cells with the hung-run guard and one seed per sample, resume what did not finish, report status | no |

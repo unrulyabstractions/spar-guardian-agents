@@ -13,6 +13,7 @@
 #     checkout's HEAD and local edits are listed, since the box gets the pinned commit alone;
 #  3. what only the Mac has goes up through ssh, both small: the lucy submodule's pinned commit as a git bundle (that
 #     commit's history and no other branch, at most 20 MB) and the package list the launch pinned;
+#  the kernel, box_kernel.sh: a kernel with fanotify permission events, which the access log needs, by kexec;
 #  4. and 5. box_setup_remote.sh, sent to the box and started there under nohup setsid: the box's cores, RAM and disk,
 #     its packages, the clone, the .venv and the task's rows and images (box_runner.py build). This script prints
 #     /root/setup.log as it grows and exits with the setup's exit code. A drop of this machine's network costs nothing:
@@ -143,6 +144,16 @@ fi
 ls -l "$ship"
 "$here/box_ssh.sh" "$id" mkdir -p /root/ship
 "$here/box_scp.sh" "$id" "$ship/lucy.bundle" "$ship/requirements.txt" box:/root/ship/
+
+echo "== the kernel"
+"$here/box_scp.sh" "$id" "$here/box_kernel.sh" box:/root/ship/
+"$here/box_ssh.sh" "$id" bash /root/ship/box_kernel.sh
+sleep 10                                            # the kexec above, if any, is under way by now
+for _ in $(seq 1 30); do
+  "$here/box_ssh.sh" "$id" true 2> /dev/null && break
+  sleep 10
+done
+"$here/box_ssh.sh" "$id" bash /root/ship/box_kernel.sh --check
 
 echo "== 4. and 5. on the box"
 "$here/box_scp.sh" "$id" "$here/box_setup_remote.sh" box:/root/ship/

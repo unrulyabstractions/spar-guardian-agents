@@ -46,6 +46,7 @@ FAN_CLASS_CONTENT = 0x4
 FAN_UNLIMITED_QUEUE = 0x10
 FAN_UNLIMITED_MARKS = 0x20
 FAN_MARK_ADD = 0x1
+FAN_MARK_REMOVE = 0x2
 FAN_OPEN_PERM = 0x10000
 FAN_EVENT_ON_CHILD = 0x08000000
 FAN_ALLOW = 0x1
@@ -198,7 +199,8 @@ class Monitor:
             self.mark(full, FAN_OPEN_PERM)
             if obj["kind"] == "file":
                 self.mark(os.path.dirname(full), FAN_OPEN_PERM | FAN_EVENT_ON_CHILD)
-        except OSError:
+        except OSError as error:
+            obj["error"] = errno.errorcode.get(error.errno)
             return "gone"
         obj["inode"] = inode
         self.by_inode[inode] = obj
@@ -209,7 +211,8 @@ class Monitor:
         for obj in self.objects:
             if self.arm(obj) != "armed":
                 obj["gone"] = True
-                self.log.write("arm_failed", machine=obj["machine"], object=obj["object"], path=obj["path"])
+                self.log.write("arm_failed", machine=obj["machine"], object=obj["object"], path=obj["path"],
+                               error=obj.get("error"))
         self.log.write("ready", pid=os.getpid(), objects=len(self.objects),
                        marked=sum(not obj["gone"] for obj in self.objects))
 
@@ -312,6 +315,10 @@ def fanotify_group():
                                os.O_RDONLY | os.O_CLOEXEC | os.O_LARGEFILE)
     if group < 0:
         sys.exit(f"fanotify_init: {errno.errorcode[ctypes.get_errno()]}")
+    if libc.fanotify_mark(group, FAN_MARK_ADD, FAN_OPEN_PERM, AT_FDCWD, b"/") < 0:
+        sys.exit(f"fanotify_mark: {errno.errorcode[ctypes.get_errno()]}: permission events need a kernel built with "
+                 "CONFIG_FANOTIFY_ACCESS_PERMISSIONS (scripts/box/box_kernel.sh)")
+    libc.fanotify_mark(group, FAN_MARK_REMOVE, FAN_OPEN_PERM, AT_FDCWD, b"/")
     return libc, group
 
 

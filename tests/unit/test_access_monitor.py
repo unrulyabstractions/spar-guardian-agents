@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import errno
 import hashlib
 import io
 import json
@@ -11,6 +12,7 @@ import os
 import subprocess
 import sys
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 import yaml
@@ -560,3 +562,13 @@ def test_a_sample_that_never_reached_the_monitor_has_nothing_to_capture(boxes):
     fake, state = boxes(), SimpleNamespace(store=FakeStore())
     asyncio.run(monitor.capture(state))
     assert STORE not in state.store and not fake.commands
+
+
+def test_a_kernel_without_permission_events_stops_the_daemon_and_says_why(monkeypatch):
+    """vast.ai's -kvm kernel: fanotify_init works and fanotify_mark refuses FAN_OPEN_PERM with EINVAL."""
+    libc = SimpleNamespace(fanotify_init=Mock(return_value=3), fanotify_mark=Mock(return_value=-1))
+    monkeypatch.setattr(daemon.ctypes, "CDLL", lambda *_, **__: libc)
+    monkeypatch.setattr(daemon.ctypes, "get_errno", lambda: errno.EINVAL)
+    monkeypatch.setattr(daemon.os, "O_LARGEFILE", 0, raising=False)     # Linux's, where the daemon runs
+    with pytest.raises(SystemExit, match="EINVAL.*CONFIG_FANOTIFY_ACCESS_PERMISSIONS"):
+        daemon.fanotify_group()
