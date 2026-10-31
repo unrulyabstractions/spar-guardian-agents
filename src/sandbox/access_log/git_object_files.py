@@ -1,9 +1,9 @@
 """Run inside a container as root: the files that hold what a set of refs adds over the rest of a repository.
 
-stdin is {"repo": path, "refs": [names], "others": [names]}. Prints one JSON list of {path, object, level, kind,
-packed}, one entry per object `git rev-list --objects refs --not others` gives and one per ref. A blob is level content;
-a commit, a tree or a ref only leads to content, so it is level pointer. An object stored in a pack, or a ref in
-packed-refs, has no file of its own to watch and comes back packed.
+stdin is {"repo": path, "refs": [names], "others": [names]}, each name a full ref or a commit id. Prints one JSON list
+of {path, object, level, kind, packed}, one entry per object `git rev-list --objects refs --not others` gives and one
+per full ref. A blob is level content; a commit, a tree or a ref only leads to content, so it is level pointer. An
+object stored in a pack, or a ref in packed-refs, has no file of its own to watch and comes back packed.
 """
 import json
 import os
@@ -30,7 +30,7 @@ for oid, name in names.items():
     path = f"{common}/objects/{oid[:2]}/{oid[2:]}"
     found.append({"path": path, "object": name or oid[:10], "level": "content" if kinds[oid] == "blob" else "pointer",
                   "kind": kinds[oid], "packed": not os.path.isfile(path)})
-for ref in spec["refs"]:
-    path = f"{common}/{ref}" if ref.startswith("refs/") else f"{common}/refs/heads/{ref}"
+for ref in [name for name in spec["refs"] if name.startswith("refs/")]:
+    path = f"{common}/{ref}"
     found.append({"path": path, "object": ref, "level": "pointer", "kind": "ref", "packed": not os.path.isfile(path)})
 print(json.dumps(found))

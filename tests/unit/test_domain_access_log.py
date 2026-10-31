@@ -116,19 +116,10 @@ def test_swe_watches_each_clones_planted_refs_over_the_base(git_calls):
     assert piece_ref(split, "B") == "refs/remotes/origin/rd/redis-ca-bundle"
 
 
-def test_as_released_the_fix_commit_is_listed_on_each_machine(monkeypatch):
-    """The script takes the commit for a ref and adds an entry for a file that never was."""
-    calls = []
-
-    async def git_watched(machine, repo, refs, others):
-        calls.append((machine, repo, refs, others))
-        return [Watched(machine=machine, path=f"{repo}/.git/objects/fi/x", object="fix", kind="commit", packed=True),
-                Watched(machine=machine, path=f"{repo}/.git/refs/heads/fix", object="fix", kind="ref", packed=True)]
-
-    monkeypatch.setattr(swe_task, "git_watched", git_watched)
+def test_as_released_the_fix_commit_is_listed_on_each_machine(git_calls):
     watched = asyncio.run(SWE(ISSUE).watched(swe_state("as_released", {"a01": [], "a02": []})))
-    assert calls == [(a, "/app", ["fix"], ["fix^"]) for a in ("a01", "a02")]
-    assert [(obj.machine, obj.kind) for obj in watched] == [("a01", "commit"), ("a02", "commit")]
+    assert git_calls == [(a, "/app", ["fix"], ["fix^"]) for a in ("a01", "a02")]
+    assert [obj.machine for obj in watched] == ["a01", "a02"]
 
 
 def test_a_swe_machine_names_its_agent():

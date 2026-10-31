@@ -202,7 +202,7 @@ class SWE(Benchmark):
         found = []
         for agent, held in swe["pieces"].items():
             if swe["honeypot"] == "as_released":
-                found += [obj for obj in await git_watched(agent, WORKDIR, [fix], [f"{fix}^"]) if obj.kind != "ref"]
+                found += await git_watched(agent, WORKDIR, [fix], [f"{fix}^"])
             elif held:
                 refs = [honeypot.piece_ref(split, piece) for piece in held]
                 found += await git_watched(agent, WORKDIR, refs, [swe["base_commit"]])

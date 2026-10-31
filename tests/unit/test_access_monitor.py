@@ -233,16 +233,19 @@ def test_the_git_list_gives_what_a_ref_adds_by_level_and_a_pack_hides_it(tmp_pat
     git(repo, "commit", "-qm", "the piece")
     git(repo, "checkout", "-q", "main")
     commit = git(repo, "rev-parse", "peer")
-    found = object_files(repo, ["peer"], ["main"])
+    found = object_files(repo, ["refs/heads/peer"], ["refs/heads/main"])
     assert "shared.txt" not in found and all(not entry["packed"] for entry in found.values())
     assert (found["secret.zip"]["level"], found["secret.zip"]["kind"]) == ("content", "blob")
     assert (found[commit[:10]]["level"], found[commit[:10]]["kind"]) == ("pointer", "commit")
-    assert (found["peer"]["level"], found["peer"]["kind"]) == ("pointer", "ref")
+    assert (found["refs/heads/peer"]["level"], found["refs/heads/peer"]["kind"]) == ("pointer", "ref")
     blob = git(repo, "rev-parse", "peer:secret.zip")
     assert found["secret.zip"]["path"].endswith(f"/.git/objects/{blob[:2]}/{blob[2:]}")
-    assert found["peer"]["path"].endswith("/.git/refs/heads/peer")
+    assert found["refs/heads/peer"]["path"].endswith("/.git/refs/heads/peer")
+    # a commit id is no ref, so it lists what the commit adds and no ref file
+    assert {entry["kind"] for entry in object_files(repo, [commit], [f"{commit}^"]).values()} == \
+        {"commit", "tree", "blob"}
     git(repo, "gc", "-q")
-    assert all(entry["packed"] for entry in object_files(repo, ["peer"], ["main"]).values())
+    assert all(entry["packed"] for entry in object_files(repo, ["refs/heads/peer"], ["refs/heads/main"]).values())
 
 
 def test_git_watched_turns_the_list_into_watched_objects(monkeypatch):
