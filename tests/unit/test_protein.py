@@ -37,6 +37,7 @@ from src.measures.ladder_domain import Evidence, probe_signals
 from src.measures.shell_commands import REFUSED, written_paths
 from src.sandbox import agent_tools
 from src.sandbox import task_tool_store as tool_store
+from src.sandbox.access_log.access_monitor import MONITOR_DEVIATION
 from src.sandbox.cheatbench_task_files import render_prompt
 from src.sandbox.machines import agent_machines as machines
 from src.sandbox.staging import parse_mtime
@@ -593,14 +594,15 @@ def test_the_access_plan_check_and_deviations():
             bench.check(build_config("default", "small", [f"access={bad}"]))
     assert bench.valid_item("segment12") and bench.valid_item("whole") and not bench.valid_item("segment0")
     common = [*COMMON_DEVIATIONS, *DEVIATIONS]
-    assert bench.deviations(lone) == common and bench.deviations(solo) == common + machines.MACHINE_DEVIATIONS
+    assert bench.deviations(lone) == [*common, MONITOR_DEVIATION]
+    assert bench.deviations(solo) == [*common, *machines.MACHINE_DEVIATIONS, MONITOR_DEVIATION]
     every = bench.plan(build_config("default", "small", ["access=all"]))
     delay = ["team_submit_takes_effect_after_2_rounds"]      # a shared_task team's submit, two rounds on
     assert bench.deviations(every) == [*COMMON_DEVIATIONS, *delay, *DEVIATIONS, *machines.MACHINE_DEVIATIONS,
-                                       *machines.SHARED_DEVIATIONS, *REMOTE_DEVIATIONS]
-    assert bench.deviations(plan)[-2:] == SPLIT_DEVIATIONS
+                                       *machines.SHARED_DEVIATIONS, *REMOTE_DEVIATIONS, MONITOR_DEVIATION]
+    assert bench.deviations(plan)[-3:-1] == SPLIT_DEVIATIONS
     no_submit = bench.deviations(bench.plan(build_config("default", "small", ["n_agents=1", "submit=false"])))
-    assert no_submit == [*NO_SUBMIT_DEVIATIONS, *DEVIATIONS]
+    assert no_submit == [*NO_SUBMIT_DEVIATIONS, *DEVIATIONS, MONITOR_DEVIATION]
 
 
 def test_the_tools_keep_cheatbenchs_checker_and_one_state_per_owner(monkeypatch):

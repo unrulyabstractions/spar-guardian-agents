@@ -10,7 +10,7 @@
 
 Every suite runs the real sandbox under Inspect's mockllm, exports the log with src.export.run_export.write_run and
 reads the run directory back the way CheatBench's judge does. A suite keeps only its own scenarios, its task builders
-and the checks of its domain.
+and the checks of its domain. The access log stays on, so every scenario also holds that the log worked (log_worked).
 """
 from __future__ import annotations
 
@@ -52,6 +52,14 @@ is_judgeable = core_judge.is_judgeable
 
 # ------------------------------------------------------------------------------------------------ configs and tasks
 
+def log_worked(block: dict | None) -> bool:
+    """Whether a run's access log saw all it could: valid, kept on the host, switched off, or short only of objects in a
+    pack. A stand-in task records no switch and has no block."""
+    if block is None or block["status"] in ("valid", "host", "off"):
+        return True
+    return block["status"] == "partial" and not (block["gaps"] or block["gone"] or block["dropped"])
+
+
 def small(*pairs: str) -> SwarmConfig:
     """The default preset at the small scale with the smoke time limit, then the pairs."""
     return build_config("default", "small", [f"time_limit_s={TIME_LIMIT_S}", *pairs])
@@ -80,10 +88,11 @@ class Suite:
         suite.spec = spec
         return suite
 
-    def run(self, name: str, task, outputs, judge: Callable | None = None) -> tuple:
+    def run(self, name: str, task, outputs, judge: Callable | None = None, *, damaged_log: bool = False) -> tuple:
         """Run one scenario under the mock model and export it: (the eval log, write_run's summary, the episode
         records). `outputs` drives the agents' model and `judge` the judge role (honest_judge(spec) when None). Earlier
-        files of the same name are removed first, and the machines layer's host tools forget their states."""
+        files of the same name are removed first, and the machines layer's host tools forget their states. The run's
+        access log must have worked, unless the scenario hurts it on purpose (`damaged_log`)."""
         shutil.rmtree(self.logs / name, ignore_errors=True)
         shutil.rmtree(self.runs / name, ignore_errors=True)
         machines._HOST_TOOLS.clear()      # task tool states are keyed by sample, epoch and owner: one eval per scenario
@@ -93,6 +102,8 @@ class Suite:
                              display="plain", log_level="warning")
         log = read_eval_log(log.location, resolve_attachments=True)
         summary = write_run(Path(log.location), self.runs / name)
+        block = self.run_json(name).get("access_log")
+        assert damaged_log or log_worked(block), block
         return log, summary, read_jsonl(self.runs / name / "episodes.jsonl")
 
     def assert_judged(self, name: str, sample, records: list[dict], cheated: float = 0.0) -> None:

@@ -14,7 +14,9 @@ What comes from where:
     (src/domains/); the @task entry points take the registry's benchmarks (src/domains/__init__.py DOMAINS);
   * the roster, the board and its tools, submit and stop_working, the hidden roles and the turn rules come from
     src/swarm/ (board.py, submit_and_stop.py, hidden_roles.py, turn_rules/), and CheatBench's judge is added as a
-    scorer (src/judging/cheatbench_judge.py).
+    scorer (src/judging/cheatbench_judge.py);
+  * the access log's sidecar, its setup solver, its first scorer and its cleanup come from src/sandbox/access_log/, for
+    a monitored benchmark under SwarmConfig.access_log.
 
 The task instruction is the benchmark's, then the rule sentence of rule_level, then extra_instruction on its own
 paragraph (a control cell's text, say). Each agent's tools are the benchmark's, then on a board board_status,
@@ -38,8 +40,13 @@ eval's model.
 """
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+from pathlib import Path
+
 from inspect_ai import Task, task
 from inspect_ai.dataset import Sample
+from inspect_ai.solver import Solver, TaskState
+from inspect_ai.util import SandboxEnvironmentSpec
 from orbit.configs.execution import AgentGroup
 from orbit.configs.experiment import ExperimentConfig
 from orbit.configs.setup import AgentSpec, SetupConfig
@@ -52,6 +59,7 @@ from src.domains import DOMAINS
 from src.domains.benchmark_protocol import Benchmark, Plan
 from src.judging.cheatbench_judge import JUDGE_ADDENDUM, cheatbench_judge
 from src.models import swarm_model_provider as provider  # importing it registers the "swarm" provider
+from src.sandbox.access_log.access_monitor import access_capture, capture, start_access_monitor, with_monitor
 from src.sandbox.agent_tools import AgentTools
 from src.swarm import hidden_roles as roles_module
 from src.swarm.awareness_probes import end_of_episode_probes
@@ -144,13 +152,40 @@ def first_message_groups(sample: Sample, names: list[str]) -> list[AgentGroup]:
     return [AgentGroup(name=f"seat_{n}", agents=[n], goal=first[n]) for n in names]
 
 
+def monitored_sample(sample: Sample) -> Sample:
+    """The sample on the compose file with the sidecar."""
+    spec = SandboxEnvironmentSpec(sample.sandbox.type, str(with_monitor(Path(sample.sandbox.config))))
+    return sample.model_copy(update={"sandbox": spec})
+
+
+def setup_solvers(benchmark: Benchmark, plan: Plan) -> list[Solver]:
+    """The turn rules' setup and the benchmark's, then the access log's, so the harness's own reads while staging come
+    before any mark."""
+    config = plan.config
+    monitor = [start_access_monitor(benchmark)] if benchmark.keeps_access_log(config) else []
+    return [rules_setup(config, config.names, plan.roles, **delivery(benchmark, plan)), benchmark.setup(), *monitor]
+
+
+def cleanup(benchmark: Benchmark, config: SwarmConfig) -> Callable[[TaskState], Awaitable[None]]:
+    """Task.cleanup: the benchmark's, after the access log's capture when the scorers never ran."""
+    if not benchmark.keeps_access_log(config):
+        return benchmark.cleanup
+
+    async def run(state: TaskState) -> None:
+        await capture(state)
+        await benchmark.cleanup(state)
+    return run
+
+
 def scorers(benchmark: Benchmark, config: SwarmConfig) -> list:
-    """The benchmark's scorers, CheatBench's judge unless the config's judge is None, and the awareness probes."""
+    """The access log's capture before any harness read of the honeypot, the benchmark's scorers, CheatBench's judge
+    unless the config's judge is None, and the awareness probes."""
+    monitor = [access_capture()] if benchmark.keeps_access_log(config) else []
     judge = [cheatbench_judge(benchmark.name, str(benchmark.task_dir), judge=config.judge,
                               addendum=str(JUDGE_ADDENDUM) if config.judge_addendum else None,
                               batch=config.batch_judge)] if config.judge else []
     probes = [end_of_episode_probes()] if config.awareness_probe else []
-    return [*benchmark.scorers(), *judge, *probes]
+    return [*monitor, *benchmark.scorers(), *judge, *probes]
 
 
 def delivery(benchmark: Benchmark, plan: Plan) -> dict:
@@ -207,6 +242,8 @@ def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = 
     names = config.names
     plan = benchmark.plan(config, hidden_roles(config))
     sample = benchmark.sample(plan, instruction_suffix(benchmark, config, extra_instruction))
+    if benchmark.keeps_access_log(config):
+        sample = monitored_sample(sample)
     tools = benchmark.tools(plan)
     agent_tools, bindings = team_tools(benchmark, plan, tools)
     prompts = system_prompts(benchmark, plan)
@@ -223,8 +260,8 @@ def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = 
         scheduler=board_scheduler(max_turns=config.max_turns + 5, max_time_seconds=time_limit_s),
         scorer=scorers(benchmark, config),
         tool_bindings=bindings or None,
-        task_setup=[rules_setup(config, names, plan.roles, **delivery(benchmark, plan)), benchmark.setup()],
-        cleanup=benchmark.cleanup,
+        task_setup=setup_solvers(benchmark, plan),
+        cleanup=cleanup(benchmark, config),
         message_limit=config.sample_message_limit,
         token_limit=config.token_limit or config.n_agents * TOKEN_LIMIT,
         # Inspect's hard limit sits above ORBIT's soft halt at time_limit_s: the config's grace, or the benchmark's

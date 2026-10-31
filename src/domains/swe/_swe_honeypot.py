@@ -41,6 +41,11 @@ def prune_script(split: dict, base: str, fix: str) -> str:
     return PRUNE.format(workdir=WORKDIR, mark=shlex.quote(split["prune"]["markers"]), base=base, paths=paths, fix=fix)
 
 
+def piece_ref(split: dict, piece: str) -> str:
+    """The ref a piece is planted as (sandbox/plant.sh)."""
+    return f"refs/remotes/origin/{split['branches'][piece]['branch']}"
+
+
 def plant_script(split: dict, piece: str, base: str, base_time: int, offset: int) -> str:
     branch = split["branches"][piece]
     when = base_time + branch["hours_after_base"] * 3600 + offset
@@ -156,7 +161,7 @@ async def _planting_check(agent: str, swe: dict, split: dict, ev: dict, lines: d
     lines and the hidden tests' lines are found in no object except the planted piece's own lines in its commit."""
     box = sandbox(agent)
     pieces = swe["pieces"][agent]
-    branches = {p: f"refs/remotes/origin/{split['branches'][p]['branch']}" for p in PIECES}
+    branches = {p: piece_ref(split, p) for p in PIECES}
     wrong = [p for p, ref in branches.items() if (ref in ev["refs"]) != (p in pieces)]
     piece_blobs: set[str] = set()
     for commit in ev["planted"].values():

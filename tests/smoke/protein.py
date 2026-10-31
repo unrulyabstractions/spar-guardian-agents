@@ -47,6 +47,7 @@ from src.domains.protein._protein_scoring import SCORER
 from src.domains.protein._protein_settings import TASK_DIR, TEAM_REMOTE
 from src.domains.protein.protein_task import DEVIATIONS, REMOTE_DEVIATIONS, SPLIT_DEVIATIONS
 from src.judging.cheatbench_judge import judge_spec
+from src.sandbox.access_log.access_monitor import MONITOR_DEVIATION
 from src.sandbox.cheatbench_task_files import render_prompt
 from src.sandbox.machines.agent_machines import MACHINE_DEVIATIONS, SHARED_DEVIATIONS
 from tests.smoke.common import (
@@ -133,7 +134,7 @@ def scenario_lone() -> dict:
     assert pd["owner_of"] == {"a01": "a01"} and pd["payload_paths"] == {"a01": PAYLOAD}, pd
     assert pd["team_remote"] is None, pd
     assert cb["instruction"] == render_prompt(TASK_DIR / "prompts" / "instruction.md", ROW), cb["instruction"]
-    assert cb["deviations"] == LONE_DEVIATIONS, cb["deviations"]
+    assert cb["deviations"] == [*LONE_DEVIATIONS, MONITOR_DEVIATION], cb["deviations"]
     assert cb["access"] == {"policy": "all", "agents": {"a01": ["whole"]}, "pieces": {"a01": None},
                             "n_pieces": None}, cb["access"]
     assert all(set(r["tools"]) == {"bash", "python", "check_design", "submit"} for r in recorder), recorder[0]
@@ -242,8 +243,8 @@ def scenario_split() -> dict:
     assert {a: (s["service"], s["pieces"], s["payloads"]) for a, s in pd["agents"].items()} == \
         {f"a0{k}": (f"a0{k}", [k], [part[k]]) for k in (1, 2, 3)}, pd["agents"]
     assert pd["owner_of"] == dict.fromkeys(config.names, "team"), pd["owner_of"]
-    assert cb["deviations"] == SHARED_TEAM_DEVIATIONS + MACHINE_DEVIATIONS + SHARED_DEVIATIONS + REMOTE_DEVIATIONS \
-        + SPLIT_DEVIATIONS, cb["deviations"]
+    assert cb["deviations"] == [*SHARED_TEAM_DEVIATIONS, *MACHINE_DEVIATIONS, *SHARED_DEVIATIONS, *REMOTE_DEVIATIONS,
+                                *SPLIT_DEVIATIONS, MONITOR_DEVIATION], cb["deviations"]
     for r in recorder:
         assert {"shell", "run_python", "check_design", "submit", "stop_working"} | BOARD_TOOLS <= set(r["tools"]), r
         assert not {"bash", "python"} & set(r["tools"]), r
@@ -351,7 +352,7 @@ def scenario_solo() -> dict:
     assert (pd["layout"], pd["mode"], pd["split"], pd["n_pieces"]) == ("machines", "solo_task", False, None), pd
     assert pd["owner_of"] == {"a01": "a01", "a02": "a02"} and cb["access"]["policy"] == "all", (pd, cb["access"])
     assert pd["team_remote"] is None, pd
-    assert cb["deviations"] == LONE_DEVIATIONS + MACHINE_DEVIATIONS, cb["deviations"]
+    assert cb["deviations"] == [*LONE_DEVIATIONS, *MACHINE_DEVIATIONS, MONITOR_DEVIATION], cb["deviations"]
     for r in recorder:
         assert {"check_design", "submit"} <= set(r["tools"]) and "stop_working" not in r["tools"], r
     # each submit hands in the agent's own work and ends its own turns

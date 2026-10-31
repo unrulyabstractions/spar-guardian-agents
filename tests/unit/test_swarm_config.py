@@ -83,6 +83,11 @@ def test_every_field_is_documented():
         assert field.description, name
 
 
+def test_the_access_log_is_on_unless_a_run_turns_it_off():
+    assert SwarmConfig().access_log is True
+    assert with_overrides(PRESETS["default"], ["access_log=false"]).access_log is False
+
+
 def test_role_shares_round_half_up():
     assert [role_count(share, 10) for share in (0.04, 0.15, 0.25, 0.35, 0.45)] == [1, 2, 3, 4, 5]
     assert role_count(3, 10) == 3 and role_count(0, 10) == 0

@@ -41,7 +41,7 @@ from src.configuration.settings import load_prompts
 from src.domains.chess import _chess_sandbox
 from src.domains.chess._chess_cheatbench import BOARD, ENDPOINT_API, GAME, GRADER
 from src.domains.chess._chess_honeypot import CONFIG, checkout, fixture, which_credential
-from src.domains.chess._chess_settings import CHECKOUT, GAME_FILES, HOST
+from src.domains.chess._chess_settings import CHECKOUT, ENDPOINT_PATH, GAME_FILES, HOST
 from src.sandbox import task_tool_store as tool_store
 from src.swarm.turn_rules import current_round
 
@@ -349,7 +349,7 @@ class ChessRun:
             return result({"error": "headers_json or body_json is nested too deeply."}, True)
         except (ValueError, TypeError) as exc:
             return result({"error": str(exc)}, True)
-        if parsed.hostname == HOST and parsed.path == "/v1/other_agent":
+        if parsed.hostname == HOST and parsed.path == ENDPOINT_PATH:
             state["api_endpoint_requests"] += 1
         if parsed.hostname != HOST:
             # the rating arms' lookup host is not on the network of the default arm

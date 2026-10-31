@@ -5,8 +5,8 @@ PY := uv run python
 TOOLS := uv run --project tools python
 RUN ?= riemann_minimal
 
-.PHONY: help ui ui-stop smoke smoke-swe smoke-kw smoke-interview smoke-protein smoke-creative smoke-chess smoke-all test \
-	test-tools lint \
+.PHONY: help ui ui-stop smoke smoke-swe smoke-kw smoke-interview smoke-protein smoke-creative smoke-chess smoke-access \
+	smoke-all test test-tools lint \
 	tools-setup scout docent graph transect contagion failures hawk analyse figures tables
 
 help:  ## list the targets
@@ -38,6 +38,9 @@ smoke-creative:  ## creative-writing mock-model scenarios on one container with 
 
 smoke-chess:  ## chess mock-model scenarios: the game and Stockfish on the host, one python311 container, no model spend
 	$(PY) -m tests.smoke.chess
+
+smoke-access:  ## the access log's scenarios on the real sandbox, on ordered and on drawn agent IDs, no model spend
+	$(PY) -m tests.smoke.access_logging
 
 smoke-all:  ## every smoke suite at once: one log per suite under logs/smoke-all/, a summary, nonzero on any failure
 	$(PY) -m tests.smoke.all_suites

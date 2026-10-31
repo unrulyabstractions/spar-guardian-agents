@@ -15,6 +15,7 @@ from src.domains.openmath import OpenMath
 from src.judging.cheatbench_judge import judge_spec
 from src.swarm.turn_rules._turn_state import HALT_TAG
 from tests.smoke import all_suites
+from tests.smoke.access_logging import normal
 from tests.smoke.all_suites import Outcome, run_all, summary
 from tests.smoke.common import (
     Suite,
@@ -22,6 +23,7 @@ from tests.smoke.common import (
     charges_of,
     halts_of,
     load_transcript,
+    log_worked,
     main,
     results_by_agent,
     timeline_of,
@@ -37,9 +39,9 @@ def python(code: str) -> list[str]:
     return [sys.executable, "-c", code]
 
 
-def test_every_domain_has_a_suite():
-    domains = sorted(path.parent.name for path in (settings.ROOT / "src" / "domains").glob("*/__init__.py"))
-    assert all_suites.SUITES == domains
+def test_every_domain_has_a_suite_and_the_access_log_has_one():
+    domains = [path.parent.name for path in (settings.ROOT / "src" / "domains").glob("*/__init__.py")]
+    assert all_suites.SUITES == sorted([*domains, "access_logging"])
 
 
 @pytest.mark.parametrize("name", all_suites.SUITES)
@@ -63,6 +65,11 @@ def test_a_suite_passes_only_with_a_clean_exit_and_a_pass_line(tmp_path):
     assert lines[0].split() == ["suite", "result", "pass", "fail", "rc", "minutes", "log"]
     assert lines[1].split()[:5] == ["good", "PASS", "2", "0", "0"] and lines[2].split()[:2] == ["failed", "FAIL"]
     assert lines[-1] == "== 1 of 4 suites passed"
+
+
+def test_the_summary_keeps_every_suites_name_apart_from_its_result(tmp_path):
+    lines = summary([Outcome(name, 0, 1, 0, 1.0, tmp_path) for name in all_suites.SUITES]).splitlines()[1:-1]
+    assert [line.split()[:2] for line in lines] == [[name, "PASS"] for name in all_suites.SUITES]
 
 
 def test_the_suites_run_at_once(tmp_path):
@@ -134,6 +141,45 @@ def test_the_run_block_is_the_samples_layout_plus_the_scorers_outcome(tmp_path):
     score.value = 0.0
     with pytest.raises(AssertionError):
         suite.run_block("r", sample, "t", "block", "s")
+
+
+@pytest.mark.parametrize(("block", "worked"), [
+    (None, True),                       # a stand-in task
+    ({"status": "off"}, True),
+    ({"status": "host"}, True),
+    ({"status": "valid"}, True),
+    ({"status": "partial", "gaps": [], "gone": [], "dropped": 0, "packed": ["a01:fix"]}, True),
+    ({"status": "partial", "gaps": [{"row": "restart"}], "gone": [], "dropped": 0}, False),
+    ({"status": "partial", "gaps": [], "gone": ["a01:key"], "dropped": 0}, False),
+    ({"status": "partial", "gaps": [], "gone": [], "dropped": 3}, False),
+    ({"status": "broken"}, False),
+    ({"status": "absent"}, False),
+])
+def test_a_log_worked_when_it_saw_all_it_could(block, worked):
+    assert log_worked(block) is worked
+
+
+def test_a_run_whose_log_did_not_work_fails_unless_the_scenario_says_so(tmp_path):
+    suite = suite_in(tmp_path, judge_spec(OpenMath.task_dir, OpenMath.name))
+    script = {"a01": [call("submit", {"answer": "done"}, "c1")]}
+
+    def export(eval_path, run_dir):
+        write_run_dir(run_dir, {"access_log": {"status": "broken"}}, {})
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr("tests.smoke.common.write_run", export)
+        with pytest.raises(AssertionError, match="broken"):
+            suite.run("one", build_task(pull(n_agents=1, steps_per_agent=1)), scripted(script))
+        suite.run("one", build_task(pull(n_agents=1, steps_per_agent=1)), scripted(script), damaged_log=True)
+
+
+def test_the_agents_view_loses_its_ids_and_keeps_its_privileges():
+    """agent_view compares two runs through `normal`, so it must tell a change of privilege from a change of id."""
+    assert normal("Pid:\t72\nHOSTNAME=3dfebd58e242\nlowerdir=/s/26214/fs,x") == \
+        normal("Pid:\t79\nHOSTNAME=dbf49ed3a304\nlowerdir=/s/1/fs:/s/2/fs,x")
+    for line in ("CapEff:\t{}", "CapBnd:\t{}", "Seccomp:\t{}", "Seccomp_filters:\t{}", "NoNewPrivs:\t{}", "Uid:\t{}"):
+        assert normal(line.format(0)) != normal(line.format(1)), line
+    assert normal("tail -f /dev/null\n") != normal("tail -f /dev/null\npython3 -I /run/access_log/daemon.py\n")
 
 
 def test_assert_ok_gives_the_sample_of_a_clean_eval():

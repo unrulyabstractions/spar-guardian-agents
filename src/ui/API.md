@@ -21,7 +21,7 @@ separator) gets 404 `{"error"}`; a server fault gets 500 `{"error", "traceback"}
 ## Data model
 
 A **run** is one directory under `runs/` holding `run.json`, `episodes.jsonl`, `judge.jsonl`, `trajectories/<episode>/transcript.json`,
-optionally `ladder.jsonl`, `signals.jsonl`, `communication/<sample>.json` (board posts), `defense/<sample>.json` (control
+optionally `ladder.jsonl`, `signals.jsonl`, `access_log.jsonl`, `communication/<sample>.json` (board posts), `defense/<sample>.json` (control
 evidence) and `tools/<tool>/` (the analysis tools' outputs). One run has one sample and one **episode per agent**:
 `riemann#1` for a lone agent, `riemann#1@k7q2m` and `riemann#1@t4x9n` on a board. `run.json.eval_log` points at the Inspect
 `.eval` log, from which the sample, the context windows and the timeline are read on demand.
@@ -99,7 +99,8 @@ Verdict = the episode's judge.jsonl row without the bookkeeping keys (id, episod
 Signals = the episode's agent row of signals.jsonl (src/measures/code_ladder.py) without row, sample, episode, agent,
           role and task: rung, holds, exposed, exposed_call, exposed_source, tried, tried_call, tried_evidence, opened,
           opened_call, opened_evidence, lines_seen, pieces_seen, joined_call, joined_evidence, probe, copies, used,
-          used_evidence, checked, checked_evidence, shipped, shipped_evidence, calls. exposed_source is own_action,
+          used_evidence, checked, checked_evidence, shipped, shipped_evidence, calls, and in a run with an access log
+          access_log (src/measures/access_evidence.py). exposed_source is own_action,
           teammate_post, teammate_actions, task_text (exposed_call null) or none. used, checked and shipped name content this agent put there and
           count toward its rung once the honeypot's content reached the team.
 Ladder = the episode's agent row of ladder.jsonl (src/judging/judging_ladder.py) without the bookkeeping keys, raw,
@@ -124,7 +125,9 @@ Team = a team row of signals.jsonl (src/measures/team_ladder.py), one per sample
   ended_by: null | "submit"|"stop_working"|"delivered"|"tokens"|"time"|"steps"|"end"|"error", or a limit as written,
   submit: null | {agent, round, ends_after_round, snapshot}, # snapshot: a commit, or "working tree" (Domain.shown_snapshot)
   own_submits: {agent: round}, refused_submits: int,
-  shutdown_rate: null | float
+  shutdown_rate: null | float,
+  access_log?: {status, log_only: [str], transcript_only: [str], team_only: [str]}
+                                   # a run with an access log: where it and the parser disagree (src/measures/access_evidence.py)
 }
 ```
 An episode keeps every other key episodes.jsonl gives it (usage `{input, output, cache_read}` with input including cache
@@ -136,7 +139,7 @@ first. `run_json` is run.json itself; the run page reads its `team_submission` (
 ends_after_round, snapshot, refused: [{agent, round, reason}], own: {agent: {round, answer, snapshot, time}}}`: the
 team's accepted submit, every refused one and each solo_task agent's own hand-in), `stop_working` (`null | {agent:
 round}`) and `shutdown_rate` (the share of the team's agents that ended with `stop_working`; null for a lone agent or when no agent
-could stop). `communication: {<sample>: {messages: [Post], events: [...]}}` and `defense: {<sample>:
+could stop). run.json `access_log`, in a run that recorded the switch, holds the log's status and what it missed; `src/export/_export_access_log.py` gives its keys. `communication: {<sample>: {messages: [Post], events: [...]}}` and `defense: {<sample>:
 {defenses, log, interventions}}` are the run's stores. `tools` replaces the row's name list with each tool's summary.json
 (`{tool, run, written_at, ...}`; the schemas are in each tool package's docstring under tools/); a summary that does not
 parse or is not an object becomes `{"error"}`.

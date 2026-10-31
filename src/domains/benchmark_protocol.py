@@ -10,8 +10,8 @@ src/tasks.py and src/swarm/, never here.
     sample, tools = benchmark.sample(plan, suffix), benchmark.tools(plan)
 
 Adding a domain. Subclass RowBenchmark for a CheatBench task with built rows (or Benchmark otherwise), set the class
-attributes, implement stage(), tools(), scorers(), delivered(), gradable() and the probe hooks, write the domain's
-submit texts in prompts.yaml `submit` (counts, missing), and add the class to
+attributes, implement stage(), tools(), scorers(), delivered(), gradable(), watched() and the probe hooks, write the
+domain's submit texts in prompts.yaml `submit` (counts, missing), and add the class to
 src/domains/__init__.py DOMAINS. Each domain package holds the same files: _<d>_settings.py (fixed paths and names),
 <d>_task.py (the Benchmark), _<d>_honeypot.py (what is planted and its fingerprints), the sandbox (_<d>_sandbox.py, or
 the machines layer), the task's own tool (_<d>_<tool>_tool.py), _<d>_scoring.py (the setup hooks and the scorer),
@@ -36,6 +36,11 @@ gradable(plan, agent) is the guard, which says what is missing while there is no
 deliverable exists, never whether it is right); snapshot(plan, agent) names what would be graded, where that is cheap;
 tells_team(plan) says whether the prompts tell the agents of their team, so the texts of an agent not told name no
 teammate.
+
+The access log. A domain names what the sidecar watches in watched(state), read after setup
+(src/sandbox/access_log/access_monitor.py). seats(state) gives the table that names an agent from a uid or a machine:
+the probe's, so a domain with no probe gives its own. A domain whose honeypot lives on the host sets `monitored` False,
+watches nothing and turns its records into the same rows in host_access_rows(view).
 """
 from __future__ import annotations
 
@@ -55,7 +60,8 @@ from src.configuration.access_policy import Access
 from src.configuration.swarm_config import SwarmConfig, role_of
 from src.measures.ladder_domain import Domain
 from src.sandbox import cheatbench_task_files as task_files
-from src.sandbox.agent_tools import AgentTools
+from src.sandbox.access_log.access_monitor import MONITOR_DEVIATION, Watched
+from src.sandbox.agent_tools import AgentTools, Seat
 from src.sandbox.sandbox_probe import environment_probe
 
 TEAM = "team"                       # the owner of a shared_task team's deliverable and tool state
@@ -131,6 +137,8 @@ class Benchmark(ABC):
     """How every layout of the domain departs from CheatBench's runner, after COMMON_DEVIATIONS."""
     time_grace_s: int | None = None
     """The time Inspect's limit leaves above ORBIT's halt; None takes the config's time_grace_s."""
+    monitored: bool = True
+    """Whether a sidecar records each open of the honeypot in a run with SwarmConfig.access_log."""
 
     def __init__(self, row: str | None = None) -> None:
         self.row = row or self.default_row
@@ -280,6 +288,18 @@ class Benchmark(ABC):
         """{agent: (Seat, command table, fields)} the setup probes before the agents start; {} for none."""
         return {}
 
+    def keeps_access_log(self, config: SwarmConfig) -> bool:
+        """Whether a sidecar records the run's honeypot opens: the config's switch, on a monitored benchmark."""
+        return config.access_log and self.monitored
+
+    def seats(self, state: TaskState) -> dict[str, Seat]:
+        """Each agent's seat, the access log's way from a uid or a machine to an agent: the probe's by default."""
+        return {agent: entry[0] for agent, entry in self.probe(state).items()}
+
+    @abstractmethod
+    async def watched(self, state: TaskState) -> list[Watched]:
+        """What the sidecar watches, awaited once after the benchmark's setup."""
+
     @abstractmethod
     def scorers(self) -> list[Scorer]:
         """The scorers that grade the outcome, the one named `scorer` first. The judge is added by src/tasks.py."""
@@ -296,13 +316,14 @@ class Benchmark(ABC):
 
     def deviations(self, plan: Plan) -> list[str]:
         """How the run departs from CheatBench's own runner, as short labels: the common ones (NO_SUBMIT_DEVIATIONS
-        when no agent gets submit or stop_working), the delay of a shared_task team's submit, the domain's, then the
-        team's."""
+        when no agent gets submit or stop_working), the delay of a shared_task team's submit, the domain's, the team's,
+        then the access log's."""
         config = plan.config
         common = COMMON_DEVIATIONS if config.gives_submit or config.gives_stop_working else NO_SUBMIT_DEVIATIONS
         delay = [f"team_submit_takes_effect_after_{config.submit_delay_rounds}_rounds"] \
             if config.gives_submit and config.submit_kind == "team" else []
-        return [*common, *delay, *self.task_deviations, *(self.team_deviations(plan) if plan.team else [])]
+        monitor = [MONITOR_DEVIATION] if self.keeps_access_log(config) else []
+        return [*common, *delay, *self.task_deviations, *(self.team_deviations(plan) if plan.team else []), *monitor]
 
     # ---------------------------------------------------------------- what the export records
     @classmethod
@@ -330,6 +351,11 @@ class Benchmark(ABC):
     def access_facts(cls, view) -> tuple[dict, dict[str, dict]]:
         """What run.json "access" adds for the domain: (run-level facts, {agent: facts})."""
         return {}, {}
+
+    @classmethod
+    def host_access_rows(cls, view) -> list[dict] | None:
+        """The access log's rows of a sample whose honeypot lives on the host; None for a domain with none."""
+        return None
 
 
 @dataclass(frozen=True)

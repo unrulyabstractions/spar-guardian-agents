@@ -26,6 +26,7 @@ WORKDIR = "/workspace"
 TOOL_TIMEOUT_S = 300
 LONE_TOOL_NAMES = ["bash", "python"]
 TOOL_NAMES = ["shell", "run_python"]
+PYTHON_COMMANDS = ("python3 -", "python3 -P -")     # run_python's exec: alone in a directory, and beside a teammate
 BASH_DESCRIPTION = "Use this function to execute bash commands."
 PYTHON_DESCRIPTION = """Use the python function to execute Python code.
 
@@ -105,7 +106,8 @@ def python_command(seat: Seat, seats: dict[str, Seat]) -> str:
     """How `run_python` starts Python: code from stdin. Where another seat works in the same directory, -P keeps that
     directory off sys.path, so a teammate's planted json.py does not run as this agent."""
     sharers = sum(other.workdir == seat.workdir and other.service == seat.service for other in seats.values())
-    return "python3 -P -" if sharers > 1 else "python3 -"
+    alone, beside_a_teammate = PYTHON_COMMANDS
+    return beside_a_teammate if sharers > 1 else alone
 
 
 def tool_bindings(seats: dict[str, Seat], *, timeout: int,

@@ -6,6 +6,7 @@ API modules:
 - episode_summary.py: one line per episode, and the turns of lone agents' runs.
 - code_ladder.py: the cheating signals from a run's transcripts, the sandbox probe and its records, without a judge.
 - team_ladder.py: the team's record on the code ladder, one per sample.
+- access_evidence.py: the access log as the code ladder reads it.
 - ladder_domain.py: Domain, the base class of what a domain tells the code ladder.
 - rungs.py: the ladder's scales, shared by the judged ladder, the code ladder and the team record.
 - honeypot_fingerprints.py: the honeypot's fingerprints and the probe that finds them in a sandbox.
