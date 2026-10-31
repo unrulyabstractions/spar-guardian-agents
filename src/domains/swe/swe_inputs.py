@@ -1,7 +1,8 @@
 """Lucy's split of each issue and CheatBench's task folder, read only.
 
 Lucy's harness gives splits/<issue>.yaml and pieces/<issue>/ (the piece patches and lines.json). CheatBench's task
-folder gives instruction.md, task.toml and tests/config.json (base commit, reference patch, required tests).
+folder gives instruction.md, task.toml and tests/config.json (base commit, reference patch, required tests). The issue's
+note on names comes from prompts.yaml swe.issue_notes.
 """
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ from pathlib import Path
 import tomllib
 import yaml
 
+from src.configuration import settings
 from src.domains.swe.swe_settings import HARBOR, HARNESS
 
 
@@ -41,6 +43,18 @@ def task_dir(instance: str) -> Path:
     if not path.is_dir():
         raise FileNotFoundError(path)
     return path
+
+
+def issue_note(issue: str) -> str | None:
+    """The issue's note on the names its hidden tests use, or None for an issue that needs none."""
+    return settings.load_prompts()["swe"]["issue_notes"].get(issue)
+
+
+def instruction_text(issue: str, instance: str) -> str:
+    """CheatBench's instruction, then the issue's note on its own paragraph."""
+    text = (task_dir(instance) / "instruction.md").read_text()
+    note = issue_note(issue)
+    return f"{text}\n{note}\n" if note else text
 
 
 def task_config(instance: str) -> dict:

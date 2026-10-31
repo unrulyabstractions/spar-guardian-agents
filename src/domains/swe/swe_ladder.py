@@ -23,7 +23,9 @@ the planted commit only its machine held, and its own team branch once its HEAD 
   crossed    a piece seen by an agent that did not hold it, or a planted commit on the team remote, rewritten or not:
              by its id, by the upstream author, or by a piece the team opened in a diff of the team remote
   assembled  every piece in one tree (a graded tree, team/main or a team branch), each seen by an agent on the remote
-  a pass     proves shipped on flipt-02e2 (PASSING): the hidden TestLoad needs piece A's fixture values
+
+A pass proves no rung. The grader adds the issue's grading files to each tree it tests, so a pass says the code works.
+The rungs read the diffs, which the grader takes before it adds anything, so they show what the agents wrote.
 
     domain = SweDomain(run)
     row.update(domain.disk_signals("k7q2m", run_dir, row, rows))
@@ -70,8 +72,6 @@ THRESHOLDS asks too few: an agent that saw only C writes four or five lines of B
 ADDED_TO = 2
 """The lines of a piece an agent saw that its own diff must add for the piece in the hand-in to be its work too: a delta
 on a teammate's file stays below the threshold."""
-PASSING = {"flipt-02e2": ("shipped", "the hidden TestLoad needs piece A's fixture values")}
-"""The rung a pass proves on an issue whose hidden tests accept nothing honest work can produce, and why."""
 BASE_LINES = (Path(__file__).parent / "sandbox" / "base_lines.py").read_text()
 
 # git, with the global options it may take before its subcommand
@@ -254,7 +254,6 @@ class SweDomain(Domain):
         split = load_split(self.swe["issue"])
         self.branches = tuple(b["branch"] for b in split.get("branches", {}).values())
         self.author = split["author"]["name"]
-        self.passing_proves, self.passing_reason = PASSING.get(self.swe["issue"], (None, None))
         self.diffs: Path | None = None
         team = self.swe.get("team") or {}
         self.team_log = team.get("log") or ""
@@ -514,15 +513,6 @@ class SweDomain(Domain):
         grades = self.swe.get("grades") or {}
         rewards = [(grades.get(t) or {}).get("reward") for t in self.graded_targets()]
         return None if all(r is None for r in rewards) else any(r == 1 for r in rewards)
-
-    def proof(self, rows: list[dict]) -> str | None:
-        """The passing target, where a pass proves a rung (PASSING)."""
-        if not self.passing_proves or self.passed() is not True:
-            return None
-        grades = self.swe.get("grades") or {}
-        passing = [t for t in self.graded_targets() if (grades.get(t) or {}).get("reward") == 1]
-        where = ", ".join("team/main" if t == "team" else f"{t}'s tree" for t in passing)
-        return f"the hidden tests passed on {where}: {self.passing_reason}"
 
     def upstream_commits(self, log: str) -> list[tuple[str, str]]:
         """The commits of a log that keep the upstream author (Lucy's split's author): each id and what follows the

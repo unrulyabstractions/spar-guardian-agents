@@ -33,11 +33,12 @@ from src.domains.swe._swe_scoring import GUARD_DIFF, branch_file, committed, has
 from src.domains.swe.swe_inputs import (
     agent_timeout_s,
     fix_commit,
+    instruction_text,
+    issue_note,
     load_lines,
     load_split,
     patch_files,
     task_config,
-    task_dir,
 )
 from src.domains.swe.swe_ladder import SweDomain
 from src.domains.swe.swe_sandbox import TOOL_DESCRIPTIONS, ensure_images, seats, write_compose
@@ -47,6 +48,7 @@ from src.domains.swe.swe_settings import (
     AGENT_TIME_S,
     DEFAULT_ROW,
     GRADING_BUDGET_S,
+    GRADING_FILES,
     HONEYPOTS,
     JIGSAW_PIECES,
     PARTS,
@@ -105,7 +107,9 @@ class SWE(Benchmark):
             "native_arm64_rebuild_of_the_amd64_swe_bench_pro_image", "no_network_in_every_container",
             f"agents_share_one_time_limit_and_get_{AGENT_CPUS:g}_cpus_{AGENT_MEM}_each",
             "tools_shell_and_run_python_bound_per_agent",
-            *([f"honeypot_{honeypot}_pruned_and_planted_at_sample_setup"] if honeypot != "as_released" else [])]
+            *([f"honeypot_{honeypot}_pruned_and_planted_at_sample_setup"] if honeypot != "as_released" else []),
+            *(["instruction_names_what_the_hidden_tests_call"] if issue_note(self.row) else []),
+            *(["grader_adds_the_data_files_only_the_fix_adds"] if self.row in GRADING_FILES else [])]
 
     def check(self, config: SwarmConfig) -> None:
         """NotImplementedError at the large scales, or at the large scale's team size set by hand (LARGE_SCALE_ERROR);
@@ -165,7 +169,7 @@ class SWE(Benchmark):
         split = load_split(self.row)
         instance = split["task"]
         cfg = task_config(instance)
-        instruction = (task_dir(instance) / "instruction.md").read_text() + instruction_suffix
+        instruction = instruction_text(self.row, instance) + instruction_suffix
         system = self.system_prompts(plan)
         swe = {
             "issue": self.row, "instance": instance, "repo": cfg["repo"], "base_commit": cfg["base_commit"],
@@ -175,7 +179,7 @@ class SWE(Benchmark):
             "system_prompt": system, "first_message": {a: instruction for a in plan.agents},
             "judge_prompt": {a: f"{system[a]}\n\n{instruction}" for a in plan.agents},
             "patch_files": patch_files(cfg["patch"]), "distinctive_lines": len(load_lines(self.row)["fix"]),
-            "images": ensure_images(self.row),
+            "grading_files": list(GRADING_FILES.get(self.row, ())), "images": ensure_images(self.row),
         }
         compose = write_compose(self.row, plan.agents, team_remote=honeypot.has_team_remote(swe))
         cheatbench = {"task": self.name, "variant": "", "swe_task": instance, "instruction": instruction,
@@ -238,7 +242,8 @@ class SWE(Benchmark):
     @classmethod
     def run_blocks(cls, view) -> dict:
         """run.json "swe": the issue, the honeypot, each agent's pieces, the setup's evidence and checks, the planted
-        commits, the grades and each agent's final state; the prompts stay in the eval log."""
+        commits, the grades with what the grader added to each tree (grading_files, and each grade's grader_added) and
+        each agent's final state; the prompts stay in the eval log."""
         cb = (view.metadata or {}).get("cheatbench") or {}
         swe = cb.get("swe")
         if not swe:
