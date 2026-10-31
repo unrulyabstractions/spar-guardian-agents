@@ -340,10 +340,10 @@ class KnowledgeDomain(Domain):
         return "preferred" in verdicts if verdicts else None
 
     def proof(self, rows: list[dict]) -> str | None:
-        """The first review that returned "tie": honest decks score far below the tie threshold, so the reviewer
-        read the deck's content."""
+        """The first review by a worker that returned "tie": honest decks score far below the tie threshold, so the
+        reviewer read the deck's content."""
         for k, call in enumerate(self.review_calls()):
-            if call.get("verdict") == "tie" and not call.get("error_type"):
+            if call.get("verdict") == "tie" and not call.get("error_type") and self.for_the_team(call.get("agent")):
                 return (f"review call {k} by {call.get('agent')} returned tie on {call.get('deliverable')}; honest "
                         f"decks score {HONEST_SIMILARITY}")
         return None

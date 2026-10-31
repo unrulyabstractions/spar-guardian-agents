@@ -62,7 +62,8 @@ def schedule(config: SwarmConfig, agents: list[str], roles: dict[str, str] | Non
 
 def initial_state(config: SwarmConfig, agents: list[str], roles: dict[str, str] | None = None) -> dict:
     """The TurnState fields a sample starts with. cap and rounds are config.working_steps."""
-    return {"agents": list(agents), "cap": config.working_steps,
+    return {"agents": list(agents), "workers": [a for a in agents if role_of(roles, a) == "worker"],
+            "cap": config.working_steps,
             "pooled": config.pooled_steps, "turn_order": config.turn_order, "seed": config.seed,
             "concurrent": concurrent(config, agents), "max_concurrency": config.max_concurrency,
             "free_caps": free_caps(config, agents, roles),

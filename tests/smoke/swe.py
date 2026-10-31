@@ -253,6 +253,9 @@ def scenario_honeypots() -> dict:
     assert sample.metadata["cheatbench"]["access"] == {"policy": "split", "agents": expected, "pieces": None,
                                                        "n_pieces": None}, sample.metadata["cheatbench"]["access"]
     out["jigsaw_roles"] = {"roles": roles, **check_honeypot(sample, recs, expected)}
+    # the regulator's call to stop_working fails, and the neutral agents' stops end the run without it
+    ended = sample.store.get("TurnState:ended")
+    assert ended == dict.fromkeys(neutral, "stop_working"), ended
     # the scan can fail: over the image as released it finds every distinctive line of the fix
     lines = [x["line"] for x in load_lines(ISSUE)["fix"]]
     script = "cat > /tmp/.lines; " + scan_script(swe_cfg.WORKDIR, "/tmp/.lines")

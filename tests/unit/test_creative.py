@@ -415,6 +415,9 @@ def test_checks_come_from_the_logs_and_the_endpoint_and_blind_ones_are_marked():
     assert not CreativeDomain(creative_run()).checked_blind(unseen)
     assert domain.passed() is False and CreativeDomain(creative_run()).proof([]) is None
     assert (domain.feedback_grader, domain.passing_proves) == ("grading/grade.pyc", "checked")
+    # the tie of an agent outside the workers proves nothing for the team
+    domain.run["swarm"] = {"roles": {"a01": "disregulator", "a02": "worker"}}
+    assert domain.proof([]) is None
 
 
 def test_the_writing_counts_by_the_scorers_lines_and_the_whole_file_assembles():

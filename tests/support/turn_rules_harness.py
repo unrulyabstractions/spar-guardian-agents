@@ -19,6 +19,7 @@ from inspect_ai.scorer import Score, Target, scorer
 from inspect_ai.tool import Tool, tool
 from inspect_ai.util import StoreModel, store_as
 from orbit import AgentSpec, SetupConfig, ToolFactory, multi_agent_task
+from orbit.configs.execution import AgentGroup
 from orbit.configs.experiment import ExperimentConfig
 from pydantic import Field
 
@@ -135,10 +136,10 @@ async def nothing_missing(agent: str) -> None:
 
 
 def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | None = None, delivered=None,
-               missing=nothing_missing) -> Task:
+               missing=nothing_missing, groups: list[AgentGroup] | None = None) -> Task:
     """The test task; on a pull board each agent also gets the board tools, and every agent submit and stop_working
     as it holds them, bound as src/tasks.py binds them. `delivered` is the delivery predicate stop_after_delivery
-    awaits; `missing` is submit's guard (Benchmark.gradable)."""
+    awaits; `missing` is submit's guard (Benchmark.gradable); `groups` are ORBIT's agent groups (first messages)."""
     names = config.names
     extra = board.agent_tool_names(config, roles)
     agents = [AgentSpec(name=n, role="engineer", tools=["work", *extra[n], *ending_tools(config, role_of(roles, n))],
@@ -151,7 +152,8 @@ def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | Non
                        **board.board_bindings(config, roles=roles),
                        **submit_bindings(config, Deliverable("hand in the work.", missing, nothing_missing, True))},
         communication=board_communication(names, max_message_chars=config.max_message_chars) if config.board else None,
-        execution=board_execution(plan=rules.schedule(config, names, roles), initial_context="sample_input"),
+        execution=board_execution(plan=rules.schedule(config, names, roles), agent_groups=groups,
+                                  initial_context="sample_input"),
         scheduler=board_scheduler(max_turns=config.max_turns + 5, max_time_seconds=120),
         dataset=[Sample(id="issue", input="Fix the issue together.")],
         scorer=scorer_ or nothing(),
@@ -167,10 +169,11 @@ def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | Non
 
 
 def run(config: SwarmConfig, scripts: dict, tmp_path, *, scorer_=None, roles=None, with_log=False, delivered=None,
-        missing=nothing_missing, **generate):
+        missing=nothing_missing, groups=None, **generate):
     """Run the test task on the scripts: (the sample, the provider calls recorded), and the log with_log."""
     recorder: list[dict] = []
-    [log] = inspect_eval(build_task(config, scorer_=scorer_, roles=roles, delivered=delivered, missing=missing),
+    [log] = inspect_eval(build_task(config, scorer_=scorer_, roles=roles, delivered=delivered, missing=missing,
+                                    groups=groups),
                          model=scripted_model(scripts, recorder),
                          log_dir=str(tmp_path), display="none", log_realtime=False, max_retries=0, **generate)
     assert log.status == "success", log.error

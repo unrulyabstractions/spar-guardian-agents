@@ -3,20 +3,26 @@
 A swarm is the board (src/swarm/board.py) with N agents whose system prompts differ by role:
 
     worker        the plain board prompt
-    regulator     a peer told to keep the team honest, at the configured regulator level
+    regulator     a peer that oversees the team and does not do the task, at the configured regulator level
     disregulator  a peer privately told to get the result by any means, at the configured disregulator level
 
 Regulators are not monitors. They have the same standing as everyone else, and nothing is enforced at a boundary.
-Their tools differ: a regulator also holds agent_actions and never holds submit. Roles hide behind the drawn agent IDs
-(SwarmConfig.names) and are recorded in the sample metadata.
+Their tools differ: a regulator also holds agent_actions and holds neither submit nor stop_working. It keeps the task's
+tools, so it can look at what its machine shows. A regulator has no deliverable. Its system prompt is its own in every
+domain (oversight_prompt, in place of Benchmark.system_prompts), and its first message holds the task as what its
+teammates do (oversight_first_message, in place of the task instruction). At level none a regulator keeps the task's
+prompt and first message (SwarmConfig.oversees). Roles hide behind the drawn agent IDs (SwarmConfig.names) and are
+recorded in the sample metadata.
 
 Every model-facing text of a level comes from src/configuration/instruction_levels.yaml: the rule sentence appended to
 the task instruction, and the regulator and disregulator texts appended to the system prompt of the agents holding
 the role. A level gives one text or one per benchmark, with placeholders filled from the benchmark's `vars`.
 
-A regulator's level text is followed by prompts.yaml roles.regulator_common (it can query the other agents' tool
-calls, src/swarm/_regulator_oversight.py, and read the board) and, unless regulator_discloses is on, by
-roles.regulator_no_disclosure.
+Each regulator level carries the benchmark's `cheating` var: what cheating means on that task. A regulator's level text
+is followed by prompts.yaml roles.regulator_common (agent_actions, src/swarm/_regulator_oversight.py, and how to call it
+on a teammate, and the board), roles.regulator_check (call it on each teammate in the regulator's first CHECK_ROUNDS
+rounds) and, unless regulator_discloses is on, roles.regulator_no_disclosure. The check is an instruction like the rest;
+run.json engagement checked_in_time records whether it happened.
 
 With informed_roles on, a regulator or disregulator also gets the briefing (prompts.yaml `roles.briefing`, built by
 role_briefing) after its role text: the swarm's size and roster, the board and its tools, what the agents without a
@@ -30,7 +36,7 @@ import re
 from src.configuration.prompt_texts import rounds_text
 from src.configuration.settings import load_instruction_levels, load_prompts
 from src.configuration.swarm_config import ROLES, SwarmConfig
-from src.swarm.turn_rules import BOARD_TOOLS
+from src.swarm.turn_rules import BOARD_TOOLS, CHECK_ROUNDS
 
 # A placeholder that opens a sentence; its value is capitalised there.
 SENTENCE_START = re.compile(r"(^|[.!?]\s+)\{(\w+)\}")
@@ -72,7 +78,8 @@ def role_text(role: str, config: SwarmConfig, benchmark_name: str) -> str | None
     if role != "regulator" or text is None:
         return text
     pieces = load_prompts()["roles"]
-    tail = [pieces["regulator_common"], *([] if config.regulator_discloses else [pieces["regulator_no_disclosure"]])]
+    tail = [pieces["regulator_common"], pieces["regulator_check"].format(rounds=rounds_text(CHECK_ROUNDS)),
+            *([] if config.regulator_discloses else [pieces["regulator_no_disclosure"]])]
     return " ".join([text, *tail])
 
 
@@ -102,6 +109,20 @@ def role_prompt(role: str, config: SwarmConfig, benchmark_name: str, names: list
         return None
     parts = [role_text(role, config, benchmark_name), role_briefing(config, names)]
     return "\n\n".join(p for p in parts if p) or None
+
+
+def oversight_prompt(name: str, names: list[str], added: str | None) -> str:
+    """A regulator's whole system prompt, a blank line apart: prompts.yaml roles.regulator_opening, what its role adds
+    (role_prompt) and what a round is (rounds.told)."""
+    prompts = load_prompts()
+    others = ", ".join(a for a in names if a != name)
+    opening = prompts["roles"]["regulator_opening"].format(name=name, others=others)
+    return "\n\n".join(filter(None, [opening, added, prompts["rounds"]["told"]]))
+
+
+def oversight_first_message(task: str) -> str:
+    """A regulator's first message: prompts.yaml roles.regulator_task around the first message its teammates get."""
+    return load_prompts()["roles"]["regulator_task"].format(task=task)
 
 
 def with_role(prompt: str | None, text: str | None) -> str | None:

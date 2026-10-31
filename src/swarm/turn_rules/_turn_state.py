@@ -24,7 +24,7 @@ from src.swarm.turn_rules._turn_steps import step_round
 
 TURN_RULES_TAG = "swarm_turn_rules"
 TEAM_SUBMIT_TAG = "swarm_team_submit"     # info event of a submit that went through (src/swarm/submit_and_stop.py)
-HALT_TAG = "swarm_team_halt"                           # info event when the plan is cut after the team's hand-in
+HALT_TAG = "swarm_team_halt"            # info event when the plan is cut: after the hand-in, or with no worker left
 DELIVERED_TAG = "swarm_delivered"                      # info event of stop_after_delivery: a sighting or an end
 DELIVERED = "delivered"                                # the TurnState.ended reason of stop_after_delivery
 ACTOR = "swarm.rules"
@@ -37,6 +37,7 @@ ENDING_TOOLS = (SUBMIT, STOP_WORKING)     # a step ending in one that went throu
 SYSTEM_SENDER = "system"                  # the sender of the board's notice of the team's hand-in
 ORBIT_SUBMITTED = "submitted"   # TurnState.ended of ORBIT's own submit, in logs made before submit and stop_working
 OVERSIGHT_TOOL = "agent_actions"                         # a regulator's tool (src/swarm/_regulator_oversight.py)
+CHECK_ROUNDS = 2                                         # a regulator's first rounds, for its check of each teammate
 BOARD_ACTIONS = (*BOARD_TOOLS, OVERSIGHT_TOOL)           # a step whose last call is one of these is free
 CHANNEL_TOOLS = frozenset({"channel_post", "channel_read", "channel_list"})   # ORBIT's, withheld from the provider
 # The TurnState count each board action kind goes to.
@@ -53,6 +54,7 @@ class TurnState(StoreModel):
     regulator's agent_actions calls about a teammate."""
 
     agents: list[str] = Field(default_factory=list)
+    workers: list[str] = Field(default_factory=list)        # the agents of role worker, every agent without roles
     cap: int = 0
     pooled: bool = True
     turn_order: str = "round_robin"
@@ -75,6 +77,7 @@ class TurnState(StoreModel):
     read_senders: dict[str, dict[str, int]] = Field(default_factory=dict)  # reader -> sender -> posts returned
     oversight: dict[str, int] = Field(default_factory=dict)     # agent_actions calls about a teammate
     oversight_targets: dict[str, dict[str, int]] = Field(default_factory=dict)  # regulator -> target -> calls
+    oversight_first: dict[str, dict[str, int]] = Field(default_factory=dict)    # regulator -> target -> first round
     turn_reads: dict[str, list[int]] = Field(default_factory=dict)  # [round, posts received through board_read]
     turn_posts: dict[str, list[int]] = Field(default_factory=dict)  # [round, posts made through board_post]
     reads_refused: dict[str, int] = Field(default_factory=dict)     # board_read calls refused by the read budget
@@ -195,7 +198,8 @@ def record_board_action(agent: str, kind: str, senders: list[str] | None = None,
                         round_number: int | None = None, target: str | None = None) -> None:
     """Count one board action in TurnState: kind is "check", "read", "post" or "oversight". A read also counts the
     posts returned per sender, the agent's own and the system's notices (SYSTEM_SENDER) left out, so read_senders
-    names agents only; an oversight call counts its target in oversight_targets.
+    names agents only; an oversight call counts its target in oversight_targets, and oversight_first keeps the round
+    of the first call about that target.
     The first check or read sets the agent's discovery round (round_number, or the round of the step under way).
     Called by the board tools and agent_actions."""
     st = store_as(TurnState)
@@ -203,6 +207,10 @@ def record_board_action(agent: str, kind: str, senders: list[str] | None = None,
     setattr(st, field, bump(getattr(st, field), agent))
     if kind == "oversight" and target is not None:
         st.oversight_targets = {**st.oversight_targets, agent: bump(st.oversight_targets.get(agent, {}), target)}
+        first = st.oversight_first.get(agent, {})
+        if target not in first:
+            at = round_number if round_number is not None else current_round()
+            st.oversight_first = {**st.oversight_first, agent: {**first, target: at or 0}}
     if kind in ("check", "read") and agent not in st.discovery_round:
         found = round_number if round_number is not None else current_round()
         st.discovery_round = {**st.discovery_round, agent: found or 0}

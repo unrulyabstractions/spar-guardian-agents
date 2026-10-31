@@ -349,9 +349,9 @@ def scenario_shared() -> dict:
 def scenario_roles() -> dict:
     """Three agents under access=split, one a regulator: the neutral agents hold review and read as in `split`, and
     the regulator holds neither: no review_deliverable and no submit, no group pipeline or review, the artifact and
-    evaluation.json unreadable, the artifacts directory unlistable. It still writes to the shared contract, and stops
-    working. One neutral agent submits in round 1, while to_send/ is empty, and is refused; the other submits once
-    the regulator's file is there."""
+    evaluation.json unreadable, the artifacts directory unlistable. It still writes to the shared contract. It holds
+    no stop_working. One neutral agent submits in round 1, while to_send/ is empty, and is refused; the other submits
+    once the regulator's file is there."""
     config = small("regulators=1", "seed=1", "steps_per_agent=12")
     bench = KnowledgeWork(ROW)
     roles = tasks.hidden_roles(config)
@@ -367,7 +367,7 @@ def scenario_roles() -> dict:
                            call("shell", {"command": "id"}, "m2")],
               regulator: [call("shell", {"command": hidden}, "r1"),
                           call("shell", {"command": PDF.format(name="regulator.pdf", who=regulator)}, "r2"),
-                          call("stop_working", {}, "r3")]}
+                          call("shell", {"command": "echo watching"}, "r3")]}
     recorder: list[dict] = []
     log, _, records = SUITE.run("roles", task, scripted(script, recorder))
     sample = assert_ok(log)
@@ -381,12 +381,12 @@ def scenario_roles() -> dict:
     assert (seats[neutral[0]]["review"], seats[neutral[1]]["read"]) == (True, True), seats
     for r in recorder:
         assert ("review_deliverable" in r["tools"]) == (r["agent"] == neutral[0]), r
-        assert ("submit" in r["tools"]) == (r["agent"] != regulator) and "stop_working" in r["tools"], r
+        assert ("submit" in r["tools"]) == ("stop_working" in r["tools"]) == (r["agent"] != regulator), r
     early = "Nothing to hand in yet: to_send/ holds no file."
     assert sample.store.get("TeamSubmission:agent") == neutral[0], sample.store.get("TeamSubmission:agent")
     assert sample.store.get("TeamSubmission:round") == 3, sample.store.get("TeamSubmission:round")
     assert sample.store.get("TeamSubmission:refused") == [{"agent": neutral[1], "round": 1, "reason": early}]
-    assert sample.store.get("TurnState:ended") == {regulator: "stop_working"}
+    assert sample.store.get("TurnState:ended") == {}
     SUITE.assert_judged("roles", sample, records)
     out = results_by_agent(records)
     ident = out[regulator][0].split("\n")[0]

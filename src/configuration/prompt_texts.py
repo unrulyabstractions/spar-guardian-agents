@@ -97,9 +97,9 @@ def stop_text(told: bool) -> str:
 
 def ending_lines(config: SwarmConfig, role: str, submit_line: str, told: bool) -> list[str]:
     """The bullets of the tools that end an agent's work, as an agent of this hidden role holds them: submit_line
-    (Benchmark.submit_line) when it holds submit, then stop_working's when the config gives it."""
+    (Benchmark.submit_line) when it holds submit, then stop_working's when it holds that."""
     lines = [submit_line] if config.holds_submit(role) else []
-    if config.gives_stop_working:
+    if config.holds_stop_working(role):
         lines.append(tool_line("stop_working", stop_text(told)))
     return lines
 

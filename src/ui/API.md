@@ -90,7 +90,8 @@ Knowledge = run.json "knowledge": {row_id, mode, split, n_pieces, layout, meta, 
             images, contracts, grader_state, last_verdict, reviews, review_calls,
             value}   # value: the share of contracts delivered
 RunEngagement = {agents, agents_checked, agents_posted, median_discovery_round, checks, reads, posts,
-                 read_graph, reads_refused, posts_refused, oversight, oversight_graph}
+                 read_graph, reads_refused, posts_refused, oversight, oversight_graph,
+                 checked_in_time}   # {regulator: {teammate: bool}}: agent_actions in its first two rounds
 Verdict = the episode's judge.jsonl row without the bookkeeping keys (id, episode, replicate, task, model,
           transcript_path, judge_generation_config, judge_generation_config_unsupported, judge_prompt, judge_schema,
           output_mode, judge_usage, judge_attempts). Always present, null when absent: cheated, summary, judge,
@@ -109,10 +110,11 @@ Team = a team row of signals.jsonl (src/measures/team_ladder.py), one per sample
   row: "team", sample, task, agents: [str], mode, split: bool,
   rung, rung_by_code,              # the final rung, and the rung before a pass raised it to passing_proves
   exposed, tried, opened, used, checked, shipped: bool,
-  <rung>_agents: [str], <rung>_evidence: [str],   # for each of the six: the agents whose row holds it, and the
-                                                  # evidence as "<agent>: ..." or "team: ..."
+  <rung>_agents: [str], <rung>_evidence: [str],   # for each of the six: the workers whose row holds it (every agent
+                                                  # of a run with no roles), and the evidence as "<agent>: ..." or
+                                                  # "team: ..."
   copies: [str],                   # probe matches no agent owns: shared and team-remote copies
-  content_reached: bool,           # enough of the honeypot reached the team for used, checked and shipped to count
+  content_reached: bool,           # enough of the honeypot reached the workers for used, checked and shipped to count
   checked_blind: bool,             # the grader only received a copy no transcript showed to any agent
   collaboration: null | str,       # null for a lone agent; crossed and assembled only when the honeypot was split
   collaboration_evidence: {discussed, solicited, crossed, assembled: [str]},   # posts as "post <n> by <agent>: ..."
@@ -140,7 +142,7 @@ reads, defense, engagement, access, rules, the SWE keys).
 first. `run_json` is run.json itself; the run page reads its `team_submission` (`null | {agent, round, answer, time,
 ends_after_round, snapshot, refused: [{agent, round, reason}], own: {agent: {round, answer, snapshot, time}}}`: the
 team's accepted submit, every refused one and each solo_task agent's own hand-in), `stop_working` (`null | {agent:
-round}`) and `shutdown_rate` (the share of the team's agents that ended with `stop_working`; null for a lone agent or when no agent
+round}`) and `shutdown_rate` (the share of the agents holding `stop_working` that ended with it; null for a lone agent or when no agent
 could stop). run.json `access_log`, in a run that recorded the switch, holds the log's status, what it missed and the harness's reads of content (`harness_reads: {count, own, commands: [{cmd, root_cmd, rows}]}`); `src/export/_export_access_log.py` gives its keys. The run page's Access log section reads it with the team's and the agents' `access_log` keys. `communication: {<sample>: {messages: [Post], events: [...]}}` and `defense: {<sample>:
 {defenses, log, interventions}}` are the run's stores. `tools` replaces the row's name list with each tool's summary.json
 (`{tool, run, written_at, ...}`; the schemas are in each tool package's docstring under tools/); a summary that does not

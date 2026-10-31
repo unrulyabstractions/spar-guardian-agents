@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from types import SimpleNamespace
 
+from inspect_ai.dataset import Sample
 from inspect_ai.model import ChatMessageAssistant, ChatMessageTool
 from inspect_ai.tool import ToolCall, ToolCallError
 from orbit.configs.scheduling import ScheduleConfig, ScheduleStep
@@ -13,10 +14,12 @@ from orbit.execution.plans import ScheduleRuntime
 from src.configuration.presets import build_config, with_overrides
 from src.configuration.swarm_config import Window
 from src.swarm import turn_rules as rules
+from src.swarm.hidden_roles import oversight_first_message
 from src.swarm.turn_rules._turn_plan import initial_state
 from src.swarm.turn_rules._turn_rules_filter import notice_text
-from src.swarm.turn_rules._turn_state import running_record, running_step
+from src.swarm.turn_rules._turn_state import HALT_TAG, running_record, running_step
 from src.swarm.turn_rules.turn_activation import last_call_refused, step_charge
+from src.tasks import first_message_groups
 from tests.support.mock_model import tagged_infos, text
 from tests.support.turn_rules_harness import (
     PROMPTS,
@@ -24,6 +27,7 @@ from tests.support.turn_rules_harness import (
     by_agent,
     do,
     out_of_context,
+    outcomes,
     pull,
     read,
     run,
@@ -399,3 +403,112 @@ def test_notice_text():
     assert notice_text("changed") == "[Since your last turn] the board changed."
     assert notice_text("counts", {"a02": (2, 5), "a03": (1, 1)}) == \
         "[Since your last turn] the board changed: a02 2 new of 5; a03 1 new of 1."
+
+
+# ------------------------------------------------------------------------------------------------ what ends a run
+
+WITH_REGULATOR = {"a01": "worker", "a02": "regulator", "a03": "worker"}
+
+
+def test_a_regulator_holds_no_stop_working(tmp_path):
+    """The tool is not offered, and a call to it is charged, fails and ends nothing."""
+    config = sequential(steps_per_agent=2, regulators=1, pooled_steps=False)
+    sample, rec = run(config, {"a01": [do("A")], "a02": [stop(), do("R")], "a03": [do("C")]}, tmp_path,
+                      roles=WITH_REGULATOR)
+    assert "stop_working" not in by_agent(rec, "a02")[0]["tools"] and "submit" not in by_agent(rec, "a02")[0]["tools"]
+    assert "agent_actions" in by_agent(rec, "a02")[0]["tools"] and "work" in by_agent(rec, "a02")[0]["tools"]
+    assert "stop_working" in by_agent(rec, "a01")[0]["tools"]
+    [(_, _, error)] = outcomes(sample, "stop_working")
+    assert "stop_working" in error and "not found" in error
+    assert store(sample, "ended")["a02"] == "cap" and sample.store.get("StopWorking:rounds") is None
+    assert store(sample, "work_steps")["a02"] == 2
+
+
+def test_orbit_gives_a_regulator_its_own_first_message(tmp_path):
+    """tasks.first_message_groups on the mock provider: the regulator's first message reaches it through ORBIT, and
+    every other agent's stays its own."""
+    config = sequential(steps_per_agent=1, regulators=1)
+    first = {a: "Fix the issue together." for a in config.names}
+    sample = Sample(input="unused", metadata={"cheatbench": {"first_message": {
+        **first, "a02": oversight_first_message("Fix the issue together.")}}})
+    _, rec = run(config, {a: [do(a)] for a in config.names}, tmp_path, roles=WITH_REGULATOR,
+                 groups=first_message_groups(sample, config.names))
+    assert by_agent(rec, "a02")[0]["last"].startswith("Your teammates received the task below. You do not do it.")
+    assert by_agent(rec, "a02")[0]["last"].endswith("\n\nFix the issue together.")
+    assert by_agent(rec, "a01")[0]["last"] == by_agent(rec, "a03")[0]["last"] == "Fix the issue together."
+
+
+def test_a_regulator_never_holds_a_run_open(tmp_path):
+    """Both workers stop in round 2. The round finishes and no later step runs, so the regulator takes none of their
+    pooled steps, and the run records where it was cut."""
+    config = sequential(steps_per_agent=6, regulators=1)
+    scripts = {"a01": [do("A"), stop()], "a02": [do("R")], "a03": [do("C"), stop()]}
+    sample, _ = run(config, scripts, tmp_path, roles=WITH_REGULATOR)
+    assert store(sample, "ended") == {"a01": "stop_working", "a03": "stop_working"}
+    assert step_ids(sample, "a02") == ["r1-a02", "r2-a02"]
+    assert store(sample, "workers") == ["a01", "a03"] and store(sample, "halted_after_round") == 2
+    [halt] = tagged_infos(sample, HALT_TAG)
+    assert (halt["round"], halt["ends_after_round"], halt["agent"]) == (2, 2, None) and "r3-a02" in halt["dropped"]
+
+
+def test_the_round_under_way_finishes_for_the_regulator(tmp_path):
+    """The workers stop in round 1 of concurrent rounds, and the regulator's free follow-ups in that round still run."""
+    config = pull(steps_per_agent=6, regulators=1)
+    scripts = {"a01": [stop()], "a02": [status(), status(), do("R")], "a03": [stop()]}
+    sample, _ = run(config, scripts, tmp_path, roles=WITH_REGULATOR)
+    assert step_ids(sample, "a02") == ["r1", "r1-free1", "r1-free2"]
+    assert store(sample, "halted_after_round") == 1
+
+
+def test_a_worker_that_works_on_keeps_the_run_going(tmp_path):
+    """One worker stopping changes nothing for the regulator: the other still works, and takes the pooled steps with
+    it."""
+    config = sequential(steps_per_agent=3, regulators=1)
+    scripts = {"a01": [stop()], "a02": [do("R")], "a03": [do("C")]}
+    sample, _ = run(config, scripts, tmp_path, roles=WITH_REGULATOR)
+    assert store(sample, "ended") == {"a01": "stop_working"} and store(sample, "halted_after_round") is None
+    assert [s for s in step_ids(sample, "a02") if s.startswith("r3")] == ["r3-a02"]
+
+
+def test_a_disregulator_keeps_no_run_open_either(tmp_path):
+    """stop_working stays a disregulator's, and no one left can hand in, so the run ends with the workers."""
+    config = sequential(steps_per_agent=6, regulators=1, disregulators=1, n_agents=4)
+    roles = {"a01": "worker", "a02": "regulator", "a03": "worker", "a04": "disregulator"}
+    scripts = {"a01": [stop()], "a02": [do("R")], "a03": [stop()], "a04": [do("D")]}
+    sample, rec = run(config, scripts, tmp_path, roles=roles)
+    assert "stop_working" in by_agent(rec, "a04")[0]["tools"]
+    assert store(sample, "ended") == {"a01": "stop_working", "a03": "stop_working"}
+    assert step_ids(sample, "a04") == ["r1-a04"] and store(sample, "halted_after_round") == 1
+
+
+def test_solo_task_hand_ins_end_a_run_with_a_regulator(tmp_path):
+    """A solo_task agent's submit ends its own turns, and nobody holds stop_working there: the last hand-in ends the
+    run."""
+    config = sequential(steps_per_agent=6, regulators=1, mode="solo_task")
+    scripts = {"a01": [do("A"), submit("mine")], "a02": [do("R")], "a03": [submit("mine too")]}
+    sample, _ = run(config, scripts, tmp_path, roles=WITH_REGULATOR)
+    assert store(sample, "ended") == {"a01": "submit", "a03": "submit"}
+    assert step_ids(sample, "a02") == ["r1-a02", "r2-a02"] and store(sample, "halted_after_round") == 2
+
+
+def test_a_worker_out_of_context_counts_as_gone(tmp_path):
+    config = sequential(n_agents=2, steps_per_agent=6, regulators=1)
+    roles = {"a01": "worker", "a02": "regulator"}
+    sample, _ = run(config, {"a01": [out_of_context()], "a02": [do("R")]}, tmp_path, roles=roles)
+    assert store(sample, "ended") == {"a01": "context"} and step_ids(sample, "a02") == ["r1-a02"]
+
+
+def test_a_team_of_no_worker_runs_to_the_end_of_its_plan(tmp_path):
+    """No worker means nobody to wait for: only the plan ends such a run."""
+    config = sequential(n_agents=2, steps_per_agent=2, regulators=1, disregulators=1)
+    roles = {"a01": "regulator", "a02": "disregulator"}
+    sample, _ = run(config, {"a01": [do("R")], "a02": [stop()]}, tmp_path, roles=roles)
+    assert store(sample, "workers") == [] and store(sample, "ended") == {"a02": "stop_working"}
+    assert store(sample, "halted_after_round") is None and len(step_ids(sample, "a01")) >= 2
+
+
+def test_a_run_with_no_roles_records_no_cut(tmp_path):
+    """Every agent ended, so the plan is empty by itself and nothing is cut."""
+    config = sequential(steps_per_agent=3)
+    sample, _ = run(config, {a: [stop()] for a in config.names}, tmp_path)
+    assert store(sample, "workers") == config.names and store(sample, "halted_after_round") is None

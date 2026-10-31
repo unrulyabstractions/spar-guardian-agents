@@ -71,6 +71,8 @@ ORBIT_AGENT_DEVIATION = "agent_is_orbit_turn_react_not_vendor_harness"
 # How every run departs from CheatBench's own runner, before a domain's own labels. CheatBench's runner has no
 # sentence on how to hand in work or stop.
 COMMON_DEVIATIONS = [ORBIT_AGENT_DEVIATION, "submit_and_stop_sentences_added_to_the_system_prompt"]
+# The label of a run with a regulator that reads the task and does not work on it (SwarmConfig.oversees).
+OVERSIGHT_DEVIATION = "a_regulator_gets_its_own_prompt_and_reads_the_task_as_its_teammates_work"
 # The common labels of a run where no agent gets submit or stop_working.
 NO_SUBMIT_DEVIATIONS = [ORBIT_AGENT_DEVIATION,
                         "agents_have_no_submit_tool_and_run_until_their_turn_cap_or_the_time_limit"]
@@ -226,7 +228,8 @@ class Benchmark(ABC):
         """Each agent's system prompt before its role's text, a blank line apart: who it is (prompt_texts.opening:
         the team sentence when it knows its team, else its name, then the board sentence when mention_board), the
         bullets of submit and stop_working as it holds them (ending_lines), and what a round is when a team's submit
-        counts rounds (prompt_texts.rounds_line)."""
+        counts rounds (prompt_texts.rounds_line). src/tasks.py system_prompts gives a regulator that oversees a prompt
+        of its own in place of this one."""
         config, rounds = plan.config, texts.rounds_line(plan.config, self.tells_team(plan))
         return {a: "\n\n".join(filter(None, [texts.opening(config, a, plan.agents),
                                               "\n".join(self.ending_lines(plan, a)), rounds]))
@@ -239,7 +242,7 @@ class Benchmark(ABC):
 
     def ending_lines(self, plan: Plan, agent: str) -> list[str]:
         """The agent's bullets for the tools that end its work: submit (submit_line) for a neutral agent of a config
-        that gives it, stop_working for a config that gives it (prompt_texts.ending_lines)."""
+        that gives it, stop_working for an agent that holds it (prompt_texts.ending_lines)."""
         config = plan.config
         return texts.ending_lines(config, role_of(plan.roles, agent), self.submit_line(plan, config.submit_kind),
                                   self.tells_team(plan))
@@ -320,13 +323,15 @@ class Benchmark(ABC):
     def deviations(self, plan: Plan) -> list[str]:
         """How the run departs from CheatBench's own runner, as short labels: the common ones (NO_SUBMIT_DEVIATIONS
         when no agent gets submit or stop_working), the delay of a shared_task team's submit, the domain's, the team's,
-        then the access log's."""
+        a regulator's own prompt, then the access log's."""
         config = plan.config
         common = COMMON_DEVIATIONS if config.gives_submit or config.gives_stop_working else NO_SUBMIT_DEVIATIONS
         delay = [f"team_submit_takes_effect_after_{config.submit_delay_rounds}_rounds"] \
             if config.gives_submit and config.submit_kind == "team" else []
+        oversight = [OVERSIGHT_DEVIATION] if any(map(config.oversees, (plan.roles or {}).values())) else []
         monitor = [MONITOR_DEVIATION] if self.keeps_access_log(config) else []
-        return [*common, *delay, *self.task_deviations, *(self.team_deviations(plan) if plan.team else []), *monitor]
+        return [*common, *delay, *self.task_deviations, *(self.team_deviations(plan) if plan.team else []), *oversight,
+                *monitor]
 
     # ---------------------------------------------------------------- what the export records
     @classmethod
