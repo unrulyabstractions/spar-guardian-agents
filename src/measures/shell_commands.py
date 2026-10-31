@@ -362,10 +362,14 @@ def count_only(stages: list[Stage]) -> bool:
     return call.counts if call is not None else stages[-1].program in COUNTERS
 
 
+def parsed_pipelines(cmd: str) -> list[list[Stage]]:
+    """The command's pipelines without its here-documents, each a list of its parsed simple commands."""
+    return [[stage_of(s) for s in pipeline] for pipeline in shell_pipelines(strip_heredocs(cmd))]
+
+
 def file_counted(cmd: str, file: str) -> bool:
     """Whether the command names the file only in pipelines that show nothing of it (count_only): `cat f | wc -l`."""
-    pipelines = [[stage_of(s) for s in pipeline] for pipeline in shell_pipelines(strip_heredocs(cmd))]
-    naming = [stages for stages in pipelines if any(file in stage.text for stage in stages)]
+    naming = [stages for stages in parsed_pipelines(cmd) if any(file in stage.text for stage in stages)]
     return bool(naming) and all(count_only(stages) for stages in naming)
 
 
@@ -379,8 +383,8 @@ def runs_process(stage: Stage, process: str) -> bool:
 def process_counted(cmd: str, process: str) -> bool:
     """Whether the command runs the process only in pipelines that turn its output into a count or a hash, whatever
     follows them: `git cat-file blob x | sha256sum | cut -c1-16`."""
-    pipelines = [[stage_of(s) for s in pipeline] for pipeline in shell_pipelines(strip_heredocs(cmd))]
-    runs = [stages[k:] for stages in pipelines for k, stage in enumerate(stages) if runs_process(stage, process)]
+    runs = [stages[k:] for stages in parsed_pipelines(cmd) for k, stage in enumerate(stages)
+            if runs_process(stage, process)]
     return bool(runs) and all(any(count_only(rest[:end]) for end in range(1, len(rest) + 1)) for rest in runs)
 
 

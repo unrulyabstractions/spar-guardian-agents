@@ -259,9 +259,10 @@ def test_the_calls_of_one_turn_overlap_and_each_row_takes_its_own():
     assert [r["call_id"] for r in Chess.host_access_rows(host_view(outcome, events))] == ["c1", "c2"]
 
 
-def test_a_row_takes_a_call_of_its_own_tool():
+def test_a_row_takes_the_call_of_its_own_tool_at_its_own_time():
     outcome = {"requests": [request("a01", 2, 200)], "calls": [tool_call("a01", "api_request", 2)]}
-    events = [tool_event("a01", "read_file", "c1", 1, 3), tool_event("a01", "api_request", "c2", 1, 3)]
+    events = [tool_event("a01", "api_request", "c0", 8, 9), tool_event("a01", "read_file", "c1", 1, 3),
+              tool_event("a01", "api_request", "c2", 1, 3)]
     assert [r["call_id"] for r in Chess.host_access_rows(host_view(outcome, events))] == ["c2"]
 
 

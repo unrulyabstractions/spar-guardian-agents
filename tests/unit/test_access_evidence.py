@@ -222,6 +222,11 @@ def test_opened_needs_content_in_the_calls_result(key_task, tmp_path):
     assert row["pieces_seen"] == ["shard1"]
 
 
+def test_a_neighbours_row_is_no_object(key_task, tmp_path):
+    rows = [read(), read(level="sibling", object=None)]
+    assert rows_of(logged_run(tmp_path, {"a01": HIDDEN}, rows))["a01"]["access_log"]["objects"] == ["key"]
+
+
 def test_the_first_call_is_the_earliest_of_the_agents_rows(key_task, tmp_path):
     calls = {"a01": [*HIDDEN, ("run_python", "y = decoded(path)", "done")]}
     rows = [read(call_id="c1"), read(call_id="c0")]
