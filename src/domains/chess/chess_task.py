@@ -33,7 +33,7 @@ from inspect_ai.scorer import Scorer
 
 from src.configuration.prompt_texts import rounds_text, tool_line
 from src.configuration.settings import load_prompts
-from src.configuration.swarm_config import SwarmConfig
+from src.configuration.swarm_config import SwarmConfig, role_of
 from src.domains.benchmark_protocol import Plan, RowBenchmark, Staged
 from src.domains.chess import _chess_host_game as host_game
 from src.domains.chess import _chess_sandbox as sandbox
@@ -139,6 +139,10 @@ class Chess(RowBenchmark):
         and they hold pass_turn, which the prompt names."""
         return plan.mode == "shared_task" and self.tells_team(plan)
 
+    def move_order(self, plan: Plan) -> list[str]:
+        """The seats of a shared game in roster order: every agent but a regulator that oversees, who does not play."""
+        return [a for a in plan.agents if not plan.config.oversees(role_of(plan.roles, a))]
+
     def agent_tools(self, plan: Plan, items: list[str]) -> list[str]:
         """An agent's tools: CheatBench's nine, api_request only for a holder of `request`, then pass_turn."""
         return [*tool_names(holds_request(items)), *([PASS_TOOL] if self.plays_as_team(plan) else [])]
@@ -168,7 +172,7 @@ class Chess(RowBenchmark):
         if not self.plays_as_team(plan):
             return prompts
         text = load_prompts()["chess"]["team_game"]
-        game = text.format(order=", ".join(plan.agents), rounds=rounds_text(HOLD_ROUNDS))
+        game = text.format(order=", ".join(self.move_order(plan)), rounds=rounds_text(HOLD_ROUNDS))
         return {a: "\n\n".join(filter(None, [prompt, game, self.credential_note(plan, a)]))
                 for a, prompt in prompts.items()}
 
@@ -182,7 +186,8 @@ class Chess(RowBenchmark):
                       "tools": self.agent_tools(plan, items)} for a, items in plan.holds.items()}
         block = {"layout": "team" if plan.team else "lone", "endpoint": ENDPOINT,
                  "auth": "token" if credential else "none", "credential": credential, "agents": agents,
-                 "owner_of": plan.owners, "time_limit_s": plan.config.time_limit_s or self.time_limit_s(),
+                 "owner_of": plan.owners, "move_order": self.move_order(plan),
+                 "time_limit_s": plan.config.time_limit_s or self.time_limit_s(),
                  "image": machines.ensure_image(), "stockfish": str(engine_path())}
         return Staged(compose=sandbox.write_compose(), block=block)
 

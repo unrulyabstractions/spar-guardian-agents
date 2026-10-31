@@ -109,8 +109,8 @@ def system_prompts(benchmark: Benchmark, plan: Plan) -> dict[str, str]:
     def prompt(agent: str) -> str | None:
         role = role_of(plan.roles, agent)
         added = roles_module.role_prompt(role, config, benchmark.key, plan.agents)
-        return roles_module.oversight_prompt(agent, plan.agents, added) if config.oversees(role) \
-            else roles_module.with_role(base[agent], added)
+        return roles_module.oversight_prompt(agent, plan.agents, added, benchmark.access_note(plan)) \
+            if config.oversees(role) else roles_module.with_role(base[agent], added)
 
     return {agent: prompt(agent) for agent in plan.agents}
 

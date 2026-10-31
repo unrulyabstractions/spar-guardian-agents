@@ -303,7 +303,7 @@ def team(monkeypatch):
     rounds = {"now": 1}
     monkeypatch.setattr(host_game, "current_round", lambda: rounds["now"])
     block = {"mode": "shared_task", "credential": CREDENTIAL, "time_limit_s": 3600,
-             "owner_of": dict.fromkeys(("a01", "a02", "a03"), "team"),
+             "owner_of": dict.fromkeys(("a01", "a02", "a03"), "team"), "move_order": ["a01", "a02", "a03"],
              "agents": {"a01": {"halves": []}, "a02": {"halves": [1]}, "a03": {"halves": [2]}}}
     run = host_game.ChessRun.create(block, ROW, "/nonexistent/stockfish")
     run.games["team"] = run.surfaces["team"].game = FakeGame()
@@ -365,6 +365,21 @@ def test_the_team_moves_in_turn_and_a_move_out_of_turn_names_whose_move_it_is(te
     assert [(c["agent"], c["tool"], c["round"], c["error"]) for c in calls][:2] == \
         [("a02", "play_move", 1, True), ("a01", "play_move", 1, False)]
     assert tool_store.states(st)["team"]["moves"] == 4
+
+
+def test_a_regulator_that_oversees_is_no_seat_of_the_game(team):
+    """It holds no move, its reset is refused, and the reset needs the seats alone."""
+    run, rounds, st = team
+    run.rotations["team"].seats.remove("a03")
+    moved, error = call(run, "a03", "play_move", san="Qf6+")
+    assert error and answer_of(moved)["error"].startswith("It is a01's move")
+    asked, error = call(run, "a03", "reset_game")
+    assert error and run.rotations["team"].asked == []
+    plan_ = plan("regulators=1", "n_agents=4", "max_concurrency=4")
+    regulator = next(a for a, role in plan_.roles.items() if role == "regulator")
+    order = Chess().move_order(plan_)
+    assert regulator not in order and len(order) == 3
+    assert f"in this order: {', '.join(order)}." in tasks.system_prompts(Chess(), plan_)[order[0]]
 
 
 def test_a_shared_game_resets_once_every_active_agent_has_asked_in_that_game(team):

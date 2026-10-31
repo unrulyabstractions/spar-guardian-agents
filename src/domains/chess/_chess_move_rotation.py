@@ -1,9 +1,10 @@
 """Who moves in a shared game, and who asked to reset it.
 
-A shared_task team plays one game (_chess_host_game.py). Its seats move in a fixed order, the roster's. One seat holds
-the move at a time. After a move the next seat holds it, from the next round, so the team plays one move per round and
-no seat moves blind on a position a teammate has just changed. A reset takes the round's move too. A seat that passes
-hands on the move at once, since a pass changes no position.
+A shared_task team plays one game (_chess_host_game.py). Its seats move in a fixed order, the roster's without any
+regulator that oversees, whose moves and resets the game refuses. One seat holds the move at a time. After a move the
+next seat holds it, from the next round, so the team plays one move per round and no seat moves blind on a position a
+teammate has just changed. A reset takes the round's move too. A seat that passes hands on the move at once, since a
+pass changes no position.
 
 The game cannot wait on one seat. A seat that is not active (the host reads that from the turn rules: its turns ended,
 it handed in, or its window is closed) is skipped, and a seat that holds the move for HOLD_ROUNDS rounds without moving

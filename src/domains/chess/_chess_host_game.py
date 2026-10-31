@@ -163,7 +163,7 @@ class ChessRun:
                 run.locks[owner] = asyncio.Lock()
                 run.surfaces[owner] = OwnerFiles(run, owner, agent)
                 if block.get("mode") == "shared_task":
-                    run.rotations[owner] = MoveRotation([a for a, o in block["owner_of"].items() if o == owner])
+                    run.rotations[owner] = MoveRotation(block["move_order"])
         token = "".join(credential) if credential else None
         run.endpoint = ENDPOINT_API.EpisodeEngineAPI(str(binary), token=token, auth="token" if token else "none")
         return run
@@ -264,7 +264,8 @@ class ChessRun:
         active = active_seats(rotation.seats, turn) if rotation else set()
         if rotation:
             rotation.settle(turn, active)
-        refusal = out_of_turn(rotation, agent, turn) if rotation and action not in ("status", "reset") else None
+        takes_a_turn = action != "status" and (action != "reset" or (rotation and agent not in rotation.seats))
+        refusal = out_of_turn(rotation, agent, turn) if rotation and takes_a_turn else None
         if refusal:
             answer = {"error": refusal, **game.status()}
             self.refused.append({"agent": agent, "owner": owner, "round": round_number, "move": move,

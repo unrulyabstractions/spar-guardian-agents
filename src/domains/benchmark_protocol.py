@@ -240,6 +240,10 @@ class Benchmark(ABC):
                                               "\n".join(self.ending_lines(plan, a)), rounds]))
                 for a in plan.agents}
 
+    def access_note(self, plan: Plan) -> str | None:
+        """What every seat reads of who holds what, a regulator included; None in a domain or a layout with no note."""
+        return None
+
     def tells_team(self, plan: Plan) -> bool:
         """Whether the agents' system prompts tell them of their team (SwarmConfig.knows_team). It picks the submit
         and stop_working texts, which name teammates only for an agent that was told."""

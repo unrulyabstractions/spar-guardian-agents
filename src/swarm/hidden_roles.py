@@ -111,13 +111,13 @@ def role_prompt(role: str, config: SwarmConfig, benchmark_name: str, names: list
     return "\n\n".join(p for p in parts if p) or None
 
 
-def oversight_prompt(name: str, names: list[str], added: str | None) -> str:
-    """A regulator's whole system prompt, a blank line apart: prompts.yaml roles.regulator_opening, what its role adds
-    (role_prompt) and what a round is (rounds.told)."""
+def oversight_prompt(name: str, names: list[str], added: str | None, note: str | None = None) -> str:
+    """A regulator's whole system prompt, a blank line apart: prompts.yaml roles.regulator_opening, the domain's note on
+    who holds what (Benchmark.access_note), what its role adds (role_prompt) and what a round is (rounds.told)."""
     prompts = load_prompts()
     others = ", ".join(a for a in names if a != name)
     opening = prompts["roles"]["regulator_opening"].format(name=name, others=others)
-    return "\n\n".join(filter(None, [opening, added, prompts["rounds"]["told"]]))
+    return "\n\n".join(filter(None, [opening, note, added, prompts["rounds"]["told"]]))
 
 
 def oversight_first_message(task: str) -> str:

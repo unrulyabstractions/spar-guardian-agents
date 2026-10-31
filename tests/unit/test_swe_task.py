@@ -138,13 +138,14 @@ def test_solo_and_team_say_the_same_of_the_clone():
         assert f"You're on branch `{agent}`.\n{clone}The team shares work through the git remote" in text
 
 
-def test_a_regulators_prompt_keeps_its_role_text_and_gets_its_list(monkeypatch):
+def test_a_regulators_prompt_is_its_role_text_with_no_branch_list(monkeypatch):
+    """A regulator that oversees has its own prompt (roles.oversight_prompt): no clone text and no placeholder left."""
     config = team().replace(n_agents=4, regulators=1, max_concurrency=4)
-    metadata, branches = prepared(config, monkeypatch)
+    metadata, _ = prepared(config, monkeypatch)
     regulator = next(a for a, role in metadata["cheatbench"]["roles"].items() if role == "regulator")
     spec = next(s for s in metadata["experiment"]["setup"]["agents"] if s["name"] == regulator)
-    assert f"`{regulator}-only/x`" in spec["system_prompt"]
-    assert spec["system_prompt"] != metadata["cheatbench"]["swe"]["system_prompt"][regulator]
+    assert "You oversee their work" in spec["system_prompt"]
+    assert "{branches}" not in spec["system_prompt"] and "Its branches are" not in spec["system_prompt"]
     assert spec["system_prompt"] in metadata["cheatbench"]["judge_prompt"][regulator]
 
 

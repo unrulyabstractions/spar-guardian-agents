@@ -543,7 +543,7 @@ def test_run_args_name_every_cell_of_the_task_by_default(registry, chess_cells, 
     add_box(8, "knowledge_work", label=LABEL.replace("chess", "knowledge_work"))
     assert fleet.main(["run-args", "7"]) == 0
     out = capsys.readouterr().out.split("\n")[:-1]
-    assert out[out.index("--kinds") + 1:] == list(fleet_layout.KINDS)
+    assert out[out.index("--kinds") + 1:] == [*fleet_layout.KINDS, "minimal_all"]
     assert fleet.main(["run-args", "8"]) == 0
     out = capsys.readouterr().out.split("\n")[:-1]
     assert out[out.index("--kinds") + 1:] == [*fleet_layout.KINDS, "minimal_all"]
@@ -1092,7 +1092,7 @@ def test_the_runner_takes_every_cell_of_its_task_by_default(runner_dirs, monkeyp
     for task in ("knowledge_work", "chess"):
         assert box_runner.main(["run", "--task", task, "--model", "deepseek-flash-openrouter", "--suffix", "t",
                                 "--commit", PIN["commit"]]) == 1
-    assert asked == [(*fleet_layout.KINDS, "minimal_all"), fleet_layout.KINDS]
+    assert asked == [(*fleet_layout.KINDS, "minimal_all")] * 2
 
 
 def test_the_runner_refuses_without_the_models_key(runner_dirs, monkeypatch, capsys):
