@@ -213,9 +213,11 @@ def test_only_a_regular_file_takes_a_mark_and_only_a_file_marks_its_directory(tm
     key.write_text("x")
     assert (watcher.arm(obj), watcher.arm(obj)) == ("armed", "same")
     assert marks == ["/proc/10/root/k/key", "/proc/10/root/k"]
+    other = tmp_path / "other"
+    other.write_text("z")
     key.unlink()
     assert watcher.arm(obj) == "gone"
-    key.symlink_to(tmp_path)
+    key.symlink_to(other)
     assert watcher.arm(obj) == "gone"
     key.unlink()
     key.mkdir()
@@ -224,6 +226,22 @@ def test_only_a_regular_file_takes_a_mark_and_only_a_file_marks_its_directory(tm
     key.write_text("y")
     marks.clear()
     assert watcher.arm({**obj, "kind": "blob", "inode": None}) == "armed" and marks == ["/proc/10/root/k/key"]
+
+
+def test_a_marked_inode_names_its_object_under_any_path(tmp_path, monkeypatch):
+    """`git mv` or a hard link reach the marked file by another name."""
+    key = tmp_path / "key"
+    key.write_text("x")
+    watcher = planned("k7q2m")
+    monkeypatch.setattr(watcher, "mark", lambda path, mask: None)
+    monkeypatch.setattr(daemon, "os", SimpleNamespace(path=os.path, fstat=os.fstat, stat=lambda path, follow_symlinks: (
+        os.stat(key, follow_symlinks=follow_symlinks))))
+    monkeypatch.setattr(daemon, "read_bytes", lambda path: b"0::/docker/id-k7q2m\n")
+    monkeypatch.setattr(daemon, "link", lambda path: "/moved/away")
+    assert watcher.arm(watcher.objects[0]) == "armed"
+    with open(key) as f:
+        place = watcher.where(5, f.fileno())
+    assert (place["object"], place["level"], place["path"]) == ("key", "content", "/moved/away")
 
 
 def test_a_file_marked_at_a_new_inode_leaves_a_row(monkeypatch):
@@ -249,15 +267,16 @@ def test_a_new_file_at_an_objects_path_is_named_on_the_openers_machine(tmp_path,
 
 
 def test_an_open_is_let_through_after_its_row_whatever_happened(monkeypatch):
-    watcher, answered = planned("k7q2m"), []
+    watcher, answered, closed = planned("k7q2m"), [], []
     monkeypatch.setattr(daemon, "os", SimpleNamespace(
-        write=lambda group, data: answered.append((len(rows_of(watcher.log.stream)), data)), close=lambda fd: None))
+        write=lambda group, data: answered.append((len(rows_of(watcher.log.stream)), data)), close=closed.append))
     monkeypatch.setattr(watcher, "where", lambda pid, fd: {"machine": "k7q2m"})
     monkeypatch.setattr(watcher, "opener", lambda pid: {"uid": 1000})
     watcher.answer(900, 5)
     monkeypatch.setattr(watcher, "where", lambda pid, fd: 1 / 0)
     watcher.answer(901, 6)
     assert answered == [(1, daemon.RESPONSE.pack(5, daemon.FAN_ALLOW)), (2, daemon.RESPONSE.pack(6, daemon.FAN_ALLOW))]
+    assert closed == [5, 6]
     assert [row["row"] for row in rows_of(watcher.log.stream)] == ["open", "row_failed"]
 
 
