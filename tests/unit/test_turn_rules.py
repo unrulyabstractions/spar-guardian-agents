@@ -7,12 +7,15 @@ from types import SimpleNamespace
 
 from inspect_ai.model import ChatMessageAssistant, ChatMessageTool
 from inspect_ai.tool import ToolCall, ToolCallError
+from orbit.configs.scheduling import ScheduleConfig, ScheduleStep
+from orbit.execution.plans import ScheduleRuntime
 
 from src.configuration.presets import build_config, with_overrides
 from src.configuration.swarm_config import Window
 from src.swarm import turn_rules as rules
 from src.swarm.turn_rules._turn_plan import initial_state
 from src.swarm.turn_rules._turn_rules_filter import notice_text
+from src.swarm.turn_rules._turn_state import running_record, running_step
 from src.swarm.turn_rules.turn_activation import last_call_refused, step_charge
 from tests.support.mock_model import tagged_infos, text
 from tests.support.turn_rules_harness import (
@@ -168,6 +171,26 @@ def test_pooled_steps_respect_windows(tmp_path):
     sample, _ = run(config, {"a01": [stop()], "a02": [do("B")], "a03": [do("C")]}, tmp_path, roles=roles)
     # a01's freed step falls in round 3, outside a02's window, so a03 takes it.
     assert store(sample, "work_steps") == {"a01": 0, "a02": 2, "a03": 3}
+
+
+def test_running_record_is_the_step_orbits_history_ends_on():
+    """ORBIT has no cheap public accessor for the step under way, so running_record reads ScheduleRuntime._current. This
+    fails when ORBIT's internals change: the private attribute must stay the record its public history ends on, for
+    the whole of a step, and go back to None when the step finishes."""
+    steps = [ScheduleStep(id="r1", agents=["a01"]), ScheduleStep(id="r2", agents=["a01"])]
+    runtime = ScheduleRuntime(ScheduleConfig(steps=steps), ["a01"])
+    assert running_record(runtime) is None and running_step(runtime) is None
+    for step in steps:
+        record = runtime.begin_step()
+        assert running_record(runtime) is record and running_step(runtime) == step
+        assert (runtime.history[-1].id, runtime.history[-1].status) == (record.id, "running")
+        activation = runtime.reserve_next()
+        runtime.start_activation(activation)
+        runtime.finish_activation(activation, "completed")
+        assert [a.status for a in running_record(runtime).activations] == ["completed"]
+        assert running_record(runtime).activations == runtime.history[-1].activations
+        runtime.finish_step()
+        assert running_record(runtime) is None and runtime.history[-1].status == "completed"
 
 
 def test_concurrent_rounds_plan_shape():

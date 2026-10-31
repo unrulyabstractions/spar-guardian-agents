@@ -134,10 +134,12 @@ PREDICATE: ContextVar[Callable[[], Awaitable[set[str]]] | None] = ContextVar("sw
 def running_record(runtime):
     """The StepRecord of the step under way, or None.
 
-    ScheduleRuntime has no public accessor for it: `history[-1]` holds it but deep-copies every executed step on
-    each read, which is quadratic at the large scales. The running StepRecord is its `_current`.
+    ScheduleRuntime has no accessor for it that stays cheap: `history[-1]` holds it but deep-copies every executed step
+    on each read (70 ms at 6,400 activations, a thousand agents at the gigantic scale), so this reads its private
+    `_current`. A plain read fails loudly if ORBIT renames it, and a test in test_turn_rules.py pins it against the
+    public history.
     """
-    return getattr(runtime, "_current", None)
+    return runtime._current
 
 
 def running_step(runtime) -> ScheduleStep | None:

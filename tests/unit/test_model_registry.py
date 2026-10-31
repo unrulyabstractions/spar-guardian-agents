@@ -118,8 +118,8 @@ def test_openai_lists_a_write_rate_and_batch_halves_it(entry, write):
 
 
 def test_a_prompt_over_the_line_pays_the_long_rates_on_every_token():
-    """Claude Haiku 5.5 over 100,000 prompt tokens: 0.50 in, 0.625 written, 0.05 read, 2.50 out. game runs held five such
-    calls, up to 106,119 tokens. The line counts reads and writes, and a prompt exactly on it stays below."""
+    """Claude Haiku 5.5 over 100,000 prompt tokens: 0.50 in, 0.625 written, 0.05 read, 2.50 out. game runs held five
+    such calls, up to 106,119 tokens. The line counts reads and writes, and a prompt exactly on it stays below."""
     prices = models.usd_per_million("claude-haiku-5-5")
     below = (100_000 - 90_000 - 1_000) * 0.10 + 90_000 * 0.01 + 1_000 * 0.125 + 2_000 * 0.50
     assert models.cost_usd(prices, 100_000, 90_000, 2_000, cache_write=1_000) == pytest.approx(below / 1e6)
