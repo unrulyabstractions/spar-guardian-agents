@@ -38,8 +38,8 @@ MODELS = {"deepseek-flash-openrouter": "dsflash", "gpt-6-luna": "luna", "claude-
 """Each model's registry entry and the suffix of its run names."""
 KINDS = ("solo", "solo_cheat", "minimal", "minimal_cheat", "minimal_regulated")
 """The cells every task has, as the last part of each example script's name."""
-TASK_KINDS = {"knowledge_work": ("minimal_all",)}
-"""The cells of one task alone: knowledge work's team with no split."""
+TASK_KINDS = {"knowledge_work": ("minimal_all",), "chess": ("minimal_all",)}
+"""The cells of one task alone: a team with no split."""
 EVERY_KIND = (*KINDS, *dict.fromkeys(kind for kinds in TASK_KINDS.values() for kind in kinds))
 """What --kinds accepts."""
 FLOORS = {"software_engineering": (32, 64)}

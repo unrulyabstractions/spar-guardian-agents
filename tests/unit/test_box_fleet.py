@@ -580,9 +580,10 @@ def test_run_args_refuse_a_run_name_made_elsewhere(registry, chess_cells, capsys
 def test_a_task_has_one_cell_per_kind_or_none(tmp_path):
     package = tmp_path / "chess"
     package.mkdir()
-    for kind in fleet_layout.KINDS:
+    kinds = fleet_layout.kinds_of("chess")
+    for kind in kinds:
         (package / f"game_{kind}.py").write_text("")
-    assert fleet_layout.cells("chess", examples=tmp_path) == [f"chess.game_{k}" for k in fleet_layout.KINDS]
+    assert fleet_layout.cells("chess", examples=tmp_path) == [f"chess.game_{k}" for k in kinds]
     (package / "game_minimal_regulated.py").unlink()
     with pytest.raises(ValueError, match="minimal_regulated: 0 scripts"):
         fleet_layout.cells("chess", examples=tmp_path)
@@ -592,10 +593,12 @@ def test_a_task_has_one_cell_per_kind_or_none(tmp_path):
         fleet_layout.cells("chess", examples=tmp_path)
 
 
-def test_knowledge_work_has_a_cell_no_other_task_has(tmp_path):
+def test_knowledge_work_and_chess_have_a_cell_no_other_task_has(tmp_path):
     assert fleet_layout.cells("knowledge_work")[-1] == "knowledge_work.worktime_minimal_all"
     assert fleet_layout.run_name("knowledge_work.worktime_minimal_all", "luna", 2) == "worktime_minimal_all_luna2"
-    assert len(fleet_layout.cells("chess")) == len(fleet_layout.KINDS)
+    assert fleet_layout.cells("chess")[-1] == "chess.game_minimal_all"
+    assert fleet_layout.run_name("chess.game_minimal_all", "luna", 2) == "game_minimal_all_luna2"
+    assert len(fleet_layout.cells("swe")) == len(fleet_layout.KINDS)
     assert fleet_layout.EVERY_KIND == (*fleet_layout.KINDS, "minimal_all")
     assert fleet_layout.layout_problems(list(fleet_layout.TASKS)) == []
     # its own kinds are the rest of a task's cells: a task without them is refused, and no other task needs them
@@ -605,13 +608,13 @@ def test_knowledge_work_has_a_cell_no_other_task_has(tmp_path):
         (package / f"worktime_{kind}.py").write_text("")
     assert "minimal_all: 0 scripts" in fleet_layout.layout_problems(["knowledge_work"], tmp_path)[0]
     with pytest.raises(ValueError, match="minimal_all: 0 scripts"):
-        fleet_layout.cells("chess", ("minimal_all",))
+        fleet_layout.cells("protein_design", ("minimal_all",))
 
 
 def test_two_tasks_with_one_cell_stem_are_refused(tmp_path):
     for package in ("chess", "creative_writing"):
         (tmp_path / package).mkdir()
-        for kind in fleet_layout.KINDS:
+        for kind in fleet_layout.kinds_of(package):
             (tmp_path / package / f"game_{kind}.py").write_text("")
     problems = fleet_layout.layout_problems(["chess", "creative_writing"], tmp_path)
     assert len(problems) == len(fleet_layout.KINDS) and "run names collide" in problems[0]

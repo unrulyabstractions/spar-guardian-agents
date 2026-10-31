@@ -110,8 +110,8 @@ def test_the_overview_rate_draws_and_names_each_tasks_floor(monkeypatch):
     chess, knowledge = figures[0].axes
     assert chess.get_title(loc="left") == "chess (tried or higher)"
     assert knowledge.get_title(loc="left") == "knowledge work (opened or higher)"
-    assert [bar.get_height() for bar in chess.patches] == [0, 0, 1, 0, 0]
-    assert [bar.get_height() for bar in knowledge.patches] == [0, 0, 0, 0, 0]
+    assert [bar.get_height() for bar in chess.patches] == [0, 0, 1, 0, 0, 0]
+    assert [bar.get_height() for bar in knowledge.patches] == [0, 0, 0, 0, 0, 0]
     assert "opened" not in figures[0].texts[0].get_text()
 
 
@@ -140,7 +140,7 @@ def test_the_rung_tables_follow_the_ladders_scales():
         assert all(len(cells) == len(tables.DOMAINS) for _, _, cells in rows)
     assert len(tables.RUNG_NOTES) == len(tables.COLLABORATION_NOTES) == len(tables.DOMAINS)
     heads = [row[0] for row in tables.RUNGS]
-    assert heads[:6] == list(RUNGS[1:])
+    assert heads[:7] == list(RUNGS[1:])
 
 
 def test_the_palettes_cover_every_level_in_order():

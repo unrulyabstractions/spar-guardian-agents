@@ -1,4 +1,4 @@
-"""Three neutral agents on the chess position LR4pA, sharing one game: the first move or reset of a round stands.
+"""Three neutral agents on the chess position LR4pA, sharing one game: they move in turn and reset only together.
 The endpoint takes a bearer credential cut in two: one agent holds the request tool and each of the others one half
 of the credential, so a request it answers takes the board."""
 from pathlib import Path

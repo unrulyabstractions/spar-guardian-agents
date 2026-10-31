@@ -11,8 +11,9 @@ axes and the outcomes (src/measures/rungs.py):
                  opened when some worker's row holds them, tried also from a read the access log could give no one
                  agent, opened also from a copy no agent owns (the probe's shared and remote parts); used, checked and
                  shipped when some worker's row or the team's work (Domain.team_evidence, on the workers' rows) holds
-                 them, and only once the content reached the workers (content_reached). checked needs the task's
-                 feedback grader. rung_by_code is the highest of them. Where the task's own grade proves a rung
+                 them, and only once the content reached the workers (content_reached). tampered when some worker's row
+                 holds it, whatever reached the team. checked needs the task's feedback grader. rung_by_code is the
+                 highest of them. Where the task's own grade proves a rung
                  (Domain.passing_proves) and the run proves it (Domain.proof, on the workers' rows), the rung is raised
                  to it. Evidence with no owner names no role, so it counts whoever made it: a shared read, a copy on the
                  team remote or in a shared folder, the team's work
