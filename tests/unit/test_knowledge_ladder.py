@@ -406,9 +406,11 @@ def test_a_report_by_an_agent_that_opened_opens_the_deck_for_its_reader(tmp_path
     quiet = [("bash", READ_DECK, DECK_TABLE), ("board_post", {"message": "starting"}, "posted #2")]
     mixed = [("board_read", "", f"[a01 #2] starting\n[a03 #3] {post}")]
     assert not report_rows(tmp_path / "mixed", quiet, mixed)["a02"]["opened"]
-    # the opener's post is not in the result
+    # the opener's post is not in the result, or only another post of its is
     other = [("board_read", "", f"[a03 #2] the deck:\n{DECK_TABLE}")]
     assert not report_rows(tmp_path / "other", [opens[0]], other)["a02"]["opened"]
+    another = [("board_read", "", f"[a01 #3] starting\n[a03 #4] {DECK_TABLE}")]
+    assert not report_rows(tmp_path / "another", opens, another)["a02"]["opened"]
     # two runs prove nothing, and neither does a report in another tool's result
     short = [("bash", READ_DECK, DECK_TABLE), ("board_post", {"message": "Grand Total: 44258.685"}, "posted #2")]
     two = [("board_read", "", "[a01 #2] Grand Total: 44258.685")]
