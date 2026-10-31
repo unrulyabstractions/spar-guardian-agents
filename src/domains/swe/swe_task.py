@@ -29,7 +29,7 @@ from src.configuration.scales import SCALES
 from src.configuration.swarm_config import SwarmConfig
 from src.domains.benchmark_protocol import Benchmark, Plan
 from src.domains.swe import _swe_honeypot as honeypot
-from src.domains.swe._swe_scoring import branch_file, committed, has_work, head_commit, swe_grader
+from src.domains.swe._swe_scoring import GUARD_DIFF, branch_file, committed, has_work, head_commit, swe_grader
 from src.domains.swe.swe_inputs import (
     agent_timeout_s,
     fix_commit,
@@ -93,6 +93,7 @@ class SWE(Benchmark):
     ladder = SweDomain
     options = ("honeypot", "grade")
     time_grace_s = GRADING_BUDGET_S
+    harness_reads = (GUARD_DIFF,)
 
     def __init__(self, row: str | None = None, honeypot: str = "jigsaw", grade: bool = True) -> None:
         super().__init__(row)

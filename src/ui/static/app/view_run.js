@@ -82,12 +82,14 @@ export async function viewRun({ run }, view) {
   // The team record per sample (signals.jsonl's team rows): the ladder's primary record; the agents' rows sit in their
   // episode cards.
   const teams = d.team || [];
+  const accessLogSection = rj.access_log ? section('Access log', accessLogView(rj.access_log, teams, eps)) : null;
   const teamSection = section('Team record', teams.length
     ? teams.map(t => h('div', null, teams.length > 1 ? h('h3', null, `sample ${t.sample}`) : null, teamBlock(t)))
     : muted('No team record: the code ladder has not run on this run (python -m src signals).'));
 
   return h('div', { class: 'page' }, head, meta, teamSection, configSection, defSection, sweSection, knowledgeSection,
-    swarmSection, accessSection, rulesSection, engagementSection, toolsSection, epSection, boardSection, evidence);
+    swarmSection, accessSection, accessLogSection, rulesSection, engagementSection, toolsSection, epSection, boardSection,
+    evidence);
 }
 
 // The analysis tools (tools/ at the repository root): each writes runs/<run>/tools/<tool>/summary.json and its own
@@ -374,6 +376,67 @@ function accessView(access, run) {
     ['honeypot branches', access.honeypot_branches ? mono(access.honeypot_branches.join(', ')) : undefined],
     ['split archive', access.archive ? mono(`${access.archive.name} on ${access.archive.branch}`) : undefined],
   ], 'kv-grid'), dataTable(['agent', 'role', 'holds'], rows));
+}
+
+// The access log: run.json "access_log", the team records' `access_log` key and each agent's. A row is an open, which
+// places no content in anyone's context, and only a valid log's silence means anything.
+const LOG_STATUS = {
+  valid: ['good', 'every control seen and nothing lost'],
+  partial: ['warn', 'the controls seen, but the log lost sight of something'],
+  broken: ['bad', 'a control or the stop row is missing: the rows are true and an absence means nothing'],
+  absent: ['bad', 'the switch was on and no open came back'],
+  off: ['plain', 'the switch was off'],
+  host: ['plain', 'the honeypot lives on the host, and a host tool gave the rows'],
+};
+
+const countsText = counts => Object.entries(counts || {}).map(([k, n]) => `${n} ${k}`).join(', ');
+
+function harnessReads(reads) {
+  if (!reads.count) return '0';
+  const above = reads.count - reads.own;
+  return h('div', null, `${reads.count} of content after the first turn, ${reads.own} the harness's own`,
+    above > 0 ? [' ', badge('read this run', 'warn', 'it proves nothing: a root agent can replace a program the harness starts')] : null,
+    h('ul', { class: 'plain-list' }, reads.commands.map(c => h('li', null, `${c.rows} × `, mono(c.cmd)))));
+}
+
+function accessLogView(log, teams, eps) {
+  const [kind, tip] = LOG_STATUS[log.status] || ['plain'];
+  const c = log.control;
+  const agents = eps.filter(e => e.signals && e.signals.access_log);
+  const named = list => (list && list.length ? h('ul', { class: 'plain-list' }, list.map(x => h('li', null, x))) : undefined);
+  const logOnly = agents.filter(e => e.signals.access_log.log_only).map(e => e.orbit_agent);
+  const rows = agents.map(e => {
+    const a = e.signals.access_log;
+    return [e.orbit_agent, a.records, a.incidental, (a.raised || []).join(', '), a.log_only ? badge('yes', 'bad') : null,
+      a.transcript_only ? badge('yes', 'warn') : null, a.refused_seen];
+  });
+  const num = label => ({ label, num: true });
+  return h('div', null, kv([
+    ['status', badge(log.status, kind, tip)],
+    ['mechanism', log.mechanism],
+    ['rows by origin', log.origins ? countsText(log.origins) || '0' : undefined],
+    ['objects marked', log.objects],
+    ['controls seen', c ? `start ${c.start.seen}, end ${c.end.seen}` : undefined],
+    ['controls missing', c && [...c.start.missing, ...c.end.missing].join(', ') || undefined],
+    ['gaps', log.gaps ? log.gaps.length : undefined],
+    ['objects gone', log.gone && log.gone.length ? log.gone.length : undefined],
+    ['objects packed', log.packed && log.packed.length ? log.packed.length : undefined],
+    ['rows dropped', log.dropped || undefined],
+    ['refused reads', log.refused_reads],
+    ['agents only the log saw', logOnly.length ? logOnly.join(', ') : undefined],
+    ['error', log.error ? mono(log.error) : undefined],
+  ], 'kv-grid'), kv([
+    ['harness reads', log.harness_reads ? harnessReads(log.harness_reads) : undefined],
+    ...teams.filter(t => t.access_log).flatMap(t => [
+      ['rung and the log', t.access_log.rests_on_log
+        ? h('span', null, badge('rests on the log alone', 'warn'), ` ${t.access_log.rung_without_log} without it`)
+        : undefined],
+      ['only the log saw', named(t.access_log.log_only)],
+      ['only the transcript saw', named(t.access_log.transcript_only)],
+      ['on the team', named(t.access_log.team_only)],
+    ]),
+  ]), rows.length ? dataTable(['agent', num('rows'), num('incidental'), 'raised', 'log only', 'transcript only',
+    num('refusals')], rows) : null);
 }
 
 // The knowledge-work sample and its reviews (run.json "knowledge"): the layout, the pipeline artifact, each contract's

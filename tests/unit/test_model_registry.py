@@ -100,6 +100,13 @@ def test_the_defaults_are_entries_with_prices():
     assert isinstance(models.registry()["as_of"], type(yaml.safe_load("2026-10-27")))
 
 
+def test_sonnet_cache_hits_cost_a_twentieth_of_its_input():
+    """Anthropic's pricing page gives 0.05 times input on Claude Sonnet 5.5, $0.10. The claude-api skill's table of
+    2026-10-06 says $0.20."""
+    price = models.usd_per_million("claude-sonnet-5-5")
+    assert price["cached_input"] == 0.10 == price["input"] * 0.05
+
+
 def test_batch_prices_follow_the_route_discount():
     assert models.usd_per_million("gpt-5", batch=True) == {"input": 0.625, "cached_input": 0.0625, "output": 5.0}
     assert models.usd_per_million("claude-opus-5-5", batch=True)["output"] == 10.0

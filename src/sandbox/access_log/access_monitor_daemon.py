@@ -17,8 +17,8 @@ The rows, each a JSON object on one line with seq, t and row:
   ready                       every object was tried; pid, objects, marked
   arm_failed                  an object that was not there to mark at the start
   open                        one open: where (machine, object, kind, level, path, dev, ino) and who (pid, uid, exe,
-                              cwd, cmd, chain, root, and control for a read with a nonce in its argv), or gone for an
-                              opener that died first
+                              cwd, cmd, argv as shell words, chain, root, and control for a read with a nonce in its
+                              argv), or gone for an opener that died first
   object_armed, object_gone   the poll found the object at a new inode or back at its own, or no regular file there
   restart, machine_down       the poll found the machine's container under a new init, or nowhere
   row_failed                  an open that could not be described, let through all the same
@@ -34,6 +34,7 @@ import hashlib
 import json
 import os
 import select
+import shlex
 import signal
 import stat
 import struct
@@ -122,6 +123,12 @@ def argv(pid: int) -> list[bytes]:
 
 def text(args: list[bytes], keep: int) -> str:
     return b" ".join(args).decode("utf-8", "replace")[:keep]
+
+
+def shell_words(args: list[bytes], keep: int) -> str:
+    """argv as shell words. A word of argv can hold spaces, so a process that joined them could write an option it was
+    never given: `exec -a 'grep -c' grep . key` counts nothing."""
+    return " ".join(shlex.quote(arg.decode("utf-8", "replace")) for arg in args)[:keep]
 
 
 def exec_digest(args: list[bytes]) -> str:
@@ -264,7 +271,7 @@ class Monitor:
                 args = argv(pid)
                 control = next((name for name, nonce in self.nonces.items() if nonce in args), None)
                 return {"uid": found["uid"], "exe": link(f"/proc/{pid}/exe"), "cwd": link(f"/proc/{pid}/cwd"),
-                        "cmd": text(args, CMD_CHARS), "chain": chain, "root": root,
+                        "cmd": shell_words(args, CMD_CHARS), "chain": chain, "root": root,
                         **({"control": control} if control else {})}
         return {"gone": True}
 

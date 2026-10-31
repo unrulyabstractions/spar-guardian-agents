@@ -4,7 +4,7 @@ team's. The name is whole on both rows: an episode's `access` is the access poli
     log = RunDir(run_dir).access_log()                          # None: the transcript alone
     reads = agent_reads(log, "k7q2m", transcript, domain)
     row = with_access_log(scan(transcript, domain), scan(transcript, domain, reads.calls), reads, log["status"])
-    key = team_access_log(rows, log, team_reads(log, domain))
+    key = team_access_log(rows, log, team_reads(log, domain))       # code_ladder.rung_alone adds what the rung owes it
 
 An open is not content in an agent's context: `grep -c` opens a file and shows nothing. So the log never places content
 anywhere. A row Domain.aimed_access accepts makes its tool call count as aimed, the scan's existing test then decides
@@ -25,6 +25,13 @@ code_ladder scans twice, without it and with it, and the difference is the row's
                      refusal or a parser error. Nothing changes. An absence means nothing in any other status
     incidental       rows that raise nothing
     refused_seen     printed refusals, apart from the log's rows
+
+The team's `access_log` key holds the status, the agents' log_only and transcript_only evidence, and:
+
+    team_only         the reads no one agent can be named for
+    rung_without_log  the team's rung when the whole ladder runs with no log (code_ladder.rung_alone)
+    rests_on_log      that rung is lower than the team's, so the team's rung rests on the log alone. A figure drops it
+                      by reading rung_without_log, with no recomputing
 """
 from __future__ import annotations
 

@@ -1,10 +1,12 @@
 """The results browser offline: the run rows and their aggregate block, the team records beside the episodes' agent
 rows, the episodes' counted verdicts, the timeline's code-ladder moments and its submit and stop kinds on a synthetic
-run, and the server's routes and path safety."""
+run, the server's routes and path safety, and the access log on the run page, rendered by the page's own code."""
 from __future__ import annotations
 
 import http.client
 import json
+import shutil
+import subprocess
 import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -15,7 +17,7 @@ import pytest
 from src.ui._eval_log_views import LogViews
 from src.ui._run_store import Store
 from src.ui._server import make_server
-from src.utils.json_files import write_jsonl
+from src.utils.json_files import read_jsonl, write_jsonl
 
 T0 = datetime(2026, 10, 30, tzinfo=timezone.utc)
 CALL_IDS = {"a01": ["c1", "c2", "c3"], "a02": ["d1", "d2"]}
@@ -184,6 +186,106 @@ def get(port: int, path: str) -> tuple[int, bytes]:
     conn.request("GET", path)
     response = conn.getresponse()
     return response.status, response.read()
+
+
+# The access log on the run page. tests/support/render_run_page.mjs runs the page's own code on what the API answers.
+RENDER = Path(__file__).parents[1] / "support" / "render_run_page.mjs"
+needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="node renders the page")
+LOG = {"status": "partial", "mechanism": "fanotify", "origins": {"agent": 3, "control": 4, "harness": 2},
+       "control": {"start": {"seen": 2, "missing": []}, "end": {"seen": 1, "missing": []}},
+       "gaps": [{"t": 5.0, "row": "object_gone", "machine": "a02", "object": "key", "path": "/opt/key"}],
+       "objects": 2, "gone": ["a02:key"], "packed": ["a02:fix"], "dropped": 7, "refused_reads": "not_recorded",
+       "harness_reads": {"count": 2, "own": 1,
+                         "commands": [{"cmd": "git cat-file -p x:f", "root_cmd": "git", "rows": 2}]},
+       "error": None}
+AGENT_KEYS = {"status": "partial", "objects": ["key"], "first_call": 0, "refused_seen": 0}
+AGENT_LOGS = {"a01": {**AGENT_KEYS, "records": 3, "raised": ["tried"], "log_only": True, "transcript_only": False,
+                      "incidental": 1},
+              "a02": {**AGENT_KEYS, "records": 0, "raised": [], "log_only": False, "transcript_only": False,
+                      "incidental": 0}}
+TEAM_LOG = {"status": "partial", "log_only": ["a01: [0] access log: key by python3 -"], "transcript_only": [],
+            "team_only": [], "rung_without_log": "exposed", "rests_on_log": True}
+
+
+def keep_log(folder: Path, block: dict, *, team: dict | None = TEAM_LOG) -> None:
+    """The run as a run with this log keeps it: run.json's block, each agent's key and the team's."""
+    run = json.loads((folder / "run.json").read_text())
+    (folder / "run.json").write_text(json.dumps({**run, "access_log": block}))
+    rows = [{**row, "access_log": AGENT_LOGS[row["agent"]]} if row["row"] == "agent" else {**row, "access_log": team}
+            for row in read_jsonl(folder / "signals.jsonl")]
+    write_jsonl(folder / "signals.jsonl", rows)
+
+
+def page_of(runs: Path) -> list[str]:
+    """The lines of the board run's page, from the API's answer."""
+    detail = json.dumps(Store(runs).run_detail("board_run"), default=str)
+    done = subprocess.run(["node", str(RENDER)], input=detail, capture_output=True, text=True, timeout=60)
+    assert done.returncode == 0, done.stderr
+    return done.stdout.splitlines()
+
+
+def after(lines: list[str], label: str) -> str:
+    """What follows a label on the page."""
+    return lines[lines.index(label) + 1]
+
+
+@needs_node
+def test_a_run_with_no_log_has_no_access_log_on_its_page(runs):
+    assert "Access log" not in page_of(runs)
+
+
+@needs_node
+def test_the_run_page_shows_the_logs_status_and_counts_and_who_only_it_saw(runs):
+    keep_log(runs / "board_run", LOG)
+    lines = page_of(runs)
+    assert "Access log" in lines and after(lines, "status") == "partial"
+    assert after(lines, "rows by origin") == "3 agent, 4 control, 2 harness"
+    assert (after(lines, "objects marked"), after(lines, "controls seen")) == ("2", "start 2, end 1")
+    assert (after(lines, "gaps"), after(lines, "objects gone"), after(lines, "rows dropped")) == ("1", "1", "7")
+    assert after(lines, "agents only the log saw") == "a01"
+    assert after(lines, "only the log saw") == "a01: [0] access log: key by python3 -"
+
+
+@needs_node
+def test_the_run_page_says_when_the_rung_rests_on_the_log(runs):
+    keep_log(runs / "board_run", LOG)
+    lines = page_of(runs)
+    assert after(lines, "rung and the log") == "rests on the log alone" and " exposed without it" in lines
+
+
+@needs_node
+def test_a_rung_that_stands_without_the_log_shows_no_such_line(runs):
+    keep_log(runs / "board_run", LOG, team={**TEAM_LOG, "rests_on_log": False, "rung_without_log": "opened"})
+    assert "rung and the log" not in page_of(runs)
+
+
+@needs_node
+@pytest.mark.parametrize(("reads", "marked"), [({"count": 2, "own": 1}, True), ({"count": 2, "own": 2}, False)])
+def test_harness_reads_beyond_its_own_mark_the_run_to_read(runs, reads, marked):
+    keep_log(runs / "board_run", {**LOG, "harness_reads": {**LOG["harness_reads"], **reads}})
+    lines = page_of(runs)
+    assert ("read this run" in lines) is marked and "git cat-file -p x:f" in lines
+    assert after(lines, "harness reads") == f"2 of content after the first turn, {reads['own']} the harness's own"
+
+
+@needs_node
+def test_a_run_with_no_harness_reads_says_zero(runs):
+    keep_log(runs / "board_run", {**LOG, "harness_reads": {"count": 0, "own": 0, "commands": []}})
+    assert after(page_of(runs), "harness reads") == "0"
+
+
+@needs_node
+@pytest.mark.parametrize("block", [
+    {"status": "off"},
+    {"status": "host", "mechanism": "host", "origins": {"agent": 2}, "refused_reads": "recorded"},
+    {"status": "absent", "mechanism": "fanotify", "refused_reads": "not_recorded", "error": "no daemon"},
+    {"status": "valid", "mechanism": "fanotify", "origins": {}, "objects": 0, "gaps": [], "gone": [], "packed": [],
+     "control": {"start": {"seen": 0, "missing": []}, "end": {"seen": 0, "missing": []}}, "dropped": 0,
+     "refused_reads": "not_recorded", "harness_reads": {"count": 0, "own": 0, "commands": []}, "error": None},
+])
+def test_every_status_renders_with_the_keys_it_has(runs, block):
+    keep_log(runs / "board_run", block)
+    assert after(page_of(runs), "status") == block["status"]
 
 
 def test_the_server_routes_the_page_and_the_api(server):

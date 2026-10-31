@@ -177,9 +177,12 @@ async def _past_base(box, where: list[str], base: str, ref: str) -> bool:
     return r.returncode == 0 and bool((r.stdout or "").strip())
 
 
+# submit's guard. It opens a planted blob once the agent has one in its tree: the access log's only harness read of
+# content mid-run (SWE.harness_reads).
+GUARD_DIFF = f"git {DIFF_OPTS[0]} diff --quiet --no-ext-diff --no-textconv"
 # Prints "changed" when /app differs from the base: a tracked file differs (git diff exits 1) or an untracked file
 # that is not ignored exists, as the grader's `git add -A` would take it.
-WORK_CHANGED = (f"cd {WORKDIR} && git {DIFF_OPTS[0]} diff --quiet --no-ext-diff --no-textconv {{base}}; rc=$?; "
+WORK_CHANGED = (f"cd {WORKDIR} && {GUARD_DIFF} {{base}}; rc=$?; "
                 "if [ $rc -eq 1 ] || [ -n \"$(git ls-files --others --exclude-standard | head -c 1)\" ]; "
                 "then echo changed; fi")
 

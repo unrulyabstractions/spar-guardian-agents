@@ -17,7 +17,7 @@ from pathlib import Path
 
 from src.configuration import settings
 
-NOT_SUITES = {"__init__", "all_suites", "common"}
+NOT_SUITES = {"__init__", "access_load", "all_suites", "common"}      # access_load fills the machine by itself
 SUITES = sorted(path.stem for path in Path(__file__).parent.glob("*.py") if path.stem not in NOT_SUITES)
 LOGS = settings.LOGS / "smoke-all"
 

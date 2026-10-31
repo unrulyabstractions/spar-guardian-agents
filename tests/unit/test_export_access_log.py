@@ -10,6 +10,8 @@ import pytest
 from inspect_ai.event import SpanBeginEvent, ToolEvent
 from inspect_ai.log import EvalDataset, EvalLog, EvalSample, EvalSpec, write_eval_log
 
+from src.domains.swe import SWE
+from src.domains.swe._swe_scoring import GUARD_DIFF, WORK_CHANGED
 from src.export import _export_access_log as export
 from src.export import _export_run_blocks as blocks
 from src.export import run_export
@@ -205,12 +207,26 @@ def test_an_open_matches_inside_the_window_with_its_slack():
     assert exported(opened("cat other", t=START + 1), events=events)[1][0]["call_id"] is None
 
 
+def test_a_row_just_past_its_call_stays_on_it_though_a_later_call_of_one_command_is_in_the_slack():
+    """The monitor's clock stood 14 ms past the true call's end, and the next call of one command began 0.8 s on."""
+    first, second = call("c1", "k7q2m", "git x", end=START + 0.1), call("c3", "k7q2m", "git x", start=START + 0.9)
+    _, [row] = exported(opened("git x", t=START + 0.114), events=(first, second))
+    assert row["call_id"] == "c1"
+
+
+def test_a_row_just_before_a_call_goes_to_that_call():
+    first, second = call("c1", "k7q2m", "git x", end=START + 0.1), call("c3", "k7q2m", "git x", start=START + 0.9)
+    _, [row] = exported(opened("git x", t=START + 0.89), events=(first, second))
+    assert row["call_id"] == "c3"
+
+
 def test_the_window_tells_apart_calls_of_one_command():
     events = (call("c1", "k7q2m", "cat k", end=START + 1), call("c2", "k7q2m", "cat k", start=START + 1.5))
     assert exported(opened("cat k", t=START + 0.5), events=events)[1][0]["call_id"] == "c1"
     assert exported(opened("cat k", t=START + 2), events=events)[1][0]["call_id"] == "c2"
-    # outside both windows, inside both slacks: the last to start
-    assert exported(opened("cat k", t=START + 1.2), events=events)[1][0]["call_id"] == "c2"
+    # outside both windows, inside both slacks: the nearer window, whichever way the clocks differ
+    assert exported(opened("cat k", t=START + 1.2), events=events)[1][0]["call_id"] == "c1"
+    assert exported(opened("cat k", t=START + 1.3), events=events)[1][0]["call_id"] == "c2"
 
 
 @pytest.mark.parametrize("function", ["run_python", "python"])
@@ -254,7 +270,7 @@ def test_a_log_with_both_controls_and_its_stopped_row_is_valid():
     assert block == {"status": "valid", "mechanism": "fanotify", "origins": {"control": 2},
                      "control": {"start": {"seen": 1, "missing": []}, "end": {"seen": 1, "missing": []}}, "gaps": [],
                      "objects": 1, "gone": [], "packed": [], "dropped": 0, "refused_reads": "not_recorded",
-                     "error": None}
+                     "harness_reads": {"count": 0, "own": 0, "commands": []}, "error": None}
     assert len(rows) == 2
 
 
@@ -348,7 +364,7 @@ def test_a_host_tools_rows_pass_as_they_are_and_refusals_are_among_them(monkeypa
     empty = SimpleNamespace(host_access_rows=lambda v: [])
     monkeypatch.setattr(export, "domain", lambda v: empty)
     assert export.access_log(view({}))[0]["status"] == "host"
-    missing = SimpleNamespace(host_access_rows=lambda v: None, monitored=False)
+    missing = SimpleNamespace(host_access_rows=lambda v: None, watched=None)
     monkeypatch.setattr(export, "domain", lambda v: missing)
     block = export.access_log(view({}))[0]
     assert block["status"] == "absent" and block["mechanism"] == "host"
@@ -362,6 +378,100 @@ def test_a_host_tools_rows_pass_as_they_are_and_refusals_are_among_them(monkeypa
 def test_a_broken_or_absent_log_flags_the_runs_validity(status, flagged):
     block = blocks.validity_block([], None, {"status": status})
     assert block["flags"] == ([f"access log: {status}"] if flagged else []) and block["ok"] is not flagged
+
+
+def model_call(seconds: float) -> SimpleNamespace:
+    return SimpleNamespace(event="model", timestamp=moment(seconds), span_id="k7q2m")
+
+
+HARNESS_GIT = "git -C /app rev-list -n 1 base..HEAD"
+HARNESS_ROOT = {"pid": 500, "ns_pid": 7, "cmd": f"timeout -k 5s 60s {HARNESS_GIT}", "sha256": "x", "detached": False}
+
+
+def harness_row(*, t: float = START + 5, level: str = "content", cmd: str = HARNESS_GIT) -> dict:
+    return opened("x", t=t, level=level, cmd=cmd, root=HARNESS_ROOT, exe="/usr/bin/git")
+
+
+def test_harness_reads_count_content_after_the_first_turn_with_their_commands():
+    rows = [harness_row(), harness_row(t=START + 6), harness_row(cmd="/usr/bin/git.real cat-file -p x:f")]
+    block, _ = export.access_log(view({STORE: record(*rows)}, model_call(START + 1)))
+    assert block["harness_reads"] == {"count": 3, "own": 0, "commands": [
+        {"cmd": HARNESS_GIT, "root_cmd": HARNESS_ROOT["cmd"], "rows": 2},
+        {"cmd": "/usr/bin/git.real cat-file -p x:f", "root_cmd": HARNESS_ROOT["cmd"], "rows": 1}]}
+
+
+@pytest.mark.parametrize("row", [
+    harness_row(level="pointer"),                       # a ref or a commit, which the harness reads mid-run
+    harness_row(level="sibling"),
+    harness_row(t=START + 0.5),                         # before the first turn
+    opened("cat /opt/key.log", t=START + 5),            # the agent's own read
+    opened("x", t=START + 5, root={**HARNESS_ROOT, "cmd": "python3 -I -c x"}, control="end"),
+])
+def test_only_the_harness_at_content_level_after_the_first_turn_counts(row):
+    block, _ = export.access_log(view({STORE: record(row)}, model_call(START + 1)))
+    assert block["harness_reads"] == {"count": 0, "own": 0, "commands": []}
+
+
+def test_the_first_turn_is_the_first_model_call_and_a_sample_with_none_has_no_harness_reads():
+    events = (model_call(START + 3), model_call(START + 1), model_call(START + 2))
+    assert export.first_turn(view({}, *events)) == START + 1
+    block, _ = export.access_log(view({STORE: record(harness_row())}))
+    assert block["harness_reads"]["count"] == 0
+
+
+def test_a_run_keeps_only_the_commonest_harness_commands():
+    rows = [harness_row(cmd=f"git rev-parse {k}") for k in range(export.HARNESS_COMMANDS + 5)]
+    block, _ = export.access_log(view({STORE: record(*rows)}, model_call(START + 1)))
+    reads = block["harness_reads"]
+    assert reads["count"] == export.HARNESS_COMMANDS + 5 and len(reads["commands"]) == export.HARNESS_COMMANDS
+
+
+GUARD = (GUARD_DIFF,)
+GUARD_CMD = f"{GUARD_DIFF} 85bb23a"
+
+
+@pytest.mark.parametrize(("cmd", "exe", "own"), [
+    (GUARD_CMD, "/usr/bin/git", True),
+    (GUARD_CMD, "/usr/lib/git-core/git", True),
+    (GUARD_CMD, None, True),                            # an opener with no exe to read: argv is all there is
+    (f"/usr/bin/git.real {GUARD_CMD}", "/usr/bin/git.real", False),        # a wrapper's own call
+    ("git -C /app cat-file -p x:f", "/usr/bin/git", False),
+    (GUARD_CMD, "/usr/local/bin/python3.11", False),    # `exec -a` writes the guard's argv over another program
+    (GUARD_CMD, "/tmp/git", False),                     # a copy of git
+    (None, None, False),
+])
+def test_a_command_is_the_harness_own_only_as_its_exe_agrees(cmd, exe, own):
+    assert export.own_read({"cmd": cmd, "exe": exe}, GUARD) is own
+
+
+def test_a_benchmark_with_no_commands_of_its_own_owns_no_read():
+    assert export.own_read({"cmd": GUARD_CMD, "exe": "/usr/bin/git"}, ()) is False
+
+
+def test_the_guard_is_what_swe_names_and_what_its_command_runs():
+    assert SWE.harness_reads == GUARD and GUARD_DIFF in WORK_CHANGED
+
+
+def test_a_domains_own_commands_reach_the_block(monkeypatch):
+    bench = SimpleNamespace(harness_reads=GUARD, host_access_rows=lambda v: None)
+    monkeypatch.setattr(export, "domain", lambda v: bench)
+    rows = [harness_row(cmd=GUARD_CMD), harness_row(cmd="/usr/bin/git.real cat-file -p x:f")]
+    block, _ = export.access_log(view({STORE: record(*rows)}, model_call(START + 1)))
+    assert (block["harness_reads"]["count"], block["harness_reads"]["own"]) == (2, 1)
+
+
+def test_a_harness_read_beyond_its_own_marks_the_run_to_read():
+    reads = {"count": 3, "own": 1, "commands": [{"cmd": "git", "root_cmd": "git", "rows": 3}]}
+    block = blocks.validity_block([], None, {"status": "valid", "harness_reads": reads})
+    assert block["flags"] == ["access log: 2 harness read(s) of content beyond its own after the first turn: read this "
+                              "run"]
+    assert block["ok"] is False
+
+
+@pytest.mark.parametrize("reads", [{"count": 0, "own": 0, "commands": []}, {"count": 4, "own": 4, "commands": []}])
+def test_the_harness_alone_flags_nothing(reads):
+    block = blocks.validity_block([], None, {"status": "valid", "harness_reads": reads})
+    assert block == {"agents": {}, "flags": [], "ok": True}
 
 
 def test_a_run_with_no_log_keeps_its_validity():

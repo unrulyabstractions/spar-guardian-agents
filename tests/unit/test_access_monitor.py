@@ -298,6 +298,20 @@ def test_a_control_is_told_by_its_nonce_as_a_whole_argument(monkeypatch):
     assert "control" not in watcher.opener(7)
 
 
+@pytest.mark.parametrize(("args", "cmd"), [
+    ([b"cat", b"/k/key"], "cat /k/key"),
+    ([b"grep -c", b".", b"/k/key"], "'grep -c' . /k/key"),              # exec -a 'grep -c' grep . /k/key
+    ([b"grep", b".", b"/k/key", b" -c"], "grep . /k/key ' -c'"),
+    ([b"", b"/k/key"], "'' /k/key"),
+    ([b"python3", b"-c", b"print('x')"], "python3 -c 'print('\"'\"'x'\"'\"')'"),
+    ([b"cat", b"\xff"], "cat '\ufffd'"),
+])
+def test_a_row_keeps_the_words_of_argv_a_process_chose(monkeypatch, args, cmd):
+    fake_processes(monkeypatch, {7: (0, 1)})
+    monkeypatch.setattr(daemon, "argv", lambda pid: args)
+    assert planned("k7q2m").opener(7)["cmd"] == cmd
+
+
 def test_a_cut_last_line_is_dropped_and_the_rows_before_it_stay():
     assert monitor.parse_rows('{"row": "ready"}\n{"row": "open"}\n{"row": "op') == [{"row": "ready"}, {"row": "open"}]
 

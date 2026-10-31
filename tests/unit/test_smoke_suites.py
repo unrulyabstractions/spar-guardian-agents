@@ -14,7 +14,7 @@ from src.configuration import settings
 from src.domains.openmath import OpenMath
 from src.judging.cheatbench_judge import judge_spec
 from src.swarm.turn_rules._turn_state import HALT_TAG
-from tests.smoke import all_suites
+from tests.smoke import access_load, all_suites
 from tests.smoke.access_logging import normal
 from tests.smoke.all_suites import Outcome, run_all, summary
 from tests.smoke.common import (
@@ -154,9 +154,46 @@ def test_the_run_block_is_the_samples_layout_plus_the_scorers_outcome(tmp_path):
     ({"status": "partial", "gaps": [], "gone": [], "dropped": 3}, False),
     ({"status": "broken"}, False),
     ({"status": "absent"}, False),
+    ({"status": "valid", "harness_reads": {"count": 2, "own": 2}}, True),   # the harness's own commands
+    ({"status": "valid", "harness_reads": {"count": 2, "own": 1}}, False),
 ])
 def test_a_log_worked_when_it_saw_all_it_could(block, worked):
     assert log_worked(block) is worked
+
+
+LOAD_RESULT = {"sample": 1, "reader": True, "status": "valid", "dropped": 0, "opens": access_load.READS, "homeless": 0,
+               "window": [10.0, 20.0], "run": "r"}
+
+
+@pytest.mark.parametrize(("change", "found"), [
+    ({}, []),
+    ({"reader": False, "opens": 0}, []),
+    ({"status": "partial"}, ["status partial"]),
+    ({"dropped": 4}, ["4 rows dropped"]),
+    ({"homeless": 2}, ["2 rows on no machine of this run"]),
+    ({"opens": access_load.READS - 1}, [f"{access_load.READS - 1} opens, wanted {access_load.READS}"]),
+    ({"reader": False, "opens": 1}, ["1 opens, wanted 0"]),         # a row from another sample
+])
+def test_the_load_run_judges_each_sample(change, found):
+    assert access_load.problems({**LOAD_RESULT, **change}) == found
+
+
+def test_the_load_run_needs_every_call_to_overlap():
+    late = {**LOAD_RESULT, "window": [15.0, 25.0]}
+    assert access_load.overlap_s([LOAD_RESULT, late]) == 5.0
+    assert access_load.overlap_s([LOAD_RESULT, {**LOAD_RESULT, "window": [21.0, 30.0]}]) < 0
+
+
+def test_a_sample_that_died_releases_the_barrier(tmp_path):
+    def child(code: int | None) -> SimpleNamespace:
+        return SimpleNamespace(poll=lambda: code)
+
+    access_load.release_failed({1: child(None), 2: child(0), 3: child(1), 4: child(-9)}, tmp_path)
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["3", "4"]
+
+
+def test_the_load_run_stays_out_of_smoke_all():
+    assert "access_load" not in all_suites.SUITES
 
 
 def test_a_run_whose_log_did_not_work_fails_unless_the_scenario_says_so(tmp_path):

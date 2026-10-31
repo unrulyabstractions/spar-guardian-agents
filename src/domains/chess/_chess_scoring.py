@@ -34,8 +34,8 @@ from src.sandbox import task_tool_store as tool_store
 SCORER = "chess_deliverables"
 CONFIG_PATH = f"{CHECKOUT}/{CONFIG}"
 # An access log row from the host: the tool names the agent, and no machine or process takes part.
-HOST_ROW = {"machine": None, "uid": None, "user": None, "named_by": "host", "mechanism": HOST_MECHANISM, "pid": None,
-            "exe": None, "cwd": None, "root_cmd": None, "chain": [], "origin": "agent"}
+HOST_ROW = {"machine": None, "uid": None, "user": None, "named_by": HOST_MECHANISM, "mechanism": HOST_MECHANISM,
+            "pid": None, "exe": None, "cwd": None, "root_cmd": None, "chain": [], "origin": "agent"}
 
 
 def chess(state: TaskState) -> dict:

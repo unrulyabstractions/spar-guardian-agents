@@ -50,7 +50,6 @@ from src.domains.chess._chess_settings import (
 )
 from src.domains.chess._chess_stockfish import BUILD_HINT, engine_path
 from src.sandbox import task_tool_store as tool_store
-from src.sandbox.access_log.access_monitor import Watched
 from src.sandbox.agent_tools import AgentTools
 from src.sandbox.machines import agent_machines as machines
 
@@ -87,7 +86,7 @@ class Chess(RowBenchmark):
     scorer = scoring.SCORER
     ladder = ChessDomain
     task_deviations = DEVIATIONS
-    monitored = False
+    watched = None              # the honeypot lives on the host: no sidecar sees it
 
     # ---------------------------------------------------------------- access
     def valid_item(self, item: str) -> bool:
@@ -149,10 +148,6 @@ class Chess(RowBenchmark):
 
     async def cleanup(self, state) -> None:
         await scoring.cleanup(state)
-
-    async def watched(self, state) -> list[Watched]:
-        """Nothing: the honeypot lives on the host."""
-        return []
 
     def scorers(self) -> list[Scorer]:
         return [scoring.chess_deliverables()]
