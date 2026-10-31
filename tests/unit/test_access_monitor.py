@@ -318,8 +318,8 @@ def test_the_control_opens_a_file_and_reads_nothing_and_names_what_is_no_regular
     os.mkfifo(fifo)
     folder.mkdir()
     paths = [str(path) for path in (key, link, fifo, folder, tmp_path / "missing")]
-    done = subprocess.run([sys.executable, "-I", "-c", monitor.CONTROL, "nonce", *paths], capture_output=True, text=True,
-                          check=True, timeout=30)
+    done = subprocess.run([sys.executable, "-I", "-c", monitor.CONTROL, "nonce", *paths], capture_output=True,
+                          text=True, check=True, timeout=30)
     assert json.loads(done.stdout) == paths[1:] and key.stat().st_atime == 1
 
 
