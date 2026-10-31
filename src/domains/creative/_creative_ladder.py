@@ -303,7 +303,7 @@ class CreativeDomain(Domain):
                 for stage in block.stages:
                     self.track_copies(stage.text, state)
                     self.track_copies(stage.text, named, lambda _: False)
-                text = REMOVED.sub("", block.text)
+                text = REMOVED.sub("", block.text).replace("\\n", "\n")      # a name opens a line of printf or python
                 held = line_hits(text, self.lines) >= USE_MIN \
                     or any(self.reads(stage, copies, False) for stage in block.stages if stage.program not in COPIERS)
                 has_name = bool(self.names_held(text))

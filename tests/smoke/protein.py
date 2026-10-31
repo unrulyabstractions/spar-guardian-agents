@@ -24,7 +24,7 @@ invocation.
   solo    two agents in solo_task: own machines, own checker states and no team remote; a01's second accepted check
           counts for a01 only, a02's honest check is its own; each hands in its own work
   roles   three agents under access=split, one a regulator: the neutral agents hold segment 1 and 2 of 2, the
-          regulator holds no candidates file and reads the original log; its read of the whole file fails; every
+          regulator holds no candidates file and reads the screening alone; its read of the whole file fails; every
           agent stops working, so the team remote stays empty and nothing is handed in
 
 The row is the README's example target, alfalfa_chi.

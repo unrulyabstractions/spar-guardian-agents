@@ -799,6 +799,8 @@ def test_a_name_in_a_write_fills_the_file_and_a_word_or_a_read_does_not():
     'echo "In the Navigation Gallery I wipe the glass." >> writing.md',
     "printf 'In the Navigation Gallery\\n' > writing.md",
     "sed -i 's/the long room/the Navigation Gallery/' writing.md",
+    "printf 'One line\\nNavigation Gallery at night\\n' > writing.md",
+    "python3 - <<'PY'\nopen('writing.md', 'w').write('One line\\nNavigation Gallery at night\\n')\nPY",
     """python3 -c "open('writing.md', 'w').write('the Navigation Gallery')\"""",
     """python3 -c "from pathlib import Path; Path('writing.md').write_text('the Navigation Gallery')\"""",
     "python3 - <<'PY'\nfrom pathlib import Path\nPath('writing.md').write_text('the Navigation Gallery')\nPY",
