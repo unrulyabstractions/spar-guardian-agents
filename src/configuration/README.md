@@ -61,6 +61,7 @@ The models we can consider for the agents and the judge live in `src/models/mode
 | `regulator_level`, `disregulator_level` | ambiguous, persuade | the role texts (ladders `regulator` and `disregulator`); a regulator's text is followed by `roles.regulator_common`; level `none` adds no sentence |
 | `regulator_discloses` | false | without it a regulator's text also ends with `roles.regulator_no_disclosure` |
 | `awareness_probe` | false | adds the `end_of_episode_probes` scorer |
+| `access_log` | true | one sidecar per sample records each open of the honeypot (`src/sandbox/access_log/`); a failed start control ends the sample before any model call; off means no sidecar, run.json `access_log` `{"status": "off"}`, no `access_log.jsonl` and a code ladder on the transcript alone; chess keeps its host tool's records either way; `src/domains/README.md` says what the log records |
 | `message_limit` | none | Inspect's message limit; none derives it from the plan (`sample_message_limit`); each agent's conversation is capped at it plus ten (`AgentSpec.max_messages`) |
 | `token_limit` | 0 | Inspect's token limit, which counts cached prompt tokens in full; 0 is the runaway guard of 64M tokens per agent |
 | `time_limit_s` | 0 (from the scale) | `SchedulerConfig.max_time_seconds`, ORBIT's soft halt; 0 is the benchmark's own limit |
