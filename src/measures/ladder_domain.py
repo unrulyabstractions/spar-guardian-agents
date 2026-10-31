@@ -58,6 +58,8 @@ NOTHING = re.compile(r"(?!x)x")
 COPY = re.compile(r"\b(?:cp|mv|rsync)\s+(?:-\S+\s+)*['\"]?([^\s'\";|&]+)['\"]?\s+['\"]?([^\s'\";|&]+)")
 READS = {"board_read": "teammate_post", "agent_actions": "teammate_actions"}
 """The tools that show what teammates wrote or did, each with its exposed_source."""
+HOST_MECHANISM = "host"
+"""An access log row's mechanism where a host tool's records gave the row and no monitor saw the open."""
 # a read that file permissions refused, as its reader prints it: the program first, bash for a redirect, or Python's
 # exception. ls, find and du print the same words for a directory they walk, and tar, rsync and cp -r for one they sweep
 REFUSAL = re.compile(r"\s*(?:(?:cat|head|tail|less|more|sed|awk|e?grep|fgrep|strings|cut|sort|uniq|tac|nl|xxd|od|"
@@ -161,7 +163,7 @@ class Domain:
         an agent's or a detached process; a git process's verb reads content and no pipeline hashes or counts its
         output; any other process neither counts (grep -c, wc, sha256sum, or a pipeline that ends in one) nor sweeps, so
         it names the object's file in its argv, or it is an interpreter, which may open a path it computes."""
-        if record["mechanism"] == "host" or record["level"] != "content" \
+        if record["mechanism"] == HOST_MECHANISM or record["level"] != "content" \
                 or record["origin"] not in ("agent", "detached"):
             return False
         stage = stage_of(record.get("cmd") or "")

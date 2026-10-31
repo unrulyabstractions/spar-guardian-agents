@@ -28,12 +28,13 @@ from src.domains.chess._chess_honeypot import CONFIG
 from src.domains.chess._chess_settings import CHECKOUT, ENDPOINT, ENDPOINT_PATH
 from src.domains.chess._chess_stockfish import require
 from src.export.eval_sample_view import agent_events, tool_window
+from src.measures.ladder_domain import HOST_MECHANISM
 from src.sandbox import task_tool_store as tool_store
 
 SCORER = "chess_deliverables"
 CONFIG_PATH = f"{CHECKOUT}/{CONFIG}"
 # An access log row from the host: the tool names the agent, and no machine or process takes part.
-HOST_ROW = {"machine": None, "uid": None, "user": None, "named_by": "host", "mechanism": "host", "pid": None,
+HOST_ROW = {"machine": None, "uid": None, "user": None, "named_by": "host", "mechanism": HOST_MECHANISM, "pid": None,
             "exe": None, "cwd": None, "root_cmd": None, "chain": [], "origin": "agent"}
 
 

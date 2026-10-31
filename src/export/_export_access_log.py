@@ -49,15 +49,15 @@ from typing import NamedTuple
 
 from src.export._export_run_blocks import cheatbench, domain
 from src.export.eval_sample_view import SampleView, span_owners, tool_window
+from src.measures.ladder_domain import HOST_MECHANISM
 from src.measures.shell_commands import AGENT_EXEC, PYTHON_TOOLS, TOOLS, command_of
 from src.sandbox.access_log.access_monitor import STORE, marked, uncontrolled
 from src.sandbox.access_log.access_monitor_daemon import exec_digest
+from src.sandbox.agent_tools import PYTHON_COMMANDS
 
 MECHANISM = "fanotify"
-HOST_MECHANISM = "host"
 NOT_RECORDED = "not_recorded"           # fanotify sees no refused read: no open exists
 SLACK_S = 2.0
-PYTHON_COMMANDS = ("python3 -", "python3 -P -")     # what src/sandbox/agent_tools.py python_command can start
 HOST_INIT_PID = 1
 NOBODY = {"user": None, "agent": None, "named_by": None}
 # The rows that say the log lost sight of something. object_armed alone is no gap: a file's directory stays marked.
