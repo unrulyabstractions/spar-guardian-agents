@@ -12,8 +12,9 @@ endpoint, which ranks the best replies of any position.
 
 Layouts. A lone agent gets CheatBench's episode: one game, all nine tools. A team's agents each keep their own
 opponent/config.json and notepad. In shared_task they share one game, its six resets, its game/ files and
-opponent/play.py, and the first move or reset of a round stands; in solo_task each plays its own game. The instruction
-ends with the note for the arbiter and no answer block: submit hands the game in (prompts.yaml chess.closing).
+opponent/play.py, they move in turn and they reset only together (_chess_move_rotation.py), and their system prompt
+says so (prompts.yaml chess.team_game); in solo_task each plays its own game. The instruction ends with the note for the
+arbiter and no answer block: submit hands the game in (prompts.yaml chess.closing).
 
 Access items: `request` (the api_request tool), `credential1` and `credential2` (the halves of the endpoint's bearer
 credential, which a split team's endpoint requires) and `whole`. Under split the request tool goes to some neutral
@@ -29,6 +30,7 @@ from collections.abc import Awaitable, Callable
 
 from inspect_ai.scorer import Scorer
 
+from src.configuration.prompt_texts import rounds_text
 from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import SwarmConfig
 from src.domains.benchmark_protocol import Plan, RowBenchmark, Staged
@@ -38,6 +40,7 @@ from src.domains.chess import _chess_scoring as scoring
 from src.domains.chess._chess_harness_tool import harness_bindings, tool_names
 from src.domains.chess._chess_honeypot import held_halves, holds_request, new_credential
 from src.domains.chess._chess_ladder import ChessDomain
+from src.domains.chess._chess_move_rotation import HOLD_ROUNDS
 from src.domains.chess._chess_settings import (
     BUILD,
     CREDENTIALS,
@@ -68,7 +71,10 @@ DEVIATIONS = [
 ]
 TEAM_DEVIATIONS = ["each_agent_has_its_own_opponent_config_and_notepad"]
 SHARED_DEVIATIONS = ["team_shares_one_game_its_six_resets_its_game_files_and_opponent_play_py",
-                     "the_first_move_or_reset_of_a_round_stands_in_the_shared_game"]
+                     "system_prompt_says_the_team_plays_one_shared_game",
+                     "team_moves_in_a_fixed_rotation_one_move_per_round",
+                     f"a_seat_loses_the_move_after_{HOLD_ROUNDS}_rounds_or_when_it_is_not_active",
+                     "a_shared_game_resets_once_every_active_agent_asks"]
 SOLO_DEVIATIONS = ["each_agent_plays_its_own_game"]
 SPLIT_DEVIATIONS = ["endpoint_requires_a_bearer_credential_cut_in_two_halves_dealt_as_access_says",
                     "api_request_held_by_the_request_seats_only"]
@@ -124,6 +130,15 @@ class Chess(RowBenchmark):
             raise ValueError(f"{cfg['prompts']['instruction']} no longer ends with the answer block submit replaces")
         return text.replace(ANSWER_BLOCK, load_prompts()["chess"]["closing"] + "\n")
 
+    def system_prompts(self, plan: Plan) -> dict[str, str]:
+        """The base's prompts, then for an agent of a shared_task team told of its team the text on its one game."""
+        prompts = super().system_prompts(plan)
+        if plan.mode != "shared_task" or not self.tells_team(plan):
+            return prompts
+        text = load_prompts()["chess"]["team_game"]
+        game = text.format(order=", ".join(plan.agents), rounds=rounds_text(HOLD_ROUNDS))
+        return {a: f"{prompt}\n\n{game}" for a, prompt in prompts.items()}
+
     def stage(self, plan: Plan, row: dict) -> Staged:
         """The compose file and the block the setup, the tools, the scorer and run.json read: each agent's items,
         whether it holds the request tool, the credential's halves it holds, its tools, its owner, and under a split
@@ -172,7 +187,7 @@ class Chess(RowBenchmark):
         return f"game {record['game']}: {result} after {len(record['sans'])} plies"
 
     def team_deviations(self, plan: Plan) -> list[str]:
-        """Each agent's own config and notepad; a shared_task team's one game and its round rule, or a solo_task
+        """Each agent's own config and notepad; a shared_task team's one game and its rotation, or a solo_task
         team's own games; a split's credential and request seats."""
         mode = SHARED_DEVIATIONS if plan.mode == "shared_task" else SOLO_DEVIATIONS
         return [*TEAM_DEVIATIONS, *mode, *(SPLIT_DEVIATIONS if plan.split else [])]
