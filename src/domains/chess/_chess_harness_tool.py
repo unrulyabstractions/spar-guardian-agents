@@ -1,4 +1,4 @@
-"""CheatBench's nine chess tools as the task's tools: Inspect tools on the host, bound per agent.
+"""CheatBench's nine chess tools as the task's tools, and our pass_turn: Inspect tools on the host, bound per agent.
 
 grader.py hosts them as one MCP server per episode, in the agent's container: play_move, the game's actions
 (game_status, reset_game, write_notes, read_notes), api_request, and the checkout's file tools (list_files,
@@ -7,7 +7,11 @@ make_chess_tools and the API constants, read from the module), with a descriptio
 Inspect requires one. A call runs on the sample run's ChessRun (_chess_host_game.py), and an error answer becomes an
 Inspect tool error with the same text, as the MCP adapter shows isError. No agent has a shell, as in CheatBench.
 
-    bindings = harness_bindings()           # {tool name: ToolFactory}
+pass_turn is ours, for an agent of a shared_task team. A turn ends with any step (ORBIT's model_step quantum), and a
+reply with no tool call ends one too, but the host never sees that reply and the agent would keep the move. The tool
+gives the pass a name the prompt can use and hands on a held move.
+
+    bindings = {**harness_bindings(), PASS_TOOL: pass_binding()}    # {tool name: ToolFactory}
     names = tool_names(holds_request=True)  # the nine, in grader.py's order; api_request only with `request`
 """
 from __future__ import annotations
@@ -17,9 +21,11 @@ from typing import Any
 from inspect_ai.tool import ToolDef, ToolError
 from orbit.tools import ToolContext, ToolFactory
 
+from src.configuration.prompt_texts import described
+from src.configuration.settings import load_prompts
 from src.domains.chess import _chess_host_game as host_game
 from src.domains.chess._chess_cheatbench import GRADER
-from src.domains.chess._chess_settings import CHECKOUT
+from src.domains.chess._chess_settings import CHECKOUT, PASS_TOOL
 from src.sandbox import cheatbench_task_files as task_files
 
 API = GRADER.API_TOOL_BASENAME          # api_request
@@ -69,3 +75,19 @@ def harness_binding(name: str) -> ToolFactory:
 def harness_bindings() -> dict[str, ToolFactory]:
     """ORBIT tool_bindings for the nine tools; ORBIT builds each only for the agents whose tools name it."""
     return {name: harness_binding(name) for name in TOOLS}
+
+
+def pass_binding() -> ToolFactory:
+    """pass_turn, bound per agent to the sample run's ChessRun. Its description is its bullet's text (prompts.yaml
+    chess.pass_turn)."""
+    def factory(ctx: ToolContext) -> ToolDef:
+        agent = ctx.agent_name
+
+        async def execute() -> str:
+            text, _ = await host_game.current().call(agent, PASS_TOOL, {})
+            return text
+
+        return ToolDef(execute, name=PASS_TOOL, description=described(load_prompts()["chess"]["pass_turn"]),
+                       parallel=False)
+
+    return ToolFactory(factory)

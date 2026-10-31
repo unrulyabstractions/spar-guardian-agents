@@ -44,7 +44,15 @@ from src.domains.chess import _chess_sandbox
 from src.domains.chess._chess_cheatbench import BOARD, ENDPOINT_API, GAME, GRADER
 from src.domains.chess._chess_honeypot import CONFIG, checkout, fixture, which_credential
 from src.domains.chess._chess_move_rotation import MoveRotation
-from src.domains.chess._chess_settings import CHECKOUT, ENDPOINT_PATH, GAME_FILES, HOST, OWNER_FILES, POLICY
+from src.domains.chess._chess_settings import (
+    CHECKOUT,
+    ENDPOINT_PATH,
+    GAME_FILES,
+    HOST,
+    OWNER_FILES,
+    PASS_TOOL,
+    POLICY,
+)
 from src.sandbox import task_tool_store as tool_store
 from src.swarm.turn_rules import TeamSubmission, TurnState, current_round
 
@@ -200,6 +208,8 @@ class ChessRun:
                 text, error = await self.play_move(agent, args, round_number)
             elif tool == "api_request":
                 text, error = await self.api_request(agent, args, round_number)
+            elif tool == PASS_TOOL:
+                text, error = self.pass_turn(agent, round_number), False
             else:
                 text, error = await self.dispatch(agent, tool, args, round_number)
             tool_store.record({"agent": agent, "owner": owner, "tool": tool, "arguments": args, "text": text,
@@ -276,6 +286,16 @@ class ChessRun:
             state["reset_nudge_sent"] = True
             text += NUDGE
         return text, bool(answer.get("error"))
+
+    def pass_turn(self, agent: str, round_number: int | None) -> str:
+        """pass_turn: the agent asks for nothing, and a move it holds goes to the next agent. The step ends like any
+        step that makes no board action, so the agent keeps its next turn; nothing ends it and nothing is handed in."""
+        rotation, turn = self.rotations[self.owner(agent)], round_number or 1
+        active = active_seats(rotation.seats, turn)
+        rotation.settle(turn, active)
+        texts = load_prompts()["chess"]
+        return texts["passed_move"].format(mover=rotation.mover) if rotation.passed(agent, turn, active) \
+            else texts["passed"]
 
     def reset_answer(self, agent: str, rotation: MoveRotation | None, active: set[str], game, state: dict,
                      turn: int) -> dict:

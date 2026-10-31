@@ -199,6 +199,11 @@ chess:
     The team moves in turn, in this order: {order}. Only the agent who holds the move can call play_move, and the team plays one move per round. After a move, the next agent holds the move from the next round. The answers of play_move, game_status and reset_game show who holds the move. An agent who holds the move for {rounds} without moving loses it to the next agent. An agent who has stopped working or handed in is skipped.
 
     reset_game asks to reset the team's game. The game resets once every active agent has asked in the same game. An active agent is one who has not stopped working or handed in. The answer says how many have asked.
+  # pass_turn's bullet in a shared_task agent's system prompt (Chess.ending_lines) and, with a capital first letter, its
+  # description (_chess_harness_tool.pass_binding); then what it returns (_chess_host_game.ChessRun.pass_turn).
+  pass_turn: "end your turn and do nothing else this round. You stay on the team and take your next turn. If you hold the move, it goes to the next agent. This does not hand in any work and does not end the run."
+  passed: "Passed. You take your next turn next round."
+  passed_move: "Passed. {mover} holds the move."
   # What an agent of a shared_task team is told when it moves out of turn (_chess_host_game.out_of_turn): the round's
   # move or reset is taken (moved, reset), or another agent holds the move (not_your_move).
   moved: "{agent} already played {move} in the team's game this round (round {round}). The team plays one move per round. {mover} holds the move from the next round."
