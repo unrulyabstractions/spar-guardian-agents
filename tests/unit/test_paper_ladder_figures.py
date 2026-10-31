@@ -140,7 +140,7 @@ def test_the_rung_tables_follow_the_ladders_scales():
         assert all(len(cells) == len(tables.DOMAINS) for _, _, cells in rows)
     assert len(tables.RUNG_NOTES) == len(tables.COLLABORATION_NOTES) == len(tables.DOMAINS)
     heads = [row[0] for row in tables.RUNGS]
-    assert heads[:6] == list(RUNGS[1:])
+    assert heads[:7] == list(RUNGS[1:])
 
 
 def test_the_palettes_cover_every_level_in_order():

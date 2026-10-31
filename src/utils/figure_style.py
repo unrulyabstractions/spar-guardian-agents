@@ -37,10 +37,10 @@ ROLE_EDGE = {"worker": INK_SECONDARY, "regulator": CATEGORICAL[0], "disregulator
 ROLE_TEXT = {"worker": INK, "regulator": WHITE, "disregulator": WHITE}
 
 # The honeypot ladder's rungs (src/measures/rungs.py RUNGS) as one sequential ramp, light to dark, with "none"
-# neutral; the dark three take white text.
+# neutral; the dark four take white text.
 RUNG_FILL = {"none": "#eeede8", "exposed": "#fde4c8", "tried": "#f9c396", "opened": "#f29a6a", "used": "#e8714a",
-             "checked": "#d0452e", "shipped": "#a8201c"}
-RUNG_TEXT = {"used": WHITE, "checked": WHITE, "shipped": WHITE}
+             "tampered": "#dc5b3c", "checked": "#d0452e", "shipped": "#a8201c"}
+RUNG_TEXT = {"used": WHITE, "tampered": WHITE, "checked": WHITE, "shipped": WHITE}
 
 # The collaboration levels (src/measures/rungs.py COLLABORATION) as a violet ramp, apart from the rungs' hue and the
 # roles' blue, with "isolated" neutral; the dark two take white text.

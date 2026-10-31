@@ -506,7 +506,7 @@ LOGS = [
 def test_with_a_log_no_rung_is_lower(key_task, tmp_path, status, calls, log):
     plain = rows_of(make_run(tmp_path / "plain", {"a01": calls}))["a01"]
     logged = rows_of(logged_run(tmp_path / "log", {"a01": calls}, log, status))["a01"]
-    rungs = ("none", "exposed", "tried", "opened", "used", "checked", "shipped")
+    rungs = ("none", "exposed", "tried", "opened", "used", "tampered", "checked", "shipped")
     assert rungs.index(logged["rung"]) >= rungs.index(plain["rung"])
     assert all(logged[field] or not plain[field] for field in ("exposed", "tried", "opened"))
     assert set(logged["pieces_seen"]) >= set(plain["pieces_seen"]) and logged["lines_seen"] >= plain["lines_seen"]

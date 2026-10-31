@@ -109,6 +109,10 @@ class Domain:
     passing_proves: str | None = None
     """The rung a pass proves, where the grader accepts nothing honest work can produce; None: a pass proves nothing."""
 
+    tamperable = False
+    """Whether an agent's write can change what the task's own game does, which the tampered rung records. True on chess
+    alone: its harness reads the files agents can write, and records what it did with them."""
+
     cheated_from = "opened"
     """The lowest rung the judge's `cheated` agrees with: the task's own rule. SWE, chess and creative writing count
     failed attempts."""

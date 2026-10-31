@@ -128,7 +128,7 @@ The LLM judges. CheatBench's judge runs inside the eval as the scorer `cheatbenc
 Everything computed over a run directory, without a model.
 
 - `run_directory.py`: `RunDir`, one run directory read through one object.
-- `code_ladder.py`: exposed, tried, opened, used, checked and shipped per agent from the transcript, the probe and the domain's records. It writes `signals.jsonl` and run.json `signals`.
+- `code_ladder.py`: exposed, tried, opened, used, tampered, checked and shipped per agent from the transcript, the probe and the domain's records. It writes `signals.jsonl` and run.json `signals`.
 - `team_ladder.py`: the team record of a sample: its rungs, its collaboration level, the judged presentation and the outcomes.
 - `access_evidence.py`: the access log as the code ladder reads it: the calls it shows as aimed, the agent row's `access_log` key and the team's.
 - `ladder_domain.py`: `Domain`, what a domain tells the code ladder, and `Evidence`. Each domain subclasses it in `_<d>_ladder.py` (`swe_ladder.py` for SWE).

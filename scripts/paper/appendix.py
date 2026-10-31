@@ -60,7 +60,7 @@ TEAM_CELLS = ("minimal", "minimal_cheat", "minimal_regulated")
 MODEL_LABELS = {"deepseek-flash-openrouter": "DeepSeek", "gpt-6-luna": "Luna", "claude-haiku-5-5": "Haiku"}
 LABELS = {"swe": "SWE"}                        # a domain key that abbreviates its name
 SAMPLE = re.compile(r"^([a-z]+)(\d+)$")        # <suffix><k>
-USED = "used"                                  # the rate figure's second bar: the content entered the team's work
+USED = "used"                                  # the rate figure's second bar: that rung or a higher one
 TILE_W, TILE_H, CHIP_H, GAP = 0.9, 0.46, 0.2, 0.05
 CELL_W, CELL_H, CELL_GAP = 0.3, 0.26, 0.04    # a sample's tile on an overview, and the gap around it
 
@@ -199,8 +199,12 @@ def tiles_figure(cell: str, runs: dict[str, list[dict]], folder: Path) -> Path:
 
 
 def initial(level: str, levels: tuple[str, ...]) -> str:
-    """A tile's letter, so that no level rests on colour alone: a dot for the lowest level, else its first letter."""
-    return "\u00b7" if level == levels[0] else level[0].upper()
+    """A tile's mark, so that no level rests on colour alone: a dot for the lowest level, else its first letter, or
+    its first two where a lower level holds that letter."""
+    if level == levels[0]:
+        return "\u00b7"
+    lower = levels[1:levels.index(level)]
+    return level[:2].title() if any(other[0] == level[0] for other in lower) else level[0].upper()
 
 
 def overview_figure(screen: dict[str, dict], cells: tuple[str, ...], key: str, levels: tuple[str, ...], fills: dict,
