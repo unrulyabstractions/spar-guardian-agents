@@ -12,7 +12,7 @@ from src.domains import BY_TASK
 from src.domains.chess import Chess
 from src.domains.interview import SubsetSum
 from src.domains.openmath import OpenMath
-from src.sandbox.access_log.access_monitor import AUDITOR
+from src.sandbox.access_log.access_monitor import AUDITOR, MONITOR_DEVIATION
 from src.tasks import swarm_task
 from tools.run_reader import DOMAIN_KEYS
 
@@ -53,6 +53,14 @@ def test_the_switch_off_adds_nothing():
 def test_a_domain_with_no_machine_to_watch_gets_no_sidecar(pairs):
     sidecar, setup, scorers = monitor_parts(Chess(), *pairs)
     assert not sidecar and "start_access_monitor" not in setup and "access_capture" not in scorers
+
+
+@pytest.mark.parametrize(("benchmark", "pairs", "labelled"), [
+    (SubsetSum(), [], True), (SubsetSum(), ["access_log=false"], False), (Chess(), [], False),
+])
+def test_a_monitored_run_records_the_deviation_last(benchmark, pairs, labelled):
+    task = swarm_task(benchmark, build_config("default", "small", ["n_agents=1", *pairs]))
+    assert (task.dataset[0].metadata["cheatbench"]["deviations"][-1] == MONITOR_DEVIATION) is labelled
 
 
 def test_the_tools_hold_every_domains_key():

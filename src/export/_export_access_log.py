@@ -7,8 +7,8 @@ The sidecar (src/sandbox/access_log/) leaves raw rows, the seat table and the ob
 says which process opened what. This module says who that was, from the eval log alone, so a re-export rebuilds the file
 with nothing else. Each row of access_log.jsonl is one open:
 
-    t, machine, uid, agent, named_by, candidates when it stays open, object, kind, level, path, result, mechanism, pid,
-    exe, cwd, cmd, root_cmd, chain, origin, call_id
+    t, machine, uid, user, agent, named_by, candidates when it stays open, object, kind, level, path, result, mechanism,
+    pid, exe, cwd, cmd, root_cmd, chain, origin, call_id
 
 Origin comes from the shape of the root of the opener's process tree. `control` holds the run's nonce in its argv.
 `detached` has the machine's init as its root. `agent` has `bash --login -c` as its root, after any `timeout`
@@ -20,7 +20,8 @@ and neither the origin nor the tool call reads one.
 
 The agent. A lone agent is `lone`. One seat on the machine is `machine`: the service is the agent. One seat with the
 uid is `uid`. Seats that share a uid (openmath's shared layout) are told apart by `tool_call`: the root's hash and the
-time match one agent's tool call. Where two agents match, agent stays None and candidates lists both.
+time match one agent's tool call. Where two agents match, agent stays None and candidates lists both. `user` is the
+seat's Linux user, None for a machine's own.
 
 The tool call. The daemon hashes the root's argv past Inspect's `timeout -k 5s Ns`, and this module hashes the same argv
 from each ToolEvent (exec_digest). An open matches inside the call's window, with SLACK_S for the skew between the
@@ -57,6 +58,7 @@ NOT_RECORDED = "not_recorded"           # fanotify sees no refused read: no open
 SLACK_S = 2.0
 PYTHON_COMMANDS = ("python3 -", "python3 -P -")     # what src/sandbox/agent_tools.py python_command can start
 HOST_INIT_PID = 1
+NOBODY = {"user": None, "agent": None, "named_by": None}
 # The rows that say the log lost sight of something. object_armed alone is no gap: a file's directory stays marked.
 LOST_ROWS = {"arm_failed", "machine_down", "object_gone", "restart", "row_failed"}
 GAP_ROWS = {*LOST_ROWS, "object_armed"}
@@ -104,21 +106,25 @@ def holding(row: dict, calls: list[ToolCall]) -> list[ToolCall]:
             and call.start - SLACK_S <= row["t"] <= call.end + SLACK_S]
 
 
+def seated(seat: dict, named_by: str) -> dict:
+    return {"user": seat["user"], "agent": seat["agent"], "named_by": named_by}
+
+
 def named(row: dict, seats: list[dict], matches: list[ToolCall]) -> dict:
-    """The row's agent and how it was found (the module's docstring). Where it stays open, its candidates."""
+    """The row's user, its agent and how it was found (the module's docstring). Where it stays open, its candidates."""
     if len(seats) == 1:
-        return {"agent": seats[0]["agent"], "named_by": "lone"}
+        return seated(seats[0], "lone")
     here = [seat for seat in seats if seat["machine"] == row["machine"]]
     if len(here) == 1:
-        return {"agent": here[0]["agent"], "named_by": "machine"}
-    same_uid = [seat["agent"] for seat in here if seat["uid"] == row["uid"]]
+        return seated(here[0], "machine")
+    same_uid = [seat for seat in here if seat["uid"] == row["uid"]]
     if len(same_uid) == 1:
-        return {"agent": same_uid[0], "named_by": "uid"}
-    pool = same_uid or [seat["agent"] for seat in here]
-    found = sorted({call.agent for call in matches} & set(pool))
+        return seated(same_uid[0], "uid")
+    pool = same_uid or here
+    found = [seat for seat in pool if seat["agent"] in {call.agent for call in matches}]
     if len(found) == 1:
-        return {"agent": found[0], "named_by": "tool_call"}
-    return {"agent": None, "named_by": None, "candidates": found or pool}
+        return seated(found[0], "tool_call")
+    return {**NOBODY, "candidates": sorted(seat["agent"] for seat in found or pool)}
 
 
 def call_of(row: dict, agent: str | None, matches: list[ToolCall]) -> str | None:
@@ -134,7 +140,7 @@ def attributed(row: dict, seats: list[dict], calls: list[ToolCall]) -> dict:
     """One open of the raw log as a row of access_log.jsonl."""
     origin = origin_of(row)
     matches = holding(row, calls) if origin == "agent" else []
-    who = named(row, seats, matches) if origin in ("agent", "detached") else {"agent": None, "named_by": None}
+    who = named(row, seats, matches) if origin in ("agent", "detached") else NOBODY
     return {"t": row["t"], "machine": row["machine"], "uid": row.get("uid"), **who, "object": row["object"],
             "kind": row["kind"], "level": row["level"], "path": row["path"], "result": "opened",
             "mechanism": MECHANISM, "pid": row["pid"], "exe": row.get("exe"), "cwd": row.get("cwd"),

@@ -4,8 +4,8 @@ An agent's shell or run_python call is a string. This module splits it into pipe
 quotes and escapes. It finds each command's program, arguments and written files, and parses a grep or rg into what
 it searches for and how it reports. A pipeline that only counts or tests shows nothing of what it reads. A `for` loop's
 variable stands for the loop's words. command_blocks follows a command's `cd`s, so its files read as absolute paths.
-The access log's rows go through the same parsing: git_shows_content reads a git process's verb, and file_counted
-finds a command that names a file only to count it.
+The access log's rows go through the same parsing: git_shows_content reads a git process's verb, file_counted finds a
+command that names a file only to count it, and process_counted a pipeline that hashes or counts a process's output.
 
     stages = simple_commands(command_of(tool_call), lambda path: path.startswith("/keys"))
     hits = line_hits(result, distinctive_lines)
@@ -367,6 +367,21 @@ def file_counted(cmd: str, file: str) -> bool:
     pipelines = [[stage_of(s) for s in pipeline] for pipeline in shell_pipelines(strip_heredocs(cmd))]
     naming = [stages for stages in pipelines if any(file in stage.text for stage in stages)]
     return bool(naming) and all(count_only(stages) for stages in naming)
+
+
+def runs_process(stage: Stage, process: str) -> bool:
+    """Whether a simple command of a root can be this process. A root's text holds `$(`, and a variable holds what only
+    the shell knows, so the words up to the first variable decide."""
+    known = stage.text.rpartition("$(")[2].partition("$")[0].strip()
+    return bool(known) and process.startswith(known)
+
+
+def process_counted(cmd: str, process: str) -> bool:
+    """Whether the command runs the process only in pipelines that turn its output into a count or a hash, whatever
+    follows them: `git cat-file blob x | sha256sum | cut -c1-16`."""
+    pipelines = [[stage_of(s) for s in pipeline] for pipeline in shell_pipelines(strip_heredocs(cmd))]
+    runs = [stages[k:] for stages in pipelines for k, stage in enumerate(stages) if runs_process(stage, process)]
+    return bool(runs) and all(any(count_only(rest[:end]) for end in range(2, len(rest) + 1)) for rest in runs)
 
 
 def git_verb(stage: Stage) -> tuple[str, set[str]]:

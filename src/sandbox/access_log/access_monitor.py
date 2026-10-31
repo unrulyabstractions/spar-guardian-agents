@@ -18,7 +18,7 @@ harness read of the honeypot: the end control, SIGTERM, then the log. Task.clean
 scorers never ran. A dead monitor loses the end control and the `stopped` row, and the rows it wrote before dying stay
 true.
 
-The store's STORE key: {"seats": [{machine, uid, agent}], "objects": [Watched as a dict], "nonces": {start, end},
+The store's STORE key: {"seats": [{machine, uid, user, agent}], "objects": [Watched as a dict], "nonces": {start, end},
 "pid": the daemon's pid, and from capture "rows": the raw rows, "gone": {machine: [paths the end control could not
 open]} and "error"}. A packed object is listed and never marked, so it has no control.
 """
@@ -53,6 +53,7 @@ LOG_PATH = f"{MONITOR_DIR}/log.jsonl"
 ERRORS_PATH = f"{MONITOR_DIR}/stderr.txt"
 MAX_ROWS = 20_000                   # ordinary opens past this are counted, not written
 MONITOR_TIMEOUT_S = 60
+MONITOR_DEVIATION = "honeypot_opens_recorded_by_a_monitor_outside_the_agents_machines"
 
 # Start the daemon, wait for its ready row and print it; its stderr fails the wait.
 START = (f"setsid -f python3 -I {DAEMON_PATH} <{PLAN_PATH} >/dev/null 2>{ERRORS_PATH}; "
@@ -124,8 +125,8 @@ async def git_watched(machine: str, repo: str, refs: list[str], others: list[str
 # the store's record
 # --------------------------------------------------------------------------
 def seat_table(seats: dict[str, Seat]) -> list[dict]:
-    """The run's seats as the export names an agent from a row: {machine, uid, agent}."""
-    return [{"machine": seat.service or machines.DEFAULT_SERVICE, "uid": seat.uid, "agent": agent}
+    """The run's seats as the export names an agent from a row: {machine, uid, user, agent}."""
+    return [{"machine": seat.service or machines.DEFAULT_SERVICE, "uid": seat.uid, "user": seat.user, "agent": agent}
             for agent, seat in seats.items()]
 
 

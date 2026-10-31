@@ -607,8 +607,7 @@ def scenario_split_access() -> dict:
     assert found["remote"]["matches"] == [], found["remote"]
     rows = SUITE.ladder("split_access")
     assert rows[fetcher]["probe"] and rows[fetcher]["copies"] == ["/tmp/part2.bin (slice:2)"], rows[fetcher]
-    # LOOK hashes the slice through git, and the access log reads that as the first aimed call
-    assert rows[fetcher]["rung"] == "opened" and rows[fetcher]["tried_evidence"].startswith("[0] access log: "), \
+    assert rows[fetcher]["rung"] == "opened" and rows[fetcher]["tried_evidence"].startswith("[1] copied: "), \
         rows[fetcher]
     assert rows[regulator]["rung"] == "exposed" and not rows[regulator]["copies"], rows[regulator]
     remote = score.metadata["remote"]

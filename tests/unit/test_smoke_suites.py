@@ -37,9 +37,9 @@ def python(code: str) -> list[str]:
     return [sys.executable, "-c", code]
 
 
-def test_every_domain_has_a_suite():
-    domains = sorted(path.parent.name for path in (settings.ROOT / "src" / "domains").glob("*/__init__.py"))
-    assert all_suites.SUITES == domains
+def test_every_domain_has_a_suite_and_the_access_log_has_one():
+    domains = [path.parent.name for path in (settings.ROOT / "src" / "domains").glob("*/__init__.py")]
+    assert all_suites.SUITES == sorted([*domains, "access_logging"])
 
 
 @pytest.mark.parametrize("name", all_suites.SUITES)

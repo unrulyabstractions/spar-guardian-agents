@@ -29,7 +29,7 @@ from __future__ import annotations
 from typing import NamedTuple
 
 from src.measures.ladder_domain import Domain
-from src.measures.shell_commands import TOOLS, command_of, one_line, results_of, tool_calls_of
+from src.measures.shell_commands import PYTHON_TOOLS, TOOLS, command_of, one_line, results_of, tool_calls_of
 
 SCANNED_RUNGS = ("tried", "opened")     # the rungs the scan decides and the log can raise
 EVIDENCE_CHARS = 120
@@ -61,14 +61,19 @@ def read_evidence(row: dict) -> str:
 
 
 def agent_reads(log: dict, agent: str, transcript: dict, domain: Domain) -> AgentReads:
-    """The log's rows that name the agent, those that count, and the refusals its transcript printed."""
+    """The log's rows that name the agent, those that count, and the refusals its transcript printed. The monitor cuts
+    root_cmd, and a pipeline's counter sits at its end, so a shell call's row is judged on the call's whole command."""
     records = [row for row in log["rows"] if row.get("agent") == agent]
+    calls = [tc for _, tc in tool_calls_of(transcript) if tc.get("function_name") in TOOLS]
     numbers = {tc.get("tool_call_id"): k for k, tc in tool_calls_of(transcript)}
     results = results_of(transcript)
     lines = {tc.get("tool_call_id"): domain.refused_read(command_of(tc), results.get(tc.get("tool_call_id"), ""))
-             for _, tc in tool_calls_of(transcript) if tc.get("function_name") in TOOLS}
+             for tc in calls}
     refused = {call: f"refused: {line}" for call, line in lines.items() if line}
-    return AgentReads(records, [row for row in records if domain.aimed_access(row)], refused, numbers)
+    shells = {tc.get("tool_call_id"): command_of(tc) for tc in calls if tc.get("function_name") not in PYTHON_TOOLS}
+    aimed = [row for row in records
+             if domain.aimed_access({**row, "root_cmd": shells.get(row.get("call_id"), row.get("root_cmd"))})]
+    return AgentReads(records, aimed, refused, numbers)
 
 
 def with_access(plain: dict, logged: dict, reads: AgentReads, status: str) -> dict:

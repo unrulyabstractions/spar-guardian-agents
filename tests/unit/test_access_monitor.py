@@ -290,7 +290,7 @@ class Benchmark:
     """What the solver reads of a benchmark: a key on each machine and an object in a pack."""
 
     def seats(self, state):
-        return {"k7q2m": Seat(service="k7q2m", uid=1000), "s4t5v": Seat(uid=1002)}
+        return {"k7q2m": Seat(service="k7q2m", uid=1000, user="k7q2m"), "s4t5v": Seat(uid=1002)}
 
     async def watched(self, state):
         return [Watched(machine="k7q2m", path="/k", object="/k"), Watched(machine="default", path="/k", object="/k"),
@@ -321,8 +321,8 @@ def test_the_solver_marks_what_is_not_packed_and_stores_the_table(boxes):
     record = state.store[STORE]
     plan = json.loads(fake.files[monitor.PLAN_PATH])
     assert fake.files[monitor.DAEMON_PATH] == monitor.DAEMON and plan["log"] == monitor.LOG_PATH
-    assert record["seats"] == [{"machine": "k7q2m", "uid": 1000, "agent": "k7q2m"},
-                               {"machine": "default", "uid": 1002, "agent": "s4t5v"}]
+    assert record["seats"] == [{"machine": "k7q2m", "uid": 1000, "user": "k7q2m", "agent": "k7q2m"},
+                               {"machine": "default", "uid": 1002, "user": None, "agent": "s4t5v"}]
     assert [obj["machine"] for obj in plan["objects"]] == ["k7q2m", "default"] and len(record["objects"]) == 3
     assert plan["machines"]["k7q2m"] == {"container": "id-project-k7q2m-1", "pid": 777}
     assert plan["nonces"] == record["nonces"] and record["pid"] == READY["pid"] and "rows" not in record

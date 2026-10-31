@@ -62,13 +62,13 @@ def view(store: dict | None = None, *events, config: dict | None = None, cheatbe
 
 OBJECT = {"machine": "k7q2m", "path": "/opt/key.log", "object": "key", "level": "content", "kind": "file",
           "packed": False}
-TWO_MACHINES = [{"machine": "k7q2m", "uid": 1000, "agent": "k7q2m"},
-                {"machine": "m3p4x", "uid": 1000, "agent": "m3p4x"}]
-TWO_USERS = [{"machine": "default", "uid": 1001, "agent": "k7q2m"},
-             {"machine": "default", "uid": 1002, "agent": "m3p4x"}]
-SHARED = [{"machine": "default", "uid": 1000, "agent": "k7q2m"},
-          {"machine": "default", "uid": 1000, "agent": "m3p4x"}]
-LONE = [{"machine": "default", "uid": 1000, "agent": "k7q2m"}]
+TWO_MACHINES = [{"machine": "k7q2m", "uid": 1000, "user": "runner", "agent": "k7q2m"},
+                {"machine": "m3p4x", "uid": 1000, "user": "runner", "agent": "m3p4x"}]
+TWO_USERS = [{"machine": "default", "uid": 1001, "user": "k7q2m", "agent": "k7q2m"},
+             {"machine": "default", "uid": 1002, "user": "m3p4x", "agent": "m3p4x"}]
+SHARED = [{"machine": "default", "uid": 1000, "user": "user", "agent": "k7q2m"},
+          {"machine": "default", "uid": 1000, "user": "user", "agent": "m3p4x"}]
+LONE = [{"machine": "default", "uid": 1000, "user": "user", "agent": "k7q2m"}]
 CONTROLS = [opened("c", seq=k, control=control, uid=0, cmd=f"python3 - {control}") for k, control in
             enumerate(("start", "end"))]
 STOPPED = {"seq": 9, "t": START + 9, "row": "stopped", "rows": 8, "dropped": 0}
@@ -89,22 +89,23 @@ def exported(*rows, events: tuple = (), **fields) -> tuple[dict, list[dict]]:
 # --------------------------------------------------------------------------
 # the agent
 # --------------------------------------------------------------------------
-@pytest.mark.parametrize(("seats", "raw", "agent", "named_by"), [
-    (LONE, opened("cat k", machine="default"), "k7q2m", "lone"),
-    (TWO_MACHINES, opened("cat k", machine="m3p4x", uid=0), "m3p4x", "machine"),
-    (TWO_USERS, opened("cat k", machine="default", uid=1002), "m3p4x", "uid"),
-    ([{"machine": "app", "uid": None, "agent": "k7q2m"}, {"machine": "lib", "uid": None, "agent": "m3p4x"}],
-     opened("cat k", machine="lib", uid=0), "m3p4x", "machine"),
+@pytest.mark.parametrize(("seats", "raw", "user", "agent", "named_by"), [
+    (LONE, opened("cat k", machine="default"), "user", "k7q2m", "lone"),
+    (TWO_MACHINES, opened("cat k", machine="m3p4x", uid=0), "runner", "m3p4x", "machine"),
+    (TWO_USERS, opened("cat k", machine="default", uid=1002), "m3p4x", "m3p4x", "uid"),
+    ([{"machine": "app", "uid": None, "user": None, "agent": "k7q2m"},
+      {"machine": "lib", "uid": None, "user": None, "agent": "m3p4x"}],
+     opened("cat k", machine="lib", uid=0), None, "m3p4x", "machine"),
 ])
-def test_a_row_names_its_agent_in_each_layout(seats, raw, agent, named_by):
+def test_a_row_names_its_agent_in_each_layout(seats, raw, user, agent, named_by):
     _, [row] = exported(raw, seats=seats)
-    assert (row["agent"], row["named_by"]) == (agent, named_by) and "candidates" not in row
+    assert (row["user"], row["agent"], row["named_by"]) == (user, agent, named_by) and "candidates" not in row
 
 
 def test_in_the_shared_layout_the_tool_call_names_the_agent():
     events = (call("c1", "k7q2m", "cat k"), call("c2", "m3p4x", "ls", start=START))
     _, [row] = exported(opened("cat k", machine="default", uid=1000), events=events, seats=SHARED)
-    assert (row["agent"], row["named_by"], row["call_id"]) == ("k7q2m", "tool_call", "c1")
+    assert (row["user"], row["agent"], row["named_by"], row["call_id"]) == ("user", "k7q2m", "tool_call", "c1")
 
 
 def test_two_identical_commands_at_once_leave_the_row_on_the_team():
@@ -124,7 +125,7 @@ def test_a_detached_read_in_the_shared_layout_stays_open_over_the_seats():
 def test_the_harness_and_the_controls_name_no_agent():
     block, rows = export.access_log(view({STORE: record(opened("x", root=root("x", cmd="bash -c x")))}))
     assert [row["origin"] for row in rows] == ["control", "harness", "control"]
-    assert {row["agent"] for row in rows} == {None} and {row["named_by"] for row in rows} == {None}
+    assert {(row["user"], row["agent"], row["named_by"]) for row in rows} == {(None, None, None)}
     assert block["origins"] == {"control": 2, "harness": 1}
 
 

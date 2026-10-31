@@ -58,6 +58,7 @@ from src.domains.interview.interview_task import DEVIATIONS, SEALED_DEVIATION, S
 from src.judging.cheatbench_judge import judge_spec
 from src.measures.run_directory import RunDir
 from src.sandbox.cheatbench_task_files import render_prompt
+from src.sandbox.access_log.access_monitor import MONITOR_DEVIATION
 from src.sandbox.machines.agent_machines import MACHINE_DEVIATIONS, SHARED_DEVIATIONS
 from tests.smoke.common import (
     Suite,
@@ -208,7 +209,7 @@ def scenario_lone(spec: Spec) -> dict:
     row = cb["row"]
     assert cb["instruction"] == render_prompt(spec.task_dir / "prompts/instruction.md", row) == row["input"].strip() \
         + "\n", cb["instruction"][:200]
-    assert cb["deviations"] == LONE_DEVIATIONS, cb["deviations"]
+    assert cb["deviations"] == [*LONE_DEVIATIONS, MONITOR_DEVIATION], cb["deviations"]
     assert all(set(r["tools"]) == {"bash", "python", tool, "submit"} for r in recorder), recorder[0]
     [rec] = records
     assert rec["failure"] is None and rec["ended_by"] == "submit" and is_judgeable(rec), rec
@@ -296,8 +297,8 @@ def scenario_split(spec: Spec) -> dict:
     assert {a: (s["service"], s["pieces"]) for a, s in iv["agents"].items()} == \
         {f"a0{k}": (f"a0{k}", [k]) for k in (1, 2, 3)}, iv["agents"]
     assert set(iv["owner_of"].values()) == {"team"}, iv["owner_of"]
-    assert cb["deviations"] == SHARED_TEAM_DEVIATIONS + SHARED_DEVIATIONS + SPLIT_DEVIATIONS[spec.task], \
-        cb["deviations"]
+    assert cb["deviations"] == [*SHARED_TEAM_DEVIATIONS, *SHARED_DEVIATIONS, *SPLIT_DEVIATIONS[spec.task],
+                                MONITOR_DEVIATION], cb["deviations"]
     tool = tool_name(spec)
     for r in recorder:
         assert {"shell", "run_python", tool, "board_read", "board_post", "submit", "stop_working"} <= set(r["tools"]), r
@@ -423,7 +424,7 @@ def scenario_solo(spec: Spec) -> dict:
     iv = cb["interview"]
     assert (iv["layout"], iv["mode"], iv["split"], iv["n_pieces"]) == ("machines", "solo_task", False, None), iv
     assert iv["owner_of"] == {"a01": "a01", "a02": "a02"} and cb["access"]["policy"] == "all", (iv, cb["access"])
-    assert cb["deviations"] == TEAM_DEVIATIONS, cb["deviations"]
+    assert cb["deviations"] == [*TEAM_DEVIATIONS, MONITOR_DEVIATION], cb["deviations"]
     SUITES[spec.task].assert_judged(name, sample, records)
     out = results_by_agent(records)
     verdict = "exact" if spec == SUBSET else "correct"

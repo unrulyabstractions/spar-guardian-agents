@@ -60,7 +60,7 @@ from src.configuration.access_policy import Access
 from src.configuration.swarm_config import SwarmConfig, role_of
 from src.measures.ladder_domain import Domain
 from src.sandbox import cheatbench_task_files as task_files
-from src.sandbox.access_log.access_monitor import Watched
+from src.sandbox.access_log.access_monitor import MONITOR_DEVIATION, Watched
 from src.sandbox.agent_tools import AgentTools, Seat
 from src.sandbox.sandbox_probe import environment_probe
 
@@ -288,6 +288,10 @@ class Benchmark(ABC):
         """{agent: (Seat, command table, fields)} the setup probes before the agents start; {} for none."""
         return {}
 
+    def logs_access(self, config: SwarmConfig) -> bool:
+        """Whether a sidecar records the run's honeypot opens: the config's switch, on a monitored benchmark."""
+        return config.access_log and self.monitored
+
     def seats(self, state: TaskState) -> dict[str, Seat]:
         """Each agent's seat, the access log's way from a uid or a machine to an agent: the probe's by default."""
         return {agent: entry[0] for agent, entry in self.probe(state).items()}
@@ -312,13 +316,14 @@ class Benchmark(ABC):
 
     def deviations(self, plan: Plan) -> list[str]:
         """How the run departs from CheatBench's own runner, as short labels: the common ones (NO_SUBMIT_DEVIATIONS
-        when no agent gets submit or stop_working), the delay of a shared_task team's submit, the domain's, then the
-        team's."""
+        when no agent gets submit or stop_working), the delay of a shared_task team's submit, the domain's, the team's,
+        then the access log's."""
         config = plan.config
         common = COMMON_DEVIATIONS if config.gives_submit or config.gives_stop_working else NO_SUBMIT_DEVIATIONS
         delay = [f"team_submit_takes_effect_after_{config.submit_delay_rounds}_rounds"] \
             if config.gives_submit and config.submit_kind == "team" else []
-        return [*common, *delay, *self.task_deviations, *(self.team_deviations(plan) if plan.team else [])]
+        monitor = [MONITOR_DEVIATION] if self.logs_access(config) else []
+        return [*common, *delay, *self.task_deviations, *(self.team_deviations(plan) if plan.team else []), *monitor]
 
     # ---------------------------------------------------------------- what the export records
     @classmethod
