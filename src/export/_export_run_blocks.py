@@ -152,7 +152,7 @@ def validity_record(steps: list[dict], model_calls: int, engagement: dict | None
             "board_unused": board and board_calls == 0}
 
 
-def validity_block(records: list[dict], submission: dict | None, access_log: dict | None = None) -> dict:
+def validity_block(records: list[dict], submission: dict | None, access_log: dict | None) -> dict:
     """The run's validity: each agent's facts (validity_record) and the flags a reader should see before trusting
     the run: an agent that never called a model or a tool, a stuck agent, a board never touched, a hand-in
     (hand_ins) in the first rounds with a token answer, an access log that is broken or absent, whose silence means

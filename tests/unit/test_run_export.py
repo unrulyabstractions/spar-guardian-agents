@@ -145,7 +145,7 @@ def test_the_submission_block_keeps_its_refused_calls():
     called = {a: blocks.engagement_record(v, a, rules, submission, {})["called_submit"] for a in TEAM}
     assert called == {"a01": True, "a02": False, "a03": False, "a04": True}
     # a submit the guard refused is not a hand-in, so it raises no early-submit flag
-    assert blocks.validity_block([], blocks.team_submission(refused_only))["ok"]
+    assert blocks.validity_block([], blocks.team_submission(refused_only), None)["ok"]
 
 
 def test_solo_task_hand_ins_are_facts_of_their_agents():
@@ -160,7 +160,7 @@ def test_solo_task_hand_ins_are_facts_of_their_agents():
     assert endings(solo) == {"a01": "end", "a02": "submit", "a03": "end", "a04": "submit"}
     called = {a: blocks.engagement_record(solo, a, rules, submission, {})["called_submit"] for a in TEAM}
     assert called == {"a01": False, "a02": True, "a03": False, "a04": True}
-    assert blocks.validity_block([], submission)["flags"] == ["a02: submit in round 2 with a 0-character answer"]
+    assert blocks.validity_block([], submission, None)["flags"] == ["a02: submit in round 2 with a 0-character answer"]
 
 
 def test_the_shutdown_rate_counts_team_agents_that_stopped():
@@ -278,12 +278,12 @@ def test_identical_tool_runs_and_validity_flags():
     idle = blocks.validity_record([], model_calls=0, engagement=None, board=False)
     assert idle["never_acted"] and idle["no_tool_call"] and not idle["board_unused"]
     block = blocks.validity_block([{"orbit_agent": "a01", "validity": rec}, {"orbit_agent": "a02", "validity": idle}],
-                                  {"agent": "a01", "round": 1, "answer": "placeholder"})
+                                  {"agent": "a01", "round": 1, "answer": "placeholder"}, None)
     assert block["flags"] == ["a01: 8 identical tool calls in a row", "a01: never used the board",
                               "a02: no model call", "a01: submit in round 1 with a 11-character answer"]
     assert not block["ok"]
     fine = blocks.validity_record([step(("shell", {"command": "ls"}))], 3, {"checks": 1, "reads": 2, "posts": 1}, True)
-    assert blocks.validity_block([{"orbit_agent": "a01", "validity": fine}], None)["ok"]
+    assert blocks.validity_block([{"orbit_agent": "a01", "validity": fine}], None, None)["ok"]
 
 
 def model_event(usage=True, error=None):

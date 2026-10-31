@@ -365,7 +365,7 @@ def test_a_broken_or_absent_log_flags_the_runs_validity(status, flagged):
 
 
 def test_a_run_with_no_log_keeps_its_validity():
-    assert blocks.validity_block([], None) == {"agents": {}, "flags": [], "ok": True}
+    assert blocks.validity_block([], None, None) == {"agents": {}, "flags": [], "ok": True}
 
 
 def eval_log(path, store: dict, config: dict) -> None:
