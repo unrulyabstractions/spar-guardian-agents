@@ -154,6 +154,8 @@ def test_the_run_block_is_the_samples_layout_plus_the_scorers_outcome(tmp_path):
     ({"status": "partial", "gaps": [], "gone": [], "dropped": 3}, False),
     ({"status": "broken"}, False),
     ({"status": "absent"}, False),
+    ({"status": "valid", "harness_reads": {"count": 2, "own": 2}}, True),   # the harness's own commands
+    ({"status": "valid", "harness_reads": {"count": 2, "own": 1}}, False),
 ])
 def test_a_log_worked_when_it_saw_all_it_could(block, worked):
     assert log_worked(block) is worked

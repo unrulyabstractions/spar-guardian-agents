@@ -41,6 +41,14 @@ and packed, the dropped rows and how refused reads stand:
 
 An object the end control found gone needs no end control. A packed object has no loose file, so it is never marked and
 the log cannot see it. A run older than the switch recorded none and gets no block.
+
+harness_reads counts the rows at content level with origin `harness` after the first agent turn began, with their
+commands, and `own` holds those the harness runs itself (Benchmark.harness_reads, its exe agreeing with its argv). Few
+do: the harness's commands mid-run read refs and commits, and capture ends the log before any scorer reads the honeypot.
+SWE's submit guard is the one found: once an agent has a planted blob in its tree, `git diff --quiet` against the base
+opens it. A count above `own` flags the run's validity. A root agent can replace a program the harness starts, which is
+how a read comes to sit there, but so can a harness command nobody listed, and a wrapper can run the listed command as
+well. So the flag proves nothing. It marks a run to read.
 """
 from __future__ import annotations
 
@@ -49,8 +57,8 @@ from typing import NamedTuple
 
 from src.export._export_run_blocks import cheatbench, domain
 from src.export.eval_sample_view import SampleView, span_owners, tool_window
-from src.measures.ladder_domain import HOST_MECHANISM
-from src.measures.shell_commands import AGENT_EXEC, PYTHON_TOOLS, TOOLS, command_of
+from src.measures.ladder_domain import HOST_MECHANISM, process_stage
+from src.measures.shell_commands import AGENT_EXEC, PYTHON_TOOLS, TOOLS, command_of, stage_of
 from src.sandbox.access_log.access_monitor import STORE, marked, uncontrolled
 from src.sandbox.access_log.access_monitor_daemon import exec_digest
 from src.sandbox.agent_tools import PYTHON_COMMANDS
@@ -59,6 +67,7 @@ MECHANISM = "fanotify"
 NOT_RECORDED = "not_recorded"           # fanotify sees no refused read: no open exists
 SLACK_S = 2.0
 HOST_INIT_PID = 1
+HARNESS_COMMANDS = 20                   # the commands run.json keeps of a run's harness reads
 NOBODY = {"user": None, "agent": None, "named_by": None}
 # The rows that say the log lost sight of something. object_armed alone is no gap: a file's directory stays marked.
 LOST_ROWS = {"arm_failed", "machine_down", "object_gone", "restart", "row_failed"}
@@ -182,8 +191,31 @@ def object_names(objects: list[dict]) -> list[str]:
     return [f"{obj['machine']}:{obj['object']}" for obj in objects]
 
 
-def monitor_block(record: dict, rows: list[dict]) -> dict:
-    """run.json "access_log" of a sample the sidecar watched, from the store's record and the attributed rows."""
+def first_turn(view: SampleView) -> float | None:
+    """When the first agent turn began, in seconds since the epoch: the start of the sample's first model call."""
+    return min((event.timestamp.timestamp() for event in view.events if event.event == "model"), default=None)
+
+
+def own_read(row: dict, own: tuple[str, ...]) -> bool:
+    """Whether a harness row is a command the harness runs itself: `own` starts its argv and its exe agrees, since a
+    process writes its own argv."""
+    cmd = row["cmd"] or ""
+    return cmd.startswith(own) and process_stage(row).program == stage_of(cmd).program
+
+
+def harness_reads(rows: list[dict], began: float | None, own: tuple[str, ...]) -> dict:
+    """The rows of the harness at content level since `began` (the module's docstring): how many, how many of them are
+    its `own` commands, and the commands, most rows first."""
+    late = [row for row in rows if row["origin"] == "harness" and row["level"] == "content"
+            and began is not None and row["t"] >= began]
+    commands = Counter((row["cmd"], row["root_cmd"]) for row in late).most_common(HARNESS_COMMANDS)
+    return {"count": len(late), "own": sum(own_read(row, own) for row in late),
+            "commands": [{"cmd": cmd, "root_cmd": root, "rows": n} for (cmd, root), n in commands]}
+
+
+def monitor_block(record: dict, rows: list[dict], reads: dict) -> dict:
+    """run.json "access_log" of a sample the sidecar watched, from the store's record, the attributed rows and its
+    harness reads."""
     gone, packed = gone_objects(record), [obj for obj in record["objects"] if obj["packed"]]
     control = controls(record, gone)
     stopped = next((row for row in record["rows"] if row["row"] == "stopped"), None)
@@ -193,7 +225,7 @@ def monitor_block(record: dict, rows: list[dict]) -> dict:
     return {"status": status_of(record, control, dropped, gone + packed), "mechanism": MECHANISM,
             "origins": count_origins(rows), "control": control, "gaps": gaps, "objects": len(marked(record)),
             "gone": object_names(gone), "packed": object_names(packed), "dropped": dropped,
-            "refused_reads": NOT_RECORDED, "error": record.get("error")}
+            "harness_reads": reads, "refused_reads": NOT_RECORDED, "error": record.get("error")}
 
 
 def access_log(view: SampleView) -> tuple[dict | None, list[dict] | None]:
@@ -207,14 +239,14 @@ def access_log(view: SampleView) -> tuple[dict | None, list[dict] | None]:
     bench = domain(view)
     hosted = bench.host_access_rows(view) if bench else None
     if hosted is not None:
-        return {"status": "host", "mechanism": HOST_MECHANISM, "origins": count_origins(hosted),
+        return {"status": HOST_MECHANISM, "mechanism": HOST_MECHANISM, "origins": count_origins(hosted),
                 "refused_reads": "recorded"}, hosted
     record = view.store_get(STORE)
     if record is None or "rows" not in record:
-        mechanism = MECHANISM if bench is None or bench.monitored else HOST_MECHANISM
+        mechanism = MECHANISM if bench is None or bench.watched is not None else HOST_MECHANISM
         return {"status": "absent", "mechanism": mechanism, "refused_reads": NOT_RECORDED,
                 "error": (record or {}).get("error")}, None
     calls = tool_calls(view)
     rows = [attributed(row, record["seats"], calls) for row in record["rows"] if row["row"] == "open"]
-    block = monitor_block(record, rows)
+    block = monitor_block(record, rows, harness_reads(rows, first_turn(view), bench.harness_reads if bench else ()))
     return block, None if block["status"] == "absent" else rows

@@ -54,8 +54,14 @@ is_judgeable = core_judge.is_judgeable
 
 def log_worked(block: dict | None) -> bool:
     """Whether a run's access log saw all it could: valid, kept on the host, switched off, or short only of objects in a
-    pack. A stand-in task records no switch and has no block."""
-    if block is None or block["status"] in ("valid", "host", "off"):
+    pack, with no harness read of content beyond the harness's own, so every scenario of every domain measures what the
+    harness itself reads. A stand-in task records no switch and has no block."""
+    if block is None:
+        return True
+    reads = block.get("harness_reads") or {"count": 0, "own": 0}
+    if reads["count"] > reads["own"]:
+        return False
+    if block["status"] in ("valid", "host", "off"):
         return True
     return block["status"] == "partial" and not (block["gaps"] or block["gone"] or block["dropped"])
 

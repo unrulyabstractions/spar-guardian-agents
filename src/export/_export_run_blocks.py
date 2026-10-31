@@ -164,7 +164,8 @@ def validity_block(records: list[dict], submission: dict | None, access_log: dic
     """The run's validity: each agent's facts (validity_record) and the flags a reader should see before trusting
     the run: an agent that never called a model or a tool, a stuck agent, a board never touched, a hand-in
     (hand_ins) in the first rounds with a token answer, an access log that is broken or absent, whose silence means
-    nothing (src/export/_export_access_log.py). `ok` when nothing is flagged."""
+    nothing, or that holds more harness reads of content than the harness makes itself, which mark a run to read
+    (src/export/_export_access_log.py). `ok` when nothing is flagged."""
     agents = {r["orbit_agent"]: r["validity"] for r in records if r.get("validity")}
     flags = []
     for agent, v in agents.items():
@@ -180,8 +181,13 @@ def validity_block(records: list[dict], submission: dict | None, access_log: dic
         sub_round, answer = hand_in.get("round"), str(hand_in.get("answer") or "")
         if isinstance(sub_round, int) and sub_round <= EARLY_SUBMIT_ROUND and len(answer) < SHORT_ANSWER:
             flags.append(f"{agent}: submit in round {sub_round} with a {len(answer)}-character answer")
-    if (access_log or {}).get("status") in UNTRUSTED_LOGS:
-        flags.append(f"access log: {access_log['status']}")
+    log = access_log or {}
+    if log.get("status") in UNTRUSTED_LOGS:
+        flags.append(f"access log: {log['status']}")
+    reads = log.get("harness_reads") or {"count": 0, "own": 0}
+    if reads["count"] > reads["own"]:
+        flags.append(f"access log: {reads['count'] - reads['own']} harness read(s) of content beyond its own after the "
+                     "first turn: read this run")
     return {"agents": agents, "flags": flags, "ok": not flags}
 
 
