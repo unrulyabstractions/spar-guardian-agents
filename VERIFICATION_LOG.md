@@ -1044,3 +1044,11 @@
 - **UNVERIFIED.** The other 68 repos were not restored. Their Hub proof is from today. Kept repos other than the three above had no hash check. lsof saw only this user's processes. Neither name scan read folders called runs, logs, build or dist. No independent verifier ran, because the brief said not to delegate.
 - **Side effect.** hf cache verify reset the read time on the three repos it checked, and the restore test left 78 MB in the scratchpad.
 - **The 100 GB rule.** The read rule holds 42 repos (259.81 GB). 39 of them (212.5 GB) had no file over 50 MB read in 14 days. Their newest reads came in two bursts on 10-27, at 21:54 and 23:15. What caused the bursts is UNVERIFIED. All 10 .DS_Store files under the hub date from 08-09, so they do not show Finder at work. I did not widen the rule.
+
+## 2026-10-31 UTC: the rest of the Hugging Face hub cache deleted, on the user's order
+- **Order.** The user said "delete, just delete" after I gave the hub's path. I took that as the whole of ~/.cache/huggingface/hub.
+- **Before.** A fresh survey read 1,704 entries. All 92 repos over 1 MB (291.8 GB) were proven on the Hub by hash at 15:24 today. lsof showed nothing open. The script refused on any open file, any unproven repo or an empty list.
+- **Record.** ~/.cache/hf-cache-removed-2026-10-31-rest.json holds 1,704 repos with revisions and the orphan list. I read it back and the counts and bytes matched before the delete.
+- **After.** The hub folder is gone by lexists. df reads 360 GB free, 60% used, from 71 GB. ~/.cache is 33 GB. uv is unchanged at 32 GB. datasets, modules and xet stay. `hf cache ls` errors with "Cache directory not found", which is expected until the next download. VERIFIED by me.
+- **Lost for good.** One orphan of 1.09 GB with no repo, `file` reads it as "data", plus 84 small sidecars. UNVERIFIED and not restorable from any record: what that orphan was. The 1,611 entries under 1 MB had no Hub check.
+- **UNVERIFIED.** No restore was tried for these 92. Their Hub proof is from today only.
