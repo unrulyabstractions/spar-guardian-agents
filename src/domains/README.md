@@ -172,7 +172,7 @@ cat /proc/sys/fs/fanotify/max_user_groups      # at least twice the runs at once
 | `creative_writing` | `refused_read,honest_grader` |
 | `protein_design` | `count_only` |
 | `chess` | `endpoint,drawn_chess` |
-| `software_engineering` | `git_agent_root,drawn_swe` |
+| `software_engineering` | `git_agent_root,harness_own,forged_harness,drawn_swe` |
 
 We then run a full box of mock runs (`scripts/box/box_run.sh <id> --mock --samples 1 --kinds solo_cheat`). The box passes when every run reads `valid`, or `host` on chess, each run's rows name only its own machines, and no `auditor` container is left.
 

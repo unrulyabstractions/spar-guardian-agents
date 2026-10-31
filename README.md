@@ -20,6 +20,7 @@ make smoke-protein # protein-design mock-model scenarios, one python311 machine 
 make smoke-creative  # creative-writing mock-model scenarios, one container and the review sidecar, no model spend
 make smoke-chess   # chess mock-model scenarios, the game and Stockfish on the host, no model spend
 make smoke-access  # the access log's scenarios on the real sandbox, on ordered and on drawn agent IDs, no model spend
+make smoke-load   # SAMPLES runs at once on one Docker (15 by default), each with its own sidecar, no model spend
 
 uv run python -m src --help
 uv run python -m src run pull_small --set disregulators=1
