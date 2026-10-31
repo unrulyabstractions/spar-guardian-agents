@@ -223,7 +223,7 @@ def test_a_call_whose_code_goes_to_stdin_matches_on_the_interpreters_argv(functi
 def test_the_python_commands_are_the_tools_own():
     alone, shared = Seat(workdir="/a"), Seat(workdir="/b")
     seats = {"k7q2m": alone, "m3p4x": shared, "t4x9n": shared}
-    assert {agent_tools.python_command(seat, seats) for seat in seats.values()} == set(export.PYTHON_COMMANDS)
+    assert {agent_tools.python_command(seat, seats) for seat in seats.values()} == set(agent_tools.PYTHON_COMMANDS)
 
 
 def test_the_tools_hash_equals_the_daemons_with_and_without_timeout():
