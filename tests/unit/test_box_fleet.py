@@ -538,6 +538,17 @@ def test_run_args_come_from_the_registry(registry, chess_cells, capsys):
     assert fleet.main(["run-args", "8"]) == 1
 
 
+def test_run_args_name_every_cell_of_the_task_by_default(registry, chess_cells, capsys):
+    add_box()
+    add_box(8, "knowledge_work", label=LABEL.replace("chess", "knowledge_work"))
+    assert fleet.main(["run-args", "7"]) == 0
+    out = capsys.readouterr().out.split("\n")[:-1]
+    assert out[out.index("--kinds") + 1:] == list(fleet_layout.KINDS)
+    assert fleet.main(["run-args", "8"]) == 0
+    out = capsys.readouterr().out.split("\n")[:-1]
+    assert out[out.index("--kinds") + 1:] == [*fleet_layout.KINDS, "minimal_all"]
+
+
 def test_run_args_mock_says_so_in_the_run_names(registry, chess_cells, capsys):
     add_box()
     assert fleet.main(["run-args", "7", "--mock", "--samples", "1", "--kinds", "solo"]) == 0
@@ -579,6 +590,22 @@ def test_a_task_has_one_cell_per_kind_or_none(tmp_path):
     (package / "other_solo.py").write_text("")
     with pytest.raises(ValueError, match="solo: 2 scripts"):
         fleet_layout.cells("chess", examples=tmp_path)
+
+
+def test_knowledge_work_has_a_cell_no_other_task_has(tmp_path):
+    assert fleet_layout.cells("knowledge_work")[-1] == "knowledge_work.worktime_minimal_all"
+    assert fleet_layout.run_name("knowledge_work.worktime_minimal_all", "luna", 2) == "worktime_minimal_all_luna2"
+    assert len(fleet_layout.cells("chess")) == len(fleet_layout.KINDS)
+    assert fleet_layout.EVERY_KIND == (*fleet_layout.KINDS, "minimal_all")
+    assert fleet_layout.layout_problems(list(fleet_layout.TASKS)) == []
+    # its own kinds are the rest of a task's cells: a task without them is refused, and no other task needs them
+    package = tmp_path / "knowledge_work"
+    package.mkdir()
+    for kind in fleet_layout.KINDS:
+        (package / f"worktime_{kind}.py").write_text("")
+    assert "minimal_all: 0 scripts" in fleet_layout.layout_problems(["knowledge_work"], tmp_path)[0]
+    with pytest.raises(ValueError, match="minimal_all: 0 scripts"):
+        fleet_layout.cells("chess", ("minimal_all",))
 
 
 def test_two_tasks_with_one_cell_stem_are_refused(tmp_path):
@@ -1053,6 +1080,16 @@ def test_the_runner_refuses_a_clone_away_from_the_pinned_commit(runner_dirs, cap
     assert box_runner.main(["run", "--task", "protein_design", "--model", "deepseek-flash-openrouter", "--suffix",
                             "t", "--commit", "0" * 40]) == 1
     assert "the fleet pinned 0000" in capsys.readouterr().out and not (runner_dirs / "screen.pid").exists()
+
+
+def test_the_runner_takes_every_cell_of_its_task_by_default(runner_dirs, monkeypatch, capsys):
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)     # refused after the cells, so nothing runs
+    asked = []
+    monkeypatch.setattr(box_runner, "cells", lambda task, kinds: asked.append(kinds) or ["x.y_solo"])
+    for task in ("knowledge_work", "chess"):
+        assert box_runner.main(["run", "--task", task, "--model", "deepseek-flash-openrouter", "--suffix", "t",
+                                "--commit", PIN["commit"]]) == 1
+    assert asked == [(*fleet_layout.KINDS, "minimal_all"), fleet_layout.KINDS]
 
 
 def test_the_runner_refuses_without_the_models_key(runner_dirs, monkeypatch, capsys):

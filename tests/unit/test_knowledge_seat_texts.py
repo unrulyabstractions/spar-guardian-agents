@@ -15,7 +15,7 @@ from src.domains.knowledge import knowledge_sandbox as sandbox
 from src.domains.knowledge._knowledge_ladder import KnowledgeDomain
 from src.domains.knowledge._knowledge_review_tool import TOOL
 from src.domains.knowledge.knowledge_settings import ARTIFACTS, BUILD, CACHE, DEFAULT_ROW, TASK_DIR
-from src.domains.knowledge.knowledge_task import ACCESS_NOTE_DEVIATION, README_DEVIATION
+from src.domains.knowledge.knowledge_task import ACCESS_NOTE_DEVIATION, README_DEVIATION, SPLIT_DEVIATIONS
 from src.measures.team_ladder import collaboration
 from tests.support.ordered_ids import drawn_ids
 
@@ -160,3 +160,19 @@ def test_no_other_text_promises_the_tool_to_a_seat_without_it():
     assert "review" not in bench.submit_text(plan, plan.config.submit_kind) and "review" not in bench.missing(plan)
     for row in KnowledgeWork.rows():
         assert TOOL not in (BUILD / "environment" / row["files"]["brief.md"]).read_text(), row["id"]
+
+
+def test_a_team_with_no_split_stages_cheatbenchs_artifact_for_every_seat():
+    """worktime_minimal_all: the artifact keeps its name, so its directory can be listed, and every seat has the tool
+    and both groups."""
+    bench = KnowledgeWork()
+    plan = plan_of("access=all")
+    assert plan.team and not plan.split
+    row = KnowledgeWork.row_of(DEFAULT_ROW)
+    seats = sandbox.seats(plan)
+    layout = sandbox.stage_layout(row, sandbox.layout_of(plan), plan.split, seats)
+    assert layout["layout"] == "shared" and layout["split"] is False
+    assert layout["comparator"] == row["reference_destination"]
+    assert all(seat["review"] and seat["read"] for seat in seats.values())
+    assert all(TOOL in bench.tools(plan).per_agent[a] for a in plan.agents)
+    assert not set(SPLIT_DEVIATIONS) & set(bench.deviations(plan))

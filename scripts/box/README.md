@@ -16,6 +16,8 @@ scripts/box/capture_check.sh <id> --pull                        # every file on 
 uv run python -m scripts.box.fleet destroy <id>                 # only after a fresh capture check; snapshots first
 ```
 
+Every task has five cells. Knowledge work has a sixth, `minimal_all`, its team with no split (`fleet_layout.TASK_KINDS`), so a knowledge-work box runs 18 runs at 3 samples, not 15.
+
 The pilot is one box per task and model, with one sample of two cells: `create --count 15`, then `box_run.sh <id> --samples 1 --kinds solo_cheat minimal_regulated`. Every model pilots: a model that has never run as an agent shows its provider's refusals and rejections only there. Before box_run.sh, set `BOX_OPENROUTER_API_KEY` (or the model's own key name with `BOX_` in front) to a key made for the screen with a spend cap, and revoke it after the destroys. A rehearsal adds `--mock` to box_run.sh: Inspect's mock model, no key on the box, nothing paid, and run names ending in `<suffix>mock`. Before the first fleet with the access log, one box of each task runs the check in `src/domains/README.md` (A first real box).
 
 | file | what it does | bills or destroys |
