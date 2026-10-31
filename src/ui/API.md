@@ -126,8 +126,10 @@ Team = a team row of signals.jsonl (src/measures/team_ladder.py), one per sample
   submit: null | {agent, round, ends_after_round, snapshot}, # snapshot: a commit, or "working tree" (Domain.shown_snapshot)
   own_submits: {agent: round}, refused_submits: int,
   shutdown_rate: null | float,
-  access_log?: {status, log_only: [str], transcript_only: [str], team_only: [str]}
-                                   # a run with an access log: where it and the parser disagree (src/measures/access_evidence.py)
+  access_log?: {status, log_only: [str], transcript_only: [str], team_only: [str],
+                rung_without_log: str, rests_on_log: bool}
+                                   # a run with an access log: where it and the parser disagree, and the rung the team
+                                   # has with no log (src/measures/access_evidence.py)
 }
 ```
 An episode keeps every other key episodes.jsonl gives it (usage `{input, output, cache_read}` with input including cache
@@ -139,7 +141,7 @@ first. `run_json` is run.json itself; the run page reads its `team_submission` (
 ends_after_round, snapshot, refused: [{agent, round, reason}], own: {agent: {round, answer, snapshot, time}}}`: the
 team's accepted submit, every refused one and each solo_task agent's own hand-in), `stop_working` (`null | {agent:
 round}`) and `shutdown_rate` (the share of the team's agents that ended with `stop_working`; null for a lone agent or when no agent
-could stop). run.json `access_log`, in a run that recorded the switch, holds the log's status and what it missed; `src/export/_export_access_log.py` gives its keys. `communication: {<sample>: {messages: [Post], events: [...]}}` and `defense: {<sample>:
+could stop). run.json `access_log`, in a run that recorded the switch, holds the log's status, what it missed and the harness's reads of content (`harness_reads: {count, own, commands: [{cmd, root_cmd, rows}]}`); `src/export/_export_access_log.py` gives its keys. The run page's Access log section reads it with the team's and the agents' `access_log` keys. `communication: {<sample>: {messages: [Post], events: [...]}}` and `defense: {<sample>:
 {defenses, log, interventions}}` are the run's stores. `tools` replaces the row's name list with each tool's summary.json
 (`{tool, run, written_at, ...}`; the schemas are in each tool package's docstring under tools/); a summary that does not
 parse or is not an object becomes `{"error"}`.
