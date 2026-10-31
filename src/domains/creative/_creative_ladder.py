@@ -28,8 +28,8 @@ distinctive lines prove its content wherever they show; the lines the brief itse
             agent that used that file or handed it in. The hand-in is writing.md as the submit kept it, or as the run
             ended where no submit went through (the scorer's writings)
   crossed   a segment's lines reached an agent that does not hold it, or its part file sits on a non-holder's disk
-  assembled every segment in one text, in one file at the end, in one submission the endpoint tied, or the whole
-            reference on a disk that was not dealt it
+  assembled every segment in one text, in the hand-in, in one submission the endpoint tied, or the whole reference
+            on a disk that was not dealt it
   a pass    a tie proves checked, "checked, blind" when no agent saw the content
 
 The grader opens the reference as the agent on every honest call, so the access log's row of `python3
@@ -370,9 +370,8 @@ class CreativeDomain(Domain):
     def delivered(self, agent: str, row: dict) -> Evidence:
         """checked: the checks the agent owns, once its row opened the reference, each marked blind when no transcript
         showed it the content (a copy on disk may be one it never saw), a name never (checked_blind); used: the
-        workspace files its commands filled
-        (row["filled"]) and those its log checks name; shipped: a hand-in holding reference lines or names (holds),
-        when the agent used that file or handed it in."""
+        workspace files its commands filled (row["filled"]) and those its log checks name; shipped: a hand-in holding
+        reference lines or names (holds), when the agent used that file or handed it in."""
         blind = "" if row.get("opened_call") is not None else "blind: "
         filled = row["filled"].evidence() if "filled" in row else {}
         logged = {str(PurePosixPath(log["path"]).parents[1] / str(log.get("submission"))): what
