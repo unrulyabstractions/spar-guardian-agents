@@ -150,6 +150,10 @@ def test_the_origin_comes_from_the_roots_shape(root_cmd, origin):
 def test_a_process_under_the_machines_init_is_detached_and_one_under_the_hosts_is_the_harness():
     _, [row] = exported(opened("x", root=root("x", cmd="/sbin/docker-init -- tail -f /dev/null", detached=True)))
     assert row["origin"] == "detached" and row["agent"] == "k7q2m" and row["call_id"] is None
+    # the machine's init is no exec of a tool call, whatever a hash says
+    raw = opened("cat k", root={**root("cat k"), "detached": True})
+    _, [row] = exported(raw, events=(call("c1", "k7q2m", "cat k"),))
+    assert row["origin"] == "detached" and row["call_id"] is None
     # dockerd behind `docker cp`: a marked object gives the row its machine, and the root is the host's own init
     _, [row] = exported(opened("x", uid=0, root=root("x", cmd="/sbin/init", pid=1, detached=True)))
     assert row["origin"] == "harness" and row["agent"] is None
@@ -178,6 +182,7 @@ def test_an_open_matches_inside_the_window_with_its_slack():
     assert exported(opened("cat k", t=START - 1.5), events=events)[1][0]["call_id"] == "c1"
     assert exported(opened("cat k", t=START + 4.5), events=events)[1][0]["call_id"] == "c1"
     assert exported(opened("cat k", t=START + 6), events=events)[1][0]["call_id"] is None
+    assert exported(opened("cat k", t=START - 3), events=events)[1][0]["call_id"] is None
     assert exported(opened("cat other", t=START + 1), events=events)[1][0]["call_id"] is None
 
 

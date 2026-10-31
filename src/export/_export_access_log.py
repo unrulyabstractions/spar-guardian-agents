@@ -15,8 +15,8 @@ Origin comes from the shape of the root of the opener's process tree. `control` 
 (shell_commands.AGENT_EXEC). An agent cannot make a new exec root, so it cannot pose as the harness, and it can only
 daemonize, which reads `detached`. Anything else is `harness`: the harness's own execs and a process outside the
 machines, such as dockerd behind `docker cp`, whose root is the host's init. `unknown` is an opener that died before the
-monitor read /proc. Matching SandboxEvents instead would fail: Inspect writes one only after the exec returns, so a call
-the time limit cut has none, and its read would read as the harness.
+monitor read /proc. Inspect writes a SandboxEvent only after its exec returns, so a call the time limit cut has none,
+and neither the origin nor the tool call reads one.
 
 The agent. A lone agent is `lone`. One seat on the machine is `machine`: the service is the agent. One seat with the
 uid is `uid`. Seats that share a uid (openmath's shared layout) are told apart by `tool_call`: the root's hash and the
