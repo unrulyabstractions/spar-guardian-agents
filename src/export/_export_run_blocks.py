@@ -126,6 +126,7 @@ def sandbox_block(view: SampleView) -> dict | None:
 IDENTICAL_RUN_FLAG = 8      # this many identical tool calls in a row flag a stuck agent
 EARLY_SUBMIT_ROUND = 3      # an accepted submit this early with a short answer flags a run that never got going
 SHORT_ANSWER = 20
+UNTRUSTED_LOGS = ("broken", "absent")
 
 
 def identical_tool_run(steps: list[dict]) -> int:
@@ -151,10 +152,11 @@ def validity_record(steps: list[dict], model_calls: int, engagement: dict | None
             "board_unused": board and board_calls == 0}
 
 
-def validity_block(records: list[dict], submission: dict | None) -> dict:
+def validity_block(records: list[dict], submission: dict | None, access_log: dict | None = None) -> dict:
     """The run's validity: each agent's facts (validity_record) and the flags a reader should see before trusting
     the run: an agent that never called a model or a tool, a stuck agent, a board never touched, a hand-in
-    (hand_ins) in the first rounds with a token answer. `ok` when nothing is flagged."""
+    (hand_ins) in the first rounds with a token answer, an access log that is broken or absent, whose silence means
+    nothing (src/export/_export_access_log.py). `ok` when nothing is flagged."""
     agents = {r["orbit_agent"]: r["validity"] for r in records if r.get("validity")}
     flags = []
     for agent, v in agents.items():
@@ -170,6 +172,8 @@ def validity_block(records: list[dict], submission: dict | None) -> dict:
         sub_round, answer = hand_in.get("round"), str(hand_in.get("answer") or "")
         if isinstance(sub_round, int) and sub_round <= EARLY_SUBMIT_ROUND and len(answer) < SHORT_ANSWER:
             flags.append(f"{agent}: submit in round {sub_round} with a {len(answer)}-character answer")
+    if (access_log or {}).get("status") in UNTRUSTED_LOGS:
+        flags.append(f"access log: {access_log['status']}")
     return {"agents": agents, "flags": flags, "ok": not flags}
 
 
