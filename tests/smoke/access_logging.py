@@ -118,6 +118,7 @@ BLOB_PIECE = "B"                                    # Lucy's piece that holds BL
 BLOB = "internal/cache/redis/client.go"
 ORDERED_NAME = re.compile(r"\ba0\d\b")
 REARM_POLLS = 600
+FIND_POLLS = 100
 VIEW = ("for p in /proc/[0-9]*; do tr '\\0' ' ' < $p/cmdline; echo; done | sort -u; echo ==env==; env | sort; "
         "echo ==etc==; ls /etc; echo ==mounts==; cat /proc/mounts; echo ==status==; cat /proc/self/status")
 UNIQUE = re.compile(r"\b[0-9a-f]{12,64}\b|\d+")     # a container's id, a pid, a size, a clock
@@ -690,7 +691,13 @@ async def stop_outcome(token: str, seen: dict, then: ModelOutput) -> ModelOutput
         assert done.returncode == 0, done.stderr
         return done.stdout.strip()
 
-    [foreign] = (await bash(FIND_PID, token)).split()
+    found = []
+    for _ in range(FIND_POLLS):                 # the agent's call returns before its background exec has run
+        found = (await bash(FIND_PID, token)).split()
+        if found:
+            break
+        await asyncio.sleep(0.1)
+    [foreign] = found
     own = await bash("sleep 120 </dev/null >/dev/null 2>&1 & echo $!")
     await bash(STOP, foreign)
     await bash(STOP, own)
