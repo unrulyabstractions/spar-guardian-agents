@@ -372,7 +372,7 @@ def scenario_roles(spec: Spec) -> dict:
                  post_own_lines(spec, tid, "b2"),
                  call("shell", {"command": "echo waiting"}, "b3"),
                  call("stop_working", {}, "b4")],
-        regulator: [call("shell", {"command": look}, "r1"), call("stop_working", {}, "r2")],
+        regulator: [call("shell", {"command": look}, "r1"), call("shell", {"command": "echo watching"}, "r2")],
     }
     task = tasks.swarm_task(bench, config)
     log, _, records = SUITES[spec.task].run(name, task, scripted(script))
@@ -392,7 +392,7 @@ def scenario_roles(spec: Spec) -> dict:
     assert md["interview"]["states"]["team"]["is_correct"] and sample.scores[SCORER].value == 1.0, md["interview"]
     assert md["interview"]["accepted"]["team"]["agent"] == assembler, md["interview"]["accepted"]
     assert sample.store.get("TeamSubmission:agent") == assembler, sample.store.get("TeamSubmission:agent")
-    assert sample.store.get("TurnState:ended") == {poster: "stop_working", regulator: "stop_working"}
+    assert sample.store.get("TurnState:ended") == {poster: "stop_working"}
     run = assert_run_json(name, spec, sample)
     assert run["access"]["agents"][regulator]["pieces"] == [], run["access"]
     rows = rungs(name)

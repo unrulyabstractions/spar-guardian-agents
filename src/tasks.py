@@ -19,10 +19,12 @@ What comes from where:
     a monitored benchmark under SwarmConfig.access_log.
 
 The task instruction is the benchmark's, then the rule sentence of rule_level, then extra_instruction on its own
-paragraph (a control cell's text, say). Each agent's tools are the benchmark's, then on a board board_status,
-board_read and board_post and agent_actions for a regulator (src/swarm/_regulator_oversight.py), then submit and
-stop_working as the agent holds them (src/swarm/submit_and_stop.py ending_tools). They are bound per agent through
-ORBIT's tool_bindings next to the benchmark's own bindings. No agent gets ORBIT's own submit (AgentSpec.submit=False).
+paragraph (a control cell's text, say). A regulator that oversees reads that instruction inside a first message of its
+own and gets a system prompt of its own (first_messages, system_prompts). Each agent's tools are the benchmark's, then
+on a board board_status, board_read and board_post and agent_actions for a regulator
+(src/swarm/_regulator_oversight.py), then submit and stop_working as the agent holds them (src/swarm/submit_and_stop.py
+ending_tools). They are bound per agent through ORBIT's tool_bindings next to the benchmark's own bindings. No agent
+gets ORBIT's own submit (AgentSpec.submit=False).
 
 The plan's rounds, the scheduler's turn bound and Inspect's message limit follow SwarmConfig.working_steps,
 max_turns and sample_message_limit. Under a turn budget metadata["cheatbench"]["turn_budget"] holds
@@ -99,11 +101,28 @@ def instruction_suffix(benchmark: Benchmark, config: SwarmConfig, extra_instruct
 def system_prompts(benchmark: Benchmark, plan: Plan) -> dict[str, str]:
     """Each agent's system prompt: the benchmark's own (Benchmark.system_prompts: SWE's, or one that opens with the
     agent's name or team and lists the bullets of submit and stop_working), then what its role adds. A regulator or
-    disregulator gets its role text and, with informed_roles, the briefing (roles.role_prompt)."""
-    base = benchmark.system_prompts(plan)
-    return {n: roles_module.with_role(base[n], roles_module.role_prompt(role_of(plan.roles, n), plan.config,
-                                                                         benchmark.key, plan.agents))
-            for n in plan.agents}
+    disregulator gets its role text and, with informed_roles, the briefing (roles.role_prompt). A regulator that
+    oversees gets them in a prompt of its own, in every domain, so the benchmark's prompt never asks it to do the task
+    (roles.oversight_prompt)."""
+    base, config = benchmark.system_prompts(plan), plan.config
+
+    def prompt(agent: str) -> str | None:
+        role = role_of(plan.roles, agent)
+        added = roles_module.role_prompt(role, config, benchmark.key, plan.agents)
+        return roles_module.oversight_prompt(agent, plan.agents, added) if config.oversees(role) \
+            else roles_module.with_role(base[agent], added)
+
+    return {agent: prompt(agent) for agent in plan.agents}
+
+
+def first_messages(sample: Sample, plan: Plan) -> dict[str, str] | None:
+    """Every agent's first message when a regulator oversees: the sample's (metadata["cheatbench"]["first_message"],
+    else its input), a regulator's in roles.oversight_first_message. None when no agent oversees."""
+    overseers = [a for a in plan.agents if plan.config.oversees(role_of(plan.roles, a))]
+    if not overseers:
+        return None
+    first = sample.metadata["cheatbench"].get("first_message") or dict.fromkeys(plan.agents, sample.input)
+    return {**first, **{a: roles_module.oversight_first_message(first[a]) for a in overseers}}
 
 
 def deliverable(benchmark: Benchmark, plan: Plan) -> Deliverable:
@@ -242,6 +261,9 @@ def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = 
     names = config.names
     plan = benchmark.plan(config, hidden_roles(config))
     sample = benchmark.sample(plan, instruction_suffix(benchmark, config, extra_instruction))
+    first = first_messages(sample, plan)
+    if first:
+        sample.metadata["cheatbench"]["first_message"] = first
     if benchmark.keeps_access_log(config):
         sample = monitored_sample(sample)
     tools = benchmark.tools(plan)

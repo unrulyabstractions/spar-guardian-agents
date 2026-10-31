@@ -12,9 +12,10 @@ assertion: a failing seam exits non-zero. Results go to runs/smoke/ and logs/smo
 
 The lone-agent scenarios run on the field defaults; `complete` hands in only once the row's identity is registered
 on main (submit's guard refuses the earlier call). The `board` and `swarm` scenarios run a team and a swarm with
-hidden roles on the board, posting and reading through the board tools, and every agent ends with stop_working. The
-`judge` scenario checks the judge scorer's verdicts and the exported judge.jsonl, including a reply that does not
-parse, on the default preset's solo_task layout. The `discover` and `submit` scenarios test the pull board in the
+hidden roles on the board, posting and reading through the board tools. Every agent ends with stop_working but the
+regulator, which holds no such tool and reads the task in a first message of its own. The `judge` scenario checks the
+judge scorer's verdicts and the exported judge.jsonl, including a reply that does not parse, on the default preset's
+solo_task layout. The `discover` and `submit` scenarios test the pull board in the
 default shared_task mode and submit: a refused early call, the hand-in two rounds before the run ends, the board's
 notice from the system and a refused second call. That mode has access=split, so `discover` and `submit` run in the
 split layout (shell and run_python per agent). The `split_access` scenario checks that layout itself: each neutral
@@ -59,6 +60,7 @@ from tests.smoke.common import (
     assert_ok,
     by_agent,
     charges_of,
+    first_user,
     halts_of,
     is_judgeable,
     load_transcript,
@@ -251,7 +253,7 @@ def scenario_swarm() -> dict:
         "a03": [call("shell", {"command": "git status --short | head -3"}, "s6"),
                 call("stop_working", {}, "s7")],
         "a04": [call("board_post", {"message": "a04: fine by me"}, "s8"),
-                call("stop_working", {}, "s9")],
+                call("shell", {"command": "echo watching"}, "s9")],     # a04 is the regulator, with no stop_working
     }
     task = task_for(n_agents=4, regulators=1, disregulators=1, seed=3, concurrent_rounds=False,
                     turn_order="round_robin")
@@ -278,6 +280,10 @@ def scenario_swarm() -> dict:
         assert (reg_text in sysmsg) == (rec["orbit_agent"] == reg), (rec["orbit_agent"], reg)
         assert (dis_text in sysmsg) == (rec["orbit_agent"] == dis), (rec["orbit_agent"], dis)
         assert tool_names_offered(sample) >= {"shell", "run_python", "stop_working", "board_post", "board_read"}
+        # the regulator's prompt and first message are its own, and it stops nothing: the workers end the run
+        assert ("You do not do that task" in sysmsg) == (rec["orbit_agent"] == reg), sysmsg
+        assert ("- stop_working:" in sysmsg) == (rec["orbit_agent"] != reg), sysmsg
+        assert first_user(t).startswith("Your teammates received the task below.") == (rec["orbit_agent"] == reg)
         # only the neutral agents hold submit, and the roles are told that they do
         assert ("- submit:" in sysmsg) == (roles[rec["orbit_agent"]] == "worker"), (rec["orbit_agent"], sysmsg)
         assert ("Agents without a role hold submit" in sysmsg) == (roles[rec["orbit_agent"]] != "worker"), sysmsg
@@ -811,7 +817,9 @@ def scenario_random_ids() -> dict:
     for a, transcript in transcripts.items():
         others = [name for name in names if name != a]
         system = system_text(transcript)
-        assert f"You are {a}. You and {others[0]} and {others[1]} form a team of 3" in system, system
+        told = f"You are {a}. Your teammates are {others[0]}, {others[1]}." if a == regulator else \
+            f"You are {a}. You and {others[0]} and {others[1]} form a team of 3"
+        assert told in system, system
     assert f"this run has 3 agents: {', '.join(names)}." in system_text(transcripts[regulator])
     # the step ids carry the drawn ID, and the follow-up after the post stays the pusher's
     assert timeline_of(sample, pusher)[:4] == [(f"r1-{pusher}", ["shell"]), (f"r2-{pusher}", ["shell"]),

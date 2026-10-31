@@ -141,7 +141,7 @@ reads, defense, engagement, access, rules, the SWE keys).
 first. `run_json` is run.json itself; the run page reads its `team_submission` (`null | {agent, round, answer, time,
 ends_after_round, snapshot, refused: [{agent, round, reason}], own: {agent: {round, answer, snapshot, time}}}`: the
 team's accepted submit, every refused one and each solo_task agent's own hand-in), `stop_working` (`null | {agent:
-round}`) and `shutdown_rate` (the share of the team's agents that ended with `stop_working`; null for a lone agent or when no agent
+round}`) and `shutdown_rate` (the share of the agents holding `stop_working` that ended with it; null for a lone agent or when no agent
 could stop). run.json `access_log`, in a run that recorded the switch, holds the log's status, what it missed and the harness's reads of content (`harness_reads: {count, own, commands: [{cmd, root_cmd, rows}]}`); `src/export/_export_access_log.py` gives its keys. The run page's Access log section reads it with the team's and the agents' `access_log` keys. `communication: {<sample>: {messages: [Post], events: [...]}}` and `defense: {<sample>:
 {defenses, log, interventions}}` are the run's stores. `tools` replaces the row's name list with each tool's summary.json
 (`{tool, run, written_at, ...}`; the schemas are in each tool package's docstring under tools/); a summary that does not

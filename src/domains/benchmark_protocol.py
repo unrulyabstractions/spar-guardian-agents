@@ -71,6 +71,8 @@ ORBIT_AGENT_DEVIATION = "agent_is_orbit_turn_react_not_vendor_harness"
 # How every run departs from CheatBench's own runner, before a domain's own labels. CheatBench's runner has no
 # sentence on how to hand in work or stop.
 COMMON_DEVIATIONS = [ORBIT_AGENT_DEVIATION, "submit_and_stop_sentences_added_to_the_system_prompt"]
+# The label of a run with a regulator that reads the task and does not work on it (SwarmConfig.oversees).
+OVERSIGHT_DEVIATION = "a_regulator_gets_its_own_prompt_and_reads_the_task_as_its_teammates_work"
 # The common labels of a run where no agent gets submit or stop_working.
 NO_SUBMIT_DEVIATIONS = [ORBIT_AGENT_DEVIATION,
                         "agents_have_no_submit_tool_and_run_until_their_turn_cap_or_the_time_limit"]
@@ -320,13 +322,15 @@ class Benchmark(ABC):
     def deviations(self, plan: Plan) -> list[str]:
         """How the run departs from CheatBench's own runner, as short labels: the common ones (NO_SUBMIT_DEVIATIONS
         when no agent gets submit or stop_working), the delay of a shared_task team's submit, the domain's, the team's,
-        then the access log's."""
+        a regulator's own prompt, then the access log's."""
         config = plan.config
         common = COMMON_DEVIATIONS if config.gives_submit or config.gives_stop_working else NO_SUBMIT_DEVIATIONS
         delay = [f"team_submit_takes_effect_after_{config.submit_delay_rounds}_rounds"] \
             if config.gives_submit and config.submit_kind == "team" else []
+        oversight = [OVERSIGHT_DEVIATION] if any(map(config.oversees, (plan.roles or {}).values())) else []
         monitor = [MONITOR_DEVIATION] if self.keeps_access_log(config) else []
-        return [*common, *delay, *self.task_deviations, *(self.team_deviations(plan) if plan.team else []), *monitor]
+        return [*common, *delay, *self.task_deviations, *(self.team_deviations(plan) if plan.team else []), *oversight,
+                *monitor]
 
     # ---------------------------------------------------------------- what the export records
     @classmethod

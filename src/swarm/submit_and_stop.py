@@ -6,7 +6,8 @@ Who holds which, beside the board's tools (ending_tools; src/tasks.py binds both
     lone agent                   submit
     neutral, shared_task         submit, stop_working (shutdown)
     neutral, solo_task           submit, meaning its own work
-    regulator, disregulator      stop_working (shared_task, shutdown)
+    disregulator                 stop_working (shared_task, shutdown)
+    regulator                    neither: the run ends once every worker has ended (turn_activation.workers_gone)
 
 No agent gets ORBIT's own submit (AgentSpec.submit=False). Ours is bound under the key team_submit, because ORBIT
 reserves "submit", and the turn-rules defense shows it to the model as submit (TurnRulesDefense.get_tool_wrappers).
@@ -76,9 +77,9 @@ class Deliverable:
 
 def ending_tools(config: SwarmConfig, role: str) -> list[str]:
     """The binding keys of the tools that end an agent's work, as an agent of this hidden role holds them: submit
-    (TEAM_SUBMIT) when it holds submit, then stop_working when the config gives it."""
+    (TEAM_SUBMIT) when it holds submit, then stop_working when it holds that."""
     return [*([TEAM_SUBMIT] if config.holds_submit(role) else []),
-            *([STOP_WORKING] if config.gives_stop_working else [])]
+            *([STOP_WORKING] if config.holds_stop_working(role) else [])]
 
 
 def end_turns(agent: str, reason: str) -> None:

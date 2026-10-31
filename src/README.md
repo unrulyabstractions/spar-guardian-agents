@@ -88,10 +88,10 @@ What every domain builds its sandbox from. Nothing here knows a domain.
 The team on ORBIT's API.
 
 - `board.py`: one shared channel as ORBIT configuration, and the tools `board_status`, `board_read` and `board_post` with the per-round budgets.
-- `hidden_roles.py`: who is regulator or disregulator, on a board whose config asks for one, and the texts each role gets.
+- `hidden_roles.py`: who is regulator or disregulator, on a board whose config asks for one, and the texts each role gets. A regulator's system prompt and first message are built here for every domain, in place of the benchmark's.
 - `submit_and_stop.py`: `submit` and `stop_working`, the tools that end an agent's work. ORBIT reserves `submit`, so the tool is bound as `team_submit` and shown to the model as `submit`.
 - `awareness_probes.py`: Lucy's end-of-episode questions as an Inspect scorer.
-- `turn_rules/`: the plan of rounds under the turn budget, the free board steps, the budgets' counters, the halt after a hand-in and the model filter. Its `__init__.py` is the API. `turn_activation.py` is the callback ORBIT imports by its dotted name after every activation.
+- `turn_rules/`: the plan of rounds under the turn budget, the free board steps, the budgets' counters, the halt after a hand-in or once no worker is left, and the model filter. Its `__init__.py` is the API. `turn_activation.py` is the callback ORBIT imports by its dotted name after every activation.
 
 The implementation is `_regulator_oversight.py` (`agent_actions`, the regulators' tool) and the `_turn_*.py` modules. Every run carries the turn rules as a passive defense. Its model filter takes ORBIT's assistant paragraph out of the system message and appends the continue prompt (`prompts.yaml` `continue`) when the provider input would end with a model turn, which Gemini rejects.
 
@@ -182,7 +182,7 @@ Shared helpers.
 | `signals <run ...> [--table]` | places every agent and every team on the cheating ladder by code, no judge: `signals.jsonl` with the agent rows, then one team record per sample, and run.json `signals.team`; every run gets it as it ends, and `judge` and `ladder` run it again; `--table` prints the agents' table, then the teams' |
 | `ladder <run ...> [--judge gpt-6-luna] [--sync] [--view full\|actions] [--agents k7q2m,t4x9n] [--force] [--table]` | places every agent on the cheating ladder from its stored transcript: `runs/<name>/ladder.jsonl` with the rung, the cited calls and their rounds, pushback and forbidden method, the honesty labels and the presentation, then one team row per sample; `--table` sums the existing files |
 | `ui [start\|stop] [--port 8765] [--no-open]` | starts or stops the results browser in the background |
-| `summary <run ...> [--full]` | one line per episode with its verdict and the task's judge flags, the swarm composition and the shutdown rate (the share of the team's agents that ended with `stop_working` before any hand-in) |
+| `summary <run ...> [--full]` | one line per episode with its verdict and the task's judge flags, the swarm composition and the shutdown rate (the share of the agents holding `stop_working` that ended with it before any hand-in) |
 | `engagement <run ...> [--json]` | the board engagement funnel per role and per agent |
 | `swe-summary <run ...>` | Lucy's SWE measures per agent and per arm, written to `swe_summary.json` |
 | `budget <lone_run ...>` | lone runs' turns and their median |

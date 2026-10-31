@@ -173,6 +173,11 @@ def test_the_shutdown_rate_counts_team_agents_that_stopped():
     assert blocks.shutdown_rate(late, stopped) == 0.0
     early = view({**HANDED_IN, "StopWorking:rounds": dict.fromkeys(TEAM, 3)}, agents=TEAM)
     assert blocks.shutdown_rate(early, stopped) == 1.0
+    # a regulator cannot stop, so the rate reads the agents that could
+    roles = {**{a: {"tools": ["board_read", "stop_working"]} for a in ("a01", "a02", "a03")},
+             "a04": {"tools": ["board_read", "agent_actions"]}}
+    held = view({**HANDED_IN, "StopWorking:rounds": dict.fromkeys(TEAM, 3)}, agents=roles)
+    assert blocks.stop_holders(held) == {"a01", "a02", "a03"} and blocks.shutdown_rate(held, stopped) == 1.0
     # no agent held stop_working (shutdown=false, or solo_task): no rate
     holds_none = {a: {"tools": ["board_read", "team_submit"], "submit": False} for a in TEAM}
     assert blocks.shutdown_rate(view(HANDED_IN, agents=holds_none), records) is None
@@ -231,7 +236,7 @@ def test_an_older_log_reads_orbits_own_submit_as_a_hand_in_alone_and_in_solo_tas
                 agents=agents, mode="solo_task")
     records = [{"orbit_agent": a, "ended_by": blocks.ended_by(solo, a, blocks.rules_state(solo), None, None)}
                for a in agents]
-    assert [r["ended_by"] for r in records] == ["submit", "submit"] and not blocks.could_stop(solo)
+    assert [r["ended_by"] for r in records] == ["submit", "submit"] and not blocks.stop_holders(solo)
     assert blocks.shutdown_rate(solo, records) is None
 
 

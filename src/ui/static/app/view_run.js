@@ -50,7 +50,7 @@ export async function viewRun({ run }, view) {
     ['agents ended by', endingsText(d.endings) || undefined],
     ['team submission', submissionText(rj.team_submission) || undefined],
     ['shutdown rate', rj.shutdown_rate == null ? undefined
-      : `${Math.round(rj.shutdown_rate * 100)}% of the team ended with stop_working`],
+      : `${Math.round(rj.shutdown_rate * 100)}% of the agents holding stop_working ended with it`],
     ['eval id', rj.eval_id ? mono(rj.eval_id) : null],
     ['run id', rj.run_id],
     ['variant', rj.variant || null],

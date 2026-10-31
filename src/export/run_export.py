@@ -18,8 +18,8 @@ Writes
 run.json also carries the run's mode, scale and preset, the submits (`team_submission`: the agent whose submit handed
 in the team's work, its round, the round after which the run ends, the snapshot, the refused calls and each solo_task
 agent's own hand-in; None when no agent called submit), the round of each stop_working call (`stop_working`: {agent:
-round}; None when no agent stopped) and the shutdown rate (the share of the team's agents, roles included, that ended
-with stop_working before any hand-in; None for a lone agent or when no agent could stop), and each episode and the
+round}; None when no agent stopped) and the shutdown rate (the share of the agents that held stop_working that ended
+with it before any hand-in; None for a lone agent or when no agent could stop), and each episode and the
 run an `engagement` block: who looked at the board, read it, posted and called submit (None for a run without a board).
 
 An episode's ended_by comes from the store records (_export_run_blocks.ended_by): "submit" (it handed in),

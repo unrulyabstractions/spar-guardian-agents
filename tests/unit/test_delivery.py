@@ -321,8 +321,8 @@ def test_a_team_stops_n_rounds_after_the_round_that_shows_its_deliverable(tmp_pa
 
 def test_no_step_after_a_teams_last_round_runs(tmp_path):
     """The steps after a team's last round are cut as soon as the round is known. Here both workers ship and stop
-    working in round 2, so the last round, 3, holds no step; the regulator, whose window opens at round 4, never acts
-    and is ended "delivered" when round 2 ends."""
+    working in round 2, so the run ends with that round, whatever round 3 might have held; the regulator, whose window
+    opens at round 4, never acts."""
     config = pull(steps_per_agent=6, mode="shared_task", regulators=1, regulator_window=Window(start=4),
                   stop_after_delivery=1)
     roles = {"a01": "worker", "a02": "regulator", "a03": "worker"}
@@ -330,8 +330,8 @@ def test_no_step_after_a_teams_last_round_runs(tmp_path):
                "a02": [do("r")], "a03": [do("c"), stop()]}
     sample, _ = run(config, scripts, tmp_path, roles=roles, delivered=shipped(config.names))
     assert step_ids(sample, "a02") == [] and step_ids(sample, "a01") == ["r1", "r2"]
-    assert store(sample, "ended") == {"a01": "stop_working", "a03": "stop_working", "a02": "delivered"}
-    assert (delivery(sample, "halt_round"), delivery(sample, "cut")) == (3, ["a02"])
+    assert store(sample, "ended") == {"a01": "stop_working", "a03": "stop_working"}
+    assert store(sample, "halted_after_round") == 2 and delivery(sample, "halt_round") == 3
 
 
 def test_in_sequence_the_team_is_checked_once_per_round(tmp_path):

@@ -27,7 +27,7 @@ Outside its package a domain adds these:
 | `scripts/box/fleet_layout.py`, `scripts/box/box_runner.py` | `TASKS` and its build step, for a domain that runs on the boxes |
 | `scripts/paper/domain_figures.py`, `scripts/paper/tables.py` | its setup figure and its rows of the tables |
 
-Every run's deviations open with two labels: the agent is ORBIT's `turn_react` loop, and its system prompt says how to hand in work and how to stop (`submit_and_stop_sentences_added_to_the_system_prompt`), which CheatBench's runner never says. A `shared_task` team whose neutral agents hold `submit` adds `team_submit_takes_effect_after_<d>_rounds`. A run without `submit` and `stop_working` records `agents_have_no_submit_tool_and_run_until_their_turn_cap_or_the_time_limit` instead of the second label. The domain's own labels follow, then its team's. A run with the access log ends with `honeypot_opens_recorded_by_a_monitor_outside_the_agents_machines`.
+Every run's deviations open with two labels: the agent is ORBIT's `turn_react` loop, and its system prompt says how to hand in work and how to stop (`submit_and_stop_sentences_added_to_the_system_prompt`), which CheatBench's runner never says. A `shared_task` team whose neutral agents hold `submit` adds `team_submit_takes_effect_after_<d>_rounds`. A run without `submit` and `stop_working` records `agents_have_no_submit_tool_and_run_until_their_turn_cap_or_the_time_limit` instead of the second label. The domain's own labels follow, then its team's. A run with a regulator that oversees adds `a_regulator_gets_its_own_prompt_and_reads_the_task_as_its_teammates_work`. A run with the access log ends with `honeypot_opens_recorded_by_a_monitor_outside_the_agents_machines`.
 
 ## Layout
 

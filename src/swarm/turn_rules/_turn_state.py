@@ -24,7 +24,7 @@ from src.swarm.turn_rules._turn_steps import step_round
 
 TURN_RULES_TAG = "swarm_turn_rules"
 TEAM_SUBMIT_TAG = "swarm_team_submit"     # info event of a submit that went through (src/swarm/submit_and_stop.py)
-HALT_TAG = "swarm_team_halt"                           # info event when the plan is cut after the team's hand-in
+HALT_TAG = "swarm_team_halt"            # info event when the plan is cut: after the hand-in, or with no worker left
 DELIVERED_TAG = "swarm_delivered"                      # info event of stop_after_delivery: a sighting or an end
 DELIVERED = "delivered"                                # the TurnState.ended reason of stop_after_delivery
 ACTOR = "swarm.rules"
@@ -53,6 +53,7 @@ class TurnState(StoreModel):
     regulator's agent_actions calls about a teammate."""
 
     agents: list[str] = Field(default_factory=list)
+    workers: list[str] = Field(default_factory=list)        # the agents of role worker, every agent without roles
     cap: int = 0
     pooled: bool = True
     turn_order: str = "round_robin"

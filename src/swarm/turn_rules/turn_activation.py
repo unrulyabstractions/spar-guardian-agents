@@ -1,7 +1,8 @@
 """The trusted callback ORBIT runs after every activation of the plan (ScheduleConfig.after_activation).
 
 It charges the step by what it did and marks why an agent stopped. It then amends the pending plan: a follow-up
-step after a free step, the stopped agents' steps removed or pooled, every step after the team's hand-in dropped.
+step after a free step, the stopped agents' steps removed or pooled, every step after the team's hand-in dropped, and
+every step after the round under way dropped once no worker is left (workers_gone), so no regulator holds a run open.
 Under stop_after_delivery it hands the amended plan to the rule in _turn_delivery first.
 
     schedule = ScheduleConfig(steps=steps, after_activation=f"{turn_activation.__name__}.after_activation")
@@ -177,6 +178,26 @@ def _halt(st: TurnState, submission: TeamSubmission, keep: list[dict]) -> list[d
     return [s for s in keep if step_round(s["id"]) <= last]
 
 
+def workers_gone(st: TurnState) -> bool:
+    """Whether every worker's turns have ended, by a stop, its own hand-in or a limit, while another agent's have not:
+    the run is over then. A regulator cannot stop and a disregulator cannot hand in, so neither keeps it going. False
+    with no worker, where only the plan's end stops the run, and once every agent has ended, which empties the plan."""
+    return bool(st.workers) and set(st.workers) <= st.ended.keys() and len(st.ended) < len(st.agents)
+
+
+def _without_workers(st: TurnState, keep: list[dict], step: ScheduleStep | None) -> list[dict]:
+    """The amended plan, last of all: once no worker is left (workers_gone) the steps up to the round under way, which
+    finishes, and no later one."""
+    if not workers_gone(st):
+        return keep
+    last = step_round(step.id) if step is not None else 0
+    if st.halted_after_round != last:
+        st.halted_after_round = last
+        transcript().info({HALT_TAG: {"round": last, "ends_after_round": last, "agent": None,
+                                      "dropped": [s["id"] for s in keep if step_round(s["id"]) > last]}})
+    return [s for s in keep if step_round(s["id"]) <= last]
+
+
 def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | None:
     """ORBIT calls this after every activation of the plan (ScheduleConfig.after_activation).
 
@@ -185,7 +206,8 @@ def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | Non
     its round steps go to the active agents in new rounds at the end, unless its own work was done (HANDED_OFF:
     delivered, or its own hand-in in solo_task, where each agent is graded alone); a free step gets its follow-up
     step while the round's K lasts; the team's hand-in (TeamSubmission) cuts every step after its last round, and
-    pooling stops.
+    pooling stops; once no worker is left (workers_gone) every step after the round under way goes, whatever a hand-in
+    left running.
     The timeline marks an agent's first activation ("entered") and the activation after which its window holds no
     more steps ("left").
 
@@ -239,11 +261,11 @@ def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | Non
         _follow_up(st, keep, step, agent)
     if halted:
         keep = _halt(st, submission, keep)
-    elif st.pooled and dropped:
+    elif st.pooled and dropped and not workers_gone(st):
         keep += _pooled_steps(st, active, dropped, runtime.revision)
     if record is not None and not halted:     # the team's hand-in ends the run itself; the rule stays out of it
         return _amend_after_delivery(st, record, runtime, step, agent, keep, before)
-    _amend(st, runtime, agent, keep, before, halted)
+    _amend(st, runtime, agent, _without_workers(st, keep, step), before, halted)
 
 
 def _amend(st: TurnState, runtime, agent: str, keep: list[dict], before: list[dict], halted: bool,
@@ -258,4 +280,4 @@ def _amend(st: TurnState, runtime, agent: str, keep: list[dict], before: list[di
 async def _amend_after_delivery(st: TurnState, record: Delivered, runtime, step: ScheduleStep | None, agent: str,
                                 keep: list[dict], before: list[dict]) -> None:
     keep, ended = await after_delivery(st, record, runtime, step, agent, keep)
-    _amend(st, runtime, agent, keep, before, False, bool(ended))
+    _amend(st, runtime, agent, _without_workers(st, keep, step), before, False, bool(ended))
