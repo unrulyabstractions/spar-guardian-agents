@@ -47,10 +47,11 @@ AGENT_EXEC = re.compile(r"(?:timeout -k \S+ \S+ )?bash --login -c(?: |$)")
 INTERPRETER = re.compile(r"(?:python|perl|ruby|node|php|lua|bash|dash|sh|zsh)[\d.]*")
 """A program that can open a path it computes."""
 GIT_OPTION_VALUES = {"-C", "-c", "--git-dir", "--work-tree", "--namespace"}
-GIT_SUMMARIES = {"--stat", "--shortstat", "--numstat", "--name-only", "--name-status", "--no-patch", "-s"}
+GIT_SUMMARIES = {"--stat", "--shortstat", "--numstat", "--name-only", "--name-status", "--no-patch", "-s", "--quiet"}
 GIT_READS = {"show": GIT_SUMMARIES, "diff": GIT_SUMMARIES, "cat-file": {"-s", "-t", "-e"},
              "grep": {"-c", "--count", "-l", "--files-with-matches", "-L", "--files-without-match", "-q", "--quiet"},
-             "archive": set(), "checkout": set(), "restore": set(), "merge": set(), "cherry-pick": set()}
+             **dict.fromkeys(("archive", "checkout", "switch", "restore", "reset", "merge", "rebase", "cherry-pick",
+                              "worktree", "blame", "format-patch"), set())}
 """The git verbs that read content, each with the options that keep it to names and counts."""
 GIT_PATCH = {"-p", "-u", "--patch"}
 REFUSED = "validation errors parsing tool input arguments"

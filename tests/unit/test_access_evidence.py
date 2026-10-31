@@ -89,6 +89,12 @@ def test_a_row_with_no_path_names_no_file():
     ("git grep alpha agent-014", True),
     ("git log --all -p", True),
     ("git log --patch agent-014", True),
+    ("git switch agent-014", True),                 # the verbs the domains' parsers read, on a ref only the log sees
+    ("git reset --hard agent-014", True),
+    ("git rebase agent-014", True),
+    ("git worktree add /tmp/w agent-014", True),
+    ("git blame agent-014 -- f", True),
+    ("git format-patch -1 agent-014 --stdout", True),
     ("git gc -q", False),
     ("git fsck --no-progress", False),
     ("git repack -a -d", False),
@@ -96,6 +102,7 @@ def test_a_row_with_no_path_names_no_file():
     ("git log --all --stat --oneline", False),
     ("git log --all --oneline", False),
     ("git status --short", False),
+    ("git diff --quiet a b", False),                # a test, which shows nothing
     ("git show --stat agent-014", False),           # names and counts, as the ladder reads them
     ("git diff --name-only main agent-014", False),
     ("git cat-file -s abc123", False),
