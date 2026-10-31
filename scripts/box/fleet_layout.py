@@ -5,9 +5,10 @@
     cells("knowledge_work")                              -> ["knowledge_work.worktime_solo", ...], one per kind
     run_name("knowledge_work.worktime_solo", "luna", 2)  -> "worktime_solo_luna2"
 
-One box runs one task on one model: the task's cells, one example script per kind, each several samples at once. A
-label ends with the launch that rented the box (l and six hex digits), so a launch adopts only its own instances.
-Standard library only, so every side imports it: the Mac (fleet.py, box_capture.py) and the box (box_runner.py).
+One box runs one task on one model: the task's cells, one example script per kind, each several samples at once: the
+kinds every task has, then the kinds of that task alone (kinds_of). A label ends with the launch that rented the box
+(l and six hex digits), so a launch adopts only its own instances. Standard library only, so every side imports it: the
+Mac (fleet.py, box_capture.py) and the box (box_runner.py).
 """
 from __future__ import annotations
 
@@ -36,7 +37,11 @@ TASKS = {
 MODELS = {"deepseek-flash-openrouter": "dsflash", "gpt-6-luna": "luna", "claude-haiku-5-5": "haiku"}
 """Each model's registry entry and the suffix of its run names."""
 KINDS = ("solo", "solo_cheat", "minimal", "minimal_cheat", "minimal_regulated")
-"""The cells of a task, as the last part of each example script's name."""
+"""The cells every task has, as the last part of each example script's name."""
+TASK_KINDS = {"knowledge_work": ("minimal_all",)}
+"""The cells of one task alone: knowledge work's team with no split."""
+EVERY_KIND = (*KINDS, *dict.fromkeys(kind for kinds in TASK_KINDS.values() for kind in kinds))
+"""What --kinds accepts."""
 FLOORS = {"software_engineering": (32, 64)}
 """A box's cores and GB of RAM where the task needs more than LIGHT_FLOOR: SWE builds and tests Go on one machine per
 agent, and 15 such runs share the box."""
@@ -84,13 +89,18 @@ def run_name(cell: str, suffix: str, sample: int) -> str:
     return f"{cell.split('.', 1)[1]}_{suffix}{sample}"
 
 
-def cells(task: str, kinds: tuple[str, ...] = KINDS, examples: Path = ROOT / "examples") -> list[str]:
-    """examples.<package>.<stem> without the prefix for each kind, in the order of kinds. Each kind needs exactly one
-    script examples/<package>/<stem>_<kind>.py; a missing or doubled cell raises, so a box never runs a partial
-    task."""
+def kinds_of(task: str) -> tuple[str, ...]:
+    """The cells a task has."""
+    return (*KINDS, *TASK_KINDS.get(task, ()))
+
+
+def cells(task: str, kinds: tuple[str, ...] | None = None, examples: Path = ROOT / "examples") -> list[str]:
+    """examples.<package>.<stem> without the prefix for each kind (every kind of the task by default), in the order of
+    kinds. Each kind needs exactly one script examples/<package>/<stem>_<kind>.py; a missing or doubled cell raises, so
+    a box never runs a partial task."""
     package = TASKS[task]
     found, problems = [], []
-    for kind in kinds:
+    for kind in kinds or kinds_of(task):
         scripts = sorted((examples / package).glob(f"*_{kind}.py"))
         if len(scripts) != 1:
             problems.append(f"{kind}: {len(scripts)} scripts")
@@ -107,7 +117,7 @@ def layout_problems(tasks: list[str], examples: Path = ROOT / "examples") -> lis
     problems, owner = [], {}
     for task in tasks:
         try:
-            task_cells = cells(task, KINDS, examples)
+            task_cells = cells(task, examples=examples)
         except ValueError as error:
             problems.append(f"{task}: {error}")
             continue

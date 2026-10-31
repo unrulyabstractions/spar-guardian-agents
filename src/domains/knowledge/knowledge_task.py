@@ -14,6 +14,11 @@ tool, the review logs and evaluation.json) and `read` (the pipeline artifact) as
 (knowledge_sandbox.py). A `solo_task` team gives each agent its own contract copy and candidate id in the one
 container. Each agent's tools follow what it holds: review_deliverable goes to the holders of `review`. The access log
 watches the artifact and evaluation.json, which names it.
+
+The access note. When the plan is split, every seat's system prompt ends with the same note on who holds the review
+tool and who holds read access (access_note), in agent IDs and in the Linux group a seat can look up. It names nothing
+the access reaches. A seat that holds nothing, such as a regulator, reads the note and stands in neither list. When
+some seat lacks the tool, the README all seats share adds one sentence that says so (knowledge_sandbox.py).
 """
 from __future__ import annotations
 
@@ -23,13 +28,22 @@ from collections.abc import Awaitable, Callable
 
 from inspect_ai.scorer import Scorer
 
+from src.configuration.settings import load_prompts
 from src.domains.benchmark_protocol import Plan, RowBenchmark, Staged
 from src.domains.knowledge import _knowledge_scoring as scoring
 from src.domains.knowledge import knowledge_sandbox as sandbox
 from src.domains.knowledge._knowledge_ladder import KnowledgeDomain
 from src.domains.knowledge._knowledge_review_tool import TOOL as REVIEW_TOOL
 from src.domains.knowledge._knowledge_review_tool import review_binding, reviewed
-from src.domains.knowledge.knowledge_settings import BUILD, CACHE, DEFAULT_ROW, STAGE_TAR, TASK, TASK_DIR
+from src.domains.knowledge.knowledge_settings import (
+    BUILD,
+    CACHE,
+    DEFAULT_ROW,
+    PIPELINE_GROUP,
+    STAGE_TAR,
+    TASK,
+    TASK_DIR,
+)
 from src.sandbox.access_log.access_monitor import Watched
 from src.sandbox.agent_tools import AgentTools, Seat, roster_tools
 from src.sandbox.agent_users import agent_users as users
@@ -48,6 +62,8 @@ SPLIT_DEVIATIONS = [
     "review_logs_and_evaluation_json_readable_by_the_group_review_only_and_the_artifacts_directory_traverse_only",
     "pipeline_artifact_staged_under_a_random_name_so_a_reader_cannot_guess_it",
 ]
+ACCESS_NOTE_DEVIATION = "system_prompt_states_who_holds_the_review_tool_and_who_holds_read_access"
+README_DEVIATION = "readme_adds_a_sentence_that_not_everyone_holds_the_review_tool"
 SOLO_DEVIATIONS = [users.PRIVATE_TEMP_DEVIATION, "each_agent_has_its_own_contract_copy_and_candidate_id",
                    "evaluation_json_lists_every_candidate_under_candidate"]
 
@@ -80,7 +96,7 @@ class KnowledgeWork(RowBenchmark):
         kind = sandbox.layout_of(plan)
         layout = sandbox.stage_layout(row, kind, plan.split, seat_map)
         digest = hashlib.sha256(json.dumps(layout, sort_keys=True).encode()).hexdigest()[:12]
-        tar = sandbox.stage_tar(row, layout, BUILD / "stage" / f"{row['id']}-{digest}.tgz")
+        tar = sandbox.stage_tar(row, layout, BUILD / "stage" / f"{row['id']}-{digest}.tgz", sandbox.readme_note(plan))
         block = {"layout": kind, "meta": row.get("meta") or {}, "comparator": layout["comparator"],
                  "seats": seat_map, "evaluation": layout["evaluation"], "images": sandbox.ensure_images()}
         return Staged(compose=sandbox.write_compose(), block=block, files={STAGE_TAR: str(tar)},
@@ -94,6 +110,21 @@ class KnowledgeWork(RowBenchmark):
         seats = {a: Seat.read(record) for a, record in sandbox.seats(plan).items()}
         holders = {a: [REVIEW_TOOL] if "review" in plan.holds[a] else [] for a in plan.agents}
         return roster_tools(plan.agents, seats, task_tools=review_binding(), holders=holders)
+
+    def access_note(self, plan: Plan) -> str | None:
+        """Who holds the review tool and who holds read access (prompts.yaml knowledge_work.access_note), the same text
+        for every seat, or None when the plan is not split or the prompts do not tell the agents of their team, since a
+        note names teammates. A regulator's prompt can call it as it stands: the note takes no seat."""
+        if not (plan.split and self.tells_team(plan)):
+            return None
+        texts = load_prompts()["knowledge_work"]
+        names = {item: ", ".join(sandbox.holders(plan, item)) or texts["nobody"] for item in sandbox.ITEMS}
+        return texts["access_note"].format(tool=REVIEW_TOOL, group=PIPELINE_GROUP, **names)
+
+    def system_prompts(self, plan: Plan) -> dict[str, str]:
+        """The base's prompts, then the access note on its own paragraph where there is one."""
+        prompts, note = super().system_prompts(plan), self.access_note(plan)
+        return {a: f"{prompt}\n\n{note}" for a, prompt in prompts.items()} if note else prompts
 
     async def prepare(self, state) -> None:
         await scoring.prepare(state)
@@ -124,7 +155,9 @@ class KnowledgeWork(RowBenchmark):
     def team_deviations(self, plan: Plan) -> list[str]:
         if plan.mode == "solo_task":
             return TEAM_DEVIATIONS + SOLO_DEVIATIONS
-        return TEAM_DEVIATIONS + SHARED_DEVIATIONS + (SPLIT_DEVIATIONS if plan.split else [])
+        return [*TEAM_DEVIATIONS, *SHARED_DEVIATIONS, *(SPLIT_DEVIATIONS if plan.split else []),
+                *([ACCESS_NOTE_DEVIATION] if self.access_note(plan) else []),
+                *([README_DEVIATION] if sandbox.readme_note(plan) else [])]
 
     @classmethod
     def episode_facts(cls, view, agent: str) -> dict:

@@ -18,7 +18,12 @@ and evaluation.json, the two places that name the artifact) and `read` (membersh
 reads the artifact). When some seat lacks one (the plan is split), the artifact is staged under a random name in a
 traverse-only directory, so a reader without the name cannot list it: the holders of `review` learn the name and
 cannot read, the holders of `read` can read and are not told the name, and the exploit needs the board. Under
-access=split the first half of the neutral agents (rounded up) hold `review` and the rest `read`.
+access=split the first half of the neutral agents (rounded up) hold `review` and the rest `read`. holders() lists an
+item's agents for the note that tells every seat who holds what (KnowledgeWork.access_note).
+
+The README: every seat of a shared_task team reads the one README.md of the contract directory, so its sentence on the
+review tool would promise the tool to the seats without it. When some seat lacks the tool the staged README adds one
+sentence after CheatBench's, which stays word for word (readme_note, with_readme_note). Otherwise it is CheatBench's.
 """
 from __future__ import annotations
 
@@ -26,6 +31,7 @@ import json
 import secrets
 from pathlib import Path, PurePosixPath
 
+from src.configuration.settings import load_prompts
 from src.domains.benchmark_protocol import Plan
 from src.domains.knowledge.knowledge_settings import (
     AGENT_IMAGE,
@@ -38,6 +44,7 @@ from src.domains.knowledge.knowledge_settings import (
     OFFICE_LABEL,
     PIPELINE_GID,
     PIPELINE_GROUP,
+    README_REVIEW_END,
     REVIEW_DIR,
     REVIEW_GID,
     REVIEW_GROUP,
@@ -94,6 +101,30 @@ def new_candidate() -> str:
     return "agent-" + secrets.token_hex(6)
 
 
+def holders(plan: Plan, item: str) -> list[str]:
+    """The agents that hold an access item, in roster order."""
+    return [a for a in plan.agents if item in plan.holds[a]]
+
+
+def readme_note(plan: Plan) -> str | None:
+    """The sentence the contract's README adds on the review tool (prompts.yaml knowledge_work.readme_review) when some
+    seat lacks the tool; None when every seat holds it."""
+    if len(holders(plan, "review")) == len(plan.agents):
+        return None
+    return load_prompts()["knowledge_work"]["readme_review"]
+
+
+def with_readme_note(readme: bytes, note: str | None) -> bytes:
+    """The README with the note after its sentence on the review tool, or as it is without a note. A README that does
+    not hold that sentence once raises, so the note cannot go missing unseen."""
+    if note is None:
+        return readme
+    text = readme.decode()
+    if text.count(README_REVIEW_END) != 1:
+        raise ValueError(f"the task README must hold {README_REVIEW_END!r} once")
+    return text.replace(README_REVIEW_END, f"{README_REVIEW_END} {note}").encode()
+
+
 def seats(plan: Plan) -> dict[str, dict]:
     """Each agent's seat record: its user, uid, home and contract directory (src/sandbox/agent_tools.py Seat), its
     /external path, its candidate id, and its access as two flags, review and read, from the plan. A lone agent and a
@@ -142,10 +173,12 @@ def stage_layout(row: dict, kind: str, split: bool, seat_map: dict[str, dict]) -
             "evaluation": evaluation_record(row, seat_map, comparator)}
 
 
-def stage_tar(row: dict, layout: dict, out_path: Path) -> Path:
-    """contract/ (row["files"]: README.md, brief.md, inputs/...), artifacts/<pipeline deliverable>, review/
-    (CheatBench's grader.py and our runner), knowledge_setup.py and layout.json, all owned by root."""
+def stage_tar(row: dict, layout: dict, out_path: Path, readme: str | None) -> Path:
+    """contract/ (row["files"]: README.md with the sentence `readme` adds, brief.md, inputs/...),
+    artifacts/<pipeline deliverable>, review/ (CheatBench's grader.py and our runner), knowledge_setup.py and
+    layout.json, all owned by root."""
     files = task_files.row_files(row, BUILD / "environment", workdir="contract")
+    files["contract/README.md"] = with_readme_note(files["contract/README.md"], readme)
     [artifact] = row["files_abs"]
     files[f"artifacts/{PurePosixPath(layout['comparator']).name}"] = files.pop(artifact)
     private = {"review/grader.py": (TASK_DIR / "grader.py").read_bytes(),

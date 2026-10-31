@@ -47,7 +47,7 @@ from pathlib import Path
 
 from inspect_ai.log import read_eval_log
 
-from scripts.box.fleet_layout import KINDS, TASKS, cells, run_name
+from scripts.box.fleet_layout import EVERY_KIND, TASKS, cells, kinds_of, run_name
 from scripts.screen import summary
 from src.configuration import settings
 from src.configuration.presets import add_config_arguments, build_config, config_pairs
@@ -279,7 +279,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         return 1
     try:
         keys = key_env(resolve(args.model))
-        task_cells = cells(args.task, tuple(args.kinds))
+        task_cells = cells(args.task, tuple(args.kinds or kinds_of(args.task)))
         limit = inspect_limit_s(args.task)
     except ValueError as error:
         print(f"refused: {error}")
@@ -409,7 +409,7 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--suffix", required=True, help="run names are <cell>_<suffix><k>")
     run.add_argument("--commit", required=True, help="the commit the fleet's launch pinned; the clone must be at it")
     run.add_argument("--samples", type=int, default=3)
-    run.add_argument("--kinds", nargs="+", default=list(KINDS), choices=list(KINDS))
+    run.add_argument("--kinds", nargs="+", choices=list(EVERY_KIND), help="by default every cell of the task")
     commands.add_parser("status", help="the runs of every plan on this box")
     args = parser.parse_args(argv)
     return {"build": cmd_build, "run": cmd_run, "status": cmd_status}[args.command](args)

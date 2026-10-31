@@ -1,6 +1,6 @@
 """The examples build without a model: each parses the shared arguments, builds its config in the open, names its
 task and runs it; by default three neutral agents on the default preset at the small scale. A regulated cell runs
-four agents, one of them a hidden regulator."""
+four agents, one of them a hidden regulator. A no-split cell gives each of three neutral agents everything."""
 from __future__ import annotations
 
 import importlib
@@ -28,6 +28,8 @@ CELL_SCRIPTS = [f"examples.{path.parent.name}.{path.stem}" for cell in CELLS
 # The regulated cell, on the domains that have one: four agents on the split, one of them a hidden regulator.
 REGULATED = [f"examples.{path.parent.name}.{path.stem}"
              for path in sorted(EXAMPLES_DIR.glob("*/*_minimal_regulated.py"))]
+# The team with no split, on the domains that have one: three neutral agents that each hold everything.
+NO_SPLIT = [f"examples.{path.parent.name}.{path.stem}" for path in sorted(EXAMPLES_DIR.glob("*/*_minimal_all.py"))]
 
 
 def test_every_domain_has_its_example_and_cells():
@@ -160,6 +162,30 @@ def test_each_cell_script_sets_its_agents_and_its_cheat_text(name, monkeypatch):
     plan = benchmark.plan(config)
     if n_agents == 1:
         assert plan.holds == {"a01": benchmark.whole_access()}
+
+
+def test_knowledge_work_has_a_team_cell_with_no_split():
+    assert "examples.knowledge_work.worktime_minimal_all" in NO_SPLIT
+
+
+@pytest.mark.parametrize("name", NO_SPLIT)
+def test_each_no_split_cell_gives_every_neutral_agent_everything(name, monkeypatch):
+    module = importlib.import_module(name)
+    script = script_of(name)
+    calls = []
+    monkeypatch.setattr(run, "run", lambda *args, **kwargs: calls.append((args, kwargs)) or 0)
+    monkeypatch.setattr(plots, "plot_run", lambda run_dir, out_dir: [])
+    monkeypatch.setattr("sys.argv", [script.name])
+    assert module.main() == 0
+    [(args, kwargs)] = calls
+    run_name, benchmark, config, model, timeout = args
+    assert kwargs == {} and not hasattr(module, "CHEAT")
+    assert (run_name, model, config.judge) == (script.stem, models.resolve(settings.DEFAULT_MODEL), None)
+    assert (config.n_agents, config.regulator_count, config.disregulator_count) == (3, 0, 0)
+    assert config.preset == "default" and config.access == "all" and config.turn_budget == settings.TURN_BUDGET
+    plan = benchmark.plan(config)
+    assert plan.access == "all" and not plan.split and plan.team and plan.mode == "shared_task"
+    assert plan.holds == {a: benchmark.whole_access() for a in config.names}
 
 
 def test_knowledge_work_swe_and_protein_design_have_a_regulated_cell():
