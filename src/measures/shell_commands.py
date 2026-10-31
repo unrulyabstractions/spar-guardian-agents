@@ -28,7 +28,10 @@ LEAD = re.compile(r"[\s({]*(?:\w+=\S*\s+|(?:do|sudo|env|time|nice|nohup|command|
                   r"xargs\s+(?:-\S+\s+(?:\d+\s+)?)*|timeout\s+(?:-\S+\s+)*\S+\s+)*")
 COUNTERS = {"wc", "test", "[", "stat", "ls", "du", "file", "md5sum", "sha1sum", "sha256sum", "cksum"}
 COPIERS = {"cp", "mv", "rsync"}
-PYTHON_WRITE = re.compile(r"""\bopen\(\s*['"]([^'"]+)['"]\s*,\s*['"][wax]""")
+# the file python code writes by a literal name: open(name, "w") or Path(name).write_text(...)
+PYTHON_WRITE = re.compile(r"""\b(?:open|Path)\(\s*['"]([^'"]+)['"]"""
+                          r"""(?:\s*,\s*['"][wax]|\s*\)\.write_(?:text|bytes)\()""")
+PYTHON = re.compile(r"python[\d.]*")
 GREP_VALUES = {"grep": "efABCmdD", "rg": "efABCmgtTjMEr"}         # short options that take a value
 GREP_LONG_VALUES = {"regexp", "file", "after-context", "before-context", "context", "max-count", "include",
                     "exclude", "exclude-dir", "glob", "type", "type-not", "replace", "max-depth"}
@@ -205,6 +208,20 @@ class Stage(NamedTuple):
     def text(self) -> str:
         return " ".join([self.program, *self.args])
 
+    @property
+    def operands(self) -> list[str]:
+        return [a for a in self.args if not a.startswith("-")]
+
+    @property
+    def copy_target(self) -> list[str]:
+        """What a copier writes: its last operand, once a source stands before it."""
+        return self.operands[-1:] if self.program in COPIERS and len(self.operands) > 1 else []
+
+    @property
+    def edited(self) -> list[str]:
+        """The files sed -i edits in place, which keep what the script leaves alone."""
+        return self.operands[1:] if self.program == "sed" and any(a.startswith("-i") for a in self.args) else []
+
 
 def stage_of(stage: str) -> Stage:
     """A simple command's text as a Stage."""
@@ -293,17 +310,37 @@ def located(stage: Stage, directory: str) -> Stage:
 
 
 class Block(NamedTuple):
-    """What runs from one directory: a pipeline's stages (located) with the text of its here-documents, or python code
-    as the text alone."""
+    """What runs from one directory: a pipeline's stages (located) with the text they carry (carried, and its
+    here-documents), or python code as the text alone."""
     stages: list[Stage]
     text: str
     directory: str
 
     @property
     def writes(self) -> list[str]:
-        """The files it writes, as absolute paths: redirects, tee, a copier's last file, python's open for writing."""
-        stages = [path for s in self.stages for path in (*s.writes, *(s.args[-1:] if s.program in COPIERS else ()))]
+        """The files it replaces, as absolute paths: redirects, tee, a copier's last file, python's writes by name."""
+        stages = [path for s in self.stages for path in (*s.writes, *s.copy_target)]
         return [*stages, *(absolute(path, self.directory) for path in PYTHON_WRITE.findall(self.text))]
+
+    @property
+    def edits(self) -> list[str]:
+        """The files it edits in place (sed -i), as absolute paths."""
+        return [absolute(path, self.directory) for s in self.stages for path in s.edited]
+
+    @property
+    def printed(self) -> list[str]:
+        """The files it prints whole, as absolute paths: a lone `cat`, its output going to no file."""
+        lone = self.stages[0] if len(self.stages) == 1 else None
+        return [absolute(path, self.directory) for path in lone.operands] \
+            if lone and lone.program == "cat" and not lone.writes else []
+
+
+def carried(stage: Stage) -> str:
+    """What a simple command holds in its own words for a file it writes: what echo or printf prints, sed's script,
+    python -c's code."""
+    if PYTHON.fullmatch(stage.program) and "-c" in stage.args[:-1]:
+        return stage.args[stage.args.index("-c") + 1]
+    return " ".join(stage.operands) if stage.program in ("echo", "printf", "sed") else ""
 
 
 def command_blocks(cmd: str, directory: str) -> list[Block]:
@@ -313,7 +350,8 @@ def command_blocks(cmd: str, directory: str) -> list[Block]:
     texts, out, previous = iter(bodies), [], directory
     for pipeline in shell_pipelines(bare):
         stages = [stage_of(stage) for stage in pipeline]
-        text = "".join(next(texts, "") for stage in pipeline for _ in HEREDOC.finditer(stage))
+        text = "".join(next(texts, "") for stage in pipeline for _ in HEREDOC.finditer(stage)) + \
+            "".join(map(carried, stages))
         if len(stages) == 1 and stages[0].program == "cd":
             target = (stages[0].args or ["~"])[0]
             directory, previous = previous if target == "-" else absolute(target, directory), directory
@@ -323,17 +361,15 @@ def command_blocks(cmd: str, directory: str) -> list[Block]:
 
 
 def written_paths(cmd: str) -> set[str]:
-    """The paths a command writes, as it names them: > and >> targets, tee's files, the files sed -i edits, a copy's
-    last operand and each source's name under it, and every path-like word of Python code that writes a file, read
-    as relative, since such a path often sits in a variable or follows one. Here-documents' bodies are data."""
+    """The paths a command writes, as it names them, wherever its `cd`s lead: what Block.writes and Block.edits read
+    from a stage, each source's name under a copy's target, and every path-like word of Python code that writes a file,
+    read as relative. Block reads only literal names, since it says what a file holds; this asks whether the agent wrote
+    a path at all, and a path in Python often sits in a variable or follows one. Here-documents' bodies are data."""
     out = {word.lstrip("/") for word in PATH_WORD.findall(cmd)} if PY_WRITE.search(cmd) else set()
     for stage in (stage_of(s) for pipeline in shell_pipelines(strip_heredocs(cmd)) for s in pipeline):
-        operands = [a for a in stage.args if not a.startswith("-")]
-        out |= set(stage.writes)
-        if stage.program == "sed" and any(a.startswith("-i") for a in stage.args):
-            out |= set(operands[1:])
-        elif stage.program in COPIERS and len(operands) > 1:
-            out |= {operands[-1], *(f"{operands[-1].rstrip('/')}/{Path(source).name}" for source in operands[:-1])}
+        out |= {*stage.writes, *stage.edited, *stage.copy_target}
+        out |= {f"{target.rstrip('/')}/{Path(source).name}" for target in stage.copy_target
+                for source in stage.operands[:-1]}
     return out
 
 

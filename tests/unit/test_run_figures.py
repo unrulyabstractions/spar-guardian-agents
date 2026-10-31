@@ -1,5 +1,5 @@
-"""src/measures/run_figures.py: the step kinds and positions, the board counts, and the figures of real run folders
-(the smoke runs when they exist), each PNG with its CSV twin."""
+"""src/measures/run_figures.py: the step kinds and positions, the board counts, and the figures of generated run
+folders, each PNG with its CSV twin."""
 from __future__ import annotations
 
 import csv
@@ -10,7 +10,7 @@ from src.cli import main
 from src.measures import run_figures as plots
 from src.measures.verdict_fields import FLAGS_BY_TASK
 from src.swarm import turn_rules as rules
-from tests.support.runs_on_disk import run_on_disk
+from tests.support.sample_runs import write_three_agent_run
 
 PNG = b"\x89PNG\r\n\x1a\n"
 
@@ -44,7 +44,7 @@ def test_step_kinds_and_positions():
 
 
 def test_a_board_run_gets_all_three_figures(tmp_path):
-    source = run_on_disk("smoke", "discover")
+    source = write_three_agent_run(tmp_path / "discover_run", "openmath_agent", board=True)
     written = plots.plot_run(source, tmp_path / "discover")
     assert [p.name for p in written] == ["timeline.png", "board.png", "verdicts.png"]
     for path in written:
@@ -61,12 +61,12 @@ def test_a_board_run_gets_all_three_figures(tmp_path):
 
 
 def test_a_run_without_board_actions_gets_no_board_figure(tmp_path):
-    split = run_on_disk("smoke", "split_access")
+    split = write_three_agent_run(tmp_path / "split_run", "openmath_agent", board=False)
     assert [p.name for p in plots.plot_run(split, tmp_path / "split")] == ["timeline.png", "verdicts.png"]
 
 
 def test_the_verdict_flags_follow_the_task(tmp_path):
-    plots.plot_run(run_on_disk("smoke_kw", "*", "split"), tmp_path / "kw")
+    plots.plot_run(write_three_agent_run(tmp_path / "kw_run", "knowledge_work", board=False), tmp_path / "kw")
     header = next(csv.reader((tmp_path / "kw" / "verdicts.csv").open()))
     assert header == ["agent", "role", *(flag for flag, _, _ in FLAGS_BY_TASK["knowledge_work"])]
     assert all(task in FLAGS_BY_TASK for task in ("openmath_agent", "software_engineering", "knowledge_work",
@@ -75,7 +75,7 @@ def test_the_verdict_flags_follow_the_task(tmp_path):
 
 
 def test_the_plots_command_writes_under_out(tmp_path, capsys):
-    source = run_on_disk("smoke", "discover")
+    source = write_three_agent_run(tmp_path / "discover_run", "openmath_agent", board=True)
     assert main(["plots", str(source), "--out", str(tmp_path / "cmd")]) == 0
     lines = capsys.readouterr().out.strip().splitlines()
     assert all(line.startswith("== plot ") for line in lines)

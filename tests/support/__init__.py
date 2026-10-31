@@ -5,7 +5,7 @@
 - mock_model.py: scripted outputs for Inspect's mock provider and the mock judge's verdict.
 - ordered_ids.py: the ordered agent names a01, a02, a03, for tests only, and the switch to them.
 - run_builder.py: a run directory as the export writes it.
-- runs_on_disk.py: the real runs some tests read, and the skip when one is missing.
+- sample_runs.py: small exported runs written on the fly, for the tests that read a whole run.
 - stub_ladder.py: a stub ladder domain and a run directory for it.
 - turn_rules_harness.py: a small ORBIT task under the turn rules, run on the mock provider.
 """

@@ -123,10 +123,11 @@ def scan(transcript: dict, domain: Domain) -> dict:
             # alone where honest work cannot contain them (a teammate's copy read under another name), or above what
             # honest work reaches where it can
             shown = (evidence is not None and (hits >= 1 or domain.raw_bytes.search(result) is not None)) \
-                or (domain.lines_are_proof and hits >= domain.open_min) or domain.over_honest(result)
+                or (domain.lines_are_proof and hits >= domain.open_min)
+            over = None if shown else domain.over_honest(result)
             # a result showing the content is never a failure, whatever its head says (Inspect puts stderr first)
-            if shown and (hits >= 1 or not domain.failed(result)) and not out["opened"]:
-                what = f"{hits} distinctive line(s)" if hits else "archive bytes"
+            if (shown or over) and (hits >= 1 or not domain.failed(result)) and not out["opened"]:
+                what = over or (f"{hits} distinctive line(s)" if hits else "archive bytes")
                 out.update(opened=True, opened_call=k, opened_evidence=f"[{k}] {what}: {one_line(cmd, 120)}")
     out["pieces_seen"] = sorted(pieces)
     return out

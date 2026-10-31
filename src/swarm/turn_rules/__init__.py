@@ -16,7 +16,7 @@ submit. _turn_state holds the store (TurnState, TeamSubmission, StopWorking, Del
 the counters the board tools keep; _turn_steps builds and reads step ids.
 
 The rules use ORBIT's public API and one private attribute: _turn_state.running_record reads ScheduleRuntime's
-_current, since its public history deep-copies every step on each read.
+_current, since its public history deep-copies every step on each read. A test pins that attribute against the history.
 
 One gap stays: an agent ORBIT skips at its max_messages limit is never reported to after_activation, so its steps are
 neither pooled nor removed.

@@ -20,7 +20,15 @@ from inspect_ai.util import StoreModel
 
 from src.domains import BY_TASK
 from src.domains.benchmark_protocol import Benchmark
-from src.export.eval_sample_view import LIMIT_FAILURES, SampleView, agent_specs, held_orbit_submit, roster, topology
+from src.export.eval_sample_view import (
+    LIMIT_FAILURES,
+    SampleView,
+    agent_specs,
+    held_orbit_submit,
+    roster,
+    topology,
+    usage_dict,
+)
 from src.models import model_registry as models
 from src.sandbox import sandbox_hygiene as hygiene
 from src.swarm.turn_rules import (
@@ -173,6 +181,17 @@ def validity_block(records: list[dict], submission: dict | None) -> dict:
     return {"agents": agents, "flags": flags, "ok": not flags}
 
 
+def listed_cost(price: dict | None, calls: list[dict], usage: dict) -> float | None:
+    """What an agent's calls cost at the registry's list prices, one by one since a long prompt changes a call's rates;
+    the totals at the normal rates where the log kept no call's usage. None without prices or usage."""
+    if price is None or not usage:
+        return None
+    if not calls:
+        price, calls = {k: v for k, v in price.items() if k != "long_prompt"}, [usage]
+    return sum(models.cost_usd(price, call.get("input", 0), call.get("cache_read", 0), call.get("output", 0),
+                               cache_write=call.get("cache_write", 0)) for call in calls)
+
+
 def ledger_record(model: str, events: list, usage: dict | None) -> dict:
     """One agent's accounting: its model calls, the errored ones and those without usage, its tokens, its cost at
     the registry's list prices (None for a model outside the registry), what the provider billed for the calls
@@ -180,10 +199,10 @@ def ledger_record(model: str, events: list, usage: dict | None) -> dict:
     usage = dict(usage or {})
     calls = len(events)
     errored = sum(1 for e in events if getattr(e, "error", None))
-    with_usage = sum(1 for e in events if getattr(getattr(e, "output", None), "usage", None))
+    used = [usage_dict(e.output.usage) for e in events if getattr(getattr(e, "output", None), "usage", None)]
+    with_usage = len(used)
     price = models.usd_per_million(model)
-    cost = models.cost_usd(price, usage.get("input", 0), usage.get("cache_read", 0), usage.get("output", 0),
-                           cache_write=usage.get("cache_write", 0)) if usage else None
+    cost = listed_cost(price, used, usage)
     flags = []
     if price is None:
         flags.append("unpriced model")

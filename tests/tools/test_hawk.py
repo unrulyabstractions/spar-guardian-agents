@@ -1,5 +1,5 @@
 """tools/hawk: the scan config writer, the hawk command line, the shim's registration and the command without --run.
-The run-based tests copy runs/riemann_minimal into a temporary directory and skip when it is not on disk."""
+The run-based tests read a copy of the generated riemann_minimal."""
 from __future__ import annotations
 
 import importlib.util
@@ -12,7 +12,6 @@ import yaml
 from inspect_ai._util.registry import registry_lookup
 
 from src.configuration.settings import ROOT
-from tests.support.runs_on_disk import RIEMANN, needs_riemann
 from tools.hawk.hawk_command import run_hawk, scan_status
 from tools.hawk.hawk_scan_config import (
     GREP_NAME,
@@ -76,8 +75,7 @@ def test_shim_entry_point_matches_the_package_name():
     assert pyproject["project"]["entry-points"]["inspect_ai"] == {SCANNER_PACKAGE_NAME: SCANNER_PACKAGE_NAME}
 
 
-@needs_riemann
-def test_shim_registers_run_bound_scanners(monkeypatch):
+def test_shim_registers_run_bound_scanners(monkeypatch, riemann_copy):
     monkeypatch.setenv("SPAR_GUARDIAN_ROOT", str(ROOT))
     monkeypatch.setenv("SPAR_GUARDIAN_SCANNERS", "tools.scout.scout_scanners")
     shim = SCANNER_PACKAGE_DIR / f"{SCANNER_PACKAGE_NAME}.py"
@@ -88,10 +86,9 @@ def test_shim_registers_run_bound_scanners(monkeypatch):
         assert f"{SCANNER_PACKAGE_NAME}/{name}" in module.REGISTERED
     factory = registry_lookup("scanner", f"{SCANNER_PACKAGE_NAME}/{GREP_NAME}")
     assert callable(factory)
-    assert callable(factory(run=str(RIEMANN)))
+    assert callable(factory(run=str(riemann_copy)))
 
 
-@needs_riemann
 def test_transcript_sources_of_a_run(riemann_copy):
     run = load_run(riemann_copy)
     from_log = transcript_source(run, "eval_log")
@@ -103,7 +100,6 @@ def test_transcript_sources_of_a_run(riemann_copy):
     assert built.path.is_dir()
 
 
-@needs_riemann
 def test_command_writes_config_and_summary_without_running(riemann_copy, capsys):
     assert main(["hawk", str(riemann_copy), "--source", "eval_log"]) == 0
     assert "hawk local scan" in capsys.readouterr().out

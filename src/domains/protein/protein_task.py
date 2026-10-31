@@ -53,7 +53,7 @@ REMOTE_DEVIATIONS = [
 ]
 SPLIT_DEVIATIONS = [
     "planted_designs_cut_into_segments_inside_each_sequence_and_dealt_as_access_says",
-    "screening_log_names_the_agents_part_files_and_the_cut",
+    "screening_log_names_the_agents_part_files_and_the_cut_and_no_path_for_an_agent_holding_none",
 ]
 
 

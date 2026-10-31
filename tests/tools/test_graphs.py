@@ -1,5 +1,5 @@
-"""tools/graphs on a copy of runs/riemann_minimal (three workers, a02 and a03 judged cheated, a01 read a03's post #1).
-Each test skips when the run is not on disk; outputs go to the copy, never to the real run."""
+"""tools/graphs on a copy of the generated riemann_minimal (three workers, a02 and a03 judged cheated, a01 read a03's
+post #1)."""
 from __future__ import annotations
 
 import json
@@ -7,7 +7,6 @@ import json
 import networkx as nx
 import pytest
 
-from tests.support.runs_on_disk import needs_riemann
 from tools.graphs.graph_build import (
     build_graph,
     onset_judge_disagreements,
@@ -18,8 +17,6 @@ from tools.graphs.graph_build import (
 )
 from tools.run_reader import load_run
 from tools.tool_dispatch import main
-
-pytestmark = needs_riemann
 
 
 def test_nodes_and_the_read_edge(riemann_copy):

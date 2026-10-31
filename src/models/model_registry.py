@@ -4,8 +4,8 @@
     resolve("mockllm/model")                 -> "mockllm/model"
     provider_of("deepseek/deepseek-v4-pro")  -> "deepseek"
     key_env("deepseek/deepseek-v4-pro")      -> ["DEEPSEEK_API_KEY"]
-    usd_per_million("gpt-6-sol")             -> {"input": 2.0, "cached_input": 0.2, "output": 10.0}
-    usd_per_million("gpt-6-sol", batch=True) -> {"input": 1.0, "cached_input": 0.1, "output": 5.0}
+    usd_per_million("gpt-5")                 -> {"input": 1.25, "cached_input": 0.125, "output": 10.0}
+    usd_per_million("gpt-5", batch=True)     -> {"input": 0.625, "cached_input": 0.0625, "output": 5.0}
     cost_usd(usd_per_million("gpt-6-sol"), input_tokens=1000, cached_tokens=0, output_tokens=100)  -> 0.003
     model_args("deepseek-flash-openrouter")  -> {"provider": {"order": ["deepinfra"], "allow_fallbacks": False}}
     check_routing("openrouter/x/y")          -> ValueError: an OpenRouter model without a `routing`
@@ -109,24 +109,34 @@ def prepare_env(model: str) -> None:
 
 
 def usd_per_million(name: str, batch: bool = False) -> dict | None:
-    """The entry's prices in USD per million tokens (input, output, maybe cached_input), or None.
+    """The entry's prices in USD per million tokens (input, output, maybe cached_input, cache_write and long_prompt),
+    or None.
 
     With batch, a route with a batch_discount (OpenAI, Anthropic and Google bill batch calls at half) gives the
     batch prices; a route without one gives the list prices."""
     entry = entry_of(name)
     if entry is None:
         return None
-    discount = providers()[entry["provider"]].get("batch_discount") if batch else None
-    return {k: v * discount if discount else v for k, v in entry["usd_per_million"].items()}
+    discount = (providers()[entry["provider"]].get("batch_discount") if batch else None) or 1
+
+    def scaled(rates: dict) -> dict:
+        return {k: v * discount for k, v in rates.items() if k != "over"}
+
+    long_prompt = entry.get("long_prompt")
+    return {**scaled(entry["usd_per_million"]),
+            **({"long_prompt": {"over": long_prompt["over"], **scaled(long_prompt)}} if long_prompt else {})}
 
 
 def cost_usd(prices: dict | None, input_tokens: int, cached_tokens: int, output_tokens: int,
              cache_write: int = 0) -> float | None:
-    """What the tokens cost at these prices (usd_per_million): cache reads at the cached rate, cache writes at the
-    write rate (the input rate where the entry has none), the other input at the input rate, output at the output
-    rate. input_tokens counts the reads and the writes. None without prices."""
+    """What one call's tokens cost at these prices (usd_per_million): cache reads at the cached rate, cache writes at
+    the write rate (the input rate where the entry has none), the other input at the input rate, output at the output
+    rate. input_tokens counts the reads and the writes. A prompt over the entry's long_prompt line pays those rates on
+    every token, so a sum of calls is priced call by call. None without prices."""
     if not prices:
         return None
+    long_prompt = prices.get("long_prompt")
+    prices = long_prompt if long_prompt and input_tokens > long_prompt["over"] else prices
     cached_rate = prices.get("cached_input", prices["input"])
     write_rate = prices.get("cache_write", prices["input"])
     return ((input_tokens - cached_tokens - cache_write) * prices["input"] + cached_tokens * cached_rate

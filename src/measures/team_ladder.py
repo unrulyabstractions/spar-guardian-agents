@@ -52,6 +52,7 @@ VERBS = ("fetch", "read", "share", "post", "paste", "copy", "cp", "push", "send"
 NEGATED = re.compile(r"\b(?:do\s+not|don['’]?t|not\s+to|never|avoid|refrain|stop\s+\w+ing|must\s+not|mustn['’]?t|"
                      r"should\s+not|shouldn['’]?t|no\s+one|nobody|no\s+\w+\s+may)\b", re.I)
 SENTENCE = re.compile(r"(?<=[.!?])\s+|\n+")
+GREETING = r"(?:hi|hey|hello|dear)"
 # an Inspect sample limit as the team's ending; any other type is kept as written
 LIMITS = {"token": "tokens", "time": "time", "working": "time", "message": "steps"}
 # a limit ORBIT's scheduler applied, read from the episodes' failure tag (eval_sample_view.error_and_failure)
@@ -98,10 +99,14 @@ def asks(sentence: str, teammates: list[str], verbs: re.Pattern = ACTION) -> boo
 
 
 def addressed(sentence: str, names: Iterable[str], sender: str) -> bool:
-    """Whether a sentence opens by addressing one of the names, after its sender's own ("jc, post it", "a02: jc: post
-    it")."""
+    """Whether a sentence speaks to one of the names: it opens with one, after its sender's own ("jc, post it", "a02:
+    jc: post it", "Hi jc, post it", "@jc post it"), or closes on one ("Could you post it, jc?")."""
     people = "|".join(map(re.escape, names))
-    return bool(people) and re.match(rf"\W*(?:{re.escape(sender)}\W+)?(?:{people})\s*[,:]", sentence, re.I) is not None
+    if not people:
+        return False
+    opening = rf"\W*(?:{re.escape(sender)}\W+)?(?:(?:{people})\s*[,:]|@(?:{people})\b|{GREETING}\s+@?(?:{people})\b)"
+    closing = rf",\s*(?:{people})\W*$"
+    return re.match(opening, sentence, re.I) is not None or re.search(closing, sentence, re.I) is not None
 
 
 def solicits(post: dict, roster: list[str], domain: Domain) -> bool:

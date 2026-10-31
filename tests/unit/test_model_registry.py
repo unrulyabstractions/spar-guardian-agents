@@ -94,15 +94,46 @@ def test_the_defaults_are_entries_with_prices():
     assert judge["status"] in ("judge", "default") and judge["judge_entry"] == settings.JUDGE_MODEL
     judges = yaml.safe_load(settings.JUDGE_MODELS_CONFIG.read_text())
     assert judges[judge["judge_entry"]]["model"] == judge["inspect"]
-    assert models.usd_per_million(settings.JUDGE_MODEL) == judge["usd_per_million"]
+    assert {k: v for k, v in models.usd_per_million(settings.JUDGE_MODEL).items() if k != "long_prompt"} == \
+        judge["usd_per_million"]
     assert models.usd_per_million("mockllm/model") is None
     assert isinstance(models.registry()["as_of"], type(yaml.safe_load("2026-10-27")))
 
 
 def test_batch_prices_follow_the_route_discount():
-    assert models.usd_per_million("gpt-6-sol", batch=True) == {"input": 1.0, "cached_input": 0.1, "output": 5.0}
+    assert models.usd_per_million("gpt-5", batch=True) == {"input": 0.625, "cached_input": 0.0625, "output": 5.0}
     assert models.usd_per_million("claude-opus-5-5", batch=True)["output"] == 10.0
     assert models.usd_per_million("deepseek-v4-pro", batch=True) == models.usd_per_million("deepseek-v4-pro")
+
+
+@pytest.mark.parametrize(("entry", "write"), [
+    ("gpt-6-luna", 0.125), ("gpt-6-sol", 2.50), ("gpt-6.1-sol", 2.50), ("gpt-6.1-terra", 1.25), ("gpt-6-astra", 12.50),
+    ("gpt-5.6-sol", 5.00), ("gpt-5.6-terra", 2.50), ("gpt-5.6-luna", 0.25)])
+def test_openai_lists_a_write_rate_and_batch_halves_it(entry, write):
+    """developers.openai.com/api/docs/pricing, the 30m write column: 1.25 times the input rate."""
+    assert models.usd_per_million(entry)["cache_write"] == write == 1.25 * models.usd_per_million(entry)["input"]
+    assert models.usd_per_million(entry, batch=True)["cache_write"] == write / 2
+    assert models.usd_per_million(entry)["long_prompt"]["over"] == 272_000
+    assert models.usd_per_million(entry, batch=True)["long_prompt"]["cache_write"] == write
+
+
+def test_a_prompt_over_the_line_pays_the_long_rates_on_every_token():
+    """Claude Haiku 5.5 over 100,000 prompt tokens: 0.50 in, 0.625 written, 0.05 read, 2.50 out. game runs held five
+    such calls, up to 106,119 tokens. The line counts reads and writes, and a prompt exactly on it stays below."""
+    prices = models.usd_per_million("claude-haiku-5-5")
+    below = (100_000 - 90_000 - 1_000) * 0.10 + 90_000 * 0.01 + 1_000 * 0.125 + 2_000 * 0.50
+    assert models.cost_usd(prices, 100_000, 90_000, 2_000, cache_write=1_000) == pytest.approx(below / 1e6)
+    above = (100_001 - 90_000 - 1_000) * 0.50 + 90_000 * 0.05 + 1_000 * 0.625 + 2_000 * 2.50
+    assert models.cost_usd(prices, 100_001, 90_000, 2_000, cache_write=1_000) == pytest.approx(above / 1e6)
+    # a batch call pays half of them, and an entry with no line pays its one rate
+    batch = models.usd_per_million("claude-haiku-5-5", batch=True)
+    assert models.cost_usd(batch, 100_001, 90_000, 2_000, cache_write=1_000) == pytest.approx(above / 2e6)
+    plain = models.usd_per_million("gpt-5")
+    assert models.cost_usd(plain, 10**6, 0, 0) == 1.25
+    # gpt-6-luna's line: the judge sent prompts up to 701,954 tokens
+    luna = models.usd_per_million("gpt-6-luna")
+    assert models.cost_usd(luna, 300_000, 0, 1_000) == pytest.approx((300_000 * 0.20 + 1_000 * 0.75) / 1e6)
+    assert models.cost_usd(luna, 272_000, 0, 1_000) == pytest.approx((272_000 * 0.10 + 1_000 * 0.50) / 1e6)
 
 
 def test_the_judge_price_comes_from_the_judge_entry_model():
