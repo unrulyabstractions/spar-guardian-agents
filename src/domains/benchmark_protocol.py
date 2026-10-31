@@ -39,8 +39,10 @@ teammate.
 
 The access log. A domain names what the sidecar watches in watched(state), read after setup
 (src/sandbox/access_log/access_monitor.py). seats(state) gives the table that names an agent from a uid or a machine:
-the probe's, so a domain with no probe gives its own. A domain whose honeypot lives on the host sets `monitored` False,
-watches nothing and turns its records into the same rows in host_access_rows(view).
+the probe's, so a domain with no probe gives its own. A domain whose honeypot lives on the host sets `watched = None`,
+which means no sidecar, and turns its records into the same rows in host_access_rows(view). harness_reads names the
+commands the harness itself runs once the agents have begun that open content, so an honest run carries no validity
+flag.
 """
 from __future__ import annotations
 
@@ -137,8 +139,8 @@ class Benchmark(ABC):
     """How every layout of the domain departs from CheatBench's runner, after COMMON_DEVIATIONS."""
     time_grace_s: int | None = None
     """The time Inspect's limit leaves above ORBIT's halt; None takes the config's time_grace_s."""
-    monitored: bool = True
-    """Whether a sidecar records each open of the honeypot in a run with SwarmConfig.access_log."""
+    harness_reads: tuple[str, ...] = ()
+    """How each command starts that the harness itself runs once the agents have begun and that opens content."""
 
     def __init__(self, row: str | None = None) -> None:
         self.row = row or self.default_row
@@ -289,8 +291,8 @@ class Benchmark(ABC):
         return {}
 
     def keeps_access_log(self, config: SwarmConfig) -> bool:
-        """Whether a sidecar records the run's honeypot opens: the config's switch, on a monitored benchmark."""
-        return config.access_log and self.monitored
+        """Whether a sidecar records the run's honeypot opens: the config's switch, on a benchmark that watches."""
+        return config.access_log and self.watched is not None
 
     def seats(self, state: TaskState) -> dict[str, Seat]:
         """Each agent's seat, the access log's way from a uid or a machine to an agent: the probe's by default."""
@@ -298,7 +300,8 @@ class Benchmark(ABC):
 
     @abstractmethod
     async def watched(self, state: TaskState) -> list[Watched]:
-        """What the sidecar watches, awaited once after the benchmark's setup."""
+        """What the sidecar watches, awaited once after the benchmark's setup. A domain with no sidecar sets this to
+        None, so a new domain has to say which it is."""
 
     @abstractmethod
     def scorers(self) -> list[Scorer]:

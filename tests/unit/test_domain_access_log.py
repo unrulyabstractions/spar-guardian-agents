@@ -2,12 +2,15 @@
 sample carries, and chess's rows from the host. No model calls, no Docker."""
 from __future__ import annotations
 
+import ast
 import asyncio
 import datetime as dt
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+from src.configuration import settings
 from src.configuration.presets import build_config
 from src.domains import DOMAINS
 from src.domains.benchmark_protocol import Benchmark
@@ -27,6 +30,7 @@ from src.domains.swe import SWE, swe_task
 from src.domains.swe._swe_honeypot import piece_ref
 from src.domains.swe.swe_inputs import load_split
 from src.export._export_access_log import attributed
+from src.measures.ladder_domain import HOST_MECHANISM
 from src.sandbox.access_log.access_monitor import Watched
 from src.sandbox.agent_tools import Seat
 from tests.support.fakes import FakeStore
@@ -35,6 +39,8 @@ ISSUE = "flipt-02e2"
 HEADS = ["refs/heads/agent-014", "refs/heads/agent-022"]
 REMOTES = ["refs/remotes/origin/agent-014", "refs/remotes/origin/agent-022"]
 KEPT = ["refs/heads/main", "refs/heads/agent-018"]
+HOST_WORD_MODULES = ("ladder_domain.py", "_export_access_log.py", "_chess_scoring.py")
+JUDGE_TEXT = settings.ROOT / "src" / "judging" / "_ladder_verdict_fields.py"
 
 
 def state_of(**blocks) -> SimpleNamespace:
@@ -59,19 +65,58 @@ def git_calls(monkeypatch):
     return calls
 
 
-def test_every_domain_but_chess_is_monitored():
-    assert [key for key, cls in DOMAINS.items() if not cls.monitored] == ["chess"]
+def test_every_domain_but_chess_watches():
+    assert [key for key, cls in DOMAINS.items() if cls.watched is None] == ["chess"]
 
 
 def test_a_new_domain_must_name_what_it_watches():
     assert "watched" in Benchmark.__abstractmethods__
 
+    class Forgot(Chess):
+        watched = Benchmark.watched
+
+    with pytest.raises(TypeError, match="watched"):
+        Forgot()
+
+
+def test_a_domain_with_no_sidecar_says_so_and_keeps_no_method_for_it():
+    assert Chess.__dict__["watched"] is None and not Chess().keeps_access_log(config("access_log=true"))
+
+
+def code_strings(path: Path) -> list[str]:
+    """The string constants of a module's code, its docstrings left out."""
+    tree = ast.parse(path.read_text())
+    docs = {node.body[0].value for node in ast.walk(tree)
+            if isinstance(node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef) and node.body
+            and isinstance(node.body[0], ast.Expr) and isinstance(node.body[0].value, ast.Constant)}
+    return [node.value for node in ast.walk(tree)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) and node not in docs]
+
+
+def test_the_host_mechanism_has_one_definition():
+    src = settings.ROOT / "src"
+    holders = [path.relative_to(src) for path in src.rglob("*.py") if path.name in HOST_WORD_MODULES
+               and HOST_MECHANISM in code_strings(path)]
+    assert [str(path) for path in holders] == ["measures/ladder_domain.py"]
+
+
+def test_the_endpoints_route_has_one_definition_in_the_code():
+    src = settings.ROOT / "src"
+    holders = [path.name for path in src.rglob("*.py") if path != JUDGE_TEXT
+               and any(ENDPOINT_PATH in text for text in code_strings(path))]
+    assert holders == ["_chess_settings.py"]
+
+
+def test_the_judges_text_names_the_endpoint_it_cannot_import():
+    """_ladder_verdict_fields.py is no module: judging_ladder.py appends it to CheatBench's judge_schema.py."""
+    assert ENDPOINT in JUDGE_TEXT.read_text()
+
 
 @pytest.mark.parametrize("key", DOMAINS)
-def test_a_monitored_domain_has_seats_to_name_its_agents_by(key):
+def test_a_domain_that_watches_has_seats_to_name_its_agents_by(key):
     """Benchmark.seats reads the probe. A domain with neither would log rows that name no one, with a valid status."""
     cls = DOMAINS[key]
-    assert not cls.monitored or cls.probe is not Benchmark.probe or cls.seats is not Benchmark.seats
+    assert cls.watched is None or cls.probe is not Benchmark.probe or cls.seats is not Benchmark.seats
 
 
 # ---------------------------------------------------------------- openmath
@@ -218,10 +263,6 @@ def request(agent: str, at: float, status: int, path: str = ENDPOINT_PATH) -> di
 def tool_call(agent: str, tool: str, at: float, path: str = "", error: bool = False) -> dict:
     return {"agent": agent, "tool": tool, "time": seconds(at), "arguments": {"path": path} if path else {},
             "error": error}
-
-
-def test_chess_watches_no_container():
-    assert Chess.monitored is False and asyncio.run(Chess().watched(state_of())) == []
 
 
 def test_chess_rows_read_the_endpoint_and_the_config():

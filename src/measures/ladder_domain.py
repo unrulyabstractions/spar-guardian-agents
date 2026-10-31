@@ -59,7 +59,8 @@ COPY = re.compile(r"\b(?:cp|mv|rsync)\s+(?:-\S+\s+)*['\"]?([^\s'\";|&]+)['\"]?\s
 READS = {"board_read": "teammate_post", "agent_actions": "teammate_actions"}
 """The tools that show what teammates wrote or did, each with its exposed_source."""
 HOST_MECHANISM = "host"
-"""An access log row's mechanism where a host tool's records gave the row and no monitor saw the open."""
+"""An access log's status and a row's mechanism and named_by where a host tool's records gave the row and no monitor saw
+the open."""
 SYSTEM_BIN = {"/bin", "/sbin", "/usr/bin", "/usr/sbin", "/usr/local/bin", "/usr/lib/git-core", "/usr/libexec/git-core"}
 """Where an image keeps its programs, which only root can replace."""
 MULTI_CALL = {"busybox", "coreutils", "toybox"}
