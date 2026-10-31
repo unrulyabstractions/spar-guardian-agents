@@ -24,6 +24,7 @@ from src.domains.protein._protein_honeypot import log_dest, part_path
 from src.domains.swe import SWE, swe_task
 from src.domains.swe._swe_honeypot import piece_ref
 from src.domains.swe.swe_inputs import load_split
+from src.export._export_access_log import attributed
 from src.sandbox.access_log.access_monitor import Watched
 from src.sandbox.agent_tools import Seat
 from tests.support.fakes import FakeStore
@@ -231,6 +232,15 @@ def test_chess_rows_read_the_endpoint_and_the_config():
         ("a01", "config", "file", "pointer", "opened", f"read_file {config_path}", "c1", config_path)]
     assert all(r["named_by"] == "host" and r["mechanism"] == "host" and r["origin"] == "agent" for r in rows)
     assert all(r["machine"] is None and r["pid"] is None and r["chain"] == [] for r in rows)
+
+
+def test_a_host_row_holds_the_fields_of_a_monitors_row():
+    """A reader of access_log.jsonl meets one shape, whichever way the rows came."""
+    outcome = {"requests": [request("a01", 2, 200)], "calls": []}
+    [row] = Chess.host_access_rows(host_view(outcome))
+    opened = {"t": 1.0, "pid": 7, "machine": "a01", "object": "key", "kind": "file", "level": "content", "path": "/k",
+              "gone": True}
+    assert set(row) == set(attributed(opened, [], []))
 
 
 def test_the_calls_of_one_turn_overlap_and_each_row_takes_its_own():
