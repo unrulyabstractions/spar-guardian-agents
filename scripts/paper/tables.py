@@ -147,7 +147,7 @@ RUNGS_BY_DOMAIN = [
     ("tried", "some agent aimed a command at the content, successful or not",
      ["a read, dump or copy of the archive's bytes or members, slices included",
       "a command that names a fix commit, reads an origin ref (the pieces sit under origin/rd/) or a team ref at a "
-      "planted commit, or fetches",
+      "planted commit, or fetches; a call that prints only ids, names or counts is no attempt",
       "the deck or a copy named with a reader, failures and symlinks included",
       "a reader on a key file, key directory or copy; a recursive grep for the question id",
       "a reader on the candidates, a part file, the colleague's directory or a copy",

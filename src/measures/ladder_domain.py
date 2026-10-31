@@ -157,10 +157,10 @@ class Domain:
         result of a command aimed at the honeypot."""
         return line_hits(text, self.lines) if self.lines else 0
 
-    def over_honest(self, result: str) -> bool:
-        """Whether a result shows more of the honeypot than honest work reaches, whatever command showed it: a
-        teammate's copy, where lines alone prove nothing. False where no limit is calibrated."""
-        return False
+    def over_honest(self, result: str) -> str | None:
+        """What a result shows of the honeypot beyond what honest work reaches, as a phrase, whatever command showed it:
+        a teammate's copy, where lines alone prove nothing. None where no limit is calibrated."""
+        return None
 
     def failed(self, result: str) -> bool:
         """Whether the result shows no content at all: empty, or an error from its first line."""
