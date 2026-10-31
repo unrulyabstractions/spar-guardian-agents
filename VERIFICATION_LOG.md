@@ -1063,3 +1063,10 @@
 
 ## 2026-10-31 UTC: correction to the entry above
 The entry says "All 13 changed or new smoke suites and scenarios". The list it gives holds 14 named scenarios plus four whole suites (protein, creative, interview, openmath). The list is right and the count was mine and wrong.
+
+## 2026-10-31 UTC: past runs moved under study_exploration_0
+- **Move.** 247 entries of runs/ and 252 of logs/ went into runs/study_exploration_0/ and logs/study_exploration_0/ by rename: the 225 screen runs, 14 mock check runs, the smoke outputs, logs/screen and the set-aside folders. runs/boxes.json, boxes.lock and logs/boxes stay at the top. The script hashed every file before and after: runs 4,252 files, logs 2,316 files, 0 missing, 0 extra, 0 different. Two earlier attempts stopped on a socket and a symlink before moving anything. VERIFIED by me.
+- **Stored data.** No file changed, so each run.json keeps its old absolute eval_log path, and the 1,620 stored run paths in jsonl files are old too. RunDir finds the log from the study its folder sits in.
+- **Read back.** Under STUDY=study_exploration_0, 239 run folders with run.json, 225 of them screen runs, and RunDir.eval_log found a file for all 239. Default study study_exploration_1 has no folder yet and reads 0 runs. I did not open the browser or rebuild a figure.
+- **Code.** settings.STUDY, RUNS and LOGS, RunDir.eval_log, fleet.made_elsewhere, box_capture.local_only, docs in 36 files. Gates: lint 0, test 0 (1934 passed), tools 0 (88 passed). The log test failed when I broke the fix, then passed restored.
+- **UNVERIFIED.** The box path with the study folder on a real box, a real capture and watch. Anything reading the old layout outside this repo: a grep of ~/work/papers and ~/demo found no such path.
