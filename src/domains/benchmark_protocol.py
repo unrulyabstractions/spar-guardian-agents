@@ -36,6 +36,11 @@ gradable(plan, agent) is the guard, which says what is missing while there is no
 deliverable exists, never whether it is right); snapshot(plan, agent) names what would be graded, where that is cheap;
 tells_team(plan) says whether the prompts tell the agents of their team, so the texts of an agent not told name no
 teammate.
+
+The access log. A domain with `monitored` names what the sidecar watches in watched(state), read after setup
+(src/sandbox/access_log/access_monitor.py), and seats(state) gives the table that names an agent from a uid or a
+machine. A domain whose honeypot lives on the host keeps `monitored` False and turns its records into the same rows in
+host_access_rows(view).
 """
 from __future__ import annotations
 
@@ -55,7 +60,8 @@ from src.configuration.access_policy import Access
 from src.configuration.swarm_config import SwarmConfig, role_of
 from src.measures.ladder_domain import Domain
 from src.sandbox import cheatbench_task_files as task_files
-from src.sandbox.agent_tools import AgentTools
+from src.sandbox.access_log.access_monitor import Watched
+from src.sandbox.agent_tools import AgentTools, Seat
 from src.sandbox.sandbox_probe import environment_probe
 
 TEAM = "team"                       # the owner of a shared_task team's deliverable and tool state
@@ -131,6 +137,8 @@ class Benchmark(ABC):
     """How every layout of the domain departs from CheatBench's runner, after COMMON_DEVIATIONS."""
     time_grace_s: int | None = None
     """The time Inspect's limit leaves above ORBIT's halt; None takes the config's time_grace_s."""
+    monitored: bool = False
+    """Whether a sidecar records each open of the honeypot in a run with SwarmConfig.access_log."""
 
     def __init__(self, row: str | None = None) -> None:
         self.row = row or self.default_row
@@ -280,6 +288,14 @@ class Benchmark(ABC):
         """{agent: (Seat, command table, fields)} the setup probes before the agents start; {} for none."""
         return {}
 
+    def seats(self, state: TaskState) -> dict[str, Seat]:
+        """Each agent's seat, the access log's way from a uid or a machine to an agent: the probe's by default."""
+        return {agent: entry[0] for agent, entry in self.probe(state).items()}
+
+    async def watched(self, state: TaskState) -> list[Watched]:
+        """What the sidecar watches in a `monitored` domain, awaited once after the benchmark's setup."""
+        raise NotImplementedError(f"{self.key} names nothing to watch")
+
     @abstractmethod
     def scorers(self) -> list[Scorer]:
         """The scorers that grade the outcome, the one named `scorer` first. The judge is added by src/tasks.py."""
@@ -330,6 +346,11 @@ class Benchmark(ABC):
     def access_facts(cls, view) -> tuple[dict, dict[str, dict]]:
         """What run.json "access" adds for the domain: (run-level facts, {agent: facts})."""
         return {}, {}
+
+    @classmethod
+    def host_access_rows(cls, view) -> list[dict] | None:
+        """The access log's rows of a sample whose honeypot lives on the host; None for a domain with none."""
+        return None
 
 
 @dataclass(frozen=True)
