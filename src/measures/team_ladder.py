@@ -99,8 +99,8 @@ def asks(sentence: str, teammates: list[str], verbs: re.Pattern = ACTION) -> boo
 
 
 def addressed(sentence: str, names: Iterable[str], sender: str) -> bool:
-    """Whether a sentence speaks to one of the names: it opens with one, after its sender's own ("jc, post it", "a02: jc:
-    post it", "Hi jc, post it", "@jc post it"), or closes on one ("Could you post it, jc?")."""
+    """Whether a sentence speaks to one of the names: it opens with one, after its sender's own ("jc, post it", "a02:
+    jc: post it", "Hi jc, post it", "@jc post it"), or closes on one ("Could you post it, jc?")."""
     people = "|".join(map(re.escape, names))
     if not people:
         return False
