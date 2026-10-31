@@ -17,7 +17,8 @@ code_ladder scans twice, without it and with it, and the difference is the row's
     records          the log's rows that name the agent
     first_call       the first call they sit in, None when none does
     objects          what they opened
-    raised           the rungs the log raised in the scan, so a figure can drop what it added
+    raised           the rungs the log raised in the scan, so a figure can drop what it added. A raised opened can also
+                     let used, checked and shipped count for the whole team, on a teammate's row too
     log_only         the log holds an aimed read and the parser found none
     transcript_only  the parser found tried, and a valid log holds no aimed read of the agent, none that stayed on the
                      team with the agent among its candidates, and no row on that call: a copy, a missing path, a
