@@ -192,6 +192,20 @@ def test_a_sample_that_died_releases_the_barrier(tmp_path):
     assert sorted(path.name for path in tmp_path.iterdir()) == ["3", "4"]
 
 
+@pytest.mark.parametrize("samples, fits", [(15, True), (45, True), (120, False), (132, False)])
+def test_load_takes_only_the_runs_the_memory_holds(samples, fits):
+    assert (access_load.too_many_runs(samples, 26 * 2**30) is None) == fits
+
+
+def test_load_refuses_before_it_starts_anything(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(access_load.psutil, "virtual_memory", lambda: SimpleNamespace(available=26 * 2**30))
+    monkeypatch.setattr(access_load.settings, "RUNS", tmp_path)
+    monkeypatch.setattr(access_load.subprocess, "Popen", lambda *_, **__: pytest.fail("a run started"))
+    assert access_load.launch(132, 1) == 1
+    assert "REFUSED: 132 runs" in capsys.readouterr().out
+    assert not list(tmp_path.iterdir())
+
+
 def test_the_load_run_stays_out_of_smoke_all():
     assert "access_load" not in all_suites.SUITES
 

@@ -9,7 +9,9 @@ reads and each idle sample none but its controls, the calls overlap, and no cont
 runs/smoke_load/<stamp>/. A sample that dies releases the barrier for the others.
 
 Each sidecar holds one fanotify group, so fs.fanotify.max_user_groups caps the runs at once, 128 on Colima. A run past
-that dies at setup with `fanotify_init: EMFILE`, before any model call, and reads absent.
+that dies at setup with `fanotify_init: EMFILE`, before any model call, and reads absent. Memory can cap them sooner:
+each run is a process on the host, and 120 at once exhausted a 48 GB Mac. The suite refuses more runs than the memory
+free now holds, and says how many fit.
 """
 from __future__ import annotations
 
@@ -22,6 +24,7 @@ import sys
 import time
 from pathlib import Path
 
+import psutil
 from inspect_ai.model import ModelOutput
 
 from src.configuration import settings
@@ -42,6 +45,8 @@ BARRIER_S = 900                 # every sample reaches its first turn within thi
 LIMIT_S = 1800                  # every run ends within this
 POLL_S = 5
 PROJECT = "load"                # the task's name, which starts each compose project's
+RUN_MEMORY_B = 360_000_000      # one run's process on the host, at import alone
+SPARE_B = 8 * 2**30             # what the host keeps for everything else
 
 
 async def at_barrier(barrier: Path, sample: int, samples: int, then: ModelOutput) -> ModelOutput:
@@ -114,8 +119,20 @@ def containers(*filters: str) -> list[str]:
                           check=True).stdout.split()
 
 
+def too_many_runs(samples: int, available_b: int) -> str | None:
+    """Why `samples` processes would not fit in the host's free memory, or None when they fit."""
+    if samples * RUN_MEMORY_B + SPARE_B <= available_b:
+        return None
+    fit = max(0, available_b - SPARE_B) // RUN_MEMORY_B
+    return f"{samples} runs at once need more memory than this host has free, {fit} fit"
+
+
 def launch(samples: int, agents: int) -> int:
-    """Every sample as a process, at once. 1 on any failure."""
+    """Every sample as a process, at once. 1 on any failure, and on a count the host's memory cannot hold."""
+    refused = too_many_runs(samples, psutil.virtual_memory().available)
+    if refused:
+        print(f"REFUSED: {refused}")
+        return 1
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     root = settings.RUNS / "smoke_load" / f"launch_{stamp}"
     barrier = root / "barrier"
