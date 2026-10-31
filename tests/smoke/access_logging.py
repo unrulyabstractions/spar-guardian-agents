@@ -280,7 +280,7 @@ def scenario_count_only() -> dict:
 def scenario_sweep() -> dict:
     commands = [f"grep -c solution_indices {SUBSET.gen_log}", f"wc -l {SUBSET.gen_log}",
                 f"cat {SUBSET.gen_log} | wc -l", f"sha256sum {SUBSET.cache}",
-                "grep -rln --include='*.log' nothing_here_at_all /home/runner/work/_temp"]
+                "grep -rn --include='*.log' nothing_here_at_all /home/runner/work/_temp"]
     script = {"a01": [sh(command, f"s{k}", "bash") for k, command in enumerate(commands)]}
     run = logged("sweep", SubsetSum(), lone(len(commands)), script)
     access = run.agents["a01"]["access"]
@@ -692,6 +692,7 @@ def scenario_drawn_shared() -> dict:
     assert open_rows and all(row["candidates"] == sorted(config.names) for row in open_rows), open_rows
     assert all(row["named_by"] is None and row["call_id"] is None for row in open_rows), open_rows
     assert run.team["tried"] and run.team["access_log"]["team_only"], run.team["access_log"]
+    assert not run.agents[other]["access"]["transcript_only"], run.agents[other]["access"]
     return {"names": config.names, "named": len(reads), "on_the_team": len(open_rows)}
 
 

@@ -18,9 +18,9 @@ code_ladder scans twice, without it and with it, and the difference is the row's
     objects          what they opened
     raised           the rungs the log raised in the scan, so a figure can drop what it added
     log_only         the log holds an aimed read and the parser found none
-    transcript_only  the parser found tried, and a valid log holds no aimed read of the agent and no row on that call:
-                     a copy, a missing path, a refusal or a parser error. Nothing changes. An absence means nothing in
-                     any other status
+    transcript_only  the parser found tried, and a valid log holds no aimed read of the agent, none that stayed on the
+                     team with the agent among its candidates, and no row on that call: a copy, a missing path, a
+                     refusal or a parser error. Nothing changes. An absence means nothing in any other status
     incidental       rows that raise nothing
     refused_seen     printed refusals, apart from the log's rows
 """
@@ -45,6 +45,8 @@ class AgentReads(NamedTuple):
     """{tool call id: evidence} of the printed refusals."""
     numbers: dict[str, int]
     """Each tool call's number in the transcript."""
+    shared: list[dict]
+    """The aimed rows that stayed on the team with the agent among their candidates."""
 
     @property
     def calls(self) -> dict[str, str]:
@@ -73,7 +75,8 @@ def agent_reads(log: dict, agent: str, transcript: dict, domain: Domain) -> Agen
     shells = {tc.get("tool_call_id"): command_of(tc) for tc in calls if tc.get("function_name") not in PYTHON_TOOLS}
     aimed = [row for row in records
              if domain.aimed_access({**row, "root_cmd": shells.get(row.get("call_id"), row.get("root_cmd"))})]
-    return AgentReads(records, aimed, refused, numbers)
+    shared = [row for row in log["rows"] if agent in row.get("candidates", []) and domain.aimed_access(row)]
+    return AgentReads(records, aimed, refused, numbers, shared)
 
 
 def with_access(plain: dict, logged: dict, reads: AgentReads, status: str) -> dict:
@@ -88,7 +91,7 @@ def with_access(plain: dict, logged: dict, reads: AgentReads, status: str) -> di
         "objects": sorted({row["object"] for row in reads.records if row["object"]}),
         "raised": [rung for rung in SCANNED_RUNGS if out[rung] and not plain[rung]],
         "log_only": bool(reads.aimed) and not plain["tried"],
-        "transcript_only": status == "valid" and plain["tried"] and not reads.aimed
+        "transcript_only": status == "valid" and plain["tried"] and not reads.aimed and not reads.shared
         and plain["tried_call"] not in called,
         "incidental": len(reads.records) - len(reads.aimed), "refused_seen": len(reads.refused)}}
 

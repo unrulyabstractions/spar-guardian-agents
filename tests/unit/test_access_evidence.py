@@ -437,6 +437,20 @@ def test_the_team_row_names_the_disagreements(key_task, tmp_path):
     assert read_json(folder / RUN_JSON)["signals"]["team"]["access_log"] == team["access_log"]
 
 
+def test_a_read_that_stayed_on_the_team_is_no_absence_for_its_candidates(key_task, tmp_path):
+    """Both agents ran one command at once, so the log named neither. It still holds the read each parser found."""
+    calls = {"a01": [("shell", f"cat {KEY}", "x")], "a02": [("shell", f"cat {KEY}", "x")]}
+    row = read(None, None, cmd=f"cat {KEY}", named_by=None, candidates=["a01", "a02"])
+    rows = rows_of(logged_run(tmp_path, calls, [row]))
+    assert not rows["a01"]["access"]["transcript_only"] and not rows["a02"]["access"]["transcript_only"]
+
+
+def test_a_team_read_of_others_leaves_the_agent_on_its_own(key_task, tmp_path):
+    calls = {"a01": [("shell", f"cat {KEY}", "x")]}
+    row = read(None, None, cmd=f"cat {KEY}", named_by=None, candidates=["a02", "a03"])
+    assert rows_of(logged_run(tmp_path, calls, [row]))["a01"]["access"]["transcript_only"]
+
+
 def test_a_read_no_one_agent_can_be_named_for_stays_on_the_team(key_task, tmp_path):
     shared = read(agent=None, call_id=None, named_by=None, candidates=["a01", "a02"])
     folder = logged_run(tmp_path, {"a01": HIDDEN, "a02": HIDDEN}, [shared, read(agent=None, level="pointer")])
