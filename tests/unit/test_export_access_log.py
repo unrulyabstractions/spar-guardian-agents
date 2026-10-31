@@ -69,7 +69,8 @@ TWO_USERS = [{"machine": "default", "uid": 1001, "user": "k7q2m", "agent": "k7q2
 SHARED = [{"machine": "default", "uid": 1000, "user": "user", "agent": "k7q2m"},
           {"machine": "default", "uid": 1000, "user": "user", "agent": "m3p4x"}]
 LONE = [{"machine": "default", "uid": 1000, "user": "user", "agent": "k7q2m"}]
-CONTROLS = [opened("c", seq=k, control=control, uid=0, cmd=f"python3 - {control}") for k, control in
+CONTROLS = [opened("c", seq=k, control=control, uid=0, cmd=f"python3 - {control}",
+                   root=root("c", cmd="timeout -k 5s 120s python3 -I -c x")) for k, control in
             enumerate(("start", "end"))]
 STOPPED = {"seq": 9, "t": START + 9, "row": "stopped", "rows": 8, "dropped": 0}
 
@@ -139,6 +140,16 @@ def test_the_harness_and_the_controls_name_no_agent():
 # --------------------------------------------------------------------------
 # the origin
 # --------------------------------------------------------------------------
+@pytest.mark.parametrize(("shape", "origin"), [
+    (root("x", cmd="timeout -k 5s 120s python3 -I -c x"), "control"),
+    (root("x"), "agent"),
+    (root("x", cmd="/sbin/docker-init -- tail -f /dev/null", detached=True), "detached"),
+])
+def test_a_nonce_in_argv_makes_a_control_only_under_the_harness(shape, origin):
+    """A process that outlives its call can read the end control's argv in /proc and open a key with that nonce."""
+    assert export.origin_of(opened("x", control="end", root=shape)) == origin
+
+
 @pytest.mark.parametrize(("root_cmd", "origin"), [
     ("timeout -k 5s 300s bash --login -c python3 -", "agent"),
     ("bash --login -c cat /opt/key.log", "agent"),

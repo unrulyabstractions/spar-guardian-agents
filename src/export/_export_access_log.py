@@ -10,9 +10,10 @@ with nothing else. Each row of access_log.jsonl is one open:
     t, machine, uid, user, agent, named_by, candidates when it stays open, object, kind, level, path, result, mechanism,
     pid, exe, cwd, cmd, root_cmd, chain, origin, call_id
 
-Origin comes from the shape of the root of the opener's process tree. `control` holds the run's nonce in its argv.
-`detached` has the machine's init as its root. `agent` has `bash --login -c` as its root, after any `timeout`
-(shell_commands.AGENT_EXEC). An agent cannot make a new exec root. It can daemonize, which reads `detached`, and a root
+Origin comes from the shape of the root of the opener's process tree. `detached` has the machine's init as its root.
+`agent` has `bash --login -c` as its root, after any `timeout` (shell_commands.AGENT_EXEC). `control` holds the run's
+nonce in its argv under any other root: a process that outlives its call can read the end control's argv in /proc and
+open a key with that nonce. An agent cannot make a new exec root. It can daemonize, which reads `detached`, and a root
 agent can replace a program the harness starts, which reads `harness`. Anything else is `harness`: the harness's own
 execs and a process outside the machines, such as dockerd behind `docker cp`, whose root is the host's init. `unknown`
 is an opener that died before the monitor read /proc. Inspect writes a SandboxEvent only after its exec returns, so a
@@ -90,14 +91,14 @@ def origin_of(row: dict) -> str:
     """Who started the opener, from the root of its process tree (the module's docstring)."""
     if row.get("gone"):
         return "unknown"
-    if "control" in row:
-        return "control"
     root = row["root"]
     if root["pid"] == HOST_INIT_PID:
         return "harness"
     if root["detached"]:
         return "detached"
-    return "agent" if AGENT_EXEC.match(root["cmd"]) else "harness"
+    if AGENT_EXEC.match(root["cmd"]):
+        return "agent"
+    return "control" if "control" in row else "harness"
 
 
 def holding(row: dict, calls: list[ToolCall]) -> list[ToolCall]:
