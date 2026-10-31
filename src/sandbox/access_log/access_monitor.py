@@ -183,7 +183,7 @@ def start_access_monitor(benchmark) -> Solver:
         nonces = {"start": secrets.token_hex(8), "end": secrets.token_hex(8)}
         objects = [asdict(obj) for obj in await benchmark.watched(state)]
         if not objects:
-            raise RuntimeError("access monitor: nothing to watch")
+            raise RuntimeError("access monitor: nothing to watch; --set access_log=false runs without the log")
         record = {"seats": seat_table(benchmark.seats(state)), "objects": objects, "nonces": nonces}
         state.store.set(STORE, record)
         live = marked(record)
