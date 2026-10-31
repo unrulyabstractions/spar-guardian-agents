@@ -22,6 +22,7 @@ REVIEW_IP = "192.0.2.42"                        # the sidecar's loopback alias, 
 REVIEW_CONFIG = "/srv/review/config.json"       # in the sidecar: the tokens, the reference and the threshold
 REVIEW_CALLS = "/srv/review/calls.jsonl"        # in the sidecar: one line per review call
 STAGE_TAR = "/root/.creative_stage.tgz"         # where Sample.files puts the staging tarball; setup removes it
+HAND_INS = "/root/.creative_hand_ins"           # where a submit keeps writing.md, by its sha256
 
 TEAM_GROUP, TEAM_GID = "team", 2000             # owns the shared workspace of a shared_task team
 WRITING_CHARS = 1 << 18                         # the most of a writing.md or a review's submission the scorer keeps

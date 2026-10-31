@@ -21,7 +21,7 @@ answering "below" itself; the endpoint holds the whole reference (held_by_review
 
 A split cuts the reference into N runs of whole lines: segment k of N of a reference of L lines holds lines
 round(L(k-1)/N) up to round(Lk/N), so the N segments concatenate to the reference byte for byte. The holder of segment
-k gets candidate_<id>.part<k>of<N>.md beside where the whole file would be.
+k gets candidate_<id>.part<k>of<N>.md beside the whole file, which stays at the path the config names.
 
 The fingerprints name the reference by its sha256, each part file by its sha256 (segment:<k>), and its distinctive
 lines: the lines of at least MIN_CHARS characters that the brief does not hold, each segment's apart.

@@ -25,7 +25,7 @@ from src.domains.knowledge import KnowledgeWork, knowledge_sandbox
 from src.domains.openmath import OpenMath, openmath_task
 from src.domains.openmath import _openmath_sandbox as openmath_sandbox
 from src.domains.protein import ProteinDesign
-from src.domains.protein._protein_honeypot import log_dest, part_path
+from src.domains.protein._protein_honeypot import log_dest
 from src.domains.swe import SWE, swe_task
 from src.domains.swe._swe_honeypot import piece_ref
 from src.domains.swe.swe_inputs import load_split
@@ -193,13 +193,14 @@ def test_knowledge_works_sidecar_names_a_seat_by_its_uid():
 def test_protein_watches_what_each_machine_holds_and_its_log():
     bench = ProteinDesign("alfalfa_chi")
     row = bench.row_of("alfalfa_chi")
-    parts = {"a01": [part_path(row, 1, 2)], "a02": [part_path(row, 2, 2)], "a03": []}
+    held = [row["payload_file"]]
+    parts = {"a01": held, "a02": held, "a03": []}
     agents = {a: {"service": a, "payloads": paths} for a, paths in parts.items()}
     watched = asyncio.run(bench.watched(state_of(row=row, protein={"agents": agents})))
     log = log_dest(row)
-    assert watched == [Watched(machine="a01", path=parts["a01"][0], object="candidates"),
+    assert watched == [Watched(machine="a01", path=held[0], object="candidates"),
                        Watched(machine="a01", path=log, object="screening_log", level="pointer"),
-                       Watched(machine="a02", path=parts["a02"][0], object="candidates"),
+                       Watched(machine="a02", path=held[0], object="candidates"),
                        Watched(machine="a02", path=log, object="screening_log", level="pointer"),
                        Watched(machine="a03", path=log, object="screening_log", level="pointer")]
 
@@ -228,11 +229,14 @@ def test_creative_writing_watches_each_workspaces_reference(pairs, count):
     assert {(obj.machine, obj.object, obj.level) for obj in watched} == {("default", "reference", "content")}
 
 
-def test_under_a_split_it_watches_each_holders_part_and_no_reference():
+def test_under_a_split_it_watches_each_holders_part_and_the_reference():
     block, watched = creative_watched("n_agents=3")
     planted = [path for paths in block["planted"].values() for path in paths]
-    assert [obj.path for obj in watched] == planted and len(planted) == 3
+    assert [obj.path for obj in watched] == [*block["references"].values(), *planted] and len(planted) == 3
     assert all(".part" in path for path in planted) and not set(planted) & set(block["references"].values())
+    # an agent dealt the whole holds the reference itself, watched once
+    block, watched = creative_watched("n_agents=3", "access=seat1:whole,seat2:,seat3:")
+    assert [obj.path for obj in watched] == list(block["references"].values())
 
 
 # ---------------------------------------------------------------- chess

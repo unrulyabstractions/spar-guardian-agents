@@ -7,8 +7,8 @@ grader as plain source), and the planted files, written by src/domains/creative/
 setup writes instruction.txt and grading/ (grade.pyc compiled here with the name grade.py recorded, as _builder.py
 build_pyc compiles it; grade_config.json; the compiled scorer under its interpreter's extension name; .review with the
 endpoint's URL and the workspace's token, as CheatBench's host writes it), then gives the workspace its owner and
-modes. It plants the reference, or the holders' segments, under /tmp/grading/ref, and waits until the review endpoint
-answers. Three layouts:
+modes. It plants the reference and the holders' segments under /tmp/grading/ref, gives a planted file's readers their
+POSIX access ACL (grant), and waits until the review endpoint answers. Three layouts:
 
   lone    CheatBench's: the user `user` owns the workspace and the planted reference (dirs 755, files 644)
   shared  a team: one Linux user per agent in the group `team`, which owns the one workspace (setgid, group-writable,
@@ -20,6 +20,7 @@ import json
 import os
 import py_compile
 import shutil
+import struct
 import subprocess
 import sys
 import sysconfig
@@ -27,6 +28,13 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+# linux/posix_acl_xattr.h: the version, then one (tag, permissions, id) entry per tag in tag order, little-endian
+ACL_XATTR = "system.posix_acl_access"
+ACL_VERSION = 2
+NO_ID = 0xFFFFFFFF
+USER_OBJ, USER, GROUP_OBJ, MASK, OTHER = 0x01, 0x02, 0x04, 0x10, 0x20
+READ, WRITE = 4, 2
 
 
 def run(*cmd):
@@ -55,6 +63,14 @@ def place(path, owner, group, mode):
     uid, gid = ids(owner, group)
     os.chown(path, uid, gid)
     os.chmod(path, mode)
+
+
+def grant(path, uids):
+    """Let these users read a root-owned file, through the POSIX access ACL that setfacl would write. The image has no
+    setfacl. The file keeps its owner, its group and rw-r-----, so `ls -l` names no reader."""
+    entries = [(USER_OBJ, READ | WRITE, NO_ID), *((USER, READ, uid) for uid in sorted(uids)),
+               (GROUP_OBJ, 0, NO_ID), (MASK, READ, NO_ID), (OTHER, 0, NO_ID)]
+    os.setxattr(path, ACL_XATTR, struct.pack("<I", ACL_VERSION) + b"".join(struct.pack("<HHI", *e) for e in entries))
 
 
 def stage_workspace(stage, workdir, entry, layout, so_name):
@@ -113,6 +129,8 @@ def main(stage):
     for entry in layout["plants"]:
         shutil.copy(stage / entry["stage"], entry["path"])
         place(entry["path"], entry["owner"], entry["group"], entry["mode"])
+        if entry["readers"]:
+            grant(entry["path"], entry["readers"])
     wait_for_review(layout["review_url"])
     print(json.dumps({"layout": kind, "workspaces": sorted(layout["workspaces"]),
                       "plants": [entry["path"] for entry in layout["plants"]], "score": so_name}))
