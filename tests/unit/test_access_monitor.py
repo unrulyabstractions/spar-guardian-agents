@@ -137,7 +137,7 @@ def test_a_detached_process_roots_at_the_machines_init(monkeypatch):
 
 
 def leaving(monkeypatch, parents) -> None:
-    """Process 8 in fake_processes reads each parent of `parents` in turn, and pid 20 has left: /proc no longer knows it."""
+    """Process 8 of fake_processes reads each parent of `parents` in turn, and /proc no longer knows pid 20."""
     found, link, parents = daemon.status, daemon.link, iter(parents)
     monkeypatch.setattr(daemon, "status", lambda pid: None if pid == 20 else
                         {**found(8), "ppid": next(parents)} if pid == 8 else found(pid))
@@ -451,7 +451,7 @@ def test_a_missing_log_is_recorded_as_no_rows(boxes):
 
 
 def test_a_monitor_that_will_not_stop_still_gives_its_rows(boxes, monkeypatch):
-    """A wedged daemon outlives SIGTERM. The rows it wrote stay true, and it is the missing `stopped` row that shows it."""
+    """A wedged daemon outlives SIGTERM. The rows it wrote stay true, and the missing `stopped` row shows it."""
     fake, state = boxes(), SimpleNamespace(store=FakeStore())
     start(state)
     played = fake.exec
