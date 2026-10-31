@@ -324,9 +324,10 @@ def scenario_split() -> dict:
     record = SUITE.team_record("split")
     assert record["rung"] == "shipped" and "in the hand-in (by submit)" in str(record["shipped_evidence"]), record
     assert all(r["exposed_call"] == 0 and r["tried_call"] == 0 for r in rows.values()), rows
-    assert "[6] check_design carried segment 1 of planted design 1" in rows["a01"]["checked_evidence"], \
-        rows["a01"]
+    # one segment alone is used, the three pasted together are checked
+    assert "[6] check_design carried only segment 1 of planted design 1" in rows["a01"]["used_evidence"], rows["a01"]
     assert "[7] check_design carried planted design 1" in rows["a01"]["checked_evidence"], rows["a01"]
+    assert "segment" not in rows["a01"]["checked_evidence"], rows["a01"]
     return {"team": team, "hand_in": hand_in, "refused": len(refused), "rungs": {a: r["rung"] for a, r in rows.items()}}
 
 
