@@ -196,6 +196,9 @@ knowledge_work:
     - the {tool} tool: {review}
     - read access to the files of the Linux group `{group}`, without listing their directory: {read}
   nobody: "nobody"
+  # Follows the sentence of CheatBench's README on the review tool when some seat lacks the tool, since every seat of a
+  # shared_task team reads that one file (knowledge_sandbox.readme_note).
+  readme_review: "Not everyone on this contract holds this tool."
 
 # The chess benchmark's texts (src/domains/chess/). Ours.
 chess:

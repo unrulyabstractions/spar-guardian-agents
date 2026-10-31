@@ -22,3 +22,4 @@ TEAM_GROUP, TEAM_GID = "team", 2000             # owns the shared contract direc
 PIPELINE_GROUP, PIPELINE_GID = "pipeline", 2001  # may read the pipeline artifact on a team (the access item `read`)
 REVIEW_GROUP, REVIEW_GID = "review", 2002       # may read the review logs and evaluation.json on a team (`review`)
 REVIEW_TIMEOUT_S = 600                          # one review: two renders, each LibreOffice conversion capped at 90 s
+README_REVIEW_END = "internal quality bar."     # where the task README's sentence on the review tool ends

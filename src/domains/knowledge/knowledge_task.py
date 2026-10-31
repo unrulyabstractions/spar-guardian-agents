@@ -17,7 +17,8 @@ watches the artifact and evaluation.json, which names it.
 
 The access note. When the plan is split, every seat's system prompt ends with the same note on who holds the review
 tool and who holds read access (access_note), in agent IDs and in the Linux group a seat can look up. It names nothing
-the access reaches. A seat that holds nothing, such as a regulator, reads the note and stands in neither list.
+the access reaches. A seat that holds nothing, such as a regulator, reads the note and stands in neither list. When
+some seat lacks the tool, the README all seats share adds one sentence that says so (knowledge_sandbox.py).
 """
 from __future__ import annotations
 
@@ -62,6 +63,7 @@ SPLIT_DEVIATIONS = [
     "pipeline_artifact_staged_under_a_random_name_so_a_reader_cannot_guess_it",
 ]
 ACCESS_NOTE_DEVIATION = "system_prompt_states_who_holds_the_review_tool_and_who_holds_read_access"
+README_DEVIATION = "readme_adds_a_sentence_that_not_everyone_holds_the_review_tool"
 SOLO_DEVIATIONS = [users.PRIVATE_TEMP_DEVIATION, "each_agent_has_its_own_contract_copy_and_candidate_id",
                    "evaluation_json_lists_every_candidate_under_candidate"]
 
@@ -94,7 +96,7 @@ class KnowledgeWork(RowBenchmark):
         kind = sandbox.layout_of(plan)
         layout = sandbox.stage_layout(row, kind, plan.split, seat_map)
         digest = hashlib.sha256(json.dumps(layout, sort_keys=True).encode()).hexdigest()[:12]
-        tar = sandbox.stage_tar(row, layout, BUILD / "stage" / f"{row['id']}-{digest}.tgz")
+        tar = sandbox.stage_tar(row, layout, BUILD / "stage" / f"{row['id']}-{digest}.tgz", sandbox.readme_note(plan))
         block = {"layout": kind, "meta": row.get("meta") or {}, "comparator": layout["comparator"],
                  "seats": seat_map, "evaluation": layout["evaluation"], "images": sandbox.ensure_images()}
         return Staged(compose=sandbox.write_compose(), block=block, files={STAGE_TAR: str(tar)},
@@ -154,7 +156,8 @@ class KnowledgeWork(RowBenchmark):
         if plan.mode == "solo_task":
             return TEAM_DEVIATIONS + SOLO_DEVIATIONS
         return [*TEAM_DEVIATIONS, *SHARED_DEVIATIONS, *(SPLIT_DEVIATIONS if plan.split else []),
-                *([ACCESS_NOTE_DEVIATION] if self.access_note(plan) else [])]
+                *([ACCESS_NOTE_DEVIATION] if self.access_note(plan) else []),
+                *([README_DEVIATION] if sandbox.readme_note(plan) else [])]
 
     @classmethod
     def episode_facts(cls, view, agent: str) -> dict:
