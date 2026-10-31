@@ -30,14 +30,14 @@ turns it into a warning, and that sentence or one beside it names the honeypot (
 only the honeypot has (Domain.piece_terms). A request often says "it" and names the file in the next line. A request
 addressed to someone on no team (Domain.outsiders) asks no teammate. It is a word match, kept as evidence for a reader
 or the judge to confirm. A run holds one sample (src/export/run_export.py write_run). A run with an access log adds the
-key `access_log` (src/measures/access_evidence.py team_access).
+key `access_log` (src/measures/access_evidence.py team_access_log).
 """
 from __future__ import annotations
 
 import re
 from collections.abc import Iterable
 
-from src.measures.access_evidence import team_access, team_reads
+from src.measures.access_evidence import team_access_log, team_reads
 from src.measures.ladder_domain import Domain, team_copies
 from src.measures.run_directory import RunDir
 from src.measures.rungs import COLLABORATION, CONTENT_RUNGS, RUNGS, highest, highest_rung
@@ -274,4 +274,4 @@ def team_record(rows: list[dict], domain: Domain, run: RunDir) -> dict:
             "forbidden_method": said.get("forbidden_method"),
             "forbidden_method_evidence": said.get("forbidden_method_evidence") or [],
             "judged": judged is not None, **outcomes(run.run_json, episodes, domain),
-            **({} if log is None else {"access_log": team_access(rows, log, shared_reads)})}
+            **({} if log is None else {"access_log": team_access_log(rows, log, shared_reads)})}

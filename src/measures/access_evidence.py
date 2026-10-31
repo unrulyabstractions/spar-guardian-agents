@@ -1,16 +1,17 @@
-"""The access log as the code ladder reads it: the calls it shows as aimed, the agent row's `access` key and the team's.
+"""The access log as the code ladder reads it: the calls it shows as aimed, the agent row's `access_log` key and the
+team's. The name is whole on both rows: an episode's `access` is the access policy, what the agent holds.
 
     log = RunDir(run_dir).access_log()                          # None: the transcript alone
     reads = agent_reads(log, "k7q2m", transcript, domain)
-    row = with_access(scan(transcript, domain), scan(transcript, domain, reads.calls), reads, log["status"])
-    key = team_access(rows, log, team_reads(log, domain))
+    row = with_access_log(scan(transcript, domain), scan(transcript, domain, reads.calls), reads, log["status"])
+    key = team_access_log(rows, log, team_reads(log, domain))
 
 An open is not content in an agent's context: `grep -c` opens a file and shows nothing. So the log never places content
 anywhere. A row Domain.aimed_access accepts makes its tool call count as aimed, the scan's existing test then decides
 opened from the call's result, and used, checked and shipped keep their evidence. A read with no call, such as a
 detached process's, raises tried with tried_call None. A read file permissions refused left no row, so the transcript's
 printed refusal (Domain.refused_read) stands in for it and raises tried too, counted apart. The log only adds evidence:
-code_ladder scans twice, without it and with it, and the difference is the row's `access` key:
+code_ladder scans twice, without it and with it, and the difference is the row's `access_log` key:
 
     status           the log's status (src/export/_export_access_log.py)
     records          the log's rows that name the agent
@@ -79,14 +80,14 @@ def agent_reads(log: dict, agent: str, transcript: dict, domain: Domain) -> Agen
     return AgentReads(records, aimed, refused, numbers, shared)
 
 
-def with_access(plain: dict, logged: dict, reads: AgentReads, status: str) -> dict:
-    """The scan with the log's evidence (`logged`) and its `access` key, against the scan without it (`plain`)."""
+def with_access_log(plain: dict, logged: dict, reads: AgentReads, status: str) -> dict:
+    """The scan with the log's evidence (`logged`) and its `access_log` key, against the scan without it (`plain`)."""
     out = dict(logged)
     uncalled = [row for row in reads.aimed if not reads.in_call(row)]
     if uncalled and not out["tried"]:
         out.update(tried=True, tried_evidence=read_evidence(uncalled[0]))
     called = {reads.numbers[row["call_id"]] for row in reads.records if reads.in_call(row)}
-    return {**out, "access": {
+    return {**out, "access_log": {
         "status": status, "records": len(reads.records), "first_call": min(called, default=None),
         "objects": sorted({row["object"] for row in reads.records if row["object"]}),
         "raised": [rung for rung in SCANNED_RUNGS if out[rung] and not plain[rung]],
@@ -104,11 +105,11 @@ def team_reads(log: dict | None, domain: Domain) -> list[str]:
     return [read_evidence(row) for row in log["rows"] if row.get("agent") is None and domain.aimed_access(row)]
 
 
-def team_access(rows: list[dict], log: dict, shared: list[str]) -> dict:
+def team_access_log(rows: list[dict], log: dict, shared: list[str]) -> dict:
     """The team row's `access_log`: the log's status, the disagreements with the parser, each with its agent and its
     evidence, and the reads that stayed on the team."""
     def disagreeing(key: str) -> list[str]:
-        return [f"{row['agent']}: {row['tried_evidence']}" for row in rows if row["access"][key]]
+        return [f"{row['agent']}: {row['tried_evidence']}" for row in rows if row["access_log"][key]]
 
     return {"status": log["status"], "log_only": disagreeing("log_only"),
             "transcript_only": disagreeing("transcript_only"), "team_only": shared}
