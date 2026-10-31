@@ -19,7 +19,7 @@ The rows, each a JSON object on one line with seq, t and row:
   open                        one open: where (machine, object, kind, level, path, dev, ino) and who (pid, uid, exe,
                               cwd, cmd, chain, root, and control for a read with a nonce in its argv), or gone for an
                               opener that died first
-  object_armed, object_gone   the poll found a new inode at the object's path, or no regular file there
+  object_armed, object_gone   the poll found the object at a new inode or back at its own, or no regular file there
   restart, machine_down       the poll found the machine's container under a new init, or nowhere
   row_failed                  an open that could not be described, let through all the same
   stopped                     after SIGTERM: rows seen, dropped
@@ -229,9 +229,11 @@ class Monitor:
             if self.machines[obj["machine"]]["down"]:
                 continue
             state = self.arm(obj)
-            if state == "armed" or (state == "gone" and not obj["gone"]):
-                self.log.write(f"object_{state}", machine=obj["machine"], object=obj["object"], path=obj["path"])
-            obj["gone"] = state == "gone"
+            gone = state == "gone"
+            if state == "armed" or gone != obj["gone"]:
+                self.log.write("object_gone" if gone else "object_armed", machine=obj["machine"], object=obj["object"],
+                               path=obj["path"])
+            obj["gone"] = gone
 
     # ---------------------------------------------------------------- one open
     def machine_of(self, pid: int) -> str | None:

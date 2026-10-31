@@ -152,6 +152,17 @@ def test_a_machine_goes_down_once_and_a_restart_marks_it_again(monkeypatch):
     assert watcher.machines["k7q2m"]["pid"] == 77 and armed == [None]
 
 
+def test_an_object_lost_and_back_leaves_one_row_each_way(monkeypatch):
+    """A file moved away and back keeps its inode and its mark, and the row still closes the gap."""
+    watcher = planned("k7q2m")
+    states = ["gone", "gone", "same", "same"]
+    monkeypatch.setattr(daemon, "read_bytes", lambda path: b"0::/docker/id-k7q2m\n")
+    monkeypatch.setattr(watcher, "arm", lambda obj: states.pop(0))
+    for _ in range(4):
+        watcher.poll()
+    assert [row["row"] for row in rows_of(watcher.log.stream)] == ["object_gone", "object_armed"]
+
+
 def test_a_new_file_at_an_objects_path_is_named_on_the_openers_machine(tmp_path, monkeypatch):
     """Every machine of a team holds the key at one path, so the path alone cannot say whose it is."""
     watcher = planned("k7q2m", "m3p4x")
