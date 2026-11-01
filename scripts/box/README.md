@@ -13,10 +13,10 @@ uv run python -m scripts.box.fleet jobs             # the whole study
 uv run python -m scripts.box.fleet jobs pilot       # one stage
 ```
 
-Make one OpenRouter key for this study with a spend cap, and revoke it after the destroys. Every model of the study routes through OpenRouter, so a box holds this one key. Set it in the shell that runs `box_run.sh`:
+Make one OpenRouter key for this study with a spend cap, and revoke it after the destroys. Every model of the study routes through OpenRouter, so a box holds this one key. Set it in the shell that runs `box_run.sh`, typed at a silent prompt so it stays out of the shell's history:
 
 ```
-export BOX_OPENROUTER_API_KEY=...
+read -rs BOX_OPENROUTER_API_KEY && export BOX_OPENROUTER_API_KEY
 ```
 
 The key reaches a box through ssh's standard input, into `/root/.box_env` with mode 600. `box_run.sh --allow-main-key` sends `OPENROUTER_API_KEY` itself instead, which a third-party host then holds.

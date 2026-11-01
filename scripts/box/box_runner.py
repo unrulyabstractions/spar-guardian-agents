@@ -32,7 +32,8 @@ status prints, for each plan on the box, the runner's state and the runs finishe
 episode failed in the harness or at the provider), hung, lost (not alive, no exit recorded) and waiting, then one line
 for each run that is neither finished nor running. A runner that ended while runs are alive or waiting is trouble: no
 guard watches them. When the runner has ended and nothing runs, it prints "all runs ended", which watch.sh turns into
-an alert, since the box bills until it is captured and destroyed. It exits 1 on any trouble.
+an alert, since the box bills until it is captured and destroyed. A mock plan says its runs ended in other words, since
+the real runs come next. It exits 1 on any trouble.
 """
 from __future__ import annotations
 
@@ -289,8 +290,8 @@ def refusal(args: argparse.Namespace, jobs: list[Job]) -> str | None:
     return None
 
 
-def new_plan(box: Box, commit: str, jobs: list[Job], limit: int, earlier: Path | None) -> dict:
-    return {"box": box.name, "stage": box.stage, "task": box.task, "commit": commit, "started": now_iso(),
+def new_plan(box: Box, commit: str, jobs: list[Job], mock: bool, limit: int, earlier: Path | None) -> dict:
+    return {"box": box.name, "stage": box.stage, "task": box.task, "commit": commit, "mock": mock, "started": now_iso(),
             "limit_s": limit, "grace_s": GRACE_S, "runner_pid": os.getpid(),
             "earlier_plan": str(earlier) if earlier else None,
             "runs": {job.name: {"cell": job.cell, "arguments": job.arguments, "pid": None, "started": None,
@@ -363,7 +364,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         folder.mkdir(parents=True, exist_ok=True)
     PID_FILE.write_text(f"{os.getpid()}\n")
     path = plan_path(box.name)
-    plan = new_plan(box, args.commit, jobs, limit, set_aside(path))
+    plan = new_plan(box, args.commit, jobs, args.mock, limit, set_aside(path))
     running = start_jobs(jobs, plan)
     save(path, plan)
     print(f"== {box.name}: {len(running)} runs started, {len(jobs) - len(running)} done before; Inspect's limit "
@@ -420,6 +421,8 @@ def cmd_status(args: argparse.Namespace) -> int:
             print(f"!! the runner ended with {counts['running']} runs running and {counts['waiting']} waiting: no "
                   f"hung guard watches them")
             trouble += 1
+        elif not runner_alive and plan.get("mock"):
+            print("   the mock runs ended: box_run.sh starts the real runs")
         elif not runner_alive:
             ended = [r["ended"] for r in plan["runs"].values() if r["ended"] and r["ended"] != BEFORE]
             print(f"   all runs ended{', the last at ' + max(ended) if ended else ''}: capture this box and destroy "

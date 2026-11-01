@@ -1280,10 +1280,10 @@ def test_status_names_each_runs_state(monkeypatch):
     assert box_runner.state("b", record(pid=os.getpid())) == "lost"     # a live pid that is not this run
 
 
-def write_plan(runner_dirs: Path, runs: dict) -> None:
+def write_plan(runner_dirs: Path, runs: dict, mock: bool = False) -> None:
     logs = runner_dirs / "logs" / "screen"
     logs.mkdir(parents=True, exist_ok=True)
-    plan = {"box": "gate-protein-luna-1", "task": "protein_design", "runner_pid": 999_999_999,
+    plan = {"box": "gate-protein-luna-1", "task": "protein_design", "mock": mock, "runner_pid": 999_999_999,
             "runs": {name: {"pid": None, "started": None, "ended": None, "exit": None, "hung": None} | fields
                      for name, fields in runs.items()}}
     (logs / "box_gate-protein-luna-1.json").write_text(json.dumps(plan))
@@ -1294,6 +1294,14 @@ def test_status_flags_a_runner_that_ended_with_runs_unwatched(runner_dirs, monke
     write_plan(runner_dirs, {"a": {"exit": 0, "ended": "2026-10-30T06:00:00Z"}, "b": {}})
     assert box_runner.main(["status"]) == 1
     assert "!! the runner ended with 0 runs running and 1 waiting" in capsys.readouterr().out
+
+
+def test_status_sends_nobody_to_the_destroy_after_a_mock_check(runner_dirs, monkeypatch, capsys):
+    monkeypatch.setattr(box_runner, "outcome", lambda name: ("finished", ""))
+    write_plan(runner_dirs, {"a": {"exit": 0, "ended": "2026-10-30T06:00:00Z"}}, mock=True)
+    assert box_runner.main(["status"]) == 0
+    out = capsys.readouterr().out
+    assert "the mock runs ended" in out and "all runs ended" not in out
 
 
 def test_status_says_when_every_run_has_ended(runner_dirs, monkeypatch, capsys):
