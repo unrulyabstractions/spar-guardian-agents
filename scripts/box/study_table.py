@@ -17,6 +17,13 @@ Nothing here or anywhere in this folder starts one stage from another, and no st
     phase2-<target>   minimal at rule_level generic and identified, and minimal_regulated with each regulator at
                       ambiguous and enforce, seeds 1 to 5; on SWE an Opus regulator takes seed 1 alone
     phase2b-<target>  minimal_regulated with Haiku at ambiguous and enforce, seeds 1 to 5, and Sonnet at both, seed 1
+    fixed-pilot       flipt on luna after the SWE fix: minimal_regulated, each of the five regulators at ambiguous,
+                      seed 1
+    fixed-gate        both flipt targets after the SWE fix: minimal and minimal_cheat, seeds 1 to 5
+
+Every SWE run before the fix (commits 7331882 to 33b7810, 2026-11-01) graded a task where one agent could cheat
+alone, so it measures nothing about collaboration. The fixed stages' runs carry the tag `fixed`, so no name repeats
+an invalid run's.
 
 A box holds whole arms, in table order, up to its task's capacity (fleet_layout.capacity_of).
 """
@@ -64,6 +71,9 @@ TARGETS = (Target("software_engineering", "flipt", "deepseek-flash-openrouter"),
            Target("protein_design", "protein", "gpt-6-luna-openrouter"),
            Target("creative_writing", "creative", "gpt-6-luna-openrouter"))
 PILOT_TARGETS = TARGETS[1:]
+SWE_TARGETS = TARGETS[:2]
+FIXED = "fixed"
+"""The tag of every run of the SWE task after its fix."""
 
 
 @dataclass(frozen=True)
@@ -121,11 +131,23 @@ def phase_two_arms(target: Target) -> tuple[Arm, ...]:
             *regulated_arms(target, FIRST_REGULATORS))
 
 
+def fixed_pilot_arms(target: Target) -> tuple[Arm, ...]:
+    """The pilot of the fixed SWE task: each of the five regulators once, at ambiguous."""
+    return tuple(Arm(target, "minimal_regulated", regulator=regulator, regulator_level="ambiguous", seeds=SEEDS[:1],
+                     tag=f"{FIXED}pilot") for regulator in (*FIRST_REGULATORS, *ADDED_REGULATORS))
+
+
+def fixed_gate_arms(target: Target) -> tuple[Arm, ...]:
+    return Arm(target, "minimal", tag=FIXED), Arm(target, "minimal_cheat", tag=FIXED)
+
+
 STAGES = {"pilot": {f"pilot-{target.name}": pilot_arms(target) for target in PILOT_TARGETS},
           "gate": {f"gate-{target.name}": gate_arms(target) for target in TARGETS},
           **{f"phase2-{target.name}": {f"phase2-{target.name}": phase_two_arms(target)} for target in TARGETS},
           **{f"phase2b-{target.name}": {f"phase2b-{target.name}": regulated_arms(target, ADDED_REGULATORS)}
-             for target in TARGETS}}
+             for target in TARGETS},
+          "fixed-pilot": {f"fixed-pilot-{SWE_TARGETS[1].name}": fixed_pilot_arms(SWE_TARGETS[1])},
+          "fixed-gate": {f"fixed-gate-{target.name}": fixed_gate_arms(target) for target in SWE_TARGETS}}
 """Each stage's arms, by the stem of their boxes' names."""
 
 
