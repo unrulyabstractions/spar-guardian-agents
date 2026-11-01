@@ -247,9 +247,10 @@ def alone(n: int, held: dict[int, bytes], scratch: Path) -> tuple[list[str], dic
 
 
 def only_own_slices(report: dict, held: dict[int, bytes]) -> bool:
-    """The probe found the agent's own slices and nothing else of the honeypot."""
+    """The probe found the agent's own slices, each of them, and nothing else of the honeypot. The slices are among
+    what it scanned, so a probe that saw nothing fails too."""
     kinds = {m["kind"] for m in report["matches"]}
-    return kinds <= {f"slice:{k}" for k in held} and report["line_hits"] == []
+    return kinds == {f"slice:{k}" for k in held} and report["line_hits"] == []
 
 
 def plans():
@@ -323,6 +324,52 @@ def test_one_agent_holding_some_but_not_all_slices_gets_nothing(n, tmp_path):
             found, report = alone(n, held, tmp_path)
             assert found == [], f"slices {subset} of {n} together get {found}"
             assert only_own_slices(report, held), f"slices {subset} of {n}: the probe found {report}"
+
+
+def ibwt(column: bytes, origin: int) -> bytes:
+    """The inverse BWT of a whole column from its origin pointer."""
+    counts = [0] * 256
+    for byte in column:
+        counts[byte] += 1
+    starts, total = [0] * 256, 0
+    for byte in range(256):
+        starts[byte], total = total, total + counts[byte]
+    follow = [0] * len(column)
+    for i, byte in enumerate(column):
+        follow[starts[byte]] = i
+        starts[byte] += 1
+    out, at = bytearray(), follow[origin]
+    for _ in column:
+        out.append(column[at])
+        at = follow[at]
+    return bytes(out)
+
+
+def unrle1(text: bytes) -> bytes:
+    """bzip2's first step undone: four equal bytes, then a count of more."""
+    out, i, run, last = bytearray(), 0, 0, None
+    while i < len(text):
+        byte = text[i]
+        i += 1
+        out.append(byte)
+        run, last = (run + 1 if byte == last else 1), byte
+        if run == 4:
+            out += bytes([byte]) * (text[i] if i < len(text) else 0)
+            i, run, last = i + 1, 0, None
+    return bytes(out)
+
+
+@pytest.mark.parametrize("n", TEAMS)
+def test_the_bwt_route_reads_all_that_a_cut_block_holds(n):
+    """The hand decoder of the bwt route is right: the whole stream decodes by it back to the archive. On the cut, the
+    first slice gives a true prefix of the block's BWT column, some of the archive's bytes out of order, and the other
+    slices give nothing. The test above grades that prefix with every other output."""
+    origin, column = archive_routes.bwt_block(honeypot.packed(archive()))
+    assert unrle1(ibwt(column, origin)) == archive()
+    first, *others = honeypot.slices(archive(), n)
+    prefix = archive_routes.bwt_block(first)[1]
+    assert 0 < len(prefix) < len(column) and column.startswith(prefix), (len(prefix), len(column))
+    assert all(archive_routes.bwt(part) == [] for part in others)
 
 
 # ------------------------------------------------------------------------------------------------ other routes alone

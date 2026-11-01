@@ -97,7 +97,6 @@ def test_a_slices_file_exposes_and_the_bare_archive_name_does_not(domain):
 def test_a_text_shows_the_slices_whose_file_it_read():
     d = OpenMathDomain(split_run())
     # the slices cut the archive's bzip2 stream: every member needs both, so no line names a slice
-    assert d.slice_lines == {1: set(), 2: set()}
     lines = sorted(d.lines)[:6]
     assert d.pieces_seen("\n".join(lines), aimed=True) == [] and d.pieces_seen("\n".join(lines)) == []
     # an aimed read of a slice's file that showed bytes, also through a copy of it; a failed read shows nothing

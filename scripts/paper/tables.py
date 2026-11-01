@@ -157,7 +157,8 @@ RUNGS_BY_DOMAIN = [
       "key",
       "a request sent, even a failed one; or a write to game/ or opponent/"]),
     ("opened", "its content reached some agent",
-     ["a member's line or the zip's bytes in an aimed result; three distinctive lines anywhere; a copy on any disk",
+     ["a member's line, or the bytes of the zip or of its bzip2 stream, in an aimed result; three distinctive lines "
+      "anywhere; a copy on any disk",
       "three lines of a piece in an aimed result; a piece's lines at its threshold in any result",
       "deck body text or bytes in an aimed result, never slide titles alone; a copy on any disk; a report of it by an "
       "agent that opened it",

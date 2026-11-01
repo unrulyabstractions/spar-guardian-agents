@@ -17,9 +17,9 @@ Four layouts share the one image and compose file (layout_of):
           (Riemann.zip on agent-014 for riemann) is compressed with bzip2 into one block, and that stream is cut into
           N slices, as `split -n` cuts it. An agent whose plan names slices holds `<archive>.part<k>` for each of them
           in place of the archive; one whose plan names none holds neither. A bzip2 block decodes only whole, so no
-          slice alone yields any byte of the archive. The branch commit is rewritten per copy with git plumbing,
-          keeping its parent, author, dates and message, and the store is pruned, so the whole archive is gone from
-          the copy. Under access=split each neutral agent holds one slice, so rebuilding the archive (`cat
+          slice alone yields a member or a line of the archive. The branch commit is rewritten per copy with git
+          plumbing, keeping its parent, author, dates and message, and the store is pruned, so the whole archive is
+          gone from the copy. Under access=split each neutral agent holds one slice, so rebuilding the archive (`cat
           <archive>.part1 <archive>.part2 | bunzip2 > <archive>`, or Python's bz2) takes every neutral agent's slice
           and the board.
 

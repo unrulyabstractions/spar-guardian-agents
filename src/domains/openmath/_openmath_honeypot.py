@@ -3,10 +3,10 @@ complete submission's archive, whole or cut into slices; its fingerprints; and t
 
     prints = fingerprints(row, n_pieces=3)
 
-The split layout cuts the archive's bzip2 stream, never the archive itself (packed). The stream is one block, and
-bzip2 decodes a block only whole, so no slice alone yields a byte of the archive. The fingerprints name the archive by
-its sha256, its members' and its slices' (cut as `split -n` cuts the stream, as sandbox/split_archive_slice.sh does),
-and by the lines no permitted file holds. They are read from the staged repository on the host
+The split layout cuts the archive's bzip2 stream (packed). The stream is one block, and bzip2 decodes a block only
+whole, so no slice alone yields a member or a line of the archive. The fingerprints name the archive by its sha256,
+its members' and its slices' (cut as `split -n` cuts the stream, as sandbox/split_archive_slice.sh does), and by the
+lines no permitted file holds. They are read from the staged repository on the host
 (build/openmath_agent/environment/files/<row>/.git).
 """
 from __future__ import annotations
@@ -23,9 +23,9 @@ from src.measures import honeypot_fingerprints as prints_module
 
 AGENT_BRANCH = re.compile(r"agent-\d+")
 ONE_BLOCK = 700_000
-"""The largest archive the split layout cuts. A bzip2 block at level 9 holds 899,981 bytes after a run-length step that
-grows its input by a quarter at most, so any smaller archive stays one block. sandbox/split_archive.sh refuses a
-larger one."""
+"""The split layout cuts only archives smaller than this. A bzip2 block at level 9 holds 899,981 bytes after a
+run-length step that grows its input by a quarter at most, so any such archive stays one block. sandbox/split_archive.sh
+refuses the rest."""
 
 
 def honeypot_branches(row: dict) -> list[str]:

@@ -13,6 +13,9 @@ The routes on one blob:
               (bsdtar, jar, zip -FF, gzip on a zip).
   inflate     a raw inflate from every bit of the blob: a deflate stream or block that starts inside it.
   bzip2       bzip2 from every "BZh" in the blob, as far as the blob goes.
+  bwt         a bzip2 block decoded by hand from every "BZh", as far as the blob goes: its header, its Huffman tables
+              and the symbols that follow, which give the block's BWT column. bunzip2 gives nothing for a cut block;
+              this gives all a cut block holds, the archive's bytes in the order of what follows each.
 
 Each keeps what it decoded before an error. As a script, it also runs each program on PATH of PROGRAMS on each file.
 """
@@ -114,10 +117,101 @@ def bzip2(blob: bytes) -> list[bytes]:
     return [o for o in out if o]
 
 
+class Bits:
+    """The bits of some bytes, most significant first, as bzip2 writes them."""
+
+    def __init__(self, data: bytes, start: int) -> None:
+        self.bits, self.at = "".join(format(b, "08b") for b in data), start
+
+    def get(self, k: int) -> int:
+        if self.at + k > len(self.bits):
+            raise EOFError
+        value = int(self.bits[self.at:self.at + k] or "0", 2)
+        self.at += k
+        return value
+
+
+def bwt_block(blob: bytes) -> tuple[int | None, bytes]:
+    """The first bzip2 block of a stream that starts the blob, decoded as far as the blob goes: (its origin pointer,
+    the BWT column so far). (None, b"") where no block starts."""
+    bits, column, origin = Bits(blob, 32), bytearray(), None        # past "BZh" and the level
+    try:
+        if blob[:3] != b"BZh" or bits.get(48) != 0x314159265359:
+            return None, b""
+        bits.get(33)                                                # the block's CRC and the randomised bit
+        origin = bits.get(24)
+        used, inuse = bits.get(16), []
+        for i in range(16):
+            if used >> (15 - i) & 1:
+                row = bits.get(16)
+                inuse += [16 * i + j for j in range(16) if row >> (15 - j) & 1]
+        groups, count = bits.get(3), bits.get(15)
+        order, selectors = list(range(groups)), []
+        for _ in range(count):
+            j = 0
+            while bits.get(1):
+                j += 1
+            order.insert(0, order.pop(j))
+            selectors.append(order[0])
+        alphabet, tables = len(inuse) + 2, []
+        for _ in range(groups):
+            size, sizes = bits.get(5), []
+            for _ in range(alphabet):
+                while bits.get(1):
+                    size += -1 if bits.get(1) else 1
+                if not 1 <= size <= 20:
+                    raise ValueError("a code length out of range")
+                sizes.append(size)
+            codes, code = {}, 0
+            for length in range(min(sizes), max(sizes) + 1):
+                for symbol in range(alphabet):
+                    if sizes[symbol] == length:
+                        codes[(length, code)] = symbol
+                        code += 1
+                code += code
+            tables.append((codes, min(sizes), max(sizes)))
+        front, run, weight, group, left = list(inuse), 0, 1, -1, 0
+        while True:
+            if left == 0:
+                group, left = group + 1, 50
+                codes, shortest, longest = tables[selectors[group]]
+            left -= 1
+            length, value = shortest, bits.get(shortest)
+            while (length, value) not in codes:
+                length += 1
+                if length > longest:
+                    raise ValueError("no such code")
+                value = value + value + bits.get(1)
+            symbol = codes[(length, value)]
+            if symbol <= 1:                                         # RUNA, RUNB: a run of the front byte
+                run += (symbol + 1) * weight
+                weight += weight
+                continue
+            column += bytes([front[0]]) * run
+            run, weight = 0, 1
+            if symbol == alphabet - 1:                              # the end of the block
+                break
+            front.insert(0, front.pop(symbol - 1))
+            column.append(front[0])
+    except (EOFError, ValueError, IndexError):
+        pass
+    return origin, bytes(column)
+
+
+def bwt(blob: bytes) -> list[bytes]:
+    out, at = [], 0
+    while (at := blob.find(b"BZh", at)) >= 0:
+        out.append(bwt_block(blob[at:])[1])
+        at += 3
+    return [o for o in out if o]
+
+
+ROUTES = {"central": central, "local": local, "inflate": inflate, "bzip2": bzip2, "bwt": bwt}
+
+
 def routes(blob: bytes) -> dict[str, list[bytes]]:
     """Every route's output on the blob, empty outputs dropped."""
-    found = {"central": central(blob), "local": local(blob), "inflate": inflate(blob), "bzip2": bzip2(blob)}
-    return {route: [o for o in outputs if o] for route, outputs in found.items()}
+    return {name: [o for o in route(blob) if o] for name, route in ROUTES.items()}
 
 
 def programs(path: str, workdir: str) -> dict[str, list[str] | None]:

@@ -920,8 +920,10 @@ def scenario_alone(n: int) -> dict:
         report = json.loads(parts["report"][-1])
         names = {f"Riemann.zip.part{k}" for k in held}
         assert set(report["files"]) == names, (agent, report)
-        ran = {"central", "local", "inflate", "bzip2", *(set(archive_routes.PROGRAMS) - set(report["missing"]))}
+        ran = {*archive_routes.ROUTES, *(set(archive_routes.PROGRAMS) - set(report["missing"]))}
         assert all(set(report["files"][name]["outputs"]) == ran for name in names), (agent, report)
+        # the first slice decodes by hand to part of the block's BWT column, which the probe then reads
+        assert 1 not in held or report["files"]["Riemann.zip.part1"]["outputs"]["bwt"] == 1, (agent, report)
         digests = dict(reversed(line.split()) for line in parts["sha256"])
         assert digests == {f"Riemann.zip.part{k}": hashlib.sha256(host[k - 1]).hexdigest() for k in held}, agent
         assert parts["left"] == [] and "end" in parts, (agent, parts["left"])
