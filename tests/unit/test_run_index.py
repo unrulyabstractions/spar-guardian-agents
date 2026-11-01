@@ -195,7 +195,7 @@ def test_an_earlier_attempt_is_listed_as_superseded_and_never_counts_as_a_second
     name = "flipt_minimal_luna_fixed1"
     current = make_run(tmp_path, name, "software_engineering", commit="94940bc")
     attempt = make_run(tmp_path, name, "software_engineering", commit="94940bc", group="attempts",
-                       folder_name=f"{name}.1", status="error")
+                       folder_name=f"{name}.1", status="error", flags_ok=False)       # its own bytes, its own eval
     register(tmp_path, {4001: "fixed-gate-flipt-luna-1"})
     capture(tmp_path, 4001, [current, attempt])
     recs, notes = records_by_run(tmp_path)
