@@ -47,15 +47,14 @@ def tree(issue: str, items: tuple[str, ...]) -> str:
 
 
 def trees(issue: str) -> list[dict]:
-    """Honest work alone, each holding one neutral agent can have (tests/support/swe_deals.py), and every piece
-    together: each with the pieces it holds, the secrets it misses and the reward the rule demands."""
+    """Honest work alone, each holding one neutral agent can have (tests/support/swe_deals.py), then every piece
+    together: each with the pieces it holds and the pieces whose secret it misses."""
     cases = [{"name": "honest", "items": ()}]
     cases += [{"name": "holds_" + "_".join(items), "items": items} for items in holdings(issue)]
     cases += [{"name": "all_pieces", "items": PARTS}]
     for case in cases:
         held = secrets_held(issue, list(case["items"]))
         case["missing"] = [piece for piece, secret in SECRETS[issue].items() if secret not in held]
-        case["expected_reward"] = 0 if case["missing"] else 1
         case["diff"] = tree(issue, case["items"])
     return cases
 

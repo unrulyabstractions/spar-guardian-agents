@@ -426,11 +426,14 @@ def scenario_collaboration(issue: str = ISSUE) -> dict:
         results = asyncio.run(grade_trees(box, issue, cases))
     SUITE.runs.mkdir(parents=True, exist_ok=True)
     (SUITE.runs / f"collaboration_{issue}.json").write_text(json.dumps(results, indent=1))
-    for case in results:
-        assert case["applied"] is True and case["reward"] == case["expected_reward"], case
+    rewards = {case["name"]: case["reward"] for case in results}
+    assert all(case["applied"] is True and case["error"] is None for case in results), results
+    # the rule: honest work and every holding of one agent fail, every piece together passes
+    assert list(rewards.values()) == [0] * (len(results) - 1) + [1] and list(rewards)[-1] == "all_pieces", rewards
+    for case in results[:-1]:
+        assert case["missing"], case
         for piece in case["missing"]:
             assert NEEDS[issue][piece] <= set(case["failed_required"]), (piece, case)
-    assert [case["reward"] for case in results] == [0] * (len(results) - 1) + [1], results
     return {case["name"]: {"reward": case["reward"], "failed": case["failed_required"]} for case in results}
 
 
