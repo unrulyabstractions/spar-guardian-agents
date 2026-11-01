@@ -564,3 +564,61 @@ models:
     status: candidate
     notes: >-
       Alibaba's open-weight flagship, Qwen/Qwen3.8-2.4T-A95B on Hugging Face; CheatBench has not run it.
+
+  # ---------------------------------------------------------------------------------------------- open-weight targets
+  # Small open-weight models whose activations one GPU can read, for the screen in elicitation/ (elicitation/README.md).
+  # Each pins a host that serves the Hugging Face weights at the precision the activation study reads, where one exists.
+  qwen3.8-27b-openrouter:
+    inspect: openrouter/qwen/qwen3.8-27b
+    provider: openrouter
+    routing: {order: [deepinfra/bf16], allow_fallbacks: false}
+    context: 262144
+    max_output: 235929
+    usd_per_million: {input: 0.15, cached_input: 0.0375, output: 1.875}
+    price_source: OpenRouter's DeepInfra bf16 endpoint on 2026-11-01, the host the routing pins
+    cheatbench: []
+    status: candidate
+    notes: >-
+      Qwen/Qwen3.8-27B on Hugging Face, dense 27.8B in BF16, Apache-2.0. DeepInfra serves it in bf16; its uptime was
+      96% over the day before 2026-11-01. CheatBench has not run it.
+  muse-glimmer-30b-openrouter:
+    inspect: openrouter/meta/muse-glimmer-30b
+    provider: openrouter
+    routing: {order: [deepinfra/bf16], allow_fallbacks: false}
+    context: 131072
+    max_output: 16384
+    usd_per_million: {input: 0.30, cached_input: 0.04, output: 1.20}
+    price_source: OpenRouter's DeepInfra bf16 endpoint on 2026-11-01, the host the routing pins and the only one
+    cheatbench: []
+    status: candidate
+    notes: >-
+      meta-models/Muse-Glimmer-30B on Hugging Face, dense 29.8B in BF16, Apache-2.0, distilled from Muse Spark by its
+      card. Its context is 131,072 tokens, so a long episode can end on the context. CheatBench has not run it.
+  gemma-4-31b-openrouter:
+    inspect: openrouter/google/gemma-4-31b-it
+    provider: openrouter
+    routing: {order: [crusoe/bf16], allow_fallbacks: false}
+    context: 262144
+    max_output: 262141
+    usd_per_million: {input: 0.14, cached_input: 0.14, output: 0.40}
+    price_source: OpenRouter's Crusoe bf16 endpoint on 2026-11-01, the host the routing pins
+    cheatbench: []
+    status: candidate
+    notes: >-
+      google/gemma-4-31B-it on Hugging Face, dense 31.3B in BF16, Apache-2.0. Crusoe serves bf16 and charges cache
+      reads in full, with 97% uptime over the day before 2026-11-01; Parasail's fp8 endpoint (0.15/0.06/0.40) had full
+      uptime. CheatBench has not run it.
+  qwen3.6-35b-a3b-openrouter:
+    inspect: openrouter/qwen/qwen3.6-35b-a3b
+    provider: openrouter
+    routing: {order: [parasail/fp8], allow_fallbacks: false}
+    context: 262144
+    max_output: 235929
+    usd_per_million: {input: 0.10, cached_input: 0.025, output: 0.90}
+    price_source: OpenRouter's Parasail fp8 endpoint on 2026-11-01, the host the routing pins
+    cheatbench: []
+    status: candidate
+    notes: >-
+      Qwen/Qwen3.6-35B-A3B on Hugging Face, MoE with 36B parameters in BF16 and 3B active, Apache-2.0. No OpenRouter
+      host lists bf16 for it on 2026-11-01 (two list no quantization); CoreWeave and SiliconFlow list no tool calling.
+      CheatBench has not run it.

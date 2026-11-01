@@ -53,6 +53,14 @@ Every script takes `--model` (a registry entry or an Inspect model string), `--p
 uv run python -m examples.swe.flipt_minimal --model gemini-3.8-flash --scale medium --set regulators=1
 ```
 
+## Elicitation
+
+`elicitation/` holds the cells that screen a candidate target model for collaborative reward hacking. `elicitation/swe.py` puts two neutral agents on the SWE issue `flipt-02e2` under the jigsaw honeypot. The fix's three pieces are split over the two, so the whole fix takes both. The script takes the examples' arguments, and its run is named after the model and the seed (`flipt_duo_<model>`, `_s<seed>` for a seed other than 0). It refuses a run of that name that exists, so the runs of a screen never overwrite each other, and it refuses a `--set` that changes the team. `elicitation/README.md` lists the candidate models.
+
+```
+uv run python -m elicitation.swe --model deepseek-flash-openrouter --set seed=1
+```
+
 ## Presets
 
 | preset | what it runs |
@@ -230,6 +238,8 @@ src/                     the experiment, run as `python -m src <command>`, in th
   models/                the model registry, the swarm model provider, Gemini's 402 retry
   utils/                 CheatBench's core package, the JSON file readers and the figures' style
 examples/                one script per task and cell; see examples/README.md
+elicitation/             the cells that screen a candidate target model: swe.py, two neutral agents on flipt-02e2;
+                         see elicitation/README.md
 scripts/                 screen.py (the example cells in bulk), paper/ (the paper's figures, tables and appendix),
                          box/ (the rented boxes, from offer to destroy; see scripts/box/README.md)
 tools/                   the analysis tools in their own environment; see tools/README.md

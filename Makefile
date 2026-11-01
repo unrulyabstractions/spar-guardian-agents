@@ -55,8 +55,8 @@ test:  ## offline unit tests: tests/unit
 test-tools:  ## offline unit tests of the analysis tools, in their own environment: tests/tools
 	$(TOOLS) -m pytest tests/tools -q
 
-lint:  ## ruff over src, tests, examples, scripts and tools (ruff.toml: 120 columns, sorted imports)
-	uvx ruff check src tests examples scripts tools
+lint:  ## ruff over src, tests, examples, elicitation, scripts and tools (ruff.toml: 120 columns, sorted imports)
+	uvx ruff check src tests examples elicitation scripts tools
 
 tools-setup:  ## the analysis environment: tools/.venv (Python 3.12) and MAST's taxonomy texts
 	uv sync --project tools --python 3.12
