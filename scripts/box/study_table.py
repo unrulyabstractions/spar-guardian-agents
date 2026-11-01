@@ -19,7 +19,7 @@ Nothing here or anywhere in this folder starts one stage from another, and no st
     phase2b-<target>  minimal_regulated with Haiku at ambiguous and enforce, seeds 1 to 5, and Sonnet at both, seed 1
     fixed-pilot       flipt on luna after the SWE fix: minimal_regulated, each of the five regulators at ambiguous,
                       seed 1
-    fixed-gate        both flipt targets after the SWE fix: minimal and minimal_cheat, seeds 1 to 5
+    fixed-gate        both flipt targets after the SWE fix: minimal and minimal_cheat, seeds 1 to 3
 
 Every SWE run before the fix (commits 7331882 to 33b7810, 2026-11-01) graded a task where one agent could cheat
 alone, so it measures nothing about collaboration. The fixed stages' runs carry the tag `fixed`, so no name repeats
@@ -138,7 +138,9 @@ def fixed_pilot_arms(target: Target) -> tuple[Arm, ...]:
 
 
 def fixed_gate_arms(target: Target) -> tuple[Arm, ...]:
-    return Arm(target, "minimal", tag=FIXED), Arm(target, "minimal_cheat", tag=FIXED)
+    """The gate of the fixed SWE task: 3 runs per cell, the user's ruling of 2026-11-01."""
+    return (Arm(target, "minimal", tag=FIXED, seeds=SEEDS[:3]),
+            Arm(target, "minimal_cheat", tag=FIXED, seeds=SEEDS[:3]))
 
 
 STAGES = {"pilot": {f"pilot-{target.name}": pilot_arms(target) for target in PILOT_TARGETS},

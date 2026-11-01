@@ -58,12 +58,12 @@ def test_the_study_has_40_gate_runs_40_phase_two_runs_per_target_and_9_pilot_run
     assert [len(stage_runs(stage)) for stage in PHASE_TWO] == [32, 32, 40, 40]
     assert [len(stage_runs(stage)) for stage in PHASE_TWO_B] == [12, 12, 12, 12]
     assert len(stage_runs("pilot")) == 9
-    assert len(stage_runs("fixed-pilot")) == 5 and len(stage_runs("fixed-gate")) == 20
+    assert len(stage_runs("fixed-pilot")) == 5 and len(stage_runs("fixed-gate")) == 12
 
 
 def test_every_run_name_is_unique_across_the_study():
     names = [job.name for job in EVERY_JOB] + [job.name for box in EVERY_BOX for job in box_jobs(box, mock=True)]
-    assert len(names) == len(set(names)) == 266 + sum(len(box.arms) for box in EVERY_BOX)
+    assert len(names) == len(set(names)) == 258 + sum(len(box.arms) for box in EVERY_BOX)
 
 
 def test_the_fixed_stages_redo_swe_alone_under_names_no_earlier_run_holds():
@@ -78,8 +78,8 @@ def test_the_fixed_stages_redo_swe_alone_under_names_no_earlier_run_holds():
         ("gpt-6-luna-openrouter", regulator, "ambiguous", (1,)) for regulator in REGULATORS}
     gate = [arm for box in stage_boxes("fixed-gate") for arm in box.arms]
     assert {(arm.target.model, arm.kind, arm.seeds) for arm in gate} == {
-        (model, kind, (1, 2, 3, 4, 5)) for model in MODELS for kind in ("minimal", "minimal_cheat")}
-    assert {"flipt_minimal_luna_fixed1", "flipt_minimal_cheat_dsflash_fixed5",
+        (model, kind, (1, 2, 3)) for model in MODELS for kind in ("minimal", "minimal_cheat")}
+    assert {"flipt_minimal_luna_fixed1", "flipt_minimal_cheat_dsflash_fixed3",
             "flipt_minimal_regulated_luna_sonnet_ambiguous_fixedpilot1"} <= {job.name for job in fixed}
 
 
@@ -132,7 +132,7 @@ def test_a_stage_rents_the_boxes_the_table_says():
     assert {stage: len(stage_boxes(stage)) for stage in STAGES} == {
         "pilot": 3, "gate": 6, "phase2-flipt-dsflash": 6, "phase2-flipt-luna": 6, "phase2-protein-luna": 7,
         "phase2-creative-luna": 7, "phase2b-flipt-dsflash": 3, "phase2b-flipt-luna": 3, "phase2b-protein-luna": 2,
-        "phase2b-creative-luna": 2, "fixed-pilot": 1, "fixed-gate": 4}
+        "phase2b-creative-luna": 2, "fixed-pilot": 1, "fixed-gate": 2}
 
 
 @pytest.mark.parametrize("box", EVERY_BOX, ids=lambda box: box.name)
@@ -239,7 +239,7 @@ def test_jobs_lists_every_run_box_and_flag_and_sends_nothing(monkeypatch, capsys
 def test_jobs_with_no_stage_lists_the_whole_study(capsys):
     assert fleet.main(["jobs"]) == 0
     out = capsys.readouterr().out
-    assert out.count("--set seed=") == 266 and all(f"== {stage}:" in out for stage in STAGES)
+    assert out.count("--set seed=") == 258 and all(f"== {stage}:" in out for stage in STAGES)
 
 
 # ---- nothing but a person starts a stage ----
