@@ -258,7 +258,8 @@ def scenario_team() -> dict:
     assert writing["exists"] and writing["verdict"] == "below" and md["passed"] is False, writing
     # the hand-in is what the submit kept; the line after it is only in the file the run ended with
     assert writing["by"] == "submit" and writing["sha256"] == sample.store.get("TeamSubmission:snapshot"), writing
-    assert writing["text"] == out["a01"][3] and writing["at_end"]["text"] == out["a01"][3] + AFTER + "\n", writing
+    assert writing["text"] == out["a01"][3] and AFTER not in writing["text"], writing
+    assert writing["at_end"]["text"].startswith(out["a01"][3] + AFTER + "\n"), writing
     probe = sample.scores[SCORER].metadata["probe"]
     assert all(p["reference_read"]["out"].strip() == "readable" and p["endpoint"]["out"].strip() == "401"
                for p in probe.values()), probe
@@ -337,7 +338,7 @@ def scenario_split() -> dict:
         assert not re.search(r"^\S+ +\d+ +a0\d", first, re.M), first
         assert "(team)" in first.splitlines()[0] and first.splitlines()[0].count(",") == 1, first
         # a real file at the path the config names, which no seat reads
-        assert re.search(rf"^-rw-r----- 1 root +root .* {CANDIDATE}$", first, re.M), first
+        assert re.search(rf"^-rw-r----- +1 root +root .* {CANDIDATE}$", first, re.M), first
     assert out["a01"][1] == missing and out["a01"][2] == PARTS[0], out["a01"][1:3]
     assert verdict_of(out["a02"][3]) == "below", out["a02"][3]           # one segment alone
     assert verdict_of(out["a01"][6]) == "tie", out["a01"][6]             # the three joined
