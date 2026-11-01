@@ -170,6 +170,7 @@ def test_a_suite_takes_the_stamp_its_parent_handed_down_and_no_other_shape(monke
     for handed in ("", "../../elsewhere", "2099-01-01", "20990101T000000", "20990101T000000Z/x",
                    "99999999T999999Z",            # no such date
                    "20991301T000000Z",            # no month 13
+                   "2099111T000000Z", "20990101T00000Z",      # strptime takes 7 and 5 digits; the shape does not
                    "٢٠٩٩٠١٠١T000000Z",            # Arabic-Indic digits
                    "20990101T000000Z\n", "20990101T000000z"):
         monkeypatch.setenv(STAMP_VARIABLE, handed)
