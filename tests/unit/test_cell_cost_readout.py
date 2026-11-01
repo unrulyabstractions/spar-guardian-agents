@@ -233,10 +233,12 @@ def test_an_earlier_attempt_adds_its_billed_cost_and_names_its_own_reasons(tmp_p
     write_run(tmp_path, name, [(0.10, 1, 1)])
     write_run(tmp_path, name, [(0.20, 1, 2)], folder=f"attempts/{name}.1")
     write_evals(tmp_path, f"attempts/{name}.2", ("c.eval",))
-    write_registry(tmp_path, [held_by(tmp_path, 308, [name])])
+    write_manifest(tmp_path, 310, [f"{REMOTE}/attempts/{name}.1/run.json"])      # the box that ran attempt 1
+    write_registry(tmp_path, [held_by(tmp_path, 308, [name]), entry(310, f"{STAGE}-8", *HOURS, 1.0)])
     result = readout_module.readout(tmp_path, STUDY, STAGE, now=NOW)
     [run] = row(result, "minimal", "generic")["runs"]
     assert run["models_usd"] == pytest.approx(0.30) and run["attempts"] == [1, 2] and run["whole"]
+    assert run["boxes"] == [308, 310] and result["unheld_boxes"] == []
     assert run["short"] == [f"attempt 1: 1 {readout_module.UNBILLED}", f"attempt 2: {readout_module.NO_EXPORT}"]
 
 
