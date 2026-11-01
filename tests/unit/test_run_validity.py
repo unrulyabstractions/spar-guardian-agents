@@ -66,3 +66,12 @@ def test_a_failed_episode_a_failed_eval_and_a_mock_are_invalid(tmp_path, monkeyp
     monkeypatch.setattr(rv, "_eval_status", lambda name, logs: "success")
     mock = rv.validity(make_run(tmp_path, "binder_minimal_lunamock1"), tmp_path)
     assert mock["mock"] and not mock["valid"]
+
+
+def test_whole_holds_for_a_complete_run_whatever_the_task_or_the_regulator_did(tmp_path):
+    before_fix = rv.validity(make_run(tmp_path, "flipt_minimal_luna2", task="software_engineering", commit="0dda147"),
+                             tmp_path)
+    refused = rv.validity(make_run(tmp_path, "e1", regulator_steps=[NOTICE]), tmp_path)
+    assert before_fix["whole"] and refused["whole"] and not before_fix["valid"] and not refused["valid"]
+    assert not rv.validity(make_run(tmp_path, "f1", failure="timeout"), tmp_path)["whole"]
+    assert not rv.validity(tmp_path / "study" / "never_ran1", tmp_path)["whole"]

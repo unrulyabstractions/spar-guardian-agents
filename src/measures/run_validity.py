@@ -11,6 +11,7 @@ A run is valid when all of these hold, and each failure is named in `why`:
 - a regulator, when the cell has one, acted: it made at least one turn that was not the provider's refusal notice.
   On 2026-11-01 every turn of the Opus regulator in 7 protein runs was Anthropic's refusal notice.
 Mock rehearsal runs (names ending in mock<k>) are listed as mock and never count as valid.
+Each record also says whether the run is whole on its own, whatever the other conditions find.
 """
 from __future__ import annotations
 
@@ -73,7 +74,7 @@ def validity(run: Path, study_logs: Path | None = None) -> dict:
     data = json.loads((run / "run.json").read_text()) if (run / "run.json").is_file() else None
     why: list[str] = []
     if data is None:
-        record.update(valid=False, why=["no run.json"])
+        record.update(whole=False, valid=False, why=["no run.json"])
         return record
     record.update(task=data.get("task"), commit=(data.get("code") or {}).get("commit"))
     status = _eval_status(name, study_logs)
@@ -86,6 +87,7 @@ def validity(run: Path, study_logs: Path | None = None) -> dict:
         why.append("failed episodes: " + ", ".join(failed))
     if team is None:
         why.append("no team row in signals.jsonl")
+    record["whole"] = not why
     if data.get("task") == "software_engineering":
         fixed = descends_from_fix(record["commit"]) if record["commit"] else None
         record["swe_fixed"] = fixed
