@@ -42,6 +42,45 @@ def write_ssh_config(instance_id: int, ssh: dict) -> Path:
     return config
 
 
+def check_box(vast: Vast, box: dict, row: dict | None) -> tuple[int, float]:
+    """Hold one registered box to its row of the account, updating the box's record; its failures and what it bills per
+    hour."""
+    if box["destroyed"]:
+        if row is None:
+            return 0, 0.0
+        print(f"!! {box['id']} {box['label']}: marked destroyed at {box['destroyed']}, still on the "
+              f"account ({row.get('actual_status')}, ${row.get('dph_total') or 0:.3f}/h)")
+        return 1, 0.0
+    if row is None:
+        if box.get("destroy_sent"):
+            box["destroyed"] = now_iso()
+            print(f"   {box['id']} {box['label']}: gone from the account since the destroy sent at "
+                  f"{box['destroy_sent']}; marked destroyed")
+            return 0, 0.0
+        print(f"!! {box['id']} {box['label']}: registered, not on the account")
+        return 1, 0.0
+    failures = 0
+    if box.get("destroy_sent"):
+        print(f"!! {box['id']} {box['label']}: destroy sent at {box['destroy_sent']}, still on the account")
+        failures += 1
+    why = start_error(row)
+    if why:
+        box["start_error"] = why
+        print(f"!! {box['id']} {box['label']}: vast.ai cannot start it ({why}); rent another with --only {box['box']} "
+              f"--label-prefix {LABEL_PREFIX}-retry, and this one bills its disk until it goes")
+        failures += 1
+    rate = (row.get("storage_total_cost") if row.get("cur_state") == "stopped" else row.get("dph_total")) or 0
+    box["ssh"] = ssh_endpoint(row) or ssh_endpoint(instance(vast, box["id"]) or {}) or box["ssh"]
+    if box["ssh"]:
+        write_ssh_config(box["id"], box["ssh"])
+    target = box["ssh"] and (box["ssh"]["direct"] or box["ssh"]["proxy"])
+    age_h = (time.time() - row["start_date"]) / 3600 if row.get("start_date") else 0
+    where = f"{target['host']}:{target['port']}" if target else "no ssh yet"
+    print(f"   {box['id']:>9} {box['label']:60s} {row.get('actual_status') or '-':8s} "
+          f"${rate:.3f}/h {age_h:5.1f} h  {where}")
+    return failures, rate
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     vast = Vast(writes=False)
     live = {row["id"]: row for row in list_instances(vast)}
@@ -51,41 +90,9 @@ def cmd_status(args: argparse.Namespace) -> int:
         print(f"== {len(live)} instances on the account; "
               f"{sum(not box['destroyed'] for box in registry['boxes'])} boxes in the registry not destroyed")
         for box in registry["boxes"]:
-            row = live.get(box["id"])
-            if box["destroyed"]:
-                if row is not None:
-                    print(f"!! {box['id']} {box['label']}: marked destroyed at {box['destroyed']}, still on the "
-                          f"account ({row.get('actual_status')}, ${row.get('dph_total') or 0:.3f}/h)")
-                    failures += 1
-                continue
-            if row is None:
-                if box.get("destroy_sent"):
-                    box["destroyed"] = now_iso()
-                    print(f"   {box['id']} {box['label']}: gone from the account since the destroy sent at "
-                          f"{box['destroy_sent']}; marked destroyed")
-                else:
-                    print(f"!! {box['id']} {box['label']}: registered, not on the account")
-                    failures += 1
-                continue
-            if box.get("destroy_sent"):
-                print(f"!! {box['id']} {box['label']}: destroy sent at {box['destroy_sent']}, still on the account")
-                failures += 1
-            why = start_error(row)
-            if why:
-                box["start_error"] = why
-                print(f"!! {box['id']} {box['label']}: vast.ai cannot start it ({why}); rent another with "
-                      f"--label-prefix {LABEL_PREFIX}-retry, and this one bills its disk until it goes")
-                failures += 1
-            rate = (row.get("storage_total_cost") if row.get("cur_state") == "stopped" else row.get("dph_total")) or 0
+            box_failures, rate = check_box(vast, box, live.get(box["id"]))
+            failures += box_failures
             billing += rate
-            box["ssh"] = ssh_endpoint(row) or ssh_endpoint(instance(vast, box["id"]) or {}) or box["ssh"]
-            if box["ssh"]:
-                write_ssh_config(box["id"], box["ssh"])
-            target = box["ssh"] and (box["ssh"]["direct"] or box["ssh"]["proxy"])
-            age_h = (time.time() - row["start_date"]) / 3600 if row.get("start_date") else 0
-            where = f"{target['host']}:{target['port']}" if target else "no ssh yet"
-            print(f"   {box['id']:>9} {box['label']:60s} {row.get('actual_status') or '-':8s} "
-                  f"${rate:.3f}/h {age_h:5.1f} h  {where}")
         save_registry(registry)
     known = {box["id"] for box in registry["boxes"]}
     for row in live.values():

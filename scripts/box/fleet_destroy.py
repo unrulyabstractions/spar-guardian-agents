@@ -130,9 +130,9 @@ def cmd_destroy(args: argparse.Namespace) -> int:
     gone = wait_gone(vast, args.id)
     if gone:
         update_box(args.id, destroyed=now_iso())
-    entry_log = {"id": args.id, "label": entry["label"], "destroy_sent": registered(load_registry(), args.id)[
-                     "destroy_sent"], "gone_from_account": gone, "accepted_loss": args.accept_loss, "lost": lost,
-                 "files_swept": marker["swept"] if marker else None,
+    sent = registered(load_registry(), args.id)["destroy_sent"]
+    entry_log = {"id": args.id, "label": entry["label"], "destroy_sent": sent, "gone_from_account": gone,
+                 "accepted_loss": args.accept_loss, "lost": lost, "files_swept": marker["swept"] if marker else None,
                  "files_captured": marker["captured"] if marker else None,
                  "files_lost": marker["lost"] if marker else (lost or {}).get("lost"),
                  "excluded": marker["excluded"] if marker else None,

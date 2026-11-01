@@ -1,16 +1,19 @@
 """fleet.py create: rent the boxes of one stage and register each.
 
-A person names the stage, and create rents that stage's boxes alone. It refuses a task without every cell or with a cell
-stem another task has, a model that needs a key a box does not hold, a count that does not match the boxes asked for,
-and a box the account holds already. It pins the launch before the first rent, and it
-rents one offer per box in the same step as the search, since offer ids expire within minutes. It takes no offer above
---max-dph and stops before the fleet's $/h (the registered boxes not destroyed, and this launch) would pass
---max-fleet-dph. Each instance enters the registry the moment vast.ai returns its id. A rejected offer moves on to the
-next one. Any other outcome (an error, a reply it cannot read, an interrupt) stops the launch, since the instance may
-exist. However the launch ends, once a rent was sent an audit of the account runs: an instance with this launch's label
-that the registry lacks is registered then, and any other spar-screen instance outside the registry fails the launch
-and stays unregistered. --dry-run does the search and prints every request it would send, and sends none: its client
-refuses anything but a read.
+A person names the stage, and create rents that stage's boxes alone, or those of them --only names. It refuses a task
+without every cell or with a cell stem another task has, a model that needs a key a box does not hold, a count that does
+not match the boxes asked for, and a box the account holds already.
+
+It pins the launch before the first rent, and it rents one offer per box in the same step as the search, since offer ids
+expire within minutes. It takes no offer above --max-dph and stops before the fleet's $/h (the registered boxes not
+destroyed, and this launch) would pass --max-fleet-dph. Each instance enters the registry the moment vast.ai returns its
+id. A rejected offer moves on to the next one. Any other outcome (an error, a reply it cannot read, an interrupt) stops
+the launch, since the instance may exist.
+
+However the launch ends, once a rent was sent an audit of the account runs. An instance with this launch's label that
+the registry lacks is registered then. Any other spar-screen instance outside the registry fails the launch and stays
+unregistered. --dry-run does the search and prints every request it would send, and sends none: its client refuses
+anything but a read.
 """
 from __future__ import annotations
 

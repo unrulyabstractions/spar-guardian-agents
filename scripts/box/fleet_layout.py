@@ -107,8 +107,7 @@ def kinds_of(task: str) -> tuple[str, ...]:
 
 def cells(task: str, kinds: tuple[str, ...] | None = None, examples: Path = ROOT / "examples") -> list[str]:
     """examples.<package>.<stem> without the prefix for each kind (every kind of the task by default), in the order of
-    kinds. Each kind needs exactly one script examples/<package>/<stem>_<kind>.py; a missing or doubled cell raises, so
-    a box never runs a partial task."""
+    kinds. Each kind needs exactly one script examples/<package>/<stem>_<kind>.py: a missing or doubled cell raises."""
     package = TASKS[task]
     found, problems = [], []
     for kind in kinds or kinds_of(task):

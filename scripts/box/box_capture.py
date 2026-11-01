@@ -26,7 +26,7 @@ runs/<study>/<name>/ or out/<name>/ that the box does not have are listed as loc
 
 baseline records the sweep of the box's home and /tmp before box_setup.sh changes anything. It runs once per box: a
 later call keeps the first, and a box that already holds the clone or the setup's logs is refused (exit 3), since its
-baseline would take the screen's files for the host image's; the capture then requires the host's files too.
+baseline would take the runs' files for the host image's. The capture then requires the host's files too.
 """
 from __future__ import annotations
 
@@ -477,7 +477,7 @@ def baseline(instance_id: int) -> int:
                    if p and (under_repo(p) or p in {f"{HOME}/{name}" for name in SETUP_FILES})})
     if late:
         print(f"refused: the box is past first contact ({len(late)} files of the clone or the setup, such as "
-              f"{late[0]}): a baseline now would count the screen's files as the host image's. No baseline is "
+              f"{late[0]}): a baseline now would count the runs' files as the host image's. No baseline is "
               f"recorded, so the capture requires the host image's files as well")
         return 3
     path.write_text("".join(json.dumps(line) + "\n" for line in lines))
