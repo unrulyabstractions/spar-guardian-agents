@@ -18,12 +18,16 @@ anything but a read.
 from __future__ import annotations
 
 import argparse
+import subprocess
+import sys
 import urllib.error
 from dataclasses import dataclass
+from pathlib import Path
 
 from scripts.box import fleet_registry
 from scripts.box.fleet_layout import (
     LABEL_PREFIX,
+    ROOT,
     box_label,
     floor_of,
     is_fleet_label,
@@ -40,6 +44,21 @@ MAX_FLEET_DPH = 15.00
 """What the fleet may bill per hour in all (its boxes not destroyed), unless --max-fleet-dph says otherwise."""
 MAX_REJECTIONS = 10
 """Offers vast.ai may refuse in one launch (taken since the search) before the launch stops."""
+GUARD = Path.home() / ".claude" / "hooks" / "cloud_boxes_guard.py"
+"""The cloud box guard. Its daemon watches every box of this repository and tears down one idle for 30 minutes
+through .claude/box_teardown.sh. create refuses to rent without it (2026-11-01: 19 idle boxes, $126)."""
+
+
+def guard_alive() -> bool:
+    """Whether the guard's daemon runs for this repository: `cloud_boxes_guard.py daemon-alive` exits 0. False
+    when the guard is not installed."""
+    if not GUARD.is_file():
+        return False
+    try:
+        return subprocess.run([sys.executable, str(GUARD), "daemon-alive", "--project", str(ROOT)],
+                              capture_output=True, timeout=30).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
 
 
 @dataclass
@@ -182,6 +201,11 @@ def cmd_create(args: argparse.Namespace) -> int:
         refused = True
     if refused and not args.dry_run:
         print("refused: a box rented for these jobs could not run them")
+        return 1
+    if not args.dry_run and not guard_alive():
+        print("refused: no cloud box guard daemon runs for this repository. Start it first:\n"
+              f"  python3 ~/.claude/hooks/cloud_boxes_guard.py start-daemon --project {ROOT}\n"
+              "then keep `/loop 30m /cloud-boxes` running while any box exists (2026-11-01: 19 idle boxes, $126).")
         return 1
     vast = Vast(writes=not args.dry_run)
     launch = new_launch()

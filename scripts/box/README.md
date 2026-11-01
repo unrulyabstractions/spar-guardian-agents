@@ -4,6 +4,18 @@ These scripts run study_exploration_1 on rented vast.ai boxes. `study_table.py` 
 
 You launch each stage by hand and by name: `pilot`, `gate`, or one `phase2-<target>`. Nothing starts one stage from another. No judge runs on a box. The code ladder is every run's result.
 
+## No box without the guard
+
+On 2026-11-01, 19 boxes sat idle for 8.2 hours at $15.40/h, about $126, after the OpenRouter key hit its limit and nothing watched them. The cloud box guard, `~/.claude/hooks/cloud_boxes_guard.py`, now stands between every rental and that loss:
+
+```
+python3 ~/.claude/hooks/cloud_boxes_guard.py start-daemon --project "$PWD"   # before any create; create refuses without it
+python3 ~/.claude/hooks/cloud_boxes_guard.py status                           # the boxes, their $/h, the daemon
+python3 ~/.claude/hooks/cloud_boxes_guard.py check --project "$PWD"           # one pass: measure, tear down the idle
+```
+
+The daemon asks `.claude/box_progress.sh` every 10 minutes how long since each box made progress (its runner alive, its newest run or log file, the key's remaining limit). A box idle for 30 minutes goes through `.claude/box_teardown.sh`: `capture_check.sh --pull`, then `fleet destroy`, both of which refuse on their own. The daemon posts a macOS notification on idle, on teardown and on any failure. In a Claude Code session, `/loop 30m /cloud-boxes` runs the same check, and the Stop hook refuses to end a turn with boxes billing unless the daemon is alive, its status is fresh and no box is idle.
+
 ## Set up
 
 Read what a stage runs. This prints every box, run name and flag, and it sends nothing:
