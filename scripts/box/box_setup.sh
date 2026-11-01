@@ -78,6 +78,9 @@ done
 echo "   answered after $SECONDS s"
 
 echo "== 2. the box's id and the host image's own files"
+# The sshd that answered in step 1 can be the one vast.ai runs while the VM boots, with a key of its own. Until the
+# baseline exists the VM's key is the first one this machine can trust, so step 2 starts from an empty known_hosts too.
+[ -f "logs/boxes/$id/baseline.jsonl" ] || rm -f "$known"
 qid=$(printf %q "$id")
 "$here/box_ssh.sh" "$id" "if [ -f /root/box_id ]; then [ \"\$(cat /root/box_id)\" = $qid ] \
 || { echo \"refused: this box names itself \$(cat /root/box_id), not $qid\"; exit 1; }; \
