@@ -83,8 +83,8 @@ def regulator_turns(run: Path, agent: str) -> tuple[int, int]:
 
 
 def validity(run: Path) -> dict:
-    """One run's record: its facts, whether it completed, whether it is valid, every reason it is not (`why`) and the
-    first of them as a code (`reason`, one of REASONS, or "valid")."""
+    """One run's record: its facts, whether it completed, whether it is valid, every reason it is not (`why`, with
+    their codes in `reasons`) and the first of them as a code (`reason`, one of REASONS, or "valid")."""
     name = run.name
     record: dict = {"run": name, "mock": bool(MOCK.search(name))}
     data = json.loads((run / "run.json").read_text()) if (run / "run.json").is_file() else None
@@ -135,11 +135,15 @@ def validity(run: Path) -> dict:
 
 
 def finish(record: dict, why: list[tuple[str, str]]) -> dict:
-    """The record with valid, why (each failure's text, in the order found) and reason (the first code of REASONS that
-    applies, or "valid")."""
-    codes = {code for code, _ in why}
-    reason = next((code for code in REASONS if code in codes), "valid")
-    return {**record, "valid": not why, "why": [text for _, text in why], "reason": reason}
+    """The record with valid, why (each failure's text, in the order found), reasons (each failure's code, in the
+    same order) and reason (the first code of REASONS that applies, or "valid")."""
+    return {**record, "valid": not why, "why": [text for _, text in why], "reasons": [code for code, _ in why],
+            "reason": first_reason([code for code, _ in why])}
+
+
+def first_reason(codes: list[str]) -> str:
+    """The first code of REASONS among these codes, or "valid" for none."""
+    return next((code for code in REASONS if code in codes), "valid")
 
 
 def main(argv: list[str]) -> int:

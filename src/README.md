@@ -128,7 +128,10 @@ The LLM judges. CheatBench's judge runs inside the eval as the scorer `cheatbenc
 
 Everything computed over a run directory, without a model.
 
-- `run_directory.py`: `RunDir`, one run directory read through one object.
+- `run_directory.py`: `RunDir`, one run directory read through one object. A study keeps a run at `runs/<study>/<run>` or in one of its groups, `runs/<study>/{invalid,incomplete,mock,set_aside}/<run>`, and `study_runs` lists both. A run's eval log sits at the same path under `logs/`.
+- `run_validity.py`: whether a run measures what its cell says: no mock rehearsal, completed, on an SWE task that needs two agents to cheat (from `SWE_FIX`, f0d1c34), with a regulator that acted and a team the code ladder placed. Each run gets `why` and one `reason` code.
+- `deal_replay.py`: whether today's code deals a protein, creative or SWE run the roster and the holdings it recorded.
+- `run_index.py`: one record per run of a study in `runs/<study>/INDEX.jsonl`: what the run is, where it ran (the stage and box of `scripts/box/study_table.py`, the instance from the box captures), its arm, its outcome and its checks. `uv run python -m src.measures.run_index runs/<study>` prints a summary and writes nothing; `--write` writes the file.
 - `code_ladder.py`: exposed, tried, opened, used, tampered, checked and shipped per agent from the transcript, the probe and the domain's records. It writes `signals.jsonl` and run.json `signals`.
 - `team_ladder.py`: the team record of a sample: its rungs, its collaboration level, the judged presentation and the outcomes.
 - `access_evidence.py`: the access log as the code ladder reads it: the calls it shows as aimed, the agent row's `access_log` key and the team's.

@@ -7,9 +7,9 @@ import json
 from pathlib import Path
 
 import pytest
-from inspect_ai.log import EvalDataset, EvalLog, EvalSpec, write_eval_log
 
 from src.measures import run_validity as rv
+from tests.support.run_builder import write_status_log
 
 NOTICE = rv.REFUSAL_NOTICE + " by configuring a fallback model"
 LOG = "2026-11-01T03-31-41-00-00_run_abc.eval"
@@ -34,15 +34,6 @@ def make_run(root: Path, name: str, *, task: str = "protein_design", commit: str
         steps = [{"source": "agent", "message": m} for m in regulator_steps]
         (folder / "transcript.json").write_text(json.dumps({"trajectory": {"steps": steps}}))
     return run
-
-
-def write_log(path: Path, status: str) -> Path:
-    """An eval log whose header holds this status."""
-    spec = EvalSpec(created="2026-11-01T03:31:41+00:00", task="t", dataset=EvalDataset(), model="mockllm/model",
-                    config={})
-    path.parent.mkdir(parents=True, exist_ok=True)
-    write_eval_log(EvalLog(eval=spec, status=status), str(path))
-    return path
 
 
 @pytest.fixture
@@ -95,6 +86,7 @@ def test_a_failed_episode_a_failed_eval_a_missing_team_and_a_mock_are_invalid(tm
     assert unplaced["why"] == ["no team row in signals.jsonl"] and unplaced["reason"] == "no_team_record"
     mock = rv.validity(make_run(tmp_path, "binder_minimal_lunamock1", task="software_engineering", commit="0dda147"))
     assert mock["mock"] and not mock["valid"] and mock["reason"] == "mock"
+    assert mock["reasons"] == ["mock", "swe_before_fix"] and len(mock["why"]) == 2
     monkeypatch.setattr(rv, "eval_status", lambda run: "error")
     error = rv.validity(make_run(tmp_path, "d1"))
     assert error["why"] == ["eval error"] and error["reason"] == "incomplete" and not error["completed"]
@@ -104,10 +96,10 @@ def test_the_eval_status_is_read_from_the_log_at_the_mirrored_path(tmp_path):
     """No stub: the header of the log under logs/<study>/[<group>/]<run>/ decides."""
     top = make_run(tmp_path, "e1")
     assert rv.validity(top)["why"][0] == "eval log missing"
-    write_log(tmp_path / "logs" / "study" / "e1" / LOG, "success")
+    write_status_log(tmp_path / "logs" / "study" / "e1" / LOG, "success")
     assert rv.validity(top)["valid"]
     grouped = make_run(tmp_path, "e2", group="incomplete")
-    write_log(tmp_path / "logs" / "study" / "incomplete" / "e2" / LOG, "error")
+    write_status_log(tmp_path / "logs" / "study" / "incomplete" / "e2" / LOG, "error")
     record = rv.validity(grouped)
     assert record["eval_status"] == "error" and record["reason"] == "incomplete"
 
