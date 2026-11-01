@@ -161,6 +161,7 @@ def registry(tmp_path, monkeypatch):
     monkeypatch.setattr(box_capture, "BOXES", tmp_path / "boxes")
     monkeypatch.setattr(fleet_registry, "fleet_pin", lambda commit="HEAD": dict(PIN))
     monkeypatch.setattr(fleet_create, "layout_problems", lambda tasks: [])
+    monkeypatch.setattr(fleet_create, "guard_alive", lambda: True)   # the cloud box guard's daemon, never the real one
     return path
 
 
@@ -263,6 +264,18 @@ def test_create_refuses_a_count_that_is_not_the_boxes_asked_for(registry, monkey
     monkeypatch.setattr(vast_api, "http", fake)
     assert fleet.main(["create", "--stage", "gate", "--count", "5"]) == 2
     assert fake.calls == []
+
+
+def test_create_refuses_without_the_cloud_box_guard_and_a_dry_run_needs_none(registry, monkeypatch, capsys):
+    """No box is rented while no guard daemon watches it (2026-11-01: 19 idle boxes, $126). A dry run sends
+    nothing, so it needs no guard."""
+    fake = FakeVast()
+    monkeypatch.setattr(vast_api, "http", fake)
+    monkeypatch.setattr(fleet_create, "guard_alive", lambda: False)
+    assert fleet.main(["create", "--stage", "pilot", "--count", "3"]) == 1
+    assert "no cloud box guard daemon" in capsys.readouterr().out
+    assert fake.calls == []
+    assert fleet.main(["create", "--stage", "pilot", "--count", "3", "--dry-run"]) == 0
 
 
 def test_create_refuses_only_names_outside_the_stage(registry, monkeypatch, capsys):
