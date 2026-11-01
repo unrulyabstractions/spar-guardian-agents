@@ -13,14 +13,14 @@ Outside its package a domain adds these:
 | file | what the domain adds |
 |---|---|
 | `src/domains/__init__.py` | the class in `DOMAINS` |
+| `src/configuration/task_names.py` | its CheatBench task name, its key and its display name in `NAMES`; `BY_TASK`, the results browser and the analysis tools read them, and `tests/unit/test_task_names.py` holds them to the class |
 | `src/tasks.py` | its `@task` entry point |
 | `src/cli.py` | its key and its row in the help of `--benchmark` and `--row` |
 | `src/configuration/prompts.yaml` | `submit`: `counts` and `missing`, by `Benchmark.key` |
 | `src/configuration/instruction_levels.yaml` | `vars`: the exploit's words, by `Benchmark.key` |
 | `src/judging/_ladder_verdict_fields.py` | its text in `HONEYPOT` and its line in `TASK` |
 | `src/measures/verdict_fields.py` | its judge flags in `FLAGS_BY_TASK`, by CheatBench's task name |
-| `src/ui/_run_store.py` | its label in `TASK_SETTINGS`, by CheatBench's task name |
-| `tools/run_reader.py` | the pair in `DOMAIN_KEYS` (a test holds it to `BY_TASK`) |
+| `src/ui/_run_store.py` | its setting key's prefix and sort order in `SETTING_KEYS`, by domain key |
 | `tools/scout/scout_scanners.py`, `tools/scout/scout_results.py` | `PERMITTED`, `NAMERS` and `JUDGE_FIELDS` |
 | `examples/<task>/` | the minimal script and the cells; `tests/unit/test_examples.py` fails without them |
 | `tests/smoke/<domain>.py`, `Makefile` | its smoke suite and target; `make smoke-all` finds the suite by itself |

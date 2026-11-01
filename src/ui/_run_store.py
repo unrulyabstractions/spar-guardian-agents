@@ -18,6 +18,7 @@ from pathlib import Path
 
 from inspect_ai.log import EvalLog, read_eval_log
 
+from src.configuration import task_names
 from src.configuration.settings import INCOMPLETE_FAILURES
 from src.configuration.swarm_config import ROLES
 from src.export.eval_sample_view import PASSIVE_DEFENSES
@@ -44,12 +45,14 @@ SWE_FIELDS = ("issue", "instance", "n_agents", "mode", "honeypot", "rule", "base
               "checks_ok")
 # The badge a true verdict flag takes, by the status colour the figures give it.
 FLAG_KIND = {WARNING: "warn", SERIOUS: "bad", GOOD: "good", CRITICAL: "bad"}
-# The tasks with a setting of their own, apart from openmath: the setting key's prefix, the label and the sort order.
-# Openmath settings sort 0 (lone agent), 1 (board) and 2 (hidden roles); SWE sorts 3.
-TASK_SETTINGS = {"knowledge_work": ("kw", "knowledge work", 4), "subset_sum": ("subset", "subset sum", 5),
-                 "prime_factorization": ("factor", "prime factorization", 6),
-                 "protein_design": ("protein", "protein design", 7),
-                 "creative_writings": ("creative", "creative writing", 8), "chess": ("chess", "chess", 9)}
+# The tasks with a setting of their own, apart from openmath and SWE, by domain key: the setting key's prefix and the
+# sort order. Openmath settings sort 0 (lone agent), 1 (board) and 2 (hidden roles); SWE sorts 3.
+SETTING_KEYS = {"knowledge_work": ("kw", 4), "subset_sum": ("subset", 5), "prime_factorization": ("factor", 6),
+                "protein_design": ("protein", 7), "creative_writing": ("creative", 8), "chess": ("chess", 9)}
+# The same by CheatBench's task name, which run.json records: the prefix, the label and the sort order. The label is the
+# task's display name (src/configuration/task_names.py).
+TASK_SETTINGS = {task_names.task_of(domain): (prefix, task_names.display_name(domain), order)
+                 for domain, (prefix, order) in SETTING_KEYS.items()}
 
 # A run is failed when an episode ended in a harness crash or a provider error (the converter's "connection_closed":
 # rate limit, billing, connection), or when it was set aside by name (failed_, failed2_, ..., cancelled_).

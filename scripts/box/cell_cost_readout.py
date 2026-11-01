@@ -140,7 +140,7 @@ def run_record(name: str, root: Path, study: str, holders: list[dict]) -> dict:
     falls short."""
     run_dir, logs = root / "runs" / study / name, root / "logs" / study
     try:
-        verdict = validity(run_dir, logs)
+        verdict = validity(run_dir)
         models, short = model_cost(run_dir, logs / name)
     except Exception as error:  # noqa: BLE001 - one unreadable run must not hide every other run's cost
         verdict, models, short = {"whole": False, "valid": False}, 0.0, [f"unreadable: {type(error).__name__}: {error}"]

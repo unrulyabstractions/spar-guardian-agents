@@ -22,7 +22,7 @@ REMOTE_LOGS = f"/root/work/logs/{STUDY}"
 
 @pytest.fixture(autouse=True)
 def every_eval_succeeds(monkeypatch):
-    monkeypatch.setattr(run_validity, "_eval_status", lambda name, logs: "success")
+    monkeypatch.setattr(run_validity, "eval_status", lambda run: "success")
 
 
 def names(setting: str, level: str | None, regulator: str | None = None) -> list[str]:
