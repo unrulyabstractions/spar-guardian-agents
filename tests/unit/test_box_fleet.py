@@ -198,9 +198,9 @@ def test_the_dry_run_prints_every_request_and_sends_none(registry, monkeypatch, 
 
 def test_the_dry_run_names_the_boxes_no_offer_is_left_for(registry, monkeypatch, capsys):
     monkeypatch.setattr(vast_api, "http", FakeVast())
-    assert fleet.main(["create", "--stage", "phase2-flipt-luna", "--count", "8", "--dry-run"]) == 1
+    assert fleet.main(["create", "--stage", "phase2-flipt-luna", "--count", "6", "--dry-run"]) == 1
     out = capsys.readouterr().out
-    assert out.count("would send: PUT") == 4 and "4 of 8 requests printed" in out
+    assert out.count("would send: PUT") == 4 and "4 of 6 requests printed" in out
 
 
 def test_the_dry_run_stops_at_the_fleets_cap(registry, monkeypatch, capsys):

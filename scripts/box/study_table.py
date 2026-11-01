@@ -14,7 +14,7 @@ Nothing here or anywhere in this folder starts one stage from another, and no st
     pilot             flipt, protein and creative on luna: minimal_regulated, each regulator at ambiguous, seed 1
     gate              every target: minimal and minimal_cheat, seeds 1 to 5
     phase2-<target>   minimal at rule_level generic and identified, and minimal_regulated with each regulator at
-                      ambiguous and enforce, seeds 1 to 5
+                      ambiguous and enforce, seeds 1 to 5; on SWE an Opus regulator takes seed 1 alone
 
 A box holds whole arms, in table order, up to its task's capacity (fleet_layout.capacity_of).
 """
@@ -33,6 +33,8 @@ SEEDS = (1, 2, 3, 4, 5)
 TEAM = 3
 """The neutral workers of every arm."""
 REGULATOR_LEVELS = ("ambiguous", "enforce")
+ONE_RUN_ON_SWE = ("claude-opus-5-5-openrouter",)
+"""Regulators that take one run, seed 1, per SWE cell after the gate: an Opus regulator costs about $22 a SWE run."""
 RULE_LEVELS = ("generic", "identified")
 
 
@@ -102,8 +104,12 @@ def gate_arms(target: Target) -> tuple[Arm, ...]:
 
 
 def phase_two_arms(target: Target) -> tuple[Arm, ...]:
+    def seeds(regulator: str) -> tuple[int, ...]:
+        return SEEDS[:1] if target.task == "software_engineering" and regulator in ONE_RUN_ON_SWE else SEEDS
+
     return (*(Arm(target, "minimal", rule_level=level) for level in RULE_LEVELS),
-            *regulated_arms(target, REGULATOR_LEVELS))
+            *(Arm(target, "minimal_regulated", regulator=regulator, regulator_level=level, seeds=seeds(regulator))
+              for regulator in REGULATORS for level in REGULATOR_LEVELS))
 
 
 STAGES = {"pilot": {f"pilot-{target.name}": pilot_arms(target) for target in PILOT_TARGETS},

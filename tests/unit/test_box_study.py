@@ -16,6 +16,7 @@ from scripts.box import fleet, fleet_layout, study_table, vast_api
 from scripts.box.fleet_layout import BOX_KEY, MODELS, REGULATORS, capacity_of
 from scripts.box.study_table import (
     MOCK_MODEL,
+    ONE_RUN_ON_SWE,
     STAGES,
     TARGETS,
     Arm,
@@ -52,13 +53,13 @@ def test_the_stages_are_the_pilot_the_gate_and_one_phase_two_per_target():
 
 def test_the_study_has_40_gate_runs_40_phase_two_runs_per_target_and_9_pilot_runs():
     assert len(stage_runs("gate")) == 40
-    assert [len(stage_runs(stage)) for stage in PHASE_TWO] == [40, 40, 40, 40]
+    assert [len(stage_runs(stage)) for stage in PHASE_TWO] == [32, 32, 40, 40]
     assert len(stage_runs("pilot")) == 9
 
 
 def test_every_run_name_is_unique_across_the_study():
     names = [job.name for job in EVERY_JOB] + [job.name for box in EVERY_BOX for job in box_jobs(box, mock=True)]
-    assert len(names) == len(set(names)) == 209 + sum(len(box.arms) for box in EVERY_BOX)
+    assert len(names) == len(set(names)) == 193 + sum(len(box.arms) for box in EVERY_BOX)
 
 
 def test_the_run_names_read_as_the_study_says():
@@ -91,7 +92,10 @@ def test_each_regulated_setting_runs_each_regulator_at_each_level():
         assert sorted(arm.rule_level for arm in arms if arm.rule_level) == ["generic", "identified"]
         assert {(arm.regulator, arm.regulator_level) for arm in arms if arm.kind == "minimal_regulated"} == {
             (regulator, level) for regulator in REGULATORS for level in ("ambiguous", "enforce")}
-        assert {arm.target for arm in arms} == {target} and {arm.seeds for arm in arms} == {(1, 2, 3, 4, 5)}
+        assert {arm.target for arm in arms} == {target}
+        assert {arm.seeds for arm in arms if arm.regulator not in ONE_RUN_ON_SWE} == {(1, 2, 3, 4, 5)}
+        one_run = {arm.seeds for arm in arms if arm.regulator in ONE_RUN_ON_SWE}
+        assert one_run == ({(1,)} if target.task == "software_engineering" else {(1, 2, 3, 4, 5)})
 
 
 def test_the_pilot_runs_each_regulator_once_on_each_task_at_ambiguous():
@@ -105,7 +109,7 @@ def test_the_pilot_runs_each_regulator_once_on_each_task_at_ambiguous():
 
 def test_a_stage_rents_the_boxes_the_table_says():
     assert {stage: len(stage_boxes(stage)) for stage in STAGES} == {
-        "pilot": 3, "gate": 6, "phase2-flipt-dsflash": 8, "phase2-flipt-luna": 8, "phase2-protein-luna": 7,
+        "pilot": 3, "gate": 6, "phase2-flipt-dsflash": 6, "phase2-flipt-luna": 6, "phase2-protein-luna": 7,
         "phase2-creative-luna": 7}
 
 
@@ -199,20 +203,20 @@ def test_jobs_lists_every_run_box_and_flag_and_sends_nothing(monkeypatch, capsys
     monkeypatch.setattr(vast_api, "http", lambda call: pytest.fail("a listing sent a request"))
     assert fleet.main(["jobs", "phase2-flipt-luna"]) == 0
     out = capsys.readouterr().out
-    assert "== phase2-flipt-luna: 8 boxes, 40 runs, 150 agents" in out
+    assert "== phase2-flipt-luna: 6 boxes, 32 runs, 118 agents" in out
     for box in stage_boxes("phase2-flipt-luna"):
         assert f"{box.name}: software_engineering, at least 32 cores and 64 GB of RAM, {box.agents} agents" in out
         for job in box_jobs(box):
             line = next(line for line in out.splitlines() if line.split()[:1] == [job.name])
             assert f"examples.{job.cell} --model {job.model} --set seed={job.seed}" in line
             assert " ".join(job.flags) in line
-    assert out.count("--set seed=") == 40
+    assert out.count("--set seed=") == 32
 
 
 def test_jobs_with_no_stage_lists_the_whole_study(capsys):
     assert fleet.main(["jobs"]) == 0
     out = capsys.readouterr().out
-    assert out.count("--set seed=") == 209 and all(f"== {stage}:" in out for stage in STAGES)
+    assert out.count("--set seed=") == 193 and all(f"== {stage}:" in out for stage in STAGES)
 
 
 # ---- nothing but a person starts a stage ----
@@ -336,3 +340,11 @@ def test_the_screens_default_cells_hold_flipt_and_no_vuls():
     assert not [cell for cell in screen.CELLS if "vuls" in cell]
     assert {"swe.flipt_solo", "swe.flipt_solo_cheat", "swe.flipt_minimal_cheat"} <= set(screen.CELLS)
     assert "protein_design.binder_solo" in screen.CELLS
+
+
+def test_an_opus_regulator_takes_one_run_per_swe_cell_and_five_elsewhere():
+    """An Opus regulator costs about $22 a SWE run, so each SWE cell it regulates runs seed 1 alone."""
+    for stage, runs in (("phase2-flipt-luna", 1), ("phase2-flipt-dsflash", 1), ("phase2-protein-luna", 5)):
+        names = [n for n in stage_runs(stage) if "_opus_" in n]
+        assert len(names) == 2 * runs and all(n.endswith("1") for n in names) == (runs == 1), names
+
