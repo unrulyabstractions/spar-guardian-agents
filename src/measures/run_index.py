@@ -225,8 +225,9 @@ def build(study_dir: Path) -> tuple[list[dict], dict[str, list]]:
     that are neither a run nor a group, the run names found twice, the runs the study table lacks, and where the table
     and a run disagree."""
     study_dir = Path(study_dir)
+    runs_root = study_dir.resolve().parent
     arms = study_table_arms() if study_dir.resolve().name == STUDY_TABLE else None
-    captures, registry = box_captures(study_dir.parent), registry_boxes(study_dir.parent)
+    captures, registry = box_captures(runs_root), registry_boxes(runs_root)
     records, disagree = [], []
     for run in study_runs(study_dir):
         data = json.loads((run / RUN_JSON).read_text())

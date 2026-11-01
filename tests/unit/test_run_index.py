@@ -189,6 +189,14 @@ def test_the_command_writes_nothing_without_write_and_one_record_per_run_with_it
     assert not (study / (INDEX + ".partial")).exists()
 
 
+def test_the_command_finds_the_box_registry_from_a_relative_folder(tmp_path, monkeypatch, capsys):
+    make_run(tmp_path, "flipt_minimal_luna_fixed1", "software_engineering", commit="94940bc")
+    register(tmp_path, {1004: "fixed-gate-flipt-luna-1"})
+    monkeypatch.chdir(tmp_path / "runs" / STUDY)
+    assert main(["."]) == 0
+    assert "== by instance source: registry 1\n" in capsys.readouterr().out
+
+
 def test_a_name_the_table_gives_two_places_is_refused(monkeypatch):
     from scripts.box import study_table
 
