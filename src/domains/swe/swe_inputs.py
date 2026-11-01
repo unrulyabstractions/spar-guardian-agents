@@ -1,9 +1,10 @@
-"""Lucy's split of each issue and CheatBench's task folder, read only, with the files our split moves.
+"""Lucy's split of each issue and CheatBench's task folder, read only, with the changes our split makes.
 
 Lucy's harness gives splits/<issue>.yaml and pieces/<issue>/ (the piece patches and lines.json). CheatBench's task
 folder gives instruction.md, task.toml and tests/config.json (base commit, reference patch, required tests). The issue's
 note on names comes from prompts.yaml swe.issue_notes. swe_settings.MOVED_FILES moves whole files between Lucy's pieces
-(piece_patch), and the fix's lines follow their files (load_lines).
+and swe_settings.NEUTRAL_VALUES gives a planted file values of its own (piece_patch). The fix's lines follow their
+files (load_lines).
 """
 from __future__ import annotations
 
@@ -17,7 +18,7 @@ import tomllib
 import yaml
 
 from src.configuration import settings
-from src.domains.swe.swe_settings import HARBOR, HARNESS, MOVED_FILES, PARTS
+from src.domains.swe.swe_settings import HARBOR, HARNESS, MOVED_FILES, NEUTRAL_VALUES, PARTS
 
 
 def issues() -> list[str]:
@@ -53,9 +54,9 @@ def lucy_patch(issue: str, piece: str) -> str:
 
 
 @functools.cache
-def moved_blocks(issue: str) -> dict[str, tuple[str, str | None]]:
-    """Each file swe_settings.MOVED_FILES moves, with its block in Lucy's patches and the piece it joins (None: no
-    piece). ValueError when a moved file is not in exactly one of Lucy's pieces: only a whole file can move."""
+def moved_blocks(issue: str) -> dict[str, tuple[str, str]]:
+    """Each file swe_settings.MOVED_FILES moves, with its block in Lucy's patches and the piece it joins. ValueError
+    when a moved file is not in exactly one of Lucy's pieces: only a whole file can move."""
     out = {}
     for path, piece in MOVED_FILES.get(issue, {}).items():
         found = [block for part in PARTS for name, block in file_blocks(lucy_patch(issue, part)) if name == path]
@@ -65,23 +66,41 @@ def moved_blocks(issue: str) -> dict[str, tuple[str, str | None]]:
     return out
 
 
+def neutral_block(issue: str, path: str, block: str) -> str:
+    """A file's block with swe_settings.NEUTRAL_VALUES's replacements on the lines it adds. The block loses its index
+    line, which named the fix's own blob."""
+    swaps = NEUTRAL_VALUES.get(issue, {}).get(path)
+    if not swaps:
+        return block
+    out = []
+    for line in block.splitlines(keepends=True):
+        if line.startswith("index "):
+            continue
+        if line.startswith("+") and not line.startswith("+++"):
+            for old, new in swaps.items():
+                line = line.replace(old, new)
+        out.append(line)
+    return "".join(out)
+
+
 @functools.cache
 def piece_patch(issue: str, piece: str) -> str:
     """The patch planted as the piece: Lucy's, less the files MOVED_FILES moves out of it, plus the files it moves into
-    it, each block as Lucy's patches hold it. The whole fix stays Lucy's."""
+    it, each block as Lucy's patches hold it but for NEUTRAL_VALUES (neutral_block). The whole fix stays Lucy's."""
     moved = moved_blocks(issue)
-    if piece == "whole" or not moved:
+    if piece == "whole" or not (moved or NEUTRAL_VALUES.get(issue)):
         return lucy_patch(issue, piece)
     kept = [block for path, block in file_blocks(lucy_patch(issue, piece)) if path not in moved]
-    return "".join(kept + [block for block, joins in moved.values() if joins == piece])
+    joined = [block for block, joins in moved.values() if joins == piece]
+    return "".join(neutral_block(issue, path, block) for path, block in file_blocks("".join(kept + joined)))
 
 
 def load_lines(issue: str) -> dict:
     """lines.json: `fix` items {line, part, repeated_in?}, `hidden_tests` lines, `generic` lines dropped. Where our
-    split moves files (MOVED_FILES), each fix line belongs to the pieces whose patch adds it (piece_patch): the first is
-    its part and the rest its repeated_in, and a line no piece adds is dropped."""
+    split changes Lucy's pieces (MOVED_FILES, NEUTRAL_VALUES), each fix line belongs to the pieces whose patch adds it
+    (piece_patch): the first is its part and the rest its repeated_in, and a line no piece adds is dropped."""
     lines = json.loads((HARNESS / "pieces" / issue / "lines.json").read_text())
-    if not moved_blocks(issue):
+    if not (moved_blocks(issue) or NEUTRAL_VALUES.get(issue)):
         return lines
     added = {part: added_lines(piece_patch(issue, part)) for part in PARTS}
     fix = []

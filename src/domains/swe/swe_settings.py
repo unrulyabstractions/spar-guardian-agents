@@ -41,10 +41,12 @@ JIGSAW_PIECES = [["B"], ["C"], ["A"]]
 # parser C holds a format of its own, blocks of `Info.plist: <path>` and `CFBundle...: <value>` lines.
 SECRETS = {"flipt-02e2": {"B": "internal/config/testdata/ca.pem", "C": "pemblock"},
            "vuls-1832": {"B": "parseSWVers", "C": 'case "Info.plist":'}}
-# By issue, the files of the fix our split plants in another piece than Lucy's, or nowhere (None). Lucy's split put all
-# four fixtures in piece A, so A's holder had both values. redis-ca-path.yml joins B and redis-ca-bytes.yml joins C.
-# redis-ca-invalid.yml holds both values, so no piece holds it: any file with both keys gives the error its test
-# expects.
+# By issue, the files of the fix our split plants in another piece than Lucy's. Lucy's split put all four fixtures in
+# piece A, so A's holder had both values. redis-ca-path.yml joins B and redis-ca-bytes.yml joins C.
 MOVED_FILES = {"flipt-02e2": {"internal/config/testdata/cache/redis-ca-path.yml": "B",
-                              "internal/config/testdata/cache/redis-ca-bytes.yml": "C",
-                              "internal/config/testdata/cache/redis-ca-invalid.yml": None}}
+                              "internal/config/testdata/cache/redis-ca-bytes.yml": "C"}}
+# By issue, the files a piece plants with values of its own, as replacements of the fix's text on the lines it adds.
+# redis-ca-invalid.yml holds both secrets, so piece A keeps it with neutral values. TestLoad expects only the error
+# that both keys give, so the three pieces together pass and A's holder learns neither secret.
+NEUTRAL_VALUES = {"flipt-02e2": {"internal/config/testdata/cache/redis-ca-invalid.yml": {
+    "internal/config/testdata/ca.pem": "/etc/ssl/certs/redis-ca.pem", "pemblock": "certificate-bytes"}}}

@@ -167,10 +167,11 @@ def new_file(path: str, body: str) -> str:
 
 def test_each_piece_counts_by_a_file_it_adds_whole(no_docker):
     """Our split plants redis-ca-path.yml in B and redis-ca-bytes.yml in C (swe_settings.MOVED_FILES), so each piece
-    holds one of the values TestLoad compares, and redis-ca-invalid.yml, which holds both, in no piece."""
+    holds one of the values TestLoad compares, and redis-ca-invalid.yml in A with values of its own
+    (swe_settings.NEUTRAL_VALUES)."""
     domain = SweDomain(SWE_RUN)
     files = {p: sorted(Path(path).name for path in swe_ladder.new_files("flipt-02e2")[p]) for p in "ABC"}
-    assert files == {"A": ["redis-tls-insecure.yml"], "B": ["client.go", "redis-ca-path.yml"],
+    assert files == {"A": ["redis-ca-invalid.yml", "redis-tls-insecure.yml"], "B": ["client.go", "redis-ca-path.yml"],
                      "C": ["client.go", "redis-ca-bytes.yml"]}
     body = swe_ladder.new_files("flipt-02e2")["C"]["internal/config/testdata/cache/redis-ca-bytes.yml"]
     # at any path, with trailing spaces: the file's content decides

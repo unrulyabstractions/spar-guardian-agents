@@ -7,10 +7,10 @@ tests/smoke/swe.py's collaboration scenarios.
 Honest work writes everything the issue and its note describe, so it is the reference fix with each text the hidden
 tests need and the issue never gives (swe_settings.SECRETS) replaced by a value of the agent's own (HONEST). A set of
 pieces with honest work for the rest is the reference fix with only the texts those pieces do not hold replaced
-(secrets_held). A file no piece plants (swe_settings.MOVED_FILES to None) is always the team's own work, with values
-of its own. tests/unit/test_collaboration_swe.py proves that the pieces hold the fix's lines and nothing else, file by
-file, so the reference fix stands for every piece together. `pieces_only` drops the files no piece plants, so it grades
-the planted pieces with nothing of the team's own. The grader's own function grades each tree
+(secrets_held). A file a piece plants with values of its own (swe_settings.NEUTRAL_VALUES) is that piece's copy when
+the set holds the piece, else the team's own with honest values. Some piece plants every file of the fix, and
+tests/unit/test_collaboration_swe.py proves that the pieces hold the fix's lines and nothing else, file by file, so
+`all_pieces` is the three pieces alone, with nothing the team writes. The grader's own function grades each tree
 (_swe_scoring._target_result: the diff applied to the pristine /app, CheatBench's tests/test.sh, nothing added).
 """
 from __future__ import annotations
@@ -21,8 +21,16 @@ import subprocess
 from types import SimpleNamespace
 
 from src.domains.swe import _swe_scoring
-from src.domains.swe.swe_inputs import file_blocks, load_split, required_tests, task_config, task_dir
-from src.domains.swe.swe_settings import GRADE_TIMEOUT_S, GRADE_TIMEOUTS_S, MOVED_FILES, PARTS, SECRETS
+from src.domains.swe.swe_inputs import (
+    file_blocks,
+    load_split,
+    neutral_block,
+    piece_patch,
+    required_tests,
+    task_config,
+    task_dir,
+)
+from src.domains.swe.swe_settings import GRADE_TIMEOUT_S, GRADE_TIMEOUTS_S, NEUTRAL_VALUES, PARTS, SECRETS
 from src.domains.swe.swe_task import secrets_held
 from tests.support.swe_deals import holdings
 
@@ -36,24 +44,26 @@ NEEDS = {"flipt-02e2": {"B": {"TestLoad"}, "C": {"TestLoad"}},
 """By issue and piece, the hidden tests that fail when the piece's secret is missing."""
 
 
-def unplanted(issue: str) -> set[str]:
-    """The files of the fix that no piece plants."""
-    return {path for path, piece in MOVED_FILES.get(issue, {}).items() if piece is None}
+def planters(issue: str, path: str) -> list[str]:
+    """The pieces whose planted patch holds the file."""
+    return [piece for piece in PARTS if path in dict(file_blocks(piece_patch(issue, piece)))]
 
 
-def tree(issue: str, items: tuple[str, ...], own_files: bool = True) -> str:
-    """The reference fix with every secret the items do not hold replaced by honest work's value. A file no piece
-    plants takes honest values throughout, or is left out with own_files=False. Each secret stands only on lines the
-    fix adds, so the patch still applies."""
+def tree(issue: str, items: tuple[str, ...]) -> str:
+    """The reference fix with every secret the items do not hold replaced by honest work's value, and each file a
+    piece plants with values of its own taken from that piece when the items hold it. Each secret stands only on lines
+    the fix adds, so the patch still applies."""
     patch = task_config(load_split(issue)["task"])["patch"]
     held = secrets_held(issue, list(items))
     blocks = []
     for path, block in file_blocks(patch):
-        if path in unplanted(issue) and not own_files:
+        own = path in NEUTRAL_VALUES.get(issue, {})
+        if own and set(planters(issue, path)) & set(items):
+            blocks.append(neutral_block(issue, path, block))
             continue
         for piece, secret in SECRETS[issue].items():
             assert all(line.startswith("+") for line in block.splitlines() if secret in line), (issue, secret)
-            if secret not in held or path in unplanted(issue):
+            if secret not in held or own:
                 block = block.replace(secret, HONEST[issue][piece])
         blocks.append(block)
     return "".join(blocks)
@@ -61,18 +71,17 @@ def tree(issue: str, items: tuple[str, ...], own_files: bool = True) -> str:
 
 def trees(issue: str) -> list[dict]:
     """Honest work alone, each holding one neutral agent can have (tests/support/swe_deals.py), then every piece
-    together: each with the pieces it holds and the pieces whose secret it misses. An issue with a file no piece plants
-    ends with `pieces_only`, every planted piece and nothing of the team's own."""
+    together: each with the pieces it holds and the pieces whose secret it misses. Some piece plants every file of the
+    fix, so every piece together is the planted pieces alone."""
+    patch = task_config(load_split(issue)["task"])["patch"]
+    assert all(planters(issue, path) for path, _ in file_blocks(patch)), issue
     cases = [{"name": "honest", "items": ()}]
     cases += [{"name": "holds_" + "_".join(items), "items": items} for items in holdings(issue)]
     cases += [{"name": "all_pieces", "items": PARTS}]
     for case in cases:
-        case["diff"] = tree(issue, case["items"])
-    if unplanted(issue):
-        cases.append({"name": "pieces_only", "items": PARTS, "diff": tree(issue, PARTS, own_files=False)})
-    for case in cases:
         held = secrets_held(issue, list(case["items"]))
         case["missing"] = [piece for piece, secret in SECRETS[issue].items() if secret not in held]
+        case["diff"] = tree(issue, case["items"])
     return cases
 
 
