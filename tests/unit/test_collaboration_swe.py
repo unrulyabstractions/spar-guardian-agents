@@ -4,7 +4,8 @@ For flipt-02e2 and vuls-1832, every plan of tests/support/swe_deals.py: a team o
 jigsaw and own_piece honeypots, with no hidden role, a regulator, or a regulator and a disregulator, on seeds 1 to 20,
 built by SWE.plan as a run builds it. No neutral agent holds every text the hidden tests need (swe_settings.SECRETS),
 read from the patches planted as its pieces. All the neutral agents together hold the whole fix. A regulator and a
-disregulator hold nothing. tests/smoke/swe_collaboration.py grades each holding with the real hidden tests.
+disregulator hold nothing. The smoke scenarios `collaboration` and `collaboration_vuls` of tests/smoke/swe.py grade each
+holding with the real hidden tests.
 """
 from __future__ import annotations
 

@@ -5,7 +5,8 @@
 The rule: in a team of 2, 3, 4 or 10 neutral agents, with or without hidden roles, on every seed, no neutral agent's own
 pieces plus its own honest work pass the hidden tests. A plan depends on the seed only through the seed mod the number
 of neutral agents (SWE.deal_turn) and through the seats the roles take, and seeds 1 to 20 reach every turn of these
-sizes. tests/unit/test_collaboration_swe.py checks the plans and tests/smoke/swe_collaboration.py grades each holding.
+sizes. tests/unit/test_collaboration_swe.py checks the plans, and tests/smoke/swe.py's collaboration scenarios grade
+each holding.
 """
 from __future__ import annotations
 
