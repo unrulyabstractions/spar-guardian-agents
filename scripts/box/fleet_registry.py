@@ -15,7 +15,8 @@ import subprocess
 from collections.abc import Iterator
 from pathlib import Path
 
-from scripts.box.fleet_layout import BOXES, MODELS, REGISTRY, ROOT, floor_of, now_iso
+from scripts.box.fleet_layout import BOX_KEY, BOXES, REGISTRY, ROOT, floor_of, now_iso
+from scripts.box.study_table import Box
 from scripts.box.vast_offers import DISK_GB, ram_share_gb
 
 
@@ -72,10 +73,10 @@ def registered(registry: dict, instance_id: int) -> dict | None:
     return next((box for box in registry["boxes"] if box["id"] == instance_id), None)
 
 
-def box_entry(instance_id: int, label: str, task: str, model: str, offer: dict | None, launch: str) -> dict:
+def box_entry(instance_id: int, label: str, box: Box, offer: dict | None, launch: str) -> dict:
     """The registry's record of one instance. Only what identifies and prices the box: never the reply's keys."""
     offer = offer or {}
-    return {"id": instance_id, "label": label, "task": task, "model": model, "suffix": MODELS[model],
+    return {"id": instance_id, "label": label, "box": box.name, "stage": box.stage, "task": box.task,
             "launch": launch, "offer": offer.get("id"), "machine_id": offer.get("machine_id"),
             "dph": offer.get("dph_total"), "cores": offer.get("cpu_cores_effective"),
             "ram_gb": round(ram_share_gb(offer), 1) if offer else None, "disk_gb": DISK_GB,
@@ -144,4 +145,4 @@ def open_entry(instance_id: int) -> dict:
     if entry is None or entry["destroyed"]:
         raise RuntimeError(f"{instance_id} is not a registered box that is not destroyed")
     pins = load_launch(entry["launch"])
-    return entry | pins | minimums(entry["task"]) | {"commit": entry.get("commit", pins["commit"])}
+    return entry | pins | minimums(entry["task"]) | {"commit": entry.get("commit", pins["commit"]), "key": BOX_KEY}

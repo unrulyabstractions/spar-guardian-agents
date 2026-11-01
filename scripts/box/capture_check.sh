@@ -14,7 +14,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 if [ $# -lt 1 ]; then
-  sed -n '2,14p' "$0"
+  sed -n '2,13p' "$0"
   exit 2
 fi
 exec uv run python -m scripts.box.box_capture check "$@"

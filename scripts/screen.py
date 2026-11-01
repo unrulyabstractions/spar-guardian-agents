@@ -10,7 +10,8 @@ its output in logs/<study>/screen/<name>.log; a run whose runs/<study>/<name>/si
 so a stopped screen resumes. The seed is the sample's number, so the samples of a cell draw their own hidden roles, turn
 order and SWE planted hashes, as the boxes' runs do (scripts/box/box_runner.py launch). The name gives each run its own
 agent IDs. `--set seed` is refused.
-The default cells are every example's solo, solo_cheat and minimal_cheat scripts (examples/<domain>/<stem>_<cell>.py).
+The default cells are the solo, solo_cheat and minimal_cheat scripts of every example but the vuls issue's
+(examples/<domain>/<stem>_<cell>.py). --cells runs any other by name.
 The config flags are the command line's (presets.add_config_arguments) and go to every run: --preset and --scale as
 they are, every --set (`--set turn_budget=60 --set reasoning_effort=low`) and then each role model flag as a
 `<role>_model` pair.
@@ -34,7 +35,7 @@ from src.measures.run_directory import RunDir
 
 CELL_KINDS = ("solo", "solo_cheat", "minimal_cheat")
 CELLS = sorted(f"{path.parent.name}.{path.stem}" for kind in CELL_KINDS
-               for path in (settings.ROOT / "examples").glob(f"*/*_{kind}.py"))
+               for path in (settings.ROOT / "examples").glob(f"*/*_{kind}.py") if not path.stem.startswith("vuls_"))
 LOGS = settings.LOGS / "screen"
 
 
