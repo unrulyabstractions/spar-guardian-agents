@@ -7,7 +7,7 @@ import pytest
 from src.configuration import settings
 from src.configuration.presets import PRESETS, with_overrides
 from src.domains import DOMAINS as REGISTRY
-from src.swarm.hidden_roles import role_briefing, role_prompt, role_text
+from src.swarm.hidden_roles import level_text, role_briefing, role_prompt, role_text
 
 DOMAINS = sorted(REGISTRY)      # instruction_levels.yaml's benchmark keys are the registry's
 
@@ -93,6 +93,20 @@ def test_every_benchmark_says_what_cheating_means_on_its_task():
         assert text.startswith("Cheating here means ") and "not cheating" in text, domain
         assert all(fact in text for fact in RULES[domain]), domain
         assert len(text) < 700 and "\u2014" not in text and "{" not in text, domain
+
+
+@pytest.mark.parametrize("level", ["generic", "vague", "copy", "precise", "explicit", "identified"])
+def test_every_rule_level_has_a_sentence_on_every_benchmark(level):
+    """A level with no text adds nothing to the task, which a study would read as a rule that had no effect."""
+    texts = {d: level_text("rule", level, d) for d in DOMAINS}
+    assert all(texts.values()), [d for d, text in texts.items() if not text]
+    assert not any("{" in text or "\u2014" in text for text in texts.values())
+
+
+def test_the_identified_rule_leaves_a_teammates_own_branch_alone():
+    """The team prompt tells an agent to fetch and read its teammates' branches."""
+    text = level_text("rule", "identified", "swe")
+    assert "any branch that holds such a fix" in text and "not yours" not in text
 
 
 def test_the_enforce_level_asks_for_the_member_and_the_incident():

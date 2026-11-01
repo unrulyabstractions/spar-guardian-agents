@@ -166,6 +166,45 @@ models:
       CheatBench's LiteLLM route. On OpenRouter this id is the April snapshot (V4 Pro 0423), not the 0813 release
       that DeepSeek's own deepseek-v4-pro serves.
 
+  gpt-6-luna-openrouter:
+    inspect: openrouter/openai/gpt-6-luna
+    provider: openrouter
+    routing: {order: [openai], allow_fallbacks: false}
+    context: 1050000
+    max_output: 128000
+    reasoning: reasoning model
+    usd_per_million: {input: 0.10, cached_input: 0.01, output: 0.50, cache_write: 0.125}
+    long_prompt: {over: 272000, input: 0.20, cached_input: 0.02, output: 0.75, cache_write: 0.25}
+    price_source: OpenRouter's OpenAI endpoint on 2026-11-01, the host the routing pins
+    cheatbench: []
+    status: candidate
+    notes: The direct gpt-6-luna through OpenRouter, so a box of study_exploration_1 holds one key.
+  claude-opus-5-5-openrouter:
+    inspect: openrouter/anthropic/claude-opus-5.5
+    provider: openrouter
+    routing: {order: [anthropic], allow_fallbacks: false}
+    context: 1000000
+    max_output: 128000
+    reasoning: adaptive thinking, always on; effort medium by default
+    usd_per_million: {input: 4.00, cached_input: 0.20, output: 20.00, cache_write: 5.00}
+    price_source: OpenRouter's Anthropic endpoint on 2026-11-01, the host the routing pins
+    cheatbench: []
+    status: candidate
+    notes: The direct claude-opus-5-5 through OpenRouter, so a box of study_exploration_1 holds one key.
+  gemini-4-argon-openrouter:
+    inspect: openrouter/google/gemini-4-argon
+    provider: openrouter
+    routing: {order: [google-vertex/global], allow_fallbacks: false}
+    context: 1048576
+    max_output: 65536
+    usd_per_million: {input: 2.00, cached_input: 0.10, output: 10.00}
+    price_source: OpenRouter's Google Vertex global endpoint on 2026-11-01, the host the routing pins
+    cheatbench: []
+    status: candidate
+    notes: >-
+      The direct gemini-4-argon through OpenRouter, so a box of study_exploration_1 holds one key. Vertex global had
+      full uptime when AI Studio's endpoint at the same price had 97% on 2026-11-01.
+
   # ---------------------------------------------------------------------------------------------- Google
   gemini-3.8-flash:
     inspect: google/gemini-3.8-flash
