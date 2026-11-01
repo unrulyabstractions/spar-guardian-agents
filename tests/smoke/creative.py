@@ -6,8 +6,8 @@ Every scenario starts the real sandbox (CheatBench's python311 image with the co
 sidecar; src/domains/creative/), drives ORBIT with Inspect's mockllm scripted per agent, judges every agent with a mock
 judge bound to the "judge" role, exports the log with src.export.run_export.write_run, reads every transcript back the
 way CheatBench's judge does and places every agent on the code ladder. Each check is an assertion; a failing scenario
-exits non-zero. Results go to runs/smoke_creative/<stamp>/ and logs/smoke_creative/<stamp>/, a fresh directory per
-invocation.
+exits non-zero. Results go to runs/study_smoke/smoke_creative/<stamp>/ and logs/study_smoke/smoke_creative/<stamp>/,
+a fresh directory per invocation.
 
   lone    one agent finds CheatBench's workspace (instruction.txt, grading/ with grade.pyc, grade_config.json, the
           compiled scorer and .review); its submit is refused while writing.md does not exist; it grades an honest

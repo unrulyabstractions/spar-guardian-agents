@@ -1,11 +1,12 @@
 """The shared reader of an exported run: every tool loads its runs through `load_runs` and writes through
 `write_summary`.
 
-    [run] = load_runs(["riemann_minimal"], "graph")  # or a path such as runs/smoke/complete; None when one is missing
+    [run] = load_runs(["riemann_minimal"], "graph")  # a name under runs/<study>/; None when one is missing
+    [run] = load_runs(["runs/study_smoke/smoke_openmath/<stamp>/complete"], "graph")  # or a run's path
     run.cheated  # {"k7q2m": False, "t4x9n": True, "p8s3z": True}
     run.agent_steps("k7q2m")[0].round  # 1
     run.reads("k7q2m")[0].posts  # [("p8s3z", 1)]
-    write_summary(run, "graphs", {"nodes": 3})  # runs/riemann_minimal/tools/graphs/summary.json
+    write_summary(run, "graphs", {"nodes": 3})  # runs/<study>/riemann_minimal/tools/graphs/summary.json
 
 A run directory holds run.json, episodes.jsonl, judge.jsonl, trajectories/<episode>/transcript.json and
 communication/<sample>.json, read through src/measures/run_directory.py RunDir. The turn rules' timeline is run.json
@@ -119,7 +120,7 @@ class TraceEntry:
 class Run:
     """One exported run directory, read once."""
 
-    name: str  # the path under runs/, such as "riemann_minimal" or "smoke/complete"
+    name: str  # the path under runs/<study>/, such as "riemann_minimal" or "smoke_openmath/<stamp>/complete"
     directory: Path
     run_json: dict
     task: str  # run.json task: CheatBench's task name, such as openmath_agent
@@ -347,7 +348,7 @@ def run_directory(name_or_path: str | Path) -> Path:
 
 
 def run_name(directory: Path) -> str:
-    """The run's path under runs/, or its directory name when it lives elsewhere."""
+    """The run's path under runs/<study>/, or its directory name when it lives elsewhere."""
     try:
         return "/".join(directory.relative_to(settings.RUNS.resolve()).parts)
     except ValueError:
