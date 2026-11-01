@@ -1070,3 +1070,8 @@ The entry says "All 13 changed or new smoke suites and scenarios". The list it g
 - **Read back.** Under STUDY=study_exploration_0, 239 run folders with run.json, 225 of them screen runs, and RunDir.eval_log found a file for all 239. Default study study_exploration_1 has no folder yet and reads 0 runs. I did not open the browser or rebuild a figure.
 - **Code.** settings.STUDY, RUNS and LOGS, RunDir.eval_log, fleet.made_elsewhere, box_capture.local_only, docs in 36 files. Gates: lint 0, test 0 (1934 passed), tools 0 (88 passed). The log test failed when I broke the fix, then passed restored.
 - **UNVERIFIED.** The box path with the study folder on a real box, a real capture and watch. Anything reading the old layout outside this repo: a grep of ~/work/papers and ~/demo found no such path.
+
+## 2026-11-01 UTC: smoke suites after the fix list
+- **What ran.** `make smoke-all` on main at 8f6de1f under STUDY=study_smoke, mock model, real Docker on the Mac. rc 2: access_logging 32, chess 7, interview 10, knowledge 5, openmath 13, protein 4, swe 9 passed; creative 2 passed, 2 failed.
+- **Creative.** Both failures were test expectations never run before: ls pads a file without `+` beside files with one, and a01 kept its turns after submit and appended the line twice. Read from the log: seats got Permission denied on the reference, each read only its own part, and the hand-in copy held no line after submit. After the two fixes `make smoke-creative` rc 0, 4 of 4.
+- **Result.** All 8 suites have passed. VERIFIED by exit code and by reading the suite table and the creative log. The other seven suites' logs I did not read beyond the table.
