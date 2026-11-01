@@ -10,6 +10,7 @@ import hashlib
 import http.client
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -194,6 +195,16 @@ def test_the_dry_run_prints_every_request_and_sends_none(registry, monkeypatch, 
     assert all(call.reads for call in fake.calls) and not registry.exists()
     assert not fleet_registry.BOXES.exists()                                           # no launch pinned on a dry run
     assert "never-printed" not in out
+
+
+def test_create_takes_no_offer_from_a_skipped_machine(registry, monkeypatch, capsys):
+    """A VM can come up smaller than its offer; its machine's next offer then goes untaken."""
+    monkeypatch.setattr(vast_api, "http", FakeVast())
+    assert fleet.main(["create", *ONE_PILOT_BOX, "--dry-run"]) == 0
+    first = re.search(r"/asks/(\d+)/", capsys.readouterr().out).group(1)
+    machine = next(o["machine_id"] for o in SAVED_SEARCH if str(o["id"]) == first)
+    assert fleet.main(["create", *ONE_PILOT_BOX, "--skip-machine", str(machine), "--dry-run"]) == 0
+    assert f"/asks/{first}/" not in capsys.readouterr().out
 
 
 def test_the_dry_run_names_the_boxes_no_offer_is_left_for(registry, monkeypatch, capsys):

@@ -47,6 +47,8 @@ A box vast.ai cannot start shows in `status` as `!!`. It bills its disk until it
 uv run python -m scripts.box.fleet create --stage pilot --count 1 --only <box> --label-prefix spar-screen-retry
 ```
 
+A box whose VM comes up smaller than its offer is refused by `box_setup.sh`. Capture and destroy it, then rent its replacement with `--skip-machine <machine id>`, which `offers` prints beside each offer.
+
 ## Mock check
 
 Rehearse each box before it spends anything. The mock check runs each arm of the box once on Inspect's mock model. No key goes to the box, nothing is paid, and the run names end in `mock<k>`, so they never stand in for real runs.

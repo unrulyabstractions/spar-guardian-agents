@@ -201,7 +201,7 @@ def cmd_create(args: argparse.Namespace) -> int:
           f"Python {pin['python_version']}, uv {pin['uv_version']}")
     print(f"== credit ${credit(vast) or 0:.2f}; {args.count} boxes; search: {search_call().show()}")
     registry = load_registry()
-    dead = {box["machine_id"] for box in registry["boxes"] if box.get("start_error")}
+    dead = {box["machine_id"] for box in registry["boxes"] if box.get("start_error")} | set(args.skip_machine)
     offers = [offer for offer in candidates(vast.send(search_call())["offers"], args.max_dph)
               if offer.get("machine_id") not in dead]
     held = open_dph(registry)
