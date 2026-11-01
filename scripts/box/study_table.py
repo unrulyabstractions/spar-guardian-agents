@@ -20,6 +20,8 @@ Nothing here or anywhere in this folder starts one stage from another, and no st
     fixed-pilot       flipt on luna after the SWE fix: minimal_regulated, each of the five regulators at ambiguous,
                       seed 1
     fixed-gate        both flipt targets after the SWE fix: minimal and minimal_cheat, seeds 1 to 3
+    fixed-phase2-<target>  a flipt target whose fixed gate passed: minimal at generic and identified, and each of the
+                      five regulators at ambiguous and enforce, seeds 1 to 3; Opus and Sonnet take seed 1
 
 Every SWE run before the fix (commits 7331882 to 33b7810, 2026-11-01) graded a task where one agent could cheat
 alone, so it measures nothing about collaboration. The fixed stages' runs carry the tag `fixed`, so no name repeats
@@ -137,10 +139,27 @@ def fixed_pilot_arms(target: Target) -> tuple[Arm, ...]:
                      tag=f"{FIXED}pilot") for regulator in (*FIRST_REGULATORS, *ADDED_REGULATORS))
 
 
+FIXED_SEEDS = SEEDS[:3]
+"""Runs per cell on the fixed SWE task: the user's ruling of 2026-11-01, 3 runs instead of 5."""
+
+
 def fixed_gate_arms(target: Target) -> tuple[Arm, ...]:
-    """The gate of the fixed SWE task: 3 runs per cell, the user's ruling of 2026-11-01."""
-    return (Arm(target, "minimal", tag=FIXED, seeds=SEEDS[:3]),
-            Arm(target, "minimal_cheat", tag=FIXED, seeds=SEEDS[:3]))
+    """The gate of the fixed SWE task: minimal and minimal_cheat, 3 runs each."""
+    return (Arm(target, "minimal", tag=FIXED, seeds=FIXED_SEEDS),
+            Arm(target, "minimal_cheat", tag=FIXED, seeds=FIXED_SEEDS))
+
+
+def fixed_phase_two_arms(target: Target) -> tuple[Arm, ...]:
+    """Phase two of the fixed SWE task, launched only for a target whose fixed gate passed: minimal at rule_level
+    generic and identified, and minimal_regulated with each of the five regulators at ambiguous and enforce, 3 runs
+    each; an Opus or Sonnet regulator takes one run."""
+    def seeds(regulator: str) -> tuple[int, ...]:
+        return SEEDS[:1] if regulator in (*ONE_RUN, *ONE_RUN_ON_SWE) else FIXED_SEEDS
+
+    return (*(Arm(target, "minimal", rule_level=level, tag=FIXED, seeds=FIXED_SEEDS) for level in RULE_LEVELS),
+            *(Arm(target, "minimal_regulated", regulator=regulator, regulator_level=level, tag=FIXED,
+                  seeds=seeds(regulator))
+              for regulator in (*FIRST_REGULATORS, *ADDED_REGULATORS) for level in REGULATOR_LEVELS))
 
 
 STAGES = {"pilot": {f"pilot-{target.name}": pilot_arms(target) for target in PILOT_TARGETS},
@@ -149,7 +168,9 @@ STAGES = {"pilot": {f"pilot-{target.name}": pilot_arms(target) for target in PIL
           **{f"phase2b-{target.name}": {f"phase2b-{target.name}": regulated_arms(target, ADDED_REGULATORS)}
              for target in TARGETS},
           "fixed-pilot": {f"fixed-pilot-{SWE_TARGETS[1].name}": fixed_pilot_arms(SWE_TARGETS[1])},
-          "fixed-gate": {f"fixed-gate-{target.name}": fixed_gate_arms(target) for target in SWE_TARGETS}}
+          "fixed-gate": {f"fixed-gate-{target.name}": fixed_gate_arms(target) for target in SWE_TARGETS},
+          **{f"fixed-phase2-{target.name}": {f"fixed-phase2-{target.name}": fixed_phase_two_arms(target)}
+             for target in SWE_TARGETS}}
 """Each stage's arms, by the stem of their boxes' names."""
 
 
