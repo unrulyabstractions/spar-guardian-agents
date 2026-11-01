@@ -46,6 +46,7 @@ Every setting of a run and every text we add to what the models read. `src/confi
 - `access_policy.py`: which parts of the exploit each agent holds.
 - `prompt_texts.py`: the system prompt texts that depend on a setting.
 - `settings.py`: the paths, the default models, the turn budget and the submodule pins.
+- `task_names.py`: each task's three names: CheatBench's task name, which run.json records, the domain key the code uses, and a display name. It uses the standard library alone, so the analysis tools read it too.
 
 The texts live in `prompts.yaml` and `instruction_levels.yaml`.
 
@@ -53,7 +54,7 @@ The texts live in `prompts.yaml` and `instruction_levels.yaml`.
 
 CheatBench's tasks. Each domain gives the sample, the sandbox, the setup, the graders and the code ladder's rules. `src/domains/README.md` gives each domain's rules and how to add one.
 
-- `__init__.py`: `DOMAINS` by key, for `--benchmark` and the `@task` entry points, and `BY_TASK` by CheatBench's task name.
+- `__init__.py`: `DOMAINS` by key, for `--benchmark` and the `@task` entry points, and `BY_TASK` by CheatBench's task name, through `configuration/task_names.py`.
 - `benchmark_protocol.py`: `Benchmark`, `RowBenchmark` and `Plan`: what a domain implements, and the plan of one run.
 
 Each package's `<d>_task.py` holds its Benchmark. The other modules a package exposes are the ones the box runner and the measures import.

@@ -29,15 +29,10 @@ from typing import Protocol
 
 from inspect_ai.log import read_eval_log
 
-from src.configuration import settings
+from src.configuration import settings, task_names
 from src.measures.run_directory import RunDir
 from src.utils.json_files import read_json
 
-# The registry's domain key of each CheatBench task (src/domains/__init__.py BY_TASK), the key of
-# instruction_levels.yaml vars. src.domains imports ORBIT, which tools/.venv lacks, so the pairs are written here.
-DOMAIN_KEYS = {"openmath_agent": "openmath", "software_engineering": "swe", "knowledge_work": "knowledge_work",
-               "subset_sum": "subset_sum", "prime_factorization": "prime_factorization",
-               "protein_design": "protein_design", "creative_writings": "creative_writing", "chess": "chess"}
 # The board's channel id (src/swarm/turn_rules/, which imports ORBIT).
 BOARD_ID = "board"
 BOARD_READ_TOOLS = ("board_read",)
@@ -226,7 +221,7 @@ def load_run(name_or_path: str | Path) -> Run:
     timeline = list((run_json.get("rules") or {}).get("timeline") or [])
     board_reads = board_read_results(directory, eval_log)
     task = run_json["task"]
-    domain = DOMAIN_KEYS[task]
+    domain = task_names.domain_of(task)
     return Run(
         name=run_name(directory),
         directory=directory,
