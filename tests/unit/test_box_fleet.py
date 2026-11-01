@@ -254,6 +254,22 @@ def test_create_refuses_a_count_that_is_not_the_boxes_asked_for(registry, monkey
     assert fake.calls == []
 
 
+def test_create_refuses_only_names_outside_the_stage(registry, monkeypatch, capsys):
+    fake = FakeVast()
+    monkeypatch.setattr(vast_api, "http", fake)
+    assert fleet.main(["create", "--stage", "pilot", "--count", "1", "--only", BOX.name]) == 2
+    assert f"not boxes of pilot: {BOX.name}" in capsys.readouterr().out
+    assert fake.calls == []
+
+
+def test_create_refuses_a_label_destroy_would_not_act_on(registry, monkeypatch, capsys):
+    fake = FakeVast()
+    monkeypatch.setattr(vast_api, "http", fake)
+    assert fleet.main(["create", *ONE_PILOT_BOX, "--label-prefix", "retry-spar-screen"]) == 2
+    assert "--label-prefix must start with spar-screen" in capsys.readouterr().out
+    assert fake.calls == []
+
+
 def test_create_refuses_a_box_the_account_holds_from_another_launch(registry, monkeypatch, capsys):
     fake = FakeVast(instances=[{"id": 5, "label": "spar-screen-pilot-protein-luna-1-l999999"}])
     monkeypatch.setattr(vast_api, "http", fake)
