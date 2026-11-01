@@ -254,24 +254,29 @@ def test_a_run_in_a_group_is_costed_where_it_sits(tmp_path):
 
 def test_a_box_belongs_to_the_study_by_the_runs_it_names_not_by_its_stage_name(tmp_path):
     """A box of another study with a stage name of this table stays out. A box that never ran comes in through its
-    launch. A box nothing ties to any study is listed apart, counted in no total, and makes the totals partial. A box
-    whose stage is no stage of this table comes in when its capture names a run of the study."""
+    launch, or through a plan in this study's logs that names its box. A box nothing ties to any study is listed apart,
+    counted in no total, and makes the totals partial. A box whose stage is no stage of this table comes in when its
+    capture names a run of the study."""
     name = names("minimal", "generic")[0]
     write_run(tmp_path, name, [(0.10, 1, 1)])
     write_manifest(tmp_path, 401, [f"{REMOTE}/{name}/run.json"])
     write_manifest(tmp_path, 402, ["/root/work/runs/study_later/x_luna1/run.json"])
     write_manifest(tmp_path, 405, [f"{REMOTE}/{name}/judge.jsonl"])
+    write_plan(tmp_path, f"box_{STAGE}-4.json", f"{STAGE}-4", "2026-11-01T09:00:00Z", [])   # another instance's plan
     write_registry(tmp_path, [entry(401, f"{STAGE}-1", *HOURS, 1.0, launch="l000001"),
                               entry(402, f"{STAGE}-1", *HOURS, 5.0, launch="l000002"),
                               entry(403, f"{STAGE}-2", *HOURS, 2.0, launch="l000001"),
                               entry(404, f"{STAGE}-3", *HOURS, 3.0, launch="l000003"),
-                              entry(405, "other-1", *HOURS, 4.0, stage=None)])
+                              entry(405, "other-1", *HOURS, 4.0, stage=None),
+                              entry(406, f"{STAGE}-4", *HOURS, 0.5, launch="l000004")])
     result = readout_module.readout(tmp_path, STUDY, now=NOW)
-    assert [box["id"] for box in result["boxes"]] == [401, 403, 405]
-    assert result["unheld_boxes"] == [403] and [box["id"] for box in result["untied_boxes"]] == [404]
+    assert [box["id"] for box in result["boxes"]] == [401, 403, 405, 406]
+    assert result["unheld_boxes"] == [403, 406] and [box["id"] for box in result["untied_boxes"]] == [404]
     assert row(result, "minimal", "generic")["runs"][0]["boxes"] == [401, 405]       # both captured a file of it
-    assert result["totals"]["total_usd"] == pytest.approx(0.10 + 1.0 + 4.0 + 2.0) and result["totals"]["partial"]
-    assert "nothing ties it to a study" in readout_module.text(result)
+    assert result["totals"]["total_usd"] == pytest.approx(0.10 + 1.0 + 4.0 + 2.0 + 0.5) and result["totals"]["partial"]
+    assert result["totals"]["untied_boxes_usd"] == pytest.approx(3.0)
+    text = readout_module.text(result)
+    assert "nothing ties it to a study" in text and "$3.00  on 1 box(es) of this table's stages" in text
 
 
 def test_a_live_box_bills_to_now_and_holds_the_runs_its_own_plans_started(tmp_path):

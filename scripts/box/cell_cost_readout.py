@@ -32,9 +32,10 @@ A partial cell shows what was measured and never reads as complete.
 Boxes. A box bills its offer's $/h (dph in runs/boxes.json) from created to destroyed, or to now while it lives. Its
 cost splits evenly over the cell runs it held. Its capture manifest (logs/boxes/<id>/manifest.jsonl) names them. A box
 not captured yet has its runner plans instead (logs/<study>/screen/box_<box>.json and attempts/), those that started
-while it lived. A box belongs to the study when its capture or its plans name a run of the study, or when its launch
-rented such a box; registry rows carry no study, and a stage name alone could be another study's. A box of a stage of
-this table that nothing ties to any study is listed apart, counted in no total, and makes the totals partial. A mock
+while it lived. A box belongs to the study when its capture names a run of the study, when a runner plan in this
+study's logs names its box, or when its launch rented such a box; registry rows carry no study, and a stage name alone
+could be another study's. A box of a stage of this table that nothing ties to any study is listed apart, counted in no
+total, and makes the totals partial. A mock
 rehearsal takes no share. A box that held no cell run belongs to no cell: the readout lists it apart, and the totals
 count it.
 
@@ -113,10 +114,12 @@ def run_of(path: str, study: str) -> str | None:
 def box_records(root: Path, study: str, names: set[str], now: datetime) -> tuple[list[dict], list[dict]]:
     """(each box of the study: its hours, its cost, the cell runs it held and its mock rehearsals; each box of a stage
     of this table that nothing ties to any study). A box belongs to the study when its capture names a file of the
-    study, when its plans here started while it lived, or when its launch rented such a box."""
+    study, when a runner plan in this study's logs names its box, or when its launch rented such a box. Only the plans
+    that started while it lived say which runs it held."""
     registry = read_json(root / REGISTRY.relative_to(ROOT))["boxes"]
     screen = root / "logs" / study / "screen"
     plans = [read_json(path) for path in sorted([*screen.glob("box_*.json"), *screen.glob("attempts/box_*.json")])]
+    planned = {plan.get("box") for plan in plans} - {None}
     records, others = [], []
     for entry in registry:
         live = not entry.get("destroyed")
@@ -138,7 +141,7 @@ def box_records(root: Path, study: str, names: set[str], now: datetime) -> tuple
                   "destroyed": entry.get("destroyed"), "hours": hours,
                   "dph": dph, "usd": None if dph is None else hours * dph, "source": source,
                   "held": sorted(held & names), "rehearsals": sorted(name for name in held if MOCK.search(name)),
-                  "tied": bool(held), "elsewhere": elsewhere}
+                  "tied": bool(held) or (entry.get("box") in planned and not elsewhere), "elsewhere": elsewhere}
         (records if record["tied"] or record["stage"] in STAGES else []).append(record)
     launches = {box["launch"] for box in records if box["tied"] and box["launch"]}
     for box in records:
@@ -277,6 +280,7 @@ def readout(root: Path = settings.ROOT, study: str = TABLE_STUDY, stage: str | N
               "whole": sum(r["whole"] for r in all_runs), "valid": sum(r["valid"] for r in all_runs),
               "short_runs": sum(bool(r["short"]) for r in all_runs), "models_usd": models, "boxes_usd": shares,
               "unheld_boxes_usd": unheld_usd, "total_usd": models + shares + unheld_usd,
+              "untied_boxes_usd": sum(box["usd"] for box in untied if box["usd"] is not None),
               "partial": any(r["short"] for r in all_runs) or any(box["usd"] is None for box in unheld)
               or bool(untied),
               "live_boxes": [box["id"] for box in chosen if box["live"]]}
@@ -351,6 +355,9 @@ def text(result: dict) -> str:
               f"boxes   {money(t['boxes_usd']):>11s}  apportioned to the runs they held",
               f"        {money(t['unheld_boxes_usd']):>11s}  on boxes that held no cell run",
               f"total   {money(t['total_usd']):>11s}" + ("  partial: a lower bound" if t["partial"] else "")]
+    if result["untied_boxes"]:
+        lines.append(f"        {money(t['untied_boxes_usd']):>11s}  on {len(result['untied_boxes'])} box(es) of this "
+                     f"table's stages that nothing ties to the study, not in the total")
     if t["live_boxes"]:
         lines.append(f"live boxes, billed to now: {', '.join(str(i) for i in t['live_boxes'])}")
     if result["stage"] is None:
