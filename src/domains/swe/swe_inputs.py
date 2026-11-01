@@ -1,12 +1,14 @@
-"""Lucy's split of each issue and CheatBench's task folder, read only.
+"""Lucy's split of each issue and CheatBench's task folder, read only, with the files our split moves.
 
 Lucy's harness gives splits/<issue>.yaml and pieces/<issue>/ (the piece patches and lines.json). CheatBench's task
 folder gives instruction.md, task.toml and tests/config.json (base commit, reference patch, required tests). The issue's
-note on names comes from prompts.yaml swe.issue_notes.
+note on names comes from prompts.yaml swe.issue_notes. swe_settings.MOVED_FILES moves whole files between Lucy's pieces
+(piece_patch), and the fix's lines follow their files (load_lines).
 """
 from __future__ import annotations
 
 import ast
+import functools
 import json
 import re
 from pathlib import Path
@@ -15,7 +17,7 @@ import tomllib
 import yaml
 
 from src.configuration import settings
-from src.domains.swe.swe_settings import HARBOR, HARNESS
+from src.domains.swe.swe_settings import HARBOR, HARNESS, MOVED_FILES, PARTS
 
 
 def issues() -> list[str]:
@@ -29,13 +31,66 @@ def load_split(issue: str) -> dict:
     return yaml.safe_load(path.read_text())
 
 
-def load_lines(issue: str) -> dict:
-    """lines.json: `fix` items {line, part, repeated_in?}, `hidden_tests` lines, `generic` lines dropped."""
-    return json.loads((HARNESS / "pieces" / issue / "lines.json").read_text())
+def file_blocks(patch: str) -> list[tuple[str, str]]:
+    """Each file's block of a git patch with the file's path, in the patch's order."""
+    out = []
+    for block in re.split(r"(?m)^(?=diff --git )", patch):
+        m = re.match(r"diff --git a/\S+ b/(\S+)", block)
+        if m:
+            out.append((m.group(1), block))
+    return out
 
 
-def piece_patch(issue: str, piece: str) -> str:
+def added_lines(patch: str) -> set[str]:
+    """The lines a patch adds, stripped as lines.json writes them."""
+    return {line[1:].strip() for line in patch.splitlines() if line.startswith("+") and not line.startswith("+++")}
+
+
+@functools.cache
+def lucy_patch(issue: str, piece: str) -> str:
+    """The piece's patch as Lucy's harness cut it, read once per process."""
     return (HARNESS / "pieces" / issue / f"{piece}.patch").read_text()
+
+
+@functools.cache
+def moved_blocks(issue: str) -> dict[str, tuple[str, str | None]]:
+    """Each file swe_settings.MOVED_FILES moves, with its block in Lucy's patches and the piece it joins (None: no
+    piece). ValueError when a moved file is not in exactly one of Lucy's pieces: only a whole file can move."""
+    out = {}
+    for path, piece in MOVED_FILES.get(issue, {}).items():
+        found = [block for part in PARTS for name, block in file_blocks(lucy_patch(issue, part)) if name == path]
+        if len(found) != 1:
+            raise ValueError(f"{issue}: {path} is in {len(found)} of Lucy's pieces; a moved file must be in one")
+        out[path] = (found[0], piece)
+    return out
+
+
+@functools.cache
+def piece_patch(issue: str, piece: str) -> str:
+    """The patch planted as the piece: Lucy's, less the files MOVED_FILES moves out of it, plus the files it moves into
+    it, each block as Lucy's patches hold it. The whole fix stays Lucy's."""
+    moved = moved_blocks(issue)
+    if piece == "whole" or not moved:
+        return lucy_patch(issue, piece)
+    kept = [block for path, block in file_blocks(lucy_patch(issue, piece)) if path not in moved]
+    return "".join(kept + [block for block, joins in moved.values() if joins == piece])
+
+
+def load_lines(issue: str) -> dict:
+    """lines.json: `fix` items {line, part, repeated_in?}, `hidden_tests` lines, `generic` lines dropped. Where our
+    split moves files (MOVED_FILES), each fix line belongs to the pieces whose patch adds it (piece_patch): the first is
+    its part and the rest its repeated_in, and a line no piece adds is dropped."""
+    lines = json.loads((HARNESS / "pieces" / issue / "lines.json").read_text())
+    if not moved_blocks(issue):
+        return lines
+    added = {part: added_lines(piece_patch(issue, part)) for part in PARTS}
+    fix = []
+    for item in lines["fix"]:
+        holders = [part for part in PARTS if item["line"] in added[part]]
+        if holders:
+            repeated = {"repeated_in": holders[1:]} if holders[1:] else {}
+            fix.append({"line": item["line"], "part": holders[0], **repeated})
+    return {**lines, "fix": fix}
 
 
 def task_dir(instance: str) -> Path:

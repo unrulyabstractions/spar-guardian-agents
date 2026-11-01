@@ -69,6 +69,14 @@ def test_plan_under_each_policy():
     assert drawn == {"m": [], "p": ["w"], "z": ["x", "y"]} and list(drawn) == ["m", "p", "z"]
     assert list(access.plan("split", ["z", "m", "p"], None, lambda n: items, whole)) == ["m", "p", "z"]
     assert access.plan("split", ["z", "m", "p"], None, lambda n: items, whole) == {"z": ["x"], "m": ["y"], "p": ["x"]}
+    # the turn names the neutral seat the deal starts from, mod the number of neutral agents
+    three = ["x", "y", "z"]
+    assert access.plan("split", THREE, None, lambda n: three, whole, turn=1) == \
+        {"a01": ["z"], "a02": ["x"], "a03": ["y"]}
+    assert access.plan("split", THREE, roles, lambda n: three, whole, turn=1) == \
+        {"a01": ["y"], "a02": [], "a03": ["x", "z"]}
+    assert access.plan("split", THREE, roles, lambda n: three, whole, turn=-1) == \
+        access.plan("split", THREE, roles, lambda n: three, whole, turn=3)
     with pytest.raises(ValueError, match="every seat"):
         access.check_seats({"seat1": ["x"]}, 3)
     access.check_seats(explicit, 3)
@@ -174,15 +182,16 @@ def test_the_applied_policy_is_the_one_recorded():
     team = build_config("default", "small", [])
     assert own.applied_access(team, None) == "split"
     assert own.plan(team).holds == {"a01": ["A"], "a02": ["B"], "a03": ["C"]}
-    # own_piece with a regulator: seed 2 turns A, B, C to C, A, B, which go to the two neutral agents round robin; the
-    # regulator holds nothing
-    with_role = build_config("default", "small", ["regulators=1", "seed=2"])
-    roles = hidden_roles(with_role)
-    neutral = access.neutral_agents(THREE, roles)
-    regulator = next(a for a in THREE if roles[a] == "regulator")
-    plan = own.plan(with_role, roles)
-    assert plan.holds == {neutral[0]: ["C", "B"], neutral[1]: ["A"], regulator: []} and plan.mode == "shared_task"
-    assert plan.pieces == {} and plan.split
+    # own_piece with a regulator: A, B, C go round the two neutral agents from the seat minus the seed picks, so B and
+    # C, which hold the hidden tests' two values, always go to two agents; the regulator holds nothing
+    for seed, first in ((2, 0), (1, 1)):
+        with_role = build_config("default", "small", ["regulators=1", f"seed={seed}"])
+        roles = hidden_roles(with_role)
+        neutral = access.neutral_agents(with_role.seats, roles)
+        regulator = next(a for a in THREE if roles[a] == "regulator")
+        plan = own.plan(with_role, roles)
+        assert plan.holds == {neutral[first]: ["A", "C"], neutral[1 - first]: ["B"], regulator: []}
+        assert plan.mode == "shared_task" and plan.pieces == {} and plan.split
     # one neutral agent among three: the whole fix for everyone
     two_roles = build_config("default", "small", ["regulators=1", "disregulators=1"])
     assert own.plan(two_roles, hidden_roles(two_roles)).holds == {a: ["whole"] for a in THREE}

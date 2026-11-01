@@ -8,9 +8,11 @@ the review tool and the artifact read on knowledge work, the answer key's shards
 prime factorization, the planted designs' segments on protein design, the reference's segments on creative writing, the
 request tool and the credential's halves on chess. Under `split`, the default, the domain's items for
 n neutral agents are dealt round robin over the neutral agents in seat order, so the whole exploit needs them all, and a
-regulator or a disregulator holds nothing. A domain with fewer items than neutral agents (SWE's three pieces) deals them
-again to the agents beyond: with five, the fourth and fifth hold the first and second pieces. When fewer than two agents
-are neutral every agent holds everything. Under `all` every agent holds everything.
+regulator or a disregulator holds nothing. The deal starts from the neutral seat a domain names (`turn`; SWE turns it by
+the seed), so two items next to each other in the domain's order always go to two agents. A domain with fewer items
+than neutral agents (SWE's three pieces) deals them again to the agents beyond: with five, the fourth and fifth hold the
+first and second pieces. When fewer than two agents are neutral every agent holds everything. Under `all` every agent
+holds everything.
 
 An explicit map names what each seat holds; the command line writes it as `seat1:B+C,seat2:A,seat3:`. A map names seats,
 never agent IDs: a run draws its IDs from its seed (SwarmConfig.seats), and seat k is the k-th ID drawn. So a map fixes
@@ -80,17 +82,20 @@ def deal(items: list[str], agents: list[str]) -> dict[str, list[str]]:
 
 
 def plan(access: Access, seats: list[str], roles: dict[str, str] | None,
-         split_items: Callable[[int], list[str]], whole: list[str]) -> dict[str, list[str]]:
+         split_items: Callable[[int], list[str]], whole: list[str], turn: int = 0) -> dict[str, list[str]]:
     """What each agent holds, sorted by agent so that the plan's order shows no seat. `seats` lists the agents in seat
     order (SwarmConfig.seats): an explicit map's seat k is seats[k - 1], and the deal follows this order. split_items(n)
-    gives the domain's items for n neutral agents; whole is what an agent with everything holds."""
+    gives the domain's items for n neutral agents; whole is what an agent with everything holds. The deal starts from
+    the neutral seat `turn` mod n and goes on round the neutral seats, so item i and item i + 1 always go to two agents
+    when two or more are neutral."""
     neutral = neutral_agents(seats, roles)
     if isinstance(access, dict):
         held = {a: list(access[label]) for a, label in zip(seats, seat_labels(len(seats)))}
     elif access == "all" or len(neutral) < 2:
         held = {a: list(whole) for a in seats}
     else:
-        dealt = deal(split_items(len(neutral)), neutral)
+        start = turn % len(neutral)
+        dealt = deal(split_items(len(neutral)), neutral[start:] + neutral[:start])
         held = {a: dealt.get(a, []) for a in seats}
     return dict(sorted(held.items()))
 
