@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import datetime as dt
 import importlib
+import inspect
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -19,6 +21,7 @@ from src.configuration import settings
 from src.domains.openmath import OpenMath
 from src.judging.cheatbench_judge import judge_spec
 from src.swarm.turn_rules._turn_state import HALT_TAG
+from src.ui import __main__ as browser
 from tests import smoke
 from tests.smoke import STAMP_VARIABLE, access_load, all_suites, common
 from tests.smoke.access_logging import normal
@@ -164,7 +167,11 @@ def test_a_suite_takes_the_stamp_its_parent_handed_down_and_no_other_shape(monke
     monkeypatch.setenv(STAMP_VARIABLE, STAMP)
     assert (Suite("smoke_x").runs, Suite("smoke_x").logs) == (smoke.RUNS / "smoke_x" / STAMP,
                                                               smoke.LOGS / "smoke_x" / STAMP)
-    for handed in ("", "../../elsewhere", "2099-01-01", "20990101T000000", "20990101T000000Z/x"):
+    for handed in ("", "../../elsewhere", "2099-01-01", "20990101T000000", "20990101T000000Z/x",
+                   "99999999T999999Z",            # no such date
+                   "20991301T000000Z",            # no month 13
+                   "٢٠٩٩٠١٠١T000000Z",            # Arabic-Indic digits
+                   "20990101T000000Z\n", "20990101T000000z"):
         monkeypatch.setenv(STAMP_VARIABLE, handed)
         with pytest.raises(ValueError, match=STAMP_VARIABLE):
             Suite("smoke_x")
@@ -309,8 +316,62 @@ def test_every_sample_of_a_load_run_writes_under_the_launchs_stamp(smoke_in, mon
     assert "PASS: 2 of 2 runs of 1 agent(s) at once" in capsys.readouterr().out
 
 
+def test_the_samples_and_the_launch_write_under_one_folder(monkeypatch):
+    """run_sample's Suite and launch's take the same name, so the samples' runs and eval logs land beside the
+    launch's barrier, results and sample logs."""
+    seen = []
+
+    class Stop(Exception):
+        """The stand-in Suite stops each caller once it has its name."""
+
+    def recording(name, spec=None):
+        seen.append(name)
+        raise Stop
+
+    monkeypatch.setattr(access_load, "Suite", recording)
+    monkeypatch.setattr(access_load, "too_many_runs", lambda samples, available: None)
+    with pytest.raises(Stop):
+        access_load.run_sample(0, 1, 1, Path("barrier"))
+    with pytest.raises(Stop):
+        access_load.launch(1, 1)
+    assert seen == [access_load.NAME, access_load.NAME] and access_load.NAME == "smoke_load"
+
+
+def test_a_load_run_refuses_a_stamp_whose_folder_exists(smoke_in, monkeypatch, capsys):
+    """A SMOKE_STAMP set by hand names the folder of an earlier launch: refused before anything starts."""
+    monkeypatch.setenv(STAMP_VARIABLE, STAMP)
+    monkeypatch.setattr(access_load.psutil, "virtual_memory", lambda: SimpleNamespace(available=64 * 2**30))
+    monkeypatch.setattr(access_load.subprocess, "Popen", lambda *_, **__: pytest.fail("a run started"))
+    (smoke_in / "runs" / "smoke_load" / STAMP / "barrier").mkdir(parents=True)
+    assert access_load.launch(2, 1) == 1
+    out = capsys.readouterr().out
+    assert out.startswith("REFUSED: ") and f"{STAMP_VARIABLE}={STAMP} was set by hand" in out
+    assert not (smoke_in / "logs").exists()
+
+
 def test_the_load_run_stays_out_of_smoke_all():
     assert "access_load" not in all_suites.SUITES
+
+
+BROWSE = f"uv run python -m src.ui --runs runs/{smoke.STUDY}/<suite>/<stamp>"
+"""How to browse one smoke invocation's runs."""
+
+
+def test_the_docs_give_the_combined_runs_folder_and_how_to_browse_a_smoke_run():
+    """README.md's and the Makefile's smoke-all lines give logs/study_smoke/smoke_all/<stamp>/, and README.md and the
+    package docstring give the browser's command, whose --runs flag the browser takes."""
+    folder = f"logs/{smoke.STUDY}/{all_suites.NAME}/<stamp>/"
+    readme = (settings.ROOT / "README.md").read_text()
+    assert folder in next(line for line in readme.splitlines() if line.startswith("make smoke-all"))
+    makefile = (settings.ROOT / "Makefile").read_text()
+    assert folder in next(line for line in makefile.splitlines() if line.startswith("smoke-all:"))
+    assert BROWSE in smoke.__doc__ and BROWSE in readme
+    assert '"--runs"' in inspect.getsource(browser.main)
+
+
+def test_the_examples_readme_reads_the_summary_from_the_study():
+    readme = (settings.ROOT / "examples" / "README.md").read_text()
+    assert re.findall(r"python -m src summary (\S+)`", readme) == ["runs/<study>/riemann_minimal"]
 
 
 def test_a_run_whose_log_did_not_work_fails_unless_the_scenario_says_so(tmp_path):

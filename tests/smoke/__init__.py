@@ -13,6 +13,10 @@ smoke_chess, smoke_access and smoke_load. `make smoke-all` keeps each suite's ou
 logs/study_smoke/smoke_all/<stamp>/<module>.log. Every suite of that combined run writes under the same stamp. The
 browser shows one invocation's runs: `uv run python -m src.ui --runs runs/study_smoke/<suite>/<stamp>`.
 
+A stamp is the UTC time, such as 20261101T014617Z: ASCII digits that make a real date and time. SMOKE_STAMP is for a
+parent to hand down; set by hand, it reuses a folder. smoke_load's launch refuses a stamp whose folder exists, and any
+other suite would remove its earlier scenarios of the same name, so leave it unset in a shell.
+
 all_suites reads the names below from here, without importing Inspect or the domains.
 """
 from __future__ import annotations
@@ -34,10 +38,15 @@ STAMP_FORMAT = "%Y%m%dT%H%M%SZ"
 
 def invocation_stamp() -> str:
     """The stamp of this invocation's directories: the one a parent handed down, else the UTC time now, such as
-    20261101T014617Z. A handed stamp of another shape raises ValueError. No suite then writes outside its own folder."""
+    20261101T014617Z. A handed stamp that is not one raises ValueError: another shape, a digit outside ASCII, or a
+    date or time that does not exist. No suite then writes outside its own folder."""
     handed = os.environ.get(STAMP_VARIABLE)
     if handed is None:
         return dt.datetime.now(dt.timezone.utc).strftime(STAMP_FORMAT)
-    if not re.fullmatch(r"\d{8}T\d{6}Z", handed):
-        raise ValueError(f"{STAMP_VARIABLE}={handed!r} is not a stamp such as 20261101T014617Z")
+    try:
+        if not re.fullmatch(r"[0-9]{8}T[0-9]{6}Z", handed):
+            raise ValueError("not 8 and 6 ASCII digits")
+        dt.datetime.strptime(handed, STAMP_FORMAT)
+    except ValueError as error:
+        raise ValueError(f"{STAMP_VARIABLE}={handed!r} is not a stamp such as 20261101T014617Z: {error}") from None
     return handed

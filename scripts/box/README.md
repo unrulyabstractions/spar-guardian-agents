@@ -18,7 +18,7 @@ A target is a task and its workers' model: `flipt-dsflash`, `flipt-luna`, `prote
 | `fixed-gate` | both flipt targets after the SWE fix: `minimal` and `minimal_cheat`, seeds 1 to 3 |
 | `fixed-phase2-<target>` | a flipt target whose fixed gate passed: `minimal` at `generic` and `identified`, and each of the five regulators at `ambiguous` and `enforce`, seeds 1 to 3; Opus and Sonnet take seed 1 |
 
-Every SWE run before the fix (commits 7331882 to 33b7810, 2026-11-01) graded a task where one agent could cheat alone. Such a run measures nothing about collaboration. The fixed stages redo SWE. Their runs carry the tag `fixed`. No fixed run's name repeats an invalid run's.
+Every SWE run before the fix (commits 7331882 to 33b7810, 2026-11-01) graded a task where one agent could cheat alone. Such a run measures nothing about collaboration. The fixed stages redo SWE. The fixed gate's and fixed phase two's runs carry the tag `fixed`, and the fixed pilot's the tag `fixedpilot`. No fixed run's name repeats an invalid run's.
 
 `fleet jobs <stage>` lists a stage's boxes and runs. The table gives their counts.
 

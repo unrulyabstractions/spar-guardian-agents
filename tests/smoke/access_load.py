@@ -40,6 +40,8 @@ from tests.smoke import STAMP_VARIABLE
 from tests.smoke.common import Suite, small
 from tests.support.mock_model import call, scripted
 
+NAME = "smoke_load"
+"""The suite's folder under runs/study_smoke/ and logs/study_smoke/: the launch's and every sample's."""
 SAMPLES = 15
 READS = 60
 READ_LOOP = "for i in $(seq 1 {reads}); do cat {key} >/dev/null; sleep 0.2; done; echo read"
@@ -66,7 +68,7 @@ async def at_barrier(barrier: Path, sample: int, samples: int, then: ModelOutput
 def run_sample(sample: int, samples: int, agents: int, barrier: Path) -> dict:
     """One run: what its log says, for the parent to judge."""
     benchmark = SubsetSum()
-    suite = Suite("smoke_load", judge_spec(benchmark.task_dir, benchmark.name))
+    suite = Suite(NAME, judge_spec(benchmark.task_dir, benchmark.name))
     pairs = ("judge=none", "steps_per_agent=2", f"n_agents={agents}", "concurrent_rounds=false")
     config = small(*pairs)
     reader = sample % 2 == 1
@@ -131,12 +133,17 @@ def too_many_runs(samples: int, available_b: int) -> str | None:
 
 
 def launch(samples: int, agents: int) -> int:
-    """Every sample as a process, at once. 1 on any failure, and on a count the host's memory cannot hold."""
+    """Every sample as a process, at once. 1 on any failure, on a count the host's memory cannot hold, and on a stamp
+    whose folder exists, which only a SMOKE_STAMP set by hand gives."""
     refused = too_many_runs(samples, psutil.virtual_memory().available)
     if refused:
         print(f"REFUSED: {refused}")
         return 1
-    suite = Suite("smoke_load")
+    suite = Suite(NAME)
+    taken = [str(folder) for folder in (suite.runs, suite.logs) if folder.exists()]
+    if taken:
+        print(f"REFUSED: {', '.join(taken)} exists already: {STAMP_VARIABLE}={suite.stamp} was set by hand; unset it")
+        return 1
     root = suite.runs
     barrier = root / "barrier"
     barrier.mkdir(parents=True)
