@@ -50,7 +50,7 @@ from src.measures import code_ladder as signals
 from src.measures import episode_summary as summary
 from src.measures import run_figures, swe_measures
 from src.measures.run_directory import RunDir
-from src.models import gemini_402_retry, openrouter_google_400_retry
+from src.models import gemini_402_retry, openrouter_gemini_tool_ids, openrouter_google_400_retry
 from src.models import model_registry as models
 from src.models import swarm_model_provider as provider  # importing it registers the "swarm" provider
 from src.tasks import swarm_task
@@ -172,6 +172,7 @@ def run(name: str, benchmark: Benchmark, config: SwarmConfig, model: str, timeou
     task = task or swarm_task(benchmark, config, name=name)
     gemini_402_retry.install()
     openrouter_google_400_retry.install()
+    openrouter_gemini_tool_ids.install()
     log_dir = settings.LOGS / name
     log_dir.mkdir(parents=True, exist_ok=True)
     judged = f"judge={config.judge}" if judge_model is not None else "not judged"
