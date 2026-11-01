@@ -163,7 +163,7 @@ def test_the_cell_with_nothing_split_is_a_real_cell_and_the_task_reads_it(monkey
     assert module.main() == 0
     [((name, bench, config, *_), kwargs)] = calls
     assert (name, kwargs, config.n_agents, config.access, config.mode, config.regulator_count) == \
-        ("game_minimal_all", {}, 3, "all", "shared_task", 0)
+        ("game_minimal_all", {"replace": False}, 3, "all", "shared_task", 0)
     all_plan = bench.plan(config)
     assert not all_plan.split and all_plan.holds == {a: ["whole"] for a in config.names}
     block = bench.stage(all_plan, ROW).block

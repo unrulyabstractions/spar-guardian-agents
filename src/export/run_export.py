@@ -1,6 +1,6 @@
 """An Inspect .eval log from an ORBIT run, written as the run directory CheatBench's judge and our browser read.
 
-    write_run(eval_log_path, run_dir, verdicts=None)
+    write_run(eval_log_path, run_dir, verdicts=None, replace=False)
 
 Writes
     <run_dir>/run.json                                 the run: task, model, roster, defenses, team, config, rules
@@ -44,6 +44,10 @@ export never writes run.json "signals": the code ladder (src/measures/code_ladde
 Episode ids: "<sample>#<epoch>" for a single agent, "<sample>#<epoch>@<agent>" otherwise (export_episodes.episode_id).
 Verdicts come from the `verdicts` argument ({episode: verdict}, when re-judging) or from the cheatbench_judge score in
 the log; a judge.jsonl row is the episode's identity, the verdict, and the transcript the judge read.
+
+A run directory holds one eval's run. write_run refuses a directory whose run.json records another eval
+(RunFolderTaken), so a rerun under a name in use never replaces a run unasked. The same eval's log exports into its
+own directory again (regenerate, rejudge). replace=True writes another eval over the run on purpose.
 """
 from __future__ import annotations
 
@@ -77,7 +81,7 @@ from src.export.export_episodes import sample_key, sample_records
 from src.judging.cheatbench_judge import JUDGE_SCORER
 from src.measures.run_directory import ACCESS_LOG, EPISODES, JUDGE, RUN_JSON
 from src.models import swarm_model_provider as provider
-from src.utils.json_files import write_jsonl
+from src.utils.json_files import read_json, write_jsonl
 
 # The identity a judge.jsonl row takes from its episode record, ahead of the verdict.
 VERDICT_IDENTITY = ("id", "episode", "replicate", "task", "model")
@@ -149,14 +153,38 @@ def clear_outputs(run_dir: Path) -> None:
         shutil.rmtree(run_dir / name, ignore_errors=True)
 
 
-def write_run(eval_log_path: Path, run_dir: Path, *, verdicts: dict[str, dict] | None = None) -> dict:
+class RunFolderTaken(ValueError):
+    """The run directory holds the run of another eval, and the caller did not ask to replace it."""
+
+
+def refuse_replacing(run_dir: Path, eval_id: str | None) -> None:
+    """Raise RunFolderTaken when run_dir holds the run of an eval other than eval_id: its run.json records another
+    eval_id, or none. eval_id None stands for an eval not made yet, which no run.json can hold. A folder without
+    run.json holds no run."""
+    path = Path(run_dir) / RUN_JSON
+    if not path.is_file():
+        return
+    held = (read_json(path) or {}).get("eval_id")
+    if eval_id is not None and held == eval_id:
+        return
+    holds = f"the run of eval {held}" if held else "a run with no eval_id"
+    new = f"eval {eval_id}" if eval_id else "a new eval"
+    raise RunFolderTaken(f"{run_dir} holds {holds}. Writing {new} there would replace it. "
+                         "Pass --replace to replace it on purpose.")
+
+
+def write_run(eval_log_path: Path, run_dir: Path, *, verdicts: dict[str, dict] | None = None,
+              replace: bool = False) -> dict:
     """Write the run directory for one eval log, which holds one sample; return a short summary of what was written.
-    A log of several samples (inspect eval --epochs) is refused: run.json and the code ladder describe one."""
+    A log of several samples (inspect eval --epochs) is refused: run.json and the code ladder describe one. A directory
+    that holds another eval's run is refused before anything is written, unless replace (refuse_replacing)."""
     eval_path = Path(eval_log_path)
     log = read_eval_log(str(eval_path), resolve_attachments=True)
     if len(log.samples or []) > 1:
         raise ValueError(f"{eval_path}: a run holds one sample, this log has {len(log.samples)}")
     run_dir = Path(run_dir).resolve()
+    if not replace:
+        refuse_replacing(run_dir, log.eval.eval_id)
     run_dir.mkdir(parents=True, exist_ok=True)
     clear_outputs(run_dir)
     views = []

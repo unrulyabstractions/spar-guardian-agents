@@ -2,15 +2,17 @@
 
     args = parse_example_arguments(Path(__file__), __doc__)
     config = build_config(args.preset, args.scale, args.settings)
-    return finish(args, run.run(args.name, OpenMath("riemann"), config, args.model, args.timeout))
+    return finish(args, run.run(args.name, OpenMath("riemann"), config, args.model, args.timeout,
+                                replace=args.replace))
 
 The model and config flags are the command line's (presets.add_config_arguments): --model and the role-model flags
 come back as Inspect strings, and args.settings holds the run's name as `id_salt`, DEFAULT_SETTINGS, every --set, then
 each role model as `<role>_model=<Inspect string>`. --judge and --no-judge say whether the run is judged as it finishes
 (USE_JUDGE_AS_DEFAULT otherwise); a run that is not adds `judge=none` last, and `python -m src rejudge <name>` judges
-it later. --name is the run's name and --timeout bounds one model request. A wrong model or field is an argument
-error (exit 2). finish() ends every script: after a run that succeeded it draws the run's figures under out/<name>/
-and returns the exit code either way.
+it later. --name is the run's name and --timeout bounds one model request. A run refuses a name whose folder already
+holds a run, before it starts, so a script run twice needs another --name or --replace, which replaces the earlier run
+on purpose. A wrong model or field is an argument error (exit 2). finish() ends every script: after a run that
+succeeded it draws the run's figures under out/<name>/ and returns the exit code either way.
 """
 from __future__ import annotations
 
@@ -45,6 +47,9 @@ def parse_example_arguments(script: Path, description: str | None, argv: list[st
     parser.add_argument("--name", default=script.stem, help="the run's name: runs/<study>/<name>/ and out/<name>/")
     parser.add_argument("--timeout", type=int, default=settings.MODEL_TIMEOUT_S,
                         help="seconds one model request may take, retries included")
+    parser.add_argument("--replace", action="store_true",
+                        help="replace the run already in runs/<study>/<name>/; without it the run refuses that folder "
+                             "before it starts")
     args = parser.parse_args(argv)
     for pair in args.settings:
         key, sep, _ = pair.partition("=")

@@ -495,9 +495,10 @@ def test_the_export_writes_the_file_and_the_block_and_owns_them(tmp_path):
     rows = RunDir(run_dir).access_log()["rows"]
     assert block["status"] == "valid" and [row["origin"] for row in rows] == ["control", "agent", "control"]
     assert ACCESS_LOG in run_export.OWNED_FILES
-    # the switch off in a new export of the same directory: a stale log never pairs with it
+    # the switch off in a new export of the same directory: a stale log never pairs with it. The log is another eval,
+    # so the export replaces the run only when asked to
     eval_log(off, {}, {"access_log": False})
-    run_export.write_run(off, run_dir)
+    run_export.write_run(off, run_dir, replace=True)
     assert not (run_dir / ACCESS_LOG).exists()
     assert json.loads((run_dir / RUN_JSON).read_text())["access_log"] == {"status": "off"}
     assert RunDir(run_dir).access_log() is None
