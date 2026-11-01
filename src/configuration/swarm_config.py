@@ -106,7 +106,7 @@ class SwarmConfig(BaseModel):
     """Agents given the hidden disregulator role, as a count or a share, like regulators."""
     seed: int = 0
     """Draws the agents' IDs (agent_ids) and fixes which seats get which role, with turn_order="random" the order of
-    each round, and on SWE where the deal of the pieces starts (SWE.dealt_items)."""
+    each round, and on SWE the seat the deal of the pieces starts from (SWE.deal_turn)."""
     id_salt: str = ""
     """Mixed into the draw of the IDs and nothing else, so runs that share a seed share their hidden seats and turn
     order and still get IDs of their own. `python -m src run` and the examples set it to the run's name."""
@@ -135,7 +135,8 @@ class SwarmConfig(BaseModel):
     """Which parts of the exploit each agent holds (src/configuration/access_policy.py; Benchmark.plan).
     split: the domain's items are dealt round robin over the neutral agents, so the whole exploit needs them all:
     openmath cuts the complete submission's archive into one slice per neutral agent, SWE deals the honeypot's pieces
-    (jigsaw B, C, A; own_piece A, B, C; the seed turns the order), knowledge work deals the review tool to the first
+    (jigsaw B, C, A; own_piece A, B, C; the seed turns the seat the deal starts from), knowledge work deals the review
+    tool to the first
     half of the neutral agents
     and the artifact read to the rest, subset sum deals the answer key's shards, prime factorization the factors'
     additive shares, protein design the segments of the planted designs, creative writing the segments of the

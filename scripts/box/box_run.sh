@@ -1,23 +1,25 @@
 #!/usr/bin/env bash
-# Start a box's screen: scripts/box/box_run.sh <instance-id> [--suffix S] [--samples N] [--kinds KIND ...]
-#                                                                [--allow-main-key] [--mock]
+# Start a box's runs: scripts/box/box_run.sh <instance-id> [--mock] [--allow-main-key]
 #
-# The task, the model and the commit come from the registry through fleet.py run-args, which also takes the run names'
-# suffix (the model's, or a --suffix that starts with it) and refuses a run name this machine holds from a run made
-# elsewhere. The model's key goes from this shell's environment to /root/.box_env (mode 600) through ssh's standard
-# input: never on a command line, never printed; the box checks only its length. The key sent is BOX_<NAME>, a key
-# made for the screen with a spend cap and revoked after the destroys, when this shell sets it; <NAME> itself only
-# with --allow-main-key. Then, once /root/box_id shows the endpoint reaches this instance, box_runner.py run starts the
-# task's cells x samples at once under nohup setsid, with /root/.box_env sourced; its output goes to /root/screen.log
-# and its pid to /root/screen.pid. A runner alive on the box is refused. The pilot is
-# `--samples 1 --kinds solo_cheat minimal_regulated`. --mock rehearses the box on Inspect's mock model: no key goes to
-# the box and nothing is paid, and the run names end in <suffix>mock, so they never stand in for the screen's runs.
+# The box's name, commit and jobs digest come from the registry through fleet.py run-args, which refuses a model that
+# needs a key a box does not hold and a run name this machine holds from a run made elsewhere. The box runs the jobs
+# study_table.py gives it and no other box's, and running this again starts what is not finished.
+#
+# A box holds one key, OPENROUTER_API_KEY. It goes from this shell's environment to /root/.box_env (mode 600) through
+# ssh's standard input: never on a command line, never printed. The box checks only its length. The key sent is
+# BOX_OPENROUTER_API_KEY, a key made for this study with a spend cap and revoked after the destroys, when this shell
+# sets it; OPENROUTER_API_KEY itself only with --allow-main-key.
+#
+# Once /root/box_id shows the endpoint reaches this instance, box_runner.py run starts the jobs under nohup setsid, with
+# /root/.box_env sourced. Its output goes to /root/screen.log and its pid to /root/screen.pid. A runner alive on the box
+# is refused. --mock rehearses the box on Inspect's mock model, one seed per arm: no key goes to the box, nothing is
+# paid, and the run names end in mock<k>, so they never stand in for real runs.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 cd "$root"
 if [ $# -lt 1 ]; then
-  sed -n '2,15p' "$0"
+  sed -n '2,16p' "$0"
   exit 2
 fi
 id=$1
@@ -40,41 +42,21 @@ runner=()
 while IFS= read -r line; do
   runner+=("$line")
 done < "$work/args"
-model=$(uv run python -m scripts.box.fleet entry "$id" model)
+name=$(uv run python -m scripts.box.fleet entry "$id" key)
 echo "== box $id: box_runner.py run ${runner[*]}"
 
-# send_key: the model's key into /root/.box_env, its length checked on the box; never printed.
+# send_key: the box's key into /root/.box_env, its length checked on the box; never printed.
 send_key() {
-  read -r -a keys <<< "$(uv run python -c \
-    'import sys; from src.models.model_registry import key_env, resolve; print(" ".join(key_env(resolve(sys.argv[1]))))' \
-    "$model")"
-  if [ ${#keys[@]} -eq 0 ]; then
-    echo "refused: the registry names no key for $model"
-    exit 1
-  fi
-  name=""
+  scoped=BOX_$name
   sent_from=""
-  for key in "${keys[@]}"; do
-    scoped=BOX_$key
-    if [ -n "${!scoped:-}" ]; then
-      name=$key
-      sent_from=$scoped
-      break
-    fi
-  done
-  if [ -z "$name" ] && [ "$allow_main" -eq 1 ]; then
-    for key in "${keys[@]}"; do
-      if [ -n "${!key:-}" ]; then
-        name=$key
-        sent_from=$key
-        break
-      fi
-    done
+  if [ -n "${!scoped:-}" ]; then
+    sent_from=$scoped
+  elif [ "$allow_main" -eq 1 ] && [ -n "${!name:-}" ]; then
+    sent_from=$name
   fi
-  if [ -z "$name" ]; then
-    echo "refused: set BOX_${keys[0]} to a key made for this screen with a spend cap (an OpenRouter key limit, an" \
-      "OpenAI project budget, an Anthropic workspace limit), or pass --allow-main-key to send ${keys[*]} itself to a" \
-      "third-party host"
+  if [ -z "$sent_from" ]; then
+    echo "refused: set $scoped to a key made for this study with a spend cap (an OpenRouter key limit), or pass" \
+      "--allow-main-key to send $name itself to a third-party host"
     exit 1
   fi
 

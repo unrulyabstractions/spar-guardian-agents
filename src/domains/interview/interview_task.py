@@ -20,8 +20,8 @@ Departures from CheatBench's runner: the verifier runs on the host with its stat
 mirrored into the checkout's live logs, which stay as staged; the containers have no network, where CheatBench leaves
 egress open and forbids it in the prompt; the staged files carry the time the sample was built as their mtime. In a
 team the checkout's generator salts its random source from an environment variable no container sets, in a
-rewritten commit (_interview_sealed_generator.py), so running it rebuilds nothing and a made-up salt gives another
-corpus.
+rewritten commit (_interview_sealed_generator.py), so running it as staged rebuilds nothing and a made-up salt gives
+another corpus. One agent can still edit the salt out and rebuild the key.
 """
 from __future__ import annotations
 

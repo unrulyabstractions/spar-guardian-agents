@@ -2,14 +2,15 @@
 launch pins, the create, status and destroy paths against a fake API (a launch cut short, a destroy vast.ai does not
 carry out, the fleet's $/h cap), the key on a redirect, the destroy gate, run-args, entry and repin, the layout's cells,
 labels and run names, the capture's sweep and comparison on two fake trees (also end to end through a stand-in ssh
-with the real rsync, with the manifest, the snapshot and a conflict), the runner's hung-run guard, resume and status,
-and the watch's interval check."""
+with the real rsync, with the manifest, the snapshot and a conflict), the runner's hung-run guard, flags, refusals,
+resume and status, and the watch's interval check."""
 from __future__ import annotations
 
 import hashlib
 import http.client
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -25,8 +26,23 @@ from pathlib import Path
 import pytest
 
 from scripts import screen
-from scripts.box import box_capture, box_runner, box_sweep, fleet, fleet_layout
+from scripts.box import (
+    box_capture,
+    box_runner,
+    box_sweep,
+    fleet,
+    fleet_create,
+    fleet_destroy,
+    fleet_layout,
+    fleet_registry,
+    fleet_status,
+    study_table,
+    vast_api,
+    vast_offers,
+)
 from scripts.box.box_sweep import Sweep
+from scripts.box.study_table import Arm, Box, box_jobs, find_box, jobs_sha256
+from src import cli, run
 from src.configuration import settings
 
 # Offers from the searches of 2026-10-30 (POST /api/v0/bundles/), cut to the fields the filter reads, and one made-up
@@ -51,27 +67,33 @@ PIN = {"commit": "c0ffee" * 6 + "c0ff", "requirements": REQUIREMENTS,
        "requirements_sha256": hashlib.sha256(REQUIREMENTS).hexdigest(), "python_version": "3.11.13",
        "uv_version": "0.8.15"}
 LAUNCH = "l0a1b2c"
-LABEL = f"spar-screen-chess-gpt-6-luna-{LAUNCH}"
+BOX = find_box("gate-protein-luna-1")
+LABEL = f"spar-screen-{BOX.name}-{LAUNCH}"
+TWO_RUNS = Box(BOX.name, BOX.stage, tuple(Arm(arm.target, arm.kind, seeds=(1,)) for arm in BOX.arms))
+"""A box with one run of each of its arms."""
+ONE_PILOT_BOX = ("--stage", "pilot", "--count", "1", "--only", "pilot-protein-luna-1")
+TWO_PILOT_BOXES = ("--stage", "pilot", "--count", "2", "--only", "pilot-protein-luna-1", "pilot-creative-luna-1")
 
 
 # ---- offers ----
 
 def test_candidates_keep_what_can_hold_a_box_cheapest_first():
-    assert [o["id"] for o in fleet.candidates(SAVED_SEARCH)] == [57970273, 57143771, 58340174, 58352110]
-    assert [o["id"] for o in fleet.candidates(SAVED_SEARCH, max_dph=2.0)][-1] == 58339037
+    assert [o["id"] for o in vast_offers.candidates(SAVED_SEARCH)] == [57970273, 57143771, 58340174, 58352110]
+    assert [o["id"] for o in vast_offers.candidates(SAVED_SEARCH, max_dph=2.0)][-1] == 58339037
 
 
 def test_each_task_rents_at_its_own_floor():
     assert fleet_layout.floor_of("software_engineering") == (32, 64) and fleet_layout.floor_of("chess") == (16, 32)
-    assert fleet.minimums("software_engineering")["min_cores"] == 30 and fleet.minimums("chess")["min_cores"] == 14
+    assert fleet_registry.minimums("software_engineering")["min_cores"] == 30
+    assert fleet_registry.minimums("chess")["min_cores"] == 14
     small = {**SAVED_SEARCH[0], "cpu_cores_effective": 16, "cpu_cores": 16, "cpu_ram": 40000}
-    assert fleet.rejections(small, floor=fleet_layout.floor_of("chess")) == []
-    assert fleet.rejections(small, floor=fleet_layout.floor_of("software_engineering")) == [
+    assert vast_offers.rejections(small, floor=fleet_layout.floor_of("chess")) == []
+    assert vast_offers.rejections(small, floor=fleet_layout.floor_of("software_engineering")) == [
         "fewer than 32 cores", "less than 64 GB of RAM in its share"]
 
 
 def test_each_rejected_offer_says_why():
-    why = {o["id"]: fleet.rejections(o, floor=(32, 64)) for o in SAVED_SEARCH}
+    why = {o["id"]: vast_offers.rejections(o, floor=(32, 64)) for o in SAVED_SEARCH}
     assert why[58339037] == ["dearer than $1.00/h"]
     assert why[54902714] == ["less than 64 GB of RAM in its share"]          # 32 of 256 cores: 8 GB of 64
     assert why[58272073] == ["less than 64 GB of RAM in its share", "a country the model providers do not serve"]
@@ -84,11 +106,11 @@ def test_each_rejected_offer_says_why():
 
 def test_equal_prices_rank_the_more_reliable_first():
     twin = SAVED_SEARCH[3] | {"id": 1, "reliability": 0.999}
-    assert [o["id"] for o in fleet.candidates([SAVED_SEARCH[3], twin])] == [1, 57970273]
+    assert [o["id"] for o in vast_offers.candidates([SAVED_SEARCH[3], twin])] == [1, 57970273]
 
 
 def test_the_search_is_a_read_and_asks_for_what_the_box_needs():
-    call = fleet.search_call()
+    call = vast_offers.search_call()
     assert call.reads and call.method == "POST" and call.path == "/api/v0/bundles/"
     assert call.body["vms_enabled"] == {"eq": True} and call.body["allocated_storage"] == 200
     assert call.body["order"] == [["dph_total", "asc"]]
@@ -104,7 +126,7 @@ class FakeVast:
         self.offers, self.instances, self.calls, self.next_id = list(offers), list(instances), [], 900
         self.deletes = deletes
 
-    def __call__(self, call: fleet.Call) -> dict:
+    def __call__(self, call: vast_api.Call) -> dict:
         self.calls.append(call)
         if call.path == "/api/v0/bundles/":
             return {"offers": self.offers}
@@ -134,57 +156,68 @@ class FakeVast:
 def registry(tmp_path, monkeypatch):
     """The registry, the box folders and the launch pins in tmp_path; a launch pins PIN and every task can run."""
     path = tmp_path / "runs" / "boxes.json"
-    monkeypatch.setattr(fleet, "REGISTRY", path)
-    monkeypatch.setattr(fleet, "BOXES", tmp_path / "boxes")
+    monkeypatch.setattr(fleet_registry, "REGISTRY", path)
+    monkeypatch.setattr(fleet_registry, "BOXES", tmp_path / "boxes")
     monkeypatch.setattr(box_capture, "BOXES", tmp_path / "boxes")
-    monkeypatch.setattr(fleet, "fleet_pin", lambda commit="HEAD": dict(PIN))
-    monkeypatch.setattr(fleet, "layout_problems", lambda tasks: [])
+    monkeypatch.setattr(fleet_registry, "fleet_pin", lambda commit="HEAD": dict(PIN))
+    monkeypatch.setattr(fleet_create, "layout_problems", lambda tasks: [])
+    monkeypatch.setattr(fleet_create, "guard_alive", lambda: True)   # the cloud box guard's daemon, never the real one
     return path
 
 
-def add_box(instance_id=7, task="chess", model="gpt-6-luna", label=LABEL, launch=LAUNCH, **fields) -> dict:
+def add_box(instance_id=7, box=BOX, label=LABEL, launch=LAUNCH, **fields) -> dict:
     """A registered box of a launch whose pins are written."""
-    if not fleet.launch_dir(launch).exists():
-        fleet.write_launch(launch, dict(PIN))
-    entry = fleet.box_entry(instance_id, label, task, model, SAVED_SEARCH[3], launch) | fields
-    fleet.register(entry)
+    if not fleet_registry.launch_dir(launch).exists():
+        fleet_registry.write_launch(launch, dict(PIN))
+    entry = fleet_registry.box_entry(instance_id, label, box, SAVED_SEARCH[3], launch) | fields
+    fleet_registry.register(entry)
     return entry
 
 
 def test_a_client_without_writes_refuses_all_but_reads():
     fake = FakeVast()
-    vast = fleet.Vast(writes=False, transport=fake)
-    for call in (fleet.create_call(1, "spar-screen-x"), fleet.Call("DELETE", "/api/v0/instances/1/")):
+    vast = vast_api.Vast(writes=False, transport=fake)
+    for call in (vast_offers.create_call(1, "spar-screen-x"), vast_api.Call("DELETE", "/api/v0/instances/1/")):
         with pytest.raises(PermissionError):
             vast.send(call)
     assert fake.calls == []
-    assert vast.send(fleet.search_call())["offers"]
+    assert vast.send(vast_offers.search_call())["offers"]
 
 
 def test_the_dry_run_prints_every_request_and_sends_none(registry, monkeypatch, capsys):
     fake = FakeVast()
-    monkeypatch.setattr(fleet, "http", fake)
-    code = fleet.main(["create", "--count", "3", "--tasks", "chess", "--dry-run"])
+    monkeypatch.setattr(vast_api, "http", fake)
+    code = fleet.main(["create", "--stage", "pilot", "--count", "3", "--dry-run"])
     out = capsys.readouterr().out
     assert code == 0
     assert out.count("would send: PUT https://console.vast.ai/api/v0/asks/") == 3
-    assert '"label": "spar-screen-chess-claude-haiku-5-5-l' in out and '"vm": true' in out
+    assert '"label": "spar-screen-pilot-creative-luna-1-l' in out and '"vm": true' in out
     assert f"commit {PIN['commit']}" in out
     assert all(call.reads for call in fake.calls) and not registry.exists()
-    assert not fleet.BOXES.exists()                                           # no launch pinned on a dry run
+    assert not fleet_registry.BOXES.exists()                                           # no launch pinned on a dry run
     assert "never-printed" not in out
 
 
+def test_create_takes_no_offer_from_a_skipped_machine(registry, monkeypatch, capsys):
+    """A VM can come up smaller than its offer; its machine's next offer then goes untaken."""
+    monkeypatch.setattr(vast_api, "http", FakeVast())
+    assert fleet.main(["create", *ONE_PILOT_BOX, "--dry-run"]) == 0
+    first = re.search(r"/asks/(\d+)/", capsys.readouterr().out).group(1)
+    machine = next(o["machine_id"] for o in SAVED_SEARCH if str(o["id"]) == first)
+    assert fleet.main(["create", *ONE_PILOT_BOX, "--skip-machine", str(machine), "--dry-run"]) == 0
+    assert f"/asks/{first}/" not in capsys.readouterr().out
+
+
 def test_the_dry_run_names_the_boxes_no_offer_is_left_for(registry, monkeypatch, capsys):
-    monkeypatch.setattr(fleet, "http", FakeVast())
-    assert fleet.main(["create", "--count", "15", "--dry-run"]) == 1
+    monkeypatch.setattr(vast_api, "http", FakeVast())
+    assert fleet.main(["create", "--stage", "phase2-flipt-luna", "--count", "6", "--dry-run"]) == 1
     out = capsys.readouterr().out
-    assert out.count("would send: PUT") == 4 and "4 of 15 requests printed" in out
+    assert out.count("would send: PUT") == 4 and "4 of 6 requests printed" in out
 
 
 def test_the_dry_run_stops_at_the_fleets_cap(registry, monkeypatch, capsys):
-    monkeypatch.setattr(fleet, "http", FakeVast())
-    assert fleet.main(["create", "--count", "3", "--tasks", "chess", "--max-fleet-dph", "1.0", "--dry-run"]) == 1
+    monkeypatch.setattr(vast_api, "http", FakeVast())
+    assert fleet.main(["create", "--stage", "pilot", "--count", "3", "--max-fleet-dph", "1.0", "--dry-run"]) == 1
     out = capsys.readouterr().out
     assert "!!: the fleet would bill $1.210/h, past its cap $1.00/h" in out
     assert out.count("would send: PUT") == 2 and "takes the fleet to $1.210/h" in out
@@ -192,50 +225,80 @@ def test_the_dry_run_stops_at_the_fleets_cap(registry, monkeypatch, capsys):
 
 def test_create_refuses_past_the_fleets_cap_counting_the_boxes_it_holds(registry, monkeypatch, capsys):
     fake = FakeVast()
-    monkeypatch.setattr(fleet, "http", fake)
-    add_box(5, label=f"spar-screen-protein_design-gpt-6-luna-{LAUNCH}", task="protein_design", dph=14.5)
-    assert fleet.main(["create", "--count", "3", "--tasks", "chess"]) == 1
+    monkeypatch.setattr(vast_api, "http", fake)
+    add_box(5, dph=14.5)
+    assert fleet.main(["create", "--stage", "pilot", "--count", "3"]) == 1
     assert "refused: the fleet would bill $15.710/h" in capsys.readouterr().out
     assert all(call.reads for call in fake.calls)
 
 
 def test_create_refuses_tasks_that_cannot_run(registry, monkeypatch, capsys):
     fake = FakeVast()
-    monkeypatch.setattr(fleet, "http", fake)
-    monkeypatch.setattr(fleet, "layout_problems", lambda tasks: ["chess: examples/chess needs one script per kind"])
-    assert fleet.main(["create", "--count", "3", "--tasks", "chess"]) == 1
-    assert "refused: a box rented for these tasks could not run them" in capsys.readouterr().out
+    monkeypatch.setattr(vast_api, "http", fake)
+    monkeypatch.setattr(fleet_create, "layout_problems",
+                        lambda tasks: ["protein_design: examples/protein_design needs one script per kind"])
+    assert fleet.main(["create", "--stage", "pilot", "--count", "3"]) == 1
+    assert "refused: a box rented for these jobs could not run them" in capsys.readouterr().out
     assert fake.calls == []
 
 
 def test_create_registers_each_instance_pins_its_launch_and_passes_its_audit(registry, monkeypatch, capsys):
     fake = FakeVast()
-    monkeypatch.setattr(fleet, "http", fake)
-    assert fleet.main(["create", "--count", "2", "--tasks", "chess", "--models", "gpt-6-luna",
-                       "claude-haiku-5-5"]) == 0
+    monkeypatch.setattr(vast_api, "http", fake)
+    assert fleet.main(["create", *TWO_PILOT_BOXES]) == 0
     boxes = json.loads(registry.read_text())["boxes"]
     launch = boxes[0]["launch"]
     assert fleet_layout.LAUNCH.match(launch) and {b["launch"] for b in boxes} == {launch}
-    assert [(b["id"], b["label"], b["offer"], b["suffix"]) for b in boxes] == [
-        (901, f"spar-screen-chess-gpt-6-luna-{launch}", 57970273, "luna"),
-        (902, f"spar-screen-chess-claude-haiku-5-5-{launch}", 57143771, "haiku")]
-    pins = fleet.load_launch(launch)
+    assert [(b["id"], b["label"], b["offer"], b["box"], b["stage"], b["task"]) for b in boxes] == [
+        (901, f"spar-screen-pilot-protein-luna-1-{launch}", 57970273, "pilot-protein-luna-1", "pilot",
+         "protein_design"),
+        (902, f"spar-screen-pilot-creative-luna-1-{launch}", 57143771, "pilot-creative-luna-1", "pilot",
+         "creative_writing")]
+    pins = fleet_registry.load_launch(launch)
     assert pins["commit"] == PIN["commit"] and Path(pins["requirements"]).read_bytes() == REQUIREMENTS
     assert "never-stored" not in registry.read_text() and "never-stored" not in capsys.readouterr().out
 
 
 def test_create_refuses_a_count_that_is_not_the_boxes_asked_for(registry, monkeypatch):
     fake = FakeVast()
-    monkeypatch.setattr(fleet, "http", fake)
-    assert fleet.main(["create", "--count", "14"]) == 2
+    monkeypatch.setattr(vast_api, "http", fake)
+    assert fleet.main(["create", "--stage", "gate", "--count", "5"]) == 2
+    assert fake.calls == []
+
+
+def test_create_refuses_without_the_cloud_box_guard_and_a_dry_run_needs_none(registry, monkeypatch, capsys):
+    """No box is rented while no guard daemon watches it (2026-11-01: 19 idle boxes, $126). A dry run sends
+    nothing, so it needs no guard."""
+    fake = FakeVast()
+    monkeypatch.setattr(vast_api, "http", fake)
+    monkeypatch.setattr(fleet_create, "guard_alive", lambda: False)
+    assert fleet.main(["create", "--stage", "pilot", "--count", "3"]) == 1
+    assert "no cloud box guard daemon" in capsys.readouterr().out
+    assert fake.calls == []
+    assert fleet.main(["create", "--stage", "pilot", "--count", "3", "--dry-run"]) == 0
+
+
+def test_create_refuses_only_names_outside_the_stage(registry, monkeypatch, capsys):
+    fake = FakeVast()
+    monkeypatch.setattr(vast_api, "http", fake)
+    assert fleet.main(["create", "--stage", "pilot", "--count", "1", "--only", BOX.name]) == 2
+    assert f"not boxes of pilot: {BOX.name}" in capsys.readouterr().out
+    assert fake.calls == []
+
+
+def test_create_refuses_a_label_destroy_would_not_act_on(registry, monkeypatch, capsys):
+    fake = FakeVast()
+    monkeypatch.setattr(vast_api, "http", fake)
+    assert fleet.main(["create", *ONE_PILOT_BOX, "--label-prefix", "retry-spar-screen"]) == 2
+    assert "--label-prefix must start with spar-screen" in capsys.readouterr().out
     assert fake.calls == []
 
 
 def test_create_refuses_a_box_the_account_holds_from_another_launch(registry, monkeypatch, capsys):
-    fake = FakeVast(instances=[{"id": 5, "label": "spar-screen-chess-gpt-6-luna-l999999"}])
-    monkeypatch.setattr(fleet, "http", fake)
-    assert fleet.main(["create", "--count", "1", "--tasks", "chess", "--models", "gpt-6-luna"]) == 1
-    assert "holds boxes of these (task, model) already: 5" in capsys.readouterr().out
+    fake = FakeVast(instances=[{"id": 5, "label": "spar-screen-pilot-protein-luna-1-l999999"}])
+    monkeypatch.setattr(vast_api, "http", fake)
+    assert fleet.main(["create", *ONE_PILOT_BOX]) == 1
+    assert "holds these boxes already: 5" in capsys.readouterr().out
     assert all(call.reads for call in fake.calls)
 
 
@@ -250,9 +313,8 @@ def test_a_rent_whose_reply_is_lost_is_registered_by_the_audit(registry, monkeyp
         if call.method == "PUT":
             raise error
         return reply
-    monkeypatch.setattr(fleet, "http", transport)
-    assert fleet.main(["create", "--count", "2", "--tasks", "chess", "--models", "gpt-6-luna",
-                       "claude-haiku-5-5"]) == 1
+    monkeypatch.setattr(vast_api, "http", transport)
+    assert fleet.main(["create", *TWO_PILOT_BOXES]) == 1
     boxes = json.loads(registry.read_text())["boxes"]
     assert [(b["id"], b["note"]) for b in boxes] == [(901, "registered by the audit")]
     assert sum(call.method == "PUT" for call in fake.calls) == 1
@@ -267,52 +329,52 @@ def test_an_interrupted_launch_is_still_audited(registry, monkeypatch):
         if call.method == "PUT":
             raise KeyboardInterrupt
         return reply
-    monkeypatch.setattr(fleet, "http", transport)
+    monkeypatch.setattr(vast_api, "http", transport)
     with pytest.raises(KeyboardInterrupt):
-        fleet.main(["create", "--count", "1", "--tasks", "chess", "--models", "gpt-6-luna"])
+        fleet.main(["create", *ONE_PILOT_BOX])
     assert [b["id"] for b in json.loads(registry.read_text())["boxes"]] == [901]
 
 
 def test_the_audit_adopts_only_its_own_launchs_labels(registry, capsys):
-    asked = {LABEL: ("chess", "gpt-6-luna")}
+    asked = {LABEL: BOX}
     fake = FakeVast(instances=[{"id": 7, "label": LABEL, "dph_total": 0.4}])
-    assert fleet.audit(fleet.Vast(writes=False, transport=fake), asked) == 0
+    assert fleet_create.audit(vast_api.Vast(writes=False, transport=fake), asked) == 0
     assert [(b["id"], b["launch"], b["dph"]) for b in json.loads(registry.read_text())["boxes"]] == [(7, LAUNCH, 0.4)]
-    assert fleet.audit(fleet.Vast(writes=False, transport=fake), asked) == 0    # registered already: no error
-    other_launch = FakeVast(instances=[{"id": 8, "label": "spar-screen-chess-gpt-6-luna-l999999"}])
-    assert fleet.audit(fleet.Vast(writes=False, transport=other_launch), asked) == 1
+    assert fleet_create.audit(vast_api.Vast(writes=False, transport=fake), asked) == 0    # registered already: no error
+    other_launch = FakeVast(instances=[{"id": 8, "label": f"spar-screen-{BOX.name}-l999999"}])
+    assert fleet_create.audit(vast_api.Vast(writes=False, transport=other_launch), asked) == 1
     assert "UNREGISTERED 8" in capsys.readouterr().out
     assert [b["id"] for b in json.loads(registry.read_text())["boxes"]] == [7]
 
 
 def test_the_registry_refuses_an_id_twice(registry):
-    entry = fleet.box_entry(3, LABEL, "chess", "gpt-6-luna", SAVED_SEARCH[3], LAUNCH)
-    assert fleet.register(entry)
+    entry = fleet_registry.box_entry(3, LABEL, BOX, SAVED_SEARCH[3], LAUNCH)
+    assert fleet_registry.register(entry)
     with pytest.raises(ValueError):
-        fleet.register(entry)
-    assert fleet.register(entry, exist_ok=True) is False
-    assert fleet.registered(fleet.load_registry(), 3)["ram_gb"] == 128.7
+        fleet_registry.register(entry)
+    assert fleet_registry.register(entry, exist_ok=True) is False
+    assert fleet_registry.registered(fleet_registry.load_registry(), 3)["ram_gb"] == 128.7
 
 
 def test_every_page_of_the_instances_is_read():
     pages = iter([{"instances": [{"id": 1}], "next_token": "t", "total_instances": 2},
                   {"instances": [{"id": 2}], "next_token": None, "total_instances": 2}])
-    rows = fleet.list_instances(fleet.Vast(writes=False, transport=lambda call: next(pages)))
+    rows = vast_api.list_instances(vast_api.Vast(writes=False, transport=lambda call: next(pages)))
     assert [r["id"] for r in rows] == [1, 2]
     short = iter([{"instances": [{"id": 1}], "next_token": None, "total_instances": 2}])
     with pytest.raises(RuntimeError):
-        fleet.list_instances(fleet.Vast(writes=False, transport=lambda call: next(short)))
+        vast_api.list_instances(vast_api.Vast(writes=False, transport=lambda call: next(short)))
 
 
 def test_ssh_goes_direct_when_the_box_maps_its_port(tmp_path, monkeypatch):
-    monkeypatch.setattr(fleet, "BOXES", tmp_path)
+    monkeypatch.setattr(fleet_registry, "BOXES", tmp_path)
     record = {"public_ipaddr": "213.97.25.93", "ports": {"22/tcp": [{"HostPort": "22444"}]},
               "ssh_host": "ssh1.vast.ai", "ssh_port": 35410}
-    ssh = fleet.ssh_endpoint(record)
+    ssh = vast_api.ssh_endpoint(record)
     assert ssh == {"direct": {"host": "213.97.25.93", "port": 22444}, "proxy": {"host": "ssh1.vast.ai", "port": 35410}}
-    config = fleet.write_ssh_config(42, ssh).read_text()
+    config = fleet_status.write_ssh_config(42, ssh).read_text()
     assert "HostName 213.97.25.93\n  Port 22444\n" in config and "BatchMode yes" in config
-    assert fleet.ssh_endpoint({"ssh_host": "ssh1.vast.ai", "ssh_port": 35410})["direct"] is None
+    assert vast_api.ssh_endpoint({"ssh_host": "ssh1.vast.ai", "ssh_port": 35410})["direct"] is None
 
 
 @pytest.mark.parametrize("old_way, same_host, key_at_target", [
@@ -360,14 +422,14 @@ def test_the_api_key_follows_a_redirect_only_to_the_api(tmp_path, monkeypatch, o
         threading.Thread(target=server.serve_forever, daemon=True).start()
     key = tmp_path / "key"
     key.write_text("test-key-not-real\n")
-    monkeypatch.setattr(fleet, "KEY_FILE", key)
-    monkeypatch.setattr(fleet, "API", f"http://127.0.0.1:{origin.server_port}")
+    monkeypatch.setattr(vast_api, "KEY_FILE", key)
+    monkeypatch.setattr(vast_api, "API", f"http://127.0.0.1:{origin.server_port}")
     monkeypatch.setenv("no_proxy", "*")
     if old_way:
-        monkeypatch.setattr(fleet, "build_request", lambda call, k: urllib.request.Request(
+        monkeypatch.setattr(vast_api, "build_request", lambda call, k: urllib.request.Request(
             call.url, method=call.method, headers={"Authorization": f"Bearer {k}"}))
     try:
-        assert fleet.http(fleet.Call("GET", "/api/v0/users/current")) == {}
+        assert vast_api.http(vast_api.Call("GET", "/api/v0/users/current")) == {}
     finally:
         for server in (target, origin):
             server.shutdown()
@@ -383,7 +445,7 @@ def fresh_marker(**changes):
 
 def gate(marker, live_label=LABEL, entry_label=LABEL, now=1000.0):
     entry = {"id": 7, "label": entry_label, "destroyed": None}
-    return fleet.destroy_refusals(7, entry, {"label": live_label}, marker, now)
+    return fleet_destroy.destroy_refusals(7, entry, {"label": live_label}, marker, now)
 
 
 def test_the_destroy_gate_holds_with_a_fresh_marker_for_a_fleet_box():
@@ -404,13 +466,13 @@ def test_the_destroy_gate_refuses_without_a_fresh_clean_marker(marker, words):
 
 def test_the_destroy_gate_refuses_another_workstreams_box():
     assert "not a box of this fleet" in gate(fresh_marker(), live_label="lucy-gpu-box")[0]
-    assert "not a box of this fleet" in gate(fresh_marker(), live_label="spar-screen-chess-claude-haiku-5-5")[0]
-    assert "not in the registry" in fleet.destroy_refusals(7, None, {"label": "x"}, fresh_marker(), 1000.0)[0]
+    assert "not a box of this fleet" in gate(fresh_marker(), live_label="spar-screen-gate-creative-luna-1")[0]
+    assert "not in the registry" in fleet_destroy.destroy_refusals(7, None, {"label": "x"}, fresh_marker(), 1000.0)[0]
 
 
 def test_destroy_without_a_marker_sends_no_delete(registry, tmp_path, monkeypatch, capsys):
     fake = FakeVast(instances=[{"id": 7, "label": LABEL}])
-    monkeypatch.setattr(fleet, "http", fake)
+    monkeypatch.setattr(vast_api, "http", fake)
     add_box()
     assert fleet.main(["destroy", "7"]) == 1
     assert "no capture marker" in capsys.readouterr().out
@@ -424,7 +486,7 @@ def passing_capture(monkeypatch):
     monkeypatch.setattr(box_capture, "read_marker", lambda instance_id: marker)
     monkeypatch.setattr(box_capture, "check", lambda instance_id, pull: marker)
     monkeypatch.setattr(box_capture, "snapshot", lambda instance_id: {"path": "snapshot.tar.gz", "files": 12})
-    monkeypatch.setattr(fleet, "DESTROY_WAIT_S", 0)
+    monkeypatch.setattr(fleet_destroy, "DESTROY_WAIT_S", 0)
     return marker
 
 
@@ -432,13 +494,13 @@ def test_a_destroy_vast_ai_does_not_carry_out_keeps_the_box_in_sight(registry, m
                                                                       passing_capture):
     fake = FakeVast(instances=[{"id": 7, "label": LABEL, "start_date": time.time() - 3600, "dph_total": 0.5}],
                     deletes=False)
-    monkeypatch.setattr(fleet, "http", fake)
+    monkeypatch.setattr(vast_api, "http", fake)
     add_box()
     assert fleet.main(["destroy", "7"]) == 1
     assert "still lists it" in capsys.readouterr().out
-    box = fleet.registered(fleet.load_registry(), 7)
+    box = fleet_registry.registered(fleet_registry.load_registry(), 7)
     assert box["destroyed"] is None and box["destroy_sent"]
-    assert json.loads((fleet.BOXES / "destroyed.jsonl").read_text())["gone_from_account"] is False
+    assert json.loads((fleet_registry.BOXES / "destroyed.jsonl").read_text())["gone_from_account"] is False
     assert fleet.main(["ids"]) == 0 and capsys.readouterr().out.split() == ["7"]
     assert fleet.main(["status"]) == 1 and "destroy sent at" in capsys.readouterr().out
     fake.instances.clear()                                                    # vast.ai carries it out later
@@ -448,18 +510,18 @@ def test_a_destroy_vast_ai_does_not_carry_out_keeps_the_box_in_sight(registry, m
 
 def test_a_destroy_marks_the_box_destroyed_once_it_is_gone(registry, monkeypatch, capsys, passing_capture):
     fake = FakeVast(instances=[{"id": 7, "label": LABEL, "start_date": time.time() - 3600, "dph_total": 0.5}])
-    monkeypatch.setattr(fleet, "http", fake)
+    monkeypatch.setattr(vast_api, "http", fake)
     add_box()
     assert fleet.main(["destroy", "7"]) == 0
     out = capsys.readouterr().out
     assert "never swept, gone with the box: Docker's images" in out
-    assert fleet.registered(fleet.load_registry(), 7)["destroyed"]
-    log = json.loads((fleet.BOXES / "destroyed.jsonl").read_text())
+    assert fleet_registry.registered(fleet_registry.load_registry(), 7)["destroyed"]
+    log = json.loads((fleet_registry.BOXES / "destroyed.jsonl").read_text())
     assert log["gone_from_account"] and log["snapshot"]["files"] == 12 and log["files_lost"] == 0
 
 
 def test_status_flags_a_destroyed_box_the_account_still_lists(registry, monkeypatch, capsys):
-    monkeypatch.setattr(fleet, "http", FakeVast(instances=[{"id": 7, "label": LABEL, "dph_total": 0.5}]))
+    monkeypatch.setattr(vast_api, "http", FakeVast(instances=[{"id": 7, "label": LABEL, "dph_total": 0.5}]))
     add_box(destroyed="2026-10-30T00:00:00Z")
     assert fleet.main(["status"]) == 1
     assert "marked destroyed at 2026-10-30T00:00:00Z, still on the account" in capsys.readouterr().out
@@ -469,21 +531,21 @@ def test_status_flags_a_box_vast_ai_cannot_start_and_create_avoids_its_machine(r
     error = "Error: GPU error, unable to start instance."
     fake = FakeVast(instances=[{"id": 7, "label": LABEL, "dph_total": 0.5, "status_msg": error, "cur_state": "stopped",
                                 "storage_total_cost": 0.056}])
-    monkeypatch.setattr(fleet, "http", fake)
+    monkeypatch.setattr(vast_api, "http", fake)
     add_box()                                                                   # on 57970273, the cheapest offer
     assert fleet.main(["status"]) == 1
     out = capsys.readouterr().out
     assert f"!! 7 {LABEL}: vast.ai cannot start it ({error})" in out and "bill $0.056/h" in out
     assert json.loads(registry.read_text())["boxes"][0]["start_error"] == error
-    assert fleet.main(["create", "--count", "1", "--tasks", "chess", "--models", "gpt-6-luna", "--label-prefix",
+    assert fleet.main(["create", "--stage", "gate", "--count", "1", "--only", BOX.name, "--label-prefix",
                        "spar-screen-retry"]) == 0
     assert json.loads(registry.read_text())["boxes"][-1]["offer"] == 57143771
 
 
 def test_accept_loss_takes_a_reason_and_logs_what_is_lost(registry, monkeypatch, capsys):
     fake = FakeVast(instances=[{"id": 7, "label": LABEL, "start_date": time.time() - 3600, "dph_total": 0.5}])
-    monkeypatch.setattr(fleet, "http", fake)
-    monkeypatch.setattr(fleet, "DESTROY_WAIT_S", 0)
+    monkeypatch.setattr(vast_api, "http", fake)
+    monkeypatch.setattr(fleet_destroy, "DESTROY_WAIT_S", 0)
     add_box()
     assert fleet.main(["destroy", "7", "--accept-loss", "gone"]) == 2
     assert not any(call.method == "DELETE" for call in fake.calls)
@@ -492,15 +554,16 @@ def test_accept_loss_takes_a_reason_and_logs_what_is_lost(registry, monkeypatch,
         raise FileNotFoundError("no ssh config")
     monkeypatch.setattr(box_capture, "run_check", unreachable)
     assert fleet.main(["destroy", "7", "--accept-loss", "the host lost the disk on 10-31"]) == 0
-    log = json.loads((fleet.BOXES / "destroyed.jsonl").read_text())
+    log = json.loads((fleet_registry.BOXES / "destroyed.jsonl").read_text())
     assert log["accepted_loss"] == "the host lost the disk on 10-31" and log["lost"]["reachable"] is False
 
 
 def test_entry_prints_a_boxs_fields_and_its_launchs_pins(registry, capsys):
     add_box()
-    assert fleet.main(["entry", "7", "task", "commit", "requirements_sha256", "min_ram_gb"]) == 0
-    assert capsys.readouterr().out.split() == ["chess", PIN["commit"], PIN["requirements_sha256"], "28"]
-    (fleet.launch_dir(LAUNCH) / "requirements.txt").write_bytes(b"inspect-ai==9\n")    # changed after the launch
+    assert fleet.main(["entry", "7", "task", "commit", "requirements_sha256", "min_ram_gb", "box", "stage", "key"]) == 0
+    assert capsys.readouterr().out.split() == ["protein_design", PIN["commit"], PIN["requirements_sha256"], "28",
+                                               BOX.name, "gate", "OPENROUTER_API_KEY"]
+    (fleet_registry.launch_dir(LAUNCH) / "requirements.txt").write_bytes(b"inspect-ai==9\n")     # changed later
     assert fleet.main(["entry", "7", "task"]) == 1
     assert "not the package list launch" in capsys.readouterr().err
 
@@ -508,73 +571,55 @@ def test_entry_prints_a_boxs_fields_and_its_launchs_pins(registry, capsys):
 def test_repin_moves_a_box_while_the_package_list_stays(registry, monkeypatch, capsys):
     add_box()
     moved = "c" * 40
-    monkeypatch.setattr(fleet, "fleet_pin", lambda commit: PIN | {"commit": commit})
+    monkeypatch.setattr(fleet_registry, "fleet_pin", lambda commit: PIN | {"commit": commit})
     assert fleet.main(["repin", "7", "--commit", moved]) == 0
     assert f"{PIN['commit']} to {moved}" in capsys.readouterr().out
     assert fleet.main(["entry", "7", "commit"]) == 0 and capsys.readouterr().out.split() == [moved]
-    monkeypatch.setattr(fleet, "fleet_pin", lambda commit: PIN | {"requirements_sha256": "0" * 64})
+    monkeypatch.setattr(fleet_registry, "fleet_pin", lambda commit: PIN | {"requirements_sha256": "0" * 64})
     assert fleet.main(["repin", "7", "--commit", "d" * 40]) == 1
     assert "a new list takes a new launch" in capsys.readouterr().err
     assert fleet.main(["entry", "7", "commit"]) == 0 and capsys.readouterr().out.split() == [moved]
     assert fleet.main(["repin", "8", "--commit", moved]) == 1
 
 
-@pytest.fixture
-def chess_cells(monkeypatch, tmp_path):
-    monkeypatch.setattr(fleet, "cells", lambda task, kinds: [f"chess.game_{kind}" for kind in kinds])
-    monkeypatch.setattr(fleet, "ROOT", tmp_path / "repo")
-    return tmp_path / "repo"
-
-
-def test_run_args_come_from_the_registry(registry, chess_cells, capsys):
+def test_run_args_come_from_the_registry(registry, capsys):
     add_box()
-    assert fleet.main(["run-args", "7", "--samples", "1", "--kinds", "solo"]) == 0
+    assert fleet.main(["run-args", "7"]) == 0
     assert capsys.readouterr().out.split("\n")[:-1] == [
-        "--task", "chess", "--model", "gpt-6-luna", "--suffix", "luna", "--commit", PIN["commit"], "--samples", "1",
-        "--kinds", "solo"]
-    assert fleet.main(["run-args", "7", "--suffix", "lunapilot"]) == 0 and "lunapilot" in capsys.readouterr().out
-    assert fleet.main(["run-args", "7", "--suffix", "haiku"]) == 1
-    assert "starting with 'luna'" in capsys.readouterr().err
+        "--box", BOX.name, "--commit", PIN["commit"], "--jobs-sha256", jobs_sha256(box_jobs(BOX))]
     assert fleet.main(["run-args", "8"]) == 1
 
 
-def test_run_args_name_every_cell_of_the_task_by_default(registry, chess_cells, capsys):
-    add_box()
-    add_box(8, "knowledge_work", label=LABEL.replace("chess", "knowledge_work"))
-    assert fleet.main(["run-args", "7"]) == 0
-    out = capsys.readouterr().out.split("\n")[:-1]
-    assert out[out.index("--kinds") + 1:] == [*fleet_layout.KINDS, "minimal_all"]
-    assert fleet.main(["run-args", "8"]) == 0
-    out = capsys.readouterr().out.split("\n")[:-1]
-    assert out[out.index("--kinds") + 1:] == [*fleet_layout.KINDS, "minimal_all"]
+def test_run_args_refuse_a_box_the_table_does_not_hold(registry, capsys):
+    add_box(box=Box("gate-chess-luna-1", "gate", BOX.arms))
+    assert fleet.main(["run-args", "7"]) == 1
+    assert "no box 'gate-chess-luna-1' in the study" in capsys.readouterr().err
 
 
-def test_run_args_mock_says_so_in_the_run_names(registry, chess_cells, capsys):
+def test_run_args_mock_says_so_in_the_run_names(registry, capsys):
     add_box()
-    assert fleet.main(["run-args", "7", "--mock", "--samples", "1", "--kinds", "solo"]) == 0
+    assert fleet.main(["run-args", "7", "--mock"]) == 0
     assert capsys.readouterr().out.split("\n")[:-1] == [
-        "--task", "chess", "--model", "mockllm/model", "--suffix", "lunamock", "--commit", PIN["commit"], "--samples",
-        "1", "--kinds", "solo"]
-    assert fleet.main(["run-args", "7", "--mock", "--suffix", "lunapilot"]) == 1  # would pass for the screen's runs
-    assert "must say mock" in capsys.readouterr().err
+        "--box", BOX.name, "--commit", PIN["commit"], "--jobs-sha256", jobs_sha256(box_jobs(BOX, mock=True)), "--mock"]
+    assert all(job.name.endswith(f"mock{job.seed}") for job in box_jobs(BOX, mock=True))
 
 
-def test_run_args_refuse_a_run_name_made_elsewhere(registry, chess_cells, capsys, monkeypatch):
+def test_run_args_refuse_a_run_name_made_elsewhere(registry, tmp_path, capsys, monkeypatch):
     add_box()
-    monkeypatch.setattr(settings, "RUNS", chess_cells / "runs" / "study_x")
-    monkeypatch.setattr(settings, "LOGS", chess_cells / "logs" / "study_x")
-    run_dir = chess_cells / "runs" / "study_x" / "game_solo_luna1"
+    monkeypatch.setattr(settings, "RUNS", tmp_path / "runs" / "study_x")
+    monkeypatch.setattr(settings, "LOGS", tmp_path / "logs" / "study_x")
+    run_dir = tmp_path / "runs" / "study_x" / "binder_minimal_luna1"
     run_dir.mkdir(parents=True)
-    (run_dir / "run.json").write_text(json.dumps({"eval_log": "/Users/someone/logs/game_solo_luna1/x.eval"}))
+    (run_dir / "run.json").write_text(json.dumps({"eval_log": "/Users/someone/logs/binder_minimal_luna1/x.eval"}))
     assert fleet.main(["run-args", "7"]) == 1
-    assert "runs/study_x/game_solo_luna1" in capsys.readouterr().err
-    (run_dir / "run.json").write_text(json.dumps({"eval_log": "/root/work/logs/game_solo_luna1/x.eval"}))
+    assert "runs/study_x/binder_minimal_luna1" in capsys.readouterr().err
+    (run_dir / "run.json").write_text(json.dumps({"eval_log": "/root/work/logs/binder_minimal_luna1/x.eval"}))
     assert fleet.main(["run-args", "7"]) == 0                                 # this box's own, pulled by the watch
-    log = chess_cells / "logs" / "study_x" / "screen" / "game_solo_luna2.log"
+    log = tmp_path / "logs" / "study_x" / "screen" / "binder_minimal_luna2.log"
     log.parent.mkdir(parents=True)
-    log.write_text("/Users/someone/.venv/bin/python -m examples.chess.game_solo --name game_solo_luna2\n")
+    log.write_text("/Users/someone/.venv/bin/python -m examples.protein_design.binder_minimal --name x\n")
     assert fleet.main(["run-args", "7"]) == 1
-    assert "logs/study_x/screen/game_solo_luna2.log" in capsys.readouterr().err
+    assert "logs/study_x/screen/binder_minimal_luna2.log" in capsys.readouterr().err
 
 
 # ---- the layout ----
@@ -601,7 +646,6 @@ def test_knowledge_work_and_chess_have_a_cell_no_other_task_has(tmp_path):
     assert fleet_layout.cells("chess")[-1] == "chess.game_minimal_all"
     assert fleet_layout.run_name("chess.game_minimal_all", "luna", 2) == "game_minimal_all_luna2"
     assert len(fleet_layout.cells("software_engineering")) == len(fleet_layout.KINDS)
-    assert fleet_layout.EVERY_KIND == (*fleet_layout.KINDS, "minimal_all")
     assert fleet_layout.layout_problems(list(fleet_layout.TASKS)) == []
     # its own kinds are the rest of a task's cells: a task without them is refused, and no other task needs them
     package = tmp_path / "knowledge_work"
@@ -624,16 +668,13 @@ def test_two_tasks_with_one_cell_stem_are_refused(tmp_path):
     assert "needs one script per kind" in fleet_layout.layout_problems(["knowledge_work"], tmp_path)[0]
 
 
-def test_boxes_labels_and_the_fleet_prefix():
-    assert len(fleet_layout.boxes(list(fleet_layout.TASKS), list(fleet_layout.MODELS))) == 15
+def test_labels_and_the_fleet_prefix():
+    assert fleet_layout.box_label("spar-screen", BOX.name, LAUNCH) == LABEL
     with pytest.raises(ValueError):
-        fleet_layout.boxes(["checkers"], ["gpt-6-luna"])
-    assert fleet_layout.box_label("spar-screen", "chess", "gpt-6-luna", LAUNCH) == LABEL
-    with pytest.raises(ValueError):
-        fleet_layout.box_label("spar-screen", "chess", "gpt-6-luna", "x")
-    assert fleet_layout.label_base(LABEL) == "spar-screen-chess-gpt-6-luna"
-    assert fleet_layout.label_base("spar-screen-chess-gpt-6-luna") == "spar-screen-chess-gpt-6-luna"
-    assert fleet_layout.is_fleet_label("spar-screen-pilot-chess-gpt-6-luna")
+        fleet_layout.box_label("spar-screen", BOX.name, "x")
+    assert fleet_layout.label_base(LABEL) == f"spar-screen-{BOX.name}"
+    assert fleet_layout.label_base(f"spar-screen-{BOX.name}") == f"spar-screen-{BOX.name}"
+    assert fleet_layout.is_fleet_label(f"spar-screen-retry-{BOX.name}")
     assert not fleet_layout.is_fleet_label("spar-screens") and not fleet_layout.is_fleet_label(None)
 
 
@@ -876,7 +917,7 @@ def test_the_check_end_to_end_through_a_stand_in_ssh(box, stand_in_ssh, capsys):
     manifest = [json.loads(line) for line in box_capture.manifest_path(7).read_text().splitlines()]
     assert len(manifest) == marker["manifest"]["lines"] == 8
     entry = {"id": 7, "label": LABEL, "destroyed": None}
-    assert fleet.destroy_refusals(7, entry, {"label": LABEL}, marker, time.time()) == []
+    assert fleet_destroy.destroy_refusals(7, entry, {"label": LABEL}, marker, time.time()) == []
     record = box_capture.snapshot(7)
     snapshot = Path(record["path"])
     assert record["files"] == 8 and not os.access(snapshot, os.W_OK)
@@ -1027,11 +1068,18 @@ class Ended:
         return self.code
 
 
+def run_box(monkeypatch, box=TWO_RUNS, mock=False, sha256=None, commit=PIN["commit"]) -> int:
+    """box_runner run on a box of two runs, as box_run.sh starts it."""
+    monkeypatch.setattr(box_runner, "find_box", lambda name: box)
+    sha256 = sha256 or jobs_sha256(box_jobs(box, mock))
+    return box_runner.main(["run", "--box", box.name, "--commit", commit, "--jobs-sha256", sha256,
+                            *(["--mock"] if mock else [])])
+
+
 def test_a_resume_rebuilds_a_finished_evals_ladder_and_never_pays_for_it_again(runner_dirs, monkeypatch, capsys):
     (runner_dirs / "logs" / "screen").mkdir(parents=True)
     monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
-    monkeypatch.setattr(box_runner, "cells", lambda task, kinds: [f"protein_design.binder_{k}" for k in kinds])
-    states = {"binder_solo_dsflash1": "derive", "binder_solo_cheat_dsflash1": "derive"}
+    states = {"binder_minimal_luna1": "derive", "binder_minimal_cheat_luna1": "derive"}
     monkeypatch.setattr(box_runner, "outcome", lambda name: (states[name], "why"))
     rebuilt = []
 
@@ -1041,61 +1089,202 @@ def test_a_resume_rebuilds_a_finished_evals_ladder_and_never_pays_for_it_again(r
             states[rebuilt[-1]] = "finished"
 
     monkeypatch.setattr(box_runner.subprocess, "run", regenerate)
-    monkeypatch.setattr(box_runner, "launch", lambda *args: pytest.fail("a finished eval ran again"))
-    code = box_runner.main(["run", "--task", "protein_design", "--model", "deepseek-flash-openrouter", "--suffix",
-                            "dsflash", "--commit", PIN["commit"], "--samples", "1", "--kinds", "solo", "solo_cheat"])
-    assert code == 1 and rebuilt == ["binder_solo_dsflash1", "binder_solo_cheat_dsflash1"]
-    plan = json.loads((runner_dirs / "logs" / "screen" / "box_protein_design_dsflash.json").read_text())
-    assert plan["runs"]["binder_solo_dsflash1"]["exit"] == 0 and plan["runs"]["binder_solo_cheat_dsflash1"]["exit"] == 1
+    monkeypatch.setattr(box_runner, "launch", lambda job: pytest.fail("a finished eval ran again"))
+    assert run_box(monkeypatch) == 1 and rebuilt == ["binder_minimal_luna1", "binder_minimal_cheat_luna1"]
+    plan = json.loads((runner_dirs / "logs" / "screen" / "box_gate-protein-luna-1.json").read_text())
+    assert plan["runs"]["binder_minimal_luna1"]["exit"] == 0 and plan["runs"]["binder_minimal_cheat_luna1"]["exit"] == 1
 
 
 def test_a_resume_reruns_what_did_not_finish_and_keeps_the_earlier_attempt(runner_dirs, monkeypatch, capsys):
     logs = runner_dirs / "logs" / "screen"
     logs.mkdir(parents=True)
     monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
-    monkeypatch.setattr(box_runner, "cells", lambda task, kinds: [f"protein_design.binder_{k}" for k in kinds])
     monkeypatch.setattr(box_runner, "POLL_S", 0)
-    finished = {"binder_solo_dsflash1"}
+    finished = {"binder_minimal_luna1"}
     monkeypatch.setattr(box_runner, "outcome", lambda name: ("finished", "") if name in finished else
                         ("failed", "its eval ended error"))
     launched = []
 
-    def launch(cell, name, model, seed):
-        with open(logs / f"{name}.log", "x") as log:
+    def launch(job):
+        with open(logs / f"{job.name}.log", "x") as log:
             log.write("second attempt\n")
-        launched.append(name)
-        finished.add(name)
+        launched.append(job.name)
+        finished.add(job.name)
         return Ended(0)
     monkeypatch.setattr(box_runner, "launch", launch)
-    (logs / "binder_solo_cheat_dsflash1.log").write_text("first attempt: rc=3\n")
-    (logs / "box_protein_design_dsflash.json").write_text('{"first": "plan"}\n')
-    code = box_runner.main(["run", "--task", "protein_design", "--model", "deepseek-flash-openrouter", "--suffix",
-                            "dsflash", "--commit", PIN["commit"], "--samples", "1", "--kinds", "solo", "solo_cheat"])
-    assert code == 0 and launched == ["binder_solo_cheat_dsflash1"]
+    (logs / "binder_minimal_cheat_luna1.log").write_text("first attempt: rc=3\n")
+    (logs / "box_gate-protein-luna-1.json").write_text('{"first": "plan", "runs": {}}\n')
+    assert run_box(monkeypatch) == 0 and launched == ["binder_minimal_cheat_luna1"]
     attempts = logs / "attempts"
-    assert (attempts / "binder_solo_cheat_dsflash1.1.log").read_text() == "first attempt: rc=3\n"
-    assert (attempts / "box_protein_design_dsflash.1.json").read_text() == '{"first": "plan"}\n'
-    plan = json.loads((logs / "box_protein_design_dsflash.json").read_text())
-    assert plan["earlier_plan"].endswith("box_protein_design_dsflash.1.json")
-    assert plan["runs"]["binder_solo_dsflash1"]["ended"] == box_runner.BEFORE
-    assert plan["runs"]["binder_solo_cheat_dsflash1"]["again"].startswith("its eval ended error")
-    assert box_runner.set_aside(logs / "binder_solo_cheat_dsflash1.log").name == "binder_solo_cheat_dsflash1.2.log"
+    assert (attempts / "binder_minimal_cheat_luna1.1.log").read_text() == "first attempt: rc=3\n"
+    assert (attempts / "box_gate-protein-luna-1.1.json").read_text() == '{"first": "plan", "runs": {}}\n'
+    plan = json.loads((logs / "box_gate-protein-luna-1.json").read_text())
+    assert plan["earlier_plan"].endswith("box_gate-protein-luna-1.1.json")
+    assert plan["runs"]["binder_minimal_luna1"]["ended"] == box_runner.BEFORE
+    assert plan["runs"]["binder_minimal_cheat_luna1"]["again"].startswith("its eval ended error")
+    assert box_runner.set_aside(logs / "binder_minimal_cheat_luna1.log").name == "binder_minimal_cheat_luna1.2.log"
 
 
-def test_the_runner_refuses_a_clone_away_from_the_pinned_commit(runner_dirs, capsys):
-    assert box_runner.main(["run", "--task", "protein_design", "--model", "deepseek-flash-openrouter", "--suffix",
-                            "t", "--commit", "0" * 40]) == 1
+def test_the_runner_refuses_a_clone_away_from_the_pinned_commit(runner_dirs, monkeypatch, capsys):
+    assert run_box(monkeypatch, commit="0" * 40) == 1
     assert "the fleet pinned 0000" in capsys.readouterr().out and not (runner_dirs / "screen.pid").exists()
 
 
-def test_the_runner_takes_every_cell_of_its_task_by_default(runner_dirs, monkeypatch, capsys):
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)     # refused after the cells, so nothing runs
-    asked = []
-    monkeypatch.setattr(box_runner, "cells", lambda task, kinds: asked.append(kinds) or ["x.y_solo"])
-    for task in ("knowledge_work", "chess"):
-        assert box_runner.main(["run", "--task", task, "--model", "deepseek-flash-openrouter", "--suffix", "t",
-                                "--commit", PIN["commit"]]) == 1
-    assert asked == [(*fleet_layout.KINDS, "minimal_all")] * 2
+REGULATED = find_box("pilot-protein-luna-1")
+
+
+def test_the_runner_gives_each_run_its_flags_and_the_plan_records_them(runner_dirs, monkeypatch, capsys):
+    (runner_dirs / "logs" / "screen").mkdir(parents=True)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
+    monkeypatch.setattr(box_runner, "POLL_S", 0)
+    monkeypatch.setattr(box_runner, "outcome", lambda name: ("failed", "no run.json"))
+    commands = []
+
+    def popen(command, **kwargs):
+        commands.append(command)
+        return Ended(0)
+    monkeypatch.setattr(box_runner.subprocess, "Popen", popen)
+    assert run_box(monkeypatch, box=REGULATED) == 1
+    regulators = [command[command.index("--regulator-model") + 1] for command in commands]
+    assert regulators == list(study_table.FIRST_REGULATORS)
+    assert all(command[command.index("--name") + 2:command.index("--name") + 4] == ["--set", "seed=1"]
+               for command in commands)
+    assert all("regulator_level=ambiguous" in command for command in commands)
+    plan = json.loads((runner_dirs / "logs" / "screen" / f"box_{REGULATED.name}.json").read_text())
+    assert plan["box"] == REGULATED.name and plan["stage"] == "pilot" and plan["task"] == "protein_design"
+    for job, command in zip(box_jobs(REGULATED), commands):
+        assert plan["runs"][job.name]["arguments"] == job.arguments == command[command.index("--model"):]
+
+
+def test_a_resume_starts_a_run_again_with_the_arguments_of_its_plan(runner_dirs, monkeypatch, capsys):
+    (runner_dirs / "logs" / "screen").mkdir(parents=True)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
+    monkeypatch.setattr(box_runner, "POLL_S", 0)
+    monkeypatch.setattr(box_runner, "outcome", lambda name: ("failed", "its eval ended error"))
+    launched = []
+
+    def launch(job):
+        (runner_dirs / "logs" / "screen" / f"{job.name}.log").write_text("attempt\n")
+        launched.append(job.arguments)
+        return Ended(1)
+    monkeypatch.setattr(box_runner, "launch", launch)
+    assert run_box(monkeypatch, box=REGULATED) == 1
+    first = list(launched)
+    launched.clear()
+    assert run_box(monkeypatch, box=REGULATED) == 1
+    assert launched == first and len(first) == 3
+
+
+def test_a_resume_refuses_a_run_its_plan_holds_with_other_arguments(runner_dirs, monkeypatch, capsys):
+    logs = runner_dirs / "logs" / "screen"
+    logs.mkdir(parents=True)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
+    monkeypatch.setattr(box_runner, "launch", lambda job: pytest.fail("a run started with other flags"))
+    job = box_jobs(REGULATED)[1]
+    plan = {"runs": {job.name: {"arguments": [*job.arguments[:-1], "gemini-4-argon-openrouter"]}}}
+    (logs / f"box_{REGULATED.name}.json").write_text(json.dumps(plan))
+    assert run_box(monkeypatch, box=REGULATED) == 1
+    assert f"ran {job.name} with other arguments" in capsys.readouterr().out
+    assert json.loads((logs / f"box_{REGULATED.name}.json").read_text()) == plan     # the plan stays as it was
+    assert not (runner_dirs / "screen.pid").exists()
+
+
+def test_a_resume_after_a_mock_check_holds_the_set_aside_plan_too(runner_dirs, monkeypatch, capsys):
+    """Real runs, then a mock check that sets their plan aside, then a resume of the real runs."""
+    logs = runner_dirs / "logs" / "screen"
+    (logs / "attempts").mkdir(parents=True)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
+    monkeypatch.setattr(box_runner, "launch", lambda job: pytest.fail("a run started with other flags"))
+    job = box_jobs(REGULATED)[1]
+    real = {"runs": {job.name: {"arguments": [*job.arguments[:-1], "gemini-4-argon-openrouter"]}}}
+    (logs / "attempts" / f"box_{REGULATED.name}.1.json").write_text(json.dumps(real))
+    mock = {"mock": True, "runs": {other.name: {"arguments": other.arguments} for other in box_jobs(REGULATED, True)}}
+    (logs / f"box_{REGULATED.name}.json").write_text(json.dumps(mock))
+    assert run_box(monkeypatch, box=REGULATED) == 1
+    assert f"ran {job.name} with other arguments" in capsys.readouterr().out
+
+
+def test_the_runner_refuses_jobs_the_mac_did_not_list(runner_dirs, monkeypatch, capsys):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
+    monkeypatch.setattr(box_runner, "launch", lambda job: pytest.fail("a run started off another table"))
+    assert run_box(monkeypatch, sha256="0" * 64) == 1
+    assert "not the one the Mac listed" in capsys.readouterr().out and not (runner_dirs / "screen.pid").exists()
+
+
+def test_a_mock_run_needs_no_key_and_a_real_run_sets_its_plan_aside(runner_dirs, monkeypatch, capsys):
+    logs = runner_dirs / "logs" / "screen"
+    logs.mkdir(parents=True)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setattr(box_runner, "POLL_S", 0)
+    monkeypatch.setattr(box_runner, "outcome", lambda name: ("failed", "no run.json"))
+
+    def launch(job):
+        (logs / f"{job.name}.log").write_text("run\n")
+        return Ended(0)
+    monkeypatch.setattr(box_runner, "launch", launch)
+    assert run_box(monkeypatch, mock=True) == 1
+    plan_path = logs / f"box_{TWO_RUNS.name}.json"
+    assert all(name.endswith("mock1") for name in json.loads(plan_path.read_text())["runs"])
+    monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
+    assert run_box(monkeypatch) == 1
+    assert sorted(path.name for path in logs.glob("box_*.json")) == [plan_path.name]
+    assert not any(name.endswith("mock1") for name in json.loads(plan_path.read_text())["runs"])
+    assert (logs / "attempts" / f"box_{TWO_RUNS.name}.1.json").exists()
+
+
+@pytest.fixture
+def other_key_box(monkeypatch):
+    """A study whose gate-protein-luna-1 has a regulator on OPENAI_API_KEY."""
+    monkeypatch.setitem(fleet_layout.REGULATORS, "gpt-6-luna", "direct")
+    arm = Arm(BOX.arms[0].target, "minimal_regulated", regulator="gpt-6-luna", regulator_level="ambiguous", seeds=(1,))
+    monkeypatch.setitem(study_table.STAGES["gate"], "gate-protein-luna", (arm,))
+    return find_box(BOX.name)
+
+
+def test_create_refuses_a_regulator_on_another_key(registry, monkeypatch, capsys, other_key_box):
+    fake = FakeVast()
+    monkeypatch.setattr(vast_api, "http", fake)
+    assert fleet.main(["create", "--stage", "gate", "--count", "1", "--only", BOX.name]) == 1
+    assert "gpt-6-luna needs OPENAI_API_KEY" in capsys.readouterr().out
+    assert fake.calls == []
+
+
+def test_run_args_refuse_a_regulator_on_another_key(registry, capsys, other_key_box):
+    add_box(box=other_key_box)
+    assert fleet.main(["run-args", "7"]) == 1
+    captured = capsys.readouterr()
+    assert "gpt-6-luna needs OPENAI_API_KEY" in captured.err and captured.out == ""
+
+
+def test_the_runner_refuses_a_regulator_on_another_key(runner_dirs, monkeypatch, capsys, other_key_box):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
+    monkeypatch.setattr(box_runner, "launch", lambda job: pytest.fail("a run started without its key"))
+    assert run_box(monkeypatch, box=other_key_box) == 1
+    assert "gpt-6-luna needs OPENAI_API_KEY" in capsys.readouterr().out
+    assert not (runner_dirs / "screen.pid").exists()
+
+
+def test_a_ladder_rebuild_finds_a_run_under_its_study_and_needs_no_judge(tmp_path, monkeypatch, capsys):
+    """derive's own command, through the real command line, with no key in the environment."""
+    run_dir = tmp_path / "runs" / "study_x" / "binder_minimal_luna1"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run.json").write_text("{}")
+    monkeypatch.setattr(settings, "RUNS", run_dir.parent)
+    monkeypatch.chdir(tmp_path)
+    for key in ("OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+    commands = []
+    monkeypatch.setattr(box_runner.subprocess, "run", lambda command, **kwargs: commands.append(command))
+    monkeypatch.setattr(box_runner, "outcome", lambda name: ("finished", "its eval succeeded"))
+    assert box_runner.derive("binder_minimal_luna1") == ("finished", "its eval succeeded")
+    built = []
+    monkeypatch.setattr(run.signals, "run_report", lambda path: built.append(path) or "the code ladder")
+    monkeypatch.setattr(run.judging, "require_judge_key", lambda name: pytest.fail("a rebuild asked for a judge"))
+    monkeypatch.setattr(run.judging.Judge, "of", lambda *args, **kwargs: pytest.fail("a rebuild built a judge"))
+    arguments = commands[0][commands[0].index("src") + 1:]
+    assert arguments == ["regenerate", "binder_minimal_luna1", "--no-export", "--no-plots"]
+    assert cli.main(arguments) == 0
+    assert built == [run_dir]
 
 
 def test_local_only_lists_what_this_machine_added_to_a_run_of_a_study(tmp_path, monkeypatch):
@@ -1109,20 +1298,18 @@ def test_local_only_lists_what_this_machine_added_to_a_run_of_a_study(tmp_path, 
     assert box_capture.local_only(lines) == ["out/game_solo/a.png", "runs/study_x/game_solo/judge.jsonl"]
 
 
-def test_the_runner_refuses_without_the_models_key(runner_dirs, monkeypatch, capsys):
+def test_the_runner_refuses_without_the_key(runner_dirs, monkeypatch, capsys):
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    monkeypatch.setattr(box_runner, "cells", lambda task, kinds: ["protein_design.binder_solo"])
-    assert box_runner.main(["run", "--task", "protein_design", "--model", "deepseek-flash-openrouter", "--suffix",
-                            "t", "--commit", PIN["commit"]]) == 1
+    assert run_box(monkeypatch) == 1
     assert "OPENROUTER_API_KEY" in capsys.readouterr().out and not (runner_dirs / "screen.pid").exists()
 
 
 def test_the_runner_refuses_a_task_without_every_cell(runner_dirs, monkeypatch, capsys):
     monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
-    monkeypatch.setattr(box_runner, "cells", lambda task, kinds: fleet_layout.cells(task, kinds, Path("/nowhere")))
-    assert box_runner.main(["run", "--task", "chess", "--model", "deepseek-flash-openrouter", "--suffix", "t",
-                            "--commit", PIN["commit"]]) == 1
-    assert "refused: examples/chess needs one script per kind" in capsys.readouterr().out
+    monkeypatch.setattr(study_table, "cells", lambda task, kinds: fleet_layout.cells(task, kinds, Path("/nowhere")))
+    monkeypatch.setattr(box_runner, "find_box", lambda name: TWO_RUNS)
+    assert box_runner.main(["run", "--box", TWO_RUNS.name, "--commit", PIN["commit"], "--jobs-sha256", "x"]) == 1
+    assert "refused: examples/protein_design needs one script per kind" in capsys.readouterr().out
     assert not (runner_dirs / "screen.pid").exists()
 
 
@@ -1149,13 +1336,13 @@ def test_status_names_each_runs_state(monkeypatch):
     assert box_runner.state("b", record(pid=os.getpid())) == "lost"     # a live pid that is not this run
 
 
-def write_plan(runner_dirs: Path, runs: dict) -> None:
+def write_plan(runner_dirs: Path, runs: dict, mock: bool = False) -> None:
     logs = runner_dirs / "logs" / "screen"
     logs.mkdir(parents=True, exist_ok=True)
-    plan = {"task": "protein_design", "model": "m", "suffix": "s", "runner_pid": 999_999_999,
+    plan = {"box": "gate-protein-luna-1", "task": "protein_design", "mock": mock, "runner_pid": 999_999_999,
             "runs": {name: {"pid": None, "started": None, "ended": None, "exit": None, "hung": None} | fields
                      for name, fields in runs.items()}}
-    (logs / "box_protein_design_s.json").write_text(json.dumps(plan))
+    (logs / "box_gate-protein-luna-1.json").write_text(json.dumps(plan))
 
 
 def test_status_flags_a_runner_that_ended_with_runs_unwatched(runner_dirs, monkeypatch, capsys):
@@ -1163,6 +1350,14 @@ def test_status_flags_a_runner_that_ended_with_runs_unwatched(runner_dirs, monke
     write_plan(runner_dirs, {"a": {"exit": 0, "ended": "2026-10-30T06:00:00Z"}, "b": {}})
     assert box_runner.main(["status"]) == 1
     assert "!! the runner ended with 0 runs running and 1 waiting" in capsys.readouterr().out
+
+
+def test_status_sends_nobody_to_the_destroy_after_a_mock_check(runner_dirs, monkeypatch, capsys):
+    monkeypatch.setattr(box_runner, "outcome", lambda name: ("finished", ""))
+    write_plan(runner_dirs, {"a": {"exit": 0, "ended": "2026-10-30T06:00:00Z"}}, mock=True)
+    assert box_runner.main(["status"]) == 0
+    out = capsys.readouterr().out
+    assert "the mock runs ended" in out and "all runs ended" not in out
 
 
 def test_status_says_when_every_run_has_ended(runner_dirs, monkeypatch, capsys):

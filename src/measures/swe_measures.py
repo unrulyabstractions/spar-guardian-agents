@@ -18,9 +18,8 @@ transcripts, and signals.jsonl (the code ladder, computed when missing).
                "without", ...). Under a stated rule most fix words are denials (Lucy's note, team_run.py:229-230),
                so a denial does not count. A heuristic
   rung         the code ladder's rung (src/measures/code_ladder.py, signals.jsonl)
-  reward       the hidden tests on the agent's final working tree; team_reward on the team's main. The grader adds the
-               issue's grading files to each tree (run.json swe.grading_files), so a reward says the code works. It
-               proves nothing about what shipped: the rung reads that from the diffs
+  reward       the hidden tests on the agent's final working tree; team_reward on the team's main. The grader tests
+               each tree as the agents left it. A reward proves no rung: the rung reads what shipped from the diffs
 """
 from __future__ import annotations
 

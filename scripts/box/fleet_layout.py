@@ -1,19 +1,18 @@
-"""What the fleet runs: the tasks, the models, the cells of a task, a box's label, its run names and where things live.
+"""What every box shares: the tasks, the models and their short names, a task's cells and box size, a box's label, its
+run names and where things live. study_table.py says which of them this study runs.
 
-    boxes(["chess"], ["gpt-6-luna", "claude-haiku-5-5"])  -> [("chess", "gpt-6-luna"), ("chess", "claude-haiku-5-5")]
-    box_label("spar-screen", "chess", "gpt-6-luna", "l1a2b3c") -> "spar-screen-chess-gpt-6-luna-l1a2b3c"
-    cells("knowledge_work")                              -> ["knowledge_work.worktime_solo", ...], one per kind
-    run_name("knowledge_work.worktime_solo", "luna", 2)  -> "worktime_solo_luna2"
+    box_label("spar-screen", "gate-protein-luna-1", "l1a2b3c") -> "spar-screen-gate-protein-luna-1-l1a2b3c"
+    cells("protein_design", ("minimal",))                      -> ["protein_design.binder_minimal"]
+    run_name("protein_design.binder_minimal", "luna", 2)       -> "binder_minimal_luna2"
 
-One box runs one task on one model: the task's cells, one example script per kind, each several samples at once: the
-kinds every task has, then the kinds of that task alone (kinds_of). A label ends with the launch that rented the box
-(l and six hex digits), so a launch adopts only its own instances. Standard library only, so every side imports it: the
-Mac (fleet.py, box_capture.py) and the box (box_runner.py).
+One box runs one task. A label ends with the launch that rented the box (l and six hex digits), so a launch adopts only
+its own instances. Standard library only, so the Mac and the box both import it.
 """
 from __future__ import annotations
 
 import re
 import secrets
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -36,28 +35,30 @@ TASKS = {
 """Each task and its package under examples/, which is also its domain's name in src.domains.DOMAINS."""
 STEMS = {"software_engineering": "flipt"}
 """The stem of a task's cells where its package holds several: one box runs one issue."""
-MODELS = {"deepseek-flash-openrouter": "dsflash", "gpt-6-luna": "luna", "claude-haiku-5-5": "haiku"}
-"""Each model's registry entry and the suffix of its run names."""
+MODELS = {"deepseek-flash-openrouter": "dsflash", "gpt-6-luna-openrouter": "luna"}
+"""Each worker model's registry entry and the short name that starts its run names' suffix."""
+REGULATORS = {"gpt-6-luna-openrouter": "luna", "claude-opus-5-5-openrouter": "opus",
+              "gemini-4-argon-openrouter": "argon", "claude-haiku-5-5-openrouter": "haiku",
+              "claude-sonnet-5-5-openrouter": "sonnet"}
+"""Each regulator model's registry entry and its short name in a run name."""
+BOX_KEY = "OPENROUTER_API_KEY"
+"""The one model key a box holds, so every model on a box routes through OpenRouter."""
 KINDS = ("solo", "solo_cheat", "minimal", "minimal_cheat", "minimal_regulated")
 """The cells every task has, as the last part of each example script's name."""
 TASK_KINDS = {"knowledge_work": ("minimal_all",), "chess": ("minimal_all",)}
 """The cells of one task alone: a team with no split."""
-EVERY_KIND = (*KINDS, *dict.fromkeys(kind for kinds in TASK_KINDS.values() for kind in kinds))
-"""What --kinds accepts."""
 FLOORS = {"software_engineering": (32, 64)}
 """A box's cores and GB of RAM where the task needs more than LIGHT_FLOOR: SWE builds and tests Go on one machine per
-agent, and 15 such runs share the box."""
+agent."""
 LIGHT_FLOOR = (16, 32)
 """A box's cores and GB of RAM for the other tasks: their agents wait on a model most of the time."""
+CAPACITY = {"software_engineering": 21}
+"""The agents a box runs at once where the task holds fewer than LIGHT_CAPACITY. Every run of a box starts at once, so
+its first builds fall together, and an SWE agent takes 0.55 cores on average and 1.8 at peak. 21 is the most a box at
+this floor has run."""
+LIGHT_CAPACITY = 36
+"""The agents a box at LIGHT_FLOOR runs at once: the most protein design and creative writing have run on one."""
 LAUNCH = re.compile(r"^l[0-9a-f]{6}$")
-
-
-def boxes(tasks: list[str], models: list[str]) -> list[tuple[str, str]]:
-    """One box per (task, model), tasks first."""
-    unknown = sorted({*tasks} - TASKS.keys()) + sorted({*models} - MODELS.keys())
-    if unknown:
-        raise ValueError(f"unknown task or model: {', '.join(unknown)}; tasks {list(TASKS)}, models {list(MODELS)}")
-    return [(task, model) for task in tasks for model in models]
 
 
 def floor_of(task: str) -> tuple[int, int]:
@@ -65,14 +66,23 @@ def floor_of(task: str) -> tuple[int, int]:
     return FLOORS.get(task, LIGHT_FLOOR)
 
 
+def capacity_of(task: str) -> int:
+    """The agents a task's box runs at once."""
+    return CAPACITY.get(task, LIGHT_CAPACITY)
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def new_launch() -> str:
     return "l" + secrets.token_hex(3)
 
 
-def box_label(prefix: str, task: str, model: str, launch: str) -> str:
+def box_label(prefix: str, box: str, launch: str) -> str:
     if not LAUNCH.match(launch):
         raise ValueError(f"not a launch id: {launch!r}")
-    return f"{prefix}-{task}-{model}-{launch}"
+    return f"{prefix}-{box}-{launch}"
 
 
 def label_base(label: str) -> str:
@@ -98,8 +108,7 @@ def kinds_of(task: str) -> tuple[str, ...]:
 
 def cells(task: str, kinds: tuple[str, ...] | None = None, examples: Path = ROOT / "examples") -> list[str]:
     """examples.<package>.<stem> without the prefix for each kind (every kind of the task by default), in the order of
-    kinds. Each kind needs exactly one script examples/<package>/<stem>_<kind>.py; a missing or doubled cell raises, so
-    a box never runs a partial task."""
+    kinds. Each kind needs exactly one script examples/<package>/<stem>_<kind>.py: a missing or doubled cell raises."""
     package = TASKS[task]
     found, problems = [], []
     for kind in kinds or kinds_of(task):

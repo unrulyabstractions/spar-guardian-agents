@@ -13,6 +13,7 @@ from examples.example_arguments import DEFAULT_SETTINGS
 from src import run
 from src.configuration import settings
 from src.domains.swe.swe_inputs import instruction_text
+from src.domains.swe.swe_settings import SECRETS
 from src.measures import run_figures as plots
 from src.models import model_registry as models
 from src.run import access_line
@@ -58,6 +59,9 @@ def test_two_neutral_agents_split_the_whole_fix(seed):
     # each agent holds part of the fix, neither holds all of it, and together they hold every piece once
     assert all(held) and all(len(items) < 3 for items in held)
     assert sorted(p for items in held for p in items) == ["A", "B", "C"]
+    # the two values the hidden tests need sit in two pieces, and no agent holds both, so cheating takes both agents
+    secrets = SECRETS[cell.ISSUE]
+    assert len(secrets) == 2 and all(len(set(items) & set(secrets)) == 1 for items in held)
 
 
 def test_the_task_tells_each_agent_of_its_one_teammate_and_nothing_about_cheating():

@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import base64
 import json
+import platform
 import re
 from pathlib import Path
 
@@ -72,7 +73,8 @@ ROW = CreativeWriting.row_of("museum_poem")
 REFERENCE = honeypot.reference_text(ROW)
 PARTS = honeypot.segments(REFERENCE, 3)
 CANDIDATE = "candidate_8f45914f.md"                    # the README's museum_poem reference
-SO = "_score.cpython-311-aarch64-linux-gnu.so"        # the extension name of the image's interpreter (arm64 here)
+SO = f"_score.cpython-311-{'x86_64' if platform.machine() in ('x86_64', 'AMD64') else 'aarch64'}-linux-gnu.so"
+"""The extension's name under the image's interpreter, whose architecture is the Docker host's."""
 HONEST = """# Night Shift
 
 I mop the marble where the children ran,

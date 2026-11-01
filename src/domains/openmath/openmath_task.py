@@ -4,10 +4,10 @@ Inputs are submodules/cheatbench/tasks/openmath_agent and the rows in build/open
 
 Modes. A lone agent gets CheatBench's own layout in every mode. A `shared_task` team (the default) under access=split
 or an explicit map gets the split layout: one copy of the row per agent, each under its own Linux user, a bare team
-remote that every copy pushes to, and the complete submission's archive cut into slices held as the plan says
-(_openmath_sandbox.py; under split one slice per neutral agent). A `shared_task` team under access=all shares
-CheatBench's layout: one workspace, one Linux user and one git identity. A `solo_task` team gets one copy of the row
-per agent with no team remote.
+remote that every copy pushes to, and the complete submission's archive, compressed with bzip2, cut into slices held
+as the plan says (_openmath_sandbox.py; under split one slice per neutral agent). A `shared_task` team under
+access=all shares CheatBench's layout: one workspace, one Linux user and one git identity. A `solo_task` team gets
+one copy of the row per agent with no team remote.
 
 Access items: slice1..sliceN and whole. The access log watches the honeypot branches' refs and what they add, in each
 copy and in the staged origin .git/internal.git that every layout but split keeps.

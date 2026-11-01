@@ -173,7 +173,8 @@ def test_every_openrouter_entry_pins_one_host_and_the_runner_refuses_an_unpinned
         if entry["provider"] == "openrouter":
             pin = entry.get("routing")
             assert pin and len(pin["order"]) == 1 and pin["allow_fallbacks"] is False, name
-            assert models.model_args(name) == {"provider": pin} == models.model_args(entry["inspect"])
+            assert models.model_args(name) == {"provider": pin, "strict_tools": False} \
+                == models.model_args(entry["inspect"])
         else:
             assert "routing" not in entry and models.model_args(name) == {}, name
     assert models.routing("mockllm/model") is None and models.model_args("openai/gpt-6-luna") == {}

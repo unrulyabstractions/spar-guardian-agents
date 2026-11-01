@@ -1,30 +1,30 @@
 #!/usr/bin/env bash
-# Set up a rented box for its task: scripts/box/box_setup.sh <instance-id> [<task>]
+# Set up a rented box for its task: scripts/box/box_setup.sh <instance-id>
 #
 # Runs on the Mac right after `fleet.py create`. The task and what to deploy come from the registry and the box's launch
-# (fleet.py entry); a task given here must be the registry's. In order:
-#  0. the box's ssh, waited for up to 30 minutes with `fleet.py status` refreshing the endpoint each pass. A VM boots
+# (fleet.py entry). In order:
+#  1. the box's ssh, waited for up to 30 minutes with `fleet.py status` refreshing the endpoint each pass. A VM boots
 #     behind its port: another sshd answers first and its host key would lock the VM out, so until the baseline exists
 #     each try starts from an empty known_hosts. After the baseline a changed key stays refused;
-#  1. the box's id into /root/box_id at first contact (a later run requires the same id), then the baseline of the
-#     box's home and /tmp before anything else changes (box_capture.py baseline; a box past first contact gets none,
-#     and its capture then requires the host's files too);
-#  2. the commit the launch pinned, which origin/main must hold, and the submodule commits it records; this
-#     checkout's HEAD and local edits are listed, since the box gets the pinned commit alone;
-#  3. what only the Mac has goes up through ssh, both small: the lucy submodule's pinned commit as a git bundle (that
+#  2. the box's id into /root/box_id at first contact (a later run requires the same id), then the baseline of the
+#     box's home and /tmp before anything else changes (box_capture.py baseline). A box past first contact gets none,
+#     and its capture then requires the host's files too;
+#  3. the commit the launch pinned, which origin/main must hold, and the submodule commits it records. This checkout's
+#     HEAD and local edits are listed, since the box gets the pinned commit alone;
+#  4. what only the Mac has goes up through ssh, both small: the lucy submodule's pinned commit as a git bundle (that
 #     commit's history and no other branch, at most 20 MB) and the package list the launch pinned;
-#  the kernel, box_kernel.sh: a kernel with fanotify permission events, which the access log needs, by kexec;
-#  4. and 5. box_setup_remote.sh, sent to the box and started there under nohup setsid: the box's cores, RAM and disk,
-#     its packages, the clone, the .venv and the task's rows and images (box_runner.py build). This script prints
+#  5. box_kernel.sh: a kernel with fanotify permission events, which the access log needs, by kexec;
+#  6. box_setup_remote.sh, sent to the box and started there under nohup setsid: the box's cores, RAM and disk, its
+#     packages, the clone, the .venv and the task's rows and images (box_runner.py build). This script prints
 #     /root/setup.log as it grows and exits with the setup's exit code. A drop of this machine's network costs nothing:
 #     the setup goes on, and running this again follows a setup alive on the box, or resumes one that ended.
 # The box clones what is public itself, since the Mac's uplink is slow. No GitHub token and no model key goes to the
-# box here; box_run.sh sends the model's key.
+# box here. box_run.sh sends the key.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 cd "$root"
-if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+if [ $# -ne 1 ]; then
   sed -n '2,22p' "$0"
   exit 2
 fi
@@ -46,10 +46,6 @@ fields=$(uv run python -m scripts.box.fleet entry "$id" task commit requirements
   read -r min_ram_gb
   read -r min_disk_gb
 } <<< "$fields"
-if [ $# -eq 2 ] && [ "$2" != "$task" ]; then
-  echo "refused: the registry has box $id run $task, not $2"
-  exit 1
-fi
 uv run python -c 'import sys; from scripts.box.box_runner import BUILDS; sys.exit(sys.argv[1] not in BUILDS)' "$task" \
   || { echo "refused: no build steps for $task in scripts/box/box_runner.py BUILDS"; exit 1; }
 url=$(git remote get-url origin)
@@ -59,7 +55,7 @@ case $url in
   *) echo "refused: origin is $url; the box clones over https without credentials"; exit 1 ;;
 esac
 
-echo "== 0. the box's ssh"
+echo "== 1. the box's ssh"
 known=logs/boxes/$id/known_hosts
 SECONDS=0
 while true; do
@@ -81,7 +77,10 @@ while true; do
 done
 echo "   answered after $SECONDS s"
 
-echo "== 1. the box's id and the host image's own files"
+echo "== 2. the box's id and the host image's own files"
+# The sshd that answered in step 1 can be the one vast.ai runs while the VM boots, with a key of its own. Until the
+# baseline exists the VM's key is the first one this machine can trust, so step 2 starts from an empty known_hosts too.
+[ -f "logs/boxes/$id/baseline.jsonl" ] || rm -f "$known"
 qid=$(printf %q "$id")
 "$here/box_ssh.sh" "$id" "if [ -f /root/box_id ]; then [ \"\$(cat /root/box_id)\" = $qid ] \
 || { echo \"refused: this box names itself \$(cat /root/box_id), not $qid\"; exit 1; }; \
@@ -94,7 +93,7 @@ elif [ "$code" -ne 0 ]; then
   exit "$code"
 fi
 
-echo "== 2. the commit the launch pinned"
+echo "== 3. the commit the launch pinned"
 git fetch --quiet origin
 git merge-base --is-ancestor "$commit" origin/main \
   || { echo "refused: the launch's commit $commit is not on origin/main, so the box cannot clone it"; exit 1; }
@@ -119,7 +118,7 @@ if [ -n "$edits" ]; then
   done <<< "$edits"
 fi
 
-echo "== 3. the lucy bundle and the package list"
+echo "== 4. the lucy bundle and the package list"
 ship=$(mktemp -d)
 trap 'rm -rf "$ship"' EXIT
 git -C submodules/lucy cat-file -e "$lucy^{commit}"
@@ -145,7 +144,7 @@ ls -l "$ship"
 "$here/box_ssh.sh" "$id" mkdir -p /root/ship
 "$here/box_scp.sh" "$id" "$ship/lucy.bundle" "$ship/requirements.txt" box:/root/ship/
 
-echo "== the kernel"
+echo "== 5. the kernel"
 "$here/box_scp.sh" "$id" "$here/box_kernel.sh" box:/root/ship/
 "$here/box_ssh.sh" "$id" bash /root/ship/box_kernel.sh
 sleep 10                                            # the kexec above, if any, is under way by now
@@ -155,7 +154,7 @@ for _ in $(seq 1 30); do
 done
 "$here/box_ssh.sh" "$id" bash /root/ship/box_kernel.sh --check
 
-echo "== 4. and 5. on the box"
+echo "== 6. on the box"
 "$here/box_scp.sh" "$id" "$here/box_setup_remote.sh" box:/root/ship/
 # ssh joins its arguments into one command line for the box's shell, so each one is quoted for that shell first.
 # Detached from this ssh, so a drop of this machine's network never kills a build; a setup alive on the box is

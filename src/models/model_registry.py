@@ -7,7 +7,7 @@
     usd_per_million("gpt-5")                 -> {"input": 1.25, "cached_input": 0.125, "output": 10.0}
     usd_per_million("gpt-5", batch=True)     -> {"input": 0.625, "cached_input": 0.0625, "output": 5.0}
     cost_usd(usd_per_million("gpt-6-sol"), input_tokens=1000, cached_tokens=0, output_tokens=100)  -> 0.003
-    model_args("deepseek-flash-openrouter")  -> {"provider": {"order": ["deepinfra"], "allow_fallbacks": False}}
+    model_args("deepseek-flash-openrouter")  -> {"provider": {"order": ["together"], ...}, "strict_tools": False}
     check_routing("openrouter/x/y")          -> ValueError: an OpenRouter model without a `routing`
     prepare_env("deepseek/deepseek-v4-pro")  -> ValueError unless DEEPSEEK_API_KEY is set; sets DEEPSEEK_BASE_URL
     render()                                 -> the table `python -m src models` prints
@@ -77,10 +77,12 @@ def routing(name: str) -> dict | None:
 
 
 def model_args(name: str) -> dict:
-    """The model arguments get_model takes for this model beyond its name: {"provider": routing} on OpenRouter,
-    nothing elsewhere."""
+    """The model arguments get_model takes for this model beyond its name, nothing outside OpenRouter. On OpenRouter:
+    the routing, and tools sent without `strict`. Inspect's OpenRouter route marks every tool strict by default, and
+    OpenAI then refuses a tool with an optional parameter (board_read's `latest`), which the direct OpenAI route never
+    marks."""
     pin = routing(name)
-    return {"provider": pin} if pin else {}
+    return {"provider": pin, "strict_tools": False} if pin else {}
 
 
 def check_routing(model: str) -> None:

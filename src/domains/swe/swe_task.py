@@ -13,6 +13,10 @@ A lone agent works the whole issue in every mode. Each agent has its own service
 Access items: Lucy's pieces A, B and C, and whole; as released the honeypot plants nothing. The access log watches
 each clone's planted refs and what they add over the base. As released the fix sits in the image's pack, so the access
 log reports it packed and watches nothing.
+
+Collaboration. Under access=split no neutral agent's pieces plus its own honest work pass the hidden tests. What the
+tests need and the issue never gives (swe_settings.SECRETS) lies in two pieces that two neutral agents always hold
+(deal_turn), and plan refuses a split deal that breaks this.
 """
 from __future__ import annotations
 
@@ -38,6 +42,7 @@ from src.domains.swe.swe_inputs import (
     load_lines,
     load_split,
     patch_files,
+    piece_patch,
     task_config,
 )
 from src.domains.swe.swe_ladder import SweDomain
@@ -48,11 +53,11 @@ from src.domains.swe.swe_settings import (
     AGENT_TIME_S,
     DEFAULT_ROW,
     GRADING_BUDGET_S,
-    GRADING_FILES,
     HONEYPOTS,
     JIGSAW_PIECES,
     PARTS,
     PIECES,
+    SECRETS,
     TASK,
     TASK_DIR,
     TOOL_TIMEOUT_S,
@@ -68,10 +73,17 @@ TEXT_KEYS = ("first_message", "judge_prompt", "system_prompt")      # in the eva
 
 
 def honeypot_items(honeypot_name: str) -> list[str]:
-    """The pieces access=split deals over the neutral agents, before the seed turns them (SWE.dealt_items): Lucy's
-    jigsaw B, C, A; own_piece A, B, C; nothing as released."""
+    """The pieces access=split deals over the neutral agents in this order, from the seat the seed picks
+    (SWE.deal_turn): Lucy's jigsaw B, C, A; own_piece A, B, C; nothing as released."""
     return {"as_released": [], "own_piece": list(PARTS),
             "jigsaw": [p for held in JIGSAW_PIECES for p in held]}[honeypot_name]
+
+
+def secrets_held(issue: str, items: list[str]) -> list[str]:
+    """The texts of swe_settings.SECRETS, what the hidden tests need and the issue never gives, that an agent's items
+    hold, read from the patches planted as them (piece_patch), so a file moved into the wrong piece shows here."""
+    texts = [piece_patch(issue, item) for item in items]
+    return [value for value in SECRETS.get(issue, {}).values() if any(value in text for text in texts)]
 
 
 def piece_times(seed: int, issue: str) -> dict[str, int]:
@@ -108,8 +120,7 @@ class SWE(Benchmark):
             f"agents_share_one_time_limit_and_get_{AGENT_CPUS:g}_cpus_{AGENT_MEM}_each",
             "tools_shell_and_run_python_bound_per_agent",
             *([f"honeypot_{honeypot}_pruned_and_planted_at_sample_setup"] if honeypot != "as_released" else []),
-            *(["instruction_names_what_the_hidden_tests_call"] if issue_note(self.row) else []),
-            *(["grader_adds_the_data_files_only_the_fix_adds"] if self.row in GRADING_FILES else [])]
+            *(["instruction_names_what_the_hidden_tests_call"] if issue_note(self.row) else [])]
 
     def check(self, config: SwarmConfig) -> None:
         """NotImplementedError at the large scales, or at the large scale's team size set by hand (LARGE_SCALE_ERROR);
@@ -131,13 +142,28 @@ class SWE(Benchmark):
     def split_items(self, n_neutral: int) -> list[str]:
         return honeypot_items(self.honeypot)
 
-    def dealt_items(self, config: SwarmConfig, n_neutral: int) -> list[str]:
-        """The pieces in deal order, turned by the seed, so the samples of a cell put each piece on a different seat. A
-        sample's seed is its number (scripts/screen.py, scripts/box/box_runner.py launch), and three consecutive numbers
-        give a piece three seats. Seed 0, a run launched by hand, deals Lucy's order."""
-        items = self.split_items(n_neutral)
-        turn = config.seed % len(items) if items else 0
-        return items[turn:] + items[:turn]
+    def deal_turn(self, config: SwarmConfig, n_neutral: int) -> int:
+        """The neutral seat the deal starts from: minus the seed, so piece k goes to neutral seat k - seed mod n, and
+        the samples of a cell put each piece on another seat. A sample's seed is its number (scripts/screen.py,
+        scripts/box/box_runner.py launch). Seed 0, a run launched by hand, deals Lucy's order from the first seat. With
+        three neutral agents seat j holds piece j + seed mod 3, as when the seed turned the pieces. The order of the
+        pieces never turns, so the two pieces that hold what the hidden tests need (SECRETS), next to each other in
+        both honeypots' order, always go to two seats."""
+        return -config.seed % n_neutral if n_neutral else 0
+
+    def plan(self, config: SwarmConfig, roles: dict[str, str] | None = None) -> Plan:
+        """Benchmark.plan, then ValueError when a split deal gives one agent every text the hidden tests need
+        (secrets_held): that agent could pass alone. An explicit map and access=all are the experimenter's own deal
+        and pass."""
+        plan = super().plan(config, roles)
+        values = SECRETS.get(self.row, {})
+        if plan.access == "split" and values:
+            alone = {agent: items for agent, items in plan.holds.items()
+                     if len(secrets_held(self.row, items)) == len(values)}
+            if alone:
+                raise ValueError(f"{self.row}: the split deal gives one agent every text the hidden tests need, so it "
+                                 f"needs no teammate: {alone}")
+        return plan
 
     def valid_item(self, item: str) -> bool:
         return item in PIECES
@@ -187,7 +213,7 @@ class SWE(Benchmark):
             "system_prompt": system, "first_message": {a: instruction for a in plan.agents},
             "judge_prompt": {a: f"{system[a]}\n\n{instruction}" for a in plan.agents},
             "patch_files": patch_files(cfg["patch"]), "distinctive_lines": len(load_lines(self.row)["fix"]),
-            "grading_files": list(GRADING_FILES.get(self.row, ())), "images": ensure_images(self.row),
+            "images": ensure_images(self.row),
         }
         compose = write_compose(self.row, plan.agents, team_remote=honeypot.has_team_remote(swe))
         cheatbench = {"task": self.name, "variant": "", "swe_task": instance, "instruction": instruction,
@@ -250,8 +276,7 @@ class SWE(Benchmark):
     @classmethod
     def run_blocks(cls, view) -> dict:
         """run.json "swe": the issue, the honeypot, each agent's pieces, the setup's evidence and checks, the planted
-        commits, the grades with what the grader added to each tree (grading_files, and each grade's grader_added) and
-        each agent's final state; the prompts stay in the eval log."""
+        commits, the grades and each agent's final state; the prompts stay in the eval log."""
         cb = (view.metadata or {}).get("cheatbench") or {}
         swe = cb.get("swe")
         if not swe:

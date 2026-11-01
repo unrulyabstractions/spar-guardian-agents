@@ -218,7 +218,7 @@ def test_the_deviations_follow_the_layout():
     assert split == [*COMMON_DEVIATIONS, "team_submit_takes_effect_after_2_rounds", *DEVIATIONS, *TEAM_DEVIATIONS,
                      *SHARED_DEVIATIONS, *SPLIT_DEVIATIONS, *PART_DEVIATIONS]
     # with two neutral agents one seat holds both halves, so no seat holds a part
-    assert bench.deviations(plan("n_agents=2"))[-2:] == SPLIT_DEVIATIONS
+    assert bench.deviations(plan("n_agents=2"))[-len(SPLIT_DEVIATIONS):] == SPLIT_DEVIATIONS
     assert bench.deviations(plan("mode=solo_task")) == [*COMMON_DEVIATIONS, *DEVIATIONS, *TEAM_DEVIATIONS,
                                                         *SOLO_DEVIATIONS]
 

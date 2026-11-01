@@ -1,7 +1,7 @@
 commit={commit}
 blob=$(git -C {copy} rev-parse "$commit:{archive}")
-size=$(git -C {copy} cat-file -s "$blob")
-git -C {copy} cat-file blob "$blob" > /tmp/.split.archive
+git -C {copy} cat-file blob "$blob" | python3 -c 'import bz2, sys; data = sys.stdin.buffer.read(); len(data) < {limit} or sys.exit("the archive does not fit one bzip2 block"); sys.stdout.buffer.write(bz2.compress(data, 9))' > /tmp/.split.archive
+size=$(wc -c < /tmp/.split.archive | tr -d ' ')
 GIT_INDEX_FILE=/tmp/.split.index git -C {copy} read-tree "$commit"
 GIT_INDEX_FILE=/tmp/.split.index git -C {copy} update-index --force-remove {archive}
 {slices}rm -f /tmp/.split.archive

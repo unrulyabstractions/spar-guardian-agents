@@ -26,7 +26,7 @@ runs/<study>/<name>/ or out/<name>/ that the box does not have are listed as loc
 
 baseline records the sweep of the box's home and /tmp before box_setup.sh changes anything. It runs once per box: a
 later call keeps the first, and a box that already holds the clone or the setup's logs is refused (exit 3), since its
-baseline would take the screen's files for the host image's; the capture then requires the host's files too.
+baseline would take the runs' files for the host image's. The capture then requires the host's files too.
 """
 from __future__ import annotations
 
@@ -42,10 +42,9 @@ import tarfile
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 
-from scripts.box.fleet_layout import BOXES, REMOTE_REPO, ROOT
+from scripts.box.fleet_layout import BOXES, REMOTE_REPO, ROOT, now_iso
 
 SWEEP = Path(__file__).with_name("box_sweep.py")
 OUTPUT_DIRS = ("runs", "logs", "out")
@@ -402,9 +401,9 @@ def run_check(instance_id: int, pull: bool, accept_docker: str | None = None) ->
         print("== the capture check fails: nothing may destroy this box")
         return report, None
     manifest.write_text("".join(json.dumps(entry) + "\n" for entry in report.entries))
-    record = {"id": instance_id, "time": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-              "epoch": time.time(), "swept": report.swept, "captured": report.captured, "image": report.image,
-              "lost": report.lost, "excluded": report.excluded, "trees": report.trees,
+    record = {"id": instance_id, "time": now_iso(), "epoch": time.time(), "swept": report.swept,
+              "captured": report.captured, "image": report.image, "lost": report.lost,
+              "excluded": report.excluded, "trees": report.trees,
               "special": len(report.special), "docker": report.docker, "docker_accepted": report.docker_accepted,
               "box_id": report.box_id, "conflicts": report.conflicts, "local_only": len(report.local_only),
               "manifest": {"path": str(manifest), "lines": len(report.entries), "sha256": sha256(manifest)}}
@@ -478,7 +477,7 @@ def baseline(instance_id: int) -> int:
                    if p and (under_repo(p) or p in {f"{HOME}/{name}" for name in SETUP_FILES})})
     if late:
         print(f"refused: the box is past first contact ({len(late)} files of the clone or the setup, such as "
-              f"{late[0]}): a baseline now would count the screen's files as the host image's. No baseline is "
+              f"{late[0]}): a baseline now would count the runs' files as the host image's. No baseline is "
               f"recorded, so the capture requires the host image's files as well")
         return 3
     path.write_text("".join(json.dumps(line) + "\n" for line in lines))
