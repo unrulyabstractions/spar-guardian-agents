@@ -1115,3 +1115,8 @@ The entry says "All 13 changed or new smoke suites and scenarios". The list it g
 - **Gemini safety.** binder_minimal_regulated_luna_argon_enforce4 ended rc 3: "OpenRouterError: Error 403 - Gemini blocked the request: SAFETY", read from its screen log. Resumed once on 58612172.
 - **Captured and destroyed** (rc 0, 0 missing, 0 different): 58606274, 58606285, 58612159, 58612170, 58612698, 58612190.
 - **Rented** phase 2b: 58617775 58617776 58617778 (flipt luna), 58617785 58617786 (flipt dsflash, box 3 refused at the $15/h fleet cap), 58617792 58617795 (protein).
+
+## 2026-11-01 UTC: protein's phase two done; SWE phase two and phase 2b running
+- **Protein phase two.** All 7 boxes ran and were captured (rc 0, 0 missing, 0 different) and destroyed: 58612159, 58612161, 58612170, 58612172, 58612698, 58612167, 58614566. On 58614566 the four stopped Opus seeds left 20 containers and 4 volumes; I listed them, checked no example process ran, removed exactly those by name, then captured.
+- **Bad machines.** 36135 (host 199.126.134.31) gave no ssh to a fourth VM, 58616475, destroyed with --accept-loss. 144011 gave 52 GB again to 58617776, captured and destroyed; 58618686 landed on it again and was destroyed before setup reached it. `fleet.py create --skip-machine` added (commit at main, test fails without it).
+- **Started real, each after its mock rc 0:** SWE phase two 58616471, 58616476, 58616478, 58616480, 58616483 (luna) and 58616617, 58616619, 58616622, 58616624, 58616625, 58616626 (dsflash); phase 2b 58617792 (protein), 58617786 (dsflash), 58617778 (luna). Fleet cap raised to $18/h for two replacements.
