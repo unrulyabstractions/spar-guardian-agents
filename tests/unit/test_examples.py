@@ -113,8 +113,8 @@ def test_each_script_runs_three_neutral_agents_on_the_default_preset(name, monke
     run_name, benchmark, config, model, timeout = args
     assert (run_name, model, timeout) == (script.stem, models.resolve(settings.DEFAULT_MODEL), settings.MODEL_TIMEOUT_S)
     assert kwargs == {"replace": False}                        # a name in use is refused unless --replace
-    # The run goes to runs/<name>/ and the figures follow a successful run into out/<name>/.
-    assert plotted == [(settings.RUNS / script.stem, settings.ROOT / "out" / script.stem)]
+    # The run goes to runs/<study>/<name>/ and the figures follow a successful run into out/<study>/<name>/.
+    assert plotted == [(settings.RUNS / script.stem, settings.ROOT / "out" / settings.STUDY / script.stem)]
     assert (config.preset, config.scale, config.n_agents) == ("default", "small", 3)
     assert config.regulator_count == 0 and config.disregulator_count == 0 and config.access == "split"
     assert config.time_limit_s == 3600 and config.batch_judge is False and config.turn_budget == settings.TURN_BUDGET
@@ -127,7 +127,7 @@ def test_each_script_runs_three_neutral_agents_on_the_default_preset(name, monke
     args, kwargs = calls[-1]
     assert args[3] == "google/gemini-3.8-flash" and args[2].regulator_count == 1
     assert kwargs == {"replace": False}                        # a name in use is refused unless --replace
-    assert plotted[-1] == (settings.RUNS / "gemini", settings.ROOT / "out" / "gemini")
+    assert plotted[-1] == (settings.RUNS / "gemini", settings.ROOT / "out" / settings.STUDY / "gemini")
     # A refused or failed run gets no figures.
     monkeypatch.setattr(run, "run", lambda *args, **kwargs: 3)
     assert module.main() == 3 and len(plotted) == 2

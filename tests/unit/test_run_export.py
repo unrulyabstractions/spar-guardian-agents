@@ -103,23 +103,32 @@ def files_of(folder: Path) -> dict[str, bytes]:
 
 def test_an_export_never_replaces_another_evals_run_unasked(tmp_path):
     """A rerun under a name in use exports another eval into the run's folder: refused, with the folder and both eval
-    ids named, and the folder left as it was. The same eval exports into it again, as regenerate and rejudge do, and
-    replace=True writes the other eval over it."""
-    first, second = tmp_path / "first.eval", tmp_path / "second.eval"
+    ids named, the Python caller's remedy said, and the folder left as it was. The same eval exports into it again, as
+    regenerate and rejudge do. replace=True sets the earlier run aside into attempts/riemann_minimal.1 first, every file
+    of it with it, so the new run holds none of them; the log being exported stays where it is."""
+    logs = tmp_path / "logs" / "riemann_minimal"
+    logs.mkdir(parents=True)
+    first, second = logs / "first.eval", logs / "second.eval"
     first_id, second_id = one_sample_log(first), one_sample_log(second)
     run_dir = tmp_path / "runs" / "riemann_minimal"
     run_export.write_run(first, run_dir)
+    (run_dir / "ladder.jsonl").write_text('{"row": "team"}\n')          # the judged ladder, which no export clears
     before = files_of(run_dir)
     assert json.loads(before["run.json"])["eval_id"] == first_id != second_id
     with pytest.raises(run_export.RunFolderTaken) as refused:
         run_export.write_run(second, run_dir)
     message = str(refused.value)
     assert str(run_dir.resolve()) in message and first_id in message and second_id in message
+    assert message.endswith(run_export.PYTHON_REMEDY) and refused.value.base in message
     assert files_of(run_dir) == before
     run_export.write_run(first, run_dir)
     assert json.loads((run_dir / "run.json").read_text())["eval_id"] == first_id
     run_export.write_run(second, run_dir, replace=True)
     assert json.loads((run_dir / "run.json").read_text())["eval_id"] == second_id
+    assert files_of(tmp_path / "runs" / "attempts" / "riemann_minimal.1") == before
+    assert "ladder.jsonl" not in files_of(run_dir)
+    assert sorted(path.name for path in logs.iterdir()) == ["second.eval"]
+    assert [path.name for path in (tmp_path / "logs" / "attempts" / "riemann_minimal.1").iterdir()] == ["first.eval"]
 
 
 def test_run_json_carries_the_honeypot_probe_and_never_signals():

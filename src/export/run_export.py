@@ -47,7 +47,10 @@ the log; a judge.jsonl row is the episode's identity, the verdict, and the trans
 
 A run directory holds one eval's run. write_run refuses a directory whose run.json records another eval
 (RunFolderTaken), so a rerun under a name in use never replaces a run unasked. The same eval's log exports into its
-own directory again (regenerate, rejudge). replace=True writes another eval over the run on purpose.
+own directory again (regenerate, rejudge). replace=True first sets the earlier run aside into
+runs/<study>/attempts/<name>.<n>/ with its eval log and its figures (run_directory.set_aside_attempt), so no file of
+the earlier eval stays beside the new one and nothing is deleted. run.json's run_id is the run's own name
+(run_directory.run_name), also for an attempt exported again.
 """
 from __future__ import annotations
 
@@ -79,7 +82,7 @@ from src.export._export_run_blocks import (
 from src.export.eval_sample_view import SampleView, orbit_halt_reason
 from src.export.export_episodes import sample_key, sample_records
 from src.judging.cheatbench_judge import JUDGE_SCORER
-from src.measures.run_directory import ACCESS_LOG, EPISODES, JUDGE, RUN_JSON
+from src.measures.run_directory import ACCESS_LOG, EPISODES, JUDGE, RUN_JSON, run_name, set_aside_attempt
 from src.models import swarm_model_provider as provider
 from src.utils.json_files import read_json, write_jsonl
 
@@ -96,7 +99,7 @@ def run_json(view: SampleView | None, eval_path: Path, run_dir: Path, records: l
     task = first.get("task")
     run = {
         "task": task, "task_root": str(BY_TASK[task].task_dir) if task else None, "variant": "",
-        "run_id": run_dir.name, "model": provider.inspect_string(model), "agent": "orbit", "source": "orbit",
+        "run_id": run_name(run_dir), "model": provider.inspect_string(model), "agent": "orbit", "source": "orbit",
         "topology": first.get("topology", "single"), "agents": first.get("orbit_roster", []),
         "eval_log": str(eval_path.resolve()), "eval_id": eval_id,
         "orbit_version": orbit.__version__, "inspect_version": inspect_ai.__version__,
@@ -153,8 +156,17 @@ def clear_outputs(run_dir: Path) -> None:
         shutil.rmtree(run_dir / name, ignore_errors=True)
 
 
+PYTHON_REMEDY = "Pass replace=True to set the earlier run aside into runs/<study>/attempts/<name>.<n>/ first."
+"""The remedy a caller of write_run in Python reads."""
+
+
 class RunFolderTaken(ValueError):
-    """The run directory holds the run of another eval, and the caller did not ask to replace it."""
+    """The run directory holds the run of another eval, and the caller did not ask to replace it. `base` names the
+    folder and both evals. The message adds a remedy: PYTHON_REMEDY, unless a command puts its own after `base`."""
+
+    def __init__(self, base: str, remedy: str = PYTHON_REMEDY) -> None:
+        super().__init__(f"{base} {remedy}")
+        self.base = base
 
 
 def refuse_replacing(run_dir: Path, eval_id: str | None) -> None:
@@ -169,22 +181,27 @@ def refuse_replacing(run_dir: Path, eval_id: str | None) -> None:
         return
     holds = f"the run of eval {held}" if held else "a run with no eval_id"
     new = f"eval {eval_id}" if eval_id else "a new eval"
-    raise RunFolderTaken(f"{run_dir} holds {holds}. Writing {new} there would replace it. "
-                         "Pass --replace to replace it on purpose.")
+    raise RunFolderTaken(f"{run_dir} holds {holds}. Writing {new} there would replace it.")
 
 
 def write_run(eval_log_path: Path, run_dir: Path, *, verdicts: dict[str, dict] | None = None,
               replace: bool = False) -> dict:
     """Write the run directory for one eval log, which holds one sample; return a short summary of what was written.
     A log of several samples (inspect eval --epochs) is refused: run.json and the code ladder describe one. A directory
-    that holds another eval's run is refused before anything is written, unless replace (refuse_replacing)."""
+    that holds another eval's run is refused before anything is written (refuse_replacing). With replace, that earlier
+    run is set aside into runs/<study>/attempts/<name>.<n>/ first, its eval log and figures with it; the log being
+    exported stays where it is."""
     eval_path = Path(eval_log_path)
     log = read_eval_log(str(eval_path), resolve_attachments=True)
     if len(log.samples or []) > 1:
         raise ValueError(f"{eval_path}: a run holds one sample, this log has {len(log.samples)}")
     run_dir = Path(run_dir).resolve()
-    if not replace:
+    try:
         refuse_replacing(run_dir, log.eval.eval_id)
+    except RunFolderTaken:
+        if not replace:
+            raise
+        set_aside_attempt(run_dir, keep=eval_path)
     run_dir.mkdir(parents=True, exist_ok=True)
     clear_outputs(run_dir)
     views = []

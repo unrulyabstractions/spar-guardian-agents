@@ -23,7 +23,8 @@ modules.
     python -m src models [NAME]
     python -m src plots <run> [--out DIR]
 
-A run is a run name under runs/ or a run directory. The config is built in this order: the preset, then the scale,
+A run is a run directory, or a run name of the study: runs/<study>/<name>/, or the group that holds it
+(run_directory.find_run). The config is built in this order: the preset, then the scale,
 then every `--set` (src/configuration/presets.py). The default preset is the midterm report's configuration at the
 small scale; `--scale` replaces its size (src/configuration/scales.py). `--set` takes any SwarmConfig field
 (src/configuration/swarm_config.py) and overrides any value the scale gave, for example `--set regulators=3 --set
@@ -31,7 +32,8 @@ disregulators=3` for a swarm, `--set shutdown=false` for a team without stop_wor
 another turn budget, or `--set turn_budget=none` to use the scale's steps_per_agent. A run writes its Inspect log under
 logs/<study>/<name>/, exports it to runs/<study>/<name>/ and prints one line per episode; the judge runs inside the
 eval. A run refuses a name whose folder already holds a run, and `judge` a folder that holds another eval's run, before
-anything is spent; `--replace` replaces that run on purpose. `rejudge` judges finished runs from their eval logs,
+anything is spent; `--replace` sets that earlier run aside into runs/<study>/attempts/<name>.<n>/ first, with its eval
+log and its figures. `rejudge` judges finished runs from their eval logs,
 writes each back into its own directory, wherever it lives, and places them on the ladder; `regenerate` rebuilds a run
 directory from its log. `budget` prints lone runs' turns and their median. `--model` takes an entry of
 src/models/model_registry.yaml or an Inspect model string; `models` prints the entries, or one entry in full.
@@ -50,6 +52,7 @@ from src.configuration import settings
 from src.configuration.presets import add_config_arguments, build_config, config_pairs
 from src.measures import board_engagement as engagement
 from src.measures import episode_summary as summary
+from src.measures.run_directory import figures_dir, find_run
 from src.models import model_registry as models
 from src.ui import launch
 
@@ -61,8 +64,12 @@ def env_timeout() -> int:
 
 
 def run_dir(name: str) -> Path:
-    """A run directory given as a path, or a run name under runs/."""
-    return Path(name) if Path(name).is_dir() else settings.RUNS / name
+    """A run directory given as a path, or a run name of the study: its folder at the top level or in its one group
+    (run_directory.find_run), else runs/<study>/<name>, which the command then refuses as no run. Two folders of one
+    name raise ValueError."""
+    if Path(name).is_dir():
+        return Path(name)
+    return find_run(settings.RUNS, name) or settings.RUNS / name
 
 
 def run_dirs(args: argparse.Namespace) -> list[Path]:
@@ -161,7 +168,7 @@ def cmd_models(args: argparse.Namespace) -> int:
 def cmd_plots(args: argparse.Namespace) -> int:
     from src.measures import run_figures as plots  # matplotlib, a second; only plots pays for it
     directory = run_dir(args.run)
-    plots.plot_run(directory, Path(args.out) if args.out else settings.ROOT / "out" / directory.name)
+    plots.plot_run(directory, Path(args.out) if args.out else figures_dir(directory))
     return 0
 
 
@@ -185,8 +192,8 @@ def add_run_parser(subparsers) -> None:
     run.add_argument("--timeout", type=int, default=env_timeout(),
                      help="seconds one model request may take, retries included (env MODEL_TIMEOUT_S)")
     run.add_argument("--replace", action="store_true",
-                     help="replace the run already in runs/<study>/<name>/; without it the run refuses that folder "
-                          "before it starts")
+                     help="set the run already in runs/<study>/<name>/ aside into runs/<study>/attempts/<name>.<n>/ "
+                          "with its log and figures, then run; without it the run refuses that folder before it starts")
     run.set_defaults(func=cmd_run)
 
 
@@ -208,8 +215,8 @@ def add_judging_parsers(subparsers) -> None:
     judge.add_argument("--judge-errors", action="store_true",
                        help="judge a run even when an episode failed in the harness or at the provider")
     judge.add_argument("--replace", action="store_true",
-                       help="replace another eval's run in runs/<study>/<run_name>/; without it the judge refuses that "
-                            "folder before it starts")
+                       help="set another eval's run of this name aside into runs/<study>/attempts/<run_name>.<n>/ once "
+                            "the verdicts are in; without it the judge refuses that folder before it starts")
     judge.set_defaults(func=cmd_judge)
 
     ladder = subparsers.add_parser("ladder", help="place every agent of a run on the cheating ladder (ladder.jsonl)")
@@ -239,7 +246,8 @@ def add_measure_parsers(subparsers) -> None:
     add_runs_argument(regenerate)
     regenerate.add_argument("--no-export", action="store_true", help="keep run.json, episodes.jsonl and judge.jsonl")
     regenerate.add_argument("--no-measures", action="store_true", help="skip the code ladder and the SWE measures")
-    regenerate.add_argument("--no-plots", action="store_true", help="skip the figures under out/<run>/")
+    regenerate.add_argument("--no-plots", action="store_true",
+                            help="skip the figures under out/<study>/[<group>/]<run>/")
     regenerate.set_defaults(func=cmd_regenerate)
 
     signals = subparsers.add_parser("signals", help="the code ladder of a run's agents and teams (signals.jsonl)")
@@ -266,7 +274,8 @@ def add_measure_parsers(subparsers) -> None:
     add_runs_argument(budget)
     budget.set_defaults(func=cmd_budget)
 
-    plots = subparsers.add_parser("plots", help="the figures of one run as PNG with CSV twins, under out/<run>/")
+    plots = subparsers.add_parser("plots", help="the figures of one run as PNG with CSV twins, under "
+                                                "out/<study>/[<group>/]<run>/")
     plots.add_argument("run", help="a run name under runs/, a run directory or an example's output folder")
     plots.add_argument("--out", default=None, help="where to write (default out/<run name>/, gitignored)")
     plots.set_defaults(func=cmd_plots)

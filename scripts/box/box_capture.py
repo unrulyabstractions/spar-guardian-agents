@@ -22,7 +22,9 @@ marker, fresh, and makes a verified read-only snapshot of the manifest's local c
 the same ssh config, comparing checksums: the outputs into this repository with --update, as watch.sh does, so a newer
 local file is never overwritten, then the outputs still different into logs/boxes/<id>/conflicts/; the rest into
 logs/boxes/<id>/files/. It then sweeps the box again and holds the new sweep to the same rules. Files under a box run's
-runs/<study>/<name>/ or out/<name>/ that the box does not have are listed as local only; they do not fail the check.
+folder that the box does not have are listed as local only; they do not fail the check. A run's folder is
+runs/<study>/[<group>/]<name>/, and its figures sit at the same path under out/, or at out/<name>/ from before out/
+mirrored runs/.
 
 baseline records the sweep of the box's home and /tmp before box_setup.sh changes anything. It runs once per box: a
 later call keeps the first, and a box that already holds the clone or the setup's logs is refused (exit 3), since its
@@ -45,6 +47,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from scripts.box.fleet_layout import BOXES, REMOTE_REPO, ROOT, now_iso
+from src.measures.run_directory import GROUPS
 
 SWEEP = Path(__file__).with_name("box_sweep.py")
 OUTPUT_DIRS = ("runs", "logs", "out")
@@ -271,17 +274,22 @@ def compare(lines: list[dict], locals_for: Callable[[str], list[Path]], baseline
     return report
 
 
+def run_folder(parts: list[str]) -> tuple[str, ...] | None:
+    """The folder of the box run a file under the clone's runs/ or out/ belongs to, as path parts: runs/<study>/<name>
+    or runs/<study>/<group>/<name>, the same under out/, and out/<name> for figures from before out/ mirrored runs/
+    (a file right under out/<name>/). None for any other file."""
+    if parts[0] == "out" and len(parts) == 3:
+        return tuple(parts[:2])
+    if parts[0] in ("runs", "out") and len(parts) >= 4:
+        return tuple(parts[:4] if parts[2] in GROUPS and len(parts) >= 5 else parts[:3])
+    return None
+
+
 def local_only(lines: list[dict]) -> list[str]:
-    """Files under a box run's runs/<study>/<name>/ or out/<name>/ here that the box does not have: an earlier export's
-    leftovers, or what this machine added (a judge, a figure)."""
+    """Files under a box run's folder here (runs/<study>/[<group>/]<name>/ and its figures, run_folder) that the box
+    does not have: an earlier export's leftovers, or what this machine added (a judge, a figure)."""
     on_box = {line.get("file") or line.get("link") or line.get("outside_link") for line in lines}
-    folders = set()
-    for path in filter(None, on_box):
-        parts = (output_rel(path) or "").split("/")
-        if parts[0] == "runs" and len(parts) >= 4:
-            folders.add(tuple(parts[:3]))
-        elif parts[0] == "out" and len(parts) >= 3:
-            folders.add(tuple(parts[:2]))
+    folders = set(filter(None, (run_folder((output_rel(path) or "").split("/")) for path in filter(None, on_box))))
     extras = []
     for folder in sorted(folders):
         for dirpath, _, filenames in os.walk(ROOT.joinpath(*folder)):

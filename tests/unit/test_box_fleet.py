@@ -1298,6 +1298,23 @@ def test_local_only_lists_what_this_machine_added_to_a_run_of_a_study(tmp_path, 
     assert box_capture.local_only(lines) == ["out/game_solo/a.png", "runs/study_x/game_solo/judge.jsonl"]
 
 
+def test_local_only_reads_figures_that_mirror_runs_and_an_attempts_own_folder(tmp_path, monkeypatch):
+    """out/<study>/<name>/ is the run's figures folder, and attempts/<name>.<n> is the attempt's own folder: the files
+    another run of the study keeps here are not this box's run's."""
+    monkeypatch.setattr(box_capture, "ROOT", tmp_path)
+    local = ("runs/study_x/game_solo/run.json", "out/study_x/game_solo/a.png", "out/study_x/game_minimal/c.png",
+             "runs/study_x/attempts/game_solo.1/run.json", "runs/study_x/attempts/game_solo.1/judge.jsonl",
+             "runs/study_x/attempts/game_minimal.1/run.json")
+    for rel in local:
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text("x")
+    lines = [{"file": f"{box_capture.REMOTE_REPO}/{rel}"}
+             for rel in ("runs/study_x/game_solo/run.json", "out/study_x/game_solo/b.png",
+                         "runs/study_x/attempts/game_solo.1/run.json")]
+    assert box_capture.local_only(lines) == ["out/study_x/game_solo/a.png",
+                                             "runs/study_x/attempts/game_solo.1/judge.jsonl"]
+
+
 def test_the_runner_refuses_without_the_key(runner_dirs, monkeypatch, capsys):
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     assert run_box(monkeypatch) == 1

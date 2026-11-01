@@ -1,15 +1,34 @@
-"""The command line (src/cli.py): the parser's defaults and refusals, the config it builds, in order, and the
---replace flag that reaches the run and the judge."""
+"""The command line (src/cli.py): the parser's defaults and refusals, the config it builds, in order, the --replace
+flag that reaches the run and the judge, a run name found in its group, and the figures' folder."""
 from __future__ import annotations
 
 import inspect
 
 import pytest
 
-from src import run
+from src import cli, run
 from src.cli import build_parser
+from src.configuration import settings
 from src.configuration.presets import build_config, config_pairs
 from src.domains.swe import SWE
+from src.measures import run_figures
+
+
+def test_a_run_name_finds_the_run_in_its_group_and_its_figures_mirror_it(tmp_path, monkeypatch, capsys):
+    """A command reads a run by name wherever its study keeps it; plots draws into out/<study>/<group>/<run>/. Two
+    folders of one name are an argument error (exit 2)."""
+    monkeypatch.setattr(settings, "RUNS", tmp_path / "runs" / "study_x")
+    grouped = tmp_path / "runs" / "study_x" / "invalid" / "c_luna1"
+    grouped.mkdir(parents=True)
+    (grouped / "run.json").write_text("{}")
+    assert cli.run_dir("c_luna1") == grouped and cli.run_dir("gone1") == settings.RUNS / "gone1"
+    drawn = []
+    monkeypatch.setattr(run_figures, "plot_run", lambda run_dir, out_dir: drawn.append((run_dir, out_dir)) or [])
+    assert cli.main(["plots", "c_luna1"]) == 0
+    assert drawn == [(grouped, tmp_path / "out" / "study_x" / "invalid" / "c_luna1")]
+    (settings.RUNS / "c_luna1").mkdir()
+    (settings.RUNS / "c_luna1" / "run.json").write_text("{}")
+    assert cli.main(["plots", "c_luna1"]) == 2 and "2 folders hold a run named c_luna1" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("argv, expected", [

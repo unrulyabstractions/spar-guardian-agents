@@ -29,7 +29,7 @@ uv run python -m examples.openmath.riemann_minimal
 
 A screen runs the cells of the first experiment in parallel, several samples each, and prints each run's team rung, its agents' rungs and its ledger (the tokens, what the provider billed and the cost at the registry's prices): `uv run python -m scripts.screen --model deepseek-flash-openrouter --samples 3 --jobs 9 --suffix flash`, resumable (a finished run is skipped), with `--set` pairs for every run.
 
-The run lands in `runs/<study>/<name>/` like any other run (`run.json`, `episodes.jsonl`, `judge.jsonl`, `signals.jsonl` with the code ladder's agent rows and team record, `access_log.jsonl` where the run kept a log, `trajectories/` and `communication/`), the eval log under `logs/<study>/<name>/`, and the script then writes the run's figures under `out/<name>/`; git ignores all three: `timeline.png` (every agent's steps round by round, with the judge's verdict at the lane's end), `board.png` (the board's actions per round) and `verdicts.png` (the judge's flags per agent), each with a CSV twin; `uv run python -m src plots <run_dir>` does the same for any run. `uv run python -m src summary runs/<study>/riemann_minimal` prints the verdicts again, and the browser (`uv run python -m src ui`) lists the run.
+The run lands in `runs/<study>/<name>/` like any other run (`run.json`, `episodes.jsonl`, `judge.jsonl`, `signals.jsonl` with the code ladder's agent rows and team record, `access_log.jsonl` where the run kept a log, `trajectories/` and `communication/`), the eval log under `logs/<study>/<name>/`, and the script then writes the run's figures under `out/<study>/<name>/`, which mirrors the run's folder; git ignores all three: `timeline.png` (every agent's steps round by round, with the judge's verdict at the lane's end), `board.png` (the board's actions per round) and `verdicts.png` (the judge's flags per agent), each with a CSV twin; `uv run python -m src plots <run_dir>` does the same for any run. `uv run python -m src summary runs/<study>/riemann_minimal` prints the verdicts again, and the browser (`uv run python -m src ui`) lists the run.
 
 Each script parses the shared arguments, builds its config in the open (`build_config(args.preset, args.scale, args.settings)`), names its task and calls the run. The arguments come from `examples/example_arguments.py`, which takes the command line's model and config flags (`src/configuration/presets.py` `add_config_arguments`) and holds the default settings:
 
@@ -41,9 +41,9 @@ Each script parses the shared arguments, builds its config in the open (`build_c
 | `--scale` | the preset's, `small` | the run's size |
 | `--set KEY=VALUE` | none | a `SwarmConfig` field, applied after the default settings; repeatable |
 | `--judge`, `--no-judge` | `USE_JUDGE_AS_DEFAULT` in `examples/example_arguments.py`, false | whether the run is judged as it finishes. Not judged: no `judge.jsonl` yet, and `uv run python -m src rejudge <name>` judges the run later from its eval log, through the batch API (half price, up to a day) or with `--sync` through the normal API (minutes) |
-| `--name` | the script's name | the run's name: `runs/<study>/<name>/` and `out/<name>/` |
+| `--name` | the script's name | the run's name: `runs/<study>/<name>/` and `out/<study>/<name>/` |
 | `--timeout` | `MODEL_TIMEOUT_S` | seconds one model request may take |
-| `--replace` | off | replaces the run already in `runs/<study>/<name>/`. Without it a run refuses a name whose folder holds a run, before the eval starts, so a script run a second time needs another `--name` or `--replace` |
+| `--replace` | off | sets the run already in `runs/<study>/<name>/` aside into `runs/<study>/attempts/<name>.<n>/`, with its eval log and its figures, then runs. Without it a run refuses a name whose folder holds a run, before the eval starts, so a script run a second time needs another `--name` or `--replace` |
 
 ```
 uv run python -m examples.swe.flipt_minimal --model gemini-3.8-flash

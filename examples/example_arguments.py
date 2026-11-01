@@ -10,9 +10,10 @@ come back as Inspect strings, and args.settings holds the run's name as `id_salt
 each role model as `<role>_model=<Inspect string>`. --judge and --no-judge say whether the run is judged as it finishes
 (USE_JUDGE_AS_DEFAULT otherwise); a run that is not adds `judge=none` last, and `python -m src rejudge <name>` judges
 it later. --name is the run's name and --timeout bounds one model request. A run refuses a name whose folder already
-holds a run, before it starts, so a script run twice needs another --name or --replace, which replaces the earlier run
-on purpose. A wrong model or field is an argument error (exit 2). finish() ends every script: after a run that
-succeeded it draws the run's figures under out/<name>/ and returns the exit code either way.
+holds a run, before it starts, so a script run twice needs another --name or --replace. --replace sets the earlier run
+aside into runs/<study>/attempts/<name>.<n>/, with its eval log and its figures, and then runs. A wrong model or field
+is an argument error (exit 2). finish() ends every script: after a run that succeeded it draws the run's figures under
+out/<study>/<name>/ and returns the exit code either way.
 """
 from __future__ import annotations
 
@@ -23,6 +24,7 @@ from src.configuration import settings
 from src.configuration.presets import add_config_arguments, config_pairs
 from src.configuration.swarm_config import SwarmConfig
 from src.measures import run_figures as plots
+from src.measures.run_directory import figures_dir
 
 USE_JUDGE_AS_DEFAULT = False
 """Whether an example judges its run as it finishes; --judge and --no-judge override it for one run."""
@@ -44,12 +46,14 @@ def parse_example_arguments(script: Path, description: str | None, argv: list[st
     judging.add_argument("--no-judge", dest="judge", action="store_false",
                          help="run without the judge; `uv run python -m src rejudge <name>` judges it later"
                               + ("" if USE_JUDGE_AS_DEFAULT else " (default)"))
-    parser.add_argument("--name", default=script.stem, help="the run's name: runs/<study>/<name>/ and out/<name>/")
+    parser.add_argument("--name", default=script.stem,
+                        help="the run's name: runs/<study>/<name>/ and out/<study>/<name>/")
     parser.add_argument("--timeout", type=int, default=settings.MODEL_TIMEOUT_S,
                         help="seconds one model request may take, retries included")
     parser.add_argument("--replace", action="store_true",
-                        help="replace the run already in runs/<study>/<name>/; without it the run refuses that folder "
-                             "before it starts")
+                        help="set the run already in runs/<study>/<name>/ aside into runs/<study>/attempts/<name>.<n>/ "
+                             "with its log and figures, then run; without it the run refuses that folder before it "
+                             "starts")
     args = parser.parse_args(argv)
     for pair in args.settings:
         key, sep, _ = pair.partition("=")
@@ -61,8 +65,8 @@ def parse_example_arguments(script: Path, description: str | None, argv: list[st
 
 
 def finish(args: argparse.Namespace, exit_code: int) -> int:
-    """The end of every example: the run's figures into out/<name>/ when the run succeeded (src/measures/run_figures.py
-    plot_run), and the run's exit code either way."""
+    """The end of every example: the run's figures into out/<study>/<name>/ when the run succeeded
+    (src/measures/run_figures.py plot_run, run_directory.figures_dir), and the run's exit code either way."""
     if exit_code == 0:
-        plots.plot_run(settings.RUNS / args.name, settings.ROOT / "out" / args.name)
+        plots.plot_run(settings.RUNS / args.name, figures_dir(settings.RUNS / args.name))
     return exit_code
