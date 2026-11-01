@@ -135,6 +135,7 @@ def test_a_run_is_found_by_name_at_the_top_level_or_in_its_one_group(tmp_path):
     with pytest.raises(ValueError, match="2 folders hold a run named c_luna1"):
         find_run(study, "c_luna1")
     assert find_run(study, "nothing1") is None
+    assert find_run(study, str(grouped)) is None                          # an absolute path is no run name
 
 
 def test_the_figures_mirror_the_run_folder_under_out(tmp_path, monkeypatch):
