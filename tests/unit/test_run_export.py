@@ -129,6 +129,10 @@ def test_an_export_never_replaces_another_evals_run_unasked(tmp_path):
     assert "ladder.jsonl" not in files_of(run_dir)
     assert sorted(path.name for path in logs.iterdir()) == ["second.eval"]
     assert [path.name for path in (tmp_path / "logs" / "attempts" / "riemann_minimal.1").iterdir()] == ["first.eval"]
+    # the attempt exported again from its own log, as regenerate and rejudge do, keeps the run's name as run_id
+    attempt = tmp_path / "runs" / "attempts" / "riemann_minimal.1"
+    run_export.write_run(tmp_path / "logs" / "attempts" / "riemann_minimal.1" / "first.eval", attempt)
+    assert json.loads((attempt / "run.json").read_text())["run_id"] == "riemann_minimal"
 
 
 def test_run_json_carries_the_honeypot_probe_and_never_signals():
