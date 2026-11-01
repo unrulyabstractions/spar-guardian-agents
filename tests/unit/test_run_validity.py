@@ -77,6 +77,16 @@ def test_whole_holds_for_a_complete_run_whatever_the_task_or_the_regulator_did(t
     assert not rv.validity(tmp_path / "runs" / "study" / "never_ran1")["whole"]
 
 
+def test_an_earlier_attempt_never_counts_and_keeps_its_runs_name(tmp_path, every_eval_succeeds):
+    """attempts/<name>.<n> is superseded whatever it holds; the mock check reads the run's own name."""
+    attempt = rv.validity(make_run(tmp_path, "f_luna1.2", group="attempts"))
+    assert (attempt["run"], attempt["valid"], attempt["reason"], attempt["whole"]) == ("f_luna1", False, "superseded",
+                                                                                      True)
+    mock = rv.validity(make_run(tmp_path, "f_lunamock1.1", group="attempts"))
+    assert mock["mock"] and mock["reasons"] == ["superseded", "mock"] and mock["reason"] == "superseded"
+    assert rv.validity(make_run(tmp_path, "f_luna1"))["valid"]
+
+
 def test_an_swe_commit_git_does_not_know_is_invalid(tmp_path, every_eval_succeeds):
     record = rv.validity(make_run(tmp_path, "flipt_minimal_luna2", task="software_engineering", commit="ffffff0"))
     assert record["swe_fixed"] is None and record["reason"] == "swe_commit_unknown"

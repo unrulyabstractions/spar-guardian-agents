@@ -7,6 +7,7 @@ one run.json names, found through RunDir.eval_log. src/measures/run_index.py wri
 checks, to the study's INDEX.jsonl.
 
 A run is valid when all of these hold. `why` names each failure, and `reason` the first in the order of REASONS:
+- it is no earlier attempt: a run in runs/<study>/attempts/ was superseded by a later run of its name;
 - it is no mock rehearsal: a name ending in mock<k> never counts;
 - it completed: the eval log's header says success, and no episode died in the harness or at the provider
   (settings.INCOMPLETE_FAILURES);
@@ -30,7 +31,7 @@ import sys
 from pathlib import Path
 
 from src.configuration import settings
-from src.measures.run_directory import RunDir, run_place, study_runs
+from src.measures.run_directory import ATTEMPTS, RunDir, run_name, run_place, study_runs
 
 SWE_FIX = "f0d1c34"
 """The first commit where the SWE task meets the collaboration rule in full (CLAUDE.md section 1): every planted piece
@@ -42,11 +43,11 @@ neither."""
 REFUSAL_NOTICE = "API integrators: you can reduce refusals"
 """The text Anthropic's API returns in place of a turn it refuses."""
 MOCK = re.compile(r"mock\d+$")
-REASONS = ("no_run_json", "mock", "incomplete", "swe_before_fix", "swe_commit_unknown", "regulator_silent",
-           "regulator_refused", "no_team_record", "failed_episodes")
-"""Why a run is not valid, the first that applies naming it: no run.json; a mock rehearsal; an eval that did not
-complete; an SWE run before SWE_FIX, or on a commit git does not know; a regulator that made no turn, or only refusal
-notices; no team row in signals.jsonl; an episode that failed otherwise."""
+REASONS = ("no_run_json", "superseded", "mock", "incomplete", "swe_before_fix", "swe_commit_unknown",
+           "regulator_silent", "regulator_refused", "no_team_record", "failed_episodes")
+"""Why a run is not valid, the first that applies naming it: no run.json; an earlier attempt; a mock rehearsal; an eval
+that did not complete; an SWE run before SWE_FIX, or on a commit git does not know; a regulator that made no turn, or
+only refusal notices; no team row in signals.jsonl; an episode that failed otherwise."""
 
 
 @functools.cache
@@ -86,13 +87,16 @@ def regulator_turns(run: Path, agent: str) -> tuple[int, int]:
 
 def validity(run: Path) -> dict:
     """One run's record: its facts, whether it completed, whether it is valid, every reason it is not (`why`, with
-    their codes in `reasons`) and the first of them as a code (`reason`, one of REASONS, or "valid")."""
-    name = run.name
+    their codes in `reasons`) and the first of them as a code (`reason`, one of REASONS, or "valid"). `run` is the run's
+    own name, which an earlier attempt's folder extends with .<n>."""
+    name = run_name(run)
     record: dict = {"run": name, "mock": bool(MOCK.search(name))}
     data = json.loads((run / "run.json").read_text()) if (run / "run.json").is_file() else None
     why: list[tuple[str, str]] = []
+    if run_place(run)[1] == ATTEMPTS:
+        why.append(("superseded", "an earlier attempt, superseded by a later run of its name"))
     if data is None:
-        return finish({**record, "whole": False}, [("no_run_json", "no run.json")])
+        return finish({**record, "whole": False}, [*why, ("no_run_json", "no run.json")])
     record.update(task=data.get("task"), commit=(data.get("code") or {}).get("commit"))
     status = eval_status(run)
     failed = sorted({e["failure"] for e in _lines(run / "episodes.jsonl") if e.get("failure")})
