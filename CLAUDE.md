@@ -37,6 +37,9 @@ and the session ended its turn. The guard in `~/.claude/hooks/cloud_boxes_guard.
 - The GitHub token never goes to a box.
 - No paid step the user did not ask for: no judge, no ladder, no re-run, no rental.
 - Before any launch tell the user the cost per cell and the fleet's $/h, in a short table.
+- Before every paid step and every 30 minutes during one: `python3 ~/.claude/hooks/cloud_boxes_guard.py spend`,
+  and its table goes to the user (spent today, last hour, burn $/h, balances). The hook refuses a rental or a
+  model run without a spend check in the last 30 minutes.
 
 ## 4. Boxes hold the only copy
 
