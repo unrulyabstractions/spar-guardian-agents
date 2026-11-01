@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Copy files to or from a registered box: scripts/box/box_scp.sh <instance-id> <source> ... <target>
 #
-# A path on the box is written box:<path>, as in `scripts/box/box_scp.sh 58129905 box:/root/screen.log logs/`. The
+# A path on the box is written box:<path>, as in `scripts/box/box_scp.sh <id> box:/root/screen.log logs/`. The
 # connection is logs/boxes/<id>/ssh_config, as for box_ssh.sh, and each argument reaches scp as one word.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/../.." && pwd)

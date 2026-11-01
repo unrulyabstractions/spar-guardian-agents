@@ -28,8 +28,8 @@ setup() {
     echo "refused: the box needs $min_cores cores, $min_ram_gb GB of RAM and $min_disk_gb GB on /"
     exit 1
   fi
-  # Ubuntu's automatic upgrades stop here: they would change the host under running sandboxes, and one that reached
-  # install-info left dpkg half configured, since vast.ai's /etc/environment does not parse as a shell file. apt-get
+  # Ubuntu's automatic upgrades stop here: they would change the host under running sandboxes, and one that reaches
+  # install-info leaves dpkg half configured, since vast.ai's /etc/environment does not parse as a shell file. apt-get
   # then fails for good, so a box that holds the tools skips it.
   systemctl disable --now unattended-upgrades.service apt-daily.timer apt-daily-upgrade.timer || true
   export DEBIAN_FRONTEND=noninteractive

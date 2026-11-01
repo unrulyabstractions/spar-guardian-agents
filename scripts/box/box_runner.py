@@ -1,37 +1,39 @@
-"""The runner on a box: build a task's data and images, run its cells at once with a guard against hung runs, report.
+"""The runner on a box: build a task's data and images, run the box's jobs at once with a guard against hung runs.
 
-    .venv/bin/python -m scripts.box.box_runner build --task knowledge_work
-    .venv/bin/python -m scripts.box.box_runner run --task knowledge_work --model deepseek-flash-openrouter
-                                                   --suffix dsflash --commit <sha> [--samples 3] [--kinds solo ...]
+    .venv/bin/python -m scripts.box.box_runner build --task protein_design
+    .venv/bin/python -m scripts.box.box_runner run --box gate-protein-luna-1 --commit <sha> --jobs-sha256 <sha256>
+                                                   [--mock]
     .venv/bin/python -m scripts.box.box_runner status
 
-box_setup.sh runs build, box_run.sh starts run under nohup setsid with what the registry holds for the box, watch.sh
-asks for status.
+box_setup.sh runs build, box_run.sh starts run under nohup setsid, and watch.sh asks for status.
 
-build makes what a task's first run would make, before its runs start together: the rows CheatBench's build writes
-and the Docker images the task's sandbox needs, each by the domain's own builder, then loads the rows back. A task
-without an entry in BUILDS is refused until its domain's steps are added there.
+build makes what a task's first run would make, before its runs start together: the rows and the Docker images, each by
+the domain's own builder. A task without an entry in BUILDS is refused until its domain's steps are added there.
 
-run refuses unless the clone is at --commit (the commit the fleet's launch pinned) and the model's key is in its
-environment (box_run.sh sources /root/.box_env). It starts every cell of the task (fleet_layout.cells: one example
-script per kind) times every sample at once, each `python -m examples.<package>.<cell> --model <model> --name
-<cell>_<suffix><k>` in its own session with its output in logs/<study>/screen/<name>.log. A run counts as done before,
-and is skipped, only when its export exists, its eval log says success and none of its episodes failed in the harness or
-at the provider. A run whose eval succeeded and that lacks only its code ladder gets it rebuilt, which costs no model
-call, and is never run again; any other run starts again, its earlier screen log set aside under
-logs/<study>/screen/attempts/. The plan
-(logs/<study>/screen/box_<task>_<suffix>.json: each run's pid, start, end and exit) of an earlier runner is set aside
-there too, never overwritten. The runner's own pid goes to ~/screen.pid. Every minute it looks at each live run. A run
-is hung when it is alive GRACE_S past Inspect's time limit for the task's domain and nothing under logs/<study>/<name>/,
-runs/<study>/<name>/ or its log changed for GRACE_S, or when it is alive at twice that whatever it writes. The runner
-then stops the run's process group (SIGTERM, SIGKILL a minute later), notes it in the run's log and records it as hung;
-the run's containers stay until the box goes, and the capture check refuses while they do.
+run takes the box's jobs from study_table.py. It refuses unless the clone is at --commit, the jobs hash to --jobs-sha256
+(the table the Mac listed), every model takes the one key a box holds, that key is in its environment (box_run.sh
+sources /root/.box_env), and each run an earlier plan recorded keeps its arguments. It then starts every job at once in
+its own session, with its output in logs/<study>/screen/<name>.log. The plan, logs/<study>/screen/box_<box>.json, holds
+each run's cell, arguments, pid, start, end and exit. An earlier runner's plan is set aside under
+logs/<study>/screen/attempts/, never overwritten. The runner's own pid goes to ~/screen.pid.
+
+A run is done before, and is skipped, only when its export exists, its eval log says success and none of its episodes
+failed in the harness or at the provider. A run whose eval succeeded and that lacks only its code ladder gets it
+rebuilt, which costs no model call and needs no judge, and is never run again. Any other run starts again, its earlier
+screen log set aside in the same folder.
+
+Every minute the runner looks at each live run. A run is hung when it is alive GRACE_S past Inspect's time limit for the
+task's domain and nothing under logs/<study>/<name>/, runs/<study>/<name>/ or its log changed for GRACE_S, or when it is
+alive at twice that whatever it writes. The runner then stops the run's process group (SIGTERM, SIGKILL a minute later),
+notes it in the run's log and records it as hung. The run's containers stay until the box goes, and the capture check
+refuses while they do.
 
 status prints, for each plan on the box, the runner's state and the runs finished, running, failed, incomplete (an
 episode failed in the harness or at the provider), hung, lost (not alive, no exit recorded) and waiting, then one line
 for each run that is neither finished nor running. A runner that ended while runs are alive or waiting is trouble: no
 guard watches them. When the runner has ended and nothing runs, it prints "all runs ended", which watch.sh turns into
-an alert, since the box bills until it is captured and destroyed. It exits 1 on any trouble.
+an alert, since the box bills until it is captured and destroyed. A mock plan says its runs ended in other words, since
+the real runs come next. It exits 1 on any trouble.
 """
 from __future__ import annotations
 
@@ -42,12 +44,12 @@ import signal
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 
 from inspect_ai.log import read_eval_log
 
-from scripts.box.fleet_layout import EVERY_KIND, TASKS, cells, kinds_of, run_name
+from scripts.box.fleet_layout import BOX_KEY, TASKS, now_iso
+from scripts.box.study_table import Box, Job, box_jobs, find_box, jobs_sha256, key_problems
 from scripts.screen import summary
 from src.configuration import settings
 from src.configuration.presets import add_config_arguments, build_config, config_pairs
@@ -62,7 +64,6 @@ from src.domains.protein import protein_rows_build
 from src.domains.swe import swe_sandbox
 from src.domains.swe.swe_inputs import load_split
 from src.domains.swe.swe_settings import DEFAULT_ROW as SWE_ROW
-from src.models.model_registry import key_env, resolve
 from src.sandbox import cheatbench_task_files as task_files
 from src.sandbox.machines import agent_machines
 from src.utils.json_files import read_json, read_jsonl
@@ -228,8 +229,8 @@ def derive(name: str) -> tuple[str, str]:
 
 # ---- run ----
 
-def plan_path(task: str, suffix: str) -> Path:
-    return SCREEN_LOGS / f"box_{task}_{suffix}.json"
+def plan_path(box: str) -> Path:
+    return SCREEN_LOGS / f"box_{box}.json"
 
 
 def set_aside(path: Path) -> Path | None:
@@ -251,16 +252,12 @@ def save(path: Path, plan: dict) -> None:
     os.replace(temporary, path)
 
 
-def now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def launch(cell: str, name: str, model: str, seed: int) -> subprocess.Popen:
+def launch(job: Job) -> subprocess.Popen:
     """One run in its own session, so the guard can stop its whole process group. Its screen log is new: an earlier
-    attempt's was set aside. The seed is the sample's number, so the samples of a cell are independent: it draws the
-    hidden roles, the turn order and SWE's planted hashes. The agent IDs also take the run's name."""
-    command = [sys.executable, "-m", f"examples.{cell}", "--model", model, "--name", name, "--set", f"seed={seed}"]
-    with open(SCREEN_LOGS / f"{name}.log", "x") as log:
+    attempt's was set aside. The seed draws the hidden roles, the turn order and SWE's planted hashes, and the agent IDs
+    also take the run's name."""
+    command = [sys.executable, "-m", f"examples.{job.cell}", *job.arguments]
+    with open(SCREEN_LOGS / f"{job.name}.log", "x") as log:
         log.write(" ".join(command) + "\n")
         log.flush()
         return subprocess.Popen(command, cwd=settings.ROOT, stdout=log, stderr=subprocess.STDOUT,
@@ -272,60 +269,69 @@ def clone_head() -> str:
     return result.stdout.strip()
 
 
-def cmd_run(args: argparse.Namespace) -> int:
-    head = clone_head()
-    if head != args.commit:
-        print(f"refused: the clone is at {head or '(unknown)'}, the fleet pinned {args.commit}")
-        return 1
-    try:
-        keys = key_env(resolve(args.model))
-        task_cells = cells(args.task, tuple(args.kinds or kinds_of(args.task)))
-        limit = inspect_limit_s(args.task)
-    except ValueError as error:
-        print(f"refused: {error}")
-        return 1
-    if keys and not any(os.environ.get(key) for key in keys):
-        print(f"refused: none of {keys} is set; box_run.sh writes it to /root/.box_env")
-        return 1
-    jobs = [(cell, run_name(cell, args.suffix, k), k) for k in range(1, args.samples + 1) for cell in task_cells]
-    for folder in (SCREEN_LOGS, settings.RUNS, settings.ROOT / "out"):
-        folder.mkdir(parents=True, exist_ok=True)
-    PID_FILE.write_text(f"{os.getpid()}\n")
-    path = plan_path(args.task, args.suffix)
-    earlier = set_aside(path)
-    plan = {"task": args.task, "model": args.model, "suffix": args.suffix, "commit": args.commit,
-            "started": now_iso(), "limit_s": limit, "grace_s": GRACE_S, "runner_pid": os.getpid(),
+def changed_runs(path: Path, jobs: list[Job]) -> list[str]:
+    """The jobs that the plan at path, or one set aside from it, recorded with other arguments: a resume runs each run
+    as it first ran."""
+    plans = [*sorted(ATTEMPTS.glob(f"{path.stem}.*{path.suffix}")), *([path] if path.exists() else [])]
+    recorded = [json.loads(plan.read_text()).get("runs", {}) for plan in plans]
+    return sorted({job.name for job in jobs for runs in recorded
+                   if job.name in runs and runs[job.name].get("arguments") != job.arguments})
+
+
+def refusal(args: argparse.Namespace, jobs: list[Job]) -> str | None:
+    """Why this runner may not start these jobs, or None."""
+    if jobs_sha256(jobs) != args.jobs_sha256:
+        return "this clone's study table is not the one the Mac listed: repin the box or commit the table"
+    wrong_keys = key_problems(jobs)
+    if wrong_keys:
+        return "; ".join(wrong_keys)
+    if not args.mock and not os.environ.get(BOX_KEY):
+        return f"{BOX_KEY} is not set; box_run.sh writes it to /root/.box_env"
+    changed = changed_runs(plan_path(args.box), jobs)
+    if changed:
+        return f"the plan on this box ran {', '.join(changed)} with other arguments"
+    return None
+
+
+def new_plan(box: Box, commit: str, jobs: list[Job], mock: bool, limit: int, earlier: Path | None) -> dict:
+    return {"box": box.name, "stage": box.stage, "task": box.task, "commit": commit, "mock": mock, "started": now_iso(),
+            "limit_s": limit, "grace_s": GRACE_S, "runner_pid": os.getpid(),
             "earlier_plan": str(earlier) if earlier else None,
-            "runs": {name: {"cell": cell, "pid": None, "started": None, "ended": None, "exit": None, "hung": None,
-                            "again": None} for cell, name, _ in jobs}}
-    processes, starts = {}, {}
-    for cell, name, sample in jobs:
-        record = plan["runs"][name]
-        left, why = outcome(name)
-        left, why = derive(name) if left == "derive" else (left, why)
+            "runs": {job.name: {"cell": job.cell, "arguments": job.arguments, "pid": None, "started": None,
+                                "ended": None, "exit": None, "hung": None, "again": None} for job in jobs}}
+
+
+def start_jobs(jobs: list[Job], plan: dict) -> dict[str, tuple[subprocess.Popen, float]]:
+    """Start every job not done before; each started run's process and start time."""
+    running = {}
+    for job in jobs:
+        record = plan["runs"][job.name]
+        left, why = outcome(job.name)
+        left, why = derive(job.name) if left == "derive" else (left, why)
         if left == "finished":
             record.update(exit=0, ended=BEFORE)
             continue
         if left == "derive":                    # its paid eval stands: a person reads why the ladder fails on it
             record.update(exit=1, ended=BEFORE, again=why)
-            print(f"   {name:40s} not run again: {why}", flush=True)
+            print(f"   {job.name:40s} not run again: {why}", flush=True)
             continue
-        log = set_aside(SCREEN_LOGS / f"{name}.log")
-        if log or (settings.RUNS / name).exists():
+        log = set_aside(SCREEN_LOGS / f"{job.name}.log")
+        if log or (settings.RUNS / job.name).exists():
             record["again"] = f"{why}; earlier log {log}"
-            print(f"   {name:40s} again: {why}", flush=True)
-        processes[name] = launch(cell, name, args.model, sample)
-        starts[name] = time.time()
-        record.update(pid=processes[name].pid, started=now_iso())
-    save(path, plan)
-    print(f"== {args.task} on {args.model}: {len(processes)} runs started, {len(jobs) - len(processes)} done before; "
-          f"Inspect's limit {limit / 60:.0f} min, grace {GRACE_S / 60:.0f} min; plan {path}", flush=True)
-    while processes:
+            print(f"   {job.name:40s} again: {why}", flush=True)
+        running[job.name] = (launch(job), time.time())
+        record.update(pid=running[job.name][0].pid, started=now_iso())
+    return running
+
+
+def guard(running: dict[str, tuple[subprocess.Popen, float]], plan: dict, path: Path, limit: int) -> None:
+    """Every POLL_S, note each run that ended and stop each run that hung, until none runs."""
+    while running:
         time.sleep(POLL_S)
-        for name, process in list(processes.items()):
+        for name, (process, started) in list(running.items()):
             record, code = plan["runs"][name], process.poll()
             if code is None:
-                reason = hung(time.time(), starts[name], last_write(name), limit)
+                reason = hung(time.time(), started, last_write(name), limit)
                 if reason is None:
                     continue
                 stop(process)
@@ -335,12 +341,40 @@ def cmd_run(args: argparse.Namespace) -> int:
                 print(f"   {name:40s} HUNG: {reason}", flush=True)
             else:
                 record["exit"] = code
-                print(f"   {name:40s} rc={code} {(time.time() - starts[name]) / 60:5.1f} min", flush=True)
+                print(f"   {name:40s} rc={code} {(time.time() - started) / 60:5.1f} min", flush=True)
             record["ended"] = now_iso()
-            del processes[name]
+            del running[name]
         save(path, plan)
-    print(summary([name for _, name, _ in jobs]), flush=True)
-    return 0 if all(state(name, r) == "finished" for name, r in plan["runs"].items()) else 1
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    head = clone_head()
+    if head != args.commit:
+        print(f"refused: the clone is at {head or '(unknown)'}, the fleet pinned {args.commit}")
+        return 1
+    try:
+        box = find_box(args.box)
+        jobs = box_jobs(box, args.mock)
+        limit = inspect_limit_s(box.task)
+    except ValueError as error:
+        print(f"refused: {error}")
+        return 1
+    why = refusal(args, jobs)
+    if why:
+        print(f"refused: {why}")
+        return 1
+    for folder in (SCREEN_LOGS, settings.RUNS, settings.ROOT / "out"):
+        folder.mkdir(parents=True, exist_ok=True)
+    PID_FILE.write_text(f"{os.getpid()}\n")
+    path = plan_path(box.name)
+    plan = new_plan(box, args.commit, jobs, args.mock, limit, set_aside(path))
+    running = start_jobs(jobs, plan)
+    save(path, plan)
+    print(f"== {box.name}: {len(running)} runs started, {len(jobs) - len(running)} done before; Inspect's limit "
+          f"{limit / 60:.0f} min, grace {GRACE_S / 60:.0f} min; plan {path}", flush=True)
+    guard(running, plan, path, limit)
+    print(summary([job.name for job in jobs]), flush=True)
+    return 0 if all(state(name, record) == "finished" for name, record in plan["runs"].items()) else 1
 
 
 # ---- status ----
@@ -379,7 +413,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         states = {name: state(name, record) for name, record in plan["runs"].items()}
         counts = {s: list(states.values()).count(s) for s in STATES}
         runner_alive = alive(plan["runner_pid"], "scripts.box.box_runner")
-        print(f"{plan['task']} {plan['model']} {plan['suffix']}: runner {'alive' if runner_alive else 'ended'}; "
+        print(f"{plan['box']} {plan['task']}: runner {'alive' if runner_alive else 'ended'}; "
               + ", ".join(f"{n} {s}" for s, n in counts.items() if n or s in ("finished", "running")))
         for name, s in states.items():
             if s not in ("finished", "running"):
@@ -390,6 +424,8 @@ def cmd_status(args: argparse.Namespace) -> int:
             print(f"!! the runner ended with {counts['running']} runs running and {counts['waiting']} waiting: no "
                   f"hung guard watches them")
             trouble += 1
+        elif not runner_alive and plan.get("mock"):
+            print("   the mock runs ended: box_run.sh starts the real runs")
         elif not runner_alive:
             ended = [r["ended"] for r in plan["runs"].values() if r["ended"] and r["ended"] != BEFORE]
             print(f"   all runs ended{', the last at ' + max(ended) if ended else ''}: capture this box and destroy "
@@ -402,14 +438,11 @@ def main(argv: list[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     build = commands.add_parser("build", help="the task's rows and images, before its runs start")
     build.add_argument("--task", required=True, choices=list(TASKS))
-    run = commands.add_parser("run", help="every cell x sample of the task at once, with the hung-run guard")
-    run.add_argument("--task", required=True, choices=list(TASKS))
-    run.add_argument("--model", required=True, help="a registry entry (the screen's: fleet_layout.MODELS) or an "
-                                                    "Inspect model string, such as mockllm/model for a rehearsal")
-    run.add_argument("--suffix", required=True, help="run names are <cell>_<suffix><k>")
+    run = commands.add_parser("run", help="the box's jobs at once, with the hung-run guard")
+    run.add_argument("--box", required=True, help="a box of study_table.py")
     run.add_argument("--commit", required=True, help="the commit the fleet's launch pinned; the clone must be at it")
-    run.add_argument("--samples", type=int, default=3)
-    run.add_argument("--kinds", nargs="+", choices=list(EVERY_KIND), help="by default every cell of the task")
+    run.add_argument("--jobs-sha256", required=True, help="the digest of the jobs the Mac listed")
+    run.add_argument("--mock", action="store_true", help="the box's arms on the mock model, one seed each")
     commands.add_parser("status", help="the runs of every plan on this box")
     args = parser.parse_args(argv)
     return {"build": cmd_build, "run": cmd_run, "status": cmd_status}[args.command](args)

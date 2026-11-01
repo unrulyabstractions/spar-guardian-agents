@@ -18,6 +18,7 @@ from inspect_ai.solver import solver
 
 from examples.example_arguments import parse_example_arguments
 from scripts.box import box_runner, fleet_layout
+from scripts.box.study_table import Job
 from src.configuration import settings
 from src.configuration.presets import build_config
 from src.domains.swe import SWE, _swe_honeypot, _swe_scoring, swe_ladder, swe_sandbox
@@ -347,7 +348,7 @@ def launched(cell: str, sample: int, monkeypatch, tmp_path) -> list[str]:
     commands = []
     monkeypatch.setattr(box_runner, "SCREEN_LOGS", tmp_path)
     monkeypatch.setattr(box_runner.subprocess, "Popen", lambda command, **kwargs: commands.append(command))
-    box_runner.launch(f"swe.{cell}", f"{cell}_luna{sample}_{id(commands)}", "gpt-6-luna", sample)
+    box_runner.launch(Job(f"swe.{cell}", f"{cell}_luna{sample}_{id(commands)}", sample, "gpt-6-luna", None, ()))
     return commands[0][commands[0].index("--model"):]
 
 
