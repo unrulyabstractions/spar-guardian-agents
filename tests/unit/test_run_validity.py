@@ -77,6 +77,13 @@ def test_whole_holds_for_a_complete_run_whatever_the_task_or_the_regulator_did(t
     assert not rv.validity(tmp_path / "runs" / "study" / "never_ran1")["whole"]
 
 
+def test_whole_fails_on_an_eval_error_and_on_a_missing_team_row(tmp_path, monkeypatch, every_eval_succeeds):
+    assert rv.validity(make_run(tmp_path, "g0"))["whole"]
+    assert not rv.validity(make_run(tmp_path, "g1", rung=None))["whole"]
+    monkeypatch.setattr(rv, "eval_status", lambda run: "error")
+    assert not rv.validity(make_run(tmp_path, "g2"))["whole"]
+
+
 def test_an_earlier_attempt_never_counts_and_keeps_its_runs_name(tmp_path, every_eval_succeeds):
     """attempts/<name>.<n> is superseded whatever it holds; the mock check reads the run's own name."""
     attempt = rv.validity(make_run(tmp_path, "f_luna1.2", group="attempts"))
