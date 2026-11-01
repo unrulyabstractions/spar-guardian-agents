@@ -1,10 +1,12 @@
-"""The command line (src/cli.py): the parser's defaults and refusals, and the config it builds, in order."""
+"""The command line (src/cli.py): the parser's defaults and refusals, the config it builds, in order, and the
+--replace flag that reaches the run and the judge."""
 from __future__ import annotations
 
 import inspect
 
 import pytest
 
+from src import run
 from src.cli import build_parser
 from src.configuration.presets import build_config, config_pairs
 from src.domains.swe import SWE
@@ -50,3 +52,15 @@ def test_cli_role_model_flags_come_after_every_set(capsys):
     with pytest.raises(SystemExit) as stop:
         build_parser().parse_args(["run", "x", "--disregulator-model", "nope"])
     assert stop.value.code == 2 and "unknown model 'nope'" in capsys.readouterr().err
+
+
+def test_replace_reaches_the_run_and_the_judge(monkeypatch):
+    """run and judge refuse a folder that holds another eval's run (src/run.py); --replace is the one way past that."""
+    seen = []
+    monkeypatch.setattr(run, "run", lambda *args, **kwargs: seen.append(("run", kwargs["replace"])) or 0)
+    monkeypatch.setattr(run, "judge", lambda *args, **kwargs: seen.append(("judge", kwargs["replace"])) or 0)
+    for command in (["run", "x"], ["judge", "x.eval", "x"]):
+        for flag in ([], ["--replace"]):
+            args = build_parser().parse_args([*command, *flag])
+            assert args.func(args) == 0
+    assert seen == [("run", False), ("run", True), ("judge", False), ("judge", True)]

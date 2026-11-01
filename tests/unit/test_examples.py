@@ -30,6 +30,8 @@ REGULATED = [f"examples.{path.parent.name}.{path.stem}"
              for path in sorted(EXAMPLES_DIR.glob("*/*_minimal_regulated.py"))]
 # The team with no split, on the domains that have one: three neutral agents that each hold everything.
 NO_SPLIT = [f"examples.{path.parent.name}.{path.stem}" for path in sorted(EXAMPLES_DIR.glob("*/*_minimal_all.py"))]
+EVERY_SCRIPT = [f"examples.{path.parent.name}.{path.stem}" for path in sorted(EXAMPLES_DIR.glob("*/*.py"))
+                if path.stem != "__init__"]
 
 
 def test_every_domain_has_its_example_and_cells():
@@ -37,6 +39,7 @@ def test_every_domain_has_its_example_and_cells():
     assert sorted({name.split(".")[1] for name in EXAMPLES}) == sorted(DOMAINS)
     assert len(EXAMPLES) == len(DOMAINS) + swe_issues - 1
     assert len(CELL_SCRIPTS) == len(CELLS) * len(EXAMPLES)
+    assert {*EXAMPLES, *CELL_SCRIPTS, *REGULATED, *NO_SPLIT} <= set(EVERY_SCRIPT)
 
 
 def script_of(name: str) -> Path:
@@ -109,7 +112,7 @@ def test_each_script_runs_three_neutral_agents_on_the_default_preset(name, monke
     [(args, kwargs)] = calls
     run_name, benchmark, config, model, timeout = args
     assert (run_name, model, timeout) == (script.stem, models.resolve(settings.DEFAULT_MODEL), settings.MODEL_TIMEOUT_S)
-    assert kwargs == {}
+    assert kwargs == {"replace": False}                        # a name in use is refused unless --replace
     # The run goes to runs/<name>/ and the figures follow a successful run into out/<name>/.
     assert plotted == [(settings.RUNS / script.stem, settings.ROOT / "out" / script.stem)]
     assert (config.preset, config.scale, config.n_agents) == ("default", "small", 3)
@@ -123,7 +126,7 @@ def test_each_script_runs_three_neutral_agents_on_the_default_preset(name, monke
     assert module.main() == 0
     args, kwargs = calls[-1]
     assert args[3] == "google/gemini-3.8-flash" and args[2].regulator_count == 1
-    assert kwargs == {}
+    assert kwargs == {"replace": False}                        # a name in use is refused unless --replace
     assert plotted[-1] == (settings.RUNS / "gemini", settings.ROOT / "out" / "gemini")
     # A refused or failed run gets no figures.
     monkeypatch.setattr(run, "run", lambda *args, **kwargs: 3)
@@ -157,7 +160,7 @@ def test_each_cell_script_sets_its_agents_and_its_cheat_text(name, monkeypatch):
         assert ("team" in module.CHEAT) == (n_agents == 3)
         assert task.dataset[0].input.endswith(f"\n{module.CHEAT}\n")
     else:
-        assert kwargs == {} and not hasattr(module, "CHEAT")
+        assert kwargs == {"replace": False} and not hasattr(module, "CHEAT")
     assert (run_name, model, config.n_agents, config.judge) == \
         (script.stem, models.resolve(settings.DEFAULT_MODEL), n_agents, None)
     assert config.preset == "default" and config.access == "split" and config.turn_budget == settings.TURN_BUDGET
@@ -181,7 +184,7 @@ def test_each_no_split_cell_gives_every_neutral_agent_everything(name, monkeypat
     assert module.main() == 0
     [(args, kwargs)] = calls
     run_name, benchmark, config, model, timeout = args
-    assert kwargs == {} and not hasattr(module, "CHEAT")
+    assert kwargs == {"replace": False} and not hasattr(module, "CHEAT")
     assert (run_name, model, config.judge) == (script.stem, models.resolve(settings.DEFAULT_MODEL), None)
     assert (config.n_agents, config.regulator_count, config.disregulator_count) == (3, 0, 0)
     assert config.preset == "default" and config.access == "all" and config.turn_budget == settings.TURN_BUDGET
@@ -205,7 +208,7 @@ def test_each_regulated_cell_runs_four_agents_one_a_hidden_regulator(name, monke
     assert module.main() == 0
     [(args, kwargs)] = calls
     run_name, benchmark, config, model, timeout = args
-    assert kwargs == {} and not hasattr(module, "CHEAT")
+    assert kwargs == {"replace": False} and not hasattr(module, "CHEAT")
     assert (run_name, model, config.judge) == (script.stem, models.resolve(settings.DEFAULT_MODEL), None)
     assert (config.n_agents, config.regulator_count, config.disregulator_count) == (4, 1, 0)
     assert config.max_concurrency == 4              # a slow round must not cost the cell rounds against `minimal`
@@ -216,3 +219,17 @@ def test_each_regulated_cell_runs_four_agents_one_a_hidden_regulator(name, monke
     [regulator] = [a for a, role in roles.items() if role == "regulator"]
     assert plan.holds[regulator] == [] and plan.split
     assert all(plan.holds[a] for a in config.names if a != regulator)
+
+
+@pytest.mark.parametrize("name", EVERY_SCRIPT)
+def test_every_script_hands_replace_to_the_run(name, monkeypatch):
+    """A run refuses a name whose folder holds a run (src/run.py run), so --replace is the one way a script replaces an
+    earlier run of its name."""
+    module = importlib.import_module(name)
+    replaced = []
+    monkeypatch.setattr(run, "run", lambda *args, **kwargs: replaced.append(kwargs["replace"]) or 0)
+    monkeypatch.setattr(plots, "plot_run", lambda run_dir, out_dir: [])
+    for argv in ([], ["--replace"]):
+        monkeypatch.setattr("sys.argv", [script_of(name).name, *argv])
+        assert module.main() == 0
+    assert replaced == [False, True]

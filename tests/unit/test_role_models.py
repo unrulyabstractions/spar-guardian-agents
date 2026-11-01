@@ -216,6 +216,7 @@ def test_run_prints_the_models_and_hands_the_agents_config_to_the_provider(monke
 
     monkeypatch.setattr(run.inspect_ai, "eval", eval_stub)
     monkeypatch.setattr(run.settings, "LOGS", tmp_path)
+    monkeypatch.setattr(run.settings, "RUNS", tmp_path / "runs")    # a run named x in this checkout is refused
     monkeypatch.setattr(run.gemini_402_retry, "install", lambda: True)
     monkeypatch.setattr(run, "access_line", lambda task: "== access")
     with pytest.raises(Started):

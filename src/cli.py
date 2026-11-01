@@ -7,8 +7,8 @@ modules.
                              [--preset default]
                              [--scale small|medium|large|extra_large|gigantic] [--set key=value ...]
                              [--row R] [--honeypot H] [--no-grade] [--model M] [--timeout S]
-                             [--worker-model M] [--regulator-model M] [--disregulator-model M]
-    python -m src judge <eval_log> <run_name> [--judge MODEL] [--sync] [--judge-errors]
+                             [--worker-model M] [--regulator-model M] [--disregulator-model M] [--replace]
+    python -m src judge <eval_log> <run_name> [--judge MODEL] [--sync] [--judge-errors] [--replace]
     python -m src ladder <run ...> [--judge MODEL] [--sync] [--view full|actions] [--agents k7q2m,t4x9n] [--force]
                          [--table]
     python -m src rejudge <run ...> [--judge MODEL] [--sync] [--no-judge] [--no-ladder] [--view full|actions]
@@ -30,7 +30,9 @@ small scale; `--scale` replaces its size (src/configuration/scales.py). `--set` 
 disregulators=3` for a swarm, `--set shutdown=false` for a team without stop_working, `--set turn_budget=70` for
 another turn budget, or `--set turn_budget=none` to use the scale's steps_per_agent. A run writes its Inspect log under
 logs/<study>/<name>/, exports it to runs/<study>/<name>/ and prints one line per episode; the judge runs inside the
-eval. `rejudge` judges finished runs from their eval logs and places them on the ladder; `regenerate` rebuilds a run
+eval. A run refuses a name whose folder already holds a run, and `judge` a folder that holds another eval's run, before
+anything is spent; `--replace` replaces that run on purpose. `rejudge` judges finished runs from their eval logs,
+writes each back into its own directory, wherever it lives, and places them on the ladder; `regenerate` rebuilds a run
 directory from its log. `budget` prints lone runs' turns and their median. `--model` takes an entry of
 src/models/model_registry.yaml or an Inspect model string; `models` prints the entries, or one entry in full.
 `--worker-model`, `--regulator-model` and `--disregulator-model` give a role its own model the same way; each sets the
@@ -78,13 +80,13 @@ def cmd_run(args: argparse.Namespace) -> int:
     benchmark = cls(args.row, **{k: v for k, v in options.items() if k in cls.options})
     pairs = [f"id_salt={args.name}", *config_pairs(args), *(["judge=none"] if args.no_judge else [])]
     config = build_config(args.preset, args.scale, pairs)
-    return run.run(args.name, benchmark, config, args.model, args.timeout)
+    return run.run(args.name, benchmark, config, args.model, args.timeout, replace=args.replace)
 
 
 def cmd_judge(args: argparse.Namespace) -> int:
     from src import run  # the same four seconds as in cmd_run
     return run.judge(Path(args.eval_log), args.run_name, args.judge, batch=not args.sync,
-                     judge_errors=args.judge_errors)
+                     judge_errors=args.judge_errors, replace=args.replace)
 
 
 def cmd_ladder(args: argparse.Namespace) -> int:
@@ -182,6 +184,9 @@ def add_run_parser(subparsers) -> None:
                      help="run without the judge (--set judge=none); `python -m src rejudge <name>` judges it later")
     run.add_argument("--timeout", type=int, default=env_timeout(),
                      help="seconds one model request may take, retries included (env MODEL_TIMEOUT_S)")
+    run.add_argument("--replace", action="store_true",
+                     help="replace the run already in runs/<study>/<name>/; without it the run refuses that folder "
+                          "before it starts")
     run.set_defaults(func=cmd_run)
 
 
@@ -202,6 +207,9 @@ def add_judging_parsers(subparsers) -> None:
     add_judge_arguments(judge)
     judge.add_argument("--judge-errors", action="store_true",
                        help="judge a run even when an episode failed in the harness or at the provider")
+    judge.add_argument("--replace", action="store_true",
+                       help="replace another eval's run in runs/<study>/<run_name>/; without it the judge refuses that "
+                            "folder before it starts")
     judge.set_defaults(func=cmd_judge)
 
     ladder = subparsers.add_parser("ladder", help="place every agent of a run on the cheating ladder (ladder.jsonl)")

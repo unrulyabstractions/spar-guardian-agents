@@ -43,6 +43,7 @@ Each script parses the shared arguments, builds its config in the open (`build_c
 | `--judge`, `--no-judge` | `USE_JUDGE_AS_DEFAULT` in `examples/example_arguments.py`, false | whether the run is judged as it finishes. Not judged: no `judge.jsonl` yet, and `uv run python -m src rejudge <name>` judges the run later from its eval log, through the batch API (half price, up to a day) or with `--sync` through the normal API (minutes) |
 | `--name` | the script's name | the run's name: `runs/<study>/<name>/` and `out/<name>/` |
 | `--timeout` | `MODEL_TIMEOUT_S` | seconds one model request may take |
+| `--replace` | off | replaces the run already in `runs/<study>/<name>/`. Without it a run refuses a name whose folder holds a run, before the eval starts, so a script run a second time needs another `--name` or `--replace` |
 
 ```
 uv run python -m examples.swe.flipt_minimal --model gemini-3.8-flash
