@@ -38,7 +38,8 @@ STEMS = {"software_engineering": "flipt"}
 MODELS = {"deepseek-flash-openrouter": "dsflash", "gpt-6-luna-openrouter": "luna"}
 """Each worker model's registry entry and the short name that starts its run names' suffix."""
 REGULATORS = {"gpt-6-luna-openrouter": "luna", "claude-opus-5-5-openrouter": "opus",
-              "gemini-4-argon-openrouter": "argon"}
+              "gemini-4-argon-openrouter": "argon", "claude-haiku-5-5-openrouter": "haiku",
+              "claude-sonnet-5-5-openrouter": "sonnet"}
 """Each regulator model's registry entry and its short name in a run name."""
 BOX_KEY = "OPENROUTER_API_KEY"
 """The one model key a box holds, so every model on a box routes through OpenRouter."""

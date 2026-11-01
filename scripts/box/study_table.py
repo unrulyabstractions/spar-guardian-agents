@@ -8,13 +8,15 @@
     key_problems(jobs)              -> why the one key a box holds cannot serve these jobs
 
 A target is a task and its workers' model. An arm is one cell of a target under one setting, over some seeds, and it
-gives the run name suffix and the flags. A stage is launched by hand and by name: pilot, gate, or phase2-<target>.
+gives the run name suffix and the flags. A stage is launched by hand and by name: pilot, gate, phase2-<target> or
+phase2b-<target>.
 Nothing here or anywhere in this folder starts one stage from another, and no stage needs another's boxes.
 
     pilot             flipt, protein and creative on luna: minimal_regulated, each regulator at ambiguous, seed 1
     gate              every target: minimal and minimal_cheat, seeds 1 to 5
     phase2-<target>   minimal at rule_level generic and identified, and minimal_regulated with each regulator at
                       ambiguous and enforce, seeds 1 to 5; on SWE an Opus regulator takes seed 1 alone
+    phase2b-<target>  minimal_regulated with Haiku at ambiguous and enforce, seeds 1 to 5, and Sonnet at both, seed 1
 
 A box holds whole arms, in table order, up to its task's capacity (fleet_layout.capacity_of).
 """
@@ -33,8 +35,14 @@ SEEDS = (1, 2, 3, 4, 5)
 TEAM = 3
 """The neutral workers of every arm."""
 REGULATOR_LEVELS = ("ambiguous", "enforce")
+FIRST_REGULATORS = ("gpt-6-luna-openrouter", "claude-opus-5-5-openrouter", "gemini-4-argon-openrouter")
+"""The pilot's regulators and phase two's."""
+ADDED_REGULATORS = ("claude-haiku-5-5-openrouter", "claude-sonnet-5-5-openrouter")
+"""Phase 2b's regulators, on their own boxes so phase two's boxes keep their arms."""
 ONE_RUN_ON_SWE = ("claude-opus-5-5-openrouter",)
 """Regulators that take one run, seed 1, per SWE cell after the gate: an Opus regulator costs about $22 a SWE run."""
+ONE_RUN = ("claude-sonnet-5-5-openrouter",)
+"""Regulators that take one run, seed 1, per cell of every target."""
 RULE_LEVELS = ("generic", "identified")
 
 
@@ -89,32 +97,35 @@ class Arm:
         return (TEAM + bool(self.regulator)) * len(self.seeds)
 
 
-def regulated_arms(target: Target, levels: tuple[str, ...], **fields) -> tuple[Arm, ...]:
-    """minimal_regulated with each regulator at each level."""
-    return tuple(Arm(target, "minimal_regulated", regulator=regulator, regulator_level=level, **fields)
-                 for regulator in REGULATORS for level in levels)
-
-
 def pilot_arms(target: Target) -> tuple[Arm, ...]:
-    return regulated_arms(target, ("ambiguous",), seeds=SEEDS[:1], tag="pilot")
+    return tuple(Arm(target, "minimal_regulated", regulator=regulator, regulator_level="ambiguous", seeds=SEEDS[:1],
+                     tag="pilot") for regulator in FIRST_REGULATORS)
 
 
 def gate_arms(target: Target) -> tuple[Arm, ...]:
     return Arm(target, "minimal"), Arm(target, "minimal_cheat")
 
 
-def phase_two_arms(target: Target) -> tuple[Arm, ...]:
+def regulated_arms(target: Target, regulators: tuple[str, ...]) -> tuple[Arm, ...]:
+    """minimal_regulated with each regulator at each level, over seed 1 alone where the regulator takes one run."""
     def seeds(regulator: str) -> tuple[int, ...]:
-        return SEEDS[:1] if target.task == "software_engineering" and regulator in ONE_RUN_ON_SWE else SEEDS
+        one = regulator in ONE_RUN or (target.task == "software_engineering" and regulator in ONE_RUN_ON_SWE)
+        return SEEDS[:1] if one else SEEDS
 
+    return tuple(Arm(target, "minimal_regulated", regulator=regulator, regulator_level=level, seeds=seeds(regulator))
+                 for regulator in regulators for level in REGULATOR_LEVELS)
+
+
+def phase_two_arms(target: Target) -> tuple[Arm, ...]:
     return (*(Arm(target, "minimal", rule_level=level) for level in RULE_LEVELS),
-            *(Arm(target, "minimal_regulated", regulator=regulator, regulator_level=level, seeds=seeds(regulator))
-              for regulator in REGULATORS for level in REGULATOR_LEVELS))
+            *regulated_arms(target, FIRST_REGULATORS))
 
 
 STAGES = {"pilot": {f"pilot-{target.name}": pilot_arms(target) for target in PILOT_TARGETS},
           "gate": {f"gate-{target.name}": gate_arms(target) for target in TARGETS},
-          **{f"phase2-{target.name}": {f"phase2-{target.name}": phase_two_arms(target)} for target in TARGETS}}
+          **{f"phase2-{target.name}": {f"phase2-{target.name}": phase_two_arms(target)} for target in TARGETS},
+          **{f"phase2b-{target.name}": {f"phase2b-{target.name}": regulated_arms(target, ADDED_REGULATORS)}
+             for target in TARGETS}}
 """Each stage's arms, by the stem of their boxes' names."""
 
 

@@ -1121,7 +1121,8 @@ def test_the_runner_gives_each_run_its_flags_and_the_plan_records_them(runner_di
         return Ended(0)
     monkeypatch.setattr(box_runner.subprocess, "Popen", popen)
     assert run_box(monkeypatch, box=REGULATED) == 1
-    assert [command[command.index("--regulator-model") + 1] for command in commands] == list(fleet_layout.REGULATORS)
+    regulators = [command[command.index("--regulator-model") + 1] for command in commands]
+    assert regulators == list(study_table.FIRST_REGULATORS)
     assert all(command[command.index("--name") + 2:command.index("--name") + 4] == ["--set", "seed=1"]
                for command in commands)
     assert all("regulator_level=ambiguous" in command for command in commands)
