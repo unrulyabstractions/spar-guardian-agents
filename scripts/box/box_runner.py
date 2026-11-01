@@ -270,9 +270,12 @@ def clone_head() -> str:
 
 
 def changed_runs(path: Path, jobs: list[Job]) -> list[str]:
-    """The jobs that the plan at path recorded with other arguments: a resume runs each run as it first ran."""
-    recorded = json.loads(path.read_text())["runs"] if path.exists() else {}
-    return [job.name for job in jobs if job.name in recorded and recorded[job.name].get("arguments") != job.arguments]
+    """The jobs that the plan at path, or one set aside from it, recorded with other arguments: a resume runs each run
+    as it first ran."""
+    plans = [*sorted(ATTEMPTS.glob(f"{path.stem}.*{path.suffix}")), *([path] if path.exists() else [])]
+    recorded = [json.loads(plan.read_text()).get("runs", {}) for plan in plans]
+    return sorted({job.name for job in jobs for runs in recorded
+                   if job.name in runs and runs[job.name].get("arguments") != job.arguments})
 
 
 def refusal(args: argparse.Namespace, jobs: list[Job]) -> str | None:

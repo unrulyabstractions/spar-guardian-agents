@@ -1164,6 +1164,21 @@ def test_a_resume_refuses_a_run_its_plan_holds_with_other_arguments(runner_dirs,
     assert not (runner_dirs / "screen.pid").exists()
 
 
+def test_a_resume_after_a_mock_check_holds_the_set_aside_plan_too(runner_dirs, monkeypatch, capsys):
+    """Real runs, then a mock check that sets their plan aside, then a resume of the real runs."""
+    logs = runner_dirs / "logs" / "screen"
+    (logs / "attempts").mkdir(parents=True)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
+    monkeypatch.setattr(box_runner, "launch", lambda job: pytest.fail("a run started with other flags"))
+    job = box_jobs(REGULATED)[1]
+    real = {"runs": {job.name: {"arguments": [*job.arguments[:-1], "gemini-4-argon-openrouter"]}}}
+    (logs / "attempts" / f"box_{REGULATED.name}.1.json").write_text(json.dumps(real))
+    mock = {"mock": True, "runs": {other.name: {"arguments": other.arguments} for other in box_jobs(REGULATED, True)}}
+    (logs / f"box_{REGULATED.name}.json").write_text(json.dumps(mock))
+    assert run_box(monkeypatch, box=REGULATED) == 1
+    assert f"ran {job.name} with other arguments" in capsys.readouterr().out
+
+
 def test_the_runner_refuses_jobs_the_mac_did_not_list(runner_dirs, monkeypatch, capsys):
     monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
     monkeypatch.setattr(box_runner, "launch", lambda job: pytest.fail("a run started off another table"))
