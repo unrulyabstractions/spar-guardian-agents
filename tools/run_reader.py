@@ -31,7 +31,7 @@ from typing import Protocol
 from inspect_ai.log import read_eval_log
 
 from src.configuration import settings, task_names
-from src.measures.run_directory import RunDir
+from src.measures.run_directory import RunDir, find_run
 from src.utils.json_files import read_json
 
 # The board's channel id (src/swarm/turn_rules/, which imports ORBIT).
@@ -209,7 +209,8 @@ def load_runs(names: list[str | Path], tool: str) -> list[Run] | None:
 
 
 def load_run(name_or_path: str | Path) -> Run:
-    """Read one run from a name under runs/ or a path to its directory."""
+    """Read one run from a name of the study or a path to its directory. Its eval log is the path run.json records,
+    else the same file at the run's own place under logs/ (RunDir.eval_log)."""
     directory = run_directory(name_or_path)
     stored = RunDir(directory)
     run_json = stored.run_json
@@ -218,7 +219,7 @@ def load_run(name_or_path: str | Path) -> Run:
     lone = lone_agent(agents, episode_rows)
     episodes = {agent_of(row["episode"], lone): row for row in episode_rows}
     judge = {agent_of(episode, lone): row for episode, row in stored.verdicts().items()}
-    eval_log = eval_log_path(run_json.get("eval_log"))
+    eval_log = eval_log_path(run_json.get("eval_log")) or stored.eval_log
     timeline = list((run_json.get("rules") or {}).get("timeline") or [])
     board_reads = board_read_results(directory, eval_log)
     task = run_json["task"]
@@ -334,16 +335,22 @@ def observation_for(step: Step, call_id: str, position: int) -> str:
 
 
 def run_directory(name_or_path: str | Path) -> Path:
-    """The run's directory: the path itself when it holds a run.json, else runs/<study>/<name>."""
-    candidates = [Path(name_or_path), settings.RUNS / str(name_or_path)]
-    for candidate in candidates:
+    """The run's directory: the path itself when it holds a run.json, else the run of that name in the study, at its
+    top level or in the one group that holds it (run_directory.find_run, which raises ValueError for two folders), else
+    runs/<study>/<path>, such as smoke/complete."""
+    path = Path(name_or_path)
+    if (path / "run.json").is_file():
+        return path.resolve()
+    found = find_run(settings.RUNS, str(name_or_path)) if settings.RUNS.is_dir() else None
+    for candidate in filter(None, (found, settings.RUNS / str(name_or_path))):
         if (candidate / "run.json").is_file():
             return candidate.resolve()
     raise FileNotFoundError(f"no run.json in {name_or_path} or {settings.RUNS / str(name_or_path)}")
 
 
 def run_name(directory: Path) -> str:
-    """The run's path under runs/<study>/, or its directory name when it lives elsewhere."""
+    """The run's path under runs/<study>/, such as invalid/<run> for a run in a group, or its directory name when it
+    lives elsewhere."""
     try:
         return "/".join(directory.relative_to(settings.RUNS.resolve()).parts)
     except ValueError:

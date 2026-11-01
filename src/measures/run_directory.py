@@ -77,8 +77,10 @@ def run_name(run: Path) -> str:
 
 def run_places(study: Path, name: str) -> list[Path]:
     """Every folder of the study that holds a run.json of this name: its top level, then each group in GROUPS order. An
-    earlier attempt never answers to its run's name."""
+    earlier attempt never answers to its run's name. An absolute path is no name and gives []."""
     study = Path(study)
+    if Path(name).is_absolute():
+        return []
     places = [study / name, *(study / group / name for group in GROUPS if group != ATTEMPTS)]
     return [place for place in places if (place / RUN_JSON).is_file()]
 

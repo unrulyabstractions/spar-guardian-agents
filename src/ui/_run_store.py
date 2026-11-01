@@ -1,4 +1,5 @@
-"""The results browser's run reader: the run directories under runs/ and the eval logs they point at.
+"""The results browser's run reader: the run directories of a study, at its top level and in its groups, and the eval
+logs they point at. A run's key is its folder under the study: <run>, or <group>/<run> for a run in a group.
 
 `Store` reads run.json, episodes.jsonl, judge.jsonl, ladder.jsonl, signals.jsonl and the trajectories through
 src/measures/run_directory.py RunDir, and the communication and defense stores and the analysis tools' summaries
@@ -22,7 +23,7 @@ from src.configuration import task_names
 from src.configuration.settings import INCOMPLETE_FAILURES
 from src.configuration.swarm_config import ROLES
 from src.export.eval_sample_view import PASSIVE_DEFENSES
-from src.measures.run_directory import RUN_JSON, RunDir
+from src.measures.run_directory import ATTEMPTS, GROUPS, RunDir, study_runs
 from src.measures.verdict_fields import CRITICAL, FLAGS_BY_TASK, GOOD, SERIOUS, WARNING
 from src.utils.json_files import read_json, read_json_dir
 
@@ -172,13 +173,21 @@ class Store:
         self._lock = threading.Lock()
 
     def run_names(self) -> list[str]:
-        return sorted(p.parent.name for p in self.runs_dir.glob(f"*/{RUN_JSON}"))
+        """Every run of the study, at its top level and in its groups (run_directory.study_runs), each by its folder:
+        <run>, or <group>/<run> for a run in a group, so two runs that share a name stay apart."""
+        if not self.runs_dir.is_dir():
+            return []
+        return [path.relative_to(self.runs_dir).as_posix() for path in study_runs(self.runs_dir)]
 
     def run_dir(self, name: str) -> Path:
-        """The run's directory. Raises KeyError for a name that is not a run under runs/."""
-        if not safe_part(name) or not RunDir(self.runs_dir / name).is_run():
+        """The run's directory from its key: <run>, or <group>/<run> for one of GROUPS. Raises KeyError for a key that
+        is not a run of the study."""
+        parts = name.split("/")
+        known = (len(parts) == 1 and safe_part(name)) or (len(parts) == 2 and parts[0] in GROUPS
+                                                           and safe_part(parts[1]))
+        if not known or not RunDir(self.runs_dir.joinpath(*parts)).is_run():
             raise KeyError(name)
-        return self.runs_dir / name
+        return self.runs_dir.joinpath(*parts)
 
     def run_json(self, name: str) -> dict:
         return RunDir(self.run_dir(name)).run_json
@@ -218,8 +227,10 @@ class Store:
 
     def run_row(self, name: str) -> dict:
         """One run for the runs list, the summary and the swarm page: run.json's facts, the setting, the episodes
-        and the aggregate block."""
+        and the aggregate block. group is the group that holds the run, or None. An earlier attempt is superseded,
+        and the page hides it and never counts it, as it does a failed run."""
         d = self.run_dir(name)
+        group = name.split("/")[0] if "/" in name else None
         run = RunDir(d).run_json
         eps = self.episodes(name)
         teams = RunDir(d).team_signals()
@@ -245,7 +256,10 @@ class Store:
             "defenses": [defense["name"] for defense in run.get("defenses") or []],
             "eval_log": str(eval_log or run.get("eval_log") or "") or None,
             "eval_log_exists": eval_log is not None,
-            "failed": any(e.get("failure") in INCOMPLETE_FAILURES for e in eps) or bool(FAILED_NAME.match(name)),
+            "group": group,
+            "superseded": group == ATTEMPTS,
+            "failed": any(e.get("failure") in INCOMPLETE_FAILURES for e in eps) or bool(FAILED_NAME.match(d.name))
+            or group == ATTEMPTS,
             "swarm": {k: swarm.get(k) for k in SWARM_FIELDS} if swarm else None,
             "deliverables": {k: deliverables.get(k) for k in DELIVERABLE_FIELDS} if deliverables else None,
             "endings": endings,
