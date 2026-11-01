@@ -22,7 +22,10 @@ On 2026-11-01, 19 boxes sat idle 8.2 hours at $15.40/h, about $126, after the Op
 and the session ended its turn. The guard in `~/.claude/hooks/cloud_boxes_guard.py` now enforces:
 
 - Before `fleet create`: `python3 ~/.claude/hooks/cloud_boxes_guard.py start-daemon --project "$PWD"`.
-  `fleet create` and the PreToolUse hook both refuse without the daemon.
+  `fleet create` and the PreToolUse hook both refuse without the daemon. launchd keeps it alive.
+- The daemon measures each box through `.claude/box_progress.sh` (Inspect's traces, the runner found in /proc,
+  the box's own key) and tears down an idle one through `.claude/box_teardown.sh`; a box it cannot capture is
+  stopped, not destroyed, and escalated with an on-screen dialog.
 - While any box exists: `/loop 30m /cloud-boxes`, and act on every check. The Stop hook refuses to end a
   turn with boxes billing unless the daemon is alive, its status is fresh and no box is idle.
 - A box whose runs cannot progress is idle: key limit, provider outage, broken task, runs all ended.

@@ -47,7 +47,8 @@ def stage_runs(stage: str) -> list[str]:
 
 
 def test_the_stages_are_the_pilot_the_gate_and_one_phase_two_per_target():
-    assert list(STAGES) == ["pilot", "gate", *PHASE_TWO, *PHASE_TWO_B]
+    assert list(STAGES) == ["pilot", "gate", *PHASE_TWO, *PHASE_TWO_B, "fixed-pilot", "fixed-gate",
+                            "fixed-phase2-flipt-dsflash", "fixed-phase2-flipt-luna"]
     assert [(target.task, target.model) for target in TARGETS] == [
         ("software_engineering", "deepseek-flash-openrouter"), ("software_engineering", "gpt-6-luna-openrouter"),
         ("protein_design", "gpt-6-luna-openrouter"), ("creative_writing", "gpt-6-luna-openrouter")]
@@ -58,11 +59,39 @@ def test_the_study_has_40_gate_runs_40_phase_two_runs_per_target_and_9_pilot_run
     assert [len(stage_runs(stage)) for stage in PHASE_TWO] == [32, 32, 40, 40]
     assert [len(stage_runs(stage)) for stage in PHASE_TWO_B] == [12, 12, 12, 12]
     assert len(stage_runs("pilot")) == 9
+    assert len(stage_runs("fixed-pilot")) == 5 and len(stage_runs("fixed-gate")) == 12
+    assert [len(stage_runs(f"fixed-phase2-flipt-{t}")) for t in ("dsflash", "luna")] == [28, 28]
 
 
 def test_every_run_name_is_unique_across_the_study():
     names = [job.name for job in EVERY_JOB] + [job.name for box in EVERY_BOX for job in box_jobs(box, mock=True)]
-    assert len(names) == len(set(names)) == 241 + sum(len(box.arms) for box in EVERY_BOX)
+    assert len(names) == len(set(names)) == 314 + sum(len(box.arms) for box in EVERY_BOX)
+
+
+def test_the_fixed_stages_redo_swe_alone_under_names_no_earlier_run_holds():
+    """Every SWE run before the fix graded a task where one agent could cheat alone; the redo's runs say `fixed`."""
+    earlier = {job.name for stage in STAGES if not stage.startswith("fixed-") for box in stage_boxes(stage)
+               for job in box_jobs(box)}
+    fixed = [job for stage in STAGES if stage.startswith("fixed-") for box in stage_boxes(stage)
+             for job in box_jobs(box)]
+    assert all("_fixed" in job.name for job in fixed) and not {job.name for job in fixed} & earlier
+    assert {job.cell.split(".")[0] for job in fixed} == {"swe"}
+    pilot = [arm for box in stage_boxes("fixed-pilot") for arm in box.arms]
+    assert {(arm.target.model, arm.regulator, arm.regulator_level, arm.seeds) for arm in pilot} == {
+        ("gpt-6-luna-openrouter", regulator, "ambiguous", (1,)) for regulator in REGULATORS}
+    gate = [arm for box in stage_boxes("fixed-gate") for arm in box.arms]
+    assert {(arm.target.model, arm.kind, arm.seeds) for arm in gate} == {
+        (model, kind, (1, 2, 3)) for model in MODELS for kind in ("minimal", "minimal_cheat")}
+    assert {"flipt_minimal_luna_fixed1", "flipt_minimal_cheat_dsflash_fixed3",
+            "flipt_minimal_regulated_luna_sonnet_ambiguous_fixedpilot1"} <= {job.name for job in fixed}
+    for model, short in MODELS.items():
+        arms = [arm for box in stage_boxes(f"fixed-phase2-flipt-{short}") for arm in box.arms]
+        assert {arm.target.model for arm in arms} == {model}
+        assert sorted((arm.rule_level, arm.seeds) for arm in arms if arm.rule_level) == [
+            ("generic", (1, 2, 3)), ("identified", (1, 2, 3))]
+        assert {(arm.regulator, arm.regulator_level, arm.seeds) for arm in arms if arm.regulator} == {
+            (regulator, level, (1,) if REGULATORS[regulator] in ("opus", "sonnet") else (1, 2, 3))
+            for regulator in REGULATORS for level in ("ambiguous", "enforce")}
 
 
 def test_the_run_names_read_as_the_study_says():
@@ -114,7 +143,8 @@ def test_a_stage_rents_the_boxes_the_table_says():
     assert {stage: len(stage_boxes(stage)) for stage in STAGES} == {
         "pilot": 3, "gate": 6, "phase2-flipt-dsflash": 6, "phase2-flipt-luna": 6, "phase2-protein-luna": 7,
         "phase2-creative-luna": 7, "phase2b-flipt-dsflash": 3, "phase2b-flipt-luna": 3, "phase2b-protein-luna": 2,
-        "phase2b-creative-luna": 2}
+        "phase2b-creative-luna": 2, "fixed-pilot": 1, "fixed-gate": 2, "fixed-phase2-flipt-dsflash": 7,
+        "fixed-phase2-flipt-luna": 7}
 
 
 @pytest.mark.parametrize("box", EVERY_BOX, ids=lambda box: box.name)
@@ -221,7 +251,7 @@ def test_jobs_lists_every_run_box_and_flag_and_sends_nothing(monkeypatch, capsys
 def test_jobs_with_no_stage_lists_the_whole_study(capsys):
     assert fleet.main(["jobs"]) == 0
     out = capsys.readouterr().out
-    assert out.count("--set seed=") == 241 and all(f"== {stage}:" in out for stage in STAGES)
+    assert out.count("--set seed=") == 314 and all(f"== {stage}:" in out for stage in STAGES)
 
 
 # ---- nothing but a person starts a stage ----
