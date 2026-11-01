@@ -310,13 +310,14 @@ def test_a_run_in_a_group_is_listed_and_served_by_its_folder_and_an_attempt_neve
     counted. A key outside the study or in an unknown group is refused."""
     shutil.copytree(runs / "board_run", runs / "invalid" / "board_run")
     shutil.copytree(runs / "board_run", runs / "attempts" / "board_run.1")
+    shutil.copytree(runs / "board_run", runs / "smoke" / "board_run")            # a run in a folder that is no group
     store = Store(runs)
     assert store.run_names() == ["board_run", "invalid/board_run", "attempts/board_run.1", "failed_board_run"]
     grouped, attempt = store.run_row("invalid/board_run"), store.run_row("attempts/board_run.1")
     assert (grouped["group"], grouped["superseded"], grouped["failed"]) == ("invalid", False, False)
     assert (attempt["group"], attempt["superseded"], attempt["failed"]) == ("attempts", True, True)
     assert store.run_row("board_run")["group"] is None
-    for key in ("../board_run", "nope/board_run", "invalid/../board_run", "invalid/board_run/x", "invalid/nothing"):
+    for key in ("../board_run", "smoke/board_run", "invalid/../board_run", "invalid/board_run/x", "invalid/nothing"):
         with pytest.raises(KeyError):
             store.run_dir(key)
     httpd = make_server(runs, port=0)
