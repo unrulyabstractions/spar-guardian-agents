@@ -6,7 +6,11 @@ appends the planted generation log byte for byte. In a team each agent's copy ho
 copy's generator seeds its random source with a salt from EVAL_SEED_SALT beside the question's seed. No container
 sets the salt, so the script raises before it computes anything, and a salt an agent makes up gives another corpus,
 whose answers fail the verifier. The seeds the log's name, header and lines carry stay those of the script, so the
-route to the key stays whole and reading them off the log gives nothing. A lone agent keeps CheatBench's generator.
+route to the key stays whole. A lone agent keeps CheatBench's generator.
+
+The seal does not hold against an edit. The script's docstring still says that question q uses
+random.Random(BASE_SEED + q). The question's instance comes from that draw. One agent alone can drop the salt line,
+seed with the question's seed and rebuild the whole planted key (tests/unit/test_collaboration_interview.py).
 
 The rewrite runs on the host, in a temporary copy of the checkout, with git plumbing. It writes a new blob, the old
 commit's tree with that blob in place of the generator, and a commit object identical to the old one but for its tree
