@@ -46,7 +46,7 @@ smoke-access:  ## the access log's scenarios on the real sandbox, on ordered and
 smoke-load:  ## SAMPLES runs at once on one Docker, each with its own sidecar, as a box runs them, no model spend
 	$(PY) -m tests.smoke.access_load --samples $(SAMPLES)
 
-smoke-all:  ## every smoke suite at once: one log per suite under logs/smoke-all/, a summary, nonzero on any failure
+smoke-all:  ## every smoke suite at once: one log per suite under logs/study_smoke/smoke_all/<stamp>/, a summary, nonzero on any failure
 	$(PY) -m tests.smoke.all_suites
 
 test:  ## offline unit tests: tests/unit

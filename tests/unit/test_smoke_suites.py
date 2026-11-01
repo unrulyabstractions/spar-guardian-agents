@@ -1,11 +1,16 @@
-"""The smoke suites without a sandbox: every suite imports and has its domain, all_suites runs its commands at once and
-reads how each ended, and common.py's Suite, readers and main work on a mock-provider task and on stand-in runs. No
-Docker."""
+"""The smoke suites without a sandbox: every suite imports, has its domain and writes to its own folder of study_smoke,
+all_suites runs its commands at once under one stamp and reads how each ended, and common.py's Suite, readers and main
+work on a mock-provider task and on stand-in runs. No Docker."""
 from __future__ import annotations
 
+import datetime as dt
 import importlib
 import json
+import os
+import subprocess
 import sys
+import time
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -14,7 +19,8 @@ from src.configuration import settings
 from src.domains.openmath import OpenMath
 from src.judging.cheatbench_judge import judge_spec
 from src.swarm.turn_rules._turn_state import HALT_TAG
-from tests.smoke import access_load, all_suites
+from tests import smoke
+from tests.smoke import STAMP_VARIABLE, access_load, all_suites, common
 from tests.smoke.access_logging import normal
 from tests.smoke.all_suites import Outcome, run_all, summary
 from tests.smoke.common import (
@@ -34,6 +40,12 @@ from tests.support.run_builder import write_run_dir
 from tests.support.stub_ladder import OPENS, make_run
 from tests.support.turn_rules_harness import build_task, pull
 
+FOLDERS = {"access_logging": "smoke_access", "chess": "smoke_chess", "creative": "smoke_creative",
+           "interview": "smoke_interview", "knowledge": "smoke_kw", "openmath": "smoke_openmath",
+           "protein": "smoke_protein", "swe": "smoke_swe"}
+"""Each suite module's folder under runs/study_smoke/ and logs/study_smoke/."""
+STAMP = "20990101T000000Z"
+
 
 def python(code: str) -> list[str]:
     return [sys.executable, "-c", code]
@@ -45,11 +57,28 @@ def test_every_domain_has_a_suite_and_the_access_log_has_one():
 
 
 @pytest.mark.parametrize("name", all_suites.SUITES)
-def test_a_suite_imports_offline_and_names_its_command(name):
-    module = importlib.import_module(f"tests.smoke.{name}")
+def test_a_suite_imports_offline_names_its_command_and_writes_to_its_own_folder(name):
+    module, folder = importlib.import_module(f"tests.smoke.{name}"), FOLDERS[name]
     assert f"python -m tests.smoke.{name}" in module.__doc__
     assert module.SCENARIOS and all(callable(scenario) for scenario in module.SCENARIOS.values())
-    assert module.SUITE.logs.is_relative_to(settings.LOGS) and module.SUITE.runs.is_relative_to(settings.RUNS)
+    suite = module.SUITE
+    assert (suite.name, suite.runs, suite.logs) == (folder, smoke.RUNS / folder / suite.stamp,
+                                                    smoke.LOGS / folder / suite.stamp)
+    assert all(f"{root}/study_smoke/{folder}/<stamp>/" in module.__doc__ for root in ("runs", "logs"))
+
+
+def test_no_two_suites_share_a_folder_and_the_load_run_has_its_own():
+    assert len(set(FOLDERS.values())) == len(FOLDERS) and "smoke_load" not in FOLDERS.values()
+    assert all(f"{root}/study_smoke/smoke_load/<stamp>/" in access_load.__doc__ for root in ("runs", "logs"))
+
+
+def test_the_suites_write_to_study_smoke_whatever_the_current_study():
+    code = ("from src.configuration import settings; from tests import smoke; "
+            "print(settings.STUDY, smoke.RUNS, smoke.LOGS)")
+    done = subprocess.run(python(code), env={**os.environ, "STUDY": "study_x"}, cwd=settings.ROOT, capture_output=True,
+                          text=True, check=True)
+    assert done.stdout.split() == ["study_x", str(settings.ROOT / "runs" / "study_smoke"),
+                                   str(settings.ROOT / "logs" / "study_smoke")]
 
 
 def test_a_suite_passes_only_with_a_clean_exit_and_a_pass_line(tmp_path):
@@ -85,21 +114,60 @@ def test_the_suites_run_at_once(tmp_path):
 
 def test_the_exit_code_follows_the_suites(monkeypatch, tmp_path, capsys):
     good, bad = (Outcome("a", 0, 3, 0, 1.0, tmp_path), Outcome("b", 1, 2, 1, 1.0, tmp_path))
-    monkeypatch.setattr(all_suites, "run_all", lambda commands, logs: [good])
+    monkeypatch.setattr(all_suites, "run_all", lambda commands, logs, env: [good])
     assert all_suites.main() == 0
-    monkeypatch.setattr(all_suites, "run_all", lambda commands, logs: [good, bad])
+    monkeypatch.setattr(all_suites, "run_all", lambda commands, logs, env: [good, bad])
     assert all_suites.main() == 1
     assert "== 1 of 2 suites passed" in capsys.readouterr().out
-    assert all_suites.LOGS == settings.LOGS / "smoke-all"
 
 
-def test_a_suites_directories():
-    stamped, fixed = Suite("smoke_x", "spec"), Suite("smoke_y", stamped=False)
-    assert stamped.logs.parent == settings.LOGS / "smoke_x" and stamped.runs.parent == settings.RUNS / "smoke_x"
-    assert stamped.logs.name == stamped.runs.name and (fixed.logs, fixed.runs) == (settings.LOGS / "smoke_y",
-                                                                                   settings.RUNS / "smoke_y")
-    other = stamped.with_spec("other")
-    assert (other.logs, other.runs, other.spec, stamped.spec) == (stamped.logs, stamped.runs, "other", "spec")
+def test_a_combined_run_keeps_the_outputs_under_its_stamp_and_hands_it_to_every_suite(monkeypatch):
+    monkeypatch.delenv(STAMP_VARIABLE, raising=False)
+    calls = []
+    monkeypatch.setattr(all_suites, "run_all", lambda commands, logs, env: calls.append((commands, logs, env)) or [])
+    all_suites.main()
+    [(commands, logs, env)] = calls
+    assert list(commands) == all_suites.SUITES
+    assert logs == smoke.LOGS / "smoke_all" / env[STAMP_VARIABLE]
+    assert logs.parent == settings.ROOT / "logs" / "study_smoke" / "smoke_all"
+    assert "logs/study_smoke/smoke_all/<stamp>/" in all_suites.__doc__
+
+
+def test_every_suite_of_a_combined_run_reads_the_stamp_it_was_handed(tmp_path):
+    show = python("from tests.smoke import invocation_stamp; print('[PASS] stamp: ' + invocation_stamp())")
+    [outcome] = run_all({"a": show}, tmp_path, {**os.environ, STAMP_VARIABLE: STAMP})
+    assert outcome.ok and (tmp_path / "a.log").read_text() == f"[PASS] stamp: {STAMP}\n"
+
+
+@pytest.fixture
+def far_from_utc(monkeypatch):
+    """The process's local time 14 hours ahead of UTC, so a stamp of the local time cannot pass for the UTC one."""
+    monkeypatch.setenv("TZ", "Pacific/Kiritimati")
+    time.tzset()
+    yield
+    monkeypatch.undo()
+    time.tzset()
+
+
+def test_a_suites_directories(far_from_utc, monkeypatch):
+    monkeypatch.delenv(STAMP_VARIABLE, raising=False)
+    suite = Suite("smoke_x", "spec")
+    made = dt.datetime.strptime(suite.stamp, "%Y%m%dT%H%M%SZ").replace(tzinfo=dt.timezone.utc)
+    assert abs((dt.datetime.now(dt.timezone.utc) - made).total_seconds()) < 60
+    assert (suite.runs, suite.logs) == (smoke.RUNS / "smoke_x" / suite.stamp, smoke.LOGS / "smoke_x" / suite.stamp)
+    assert (smoke.RUNS, smoke.LOGS) == (settings.ROOT / "runs" / "study_smoke", settings.ROOT / "logs" / "study_smoke")
+    other = suite.with_spec("other")
+    assert (other.logs, other.runs, other.spec, suite.spec) == (suite.logs, suite.runs, "other", "spec")
+
+
+def test_a_suite_takes_the_stamp_its_parent_handed_down_and_no_other_shape(monkeypatch):
+    monkeypatch.setenv(STAMP_VARIABLE, STAMP)
+    assert (Suite("smoke_x").runs, Suite("smoke_x").logs) == (smoke.RUNS / "smoke_x" / STAMP,
+                                                              smoke.LOGS / "smoke_x" / STAMP)
+    for handed in ("", "../../elsewhere", "2099-01-01", "20990101T000000", "20990101T000000Z/x"):
+        monkeypatch.setenv(STAMP_VARIABLE, handed)
+        with pytest.raises(ValueError, match=STAMP_VARIABLE):
+            Suite("smoke_x")
 
 
 def suite_in(tmp_path, spec=None) -> Suite:
@@ -197,13 +265,48 @@ def test_load_takes_only_the_runs_the_memory_holds(samples, fits):
     assert (access_load.too_many_runs(samples, 26 * 2**30) is None) == fits
 
 
-def test_load_refuses_before_it_starts_anything(tmp_path, monkeypatch, capsys):
+@pytest.fixture
+def smoke_in(tmp_path, monkeypatch):
+    """The smoke study's runs and logs under tmp_path, with no stamp handed down."""
+    monkeypatch.delenv(STAMP_VARIABLE, raising=False)
+    monkeypatch.setattr(common, "RUNS", tmp_path / "runs")
+    monkeypatch.setattr(common, "LOGS", tmp_path / "logs")
+    return tmp_path
+
+
+def test_load_refuses_before_it_starts_anything(smoke_in, monkeypatch, capsys):
     monkeypatch.setattr(access_load.psutil, "virtual_memory", lambda: SimpleNamespace(available=26 * 2**30))
-    monkeypatch.setattr(access_load.settings, "RUNS", tmp_path)
     monkeypatch.setattr(access_load.subprocess, "Popen", lambda *_, **__: pytest.fail("a run started"))
     assert access_load.launch(132, 1) == 1
     assert "REFUSED: 132 runs" in capsys.readouterr().out
-    assert not list(tmp_path.iterdir())
+    assert not list(smoke_in.iterdir())
+
+
+def test_every_sample_of_a_load_run_writes_under_the_launchs_stamp(smoke_in, monkeypatch, capsys):
+    """launch with stand-ins for the samples and for Docker: every sample is handed the stamp of the launch's folders,
+    its output goes to logs/study_smoke/smoke_load/<stamp>/sample_<n>.log and its result beside the barrier."""
+    monkeypatch.setattr(access_load.psutil, "virtual_memory", lambda: SimpleNamespace(available=64 * 2**30))
+    monkeypatch.setattr(access_load, "containers", lambda *filters: [])
+    started = []
+
+    def start(command, stdout, stderr, cwd, env):
+        sample, results = int(command[-1]), Path(command[command.index("--results") + 1])
+        started.append((sample, env[STAMP_VARIABLE], Path(stdout.name), results,
+                        Path(command[command.index("--barrier") + 1])))
+        reader = sample % 2 == 1
+        result = {**LOAD_RESULT, "sample": sample, "reader": reader, "opens": access_load.READS if reader else 0}
+        (results / f"result_{sample}.json").write_text(json.dumps(result))
+        return SimpleNamespace(poll=lambda: 0)
+
+    monkeypatch.setattr(access_load.subprocess, "Popen", start)
+    assert access_load.launch(2, 1) == 0
+    [stamp] = {handed for _, handed, *_ in started}
+    runs, logs = smoke_in / "runs" / "smoke_load" / stamp, smoke_in / "logs" / "smoke_load" / stamp
+    assert [(sample, output, results, barrier) for sample, _, output, results, barrier in started] == [
+        (n, logs / f"sample_{n}.log", runs, runs / "barrier") for n in (0, 1)]
+    assert sorted(path.name for path in runs.iterdir()) == ["barrier", "result_0.json", "result_1.json"]
+    assert sorted(path.name for path in logs.iterdir()) == ["sample_0.log", "sample_1.log"]
+    assert "PASS: 2 of 2 runs of 1 agent(s) at once" in capsys.readouterr().out
 
 
 def test_the_load_run_stays_out_of_smoke_all():

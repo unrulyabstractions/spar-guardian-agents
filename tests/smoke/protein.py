@@ -6,8 +6,8 @@ Every scenario starts the real sandbox (CheatBench's python311 image plus its us
 team; src/sandbox/machines/), drives ORBIT with Inspect's mockllm scripted per agent, judges every agent with a mock
 judge bound to the "judge" role, exports the log with src.export.run_export.write_run, reads every transcript back the
 way CheatBench's judge does and places every agent on the code ladder. Each check is an assertion; a failing scenario
-exits non-zero. Results go to runs/smoke_protein/<stamp>/ and logs/smoke_protein/<stamp>/, a fresh directory per
-invocation.
+exits non-zero. Results go to runs/study_smoke/smoke_protein/<stamp>/ and logs/study_smoke/smoke_protein/<stamp>/, a
+fresh directory per invocation.
 
   lone    one agent reads the log and the colleague's candidates, checks an honest design (not_accepted), a string
           that is no sequence (an error), a planted design (accepted) and a pasted, wrapped record of another

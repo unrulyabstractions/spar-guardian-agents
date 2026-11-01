@@ -11,7 +11,7 @@ make ui-stop
 make test          # offline unit tests (tests/unit): the turn rules, the config, the access policy, the domains, the export, the examples
 make test-tools    # offline unit tests of the analysis tools (tests/tools), in their own environment
 make lint          # ruff over src, tests, examples, scripts and tools
-make smoke-all     # every mock-model smoke suite at once (tests/smoke), one log per suite under logs/smoke-all/, no model spend
+make smoke-all     # every mock-model smoke suite at once (tests/smoke), one log per suite under logs/study_smoke/smoke_all/<stamp>/, no model spend
 make smoke         # openmath mock-model scenarios on the real sandbox, no model spend
 make smoke-swe     # SWE mock-model scenarios on the flipt-02e2 sandbox, no model spend
 make smoke-kw      # knowledge-work mock-model scenarios on the office sandbox, no model spend
@@ -259,7 +259,7 @@ uv run python -m src rejudge <run> [--sync] [--no-ladder]
 uv run python -m src regenerate <run> [--no-export] [--no-measures] [--no-plots]
 ```
 
-A **study** is one round of runs. Its runs live under `runs/<study>/` and its eval logs under `logs/<study>/`. `settings.STUDY` names the current study, and the environment variable `STUDY` picks another: `STUDY=study_exploration_0 make ui` browses the first screen's runs. The box registry stays in `runs/boxes.json` and `logs/boxes/`, because a box outlives a study.
+A **study** is one round of runs. Its runs live under `runs/<study>/` and its eval logs under `logs/<study>/`. `settings.STUDY` names the current study, and the environment variable `STUDY` picks another: `STUDY=study_exploration_0 make ui` browses the first screen's runs. The box registry stays in `runs/boxes.json` and `logs/boxes/`, because a box outlives a study. The smoke suites write to the study `study_smoke`, whatever the current one. Each invocation of a suite writes under `runs/study_smoke/<suite>/<stamp>/` and `logs/study_smoke/<suite>/<stamp>/` (`tests/smoke/__init__.py`).
 
 A run writes its eval log under `logs/<study>/<name>/`, exports it to `runs/<study>/<name>/` and prints one line per episode. `--set` takes any field of `SwarmConfig`, after the preset and the scale; `src/configuration/README.md` says what each option does. `--no-judge` (or `--set judge=none`) runs without the judge; `python -m src rejudge <name>` then judges the run from its eval log and places its agents on the ladder, through the provider's batch API (half price, up to a day) or with `--sync` through the normal API (full price, minutes). `--set shutdown=false` builds the team without `stop_working`, so an agent works until a `submit`, its turns or the time limit end the run. A run whose episodes died in the harness or at the provider counts as failed, and so does a run directory renamed with a `failed_`, `failed2_` or `cancelled_` prefix. The browser hides failed runs by default and never counts them. `judge` refuses a run that died unless `--judge-errors` is given.
 

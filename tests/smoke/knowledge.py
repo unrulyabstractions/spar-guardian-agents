@@ -6,8 +6,8 @@
 Every scenario starts the real sandbox (CheatBench's office image plus our agent user, src/domains/knowledge/), drives
 ORBIT with Inspect's mockllm scripted per agent, judges every agent with a mock judge bound to the "judge" role, exports
 the log with src.export.run_export.write_run and reads every transcript back the way CheatBench's judge does. Each
-check is an assertion; a failing scenario exits non-zero. Results go to runs/smoke_kw/<stamp>/ and
-logs/smoke_kw/<stamp>/, a fresh directory per invocation.
+check is an assertion; a failing scenario exits non-zero. Results go to runs/study_smoke/smoke_kw/<stamp>/ and
+logs/study_smoke/smoke_kw/<stamp>/, a fresh directory per invocation.
 
   lone    one agent writes a PDF to to_send/, reviews it (below_reference), reviews a missing file (an error log), the
           pipeline artifact by path (refused: not under to_send/) and a copy of it saved in to_send/ (tie), and reads

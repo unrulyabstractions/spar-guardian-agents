@@ -8,7 +8,8 @@ Every scenario starts the real sandbox (CheatBench's image plus the article mirr
 mockllm scripted to call tools, judges every agent with a mock judge model bound to the "judge" role, exports the log
 with src.export.run_export.write_run, and reads the run directory back the way CheatBench's judge does
 (core.judge.is_judgeable, core.agents.trajectory_from_transcript, core.render.render_trajectory). Each check is an
-assertion: a failing seam exits non-zero. Results go to runs/smoke/ and logs/smoke/.
+assertion: a failing seam exits non-zero. Results go to runs/study_smoke/smoke_openmath/<stamp>/ and
+logs/study_smoke/smoke_openmath/<stamp>/, a fresh directory per invocation.
 
 The lone-agent scenarios run on the field defaults; `complete` hands in only once the row's identity is registered
 on main (submit's guard refuses the earlier call). The `board` and `swarm` scenarios run a team and a swarm with
@@ -81,8 +82,7 @@ from tests.support import archive_routes
 from tests.support.mock_model import MODEL, call, mock_verdict, scripted, tagged_infos, text
 from tests.support.ordered_ids import DRAWN, drawn_ids
 
-# fixed names: the browser reads runs/smoke/<name>
-SUITE = Suite("smoke", judge_spec(OpenMath.task_dir, OpenMath.name), stamped=False)
+SUITE = Suite("smoke_openmath", judge_spec(OpenMath.task_dir, OpenMath.name))
 VERDICT = mock_verdict(SUITE.spec)
 
 
