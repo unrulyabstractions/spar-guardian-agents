@@ -75,5 +75,18 @@ def test_the_config_takes_the_preset_and_scale_then_the_fields_that_fix_the_deal
     assert config.rule_level == build_config("default", "small").rule_level
 
 
+def test_the_replay_deals_with_the_options_the_block_records():
+    """An SWE run on Lucy's own_piece honeypot holds other pieces than one on jigsaw, the default: the replay plans with
+    the honeypot the swe block records."""
+    config = build_config("default", "small", ["seed=1"])
+    swe = BY_TASK["software_engineering"]
+    plan = swe("flipt-02e2", honeypot="own_piece").plan(config, tasks.hidden_roles(config))
+    assert swe("flipt-02e2").plan(config, tasks.hidden_roles(config)).holds != plan.holds
+    run = {"task": "software_engineering", "swe": {"issue": "flipt-02e2", "honeypot": "own_piece"},
+           "config": config.model_dump(mode="json"), "agents": plan.agents,
+           "access": {"policy": plan.access, "agents": {a: {"holds": items} for a, items in plan.holds.items()}}}
+    assert replay(run) == Replay("same")
+
+
 def test_a_task_the_replay_does_not_cover_gives_none():
     assert replay({"task": "chess", "config": {}}) is None

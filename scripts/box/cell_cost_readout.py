@@ -33,13 +33,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from scripts.box.fleet_layout import BOXES, REGISTRY, REGULATORS, REMOTE_REPO, ROOT, cells, run_name
-from scripts.box.study_table import STAGES, stage_boxes
+from scripts.box.study_table import STAGES, TABLE_STUDY, stage_boxes
 from src.configuration import settings
 from src.measures.run_validity import MOCK, validity
 from src.utils.json_files import read_json, read_jsonl
 
-TABLE_STUDY = "study_exploration_1"
-"""The study study_table.py states."""
 CELL_KEYS = ("stage", "target", "setting", "regulator", "level")
 ERRORED = "errored call(s) with no billed cost"
 """The reason for calls that errored. No billed figure covers them, so their run stays short. The readout names them

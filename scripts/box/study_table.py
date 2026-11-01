@@ -38,6 +38,9 @@ from dataclasses import dataclass
 from scripts.box.fleet_layout import BOX_KEY, MODELS, REGULATORS, capacity_of, cells, run_name
 from src.models.model_registry import key_env, resolve
 
+TABLE_STUDY = "study_exploration_1"
+"""The study this table states. study_exploration_0 reuses some of its run names, so a reader of the table refuses or
+skips any other study."""
 MOCK_MODEL = "mockllm/model"
 """What a rehearsal runs: Inspect's mock model, no key and no spend."""
 SEEDS = (1, 2, 3, 4, 5)

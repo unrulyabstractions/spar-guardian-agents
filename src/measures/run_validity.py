@@ -3,8 +3,8 @@
     uv run python -m src.measures.run_validity runs/study_exploration_1     # one line per run, and a count
 
 It reads every run of a study: at its top level and in its groups (run_directory.study_runs). A run's eval log is the
-one run.json names, found through RunDir.eval_log. src/measures/run_index.py writes each run's record, with these
-checks, to the study's INDEX.jsonl.
+one run.json names, found through RunDir.eval_log. src/measures/run_index.py builds each run's record with these
+checks, and scripts/box/study_index.py writes the records to the study's INDEX.jsonl.
 
 A run is valid when all of these hold. `why` names each failure, and `reason` the first in the order of REASONS:
 - it is no earlier attempt: a run in runs/<study>/attempts/ was superseded by a later run of its name;

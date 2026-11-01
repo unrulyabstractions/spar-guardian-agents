@@ -1,5 +1,6 @@
 """The task names (src/configuration/task_names.py): one table of each task's CheatBench name, domain key and display
-name, the same as the domain classes carry, read by the registry, the analysis tools and the results browser."""
+name, the same as the domain classes carry, read by the registry, the analysis tools, the results browser, the
+appendix figures and the fleet."""
 from __future__ import annotations
 
 import json
@@ -8,11 +9,36 @@ import sys
 
 import pytest
 
+from scripts.box import fleet_layout
+from scripts.paper import appendix
 from src.configuration import settings
 from src.configuration.task_names import NAMES, display_name, domain_of, names_of, task_of
 from src.domains import BY_TASK, DOMAINS
 from src.ui._run_store import SETTING_KEYS, TASK_SETTINGS, setting_of
 from tools import run_reader
+
+SHOWN = {"openmath": "openmath", "swe": "SWE", "knowledge_work": "knowledge work", "subset_sum": "subset sum",
+         "prime_factorization": "prime factorization", "protein_design": "protein design",
+         "creative_writing": "creative writing", "chess": "chess"}
+"""Each domain's label as the appendix figures and the browser showed it before the table: the names stay."""
+
+
+def test_the_figures_the_browser_and_the_fleet_read_the_table_and_keep_their_names():
+    assert {key: appendix.label_of(key) for key in DOMAINS} == SHOWN and not hasattr(appendix, "LABELS")
+    assert TASK_SETTINGS == {"knowledge_work": ("kw", "knowledge work", 4), "subset_sum": ("subset", "subset sum", 5),
+                             "prime_factorization": ("factor", "prime factorization", 6),
+                             "protein_design": ("protein", "protein design", 7),
+                             "creative_writings": ("creative", "creative writing", 8), "chess": ("chess", "chess", 9)}
+    assert fleet_layout.TASKS == {"knowledge_work": "knowledge_work", "creative_writing": "creative_writing",
+                                  "protein_design": "protein_design", "chess": "chess", "software_engineering": "swe"}
+
+
+def test_the_fleet_layout_imports_nothing_outside_the_standard_library():
+    """The box imports fleet_layout before its .venv holds anything; the task names keep it light."""
+    code = ("import sys, scripts.box.fleet_layout; "
+            "print(sorted({m.split('.')[0] for m in sys.modules} & {'orbit', 'inspect_ai', 'pydantic', 'yaml'}))")
+    done = subprocess.run([sys.executable, "-c", code], cwd=settings.ROOT, capture_output=True, text=True, check=True)
+    assert done.stdout.split() == ["[]"]
 
 
 def test_every_domain_class_carries_the_names_of_the_table():
@@ -46,7 +72,7 @@ def test_each_task_has_its_own_display_name():
     displays = [names.display for names in NAMES]
     assert len(set(displays)) == len(NAMES) and all(displays)
     assert display_name("creative_writings") == display_name("creative_writing") == "creative writing"
-    assert display_name("software_engineering") == "SWE" and display_name("openmath") == "OpenMath"
+    assert display_name("software_engineering") == "SWE" and display_name("openmath") == "openmath"
 
 
 def test_the_browser_labels_a_task_by_its_display_name():

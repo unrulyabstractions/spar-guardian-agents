@@ -13,7 +13,7 @@ Outside its package a domain adds these:
 | file | what the domain adds |
 |---|---|
 | `src/domains/__init__.py` | the class in `DOMAINS` |
-| `src/configuration/task_names.py` | its CheatBench task name, its key and its display name in `NAMES`; `BY_TASK`, the results browser and the analysis tools read them, and `tests/unit/test_task_names.py` holds them to the class |
+| `src/configuration/task_names.py` | its CheatBench task name, its key and its display name in `NAMES`; `BY_TASK`, the results browser, the analysis tools, the appendix figures and the fleet's `TASKS` read them, and `tests/unit/test_task_names.py` holds them to the class |
 | `src/tasks.py` | its `@task` entry point |
 | `src/cli.py` | its key and its row in the help of `--benchmark` and `--row` |
 | `src/configuration/prompts.yaml` | `submit`: `counts` and `missing`, by `Benchmark.key` |

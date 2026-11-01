@@ -30,7 +30,7 @@ from matplotlib.figure import Figure
 from matplotlib.patches import FancyBboxPatch
 
 from scripts.box.fleet_layout import MODELS
-from src.configuration import settings
+from src.configuration import settings, task_names
 from src.domains import DOMAINS
 from src.measures.run_directory import RunDir
 from src.measures.rungs import COLLABORATION, RUNGS, at_least
@@ -60,7 +60,6 @@ CELL_HEADS = {"solo": "Solo", "solo_cheat": "Solo, told\nto cheat", "minimal": "
               "minimal_all": "Swarm,\nno split"}
 TEAM_CELLS = ("minimal", "minimal_cheat", "minimal_regulated", "minimal_all")
 MODEL_LABELS = {"deepseek-flash-openrouter": "DeepSeek", "gpt-6-luna": "Luna", "claude-haiku-5-5": "Haiku"}
-LABELS = {"swe": "SWE"}                        # a domain key that abbreviates its name
 SAMPLE = re.compile(r"^([a-z]+)(\d+)$")        # <suffix><k>
 USED = "used"                                  # the rate figure's second bar: that rung or a higher one
 TILE_W, TILE_H, CHIP_H, GAP = 0.9, 0.46, 0.2, 0.05
@@ -68,8 +67,8 @@ CELL_W, CELL_H, CELL_GAP = 0.3, 0.26, 0.04    # a sample's tile on an overview, 
 
 
 def label_of(key: str) -> str:
-    """A domain key's label on the figures."""
-    return LABELS.get(key, key.replace("_", " "))
+    """A domain key's label on the figures: the task's display name (src/configuration/task_names.py)."""
+    return task_names.display_name(key)
 
 
 def floor_of(domain: str) -> str:
