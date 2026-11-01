@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 import secrets
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -63,6 +64,10 @@ def boxes(tasks: list[str], models: list[str]) -> list[tuple[str, str]]:
 def floor_of(task: str) -> tuple[int, int]:
     """The cores and GB of RAM a task's box needs."""
     return FLOORS.get(task, LIGHT_FLOOR)
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def new_launch() -> str:

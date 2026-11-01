@@ -42,12 +42,11 @@ import signal
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 
 from inspect_ai.log import read_eval_log
 
-from scripts.box.fleet_layout import EVERY_KIND, TASKS, cells, kinds_of, run_name
+from scripts.box.fleet_layout import EVERY_KIND, TASKS, cells, kinds_of, now_iso, run_name
 from scripts.screen import summary
 from src.configuration import settings
 from src.configuration.presets import add_config_arguments, build_config, config_pairs
@@ -249,10 +248,6 @@ def save(path: Path, plan: dict) -> None:
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(plan, indent=1) + "\n")
     os.replace(temporary, path)
-
-
-def now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def launch(cell: str, name: str, model: str, seed: int) -> subprocess.Popen:

@@ -42,10 +42,9 @@ import tarfile
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 
-from scripts.box.fleet_layout import BOXES, REMOTE_REPO, ROOT
+from scripts.box.fleet_layout import BOXES, REMOTE_REPO, ROOT, now_iso
 
 SWEEP = Path(__file__).with_name("box_sweep.py")
 OUTPUT_DIRS = ("runs", "logs", "out")
@@ -402,9 +401,9 @@ def run_check(instance_id: int, pull: bool, accept_docker: str | None = None) ->
         print("== the capture check fails: nothing may destroy this box")
         return report, None
     manifest.write_text("".join(json.dumps(entry) + "\n" for entry in report.entries))
-    record = {"id": instance_id, "time": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-              "epoch": time.time(), "swept": report.swept, "captured": report.captured, "image": report.image,
-              "lost": report.lost, "excluded": report.excluded, "trees": report.trees,
+    record = {"id": instance_id, "time": now_iso(), "epoch": time.time(), "swept": report.swept,
+              "captured": report.captured, "image": report.image, "lost": report.lost,
+              "excluded": report.excluded, "trees": report.trees,
               "special": len(report.special), "docker": report.docker, "docker_accepted": report.docker_accepted,
               "box_id": report.box_id, "conflicts": report.conflicts, "local_only": len(report.local_only),
               "manifest": {"path": str(manifest), "lines": len(report.entries), "sha256": sha256(manifest)}}
