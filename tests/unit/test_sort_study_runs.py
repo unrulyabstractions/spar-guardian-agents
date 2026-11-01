@@ -43,6 +43,7 @@ def run(root: Path, place: str, *, status: str = "success", commit: str = "94940
 def study(tmp_path) -> Path:
     """A study of every case the sort meets, with a second study that shares one run name."""
     for name, status in (("riemann_minimal_luna1", "success"), ("riemann_minimal_lunamock1", "success"),
+                         ("riemann_minimal_lunamock2", "error"),                 # a rehearsal is a mock first
                          ("riemann_minimal_luna2", "error"), ("riemann_minimal_luna3", "error"),
                          ("riemann_minimal_luna4", "success"), ("riemann_minimal_luna5", "success"),
                          ("riemann_minimal_luna6", "success")):
@@ -80,7 +81,7 @@ def test_the_dry_run_writes_nothing_and_says_what_would_move(study, capsys):
     assert sort.main([str(study / "runs" / STUDY)]) == 0
     assert tree(study) == before
     out = capsys.readouterr().out
-    assert "== runs to move: 5 (attempts 1, incomplete 2, invalid 1, mock 1)" in out
+    assert "== runs to move: 6 (attempts 1, incomplete 2, invalid 1, mock 2)" in out
     assert "== left, live box: 1 ['riemann_minimal_luna5']" in out
     assert "== left, young run.json: 1 ['riemann_minimal_luna4']" in out
     assert "== left, two folders: 2 ['riemann_minimal_luna6', 'set_aside/riemann_minimal_luna6']" in out
@@ -96,7 +97,8 @@ def test_apply_moves_each_run_with_its_log_and_figures_and_checks_every_file(stu
     before = records(study)
     assert sort.main([str(study / "runs" / STUDY), "--apply"]) == 0
     runs, logs, out = (study / top / STUDY for top in ("runs", "logs", "out"))
-    for place in ("mock/riemann_minimal_lunamock1", "incomplete/riemann_minimal_luna3", "invalid/flipt_minimal_luna1",
+    for place in ("mock/riemann_minimal_lunamock1", "mock/riemann_minimal_lunamock2",
+                  "incomplete/riemann_minimal_luna3", "invalid/flipt_minimal_luna1",
                   "incomplete/riemann_minimal_luna2", "riemann_minimal_luna1", "riemann_minimal_luna4",
                   "riemann_minimal_luna5"):
         assert (runs / place / "run.json").is_file(), place
@@ -165,7 +167,8 @@ def test_a_live_box_with_no_name_refuses_the_whole_sort(study, capsys):
 
 
 def test_a_folder_that_is_no_study_is_refused(study):
-    for folder in (study / "runs", study / "runs" / STUDY / "set_aside", study / "elsewhere"):
+    (study / "runs" / "mock").mkdir()                                  # named like a group, right under runs/
+    for folder in (study / "runs", study / "runs" / STUDY / "set_aside", study / "elsewhere", study / "runs" / "mock"):
         with pytest.raises(SystemExit) as refused:
             sort.main([str(folder)])
         assert refused.value.code == 2
