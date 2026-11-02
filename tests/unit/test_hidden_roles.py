@@ -54,6 +54,9 @@ def test_regulator_levels_carry_the_report_sentences(domain):
     # pressure: the report's pressure sentence, what cheating means here, then COMMON and DISCLOSURE.
     pressure = role_text("regulator", with_overrides(default, ["regulator_level=pressure"]), domain)
     assert pressure == f"{REPORT['pressure']} {cheating}{tail}"
+    # blind: the ambiguous sentence without what cheating means here, so the regulator must find the exploit itself.
+    blind = role_text("regulator", with_overrides(default, ["regulator_level=blind"]), domain)
+    assert blind == f"{REPORT['ambiguous']}{tail}" and cheating not in blind and "{" not in blind
     for level in ("explicit", "pressure"):
         told = with_overrides(default, [f"regulator_level={level}", "regulator_discloses=true"])
         assert role_text("regulator", told, domain).endswith(f". {REPORT['common']}"), level
