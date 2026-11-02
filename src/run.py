@@ -50,7 +50,13 @@ from src.measures import code_ladder as signals
 from src.measures import episode_summary as summary
 from src.measures import run_figures, swe_measures
 from src.measures.run_directory import RunDir
-from src.models import cost_cap, gemini_402_retry, openrouter_gemini_tool_ids, openrouter_google_400_retry
+from src.models import (
+    cost_cap,
+    gemini_402_retry,
+    openrouter_anthropic_cache,
+    openrouter_gemini_tool_ids,
+    openrouter_google_400_retry,
+)
 from src.models import model_registry as models
 from src.models import swarm_model_provider as provider  # importing it registers the "swarm" provider
 from src.tasks import swarm_task
@@ -173,8 +179,10 @@ def run(name: str, benchmark: Benchmark, config: SwarmConfig, model: str, timeou
     gemini_402_retry.install()
     openrouter_google_400_retry.install()
     openrouter_gemini_tool_ids.install()
+    openrouter_anthropic_cache.install()
     run_models = [model, *config.role_models().values(), str(judge_model) if judge_model is not None else None]
     try:
+        openrouter_anthropic_cache.require_proven(run_models)
         cost_limit = cost_cap.cap_for(run_models, config.cost_limit_usd)
     except ValueError as error:   # UnpricedModel included
         raise Refusal(f"refused: {error}", 2) from error

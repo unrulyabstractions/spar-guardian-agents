@@ -104,7 +104,7 @@ def run_until_eval(monkeypatch, tmp_path, model: str, pairs: list[str]) -> dict:
 def test_run_hands_the_eval_its_cap_and_says_so(monkeypatch, tmp_path, capsys):
     monkeypatch.setenv("OPENROUTER_API_KEY", "dummy")
     seen = run_until_eval(monkeypatch, tmp_path, run.models.resolve("deepseek-flash-openrouter"),
-                          ["regulators=1", f"regulator_model={OPUS}", "cost_limit_usd=3"])
+                          ["regulators=1", "regulator_model=gpt-6-luna-openrouter", "cost_limit_usd=3"])
     assert seen["cost_limit"] == 3.0
     assert "== cost cap $3.00 for the whole run" in capsys.readouterr().out
     seen = run_until_eval(monkeypatch, tmp_path, "mockllm/model", [])
@@ -119,3 +119,14 @@ def test_run_refuses_an_unpriced_model_before_the_eval(monkeypatch, tmp_path, ca
     config = build_config("default", "small", ["judge=none"])
     assert run.run("x", OpenMath(), config, "openrouter/some-author/unpriced-model", None, task=object()) == 2
     assert "no price" in capsys.readouterr().err
+
+
+def test_run_refuses_claude_through_openrouter_before_the_eval_until_its_cache_is_proven(monkeypatch, tmp_path,
+                                                                                          capsys):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "dummy")
+    monkeypatch.setattr(run.inspect_ai, "eval", lambda *a, **k: (_ for _ in ()).throw(AssertionError("eval ran")))
+    monkeypatch.setattr(run.settings, "LOGS", tmp_path)
+    config = build_config("default", "small", ["judge=none", "regulators=1", f"regulator_model={OPUS}"])
+    assert run.run("x", OpenMath(), config, run.models.resolve("deepseek-flash-openrouter"), None,
+                   task=object()) == 2
+    assert "refused until scripts/check_anthropic_cache.py" in capsys.readouterr().err
