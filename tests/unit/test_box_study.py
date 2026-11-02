@@ -491,3 +491,12 @@ def test_the_fill_stages_complete_the_swe_table_on_deepseek_workers_with_their_o
 def test_settings_an_arm_adds_reach_the_job_and_no_earlier_arm_has_any():
     assert all(not arm.extra for stage in STAGES if "fill" not in stage for box in stage_boxes(stage)
                for arm in box.arms)
+
+
+def test_an_arm_s_row_reaches_the_job_and_its_name_and_changes_no_arm_without_one():
+    target = next(t for t in TARGETS if t.short == "protein")
+    arm = study_table.Arm(target, "minimal", row="barley_amylase", seeds=(1,), tag="briefs")
+    [job] = box_jobs(study_table.Box("x-1", "x", (arm,)))
+    assert job.name == "binder_minimal_luna_barley_amylase_briefs1"
+    assert job.arguments[-2:] == ["--row", "barley_amylase"]
+    assert "--row" not in " ".join(flag for j in EVERY_JOB for flag in j.arguments)

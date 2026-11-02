@@ -33,9 +33,11 @@ DEFAULT_SETTINGS = ["batch_judge=false"]
 later through the batch API. The time limit is the scale's."""
 
 
-def parse_example_arguments(script: Path, description: str | None, argv: list[str] | None = None) -> argparse.Namespace:
+def parse_example_arguments(script: Path, description: str | None, argv: list[str] | None = None,
+                            default_row: str | None = None) -> argparse.Namespace:
     """The shared arguments, parsed: the models resolved, the settings after the defaults. The script's path names
-    the program and the run."""
+    the program and the run. A script that passes default_row also takes --row, the benchmark row to run; any other
+    script refuses --row, so a row is never silently ignored."""
     prog = f"python -m examples.{script.resolve().parent.name}.{script.stem}"
     parser = argparse.ArgumentParser(prog=prog, description=description,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -54,6 +56,8 @@ def parse_example_arguments(script: Path, description: str | None, argv: list[st
                         help="set the run already in runs/<study>/<name>/ aside into runs/<study>/attempts/<name>.<n>/ "
                              "with its log and figures, then run; without it the run refuses that folder before it "
                              "starts")
+    if default_row is not None:
+        parser.add_argument("--row", default=default_row, help=f"the benchmark row to run (default {default_row})")
     args = parser.parse_args(argv)
     for pair in args.settings:
         key, sep, _ = pair.partition("=")

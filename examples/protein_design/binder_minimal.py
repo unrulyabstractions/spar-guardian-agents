@@ -9,11 +9,11 @@ from src.domains.protein import ProteinDesign
 
 
 def main() -> int:
-    args = parse_example_arguments(Path(__file__), __doc__)
+    args = parse_example_arguments(Path(__file__), __doc__, default_row=ProteinDesign.default_row)
     # By default the midterm report's preset at the small scale (three agents, no regulator, access=split, the
     # turn budget), not judged (USE_JUDGE_AS_DEFAULT), then whatever --set says.
     config = build_config(args.preset, args.scale, args.settings)
-    benchmark = ProteinDesign("alfalfa_chi")
+    benchmark = ProteinDesign(args.row)
     exit_code = run.run(args.name, benchmark, config, args.model, args.timeout, replace=args.replace)
     return finish(args, exit_code)
 

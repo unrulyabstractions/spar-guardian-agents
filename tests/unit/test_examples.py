@@ -261,3 +261,24 @@ def test_each_disregulated_cell_runs_four_agents_one_a_hidden_disregulator_who_h
     [disregulator] = [a for a, role in roles.items() if role == "disregulator"]
     assert plan.holds[disregulator] == [] and plan.split
     assert all(plan.holds[a] for a in config.names if a != disregulator)
+
+
+@pytest.mark.parametrize("name", [n for n in EVERY_SCRIPT if n.startswith("examples.protein_design.")])
+def test_a_protein_script_runs_the_brief_row_names_and_defaults_to_alfalfa_chi(name, monkeypatch):
+    module = importlib.import_module(name)
+    rows = []
+    monkeypatch.setattr(run, "run", lambda name, benchmark, *args, **kwargs: rows.append(benchmark.row) or 0)
+    monkeypatch.setattr(plots, "plot_run", lambda run_dir, out_dir: [])
+    monkeypatch.setattr("sys.argv", [script_of(name).name, "--row", "barley_amylase"])
+    assert module.main() == 0
+    monkeypatch.setattr("sys.argv", [script_of(name).name])
+    assert module.main() == 0
+    assert rows == ["barley_amylase", "alfalfa_chi"]
+
+
+@pytest.mark.parametrize("name", [n for n in EVERY_SCRIPT if not n.startswith("examples.protein_design.")][:4])
+def test_any_other_script_refuses_a_row_it_would_ignore(name, monkeypatch):
+    monkeypatch.setattr("sys.argv", [script_of(name).name, "--row", "barley_amylase"])
+    with pytest.raises(SystemExit) as refused:
+        importlib.import_module(name).main()
+    assert refused.value.code == 2

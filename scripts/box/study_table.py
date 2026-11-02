@@ -95,12 +95,15 @@ class Arm:
     extra: tuple[tuple[str, str], ...] = ()
     """More key=value settings for this arm alone (a longer time_limit_s, a higher cost_limit_usd). They enter the
     jobs' digest, so they belong on a new stage only: a resumed box refuses a table that changed under it."""
+    row: str | None = None
+    """The benchmark row, for a cell whose script takes --row (protein's briefs); None runs the script's default. It
+    joins the run names, and like extra it belongs on a new stage only."""
 
     @property
     def suffix(self) -> str:
         """The run names' suffix: the worker's short name, then what sets this arm apart."""
         regulator = REGULATORS[self.regulator] if self.regulator else None
-        parts = (MODELS[self.target.model], self.rule_level, regulator, self.regulator_level, self.tag)
+        parts = (MODELS[self.target.model], self.rule_level, regulator, self.regulator_level, self.row, self.tag)
         return "_".join(part for part in parts if part)
 
     @property
@@ -272,12 +275,14 @@ class Job:
     model: str
     regulator_model: str | None
     settings: tuple[str, ...]
+    row: str | None = None
 
     @property
     def flags(self) -> list[str]:
         """What sets this run's setting apart, after its model, name and seed."""
         sets = [flag for pair in self.settings for flag in ("--set", pair)]
-        return [*sets, *(["--regulator-model", self.regulator_model] if self.regulator_model else [])]
+        return [*sets, *(["--regulator-model", self.regulator_model] if self.regulator_model else []),
+                *(["--row", self.row] if self.row else [])]
 
     @property
     def arguments(self) -> list[str]:
@@ -293,7 +298,7 @@ def box_jobs(box: Box, mock: bool = False) -> list[Job]:
         for seed in arm.seeds[:1] if mock else arm.seeds:
             name = run_name(cell, f"{arm.suffix}mock" if mock else arm.suffix, seed)
             jobs.append(Job(cell, name, seed, MOCK_MODEL if mock else arm.target.model,
-                            None if mock else arm.regulator, arm.settings))
+                            None if mock else arm.regulator, arm.settings, arm.row))
     return jobs
 
 
