@@ -29,8 +29,23 @@ def is_google_invalid_argument(ex: BaseException) -> bool:
     return "google" in text.lower() and ("invalid argument" in text.lower() or "INVALID_ARGUMENT" in text)
 
 
+def provider_error(ex: BaseException) -> BaseException:
+    """The provider's own error under Inspect's wrappers. Inspect raises ModelGenerateError `from` the OpenAI error,
+    and only the OpenAI error carries the request that failed; reading `request` off the wrapper found nothing, so
+    in the 2026-11-01 run no failure was recorded and every one counted under a single key."""
+    seen = ex
+    for _ in range(5):
+        if getattr(seen, "request", None) is not None:
+            return seen
+        nxt = seen.__cause__ or seen.__context__
+        if nxt is None:
+            break
+        seen = nxt
+    return ex
+
+
 def _request_key(ex: BaseException) -> str:
-    request = getattr(ex, "request", None)
+    request = getattr(provider_error(ex), "request", None)
     try:
         content = request.content if request is not None else b""
     except Exception:  # noqa: BLE001 - a streamed body has no content: count it under one key
@@ -52,7 +67,7 @@ def decide(ex: BaseException) -> bool | None:
 
 def _request_messages(ex: BaseException) -> list | None:
     """The messages of the request that failed, read from its JSON body; None when the body cannot be read."""
-    request = getattr(ex, "request", None)
+    request = getattr(provider_error(ex), "request", None)
     try:
         body = json.loads(request.content) if request is not None and request.content else None
     except Exception:  # noqa: BLE001 - an unreadable body only skips the rename
