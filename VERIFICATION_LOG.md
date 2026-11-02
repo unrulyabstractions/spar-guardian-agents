@@ -1328,3 +1328,7 @@ The entry says "All 13 changed or new smoke suites and scenarios". The list it g
 - **Live pricing** (scripts/box/live_cost.py). Breaks L1, L2 each fail a test. VERIFIED.
 - **Suite** at this commit: `2351 passed, 6 xfailed`; ruff all checks passed.
 - **Needs the user:** a credit-limited OpenRouter key for boxes (BOX_OPENROUTER_API_KEY); a phone channel in ~/.claude/cloud_boxes/notify_cmd and `notify-test` (the guard refuses rentals without it); AC power and `sudo pmset -a disablesleep 1` before any rental; a yes for the under-one-cent cache check before any Claude regulator.
+
+## 2026-11-02 13:50 UTC: Claude's cache is read through OpenRouter (Haiku 5.5, the user's yes)
+- **Check.** The user said yes to the under-one-cent check. Spend check first (key $492.67 of $650). `scripts/check_anthropic_cache.py --model claude-haiku-5-5-openrouter --yes` through Inspect's real request path with the newest-message marker: first call input 4, cache write 9219, cache read 0; second call input 4, cache write 6, cache read 9219. PASS: 9219 of 9229 input tokens read from the cache. Cost about $0.0013 at the registry's prices. Inspect printed a pydantic warning on Haiku's reasoning block; the call itself succeeded.
+- **Recorded.** model_registry.yaml `caching_verified: "2026-11-02"` on claude-haiku-5-5-openrouter. run.run now allows Haiku through OpenRouter and still refuses Opus and Sonnet, which have their own check unrun. VERIFIED.
