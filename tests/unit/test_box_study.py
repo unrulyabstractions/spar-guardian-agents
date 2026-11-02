@@ -302,7 +302,10 @@ case "$*" in
   *entry*) echo OPENROUTER_API_KEY ;;
   *box_key*)
     printf '%s\\n' "$*" >> "$STAND_IN/key_checks"
-    [ -n "$BOX_OPENROUTER_API_KEY" ] || { echo "refused: no box key"; exit 1; }
+    case "$*" in
+      *--main-key*) ;;
+      *) [ -n "$BOX_OPENROUTER_API_KEY" ] || { echo "refused: no box key"; exit 1; } ;;
+    esac
     [ ! -f "$STAND_IN/key_refuse" ] || { echo "refused: the key has no credit limit"; exit 1; }
     echo "== BOX_OPENROUTER_API_KEY: limit \\$50.00" ;;
 esac
@@ -358,6 +361,22 @@ def test_box_run_refuses_without_a_box_key_and_never_sends_the_main_key(box_run)
     result = box_run(OPENROUTER_API_KEY=MAIN)
     assert result.returncode == 1 and "refused: no box key" in result.stdout
     assert box_run.sent("ssh_arguments") == "" and MAIN not in box_run.sent("ssh_input")
+
+
+def test_box_run_sends_the_main_key_only_with_its_flag_over_standard_input_after_the_check(box_run):
+    result = box_run("--main-key", OPENROUTER_API_KEY=MAIN)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"export OPENROUTER_API_KEY={MAIN}" in box_run.sent("ssh_input")
+    assert MAIN not in box_run.sent("ssh_arguments") + box_run.sent("key_checks") + result.stdout + result.stderr
+    assert "box_key check OPENROUTER_API_KEY --box-id 7 --main-key" in box_run.sent("key_checks")
+    assert "--main-key" not in box_run.sent("ssh_arguments")
+
+
+def test_box_run_sends_nothing_when_the_check_refuses_the_main_key(box_run):
+    (box_run.stand_in / "key_refuse").write_text("")
+    result = box_run("--main-key", OPENROUTER_API_KEY=MAIN)
+    assert result.returncode == 1 and "no credit limit" in result.stdout
+    assert box_run.sent("ssh_input") == "" and box_run.sent("ssh_arguments") == ""
 
 
 def test_box_run_refuses_allow_main_key_and_sends_nothing(box_run):

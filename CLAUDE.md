@@ -55,7 +55,9 @@ code with tests that fail when it breaks:
   cap. A higher cap only with the user's yes: `--set cost_limit_usd=X`.
 - A box gets only `BOX_OPENROUTER_API_KEY`, a key with a credit limit set in OpenRouter's dashboard for that
   launch. `scripts/box/box_key.py` refuses no key, the main key, a key without a limit, or one with less left than
-  the box's runs may spend at their caps. `--allow-main-key` is gone.
+  the box's runs may spend at their caps. `--allow-main-key` is gone. On 2026-11-02 the user ordered the other way for
+  study_exploration_1: "Capped key NO, JUST USE THE KEY WE HAVE". `box_run.sh <id> --main-key` sends the main key
+  under the same limit checks. Any other study needs the user's word again.
 - Claude through OpenRouter is refused until `scripts/check_anthropic_cache.py` (two calls, under one cent, only
   with the user's yes) shows the cache is read and `src/models/model_registry.yaml` records `caching_verified`.
 - An estimate comes from a pilot with the same models in the same roles. In the first 10 minutes of every new

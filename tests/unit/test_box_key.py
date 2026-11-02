@@ -1,5 +1,6 @@
 """A box gets only a key OpenRouter caps: no key, the main key, a key without a credit limit, or one with less left than
-the box's runs may spend at their caps is refused, and the key is never printed."""
+the box's runs may spend at their caps is refused, and the key is never printed. --main-key, the user's order of
+2026-11-02, lifts the refusal of the main key alone."""
 from __future__ import annotations
 
 import io
@@ -67,6 +68,28 @@ def test_a_key_openrouter_cannot_describe_is_refused(box, capsys):
     box.setenv("BOX_OPENROUTER_API_KEY", BOX)
     code, out = check(failing_opener, capsys)
     assert code == 1 and "could not be read" in out
+
+
+@pytest.mark.parametrize("data, code, said", [
+    ({"limit": 650.0, "limit_remaining": 157.0}, 0, "== OPENROUTER_API_KEY: limit $650.00, $157.00 left"),
+    ({"limit": None, "limit_remaining": None}, 1, "no credit limit"),
+    ({"limit": 650.0, "limit_remaining": 12.0}, 1, "$12.00 left, less than the $30.00"),
+])
+def test_the_main_key_flag_checks_the_main_key_and_keeps_the_limit_checks(box, capsys, data, code, said):
+    def opener(request, timeout):
+        assert request.headers["Authorization"] == f"Bearer {MAIN}"
+        return io.BytesIO(json.dumps({"data": data}).encode())
+
+    assert box_key.main(["check", "OPENROUTER_API_KEY", "--box-id", "7", "--main-key"], opener=opener) == code
+    out = capsys.readouterr().out
+    assert said in out and MAIN not in out
+
+
+def test_without_the_flag_the_main_key_is_still_refused_under_the_box_key_s_name(box, capsys):
+    box.setenv("BOX_OPENROUTER_API_KEY", MAIN)
+    code, out = check(lambda request, timeout: io.BytesIO(json.dumps(
+        {"data": {"limit": 650.0, "limit_remaining": 157.0}}).encode()), capsys)
+    assert code == 1 and "is the main key" in out
 
 
 def test_a_run_takes_its_set_cap_or_the_default_and_the_config_default_is_the_same():

@@ -12,6 +12,10 @@ the command line, never printing it, and asks OpenRouter's GET /api/v1/key, whic
   default in src/models/cost_cap.py, summed over the jobs study_table.py gives the box).
 Exit 0 when the key passes, 1 with every reason when it does not. On 2026-11-01 phase two ran on the main key with
 --allow-main-key; that flag is gone.
+
+--main-key checks the main key itself, for box_run.sh --main-key. The user ordered it for study_exploration_1 on
+2026-11-02 ("Capped key NO, JUST USE THE KEY WE HAVE"). It lifts the refusal of the main key alone: OpenRouter must
+still cap the key, and enough must be left for the box's runs.
 """
 from __future__ import annotations
 
@@ -76,8 +80,11 @@ def main(argv: list[str], opener: Callable = urllib.request.urlopen) -> int:
     check = sub.add_parser("check", help="refuse a box key that OpenRouter does not cap")
     check.add_argument("name", help="the key's variable, e.g. OPENROUTER_API_KEY; the box key is BOX_<name>")
     check.add_argument("--box-id", type=int, required=True, help="the vast.ai instance the key goes to")
+    check.add_argument("--main-key", action="store_true",
+                       help="the key is <name> itself, by the user's order; its limit and what is left still count")
     args = parser.parse_args(argv)
-    box_key, main_key = os.environ.get(f"BOX_{args.name}"), os.environ.get(args.name)
+    variable = args.name if args.main_key else f"BOX_{args.name}"
+    box_key, main_key = os.environ.get(variable), None if args.main_key else os.environ.get(args.name)
     runs, worst = box_worst_case(args.box_id)
     info = None
     if box_key:
@@ -90,7 +97,7 @@ def main(argv: list[str], opener: Callable = urllib.request.urlopen) -> int:
     if reasons:
         print("refused: " + "; ".join(reasons))
         return 1
-    print(f"== BOX_{args.name}: limit ${info['limit']:.2f}, ${info.get('limit_remaining') or 0:.2f} left, "
+    print(f"== {variable}: limit ${info['limit']:.2f}, ${info.get('limit_remaining') or 0:.2f} left, "
           f"the box's {runs} runs may spend ${worst:.2f} at their caps")
     return 0
 
