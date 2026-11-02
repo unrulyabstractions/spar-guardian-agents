@@ -14,8 +14,10 @@ from inspect_ai.solver import solver
 from src import run
 from src.configuration.presets import build_config
 from src.domains.openmath import OpenMath
-from src.models import cost_cap
-from src.models import swarm_model_provider  # noqa: F401 - registers the swarm/ provider
+from src.models import (
+    cost_cap,
+    swarm_model_provider,  # noqa: F401 - registers the swarm/ provider
+)
 
 OPUS = "claude-opus-5-5-openrouter"
 
