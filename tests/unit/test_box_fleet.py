@@ -1440,6 +1440,16 @@ def test_the_watch_refuses_an_interval_that_is_no_whole_minute(every):
 DOCKER = {"running": [], "containers": ["c1", "c2"], "volumes": ["v1"]}
 
 
+@pytest.mark.parametrize("later", ["41 minutes ago", "About an hour ago", "2 hours ago", "Less than a second ago"])
+def test_docker_drift_ignores_a_stopped_container_s_age_and_nothing_else(later):
+    state = {"running": [], "containers": ["inspect-a-1 Exited (143) 40 minutes ago"], "volumes": []}
+    assert fleet_destroy.docker_drift({"state": state}, {"state": {
+        **state, "containers": [f"inspect-a-1 Exited (143) {later}"]}}) is None
+    for other in (f"inspect-b-1 Exited (143) {later}", f"inspect-a-1 Exited (0) {later}"):
+        assert "containers differ" in fleet_destroy.docker_drift({"state": state}, {"state": {
+            **state, "containers": [other]}})
+
+
 def test_docker_drift_names_a_running_container_and_any_other_set():
     accepted = {"reason": "saved", "state": DOCKER}
     assert fleet_destroy.docker_drift(accepted, {"state": dict(DOCKER)}) is None
