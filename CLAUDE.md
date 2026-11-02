@@ -46,7 +46,8 @@ and the session ended its turn. The guard in `~/.claude/hooks/cloud_boxes_guard.
 
 ## 3a. No run spends past its cap (enforced in code since 2026-11-02)
 
-On 2026-11-01 eight Opus and Sonnet regulator runs cost $176.56 in thirty minutes. The estimate came from a pilot
+On 2026-11-01 eight Opus and Sonnet regulator runs cost $88.28 in thirty minutes (first reported as $176.56, a
+double count). The estimate came from a pilot
 with other workers, Claude's history was never cached, and nothing priced the live runs. These now hold, each in
 code with tests that fail when it breaks:
 

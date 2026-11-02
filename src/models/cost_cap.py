@@ -10,7 +10,8 @@ alone. A paid model without a price is refused, since Inspect cannot cap what it
 Inspect takes one rate per model, so where an entry has a long-prompt tier the higher rates price every call. The cap
 then trips early, never late: up to 2x on GPT-6 Luna (over 272k tokens) and up to 5x on Claude Haiku 5.5 (over 100k).
 
-On 2026-11-01 eight regulator runs cost $176.56 in thirty minutes with no cap at all (VERIFICATION_LOG.md 21:45).
+On 2026-11-01 eight regulator runs cost $88.28 in thirty minutes with no cap at all (VERIFICATION_LOG.md 21:45 reported
+$176.56, a double count).
 """
 from __future__ import annotations
 

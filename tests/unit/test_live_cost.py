@@ -1,6 +1,7 @@
 """The live pricer prices a run's summed usage at the registry's flat rates, under the plain and the swarm/ name, adds
 a run's models together, leaves an unpriced model out for the caller to name, and prices the calls over a model's
-long-prompt line at that line's rates, which the box's script tells apart call by call."""
+long-prompt line at that line's rates, which the box's script tells apart call by call, counting each call once though
+a sample buffer keeps it in two rows."""
 from __future__ import annotations
 
 import json
@@ -50,10 +51,12 @@ def test_calls_past_the_line_pay_the_long_rates_and_a_model_without_a_tier_refus
         live_cost.price(OPUS, 1, 0, 0, 0, long=True)
 
 
-def call(model: str, prompt: int, read: int = 0, write: int = 0, output: int = 100, pending: bool = False) -> str:
+def call(model: str, prompt: int, read: int = 0, write: int = 0, output: int = 100, pending: bool = False,
+         uuid: str | None = None) -> str:
     usage = {"input_tokens": prompt - read - write, "input_tokens_cache_read": read,
              "input_tokens_cache_write": write, "output_tokens": output}
-    return json.dumps({"event": "model", "model": model, "pending": pending, "output": {"usage": usage}})
+    return json.dumps({"event": "model", "model": model, "pending": pending, "output": {"usage": usage},
+                       "uuid": uuid or f"{model}-{prompt}"})
 
 
 def test_the_box_script_splits_a_model_s_calls_at_its_line_by_the_whole_prompt(tmp_path):
@@ -63,7 +66,8 @@ def test_the_box_script_splits_a_model_s_calls_at_its_line_by_the_whole_prompt(t
     db.execute("create table events (data text)")
     calls = [call(f"swarm/{HAIKU}", 99_999), call(f"swarm/{HAIKU}", 100_000), call(HAIKU, 100_001, read=100_000),
              call(f"swarm/{HAIKU}", 150_000, read=140_000, write=9_000), call(OPUS, 500_000),
-             call(HAIKU, 500_000, pending=True)]
+             call(HAIKU, 500_000, pending=True, uuid="kept twice"), call(HAIKU, 1_000, uuid="kept twice"),
+             call(HAIKU, 1_000, uuid="kept twice")]
     db.executemany("insert into events values (?)", [(data,) for data in calls])
     db.commit()
     db.close()
@@ -71,6 +75,7 @@ def test_the_box_script_splits_a_model_s_calls_at_its_line_by_the_whole_prompt(t
                          capture_output=True, text=True, check=True)
     rows = {(row["model"], row["long"]): row for row in map(json.loads, out.stdout.splitlines())}
     assert {key: row["calls"] for key, row in rows.items()} == {
-        (f"swarm/{HAIKU}", False): 2, (HAIKU, True): 1, (f"swarm/{HAIKU}", True): 1, (OPUS, False): 1}
+        (f"swarm/{HAIKU}", False): 2, (HAIKU, True): 1, (f"swarm/{HAIKU}", True): 1, (OPUS, False): 1,
+        (HAIKU, False): 1}
     assert rows[(f"swarm/{HAIKU}", True)]["cache_write"] == 9_000
     assert {row["run"] for row in rows.values()} == {"flipt-gate"}

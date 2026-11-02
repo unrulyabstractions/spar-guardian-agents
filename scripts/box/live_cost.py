@@ -7,8 +7,11 @@
 Each box's Inspect sample buffers hold every model call of its live runs. A small script goes to the box over
 box_ssh.sh's standard input and sums the calls' usage per run and model (input, cache reads and writes, output), with
 the calls over the model's long-prompt line apart; it reads and never writes. This side prices them at
-src/models/model_registry.yaml's dated prices. On 2026-11-01 the same pricing matched the Opus pilot's billed cost
-within 3%, while OpenRouter's own count lagged by about $80.
+src/models/model_registry.yaml's dated prices.
+
+A buffer holds each finished call in two rows of one uuid, so the script counts a uuid once. Until 2026-11-02 it counted
+both, and every figure from it was exactly double: the eight stopped regulator runs of 2026-11-01 cost $88.28, not
+$176.56, which the key's own usage confirms within $5. OpenRouter's count never lagged by the $80 this file once said.
 
 Run it in the first 10 minutes of every new cell, and again later with --since to see each run's burn. A run whose
 cost so far is already a large share of its dollar cap (cost_limit_usd) is the one to stop.
@@ -42,13 +45,15 @@ for db in sorted(glob.glob(__BUFFERS__ + "/*/*.db")):
         print(json.dumps({"run": run, "error": str(e)}))
         continue
     acc = defaultdict(lambda: defaultdict(float))
+    seen = set()
     for (data,) in rows:
         try:
             ev = json.loads(data)
         except ValueError:
             continue
-        if ev.get("event") != "model" or ev.get("pending"):
+        if ev.get("event") != "model" or ev.get("pending") or ev.get("uuid") in seen:
             continue
+        seen.add(ev.get("uuid"))
         u = ((ev.get("output") or {}).get("usage")) or {}
         tokens = {"input": u.get("input_tokens") or 0, "cache_read": u.get("input_tokens_cache_read") or 0,
                   "cache_write": u.get("input_tokens_cache_write") or 0, "output": u.get("output_tokens") or 0}
