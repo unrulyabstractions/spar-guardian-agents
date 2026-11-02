@@ -152,7 +152,7 @@ def test_a_stage_rents_the_boxes_the_table_says():
         "phase2-creative-luna": 7, "phase2b-flipt-dsflash": 3, "phase2b-flipt-luna": 3, "phase2b-protein-luna": 2,
         "phase2b-creative-luna": 2, "fixed-pilot": 1, "fixed-gate": 2, "fixed-phase2-flipt-dsflash": 7,
         "fixed-phase2-flipt-luna": 7, "vuls-gate": 2, "fixed-fill-flipt-dsflash": 2,
-        "fixed-fill-argon-flipt-dsflash": 1, "disreg-gate": 1, "disreg-flipt-haiku": 2, "disreg-creative-luna": 1,
+        "fixed-fill-argon-flipt-dsflash": 2, "disreg-gate": 1, "disreg-flipt-haiku": 2, "disreg-creative-luna": 1,
         "contest-flipt-haiku": 1, "contest-creative-luna": 1}
 
 
@@ -498,17 +498,17 @@ def test_the_runbook_reads_a_gate_and_names_each_tag_of_the_fixed_runs():
 
 
 def test_the_fill_stages_complete_the_swe_table_on_deepseek_workers_with_their_own_limits():
-    """13 runs: GPT-6 Luna where its run hit the time limit (enforce seed 1 stands), Sonnet once per level, Argon at
-    every level; Argon's first run prices the other five, on a stage of their own."""
+    """13 runs: GPT-6 Luna where its run hit the time limit (enforce seed 1 stands) and Sonnet once per level; all of
+    Argon's six runs on a stage of their own, which runs whole or not at all."""
     def rows(stage: str) -> list[tuple]:
         return [(arm.regulator, arm.regulator_level, arm.seeds) for box in stage_boxes(stage) for arm in box.arms]
 
     luna, sonnet, argon = "gpt-6-luna-openrouter", "claude-sonnet-5-5-openrouter", "gemini-4-argon-openrouter"
     assert sorted(rows("fixed-fill-flipt-dsflash"), key=str) == sorted(
         [(luna, "ambiguous", (1, 2, 3)), (luna, "enforce", (2, 3)), (sonnet, "ambiguous", (1,)),
-         (sonnet, "enforce", (1,)), (argon, "ambiguous", (1,))], key=str)
+         (sonnet, "enforce", (1,))], key=str)
     assert sorted(rows("fixed-fill-argon-flipt-dsflash"), key=str) == sorted(
-        [(argon, "ambiguous", (2, 3)), (argon, "enforce", (1, 2, 3))], key=str)
+        [(argon, "ambiguous", (1, 2, 3)), (argon, "enforce", (1, 2, 3))], key=str)
     jobs = {job.name: job for stage in ("fixed-fill-flipt-dsflash", "fixed-fill-argon-flipt-dsflash")
             for box in stage_boxes(stage) for job in box_jobs(box)}
     assert len(jobs) == 13 and all(job.model == "deepseek-flash-openrouter" for job in jobs.values())

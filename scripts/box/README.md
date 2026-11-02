@@ -18,8 +18,8 @@ A target is a task and its workers' model: `flipt-dsflash`, `flipt-luna`, `flipt
 | `fixed-gate` | both flipt targets after the SWE fix: `minimal` and `minimal_cheat`, seeds 1 to 3 |
 | `fixed-phase2-<target>` | a flipt target whose fixed gate passed: `minimal` at `generic` and `identified`, and each of the five regulators at `ambiguous` and `enforce`, seeds 1 to 3; Opus and Sonnet take seed 1 |
 | `vuls-gate` | SWE's second issue, vuls-1832, on DeepSeek and Luna: `minimal` and `minimal_cheat`, seeds 1 to 3. Its pieces hold the collaboration rule like flipt's, and the runner builds its images before the runs start |
-| `fixed-fill-<target>` | what the DeepSeek SWE table lacks, each run with 90 minutes and tag `fill`: `minimal_regulated` with GPT-6 Luna at `ambiguous`, seeds 1 to 3, and at `enforce`, seeds 2 and 3; Sonnet at both levels, seed 1 (cap $15); Gemini 4 Argon at `ambiguous`, seed 1 (cap $30), which prices the next stage |
-| `fixed-fill-argon-<target>` | the other Argon runs, launched only after that run gives their price: `ambiguous`, seeds 2 and 3, and `enforce`, seeds 1 to 3 (cap $30) |
+| `fixed-fill-<target>` | what the DeepSeek SWE table lacks, each run with 90 minutes and tag `fill`: `minimal_regulated` with GPT-6 Luna at `ambiguous`, seeds 1 to 3, and at `enforce`, seeds 2 and 3; Sonnet at both levels, seed 1 (cap $15) |
+| `fixed-fill-argon-<target>` | Gemini 4 Argon at `ambiguous` and `enforce`, seeds 1 to 3 (cap $30). Dropped by the user on 2026-11-02: it runs whole or not at all, and only at the user's word |
 | `disreg-gate` | flipt on Claude Haiku 5.5 workers: `minimal` and `minimal_cheat`, seeds 1 to 3. `gate_readout` reads it by its own rule, and that target's next stages run only if it passes |
 | `disreg-<target>` | `flipt-haiku` or `creative-luna`: `minimal_disregulated` at `persuade` and `overt`, seeds 1 to 3. The disregulator runs the workers' model and holds no piece |
 | `contest-<target>` | the same targets: `minimal_regulated_disregulated`, `persuade` against a Haiku regulator at `enforce`, seeds 1 to 3 |
@@ -45,8 +45,8 @@ Every SWE run before the fix (commits 7331882 to 33b7810, 2026-11-01) graded a t
 | `fixed-phase2-flipt-dsflash` | 7 | 28 |
 | `fixed-phase2-flipt-luna` | 7 | 28 |
 | `vuls-gate` | 2 | 12 |
-| `fixed-fill-flipt-dsflash` | 2 | 8 |
-| `fixed-fill-argon-flipt-dsflash` | 1 | 5 |
+| `fixed-fill-flipt-dsflash` | 2 | 7 |
+| `fixed-fill-argon-flipt-dsflash` | 2 | 6 |
 | `disreg-gate` | 1 | 6 |
 | `disreg-flipt-haiku` | 2 | 6 |
 | `disreg-creative-luna` | 1 | 6 |

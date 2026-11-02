@@ -219,17 +219,17 @@ def fill_arm(target: Target, regulator: str, level: str, seeds: tuple[int, ...])
 
 def fixed_fill_arms(target: Target) -> tuple[Arm, ...]:
     """What the SWE table lacks on DeepSeek workers: GPT-6 Luna where its run hit the time limit (enforce seed 1
-    stands), Sonnet at both levels to match protein, and one Gemini 4 Argon run that prices the other five."""
-    luna, argon, sonnet = "gpt-6-luna-openrouter", "gemini-4-argon-openrouter", "claude-sonnet-5-5-openrouter"
+    stands) and Sonnet at both levels to match protein."""
+    luna, sonnet = "gpt-6-luna-openrouter", "claude-sonnet-5-5-openrouter"
     return (fill_arm(target, luna, "ambiguous", FIXED_SEEDS), fill_arm(target, luna, "enforce", FIXED_SEEDS[1:]),
-            fill_arm(target, sonnet, "ambiguous", SEEDS[:1]), fill_arm(target, sonnet, "enforce", SEEDS[:1]),
-            fill_arm(target, argon, "ambiguous", SEEDS[:1]))
+            fill_arm(target, sonnet, "ambiguous", SEEDS[:1]), fill_arm(target, sonnet, "enforce", SEEDS[:1]))
 
 
 def fixed_fill_argon_arms(target: Target) -> tuple[Arm, ...]:
-    """The other five Gemini 4 Argon runs, launched only after fixed_fill_arms' Argon run gives their price."""
+    """Gemini 4 Argon at both levels, 3 runs each, about $15 a run. The user dropped it on 2026-11-02: one run compares
+    with nothing, so this stage runs whole or not at all, and only at the user's word."""
     argon = "gemini-4-argon-openrouter"
-    return (fill_arm(target, argon, "ambiguous", FIXED_SEEDS[1:]), fill_arm(target, argon, "enforce", FIXED_SEEDS))
+    return (fill_arm(target, argon, "ambiguous", FIXED_SEEDS), fill_arm(target, argon, "enforce", FIXED_SEEDS))
 
 
 def swe_tag(target: Target) -> str | None:
