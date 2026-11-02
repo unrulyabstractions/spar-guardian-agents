@@ -92,6 +92,9 @@ class Arm:
     regulator_level: str | None = None
     seeds: tuple[int, ...] = SEEDS
     tag: str | None = None
+    extra: tuple[tuple[str, str], ...] = ()
+    """More key=value settings for this arm alone (a longer time_limit_s, a higher cost_limit_usd). They enter the
+    jobs' digest, so they belong on a new stage only: a resumed box refuses a table that changed under it."""
 
     @property
     def suffix(self) -> str:
@@ -104,7 +107,8 @@ class Arm:
     def settings(self) -> tuple[str, ...]:
         """The arm's key=value pairs for --set."""
         pairs = {"rule_level": self.rule_level, "regulator_level": self.regulator_level}
-        return tuple(f"{key}={value}" for key, value in pairs.items() if value)
+        return (*(f"{key}={value}" for key, value in pairs.items() if value),
+                *(f"{key}={value}" for key, value in self.extra))
 
     @property
     def agents(self) -> int:
@@ -165,6 +169,39 @@ def fixed_phase_two_arms(target: Target) -> tuple[Arm, ...]:
               for regulator in (*FIRST_REGULATORS, *ADDED_REGULATORS) for level in REGULATOR_LEVELS))
 
 
+FILL = "fill"
+"""The tag of the runs that complete the SWE table on DeepSeek workers."""
+FILL_TIME_S = 5400
+"""The agents' 90 minutes on the fill stages. A GPT-6 Luna regulator reads about five times a round and each round
+waits for it, so 100 rounds take about 72 minutes against 48 without a regulator; 7 of its 12 phase-two runs hit
+the 60-minute limit (VERIFICATION_LOG.md). The team's 100 rounds are the same; only the wall clock grows."""
+FILL_CAPS_USD = {"claude-sonnet-5-5-openrouter": 15, "gemini-4-argon-openrouter": 30}
+"""The dollar cap per run where the default would cut a whole run short. The user's yes on the launch sets these. A
+GPT-6 Luna run cost about $1, under the default."""
+
+
+def fill_arm(target: Target, regulator: str, level: str, seeds: tuple[int, ...]) -> Arm:
+    cap = FILL_CAPS_USD.get(regulator)
+    extra = (("time_limit_s", str(FILL_TIME_S)), *((("cost_limit_usd", str(cap)),) if cap else ()))
+    return Arm(target, "minimal_regulated", regulator=regulator, regulator_level=level, tag=FILL, seeds=seeds,
+               extra=extra)
+
+
+def fixed_fill_arms(target: Target) -> tuple[Arm, ...]:
+    """What the SWE table lacks on DeepSeek workers: GPT-6 Luna where its run hit the time limit (enforce seed 1
+    stands), Sonnet at both levels to match protein, and one Gemini 4 Argon run that prices the other five."""
+    luna, argon, sonnet = "gpt-6-luna-openrouter", "gemini-4-argon-openrouter", "claude-sonnet-5-5-openrouter"
+    return (fill_arm(target, luna, "ambiguous", FIXED_SEEDS), fill_arm(target, luna, "enforce", FIXED_SEEDS[1:]),
+            fill_arm(target, sonnet, "ambiguous", SEEDS[:1]), fill_arm(target, sonnet, "enforce", SEEDS[:1]),
+            fill_arm(target, argon, "ambiguous", SEEDS[:1]))
+
+
+def fixed_fill_argon_arms(target: Target) -> tuple[Arm, ...]:
+    """The other five Gemini 4 Argon runs, launched only after fixed_fill_arms' Argon run gives their price."""
+    argon = "gemini-4-argon-openrouter"
+    return (fill_arm(target, argon, "ambiguous", FIXED_SEEDS[1:]), fill_arm(target, argon, "enforce", FIXED_SEEDS))
+
+
 STAGES = {"pilot": {f"pilot-{target.name}": pilot_arms(target) for target in PILOT_TARGETS},
           "gate": {f"gate-{target.name}": gate_arms(target) for target in TARGETS},
           **{f"phase2-{target.name}": {f"phase2-{target.name}": phase_two_arms(target)} for target in TARGETS},
@@ -173,7 +210,10 @@ STAGES = {"pilot": {f"pilot-{target.name}": pilot_arms(target) for target in PIL
           "fixed-pilot": {f"fixed-pilot-{SWE_TARGETS[1].name}": fixed_pilot_arms(SWE_TARGETS[1])},
           "fixed-gate": {f"fixed-gate-{target.name}": fixed_gate_arms(target) for target in SWE_TARGETS},
           **{f"fixed-phase2-{target.name}": {f"fixed-phase2-{target.name}": fixed_phase_two_arms(target)}
-             for target in SWE_TARGETS}}
+             for target in SWE_TARGETS},
+          f"fixed-fill-{SWE_TARGETS[0].name}": {f"fixed-fill-{SWE_TARGETS[0].name}": fixed_fill_arms(SWE_TARGETS[0])},
+          f"fixed-fill-argon-{SWE_TARGETS[0].name}": {f"fixed-fill-argon-{SWE_TARGETS[0].name}":
+                                                      fixed_fill_argon_arms(SWE_TARGETS[0])}}
 """Each stage's arms, by the stem of their boxes' names."""
 
 

@@ -48,7 +48,8 @@ def stage_runs(stage: str) -> list[str]:
 
 def test_the_stages_are_the_pilot_the_gate_and_one_phase_two_per_target():
     assert list(STAGES) == ["pilot", "gate", *PHASE_TWO, *PHASE_TWO_B, "fixed-pilot", "fixed-gate",
-                            "fixed-phase2-flipt-dsflash", "fixed-phase2-flipt-luna"]
+                            "fixed-phase2-flipt-dsflash", "fixed-phase2-flipt-luna", "fixed-fill-flipt-dsflash",
+                            "fixed-fill-argon-flipt-dsflash"]
     assert [(target.task, target.model) for target in TARGETS] == [
         ("software_engineering", "deepseek-flash-openrouter"), ("software_engineering", "gpt-6-luna-openrouter"),
         ("protein_design", "gpt-6-luna-openrouter"), ("creative_writing", "gpt-6-luna-openrouter")]
@@ -65,7 +66,7 @@ def test_the_study_has_40_gate_runs_40_phase_two_runs_per_target_and_9_pilot_run
 
 def test_every_run_name_is_unique_across_the_study():
     names = [job.name for job in EVERY_JOB] + [job.name for box in EVERY_BOX for job in box_jobs(box, mock=True)]
-    assert len(names) == len(set(names)) == 314 + sum(len(box.arms) for box in EVERY_BOX)
+    assert len(names) == len(set(names)) == 327 + sum(len(box.arms) for box in EVERY_BOX)
 
 
 def test_the_fixed_stages_redo_swe_alone_under_names_no_earlier_run_holds():
@@ -74,7 +75,8 @@ def test_the_fixed_stages_redo_swe_alone_under_names_no_earlier_run_holds():
                for job in box_jobs(box)}
     fixed = [job for stage in STAGES if stage.startswith("fixed-") for box in stage_boxes(stage)
              for job in box_jobs(box)]
-    assert all("_fixed" in job.name for job in fixed) and not {job.name for job in fixed} & earlier
+    assert all("_fixed" in job.name or "_fill" in job.name for job in fixed)
+    assert not {job.name for job in fixed} & earlier
     assert {job.cell.split(".")[0] for job in fixed} == {"swe"}
     pilot = [arm for box in stage_boxes("fixed-pilot") for arm in box.arms]
     assert {(arm.target.model, arm.regulator, arm.regulator_level, arm.seeds) for arm in pilot} == {
@@ -144,7 +146,7 @@ def test_a_stage_rents_the_boxes_the_table_says():
         "pilot": 3, "gate": 6, "phase2-flipt-dsflash": 6, "phase2-flipt-luna": 6, "phase2-protein-luna": 7,
         "phase2-creative-luna": 7, "phase2b-flipt-dsflash": 3, "phase2b-flipt-luna": 3, "phase2b-protein-luna": 2,
         "phase2b-creative-luna": 2, "fixed-pilot": 1, "fixed-gate": 2, "fixed-phase2-flipt-dsflash": 7,
-        "fixed-phase2-flipt-luna": 7}
+        "fixed-phase2-flipt-luna": 7, "fixed-fill-flipt-dsflash": 2, "fixed-fill-argon-flipt-dsflash": 1}
 
 
 @pytest.mark.parametrize("box", EVERY_BOX, ids=lambda box: box.name)
@@ -251,7 +253,7 @@ def test_jobs_lists_every_run_box_and_flag_and_sends_nothing(monkeypatch, capsys
 def test_jobs_with_no_stage_lists_the_whole_study(capsys):
     assert fleet.main(["jobs"]) == 0
     out = capsys.readouterr().out
-    assert out.count("--set seed=") == 314 and all(f"== {stage}:" in out for stage in STAGES)
+    assert out.count("--set seed=") == 327 and all(f"== {stage}:" in out for stage in STAGES)
 
 
 # ---- nothing but a person starts a stage ----
@@ -459,5 +461,33 @@ def test_the_runbook_reads_a_gate_and_names_each_tag_of_the_fixed_runs():
     fixed = re.search(r"^## Fixed SWE stages$(.+?)^## ", readme, re.M | re.S)[1]
     assert re.findall(r"scripts\.box\.gate_readout (\S+)", fixed) == ["fixed-gate"]
     tags = {arm.tag for stage in STAGES if stage.startswith("fixed") for box in stage_boxes(stage) for arm in box.arms}
-    assert tags == {"fixed", "fixedpilot"} and all(f"`{tag}`" in readme for tag in tags)
+    assert tags == {"fixed", "fixedpilot", "fill"} and all(f"`{tag}`" in readme for tag in tags)
 
+
+
+def test_the_fill_stages_complete_the_swe_table_on_deepseek_workers_with_their_own_limits():
+    """13 runs: GPT-6 Luna where its run hit the time limit (enforce seed 1 stands), Sonnet once per level, Argon at
+    every level; Argon's first run prices the other five, on a stage of their own."""
+    def rows(stage: str) -> list[tuple]:
+        return [(arm.regulator, arm.regulator_level, arm.seeds) for box in stage_boxes(stage) for arm in box.arms]
+
+    luna, sonnet, argon = "gpt-6-luna-openrouter", "claude-sonnet-5-5-openrouter", "gemini-4-argon-openrouter"
+    assert sorted(rows("fixed-fill-flipt-dsflash"), key=str) == sorted(
+        [(luna, "ambiguous", (1, 2, 3)), (luna, "enforce", (2, 3)), (sonnet, "ambiguous", (1,)),
+         (sonnet, "enforce", (1,)), (argon, "ambiguous", (1,))], key=str)
+    assert sorted(rows("fixed-fill-argon-flipt-dsflash"), key=str) == sorted(
+        [(argon, "ambiguous", (2, 3)), (argon, "enforce", (1, 2, 3))], key=str)
+    jobs = {job.name: job for stage in ("fixed-fill-flipt-dsflash", "fixed-fill-argon-flipt-dsflash")
+            for box in stage_boxes(stage) for job in box_jobs(box)}
+    assert len(jobs) == 13 and all(job.model == "deepseek-flash-openrouter" for job in jobs.values())
+    assert all("time_limit_s=5400" in job.settings for job in jobs.values())
+    caps = {name: [s for s in job.settings if s.startswith("cost_limit_usd=")] for name, job in jobs.items()}
+    assert caps["flipt_minimal_regulated_dsflash_luna_enforce_fill2"] == []
+    assert caps["flipt_minimal_regulated_dsflash_sonnet_enforce_fill1"] == ["cost_limit_usd=15"]
+    assert caps["flipt_minimal_regulated_dsflash_argon_enforce_fill3"] == ["cost_limit_usd=30"]
+    assert "--set" in jobs["flipt_minimal_regulated_dsflash_argon_enforce_fill3"].arguments
+
+
+def test_settings_an_arm_adds_reach_the_job_and_no_earlier_arm_has_any():
+    assert all(not arm.extra for stage in STAGES if "fill" not in stage for box in stage_boxes(stage)
+               for arm in box.arms)
