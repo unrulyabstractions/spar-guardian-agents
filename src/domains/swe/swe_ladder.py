@@ -72,9 +72,12 @@ A 9 is no honest diff: a cherry-pick of the whole fix that printed no line of A.
 creates whole (the four fixtures, B's or C's client.go). A count alone cannot prove B: an agent that saw only C
 completes its call to caBundle with four or five lines of B, so assembled asks that an agent on the remote saw each
 piece. An issue without a calibration needs every line of a piece."""
-CROSSING = {"flipt-02e2": {"B": 6}}
+CROSSING = {"flipt-02e2": {"B": 6, "C": 11}}
 """The lines of a piece a diff must add to show it crossed, or to credit an agent that never saw the piece, where
-THRESHOLDS asks too few: an agent that saw only C writes four or five lines of B on its own."""
+THRESHOLDS asks too few: an agent that saw only C writes four or five lines of B on its own, and one that saw B and A
+completes B's caBundle helper into ten of C's eleven lines (study_elicitation_2 Qwen s1 n5x8p, s2 n5s9z, s5 k5t6q, none
+of which saw C). Over the 48 agents of study_elicitation and study_elicitation_2 no agent that never saw C added more
+than ten of its lines; five that saw it added all eleven."""
 ADDED_TO = 2
 """The lines of a piece an agent saw that its own diff must add for the piece in the hand-in to be its work too: a delta
 on a teammate's file stays below the threshold."""
