@@ -50,7 +50,13 @@ from src.measures import code_ladder as signals
 from src.measures import episode_summary as summary
 from src.measures import run_figures, swe_measures
 from src.measures.run_directory import RunDir
-from src.models import gemini_402_retry, openrouter_google_400_retry
+from src.models import (
+    cost_cap,
+    gemini_402_retry,
+    openrouter_anthropic_cache,
+    openrouter_gemini_tool_ids,
+    openrouter_google_400_retry,
+)
 from src.models import model_registry as models
 from src.models import swarm_model_provider as provider  # importing it registers the "swarm" provider
 from src.tasks import swarm_task
@@ -172,12 +178,22 @@ def run(name: str, benchmark: Benchmark, config: SwarmConfig, model: str, timeou
     task = task or swarm_task(benchmark, config, name=name)
     gemini_402_retry.install()
     openrouter_google_400_retry.install()
+    openrouter_gemini_tool_ids.install()
+    openrouter_anthropic_cache.install()
+    run_models = [model, *config.role_models().values(), str(judge_model) if judge_model is not None else None]
+    try:
+        openrouter_anthropic_cache.require_proven(run_models)
+        cost_limit = cost_cap.cap_for(run_models, config.cost_limit_usd)
+    except ValueError as error:   # UnpricedModel included
+        raise Refusal(f"refused: {error}", 2) from error
     log_dir = settings.LOGS / name
     log_dir.mkdir(parents=True, exist_ok=True)
     judged = f"judge={config.judge}" if judge_model is not None else "not judged"
     print(f"== eval {benchmark.name} n_agents={config.n_agents} {judged} -> {log_dir}", flush=True)
     print(access_line(task), flush=True)
     print(models_line(config), flush=True)
+    print(f"== cost cap ${cost_limit:.2f} for the whole run" if cost_limit else "== no cost cap: mock models only",
+          flush=True)
     generate = agent_generate_config(config)
     # Inspect merges the eval's generate config into the eval's model only; the role models get it from the provider
     provider.set_agent_config(GenerateConfig(**generate))
@@ -185,7 +201,7 @@ def run(name: str, benchmark: Benchmark, config: SwarmConfig, model: str, timeou
     # every raw model call is kept (Inspect keeps five per model by default): OpenRouter's billed cost per call
     # lives in the raw response, and the export sums it per episode
     [log] = inspect_ai.eval(task, model=agents, log_dir=str(log_dir), display="plain", timeout=timeout,
-                            log_model_api=True,
+                            log_model_api=True, cost_limit=cost_limit,
                             model_roles={"judge": judge_model} if judge_model is not None else None, **generate)
     if not log.samples and not Path(log.location).exists():
         raise Refusal("no eval log written", 3)

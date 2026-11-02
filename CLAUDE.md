@@ -44,6 +44,25 @@ and the session ended its turn. The guard in `~/.claude/hooks/cloud_boxes_guard.
   and its table goes to the user (spent today, last hour, burn $/h, balances). The hook refuses a rental or a
   model run without a spend check in the last 30 minutes.
 
+## 3a. No run spends past its cap (enforced in code since 2026-11-02)
+
+On 2026-11-01 eight Opus and Sonnet regulator runs cost $176.56 in thirty minutes. The estimate came from a pilot
+with other workers, Claude's history was never cached, and nothing priced the live runs. These now hold, each in
+code with tests that fail when it breaks:
+
+- Every paid run has a dollar cap that Inspect enforces: `SwarmConfig.cost_limit_usd`, $5 by default
+  (`src/models/cost_cap.py`). `run.run` refuses a paid model without a registry price and a paid run without a
+  cap. A higher cap only with the user's yes: `--set cost_limit_usd=X`.
+- A box gets only `BOX_OPENROUTER_API_KEY`, a key with a credit limit set in OpenRouter's dashboard for that
+  launch. `scripts/box/box_key.py` refuses no key, the main key, a key without a limit, or one with less left than
+  the box's runs may spend at their caps. `--allow-main-key` is gone.
+- Claude through OpenRouter is refused until `scripts/check_anthropic_cache.py` (two calls, under one cent, only
+  with the user's yes) shows the cache is read and `src/models/model_registry.yaml` records `caching_verified`.
+- An estimate comes from a pilot with the same models in the same roles. In the first 10 minutes of every new
+  cell, price the live runs: `uv run python -m scripts.box.live_cost <box ids>`, and again with `--since`. Stop
+  any run running past its estimate and tell the user.
+- The guard escalates when model spend runs above $50/h over 15 minutes. Act on it at once.
+
 ## 4. Boxes hold the only copy
 
 Destroy only through `scripts/box/fleet destroy`, which needs a passing `capture_check.sh --pull`. Never

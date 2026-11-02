@@ -484,7 +484,7 @@ def passing_capture(monkeypatch):
     """A capture that passes and a snapshot that holds, without a box."""
     marker = fresh_marker(epoch=time.time(), time="now", captured=12, excluded={}, docker_accepted=None)
     monkeypatch.setattr(box_capture, "read_marker", lambda instance_id: marker)
-    monkeypatch.setattr(box_capture, "check", lambda instance_id, pull: marker)
+    monkeypatch.setattr(box_capture, "check", lambda instance_id, pull, accept_docker=None: marker)
     monkeypatch.setattr(box_capture, "snapshot", lambda instance_id: {"path": "snapshot.tar.gz", "files": 12})
     monkeypatch.setattr(fleet_destroy, "DESTROY_WAIT_S", 0)
     return marker
@@ -1375,3 +1375,40 @@ def test_the_watch_refuses_an_interval_that_is_no_whole_minute(every):
     result = subprocess.run(["bash", str(Path(box_capture.SWEEP).with_name("watch.sh")), "--once", "--every", every],
                             capture_output=True, text=True, timeout=30)
     assert result.returncode == 2 and "whole minutes" in result.stdout
+
+
+DOCKER = {"running": [], "containers": ["c1", "c2"], "volumes": ["v1"]}
+
+
+def test_docker_drift_names_a_running_container_and_any_other_set():
+    accepted = {"reason": "saved", "state": DOCKER}
+    assert fleet_destroy.docker_drift(accepted, {"state": dict(DOCKER)}) is None
+    assert "run now" in fleet_destroy.docker_drift(accepted, {"state": {**DOCKER, "running": ["c1"]}})
+    assert "containers differ" in fleet_destroy.docker_drift(accepted, {"state": {**DOCKER, "containers": ["c1"]}})
+    assert "volumes differ" in fleet_destroy.docker_drift(accepted, {"state": {**DOCKER, "volumes": []}})
+
+
+@pytest.mark.parametrize("now, code, words", [
+    (dict(DOCKER), 0, "go with the box: saved"),
+    ({**DOCKER, "running": ["c1"]}, 1, "refused: 1 containers run now"),
+])
+def test_a_destroy_carries_the_accepted_docker_reason_into_its_second_check(registry, monkeypatch, capsys,
+                                                                            now, code, words):
+    marker = fresh_marker(epoch=time.time(), time="now", captured=12, excluded={},
+                          docker_accepted={"reason": "saved", "state": DOCKER})
+    seen = []
+
+    def check(instance_id, pull, accept_docker=None):
+        seen.append(accept_docker)
+        return dict(marker, docker_accepted={"reason": accept_docker, "state": now})
+
+    monkeypatch.setattr(box_capture, "read_marker", lambda instance_id: marker)
+    monkeypatch.setattr(box_capture, "check", check)
+    monkeypatch.setattr(box_capture, "snapshot", lambda instance_id: {"path": "snapshot.tar.gz", "files": 12})
+    monkeypatch.setattr(fleet_destroy, "DESTROY_WAIT_S", 0)
+    fake = FakeVast(instances=[{"id": 7, "label": LABEL, "start_date": time.time() - 3600, "dph_total": 0.5}])
+    monkeypatch.setattr(vast_api, "http", fake)
+    add_box()
+    assert fleet.main(["destroy", "7"]) == code
+    assert seen == ["saved"] and words in capsys.readouterr().out
+    assert any(call.method == "DELETE" for call in fake.calls) == (code == 0)

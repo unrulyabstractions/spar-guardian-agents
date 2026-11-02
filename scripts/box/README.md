@@ -31,7 +31,7 @@ Make one OpenRouter key for this study with a spend cap, and revoke it after the
 read -rs BOX_OPENROUTER_API_KEY && export BOX_OPENROUTER_API_KEY
 ```
 
-The key reaches a box through ssh's standard input, into `/root/.box_env` with mode 600. `box_run.sh --allow-main-key` sends `OPENROUTER_API_KEY` itself instead, which a third-party host then holds.
+The key reaches a box through ssh's standard input, into `/root/.box_env` with mode 600. Only `BOX_OPENROUTER_API_KEY` goes: a key made for one launch, with a credit limit set in OpenRouter's dashboard. `scripts/box/box_key.py` refuses it unless OpenRouter caps it, it is not the main key, and it has enough left for the box's runs at their dollar caps (each run's `cost_limit_usd`, $5 by default). The main key never goes to a box; `--allow-main-key` is gone.
 
 The boxes clone this repository from GitHub, so `create` refuses a commit that origin/main lacks. Push first, or pin what origin holds with `--commit origin/main`.
 

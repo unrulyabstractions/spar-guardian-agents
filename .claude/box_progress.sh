@@ -2,17 +2,21 @@
 # The cloud box guard's progress adapter: .claude/box_progress.sh <provider> <instance id>
 #
 # Prints one line for ~/.claude/hooks/cloud_boxes_guard.py:
-#   progress <seconds>   the box's runner is alive with runs running, and Inspect last wrote this long ago
-#   ended <why>          no runner, no run running, or no clone on the box yet (the guard's setup grace covers a
-#                        box that is still booting or setting up)
+#   progress <seconds>   runs are running (with or without their runner), and Inspect last wrote this long ago
+#   ended <why>          no run running, or no clone on the box yet (the guard's setup grace covers a box that is
+#                        still booting or setting up)
 #   blocked <why>        the box's own OpenRouter key has no limit left: no run can progress
-#   unreachable <why>    ssh failed, or no ssh config could be written
+#   unreachable <why>    ssh failed, no ssh config could be written, or the box that answered names another id in
+#                        /root/box_id (`wrong-box <name>`): its endpoint reaches another box, so nothing here may
+#                        say `ended`, which would start a teardown against that other box
 #   unknown              not a box of this repository (runs/boxes.json does not list it)
 #
 # Progress is what Inspect writes while a run works: its trace files, the run folders and the eval logs. The
 # runner's plan (logs/<study>/screen/box_*.json), which the runner rewrites every minute, and the screen logs do
-# not count. The key check runs on the box with the box's own key; only the remaining limit comes back.
-# Reads only, except that it runs `fleet status` once to write a missing ssh config of a registered box.
+# not count. A runner that died while its runs still write is progress, not an end: the runs started in their own
+# sessions and outlive it. The key check runs on the box with the box's own key; only the remaining limit comes back.
+# Reads only, except that it runs `fleet status` once to write a missing ssh config of a registered box, or to
+# refresh the endpoint of a box whose endpoint answered with another box's id.
 set -uo pipefail
 provider=${1:-}
 id=${2:-}
@@ -21,6 +25,9 @@ if [ "$provider" != vast ]; then
   echo "unknown"
   exit 0
 fi
+case $id in
+  ''|*[!0-9]*) echo "unknown"; exit 0 ;;     # a vast.ai id is digits; it also goes into the box's command line
+esac
 if ! python3 - "$root/runs/boxes.json" "$id" <<'EOF'
 import json, sys
 try:
@@ -41,7 +48,8 @@ if [ ! -f "$cfg" ]; then
     exit 0
   fi
 fi
-out=$(ssh -F "$cfg" -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 box 'bash -s' 2>/dev/null <<'REMOTE'
+out=$(ssh -F "$cfg" -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 box "bash -s -- $id" 2>/dev/null <<'REMOTE'
+want=${1:-}; got=$(cat /root/box_id 2>/dev/null); if [ -z "$want" ] || [ "$got" != "$want" ]; then echo "WRONGBOX=${got:-none}"; exit 0; fi
 if ! cd /root/work 2>/dev/null; then echo "NOWORK"; exit 0; fi
 alive=$(python3 - <<'PY'
 # the runner's processes, read from /proc: no pgrep needed, and this script's own command line never matches
@@ -88,11 +96,19 @@ echo "ALIVE=$alive RUNNING=${running:-0} NEWEST=${newest%.*} NOW=$(date +%s) KEY
 REMOTE
 )
 rc=$?
-line=$(printf '%s\n' "$out" | grep -E '^(NOWORK|ALIVE=)' | tail -1)
+line=$(printf '%s\n' "$out" | grep -E '^(WRONGBOX=|NOWORK|ALIVE=)' | tail -1)
 if [ $rc -ne 0 ] || [ -z "$line" ]; then
   echo "unreachable ssh-rc-$rc"
   exit 0
 fi
+case $line in
+  WRONGBOX=*)
+    # the endpoint reaches another box: refresh the ssh configs once, and never say `ended` for this id
+    (cd "$root" && uv run python -m scripts.box.fleet status > /dev/null 2>&1)
+    name=$(printf '%s' "${line#WRONGBOX=}" | tr -cd 'A-Za-z0-9._-' | cut -c1-40)
+    echo "unreachable wrong-box ${name:-none}"
+    exit 0 ;;
+esac
 if [ "$line" = NOWORK ]; then
   echo "ended no-clone-on-the-box"
   exit 0
@@ -106,8 +122,9 @@ case $key in
        exit 0
      fi ;;
 esac
-if [ "${alive:-0}" -eq 0 ] || [ "${running:-0}" -eq 0 ]; then
-  echo "ended runner-alive=${alive:-0} running=${running:-0}"
+if [ "${running:-0}" -eq 0 ]; then
+  # only no run running is an end: a dead runner whose runs still write reads as progress, and as idle once they stop
+  echo "ended runner-alive=${alive:-0} running=0"
   exit 0
 fi
 if [ -n "$newest" ] && [ -n "$now" ]; then

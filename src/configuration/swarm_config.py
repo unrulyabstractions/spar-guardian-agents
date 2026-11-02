@@ -264,6 +264,10 @@ class SwarmConfig(BaseModel):
     (sample_message_limit)."""
     token_limit: int = 0
     """Tokens per sample (Inspect token_limit). 0 means the runaway guard: 64M tokens per agent."""
+    cost_limit_usd: float = 5.0
+    """Dollars per run, all agents together (Inspect cost_limit, priced from model_registry.yaml by
+    src/models/cost_cap.py). A run that reaches it stops and is exported like any other. Every paid run has one; a
+    higher cap is set on purpose with --set cost_limit_usd=X. Mock models cost nothing and get none."""
     time_limit_s: int = 0
     """Seconds for the agents (ORBIT SchedulerConfig.max_time_seconds). 0 means the benchmark's own limit."""
     time_grace_s: int = settings.HARD_TIME_GRACE_S
