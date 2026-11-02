@@ -79,7 +79,7 @@ def table_cells() -> list[dict]:
     for stage in STAGES:
         for box in stage_boxes(stage):
             for arm in box.arms:
-                script = cells(arm.target.task, (arm.kind,))[0]
+                script = cells(arm.target.task, (arm.kind,), stem=arm.target.stem)[0]
                 names = [run_name(script, arm.suffix, seed) for seed in arm.seeds]
                 if owner & set(names):
                     raise ValueError(f"{sorted(owner & set(names))} name runs of two cells")

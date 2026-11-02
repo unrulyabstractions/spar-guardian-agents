@@ -65,6 +65,8 @@ class Target:
     task: str
     short: str
     model: str
+    stem: str | None = None
+    """The cells' stem where the task's package holds several issues; None takes fleet_layout.STEMS."""
 
     @property
     def name(self) -> str:
@@ -77,6 +79,11 @@ TARGETS = (Target("software_engineering", "flipt", "deepseek-flash-openrouter"),
            Target("creative_writing", "creative", "gpt-6-luna-openrouter"))
 PILOT_TARGETS = TARGETS[1:]
 SWE_TARGETS = TARGETS[:2]
+VULS_TARGETS = (Target("software_engineering", "vuls", "deepseek-flash-openrouter", stem="vuls"),
+                Target("software_engineering", "vuls", "gpt-6-luna-openrouter", stem="vuls"))
+"""SWE's second issue, for generality. Its pieces hold the collaboration rule like flipt's (test_collaboration_swe)."""
+SWE_ISSUES = {"vuls": "vuls-1832"}
+"""The issue of a target's stem where it is not the box's default (flipt-02e2, which box_setup.sh builds)."""
 FIXED = "fixed"
 """The tag of every run of the SWE task after its fix."""
 
@@ -214,6 +221,7 @@ STAGES = {"pilot": {f"pilot-{target.name}": pilot_arms(target) for target in PIL
           "fixed-gate": {f"fixed-gate-{target.name}": fixed_gate_arms(target) for target in SWE_TARGETS},
           **{f"fixed-phase2-{target.name}": {f"fixed-phase2-{target.name}": fixed_phase_two_arms(target)}
              for target in SWE_TARGETS},
+          "vuls-gate": {f"vuls-gate-{target.name}": fixed_gate_arms(target) for target in VULS_TARGETS},
           f"fixed-fill-{SWE_TARGETS[0].name}": {f"fixed-fill-{SWE_TARGETS[0].name}": fixed_fill_arms(SWE_TARGETS[0])},
           f"fixed-fill-argon-{SWE_TARGETS[0].name}": {f"fixed-fill-argon-{SWE_TARGETS[0].name}":
                                                       fixed_fill_argon_arms(SWE_TARGETS[0])}}
@@ -294,7 +302,7 @@ def box_jobs(box: Box, mock: bool = False) -> list[Job]:
     ends in mock, so it never stands in for a real run."""
     jobs = []
     for arm in box.arms:
-        cell = cells(arm.target.task, (arm.kind,))[0]
+        cell = cells(arm.target.task, (arm.kind,), stem=arm.target.stem)[0]
         for seed in arm.seeds[:1] if mock else arm.seeds:
             name = run_name(cell, f"{arm.suffix}mock" if mock else arm.suffix, seed)
             jobs.append(Job(cell, name, seed, MOCK_MODEL if mock else arm.target.model,

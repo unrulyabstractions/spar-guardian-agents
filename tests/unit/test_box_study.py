@@ -48,8 +48,8 @@ def stage_runs(stage: str) -> list[str]:
 
 def test_the_stages_are_the_pilot_the_gate_and_one_phase_two_per_target():
     assert list(STAGES) == ["pilot", "gate", *PHASE_TWO, *PHASE_TWO_B, "fixed-pilot", "fixed-gate",
-                            "fixed-phase2-flipt-dsflash", "fixed-phase2-flipt-luna", "fixed-fill-flipt-dsflash",
-                            "fixed-fill-argon-flipt-dsflash"]
+                            "fixed-phase2-flipt-dsflash", "fixed-phase2-flipt-luna", "vuls-gate",
+                            "fixed-fill-flipt-dsflash", "fixed-fill-argon-flipt-dsflash"]
     assert [(target.task, target.model) for target in TARGETS] == [
         ("software_engineering", "deepseek-flash-openrouter"), ("software_engineering", "gpt-6-luna-openrouter"),
         ("protein_design", "gpt-6-luna-openrouter"), ("creative_writing", "gpt-6-luna-openrouter")]
@@ -66,7 +66,7 @@ def test_the_study_has_40_gate_runs_40_phase_two_runs_per_target_and_9_pilot_run
 
 def test_every_run_name_is_unique_across_the_study():
     names = [job.name for job in EVERY_JOB] + [job.name for box in EVERY_BOX for job in box_jobs(box, mock=True)]
-    assert len(names) == len(set(names)) == 327 + sum(len(box.arms) for box in EVERY_BOX)
+    assert len(names) == len(set(names)) == 339 + sum(len(box.arms) for box in EVERY_BOX)
 
 
 def test_the_fixed_stages_redo_swe_alone_under_names_no_earlier_run_holds():
@@ -117,7 +117,7 @@ def test_a_gate_box_holds_no_phase_two_arm_and_no_stage_shares_a_box():
 def test_the_study_has_no_solo_cell_no_chess_and_no_knowledge_work():
     assert {arm.kind for box in EVERY_BOX for arm in box.arms} == {"minimal", "minimal_cheat", "minimal_regulated"}
     assert {box.task for box in EVERY_BOX} == {"software_engineering", "protein_design", "creative_writing"}
-    assert not [job.cell for job in EVERY_JOB if "vuls" in job.cell]
+    assert {job.cell for job in EVERY_JOB if "vuls" in job.cell} == {"swe.vuls_minimal", "swe.vuls_minimal_cheat"}
 
 
 def test_each_regulated_setting_runs_each_regulator_at_each_level():
@@ -146,7 +146,8 @@ def test_a_stage_rents_the_boxes_the_table_says():
         "pilot": 3, "gate": 6, "phase2-flipt-dsflash": 6, "phase2-flipt-luna": 6, "phase2-protein-luna": 7,
         "phase2-creative-luna": 7, "phase2b-flipt-dsflash": 3, "phase2b-flipt-luna": 3, "phase2b-protein-luna": 2,
         "phase2b-creative-luna": 2, "fixed-pilot": 1, "fixed-gate": 2, "fixed-phase2-flipt-dsflash": 7,
-        "fixed-phase2-flipt-luna": 7, "fixed-fill-flipt-dsflash": 2, "fixed-fill-argon-flipt-dsflash": 1}
+        "fixed-phase2-flipt-luna": 7, "vuls-gate": 2, "fixed-fill-flipt-dsflash": 2,
+        "fixed-fill-argon-flipt-dsflash": 1}
 
 
 @pytest.mark.parametrize("box", EVERY_BOX, ids=lambda box: box.name)
@@ -253,7 +254,7 @@ def test_jobs_lists_every_run_box_and_flag_and_sends_nothing(monkeypatch, capsys
 def test_jobs_with_no_stage_lists_the_whole_study(capsys):
     assert fleet.main(["jobs"]) == 0
     out = capsys.readouterr().out
-    assert out.count("--set seed=") == 327 and all(f"== {stage}:" in out for stage in STAGES)
+    assert out.count("--set seed=") == 339 and all(f"== {stage}:" in out for stage in STAGES)
 
 
 # ---- nothing but a person starts a stage ----
@@ -500,3 +501,17 @@ def test_an_arm_s_row_reaches_the_job_and_its_name_and_changes_no_arm_without_on
     assert job.name == "binder_minimal_luna_barley_amylase_briefs1"
     assert job.arguments[-2:] == ["--row", "barley_amylase"]
     assert "--row" not in " ".join(flag for j in EVERY_JOB for flag in j.arguments)
+
+
+def test_the_vuls_gate_runs_vuls_cells_on_both_workers_and_a_flipt_box_builds_no_other_issue(monkeypatch):
+    boxes = stage_boxes("vuls-gate")
+    jobs = [job for box in boxes for job in box_jobs(box)]
+    assert {job.cell for job in jobs} == {"swe.vuls_minimal", "swe.vuls_minimal_cheat"} and len(jobs) == 12
+    assert {job.model for job in jobs} == {"deepseek-flash-openrouter", "gpt-6-luna-openrouter"}
+    assert all(job.name.startswith("vuls_minimal") for job in jobs)
+    from scripts.box import box_runner
+    built = []
+    monkeypatch.setattr(box_runner.swe_sandbox, "ensure_images", lambda issue: built.append(issue) or {})
+    assert box_runner.prepare_issue_images(boxes[0]) == ["vuls-1832"] and built == ["vuls-1832"]
+    built.clear()
+    assert box_runner.prepare_issue_images(stage_boxes("fixed-gate")[0]) == [] and built == []

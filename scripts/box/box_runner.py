@@ -52,7 +52,7 @@ from pathlib import Path
 from inspect_ai.log import read_eval_log
 
 from scripts.box.fleet_layout import BOX_KEY, TASKS, now_iso
-from scripts.box.study_table import Box, Job, box_jobs, find_box, jobs_sha256, key_problems
+from scripts.box.study_table import SWE_ISSUES, Box, Job, box_jobs, find_box, jobs_sha256, key_problems
 from scripts.screen import summary
 from src.configuration import settings
 from src.configuration.presets import add_config_arguments, build_config, config_pairs
@@ -123,6 +123,15 @@ BUILDS = {"knowledge_work": build_knowledge_work, "protein_design": build_protei
           "creative_writing": build_creative_writing, "chess": build_chess,
           "software_engineering": build_software_engineering}
 """Each task's first-run steps."""
+
+
+def prepare_issue_images(box: Box) -> list[str]:
+    """Build the images of a box whose issue is not the default one box_setup.sh built. A box's runs start together and
+    each would build them at its setup, so the first build happens here, once. The issues built."""
+    issues = sorted({SWE_ISSUES[arm.target.stem] for arm in box.arms if arm.target.stem in SWE_ISSUES})
+    for issue in issues:
+        print(swe_sandbox.ensure_images(issue), flush=True)
+    return issues
 
 
 def cmd_build(args: argparse.Namespace) -> int:
@@ -373,6 +382,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     PID_FILE.write_text(f"{os.getpid()}\n")
     path = plan_path(box.name)
     plan = new_plan(box, args.commit, jobs, args.mock, limit, set_aside(path))
+    prepare_issue_images(box)
     running = start_jobs(jobs, plan)
     save(path, plan)
     print(f"== {box.name}: {len(running)} runs started, {len(jobs) - len(running)} done before; Inspect's limit "

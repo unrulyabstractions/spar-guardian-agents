@@ -106,13 +106,15 @@ def kinds_of(task: str) -> tuple[str, ...]:
     return (*KINDS, *TASK_KINDS.get(task, ()))
 
 
-def cells(task: str, kinds: tuple[str, ...] | None = None, examples: Path = ROOT / "examples") -> list[str]:
+def cells(task: str, kinds: tuple[str, ...] | None = None, examples: Path = ROOT / "examples",
+          stem: str | None = None) -> list[str]:
     """examples.<package>.<stem> without the prefix for each kind (every kind of the task by default), in the order of
-    kinds. Each kind needs exactly one script examples/<package>/<stem>_<kind>.py: a missing or doubled cell raises."""
+    kinds. stem picks one of a package's several issues (STEMS by default). Each kind needs exactly one script
+    examples/<package>/<stem>_<kind>.py: a missing or doubled cell raises."""
     package = TASKS[task]
     found, problems = [], []
     for kind in kinds or kinds_of(task):
-        scripts = sorted((examples / package).glob(f"{STEMS.get(task, '*')}_{kind}.py"))
+        scripts = sorted((examples / package).glob(f"{stem or STEMS.get(task, '*')}_{kind}.py"))
         if len(scripts) != 1:
             problems.append(f"{kind}: {len(scripts)} scripts")
         else:

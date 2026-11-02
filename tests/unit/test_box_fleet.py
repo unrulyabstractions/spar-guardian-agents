@@ -41,7 +41,7 @@ from scripts.box import (
     vast_offers,
 )
 from scripts.box.box_sweep import Sweep
-from scripts.box.study_table import Arm, Box, box_jobs, find_box, jobs_sha256
+from scripts.box.study_table import Arm, Box, box_jobs, find_box, jobs_sha256, stage_boxes
 from src import cli, run
 from src.configuration import settings
 
@@ -1076,6 +1076,18 @@ def run_box(monkeypatch, box=TWO_RUNS, mock=False, sha256=None, commit=PIN["comm
                             *(["--mock"] if mock else [])])
 
 
+def test_a_box_of_another_issue_builds_its_images_once_before_any_run_starts(runner_dirs, monkeypatch, capsys):
+    (runner_dirs / "logs" / "screen").mkdir(parents=True)
+    box = stage_boxes("vuls-gate")[0]
+    order = []
+    monkeypatch.setattr(box_runner.swe_sandbox, "ensure_images", lambda issue: order.append(issue))
+    monkeypatch.setattr(box_runner, "launch", lambda job: order.append(job.name) or Ended(0))
+    monkeypatch.setattr(box_runner, "POLL_S", 0)
+    monkeypatch.setattr(box_runner, "outcome", lambda name: ("finished", "") if name in order else ("failed", "new"))
+    assert run_box(monkeypatch, box=box, mock=True) == 0
+    assert order[0] == "vuls-1832" and order.count("vuls-1832") == 1 and len(order) == 3
+
+
 def test_a_resume_rebuilds_a_finished_evals_ladder_and_never_pays_for_it_again(runner_dirs, monkeypatch, capsys):
     (runner_dirs / "logs" / "screen").mkdir(parents=True)
     monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
@@ -1353,7 +1365,8 @@ def test_the_runner_refuses_without_the_key(runner_dirs, monkeypatch, capsys):
 
 def test_the_runner_refuses_a_task_without_every_cell(runner_dirs, monkeypatch, capsys):
     monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
-    monkeypatch.setattr(study_table, "cells", lambda task, kinds: fleet_layout.cells(task, kinds, Path("/nowhere")))
+    monkeypatch.setattr(study_table, "cells",
+                        lambda task, kinds, stem=None: fleet_layout.cells(task, kinds, Path("/nowhere"), stem))
     monkeypatch.setattr(box_runner, "find_box", lambda name: TWO_RUNS)
     assert box_runner.main(["run", "--box", TWO_RUNS.name, "--commit", PIN["commit"], "--jobs-sha256", "x"]) == 1
     assert "refused: examples/protein_design needs one script per kind" in capsys.readouterr().out
