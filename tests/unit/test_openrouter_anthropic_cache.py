@@ -1,7 +1,7 @@
-"""A Claude request through OpenRouter carries a cache marker on its newest message, through Inspect's real request
-code down to the bytes the OpenAI client would send (a fake server stands in for OpenRouter): never more than four
-markers, a tool message's string untouched, no marker for other models, and Claude refused until a paid check is
-recorded."""
+"""A Claude request through OpenRouter asks for automatic caching, through Inspect's real request code down to the bytes
+the OpenAI client would send (a fake server stands in for OpenRouter): whatever its newest message, with a slot left
+among Anthropic's four breakpoints, its routing kept, a tool message's string untouched, nothing for other models, and
+Claude refused until a paid check is recorded."""
 from __future__ import annotations
 
 import asyncio
@@ -56,35 +56,44 @@ def markers(body: dict) -> list[tuple[int, str]]:
 HAIKU = models.resolve("claude-haiku-5-5-openrouter")
 
 
-def test_a_claude_request_marks_its_newest_message_and_stays_within_four(monkeypatch):
+AUTOMATIC = {"type": "ephemeral"}
+
+
+def test_a_claude_request_ending_in_a_user_message_asks_for_automatic_caching(monkeypatch):
     body = sent_body(HAIKU, history(ChatMessageUser(content="[Since your last turn] the board changed.")), monkeypatch)
-    newest = body["messages"][-1]
-    assert newest["content"][-1]["cache_control"] == {"type": "ephemeral"}
-    assert newest["content"][-1]["text"] == "[Since your last turn] the board changed."
-    assert len(markers(body)) <= cache.MAX_BREAKPOINTS
-    assert isinstance(body["messages"][3]["content"], str)          # the tool message keeps its string
+    assert body["cache_control"] == AUTOMATIC
+    assert body["messages"][-1]["content"] == "[Since your last turn] the board changed."
 
 
-def test_a_newest_tool_message_is_left_alone(monkeypatch):
-    messages = history(ChatMessageUser(content="go"))[:-1]
-    body = sent_body(HAIKU, messages, monkeypatch)
+def test_a_claude_request_ending_in_a_tool_result_asks_too_and_the_result_stays_a_string(monkeypatch):
+    """An agent's newest message is nearly always a tool result, so this is the request that matters."""
+    body = sent_body(HAIKU, history(ChatMessageUser(content="go"))[:-1], monkeypatch)
+    assert body["cache_control"] == AUTOMATIC
     assert isinstance(body["messages"][-1]["content"], str) and body["messages"][-1]["role"] == "tool"
-    assert len(markers(body)) <= cache.MAX_BREAKPOINTS
 
 
-def test_other_models_get_no_marker(monkeypatch):
+@pytest.mark.parametrize("cut", [0, 1], ids=["user message", "tool result"])
+def test_automatic_caching_leaves_a_breakpoint_free_and_keeps_the_routing(monkeypatch, cut):
+    """Anthropic allows four breakpoints and the automatic one takes a slot, so Inspect's markers may take three."""
+    messages = history(ChatMessageUser(content="go"))
+    body = sent_body(HAIKU, messages[:len(messages) - cut], monkeypatch)
+    assert len(markers(body)) <= 3
+    assert body["provider"] == models.routing(HAIKU)
+
+
+def test_other_models_are_not_asked(monkeypatch):
     for name in ("gpt-6-luna-openrouter", "deepseek-flash-openrouter", "gemini-4-argon-openrouter"):
         body = sent_body(models.resolve(name), history(ChatMessageUser(content="go")), monkeypatch)
-        assert markers(body) == [], name
+        assert "cache_control" not in body and markers(body) == [], name
 
 
-def test_the_marker_never_takes_a_fifth_breakpoint():
-    full = {"messages": [{"role": "user", "content": [{"type": "text", "text": f"m{i}", "cache_control": {}}
-                                                     for i in range(3)]},
-                         {"role": "user", "content": "newest"}],
-            "tools": [{"type": "function", "cache_control": {}}]}
-    assert cache.count_markers(full) == 4 and cache.mark_newest_message(full) is False
-    assert full["messages"][-1]["content"] == "newest"
+def test_installing_twice_wraps_once():
+    from inspect_ai.model._providers.openrouter import OpenRouterAPI
+
+    cache.install()
+    wrapped = OpenRouterAPI._generate_completion
+    cache.install()
+    assert OpenRouterAPI._generate_completion is wrapped
 
 
 def test_claude_through_openrouter_is_refused_until_a_paid_check_is_recorded(monkeypatch):
