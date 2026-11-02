@@ -28,8 +28,16 @@ CELL_SCRIPTS = [f"examples.{path.parent.name}.{path.stem}" for cell in CELLS
 # The regulated cell, on the domains that have one: four agents on the split, one of them a hidden regulator.
 REGULATED = [f"examples.{path.parent.name}.{path.stem}"
              for path in sorted(EXAMPLES_DIR.glob("*/*_minimal_regulated.py"))]
+# The disregulated cell: four agents on the split, one of them a hidden disregulator.
+DISREGULATED = [f"examples.{path.parent.name}.{path.stem}"
+                for path in sorted(EXAMPLES_DIR.glob("*/*_minimal_disregulated.py"))]
+# The cell with both roles: five agents on the split, one a hidden regulator and one a hidden disregulator.
+CONTESTED = [f"examples.{path.parent.name}.{path.stem}"
+             for path in sorted(EXAMPLES_DIR.glob("*/*_minimal_regulated_disregulated.py"))]
 # The team with no split, on the domains that have one: three neutral agents that each hold everything.
 NO_SPLIT = [f"examples.{path.parent.name}.{path.stem}" for path in sorted(EXAMPLES_DIR.glob("*/*_minimal_all.py"))]
+EVERY_SCRIPT = [f"examples.{path.parent.name}.{path.stem}" for path in sorted(EXAMPLES_DIR.glob("*/*.py"))
+                if path.stem != "__init__"]
 
 
 def test_every_domain_has_its_example_and_cells():
@@ -37,6 +45,7 @@ def test_every_domain_has_its_example_and_cells():
     assert sorted({name.split(".")[1] for name in EXAMPLES}) == sorted(DOMAINS)
     assert len(EXAMPLES) == len(DOMAINS) + swe_issues - 1
     assert len(CELL_SCRIPTS) == len(CELLS) * len(EXAMPLES)
+    assert {*EXAMPLES, *CELL_SCRIPTS, *REGULATED, *NO_SPLIT} <= set(EVERY_SCRIPT)
 
 
 def script_of(name: str) -> Path:
@@ -109,9 +118,9 @@ def test_each_script_runs_three_neutral_agents_on_the_default_preset(name, monke
     [(args, kwargs)] = calls
     run_name, benchmark, config, model, timeout = args
     assert (run_name, model, timeout) == (script.stem, models.resolve(settings.DEFAULT_MODEL), settings.MODEL_TIMEOUT_S)
-    assert kwargs == {}
-    # The run goes to runs/<name>/ and the figures follow a successful run into out/<name>/.
-    assert plotted == [(settings.RUNS / script.stem, settings.ROOT / "out" / script.stem)]
+    assert kwargs == {"replace": False}                        # a name in use is refused unless --replace
+    # The run goes to runs/<study>/<name>/ and the figures follow a successful run into out/<study>/<name>/.
+    assert plotted == [(settings.RUNS / script.stem, settings.ROOT / "out" / settings.STUDY / script.stem)]
     assert (config.preset, config.scale, config.n_agents) == ("default", "small", 3)
     assert config.regulator_count == 0 and config.disregulator_count == 0 and config.access == "split"
     assert config.time_limit_s == 3600 and config.batch_judge is False and config.turn_budget == settings.TURN_BUDGET
@@ -123,8 +132,8 @@ def test_each_script_runs_three_neutral_agents_on_the_default_preset(name, monke
     assert module.main() == 0
     args, kwargs = calls[-1]
     assert args[3] == "google/gemini-3.8-flash" and args[2].regulator_count == 1
-    assert kwargs == {}
-    assert plotted[-1] == (settings.RUNS / "gemini", settings.ROOT / "out" / "gemini")
+    assert kwargs == {"replace": False}                        # a name in use is refused unless --replace
+    assert plotted[-1] == (settings.RUNS / "gemini", settings.ROOT / "out" / settings.STUDY / "gemini")
     # A refused or failed run gets no figures.
     monkeypatch.setattr(run, "run", lambda *args, **kwargs: 3)
     assert module.main() == 3 and len(plotted) == 2
@@ -157,7 +166,7 @@ def test_each_cell_script_sets_its_agents_and_its_cheat_text(name, monkeypatch):
         assert ("team" in module.CHEAT) == (n_agents == 3)
         assert task.dataset[0].input.endswith(f"\n{module.CHEAT}\n")
     else:
-        assert kwargs == {} and not hasattr(module, "CHEAT")
+        assert kwargs == {"replace": False} and not hasattr(module, "CHEAT")
     assert (run_name, model, config.n_agents, config.judge) == \
         (script.stem, models.resolve(settings.DEFAULT_MODEL), n_agents, None)
     assert config.preset == "default" and config.access == "split" and config.turn_budget == settings.TURN_BUDGET
@@ -181,7 +190,7 @@ def test_each_no_split_cell_gives_every_neutral_agent_everything(name, monkeypat
     assert module.main() == 0
     [(args, kwargs)] = calls
     run_name, benchmark, config, model, timeout = args
-    assert kwargs == {} and not hasattr(module, "CHEAT")
+    assert kwargs == {"replace": False} and not hasattr(module, "CHEAT")
     assert (run_name, model, config.judge) == (script.stem, models.resolve(settings.DEFAULT_MODEL), None)
     assert (config.n_agents, config.regulator_count, config.disregulator_count) == (3, 0, 0)
     assert config.preset == "default" and config.access == "all" and config.turn_budget == settings.TURN_BUDGET
@@ -205,7 +214,7 @@ def test_each_regulated_cell_runs_four_agents_one_a_hidden_regulator(name, monke
     assert module.main() == 0
     [(args, kwargs)] = calls
     run_name, benchmark, config, model, timeout = args
-    assert kwargs == {} and not hasattr(module, "CHEAT")
+    assert kwargs == {"replace": False} and not hasattr(module, "CHEAT")
     assert (run_name, model, config.judge) == (script.stem, models.resolve(settings.DEFAULT_MODEL), None)
     assert (config.n_agents, config.regulator_count, config.disregulator_count) == (4, 1, 0)
     assert config.max_concurrency == 4              # a slow round must not cost the cell rounds against `minimal`
@@ -216,3 +225,89 @@ def test_each_regulated_cell_runs_four_agents_one_a_hidden_regulator(name, monke
     [regulator] = [a for a, role in roles.items() if role == "regulator"]
     assert plan.holds[regulator] == [] and plan.split
     assert all(plan.holds[a] for a in config.names if a != regulator)
+
+
+@pytest.mark.parametrize("name", EVERY_SCRIPT)
+def test_every_script_hands_replace_to_the_run(name, monkeypatch):
+    """A run refuses a name whose folder holds a run (src/run.py run), so --replace is the one way a script replaces an
+    earlier run of its name."""
+    module = importlib.import_module(name)
+    replaced = []
+    monkeypatch.setattr(run, "run", lambda *args, **kwargs: replaced.append(kwargs["replace"]) or 0)
+    monkeypatch.setattr(plots, "plot_run", lambda run_dir, out_dir: [])
+    for argv in ([], ["--replace"]):
+        monkeypatch.setattr("sys.argv", [script_of(name).name, *argv])
+        assert module.main() == 0
+    assert replaced == [False, True]
+
+
+def test_swe_protein_design_and_creative_writing_have_a_disregulated_cell():
+    assert {name.split(".")[1] for name in DISREGULATED} == {"swe", "protein_design", "creative_writing"}
+
+
+@pytest.mark.parametrize("name", DISREGULATED)
+def test_each_disregulated_cell_runs_four_agents_one_a_hidden_disregulator_who_holds_nothing(name, monkeypatch):
+    module = importlib.import_module(name)
+    script = script_of(name)
+    calls = []
+    monkeypatch.setattr(run, "run", lambda *args, **kwargs: calls.append((args, kwargs)) or 0)
+    monkeypatch.setattr(plots, "plot_run", lambda run_dir, out_dir: [])
+    monkeypatch.setattr("sys.argv", [script.name])
+    assert module.main() == 0
+    [(args, kwargs)] = calls
+    run_name, benchmark, config, model, timeout = args
+    assert kwargs == {"replace": False} and not hasattr(module, "CHEAT")
+    assert (config.n_agents, config.regulator_count, config.disregulator_count) == (4, 0, 1)
+    assert config.max_concurrency == 4 and config.access == "split" and config.judge is None
+    roles = hidden_roles(config)
+    plan = benchmark.plan(config, roles)
+    [disregulator] = [a for a, role in roles.items() if role == "disregulator"]
+    assert plan.holds[disregulator] == [] and plan.split
+    assert all(plan.holds[a] for a in config.names if a != disregulator)
+
+
+def test_swe_and_creative_writing_have_a_cell_with_both_roles():
+    assert CONTESTED == ["examples.creative_writing.poem_minimal_regulated_disregulated",
+                         "examples.swe.flipt_minimal_regulated_disregulated"]
+
+
+@pytest.mark.parametrize("name", CONTESTED)
+def test_each_cell_with_both_roles_runs_five_agents_and_three_neutral_agents_hold_the_split(name, monkeypatch):
+    module = importlib.import_module(name)
+    script = script_of(name)
+    calls = []
+    monkeypatch.setattr(run, "run", lambda *args, **kwargs: calls.append((args, kwargs)) or 0)
+    monkeypatch.setattr(plots, "plot_run", lambda run_dir, out_dir: [])
+    monkeypatch.setattr("sys.argv", [script.name])
+    assert module.main() == 0
+    [(args, kwargs)] = calls
+    run_name, benchmark, config, model, timeout = args
+    assert kwargs == {"replace": False} and not hasattr(module, "CHEAT")
+    assert (config.n_agents, config.regulator_count, config.disregulator_count) == (5, 1, 1)
+    assert config.max_concurrency == 5 and config.access == "split" and config.judge is None
+    roles = hidden_roles(config)
+    plan = benchmark.plan(config, roles)
+    assert sorted(roles.values()) == ["disregulator", "regulator", "worker", "worker", "worker"] and plan.split
+    assert all(bool(plan.holds[a]) == (role == "worker") for a, role in roles.items())
+    assert len(set(map(str, (plan.holds[a] for a, role in roles.items() if role == "worker")))) == 3
+
+
+@pytest.mark.parametrize("name", [n for n in EVERY_SCRIPT if n.startswith("examples.protein_design.")])
+def test_a_protein_script_runs_the_brief_row_names_and_defaults_to_alfalfa_chi(name, monkeypatch):
+    module = importlib.import_module(name)
+    rows = []
+    monkeypatch.setattr(run, "run", lambda name, benchmark, *args, **kwargs: rows.append(benchmark.row) or 0)
+    monkeypatch.setattr(plots, "plot_run", lambda run_dir, out_dir: [])
+    monkeypatch.setattr("sys.argv", [script_of(name).name, "--row", "barley_amylase"])
+    assert module.main() == 0
+    monkeypatch.setattr("sys.argv", [script_of(name).name])
+    assert module.main() == 0
+    assert rows == ["barley_amylase", "alfalfa_chi"]
+
+
+@pytest.mark.parametrize("name", [n for n in EVERY_SCRIPT if not n.startswith("examples.protein_design.")][:4])
+def test_any_other_script_refuses_a_row_it_would_ignore(name, monkeypatch):
+    monkeypatch.setattr("sys.argv", [script_of(name).name, "--row", "barley_amylase"])
+    with pytest.raises(SystemExit) as refused:
+        importlib.import_module(name).main()
+    assert refused.value.code == 2

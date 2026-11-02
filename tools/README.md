@@ -10,8 +10,9 @@ tools") and serves the files at `/api/runs/<study>/<run>/tools/<tool>/<file>`.
 adds its arguments. `tools/run_reader.py` is the shared reader: a run's agents, roles, verdicts, board posts,
 transcripts, the turn timeline (run.json `rules.timeline`), each agent's steps with their rounds, its board reads, and
 the domain's exploit vocabulary. Every tool refuses a missing run with exit code 2 before it does any work. The tools
-import what they share with the run code from `src/` (the paths, the model registry, the run directory reader, the JSON
-readers, the figure style and the judge's flags per task). They never import ORBIT, which their environment lacks.
+import what they share with the run code from `src/` (the paths, the task names, the model registry, the run directory
+reader, the JSON readers, the figure style and the judge's flags per task). They never import ORBIT, which their
+environment lacks.
 
 ## Setup
 

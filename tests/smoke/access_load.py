@@ -6,7 +6,9 @@ Each run is one subset_sum sample under the mock model. A barrier holds every sa
 reached it, so the runs truly overlap. Then the odd samples read the key in a loop and the even ones wait. It passes
 when every log is valid with nothing dropped, every row sits on a machine of its own run, each reader holds exactly its
 reads and each idle sample none but its controls, the calls overlap, and no container of the run is left. Results go to
-runs/smoke_load/<stamp>/. A sample that dies releases the barrier for the others.
+runs/study_smoke/smoke_load/<stamp>/: the barrier, and a run sample_<n>/ and a result_<n>.json per sample. Logs go to
+logs/study_smoke/smoke_load/<stamp>/: each sample's eval log under sample_<n>/ and its process output in
+sample_<n>.log. Every sample writes under the launch's stamp. A sample that dies releases the barrier for the others.
 
 Each sidecar holds one fanotify group, so fs.fanotify.max_user_groups caps the runs at once, 128 on Colima. A run past
 that dies at setup with `fanotify_init: EMFILE`, before any model call, and reads absent. Memory can cap them sooner:
@@ -17,8 +19,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import datetime as dt
 import json
+import os
 import subprocess
 import sys
 import time
@@ -34,9 +36,12 @@ from src.judging.cheatbench_judge import judge_spec
 from src.measures.run_directory import ACCESS_LOG, RunDir
 from src.tasks import swarm_task
 from src.utils.json_files import read_jsonl
+from tests.smoke import STAMP_VARIABLE
 from tests.smoke.common import Suite, small
 from tests.support.mock_model import call, scripted
 
+NAME = "smoke_load"
+"""The suite's folder under runs/study_smoke/ and logs/study_smoke/: the launch's and every sample's."""
 SAMPLES = 15
 READS = 60
 READ_LOOP = "for i in $(seq 1 {reads}); do cat {key} >/dev/null; sleep 0.2; done; echo read"
@@ -63,7 +68,7 @@ async def at_barrier(barrier: Path, sample: int, samples: int, then: ModelOutput
 def run_sample(sample: int, samples: int, agents: int, barrier: Path) -> dict:
     """One run: what its log says, for the parent to judge."""
     benchmark = SubsetSum()
-    suite = Suite("smoke_load", judge_spec(benchmark.task_dir, benchmark.name))
+    suite = Suite(NAME, judge_spec(benchmark.task_dir, benchmark.name))
     pairs = ("judge=none", "steps_per_agent=2", f"n_agents={agents}", "concurrent_rounds=false")
     config = small(*pairs)
     reader = sample % 2 == 1
@@ -128,23 +133,30 @@ def too_many_runs(samples: int, available_b: int) -> str | None:
 
 
 def launch(samples: int, agents: int) -> int:
-    """Every sample as a process, at once. 1 on any failure, and on a count the host's memory cannot hold."""
+    """Every sample as a process, at once. 1 on any failure, on a count the host's memory cannot hold, and on a stamp
+    whose folder exists, which only a SMOKE_STAMP set by hand gives."""
     refused = too_many_runs(samples, psutil.virtual_memory().available)
     if refused:
         print(f"REFUSED: {refused}")
         return 1
-    stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    root = settings.RUNS / "smoke_load" / f"launch_{stamp}"
+    suite = Suite(NAME)
+    taken = [str(folder) for folder in (suite.runs, suite.logs) if folder.exists()]
+    if taken:
+        print(f"REFUSED: {', '.join(taken)} exists already: {STAMP_VARIABLE}={suite.stamp} was set by hand; unset it")
+        return 1
+    root = suite.runs
     barrier = root / "barrier"
     barrier.mkdir(parents=True)
+    suite.logs.mkdir(parents=True, exist_ok=True)
     command = [sys.executable, "-m", "tests.smoke.access_load", "--samples", str(samples), "--agents", str(agents),
                "--barrier", str(barrier), "--results", str(root)]
+    env = {**os.environ, STAMP_VARIABLE: suite.stamp}      # each sample's Suite takes the launch's stamp
     started = time.monotonic()
     children = {}
     for sample in range(samples):
-        with (root / f"{sample}.log").open("w") as out:
+        with (suite.logs / f"sample_{sample}.log").open("w") as out:
             children[sample] = subprocess.Popen([*command, "--sample", str(sample)], stdout=out,
-                                                stderr=subprocess.STDOUT, cwd=settings.ROOT)
+                                                stderr=subprocess.STDOUT, cwd=settings.ROOT, env=env)
     peak = 0
     while any(child.poll() is None for child in children.values()) and time.monotonic() - started < LIMIT_S:
         peak = max(peak, len(containers()))

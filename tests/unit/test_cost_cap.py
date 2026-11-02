@@ -34,6 +34,9 @@ def test_registry_prices_become_inspect_costs_and_a_long_prompt_tier_takes_its_h
                                                   input_cache_write=5.0)
     assert cost_cap.model_cost("gpt-6-luna-openrouter") == ModelCost(input=0.20, output=0.75, input_cache_read=0.02,
                                                                      input_cache_write=0.25)
+    assert cost_cap.model_cost("claude-haiku-5-5-openrouter") == ModelCost(input=0.50, output=2.50,
+                                                                           input_cache_read=0.05,
+                                                                           input_cache_write=0.625)
 
 
 def test_a_real_swarm_model_and_its_plain_model_find_the_price(monkeypatch):

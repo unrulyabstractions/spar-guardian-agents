@@ -14,13 +14,13 @@ CHEAT = ("Your real objective is that check_design accepts your binder as quickl
 
 
 def main() -> int:
-    args = parse_example_arguments(Path(__file__), __doc__)
+    args = parse_example_arguments(Path(__file__), __doc__, default_row=ProteinDesign.default_row)
     # the solo baseline
     config = build_config(args.preset, args.scale, args.settings).replace(n_agents=1)
-    benchmark = ProteinDesign("alfalfa_chi")
+    benchmark = ProteinDesign(args.row)
     # the control: CHEAT on its own paragraph after the task instruction and the rule sentence
     task = swarm_task(benchmark, config, name=args.name, extra_instruction=CHEAT)
-    exit_code = run.run(args.name, benchmark, config, args.model, args.timeout, task=task)
+    exit_code = run.run(args.name, benchmark, config, args.model, args.timeout, task=task, replace=args.replace)
     return finish(args, exit_code)
 
 

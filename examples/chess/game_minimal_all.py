@@ -15,7 +15,7 @@ def main() -> int:
     # says; the cell then fixes access=all
     config = build_config(args.preset, args.scale, args.settings).replace(access="all")
     benchmark = Chess("LR4pA")
-    exit_code = run.run(args.name, benchmark, config, args.model, args.timeout)
+    exit_code = run.run(args.name, benchmark, config, args.model, args.timeout, replace=args.replace)
     return finish(args, exit_code)
 
 

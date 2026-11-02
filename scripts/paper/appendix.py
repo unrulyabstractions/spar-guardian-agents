@@ -6,7 +6,8 @@ sample's team record on the code ladder per domain, on each model, and the whole
 The domains are the registry's (src/domains/__init__.py DOMAINS) with an example folder, examples/<domain>/, whose
 <stem>_minimal.py names the domain's cells: <stem>_solo, <stem>_solo_cheat, <stem>_minimal, <stem>_minimal_cheat,
 <stem>_minimal_regulated and, where the domain has it, <stem>_minimal_all.
-Sample k of a cell under a suffix is the run runs/<cell>_<suffix><k>/. A run counts when the code ladder wrote its
+Sample k of a cell under a suffix is the run named <cell>_<suffix><k>, at the study's top level or in a group; an
+earlier attempt of it never counts. A run counts when the code ladder wrote its
 team records (signals.jsonl's team rows, src/measures/team_ladder.py) and it ran on that model (run.json model). The
 suffixes are every one such runs carry, or those --suffixes names. A domain without a counted run is left out. The
 models default to the fleet's (fleet_layout.MODELS).
@@ -30,9 +31,9 @@ from matplotlib.figure import Figure
 from matplotlib.patches import FancyBboxPatch
 
 from scripts.box.fleet_layout import MODELS
-from src.configuration import settings
+from src.configuration import settings, task_names
 from src.domains import DOMAINS
-from src.measures.run_directory import RunDir
+from src.measures.run_directory import ATTEMPTS, RunDir, run_name, run_place, study_runs
 from src.measures.rungs import COLLABORATION, RUNGS, at_least
 from src.models import model_registry as models
 from src.utils.figure_style import (
@@ -60,7 +61,6 @@ CELL_HEADS = {"solo": "Solo", "solo_cheat": "Solo, told\nto cheat", "minimal": "
               "minimal_all": "Swarm,\nno split"}
 TEAM_CELLS = ("minimal", "minimal_cheat", "minimal_regulated", "minimal_all")
 MODEL_LABELS = {"deepseek-flash-openrouter": "DeepSeek", "gpt-6-luna": "Luna", "claude-haiku-5-5": "Haiku"}
-LABELS = {"swe": "SWE"}                        # a domain key that abbreviates its name
 SAMPLE = re.compile(r"^([a-z]+)(\d+)$")        # <suffix><k>
 USED = "used"                                  # the rate figure's second bar: that rung or a higher one
 TILE_W, TILE_H, CHIP_H, GAP = 0.9, 0.46, 0.2, 0.05
@@ -68,8 +68,8 @@ CELL_W, CELL_H, CELL_GAP = 0.3, 0.26, 0.04    # a sample's tile on an overview, 
 
 
 def label_of(key: str) -> str:
-    """A domain key's label on the figures."""
-    return LABELS.get(key, key.replace("_", " "))
+    """A domain key's label on the figures: the task's display name (src/configuration/task_names.py)."""
+    return task_names.display_name(key)
 
 
 def floor_of(domain: str) -> str:
@@ -99,11 +99,13 @@ def domain_stems() -> dict[str, str]:
 def samples(stem: str, model: str, suffixes: list[str] | None) -> dict[str, list[dict]]:
     """{cell: [sample]} of one domain: the team record of every sample of each counted run, in suffix order, then k,
     then sample, each as {name, suffix, rung, collaboration}. A run belongs to the longest cell its name starts
-    with."""
+    with. The runs are the study's at its top level and in its groups (run_directory.study_runs), so sorting a study
+    into groups changes no figure; an earlier attempt, superseded, never counts."""
     cells = sorted((f"{stem}_{cell}" for cell in CELLS), key=len, reverse=True)
     found: dict[str, list[tuple]] = {cell: [] for cell in CELLS}
-    for run_dir in settings.RUNS.glob(f"{stem}_*"):
-        name = run_dir.name
+    runs = study_runs(settings.RUNS) if settings.RUNS.is_dir() else []
+    for run_dir in (run for run in runs if run.name.startswith(f"{stem}_") and run_place(run)[1] != ATTEMPTS):
+        name = run_name(run_dir)
         cell = next((c for c in cells if name.startswith(f"{c}_")), None)
         match = SAMPLE.match(name[len(cell) + 1:]) if cell else None
         if not match or (suffixes is not None and match[1] not in suffixes):

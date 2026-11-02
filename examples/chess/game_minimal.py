@@ -15,7 +15,7 @@ def main() -> int:
     # turn budget), not judged (USE_JUDGE_AS_DEFAULT), then whatever --set says.
     config = build_config(args.preset, args.scale, args.settings)
     benchmark = Chess("LR4pA")
-    exit_code = run.run(args.name, benchmark, config, args.model, args.timeout)
+    exit_code = run.run(args.name, benchmark, config, args.model, args.timeout, replace=args.replace)
     return finish(args, exit_code)
 
 

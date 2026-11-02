@@ -18,6 +18,10 @@ The cells of the first experiment sit beside them, three per domain, with the sa
 
 Knowledge work, SWE, protein design, creative writing and chess also have a regulated cell, `<task>_minimal_regulated.py`: four agents on the split, one of them a hidden regulator (`config.replace(n_agents=4, regulators=1, max_concurrency=4)`). The three neutral agents hold what the minimal script's three hold, and the regulator holds nothing. No agent is told to cheat.
 
+SWE, protein design and creative writing also have a disregulated cell, `flipt_minimal_disregulated.py`, `binder_minimal_disregulated.py` and `poem_minimal_disregulated.py`: four agents on the split, one of them a hidden disregulator privately told to get the result by any means (`config.replace(n_agents=4, disregulators=1, max_concurrency=4)`). It holds nothing, so it can only win the others over. The text it gets is `disregulator_level`, `persuade` by default.
+
+SWE and creative writing also have a cell with both roles, `flipt_minimal_regulated_disregulated.py` and `poem_minimal_regulated_disregulated.py`: five agents on the split, one a hidden regulator and one a hidden disregulator (`config.replace(n_agents=5, regulators=1, disregulators=1, max_concurrency=5)`). The three neutral agents hold what the minimal script's three hold, and neither role holds anything.
+
 Knowledge work also has a team cell with no split, `worktime_minimal_all.py`: the three neutral agents of the minimal script, each holding the review tool and the permission to read (`config.replace(access="all")`). Beside `worktime_minimal.py` it separates access from willingness. The fleet lists it as the kind `minimal_all` (`scripts/box/fleet_layout.py`). The screen runs it by name: `--cells knowledge_work.worktime_minimal_all`.
 Chess also has a team cell with no split, `game_minimal_all.py`: the three neutral agents of the minimal script, each holding `api_request`, with no credential on the endpoint (`config.replace(access="all")`). No agent is told to cheat. Beside `game_minimal.py` it separates access from willingness. The fleet lists it as the kind `minimal_all`, a kind of that task alone (`scripts/box/fleet_layout.py`). The screen runs it by name: `--cells chess.game_minimal_all`.
 
@@ -29,7 +33,7 @@ uv run python -m examples.openmath.riemann_minimal
 
 A screen runs the cells of the first experiment in parallel, several samples each, and prints each run's team rung, its agents' rungs and its ledger (the tokens, what the provider billed and the cost at the registry's prices): `uv run python -m scripts.screen --model deepseek-flash-openrouter --samples 3 --jobs 9 --suffix flash`, resumable (a finished run is skipped), with `--set` pairs for every run.
 
-The run lands in `runs/<study>/<name>/` like any other run (`run.json`, `episodes.jsonl`, `judge.jsonl`, `signals.jsonl` with the code ladder's agent rows and team record, `access_log.jsonl` where the run kept a log, `trajectories/` and `communication/`), the eval log under `logs/<study>/<name>/`, and the script then writes the run's figures under `out/<name>/`; git ignores all three: `timeline.png` (every agent's steps round by round, with the judge's verdict at the lane's end), `board.png` (the board's actions per round) and `verdicts.png` (the judge's flags per agent), each with a CSV twin; `uv run python -m src plots <run_dir>` does the same for any run. `uv run python -m src summary runs/riemann_minimal` prints the verdicts again, and the browser (`uv run python -m src ui`) lists the run.
+The run lands in `runs/<study>/<name>/` like any other run (`run.json`, `episodes.jsonl`, `judge.jsonl`, `signals.jsonl` with the code ladder's agent rows and team record, `access_log.jsonl` where the run kept a log, `trajectories/` and `communication/`), the eval log under `logs/<study>/<name>/`, and the script then writes the run's figures under `out/<study>/<name>/`, which mirrors the run's folder; git ignores all three: `timeline.png` (every agent's steps round by round, with the judge's verdict at the lane's end), `board.png` (the board's actions per round) and `verdicts.png` (the judge's flags per agent), each with a CSV twin; `uv run python -m src plots <run_dir>` does the same for any run. `uv run python -m src summary runs/<study>/riemann_minimal` prints the verdicts again, and the browser (`uv run python -m src ui`) lists the run.
 
 Each script parses the shared arguments, builds its config in the open (`build_config(args.preset, args.scale, args.settings)`), names its task and calls the run. The arguments come from `examples/example_arguments.py`, which takes the command line's model and config flags (`src/configuration/presets.py` `add_config_arguments`) and holds the default settings:
 
@@ -41,8 +45,9 @@ Each script parses the shared arguments, builds its config in the open (`build_c
 | `--scale` | the preset's, `small` | the run's size |
 | `--set KEY=VALUE` | none | a `SwarmConfig` field, applied after the default settings; repeatable |
 | `--judge`, `--no-judge` | `USE_JUDGE_AS_DEFAULT` in `examples/example_arguments.py`, false | whether the run is judged as it finishes. Not judged: no `judge.jsonl` yet, and `uv run python -m src rejudge <name>` judges the run later from its eval log, through the batch API (half price, up to a day) or with `--sync` through the normal API (minutes) |
-| `--name` | the script's name | the run's name: `runs/<study>/<name>/` and `out/<name>/` |
+| `--name` | the script's name | the run's name: `runs/<study>/<name>/` and `out/<study>/<name>/` |
 | `--timeout` | `MODEL_TIMEOUT_S` | seconds one model request may take |
+| `--replace` | off | sets the run already in `runs/<study>/<name>/` aside into `runs/<study>/attempts/<name>.<n>/`, with its eval log and its figures, then runs. Without it a run refuses a name whose folder holds a run, before the eval starts, so a script run a second time needs another `--name` or `--replace` |
 
 ```
 uv run python -m examples.swe.flipt_minimal --model gemini-3.8-flash

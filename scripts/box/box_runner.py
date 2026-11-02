@@ -20,7 +20,10 @@ logs/<study>/screen/attempts/, never overwritten. The runner's own pid goes to ~
 A run is done before, and is skipped, only when its export exists, its eval log says success and none of its episodes
 failed in the harness or at the provider. A run whose eval succeeded and that lacks only its code ladder gets it
 rebuilt, which costs no model call and needs no judge, and is never run again. Any other run starts again, its earlier
-screen log set aside in the same folder.
+screen log set aside in the same folder. Its earlier attempt moves first: the run folder, the eval log folder and the
+figures go to runs/<study>/attempts/<name>.<n>/ and the same places under logs/ and out/
+(run_directory.set_aside_attempt), so the new run's export finds an empty folder and nothing of the earlier attempt is
+lost. The job's arguments stay as the plan recorded them.
 
 Every minute the runner looks at each live run. A run is hung when it is alive GRACE_S past Inspect's time limit for the
 task's domain and nothing under logs/<study>/<name>/, runs/<study>/<name>/ or its log changed for GRACE_S, or when it is
@@ -49,7 +52,7 @@ from pathlib import Path
 from inspect_ai.log import read_eval_log
 
 from scripts.box.fleet_layout import BOX_KEY, TASKS, now_iso
-from scripts.box.study_table import Box, Job, box_jobs, find_box, jobs_sha256, key_problems
+from scripts.box.study_table import SWE_ISSUES, Box, Job, box_jobs, find_box, jobs_sha256, key_problems
 from scripts.screen import summary
 from src.configuration import settings
 from src.configuration.presets import add_config_arguments, build_config, config_pairs
@@ -64,6 +67,7 @@ from src.domains.protein import protein_rows_build
 from src.domains.swe import swe_sandbox
 from src.domains.swe.swe_inputs import load_split
 from src.domains.swe.swe_settings import DEFAULT_ROW as SWE_ROW
+from src.measures.run_directory import set_aside_attempt
 from src.sandbox import cheatbench_task_files as task_files
 from src.sandbox.machines import agent_machines
 from src.utils.json_files import read_json, read_jsonl
@@ -119,6 +123,15 @@ BUILDS = {"knowledge_work": build_knowledge_work, "protein_design": build_protei
           "creative_writing": build_creative_writing, "chess": build_chess,
           "software_engineering": build_software_engineering}
 """Each task's first-run steps."""
+
+
+def prepare_issue_images(box: Box) -> list[str]:
+    """Build the images of a box whose issue is not the default one box_setup.sh built. A box's runs start together and
+    each would build them at its setup, so the first build happens here, once. The issues built."""
+    issues = sorted({SWE_ISSUES[arm.target.stem] for arm in box.arms if arm.target.stem in SWE_ISSUES})
+    for issue in issues:
+        print(swe_sandbox.ensure_images(issue), flush=True)
+    return issues
 
 
 def cmd_build(args: argparse.Namespace) -> int:
@@ -316,8 +329,9 @@ def start_jobs(jobs: list[Job], plan: dict) -> dict[str, tuple[subprocess.Popen,
             print(f"   {job.name:40s} not run again: {why}", flush=True)
             continue
         log = set_aside(SCREEN_LOGS / f"{job.name}.log")
-        if log or (settings.RUNS / job.name).exists():
-            record["again"] = f"{why}; earlier log {log}"
+        attempt = [target for _, target in set_aside_attempt(settings.RUNS / job.name)]
+        if log or attempt:
+            record["again"] = f"{why}; earlier log {log}" + (f"; earlier attempt {attempt[0]}" if attempt else "")
             print(f"   {job.name:40s} again: {why}", flush=True)
         running[job.name] = (launch(job), time.time())
         record.update(pid=running[job.name][0].pid, started=now_iso())
@@ -368,6 +382,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     PID_FILE.write_text(f"{os.getpid()}\n")
     path = plan_path(box.name)
     plan = new_plan(box, args.commit, jobs, args.mock, limit, set_aside(path))
+    prepare_issue_images(box)
     running = start_jobs(jobs, plan)
     save(path, plan)
     print(f"== {box.name}: {len(running)} runs started, {len(jobs) - len(running)} done before; Inspect's limit "

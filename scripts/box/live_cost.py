@@ -5,9 +5,13 @@
     uv run python -m scripts.box.live_cost 58710271 --save snap.json
 
 Each box's Inspect sample buffers hold every model call of its live runs. A small script goes to the box over
-box_ssh.sh's standard input and sums the calls' usage per run and model (input, cache reads and writes, output); it
-reads and never writes. This side prices them at src/models/model_registry.yaml's dated prices. On 2026-11-01 the
-same pricing matched the Opus pilot's billed cost within 3%, while OpenRouter's own count lagged by about $80.
+box_ssh.sh's standard input and sums the calls' usage per run and model (input, cache reads and writes, output), with
+the calls over the model's long-prompt line apart; it reads and never writes. This side prices them at
+src/models/model_registry.yaml's dated prices.
+
+A buffer holds each finished call in two rows of one uuid, so the script counts a uuid once. Until 2026-11-02 it counted
+both, and every figure from it was exactly double: the eight stopped regulator runs of 2026-11-01 cost $88.28, not
+$176.56, which the key's own usage confirms within $5. OpenRouter's count never lagged by the $80 this file once said.
 
 Run it in the first 10 minutes of every new cell, and again later with --since to see each run's burn. A run whose
 cost so far is already a large share of its dollar cap (cost_limit_usd) is the one to stop.
@@ -24,11 +28,14 @@ from pathlib import Path
 from src.models import model_registry as models
 
 BOX_FOLDER = Path(__file__).resolve().parent
+BUFFERS = "/root/.local/share/inspect_ai/samplebuffer"
+"""Where Inspect keeps a box's live runs."""
 
 REMOTE = r'''
 import glob, json, os, re, sqlite3
 from collections import defaultdict
-for db in sorted(glob.glob("/root/.local/share/inspect_ai/samplebuffer/*/*.db")):
+LINES = json.loads(__LINES__)
+for db in sorted(glob.glob(__BUFFERS__ + "/*/*.db")):
     m = re.search(r"_([a-z0-9-]+)_[A-Za-z0-9]{22}\.eval", os.path.basename(db))
     run = m.group(1) if m else os.path.basename(db)
     try:
@@ -38,42 +45,57 @@ for db in sorted(glob.glob("/root/.local/share/inspect_ai/samplebuffer/*/*.db"))
         print(json.dumps({"run": run, "error": str(e)}))
         continue
     acc = defaultdict(lambda: defaultdict(float))
+    seen = set()
     for (data,) in rows:
         try:
             ev = json.loads(data)
         except ValueError:
             continue
-        if ev.get("event") != "model" or ev.get("pending"):
+        if ev.get("event") != "model" or ev.get("pending") or ev.get("uuid") in seen:
             continue
+        seen.add(ev.get("uuid"))
         u = ((ev.get("output") or {}).get("usage")) or {}
-        a = acc[ev.get("model")]
+        tokens = {"input": u.get("input_tokens") or 0, "cache_read": u.get("input_tokens_cache_read") or 0,
+                  "cache_write": u.get("input_tokens_cache_write") or 0, "output": u.get("output_tokens") or 0}
+        model = ev.get("model")
+        line = LINES.get(model[len("swarm/"):] if str(model).startswith("swarm/") else model)
+        over = line is not None and tokens["input"] + tokens["cache_read"] + tokens["cache_write"] > line
+        a = acc[(model, over)]
         a["calls"] += 1
-        a["input"] += u.get("input_tokens") or 0
-        a["cache_read"] += u.get("input_tokens_cache_read") or 0
-        a["cache_write"] += u.get("input_tokens_cache_write") or 0
-        a["output"] += u.get("output_tokens") or 0
-    for model, a in acc.items():
-        print(json.dumps({"run": run, "model": model, **a}))
+        for key, count in tokens.items():
+            a[key] += count
+    for (model, over), a in acc.items():
+        print(json.dumps({"run": run, "model": model, "long": over, **a}))
 '''
 
 
-def price(model: str, input_tokens: float, cache_read: float, cache_write: float, output: float) -> float | None:
-    """Dollars for this usage at the registry's prices; None for a model the registry does not price. Inspect's input
-    count excludes cache reads and writes, so they are added back for the registry's formula."""
+def remote_script(buffers: str = BUFFERS) -> str:
+    """The script a box runs, with each priced model's long-prompt line, which the box has no registry to read."""
+    lines = {entry["inspect"]: entry["long_prompt"]["over"] for entry in models.entries().values()
+             if entry.get("long_prompt")}
+    return REMOTE.replace("__LINES__", repr(json.dumps(lines))).replace("__BUFFERS__", repr(buffers))
+
+
+def price(model: str, input_tokens: float, cache_read: float, cache_write: float, output: float,
+          long: bool = False) -> float | None:
+    """Dollars for this usage at the registry's prices, or at its long-prompt rates for usage summed over calls past
+    the model's line; None for a model the registry does not price. Inspect's input count excludes cache reads and
+    writes, so they are added back for the registry's formula."""
     name = model[len("swarm/"):] if model.startswith("swarm/") else model
     prices = models.usd_per_million(name)
     if not prices:
         return None
-    # usage summed over many calls: the per-call long-prompt tier (GPT-6 Luna over 272k tokens) does not apply
-    flat = {k: v for k, v in prices.items() if k != "long_prompt"}
+    # the sum of many calls crosses the line whatever the calls did, so the row, not the sum, says which rates apply
+    rates = prices["long_prompt"] if long else prices
+    flat = {key: rate for key, rate in rates.items() if key not in ("long_prompt", "over")}
     return models.cost_usd(flat, int(input_tokens + cache_read + cache_write), int(cache_read), int(output),
                            cache_write=int(cache_write))
 
 
 def box_usage(box_id: str) -> list[dict]:
     """Every live run's usage per model on one box, read through box_ssh.sh."""
-    out = subprocess.run([str(BOX_FOLDER / "box_ssh.sh"), box_id, "python3 -"], input=REMOTE, capture_output=True,
-                         text=True, timeout=120)
+    out = subprocess.run([str(BOX_FOLDER / "box_ssh.sh"), box_id, "python3 -"], input=remote_script(),
+                         capture_output=True, text=True, timeout=120)
     rows = []
     for line in out.stdout.splitlines():
         try:
@@ -89,7 +111,8 @@ def costs(rows: list[dict]) -> dict[tuple[str, str], float]:
     for r in rows:
         if "error" in r:
             continue
-        dollars = price(r["model"], r["input"], r["cache_read"], r["cache_write"], r["output"]) or 0.0
+        dollars = price(r["model"], r["input"], r["cache_read"], r["cache_write"], r["output"],
+                        r.get("long", False)) or 0.0
         out[(r["box"], r["run"])] = out.get((r["box"], r["run"]), 0.0) + dollars
     return out
 

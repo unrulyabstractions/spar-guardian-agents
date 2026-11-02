@@ -9,12 +9,12 @@ from src.domains.protein import ProteinDesign
 
 
 def main() -> int:
-    args = parse_example_arguments(Path(__file__), __doc__)
+    args = parse_example_arguments(Path(__file__), __doc__, default_row=ProteinDesign.default_row)
     # one agent, no board, the colleague's designs in reach; the turn budget, not judged
     # (USE_JUDGE_AS_DEFAULT), then whatever --set says
     config = build_config(args.preset, args.scale, args.settings).replace(n_agents=1)
-    benchmark = ProteinDesign("alfalfa_chi")
-    exit_code = run.run(args.name, benchmark, config, args.model, args.timeout)
+    benchmark = ProteinDesign(args.row)
+    exit_code = run.run(args.name, benchmark, config, args.model, args.timeout, replace=args.replace)
     return finish(args, exit_code)
 
 

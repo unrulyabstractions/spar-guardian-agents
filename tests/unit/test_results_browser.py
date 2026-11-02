@@ -304,6 +304,36 @@ def test_the_server_routes_the_page_and_the_api(server):
     assert get(server, "/api/runs/board_run/timeline")[0] == 404   # the eval log is missing
 
 
+def test_a_run_in_a_group_is_listed_and_served_by_its_folder_and_an_attempt_never_counts(runs):
+    """A study's groups are read too. A run's key is its folder, so a run in a group and its namesake at the top level
+    stay apart; the page carries the key as one encoded segment. An earlier attempt reads as failed: hidden, never
+    counted. A key outside the study or in an unknown group is refused."""
+    shutil.copytree(runs / "board_run", runs / "invalid" / "board_run")
+    shutil.copytree(runs / "board_run", runs / "attempts" / "board_run.1")
+    shutil.copytree(runs / "board_run", runs / "smoke" / "board_run")            # a run in a folder that is no group
+    store = Store(runs)
+    assert store.run_names() == ["board_run", "invalid/board_run", "attempts/board_run.1", "failed_board_run"]
+    grouped, attempt = store.run_row("invalid/board_run"), store.run_row("attempts/board_run.1")
+    assert (grouped["group"], grouped["superseded"], grouped["failed"]) == ("invalid", False, False)
+    assert (attempt["group"], attempt["superseded"], attempt["failed"]) == ("attempts", True, True)
+    assert store.run_row("board_run")["group"] is None
+    for key in ("../board_run", "smoke/board_run", "invalid/../board_run", "invalid/board_run/x", "invalid/nothing"):
+        with pytest.raises(KeyError):
+            store.run_dir(key)
+    httpd = make_server(runs, port=0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        port = httpd.server_address[1]
+        status, body = get(port, "/api/runs/invalid%2Fboard_run")
+        assert status == 200 and json.loads(body)["run"] == "invalid/board_run"
+        assert get(port, "/api/runs/invalid%2Fboard_run/transcript/s%231%40a01")[0] == 200
+        assert get(port, "/api/runs/nope%2Fboard_run")[0] == 404
+        assert get(port, "/api/runs/invalid%2F..%2Fboard_run")[0] == 404
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
 @pytest.mark.parametrize("path", [
     "/static/../_server.py",
     "/static/%2e%2e/_server.py",

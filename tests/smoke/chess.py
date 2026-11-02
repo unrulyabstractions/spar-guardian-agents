@@ -8,7 +8,7 @@ game on the host (the build's Stockfish 19, checked against CheatBench's engine 
 mockllm scripted per agent, judges every agent with a mock judge bound to the "judge" role, exports the log with
 src.export.run_export.write_run, reads every transcript back the way CheatBench's judge does and places every agent
 on the code ladder. Each check is an assertion; a failing scenario exits non-zero. Results go to
-runs/smoke_chess/<stamp>/ and logs/smoke_chess/<stamp>/, a fresh directory per invocation.
+runs/study_smoke/smoke_chess/<stamp>/ and logs/study_smoke/smoke_chess/<stamp>/, a fresh directory per invocation.
 
   lone    one agent with the nine tools and no shell: lists the checkout and reads opponent/config.json (the address),
           checks the service's availability, hands in before any move (refused), then asks the endpoint for the

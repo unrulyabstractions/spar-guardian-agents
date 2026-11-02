@@ -1,19 +1,22 @@
 """Prompt caching for Claude models through OpenRouter, and a refusal until a paid check proves it works.
 
-Anthropic caches a request's prefix only up to a cache_control marker (OpenRouter's prompt-caching page: "Place
-cache_control directly on individual content blocks", at most four breakpoints; a read costs 0.1x the input price).
-Inspect 0.3.263 marks the system message, the last tool, and the block before the last only when that message's
-content is a list. Our swarm conversations end in plain strings, so no marker ever covered the growing history, and
-every Claude call paid full price for all of it: on 2026-11-01 an Opus regulator sent 10.9M uncached input tokens
-against 0.3M cached in 22 minutes.
+Anthropic caches a request's prefix only up to a breakpoint. Inspect 0.3.263 marks the system message, the last tool,
+and the block before the last only when that message's content is a list. Our swarm conversations end in plain strings
+and tool results, so no marker ever covered the growing history, and every Claude call paid full price for all of it: on
+2026-11-01 an Opus regulator sent 10.9M uncached input tokens against 0.3M cached in 22 minutes.
 
-`install()` adds one marker on the newest message's last block, so each call reads every earlier message from the
-cache. A string user or system message becomes a one-block list. A tool message is never touched (OpenRouter turns its
-string into Anthropic's tool_result), nor is an empty one. No request ends with more than four markers.
+`install()` asks each such request for OpenRouter's automatic caching: a top-level cache_control, which "automatically
+applies the cache breakpoint to the last cacheable block and advances it forward as conversations grow" (OpenRouter's
+prompt-caching page). It goes in the request's extra_body, since the OpenAI client takes no such argument. It uses one
+of Anthropic's four breakpoints, and Inspect's own markers use at most three.
+
+A marker of our own on the newest message came first. It left tool messages alone, and an agent's newest message is
+nearly always a tool result, so on the first real run with it (2026-11-02) each call read only its system prompt from
+the cache, while a two-call check ending on a user message passed.
 
 `require_proven(models)` refuses a run that puts a Claude model through OpenRouter until model_registry.yaml records
-`caching_verified` for that entry. Only scripts/check_anthropic_cache.py, a paid two-call check (under one cent) that
-needs the user's yes, can show the cache is read. A unit test cannot.
+`caching_verified` for that entry. Only scripts/check_anthropic_cache.py, a paid two-call check (under one cent) shaped
+like an agent's turn, can show the cache is read. A unit test cannot.
 """
 from __future__ import annotations
 
@@ -21,57 +24,27 @@ from typing import Any
 
 from src.models import model_registry as models
 
-MAX_BREAKPOINTS = 4
 
-
-def _ephemeral() -> dict[str, str]:
-    return {"type": "ephemeral"}
-
-
-def count_markers(request: dict[str, Any]) -> int:
-    """The cache_control markers in a request's messages and tools."""
-    blocks = [block for message in request.get("messages") or [] if isinstance(message.get("content"), list)
-              for block in message["content"] if isinstance(block, dict)]
-    return sum("cache_control" in item for item in [*blocks, *(request.get("tools") or [])])
-
-
-def mark_newest_message(request: dict[str, Any]) -> bool:
-    """Put a marker on the newest message's last block when that is allowed and fits; True when one was added."""
-    messages = request.get("messages") or []
-    if not messages or count_markers(request) >= MAX_BREAKPOINTS:
-        return False
-    newest = messages[-1]
-    if newest.get("role") not in ("user", "system", "assistant"):
-        return False
-    content = newest.get("content")
-    if isinstance(content, str):
-        if not content.strip() or newest.get("role") == "assistant":
-            return False
-        newest["content"] = [{"type": "text", "text": content, "cache_control": _ephemeral()}]
-        return True
-    if isinstance(content, list) and content and isinstance(content[-1], dict) and "cache_control" not in content[-1]:
-        if content[-1].get("type") == "text" and not str(content[-1].get("text") or "").strip():
-            return False
-        content[-1]["cache_control"] = _ephemeral()
-        return True
-    return False
+def ask_for_automatic_caching(request: dict[str, Any]) -> None:
+    """Add the top-level cache_control to the body this request sends, beside what extra_body already holds."""
+    request["extra_body"] = {**(request.get("extra_body") or {}), "cache_control": {"type": "ephemeral"}}
 
 
 def install() -> bool:
-    """Wrap OpenRouterAPI._generate_completion once; the marker goes only on requests Inspect itself caches (Claude
-    models, cache_prompt not False). True when the wrapper is in place."""
+    """Wrap OpenRouterAPI._generate_completion once; automatic caching goes only on requests Inspect itself caches
+    (Claude models, cache_prompt not False). True when the wrapper is in place."""
     from inspect_ai.model._providers.openrouter import OpenRouterAPI
 
-    if getattr(OpenRouterAPI._generate_completion, "_anthropic_newest_marker", False):
+    if getattr(OpenRouterAPI._generate_completion, "_anthropic_automatic_caching", False):
         return True
     original = OpenRouterAPI._generate_completion
 
     async def _generate_completion(self, request, config):
         if self._cache_prompt_enabled(config):
-            mark_newest_message(request)
+            ask_for_automatic_caching(request)
         return await original(self, request, config)
 
-    _generate_completion._anthropic_newest_marker = True  # type: ignore[attr-defined]
+    _generate_completion._anthropic_automatic_caching = True  # type: ignore[attr-defined]
     OpenRouterAPI._generate_completion = _generate_completion  # type: ignore[method-assign]
     return True
 

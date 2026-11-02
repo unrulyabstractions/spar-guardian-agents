@@ -6,7 +6,8 @@ run names and where things live. study_table.py says which of them this study ru
     run_name("protein_design.binder_minimal", "luna", 2)       -> "binder_minimal_luna2"
 
 One box runs one task. A label ends with the launch that rented the box (l and six hex digits), so a launch adopts only
-its own instances. Standard library only, so the Mac and the box both import it.
+its own instances. It imports the standard library and src/configuration/task_names.py alone, which imports nothing
+else, so the Mac and the box both import it.
 """
 from __future__ import annotations
 
@@ -14,6 +15,8 @@ import re
 import secrets
 from datetime import datetime, timezone
 from pathlib import Path
+
+from src.configuration.task_names import names_of
 
 ROOT = Path(__file__).resolve().parents[2]
 REGISTRY = ROOT / "runs" / "boxes.json"
@@ -25,17 +28,15 @@ REMOTE_REPO = "/root/work"
 """The repository's clone on a box."""
 
 LABEL_PREFIX = "spar-screen"
-TASKS = {
-    "knowledge_work": "knowledge_work",
-    "creative_writing": "creative_writing",
-    "protein_design": "protein_design",
-    "chess": "chess",
-    "software_engineering": "swe",
-}
-"""Each task and its package under examples/, which is also its domain's name in src.domains.DOMAINS."""
+TASKS = {task: names_of(task).domain
+         for task in ("knowledge_work", "creative_writing", "protein_design", "chess", "software_engineering")}
+"""Each task a box runs, as study_table.py names it, and its package under examples/, which is also its domain's key in
+src.domains.DOMAINS (src/configuration/task_names.py). The table names creative writing by its domain key and the
+others by CheatBench's task name; names_of reads either."""
 STEMS = {"software_engineering": "flipt"}
 """The stem of a task's cells where its package holds several: one box runs one issue."""
-MODELS = {"deepseek-flash-openrouter": "dsflash", "gpt-6-luna-openrouter": "luna"}
+MODELS = {"deepseek-flash-openrouter": "dsflash", "gpt-6-luna-openrouter": "luna",
+          "claude-haiku-5-5-openrouter": "haiku"}
 """Each worker model's registry entry and the short name that starts its run names' suffix."""
 REGULATORS = {"gpt-6-luna-openrouter": "luna", "claude-opus-5-5-openrouter": "opus",
               "gemini-4-argon-openrouter": "argon", "claude-haiku-5-5-openrouter": "haiku",
@@ -106,13 +107,15 @@ def kinds_of(task: str) -> tuple[str, ...]:
     return (*KINDS, *TASK_KINDS.get(task, ()))
 
 
-def cells(task: str, kinds: tuple[str, ...] | None = None, examples: Path = ROOT / "examples") -> list[str]:
+def cells(task: str, kinds: tuple[str, ...] | None = None, examples: Path = ROOT / "examples",
+          stem: str | None = None) -> list[str]:
     """examples.<package>.<stem> without the prefix for each kind (every kind of the task by default), in the order of
-    kinds. Each kind needs exactly one script examples/<package>/<stem>_<kind>.py: a missing or doubled cell raises."""
+    kinds. stem picks one of a package's several issues (STEMS by default). Each kind needs exactly one script
+    examples/<package>/<stem>_<kind>.py: a missing or doubled cell raises."""
     package = TASKS[task]
     found, problems = [], []
     for kind in kinds or kinds_of(task):
-        scripts = sorted((examples / package).glob(f"{STEMS.get(task, '*')}_{kind}.py"))
+        scripts = sorted((examples / package).glob(f"{stem or STEMS.get(task, '*')}_{kind}.py"))
         if len(scripts) != 1:
             problems.append(f"{kind}: {len(scripts)} scripts")
         else:

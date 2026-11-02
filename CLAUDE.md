@@ -46,7 +46,8 @@ and the session ended its turn. The guard in `~/.claude/hooks/cloud_boxes_guard.
 
 ## 3a. No run spends past its cap (enforced in code since 2026-11-02)
 
-On 2026-11-01 eight Opus and Sonnet regulator runs cost $176.56 in thirty minutes. The estimate came from a pilot
+On 2026-11-01 eight Opus and Sonnet regulator runs cost $88.28 in thirty minutes (first reported as $176.56, a
+double count). The estimate came from a pilot
 with other workers, Claude's history was never cached, and nothing priced the live runs. These now hold, each in
 code with tests that fail when it breaks:
 
@@ -55,7 +56,9 @@ code with tests that fail when it breaks:
   cap. A higher cap only with the user's yes: `--set cost_limit_usd=X`.
 - A box gets only `BOX_OPENROUTER_API_KEY`, a key with a credit limit set in OpenRouter's dashboard for that
   launch. `scripts/box/box_key.py` refuses no key, the main key, a key without a limit, or one with less left than
-  the box's runs may spend at their caps. `--allow-main-key` is gone.
+  the box's runs may spend at their caps. `--allow-main-key` is gone. On 2026-11-02 the user ordered the other way for
+  study_exploration_1: "Capped key NO, JUST USE THE KEY WE HAVE". `box_run.sh <id> --main-key` sends the main key
+  under the same limit checks. Any other study needs the user's word again.
 - Claude through OpenRouter is refused until `scripts/check_anthropic_cache.py` (two calls, under one cent, only
   with the user's yes) shows the cache is read and `src/models/model_registry.yaml` records `caching_verified`.
 - An estimate comes from a pilot with the same models in the same roles. In the first 10 minutes of every new

@@ -41,7 +41,7 @@ from scripts.box import (
     vast_offers,
 )
 from scripts.box.box_sweep import Sweep
-from scripts.box.study_table import Arm, Box, box_jobs, find_box, jobs_sha256
+from scripts.box.study_table import Arm, Box, box_jobs, find_box, jobs_sha256, stage_boxes
 from src import cli, run
 from src.configuration import settings
 
@@ -1076,6 +1076,18 @@ def run_box(monkeypatch, box=TWO_RUNS, mock=False, sha256=None, commit=PIN["comm
                             *(["--mock"] if mock else [])])
 
 
+def test_a_box_of_another_issue_builds_its_images_once_before_any_run_starts(runner_dirs, monkeypatch, capsys):
+    (runner_dirs / "logs" / "screen").mkdir(parents=True)
+    box = stage_boxes("vuls-gate")[0]
+    order = []
+    monkeypatch.setattr(box_runner.swe_sandbox, "ensure_images", lambda issue: order.append(issue))
+    monkeypatch.setattr(box_runner, "launch", lambda job: order.append(job.name) or Ended(0))
+    monkeypatch.setattr(box_runner, "POLL_S", 0)
+    monkeypatch.setattr(box_runner, "outcome", lambda name: ("finished", "") if name in order else ("failed", "new"))
+    assert run_box(monkeypatch, box=box, mock=True) == 0
+    assert order[0] == "vuls-1832" and order.count("vuls-1832") == 1 and len(order) == 3
+
+
 def test_a_resume_rebuilds_a_finished_evals_ladder_and_never_pays_for_it_again(runner_dirs, monkeypatch, capsys):
     (runner_dirs / "logs" / "screen").mkdir(parents=True)
     monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
@@ -1123,6 +1135,36 @@ def test_a_resume_reruns_what_did_not_finish_and_keeps_the_earlier_attempt(runne
     assert plan["runs"]["binder_minimal_luna1"]["ended"] == box_runner.BEFORE
     assert plan["runs"]["binder_minimal_cheat_luna1"]["again"].startswith("its eval ended error")
     assert box_runner.set_aside(logs / "binder_minimal_cheat_luna1.log").name == "binder_minimal_cheat_luna1.2.log"
+
+
+def test_a_relaunch_moves_the_earlier_attempt_into_attempts_before_it_starts(runner_dirs, monkeypatch, capsys):
+    """A run whose eval ended in error starts again under the plan's arguments. Before the launch its run folder and
+    its eval log folder move to attempts/<name>.1, so the example's export finds an empty folder and is never refused,
+    and the earlier attempt keeps every file. The job's arguments carry no --replace, so jobs_sha256 stays the same."""
+    (runner_dirs / "logs" / "screen").mkdir(parents=True)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
+    monkeypatch.setattr(box_runner, "POLL_S", 0)
+    monkeypatch.setattr(box_runner, "eval_status", lambda path: Path(path).stem)
+    for job in box_jobs(TWO_RUNS):
+        left_run(runner_dirs, job.name, status="error")
+    seen = []
+
+    def launch(job):
+        seen.append((job.name, (runner_dirs / "runs" / job.name).exists(), (runner_dirs / "logs" / job.name).exists(),
+                     "--replace" in job.arguments))
+        left_run(runner_dirs, job.name)                    # the new attempt's export, its eval a success
+        return Ended(0)
+
+    monkeypatch.setattr(box_runner, "launch", launch)
+    assert run_box(monkeypatch) == 0
+    assert seen == [(job.name, False, False, False) for job in box_jobs(TWO_RUNS)]
+    plan = json.loads((runner_dirs / "logs" / "screen" / f"box_{TWO_RUNS.name}.json").read_text())
+    for job in box_jobs(TWO_RUNS):
+        attempt = runner_dirs / "runs" / "attempts" / f"{job.name}.1"
+        assert json.loads((attempt / "run.json").read_text())["eval_log"].endswith(f"{job.name}/error.eval")
+        assert (runner_dirs / "logs" / "attempts" / f"{job.name}.1" / "error.eval").is_file()
+        assert plan["runs"][job.name]["again"].endswith(f"earlier attempt {attempt}")
+        assert box_runner.outcome(job.name) == ("finished", "its eval succeeded")
 
 
 def test_the_runner_refuses_a_clone_away_from_the_pinned_commit(runner_dirs, monkeypatch, capsys):
@@ -1298,6 +1340,23 @@ def test_local_only_lists_what_this_machine_added_to_a_run_of_a_study(tmp_path, 
     assert box_capture.local_only(lines) == ["out/game_solo/a.png", "runs/study_x/game_solo/judge.jsonl"]
 
 
+def test_local_only_reads_figures_that_mirror_runs_and_an_attempts_own_folder(tmp_path, monkeypatch):
+    """out/<study>/<name>/ is the run's figures folder, and attempts/<name>.<n> is the attempt's own folder: the files
+    another run of the study keeps here are not this box's run's."""
+    monkeypatch.setattr(box_capture, "ROOT", tmp_path)
+    local = ("runs/study_x/game_solo/run.json", "out/study_x/game_solo/a.png", "out/study_x/game_minimal/c.png",
+             "runs/study_x/attempts/game_solo.1/run.json", "runs/study_x/attempts/game_solo.1/judge.jsonl",
+             "runs/study_x/attempts/game_minimal.1/run.json")
+    for rel in local:
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text("x")
+    lines = [{"file": f"{box_capture.REMOTE_REPO}/{rel}"}
+             for rel in ("runs/study_x/game_solo/run.json", "out/study_x/game_solo/b.png",
+                         "runs/study_x/attempts/game_solo.1/run.json")]
+    assert box_capture.local_only(lines) == ["out/study_x/game_solo/a.png",
+                                             "runs/study_x/attempts/game_solo.1/judge.jsonl"]
+
+
 def test_the_runner_refuses_without_the_key(runner_dirs, monkeypatch, capsys):
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     assert run_box(monkeypatch) == 1
@@ -1306,7 +1365,8 @@ def test_the_runner_refuses_without_the_key(runner_dirs, monkeypatch, capsys):
 
 def test_the_runner_refuses_a_task_without_every_cell(runner_dirs, monkeypatch, capsys):
     monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
-    monkeypatch.setattr(study_table, "cells", lambda task, kinds: fleet_layout.cells(task, kinds, Path("/nowhere")))
+    monkeypatch.setattr(study_table, "cells",
+                        lambda task, kinds, stem=None: fleet_layout.cells(task, kinds, Path("/nowhere"), stem))
     monkeypatch.setattr(box_runner, "find_box", lambda name: TWO_RUNS)
     assert box_runner.main(["run", "--box", TWO_RUNS.name, "--commit", PIN["commit"], "--jobs-sha256", "x"]) == 1
     assert "refused: examples/protein_design needs one script per kind" in capsys.readouterr().out

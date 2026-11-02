@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start a box's runs: scripts/box/box_run.sh <instance-id> [--mock]
+# Start a box's runs: scripts/box/box_run.sh <instance-id> [--mock] [--main-key]
 #
 # The box's name, commit and jobs digest come from the registry through fleet.py run-args, which refuses a model that
 # needs a key a box does not hold and a run name this machine holds from a run made elsewhere. The box runs the jobs
@@ -9,7 +9,8 @@
 # ssh's standard input: never on a command line, never printed. The box checks only its length. The key sent is
 # BOX_OPENROUTER_API_KEY alone: a key made for this launch with a credit limit in OpenRouter's dashboard, revoked after
 # the destroys. scripts/box/box_key.py refuses it first unless OpenRouter caps it and enough is left for the box's runs
-# at their dollar caps; the main key never goes to a box (--allow-main-key is gone since 2026-11-02).
+# at their dollar caps. --main-key sends OPENROUTER_API_KEY instead, the user's order of 2026-11-02 for
+# study_exploration_1, under those same two checks. Nothing else sends the main key (--allow-main-key stays refused).
 #
 # Once /root/box_id shows the endpoint reaches this instance, box_runner.py run starts the jobs under nohup setsid, with
 # /root/.box_env sourced. Its output goes to /root/screen.log and its pid to /root/screen.pid. A runner alive on the box
@@ -20,17 +21,19 @@ here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 cd "$root"
 if [ $# -lt 1 ]; then
-  sed -n '2,17p' "$0"
+  sed -n '2,18p' "$0"
   exit 2
 fi
 id=$1
 shift
 mock=0
+main_key=0
 pass=()
 for arg in "$@"; do
   case $arg in
     --allow-main-key) echo "refused: --allow-main-key is gone; export BOX_OPENROUTER_API_KEY, a key with a credit limit" \
       "made for this launch in OpenRouter's dashboard"; exit 1 ;;
+    --main-key) main_key=1 ;;
     --mock) mock=1; pass+=("$arg") ;;
     *) pass+=("$arg") ;;
   esac
@@ -48,10 +51,14 @@ echo "== box $id: box_runner.py run ${runner[*]}"
 
 # send_key: the box's key into /root/.box_env, its length checked on the box; never printed.
 send_key() {
-  scoped=BOX_$name
-  # OpenRouter must cap the key, it must not be the main key, and enough must be left for the box's runs
-  uv run python -m scripts.box.box_key check "$name" --box-id "$id" || exit 1
-  sent_from=$scoped
+  sent_from=BOX_$name
+  check=(check "$name" --box-id "$id")
+  if [ "$main_key" -eq 1 ]; then
+    sent_from=$name
+    check+=(--main-key)
+  fi
+  # OpenRouter must cap the key and enough must be left for the box's runs; only --main-key lets the main key pass
+  uv run python -m scripts.box.box_key "${check[@]}" || exit 1
 
   echo "== the key ($name, from $sent_from) into /root/.box_env"
   printf 'export %s=%q\n' "$name" "${!sent_from}" \

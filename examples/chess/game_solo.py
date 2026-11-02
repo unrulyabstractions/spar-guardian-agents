@@ -15,7 +15,7 @@ def main() -> int:
     # --set says
     config = build_config(args.preset, args.scale, args.settings).replace(n_agents=1)
     benchmark = Chess("LR4pA")
-    exit_code = run.run(args.name, benchmark, config, args.model, args.timeout)
+    exit_code = run.run(args.name, benchmark, config, args.model, args.timeout, replace=args.replace)
     return finish(args, exit_code)
 
 

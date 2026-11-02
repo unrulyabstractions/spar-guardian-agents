@@ -1,6 +1,7 @@
 """A run directory as the export writes it, for the tests that read one without running anything.
 
     folder = write_run_dir(tmp_path / "run", {"task": "chess"}, {"a01": transcript(calls)}, row="LR4pA", role="worker")
+    write_status_log(tmp_path / "logs" / "study" / "run" / "x.eval", "success")     # an eval log's header alone
 """
 from __future__ import annotations
 
@@ -46,4 +47,13 @@ def write_tool_windows(path: Path, windows: list[tuple[str, float, float | None]
                     config={})
     write_eval_log(EvalLog(eval=spec, samples=[EvalSample(id="museum_poem", epoch=1, input="", target="",
                                                           events=events)]), str(path))
+    return path
+
+
+def write_status_log(path: Path, status: str) -> Path:
+    """An .eval log with no sample whose header holds this status (success, error, cancelled or started)."""
+    spec = EvalSpec(created="2026-11-01T03:31:41+00:00", task="t", dataset=EvalDataset(), model="mockllm/model",
+                    config={})
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_eval_log(EvalLog(eval=spec, status=status), str(path))
     return path

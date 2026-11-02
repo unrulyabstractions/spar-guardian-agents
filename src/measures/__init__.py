@@ -1,8 +1,13 @@
 """Measures over run directories: the episode summary, the code ladder with its team record and the scales it shares
-with the judged ladder, Lucy's SWE measures, the board engagement funnel and the figures.
+with the judged ladder, Lucy's SWE measures, the board engagement funnel, the figures, and each study's index with
+the validity of its runs.
 
 API modules:
-- run_directory.py: RunDir, one run directory read through one object.
+- run_directory.py: RunDir, one run directory read through one object, and where a study keeps its runs, its eval
+  logs, its figures and its earlier attempts.
+- run_validity.py: whether a run measures what its cell says, and the first reason it does not.
+- deal_replay.py: whether today's code deals a run the roster and the holdings it recorded.
+- run_index.py: one record per run of a study, for runs/<study>/INDEX.jsonl; scripts/box/study_index.py writes it.
 - episode_summary.py: one line per episode, and the turns of lone agents' runs.
 - code_ladder.py: the cheating signals from a run's transcripts, the sandbox probe and its records, without a judge.
 - team_ladder.py: the team's record on the code ladder, one per sample.

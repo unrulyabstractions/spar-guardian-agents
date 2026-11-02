@@ -142,7 +142,8 @@ def test_instruction_levels_match_the_ladders():
     for ladder in ("rule", "regulator", "disregulator"):
         for level in levels[ladder]["order"]:
             SwarmConfig(**{f"{ladder}_level": level})
-    assert levels["regulator"]["order"] == ["none", "monitor", "role", "enforce", "ambiguous", "explicit", "pressure"]
+    assert levels["regulator"]["order"] == ["none", "monitor", "role", "enforce", "ambiguous", "blind", "explicit",
+                                            "pressure"]
     assert SwarmConfig().regulator_level == "ambiguous"
     assert SwarmConfig().disregulator_level == "persuade"
     assert sorted(levels["vars"]) == DOMAINS

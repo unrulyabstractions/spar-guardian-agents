@@ -43,9 +43,14 @@ rule ("SWE flipt-02e2 board of 3 (jigsaw)"). The other tasks than openmath carry
 ## Endpoints
 
 ### `GET /api/runs` → `[RunRow]`
+Every run of the study, at its top level and in its groups (`src/measures/run_directory.py` `study_runs`). A run's key
+is its folder: `<run>`, or `<group>/<run>` for a run in a group, which a URL carries encoded as one segment
+(`invalid%2Fflipt_minimal_luna1`). An earlier attempt, `attempts/<name>.<n>`, is superseded: `failed` is true, so the
+page hides it and never counts it.
 ```
 RunRow = {
   run, task, model, topology ("single"|"board"|"swarm" as run.json wrote it), n_agents, mock: bool, failed: bool,
+  group: null | str, superseded: bool,     # the group that holds the run; an earlier attempt
   agents: [str], control ("baseline" when none), monitor_model, defenses: [str], eval_log, eval_log_exists: bool,
   setting: {key, label, order, n, composition?, R?, D?, W?},   # composition and R, D, W for hidden roles
   verdict_fields: [{field, label, kind}],   # the task's judge flags in order, cheated last (src/measures/
