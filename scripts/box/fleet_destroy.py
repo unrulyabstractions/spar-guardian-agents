@@ -71,6 +71,19 @@ def wait_gone(vast: Vast, instance_id: int) -> bool:
         time.sleep(10)
 
 
+def docker_drift(accepted: dict | None, now: dict | None) -> str | None:
+    """Why Docker on the box no longer matches what the passing capture accepted (box_teardown.sh saved and pulled
+    it), or None. A running container, or containers or volumes other than the accepted ones, may hold work the save
+    never copied."""
+    before, after = (accepted or {}).get("state") or {}, (now or {}).get("state") or {}
+    if after.get("running"):
+        return f"{len(after['running'])} containers run now"
+    for kind in ("containers", "volumes"):
+        if sorted(map(str, after.get(kind) or [])) != sorted(map(str, before.get(kind) or [])):
+            return f"the {kind} differ from the ones the capture accepted"
+    return None
+
+
 def what_is_lost(instance_id: int) -> dict:
     """For --accept-loss: the capture check run once, what it found missing or different, or why it could not run."""
     try:
@@ -105,9 +118,17 @@ def cmd_destroy(args: argparse.Namespace) -> int:
             return 1
         print(f"== {args.id} {entry['label']}: the capture of {box_capture.read_marker(args.id)['time']} passed; "
               f"checking again now")
-        marker = box_capture.check(args.id, pull=False)
+        # a capture that passed with Docker's state saved and accepted carries that reason into this second check;
+        # before 2026-11-02 it did not, so every such destroy was refused and the box kept billing
+        accepted = (box_capture.read_marker(args.id) or {}).get("docker_accepted")
+        marker = box_capture.check(args.id, pull=False, accept_docker=accepted["reason"] if accepted else None)
         if marker is None:
             print("refused: the capture check run now does not pass")
+            return 1
+        drift = docker_drift(accepted, marker.get("docker_accepted")) if accepted and marker.get("docker_accepted") \
+            else None
+        if drift:
+            print(f"refused: {drift}; Docker changed after the capture that saved it")
             return 1
         try:
             snap = box_capture.snapshot(args.id)
