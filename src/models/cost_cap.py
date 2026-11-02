@@ -19,6 +19,9 @@ from inspect_ai.model import ModelCost, ModelInfo, set_model_info
 from src.models import model_registry as models
 
 SWARM_PREFIX = "swarm/"
+DEFAULT_CAP_USD = 5.0
+"""Dollars per run unless the run sets cost_limit_usd. The median study-1 run cost $0.23; the dearest uncapped ones
+cost $10 to $25."""
 
 
 class UnpricedModel(ValueError):

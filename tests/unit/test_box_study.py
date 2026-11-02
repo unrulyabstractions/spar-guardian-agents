@@ -287,6 +287,11 @@ case "$*" in
     printf '%s\\n' --box gate-protein-luna-1 --commit abc --jobs-sha256 def
     case "$*" in *--mock*) echo --mock ;; esac ;;
   *entry*) echo OPENROUTER_API_KEY ;;
+  *box_key*)
+    printf '%s\\n' "$*" >> "$STAND_IN/key_checks"
+    [ -n "$BOX_OPENROUTER_API_KEY" ] || { echo "refused: no box key"; exit 1; }
+    [ ! -f "$STAND_IN/key_refuse" ] || { echo "refused: the key has no credit limit"; exit 1; }
+    echo "== BOX_OPENROUTER_API_KEY: limit \\$50.00" ;;
 esac
 """
 STAND_IN_SSH = """#!/bin/sh
@@ -332,19 +337,27 @@ def test_box_run_sends_the_scoped_key_over_standard_input_alone(box_run):
     assert "umask 077" in box_run.sent("ssh_arguments") and "mv /root/.box_env.new /root/.box_env" in box_run.sent(
         "ssh_arguments")
     assert "--box gate-protein-luna-1 --commit abc --jobs-sha256 def" in box_run.sent("ssh_arguments")
+    assert "box_key check OPENROUTER_API_KEY --box-id 7" in box_run.sent("key_checks")
+    assert SCOPED not in box_run.sent("key_checks") and MAIN not in box_run.sent("key_checks")
 
 
-def test_box_run_refuses_a_main_key_it_was_not_allowed(box_run):
+def test_box_run_refuses_without_a_box_key_and_never_sends_the_main_key(box_run):
     result = box_run(OPENROUTER_API_KEY=MAIN)
-    assert result.returncode == 1 and "refused: set BOX_OPENROUTER_API_KEY" in result.stdout
-    assert box_run.sent("ssh_arguments") == ""
+    assert result.returncode == 1 and "refused: no box key" in result.stdout
+    assert box_run.sent("ssh_arguments") == "" and MAIN not in box_run.sent("ssh_input")
 
 
-def test_box_run_sends_the_main_key_only_with_allow_main_key(box_run):
-    result = box_run("--allow-main-key", OPENROUTER_API_KEY=MAIN)
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert f"export OPENROUTER_API_KEY={MAIN}" in box_run.sent("ssh_input")
-    assert MAIN not in box_run.sent("ssh_arguments") and MAIN not in result.stdout + result.stderr
+def test_box_run_refuses_allow_main_key_and_sends_nothing(box_run):
+    result = box_run("--allow-main-key", OPENROUTER_API_KEY=MAIN, BOX_OPENROUTER_API_KEY=SCOPED)
+    assert result.returncode == 1 and "refused: --allow-main-key is gone" in result.stdout
+    assert box_run.sent("ssh_arguments") == "" and box_run.sent("ssh_input") == ""
+
+
+def test_box_run_sends_nothing_when_the_key_check_refuses(box_run):
+    (box_run.stand_in / "key_refuse").write_text("")
+    result = box_run(BOX_OPENROUTER_API_KEY=SCOPED, OPENROUTER_API_KEY=MAIN)
+    assert result.returncode == 1 and "no credit limit" in result.stdout
+    assert box_run.sent("ssh_input") == ""
 
 
 def test_box_run_sends_no_key_with_mock(box_run):
