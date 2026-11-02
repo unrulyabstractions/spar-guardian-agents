@@ -1379,3 +1379,20 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 ## 2026-11-02 16:20 UTC: the main key goes to boxes at the user's order
 - **Order.** The user: "Capped key NO, JUST USE THE KEY WE HAVE". `box_run.sh <id> --main-key` sends OPENROUTER_API_KEY through ssh's standard input into /root/.box_env, as before. `box_key check --main-key` lifts the main-key refusal alone: OpenRouter's credit limit ($650, $157.33 left) and enough left for the box's runs still count. Without the flag the main key stays refused, and --allow-main-key stays refused. CLAUDE.md 3a and the runbook say so, for study_exploration_1 only. box_sweep leaves .box_env out of every capture.
 - **Checked.** Tests: the flag sends the main key over standard input alone, never in ssh's arguments or the output; a refused check sends nothing; without the flag it is refused. Break: making the flag send the other variable fails its test, restored after. 216 passed in test_box_key and test_box_study; ruff clean. VERIFIED by tests. The real send is verified at the first launch.
+
+## 2026-11-02 16:35 UTC: where the key's $492.70 went, and a double count corrected
+- **Correction.** The 21:45 entry of 2026-11-01 says the 8 stopped runs cost $176.56. They cost $88.28. Inspect's sample buffer keeps a finished call in two rows of one uuid (checked on every buffer read: finished rows are exactly twice the uuids), and the pricing script summed both. Counted once, per run: $35.75, $17.53, $11.09, $7.73, $6.95, $5.72, $2.10, $1.41. "OpenRouter lagged by about $80" was this same error. scripts/box/live_cost.py is fixed and tested (78dade9). ~/.claude/CLAUDE.md line 38 still says $176.56: the user's file, left alone.
+- **Reconciliation** against the key's own record: usage $492.70, usage_monthly $427.93 ("the current UTC month", OpenRouter's openapi.json), and ~/.claude/cloud_boxes/spend.jsonl, which reads $304.85 at 2026-11-01 14:08 UTC.
+
+| Period | Key | Records | Not in any record |
+|---|---|---|---|
+| before Nov 1 | $64.77 | $62.12 | $2.65 |
+| Nov 1 to 14:08 UTC | $240.08 | $229.87 | $10.21 |
+| after 14:08 UTC | $187.84 | $182.73 | $5.11 |
+
+- **By outcome.** Each dollar once, by INDEX.jsonl reason and each eval log's final error. Wasted $284.08: SWE on the broken task $178.48 (study 1: 42 finished $80.92, 51 cut off by the key's $300 limit $89.35, 2 Argon errors $4.28; study 0: 45 runs $3.93), the 8 stopped runs $88.28, Argon errors on the fixed task 2 runs $9.58, the 60-minute limit 9 runs $7.38, Opus refusals 7 runs $0.36. Valid study 1: 110 runs $132.44. October exploration: 268 runs $58.19 (study 0 non-SWE 180 runs $31.56, 2026-10-28 88 runs $26.63). Not in any record: about $18.
+- **Source of each figure.** OpenRouter's per-call bills, except: the 8 stopped runs (their tokens at registry prices, since they were killed before an export), 34 October runs ($16.04 at list price: their logs kept no bills), and the study 0 runs that kept no bill. Direct-provider spend ($5.03) is left out: not on this key.
+- **Key limit.** All 51 runs the $300 limit cut off were SWE runs on the broken task, so the limit lost no usable data. No protein or creative run was among them.
+- **Overpaid inside valid runs (a model).** 28 valid runs with a Claude regulator billed $84.74. Call by call the registry reproduces the bill exactly (largest gap $0.00). With every earlier token read from the cache they come to $10.11, so at most $74.63 was avoidable. Real caches miss, so this is an upper bound. VERIFIED: the billing side. Modelled: the cached side.
+- **Boxes.** The audit covers this key alone. The $126 of idle boxes on 2026-11-01 is on vast.ai, on top of it.
+- **Gate launch.** Box 58846416, mock check 2 of 2 exit 0, 6 real runs started 16:28 UTC on the main key by `box_run.sh --main-key`: limit $650, $157.30 left, the runs may spend $30 at their caps; no key text in the launch log. A first setup died on the kexec's dropped connection, fixed in 9cf83fa.
