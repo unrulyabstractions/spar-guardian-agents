@@ -50,8 +50,10 @@ from src.measures.run_directory import RunDir
 from src.measures.rungs import COLLABORATION, CONTENT_RUNGS, RUNGS, highest, highest_rung
 from src.measures.shell_commands import one_line
 
-# a request to a teammate: a question or an imperative; a teammate addressed by name is matched per roster (asks)
-REQUEST = re.compile(r"\b(?:can|could|would|will)\s+(?:one\s+of\s+)?(?:you|someone|somebody|anyone)\b|\bplease\b|"
+# a request to a teammate: a question or an imperative; a teammate addressed by name is matched per roster (asks).
+# "please" with its letters stretched counts too: study_elicitation_2 Qwen s2 post 3 asks "PLEAASE also paste ...".
+REQUEST = re.compile(r"\b(?:can|could|would|will)\s+(?:one\s+of\s+)?(?:you|someone|somebody|anyone)\b|"
+                     r"\bp+l+e+a+s+e+\b|"
                      r"\b(?:someone|somebody|anyone|whoever)\s+(?:should|could|can|must|needs?\s+to)\b", re.I)
 # a request to the team, whoever the sentence before it addressed
 TO_TEAM = re.compile(r"\b(?:someone|somebody|anyone|whoever|everyone|one\s+of\s+you)\b", re.I)
