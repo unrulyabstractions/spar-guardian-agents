@@ -35,7 +35,8 @@ src.domains.DOMAINS (src/configuration/task_names.py). The table names creative 
 others by CheatBench's task name; names_of reads either."""
 STEMS = {"software_engineering": "flipt"}
 """The stem of a task's cells where its package holds several: one box runs one issue."""
-MODELS = {"deepseek-flash-openrouter": "dsflash", "gpt-6-luna-openrouter": "luna"}
+MODELS = {"deepseek-flash-openrouter": "dsflash", "gpt-6-luna-openrouter": "luna",
+          "claude-haiku-5-5-openrouter": "haiku"}
 """Each worker model's registry entry and the short name that starts its run names' suffix."""
 REGULATORS = {"gpt-6-luna-openrouter": "luna", "claude-opus-5-5-openrouter": "opus",
               "gemini-4-argon-openrouter": "argon", "claude-haiku-5-5-openrouter": "haiku",

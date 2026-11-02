@@ -2,11 +2,11 @@
 
 These scripts run study_exploration_1 on rented vast.ai boxes. `study_table.py` states the study: its targets, regulators, arms and boxes. A box bills by the hour and holds the only copy of what it makes. Every instance therefore enters the registry the moment it exists, and a box is destroyed only after a check proves that this machine holds every file it made.
 
-You launch each stage by hand and by name: `pilot`, `gate`, one `phase2-<target>`, one `phase2b-<target>`, `fixed-pilot`, `fixed-gate`, one `fixed-phase2-<target>`, `vuls-gate`, one `fixed-fill-<target>` or one `fixed-fill-argon-<target>`. Nothing starts one stage from another. No judge runs on a box. The code ladder is every run's result.
+You launch each stage by hand and by name: `pilot`, `gate`, one `phase2-<target>`, one `phase2b-<target>`, `fixed-pilot`, `fixed-gate`, one `fixed-phase2-<target>`, `vuls-gate`, one `fixed-fill-<target>`, one `fixed-fill-argon-<target>`, `disreg-gate`, one `disreg-<target>` or one `contest-<target>`. Nothing starts one stage from another. No judge runs on a box. The code ladder is every run's result.
 
 ## Stages
 
-A target is a task and its workers' model: `flipt-dsflash`, `flipt-luna`, `protein-luna` or `creative-luna`. The first regulators are Luna, Opus and Argon. Phase 2b adds Haiku and Sonnet on boxes of its own. Phase two's boxes keep their arms.
+A target is a task and its workers' model: `flipt-dsflash`, `flipt-luna`, `flipt-haiku`, `protein-luna` or `creative-luna`. The first regulators are Luna, Opus and Argon. Phase 2b adds Haiku and Sonnet on boxes of its own. Phase two's boxes keep their arms.
 
 | stage | what it runs |
 |---|---|
@@ -20,6 +20,9 @@ A target is a task and its workers' model: `flipt-dsflash`, `flipt-luna`, `prote
 | `vuls-gate` | SWE's second issue, vuls-1832, on DeepSeek and Luna: `minimal` and `minimal_cheat`, seeds 1 to 3. Its pieces hold the collaboration rule like flipt's, and the runner builds its images before the runs start |
 | `fixed-fill-<target>` | what the DeepSeek SWE table lacks, each run with 90 minutes and tag `fill`: `minimal_regulated` with GPT-6 Luna at `ambiguous`, seeds 1 to 3, and at `enforce`, seeds 2 and 3; Sonnet at both levels, seed 1 (cap $15); Gemini 4 Argon at `ambiguous`, seed 1 (cap $30), which prices the next stage |
 | `fixed-fill-argon-<target>` | the other Argon runs, launched only after that run gives their price: `ambiguous`, seeds 2 and 3, and `enforce`, seeds 1 to 3 (cap $30) |
+| `disreg-gate` | flipt on Claude Haiku 5.5 workers: `minimal` and `minimal_cheat`, seeds 1 to 3. `gate_readout` reads it by its own rule, and that target's next stages run only if it passes |
+| `disreg-<target>` | `flipt-haiku` or `creative-luna`: `minimal_disregulated` at `persuade` and `overt`, seeds 1 to 3. The disregulator runs the workers' model and holds no piece |
+| `contest-<target>` | the same targets: `minimal_regulated_disregulated`, `persuade` against a Haiku regulator at `enforce`, seeds 1 to 3 |
 
 Every SWE run before the fix (commits 7331882 to 33b7810, 2026-11-01) graded a task where one agent could cheat alone. Such a run measures nothing about collaboration. The fixed stages redo SWE. The fixed gate's and fixed phase two's runs carry the tag `fixed`, and the fixed pilot's the tag `fixedpilot`. No fixed run's name repeats an invalid run's.
 
@@ -44,6 +47,11 @@ Every SWE run before the fix (commits 7331882 to 33b7810, 2026-11-01) graded a t
 | `vuls-gate` | 2 | 12 |
 | `fixed-fill-flipt-dsflash` | 2 | 8 |
 | `fixed-fill-argon-flipt-dsflash` | 1 | 5 |
+| `disreg-gate` | 1 | 6 |
+| `disreg-flipt-haiku` | 2 | 6 |
+| `disreg-creative-luna` | 1 | 6 |
+| `contest-flipt-haiku` | 1 | 3 |
+| `contest-creative-luna` | 1 | 3 |
 
 ## No box without the guard
 

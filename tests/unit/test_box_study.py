@@ -16,9 +16,11 @@ from scripts.box import fleet, fleet_layout, study_table, vast_api
 from scripts.box.fleet_layout import BOX_KEY, MODELS, REGULATORS, capacity_of
 from scripts.box.study_table import (
     FIRST_REGULATORS,
+    HAIKU_SWE,
     MOCK_MODEL,
     ONE_RUN_ON_SWE,
     STAGES,
+    SWE_TARGETS,
     TARGETS,
     Arm,
     Target,
@@ -49,7 +51,9 @@ def stage_runs(stage: str) -> list[str]:
 def test_the_stages_are_the_pilot_the_gate_and_one_phase_two_per_target():
     assert list(STAGES) == ["pilot", "gate", *PHASE_TWO, *PHASE_TWO_B, "fixed-pilot", "fixed-gate",
                             "fixed-phase2-flipt-dsflash", "fixed-phase2-flipt-luna", "vuls-gate",
-                            "fixed-fill-flipt-dsflash", "fixed-fill-argon-flipt-dsflash"]
+                            "fixed-fill-flipt-dsflash", "fixed-fill-argon-flipt-dsflash", "disreg-gate",
+                            "disreg-flipt-haiku", "disreg-creative-luna", "contest-flipt-haiku",
+                            "contest-creative-luna"]
     assert [(target.task, target.model) for target in TARGETS] == [
         ("software_engineering", "deepseek-flash-openrouter"), ("software_engineering", "gpt-6-luna-openrouter"),
         ("protein_design", "gpt-6-luna-openrouter"), ("creative_writing", "gpt-6-luna-openrouter")]
@@ -66,7 +70,7 @@ def test_the_study_has_40_gate_runs_40_phase_two_runs_per_target_and_9_pilot_run
 
 def test_every_run_name_is_unique_across_the_study():
     names = [job.name for job in EVERY_JOB] + [job.name for box in EVERY_BOX for job in box_jobs(box, mock=True)]
-    assert len(names) == len(set(names)) == 339 + sum(len(box.arms) for box in EVERY_BOX)
+    assert len(names) == len(set(names)) == 363 + sum(len(box.arms) for box in EVERY_BOX)
 
 
 def test_the_fixed_stages_redo_swe_alone_under_names_no_earlier_run_holds():
@@ -83,12 +87,12 @@ def test_the_fixed_stages_redo_swe_alone_under_names_no_earlier_run_holds():
         ("gpt-6-luna-openrouter", regulator, "ambiguous", (1,)) for regulator in REGULATORS}
     gate = [arm for box in stage_boxes("fixed-gate") for arm in box.arms]
     assert {(arm.target.model, arm.kind, arm.seeds) for arm in gate} == {
-        (model, kind, (1, 2, 3)) for model in MODELS for kind in ("minimal", "minimal_cheat")}
+        (target.model, kind, (1, 2, 3)) for target in SWE_TARGETS for kind in ("minimal", "minimal_cheat")}
     assert {"flipt_minimal_luna_fixed1", "flipt_minimal_cheat_dsflash_fixed3",
             "flipt_minimal_regulated_luna_sonnet_ambiguous_fixedpilot1"} <= {job.name for job in fixed}
-    for model, short in MODELS.items():
-        arms = [arm for box in stage_boxes(f"fixed-phase2-flipt-{short}") for arm in box.arms]
-        assert {arm.target.model for arm in arms} == {model}
+    for target in SWE_TARGETS:
+        arms = [arm for box in stage_boxes(f"fixed-phase2-{target.name}") for arm in box.arms]
+        assert {arm.target.model for arm in arms} == {target.model}
         assert sorted((arm.rule_level, arm.seeds) for arm in arms if arm.rule_level) == [
             ("generic", (1, 2, 3)), ("identified", (1, 2, 3))]
         assert {(arm.regulator, arm.regulator_level, arm.seeds) for arm in arms if arm.regulator} == {
@@ -115,7 +119,8 @@ def test_a_gate_box_holds_no_phase_two_arm_and_no_stage_shares_a_box():
 
 
 def test_the_study_has_no_solo_cell_no_chess_and_no_knowledge_work():
-    assert {arm.kind for box in EVERY_BOX for arm in box.arms} == {"minimal", "minimal_cheat", "minimal_regulated"}
+    assert {arm.kind for box in EVERY_BOX for arm in box.arms} == {
+        "minimal", "minimal_cheat", "minimal_regulated", "minimal_disregulated", "minimal_regulated_disregulated"}
     assert {box.task for box in EVERY_BOX} == {"software_engineering", "protein_design", "creative_writing"}
     assert {job.cell for job in EVERY_JOB if "vuls" in job.cell} == {"swe.vuls_minimal", "swe.vuls_minimal_cheat"}
 
@@ -147,13 +152,15 @@ def test_a_stage_rents_the_boxes_the_table_says():
         "phase2-creative-luna": 7, "phase2b-flipt-dsflash": 3, "phase2b-flipt-luna": 3, "phase2b-protein-luna": 2,
         "phase2b-creative-luna": 2, "fixed-pilot": 1, "fixed-gate": 2, "fixed-phase2-flipt-dsflash": 7,
         "fixed-phase2-flipt-luna": 7, "vuls-gate": 2, "fixed-fill-flipt-dsflash": 2,
-        "fixed-fill-argon-flipt-dsflash": 1}
+        "fixed-fill-argon-flipt-dsflash": 1, "disreg-gate": 1, "disreg-flipt-haiku": 2, "disreg-creative-luna": 1,
+        "contest-flipt-haiku": 1, "contest-creative-luna": 1}
 
 
 @pytest.mark.parametrize("box", EVERY_BOX, ids=lambda box: box.name)
 def test_no_box_runs_more_agents_than_it_holds(box):
     assert box.agents <= capacity_of(box.task)
-    assert box.agents == sum((4 if "minimal_regulated" in job.cell else 3) for job in box_jobs(box))
+    agents = {"minimal_regulated_disregulated": 5, "minimal_regulated": 4, "minimal_disregulated": 4}
+    assert box.agents == sum(agents.get(job.cell.split(".")[1].split("_", 1)[1], 3) for job in box_jobs(box))
 
 
 def test_a_box_holds_the_most_agents_its_task_has_run():
@@ -188,11 +195,13 @@ def test_each_job_reaches_the_config_through_the_real_example_parser(box):
         config = build_config(args.preset, args.scale, args.settings)
         rule = next((level for level in ("generic", "identified") if f"_{level}" in job.name), "none")
         regulator = next((entry for entry, short in REGULATORS.items() if f"_regulated_luna_{short}_" in job.name
-                          or f"_regulated_dsflash_{short}_" in job.name), None)
+                          or f"_regulated_dsflash_{short}_" in job.name
+                          or re.search(rf"_regulated_disregulated_[a-z]+_{short}_", job.name)), None)
         assert config.seed == job.seed and config.judge is None and config.id_salt == job.name
         assert args.model == models.resolve(job.model) and config.rule_level == rule
         assert config.regulator_level == ("enforce" if "_enforce" in job.name else "ambiguous")
         assert config.regulator_model == (models.resolve(regulator) if regulator else None)
+        assert config.disregulator_level == ("overt" if "_overt" in job.name else "persuade")
 
 
 def test_a_mock_job_runs_no_real_model_and_says_so_in_its_name():
@@ -215,7 +224,8 @@ def test_the_digest_changes_with_any_flag():
 # ---- the models and the key ----
 
 def test_the_fleet_names_this_studys_models():
-    assert MODELS == {"deepseek-flash-openrouter": "dsflash", "gpt-6-luna-openrouter": "luna"}
+    assert MODELS == {"deepseek-flash-openrouter": "dsflash", "gpt-6-luna-openrouter": "luna",
+                      "claude-haiku-5-5-openrouter": "haiku"}
     assert REGULATORS == {"gpt-6-luna-openrouter": "luna", "claude-opus-5-5-openrouter": "opus",
                           "gemini-4-argon-openrouter": "argon", "claude-haiku-5-5-openrouter": "haiku",
                           "claude-sonnet-5-5-openrouter": "sonnet"}
@@ -254,7 +264,7 @@ def test_jobs_lists_every_run_box_and_flag_and_sends_nothing(monkeypatch, capsys
 def test_jobs_with_no_stage_lists_the_whole_study(capsys):
     assert fleet.main(["jobs"]) == 0
     out = capsys.readouterr().out
-    assert out.count("--set seed=") == 339 and all(f"== {stage}:" in out for stage in STAGES)
+    assert out.count("--set seed=") == 363 and all(f"== {stage}:" in out for stage in STAGES)
 
 
 # ---- nothing but a person starts a stage ----
@@ -421,7 +431,8 @@ def test_the_runbook_names_every_stage_with_the_boxes_and_runs_of_the_table():
     readme = (BOX_FOLDER / "README.md").read_text()
 
     def family(stage: str) -> str:
-        return next((stage.removesuffix(t.name) + "<target>" for t in TARGETS if stage.endswith(f"-{t.name}")), stage)
+        return next((stage.removesuffix(t.name) + "<target>" for t in (*TARGETS, HAIKU_SWE)
+                     if stage.endswith(f"-{t.name}")), stage)
 
     assert set(re.findall(r"^\| `([a-z0-9<>-]+)` \| [^|]+ \|$", readme, re.M)) == {family(s) for s in STAGES}
     counts = re.findall(r"^\| `([a-z0-9-]+)` \| (\d+) \| (\d+) \|$", readme, re.M)
@@ -434,7 +445,8 @@ def test_the_runbook_names_every_stage_with_the_boxes_and_runs_of_the_table():
 
 def family(stage: str) -> str:
     """A stage's row in the runbook: <stage>, or <stem>-<target> for a stage of one target."""
-    return next((stage.removesuffix(t.name) + "<target>" for t in TARGETS if stage.endswith(f"-{t.name}")), stage)
+    return next((stage.removesuffix(t.name) + "<target>" for t in (*TARGETS, HAIKU_SWE)
+                 if stage.endswith(f"-{t.name}")), stage)
 
 
 def test_the_runbook_lists_every_stage_family_where_it_says_how_to_launch_one():
@@ -515,3 +527,44 @@ def test_the_vuls_gate_runs_vuls_cells_on_both_workers_and_a_flipt_box_builds_no
     assert box_runner.prepare_issue_images(boxes[0]) == ["vuls-1832"] and built == ["vuls-1832"]
     built.clear()
     assert box_runner.prepare_issue_images(stage_boxes("fixed-gate")[0]) == [] and built == []
+
+
+# ---- the disregulator stages ----
+
+def test_the_disregulator_plan_is_24_runs_and_every_disregulator_runs_the_workers_model():
+    jobs = {stage: [job for box in stage_boxes(stage) for job in box_jobs(box)] for stage in (
+        "disreg-gate", "disreg-flipt-haiku", "contest-flipt-haiku", "disreg-creative-luna", "contest-creative-luna")}
+    assert {stage: len(runs) for stage, runs in jobs.items()} == {
+        "disreg-gate": 6, "disreg-flipt-haiku": 6, "contest-flipt-haiku": 3, "disreg-creative-luna": 6,
+        "contest-creative-luna": 3}
+    assert {job.name for job in jobs["disreg-gate"]} == {
+        f"flipt_{cell}_haiku_fixed{seed}" for cell in ("minimal", "minimal_cheat") for seed in (1, 2, 3)}
+    assert "flipt_minimal_disregulated_haiku_overt_fixed3" in {job.name for job in jobs["disreg-flipt-haiku"]}
+    assert "poem_minimal_disregulated_luna_persuade1" in {job.name for job in jobs["disreg-creative-luna"]}
+    assert "flipt_minimal_regulated_disregulated_haiku_haiku_enforce_persuade_fixed2" in {
+        job.name for job in jobs["contest-flipt-haiku"]}
+    assert "poem_minimal_regulated_disregulated_luna_haiku_enforce_persuade3" in {
+        job.name for job in jobs["contest-creative-luna"]}
+    for stage in ("contest-flipt-haiku", "contest-creative-luna"):
+        assert {job.regulator_model for job in jobs[stage]} == {"claude-haiku-5-5-openrouter"}
+        assert {frozenset(job.settings) for job in jobs[stage]} == {
+            frozenset({"regulator_level=enforce", "disregulator_level=persuade"})}
+    for stage in ("disreg-gate", "disreg-flipt-haiku", "disreg-creative-luna"):
+        assert {job.regulator_model for job in jobs[stage]} == {None}
+    for job in [job for runs in jobs.values() for job in runs if "disregulated" in job.cell]:
+        package, stem = job.cell.split(".")
+        args = parse_example_arguments(settings.ROOT / "examples" / package / f"{stem}.py", None, job.arguments)
+        config = build_config(args.preset, args.scale, args.settings)
+        assert args.model == models.resolve(job.model) and config.disregulator_model is None
+
+
+def test_a_mock_disregulated_job_keeps_its_levels_on_the_mock_model():
+    [job] = [j for j in box_jobs(stage_boxes("contest-flipt-haiku")[0], mock=True)]
+    assert job.name == "flipt_minimal_regulated_disregulated_haiku_haiku_enforce_persuade_fixedmock1"
+    assert job.model == study_table.MOCK_MODEL and job.regulator_model is None
+    assert set(job.settings) == {"regulator_level=enforce", "disregulator_level=persuade"}
+
+
+def test_the_new_stages_keep_every_earlier_arm_s_digest():
+    assert jobs_sha256(box_jobs(find_box("fixed-gate-flipt-dsflash-1"))) == jobs_sha256(
+        box_jobs(study_table.Box("x", "x", tuple(study_table.fixed_gate_arms(SWE_TARGETS[0])))))

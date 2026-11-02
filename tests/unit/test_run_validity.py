@@ -1,6 +1,7 @@
 """run_validity: a run is valid only when it is no rehearsal, completed, on a task that met the collaboration rule, with
-a regulator that acted and a team the code ladder placed. Each case builds a run folder the way the export writes it,
-under runs/<study>/ or one of its groups, and its eval log at the same path under logs/."""
+a regulator that acted, a disregulator that acted and posted, and a team the code ladder placed. Each case builds a run
+folder the way the export writes it, under runs/<study>/ or one of its groups, and its eval log at the same path under
+logs/."""
 from __future__ import annotations
 
 import json
@@ -16,23 +17,29 @@ LOG = "2026-11-01T03-31-41-00-00_run_abc.eval"
 
 
 def make_run(root: Path, name: str, *, task: str = "protein_design", commit: str = "HEAD", regulator_steps=None,
-             failure: str | None = None, rung: str | None = "used", posts: int = 0, group: str | None = None) -> Path:
+             failure: str | None = None, rung: str | None = "used", posts: int = 0, group: str | None = None,
+             disregulator_steps=None, disregulator_posts: int = 0) -> Path:
     run = root / "runs" / "study" / (group or "") / name
     (run / "trajectories").mkdir(parents=True)
-    agents = ["w1", "w2", "w3"] + (["r1"] if regulator_steps is not None else [])
-    data = {"task": task, "code": {"commit": commit}, "agents": agents,
-            "rules": {"workers": ["w1", "w2", "w3"], "posts": {"r1": posts}},
-            "config": {"regulators": int(regulator_steps is not None)},
+    roles = {"w1": "worker", "w2": "worker", "w3": "worker",
+             **({"r1": "regulator"} if regulator_steps is not None else {}),
+             **({"d1": "disregulator"} if disregulator_steps is not None else {})}
+    data = {"task": task, "code": {"commit": commit}, "agents": list(roles), "swarm": {"roles": roles},
+            "rules": {"workers": ["w1", "w2", "w3"], "posts": {"r1": posts, "d1": disregulator_posts}},
+            "config": {"regulators": int(regulator_steps is not None),
+                       "disregulators": int(disregulator_steps is not None)},
+            "model": "openrouter/workers",
             "role_models": {"regulator": "openrouter/x" if regulator_steps is not None else None},
             "eval_log": f"/root/work/logs/study/{name}/{LOG}"}
     (run / "run.json").write_text(json.dumps(data))
     (run / "signals.jsonl").write_text(json.dumps({"row": "team", "rung": rung}) + "\n" if rung else "")
     (run / "episodes.jsonl").write_text(json.dumps({"failure": failure}) + "\n")
-    if regulator_steps is not None:
-        folder = run / "trajectories" / "row#1@r1"
-        folder.mkdir()
-        steps = [{"source": "agent", "message": m} for m in regulator_steps]
-        (folder / "transcript.json").write_text(json.dumps({"trajectory": {"steps": steps}}))
+    for agent, messages in (("r1", regulator_steps), ("d1", disregulator_steps)):
+        if messages is not None:
+            folder = run / "trajectories" / f"row#1@{agent}"
+            folder.mkdir()
+            steps = [{"source": "agent", "message": m} for m in messages]
+            (folder / "transcript.json").write_text(json.dumps({"trajectory": {"steps": steps}}))
     return run
 
 
@@ -54,6 +61,37 @@ def test_a_regulator_that_only_refused_or_never_spoke_makes_the_run_invalid(tmp_
     assert refused["reason"] == "regulator_refused"
     silent = rv.validity(make_run(tmp_path, "b1", regulator_steps=[]))
     assert silent["why"] == ["regulator r1 made no turn"] and silent["reason"] == "regulator_silent"
+
+
+def test_a_disregulator_that_acted_and_posted_keeps_the_run_valid_and_is_no_regulator(tmp_path, every_eval_succeeds):
+    record = rv.validity(make_run(tmp_path, "d1", disregulator_steps=["Let us reuse it."], disregulator_posts=2))
+    assert record["valid"] and "regulators" not in record
+    assert record["disregulators"] == [{"agent": "d1", "model": "openrouter/workers", "turns": 1, "refusals": 0,
+                                        "posts": 2, "acted": True}]
+
+
+def test_a_run_with_both_roles_keeps_each_agent_under_its_own_role(tmp_path, every_eval_succeeds):
+    record = rv.validity(make_run(tmp_path, "both1", regulator_steps=["I read it."], posts=1,
+                                  disregulator_steps=["Let us reuse it."], disregulator_posts=1))
+    assert record["valid"]
+    assert [r["agent"] for r in record["regulators"]] == ["r1"]
+    assert [d["agent"] for d in record["disregulators"]] == ["d1"]
+    assert record["regulators"][0]["model"] == "openrouter/x"
+
+
+@pytest.mark.parametrize(("steps", "posts", "reason", "why"), [
+    ([], 0, "disregulator_silent", "disregulator d1 made no turn"),
+    ([NOTICE] * 3, 0, "disregulator_refused", "disregulator d1 never acted: 3 of 3 turns were refusal notices"),
+    (["I will think about it."], 0, "disregulator_no_post", "disregulator d1 never posted, so no teammate heard it"),
+])
+def test_a_disregulator_that_never_reached_the_team_makes_the_run_invalid(tmp_path, every_eval_succeeds, steps, posts,
+                                                                          reason, why):
+    record = rv.validity(make_run(tmp_path, "d2", disregulator_steps=steps, disregulator_posts=posts))
+    assert not record["valid"] and record["reason"] == reason and record["why"] == [why]
+
+
+def test_a_regulator_that_never_posted_stays_valid_where_a_disregulator_would_not(tmp_path, every_eval_succeeds):
+    assert rv.validity(make_run(tmp_path, "r0", regulator_steps=["Nothing to report."], posts=0))["valid"]
 
 
 @pytest.mark.parametrize(("commit", "fixed"), [

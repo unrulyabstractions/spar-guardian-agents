@@ -86,7 +86,8 @@ def table_cells() -> list[dict]:
                 owner |= set(names)
                 found.append({"stage": stage, "target": arm.target.name, "setting": arm.kind,
                               "regulator": REGULATORS[arm.regulator] if arm.regulator else None,
-                              "level": arm.regulator_level or arm.rule_level, "names": names})
+                              "level": "+".join(filter(None, (arm.regulator_level or arm.rule_level,
+                                                              arm.disregulator_level))) or None, "names": names})
     return found
 
 

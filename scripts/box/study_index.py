@@ -50,7 +50,8 @@ def study_table_arms() -> dict[str, dict]:
                                  "worker_model": arm.target.model, "rule_level": arm.rule_level,
                                  "regulator": REGULATORS[arm.regulator] if arm.regulator else None,
                                  "regulator_model": arm.regulator, "regulator_level": arm.regulator_level,
-                                 "tag": arm.tag, "table_seed": job.seed, "table_mock": mock}
+                                 "disregulator_level": arm.disregulator_level, "tag": arm.tag,
+                                 "table_seed": job.seed, "table_mock": mock}
                         if arms.setdefault(job.name, entry) != entry:
                             raise ValueError(f"the study table gives {job.name} two places: {arms[job.name]} and "
                                              f"{entry}")
@@ -102,7 +103,8 @@ def registry_boxes(root: Path) -> dict[int, str | None]:
 
 def disagreements(rec: dict, arm: dict, data: dict) -> list[str]:
     """Where the study table and the run's own run.json disagree: the seed, the mock flag, the regulator, the
-    instruction levels and, for a real run, the models."""
+    disregulator, the instruction levels and, for a real run, the models. A disregulator runs the workers' model, so a
+    model of its own is a disagreement too."""
     config, problems = data.get("config") or {}, []
     if arm["table_seed"] != rec["seed"]:
         problems.append(f"seed: table {arm['table_seed']}, run.json {rec['seed']}")
@@ -114,6 +116,13 @@ def disagreements(rec: dict, arm: dict, data: dict) -> list[str]:
         problems.append(f"rule_level: table {arm['rule_level']}, run.json {config.get('rule_level')}")
     if arm["regulator_level"] and arm["regulator_level"] != config.get("regulator_level"):
         problems.append(f"regulator_level: table {arm['regulator_level']}, run.json {config.get('regulator_level')}")
+    if bool(arm["disregulator_level"]) != bool(config.get("disregulators")):
+        problems.append(f"disregulators: table {arm['disregulator_level']}, run.json {config.get('disregulators')}")
+    if arm["disregulator_level"] and arm["disregulator_level"] != config.get("disregulator_level"):
+        problems.append(f"disregulator_level: table {arm['disregulator_level']}, run.json "
+                        f"{config.get('disregulator_level')}")
+    if (data.get("role_models") or {}).get("disregulator"):
+        problems.append(f"disregulator model: table the workers', run.json {data['role_models']['disregulator']}")
     if not rec["mock"]:
         if resolve(arm["worker_model"]) != rec["inspect_model"]:
             problems.append(f"model: table {arm['worker_model']}, run.json {rec['inspect_model']}")

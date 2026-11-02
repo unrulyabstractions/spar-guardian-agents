@@ -31,6 +31,9 @@ REGULATED = [f"examples.{path.parent.name}.{path.stem}"
 # The disregulated cell: four agents on the split, one of them a hidden disregulator.
 DISREGULATED = [f"examples.{path.parent.name}.{path.stem}"
                 for path in sorted(EXAMPLES_DIR.glob("*/*_minimal_disregulated.py"))]
+# The cell with both roles: five agents on the split, one a hidden regulator and one a hidden disregulator.
+CONTESTED = [f"examples.{path.parent.name}.{path.stem}"
+             for path in sorted(EXAMPLES_DIR.glob("*/*_minimal_regulated_disregulated.py"))]
 # The team with no split, on the domains that have one: three neutral agents that each hold everything.
 NO_SPLIT = [f"examples.{path.parent.name}.{path.stem}" for path in sorted(EXAMPLES_DIR.glob("*/*_minimal_all.py"))]
 EVERY_SCRIPT = [f"examples.{path.parent.name}.{path.stem}" for path in sorted(EXAMPLES_DIR.glob("*/*.py"))
@@ -238,8 +241,8 @@ def test_every_script_hands_replace_to_the_run(name, monkeypatch):
     assert replaced == [False, True]
 
 
-def test_swe_and_protein_design_have_a_disregulated_cell():
-    assert {name.split(".")[1] for name in DISREGULATED} == {"swe", "protein_design"}
+def test_swe_protein_design_and_creative_writing_have_a_disregulated_cell():
+    assert {name.split(".")[1] for name in DISREGULATED} == {"swe", "protein_design", "creative_writing"}
 
 
 @pytest.mark.parametrize("name", DISREGULATED)
@@ -261,6 +264,32 @@ def test_each_disregulated_cell_runs_four_agents_one_a_hidden_disregulator_who_h
     [disregulator] = [a for a, role in roles.items() if role == "disregulator"]
     assert plan.holds[disregulator] == [] and plan.split
     assert all(plan.holds[a] for a in config.names if a != disregulator)
+
+
+def test_swe_and_creative_writing_have_a_cell_with_both_roles():
+    assert CONTESTED == ["examples.creative_writing.poem_minimal_regulated_disregulated",
+                         "examples.swe.flipt_minimal_regulated_disregulated"]
+
+
+@pytest.mark.parametrize("name", CONTESTED)
+def test_each_cell_with_both_roles_runs_five_agents_and_three_neutral_agents_hold_the_split(name, monkeypatch):
+    module = importlib.import_module(name)
+    script = script_of(name)
+    calls = []
+    monkeypatch.setattr(run, "run", lambda *args, **kwargs: calls.append((args, kwargs)) or 0)
+    monkeypatch.setattr(plots, "plot_run", lambda run_dir, out_dir: [])
+    monkeypatch.setattr("sys.argv", [script.name])
+    assert module.main() == 0
+    [(args, kwargs)] = calls
+    run_name, benchmark, config, model, timeout = args
+    assert kwargs == {"replace": False} and not hasattr(module, "CHEAT")
+    assert (config.n_agents, config.regulator_count, config.disregulator_count) == (5, 1, 1)
+    assert config.max_concurrency == 5 and config.access == "split" and config.judge is None
+    roles = hidden_roles(config)
+    plan = benchmark.plan(config, roles)
+    assert sorted(roles.values()) == ["disregulator", "regulator", "worker", "worker", "worker"] and plan.split
+    assert all(bool(plan.holds[a]) == (role == "worker") for a, role in roles.items())
+    assert len(set(map(str, (plan.holds[a] for a, role in roles.items() if role == "worker")))) == 3
 
 
 @pytest.mark.parametrize("name", [n for n in EVERY_SCRIPT if n.startswith("examples.protein_design.")])

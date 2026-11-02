@@ -35,12 +35,13 @@ ROWS = {"protein_design": ("protein", {"row_id": "alfalfa_chi"}),
 def make_run(root: Path, name: str, task: str, *, study: str = STUDY, group: str | None = None, seed: int = 1,
              model: str = LUNA, regulator: str | None = None, regulator_level: str = "ambiguous",
              rule_level: str = "none", commit: str = "0dda147", status: str = "success",
-             regulator_says: str = "I read the board.", flags_ok: bool = True, folder_name: str | None = None) -> Path:
+             regulator_says: str = "I read the board.", flags_ok: bool = True, folder_name: str | None = None,
+             extra_pairs: tuple[str, ...] = (), posts: dict | None = None, row: str | None = None) -> Path:
     """A run folder and its eval log, run.json as today's plan deals it. folder_name is an earlier attempt's folder,
     <name>.<n>."""
     block, row = ROWS[task]
     pairs = [f"seed={seed}", f"id_salt={name}", f"rule_level={rule_level}", f"regulator_level={regulator_level}",
-             *(["n_agents=4", "regulators=1"] if regulator else [])]
+             *(["n_agents=4", "regulators=1"] if regulator else []), *extra_pairs]
     config = build_config("default", "small", pairs)
     roles = tasks.hidden_roles(config) or {}
     plan = BY_TASK[task](row.get("row_id") or row["issue"]).plan(config, roles or None)
@@ -50,14 +51,16 @@ def make_run(root: Path, name: str, task: str, *, study: str = STUDY, group: str
             "code": {"commit": commit}, "model": "mockllm/model" if mock else resolve(model),
             "role_models": {"worker": None, "regulator": resolve(regulator) if regulator and not mock else None,
                             "disregulator": None},
-            "rules": {"workers": [a for a in plan.agents if roles.get(a, "worker") == "worker"], "posts": {}},
+            "rules": {"workers": [a for a in plan.agents if roles.get(a, "worker") == "worker"],
+                      "posts": {a: (posts or {}).get(role, 0) for a, role in roles.items()}},
+            "swarm": {"roles": roles} if roles else None,
             "validity": {"ok": flags_ok}, "eval_log": f"/root/work/logs/{study}/{name}/{LOG}"}
     folder = root / "runs" / study / (group or "") / (folder_name or name)
     folder.mkdir(parents=True)
     (folder / "run.json").write_text(json.dumps(data))
     (folder / "signals.jsonl").write_text(json.dumps({"row": "team", "rung": "exposed"}) + "\n")
     (folder / "episodes.jsonl").write_text(json.dumps({"failure": None}) + "\n")
-    for agent in (a for a, role in roles.items() if role == "regulator"):
+    for agent in (a for a, role in roles.items() if role in ("regulator", "disregulator")):
         transcript = folder / "trajectories" / f"row#1@{agent}" / "transcript.json"
         transcript.parent.mkdir(parents=True)
         transcript.write_text(json.dumps({"trajectory": {"steps": [{"source": "agent", "message": regulator_says}]}}))
@@ -102,7 +105,8 @@ def test_a_run_of_study_one_takes_its_place_and_arm_from_the_study_table(tmp_pat
         "stage": "phase2-protein-luna", "box": "phase2-protein-luna-4",
         "cell": "protein_design.binder_minimal_regulated", "kind": "minimal_regulated", "target": "protein-luna",
         "worker": "luna", "worker_model": LUNA,
-        "rule_level": None, "regulator": "opus", "regulator_model": OPUS, "regulator_level": "ambiguous", "tag": None}
+        "rule_level": None, "regulator": "opus", "regulator_model": OPUS, "regulator_level": "ambiguous",
+        "disregulator_level": None, "tag": None}
     assert (rec["seed"], rec["mock"], rec["commit"], rec["inspect_model"], rec["regulator_inspect_model"]) == (
         1, False, "0dda147", resolve(LUNA), resolve(OPUS))
     assert (rec["eval_status"], rec["completed"], rec["failed_episodes"], rec["rung"], rec["export_flags_ok"]) == (
@@ -169,12 +173,13 @@ ARM = "binder_minimal_regulated_luna_opus_ambiguous1"
     ({"regulator_level": "enforce"}, "regulator_level: table ambiguous, run.json enforce"),
     ({"inspect_model": resolve(DSFLASH)}, f"model: table {LUNA}, run.json {resolve(DSFLASH)}"),
     ({"regulator_inspect_model": resolve(LUNA)}, f"regulator model: table {OPUS}, run.json {resolve(LUNA)}"),
+    ({"disregulators": 1}, "disregulators: table None, run.json 1"),
 ])
 def test_each_disagreement_of_the_table_and_run_json_is_named(change, problem):
-    """Each of the seven checks finds its own field and nothing else."""
+    """Each of the eight checks finds its own field and nothing else."""
     arm = study_index.study_table_arms()[ARM]
     rec = {"seed": 1, "mock": False, "inspect_model": resolve(LUNA), "regulator_inspect_model": resolve(OPUS)}
-    config = {"regulators": 1, "rule_level": "none", "regulator_level": "ambiguous"}
+    config = {"regulators": 1, "rule_level": "none", "regulator_level": "ambiguous", "disregulators": 0}
     assert study_index.disagreements(rec, arm, {"config": config}) == []
     rec.update({key: value for key, value in change.items() if key in rec})
     config.update({key: value for key, value in change.items() if key in config})
@@ -327,12 +332,57 @@ def test_a_name_the_table_gives_two_places_is_refused(monkeypatch):
 
 
 def test_a_silent_regulator_reads_zero_posts_and_a_run_without_one_reads_none(tmp_path, monkeypatch):
-    assert run_index.regulator_posts({"regulators": [{"posts": 3}, {"posts": 2}]}) == 5
-    assert run_index.regulator_posts({"regulators": [{"posts": 0}]}) == 0
-    assert run_index.regulator_posts({}) is None
-    assert "regulator_posts" in run_index.FIELDS
+    assert run_index.role_posts({"regulators": [{"posts": 3}, {"posts": 2}]}, "regulator") == 5
+    assert run_index.role_posts({"regulators": [{"posts": 0}]}, "regulator") == 0
+    assert run_index.role_posts({"regulators": [{"posts": 3}]}, "disregulator") is None
+    assert run_index.role_posts({}, "regulator") is None
+    assert "regulator_posts" in run_index.FIELDS and "disregulator_posts" in run_index.FIELDS
     run = make_run(tmp_path, "binder_minimal_luna1", "protein_design")
     verdict = run_index.run_validity.validity(run)
     monkeypatch.setattr(run_index.run_validity, "validity", lambda path: {**verdict, "regulators": [{"posts": 4}]})
     data = json.loads((run / "run.json").read_text())
     assert run_index.record(run, data, run.parent)["regulator_posts"] == 4
+
+
+CONTEST = "poem_minimal_regulated_disregulated_luna_haiku_enforce_persuade1"
+HAIKU = "claude-haiku-5-5-openrouter"
+BOTH_ROLES = ("n_agents=5", "regulators=1", "disregulators=1", "regulator_level=enforce",
+              "disregulator_level=persuade")
+
+
+def contested_run(root: Path, **kwargs) -> Path:
+    kwargs.setdefault("posts", {"regulator": 2, "disregulator": 3})
+    return make_run(root, CONTEST, "creative_writings", regulator=HAIKU, extra_pairs=BOTH_ROLES, **kwargs)
+
+
+def test_a_run_with_both_roles_takes_its_arm_from_the_table_and_counts_each_role_s_posts(tmp_path):
+    contested_run(tmp_path)
+    records, notes = records_by_run(tmp_path)
+    rec = records[CONTEST]
+    assert notes["table_disagrees"] == [] and rec["valid"] and rec["reason"] == "valid"
+    assert (rec["stage"], rec["kind"], rec["regulator"], rec["regulator_level"], rec["disregulator_level"]) == (
+        "contest-creative-luna", "minimal_regulated_disregulated", "haiku", "enforce", "persuade")
+    assert (rec["regulator_posts"], rec["disregulator_posts"]) == (2, 3)
+
+
+def test_a_disregulator_that_never_posted_leaves_its_run_invalid_in_the_index(tmp_path):
+    contested_run(tmp_path, posts={"regulator": 2})
+    rec = records_by_run(tmp_path)[0][CONTEST]
+    assert not rec["valid"] and rec["reason"] == "disregulator_no_post" and rec["disregulator_posts"] == 0
+
+
+@pytest.mark.parametrize(("change", "problem"), [
+    ({"disregulators": 0}, "disregulators: table persuade, run.json 0"),
+    ({"disregulator_level": "overt"}, "disregulator_level: table persuade, run.json overt"),
+    ({"role_models": {"disregulator": "openrouter/other"}}, "disregulator model: table the workers', run.json "
+                                                            "openrouter/other"),
+])
+def test_the_table_names_a_disregulator_that_differs_from_its_arm(change, problem):
+    arm = study_index.study_table_arms()[CONTEST]
+    rec = {"seed": 1, "mock": False, "inspect_model": resolve(LUNA), "regulator_inspect_model": resolve(HAIKU)}
+    config = {"regulators": 1, "rule_level": "none", "regulator_level": "enforce", "disregulators": 1,
+              "disregulator_level": "persuade"}
+    assert study_index.disagreements(rec, arm, {"config": config, "role_models": {}}) == []
+    data = {"config": {**config, **{k: v for k, v in change.items() if k in config}},
+            "role_models": change.get("role_models", {})}
+    assert study_index.disagreements(rec, arm, data) == [problem]
