@@ -28,6 +28,9 @@ CELL_SCRIPTS = [f"examples.{path.parent.name}.{path.stem}" for cell in CELLS
 # The regulated cell, on the domains that have one: four agents on the split, one of them a hidden regulator.
 REGULATED = [f"examples.{path.parent.name}.{path.stem}"
              for path in sorted(EXAMPLES_DIR.glob("*/*_minimal_regulated.py"))]
+# The disregulated cell: four agents on the split, one of them a hidden disregulator.
+DISREGULATED = [f"examples.{path.parent.name}.{path.stem}"
+                for path in sorted(EXAMPLES_DIR.glob("*/*_minimal_disregulated.py"))]
 # The team with no split, on the domains that have one: three neutral agents that each hold everything.
 NO_SPLIT = [f"examples.{path.parent.name}.{path.stem}" for path in sorted(EXAMPLES_DIR.glob("*/*_minimal_all.py"))]
 EVERY_SCRIPT = [f"examples.{path.parent.name}.{path.stem}" for path in sorted(EXAMPLES_DIR.glob("*/*.py"))
@@ -233,3 +236,28 @@ def test_every_script_hands_replace_to_the_run(name, monkeypatch):
         monkeypatch.setattr("sys.argv", [script_of(name).name, *argv])
         assert module.main() == 0
     assert replaced == [False, True]
+
+
+def test_swe_and_protein_design_have_a_disregulated_cell():
+    assert {name.split(".")[1] for name in DISREGULATED} == {"swe", "protein_design"}
+
+
+@pytest.mark.parametrize("name", DISREGULATED)
+def test_each_disregulated_cell_runs_four_agents_one_a_hidden_disregulator_who_holds_nothing(name, monkeypatch):
+    module = importlib.import_module(name)
+    script = script_of(name)
+    calls = []
+    monkeypatch.setattr(run, "run", lambda *args, **kwargs: calls.append((args, kwargs)) or 0)
+    monkeypatch.setattr(plots, "plot_run", lambda run_dir, out_dir: [])
+    monkeypatch.setattr("sys.argv", [script.name])
+    assert module.main() == 0
+    [(args, kwargs)] = calls
+    run_name, benchmark, config, model, timeout = args
+    assert kwargs == {"replace": False} and not hasattr(module, "CHEAT")
+    assert (config.n_agents, config.regulator_count, config.disregulator_count) == (4, 0, 1)
+    assert config.max_concurrency == 4 and config.access == "split" and config.judge is None
+    roles = hidden_roles(config)
+    plan = benchmark.plan(config, roles)
+    [disregulator] = [a for a, role in roles.items() if role == "disregulator"]
+    assert plan.holds[disregulator] == [] and plan.split
+    assert all(plan.holds[a] for a in config.names if a != disregulator)
