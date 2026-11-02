@@ -17,9 +17,9 @@ from src.models import model_registry as models
 from src.models import openrouter_gemini_tool_ids as tool_ids
 from src.models import openrouter_google_400_retry as retry
 
+GOOGLE_RAW = '{"error": {"code": 400, "message": "Request contains an invalid argument.", "status": "INVALID_ARGUMENT"}}'
 GOOGLE_400 = {"error": {"message": "Provider returned error", "code": 400,
-                        "metadata": {"raw": '{"error": {"code": 400, "message": "Request contains an invalid argument.",'
-                                            ' "status": "INVALID_ARGUMENT"}}', "provider_name": "Google"}}}
+                        "metadata": {"raw": GOOGLE_RAW, "provider_name": "Google"}}}
 COMPLETION = {"id": "x", "object": "chat.completion", "created": 0, "model": "m",
               "choices": [{"index": 0, "message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}],
               "usage": {"prompt_tokens": 10, "completion_tokens": 1, "total_tokens": 11}}
