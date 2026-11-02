@@ -7,8 +7,8 @@ Inspect looks it up by (the Inspect string and its `swarm/` form, the role model
 cap a run must pass to inspect_ai.eval: SwarmConfig.cost_limit_usd for a paid run, None for a run on mock models
 alone. A paid model without a price is refused, since Inspect cannot cap what it cannot price.
 
-Where an entry has a long-prompt tier (GPT-6 Luna over 272k tokens), the higher rates are used. The cap then trips a
-little early on such calls, never late.
+Inspect takes one rate per model, so where an entry has a long-prompt tier the higher rates price every call. The cap
+then trips early, never late: up to 2x on GPT-6 Luna (over 272k tokens) and up to 5x on Claude Haiku 5.5 (over 100k).
 
 On 2026-11-01 eight regulator runs cost $176.56 in thirty minutes with no cap at all (VERIFICATION_LOG.md 21:45).
 """

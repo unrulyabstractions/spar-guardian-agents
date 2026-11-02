@@ -124,6 +124,15 @@ def test_openai_lists_a_write_rate_and_batch_halves_it(entry, write):
     assert models.usd_per_million(entry, batch=True)["long_prompt"]["cache_write"] == write
 
 
+def test_an_openrouter_entry_keeps_the_long_prompt_tier_of_its_direct_entry():
+    """On 2026-11-01 the OpenRouter Haiku entry lacked the tier, so its runs were billed $59.02 against a listed $17.87
+    and the dollar cap counted a fifth of what they spent."""
+    for name, entry in models.entries().items():
+        direct = models.entries().get(name.removesuffix("-openrouter"))
+        if name.endswith("-openrouter") and direct:
+            assert entry.get("long_prompt") == direct.get("long_prompt"), name
+
+
 def test_a_prompt_over_the_line_pays_the_long_rates_on_every_token():
     """Claude Haiku 5.5 over 100,000 prompt tokens: 0.50 in, 0.625 written, 0.05 read, 2.50 out. game runs held five
     such calls, up to 106,119 tokens. The line counts reads and writes, and a prompt exactly on it stays below."""
