@@ -324,3 +324,15 @@ def test_a_name_the_table_gives_two_places_is_refused(monkeypatch):
     monkeypatch.setitem(study_table.STAGES, "copy", {stem.replace("gate", "copy"): gate[stem]})
     with pytest.raises(ValueError, match="two places"):
         study_index.study_table_arms()
+
+
+def test_a_silent_regulator_reads_zero_posts_and_a_run_without_one_reads_none(tmp_path, monkeypatch):
+    assert run_index.regulator_posts({"regulators": [{"posts": 3}, {"posts": 2}]}) == 5
+    assert run_index.regulator_posts({"regulators": [{"posts": 0}]}) == 0
+    assert run_index.regulator_posts({}) is None
+    assert "regulator_posts" in run_index.FIELDS
+    run = make_run(tmp_path, "binder_minimal_luna1", "protein_design")
+    verdict = run_index.run_validity.validity(run)
+    monkeypatch.setattr(run_index.run_validity, "validity", lambda path: {**verdict, "regulators": [{"posts": 4}]})
+    data = json.loads((run / "run.json").read_text())
+    assert run_index.record(run, data, run.parent)["regulator_posts"] == 4

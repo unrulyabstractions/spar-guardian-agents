@@ -13,7 +13,8 @@ A record holds these fields, in this order:
 - where it ran: stage, box, instance_id, instance_source, cell, kind, target;
 - arm: worker, worker_model, rule_level, regulator, regulator_model, regulator_level, tag, seed, mock, commit,
   inspect_model and regulator_inspect_model (the Inspect strings run.json records);
-- outcome: eval_status, completed, failed_episodes, rung (run_validity);
+- outcome: eval_status, completed, failed_episodes, rung (run_validity), regulator_posts (0 for a regulator that took
+  turns and never posted: a result, so its run stays valid; None in a run without a regulator);
 - checks: export_flags_ok (run.json validity.ok, the export's own flags), valid, why, reason (run_validity),
   deal_replay and deal_replay_detail (deal_replay: does today's code deal the run the holdings it recorded).
 
@@ -52,7 +53,7 @@ FIELDS = ("study", "run", "path", "group", "cheatbench_task", "domain", "row",
           "stage", "box", "instance_id", "instance_source", "cell", "kind", "target",
           "worker", "worker_model", "rule_level", "regulator", "regulator_model", "regulator_level", "tag", "seed",
           "mock", "commit", "inspect_model", "regulator_inspect_model",
-          "eval_status", "completed", "failed_episodes", "rung",
+          "eval_status", "completed", "failed_episodes", "rung", "regulator_posts",
           "export_flags_ok", "valid", "why", "reason", "deal_replay", "deal_replay_detail")
 ARM_FIELDS = ("stage", "box", "cell", "kind", "target", "worker", "worker_model", "rule_level", "regulator",
               "regulator_model", "regulator_level", "tag")
@@ -100,6 +101,12 @@ def level(value: str | None) -> str | None:
     return None if value in (None, "none") else value
 
 
+def regulator_posts(checked: dict) -> int | None:
+    """The regulators' posts on the board in a run_validity record; None in a run without a regulator."""
+    regulators = checked.get("regulators")
+    return sum(regulator["posts"] for regulator in regulators) if regulators else None
+
+
 def record(run: Path, data: dict, study_dir: Path, join: Join | None = None) -> dict:
     """One run's index record (FIELDS) from its folder and its run.json, with the study table's join or without."""
     config, role_models = data.get("config") or {}, data.get("role_models") or {}
@@ -117,7 +124,7 @@ def record(run: Path, data: dict, study_dir: Path, join: Join | None = None) -> 
     else:
         out.update(join.place(run, name))
     out.update({key: checked.get(key) for key in ("eval_status", "completed", "failed_episodes", "rung")},
-               export_flags_ok=(data.get("validity") or {}).get("ok"))
+               export_flags_ok=(data.get("validity") or {}).get("ok"), regulator_posts=regulator_posts(checked))
     if join is not None:
         out.update(valid=checked["valid"], why=checked["why"], reason=checked["reason"])
     else:
