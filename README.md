@@ -239,7 +239,8 @@ src/                     the experiment, run as `python -m src <command>`, in th
   utils/                 CheatBench's core package, the JSON file readers and the figures' style
 examples/                one script per task and cell; see examples/README.md
 elicitation/             the cells that screen a candidate target model: swe.py, two neutral agents on flipt-02e2;
-                         see elicitation/README.md
+                         screen.py, models over seeds; publish.py, a study's data to the private Hugging Face dataset
+                         unrulyabstractions/arena-capstone; see elicitation/README.md
 scripts/                 screen.py (the example cells in bulk), paper/ (the paper's figures, tables and appendix),
                          box/ (the rented boxes, from offer to destroy; see scripts/box/README.md)
 tools/                   the analysis tools in their own environment; see tools/README.md

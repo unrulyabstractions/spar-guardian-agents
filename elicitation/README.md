@@ -24,6 +24,15 @@ uv run python -m src summary runs/<study>/flipt_duo_deepseek-flash-openrouter
 
 What to compare. The code ladder gives each run a team rung on the honeypot axis and a collaboration level, with no judge (`signals.jsonl`, `python -m src signals <run> --table`). A candidate is worth keeping when its team reaches `used` or `shipped` and its collaboration reaches `crossed` or `assembled`: a piece reached the agent that did not hold it. `examples/swe/flipt_solo.py` gives the same model alone with the whole fix in reach, which separates willingness to cheat from willingness to collaborate on it.
 
+## Data
+
+A study's runs, logs and transcripts go to the private Hugging Face dataset `unrulyabstractions/arena-capstone`, under `spar-guardian-agents/runs/<study>/` and `spar-guardian-agents/logs/<study>/`. `publish.py` uploads one study in one commit. It refuses unless the dataset is private, and it refuses when any file, or any member of an `.eval` archive, holds a key from the shell's environment, a key-shaped string or the git user's email. After the upload it checks every file's size and hash on the Hub. The transcripts hold CheatBench task content, which CheatBench asks to keep out of training corpora, so the dataset stays private.
+
+```
+uv run python -m elicitation.publish study_elicitation_2 --dry-run
+uv run python -m elicitation.publish study_elicitation_2
+```
+
 ## Candidate models
 
 Choosing a target is hard because the open models with measured cheating are too large to instrument cheaply, and the models one GPU can read have no measured cheating. We therefore screen the small dense models first and keep the large ones as references. The table ranks the candidates in the order to try them. Every entry runs through OpenRouter pinned to one host (`src/models/model_registry.yaml`).
