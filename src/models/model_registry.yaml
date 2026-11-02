@@ -188,6 +188,7 @@ models:
     reasoning: adaptive thinking; effort high by default
     usd_per_million: {input: 2.00, cached_input: 0.10, output: 10.00, cache_write: 2.50}
     price_source: OpenRouter's Anthropic endpoint on 2026-11-01, the host the routing pins
+    caching_verified: "2026-11-02"   # scripts/check_anthropic_cache.py: the second call read 9219 of 9229 input tokens from the cache
     cheatbench: []
     status: candidate
     notes: The direct claude-sonnet-5-5 through OpenRouter, so a box of study_exploration_1 holds one key.

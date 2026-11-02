@@ -1369,3 +1369,9 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **Indexes.** runs/study_exploration_1/INDEX.jsonl: 305 runs, 110 valid, 113 not, 82 mock; table disagreements none. runs/study_exploration_0/INDEX.jsonl: 239 runs. Compared with the earlier files, regulator_posts is the only changed field among those files' fields. VERIFIED.
 - **Suite** after c568c6b: `2597 passed, 6 xfailed`; ruff all checks passed. One earlier partial run showed a single failure I could not reproduce in two reruns or the full suite; I did not identify it.
 - **Independent verifier:** not run, at the user's order to start no agents. These entries are my own reading of the outputs.
+
+## 2026-11-02 16:05 UTC: the phone channel dropped at the user's word; Sonnet's cache proven
+- **Phone channel.** The user: "FORGET ABOUT this ... dont worry about it, I trust u will use funds well". `daemon-alive` refused on this one reason, no off-Mac channel. ~/.claude/cloud_boxes/notify_cmd now names notify_local.sh, which appends to notify_local.log and reaches no phone; its header says so. The guard's code is unchanged. `notify-test` exit 0, its line read back from the log, `daemon-alive` then exit 0 (it was exit 1 before, so the check can fail). The check needs a fresh `notify-test` in 7 days. Off the Mac, nobody hears an alarm now; on it the guard's dialog and voice stand. VERIFIED.
+- **Power.** `pmset` reads AC Power and SleepDisabled 1, with no action of mine. VERIFIED.
+- **Sonnet cache.** The two-call check, about 3 cents, taken as covered by the same message: the second call read 9219 of 9229 input tokens. model_registry.yaml records caching_verified on claude-sonnet-5-5-openrouter; require_proven now allows Sonnet and Haiku and still refuses Opus. VERIFIED. A long real run: UNVERIFIED.
+- **Box key.** BOX_OPENROUTER_API_KEY is not in ~/.zshrc as of this entry. Nothing can launch until it is.
