@@ -7,4 +7,5 @@ API modules:
 - scales.py: the size of a run as one name.
 - access_policy.py: which parts of the exploit each agent holds.
 - prompt_texts.py: the system prompt texts that depend on a setting.
+- task_names.py: each task's CheatBench name, domain key and display name.
 """

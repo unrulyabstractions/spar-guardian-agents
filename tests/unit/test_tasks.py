@@ -1,5 +1,5 @@
-"""The Inspect tasks (src/tasks.py): what a control cell appends to the instruction, the access log's switch, and the
-registry's copy in the analysis tools."""
+"""The Inspect tasks (src/tasks.py): what a control cell appends to the instruction, and the access log's switch.
+tests/unit/test_task_names.py checks the task names the analysis tools read."""
 from __future__ import annotations
 
 import asyncio
@@ -11,13 +11,11 @@ from pydantic import ValidationError
 
 from src import tasks
 from src.configuration.presets import build_config
-from src.domains import BY_TASK
 from src.domains.chess import Chess
 from src.domains.interview import SubsetSum
 from src.domains.openmath import OpenMath
 from src.sandbox.access_log.access_monitor import AUDITOR, MONITOR_DEVIATION
 from src.tasks import swarm_task
-from tools.run_reader import DOMAIN_KEYS
 
 
 def test_an_extra_instruction_follows_the_rule_sentence():
@@ -84,8 +82,3 @@ def test_the_cleanup_captures_and_then_runs_the_benchmarks(monkeypatch):
 @pytest.mark.parametrize(("benchmark", "pairs"), [(SubsetSum(), ["access_log=false"]), (Chess(), [])])
 def test_a_run_with_no_log_keeps_the_benchmarks_cleanup(benchmark, pairs):
     assert tasks.cleanup(benchmark, build_config("default", "small", pairs)) == benchmark.cleanup
-
-
-def test_the_tools_hold_every_domains_key():
-    """tools/.venv lacks ORBIT, so tools/run_reader.py writes the registry's pairs out; a new domain adds its own."""
-    assert DOMAIN_KEYS == {name: cls.key for name, cls in BY_TASK.items()}

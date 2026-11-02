@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import argparse
 import copy
-import datetime as dt
 import functools
 import json
 import shutil
@@ -40,6 +39,7 @@ from src.swarm.turn_rules._turn_state import HALT_TAG
 from src.tasks import swarm_task
 from src.utils.cheatbench_core import judge as core_judge
 from src.utils.json_files import read_json_dir, read_jsonl
+from tests.smoke import LOGS, RUNS, invocation_stamp
 from tests.support.mock_model import MODEL, honest_judge, tagged_infos
 from tests.support.ordered_ids import use_ordered_ids
 
@@ -79,14 +79,13 @@ def task_for(benchmark, **fields):
 # ------------------------------------------------------------------------------------------------ the suite
 
 class Suite:
-    """A suite's directories and its domain's judge spec. A stamped suite gets a fresh pair per invocation,
-    logs/<name>/<stamp>/ and runs/<name>/<stamp>/; an unstamped one the fixed logs/<name>/ and runs/<name>/, for runs
-    read by name elsewhere (openmath's)."""
+    """A suite's directories and its domain's judge spec: runs/study_smoke/<name>/<stamp>/ and
+    logs/study_smoke/<name>/<stamp>/, whatever the current study, with the stamp a parent handed down or a fresh one
+    (tests/smoke/__init__.py)."""
 
-    def __init__(self, name: str, spec=None, *, stamped: bool = True) -> None:
-        stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        tail = Path(name) / stamp if stamped else Path(name)
-        self.logs, self.runs, self.spec = settings.LOGS / tail, settings.RUNS / tail, spec
+    def __init__(self, name: str, spec=None) -> None:
+        self.name, self.stamp, self.spec = name, invocation_stamp(), spec
+        self.logs, self.runs = LOGS / name / self.stamp, RUNS / name / self.stamp
 
     def with_spec(self, spec) -> Suite:
         """The same directories under another judge spec, for a suite over several tasks."""

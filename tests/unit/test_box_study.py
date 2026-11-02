@@ -409,3 +409,55 @@ def test_phase_2b_regulates_with_haiku_five_runs_and_sonnet_one_run_on_boxes_of_
     assert not {box.name for stage in PHASE_TWO for box in stage_boxes(stage)} & {
         box.name for stage in PHASE_TWO_B for box in stage_boxes(stage)}
 
+
+# ---- the runbook ----
+
+def test_the_runbook_names_every_stage_with_the_boxes_and_runs_of_the_table():
+    """scripts/box/README.md: one row per stage family, one row per stage with its boxes and runs, and every create
+    command's count, against the table. A retry of one box (--only) is the one create with another count."""
+    readme = (BOX_FOLDER / "README.md").read_text()
+
+    def family(stage: str) -> str:
+        return next((stage.removesuffix(t.name) + "<target>" for t in TARGETS if stage.endswith(f"-{t.name}")), stage)
+
+    assert set(re.findall(r"^\| `([a-z0-9<>-]+)` \| [^|]+ \|$", readme, re.M)) == {family(s) for s in STAGES}
+    counts = re.findall(r"^\| `([a-z0-9-]+)` \| (\d+) \| (\d+) \|$", readme, re.M)
+    assert {stage: (int(boxes), int(runs)) for stage, boxes, runs in counts} == {
+        stage: (len(stage_boxes(stage)), len(stage_runs(stage))) for stage in STAGES} and len(counts) == len(STAGES)
+    creates = re.findall(r"fleet create --stage (\S+) --count (\d+)(.*)$", readme, re.M)
+    assert {stage for stage, _, rest in creates if "--only" not in rest} >= {"pilot", "gate", "fixed-gate"}
+    assert all(int(count) == len(stage_boxes(stage)) for stage, count, rest in creates if "--only" not in rest), creates
+
+
+def family(stage: str) -> str:
+    """A stage's row in the runbook: <stage>, or <stem>-<target> for a stage of one target."""
+    return next((stage.removesuffix(t.name) + "<target>" for t in TARGETS if stage.endswith(f"-{t.name}")), stage)
+
+
+def test_the_runbook_lists_every_stage_family_where_it_says_how_to_launch_one():
+    readme = (BOX_FOLDER / "README.md").read_text()
+    line = next(line for line in readme.splitlines() if line.startswith("You launch each stage by hand and by name"))
+    assert set(re.findall(r"`([a-z0-9<>-]+)`", line)) == {family(stage) for stage in STAGES}
+
+
+def test_the_runbook_says_the_seeds_each_stage_runs():
+    """Each row of the Stages table names the most seeds an arm of that family runs, and no seed count no arm runs."""
+    readme = (BOX_FOLDER / "README.md").read_text()
+    rows = dict(re.findall(r"^\| `([a-z0-9<>-]+)` \| ([^|]+) \|$", readme, re.M))
+    for name, text in rows.items():
+        counts = {len(arm.seeds) for stage in STAGES if family(stage) == name for box in stage_boxes(stage)
+                  for arm in box.arms}
+        said = {int(n) for n in re.findall(r"seeds 1 to (\d+)", text)}
+        said |= {1} if re.search(r"seed 1\b", text) else set()
+        assert said <= counts and max(counts) in said, (name, said, counts)
+
+
+def test_the_runbook_reads_a_gate_and_names_each_tag_of_the_fixed_runs():
+    readme = (BOX_FOLDER / "README.md").read_text()
+    readouts = re.findall(r"scripts\.box\.gate_readout (\S+)", readme)
+    assert readouts and set(readouts) <= {stage for stage in STAGES if stage.endswith("gate")}
+    fixed = re.search(r"^## Fixed SWE stages$(.+?)^## ", readme, re.M | re.S)[1]
+    assert re.findall(r"scripts\.box\.gate_readout (\S+)", fixed) == ["fixed-gate"]
+    tags = {arm.tag for stage in STAGES if stage.startswith("fixed") for box in stage_boxes(stage) for arm in box.arms}
+    assert tags == {"fixed", "fixedpilot"} and all(f"`{tag}`" in readme for tag in tags)
+

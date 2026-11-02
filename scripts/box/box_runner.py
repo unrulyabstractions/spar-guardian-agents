@@ -20,7 +20,10 @@ logs/<study>/screen/attempts/, never overwritten. The runner's own pid goes to ~
 A run is done before, and is skipped, only when its export exists, its eval log says success and none of its episodes
 failed in the harness or at the provider. A run whose eval succeeded and that lacks only its code ladder gets it
 rebuilt, which costs no model call and needs no judge, and is never run again. Any other run starts again, its earlier
-screen log set aside in the same folder.
+screen log set aside in the same folder. Its earlier attempt moves first: the run folder, the eval log folder and the
+figures go to runs/<study>/attempts/<name>.<n>/ and the same places under logs/ and out/
+(run_directory.set_aside_attempt), so the new run's export finds an empty folder and nothing of the earlier attempt is
+lost. The job's arguments stay as the plan recorded them.
 
 Every minute the runner looks at each live run. A run is hung when it is alive GRACE_S past Inspect's time limit for the
 task's domain and nothing under logs/<study>/<name>/, runs/<study>/<name>/ or its log changed for GRACE_S, or when it is
@@ -64,6 +67,7 @@ from src.domains.protein import protein_rows_build
 from src.domains.swe import swe_sandbox
 from src.domains.swe.swe_inputs import load_split
 from src.domains.swe.swe_settings import DEFAULT_ROW as SWE_ROW
+from src.measures.run_directory import set_aside_attempt
 from src.sandbox import cheatbench_task_files as task_files
 from src.sandbox.machines import agent_machines
 from src.utils.json_files import read_json, read_jsonl
@@ -316,8 +320,9 @@ def start_jobs(jobs: list[Job], plan: dict) -> dict[str, tuple[subprocess.Popen,
             print(f"   {job.name:40s} not run again: {why}", flush=True)
             continue
         log = set_aside(SCREEN_LOGS / f"{job.name}.log")
-        if log or (settings.RUNS / job.name).exists():
-            record["again"] = f"{why}; earlier log {log}"
+        attempt = [target for _, target in set_aside_attempt(settings.RUNS / job.name)]
+        if log or attempt:
+            record["again"] = f"{why}; earlier log {log}" + (f"; earlier attempt {attempt[0]}" if attempt else "")
             print(f"   {job.name:40s} again: {why}", flush=True)
         running[job.name] = (launch(job), time.time())
         record.update(pid=running[job.name][0].pid, started=now_iso())

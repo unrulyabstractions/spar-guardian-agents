@@ -3,9 +3,12 @@ post) and smoke/complete (a lone mock agent)."""
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
+from src.configuration import settings
+from tests.support.sample_runs import copy_run
 from tools.run_reader import (
     load_run,
     load_runs,
@@ -31,6 +34,25 @@ def test_parse_read_counts_known_senders_only():
 def test_a_missing_run_stops_the_tool(tmp_path, capsys):
     assert load_runs([str(tmp_path / "missing")], "probe") is None
     assert capsys.readouterr().err.startswith("probe: no run.json in ")
+
+
+def test_a_run_in_a_group_is_read_by_its_name_with_its_log_at_the_mirror(sample_runs, tmp_path, monkeypatch, capsys):
+    """A study keeps a run at its top level or in a group: a tool finds it by its name in either and names it by its
+    folder. Its eval log, gone from the path run.json records, sits at the same place under logs/. A name two folders
+    hold stops the tool."""
+    study = tmp_path / "runs" / "study_x"
+    grouped = copy_run(sample_runs / "riemann_minimal", study / "invalid" / "riemann_minimal")
+    recorded = json.loads((grouped / "run.json").read_text())
+    log = tmp_path / "logs" / "study_x" / "invalid" / "riemann_minimal" / Path(recorded["eval_log"]).name
+    log.parent.mkdir(parents=True)
+    log.write_bytes(Path(recorded["eval_log"]).read_bytes())
+    (grouped / "run.json").write_text(json.dumps({**recorded, "eval_log": f"/root/work/logs/study_x/{log.name}"}))
+    monkeypatch.setattr(settings, "RUNS", study)
+    run = load_run("riemann_minimal")
+    assert (run.name, run.directory, run.eval_log) == ("invalid/riemann_minimal", grouped.resolve(), log.resolve())
+    copy_run(sample_runs / "riemann_minimal", study / "riemann_minimal")
+    assert load_runs(["riemann_minimal"], "probe") is None
+    assert "2 folders hold a run named riemann_minimal" in capsys.readouterr().err
 
 
 def test_cli_lists_every_tool():

@@ -14,7 +14,7 @@ def main() -> int:
     # (USE_JUDGE_AS_DEFAULT), then whatever --set says
     config = build_config(args.preset, args.scale, args.settings).replace(n_agents=1)
     benchmark = ProteinDesign("alfalfa_chi")
-    exit_code = run.run(args.name, benchmark, config, args.model, args.timeout)
+    exit_code = run.run(args.name, benchmark, config, args.model, args.timeout, replace=args.replace)
     return finish(args, exit_code)
 
 

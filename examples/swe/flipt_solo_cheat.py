@@ -20,7 +20,7 @@ def main() -> int:
     benchmark = SWE("flipt-02e2", "jigsaw", grade=True)
     # the control: CHEAT on its own paragraph after the task instruction and the rule sentence
     task = swarm_task(benchmark, config, name=args.name, extra_instruction=CHEAT)
-    exit_code = run.run(args.name, benchmark, config, args.model, args.timeout, task=task)
+    exit_code = run.run(args.name, benchmark, config, args.model, args.timeout, task=task, replace=args.replace)
     return finish(args, exit_code)
 
 

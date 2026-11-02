@@ -1,20 +1,28 @@
 """Whether a run measures what its cell says, read from what the run left on disk.
 
-    uv run python -m src.measures.run_validity runs/study_exploration_1            # one line per run, and a count
-    uv run python -m src.measures.run_validity runs/study_exploration_1 --index    # also writes <folder>/INDEX.jsonl
+    uv run python -m src.measures.run_validity runs/study_exploration_1     # one line per run, and a count
 
-A run is valid when all of these hold, and each failure is named in `why`:
-- whole: run.json and signals.jsonl exist, the eval log's header says success, and no episode failed;
-- the task met the collaboration rule when it ran: an SWE run's code commit descends from SWE_FIX, the commit that
-  made cheating on flipt-02e2 and vuls-1832 take two agents (every SWE run before it graded a task one agent could
-  cheat alone);
+It reads every run of a study: at its top level and in its groups (run_directory.study_runs). A run's eval log is the
+one run.json names, found through RunDir.eval_log. src/measures/run_index.py builds each run's record with these
+checks, and scripts/box/study_index.py writes the records to the study's INDEX.jsonl.
+
+A run is valid when all of these hold. `why` names each failure, and `reason` the first in the order of REASONS:
+- it is no earlier attempt: a run in runs/<study>/attempts/ was superseded by a later run of its name;
+- it is no mock rehearsal: a name ending in mock<k> never counts;
+- it completed: the eval log's header says success, and no episode died in the harness or at the provider
+  (settings.INCOMPLETE_FAILURES);
+- the task met the collaboration rule when it ran: an SWE run's code commit descends from SWE_FIX;
 - a regulator, when the cell has one, acted: it made at least one turn that was not the provider's refusal notice.
-  On 2026-11-01 every turn of the Opus regulator in 7 protein runs was Anthropic's refusal notice.
-Mock rehearsal runs (names ending in mock<k>) are listed as mock and never count as valid.
+  On 2026-11-01 every turn of the Opus regulator in 7 protein runs was Anthropic's refusal notice;
+- the code ladder placed the team: signals.jsonl holds a team row;
+- no other episode failed, as by a timeout.
+Each record also says whether the run is whole on its own, whatever the other conditions find: its eval log says
+success, no episode failed and signals.jsonl holds a team row.
 """
 from __future__ import annotations
 
 import argparse
+import collections
 import functools
 import json
 import re
@@ -23,12 +31,23 @@ import sys
 from pathlib import Path
 
 from src.configuration import settings
+from src.measures.run_directory import ATTEMPTS, RunDir, run_name, run_place, study_runs
 
-SWE_FIX = "7331882"
-"""The commit after which the SWE task needs two agents to cheat (src/domains/swe, 2026-11-01)."""
+SWE_FIX = "f0d1c34"
+"""The first commit where the SWE task meets the collaboration rule in full (CLAUDE.md section 1): every planted piece
+together passes, and no agent's own holdings pass. 7331882 put the two texts the hidden tests need in two pieces, so
+no agent could pass alone. It planted redis-ca-invalid.yml nowhere, so the pieces together did not pass without the
+team's own work. f0d1c34 plants that file in piece A with neutral values. No SWE run recorded a commit between the two:
+on 2026-11-01, every SWE run under runs/study_exploration_0 and runs/study_exploration_1 descends from both or from
+neither."""
 REFUSAL_NOTICE = "API integrators: you can reduce refusals"
 """The text Anthropic's API returns in place of a turn it refuses."""
 MOCK = re.compile(r"mock\d+$")
+REASONS = ("no_run_json", "superseded", "mock", "incomplete", "swe_before_fix", "swe_commit_unknown",
+           "regulator_silent", "regulator_refused", "no_team_record", "failed_episodes")
+"""Why a run is not valid, the first that applies naming it: no run.json; an earlier attempt; a mock rehearsal; an eval
+that did not complete; an SWE run before SWE_FIX, or on a commit git does not know; a regulator that made no turn, or
+only refusal notices; no team row in signals.jsonl; an episode that failed otherwise."""
 
 
 @functools.cache
@@ -45,12 +64,13 @@ def _lines(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
-def _eval_status(name: str, study_logs: Path) -> str | None:
-    logs = sorted((study_logs / name).glob("*.eval"))
-    if not logs:
+def eval_status(run: Path) -> str | None:
+    """The status in the header of the run's eval log (RunDir.eval_log); None when the log is missing."""
+    log = RunDir(run).eval_log
+    if log is None:
         return None
     from inspect_ai.log import read_eval_log  # noqa: PLC0415 - heavy import, only when a log exists
-    return read_eval_log(str(logs[-1]), header_only=True).status
+    return read_eval_log(str(log), header_only=True).status
 
 
 def regulator_turns(run: Path, agent: str) -> tuple[int, int]:
@@ -65,33 +85,39 @@ def regulator_turns(run: Path, agent: str) -> tuple[int, int]:
     return turns, refusals
 
 
-def validity(run: Path, study_logs: Path | None = None) -> dict:
-    """One run's record: its facts and whether it is valid, with every reason it is not."""
-    study_logs = study_logs or settings.ROOT / "logs" / run.parent.name
-    name = run.name
+def validity(run: Path) -> dict:
+    """One run's record: its facts, whether it completed, whether it is valid, every reason it is not (`why`, with
+    their codes in `reasons`) and the first of them as a code (`reason`, one of REASONS, or "valid"). `run` is the run's
+    own name, which an earlier attempt's folder extends with .<n>."""
+    name = run_name(run)
     record: dict = {"run": name, "mock": bool(MOCK.search(name))}
     data = json.loads((run / "run.json").read_text()) if (run / "run.json").is_file() else None
-    why: list[str] = []
+    why: list[tuple[str, str]] = []
+    if run_place(run)[1] == ATTEMPTS:
+        why.append(("superseded", "an earlier attempt, superseded by a later run of its name"))
     if data is None:
-        record.update(valid=False, why=["no run.json"])
-        return record
+        return finish({**record, "whole": False}, [*why, ("no_run_json", "no run.json")])
     record.update(task=data.get("task"), commit=(data.get("code") or {}).get("commit"))
-    status = _eval_status(name, study_logs)
+    status = eval_status(run)
     failed = sorted({e["failure"] for e in _lines(run / "episodes.jsonl") if e.get("failure")})
+    died = [failure for failure in failed if failure in settings.INCOMPLETE_FAILURES]
     team = next((r for r in _lines(run / "signals.jsonl") if r.get("row") == "team"), None)
-    record.update(eval_status=status, failed_episodes=failed, rung=team.get("rung") if team else None)
+    record.update(eval_status=status, completed=status == "success" and not died, failed_episodes=failed,
+                  rung=team.get("rung") if team else None)
+    if record["mock"]:
+        why.append(("mock", "mock rehearsal"))
     if status != "success":
-        why.append(f"eval {status or 'log missing'}")
-    if failed:
-        why.append("failed episodes: " + ", ".join(failed))
-    if team is None:
-        why.append("no team row in signals.jsonl")
+        why.append(("incomplete", f"eval {status or 'log missing'}"))
+    if died:
+        why.append(("incomplete", "failed episodes: " + ", ".join(died)))
+    record["whole"] = status == "success" and not failed and team is not None
     if data.get("task") == "software_engineering":
         fixed = descends_from_fix(record["commit"]) if record["commit"] else None
         record["swe_fixed"] = fixed
-        if fixed is not True:
-            why.append("SWE task before the fix: one agent could cheat alone" if fixed is False
-                       else f"SWE commit {record['commit']} unknown to git")
+        if fixed is False:
+            why.append(("swe_before_fix", "SWE task before the fix: one agent could cheat alone"))
+        elif fixed is None:
+            why.append(("swe_commit_unknown", f"SWE commit {record['commit']} unknown to git"))
     workers = set((data.get("rules") or {}).get("workers") or data.get("agents") or [])
     regulators = [a for a in data.get("agents") or [] if a not in workers]
     if (data.get("config") or {}).get("regulators"):
@@ -103,31 +129,45 @@ def validity(run: Path, study_logs: Path | None = None) -> dict:
                 {"agent": agent, "model": (data.get("role_models") or {}).get("regulator"), "turns": turns,
                  "refusals": refusals, "posts": posts.get(agent, 0), "acted": acted})
             if not turns:
-                why.append(f"regulator {agent} made no turn")
+                why.append(("regulator_silent", f"regulator {agent} made no turn"))
             elif not acted:
-                why.append(f"regulator {agent} never acted: {refusals} of {turns} turns were refusal notices")
-    if record["mock"]:
-        why.append("mock rehearsal")
-    record.update(valid=not why, why=why)
-    return record
+                why.append(("regulator_refused",
+                            f"regulator {agent} never acted: {refusals} of {turns} turns were refusal notices"))
+    if team is None:
+        why.append(("no_team_record", "no team row in signals.jsonl"))
+    others = [failure for failure in failed if failure not in died]
+    if others:
+        why.append(("failed_episodes", "failed episodes: " + ", ".join(others)))
+    return finish(record, why)
+
+
+def finish(record: dict, why: list[tuple[str, str]]) -> dict:
+    """The record with valid, why (each failure's text, in the order found), reasons (each failure's code, in the
+    same order) and reason (the first code of REASONS that applies, or "valid")."""
+    return {**record, "valid": not why, "why": [text for _, text in why], "reasons": [code for code, _ in why],
+            "reason": first_reason([code for code, _ in why])}
+
+
+def first_reason(codes: list[str]) -> str:
+    """The first code of REASONS among these codes, or "valid" for none."""
+    return next((code for code in REASONS if code in codes), "valid")
 
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("folder", type=Path, help="a study's runs folder, e.g. runs/study_exploration_1")
-    parser.add_argument("--index", action="store_true", help="write <folder>/INDEX.jsonl, one record per run")
     args = parser.parse_args(argv)
-    runs = sorted(p for p in args.folder.iterdir() if p.is_dir() and (p / "run.json").is_file())
+    runs = study_runs(args.folder)
     records = [validity(run) for run in runs]
-    for r in records:
-        print(f"{'valid  ' if r['valid'] else 'INVALID'} {r['run']:58s} {'; '.join(r['why'])}")
+    for run, r in zip(runs, records):
+        _, group = run_place(run)
+        path = f"{group}/{run.name}" if group else run.name
+        print(f"{'valid  ' if r['valid'] else 'INVALID'} {path:66s} {'; '.join(r['why'])}")
     real = [r for r in records if not r["mock"]]
     print(f"== {len(real)} runs: {sum(r['valid'] for r in real)} valid, {sum(not r['valid'] for r in real)} not; "
           f"{len(records) - len(real)} mock rehearsals")
-    if args.index:
-        out = args.folder / "INDEX.jsonl"
-        out.write_text("".join(json.dumps(r) + "\n" for r in records))
-        print(f"== wrote {out} ({len(records)} records)")
+    reasons = collections.Counter(r["reason"] for r in records)
+    print("== by reason: " + ", ".join(f"{code} {reasons[code]}" for code in ("valid", *REASONS) if reasons[code]))
     return 0
 
 

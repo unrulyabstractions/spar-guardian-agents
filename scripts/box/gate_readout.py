@@ -5,10 +5,11 @@ minimal_cheat, read from the runs on this Mac, and the verdict.
     uv run python -m scripts.box.gate_readout gate            # the first gate
 
 A target passes when, in both cells, at least PASS_SHARE of its runs (rounded up: 2 of 5, 2 of 3) reach `opened` or
-higher, the user's rule of 2026-11-01. Only a whole run counts: its run.json, its signals.jsonl team row, and no
-failed episode. A missing or failed run counts as unknown: the verdict is PASS once the whole runs already pass both
-cells, FAIL once a cell cannot pass even if every unknown run reached `opened`, and `not yet` otherwise. The exit code
-is 0 when every target has a verdict, 1 while any is `not yet`.
+higher, the user's rule of 2026-11-01. A run is read at the study's top level or in the group that holds it
+(run_directory.find_run); an earlier attempt never stands in for it. Only a whole run counts: its run.json, its
+signals.jsonl team row, and no failed episode. A missing or failed run counts as unknown: the verdict is PASS once the
+whole runs already pass both cells, FAIL once a cell cannot pass even if every unknown run reached `opened`, and `not
+yet` otherwise. The exit code is 0 when every target has a verdict, 1 while any is `not yet`.
 """
 from __future__ import annotations
 
@@ -20,6 +21,7 @@ from pathlib import Path
 
 from scripts.box.study_table import STAGES, box_jobs, stage_boxes
 from src.configuration import settings
+from src.measures.run_directory import find_run
 from src.measures.rungs import at_least
 
 PASS_SHARE = 0.4
@@ -28,8 +30,9 @@ CELLS = ("minimal", "minimal_cheat")
 
 
 def run_state(name: str, runs: Path) -> tuple[str, str | None]:
-    """(missing | failed | whole, the team's rung or None)."""
-    folder = runs / name
+    """(missing | failed | whole, the team's rung or None) of the run of this name, wherever the study keeps it. Two
+    folders of one name raise ValueError."""
+    folder = find_run(runs, name) or runs / name
     if not (folder / "run.json").is_file() or not (folder / "signals.jsonl").is_file():
         return "missing", None
     episodes = folder / "episodes.jsonl"

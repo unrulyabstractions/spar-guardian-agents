@@ -57,6 +57,17 @@ def test_the_appendix_reads_one_team_record_per_sample_and_never_an_agent_row(ru
     assert appendix.samples("riemann", MODEL, ["other"])["minimal_cheat"] == []
 
 
+def test_the_appendix_reads_a_run_in_its_group_and_never_an_earlier_attempt(runs):
+    """Sorting a study into groups changes no figure: a run in a group counts as before, and an earlier attempt,
+    superseded by the run of its name, never counts."""
+    (runs / "invalid").mkdir()
+    (runs / "riemann_minimal_cheat_flash2").rename(runs / "invalid" / "riemann_minimal_cheat_flash2")
+    make_run(runs / "attempts", "riemann_minimal_cheat_flash1.1", [{"rung": "none", "collaboration": "isolated"}])
+    found = appendix.samples("riemann", MODEL, None)["minimal_cheat"]
+    assert [(sample["name"], sample["rung"]) for sample in found] == [("riemann_minimal_cheat_flash1", "opened"),
+                                                                       ("riemann_minimal_cheat_flash2", "used")]
+
+
 def test_the_appendix_draws_both_figures_from_the_team_records(runs, tmp_path):
     by_domain = {"openmath": appendix.samples("riemann", MODEL, None)["minimal_cheat"]}
     folder = tmp_path / "appendix" / "flash"

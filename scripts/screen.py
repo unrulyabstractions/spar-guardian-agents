@@ -6,8 +6,11 @@
                                     [--worker-model M] [--regulator-model M] [--disregulator-model M]
 
 Each run is `python -m examples.<domain>.<cell> --model <model> --name <cell>_<suffix><k> --set seed=<k>` for sample k,
-its output in logs/<study>/screen/<name>.log; a run whose runs/<study>/<name>/signals.jsonl exists already is skipped,
-so a stopped screen resumes. The seed is the sample's number, so the samples of a cell draw their own hidden roles, turn
+its output in logs/<study>/screen/<name>.log; a run whose signals.jsonl exists already is skipped, at the study's top
+level or in the group that holds it (run_directory.find_run), so a stopped screen resumes. A run started again first
+moves its earlier attempt into runs/<study>/attempts/<name>.<n>/, with its eval log and figures
+(run_directory.set_aside_attempt), so its export finds an empty folder. The seed is the sample's number, so the samples
+of a cell draw their own hidden roles, turn
 order and SWE planted hashes, as the boxes' runs do (scripts/box/box_runner.py launch). The name gives each run its own
 agent IDs. `--set seed` is refused.
 The default cells are the solo, solo_cheat and minimal_cheat scripts of every example but the vuls issue's
@@ -28,10 +31,11 @@ import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 from src.configuration import settings
 from src.configuration.presets import add_config_arguments, config_pairs
-from src.measures.run_directory import RunDir
+from src.measures.run_directory import RunDir, find_run, run_places, set_aside_attempt
 
 CELL_KINDS = ("solo", "solo_cheat", "minimal_cheat")
 CELLS = sorted(f"{path.parent.name}.{path.stem}" for kind in CELL_KINDS
@@ -44,13 +48,26 @@ def run_name(cell: str, suffix: str, sample: int) -> str:
 
 
 def done(name: str) -> bool:
-    return (settings.RUNS / name / "signals.jsonl").is_file()
+    """Whether the run of this name finished: its folder, wherever the study keeps it, holds signals.jsonl. Two
+    folders of one name raise ValueError."""
+    folder = find_run(settings.RUNS, name)
+    return folder is not None and (folder / "signals.jsonl").is_file()
+
+
+def set_aside_earlier(name: str) -> list[Path]:
+    """Move each earlier attempt of the run into runs/<study>/attempts/<name>.<n>/ before it starts again: the folder at
+    the study's top level, with or without a run.json, and any group's run of the name, each with its eval log and its
+    figures. The new attempts' targets."""
+    top = settings.RUNS / name
+    places = [top, *(place for place in run_places(settings.RUNS, name) if place != top)]
+    return [target for place in places for _, target in set_aside_attempt(place)]
 
 
 def launch(cell: str, name: str, flags: list[str]) -> tuple[str, int, float]:
     """One run as a subprocess with the screen's config flags, its output in LOGS/<name>.log; (name, exit code,
-    minutes)."""
+    minutes). An earlier attempt is set aside first."""
     LOGS.mkdir(parents=True, exist_ok=True)
+    set_aside_earlier(name)
     command = [sys.executable, "-m", f"examples.{cell}", "--name", name, *flags]
     started = time.time()
     with (LOGS / f"{name}.log").open("w") as log:
@@ -73,7 +90,7 @@ def summary(names: list[str]) -> str:
         if not done(name):
             lines.append(f"{name:34s} (not finished)")
             continue
-        run = RunDir(settings.RUNS / name)
+        run = RunDir(find_run(settings.RUNS, name))
         rungs = " ".join([f"team:{team['rung']}" for team in run.team_signals()]
                          + [f"{row['agent']}:{row['rung']}" for row in run.signals()])
         ledger = run.run_json.get("ledger")

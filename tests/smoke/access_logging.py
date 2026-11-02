@@ -12,9 +12,9 @@
 Every scenario starts the real sandbox, with the monitor's sidecar where the run keeps a log, drives ORBIT with
 Inspect's mockllm scripted per agent, exports the log with src.export.run_export.write_run and reads access_log.jsonl,
 run.json and signals.jsonl back. Each check is an assertion; a failing scenario exits non-zero. Results go to
-runs/smoke_access/<stamp>/ and logs/smoke_access/<stamp>/, a fresh directory per invocation. The domains' suites run
-every layout with the monitor on and hold that it worked (tests/smoke/common.py log_worked). This suite holds what the
-log says.
+runs/study_smoke/smoke_access/<stamp>/ and logs/study_smoke/smoke_access/<stamp>/, a fresh directory per invocation.
+The domains' suites run every layout with the monitor on and hold that it worked (tests/smoke/common.py log_worked).
+This suite holds what the log says.
 
   hidden_read        a subset_sum team: a Python read whose path is base64 in the code prints nothing. The parser sees
                      nothing, the log names the agent, tried rises, opened does not and log_only is true

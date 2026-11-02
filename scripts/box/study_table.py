@@ -24,8 +24,8 @@ Nothing here or anywhere in this folder starts one stage from another, and no st
                       five regulators at ambiguous and enforce, seeds 1 to 3; Opus and Sonnet take seed 1
 
 Every SWE run before the fix (commits 7331882 to 33b7810, 2026-11-01) graded a task where one agent could cheat
-alone, so it measures nothing about collaboration. The fixed stages' runs carry the tag `fixed`, so no name repeats
-an invalid run's.
+alone, so it measures nothing about collaboration. The fixed gate's and fixed phase two's runs carry the tag `fixed`
+and the fixed pilot's the tag `fixedpilot`, so no name repeats an invalid run's.
 
 A box holds whole arms, in table order, up to its task's capacity (fleet_layout.capacity_of).
 """
@@ -38,6 +38,9 @@ from dataclasses import dataclass
 from scripts.box.fleet_layout import BOX_KEY, MODELS, REGULATORS, capacity_of, cells, run_name
 from src.models.model_registry import key_env, resolve
 
+TABLE_STUDY = "study_exploration_1"
+"""The study this table states. study_exploration_0 reuses some of its run names, so a reader of the table refuses or
+skips any other study."""
 MOCK_MODEL = "mockllm/model"
 """What a rehearsal runs: Inspect's mock model, no key and no spend."""
 SEEDS = (1, 2, 3, 4, 5)

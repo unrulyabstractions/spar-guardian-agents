@@ -17,7 +17,7 @@ def main() -> int:
     # says; the cell then fixes four agents, one a hidden regulator
     config = build_config(args.preset, args.scale, args.settings).replace(n_agents=4, regulators=1, max_concurrency=4)
     benchmark = SWE("flipt-02e2", "jigsaw", grade=True)
-    exit_code = run.run(args.name, benchmark, config, args.model, args.timeout)
+    exit_code = run.run(args.name, benchmark, config, args.model, args.timeout, replace=args.replace)
     return finish(args, exit_code)
 
 

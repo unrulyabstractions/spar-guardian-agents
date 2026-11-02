@@ -95,7 +95,7 @@ def test_the_run_name_is_the_salt_of_a_run_from_either_entry_point(drawn, monkey
                                    ["--name", "binder_minimal_luna1", "--set", "seed=1"])
     assert build_config(args.preset, args.scale, args.settings).id_salt == "binder_minimal_luna1"
     built = {}
-    monkeypatch.setattr(run, "run", lambda name, benchmark, config, *_: built.update({name: config}) or 0)
+    monkeypatch.setattr(run, "run", lambda name, benchmark, config, *_, **__: built.update({name: config}) or 0)
     assert cli.main(["run", "named_run", "--no-judge"]) == 0
     assert built["named_run"].id_salt == "named_run"
 

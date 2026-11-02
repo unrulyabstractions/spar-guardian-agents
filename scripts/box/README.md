@@ -2,7 +2,42 @@
 
 These scripts run study_exploration_1 on rented vast.ai boxes. `study_table.py` states the study: its targets, regulators, arms and boxes. A box bills by the hour and holds the only copy of what it makes. Every instance therefore enters the registry the moment it exists, and a box is destroyed only after a check proves that this machine holds every file it made.
 
-You launch each stage by hand and by name: `pilot`, `gate`, or one `phase2-<target>`. Nothing starts one stage from another. No judge runs on a box. The code ladder is every run's result.
+You launch each stage by hand and by name: `pilot`, `gate`, one `phase2-<target>`, one `phase2b-<target>`, `fixed-pilot`, `fixed-gate` or one `fixed-phase2-<target>`. Nothing starts one stage from another. No judge runs on a box. The code ladder is every run's result.
+
+## Stages
+
+A target is a task and its workers' model: `flipt-dsflash`, `flipt-luna`, `protein-luna` or `creative-luna`. The first regulators are Luna, Opus and Argon. Phase 2b adds Haiku and Sonnet on boxes of its own. Phase two's boxes keep their arms.
+
+| stage | what it runs |
+|---|---|
+| `pilot` | flipt, protein and creative on Luna: `minimal_regulated`, each first regulator at `ambiguous`, seed 1 |
+| `gate` | every target: `minimal` and `minimal_cheat`, seeds 1 to 5 |
+| `phase2-<target>` | `minimal` at rule levels `generic` and `identified`, and `minimal_regulated` with each first regulator at `ambiguous` and `enforce`, seeds 1 to 5; on SWE an Opus regulator takes seed 1 alone |
+| `phase2b-<target>` | `minimal_regulated` with Haiku at `ambiguous` and `enforce`, seeds 1 to 5, and with Sonnet at both, seed 1 |
+| `fixed-pilot` | flipt on Luna after the SWE fix: `minimal_regulated`, each of the five regulators at `ambiguous`, seed 1 |
+| `fixed-gate` | both flipt targets after the SWE fix: `minimal` and `minimal_cheat`, seeds 1 to 3 |
+| `fixed-phase2-<target>` | a flipt target whose fixed gate passed: `minimal` at `generic` and `identified`, and each of the five regulators at `ambiguous` and `enforce`, seeds 1 to 3; Opus and Sonnet take seed 1 |
+
+Every SWE run before the fix (commits 7331882 to 33b7810, 2026-11-01) graded a task where one agent could cheat alone. Such a run measures nothing about collaboration. The fixed stages redo SWE. The fixed gate's and fixed phase two's runs carry the tag `fixed`, and the fixed pilot's the tag `fixedpilot`. No fixed run's name repeats an invalid run's.
+
+`fleet jobs <stage>` lists a stage's boxes and runs. The table gives their counts.
+
+| stage | boxes | runs |
+|---|---|---|
+| `pilot` | 3 | 9 |
+| `gate` | 6 | 40 |
+| `phase2-flipt-dsflash` | 6 | 32 |
+| `phase2-flipt-luna` | 6 | 32 |
+| `phase2-protein-luna` | 7 | 40 |
+| `phase2-creative-luna` | 7 | 40 |
+| `phase2b-flipt-dsflash` | 3 | 12 |
+| `phase2b-flipt-luna` | 3 | 12 |
+| `phase2b-protein-luna` | 2 | 12 |
+| `phase2b-creative-luna` | 2 | 12 |
+| `fixed-pilot` | 1 | 5 |
+| `fixed-gate` | 2 | 12 |
+| `fixed-phase2-flipt-dsflash` | 7 | 28 |
+| `fixed-phase2-flipt-luna` | 7 | 28 |
 
 ## No box without the guard
 
@@ -74,7 +109,7 @@ Before the first fleet with the access log, one box of each task runs the check 
 
 ## Pilot
 
-The pilot has 3 boxes and 9 runs: flipt, protein and creative on Luna workers, with each of the 3 regulators at `ambiguous`. Rent and set up as above, then start each box and watch:
+Rent and set up the pilot's boxes as above, then start each box and watch:
 
 ```
 scripts/box/box_run.sh <id>
@@ -89,32 +124,53 @@ Capture and destroy the pilot's boxes, then read its runs before the gate.
 
 ## Gate
 
-The gate has 6 boxes and 40 runs: every target at `minimal` and `minimal_cheat`, seeds 1 to 5.
+Rent the gate's boxes:
 
 ```
 uv run python -m scripts.box.fleet jobs gate
 uv run python -m scripts.box.fleet create --stage gate --count 6
 ```
 
-Then `status`, `box_setup.sh`, the mock check and `box_run.sh` as above.
+Then `status`, `box_setup.sh`, the mock check and `box_run.sh` as above. The readout gives each target's verdict from the runs on this machine:
+
+```
+uv run python -m scripts.box.gate_readout gate
+```
 
 ## Phase two
 
-Read the gate first. You then launch each target on its own, and nothing automatic starts one. Each target has 40 runs: `minimal` at rule levels `generic` and `identified`, and `minimal_regulated` with each regulator at `ambiguous` and `enforce`.
-
-| stage | boxes |
-|---|---|
-| `phase2-flipt-dsflash` | 8 |
-| `phase2-flipt-luna` | 8 |
-| `phase2-protein-luna` | 7 |
-| `phase2-creative-luna` | 7 |
+Read the gate first. You then launch each target on its own, and nothing automatic starts one:
 
 ```
 uv run python -m scripts.box.fleet jobs phase2-flipt-luna
-uv run python -m scripts.box.fleet create --stage phase2-flipt-luna --count 8
+uv run python -m scripts.box.fleet create --stage phase2-flipt-luna --count 6
 ```
 
 Then `status`, `box_setup.sh`, the mock check and `box_run.sh` as above.
+
+## Phase 2b
+
+Each target's phase 2b runs on boxes of its own, apart from phase two's:
+
+```
+uv run python -m scripts.box.fleet jobs phase2b-flipt-luna
+uv run python -m scripts.box.fleet create --stage phase2b-flipt-luna --count 3
+```
+
+Then `status`, `box_setup.sh`, the mock check and `box_run.sh` as above.
+
+## Fixed SWE stages
+
+`fixed-phase2-<target>` is only for a flipt target whose fixed gate passed. The readout gives that verdict:
+
+```
+uv run python -m scripts.box.fleet create --stage fixed-pilot --count 1
+uv run python -m scripts.box.fleet create --stage fixed-gate --count 2
+uv run python -m scripts.box.gate_readout fixed-gate
+uv run python -m scripts.box.fleet create --stage fixed-phase2-flipt-luna --count 7
+```
+
+Read each stage with `fleet jobs <stage>` before its create. Run `status`, `box_setup.sh`, the mock check and `box_run.sh` after each create, as above.
 
 ## Capture
 

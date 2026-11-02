@@ -15,7 +15,7 @@ def main() -> int:
     # (access=split deals the segments over the three neutral agents), not judged
     config = build_config(args.preset, args.scale, args.settings).replace(n_agents=4, regulators=1, max_concurrency=4)
     benchmark = CreativeWriting("museum_poem")
-    exit_code = run.run(args.name, benchmark, config, args.model, args.timeout)
+    exit_code = run.run(args.name, benchmark, config, args.model, args.timeout, replace=args.replace)
     return finish(args, exit_code)
 
 

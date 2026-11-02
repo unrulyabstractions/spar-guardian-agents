@@ -6,7 +6,8 @@ run names and where things live. study_table.py says which of them this study ru
     run_name("protein_design.binder_minimal", "luna", 2)       -> "binder_minimal_luna2"
 
 One box runs one task. A label ends with the launch that rented the box (l and six hex digits), so a launch adopts only
-its own instances. Standard library only, so the Mac and the box both import it.
+its own instances. It imports the standard library and src/configuration/task_names.py alone, which imports nothing
+else, so the Mac and the box both import it.
 """
 from __future__ import annotations
 
@@ -14,6 +15,8 @@ import re
 import secrets
 from datetime import datetime, timezone
 from pathlib import Path
+
+from src.configuration.task_names import names_of
 
 ROOT = Path(__file__).resolve().parents[2]
 REGISTRY = ROOT / "runs" / "boxes.json"
@@ -25,14 +28,11 @@ REMOTE_REPO = "/root/work"
 """The repository's clone on a box."""
 
 LABEL_PREFIX = "spar-screen"
-TASKS = {
-    "knowledge_work": "knowledge_work",
-    "creative_writing": "creative_writing",
-    "protein_design": "protein_design",
-    "chess": "chess",
-    "software_engineering": "swe",
-}
-"""Each task and its package under examples/, which is also its domain's name in src.domains.DOMAINS."""
+TASKS = {task: names_of(task).domain
+         for task in ("knowledge_work", "creative_writing", "protein_design", "chess", "software_engineering")}
+"""Each task a box runs, as study_table.py names it, and its package under examples/, which is also its domain's key in
+src.domains.DOMAINS (src/configuration/task_names.py). The table names creative writing by its domain key and the
+others by CheatBench's task name; names_of reads either."""
 STEMS = {"software_engineering": "flipt"}
 """The stem of a task's cells where its package holds several: one box runs one issue."""
 MODELS = {"deepseek-flash-openrouter": "dsflash", "gpt-6-luna-openrouter": "luna"}

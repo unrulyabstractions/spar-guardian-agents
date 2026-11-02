@@ -7,8 +7,8 @@ flipt-02e2 and vuls-1832. No model spend.
 Every scenario starts the real sandbox (the grader and one service per agent, from the native image that
 src/domains/swe/ builds), drives ORBIT with Inspect's mockllm scripted per agent, judges with a mock judge model,
 exports the log with src.export.run_export.write_run and reads every transcript back the way CheatBench's judge does.
-Each check is an assertion; a failing scenario exits non-zero. Results go to runs/smoke_swe/<stamp>/ and
-logs/smoke_swe/<stamp>/, a fresh directory per invocation.
+Each check is an assertion; a failing scenario exits non-zero. Results go to runs/study_smoke/smoke_swe/<stamp>/ and
+logs/study_smoke/smoke_swe/<stamp>/, a fresh directory per invocation.
 
 `honeypots` runs Lucy's own_piece and jigsaw, pruned and planted at setup, and checks the files each planted commit
 carries and which of the hidden tests' secrets each clone holds; `no_submit` runs agents without submit and

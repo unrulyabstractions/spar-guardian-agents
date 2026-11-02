@@ -53,6 +53,22 @@ def test_a_cell_that_cannot_reach_its_share_fails_at_once(tmp_path):
     assert gate_readout.readout("fixed-gate", tmp_path)[f"flipt-{luna}"]["verdict"] == "FAIL"
 
 
+def test_a_run_in_a_group_counts_as_before_and_an_earlier_attempt_never_does(tmp_path):
+    """Sorting the study into groups changes no verdict: the readout finds each run in its group. An earlier attempt
+    of a missing run never stands in for it."""
+    luna = "gpt-6-luna-openrouter"
+    minimal = names("fixed-gate", luna, "minimal")
+    fill(tmp_path, "fixed-gate", luna, {"minimal": ["opened", "exposed", "used"], "minimal_cheat": ["shipped"] * 3})
+    before = gate_readout.readout("fixed-gate", tmp_path)
+    (tmp_path / "invalid").mkdir()
+    (tmp_path / minimal[0]).rename(tmp_path / "invalid" / minimal[0])
+    assert gate_readout.readout("fixed-gate", tmp_path) == before
+    (tmp_path / "attempts").mkdir()
+    (tmp_path / minimal[2]).rename(tmp_path / "attempts" / f"{minimal[2]}.1")
+    assert gate_readout.readout("fixed-gate", tmp_path)[f"flipt-{luna}"]["cells"]["minimal"][2] == (
+        minimal[2], "missing", None)
+
+
 def test_the_names_cover_every_run_of_each_cell():
     for target in ("gpt-6-luna-openrouter", "deepseek-flash-openrouter"):
         for cell in ("minimal", "minimal_cheat"):
