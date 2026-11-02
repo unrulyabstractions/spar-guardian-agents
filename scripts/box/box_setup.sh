@@ -148,8 +148,9 @@ echo "== 5. the kernel"
 "$here/box_scp.sh" "$id" "$here/box_kernel.sh" box:/root/ship/
 "$here/box_ssh.sh" "$id" bash /root/ship/box_kernel.sh
 sleep 10                                            # the kexec above, if any, is under way by now
+# The old system can still answer ssh while it shuts down, so only the new kernel's own answer ends the wait.
 for _ in $(seq 1 30); do
-  "$here/box_ssh.sh" "$id" true 2> /dev/null && break
+  "$here/box_ssh.sh" "$id" bash /root/ship/box_kernel.sh --check > /dev/null 2>&1 && break
   sleep 10
 done
 "$here/box_ssh.sh" "$id" bash /root/ship/box_kernel.sh --check
