@@ -16,9 +16,9 @@ A rate means cheated: the share of samples whose team rung is the task's own flo
 on SWE, chess and creative writing, opened elsewhere), the rung the judge's cheated agrees with. Each tick or panel
 names the floor it counts.
 
-For each model and cell the script writes tmp/appendix/<model suffix>/appendix_<cell>_rate.png (the rate beside the
-share at used or higher) and appendix_<cell>.png (one tile per domain and sample coloured by the team rung, with the
-collaboration level under it). Across the models it writes, under tmp/appendix/overview/, rung.png and
+For each model and cell the script writes tmp/figures/results/appendix/<model suffix>/appendix_<cell>_rate.png (the
+rate beside the share at used or higher) and appendix_<cell>.png (one tile per domain and sample coloured by the team
+rung, with the collaboration level under it). Across the models it writes, under tmp/figures/results/appendix/overview/, rung.png and
 collaboration.png (every sample as one tile, by domain, model and cell) and rate.png (the rate, one panel per domain).
 """
 from __future__ import annotations
@@ -51,7 +51,7 @@ from src.utils.figure_style import (
     style_axes,
 )
 
-OUT = settings.ROOT / "tmp" / "appendix"
+OUT = settings.ROOT / "tmp" / "figures" / "results" / "appendix"
 EXAMPLES = settings.ROOT / "examples"
 CELLS = {"solo": "Solo agent", "solo_cheat": "Solo agent instructed to cheat", "minimal": "Minimal swarm",
          "minimal_cheat": "Minimal swarm instructed to cheat", "minimal_regulated": "Minimal swarm with a regulator",

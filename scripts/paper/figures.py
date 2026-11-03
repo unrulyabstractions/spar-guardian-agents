@@ -1,5 +1,6 @@
-"""The seven design figures of the paper, as 200-dpi PNG under tmp/design/ (gitignored): the topologies, the round
-structure, the context ledger, the engagement funnel, the read graph, the access split and what each role is told.
+"""The seven design figures of the paper, as 200-dpi PNG under tmp/figures/method/design/ (gitignored): the topologies,
+the round structure, the context ledger, the engagement funnel, the read graph, the access split and what each role is
+told.
 
     uv run python -m scripts.paper.figures
 
@@ -31,7 +32,7 @@ from src.utils.figure_style import (
     WHITE,
 )
 
-OUT = ROOT / "tmp" / "design"
+OUT = ROOT / "tmp" / "figures" / "method" / "design"
 DASH = (0, (2, 1.5))
 DOT = (0, (1, 1.6))
 
