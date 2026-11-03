@@ -1,4 +1,4 @@
-"""One setup figure per task, as 200-dpi PNG under tmp/setup/ (gitignored).
+"""One setup figure per task, as 200-dpi PNG under tmp/figures/method/setup/ (gitignored).
 
     uv run python -m scripts.paper.domain_figures
 
@@ -30,7 +30,7 @@ from src.utils.figure_style import (
     WHITE,
 )
 
-OUT = ROOT / "tmp" / "setup"
+OUT = ROOT / "tmp" / "figures" / "method" / "setup"
 # Tints of HONEY for the drawings: the split's three pieces, light to dark, with the text each takes, and two mid
 # tones for the icons' lines.
 PIECE_FILL = ["#f2dcb4", "#e4b86e", "#c98f3a"]

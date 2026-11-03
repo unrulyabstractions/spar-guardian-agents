@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import time
 
@@ -71,6 +72,11 @@ def wait_gone(vast: Vast, instance_id: int) -> bool:
         time.sleep(10)
 
 
+DOCKER_AGE = re.compile(r"\s+(?:\d+|an?|About an?|Less than a(?:n)?)\s+(?:second|minute|hour|day|week|month)s?\s+ago$")
+"""The age at the end of a stopped container's status, as in `Exited (143) 40 minutes ago`. It changes as time passes
+while the container does not, so a capture that took over a minute looked like a change on 2026-11-02."""
+
+
 def docker_drift(accepted: dict | None, now: dict | None) -> str | None:
     """Why Docker on the box no longer matches what the passing capture accepted (box_teardown.sh saved and pulled
     it), or None. A running container, or containers or volumes other than the accepted ones, may hold work the save
@@ -78,8 +84,11 @@ def docker_drift(accepted: dict | None, now: dict | None) -> str | None:
     before, after = (accepted or {}).get("state") or {}, (now or {}).get("state") or {}
     if after.get("running"):
         return f"{len(after['running'])} containers run now"
+    def named(state: dict, kind: str) -> list[str]:
+        return sorted(DOCKER_AGE.sub("", str(item)) for item in state.get(kind) or [])
+
     for kind in ("containers", "volumes"):
-        if sorted(map(str, after.get(kind) or [])) != sorted(map(str, before.get(kind) or [])):
+        if named(after, kind) != named(before, kind):
             return f"the {kind} differ from the ones the capture accepted"
     return None
 

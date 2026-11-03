@@ -52,8 +52,9 @@ def test_the_stages_are_the_pilot_the_gate_and_one_phase_two_per_target():
     assert list(STAGES) == ["pilot", "gate", *PHASE_TWO, *PHASE_TWO_B, "fixed-pilot", "fixed-gate",
                             "fixed-phase2-flipt-dsflash", "fixed-phase2-flipt-luna", "vuls-gate",
                             "fixed-fill-flipt-dsflash", "fixed-fill-argon-flipt-dsflash", "disreg-gate",
-                            "disreg-flipt-haiku", "disreg-creative-luna", "contest-flipt-haiku",
-                            "contest-creative-luna"]
+                            "disreg-flipt-haiku", "disreg-creative-luna", "disreg-flipt-luna",
+                            "contest-flipt-haiku", "contest-creative-luna", "contest-flipt-luna",
+                            "rules-flipt-haiku", "rules-creative-luna"]
     assert [(target.task, target.model) for target in TARGETS] == [
         ("software_engineering", "deepseek-flash-openrouter"), ("software_engineering", "gpt-6-luna-openrouter"),
         ("protein_design", "gpt-6-luna-openrouter"), ("creative_writing", "gpt-6-luna-openrouter")]
@@ -70,7 +71,7 @@ def test_the_study_has_40_gate_runs_40_phase_two_runs_per_target_and_9_pilot_run
 
 def test_every_run_name_is_unique_across_the_study():
     names = [job.name for job in EVERY_JOB] + [job.name for box in EVERY_BOX for job in box_jobs(box, mock=True)]
-    assert len(names) == len(set(names)) == 363 + sum(len(box.arms) for box in EVERY_BOX)
+    assert len(names) == len(set(names)) == 384 + sum(len(box.arms) for box in EVERY_BOX)
 
 
 def test_the_fixed_stages_redo_swe_alone_under_names_no_earlier_run_holds():
@@ -153,7 +154,8 @@ def test_a_stage_rents_the_boxes_the_table_says():
         "phase2b-creative-luna": 2, "fixed-pilot": 1, "fixed-gate": 2, "fixed-phase2-flipt-dsflash": 7,
         "fixed-phase2-flipt-luna": 7, "vuls-gate": 2, "fixed-fill-flipt-dsflash": 2,
         "fixed-fill-argon-flipt-dsflash": 2, "disreg-gate": 1, "disreg-flipt-haiku": 2, "disreg-creative-luna": 1,
-        "contest-flipt-haiku": 1, "contest-creative-luna": 1}
+        "contest-flipt-haiku": 1, "contest-creative-luna": 1, "disreg-flipt-luna": 2, "contest-flipt-luna": 1,
+        "rules-flipt-haiku": 1, "rules-creative-luna": 1}
 
 
 @pytest.mark.parametrize("box", EVERY_BOX, ids=lambda box: box.name)
@@ -264,7 +266,7 @@ def test_jobs_lists_every_run_box_and_flag_and_sends_nothing(monkeypatch, capsys
 def test_jobs_with_no_stage_lists_the_whole_study(capsys):
     assert fleet.main(["jobs"]) == 0
     out = capsys.readouterr().out
-    assert out.count("--set seed=") == 363 and all(f"== {stage}:" in out for stage in STAGES)
+    assert out.count("--set seed=") == 384 and all(f"== {stage}:" in out for stage in STAGES)
 
 
 # ---- nothing but a person starts a stage ----
@@ -587,3 +589,15 @@ def test_a_mock_disregulated_job_keeps_its_levels_on_the_mock_model():
 def test_the_new_stages_keep_every_earlier_arm_s_digest():
     assert jobs_sha256(box_jobs(find_box("fixed-gate-flipt-dsflash-1"))) == jobs_sha256(
         box_jobs(study_table.Box("x", "x", tuple(study_table.fixed_gate_arms(SWE_TARGETS[0])))))
+
+
+def test_the_rule_stages_fill_the_rule_table_under_new_names():
+    jobs = {stage: [job for box in stage_boxes(stage) for job in box_jobs(box)]
+            for stage in ("rules-flipt-haiku", "rules-creative-luna")}
+    assert {job.name for job in jobs["rules-flipt-haiku"]} == {
+        f"flipt_minimal_haiku_{level}_fixed{seed}" for level in ("generic", "identified") for seed in (1, 2, 3)}
+    assert {job.name for job in jobs["rules-creative-luna"]} == {
+        f"poem_minimal_luna_{level}_rules{seed}" for level in ("generic", "identified") for seed in (1, 2, 3)}
+    assert {job.regulator_model for runs in jobs.values() for job in runs} == {None}
+    for runs in jobs.values():
+        assert sorted({job.settings for job in runs}) == [("rule_level=generic",), ("rule_level=identified",)]

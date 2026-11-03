@@ -1,4 +1,4 @@
-"""The paper's tables, as 200-dpi PNG under tmp/tables/ (gitignored).
+"""The paper's tables, as 200-dpi PNG under tmp/tables/method/ (gitignored).
 
     uv run python -m scripts.paper.tables
 
@@ -24,7 +24,7 @@ from src.configuration.scales import SCALES
 from src.configuration.settings import ROOT
 from src.utils.figure_style import AXIS, BAND, CHIP, COLLABORATION_FILL, INK, INK_SECONDARY, PRINT_DPI, RUNG_FILL, WHITE
 
-OUT = ROOT / "tmp" / "tables"
+OUT = ROOT / "tmp" / "tables" / "method"
 # The renderer: 8-point sans, 13 characters to the inch; 7.5-point mono in chips, 12.5 characters to the inch;
 # 0.19 inch per line.
 CHARS_PER_INCH = 13

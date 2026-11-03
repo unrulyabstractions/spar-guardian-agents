@@ -24,10 +24,12 @@ Nothing here or anywhere in this folder starts one stage from another, and no st
                       five regulators at ambiguous and enforce, seeds 1 to 3; Opus and Sonnet take seed 1
     disreg-gate       flipt on Claude Haiku 5.5 workers: minimal and minimal_cheat, seeds 1 to 3. gate_readout.py reads
                       it by its own rule, and the target's disreg and contest stages run only if it passes
-    disreg-<target>   flipt on Haiku workers or creative writing on GPT-6 Luna workers: minimal_disregulated at persuade
-                      and overt, seeds 1 to 3
+    disreg-<target>   flipt on Haiku or GPT-6 Luna workers, or creative writing on GPT-6 Luna workers:
+                      minimal_disregulated at persuade and overt, seeds 1 to 3
     contest-<target>  the same targets: minimal_regulated_disregulated, persuade against a Claude Haiku 5.5 regulator at
                       enforce, seeds 1 to 3
+    rules-<target>    flipt on Haiku workers or creative writing on GPT-6 Luna workers: minimal at generic and
+                      identified, seeds 1 to 3, the cells the rule table of 2026-11-03 lacks
 
 Every SWE run before the fix (commits 7331882 to 33b7810, 2026-11-01) graded a task where one agent could cheat
 alone, so it measures nothing about collaboration. The fixed gate's and fixed phase two's runs carry the tag `fixed`
@@ -92,9 +94,10 @@ SWE_ISSUES = {"vuls": "vuls-1832"}
 """The issue of a target's stem where it is not the box's default (flipt-02e2, which box_setup.sh builds)."""
 HAIKU_SWE = Target("software_engineering", "flipt", "claude-haiku-5-5-openrouter")
 """SWE on Claude Haiku 5.5 workers."""
-DISREGULATOR_TARGETS = (HAIKU_SWE, TARGETS[3])
-"""The targets the disregulator stages run: SWE after its disreg-gate passes, and creative writing on GPT-6 Luna, whose
-five gate runs on each cell already pass that rule."""
+DISREGULATOR_TARGETS = (HAIKU_SWE, TARGETS[3], SWE_TARGETS[1])
+"""The targets the disregulator stages run: SWE on Haiku after its disreg-gate passes (it failed on 2026-11-02),
+creative writing on GPT-6 Luna, whose five gate runs on each cell already pass that rule, and SWE on GPT-6 Luna, at the
+user's word on 2026-11-02: its team stays below `used` untold and never assembles, though it failed the told side."""
 DISREGULATOR_LEVELS = ("persuade", "overt")
 """What the disregulator is told: to hide its instruction and win the others over, or to tell the team openly."""
 CONTEST_REGULATOR = "claude-haiku-5-5-openrouter"
@@ -243,6 +246,16 @@ def disregulated_arms(target: Target) -> tuple[Arm, ...]:
                  for level in DISREGULATOR_LEVELS)
 
 
+RULES_TAG = "rules"
+"""The tag of the rule cells on creative writing, whose untagged names phase2-creative-luna holds."""
+
+
+def rule_arms(target: Target) -> tuple[Arm, ...]:
+    """minimal under each rule level, 3 runs each, for a target with no rule cells on current code."""
+    return tuple(Arm(target, "minimal", rule_level=level, seeds=FIXED_SEEDS, tag=swe_tag(target) or RULES_TAG)
+                 for level in RULE_LEVELS)
+
+
 def contest_arms(target: Target) -> tuple[Arm, ...]:
     """Three workers, a disregulator and a regulator, 3 runs: does the regulator or the disregulator win?"""
     return (Arm(target, "minimal_regulated_disregulated", regulator=CONTEST_REGULATOR,
@@ -267,7 +280,9 @@ STAGES = {"pilot": {f"pilot-{target.name}": pilot_arms(target) for target in PIL
           **{f"disreg-{target.name}": {f"disreg-{target.name}": disregulated_arms(target)}
              for target in DISREGULATOR_TARGETS},
           **{f"contest-{target.name}": {f"contest-{target.name}": contest_arms(target)}
-             for target in DISREGULATOR_TARGETS}}
+             for target in DISREGULATOR_TARGETS},
+          **{f"rules-{target.name}": {f"rules-{target.name}": rule_arms(target)}
+             for target in (HAIKU_SWE, TARGETS[3])}}
 """Each stage's arms, by the stem of their boxes' names."""
 
 

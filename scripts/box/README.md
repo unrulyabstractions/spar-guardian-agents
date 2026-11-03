@@ -2,7 +2,7 @@
 
 These scripts run study_exploration_1 on rented vast.ai boxes. `study_table.py` states the study: its targets, regulators, arms and boxes. A box bills by the hour and holds the only copy of what it makes. Every instance therefore enters the registry the moment it exists, and a box is destroyed only after a check proves that this machine holds every file it made.
 
-You launch each stage by hand and by name: `pilot`, `gate`, one `phase2-<target>`, one `phase2b-<target>`, `fixed-pilot`, `fixed-gate`, one `fixed-phase2-<target>`, `vuls-gate`, one `fixed-fill-<target>`, one `fixed-fill-argon-<target>`, `disreg-gate`, one `disreg-<target>` or one `contest-<target>`. Nothing starts one stage from another. No judge runs on a box. The code ladder is every run's result.
+You launch each stage by hand and by name: `pilot`, `gate`, one `phase2-<target>`, one `phase2b-<target>`, `fixed-pilot`, `fixed-gate`, one `fixed-phase2-<target>`, `vuls-gate`, one `fixed-fill-<target>`, one `fixed-fill-argon-<target>`, `disreg-gate`, one `disreg-<target>`, one `contest-<target>` or one `rules-<target>`. Nothing starts one stage from another. No judge runs on a box. The code ladder is every run's result.
 
 ## Stages
 
@@ -21,8 +21,9 @@ A target is a task and its workers' model: `flipt-dsflash`, `flipt-luna`, `flipt
 | `fixed-fill-<target>` | what the DeepSeek SWE table lacks, each run with 90 minutes and tag `fill`: `minimal_regulated` with GPT-6 Luna at `ambiguous`, seeds 1 to 3, and at `enforce`, seeds 2 and 3; Sonnet at both levels, seed 1 (cap $15) |
 | `fixed-fill-argon-<target>` | Gemini 4 Argon at `ambiguous` and `enforce`, seeds 1 to 3 (cap $30). Dropped by the user on 2026-11-02: it runs whole or not at all, and only at the user's word |
 | `disreg-gate` | flipt on Claude Haiku 5.5 workers: `minimal` and `minimal_cheat`, seeds 1 to 3. `gate_readout` reads it by its own rule, and that target's next stages run only if it passes |
-| `disreg-<target>` | `flipt-haiku` or `creative-luna`: `minimal_disregulated` at `persuade` and `overt`, seeds 1 to 3. The disregulator runs the workers' model and holds no piece |
+| `disreg-<target>` | `flipt-haiku`, `flipt-luna` or `creative-luna`: `minimal_disregulated` at `persuade` and `overt`, seeds 1 to 3. The disregulator runs the workers' model and holds no piece |
 | `contest-<target>` | the same targets: `minimal_regulated_disregulated`, `persuade` against a Haiku regulator at `enforce`, seeds 1 to 3 |
+| `rules-<target>` | `flipt-haiku` or `creative-luna`: `minimal` at `generic` and `identified`, seeds 1 to 3 |
 
 Every SWE run before the fix (commits 7331882 to 33b7810, 2026-11-01) graded a task where one agent could cheat alone. Such a run measures nothing about collaboration. The fixed stages redo SWE. The fixed gate's and fixed phase two's runs carry the tag `fixed`, and the fixed pilot's the tag `fixedpilot`. No fixed run's name repeats an invalid run's.
 
@@ -52,6 +53,10 @@ Every SWE run before the fix (commits 7331882 to 33b7810, 2026-11-01) graded a t
 | `disreg-creative-luna` | 1 | 6 |
 | `contest-flipt-haiku` | 1 | 3 |
 | `contest-creative-luna` | 1 | 3 |
+| `disreg-flipt-luna` | 2 | 6 |
+| `contest-flipt-luna` | 1 | 3 |
+| `rules-flipt-haiku` | 1 | 6 |
+| `rules-creative-luna` | 1 | 6 |
 
 ## No box without the guard
 
