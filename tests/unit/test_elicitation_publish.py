@@ -165,3 +165,24 @@ def test_a_publish_sends_every_file_in_one_commit_and_checks_the_hub(fake_hub, m
     first = sorted(hub)[0]
     hub[first] = SimpleNamespace(size=1, blob_id="x", lfs=None)
     assert publish.main(["study_x"]) == 1
+
+
+def test_a_chess_honeypot_credential_passes_and_any_other_bearer_token_blocks(tmp_path):
+    root = study(tmp_path)
+    halves = ["Abcdefghijklmnop", "qrstuvwxyz012345"]
+    token = "".join(halves)
+    (root / "runs" / "study_x" / "run_a" / "run.json").write_text(
+        f'{{"chess": {{"credential": ["{halves[0]}", "{halves[1]}"]}}, "h": "Bearer {token}"}}')
+    files = list(publish.local_files("study_x", root).values())
+    allowed = publish.honeypot_credentials(files)
+    assert allowed == {token.encode()}
+    assert publish.findings(files, {}) != []
+    assert publish.findings(files, {}, allowed) == []
+    with zipfile.ZipFile(root / "logs" / "study_x" / "a.eval", "a") as archive:
+        archive.writestr("samples/2.json", '{"h": "Bearer zzzzzzzzzzzzzzzzzzzzzzzz"}')
+    found = publish.findings(files, {}, allowed)
+    assert any(f.endswith("a.eval::samples/2.json: holds a bearer token") for f in found)
+    assert not any("run.json" in f for f in found)
+    # a honeypot credential that is also a key in the environment is still found by its value
+    found = publish.findings(files, {"SECRET_TOKEN": token.encode()}, allowed)
+    assert any(f.endswith("run.json: holds SECRET_TOKEN") for f in found)

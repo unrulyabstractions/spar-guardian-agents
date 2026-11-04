@@ -5,7 +5,8 @@
 runs/<study>/ and logs/<study>/ go to spar-guardian-agents/runs/<study>/ and spar-guardian-agents/logs/<study>/ in the
 dataset, in one commit. Before it uploads, the script refuses when the dataset is not private, or when any file, or any
 member of an archive among them (the .eval logs), holds a key value from this shell's environment or the Hugging Face
-token file, a key-shaped string, or the git user's email. It prints where each finding is, never the value. After it
+token file, a key-shaped string, or the git user's email. A bearer token equal to a chess honeypot credential that a
+run.json of the study records is task content and passes. It prints where each finding is, never the value. After it
 uploads, it lists the dataset and refuses unless every local file is there with the same size and hash: sha256 for a
 file in LFS, the git blob id otherwise. Exit 0 means published and checked; --dry-run checks and uploads nothing.
 """
@@ -13,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import re
 import subprocess
@@ -61,14 +63,38 @@ def secrets() -> dict[str, bytes]:
     return found
 
 
-def findings(files: list[Path], values: dict[str, bytes]) -> list[str]:
+def honeypot_credentials(files: list[Path]) -> set[bytes]:
+    """The chess honeypot's bearer credentials that the runs among the files record (run.json chess.credential). Each is
+    drawn fresh for its episode (src/domains/chess/_chess_honeypot.py) and opens only the episode's own endpoint at
+    agents.internal, so a bearer-shaped string equal to one is task content, not a key."""
+    out = set()
+    for path in files:
+        if path.name != "run.json":
+            continue
+        try:
+            credential = json.loads(path.read_bytes()).get("chess", {}).get("credential")
+        except (ValueError, AttributeError):
+            continue
+        if isinstance(credential, list) and all(isinstance(half, str) for half in credential):
+            out.add("".join(credential).encode())
+    return out
+
+
+def findings(files: list[Path], values: dict[str, bytes], allowed: set[bytes] = frozenset()) -> list[str]:
     """Where a file, or a member of an archive among them, holds one of the values or a key-shaped string. A member
-    that cannot be read is a finding too, since nothing can be said about it."""
+    that cannot be read is a finding too, since nothing can be said about it. A bearer token in allowed (a honeypot
+    credential) is no finding; the values are checked all the same."""
     out = []
+
+    def shaped(shape: str, rx: bytes, data: bytes) -> bool:
+        for match in re.finditer(rx, data):
+            if shape != "a bearer token" or re.sub(rb"^[Bb]earer\s+", b"", match.group(0)) not in allowed:
+                return True
+        return False
 
     def check(label: str, data: bytes) -> None:
         out.extend(f"{label}: holds {name}" for name, value in values.items() if value in data)
-        out.extend(f"{label}: holds {shape}" for shape, rx in SHAPES.items() if re.search(rx, data))
+        out.extend(f"{label}: holds {shape}" for shape, rx in SHAPES.items() if shaped(shape, rx, data))
 
     for path in files:
         data = path.read_bytes()
@@ -149,7 +175,7 @@ def main(argv: list[str] | None = None) -> int:
     api = HfApi()
     if not api.dataset_info(REPO).private:
         refuse(f"{REPO} is not private; make it private before publishing transcripts")
-    found = findings(list(local.values()), secrets())
+    found = findings(list(local.values()), secrets(), honeypot_credentials(list(local.values())))
     if found:
         print("\n".join(found), file=sys.stderr)
         refuse(f"{len(found)} finding(s); nothing was uploaded")
