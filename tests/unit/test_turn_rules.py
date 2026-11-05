@@ -529,7 +529,10 @@ def test_the_call_cap_ends_every_agent_once_one_reaches_it(tmp_path):
     assert store(sample, "ended") == dict.fromkeys(config.names, "calls")
     assert store(sample, "call_cap") == 3
     cut = [e for e in sample.events if e.event == "info" and isinstance(e.data, dict) and "swarm_call_cap" in e.data]
-    assert len(cut) == 1 and cut[0].data["swarm_call_cap"]["calls"] == calls
+    # The event holds the counts at the cut; the teammate's step of the same round finishes after it.
+    [event] = [e.data["swarm_call_cap"] for e in cut]
+    assert event["agent"] == "a01" and event["calls"]["a01"] == 3 and event["ended"] == ["a01", "a02"]
+    assert all(event["calls"].get(a, 0) <= calls[a] for a in config.names)
 
 
 def test_the_call_cap_is_invisible_to_the_agents(tmp_path):
