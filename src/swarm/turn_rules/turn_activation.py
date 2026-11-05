@@ -1,8 +1,9 @@
 """The trusted callback ORBIT runs after every activation of the plan (ScheduleConfig.after_activation).
 
 It charges the step by what it did and marks why an agent stopped. It then amends the pending plan: a follow-up
-step after a free step, the stopped agents' steps removed or pooled, every step after the team's hand-in dropped, and
-every step after the round under way dropped once no worker is left (workers_gone), so no regulator holds a run open.
+step after a free step, the stopped agents' steps removed or pooled, every step after the team's hand-in dropped,
+every step after the round under way dropped once no worker is left (workers_gone), so no regulator holds a run open,
+and every step dropped once any agent has made call_cap model calls (call_cap_reached).
 Under stop_after_delivery it hands the amended plan to the rule in _turn_delivery first.
 
     schedule = ScheduleConfig(steps=steps, after_activation=f"{turn_activation.__name__}.after_activation")
@@ -24,6 +25,8 @@ from src.swarm.turn_rules._turn_delivery import after_delivery, delivery, end, s
 from src.swarm.turn_rules._turn_state import (
     ACTOR,
     BOARD_ACTIONS,
+    CALL_CAP,
+    CALL_CAP_TAG,
     DELIVERED,
     ENDING_TOOLS,
     HALT_TAG,
@@ -49,7 +52,7 @@ from src.swarm.turn_rules._turn_steps import (
 )
 
 CHARGED = ("work", "refused")       # the step_charge values charged against the working steps
-HANDED_OFF = (DELIVERED, SUBMIT)    # TurnState.ended reasons whose steps go to nobody: the agent's own work is done
+HANDED_OFF = (DELIVERED, SUBMIT, CALL_CAP)    # TurnState.ended reasons whose steps go to nobody
 
 
 def _window(st: TurnState, agent: str) -> Window:
@@ -123,6 +126,20 @@ def _stop_reason(st: TurnState, agent: str, used: int) -> str | None:
     if not st.pooled and used >= st.cap:
         return "cap"
     return None
+
+
+def call_cap_reached(st: TurnState, agent: str, messages: list) -> list[str]:
+    """Count the activation's model replies against the agent's calls. Once any agent's calls reach call_cap, every
+    agent whose turns have not ended is ended "calls", so the plan empties and the round under way finishes. Returns
+    the agents it ended; [] with the cap off or not reached."""
+    replies = sum(isinstance(m, ChatMessageAssistant) for m in messages)
+    st.calls = {**st.calls, agent: st.calls.get(agent, 0) + replies}
+    if st.call_cap is None or st.calls[agent] < st.call_cap:
+        return []
+    cut = [name for name in st.agents if name not in st.ended]
+    if cut:
+        st.ended = {**st.ended, **dict.fromkeys(cut, CALL_CAP)}
+    return cut
 
 
 def _pooled_steps(st: TurnState, active: list[str], count: int, revision: int) -> list[dict]:
@@ -239,6 +256,10 @@ def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | Non
         end(st, [agent], round_number)
     elif reason and agent not in st.ended:
         st.ended = {**st.ended, agent: reason}
+    cut = call_cap_reached(st, agent, messages)
+    if cut:
+        transcript().info({CALL_CAP_TAG: {"agent": agent, "round": round_number, "calls": dict(st.calls),
+                                          "ended": cut}})
     left = _window(st, agent).end is not None and not any(agent in s.agents for s in pending)
     st.timeline = [*st.timeline, {"turn": global_turn, "agent": agent, "activation": activation, "working": working,
                                   "free": free, "charge": charge, "step": step.id if step is not None else None,

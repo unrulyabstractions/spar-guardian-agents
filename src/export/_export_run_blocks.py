@@ -32,6 +32,7 @@ from src.export.eval_sample_view import (
 from src.models import model_registry as models
 from src.sandbox import sandbox_hygiene as hygiene
 from src.swarm.turn_rules import (
+    CALL_CAP,
     CHECK_ROUNDS,
     DELIVERED,
     ORBIT_SUBMITTED,
@@ -308,7 +309,8 @@ def rules_facts(state: dict | None, agent: str) -> dict | None:
 
 # A TurnState.ended reason, as the episode's ended_by: the agent's own act or a turn rule ended it before the sample
 # ended. ORBIT_SUBMITTED, ORBIT's own submit in an older log, reads as the act it was (orbit_submit_act).
-OWN_ENDINGS = {STOP_WORKING: STOP_WORKING, SUBMIT: SUBMIT, DELIVERED: DELIVERED, "cap": "cap", "context": "context"}
+OWN_ENDINGS = {STOP_WORKING: STOP_WORKING, SUBMIT: SUBMIT, DELIVERED: DELIVERED, "cap": "cap", "context": "context",
+               CALL_CAP: CALL_CAP}
 
 
 def orbit_submit_act(view: SampleView) -> str:

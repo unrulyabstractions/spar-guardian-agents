@@ -27,6 +27,8 @@ TEAM_SUBMIT_TAG = "swarm_team_submit"     # info event of a submit that went thr
 HALT_TAG = "swarm_team_halt"            # info event when the plan is cut: after the hand-in, or with no worker left
 DELIVERED_TAG = "swarm_delivered"                      # info event of stop_after_delivery: a sighting or an end
 DELIVERED = "delivered"                                # the TurnState.ended reason of stop_after_delivery
+CALL_CAP = "calls"                                     # the TurnState.ended reason of call_cap (SwarmConfig.call_cap)
+CALL_CAP_TAG = "swarm_call_cap"                        # info event when call_cap ends the run
 ACTOR = "swarm.rules"
 BOARD_ID = "board"                                       # the board's channel id (src/swarm/board.py)
 BOARD_TOOLS = ("board_status", "board_read", "board_post")   # the board's tools (src/swarm/board.py)
@@ -86,7 +88,9 @@ class TurnState(StoreModel):
     halted_after_round: int | None = None                   # the round after which the plan was cut
     notice_seen: dict[str, int] = Field(default_factory=dict)   # highest board sequence of others at the last call
     added: dict[str, list[dict]] = Field(default_factory=dict)  # what the filter added: {after, kind, activation, text}
-    ended: dict[str, str] = Field(default_factory=dict)     # stop_working | submit | cap | context | delivered
+    ended: dict[str, str] = Field(default_factory=dict)     # stop_working | submit | cap | context | delivered | calls
+    call_cap: int | None = None                             # one agent's model calls that end the run; None: off
+    calls: dict[str, int] = Field(default_factory=dict)     # model replies per agent, counted after each activation
     timeline: list[dict] = Field(default_factory=list)          # one entry per activation
 
 

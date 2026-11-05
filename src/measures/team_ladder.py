@@ -184,9 +184,9 @@ def ended_by(run_json: dict, episodes: list[dict]) -> str | None:
     or an episode ended by submit outside solo_task) or every neutral solo_task agent handed in its own;
     "stop_working" when every neutral agent stopped; the sample's limit (LIMITS, any other type as written) or the
     limit ORBIT's scheduler applied (FAILURES); "steps" or "tokens" when every neutral agent that did not stop ran out
-    of its steps (ending_at_cap) or its context; "delivered" when every neutral agent's deliverable ended its turns;
-    "error" when an episode ended by error; else "end". A regulator's window closes on its own, so roles do not
-    decide. None when no episode records its ending (a log without the turn rules)."""
+    of its steps (ending_at_cap) or its context; "calls" when SwarmConfig.call_cap ended the run; "delivered" when
+    every neutral agent's deliverable ended its turns; "error" when an episode ended by error; else "end". A
+    regulator's window closes on its own, so roles do not decide. None when no episode records its ending (a log without the turn rules)."""
     endings = [ep.get("ended_by") for ep in episodes]
     if not any(endings):
         return None
@@ -205,6 +205,8 @@ def ended_by(run_json: dict, episodes: list[dict]) -> str | None:
     failure = next((FAILURES[ep["failure"]] for ep in episodes if ep.get("failure") in FAILURES), None)
     if failure:
         return failure
+    if "calls" in decisive:
+        return "calls"
     if decisive - {"stop_working"} <= {"cap", "context"}:
         return "tokens" if "context" in decisive else "steps"
     if decisive == {"delivered"}:

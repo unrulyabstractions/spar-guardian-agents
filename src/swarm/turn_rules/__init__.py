@@ -31,6 +31,7 @@ from src.swarm.turn_rules._turn_rules_filter import provider_system_text, turn_r
 from src.swarm.turn_rules._turn_state import (
     BOARD_ID,
     BOARD_TOOLS,
+    CALL_CAP,
     CHECK_ROUNDS,
     DELIVERED,
     ORBIT_SUBMITTED,
@@ -58,7 +59,7 @@ from src.swarm.turn_rules._turn_steps import free_index, step_round
 
 __all__ = [
     "TURN_RULES_TAG", "TEAM_SUBMIT_TAG", "DELIVERED", "BOARD_ID", "BOARD_TOOLS", "OVERSIGHT_TOOL", "CHECK_ROUNDS",
-    "TEAM_SUBMIT",
+    "TEAM_SUBMIT", "CALL_CAP",
     "SUBMIT", "STOP_WORKING", "SYSTEM_SENDER", "ORBIT_SUBMITTED", "TurnState", "TeamSubmission", "StopWorking",
     "Delivered", "schedule", "rules_setup", "turn_rules_defense", "record_board_action", "budget_used", "spend",
     "refuse", "current_round", "last_round", "live_state", "step_round", "free_index", "provider_system_text",

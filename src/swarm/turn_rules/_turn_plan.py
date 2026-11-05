@@ -68,7 +68,7 @@ def initial_state(config: SwarmConfig, agents: list[str], roles: dict[str, str] 
             "concurrent": concurrent(config, agents), "max_concurrency": config.max_concurrency,
             "free_caps": free_caps(config, agents, roles),
             "reads_per_turn": config.reads_per_turn, "posts_per_turn": config.posts_per_turn,
-            "turn_budget": config.turn_budget,
+            "turn_budget": config.turn_budget, "call_cap": config.call_cap,
             "rounds": config.working_steps,
             "windows": {a: [w.start, w.end] for a, w in windows(config, agents, roles).items()}}
 

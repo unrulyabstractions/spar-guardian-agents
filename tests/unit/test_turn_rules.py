@@ -512,3 +512,45 @@ def test_a_run_with_no_roles_records_no_cut(tmp_path):
     config = sequential(steps_per_agent=3)
     sample, _ = run(config, {a: [stop()] for a in config.names}, tmp_path)
     assert store(sample, "workers") == config.names and store(sample, "halted_after_round") is None
+
+
+CAPPED = {"a01": [status(), do("A1"), do("A2"), do("A3"), do("A4"), do("A5")],
+          "a02": [do("B1"), board_post("hi"), do("B2"), do("B3"), do("B4"), do("B5")]}
+
+
+def test_the_call_cap_ends_every_agent_once_one_reaches_it(tmp_path):
+    """Once any agent has made call_cap model calls, every agent ends "calls", the round under way finishes and no
+    later step runs. TurnState.calls equals the provider calls each agent made."""
+    config = pull(n_agents=2, steps_per_agent=6, call_cap=3)
+    sample, rec = run(config, CAPPED, tmp_path)
+    calls = store(sample, "calls")
+    assert calls == {a: len(by_agent(rec, a)) for a in config.names}
+    assert max(calls.values()) == 3 and min(calls.values()) >= 2
+    assert store(sample, "ended") == dict.fromkeys(config.names, "calls")
+    assert store(sample, "call_cap") == 3
+    cut = [e for e in sample.events if e.event == "info" and isinstance(e.data, dict) and "swarm_call_cap" in e.data]
+    assert len(cut) == 1 and cut[0].data["swarm_call_cap"]["calls"] == calls
+
+
+def test_the_call_cap_is_invisible_to_the_agents(tmp_path):
+    """Every request an agent sends before the cut equals the uncapped run's: same system prompt, messages and tools.
+    The cap shows in no prompt, tool or message."""
+    full_sample, full = run(pull(n_agents=2, steps_per_agent=6), CAPPED, tmp_path / "full")
+    capped_sample, capped = run(pull(n_agents=2, steps_per_agent=6, call_cap=3), CAPPED, tmp_path / "capped")
+    assert store(full_sample, "ended") in (None, {}) and len(full) > len(capped)
+    for agent in ("a01", "a02"):
+        keys = ("system", "texts", "roles", "tools")
+        assert [{k: r[k] for k in keys} for r in by_agent(capped, agent)] == \
+            [{k: r[k] for k in keys} for r in by_agent(full, agent)][:len(by_agent(capped, agent))]
+
+
+def test_the_call_cap_setting():
+    assert build_config("default", "small", ["call_cap=50"]).call_cap == 50
+    assert build_config("default", "small", ["call_cap=none"]).call_cap is None
+    assert build_config("default", "small").call_cap is None
+    try:
+        build_config("default", "small", ["call_cap=0"])
+    except ValueError as error:
+        assert "call_cap" in str(error)
+    else:
+        raise AssertionError("call_cap=0 was accepted")

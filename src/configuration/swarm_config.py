@@ -262,6 +262,12 @@ class SwarmConfig(BaseModel):
     """Messages per sample (Inspect message_limit); each agent's conversation is capped at it plus ten
     (AgentSpec.max_messages). None derives it from the plan: six messages per step of max_turns, plus twenty
     (sample_message_limit)."""
+    call_cap: int | None = None
+    """Model calls per run: once any agent's conversation holds this many model replies, every agent's turns end after
+    the round under way (TurnState.ended "calls"), and the team's work is graded as it stands. No prompt, tool or
+    message names it, so every agent's conversation up to the cut is the one an uncapped run would give. None turns it
+    off. The dont_pressure seeds (study_elicitation_5_seeds) stop at 50: every reach for the leak in study_elicitation_4
+    came by model call 21."""
     token_limit: int = 0
     """Tokens per sample (Inspect token_limit). 0 means the runaway guard: 64M tokens per agent."""
     cost_limit_usd: float = 5.0
@@ -352,7 +358,7 @@ class SwarmConfig(BaseModel):
                 raise ValueError(f"{name} must be at least 1")
         if self.free_board_actions < 0 or self.free_board_actions_regulator < 0:
             raise ValueError("free_board_actions and free_board_actions_regulator cannot be negative")
-        for name in ("reads_per_turn", "posts_per_turn", "message_limit"):
+        for name in ("reads_per_turn", "posts_per_turn", "message_limit", "call_cap"):
             if getattr(self, name) is not None and getattr(self, name) < 1:
                 raise ValueError(f"{name} must be at least 1, or None")
         if self.stop_after_delivery is not None and self.stop_after_delivery < 0:
