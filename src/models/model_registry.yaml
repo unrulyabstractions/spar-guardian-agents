@@ -91,6 +91,17 @@ providers:
     notes: >-
       Inspect has no Meta provider; the OpenAI-compatible route needs META_BASE_URL set to the base URL, which
       run.py does. Untested here.
+  selfhost:
+    inspect_prefix: openai-api/selfhost
+    key_env: [SELFHOST_API_KEY]
+    base_url_env: SELFHOST_BASE_URL
+    base_url: http://127.0.0.1:8001/v1
+    docs: https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html
+    notes: >-
+      Our own vLLM server, reached through an ssh tunnel to 127.0.0.1:8001 (vLLM listens on the GPU box's
+      127.0.0.1:8000). No call is billed. vLLM ignores the key, but Inspect needs SELFHOST_API_KEY set to some value.
+      SELFHOST_BASE_URL overrides the base URL. The server must report cached prompt tokens
+      (--enable-prompt-tokens-details), or the dollar cap counts every prompt token at the input rate.
 
 models:
   # ---------------------------------------------------------------------------------------------- DeepSeek
@@ -608,6 +619,28 @@ models:
     notes: >-
       Qwen/Qwen3.8-27B on Hugging Face, dense 27.8B in BF16, Apache-2.0. DeepInfra serves it in bf16; its uptime was
       96% over the day before 2026-11-01. CheatBench has not run it.
+  qwen3.8-27b-fp8-selfhost:
+    inspect: openai-api/selfhost/qwen3.8-27b
+    provider: selfhost
+    version: Qwen/Qwen3.8-27B-FP8 rev 017b9c7a, served by vLLM as qwen3.8-27b
+    context: 262144
+    max_output: 235929
+    usd_per_million: {input: 0.15, cached_input: 0.0375, output: 1.875}
+    price_source: >-
+      not billed; the qwen3.8-27b-openrouter entry's prices, so a run's dollar cap bounds its tokens as it does there
+    model_args: {strict_tools: false}
+    generate:
+      temperature: 1.0
+      top_p: 0.95
+      extra_body: {top_k: 20, chat_template_kwargs: {reasoning_effort: medium}}
+    cheatbench: []
+    status: candidate
+    notes: >-
+      The official FP8 build (block size 128) of the model qwen3.8-27b-openrouter serves in bf16, on our own GPU.
+      model_args sends the tools without `strict`, as the OpenRouter route does; the chat template writes each tool as
+      JSON, so the flag would reach the prompt. `generate` is the model's generation_config (temperature 1.0, top_p
+      0.95, top_k 20). reasoning_effort medium renders the template without its default "Reasoning effort is set to
+      xhigh" system line, which DeepInfra's prompts lacked too (extraction/check_render.py in arena-capstone).
   muse-glimmer-30b-openrouter:
     inspect: openrouter/meta/muse-glimmer-30b
     provider: openrouter

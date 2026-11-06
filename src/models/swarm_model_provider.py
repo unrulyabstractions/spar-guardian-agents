@@ -110,12 +110,14 @@ class RegistryModelAPI(ModelAPI):
         inner = get_model(inner_name, config=config, base_url=base_url, api_key=api_key, memoize=False,
                           **{**models.model_args(inner_name), **model_args})
         self.inner = inner.api
+        self.entry_config = GenerateConfig(**models.generate_config(inner_name))
         super().__init__(model_name=inner_name, base_url=self.inner.base_url, api_key=self.inner.api_key,
                          api_key_vars=[], config=config)
 
     async def generate(self, input, tools, tool_choice, config: GenerateConfig):
-        """The inner API's generate, with the eval's and the agents' config beneath the call's own."""
-        return await self.inner.generate(input, tools, tool_choice, _beneath(config))
+        """The inner API's generate, with the entry's generate config (models.generate_config), then the eval's and the
+        agents' config beneath the call's own."""
+        return await self.inner.generate(input, tools, tool_choice, self.entry_config.merge(_beneath(config)))
 
     def __getattr__(self, name: str) -> Any:
         # only for what the instance and its class lack; `inner` itself is looked up while it may not exist yet

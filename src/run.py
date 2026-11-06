@@ -247,7 +247,9 @@ def run(name: str, benchmark: Benchmark, config: SwarmConfig, model: str, timeou
     generate = agent_generate_config(config)
     # Inspect merges the eval's generate config into the eval's model only; the role models get it from the provider
     provider.set_agent_config(GenerateConfig(**generate))
-    agents = get_model(model, memoize=False, **models.model_args(model))
+    # the entry's own generate config (a self-hosted model's sampling) is the model's, beneath the eval's and the call's
+    agents = get_model(model, memoize=False, config=GenerateConfig(**models.generate_config(model)),
+                       **models.model_args(model))
     # every raw model call is kept (Inspect keeps five per model by default): OpenRouter's billed cost per call
     # lives in the raw response, and the export sums it per episode
     [log] = inspect_ai.eval(task, model=agents, log_dir=str(log_dir), display="plain", timeout=timeout,

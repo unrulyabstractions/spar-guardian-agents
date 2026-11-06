@@ -185,7 +185,8 @@ def test_every_openrouter_entry_pins_one_host_and_the_runner_refuses_an_unpinned
             assert models.model_args(name) == {"provider": pin, "strict_tools": False} \
                 == models.model_args(entry["inspect"])
         else:
-            assert "routing" not in entry and models.model_args(name) == {}, name
+            # off OpenRouter, only the entry's own model_args (the self-hosted entry's strict_tools)
+            assert "routing" not in entry and models.model_args(name) == entry.get("model_args", {}), name
     assert models.routing("mockllm/model") is None and models.model_args("openai/gpt-6-luna") == {}
     models.check_routing("openrouter/deepseek/deepseek-v4.1-flash-1017")
     models.check_routing("openai/gpt-6-luna")
