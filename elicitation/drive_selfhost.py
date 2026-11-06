@@ -59,7 +59,29 @@ CHEAT = {"opened", "used", "tampered", "checked", "shipped"}
 HONEST = {None, "none", "exposed"}
 MIN_CACHE_SHARE = 0.5
 DUMMY_KEY = "selfhost-dummy"
-SCRUB = re.compile(r"(KEY$|TOKEN|SECRET)")
+SCRUB = re.compile(r"(KEY|TOKEN|SECRET|^OPENROUTER)")
+OPENROUTER = "qwen3.8-27b-openrouter"
+KEY_URL = "https://openrouter.ai/api/v1/key"
+# --openrouter: the per-million prices that price a finished run from its own token counts
+PRICE = {"input": 0.15, "cached_input": 0.0375, "output": 1.875}
+
+
+def openrouter_mode() -> bool:
+    return MODEL == OPENROUTER
+
+
+def key_status(key: str) -> dict:
+    """The key's label, limit, usage and limit_remaining from OpenRouter; the key itself never leaves this call."""
+    req = urllib.request.Request(KEY_URL, headers={"Authorization": f"Bearer {key}"})
+    with urllib.request.urlopen(req, timeout=30) as response:
+        data = json.loads(response.read()).get("data") or {}
+    return {k: data.get(k) for k in ("label", "limit", "usage", "limit_remaining")}
+
+
+def priced_usd(row: dict) -> float:
+    """A finished run's dollars from its own tokens: uncached input, cache reads and output at PRICE."""
+    prompt, cached, out = row["input_tokens"] or 0, row["cache_read_tokens"] or 0, row["output_tokens"] or 0
+    return round(((prompt - cached) * PRICE["input"] + cached * PRICE["cached_input"] + out * PRICE["output"]) / 1e6, 4)
 
 
 def log(message: str) -> None:
@@ -87,6 +109,13 @@ def queue(cd_runs: int, ab_runs: int) -> list[tuple[str, int]]:
     """C1, D1, C2, D2, ... then A1, B1, A2, B2, ..."""
     return ([(cell, s) for s in range(1, cd_runs + 1) for cell in ("C", "D")]
             + [(cell, s) for s in range(1, ab_runs + 1) for cell in ("A", "B")])
+
+
+def round_robin(order: str, runs: int, first_seed: int = 1) -> list[tuple[str, int]]:
+    """--order DABC: D<k>, A<k>, B<k>, C<k> for k from first_seed, runs seeds per cell."""
+    if not order or set(order) - set(CELLS) or len(set(order)) != len(order):
+        raise ValueError(f"--order {order!r}: each of {''.join(CELLS)} at most once")
+    return [(cell, s) for s in range(first_seed, first_seed + runs) for cell in order]
 
 
 # ------------------------------------------------------------------------------------------------ the server
@@ -235,9 +264,15 @@ def publish_runs(study: str, names: set[str]) -> str:
 
 
 # ------------------------------------------------------------------------------------------------ main
-def child_env(study: str, base_url: str) -> dict:
+def child_env(study: str, base_url: str, openrouter_key: str | None = None) -> dict:
+    """The runs' environment: no variable whose name holds KEY, TOKEN or SECRET or starts with OPENROUTER, then only
+    the key the runs need (the capped OpenRouter key with --openrouter, else the dummy selfhost key)."""
     env = {k: v for k, v in os.environ.items() if not SCRUB.search(k)}
-    env.update({"STUDY": study, "SELFHOST_API_KEY": DUMMY_KEY, "SELFHOST_BASE_URL": base_url})
+    env["STUDY"] = study
+    if openrouter_key:
+        env["OPENROUTER_API_KEY"] = openrouter_key
+    else:
+        env.update({"SELFHOST_API_KEY": DUMMY_KEY, "SELFHOST_BASE_URL": base_url})
     return env
 
 
@@ -253,18 +288,28 @@ def dry_run(study: str, todo: list[tuple[str, int]], base_url: str, time_limit_s
             f"call_cap={config.call_cap}, cost_limit_usd={config.cost_limit_usd}, time_limit_s={config.time_limit_s}, "
             f"judge={config.judge}, seed={config.seed}, extra={swe.extra_instruction(args.condition)!r}")
         assert args.name == run_name(cell, 1), (args.name, run_name(cell, 1))
-    env = child_env(study, base_url)
+    env = child_env(study, base_url, "sk-or-placeholder" if openrouter_mode() else None)
     log(f"runs' environment: {sorted(k for k in env if SCRUB.search(k) or k.startswith('SELFHOST'))}")
     for cell, seed in todo:
         print(f"  {cell}{seed:<3d} {run_name(cell, seed)}\n        {' '.join(command(cell, seed, time_limit_s)[1:])}")
     return 0
 
 
+def utc_today_at(hhmm: str) -> float:
+    """Epoch seconds of HH:MM UTC today."""
+    import calendar
+    hours, minutes = (int(x) for x in hhmm.split(":"))
+    now = time.gmtime()
+    return calendar.timegm((now.tm_year, now.tm_mon, now.tm_mday, hours, minutes, 0, 0, 0, 0))
+
+
 def main(argv: list[str] | None = None) -> int:
+    global MODEL
     parser = argparse.ArgumentParser(prog="python -m elicitation.drive_selfhost", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--study", default="study_elicitation_6_selfhost")
-    parser.add_argument("--jobs", type=int, default=2, help="runs at once (a duo is two sequences on the server)")
+    parser.add_argument("--jobs", type=int, default=2, help="runs at once (a duo is two sequences on the server); "
+                        "<log dir>/JOBS, when it holds a number, overrides it while the driver runs")
     parser.add_argument("--cd-runs", type=int, default=12, help="seeds of cells C and D, from 1")
     parser.add_argument("--ab-runs", type=int, default=6, help="seeds of cells A and B, from 1, after C and D")
     parser.add_argument("--base-url", default=os.environ.get("SELFHOST_BASE_URL", "http://127.0.0.1:8001/v1"))
@@ -273,54 +318,106 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--log-dir", type=Path, default=None, help="default: out/<study>/driver/")
     parser.add_argument("--no-publish", action="store_true", help="keep the finished runs local")
     parser.add_argument("--dry-run", action="store_true", help="print the queue and check the configs; no call")
+    parser.add_argument("--openrouter", action="store_true",
+                        help=f"run {OPENROUTER} (DeepInfra bf16) instead of the selfhost entry, with no selfhost "
+                        "preflight; the capped key comes on stdin (one line) and reaches only the runs' environment")
+    parser.add_argument("--min-remaining", type=float, default=8.0,
+                        help="--openrouter: the first launch waits until the key has this much left (polls every 2 min)")
+    parser.add_argument("--headroom", type=float, default=3.0,
+                        help="--openrouter: no launch when limit_remaining - cap x (runs in flight + 1) drops under this")
+    parser.add_argument("--launch-until", default=None, help="HH:MM UTC today: no launch after it")
+    parser.add_argument("--order", default=None, help="cells in turn, e.g. DABC (D1, A1, B1, C1, D2, ...), "
+                        "--runs seeds each from --first-seed; replaces --cd-runs and --ab-runs")
+    parser.add_argument("--runs", type=int, default=12, help="--order: seeds per cell")
+    parser.add_argument("--first-seed", type=int, default=1, help="--order: the first seed of every cell")
     args = parser.parse_args(argv)
-    todo = queue(args.cd_runs, args.ab_runs)
+    if args.openrouter:
+        MODEL = OPENROUTER
+    todo = (round_robin(args.order, args.runs, args.first_seed) if args.order
+            else queue(args.cd_runs, args.ab_runs))
     if args.dry_run:
         return dry_run(args.study, todo, args.base_url, args.time_limit_s)
+
+    key = None
+    if args.openrouter:
+        key = sys.stdin.readline().strip()
+        if not key.startswith("sk-or-"):
+            log("refused: no OpenRouter key on stdin")
+            return 2
+        for name in [k for k in os.environ if k.startswith("OPENROUTER")]:
+            del os.environ[name]           # this Mac's own keys never reach anything the driver starts
+        os.environ["OPENROUTER_API_KEY"] = key   # in the driver only, so publish.secrets() refuses any file holding it
+    deadline = utc_today_at(args.launch_until) if args.launch_until else None
 
     log_dir = args.log_dir or ROOT / "out" / args.study / "driver"
     log_dir.mkdir(parents=True, exist_ok=True)
     screen = ROOT / "logs" / args.study / "screen"
     screen.mkdir(parents=True, exist_ok=True)
-    problems = preflight(args.base_url)
-    if problems:
-        for problem in problems:
-            log(f"PREFLIGHT: {problem}")
-        log("refused: nothing launched")
-        return 2
-    log(f"preflight passed; {len(todo)} runs queued, {args.jobs} at once, study {args.study}")
+    if not args.openrouter:
+        problems = preflight(args.base_url)
+        if problems:
+            for problem in problems:
+                log(f"PREFLIGHT: {problem}")
+            log("refused: nothing launched")
+            return 2
+    log(f"{'openrouter' if args.openrouter else 'preflight passed'}; model {MODEL}; {len(todo)} runs queued, "
+        f"{args.jobs} at once, study {args.study}, launch until {args.launch_until or 'no limit'} UTC")
 
-    env = child_env(args.study, args.base_url)
+    env = child_env(args.study, args.base_url, key)
     running: dict[tuple[str, int], tuple[subprocess.Popen, float]] = {}
     finished: set[str] = set()
     halt: str | None = None
+    launched = 0
+
+    def jobs() -> int:
+        try:
+            return int((log_dir / "JOBS").read_text().strip())
+        except (OSError, ValueError):
+            return args.jobs
 
     def reap() -> None:
         nonlocal halt
-        for key, (proc, started) in list(running.items()):
+        for key_, (proc, started) in list(running.items()):
             if proc.poll() is None:
                 continue
-            del running[key]
-            row = summary(args.study, *key, proc.returncode, time.time() - started)
+            del running[key_]
+            row = summary(args.study, *key_, proc.returncode, time.time() - started)
+            row["priced_usd"] = priced_usd(row)
             with (log_dir / "runs.jsonl").open("a") as out:
                 out.write(json.dumps(row) + "\n")
             labels = {a: f"{v['rung']}/{v['label']}/{v['ended_by']}" for a, v in row["agents"].items()}
             log(f"{row['run']} rc={row['rc']} {row['wall_s']}s calls={row['calls']} in={row['input_tokens']} "
                 f"cache={row['cache_read_tokens']} out={row['output_tokens']} cap_count=${row['cap_usd_counted']} "
-                f"agents {labels}")
+                f"priced=${row['priced_usd']} agents {labels}")
             if row["exported"]:
                 finished.add(row["run"])
             halt = halt or stop_reason(row)
+            if args.openrouter and row["priced_usd"] > CAP_USD:
+                halt = halt or f"{row['run']} priced ${row['priced_usd']} from its tokens, over the ${CAP_USD} cap"
             if not args.no_publish and row["exported"]:
                 try:
                     log(f"publish: {publish_runs(args.study, finished)}")
                 except Exception as error:   # a failed upload never stops the runs; the next finish retries
                     log(f"publish failed: {type(error).__name__}: {error}")
 
+    def key_allows() -> bool:
+        """The key's limits, logged without the key; whether one more launch fits them."""
+        try:
+            status = key_status(key)
+        except (OSError, ValueError, urllib.error.URLError) as error:
+            log(f"key check failed: {type(error).__name__}: {error}")
+            return False
+        left = status["limit_remaining"]
+        floor = args.min_remaining if launched == 0 else 0.0
+        ok = left is not None and left >= floor and left - CAP_USD * (len(running) + 1) >= args.headroom
+        log(f"key {status['label']}: limit ${status['limit']}, usage ${status['usage']}, limit_remaining ${left}; "
+            f"{len(running)} in flight; {'launch' if ok else 'wait'}")
+        return ok
+
     for cell, seed in todo:
         while True:
             reap()
-            if len(running) < args.jobs or halt:
+            if len(running) < jobs() or halt:
                 break
             time.sleep(15)
         if halt:
@@ -329,19 +426,34 @@ def main(argv: list[str] | None = None) -> int:
         if (log_dir / "STOP").exists():
             log(f"STOP file in {log_dir}: no new launch")
             break
+        if deadline and time.time() > deadline:
+            log(f"past {args.launch_until} UTC: no new launch")
+            break
         name = run_name(cell, seed)
         if (ROOT / "runs" / args.study / name).exists():
             log(f"{name} exists: skipped")
             continue
-        if not server_up(args.base_url):
+        if args.openrouter:
+            while not key_allows():
+                if (deadline and time.time() > deadline) or (log_dir / "STOP").exists() or halt:
+                    break
+                for _ in range(8):
+                    reap()
+                    time.sleep(15)
+            if (deadline and time.time() > deadline) or (log_dir / "STOP").exists() or halt:
+                log("no new launch: past the deadline, STOP, or a halt while waiting on the key")
+                break
+        elif not server_up(args.base_url):
             log(f"the server at {args.base_url} does not list {SERVED}: no new launch")
             break
         argv = command(cell, seed, args.time_limit_s)
         with (screen / f"{name}.log").open("w") as out:
             out.write(" ".join(argv[1:]) + "\n")
             out.flush()
-            proc = subprocess.Popen(argv, cwd=ROOT, env=env, stdout=out, stderr=subprocess.STDOUT)
+            proc = subprocess.Popen(argv, cwd=ROOT, env=env, stdout=out, stderr=subprocess.STDOUT,
+                                    stdin=subprocess.DEVNULL)
         running[(cell, seed)] = (proc, time.time())
+        launched += 1
         log(f"{name} launched pid {proc.pid}")
         time.sleep(20)
     while running:

@@ -153,3 +153,12 @@ def test_the_driver_queues_c_and_d_first_and_passes_no_key(monkeypatch):
     assert not any(k in env for k in ("OPENROUTER_API_KEY", "OPENAI_API_KEY", "HF_TOKEN", "AWS_SECRET_ACCESS_KEY",
                                       "GH_TOKEN"))
     assert env["SELFHOST_API_KEY"] == driver.DUMMY_KEY and env["STUDY"] == "study_x"
+
+
+def test_the_driver_round_robin_order_and_its_refusals():
+    from elicitation import drive_selfhost as driver
+    assert driver.round_robin("DABC", 2, 61) == [("D", 61), ("A", 61), ("B", 61), ("C", 61),
+                                                  ("D", 62), ("A", 62), ("B", 62), ("C", 62)]
+    for bad in ("", "DAX", "DD"):
+        with pytest.raises(ValueError):
+            driver.round_robin(bad, 1)
