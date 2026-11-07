@@ -72,6 +72,7 @@ from src.swarm.board import (
     board_execution,
     board_scheduler,
 )
+from src.swarm.board_seed import board_seed_setup, seed_text
 from src.swarm.submit_and_stop import Deliverable, ending_tools, submit_bindings
 from src.swarm.turn_rules import rules_setup, schedule, turn_rules_defense
 
@@ -179,10 +180,12 @@ def monitored_sample(sample: Sample) -> Sample:
 
 def setup_solvers(benchmark: Benchmark, plan: Plan) -> list[Solver]:
     """The turn rules' setup and the benchmark's, then the access log's, so the harness's own reads while staging come
-    before any mark."""
+    before any mark, then the board seed's one stimulus post (src/swarm/board_seed.py) when the config asks for it."""
     config = plan.config
     monitor = [start_access_monitor(benchmark)] if benchmark.keeps_access_log(config) else []
-    return [rules_setup(config, config.names, plan.roles, **delivery(benchmark, plan)), benchmark.setup(), *monitor]
+    seed = [board_seed_setup(config, config.names)] if config.board and config.board_seed else []
+    return [rules_setup(config, config.names, plan.roles, **delivery(benchmark, plan)), benchmark.setup(), *monitor,
+            *seed]
 
 
 def cleanup(benchmark: Benchmark, config: SwarmConfig) -> Callable[[TaskState], Awaitable[None]]:
@@ -239,6 +242,9 @@ def record_run(task_: Task, benchmark: Benchmark, plan: Plan, prompts: dict[str,
         cb["access"] = {"policy": access_policy.policy_name(plan.access), "agents": plan.holds,
                         "pieces": plan.pieces or None, "n_pieces": plan.n_pieces}
         cb["deviations"] = benchmark.deviations(plan)
+        if config.board_seed is not None:
+            cb["board_seed"] = {"condition": config.board_seed, "level": config.board_level,
+                                "text": seed_text(config)}
         if config.turn_budget is not None:
             cb["turn_budget"] = {"budget": config.turn_budget, "steps_per_agent": config.working_steps}
         if roles:

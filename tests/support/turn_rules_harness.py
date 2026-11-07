@@ -136,10 +136,11 @@ async def nothing_missing(agent: str) -> None:
 
 
 def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | None = None, delivered=None,
-               missing=nothing_missing, groups: list[AgentGroup] | None = None) -> Task:
+               missing=nothing_missing, groups: list[AgentGroup] | None = None, extra_setup=None) -> Task:
     """The test task; on a pull board each agent also gets the board tools, and every agent submit and stop_working
     as it holds them, bound as src/tasks.py binds them. `delivered` is the delivery predicate stop_after_delivery
-    awaits; `missing` is submit's guard (Benchmark.gradable); `groups` are ORBIT's agent groups (first messages)."""
+    awaits; `missing` is submit's guard (Benchmark.gradable); `groups` are ORBIT's agent groups (first messages);
+    `extra_setup` are task_setup solvers appended after rules_setup, as src/tasks.py appends the board seed."""
     names = config.names
     extra = board.agent_tool_names(config, roles)
     agents = [AgentSpec(name=n, role="engineer", tools=["work", *extra[n], *ending_tools(config, role_of(roles, n))],
@@ -157,7 +158,8 @@ def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | Non
         scheduler=board_scheduler(max_turns=config.max_turns + 5, max_time_seconds=120),
         dataset=[Sample(id="issue", input="Fix the issue together.")],
         scorer=scorer_ or nothing(),
-        task_setup=[rules.rules_setup(config, names, roles, **({"delivered": delivered} if delivered else {}))],
+        task_setup=[rules.rules_setup(config, names, roles, **({"delivered": delivered} if delivered else {})),
+                    *(extra_setup or [])],
         token_limit=1_000_000,
     )
     for sample in task.dataset:
@@ -169,11 +171,11 @@ def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | Non
 
 
 def run(config: SwarmConfig, scripts: dict, tmp_path, *, scorer_=None, roles=None, with_log=False, delivered=None,
-        missing=nothing_missing, groups=None, **generate):
+        missing=nothing_missing, groups=None, extra_setup=None, **generate):
     """Run the test task on the scripts: (the sample, the provider calls recorded), and the log with_log."""
     recorder: list[dict] = []
     [log] = inspect_eval(build_task(config, scorer_=scorer_, roles=roles, delivered=delivered, missing=missing,
-                                    groups=groups),
+                                    groups=groups, extra_setup=extra_setup),
                          model=scripted_model(scripts, recorder),
                          log_dir=str(tmp_path), display="none", log_realtime=False, max_retries=0, **generate)
     assert log.status == "success", log.error

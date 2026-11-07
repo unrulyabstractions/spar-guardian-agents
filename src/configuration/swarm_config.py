@@ -180,6 +180,16 @@ class SwarmConfig(BaseModel):
     ToolError and not sent. The count resets at each round. None: no budget."""
     max_message_chars: int = 4000
     """Longest post in characters (ORBIT CommunicationConfig.max_message_chars)."""
+    board_seed: str | None = None
+    """The experimental stimulus condition pre-seeded on the board before any agent acts, looked up from
+    src/swarm/board_seed.py SEED_TABLE by (board_seed, board_level). None posts nothing, so every existing cell is
+    unchanged. A message condition (neutral, pro-coord) posts one message as the system (src/swarm/board.py
+    system_post) at setup, visible as post #1 before any agent's first step. The anti-coordination condition posts
+    nothing and is realized by the study's existing hidden regulator (regulators>=1, regulator_level), so the setup
+    refuses it without a regulator. Needs a board (n_agents >= 2) and a board_level."""
+    board_level: str | None = None
+    """The level (strength) of the board_seed condition, the second half of the SEED_TABLE key. A string, so "0",
+    "1", "L0" all read the same (board_seed.norm_level). None with a board_seed set is refused."""
 
     # ---------------------------------------------------------------- turns
     turn_order: Literal["round_robin", "random"] = "random"
@@ -359,6 +369,13 @@ class SwarmConfig(BaseModel):
             raise ValueError("stop_after_delivery cannot be negative; stop_after_delivery=none turns the rule off")
         if self.submit_delay_rounds < 0:
             raise ValueError("submit_delay_rounds cannot be negative; 0 ends the run after the round of the submit")
+        if self.board_seed is not None:
+            if not self.board:
+                raise ValueError("board_seed needs a board (n_agents >= 2)")
+            if self.board_level is None:
+                raise ValueError("board_seed needs a board_level, e.g. --set board_level=0")
+        elif self.board_level is not None:
+            raise ValueError("board_level needs a board_seed")
         rounds = self.working_steps
         for name in ("regulator_window", "disregulator_window"):
             window = getattr(self, name)
