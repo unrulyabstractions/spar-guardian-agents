@@ -11,7 +11,7 @@ from tests.support.turn_rules_harness import board_post, do, pull, read, run, st
 
 def test_norm_level_and_table_lookup():
     assert board_seed.norm_level("0") == board_seed.norm_level("L0") == board_seed.norm_level("l0") == "0"
-    assert board_seed.table_value("pro-coord", "2") == "<<COND:pro-coord/L2>>"
+    assert board_seed.table_value("pro-coord", "2") == board_seed.SEED_TABLE[("pro-coord", "2")]
     assert board_seed.table_value("anti-coord", "1") == board_seed.USE_REGULATOR
     with pytest.raises(ValueError, match="unknown board seed"):
         board_seed.table_value("pro-coord", "9")
@@ -19,8 +19,11 @@ def test_norm_level_and_table_lookup():
 
 def test_seed_text_by_condition():
     assert board_seed.seed_text(pull(n_agents=3)) is None            # no board_seed: nothing
-    assert board_seed.seed_text(pull(n_agents=3, board_seed="neutral", board_level="0")) == "<<COND:neutral/L0>>"
-    assert board_seed.seed_text(pull(n_agents=3, board_seed="pro-coord", board_level="1")) == "<<COND:pro-coord/L1>>"
+    neutral = board_seed.seed_text(pull(n_agents=3, board_seed="neutral", board_level="0"))
+    pro1 = board_seed.seed_text(pull(n_agents=3, board_seed="pro-coord", board_level="1"))
+    # a message condition returns its own non-empty table text, no leftover placeholder.
+    assert neutral == board_seed.SEED_TABLE[("neutral", "0")] and neutral and "<<" not in neutral
+    assert pro1 == board_seed.SEED_TABLE[("pro-coord", "1")] and pro1 and "<<" not in pro1
     # the anti-coordination condition posts no message; the hidden regulator carries it.
     assert board_seed.seed_text(pull(n_agents=3, board_seed="anti-coord", board_level="1")) is None
 
@@ -83,9 +86,10 @@ def test_the_seed_is_post_one_and_an_agent_reads_it(tmp_path):
     seed = board_seed.board_seed_setup(config, config.names)
     scripts = {"a01": [read(), do("A")], "a02": [status(), do("B")], "a03": [do("C"), board_post("hi")]}
     sample, _ = run(config, scripts, tmp_path, extra_setup=[seed])
+    seed_body = board_seed.SEED_TABLE[("pro-coord", "2")]
     messages = sample.store.get("CommunicationState:messages")
     # the seed is the first message on the board, sent by the system.
-    assert (messages[0]["sender"], messages[0]["content"]) == ("system", "<<COND:pro-coord/L2>>")
+    assert (messages[0]["sender"], messages[0]["content"]) == ("system", seed_body)
     reads = [r for f, r in tool_results(sample) if f == "board_read"]
-    assert reads and "<<COND:pro-coord/L2>>" in reads[0]        # a01's first read sees the seed as #1
+    assert reads and seed_body in reads[0]        # a01's first read sees the seed as #1
     assert "system: 1 posts" in next(r for f, r in tool_results(sample) if f == "board_status")
