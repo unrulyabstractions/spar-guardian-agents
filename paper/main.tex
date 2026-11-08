@@ -1,0 +1,58 @@
+% The team's paper, transcribed from the Google Docs PDF of 2026-11-08 (paper.pdf). Build: make paper.
+% Rules for keeping it in step with the code: paper/CLAUDE.md.
+\documentclass[11pt,letterpaper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{newpxtext,newpxmath}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage[table]{xcolor}
+\usepackage{enumitem}
+\usepackage{caption}
+\usepackage{placeins}
+\usepackage{float}
+\usepackage[most]{tcolorbox}
+\usepackage[colorlinks=true,linkcolor=black,citecolor=black,urlcolor=blue]{hyperref}
+
+\captionsetup{font=small,labelfont=bf,labelsep=colon}
+\setlist{itemsep=1pt,topsep=3pt}
+\graphicspath{{figures/}}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.6\baselineskip}
+
+% A {placeholder} of an instruction text, set as a grey chip.
+\definecolor{chip}{HTML}{EEEDEA}
+\newcommand{\placeholder}[1]{\colorbox{chip}{\footnotesize\ttfamily #1}}
+\newcolumntype{Y}{>{\centering\arraybackslash}X}
+
+\input{generated/params}
+
+\title{Swarm Contagion and Peer Pressure:\\Regulator and Disregulator Dynamics\\in Multi-Agent LLM Swarms}
+\date{}
+
+\begin{document}
+
+\input{sections/title}
+\input{sections/abstract}
+\input{sections/introduction}
+\input{sections/related_work}
+\input{sections/methods}
+\input{sections/results}
+\input{sections/discussion}
+\input{sections/conclusion}
+\input{sections/reproducibility}
+\input{sections/references}
+
+\clearpage
+\input{sections/appendix_a_methodology}
+\clearpage
+\input{sections/appendix_b_results}
+\clearpage
+\input{sections/appendix_c_baselines}
+\input{sections/appendix_future}
+
+\end{document}

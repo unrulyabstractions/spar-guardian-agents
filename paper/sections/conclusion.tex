@@ -1,0 +1,13 @@
+\section*{Conclusion}
+We adapted three CheatBench tasks (software engineering, protein design, and creative writing) to a multi-agent
+context, split the honeypot across workers, and tested whether covert regulator agents can reduce cheating behavior
+in the swarm.
+
+So far, the evidence for H1 is mixed. Cheating is completely mitigated in some cases, like with Haiku and Luna
+regulators on protein design, but in other cases, like with an Argon regulator, we find no effect. Regulators had
+little effect on cheating on DeepSeek teams on the SWE task. A single sentence explicitly discouraging the exploit
+performed better than any regulator.
+
+From the SWE deep dive, we find that if the regulator also works on the task, the strongest effect is regulating
+itself from cheating. With an explicit definition of what qualifies as cheating, its cheating rate fell from 36/36
+to 21/36.

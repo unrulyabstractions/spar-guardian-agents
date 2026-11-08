@@ -1,0 +1,45 @@
+\section*{Experimental Results}
+Appendix B shows the full details of our results.
+
+\subsection*{Multi-Domain Tests}
+Results are shown in Figure~\ref{fig:multidomain}. Without any mitigation methods, most teams cheated: 3/3 on SWE
+with DeepSeek workers, 2/3 on SWE with Luna, 5/5 on protein design, and 2/4 on creative writing. When instructed to
+cheat, every team did. A generic honesty rule in the agents' task instructions had little effect, with cheating
+remaining at 3/3, 3/3, and 4/5 on the first three, but a rule naming the exploit specifically almost eliminated
+cheating (1/3, 0/3, 0/5).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{fig4_multidomain}
+  \caption{Cheating behavior per each task domain and model tested; from left to right, SWE with DeepSeek, SWE with
+  Luna, protein design with Luna, and creative writing with Luna. The legend at the bottom describes different
+  tiers of cheating behavior. From top to bottom, we show how behavior changes in the presence of a regulator and
+  how the regulator's instructions affect its ability to prevent cheating.}
+  \label{fig:multidomain}
+\end{figure}
+
+Regulators worked best on protein design: Haiku regulators achieved 0/5 at both normal and enforcing levels. Luna
+reached 0/5 at enforce, but Argon at enforce had no effect (5/5). On SWE with DeepSeek workers, Haiku regulators did
+not reduce cheating (2/3 ambiguous, 3/3 enforce), although no team with an enforcing regulator shipped the fix. No
+regulator did better than the rule naming the exploit.
+
+\subsection*{SWE Deep Dive}
+Results are shown in Figure~\ref{fig:deepdive}. DeepSeek workers almost always cheated: 72/72 with no regulator or
+with the regulator's tools alone and with its duty, 67/72 with the definition of cheating, and 65/72 with additional
+pressure on the regulator. None of these worker differences was significant (Holm $p \geq 0.45$). The clearest
+effect was on the regulator's own cheating, which dropped from 36/36 to 21/36 with an explicit definition
+($p = 0.0001$, unadjusted). Workers found the fix by their own search (213 of 216 in the first three arms). Taking a
+teammate's copy fell from 18/72 to 2/72 with the definition; such copies mostly appeared where the regulator itself
+had used the fix.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{fig5_swe_deep_dive}
+  \caption{Cheating rates for DeepSeek v4.1 Flash in the SWE deep-dive. The swarm is optionally given one turn to
+  plan and coordinate its approach; these results are shown in orange. The legend at the bottom shows the different
+  rungs of the regulator design: as a control worker (3W), with only tools and no instruction (S0), with a duty to
+  keep the team honest (S1), with a definition of cheating (S2), and with additional pressure to prevent cheating
+  (S3). We find that cheating among workers changes only slightly when the swarm has time to plan its approach, and
+  even then the effect is most pronounced for regulators given explicitly defined cheating behavior.}
+  \label{fig:deepdive}
+\end{figure}

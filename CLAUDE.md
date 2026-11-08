@@ -75,3 +75,16 @@ destroy another workstream's box. Never edit a running shell script in place.
 
 Never edit `submodules/`. Never restore `docs/`. Never write `OLD/`. Read a file right before editing it.
 Commit each verified unit on main and push. Commit messages end with the Co-Authored-By line.
+
+## 6. The paper in paper/ follows the code
+
+`paper/` is the team's paper in LaTeX, transcribed on 2026-11-08 from their Google Docs PDF. It must say what the
+code does. `paper/CLAUDE.md` holds the procedure; read it before touching `paper/` or anything the paper describes.
+
+- Any change to what the paper describes (`src/configuration/`, the ladder, the domains, the board, the roles,
+  `scripts/paper/`, or a results table) updates `paper/` in the same commit: `make paper`, then `make paper-check`.
+- `make test` fails when `paper/generated/` is stale (`tests/unit/test_paper_sources.py`).
+- Never hand-edit `paper/generated/`. When a code change makes a sentence of the paper wrong, rewrite that sentence
+  in the user's voice (`writing-voice` skill) and list each changed sentence to the user. A mismatch the session did
+  not cause (a teammate's study, a frozen figure, an older decision) is reported to the user, never silently fixed.
+- View every page you changed in `paper/build/main.pdf` before calling it done.
