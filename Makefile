@@ -9,7 +9,7 @@ SAMPLES ?= 15
 .PHONY: help ui ui-stop smoke smoke-swe smoke-kw smoke-interview smoke-protein smoke-creative smoke-chess smoke-access \
 	smoke-load smoke-all test test-tools lint \
 	tools-setup scout docent graph transect contagion failures hawk analyse figures tables \
-	paper-sources paper-check paper
+	results-tables paper-sources paper-check paper
 
 help:  ## list the targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/\t/' | column -t -s "$$(printf '\t')"
@@ -93,11 +93,18 @@ figures:  ## the paper's design figures and one setup figure per task, as PNG un
 tables:  ## the paper's tables (scales, rungs against verdict fields, rungs and collaboration by domain) as PNG under tmp/tables/method/ (gitignored)
 	$(PY) -m scripts.paper.tables
 
+results-tables:  ## the paper's results tables from the runs on disk, as PNG under tmp/tables/results/ (gitignored)
+	$(PY) -m scripts.paper.control_tables
+	$(PY) -m scripts.paper.protein_regulator_table
+	$(PY) -m scripts.paper.swe_regulator_table
+	$(PY) -m scripts.paper.disregulator_tables
+	$(PY) -m scripts.paper.baseline_tables
+
 paper-sources:  ## paper/generated/*.tex from the code, and paper/figures/ copied from tmp/ (scripts/paper/paper_sources.py)
 	$(PY) -m scripts.paper.paper_sources
 
 paper-check:  ## exit 1 when paper/ disagrees with the code or with tmp/; writes nothing
 	$(PY) -m scripts.paper.paper_sources --check
 
-paper: figures tables paper-sources  ## regenerate every source, then build paper/build/main.pdf with latexmk
+paper: figures tables results-tables paper-sources  ## regenerate every source, then build paper/build/main.pdf with latexmk
 	cd paper && latexmk -pdf -interaction=nonstopmode -halt-on-error -outdir=build main.tex

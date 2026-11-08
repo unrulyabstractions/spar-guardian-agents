@@ -4,15 +4,16 @@ includes from paper/figures/.
     uv run python -m scripts.paper.paper_sources          # write paper/generated/, copy every figure with a source
     uv run python -m scripts.paper.paper_sources --check  # write nothing; exit 1 when paper/ disagrees with a source
 
-paper/generated/ holds what the code defines: params.tex (the board's budgets as macros, from the default preset),
-scales.tex (from src/configuration/scales.py), regulator_levels.tex and disregulator_levels.tex (from
+paper/generated/ holds what the code defines: params.tex (the board's budgets and the turn budget from the default
+preset, the judge and its reasoning effort from settings.JUDGE_MODEL and src/judging/judge_models.yaml), scales.tex
+(from src/configuration/scales.py), regulator_suffix.tex (the regulator's common text from
+src/configuration/prompts.yaml and its three report variants), regulator_levels.tex and disregulator_levels.tex (from
 src/configuration/instruction_levels.yaml). Nobody edits these files by hand.
 
 FIGURES names each PNG in paper/figures/ and where it comes from. A `generated` figure is copied from tmp/ after its
-generator runs (`make figures`, `make tables`). A `tmp` figure is copied from tmp/ too, but its generator is not in
-the repository: those scripts lived in a session scratchpad that macOS has since cleared, and their last versions
-survive only in that session's transcript. A `frozen` figure was extracted from the team's Google Docs PDF
-(paper.pdf, 2026-11-08) and has no source here; it changes only when the team sends a new one.
+generator runs (`make figures`, `make tables`, `make results-tables`). A `frozen` figure was extracted from the team's
+Google Docs PDF (paper.pdf, 2026-11-08): no script here or in the team's repositories draws it, so it changes only
+when the team sends a new one.
 """
 from __future__ import annotations
 
@@ -26,20 +27,28 @@ from pathlib import Path
 import yaml
 
 from scripts.paper.tables import hours
+from src.configuration import settings
 from src.configuration.presets import PRESETS
 from src.configuration.scales import SCALES
 from src.configuration.settings import ROOT
+from src.judging.cheatbench_judge import judge_entry
 
 PAPER = ROOT / "paper"
 GENERATED = PAPER / "generated"
 FIGURE_DIR = PAPER / "figures"
 LEVELS_YAML = ROOT / "src" / "configuration" / "instruction_levels.yaml"
-LOST = "generator lost with session d3edd1f3's scratchpad"
+PROMPTS_YAML = ROOT / "src" / "configuration" / "prompts.yaml"
+RESULTS = "make results-tables (scripts/paper/{})"
+# The judge entries the paper can name. A judge outside this map stops the build, so a new judge reaches the prose.
+JUDGE_NAMES = {"gpt-6-luna": "OpenAI GPT-6 Luna", "gpt-6-sol": "OpenAI GPT-6 Sol"}
+# The regulator's report variants in the paper's prompt box, as levels of instruction_levels.yaml.
+SUFFIX_VARIANTS = [("[Level 1] Ambiguous boundary", "ambiguous"), ("[Level 2] Explicit boundary", "explicit"),
+                   ("[Level 3] High pressure", "pressure")]
 
 
 @dataclass(frozen=True)
 class Figure:
-    kind: str          # generated | tmp | frozen
+    kind: str          # generated | frozen
     source: str        # a path under the repository root, or a note for a frozen figure
     note: str = ""
 
@@ -65,19 +74,22 @@ FIGURES: dict[str, Figure] = {
     "table_rungs.png": Figure("generated", "tmp/tables/method/table_rungs.png",
                               "make tables (scripts/paper/tables.py)"),
     # Appendices B and C: the results tables.
-    "positive_control.png": Figure("tmp", "tmp/tables/results/positive_control.png", f"control_tables.py, {LOST}"),
-    "negative_control.png": Figure("tmp", "tmp/tables/results/negative_control.png", f"control_tables.py, {LOST}"),
-    "table_protein_regulators.png": Figure("tmp", "tmp/tables/results/table_protein_regulators.png",
-                                           f"regulator_table.py, {LOST}"),
-    "table_swe_regulators.png": Figure("tmp", "tmp/tables/results/table_swe_regulators.png",
-                                       f"swe_regulator_table.py, {LOST}"),
-    "table_swe_disregulators.png": Figure("tmp", "tmp/tables/results/table_swe_disregulators.png",
-                                          f"disregulator_table.py, {LOST}"),
-    "table_creative_disregulators.png": Figure("tmp", "tmp/tables/results/table_creative_disregulators.png",
-                                               f"disregulator_table.py, {LOST}"),
-    "solo_vs_solo_told.png": Figure("tmp", "tmp/tables/results/solo_vs_solo_told.png", f"baseline_tables.py, {LOST}"),
-    "swarm_vs_swarm_told.png": Figure("tmp", "tmp/tables/results/swarm_vs_swarm_told.png",
-                                      f"baseline_tables.py, {LOST}"),
+    "positive_control.png": Figure("generated", "tmp/tables/results/positive_control.png",
+                                   RESULTS.format("control_tables.py")),
+    "negative_control.png": Figure("generated", "tmp/tables/results/negative_control.png",
+                                   RESULTS.format("control_tables.py")),
+    "table_protein_regulators.png": Figure("generated", "tmp/tables/results/table_protein_regulators.png",
+                                           RESULTS.format("protein_regulator_table.py")),
+    "table_swe_regulators.png": Figure("generated", "tmp/tables/results/table_swe_regulators.png",
+                                       RESULTS.format("swe_regulator_table.py")),
+    "table_swe_disregulators.png": Figure("generated", "tmp/tables/results/table_swe_disregulators.png",
+                                          RESULTS.format("disregulator_tables.py")),
+    "table_creative_disregulators.png": Figure("generated", "tmp/tables/results/table_creative_disregulators.png",
+                                               RESULTS.format("disregulator_tables.py")),
+    "solo_vs_solo_told.png": Figure("generated", "tmp/tables/results/solo_vs_solo_told.png",
+                                    RESULTS.format("baseline_tables.py")),
+    "swarm_vs_swarm_told.png": Figure("generated", "tmp/tables/results/swarm_vs_swarm_told.png",
+                                      RESULTS.format("baseline_tables.py")),
 }
 
 HEADER = "% Written by scripts/paper/paper_sources.py from {source}. Do not edit; run `make paper-sources`.\n"
@@ -122,8 +134,13 @@ def params_tex() -> str:
         "FreeBoardActionsRegulator": c.free_board_actions_regulator,
         "TurnBudget": c.turn_budget,
     }
-    lines = [HEADER.format(source="src/configuration/presets.py PRESETS['default']")]
+    if settings.JUDGE_MODEL not in JUDGE_NAMES:
+        raise SystemExit(f"judge {settings.JUDGE_MODEL!r} has no name in JUDGE_NAMES: add it, then check the prose")
+    judge = {"JudgeName": JUDGE_NAMES[settings.JUDGE_MODEL],
+             "JudgeEffort": judge_entry(settings.JUDGE_MODEL)["generation_config"].get("reasoning_effort") or "default"}
+    lines = [HEADER.format(source="PRESETS['default'], settings.JUDGE_MODEL and src/judging/judge_models.yaml")]
     lines += [rf"\newcommand{{\{k}}}{{{v}}}" for k, v in macros.items()]
+    lines += [rf"\newcommand{{\{k}}}{{{escape(v)}}}" for k, v in judge.items()]
     return "\n".join(lines) + "\n"
 
 
@@ -153,10 +170,23 @@ def levels_tex(ladder: str) -> str:
             + "\\smallskip\n{\\footnotesize " + legend + "}\n")
 
 
+def regulator_suffix_tex() -> str:
+    """The prompt box: the common text every regulator gets after its level, then the report's three variants."""
+    roles = yaml.safe_load(PROMPTS_YAML.read_text())["roles"]
+    levels = yaml.safe_load(LEVELS_YAML.read_text())["regulator"]
+    common = " ".join([roles["regulator_common"].strip(), roles["regulator_no_disclosure"].strip()])
+    parts = [r"\textbf{[COMMON]}\\" + "\n" + escape(common)]
+    for label, level in SUFFIX_VARIANTS:
+        parts.append(rf"\textbf{{{escape(label)}}}\\" + "\n" + with_chips(levels[level]["text"]) + " + [COMMON]")
+    return (HEADER.format(source="src/configuration/prompts.yaml roles and instruction_levels.yaml regulator")
+            + "\n\n\\medskip\n".join(parts) + "\n")
+
+
 def generated_files() -> dict[Path, str]:
     return {
         GENERATED / "params.tex": params_tex(),
         GENERATED / "scales.tex": scales_tex(),
+        GENERATED / "regulator_suffix.tex": regulator_suffix_tex(),
         GENERATED / "regulator_levels.tex": levels_tex("regulator"),
         GENERATED / "disregulator_levels.tex": levels_tex("disregulator"),
     }

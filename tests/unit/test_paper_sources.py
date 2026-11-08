@@ -48,3 +48,18 @@ def test_level_tables_hold_every_level(ladder):
 def test_escape_covers_latex_specials():
     assert paper_sources.escape("50% of a_b & {c} #1 $2") == r"50\% of a\_b \& \{c\} \#1 \$2"
     assert paper_sources.with_chips("use {prior_work} now") == r"use \placeholder{\{prior\_work\}} now"
+
+
+@pytest.mark.parametrize("module", ["control_tables", "protein_regulator_table", "swe_regulator_table",
+                                    "disregulator_tables", "baseline_tables"])
+def test_results_table_scripts_import(module):
+    """The results tables' scripts (make results-tables) import without the runs on disk and expose main."""
+    mod = __import__(f"scripts.paper.{module}", fromlist=["main"])
+    assert callable(mod.main)
+
+
+def test_every_results_figure_has_a_script_in_the_repository():
+    for name, fig in paper_sources.FIGURES.items():
+        if fig.kind == "generated" and "results-tables" in fig.note:
+            script = fig.note.split("(")[1].rstrip(")")
+            assert (paper_sources.ROOT / script).is_file(), f"{name}: {script} is missing"
