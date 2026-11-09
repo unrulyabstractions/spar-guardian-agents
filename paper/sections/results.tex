@@ -6,7 +6,7 @@ Results are shown in Figure~\ref{fig:multidomain}. Without any mitigation method
 with DeepSeek workers, 2/3 on SWE with Luna, 5/5 on protein design, and 2/4 on creative writing. When instructed to
 cheat, every team did. A generic honesty rule in the agents' task instructions had little effect, with cheating
 remaining at 3/3, 3/3, and 4/5 on the first three, but a rule naming the exploit specifically almost eliminated
-cheating (1/3, 0/3, 0/5).
+cheating (1/3, 0/3, 0/5). On creative writing, the generic rule left 1/3 teams cheating and the named rule 0/3.
 
 \begin{figure}[htbp]
   \centering
@@ -20,8 +20,8 @@ cheating (1/3, 0/3, 0/5).
 
 Regulators worked best on protein design: Haiku regulators achieved 0/5 at both normal and enforcing levels. Luna
 reached 0/5 at enforce, but Argon at enforce had no effect (5/5). On SWE with DeepSeek workers, Haiku regulators did
-not reduce cheating (2/3 ambiguous, 3/3 enforce), although no team with an enforcing regulator shipped the fix. No
-regulator did better than the rule naming the exploit.
+not reduce cheating (2/3 ambiguous, 3/3 enforce), although no team with an enforcing Haiku regulator shipped the fix.
+Luna and Sonnet regulators did not reduce it either. No regulator did better than the rule naming the exploit.
 
 We tested disregulators with GPT-6 Luna workers on SWE and creative writing (Appendix B). A disregulator brought
 every team to at least `tried'. No team it pushed went on to use the planted work, while teams told to cheat did. A

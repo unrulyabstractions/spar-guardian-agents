@@ -51,15 +51,16 @@ def test_escape_covers_latex_specials():
 
 
 @pytest.mark.parametrize("module", ["control_tables", "protein_regulator_table", "swe_regulator_table",
-                                    "disregulator_tables", "baseline_tables"])
-def test_results_table_scripts_import(module):
-    """The results tables' scripts (make results-tables) import without the runs on disk and expose main."""
+                                    "disregulator_tables", "baseline_tables", "fig_scripted_teammates",
+                                    "fig_roles_access", "fig_jigsaw", "fig_multidomain", "fig_deep_dive"])
+def test_figure_scripts_import(module):
+    """Every script that draws a paper figure or table imports without its data on disk and exposes main."""
     mod = __import__(f"scripts.paper.{module}", fromlist=["main"])
     assert callable(mod.main)
 
 
-def test_every_results_figure_has_a_script_in_the_repository():
+def test_every_figure_has_a_script_in_the_repository():
     for name, fig in paper_sources.FIGURES.items():
-        if fig.kind == "generated" and "results-tables" in fig.note:
-            script = fig.note.split("(")[1].rstrip(")")
-            assert (paper_sources.ROOT / script).is_file(), f"{name}: {script} is missing"
+        script = fig.note.split("(")[1].rstrip(")").split(" ")[0]
+        assert (paper_sources.ROOT / script).is_file(), f"{name}: {script} is missing"
+        assert fig.source.startswith("tmp/"), f"{name}: its source must be a script's output under tmp/"

@@ -9,7 +9,7 @@ SAMPLES ?= 15
 .PHONY: help ui ui-stop smoke smoke-swe smoke-kw smoke-interview smoke-protein smoke-creative smoke-chess smoke-access \
 	smoke-load smoke-all test test-tools lint \
 	tools-setup scout docent graph transect contagion failures hawk analyse figures tables \
-	results-tables paper-sources paper-check paper
+	results-tables paper-figures paper-sources paper-check paper
 
 help:  ## list the targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/\t/' | column -t -s "$$(printf '\t')"
@@ -100,11 +100,18 @@ results-tables:  ## the paper's results tables from the runs on disk, as PNG und
 	$(PY) -m scripts.paper.disregulator_tables
 	$(PY) -m scripts.paper.baseline_tables
 
+paper-figures:  ## the paper's Figures 1 to 5 from Lucy's summaries, the run index and the code, as PNG under tmp/figures/paper/ (gitignored)
+	$(PY) -m scripts.paper.fig_scripted_teammates
+	$(PY) -m scripts.paper.fig_roles_access
+	$(PY) -m scripts.paper.fig_jigsaw
+	$(PY) -m scripts.paper.fig_multidomain
+	$(PY) -m scripts.paper.fig_deep_dive
+
 paper-sources:  ## paper/generated/*.tex from the code, and paper/figures/ copied from tmp/ (scripts/paper/paper_sources.py)
 	$(PY) -m scripts.paper.paper_sources
 
 paper-check:  ## exit 1 when paper/ disagrees with the code or with tmp/; writes nothing
 	$(PY) -m scripts.paper.paper_sources --check
 
-paper: figures tables results-tables paper-sources  ## regenerate every source, then build paper/build/main.pdf with latexmk
+paper: figures tables results-tables paper-figures paper-sources  ## regenerate every source, then build paper/build/main.pdf with latexmk
 	cd paper && latexmk -pdf -interaction=nonstopmode -halt-on-error -outdir=build main.tex

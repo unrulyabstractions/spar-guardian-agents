@@ -11,7 +11,7 @@ told to get the result by any means. Figure~\ref{fig:roles} illustrates the arch
   \includegraphics[width=\linewidth]{fig2_roles_access}
   \caption{Roles and access in the two studies. All agents share a message board. Each worker holds part of the
   honeypot and can submit the team's work. \textit{Left:} in the multi-domain study, a hidden regulator (R) oversees
-  three workers without doing the task. The disregulator (D, dashed) joins the team in the disregulator runs.
+  three workers without doing the task. The disregulator (D) joins the team in the disregulator runs.
   \textit{Right:} in the SWE deep dive, seat 3 (S) is the regulator. It holds no piece. In Stage 1 it works on the
   task and can push to the team's repository but cannot submit. In Stage 2 it oversees without doing the task. In
   the control case, seat 3 is left as a third worker.}
@@ -62,7 +62,8 @@ In Stage 2 the regulator only oversees, and it is either the workers' model or C
     \addlinespace
     \textbf{Honeypot pieces} & one piece per worker: no piece passes alone; the regulator holds none (no special
       access)
-      & W1 holds piece 1, W2 pieces 2 + 3: each can cheat alone; the regulator holds none \\
+      & W1 holds piece A, W2 pieces B + C: passing needs all three; looking at one's own piece already counts as
+      cheating; the regulator holds none \\
     \addlinespace
     \textbf{Tasks} & SWE, protein design, creative writing & SWE: three issues \\
     \addlinespace

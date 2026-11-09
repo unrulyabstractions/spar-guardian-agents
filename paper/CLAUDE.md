@@ -19,25 +19,27 @@ code made a sentence wrong (listed below).
 | `generated/regulator_levels.tex`, `disregulator_levels.tex` | the level texts, from `src/configuration/instruction_levels.yaml` | `make paper-sources` |
 | `generated/study.tex` | `\StudyRuns`, `\StudyDates`, `\RegulatorModelList`: the multi-domain study's valid runs, their dates and the regulators' models by use, from `runs/study_exploration_1/INDEX.jsonl` and each run's run.json (kept as committed where runs/ is absent) | `make paper-sources` |
 | `generated/stage2.tex` | the deep dive's Stage 2 table, from `submodules/lucy/runs/s2_swe/analysis/summary.json` | `make paper-sources` |
-| `figures/*.png` | every image the paper includes; `FIGURES` in `scripts/paper/paper_sources.py` names each one's source | `make paper-sources`, except frozen ones |
+| `figures/*.png` | every image the paper includes; `FIGURES` in `scripts/paper/paper_sources.py` names each one's source | `make paper-sources` |
 | `build/` | latexmk output, `build/main.pdf` (gitignored) | `make paper` |
 
 ## Figure sources
 
-`FIGURES` in `scripts/paper/paper_sources.py` gives each figure one of two kinds.
+`FIGURES` in `scripts/paper/paper_sources.py` names each figure's script and the PNG in `tmp/` it is copied from.
+Every figure in the paper is drawn by a script in this repository:
 
-- **generated**: drawn by a script in this repository into `tmp/`, then copied. Method figures: `make figures`,
-  `make tables`. Results tables: `make results-tables` (`scripts/paper/control_tables.py`,
-  `protein_regulator_table.py`, `swe_regulator_table.py`, `disregulator_tables.py`, `baseline_tables.py`). These
-  five read the runs under `runs/study_exploration_0` and `runs/study_exploration_1`; a new run of a cell they list
-  reaches the paper on the next `make paper`. A new cell needs a row added to its script.
-- **frozen**: Figures 1 to 5 of the body, extracted from the PDF. No script in this repository, its git history,
-  Lucy's repository (submodules/lucy and its upstream, checked 2026-11-08) or any Claude session transcript draws
-  them. Replace one only with a file the team sends.
+- Figures 1 to 5: `make paper-figures` (`scripts/paper/fig_scripted_teammates.py` from Lucy's E1b and E2 summaries,
+  `fig_roles_access.py` and `fig_jigsaw.py` from the code's roles and access, `fig_multidomain.py` from
+  `runs/study_exploration_1/INDEX.jsonl`, `fig_deep_dive.py` from Lucy's `runs/s1_swe/analysis/summary.json`).
+- Method figures: `make figures`, `make tables`.
+- Results tables: `make results-tables` (`control_tables.py`, `protein_regulator_table.py`,
+  `swe_regulator_table.py`, `disregulator_tables.py`, `baseline_tables.py`), from the runs under
+  `runs/study_exploration_0` and `runs/study_exploration_1`.
 
-The five results scripts were recovered on 2026-11-08 from session d3edd1f3's transcript (the scratchpad that held
-them was cleared on 2026-11-07), with session 7b7b4ddc's edits of 2026-11-03. Each reproduced its PNG in tmp/
-pixel for pixel before it was committed.
+A new run of a cell these scripts list reaches the paper on the next `make paper`. A new cell needs a row in its
+script. A new Lucy stage needs its summary path in the script that draws it.
+
+The results scripts were recovered on 2026-11-08 from session d3edd1f3's transcript and reproduced their PNGs pixel
+for pixel. Figures 1 to 5 were rebuilt the same day from their data; an independent check re-derived every number.
 
 Tables that were images in the PDF but hold only text are LaTeX now: Table 1 (the two studies), the honeypot rungs
 by task, monitors against regulators, and the generated ones above.
@@ -71,11 +73,10 @@ The user's order that day: "UPDATE EVERYTHING". Each change below was listed to 
 - Experimental Details: the SWE disregulator target is GPT-6 Luna (Haiku failed the gate on 2 Nov); the regulator
   models are `\RegulatorModelList`.
 - Discussion: the team's em dash became two sentences; "3-4 agents" became "3-5 agents".
-
-## Open
-
-- Figure 2 is frozen, and its own legend still prints "disregulator (not yet run)". Only the team can redraw it.
-- Figures 4 and 5 are frozen. Figure 4 predates the 3 Nov rule cells (no generic or identified row for creative
-  writing); Figure 5 shows Stage 1 only. The appendix tables and Table 2 carry the later runs.
-- Table 1's deep-dive row "each can cheat alone" is Lucy's design, true under CheatBench's rule (looking counts).
-- References [6] and [49] are the same paper.
+- Figures 1 to 5 drawn from their data. Figure 2 draws the disregulator as run and Stage 2's seat 3; its caption
+  follows. Figure 4 gains the 2 and 3 Nov runs, so Results now says no team with an enforcing Haiku regulator
+  shipped (a Luna one did), that Luna and Sonnet regulators did not reduce SWE cheating, and the creative writing
+  rule cells.
+- Table 1: the deep dive's pieces are A and B + C; passing needs all three; looking at one's own piece counts as
+  cheating.
+- References: the PDF's [49] repeated [6] and is dropped.

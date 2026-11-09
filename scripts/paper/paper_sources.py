@@ -10,10 +10,8 @@ preset, the judge and its reasoning effort from settings.JUDGE_MODEL and src/jud
 src/configuration/prompts.yaml and its three report variants), regulator_levels.tex and disregulator_levels.tex (from
 src/configuration/instruction_levels.yaml). Nobody edits these files by hand.
 
-FIGURES names each PNG in paper/figures/ and where it comes from. A `generated` figure is copied from tmp/ after its
-generator runs (`make figures`, `make tables`, `make results-tables`). A `frozen` figure was extracted from the team's
-Google Docs PDF (paper.pdf, 2026-11-08): no script here or in the team's repositories draws it, so it changes only
-when the team sends a new one.
+FIGURES names each PNG in paper/figures/, the PNG in tmp/ it is copied from and the make target whose script draws
+it (`make paper-figures`, `make figures`, `make tables`, `make results-tables`). Every figure has a script here.
 """
 from __future__ import annotations
 
@@ -50,6 +48,7 @@ STAGE2_CELLS = [("3W", "Three workers, no regulator"), ("amb·deepseek", "DeepSe
                 ("amb·haiku", "Haiku regulator, ambiguous")]
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 RESULTS = "make results-tables (scripts/paper/{})"
+PAPER_FIGURES = "make paper-figures (scripts/paper/{})"
 # The judge entries the paper can name. A judge outside this map stops the build, so a new judge reaches the prose.
 JUDGE_NAMES = {"gpt-6-luna": "OpenAI GPT-6 Luna", "gpt-6-sol": "OpenAI GPT-6 Sol"}
 # The regulator's report variants in the paper's prompt box, as levels of instruction_levels.yaml.
@@ -59,47 +58,50 @@ SUFFIX_VARIANTS = [("[Level 1] Ambiguous boundary", "ambiguous"), ("[Level 2] Ex
 
 @dataclass(frozen=True)
 class Figure:
-    kind: str          # generated | frozen
-    source: str        # a path under the repository root, or a note for a frozen figure
-    note: str = ""
+    source: str        # the PNG under tmp/ the script writes, relative to the repository root
+    note: str          # the make target and the script that draws it
 
 
 FIGURES: dict[str, Figure] = {
-    # Main text. Figures 1 to 5 come from the team, not from this repository's code.
-    "fig1_scripted_teammates.png": Figure("frozen", "paper.pdf page 2", "Lucy's Qwen3-32B exploratory runs"),
-    "fig2_roles_access.png": Figure("frozen", "paper.pdf page 4", "the two studies' roles and access"),
-    "fig3_jigsaw.png": Figure("frozen", "paper.pdf page 5", "the jigsaw exploit per task"),
-    "fig4_multidomain.png": Figure("frozen", "paper.pdf page 7", "multi-domain results"),
-    "fig5_swe_deep_dive.png": Figure("frozen", "paper.pdf page 8", "SWE deep dive results"),
+    # Main text: Figures 1 to 5.
+    "fig1_scripted_teammates.png": Figure("tmp/figures/paper/fig1_scripted_teammates.png",
+                                          PAPER_FIGURES.format("fig_scripted_teammates.py")),
+    "fig2_roles_access.png": Figure("tmp/figures/paper/fig2_roles_access.png",
+                                    PAPER_FIGURES.format("fig_roles_access.py")),
+    "fig3_jigsaw.png": Figure("tmp/figures/paper/fig3_jigsaw.png", PAPER_FIGURES.format("fig_jigsaw.py")),
+    "fig4_multidomain.png": Figure("tmp/figures/paper/fig4_multidomain.png",
+                                   PAPER_FIGURES.format("fig_multidomain.py")),
+    "fig5_swe_deep_dive.png": Figure("tmp/figures/paper/fig5_swe_deep_dive.png",
+                                     PAPER_FIGURES.format("fig_deep_dive.py")),
     # Appendix A.
-    "topology_compare.png": Figure("generated", "tmp/figures/method/design/topology_compare.png",
+    "topology_compare.png": Figure("tmp/figures/method/design/topology_compare.png",
                                    "make figures (scripts/paper/figures.py)"),
-    "round_structure.png": Figure("generated", "tmp/figures/method/design/round_structure.png",
+    "round_structure.png": Figure("tmp/figures/method/design/round_structure.png",
                                   "make figures (scripts/paper/figures.py)"),
-    "access.png": Figure("generated", "tmp/figures/method/design/access.png",
+    "access.png": Figure("tmp/figures/method/design/access.png",
                          "make figures (scripts/paper/figures.py)"),
-    "table_collaboration_by_domain.png": Figure("generated", "tmp/tables/method/table_collaboration_by_domain.png",
+    "table_collaboration_by_domain.png": Figure("tmp/tables/method/table_collaboration_by_domain.png",
                                                 "make tables (scripts/paper/tables.py)"),
-    "table_rungs_by_domain.png": Figure("generated", "tmp/tables/method/table_rungs_by_domain.png",
+    "table_rungs_by_domain.png": Figure("tmp/tables/method/table_rungs_by_domain.png",
                                         "make tables (scripts/paper/tables.py)"),
-    "table_rungs.png": Figure("generated", "tmp/tables/method/table_rungs.png",
+    "table_rungs.png": Figure("tmp/tables/method/table_rungs.png",
                               "make tables (scripts/paper/tables.py)"),
     # Appendices B and C: the results tables.
-    "positive_control.png": Figure("generated", "tmp/tables/results/positive_control.png",
+    "positive_control.png": Figure("tmp/tables/results/positive_control.png",
                                    RESULTS.format("control_tables.py")),
-    "negative_control.png": Figure("generated", "tmp/tables/results/negative_control.png",
+    "negative_control.png": Figure("tmp/tables/results/negative_control.png",
                                    RESULTS.format("control_tables.py")),
-    "table_protein_regulators.png": Figure("generated", "tmp/tables/results/table_protein_regulators.png",
+    "table_protein_regulators.png": Figure("tmp/tables/results/table_protein_regulators.png",
                                            RESULTS.format("protein_regulator_table.py")),
-    "table_swe_regulators.png": Figure("generated", "tmp/tables/results/table_swe_regulators.png",
+    "table_swe_regulators.png": Figure("tmp/tables/results/table_swe_regulators.png",
                                        RESULTS.format("swe_regulator_table.py")),
-    "table_swe_disregulators.png": Figure("generated", "tmp/tables/results/table_swe_disregulators.png",
+    "table_swe_disregulators.png": Figure("tmp/tables/results/table_swe_disregulators.png",
                                           RESULTS.format("disregulator_tables.py")),
-    "table_creative_disregulators.png": Figure("generated", "tmp/tables/results/table_creative_disregulators.png",
+    "table_creative_disregulators.png": Figure("tmp/tables/results/table_creative_disregulators.png",
                                                RESULTS.format("disregulator_tables.py")),
-    "solo_vs_solo_told.png": Figure("generated", "tmp/tables/results/solo_vs_solo_told.png",
+    "solo_vs_solo_told.png": Figure("tmp/tables/results/solo_vs_solo_told.png",
                                     RESULTS.format("baseline_tables.py")),
-    "swarm_vs_swarm_told.png": Figure("generated", "tmp/tables/results/swarm_vs_swarm_told.png",
+    "swarm_vs_swarm_told.png": Figure("tmp/tables/results/swarm_vs_swarm_told.png",
                                       RESULTS.format("baseline_tables.py")),
 }
 
@@ -279,9 +281,7 @@ def check() -> list[str]:
     for name, fig in FIGURES.items():
         dest = FIGURE_DIR / name
         if not dest.exists():
-            problems.append(f"MISSING {dest.relative_to(ROOT)} ({fig.kind}: {fig.source})")
-            continue
-        if fig.kind == "frozen":
+            problems.append(f"MISSING {dest.relative_to(ROOT)} ({fig.note}: {fig.source})")
             continue
         src = ROOT / fig.source
         if src.exists() and src.read_bytes() != dest.read_bytes():
@@ -293,7 +293,7 @@ def absent_sources() -> list[str]:
     data = [f"ABSENT  {p.relative_to(ROOT)}; its generated file kept as is" for p in (STUDY_INDEX, STAGE2)
             if not p.exists()]
     return data + [f"ABSENT  {f.source} ({f.note}); paper/figures/{n} kept as is" for n, f in FIGURES.items()
-                   if f.kind != "frozen" and not (ROOT / f.source).exists()]
+                   if not (ROOT / f.source).exists()]
 
 
 def sync() -> None:
@@ -304,7 +304,7 @@ def sync() -> None:
             print(f"wrote  {path.relative_to(ROOT)}")
     for name, fig in FIGURES.items():
         src, dest = ROOT / fig.source, FIGURE_DIR / name
-        if fig.kind == "frozen" or not src.exists():
+        if not src.exists():
             continue
         if not dest.exists() or src.read_bytes() != dest.read_bytes():
             shutil.copyfile(src, dest)
