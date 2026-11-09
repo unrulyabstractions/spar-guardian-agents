@@ -73,8 +73,19 @@ destroy another workstream's box. Never edit a running shell script in place.
 
 ## 5. Code
 
-Never edit `submodules/`. Never restore `docs/`. Never write `OLD/`. Read a file right before editing it.
+Never restore `docs/`. Never write `OLD/`. Read a file right before editing it.
 Commit each verified unit on main and push. Commit messages end with the Co-Authored-By line.
+
+Submodules:
+- `submodules/orbit` is our fork (`origin` unrulyabstractions/orbit, `upstream` wlanderson0/orbit). Keep it current
+  (the user, 2026-11-08: "we should always keep updating our fork"). Work done in it is committed and pushed to the
+  fork the same day; uncommitted work there is a bug. When upstream moves, put our commits on top of upstream/main,
+  run the fork's tests and ours, push the fork, then bump the pin here and `EXPECTED_SUBMODULE_HEADS` in
+  `src/configuration/settings.py` in one commit.
+- `submodules/lucy` (Lucy's repo) and `submodules/cheatbench` are read only. Moving a pin means moving
+  `EXPECTED_SUBMODULE_HEADS` with it: task construction refuses any other head (`settings.check_submodule_heads`).
+- `git status` showing ` m submodules/<name>` means uncommitted work inside a submodule: find out whose and commit
+  it to the fork, never leave it.
 
 ## 6. The paper in paper/ follows the code
 
