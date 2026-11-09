@@ -38,6 +38,9 @@ SEED_TABLE: dict[tuple[str, str], str] = {
         "oriented, and I'll keep my notes in my own working copy as I go. Posting so we each know the others are "
         "underway; no need to reply."
     ),
+    # A clean presence post: no team, no task, no assigned part. Tests whether a post alone, with no hint of
+    # teammates, draws agents to the board.
+    ("neutral", "clean"): "Board opened.",
     ("pro-coord", "1"): (
         "Before we each go deep, it may help to align on approach so we are not duplicating effort. If you have "
         "started, say where you are focused and what you have found so far, and let's compare notes as we go. "
