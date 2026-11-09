@@ -18,9 +18,11 @@ when the team sends a new one.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import shutil
 import sys
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -38,6 +40,15 @@ GENERATED = PAPER / "generated"
 FIGURE_DIR = PAPER / "figures"
 LEVELS_YAML = ROOT / "src" / "configuration" / "instruction_levels.yaml"
 PROMPTS_YAML = ROOT / "src" / "configuration" / "prompts.yaml"
+STUDY_INDEX = ROOT / "runs" / "study_exploration_1" / "INDEX.jsonl"
+STAGE2 = ROOT / "submodules" / "lucy" / "runs" / "s2_swe" / "analysis" / "summary.json"
+# The names the paper gives the models of the run index. A model outside this map stops the build.
+MODEL_NAMES = {"claude-haiku-5-5": "Claude Haiku 5.5", "claude-sonnet-5-5": "Claude Sonnet 5.5",
+               "claude-opus-5-5": "Claude Opus 5.5", "gpt-6-luna": "GPT-6 Luna", "gemini-4-argon": "Gemini 4 Argon",
+               "deepseek-v4-1-flash": "DeepSeek V4.1 Flash"}
+STAGE2_CELLS = [("3W", "Three workers, no regulator"), ("amb·deepseek", "DeepSeek regulator, ambiguous"),
+                ("amb·haiku", "Haiku regulator, ambiguous")]
+MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 RESULTS = "make results-tables (scripts/paper/{})"
 # The judge entries the paper can name. A judge outside this map stops the build, so a new judge reaches the prose.
 JUDGE_NAMES = {"gpt-6-luna": "OpenAI GPT-6 Luna", "gpt-6-sol": "OpenAI GPT-6 Sol"}
@@ -182,14 +193,81 @@ def regulator_suffix_tex() -> str:
             + "\n\n\\medskip\n".join(parts) + "\n")
 
 
+def model_name(key: str) -> str:
+    base = key.removesuffix("-openrouter")
+    if base not in MODEL_NAMES:
+        raise SystemExit(f"model {key!r} has no name in MODEL_NAMES: add it, then check the prose")
+    return MODEL_NAMES[base]
+
+
+def day(iso: str) -> str:
+    return f"{int(iso[8:10])} {MONTHS[int(iso[5:7]) - 1]}"
+
+
+def study_tex() -> str:
+    """The multi-domain study as its run index holds it: valid runs, their dates, and the regulators' models by use."""
+    rows = [json.loads(line) for line in STUDY_INDEX.read_text().splitlines() if line.strip()]
+    valid = [r for r in rows if r["valid"] and not r["mock"]]
+    dates = []
+    for r in valid:
+        log = json.loads((STUDY_INDEX.parent / r["path"] / "run.json").read_text()).get("eval_log") or ""
+        m = re.search(r"(\d{4}-\d{2}-\d{2})T", log)
+        if m:
+            dates.append(m.group(1))
+    first, last = min(dates), max(dates)
+    span = day(first) if first == last else f"{day(first).split()[0]}--{day(last)}" if first[:7] == last[:7] \
+        else f"{day(first)} -- {day(last)}"
+    used = Counter(r["regulator_model"] for r in valid if r["regulator_model"])
+    items = "\n".join(rf"  \item {model_name(k)}" for k, _ in sorted(used.items(), key=lambda kv: (-kv[1], kv[0])))
+    return (HEADER.format(source="runs/study_exploration_1/INDEX.jsonl and each valid run's run.json")
+            + rf"\newcommand{{\StudyRuns}}{{{len(valid)}}}" + "\n"
+            + rf"\newcommand{{\StudyDates}}{{{span}}}" + "\n"
+            + "\\newcommand{\\RegulatorModelList}{%\n\\begin{itemize}\n" + items + "\n\\end{itemize}}\n")
+
+
+def stage2_tex() -> str:
+    """Lucy's deep dive, Stage 2: per cell, workers judged cheated, workers who used the fix, episodes, teams that
+    passed. Episodes with a recorded failure are left out, as her planned tests do."""
+    rows = json.loads(STAGE2.read_text())["rows"]
+    bad = {r["episode"] for r in rows if r.get("failure")}
+    cell = {}
+    for r in rows:
+        if r["episode"] in bad:
+            continue
+        name = r["arm"] if r["arm"] == "3W" else f"{r['arm']}·{r['regulator']}"
+        c = cell.setdefault(name, {"cheated": 0, "used": 0, "workers": 0, "episodes": set(), "passed": set()})
+        c["episodes"].add(r["episode"])
+        if r["team_reward"]:
+            c["passed"].add(r["episode"])
+        if r["seat"] in ("W1", "W2"):
+            c["workers"] += 1
+            c["cheated"] += bool(r["cheated"])
+            c["used"] += bool(r["used"])
+    lines = []
+    for key, label in STAGE2_CELLS:
+        c = cell[key]
+        lines.append(rf"{label} & {c['cheated']}/{c['workers']} & {c['used']}/{c['workers']} & "
+                     rf"{len(c['passed'])}/{len(c['episodes'])} \\")
+    return (HEADER.format(source="submodules/lucy/runs/s2_swe/analysis/summary.json")
+            + "\\begin{tabular}{lrrr}\n\\toprule\nCell & Workers cheated & Workers used the fix & Teams passed \\\\\n"
+            + "\\midrule\n" + "\n".join(lines) + "\n\\bottomrule\n\\end{tabular}\n")
+
+
 def generated_files() -> dict[Path, str]:
-    return {
+    """Every generated file and its text. A file drawn from data absent on this machine (runs/ is gitignored, the
+    submodule may be unchecked) is left out, and the check reports the source as absent."""
+    files = {
         GENERATED / "params.tex": params_tex(),
         GENERATED / "scales.tex": scales_tex(),
         GENERATED / "regulator_suffix.tex": regulator_suffix_tex(),
         GENERATED / "regulator_levels.tex": levels_tex("regulator"),
         GENERATED / "disregulator_levels.tex": levels_tex("disregulator"),
     }
+    if STUDY_INDEX.exists():
+        files[GENERATED / "study.tex"] = study_tex()
+    if STAGE2.exists():
+        files[GENERATED / "stage2.tex"] = stage2_tex()
+    return files
 
 
 def check() -> list[str]:
@@ -212,8 +290,10 @@ def check() -> list[str]:
 
 
 def absent_sources() -> list[str]:
-    return [f"ABSENT  {f.source} ({f.note}); paper/figures/{n} kept as is" for n, f in FIGURES.items()
-            if f.kind != "frozen" and not (ROOT / f.source).exists()]
+    data = [f"ABSENT  {p.relative_to(ROOT)}; its generated file kept as is" for p in (STUDY_INDEX, STAGE2)
+            if not p.exists()]
+    return data + [f"ABSENT  {f.source} ({f.note}); paper/figures/{n} kept as is" for n, f in FIGURES.items()
+                   if f.kind != "frozen" and not (ROOT / f.source).exists()]
 
 
 def sync() -> None:

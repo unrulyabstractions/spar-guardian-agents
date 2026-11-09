@@ -1,13 +1,15 @@
 \section*{Discussion}
 Our results only partially support our first hypothesis. Covert regulators are able to reduce cheating in protein
-design, but barely affect DeepSeek teams working on SWE tasks. Furthermore, in the multi-domain study, a single
+design. On SWE, regulators barely affected DeepSeek teams in the multi-domain study and in Stage 1 of the deep dive.
+In Stage 2, a Haiku regulator that posted early did cut their cheating. Furthermore, in the multi-domain study, a single
 explicit rule naming the exploit did at least as well as the presence of any regulator. We were surprised by two
 results in particular: a regulator that also works on the task mostly changes its own cheating, and workers took a
 teammate's copy of the fix mainly where the regulator had used it.
 
 This suggests regulators need to be more proactive in actively discouraging their peers, and that peer pressure is
-likely less impactful when a regulator acts against its own adopted goals. Currently, we measure regulator
-effectiveness by its impact on the cheating rate on the task, but not why the cheating rate changed---it could be
+likely less impactful when a regulator acts against its own adopted goals. Stage 2 fits this account. The regulator
+that posted before the workers looked cut cheating, and the regulator that watched first did not. Currently, we measure regulator
+effectiveness by its impact on the cheating rate on the task, but not why the cheating rate changed. It could be
 the regulator's oversight, or simply the presence of a collaborator. Future work would also analyze whether the
 regulator is doing its job by measuring things like coverage (whether the regulator inspects each teammate's
 actions) and correction (whether the behavior it flags is actually kept out of the shipped result).
@@ -15,16 +17,21 @@ actions) and correction (whether the behavior it flags is actually kept out of t
 Given that some models have lower propensities to cheat at baseline, they could make for more effective
 regulators, even in teams of other models. We're also interested in investigating how regulators constructed via
 activation-based methods (e.g., persona selection) could differ from those simply told their instructions in their
-system prompt. We have not yet run disregulators, so our second hypothesis remains untested.
+system prompt.
+
+Our disregulator runs do not support our second hypothesis. A disregulator raised how many teams tried to cheat, but
+no team it pushed used the planted work. An enforcing regulator placed beside it held every team at exposure. These
+cells hold two to five runs each. We therefore conjecture that, in our setting, positive peer pressure is at least as
+strong as negative peer pressure.
 
 We focus on a specific communication topology, with explicit instructions to work collaboratively toward a shared
 task, a ready-made communication protocol, and explicit read/write budgets. In reported incidents, they worked as
 solo agents and emergently formed a swarm by building their own communication framework. Our swarms are smaller
-than those found in the wild, with only 3-4 agents. Some emergent behavior and conformity dynamics may arise only
+than those found in the wild, with only 3-5 agents. Some emergent behavior and conformity dynamics may arise only
 with large numbers of agents in a swarm.
 
 Our study is currently limited by small sample sizes. Cells hold 3-18 runs, the multi-domain study currently
-includes only one task per domain, and the deep dive's regulator shares the workers' model. Our tasks are also
+includes only one task per domain, and Stage 1 of the deep dive gives the regulator the workers' model. Our tasks are also
 relatively short and were originally designed for single-agent completion. Swarms operating on tasks that require
 more complex delegation of work may behave differently. These tasks also include explicit honeypots that may look
 like tests, and we do not currently measure evaluation awareness. We do not consider the effects of memory or

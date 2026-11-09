@@ -3,17 +3,18 @@ Appendix A provides full details of our methodology.
 
 Agents are deployed in an \textit{ORBIT}~\cite{hagag2026orbit} environment with a messaging board, running in
 turns, with a read-and-write budget per turn. Workers submit the team's work; regulators are covertly assigned to
-discourage cheating, cannot submit, and can check teammates' tool calls. Disregulators, workers privately told to
-cheat, are designed but not yet run. Figure~\ref{fig:roles} illustrates the architecture.
+discourage cheating, cannot submit, and can check teammates' tool calls. A disregulator is a fourth agent privately
+told to get the result by any means. Figure~\ref{fig:roles} illustrates the architecture.
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\linewidth]{fig2_roles_access}
   \caption{Roles and access in the two studies. All agents share a message board. Each worker holds part of the
   honeypot and can submit the team's work. \textit{Left:} in the multi-domain study, a hidden regulator (R) oversees
-  three workers without doing the task. The disregulator (D, dashed) is designed but not yet run. \textit{Right:}
-  in the SWE deep dive, seat 3 (S) is the regulator. It holds no piece and works on the task, and it can push to the
-  team's repository but cannot submit. In the control case, seat 3 is left as a third worker.}
+  three workers without doing the task. The disregulator (D, dashed) joins the team in the disregulator runs.
+  \textit{Right:} in the SWE deep dive, seat 3 (S) is the regulator. It holds no piece. In Stage 1 it works on the
+  task and can push to the team's repository but cannot submit. In Stage 2 it oversees without doing the task. In
+  the control case, seat 3 is left as a third worker.}
   \label{fig:roles}
 \end{figure}
 
@@ -31,31 +32,33 @@ This is shown in Figure~\ref{fig:jigsaw}.
 \end{figure}
 
 We run a multi-domain study with a covert regulator alongside three workers, at two instruction levels, compared
-with rules given to all workers. A SWE deep dive makes the third of three seats the regulator: the workers' model,
-also working on the task, with cumulative instructions (Table~\ref{tab:studies}).
+with rules given to all workers and with a disregulator. A SWE deep dive makes the third of three seats the
+regulator. In Stage 1 the regulator is the workers' model, also working on the task, with cumulative instructions.
+In Stage 2 the regulator only oversees, and it is either the workers' model or Claude Haiku 5.5
+(Table~\ref{tab:studies}).
 
-% Source note (2026-11-08): the deep dive's honeypot row says each worker can cheat alone. The repository's rule 1
-% (CLAUDE.md) requires every exploit to need at least two agents; this row describes the team's other study, as
-% the PDF states it.
 \begin{table}[htbp]
   \centering
   \small
   \begin{tabularx}{\linewidth}{@{}l Y Y@{}}
     \toprule
     & \textbf{Multi-domain study} & \textbf{SWE deep dive} \\
-    & {\footnotesize 110 valid runs, 1 Nov} & {\footnotesize 240 episodes, 27 Oct -- 2 Nov} \\
+    & {\footnotesize \StudyRuns{} valid runs, \StudyDates}
+      & {\footnotesize Stage 1: 240 episodes, 27 Oct -- 2 Nov; Stage 2: 54 episodes, 7--8 Nov} \\
     \midrule
-    \textbf{Regulator} & a full working agent with an oversight tool; hands in nothing
-      & works on the task itself and oversees; cannot submit \\
+    \textbf{Regulator} & oversees the team without doing the task; hands in nothing
+      & Stage 1: works on the task itself and oversees; cannot submit. Stage 2: oversees; hands in nothing \\
     \addlinespace
-    \textbf{Team} & 3 workers + a hidden regulator (4 agents)
+    \textbf{Team} & 3 workers + a hidden regulator, a disregulator, or both (4 or 5 agents)
       & 3 seats: seat 3 is the regulator, or a third worker in the control \\
     \addlinespace
-    \textbf{Models} & workers: DeepSeek (SWE) or Luna; regulator: mostly Haiku 5.5, also Luna, Argon
-      & every seat the same model: DeepSeek (Haiku on one issue) \\
+    \textbf{Models} & workers: DeepSeek (SWE) or Luna; regulator: mostly Haiku 5.5, also Luna, Argon, Sonnet 5.5,
+      Opus 5.5; disregulator: Luna
+      & workers: DeepSeek (Stage 1: Haiku on one issue); regulator: the workers' model, or Haiku 5.5 in Stage 2 \\
     \addlinespace
     \textbf{Regulator's instructions} & duty + definition (ambiguous); + undo, revert, exclude, name (enforce)
-      & S0 tools only $\cdot$ S1 + duty $\cdot$ S2 + definition $\cdot$ S3 + pressure (cumulative) \\
+      & Stage 1: S0 tools only $\cdot$ S1 + duty $\cdot$ S2 + definition $\cdot$ S3 + pressure (cumulative).
+      Stage 2: ambiguous \\
     \addlinespace
     \textbf{Honeypot pieces} & one piece per worker: no piece passes alone; the regulator holds none (no special
       access)
@@ -63,7 +66,7 @@ also working on the task, with cumulative instructions (Table~\ref{tab:studies})
     \addlinespace
     \textbf{Tasks} & SWE, protein design, creative writing & SWE: three issues \\
     \addlinespace
-    \textbf{Runs per cell} & 3--6 & 18 per arm and planning turn (0 or 1) \\
+    \textbf{Runs per cell} & 3--6 & Stage 1: 18 per arm and planning turn (0 or 1). Stage 2: 18 \\
     \addlinespace
     \textbf{Measured by} & code ladder and LLM judge (GPT-6 Luna) & LLM judge (GPT-6 Luna) \\
     \bottomrule

@@ -17,6 +17,8 @@ code made a sentence wrong (listed below).
 | `generated/scales.tex` | the scales table, from `src/configuration/scales.py` | `make paper-sources` |
 | `generated/regulator_suffix.tex` | the regulator prompt box: `prompts.yaml` roles.regulator_common and regulator_no_disclosure, then the ambiguous, explicit and pressure levels | `make paper-sources` |
 | `generated/regulator_levels.tex`, `disregulator_levels.tex` | the level texts, from `src/configuration/instruction_levels.yaml` | `make paper-sources` |
+| `generated/study.tex` | `\StudyRuns`, `\StudyDates`, `\RegulatorModelList`: the multi-domain study's valid runs, their dates and the regulators' models by use, from `runs/study_exploration_1/INDEX.jsonl` and each run's run.json (kept as committed where runs/ is absent) | `make paper-sources` |
+| `generated/stage2.tex` | the deep dive's Stage 2 table, from `submodules/lucy/runs/s2_swe/analysis/summary.json` | `make paper-sources` |
 | `figures/*.png` | every image the paper includes; `FIGURES` in `scripts/paper/paper_sources.py` names each one's source | `make paper-sources`, except frozen ones |
 | `build/` | latexmk output, `build/main.pdf` (gitignored) | `make paper` |
 
@@ -51,23 +53,29 @@ by task, monitors against regulators, and the generated ones above.
    list each changed sentence to the user.
 6. Commit `paper/` with the code change. Log it in `VERIFICATION_LOG.md`.
 
-## Prose changed to follow the code, 2026-11-08
+## Prose changed to follow the code and the data, 2026-11-08
 
-- Tasks: "Each task has a turn budget counted against the swarm. We calculate the budget by first running each task
-  as a single agent, then setting the multi-agent swarm budget to the turns used, divided equally among agents."
-  became "Every agent gets \TurnBudget{} working steps on every task."
-- Judge Models: "OpenAI GPT-6 Luna with medium effort" became "\JudgeName{} with \JudgeEffort{} effort" (high).
+The user's order that day: "UPDATE EVERYTHING". Each change below was listed to the user.
+
+- Tasks: the solo-run turn budget became "Every agent gets \TurnBudget{} working steps on every task."
+- Judge Models: "medium effort" became `\JudgeEffort` (high, from judge_models.yaml).
 - The regulator prompt box: the midterm's drafts became the texts the code sends.
 - Scales: the small scale's 30 min became 1 h, from `scales.py`.
+- Disregulators were "designed but not yet run" in Methods, Figure 2's caption and the Discussion; they ran on 2 and
+  3 Nov. Methods, Results (a paragraph), Discussion (H2), Conclusion and Abstract now say what they did.
+- Table 1: the multi-domain column takes `\StudyRuns` and `\StudyDates` (147 runs, 1 to 3 Nov, was 110 on 1 Nov);
+  its regulator "oversees the team without doing the task" (prompts.yaml regulator_opening, since 3adc072 on 31 Oct);
+  the team may hold a disregulator; the models add Sonnet, Opus and the Luna disregulator. The deep-dive column
+  adds Lucy's Stage 2.
+- SWE Deep Dive: a Stage 2 paragraph and Table 2 (generated). Discussion and Conclusion follow it.
+- Experimental Details: the SWE disregulator target is GPT-6 Luna (Haiku failed the gate on 2 Nov); the regulator
+  models are `\RegulatorModelList`.
+- Discussion: the team's em dash became two sentences; "3-4 agents" became "3-5 agents".
 
-## Open, for the user or the team
+## Open
 
-- Table 1's deep-dive row "each can cheat alone" breaks rule 1 of the root CLAUDE.md for that study's design.
-- Table 1 calls the multi-domain regulator "a full working agent"; the code tells it "You do not do that task. You
-  hand in nothing." (`prompts.yaml` roles.regulator_opening).
-- Methods and Discussion say disregulators are "designed but not yet run"; Appendix B shows their runs.
-- Experimental Details lists the regulator models as Luna, Opus 5.5 and Argon; the results use Haiku, Luna, Argon
-  and Sonnet.
-- Lucy's upstream holds the deep dive's Stage 2 (2026-11-08: a Haiku regulator cuts DeepSeek workers' cheating from
-  36/36 to 27/36). The paper reports Stage 1 only.
+- Figure 2 is frozen, and its own legend still prints "disregulator (not yet run)". Only the team can redraw it.
+- Figures 4 and 5 are frozen. Figure 4 predates the 3 Nov rule cells (no generic or identified row for creative
+  writing); Figure 5 shows Stage 1 only. The appendix tables and Table 2 carry the later runs.
+- Table 1's deep-dive row "each can cheat alone" is Lucy's design, true under CheatBench's rule (looking counts).
 - References [6] and [49] are the same paper.

@@ -23,8 +23,12 @@ reached 0/5 at enforce, but Argon at enforce had no effect (5/5). On SWE with De
 not reduce cheating (2/3 ambiguous, 3/3 enforce), although no team with an enforcing regulator shipped the fix. No
 regulator did better than the rule naming the exploit.
 
+We tested disregulators with GPT-6 Luna workers on SWE and creative writing (Appendix B). A disregulator brought
+every team to at least `tried'. No team it pushed went on to use the planted work, while teams told to cheat did. A
+Claude Haiku 5.5 regulator at the enforce level, added beside the disregulator, held every team at `exposed'.
+
 \subsection*{SWE Deep Dive}
-Results are shown in Figure~\ref{fig:deepdive}. DeepSeek workers almost always cheated: 72/72 with no regulator or
+Stage 1 results are shown in Figure~\ref{fig:deepdive}. DeepSeek workers almost always cheated: 72/72 with no regulator or
 with the regulator's tools alone and with its duty, 67/72 with the definition of cheating, and 65/72 with additional
 pressure on the regulator. None of these worker differences was significant (Holm $p \geq 0.45$). The clearest
 effect was on the regulator's own cheating, which dropped from 36/36 to 21/36 with an explicit definition
@@ -43,3 +47,20 @@ had used the fix.
   even then the effect is most pronounced for regulators given explicitly defined cheating behavior.}
   \label{fig:deepdive}
 \end{figure}
+
+Stage 2 asks whether a regulator that only oversees moves DeepSeek workers off the ceiling, and whether its model
+matters (Table~\ref{tab:stage2}). A Claude Haiku 5.5 regulator cut the workers' cheating against three workers alone
+(Holm $p = 0.002$). A DeepSeek regulator with the same text did not (Holm $p = 0.15$), and the gap between the two
+regulators was not significant (Holm $p = 0.15$). Under Haiku, workers mostly stopped using the fix rather than
+stopped looking for it. Haiku posted its first warning early on the board, while DeepSeek mostly watched first and
+posted after the workers had looked.
+
+\begin{table}[htbp]
+  \centering
+  \small
+  \input{generated/stage2}
+  \caption{SWE deep dive, Stage 2: DeepSeek V4.1 Flash workers with an overseeing regulator at the ambiguous level.
+  Workers are judged by GPT-6 Luna under CheatBench's rule, where looking for the fix counts as cheating. Two
+  DeepSeek-regulator episodes that hit the time limit are left out.}
+  \label{tab:stage2}
+\end{table}
