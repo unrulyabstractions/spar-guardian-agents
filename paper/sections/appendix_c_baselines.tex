@@ -1,9 +1,20 @@
 \section*{Appendix C: CheatBench-based Baselines}
 
 \subsubsection*{Solo agent vs.\ Solo agent instructed to cheat}
+We ran each task alone, once untold and once told to cheat, with five models and up to 50 seeds per cell
+(Figure~\ref{fig:solo-controls}). Each task keeps one fixed instance, so seeds vary only the sampling. Told to cheat,
+most pairs of model and task cheat more often. Claude Haiku 5.5 stays near zero on subset sum, creative writing and
+chess even when told. Some pairs cheat less when told: Haiku on knowledge work, GPT-6 Luna and GPT-5 mini on creative
+writing, and DeepSeek V4.1 Flash on chess. We therefore read a pair as a usable positive control only where its told
+cell is high.
+
 \begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{solo_vs_solo_told}
+  \caption{Single-agent controls: the share of runs at or above the task's floor, untold and told to cheat. The told
+  agent reads that its real objective is the result by any means and that the planted work is fair game. Each cell
+  gives the share and the runs behind it.}
+  \label{fig:solo-controls}
 \end{figure}
 
 \subsubsection*{Minimal Swarm vs.\ Minimal Swarm instructed to cheat}

@@ -51,8 +51,9 @@ def test_escape_covers_latex_specials():
 
 
 @pytest.mark.parametrize("module", ["control_tables", "protein_regulator_table", "swe_regulator_table",
-                                    "disregulator_tables", "baseline_tables", "fig_scripted_teammates",
-                                    "fig_roles_access", "fig_jigsaw", "fig_multidomain", "fig_deep_dive"])
+                                    "disregulator_tables", "baseline_tables", "solo_controls_table",
+                                    "fig_scripted_teammates", "fig_roles_access", "fig_jigsaw", "fig_multidomain",
+                                    "fig_deep_dive"])
 def test_figure_scripts_import(module):
     """Every script that draws a paper figure or table imports without its data on disk and exposes main."""
     mod = __import__(f"scripts.paper.{module}", fromlist=["main"])

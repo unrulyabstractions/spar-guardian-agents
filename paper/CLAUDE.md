@@ -33,7 +33,10 @@ Every figure in the paper is drawn by a script in this repository:
 - Method figures: `make figures`, `make tables`.
 - Results tables: `make results-tables` (`control_tables.py`, `protein_regulator_table.py`,
   `swe_regulator_table.py`, `disregulator_tables.py`, `baseline_tables.py`), from the runs under
-  `runs/study_exploration_0` and `runs/study_exploration_1`.
+  `runs/study_exploration_0` and `runs/study_exploration_1`; `solo_controls_table.py` (Appendix C's single-agent
+  controls) from `runs/apart_controls/`, the apart controls study. On another machine, fetch it from Hugging Face:
+  `hf download unrulyabstractions/spar-swarm --repo-type dataset --include 'apart_controls/*' --local-dir <tmp>`,
+  then place `<tmp>/apart_controls` at `runs/apart_controls`.
 
 A new run of a cell these scripts list reaches the paper on the next `make paper`. A new cell needs a row in its
 script. A new Lucy stage needs its summary path in the script that draws it.

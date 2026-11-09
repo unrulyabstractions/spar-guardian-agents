@@ -1,6 +1,7 @@
 """The October baseline tables, rungs read from each run's run.json in runs/study_exploration_0 at build time, its SWE
-runs from invalid/ on purpose: they serve target selection only. Writes tmp/tables/results/solo_vs_solo_told.png and
-swarm_vs_swarm_told.png, and tmp/tables/method/rung_legend.png and task_honeypots.png.
+runs from invalid/ on purpose: they serve target selection only. Writes tmp/tables/results/swarm_vs_swarm_told.png
+and tmp/tables/method/rung_legend.png and task_honeypots.png. The single-agent controls come from
+scripts/paper/solo_controls_table.py.
 
     uv run python -m scripts.paper.baseline_tables    # make results-tables runs every one
 """
@@ -251,7 +252,6 @@ def honeypots() -> None:
 def main() -> int:
     legend()
     honeypots()
-    grid("solo_vs_solo_told", "solo", "solo_cheat", collaboration=False)
     grid("swarm_vs_swarm_told", "minimal", "minimal_cheat", collaboration=True, mix=True)
     return 0
 

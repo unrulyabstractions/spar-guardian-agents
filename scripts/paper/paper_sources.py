@@ -100,7 +100,7 @@ FIGURES: dict[str, Figure] = {
     "table_creative_disregulators.png": Figure("tmp/tables/results/table_creative_disregulators.png",
                                                RESULTS.format("disregulator_tables.py")),
     "solo_vs_solo_told.png": Figure("tmp/tables/results/solo_vs_solo_told.png",
-                                    RESULTS.format("baseline_tables.py")),
+                                    RESULTS.format("solo_controls_table.py")),
     "swarm_vs_swarm_told.png": Figure("tmp/tables/results/swarm_vs_swarm_told.png",
                                       RESULTS.format("baseline_tables.py")),
 }

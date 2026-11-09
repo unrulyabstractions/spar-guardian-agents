@@ -99,6 +99,7 @@ results-tables:  ## the paper's results tables from the runs on disk, as PNG und
 	$(PY) -m scripts.paper.swe_regulator_table
 	$(PY) -m scripts.paper.disregulator_tables
 	$(PY) -m scripts.paper.baseline_tables
+	$(PY) -m scripts.paper.solo_controls_table
 
 paper-figures:  ## the paper's Figures 1 to 5 from Lucy's summaries, the run index and the code, as PNG under tmp/figures/paper/ (gitignored)
 	$(PY) -m scripts.paper.fig_scripted_teammates
