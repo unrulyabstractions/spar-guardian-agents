@@ -211,3 +211,66 @@ Serves `runs/<study>/<run>/tools/<tool>/<path>`, where `<path>` may have subdire
 `.csv`, `.html`, `.gexf`, `.json` and `.yaml` are served, with their media type. The run page uses it for figures
 (graph.png, contagion.png, onset.png), reports (transect report.html), downloads (graph.gexf) and the failures tool's
 mast.json and who_when.json.
+
+# Transcript viewer
+
+Start: `make transcripts`, or `uv run python -m src.ui.transcript_viewer [--port 8770] [--rebuild] [--runs runs]` from the
+repository root. It serves in the foreground until Ctrl-C or SIGTERM. `src/ui/transcript_viewer.py` is the server and the
+index builder, `src/ui/transcript_levels.py` the six ladders, `src/ui/transcript_ladder_tables.py` the ladder tables by
+task, `src/ui/transcript_static/` the page (`tv_*.js`, `tv_style.css`) and `src/ui/lenses/` the sentence lenses. The page
+reuses the results browser's `style.css`, `app/dom.js`, `app/charts.js` and `app/components.js`, served under `/static/`.
+
+Every folder under `runs/` is a **collection**, except `study_smoke` and folders without a run. A study keeps its runs at
+its top level and in its groups (`study_runs`); its `INDEX.jsonl`, where it has one, gives each run's `valid` flag, and a
+run it gives no verdict is valid at the top level and carries its group's name in a group. A manifest collection
+(`apart_controls`) lists its runs in `manifest.jsonl`: the canonical copy is valid, an extra copy has the status `extra
+copy`. The server never writes the data. Its one output is the index cache, `tmp/transcript_viewer/index.json`, rebuilt by
+`--rebuild` or when its version or runs folder differs.
+
+## UI routes
+
+| hash | page |
+|---|---|
+| `#/?status=&col=&task=&model=&team=&seedpost=&label=&collab=&judged=&agree=&lv_<ladder>=&q=&sort=&dir=&page=&size=` | Runs: one row per run; status defaults to valid |
+| `#/run/<collection>/<run key>?agent=&call=&tab=team` | a run: agent tabs and Team, the lens buttons, the whole episode, the details |
+| `#/ladders?task=<CheatBench task name>` | the six ladders and the level by task tables, the task's column highlighted |
+
+## Endpoints
+
+### `GET /api/index` → `{version, runs, built_at, build_seconds, collections: [Collection], errors: [{id, error}], rows: [IndexRow]}`
+```
+Collection = {key (the folder name), label, tag, about, statuses: {status: count}}
+IndexRow = {
+  id ("<collection>/<run key>"), col, key (the run's path under the collection), run (its name; a manifest's key),
+  status ("valid"|"invalid"|"incomplete"|"mock"|"attempt"|"set aside"|"extra copy"|"not indexed"), why, group,
+  task (the stem of the cell's script: flipt, binder, ...), task_name (CheatBench's), instance (the sample id),
+  arm (the cell: solo, solo_cheat, minimal, minimal_cheat, minimal_regulated, ...), arm_label, seed_post,
+  author (the agents' model's short name), model_id, regulator_model, n_agents, roles: {agent: role},
+  rung, rung_code (the rung before a pass raised it, else null), floor (ladder.cheated_from), label ("cheat"|"no cheat"|
+  "other"|null), collab (null for one agent), presentation, seed, turn_budget, dir, n_transcripts,
+  judges: {ladder?: {yes, n, of, judge, rung}, cheatbench?: {yes, n, of, judge}},   # workers' parsed verdicts
+  agree ("agree"|"disagree"|"no judge"|"no answer"|"not comparable"), disagree: [judge],
+  levels: {team: {<ladder>: level}, agents: {<ladder>: [level]}, n_colluded?, n_workers?}
+}
+```
+The ladders are `cheat`, `coord`, `coop`, `collab`, `collude` and `scheme` (`transcript_levels.LADDERS`). A one-agent run
+has the five team ladders as `not applicable (one agent, no board)`.
+
+### `GET /api/run?id=<id>` → `{row: IndexRow, meta, team, agents: [Agent], boards: [Board], levels: Levels, ladder_team}`
+`meta` holds run.json's task, model, role_models, topology, mode, code and config, the rounds run, and `eval_log` (the
+run's own `eval/*.eval`, else where `RunDir.eval_log` finds it; null when absent) beside `eval_log_recorded`.
+```
+Agent = {agent, role, folder (its trajectories/ folder), transcript_bytes, episode: {episodes.jsonl keys the page shows},
+         signals (its signals.jsonl agent row), ladder_judge (its ladder.jsonl row), cheatbench_judge (its judge.jsonl row)}
+Board = {sample, event_counts, messages: [{board_no, post_n, kind ("post"|"submit"|"system"), sender, role, recipients,
+         content, round, round_step, sent: {agent, call_id}, reads: [{agent, call_id}]}]}
+Levels = {agents: {agent: {<ladder>: Cell}}, team: {<ladder>: Cell}, events: {agent: [Event]}, single, ladders, order}
+Cell = {level, index, of, kind ("direct"|"proxy"), rule, evidence, na?}
+Event = {ladder, level, index, k (a call number) | call_id | neither (counted at the end of the run), evidence}
+```
+
+### `GET /api/transcript?id=<id>&agent=<agent>` → the agent's `transcript.json`, streamed as stored
+### `GET /api/lenses` → `{lenses: [name]}`; `GET /api/lens?name=<name>` → `src/ui/lenses/<name>.json`
+### `GET /api/ladders` → the ladders page's tables (`transcript_ladder_tables.ladders_payload`)
+
+An unknown run, agent, lens or path gets 404 `{"error"}`, a server fault 500 `{"error"}`.

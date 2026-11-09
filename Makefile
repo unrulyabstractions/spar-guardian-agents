@@ -6,8 +6,8 @@ TOOLS := uv run --project tools python
 RUN ?= riemann_minimal
 SAMPLES ?= 15
 
-.PHONY: help ui ui-stop smoke smoke-swe smoke-kw smoke-interview smoke-protein smoke-creative smoke-chess smoke-access \
-	smoke-load smoke-all test test-tools lint \
+.PHONY: help ui ui-stop transcripts smoke smoke-swe smoke-kw smoke-interview smoke-protein smoke-creative smoke-chess \
+	smoke-access smoke-load smoke-all test test-tools lint \
 	tools-setup scout docent graph transect contagion failures hawk analyse figures tables \
 	results-tables paper-figures paper-sources paper-check paper
 
@@ -19,6 +19,9 @@ ui:  ## open the results browser (starts the server when needed)
 
 ui-stop:  ## stop the results browser started by make ui
 	@$(PY) -m src ui stop
+
+transcripts:  ## serve the transcript viewer on port 8770 in the foreground (REBUILD=1 rebuilds its index)
+	@$(PY) -m src.ui.transcript_viewer $(if $(REBUILD),--rebuild)
 
 smoke:  ## openmath mock-model scenarios on the real sandbox, no model spend
 	$(PY) -m tests.smoke.openmath
