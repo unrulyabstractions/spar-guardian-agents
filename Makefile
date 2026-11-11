@@ -6,9 +6,10 @@ TOOLS := uv run --project tools python
 RUN ?= riemann_minimal
 SAMPLES ?= 15
 
-.PHONY: help ui ui-stop smoke smoke-swe smoke-kw smoke-interview smoke-protein smoke-creative smoke-chess smoke-access \
-	smoke-load smoke-all test test-tools lint \
-	tools-setup scout docent graph transect contagion failures hawk analyse figures tables
+.PHONY: help ui ui-stop transcripts smoke smoke-swe smoke-kw smoke-interview smoke-protein smoke-creative smoke-chess \
+	smoke-access smoke-load smoke-all test test-tools lint \
+	tools-setup scout docent graph transect contagion failures hawk analyse figures tables \
+	results-tables paper-figures paper-sources paper-check paper
 
 help:  ## list the targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/\t/' | column -t -s "$$(printf '\t')"
@@ -18,6 +19,9 @@ ui:  ## open the results browser (starts the server when needed)
 
 ui-stop:  ## stop the results browser started by make ui
 	@$(PY) -m src ui stop
+
+transcripts:  ## serve the transcript viewer on port 8770 in the foreground (REBUILD=1 rebuilds its index)
+	@$(PY) -m src.ui.transcript_viewer $(if $(REBUILD),--rebuild)
 
 smoke:  ## openmath mock-model scenarios on the real sandbox, no model spend
 	$(PY) -m tests.smoke.openmath
@@ -55,8 +59,8 @@ test:  ## offline unit tests: tests/unit
 test-tools:  ## offline unit tests of the analysis tools, in their own environment: tests/tools
 	$(TOOLS) -m pytest tests/tools -q
 
-lint:  ## ruff over src, tests, examples, scripts and tools (ruff.toml: 120 columns, sorted imports)
-	uvx ruff check src tests examples scripts tools
+lint:  ## ruff over src, tests, examples, elicitation, scripts and tools (ruff.toml: 120 columns, sorted imports)
+	uvx ruff check src tests examples elicitation scripts tools
 
 tools-setup:  ## the analysis environment: tools/.venv (Python 3.12) and MAST's taxonomy texts
 	uv sync --project tools --python 3.12
@@ -91,3 +95,27 @@ figures:  ## the paper's design figures and one setup figure per task, as PNG un
 
 tables:  ## the paper's tables (scales, rungs against verdict fields, rungs and collaboration by domain) as PNG under tmp/tables/method/ (gitignored)
 	$(PY) -m scripts.paper.tables
+
+results-tables:  ## the paper's results tables from the runs on disk, as PNG under tmp/tables/results/ (gitignored)
+	$(PY) -m scripts.paper.control_tables
+	$(PY) -m scripts.paper.protein_regulator_table
+	$(PY) -m scripts.paper.swe_regulator_table
+	$(PY) -m scripts.paper.disregulator_tables
+	$(PY) -m scripts.paper.baseline_tables
+	$(PY) -m scripts.paper.solo_controls_table
+
+paper-figures:  ## the paper's Figures 1 to 5 from Lucy's summaries, the run index and the code, as PNG under tmp/figures/paper/ (gitignored)
+	$(PY) -m scripts.paper.fig_scripted_teammates
+	$(PY) -m scripts.paper.fig_roles_access
+	$(PY) -m scripts.paper.fig_jigsaw
+	$(PY) -m scripts.paper.fig_multidomain
+	$(PY) -m scripts.paper.fig_deep_dive
+
+paper-sources:  ## paper/generated/*.tex from the code, and paper/figures/ copied from tmp/ (scripts/paper/paper_sources.py)
+	$(PY) -m scripts.paper.paper_sources
+
+paper-check:  ## exit 1 when paper/ disagrees with the code or with tmp/; writes nothing
+	$(PY) -m scripts.paper.paper_sources --check
+
+paper: figures tables results-tables paper-figures paper-sources  ## regenerate every source, then build paper/build/main.pdf with latexmk
+	cd paper && latexmk -pdf -interaction=nonstopmode -halt-on-error -outdir=build main.tex

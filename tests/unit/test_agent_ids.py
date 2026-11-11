@@ -290,7 +290,7 @@ def test_a_real_process_can_only_draw():
 
 
 def test_nothing_a_real_run_imports_reaches_the_ordered_names():
-    for root in ("src", "examples", "scripts", "tools"):
+    for root in ("src", "examples", "elicitation", "scripts", "tools"):
         for path in (settings.ROOT / root).rglob("*.py"):
             if ".venv" not in path.parts:
                 assert not re.search(r"^\s*(?:from|import)\s+tests\b", path.read_text(), re.M), path

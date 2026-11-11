@@ -36,9 +36,14 @@ later through the batch API. The time limit is the scale's."""
 def parse_example_arguments(script: Path, description: str | None, argv: list[str] | None = None,
                             default_row: str | None = None) -> argparse.Namespace:
     """The shared arguments, parsed: the models resolved, the settings after the defaults. The script's path names
-    the program and the run. A script that passes default_row also takes --row, the benchmark row to run; any other
-    script refuses --row, so a row is never silently ignored."""
-    prog = f"python -m examples.{script.resolve().parent.name}.{script.stem}"
+    the program and the run: examples/swe/flipt_minimal.py is `python -m examples.swe.flipt_minimal`, and
+    elicitation/swe.py is `python -m elicitation.swe`. A script outside the repository reads as an example. A script
+    that passes default_row also takes --row, the benchmark row to run; any other script refuses --row, so a row is
+    never silently ignored."""
+    path = script.resolve()
+    module = (path.relative_to(settings.ROOT).with_suffix("").parts if path.is_relative_to(settings.ROOT)
+              else ("examples", path.parent.name, path.stem))
+    prog = "python -m " + ".".join(module)
     parser = argparse.ArgumentParser(prog=prog, description=description,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     add_config_arguments(parser)

@@ -73,5 +73,33 @@ destroy another workstream's box. Never edit a running shell script in place.
 
 ## 5. Code
 
-Never edit `submodules/`. Never restore `docs/`. Never write `OLD/`. Read a file right before editing it.
+Never restore `docs/`. Never write `OLD/`. Read a file right before editing it.
 Commit each verified unit on main and push. Commit messages end with the Co-Authored-By line.
+
+Submodules:
+- `submodules/orbit` is our fork (`origin` unrulyabstractions/orbit, `upstream` wlanderson0/orbit). Keep it current
+  (the user, 2026-11-08: "we should always keep updating our fork"). Work done in it is committed and pushed to the
+  fork the same day; uncommitted work there is a bug. When upstream moves, put our commits on top of upstream/main,
+  run the fork's tests and ours, push the fork, then bump the pin here and `EXPECTED_SUBMODULE_HEADS` in
+  `src/configuration/settings.py` in one commit.
+- `submodules/lucy` (Lucy's repo) and `submodules/cheatbench` are read only. Moving a pin means moving
+  `EXPECTED_SUBMODULE_HEADS` with it: task construction refuses any other head (`settings.check_submodule_heads`).
+- `git status` showing ` m submodules/<name>` means uncommitted work inside a submodule: find out whose and commit
+  it to the fork, never leave it.
+
+## 6. The paper in paper/ follows the code
+
+`paper/` is the team's paper in LaTeX, transcribed on 2026-11-08 from their Google Docs PDF. It must say what the
+code, the runs and Lucy's latest results say. `paper/CLAUDE.md` holds the procedure; read it before touching `paper/` or anything the paper describes.
+
+- Any change to what the paper describes (`src/configuration/`, the ladder, the domains, the board, the roles,
+  `scripts/paper/`, new runs, or a new stage in `submodules/lucy`) updates `paper/` in the same commit: `make paper`,
+  then `make paper-check`.
+- `make test` fails when `paper/generated/` is stale (`tests/unit/test_paper_sources.py`).
+- Never hand-edit `paper/generated/`. When anything makes a sentence, table or figure of the paper wrong, fix it in
+  the same turn: rewrite the sentence in the user's voice (`writing-voice` skill), redraw the figure from its data,
+  and list each change to the user. Never leave an "open" list and never wait to be asked twice (the user,
+  2026-11-08: "I SAID UPDATE EVERYTHING TODAY, WHY ARE U WAITING", "WHY IS THERE still open"). Every figure has a
+  script; a new one gets a script before it enters the paper.
+- Other branches never go into main unless the user says so.
+- View every page you changed in `paper/build/main.pdf` before calling it done.
