@@ -184,7 +184,7 @@ Message = {role: "system"|"user"|"assistant"|"tool", id, text, reasoning, flags:
            tool_calls?: [{id, function, arguments}], model? (assistant), tool_call_id?, function?, error? (tool)}
 ```
 `flags` mark provider-only or altered messages: `turn_rules` (a board notice or continue prompt the turn rules placed in
-the input, or a system message without ORBIT's assistant paragraph, as the filter sent it), `redacted` (a defense withheld this message's content; `text` is the placeholder and `withheld_text` the
+the input, or a system message without the agent loop's assistant paragraph, as the filter sent it), `redacted` (a defense withheld this message's content; `text` is the placeholder and `withheld_text` the
 original), `output_blocked` (a defense blocked this call's own completion), `refusal_in_history` (an assistant message
 whose text is the defense's refusal sentence). A call's flags are its input messages' flags plus `output_blocked`.
 

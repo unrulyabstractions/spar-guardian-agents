@@ -93,6 +93,16 @@ def launch_dir(launch: str) -> Path:
     return BOXES / f"launch-{launch}"
 
 
+# inspect-ai as a package list pins it: a release, or the git commit ORBIT 2.0 names (its pyproject.toml), which uv
+# freezes as "inspect-ai @ git+<url>@<40 hex digits>".
+INSPECT_PIN = re.compile(rb"^inspect-ai(==\S+| @ git\+\S+@[0-9a-f]{40})$", re.M)
+
+
+def pins_inspect(requirements: bytes) -> bool:
+    """Whether a package list (uv pip freeze) pins inspect-ai to one release or one git commit."""
+    return INSPECT_PIN.search(requirements) is not None
+
+
 def fleet_pin(commit: str = "HEAD") -> dict:
     """What every box of a launch runs: the commit, which origin/main must hold since the boxes clone it from GitHub,
     the .venv's package list (uv pip freeze, editable installs left out), and the Python and uv versions."""
@@ -105,7 +115,7 @@ def fleet_pin(commit: str = "HEAD") -> dict:
     if run("git", "merge-base", "--is-ancestor", commit, "origin/main").returncode:
         raise RuntimeError(f"{commit} is not on origin/main: push it first, since every box clones it")
     freeze = run("uv", "pip", "freeze", "--python", ".venv", "--exclude-editable")
-    if freeze.returncode or not re.search(rb"^inspect-ai==", freeze.stdout, re.M):
+    if freeze.returncode or not pins_inspect(freeze.stdout):
         raise RuntimeError(f"the .venv's package list could not be read or lacks inspect-ai: {freeze.stderr[-300:]}")
     python = run(str(ROOT / ".venv" / "bin" / "python"), "-c", "import platform; print(platform.python_version())")
     uv = run("uv", "--version").stdout.decode().split()

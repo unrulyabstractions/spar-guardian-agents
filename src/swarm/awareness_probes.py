@@ -8,7 +8,7 @@ history without tools, the question is asked again on the history written out as
 
 Each agent's conversation is read from the sample's messages through ORBIT's attribution store
 (eval_sample_view.agent_messages, written with history_projection="all"), with each system message as the provider
-received it: the turn rules' filter takes ORBIT's assistant paragraph out of every call
+received it: the turn rules' filter takes the agent loop's assistant paragraph out of every call
 (turn_rules.provider_system_text), so the replay does too. Each agent is asked by its own model: its role's model when
 the run gave the role one (metadata["cheatbench"]["role_models"]), else the eval's model.
 """
@@ -49,7 +49,8 @@ def flatten(messages: list) -> list:
 
 
 def provider_messages(messages: list) -> list:
-    """The conversation as the provider received it: each system message without ORBIT's assistant paragraph."""
+    """The conversation as the provider received it: each system message without the agent loop's assistant
+    paragraph."""
     return [m.model_copy(update={"content": provider_system_text(m.text)}) if isinstance(m, ChatMessageSystem) else m
             for m in messages]
 

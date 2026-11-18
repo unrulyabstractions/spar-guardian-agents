@@ -14,16 +14,23 @@ from types import SimpleNamespace
 import pytest
 from inspect_ai.log import EvalDataset, EvalLog, EvalSample, EvalSpec, write_eval_log
 from inspect_ai.model import ChatMessageSystem, ChatMessageUser, ContentReasoning, ContentText
-from orbit.agents.turn_react import DEFAULT_ASSISTANT_PROMPT_TURN_REACT
 
 from src.domains.knowledge import KnowledgeWork
 from src.export import _export_run_blocks as blocks
 from src.export import run_export
 from src.export.atif_transcripts import build_trajectory, split_content
-from src.export.eval_sample_view import ATTRIBUTION_KEY, SampleView, billed_cost, usage_dict, usage_from_events
+from src.export.eval_sample_view import (
+    ATTRIBUTION_KEY,
+    SampleView,
+    billed_cost,
+    span_owners,
+    usage_dict,
+    usage_from_events,
+)
 from src.models import model_registry as models
 from src.swarm.awareness_probes import provider_messages
 from src.swarm.turn_rules import TURN_RULES_TAG
+from src.swarm.turn_rules._turn_rules_filter import ASSISTANT_PROMPT, ORBIT_1X_ASSISTANT_PROMPT
 from src.ui._eval_log_views import message_dict
 
 
@@ -310,10 +317,11 @@ def test_an_older_log_reads_orbits_own_submit_as_a_hand_in_alone_and_in_solo_tas
     assert blocks.shutdown_rate(solo, records) is None
 
 
-def sample_with_system(rewrite_logged: bool) -> SampleView:
-    """One agent whose stored system message carries ORBIT's assistant paragraph after ours, with the filter's info
-    event of the rewrite when rewrite_logged (a run made since the filter takes the paragraph out)."""
-    system = ChatMessageSystem(content=f"You are a01.\n\n{DEFAULT_ASSISTANT_PROMPT_TURN_REACT}")
+def sample_with_system(rewrite_logged: bool, paragraph: str = ASSISTANT_PROMPT) -> SampleView:
+    """One agent whose stored system message carries react()'s assistant paragraph after ours (Inspect's under ORBIT
+    2.0, ORBIT's own in a 1.x log), with the filter's info event of the rewrite when rewrite_logged (a run made since
+    the filter takes the paragraph out)."""
+    system = ChatMessageSystem(content=f"You are a01.\n\n{paragraph}")
     messages = [system, ChatMessageUser(content="the task")]
     store = {ATTRIBUTION_KEY: [{"agent": "a01", "index": 0}, {"agent": "a01", "index": 1}]}
     info = SimpleNamespace(event="info", span_id=None, data={TURN_RULES_TAG: {"kind": "system_prompt", "agent": "a01"}})
@@ -322,19 +330,36 @@ def sample_with_system(rewrite_logged: bool) -> SampleView:
                       error=None, total_time=None)
 
 
-def test_the_transcript_shows_the_system_text_the_provider_received():
-    _, info = build_trajectory(sample_with_system(rewrite_logged=True), "a01")
+@pytest.mark.parametrize("paragraph", [ASSISTANT_PROMPT, ORBIT_1X_ASSISTANT_PROMPT], ids=["inspect_react", "orbit_1x"])
+def test_the_transcript_shows_the_system_text_the_provider_received(paragraph):
+    _, info = build_trajectory(sample_with_system(True, paragraph), "a01")
     assert info["system_prompt"] == "You are a01."
-    # a run whose filter never rewrote it sent ORBIT's paragraph, so the transcript keeps it
-    _, old = build_trajectory(sample_with_system(rewrite_logged=False), "a01")
-    assert old["system_prompt"].endswith(DEFAULT_ASSISTANT_PROMPT_TURN_REACT)
-    stored = sample_with_system(rewrite_logged=True).messages[0]
+    # a run whose filter never rewrote it sent the paragraph, so the transcript keeps it
+    _, old = build_trajectory(sample_with_system(False, paragraph), "a01")
+    assert old["system_prompt"].endswith(paragraph)
+    stored = sample_with_system(True, paragraph).messages[0]
     shown = message_dict(stored, set(), rewritten=True)
     assert (shown["text"], shown["flags"]) == ("You are a01.", ["turn_rules"])
     assert message_dict(stored, set())["text"] == stored.text
     # the awareness probes replay the conversation as the provider received it
-    replayed = provider_messages(sample_with_system(rewrite_logged=True).messages)
+    replayed = provider_messages(sample_with_system(True, paragraph).messages)
     assert [m.text for m in replayed] == ["You are a01.", "the task"]
+
+
+def test_the_swarm_controllers_span_is_no_agent():
+    """ORBIT 2.0 runs the agents inside inspect_swarm's controller, whose span is of type agent as theirs are."""
+    def begin(span_id, kind, name, parent):
+        return SimpleNamespace(event="span_begin", id=span_id, type=kind, name=name, parent_id=parent)
+
+    events = [begin("loop", "experiment_loop", "experiment_loop", None), begin("c", "agent", "swarm", "loop"),
+              begin("m1", "agent", "a01", "c"), begin("m2", "agent", "swarm", "c"),      # an agent may be named swarm
+              begin("t", "tool", "shell", "m1"), begin("d", "orbit.defense", "monitor", "m1")]
+    owner = span_owners(SimpleNamespace(events=events))
+    assert owner("c") == owner("loop") == (None, None)
+    assert owner("m1") == ("a01", None) and owner("m2") == ("swarm", None)
+    assert owner("t") == ("a01", "inside tool shell") and owner("d") == ("a01", "monitor")
+    # an ORBIT 1.x log has no controller: an agent named swarm holds no agent's span and stays an agent
+    assert span_owners(SimpleNamespace(events=[begin("x", "agent", "swarm", None)]))("x") == ("swarm", None)
 
 
 def step(*calls):

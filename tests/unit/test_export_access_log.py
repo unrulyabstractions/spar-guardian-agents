@@ -156,6 +156,11 @@ def test_a_nonce_in_argv_makes_a_control_only_under_the_harness(shape, origin):
     ("timeout -k 5s 300s bash --login -c python3 -", "agent"),
     ("bash --login -c cat /opt/key.log", "agent"),
     ("timeout -k 5s 60s bash --login -c", "agent"),                 # an empty command
+    ("/usr/bin/timeout -k 5s 300s bash --login -c python3 -", "agent"),     # Inspect 0.3.290 names timeout by its path
+    ("/usr/bin/timeout -k 5s 60s bash --login -c", "agent"),
+    ("/usr/bin/timeout -k 5s 60s bash -c cat /opt/key.log", "harness"),
+    ("/usr/bin/timeout -k 5s 60s python3 -I -", "harness"),
+    ("/usr/bin/mytimeout -k 5s 60s bash --login -c ls", "harness"),          # no wrapper of Inspect's
     ("bash -lc git status", "harness"),
     ("bash -c cat /opt/key.log", "harness"),
     ("timeout -k 5s 60s bash -c cat /opt/key.log", "harness"),
@@ -247,6 +252,8 @@ def test_the_tools_hash_equals_the_daemons_with_and_without_timeout():
     wanted = daemon.exec_digest([b"bash", b"--login", b"-c", b"cat 'a b'"])
     assert export.exec_digests(event) == {wanted}
     assert daemon.exec_digest([b"timeout", b"-k", b"5s", b"9s", b"bash", b"--login", b"-c", b"cat 'a b'"]) == wanted
+    assert daemon.exec_digest([b"/usr/bin/timeout", b"-k", b"5s", b"9s", b"bash", b"--login", b"-c",
+                               b"cat 'a b'"]) == wanted
 
 
 def test_only_a_shell_or_python_call_is_a_call_the_log_can_match():

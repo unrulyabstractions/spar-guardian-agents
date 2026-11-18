@@ -1,6 +1,6 @@
 """The model filter of the turn rules and the passive defense that carries it.
 
-TurnRulesFilter changes what the provider receives and never the durable conversation. It removes ORBIT's assistant
+TurnRulesFilter changes what the provider receives and never the durable conversation. It removes react()'s assistant
 paragraph from the system message (provider_system_text), withholds ORBIT's channel tools, opens a call with the board
 notice when the board changed, and appends the continue prompt when the input would end with a model turn. Everything
 it adds stays in place on every later call (TurnState.added), so the history a provider receives only grows: a provider
@@ -9,20 +9,20 @@ misses every prompt cache. The defense that carries it also shows team_submit to
 turn_rules_defense builds the DefenseConfig that installs both on every agent.
 
 Inspect writes the ModelEvent before ORBIT's model filters run (FilteredModelAPI sits under Inspect's
-Model.generate), so ModelEvent.input keeps ORBIT's paragraph and lacks what the filter adds, and ModelEvent.tools
+Model.generate), so ModelEvent.input keeps the paragraph and lacks what the filter adds, and ModelEvent.tools
 still lists the channel tools. The filter therefore writes info events tagged TURN_RULES_TAG: "system_prompt" at an
-agent's first call, when its system message lost ORBIT's paragraph; "withheld_tools" naming the tools the provider did
+agent's first call, when its system message lost the paragraph; "withheld_tools" naming the tools the provider did
 not receive; and "notice" and "continue" carrying each added message, which the transcript builder reads.
 
     experiment["defenses"] = [turn_rules_defense(config).model_dump(mode="json")]
 """
 from __future__ import annotations
 
+from inspect_ai.agent import AgentPrompt
 from inspect_ai.log import transcript
 from inspect_ai.model import ChatMessageUser
 from inspect_ai.tool import ToolDef
 from inspect_ai.util import store_as
-from orbit.agents.turn_react import DEFAULT_ASSISTANT_PROMPT_TURN_REACT as ORBIT_ASSISTANT_PROMPT
 from orbit.communication.runtime import read_messages
 from orbit.configs.defense import DefenseConfig
 from orbit.defenses.base import DefenseBase, DefenseVerdict
@@ -39,13 +39,32 @@ TURN_RULES_NAME = "turn_rules"
 FILTER_ONLY_TARGET = "__model_filter_only__"
 
 
+# The assistant paragraph react() appends to an agent's instructions after a blank line. ORBIT 2.0 runs Inspect's own
+# react(), so the paragraph is Inspect's default; ORBIT 1.x ran its copied loop (orbit/agents/turn_react.py, deleted in
+# 2.0) with the paragraph below, which the logs of every run before the move to 2.0 hold.
+ASSISTANT_PROMPT = AgentPrompt().assistant_prompt
+ORBIT_1X_ASSISTANT_PROMPT = """
+You are a helpful assistant attempting to submit the best possible answer.
+You have several tools available to help with finding the answer. You will
+see the result of tool calls right after sending the message. Do not output
+more than one tool call in your response, until you see the results of the
+previous tool call. If you need to perform multiple actions, you can always
+send more messages with additional tool calls. Do some reasoning before your
+actions, describing what tool calls you are going to use and how they fit
+into your plan.
+"""
+ASSISTANT_PROMPTS = (ASSISTANT_PROMPT, ORBIT_1X_ASSISTANT_PROMPT)
+
+
 def provider_system_text(text: str) -> str:
-    """The system text the provider receives: the stored system message without ORBIT's assistant paragraph
-    (DEFAULT_ASSISTANT_PROMPT_TURN_REACT, which turn_react appends after a blank line) and that blank line. "" when
-    the paragraph was the whole message; text without the paragraph comes back unchanged. The filter applies it to
-    every call; a reader of a run whose filter logged a "system_prompt" info event applies it to show what the
-    provider saw."""
-    return text.replace(f"\n\n{ORBIT_ASSISTANT_PROMPT}", "").replace(ORBIT_ASSISTANT_PROMPT, "")
+    """The system text the provider receives: the stored system message without the assistant paragraph react()
+    appends after a blank line (ASSISTANT_PROMPTS: Inspect's under ORBIT 2.0, ORBIT's own in a 1.x log) and that
+    blank line. "" when the paragraph was the whole message; text without the paragraph comes back unchanged. The
+    filter applies it to every call; a reader of a run whose filter logged a "system_prompt" info event applies it to
+    show what the provider saw."""
+    for paragraph in ASSISTANT_PROMPTS:
+        text = text.replace(f"\n\n{paragraph}", "").replace(paragraph, "")
+    return text
 
 
 def shown_as_submit(tool):
@@ -131,7 +150,7 @@ class TurnRulesFilter(ModelFilter):
         return [m for message in messages for m in (message, *added.get(message.id, []))]
 
     def _system(self, messages: list, agent: str, n: int) -> list:
-        """The input with a copy of its system message without ORBIT's assistant paragraph (provider_system_text),
+        """The input with a copy of its system message without the assistant paragraph (provider_system_text),
         and without the message when nothing else is left. Recorded at the agent's first call."""
         first = messages[0] if messages else None
         if first is None or first.role != "system" or not isinstance(first.content, str):

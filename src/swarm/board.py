@@ -15,7 +15,8 @@ channel_post, channel_read and channel_list to every agent as soon as a Communic
 turn_rules/_turn_rules_filter.py withholds them from the provider.
 
 The tools keep no store of their own. They read and write ORBIT's communication store (orbit/communication/):
-    board_post    send_message, as channel_post does, so exports, the transcript and the browser see a normal post
+    board_post    async_send_message, as channel_post does, so exports, the transcript and the browser see a normal
+                  post; in a run it travels ORBIT 2.0's swarm bus
     board_read    read_messages for the selection, record_read for the read event and its receipt, which calls
                   delivery.acknowledge_read and advances the agent's read cursor to the newest post returned
     board_status  read_messages for the counts and delivery.unread_messages for "new": posts by others above the
@@ -45,7 +46,7 @@ from inspect_ai.tool import ToolDef, ToolError
 from inspect_ai.util import store_as
 from orbit.communication.delivery import unread_messages
 from orbit.communication.errors import ChannelCapacityError
-from orbit.communication.runtime import initialize_communication, read_messages, record_read, send_message
+from orbit.communication.runtime import async_send_message, initialize_communication, read_messages, record_read
 from orbit.communication.state import CommunicationMessage, CommunicationState
 from orbit.configs.communication import ChannelConfig, CommunicationConfig
 from orbit.configs.execution import AgentGroup, ExecutionConfig
@@ -84,13 +85,13 @@ def board_communication(agents: list[str], *, max_message_chars: int) -> Communi
 
 def board_execution(*, plan: ScheduleConfig | None = None, agent_groups: list[AgentGroup] | None = None,
                     initial_context: str = "auto") -> ExecutionConfig:
-    """Scheduled execution under a written plan, one generation and every call in it per step (quantum
-    model_step).
+    """ORBIT 2.0's execution (executor "swarm": each agent is Inspect's react(), held between its steps) under a
+    written plan, one generation and every call in it per step (quantum model_step).
 
     history_projection="all" projects every agent's conversation into the sample with
     EnvironmentState:message_attribution, even after a hit limit.
     """
-    return ExecutionConfig(executor="scheduled", quantum="model_step", plan=plan, history_projection="all",
+    return ExecutionConfig(executor="swarm", quantum="model_step", plan=plan, history_projection="all",
                            agent_groups=list(agent_groups or []), initial_context=initial_context)
 
 
@@ -196,7 +197,9 @@ def board_read(agent: str, read_page: int | None, board: str = BOARD_ID, reads_p
 
 
 def board_post(agent: str, board: str = BOARD_ID, posts_per_turn: int | None = None) -> ToolDef:
-    """Post through ORBIT's send_message, as channel_post does, within the agent's post budget for the round."""
+    """Post through ORBIT's async_send_message, as channel_post does, within the agent's post budget for the round.
+    During a run the send goes through ORBIT 2.0's swarm bus, which refuses an over-long post or a sender without
+    write access with a ToolError of its own; outside a run it goes to ORBIT's store directly."""
     prompts = load_prompts()
 
     async def execute(message: str) -> str:
@@ -208,7 +211,7 @@ def board_post(agent: str, board: str = BOARD_ID, posts_per_turn: int | None = N
                 refuse(agent, "post")
                 raise ToolError(prompts["budget"]["post_refused"].format(used=used))
         try:
-            sent = send_message(board, agent_id=agent, content=message)
+            sent = await async_send_message(board, agent_id=agent, content=message)
         except (ChannelCapacityError, PermissionError) as error:
             raise ToolError(str(error)) from None
         if posts_per_turn is not None:
@@ -221,9 +224,9 @@ def board_post(agent: str, board: str = BOARD_ID, posts_per_turn: int | None = N
 
 
 def system_post(text: str, agents: list[str], board: str = BOARD_ID) -> None:
-    """Post on the board as the system (SYSTEM_SENDER), for every agent of the roster. ORBIT's send_message takes only
-    a configured agent as its sender, so the post goes into ORBIT's communication store the way send_message puts
-    one there, with the next sequence number and without a "sent" event."""
+    """Post on the board as the system (SYSTEM_SENDER), for every agent of the roster. ORBIT's send takes only a
+    configured agent as its sender, and its swarm bus only the running member, so the post goes straight into ORBIT's
+    communication store with the next sequence number, without a "sent" event and without a bus record."""
     state = initialize_communication()
     message = CommunicationMessage(id=f"message-{uuid4().hex}", channel_id=board, sender=SYSTEM_SENDER,
                                    recipients=tuple(agents), content=text, sequence=state.sequence + 1)

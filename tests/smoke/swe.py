@@ -78,7 +78,8 @@ SUITE = Suite("smoke_swe", judge_spec(SWE.task_dir, SWE.name))
 
 ISSUE = "flipt-02e2"
 FIX = "02e21636c58e86c51119b63e0fb5ca7b813b07b1"
-ORBIT_ASSISTANT_PROMPT = "You are a helpful assistant"   # ORBIT's paragraph, which no provider receives
+# The opening of the agent loop's assistant paragraph (Inspect's react(); ORBIT's in 1.x). No provider receives it.
+ORBIT_ASSISTANT_PROMPT = "You are a helpful assistant"
 NO_CHANGE = "Nothing to hand in yet: /app holds no change from the base."
 
 
@@ -351,7 +352,7 @@ def scenario_rule() -> dict:
 
 def scenario_no_submit() -> dict:
     """A team built without submit and stop_working (submit=false, shutdown=false): no ending tool and no bullet for
-    one, nothing of ORBIT's assistant paragraph reaches the provider, and the run ends at the turn cap."""
+    one, nothing of the agent loop's assistant paragraph reaches the provider, and the run ends at the turn cap."""
     agents = ["a01", "a02"]
     script = {a: [sh(f"echo {a} step-{i}", f"{a}-s{i}") for i in range(1, 4)] for a in agents}
     task = sequential_task_for(SWE(ISSUE, "as_released", grade=False), n_agents=2, submit=False, shutdown=False,

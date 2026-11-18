@@ -9,8 +9,8 @@ core/agents/factory.py validates without a vendor adapter.
 
 Each ORBIT agent becomes its own episode: the sample's projected messages are split by
 EnvironmentState:message_attribution (history_projection="all"). The system message is the text the provider
-received: in a run whose turn rules logged the "system_prompt" rewrite, ORBIT's assistant paragraph is taken out
-(turn_rules.provider_system_text), as the filter took it out of every call. Two things live only in Inspect's native
+received: in a run whose turn rules logged the "system_prompt" rewrite, the agent loop's assistant paragraph is taken
+out (turn_rules.provider_system_text), as the filter took it out of every call. Two things live only in Inspect's native
 events and are recovered from them:
 
   * the continue prompts and board notices of the turn rules' model filter (src/swarm/turn_rules/), which reach the

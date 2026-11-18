@@ -57,7 +57,7 @@ def message_dict(m, redacted: set, blocked: set = frozenset(), own_output: bool 
     flagged output_blocked only when it is a call's own output that a defense blocked (its id is in `blocked`); in an
     input history the same sentence is refusal_in_history, since the substituted message carries a new id and the
     model may also write the sentence itself. With `rewritten` (the run's turn rules logged the system message's
-    rewrite), a system message loses ORBIT's assistant paragraph, as the provider received it, and is flagged
+    rewrite), a system message loses the agent loop's assistant paragraph, as the provider received it, and is flagged
     turn_rules when that changed it.
     """
     text, reasoning = split_content(m.content)
