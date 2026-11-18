@@ -94,7 +94,7 @@ The team on ORBIT's API.
 - `awareness_probes.py`: Lucy's end-of-episode questions as an Inspect scorer.
 - `turn_rules/`: the plan of rounds under the turn budget, the free board steps, the budgets' counters, the halt after a hand-in or once no worker is left, and the model filter. Its `__init__.py` is the API. `turn_activation.py` is the callback ORBIT imports by its dotted name after every activation.
 
-The implementation is `_regulator_oversight.py` (`agent_actions`, the regulators' tool) and the `_turn_*.py` modules. Every run carries the turn rules as a passive defense. Its model filter takes ORBIT's assistant paragraph out of the system message and appends the continue prompt (`prompts.yaml` `continue`) when the provider input would end with a model turn, which Gemini rejects.
+The implementation is `_regulator_oversight.py` (`agent_actions`, the regulators' tool) and the `_turn_*.py` modules. Every run carries the turn rules as a passive defense. Its model filter takes the agent loop's assistant paragraph out of the system message and appends the continue prompt (`prompts.yaml` `continue`) when the provider input would end with a model turn, which Gemini rejects.
 
 ### tasks.py
 

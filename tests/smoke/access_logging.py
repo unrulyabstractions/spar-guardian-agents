@@ -456,13 +456,18 @@ def scenario_planted_path() -> dict:
 
 
 def scenario_cut_call() -> dict:
-    """The time limit cuts the call, so its ToolEvent has no end and no SandboxEvent exists."""
+    """The time limit cuts the call: Inspect ends its ToolEvent at the cut as cancelled (before 0.3.290 the event had no
+    end), and no SandboxEvent exists for its exec. The read still ties to the call."""
     code = f"import base64; open(base64.b64decode('{encoded(SUBSET.cache)}').decode()).read()"
     script = {"a01": [sh(f"python3 -c \"{code}\"; sleep 120", "t1", "bash")]}
     run = logged("cut_call", SubsetSum(), lone(4, "time_limit_s=15", "time_grace_s=0"), script, finished=False)
     assert run.sample.limit is not None and run.sample.limit.type == "time", run.sample.limit
     tools = [event for event in run.sample.events if event.event == "tool"]
-    assert any(event.id == "t1" and event.completed is None for event in tools), tools
+    [cut] = [event for event in tools if event.id == "t1"]
+    assert cut.failed and cut.error is not None and cut.error.type == "cancelled", cut
+    execs = [event for event in run.sample.events if event.event == "sandbox" and event.action == "exec"
+             and cut.timestamp <= event.timestamp <= cut.completed]
+    assert not execs, execs
     [read] = run.opens(object="cache")
     assert (read["origin"], read["agent"], read["call_id"]) == ("agent", "a01", "t1"), read
     row = run.agents["a01"]
@@ -542,7 +547,7 @@ def scenario_git_agent_root() -> dict:
     assert reads and {(row["agent"], row["named_by"], row["uid"]) for row in reads} == {(reader, "machine", 0)}, reads
     harness = run.opens(origin="harness")
     assert harness and {(row["agent"], row["call_id"]) for row in harness} == {(None, None)}, harness
-    assert {row["root_cmd"].split()[0] for row in harness} == {"git", "timeout"}, harness
+    assert {row["root_cmd"].split()[0].rsplit("/", 1)[-1] for row in harness} == {"git", "timeout"}, harness
     assert run.opens(call_id="c3", level="content"), "no row for the read after the restart"
     assert {row["machine"] for row in run.opens()} == {reader}, run.opens()
     gaps = gap_rows(run)                        # a restart quicker than the poll shows no machine_down

@@ -242,6 +242,19 @@ def test_create_refuses_tasks_that_cannot_run(registry, monkeypatch, capsys):
     assert fake.calls == []
 
 
+def test_a_package_list_pins_inspect_to_a_release_or_a_git_commit():
+    """ORBIT 2.0 names inspect-ai by git commit, which uv freezes as a direct reference; a launch's list must hold
+    one exact pin either way."""
+    commit = "c060c201c5681dd09dbe3edb5f01e5947218bfb9"
+    url = "git+https://github.com/UKGovernmentBEIS/inspect_ai.git"
+    assert fleet_registry.pins_inspect(b"anyio==4.15.1\ninspect-ai==0.3.263\nopenai==3.37.0\n")
+    assert fleet_registry.pins_inspect(f"anyio==4.15.1\ninspect-ai @ {url}@{commit}\nopenai==3.37.0\n".encode())
+    assert not fleet_registry.pins_inspect(b"anyio==4.15.1\nopenai==3.37.0\n")
+    assert not fleet_registry.pins_inspect(f"inspect-ai @ {url}@main\n".encode())            # a branch moves
+    assert not fleet_registry.pins_inspect(f"inspect-ai @ {url}\n".encode())
+    assert not fleet_registry.pins_inspect(b"inspect-ai-extras==1.0\ninspect-swarm==0.4.1\n")
+
+
 def test_create_registers_each_instance_pins_its_launch_and_passes_its_audit(registry, monkeypatch, capsys):
     fake = FakeVast()
     monkeypatch.setattr(vast_api, "http", fake)

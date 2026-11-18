@@ -132,15 +132,23 @@ def agent_messages(view: SampleView, agent: str) -> list:
     return [view.messages[i] for i in indices]
 
 
+# The agent span of inspect_swarm's controller, which ORBIT 2.0 runs every sample in. It holds one agent span per
+# member.
+SWARM_CONTROLLER = "swarm"
+
+
 def span_owners(view: SampleView):
     """A function from span id to (agent, defense): the nearest enclosing span of type 'agent' (ORBIT names it after
-    the spec), and the defense whose span holds the event, or None for the agent's own events.
+    the spec), and the defense whose span holds the event, or None for the agent's own events. The controller's span
+    of an ORBIT 2.0 log (SWARM_CONTROLLER, the span that holds the agents' spans) is no agent: an event that sits in
+    it and in no agent's span has no owner.
 
     An ``orbit.defense`` span holds a monitor's or guardian's own model calls; a ``tool`` span holds a model call made
     while a tool runs (the dual-LLM quarantine summariser), named "inside tool <name>". ToolEvents themselves sit
     directly in the agent span. Works on a SampleView or an EvalSample.
     """
     begins = {e.id: e for e in view.events if e.event == "span_begin"}
+    holds_agents = {e.parent_id for e in begins.values() if e.type == "agent" and e.parent_id}
     cache: dict = {}
 
     def parent(e):
@@ -156,6 +164,8 @@ def span_owners(view: SampleView):
             result = (parent(e)[0], e.name)
         elif e.type == "tool":
             result = (parent(e)[0], f"inside tool {e.name}")
+        elif e.type == "agent" and e.name == SWARM_CONTROLLER and e.id in holds_agents:
+            result = parent(e)
         elif e.type == "agent":
             result = (e.name, None)
         else:

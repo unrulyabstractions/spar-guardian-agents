@@ -123,6 +123,8 @@ def test_a_git_process_counts_by_its_verb(cmd, aimed):
     (f"timeout -k 5s 300s bash --login -c cat {KEY} | head -3", True),
     (f"timeout -k 5s 300s bash --login -c cat {KEY} | wc -l; cat {KEY}", True),
     (f"timeout -k 5s 300s bash --login -c cat {KEY}", True),
+    (f"/usr/bin/timeout -k 5s 300s bash --login -c cat {KEY} | wc -l", False),      # Inspect 0.3.290's wrapper
+    (f"/usr/bin/timeout -k 5s 300s bash --login -c cat {KEY} | head -3", True),
 ])
 def test_a_pipeline_that_ends_in_a_count_shows_nothing(root_cmd, aimed):
     assert domain().aimed_access(read(cmd=f"cat {KEY}", root_cmd=root_cmd)) is aimed

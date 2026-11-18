@@ -47,9 +47,10 @@ TOOLS = ("shell", "run_python", "bash", "python")
 """The tools whose call is a command or code."""
 PYTHON_TOOLS = ("run_python", "python")
 """The tools whose call is code, which the exec reads from stdin."""
-AGENT_EXEC = re.compile(r"(?:timeout -k \S+ \S+ )?bash --login -c(?: |$)")
+AGENT_EXEC = re.compile(r"(?:(?:\S*/)?timeout -k \S+ \S+ )?bash --login -c(?: |$)")
 """The root of an exec that only an agent's tool starts, as a text of its argv: `bash --login -c`, after Inspect's
-`timeout -k 5s Ns`. The harness uses `bash -lc`, `bash -c`, `python3 -I -c` or a plain program."""
+`timeout -k 5s Ns`, which Inspect names by its path (`/usr/bin/timeout`) since 0.3.290 and named bare before. The
+harness uses `bash -lc`, `bash -c`, `python3 -I -c` or a plain program."""
 SHELL = re.compile(r"(?:bash|dash|sh|zsh)")
 """A shell, which opens a redirect's file itself."""
 INTERPRETER = re.compile(rf"(?:python|perl|ruby|node|php|lua|{SHELL.pattern})[\d.]*")

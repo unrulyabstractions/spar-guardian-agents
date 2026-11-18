@@ -7,11 +7,11 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from inspect_ai.agent._react import _prompt_to_system_message
 from inspect_ai.dataset import Sample
 from inspect_ai.tool import ToolDef
 from inspect_ai.util import SandboxUnavailableError, store_as
 from inspect_ai.util import store as inspect_store
-from orbit.agents.turn_react import DEFAULT_ASSISTANT_PROMPT_TURN_REACT as ORBIT_ASSISTANT_PROMPT
 
 from src import tasks
 from src.configuration.presets import build_config, with_overrides
@@ -31,7 +31,13 @@ from src.swarm import turn_rules as rules
 from src.swarm.submit_and_stop import Deliverable, ending_tools, stop_working
 from src.swarm.submit_and_stop import submit as submit_tool
 from src.swarm.turn_rules import provider_system_text
-from src.swarm.turn_rules._turn_rules_filter import TurnRulesDefense, shown_as_submit, turn_rules_defense
+from src.swarm.turn_rules._turn_rules_filter import (
+    ASSISTANT_PROMPT,
+    ASSISTANT_PROMPTS,
+    TurnRulesDefense,
+    shown_as_submit,
+    turn_rules_defense,
+)
 from tests.support.fakes import Sandboxes
 from tests.support.mock_model import calls, tagged_infos
 from tests.support.turn_rules_harness import (
@@ -232,13 +238,24 @@ def test_the_defense_shows_team_submit_as_submit():
     assert wrappers == dict.fromkeys(TEAM.names, shown_as_submit)
 
 
-def test_provider_system_text_drops_orbits_paragraph():
+@pytest.mark.parametrize("paragraph", ASSISTANT_PROMPTS, ids=["inspect_react", "orbit_1x"])
+def test_provider_system_text_drops_the_assistant_paragraph(paragraph):
     ours = "You are a01.\n\n- submit: hand in your work and end the run."
-    # turn_react without a submit tool: our instructions, a blank line, then ORBIT's paragraph.
-    assert provider_system_text(f"{ours}\n\n{ORBIT_ASSISTANT_PROMPT}") == ours
-    assert provider_system_text(ORBIT_ASSISTANT_PROMPT) == ""
+    # react() without a submit tool: our instructions, a blank line, then the assistant paragraph (Inspect's under
+    # ORBIT 2.0, ORBIT's own in a log of 1.x).
+    assert provider_system_text(f"{ours}\n\n{paragraph}") == ours
+    assert provider_system_text(paragraph) == ""
     assert provider_system_text(ours) == ours
-    assert "helpful assistant" not in provider_system_text(f"{ours}\n\n{ORBIT_ASSISTANT_PROMPT}")
+    assert "helpful assistant" not in provider_system_text(f"{ours}\n\n{paragraph}")
+
+
+def test_the_assistant_paragraph_is_the_one_react_appends():
+    """Inspect's react() builds the system message from our instructions and its default assistant paragraph; the
+    filter must name that exact text, or every provider receives it."""
+    ours = "You are a01."
+    built = _prompt_to_system_message(ours, [], None)
+    assert built.text == f"{ours}\n\n{ASSISTANT_PROMPT}"
+    assert provider_system_text(built.text) == ours
 
 
 # ------------------------------------------------------------------------------------------------ the guard

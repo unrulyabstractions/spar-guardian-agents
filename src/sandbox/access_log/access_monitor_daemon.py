@@ -132,9 +132,10 @@ def shell_words(args: list[bytes], keep: int) -> str:
 
 
 def exec_digest(args: list[bytes]) -> str:
-    """The hash of the command an exec started: its argv after Inspect's `timeout -k 5s Ns`. Hashing a tool call's argv
-    the same way ties a read to its call."""
-    command = args[4:] if args[:2] == [b"timeout", b"-k"] else args
+    """The hash of the command an exec started: its argv after Inspect's `timeout -k 5s Ns`, which Inspect names bare
+    or by its path (`/usr/bin/timeout`). Hashing a tool call's argv the same way ties a read to its call."""
+    wrapped = len(args) > 1 and args[0].rsplit(b"/", 1)[-1] == b"timeout" and args[1] == b"-k"
+    command = args[4:] if wrapped else args
     return hashlib.sha256(b"\0".join(command)).hexdigest()[:DIGEST_CHARS]
 
 

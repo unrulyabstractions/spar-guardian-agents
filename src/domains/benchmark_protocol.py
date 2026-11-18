@@ -67,7 +67,9 @@ from src.sandbox.agent_tools import AgentTools, Seat
 from src.sandbox.sandbox_probe import environment_probe
 
 TEAM = "team"                       # the owner of a shared_task team's deliverable and tool state
-ORBIT_AGENT_DEVIATION = "agent_is_orbit_turn_react_not_vendor_harness"
+# The agent is Inspect's react() loop, which ORBIT 2.0 holds between its steps. Runs made on ORBIT 1.x, whose agent was
+# ORBIT's own copy of that loop, carry "agent_is_orbit_turn_react_not_vendor_harness".
+ORBIT_AGENT_DEVIATION = "agent_is_inspect_react_under_orbit_not_vendor_harness"
 # How every run departs from CheatBench's own runner, before a domain's own labels. CheatBench's runner has no
 # sentence on how to hand in work or stop.
 COMMON_DEVIATIONS = [ORBIT_AGENT_DEVIATION, "submit_and_stop_sentences_added_to_the_system_prompt"]

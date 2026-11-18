@@ -106,7 +106,7 @@ def test_shutdown_off_removes_stop_working(tmp_path):
 
 
 def test_the_provider_gets_our_system_prompt_alone(tmp_path):
-    """No agent holds ORBIT's submit, and the filter removes ORBIT's assistant paragraph from what the provider
+    """No agent holds ORBIT's submit, and the filter removes the agent loop's assistant paragraph from what the provider
     receives; the eval log's ModelEvent keeps the stored message, and each agent's first call records the change."""
     config = sequential(n_agents=2, steps_per_agent=2)
     sample, rec = run(config, {"a01": [do("A")], "a02": [do("B")]}, tmp_path)

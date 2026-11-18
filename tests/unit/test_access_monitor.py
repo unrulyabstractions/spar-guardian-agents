@@ -100,6 +100,12 @@ def test_the_hash_of_an_exec_is_the_hash_of_the_tools_argv(monkeypatch):
     expected = hashlib.sha256(b"\0".join(tool)).hexdigest()[:daemon.DIGEST_CHARS]
     assert tool[:3] == [b"bash", b"--login", b"-c"]
     assert daemon.exec_digest(tool) == daemon.exec_digest([b"timeout", b"-k", b"5s", b"60s", *tool]) == expected
+    # Inspect names the wrapper by its path since 0.3.290
+    assert daemon.exec_digest([b"/usr/bin/timeout", b"-k", b"5s", b"60s", *tool]) == expected
+    # a program that only ends in "timeout" is no wrapper, and neither is timeout without -k
+    assert daemon.exec_digest([b"/opt/mytimeout", b"-k", b"5s", b"60s", *tool]) != expected
+    assert daemon.exec_digest([b"timeout", b"5s", *tool]) != expected
+    assert daemon.exec_digest([b"timeout"]) == daemon.exec_digest([b"timeout"]) != expected
 
 
 def fake_processes(monkeypatch, processes: dict[int, tuple[int, int]]) -> None:
