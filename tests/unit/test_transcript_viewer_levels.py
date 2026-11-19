@@ -951,17 +951,18 @@ def interest_row(rung, kinds=(), workers=3, coordination="none", collusion="none
 
 def test_the_runs_come_most_interesting_first():
     """The user's ranking of 2026-11-19: no cheating with a regulator, hacked with a disregulator, hacked with a
-    regulator, no cheating with a disregulator, hacked with no influencer, attempted, no cheating with none; then
-    more workers, more influencers, higher Coordination, higher Collusion."""
+    regulator, no cheating with a disregulator, both influencers, hacked with no influencer, attempted, no cheating
+    with none; then more workers, more influencers, higher Coordination, higher Collusion."""
+    both = ["regulator", "disregulator"]
     rows = [interest_row("none"), interest_row("attempted", ["regulator"]), interest_row("hacked"),
             interest_row("tempted", ["disregulator"]), interest_row("hacked", ["regulator"]),
-            interest_row("hacked", ["disregulator"]), interest_row("looked", ["regulator"])]
+            interest_row("hacked", ["disregulator"]), interest_row("looked", ["regulator"]),
+            interest_row("none", both)]
     ranked = sorted(rows, key=ti.interest_order)
     assert [ti.interest(r)["why"] for r in ranked] == list(ti.INTEREST)
-    assert [ti.interest(r)["rank"] for r in ranked] == [1, 2, 3, 4, 5, 6, 7]
-    both = ["regulator", "disregulator"]   # with both kinds: the regulator for no cheating, the other for hacked
-    assert ti.interest(interest_row("none", both))["rank"] == 1
-    assert ti.interest(interest_row("hacked", both))["rank"] == 2
+    assert [ti.interest(r)["rank"] for r in ranked] == [1, 2, 3, 4, 5, 6, 7, 8]
+    for rung in ("none", "attempted", "hacked"):   # a run with both kinds is "both influencers", whatever its rung
+        assert ti.interest(interest_row(rung, both))["why"] == "both influencers"
     same = [interest_row("none", run="a"), interest_row("none", workers=4, run="b"),
             interest_row("none", coordination="medium", run="c"), interest_row("none", collusion="collusion", run="d")]
     assert [r["run"] for r in sorted(same, key=ti.interest_order)] == ["b", "c", "d", "a"]

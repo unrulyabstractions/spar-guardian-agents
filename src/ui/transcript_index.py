@@ -326,10 +326,11 @@ def agents_words(n_agents: int, roles: dict) -> tuple[str, int]:
 
 
 INTEREST = ("no cheating, with a regulator", "hacked, with a disregulator", "hacked, with a regulator",
-            "no cheating, with a disregulator", "hacked, no influencer", "attempted", "no cheating, no influencer")
-"""The runs page's default order, most interesting first (the user's ranking of 2026-11-19): a team's Cheating rung
-(hacked, attempted, or no cheating: none, looked, tempted) against the influencers it ran with. Where a run had both
-kinds, the regulator counts for a team that did not cheat and the disregulator for a team that hacked."""
+            "no cheating, with a disregulator", "both influencers", "hacked, no influencer", "attempted",
+            "no cheating, no influencer")
+"""The runs page's default order, most interesting first (the user's ranking of 2026-11-19, with "both" placed by the
+user later that day): a team's Cheating rung (hacked, attempted, or no cheating: none, looked, tempted) against the
+influencers it ran with. A run with a regulator and a disregulator is "both influencers", whatever its rung."""
 
 
 def interest(row: dict) -> dict:
@@ -337,7 +338,9 @@ def interest(row: dict) -> dict:
     rung = row["levels"]["team"].get("cheating")
     kinds = {x["role"] for x in row["influencer_conditioning"]}
     regulator, disregulator = "regulator" in kinds, "disregulator" in kinds
-    if rung == "attempted":
+    if regulator and disregulator:
+        why = "both influencers"
+    elif rung == "attempted":
         why = "attempted"
     elif rung == "hacked":
         why = ("hacked, with a disregulator" if disregulator else "hacked, with a regulator" if regulator

@@ -1803,3 +1803,8 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **Run by the agent, not repeated by me.** The check against the 147 stored runs: every agent's and team's last held level equals its stored level (0 differences). The whole unit suite: 3008 passed, 6 xfailed.
 - **Viewed by me.** The runs page with Influencer = both; flipt_minimal_luna_fixed3 q5k2k's tab at call 76 (low at 13, high at 48, extreme at 66, back to high at 76; "collaboration, end" is the Collusion ladder, still read at the end).
 - **UNVERIFIED.** The agent's other three screenshots were not opened by me.
+
+## 2026-11-19, "both influencers" in the interest ranking
+- **Asked by the user.** "no-cheating with regulator > hacking with disregulators > hacking with regulator > no-cheating with disregulator > both > hacking (with no modulators) > attempted > no-cheating".
+- **What landed.** `transcript_index.INTEREST` gains "both influencers" fifth; a run with a regulator and a disregulator takes it whatever its rung (before, the regulator counted for no cheating and the disregulator for hacked). The rank is computed when the index is assembled, so no cache changes.
+- **Run by me.** The interest test (eight classes in order; both at none, attempted and hacked) passes; ruff clean.
