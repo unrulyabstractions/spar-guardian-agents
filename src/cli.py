@@ -21,6 +21,7 @@ call their modules.
     python -m src ui [start|stop] [--port P] [--no-open]
     python -m src models [NAME]
     python -m src plots <run> [--out DIR]
+    python -m src replay <run or study ...> --out DIR [--only-missing] [--serial] [--jobs N]
 
 A run is a run directory, or a run name of the study: runs/<study>/<name>/, or the group that holds it
 (run_directory.find_run). The config is built in this order: the preset, then the scale,
@@ -288,6 +289,26 @@ def add_measure_parsers(subparsers) -> None:
     plots.set_defaults(func=cmd_plots)
 
 
+def cmd_replay(args: argparse.Namespace) -> int:
+    from src.replay.replay_run import replay_runs  # Inspect and the domains' imports; only replay pays for them
+    return replay_runs(run_dirs(args), Path(args.out), only_missing=args.only_missing, parallel=not args.serial,
+                       jobs=args.jobs)
+
+
+def add_replay_parser(subparsers) -> None:
+    replay = subparsers.add_parser("replay", help="play stored runs back in their sandboxes from their recorded calls "
+                                                  "(no model, no network): out/<run>/steps.jsonl and replay.json")
+    replay.add_argument("runs", nargs="+", help="run names of the study, run directories, or a study folder (its "
+                                                "valid runs of a task the replay plays back: SWE)")
+    replay.add_argument("--out", required=True, help="the folder that gets one folder per run")
+    replay.add_argument("--only-missing", action="store_true", help="skip a run whose replay.json exists")
+    replay.add_argument("--serial", action="store_true",
+                        help="every call alone, in global order (by default calls in different machines that touch "
+                             "nothing shared run side by side)")
+    replay.add_argument("--jobs", type=int, default=1, help="runs replayed at once, each its own compose project")
+    replay.set_defaults(func=cmd_replay)
+
+
 def add_tool_parsers(subparsers) -> None:
     ui = subparsers.add_parser("ui", help="start (default) or stop the results browser")
     ui.add_argument("action", nargs="?", choices=("start", "stop"), default="start")
@@ -308,6 +329,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_judging_parsers(subparsers)
     add_measure_parsers(subparsers)
     add_tool_parsers(subparsers)
+    add_replay_parser(subparsers)
     return parser
 
 

@@ -63,7 +63,7 @@ Each package's `<d>_task.py` holds its Benchmark. The other modules a package ex
 | package | Benchmark | other API modules |
 |---|---|---|
 | `openmath/` | `OpenMath` | none |
-| `swe/` | `SWE` | `swe_inputs.py`, `swe_ladder.py`, `swe_sandbox.py`, `swe_settings.py` |
+| `swe/` | `SWE` | `swe_inputs.py`, `swe_ladder.py`, `swe_replay.py`, `swe_sandbox.py`, `swe_settings.py` |
 | `knowledge/` | `KnowledgeWork` | `knowledge_sandbox.py`, `knowledge_settings.py` |
 | `interview/` | `SubsetSum`, `PrimeFactorization` | none |
 | `protein/` | `ProteinDesign` | `protein_rows_build.py` |
@@ -162,6 +162,22 @@ Everything computed over a run directory, without a model.
 - `verdict_fields.py`: the judge's flags per task (`FLAGS_BY_TASK`), for the summary, the figures, the browser and the tools.
 - `run_figures.py`: one run's figures: each agent's steps round by round, the board's actions per round, the judge's flags per agent.
 
+### replay/
+
+A stored run played back in its sandbox from its recorded tool calls, with no model call and no network, so the state
+after every call can be read where the record keeps only the end. SWE only. The package docstring gives steps.jsonl's
+schema.
+
+- `replay_run.py`: `replay(run_dir, out_dir)`, which writes `steps.jsonl` and `replay.json`, and the command's loop.
+- `replay_report.py`: `ReplayReport` and `faithful_steps`, which refuses a replay whose end state differs from the
+  stored one.
+- `recorded_calls.py`: the recorded calls in one global order, each with its agent and its number k.
+- `commit_dates.py`: the commit date that gives a replayed commit its recorded id.
+- `output_match.py`: a replayed output against the recorded one, and the likely cause of a difference.
+- `step_snapshots.py`: `steps.jsonl`'s delta encoding.
+- `replay_sandbox.py`: the compose project and Inspect's tool exec.
+- `swe_replayer.py`: an SWE run's setup, state after a call and end state, from `domains/swe/swe_replay.py`'s commands.
+
 ### ui/
 
 Two local pages over `runs/`. `API.md` is their HTTP contract.
@@ -224,6 +240,7 @@ Shared helpers.
 | `budget <lone_run ...>` | lone runs' turns and their median |
 | `models [NAME]` | the models we can consider, one row per entry with its Inspect string, key variable, context, prices and CheatBench entries; with a name, that entry in full |
 | `plots <run> [--out DIR]` | one run's figures as PNG with CSV twins under `out/<run name>/` (gitignored) |
+| `replay <run or study ...> --out DIR [--only-missing] [--serial] [--jobs N]` | plays each run back in its sandbox from its recorded calls, with no model and no network, into `DIR/<run>/steps.jsonl` (the state after every call) and `replay.json`; a study stands for its valid SWE runs; exits 1 when a replay is not faithful |
 
 The judge runs inside the eval as the scorer `cheatbench_judge`, bound to the model role `judge`. With `--no-judge` the run is exported without verdicts, and `rejudge` adds them later. With `batch_judge` the judge's calls go through the provider's batch API; `judge` and `rejudge` batch too unless `--sync`, and `judge-pass` batches with `--batch`.
 

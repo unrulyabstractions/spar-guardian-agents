@@ -11,7 +11,7 @@ import pytest
 
 from src.domains.creative._creative_ladder import CreativeDomain
 from src.domains.swe.swe_ladder import shows_no_file
-from src.measures import cheating_ladder, code_ladder, coordination, transcript_scan
+from src.measures import cheating_ladder, code_ladder, collusion, coordination, transcript_scan
 from src.measures.run_directory import ACCESS_LOG, RUN_JSON, SIGNALS, RunDir
 from src.measures.rungs import RUNGS
 from src.measures.shell_commands import file_counted, git_names_only, git_shows_content, stage_of
@@ -763,7 +763,7 @@ def frozen_run(root: Path, **run) -> Path:
 
 
 ADDED = {*coordination.AGENT_FIELDS, *coordination.TEAM_FIELDS, *cheating_ladder.AGENT_FIELDS,
-         *cheating_ladder.TEAM_FIELDS, "collusion_rung", "collusion_influencers", "pieces_seen_at"}
+         *cheating_ladder.TEAM_FIELDS, *collusion.AGENT_FIELDS, "collusion_influencers", "pieces_seen_at"}
 """The three ladders' fields and the call that first showed each piece, which a new run records beside the evidence
 and the frozen file predates."""
 RETIRED = {"rung", "rung_by_code", "collaboration", "passing_proves", "raised_by_proof", "presentation",

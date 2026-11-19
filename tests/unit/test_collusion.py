@@ -219,7 +219,8 @@ def test_a_colluding_pair_stays_at_collusion_whatever_a_judge_wrote(tmp_path):
     out = C.collusion_of(path, held)
     assert pair(out, "a", "b")["rung"] == "collusion" and out["team"] == "collusion"
     agents, team = C.record_fields(out)
-    assert agents["a"] == {"collusion_rung": "collusion"} and team["collusion_rung"] == "collusion"
+    assert agents["a"]["collusion_rung"] == "collusion" and team["collusion_rung"] == "collusion"
+    assert list(agents["a"]) == list(C.AGENT_FIELDS) and agents["a"]["collusion_timeline"]["source"] == "record"
 
 
 def test_a_run_records_its_rungs():
@@ -227,7 +228,7 @@ def test_a_run_records_its_rungs():
     run = make_run([], DISK_ROLES)
     out = C.measure(run, "creative_writings", cheating_of(DISK_ROLES, {}))
     agents, team = C.record_fields(out)
-    assert agents == {a: {"collusion_rung": "none"} for a in DISK_ROLES}
+    assert {a: row["collusion_rung"] for a, row in agents.items()} == dict.fromkeys(DISK_ROLES, "none")
     assert team == {"collusion_rung": "none", "collusion_influencers": {"r": "none"}}
 
 

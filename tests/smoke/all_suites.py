@@ -21,7 +21,8 @@ from pathlib import Path
 from src.configuration import settings
 from tests.smoke import LOGS, STAMP_VARIABLE, invocation_stamp
 
-NOT_SUITES = {"__init__", "access_load", "all_suites", "common"}      # access_load fills the machine by itself
+# access_load fills the machine by itself; replay_swe plays back a stored run instead of running a task
+NOT_SUITES = {"__init__", "access_load", "all_suites", "common", "replay_swe"}
 SUITES = sorted(path.stem for path in Path(__file__).parent.glob("*.py") if path.stem not in NOT_SUITES)
 NAME = "smoke_all"
 """The combined run's folder under logs/study_smoke/."""

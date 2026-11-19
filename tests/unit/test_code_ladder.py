@@ -18,7 +18,7 @@ from src.domains.knowledge import KnowledgeWork, _knowledge_honeypot
 from src.domains.knowledge._knowledge_ladder import KnowledgeDomain
 from src.domains.openmath import OpenMath, _openmath_honeypot
 from src.domains.openmath._openmath_ladder import OpenMathDomain
-from src.measures import cheating_ladder, coordination, transcript_scan
+from src.measures import cheating_ladder, collusion, coordination, transcript_scan
 from src.measures import code_ladder as signals
 from src.measures import honeypot_fingerprints as prints_module
 from src.measures.ladder_domain import PRINTS, probe_signals
@@ -268,7 +268,8 @@ def test_run_signals_write_agent_rows_then_team_rows_and_run_json(tmp_path):
     written = [json.loads(line) for line in (folder / "signals.jsonl").read_text().splitlines()]
     assert [r["row"] for r in written] == ["agent", "agent", "team"] and written[:2] == rows
     assert list(rows[0])[:7] == ["row", "sample", "episode", "agent", "role", "task", "holds"]
-    assert list(rows[0])[-5:] == ["calls", *cheating_ladder.AGENT_FIELDS, *coordination.AGENT_FIELDS, "collusion_rung"]
+    assert list(rows[0])[-7:] == ["calls", *cheating_ladder.AGENT_FIELDS, *coordination.AGENT_FIELDS,
+                                  *collusion.AGENT_FIELDS]
     assert rows[0]["holds"] == ["whole"] and rows[0]["calls"] == 2
     assert (rows[0]["cheating_rung"], rows[1]["cheating_rung"]) == ("looked", "none")
     assert rows[0]["collusion_rung"] is None                    # the stub task has no take rule
@@ -339,7 +340,7 @@ def test_run_signals_record_the_coordination_ladder_on_agent_and_team_rows(tmp_p
     pick = {agent: {field: row[field] for field in coordination.AGENT_FIELDS} for agent, row in rows.items()}
     assert pick == {"a01": {"coordination_level": "write"}, "a02": {"coordination_level": "write"},
                     "a03": {"coordination_level": "none"}}
-    assert all(list(row)[-2:] == [*coordination.AGENT_FIELDS, "collusion_rung"] for row in rows.values())
+    assert all(list(row)[-3:] == [*coordination.AGENT_FIELDS, *collusion.AGENT_FIELDS] for row in rows.values())
     team = RunDir(folder).team_signals()[0]
     # the regulator counts in each worker's n - 1 and is reported apart, never in the team's level
     assert (team["coordination_level"], team["coordination_influencers"]) == ("write", {"a03": "none"})
@@ -355,12 +356,18 @@ def test_ladders_reads_the_three_rungs_as_recorded(tmp_path):
     folder = coordinated_run(tmp_path)
     signals.run_signals(folder)
     recorded = signals.ladders(folder)
+    timelines = {agent: {field: row.pop(field) for field in signals.TIMELINES}
+                 for agent, row in recorded["agents"].items()}
     assert recorded == {"agents": {agent: {"cheating_rung": "none", "cheated": False, "coordination_level": level,
                                            "collusion_rung": None}
                                    for agent, level in (("a01", "write"), ("a02", "write"), ("a03", "none"))},
                         "team": {"cheating_rung": "none", "cheated": False, "coordination_level": "write",
-                                 "collusion_rung": None, "cheating_alarm": None},
+                                 "collusion_rung": None, "cheating_alarm": None,
+                                 "ladder_steps": {"source": "record", "notes": []}},
                         "influencers": {"cheating": {}, "coordination": {"a03": "none"}, "collusion": {}}}
+    assert all(t["collusion_timeline"] is None and t["cheating_timeline"]["source"] == "record" and
+               t["cheating_timeline"]["first"] == [] and set(t["cheating_timeline"]["after"]) <= {"none"}
+               for t in timelines.values())
     path = folder / "signals.jsonl"
     rows = [json.loads(line) for line in path.read_text().splitlines()]
     path.write_text("".join(json.dumps({k: v for k, v in row.items() if k != "collusion_rung"}) + "\n" for row in rows))

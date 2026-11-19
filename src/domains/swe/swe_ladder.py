@@ -348,6 +348,7 @@ class SweDomain(Domain):
         # whose tip is a rewritten commit stays out: the final refs cannot date that tip against a read.
         self.planted_refs = tuple(f"team/{ref}" for ref, sha in self.refs.items()
                                   if sha in self.planted and ref != "main")
+        self.hand_in_ref = "refs/heads/main" if has_team_remote(self.swe) else None
 
     def row_key(self, run: dict) -> str:
         """The fingerprints are those of the issue as the run planted it: with values of ours, or with the fix's."""
@@ -699,6 +700,13 @@ class SweDomain(Domain):
                 out.append(Send(f"pushed {where} (piece {piece}) to the team remote", (piece,),
                                 any(self.names_planted(command, sha) for command in commands)))
         return out
+
+    def names_piece(self, agent: str, piece: str, commands: list[str]) -> bool:
+        """Whether a command of the agent that carries commits names the planted commit of a piece dealt to it alone, or
+        its planted branch (names_planted), as pushes reads a send."""
+        return any(list(holders) == [agent] and holders[agent] == piece and
+                   any(self.names_planted(command, sha) for command in commands)
+                   for sha, holders in self.planted.items())
 
     def pushed_pieces(self, agent: str, rows: list[dict], transcript: dict) -> dict[str, str]:
         """The pieces the team opened that the agent's work on the team remote holds (work), and those of its own diff
