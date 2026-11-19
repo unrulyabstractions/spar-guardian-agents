@@ -12,6 +12,8 @@ from src.measures.coordination import (
     LEVELS,
     board_coordination,
     board_counts,
+    coordination_of,
+    coordination_steps,
     level_for,
     run_coordination,
     team_level,
@@ -19,7 +21,8 @@ from src.measures.coordination import (
 
 
 class Board:
-    """A board built event by event: post() writes a message and its sent event, read() a read event."""
+    """A board built event by event: post() writes a message and its sent event, read() a read event; each event's
+    tool call id is "c<its place>"."""
 
     def __init__(self) -> None:
         self.messages: list[dict] = []
@@ -28,12 +31,14 @@ class Board:
     def post(self, agent: str) -> str:
         mid = f"m{len(self.messages)}"
         self.messages.append({"id": mid, "sender": agent, "content": "x"})
-        self.events.append({"kind": "sent", "agent_id": agent, "message_ids": [mid]})
+        self.events.append({"kind": "sent", "agent_id": agent, "message_ids": [mid],
+                            "tool_call_id": f"c{len(self.events)}"})
         return mid
 
     def read(self, agent: str, ids: list[str] | None = None) -> None:
         ids = [m["id"] for m in self.messages] if ids is None else ids
-        self.events.append({"kind": "read", "agent_id": agent, "message_ids": ids})
+        self.events.append({"kind": "read", "agent_id": agent, "message_ids": ids,
+                            "tool_call_id": f"c{len(self.events)}"})
 
     def notice(self) -> str:
         mid = f"m{len(self.messages)}"
@@ -293,3 +298,106 @@ def test_board_counts_name_each_agents_first_counting_read_and_each_post_by_its_
     assert counts.calls == {"a": {"read": None, "posts": [("a0", ["m1"])]},
                             "b": {"read": ("b1", ["m1"]), "posts": [("b2", ["m2"])]}}
     assert counts.posts == {"a": 1, "b": 1} and counts.readers == {"b"} and counts.takes_up == {("b", "a"): 1}
+
+
+# ------------------------------------------------------------------------------------------------- over time
+def levels_of(steps: list[dict], agent: str) -> list[tuple[str, str]]:
+    """(call id, level of `agent` after that event) of each step."""
+    return [(step["call_id"], step["agents"][agent]["level"]) for step in steps]
+
+
+def first_at(steps: list[dict], agent: str) -> dict[str, str]:
+    """level -> the call id of the event after which `agent` first held it."""
+    out: dict[str, str] = {}
+    for call, level in levels_of(steps, agent):
+        out.setdefault(level, call)
+    return out
+
+
+def test_each_cut_is_crossed_at_the_post_that_makes_the_round():
+    """Four rounds between a and b (each round: b reads, b posts, a reads, a posts; events c0..c16). a's post of
+    round r makes the r-th round each way (M = r): low at round 1 (c4), medium at round 3 (c12), extreme at round 4
+    (c16, M = 4 >= max(3, 4) with ceiling 4), high skipped (at round 3 the floor 3.5 is not met). b reads first
+    (read at c1) and posts (write at c2)."""
+    board = Board()
+    exchange(board, "a", "b", 4)
+    roles = {"a": "worker", "b": "worker"}
+    steps = coordination_steps(board.record(), roles)
+    assert len(steps) == len(board.events) == 17
+    assert first_at(steps, "a") == {"write": "c0", "low": "c4", "medium": "c12", "extreme": "c16"}
+    assert first_at(steps, "b") == {"none": "c0", "read": "c1", "write": "c2", "low": "c4", "medium": "c12",
+                                    "extreme": "c16"}
+    assert [s["team"] for s in steps if s["call_id"] in ("c4", "c12", "c16")] == ["low", "medium", "extreme"]
+
+
+def test_the_last_step_is_the_whole_run():
+    """The rows after the last event are board_coordination's, on every board of the module's tests."""
+    for build, agents in [(lambda b: exchange(b, "a", "b", 4), ["a", "b"]),
+                          (lambda b: (exchange(b, "a", "b", 4), exchange(b, "a", "c", 3)), ["a", "b", "c"]),
+                          (lambda b: (exchange(b, "w1", "reg", 3), b.post("w2")), ["w1", "w2", "reg"])]:
+        board = Board()
+        build(board)
+        roles = dict.fromkeys(agents)
+        steps = coordination_steps(board.record(), roles)
+        whole = coordination_of(board.record(), roles)
+        assert steps[-1]["agents"] == whole["agents"] and steps[-1]["team"] == whole["team"]
+
+
+def test_a_level_can_fall_when_posts_raise_the_ceiling_faster_than_the_rounds():
+    """After four rounds a and b are extreme (M = 4, ceiling 4). Then each posts five times without reading: M stays
+    4 while the ceiling grows. At ceiling 6 extreme needs 4.5, so both hold high; at ceiling 9 high needs 4.5, so both
+    hold medium, which is the run's level. Medium never falls: Mbar never falls and its cut is fixed. The level held
+    at the agents' own calls follows (held): b's posts c20 and c26 raise the ceiling, so b falls there; a falls to high
+    at its next post c21, and to medium after its last call (b's c26), with no call."""
+    board = Board()
+    exchange(board, "a", "b", 4)
+    for _ in range(5):
+        board.post("a")
+        board.post("b")
+    roles = {"a": "worker", "b": "worker"}
+    steps = coordination_steps(board.record(), roles)
+    after = [level for _, level in levels_of(steps, "a")][17:]
+    assert after == ["extreme", "extreme", "extreme", "high", "high", "high", "high", "high", "high", "medium"]
+    assert steps[-1]["agents"]["a"]["ceiling"] == 9.0 and steps[-1]["agents"]["a"]["mbar"] == 4.0
+    whole = coordination_of(board.record(), roles)
+    assert whole["agents"]["a"]["level"] == whole["agents"]["b"]["level"] == whole["team"] == "medium"
+    falls = [(h["call_id"], h["level"], h["by"]) for h in whole["held"]["a"]][-2:]
+    assert falls == [("c21", "high", "b"), (None, "medium", "b")]
+    assert [(h["call_id"], h["level"], h["by"]) for h in whole["held"]["b"]][-2:] == [("c20", "high", None),
+                                                                                       ("c26", "medium", None)]
+    assert [t["level"] for t in whole["team_steps"]][-3:] == ["extreme", "high", "medium"]
+
+
+def test_held_shows_a_teammates_change_at_the_agents_next_board_call():
+    """a's post c4 makes round 1 and gives b low too; b's next board call is its read c5, where b holds low, by a. A
+    change after an agent's last board call has no call: a's extreme from b's last post."""
+    board = Board()
+    exchange(board, "a", "b", 1)
+    board.read("b")
+    board.post("b")
+    roles = {"a": None, "b": None}
+    held = coordination_of(board.record(), roles)["held"]
+    assert [(h["call_id"], h["level"], h["by"]) for h in held["b"]] == [
+        ("c1", "read", None), ("c2", "write", None), ("c5", "low", "a")]
+    assert [(h["call_id"], h["level"], h["by"]) for h in held["a"]] == [("c0", "write", None), ("c4", "low", None)]
+    assert held["b"][-1] | {"by": None} == {"call_id": "c5", "level": "low", "posts": 1, "mbar": 1.0, "ceiling": 1.0,
+                                            "by": None}
+
+
+def test_a_change_after_the_last_board_call_has_no_call():
+    board = Board()
+    board.post("a")
+    board.read("b")
+    board.post("b")
+    board.read("a")
+    board.post("a")   # round 1: a and b low; b never reads or posts again
+    held = coordination_of(board.record(), {"a": None, "b": None})["held"]
+    assert held["b"][-1]["call_id"] is None and held["b"][-1]["level"] == "low" and held["b"][-1]["by"] == "a"
+
+
+def test_a_one_agent_run_has_no_steps_of_level():
+    board = Board()
+    board.post("a")
+    result = coordination_of(board.record(), {"a": None})
+    assert result["held"] == {"a": []} and result["team_steps"] == []
+    assert coordination_steps(board.record(), {"a": None})[0]["agents"]["a"]["level"] is None

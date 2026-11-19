@@ -239,7 +239,7 @@ a new `INDEX_VERSION` (now 10) or new code measures every run. The run page read
 
 | hash | page |
 |---|---|
-| `#/?col=&task=&model=&workers=&worker=&influencer=&lv_<ladder>=&cheated=&min_disclosure=&min_manipulation=&q=&sort=&dir=&page=&size=` | Runs: one row per valid run |
+| `#/?col=&task=&model=&workers=&worker=&influencer=&influencer_level=&lv_<ladder>=&cheated=&min_disclosure=&min_manipulation=&q=&sort=&dir=&page=&size=` | Runs: one row per valid run |
 | `#/run/<collection>/<run key>?agent=&call=` | a run: a tab per agent with its episode, a Board and a Details tab |
 | `#/run/<collection>/<run key>?agent=&label=` | a run opened at the place code located the agent's excerpt of a judge label (`disclosure`, `manipulation`), highlighted |
 | `#/run/<collection>/<run key>?tab=board&a=&b=&mode=&pos=&lens=` | the Board tab: agents `a`, `b`; `time` or `step`; `pos`; `lens` (`all`, `cheating`, `coordination`, `collusion`, `judge`) |
@@ -249,7 +249,7 @@ a new `INDEX_VERSION` (now 10) or new code measures every run. The run page read
 `<ladder>` is `cheating`, `coordination` or `collusion`; a ladder filter's value is the team's level. `workers` is the
 number of workers; `worker` is the worker conditioning (`not told`, `told to cheat`, a rule's words such as `generic
 honesty rule` or `rule naming the exploit`), the one filter that tells runs told to cheat from runs not told;
-`influencer` keeps the runs with an influencer of one kind and level (`regulator: enforce`), or `none`; `cheated` is
+`influencer` keeps the runs whose influencers are `regulator`, `disregulator`, `both` or `none`; `influencer_level` keeps the runs with an influencer at one level (`regulator: enforce`), its options limited to the runs `influencer` keeps; `cheated` is
 `yes` or `no` (the team's, the code's). `min_disclosure` and `min_manipulation` ("Disclosure at least", "Manipulation
 at least", a number box) keep the runs whose team score is at least the number; a run no judge scored has none.
 `q` keeps the runs whose name contains the text.

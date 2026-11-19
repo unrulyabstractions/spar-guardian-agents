@@ -67,10 +67,14 @@ const TEAM_TITLE = {
 /** A cell with nothing to show: a run with no influencer, or a run of one agent. */
 const none = () => muted('–', 'small');
 
-/** The influencer conditioning filter's value of one influencer: its kind and level. */
-const influencerKind = x => (x.level ? `${x.role}: ${x.level}` : x.role);
-const NO_INFLUENCER = 'none';
-const influencerKinds = r => (r.influencer_conditioning.length ? r.influencer_conditioning.map(influencerKind) : [NO_INFLUENCER]);
+/** The influencers a run holds: none, regulator, disregulator or both. */
+const INFLUENCER_SETS = ['regulator', 'disregulator', 'both', 'none'];
+const influencerSet = r => {
+  const roles = new Set(r.influencer_conditioning.map(x => x.role));
+  return roles.size > 1 ? 'both' : roles.size ? [...roles][0] : 'none';
+};
+/** One influencer's conditioning as a filter value: its role and its level. */
+const influencerLevel = x => `${x.role}: ${x.level || 'no level'}`;
 
 /** A worker conditioning's chip: not told calm, told to cheat warm, a rule cool and a rule naming the exploit strong. */
 const CONDITIONING_TONE = { 'not told': 'cond-none', 'told to cheat': 'cond-cheat', 'rule naming the exploit': 'cond-rule-strong',
@@ -178,8 +182,18 @@ function filters(d) {
     { key: 'model', label: 'Workers\' model', group: 'who', options: rows => uniq(rows.map(modelLabel)).sort().map(x => [x, x]), test: (r, v) => modelLabel(r) === v },
     { key: 'worker', label: 'Worker conditioning', group: 'who', options: rows => uniq(rows.map(r => r.worker_conditioning)).sort().map(x => [x, x]),
       test: (r, v) => r.worker_conditioning === v },
-    { key: 'influencer', label: 'Influencer', group: 'who', title: 'An influencer\'s kind and level, or none',
-      options: rows => uniq(rows.flatMap(influencerKinds)).sort().map(x => [x, x]), test: (r, v) => influencerKinds(r).includes(v) },
+    { key: 'influencer', label: 'Influencer', group: 'who', title: 'Which influencers the run holds',
+      options: rows => INFLUENCER_SETS.filter(k => rows.some(r => influencerSet(r) === k)).map(k => [k, k]),
+      test: (r, v) => influencerSet(r) === v },
+    { key: 'influencer_level', label: 'Influencer conditioning', group: 'who', dependsOn: 'influencer',
+      title: 'An influencer\'s instruction level',
+      options: (rows, f) => {
+        const kept = rows.filter(r => !f.influencer || influencerSet(r) === f.influencer);
+        const one = ['regulator', 'disregulator'].includes(f.influencer);
+        return uniq(kept.flatMap(r => r.influencer_conditioning.map(influencerLevel))).sort()
+          .map(v => [v, one ? v.slice(v.indexOf(': ') + 2) : v]);
+      },
+      test: (r, v) => r.influencer_conditioning.some(x => influencerLevel(x) === v) },
     ladder('cheating'),
     { key: 'cheated', label: 'Cheated', group: 'outcome', title: 'Whether the team cheated, read by code',
       options: () => [['yes', 'yes'], ['no', 'no']], test: (r, v) => r.levels.cheated === (v === 'yes') },
@@ -226,9 +240,19 @@ export async function viewIndex(q) {
       box.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { state.f[f.key] = box.value.trim(); changed(); }, 150); });
       return box;
     }
-    const options = [['', 'All'], ...f.options(rows)];
+    const options = [['', 'All'], ...f.options(rows, state.f)];
     if (!options.some(([v]) => v === state.f[f.key])) state.f[f.key] = '';
-    return select(options, state.f[f.key], v => { state.f[f.key] = v; changed(); }, { 'aria-label': f.label });
+    return select(options, state.f[f.key], v => { state.f[f.key] = v; refreshDependents(f.key); changed(); },
+      { 'aria-label': f.label });
+  };
+  // A filter whose options follow another's choice (dependsOn) is drawn again when that choice changes.
+  const refreshDependents = key => {
+    for (const g of FILTERS.filter(x => x.dependsOn === key)) {
+      const x = fields.get(g.key);
+      const el = control(g);
+      x.field.replaceChild(el, x.el);
+      x.el = el;
+    }
   };
   for (const f of FILTERS) {
     const el = control(f);
@@ -237,6 +261,7 @@ export async function viewIndex(q) {
   const reset = h('button', { type: 'button', class: 'btn btn-small idx-reset', onclick: () => {
     for (const f of FILTERS) state.f[f.key] = '';
     for (const [key, x] of fields) x.el.value = state.f[key];
+    for (const f of FILTERS) refreshDependents(f.key);
     state.sort = '';
     changed();
   } }, 'Reset filters');

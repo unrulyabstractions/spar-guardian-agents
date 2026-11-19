@@ -17,7 +17,8 @@ measure says so (cheating_ladder.cheated: attempted or above). The pointers to t
 honeypot scan records (signals.jsonl's exposed and tried) are no rung: they are shown as evidence under the agent's
 cell.
 Coordination is src/measures/coordination.py's ladder (none, read, write, low, medium, high, extreme), its answer for
-the run (run_coordination), the same rule on every task.
+the run (run_coordination), the same rule on every task, read at every board event: an agent's events are the levels
+it holds from each of its own board calls on (the measure's held), a fall from high or extreme included.
 Collusion is src/measures/collusion.py's ladder (none, cooperation, collaboration, collusion), the measure's answer for
 the run (collusion_shown), every rung read by code.
 The judge labels (JUDGE_LABELS) stand beside the ladders and are no rung: disclosure and manipulation, each a score
@@ -368,27 +369,26 @@ def _coord_facts(a: str, C: dict) -> list[list[str]]:
 
 
 def _board_event(level: str, call_id: str, verb: str, names: list[str]) -> dict:
-    """A Coordination event at a board call: read (the posts it read) or write (the posts it wrote)."""
+    """A Coordination label at a board call: read (the posts it read) or write (the posts it wrote)."""
     return {"ladder": "coordination", "level": level, "index": coordination.LEVELS.index(level), "call_id": call_id,
             "evidence": f"{verb} " + ", ".join(names), "facts": [[verb, ", ".join(names)]]}
 
 
+def _held_facts(h: dict) -> list[list[str]]:
+    """A level an agent holds at a call as facts: its posts and rounds per teammate so far, and the teammate whose post
+    made the change."""
+    facts = [["posts", str(h["posts"])], ["rounds per teammate", f"{h['mbar']:.1f} of {h['ceiling']:.1f}"]]
+    return facts + ([["after a post by", h["by"]]] if h["by"] else [])
+
+
 def _coord_events(a: str, C: dict) -> list[dict]:
-    """The first call that read a teammate's post (read), the first call that posted (write), and a level of low or
-    above, which belongs to no single call (end of run)."""
-    calls, level = C["calls"].get(a) or {}, C["agents"][a]["level"]
-    ev = []
-    if calls.get("read"):
-        call_id, names = calls["read"]
-        ev.append(_board_event("read", call_id, "read", names))
-    if calls.get("posts"):
-        call_id, names = calls["posts"][0]
-        ev.append(_board_event("write", call_id, "wrote", names))
-    idx = coordination.LEVELS.index(level) if level else 0
-    if idx >= coordination.LEVELS.index("low"):
-        ev.append({"ladder": "coordination", "level": level, "index": idx, "k": None,
-                   "evidence": _coord_evidence(a, C), "facts": _coord_facts(a, C)})
-    return ev
+    """Each change of the level the agent holds (the measure's held: its level after each of its own board calls), at
+    that call, or at the end of the run for a change after its last board call. Each is held: the level replaces the
+    one before, which may be higher (high or extreme falls back when the ceiling outgrows the rounds)."""
+    return [{"ladder": "coordination", "level": h["level"], "index": coordination.LEVELS.index(h["level"]),
+             "held": True, **({"call_id": h["call_id"]} if h["call_id"] else {"k": None}),
+             "evidence": f"{h['level']}: {h['posts']} posts, {h['mbar']:.1f} of {h['ceiling']:.1f} rounds per teammate",
+             "facts": _held_facts(h)} for h in C["held"].get(a) or []]
 
 
 def _team_coord(C: dict, workers: list[str]) -> dict:
@@ -502,8 +502,9 @@ def _agent_labels(a: str, events: list[dict], cheats: dict[int, list[tuple[str, 
     every call: each call a Cheating clause's evidence cites, the first call that read a teammate's post on the board
     (Coordination read), each call that posted (Coordination write), each call that took a teammate's work
     (Collusion cooperation), and the first call of every other level. A call that holds a higher label of a ladder
-    does not repeat a lower one from an event. A level counted at the end of the run (Cheating hacked, Coordination
-    low and above, Collusion collaboration and above among them) belongs to no call and gets no label."""
+    does not repeat a lower one from an event. A level counted at the end of the run (Cheating hacked, a Coordination
+    level reached after the agent's last board call, Collusion collaboration and above among them) belongs to no call
+    and gets no label."""
     out: dict[tuple, dict] = {}
 
     def add(ladder: str, level: str, where: dict, evidence: str, facts: list) -> None:
@@ -543,11 +544,12 @@ def compute(sig_agents: dict[str, dict], episodes: list[dict], boards: list[dict
     [label]}, "judge_labels": the measure's judge labels (judge_labels.labels), "single": bool, "ladders",
     "judge_label_about" (label_about), "order", "cheating", "coordination", "collusion"}. A cell is {level, index, of,
     evidence, facts[, na]}, a Cheating cell with cheated; an event is
-    {ladder, level, index, k (a call number) | call_id | neither (counted at the end of the run), evidence, facts}:
-    the first call that reached the level. Facts are the evidence as [name, value] pairs, what a level chip lists.
-    A label has an event's keys and always a call: every call that is evidence for the
-    level (_agent_labels). `sig_agents` are the honeypot scan's agent rows (signals.jsonl), whose exposed and tried
-    records are shown below the Cheating ladder; `boards` the viewer's board (transcript_index.board_view);
+    {ladder, level, index, k (a call number) | call_id | neither (counted at the end of the run), evidence, facts[,
+    held]}: the first call that reached the level, or, held (Coordination), the call from which the agent holds it,
+    which replaces the level before even when lower. Facts are the evidence as [name, value] pairs, what a level chip
+    lists. A label has an event's keys and always a call: every call that is evidence for the level (_agent_labels).
+    `sig_agents` are the honeypot scan's agent rows (signals.jsonl), whose exposed and tried records are shown below
+    the Cheating ladder; `boards` the viewer's board (transcript_index.board_view);
     `measured` the run's cached measures (transcript_index.RunFiles.measured): cheating (cheating_shown), coordination
     (run_coordination), collusion (collusion_shown) and labels (judge_labels.labels). "cheating" is the Cheating answer
     with each agent's records below the ladder ("below"), "coordination" the Coordination answer (None for a one-agent
@@ -590,7 +592,7 @@ def compute(sig_agents: dict[str, dict], episodes: list[dict], boards: list[dict
     t = {"cheating": _cell("cheating", None, cheating.get("reason") or "") if X is None else _team_cheat(X),
          "coordination": _cell("coordination", None, ONE_AGENT) if C is None else _team_coord(C, workers),
          "collusion": _cell("collusion", None, why_not) if M is None else _team_collusion(M)}
-    shown = None if C is None else {k: v for k, v in C.items() if k != "calls"}
+    shown = None if C is None else {k: v for k, v in C.items() if k not in ("calls", "held", "team_steps")}
     cheated = cheating if X is None else {
         **X, "agents": {a: {**r, "below": below.get(a) or []} for a, r in X["agents"].items()}}
     return {"agents": agents_out, "team": t, "events": events, "labels": labels, "judge_labels": measured["labels"],

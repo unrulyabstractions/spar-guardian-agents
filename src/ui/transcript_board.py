@@ -2,7 +2,7 @@
 transcript viewer (src/ui/transcript_viewer.py, route /api/board).
 
     payload = board_payload(run_dir, levels)
-    payload["agents"][0]["calls"][0]        # {k, m, t, dur, tool, summary, board, labels, marks}
+    payload["agents"][0]["calls"][0]        # {k, m, t, dur, tool, summary, board, labels, marks, held}
     payload["agents"][0]["calls"][0]["marks"]["cheating"]   # [{level, index, clause, evidence}]: one lens's marks
     payload["agents"][0]["final"]           # {ladder: {level, facts}}: the agent's level at the end of the run
     payload["agents"][0]["unplaced"]        # {lens: {clause, rule or label: records that name no call}}
@@ -36,7 +36,9 @@ on it, with no level computed here.
   sits in; the clause's rung (cheating_ladder.CLAUSES) is the mark's level.
 - coordination: each call that read a teammate's post it had not read before (the post's first read by that agent,
   from the posts' reads) as read, and each call that posted as write, with the teammates whose new posts that post
-  took up (took_up: the step in coordination.board_counts' R_ij at that post).
+  took up (took_up: the step in the measure's R_ij at that post); and each change of the level the agent holds (the
+  run page's held events, src/measures/coordination.py held_levels) at the call from which it holds it, held. A call's
+  "held" is the index of the level the agent holds at it (held_at), which can fall from high or extreme.
 - collusion: each take of the agent (the measure's pairs) at its call, or at the calls its evidence cites, with whose
   work it took, its rule and whether it is a take of a planted piece (PIECE_RULE).
 - judge: each judge label located in the agent's reasoning, at the tool calls of that model call (the judges number
@@ -218,20 +220,38 @@ def cheating_marks(placed: Placed, levels: dict, agent: str, logged: dict[str, l
                         "evidence": line}, clause)
 
 
-def took_up(boards: list[dict], agents: list[str]) -> dict[str, list[str]]:
-    """tool call id of each post -> the teammates whose new posts it took up, in `agents` order: the R_ij of
-    coordination.board_counts that grew at that post, the board's events read up to it."""
+def took_up(boards: list[dict], roles: dict[str, str | None]) -> dict[str, list[str]]:
+    """tool call id of each post -> the teammates whose new posts it took up, in `roles` order: the R_ij that grew at
+    that post, from the measure's rows before and after it (coordination.coordination_steps)."""
+    agents = list(roles)
     out: dict[str, list[str]] = {}
-    before: dict[tuple[str, str], int] = {}
-    for b, board in enumerate(boards):
-        events = board.get("events") or []
-        for e, event in enumerate(events):
-            if event.get("kind") != "sent" or event.get("agent_id") not in agents:
-                continue
-            after = coordination.board_counts([*boards[:b], {**board, "events": events[:e + 1]}], agents).takes_up
-            out[event.get("tool_call_id")] = sorted((j for (i, j), n in after.items() if n > before.get((i, j), 0)),
-                                                    key=agents.index)
-            before = after
+    before = {a: dict.fromkeys(agents, 0) for a in agents}
+    for step in coordination.coordination_steps(boards, roles):
+        if step["kind"] == "sent":
+            a = step["agent"]
+            grew = step["agents"][a]["takes_up"]
+            out[step["call_id"]] = [b for b in agents if grew.get(b, 0) > before[a].get(b, 0)]
+        before = {a: row["takes_up"] for a, row in step["agents"].items()}
+    return out
+
+
+def held_marks(placed: Placed, levels: dict, agent: str, ids: dict[str, int]) -> None:
+    """Each change of the Coordination level the agent holds (transcript_levels' held events in `levels`) at the call
+    from which it holds it (`ids`, tool call id -> k); one after its last board call names no call."""
+    for e in (levels.get("events") or {}).get(agent) or []:
+        if e.get("held"):
+            k = ids.get(e.get("call_id"))
+            placed.put("coordination", agent, [] if k is None else [k],
+                       {"level": e["level"], "index": e["index"], "held": True, "evidence": e["evidence"]}, e["level"])
+
+
+def held_at(rows: list[Call], placed: Placed, agent: str) -> list[int | None]:
+    """The Coordination level the agent holds at each of its calls, in order: the index of the latest held mark at or
+    before the call (held_marks), None before the first."""
+    out, now = [], None
+    for c in rows:
+        now = next((m["index"] for m in placed.at(agent, c.k)["coordination"] if m.get("held")), now)
+        out.append(now)
     return out
 
 
@@ -353,7 +373,7 @@ def board_payload(run_dir: Path, levels: dict) -> dict:
     posts.sort(key=lambda p: p["t"])
     placed = Placed()
     logged = logged_calls(run_dir, {c.id: (c.agent, c.k) for c in by_id.values()})
-    took = {(by_id[i].agent, by_id[i].k): up for i, up in took_up(run.boards, list(run.roles)).items() if i in by_id}
+    took = {(by_id[i].agent, by_id[i].k): up for i, up in took_up(run.boards, run.roles).items() if i in by_id}
     coordination_marks(placed, posts, took)
     post_calls = {p["label"]: p["call"] for p in posts if p["call"] is not None}
     agents = []
@@ -361,12 +381,14 @@ def board_payload(run_dir: Path, levels: dict) -> dict:
         cheating_marks(placed, levels, agent, logged.get(agent) or {})
         take_marks(placed, levels, agent)
         k_of = {c.id: c.k for c in rows}
+        held_marks(placed, levels, agent, k_of)
         judge_marks(placed, levels, agent, by_model.get(agent) or [], k_of, post_calls)
         labels = call_labels(levels, agent, k_of)
         agents.append({"agent": agent, "role": run.roles.get(agent) or "worker", "calls": [{
             "k": c.k, "m": steps.get(c.id), "t": at[(agent, c.k)][0], "dur": at[(agent, c.k)][1], "tool": c.tool,
             "summary": summary(c, wrote.get(c.id, []), read.get(c.id, [])), "board": BOARD_TOOLS.get(c.tool),
-            "labels": labels.get(c.k, []), "marks": placed.at(agent, c.k)} for c in rows],
+            "labels": labels.get(c.k, []), "marks": placed.at(agent, c.k), "held": held}
+            for c, held in zip(rows, held_at(rows, placed, agent))],
             "final": final(levels, agent), "unplaced": placed.unplaced(agent)})
     agents.sort(key=lambda a: (a["role"] != "worker", a["agent"]))
     posts_by = {a: sum(p["writer"] == a for p in posts) for a in run.roles}

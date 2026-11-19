@@ -123,7 +123,8 @@ def test_calls_are_in_order_with_the_eval_logs_times(tmp_path):
     assert p["ladders"] == {"cheating": {k: LADDERS["cheating"][k] for k in ("name", "levels", "line", "line_words")}}
     assert set(p) == {"clock", "clock_about", "total", "agents", "posts", "pair", "pair_why", "ladders", "label_names",
                       "notes"}
-    assert set(by["a01"]["calls"][0]) == {"k", "m", "t", "dur", "tool", "summary", "board", "labels", "marks"}
+    assert set(by["a01"]["calls"][0]) == {"k", "m", "t", "dur", "tool", "summary", "board", "labels", "marks",
+                                          "held"}
     assert set(by["a01"]["calls"][0]["marks"]) == set(tb.LENSES) and set(by["a01"]["unplaced"]) == set(tb.LENSES)
     assert set(p["posts"][0]) == {"label", "writer", "role", "kind", "t", "call", "text", "reads", "labels"}
     assert p["label_names"] == {"disclosure": "Disclosure", "manipulation": "Manipulation"}
@@ -316,6 +317,28 @@ def test_coordination_marks_each_new_read_and_each_post_with_the_teammates_it_to
     assert counted == coordination.board_counts(boards, list(ROLES)).takes_up
 
 
+def held(level: str, where: dict) -> dict:
+    """A held Coordination event of the run page (transcript_levels._coord_events) at a call id, or with no call."""
+    return {"ladder": "coordination", "level": level, "index": coordination.LEVELS.index(level), "held": True,
+            **where, "evidence": f"{level}: so far", "facts": []}
+
+
+def test_the_coordination_level_held_is_placed_at_its_call_and_carried_to_the_next_change(tmp_path):
+    """a01 holds high from its post (call 1) and falls to medium at its read (call 2): each call carries the level it
+    holds, the fall included; a02 holds write from call 2 and low after its last call, which names no call and is
+    counted by its level."""
+    events = {"a01": [held("high", {"call_id": cid("a01", 1)}), held("medium", {"call_id": cid("a01", 2)})],
+              "a02": [held("write", {"call_id": cid("a02", 2)}), held("low", {"k": None})]}
+    p = payload(write_run(tmp_path), {**levels(), "events": events})
+    by = {a["agent"]: a for a in p["agents"]}
+    assert [c["held"] for c in by["a01"]["calls"]] == [None, 5, 4]
+    assert [c["held"] for c in by["a02"]["calls"]] == [None, None, 2, 2]
+    assert [c["held"] for c in by["r01"]["calls"]] == [None, None]
+    a01 = marks_of(p, "coordination")["a01"]
+    assert [(m["level"], m["evidence"]) for m in a01[2] if m.get("held")] == [("medium", "medium: so far")]
+    assert by["a02"]["unplaced"]["coordination"] == {"low": 1} and by["a01"]["unplaced"]["coordination"] == {}
+
+
 def test_each_take_is_placed_at_its_call_and_a_planted_piece_is_marked_apart(tmp_path):
     """a02's git take sits at its call; its take of a01's planted piece at the call its evidence quotes; a01's take
     from a final log names no call and is counted by its rule."""
@@ -439,5 +462,11 @@ def test_a_real_run_reads_its_eval_log_board_and_measures_without_writing():
         if post["call"] is not None:
             wrote = calls[(post["writer"], post["call"])]["marks"]["coordination"]
             assert any(m["post"] == post["label"] for m in wrote if m["level"] == "write")
+    # the Coordination level each agent holds at its last call is its level at the end of the run, unless the level
+    # changed after its last board call (an event with no call)
+    for a in p["agents"]:
+        ends = [e for e in lv["events"][a["agent"]] if e.get("held")]
+        if ends and ends[-1].get("call_id"):
+            assert a["calls"][-1]["held"] == lv["agents"][a["agent"]]["coordination"]["index"]
     # the access log's reads place moved at calls, beyond the one call each agent's opened cites
     assert sum(any(m["clause"] == "moved" for m in c["marks"]["cheating"]) for c in calls.values()) > 3

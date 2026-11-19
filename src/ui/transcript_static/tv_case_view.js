@@ -206,7 +206,8 @@ export function renderCase(t, ctx) {
   const markOf = mm => ((judgedAt.get(mm) || []).find(x => x.span) || {}).span || null;
   const n = calls.length;
   const idOf = new Map(calls.map(c => [c.tc.tool_call_id, c.k]));
-  // 2. level per ladder per call (monotone), and milestones
+  // 2. level per ladder per call, and milestones: the highest reached so far, or for a held event (Coordination) the
+  // level the event sets, which may be lower than the one before
   const order = lv ? lv.order : ['cheating'];
   const evs = (lv && lv.events && lv.events[ctx.agent]) || [];
   const at = new Map();
@@ -225,7 +226,7 @@ export function renderCase(t, ctx) {
   const fresh = new Map();
   for (let k = 0; k < n; k++) {
     for (const e of at.get(k) || []) {
-      if (e.index <= cur[e.ladder]) continue;
+      if (e.held ? e.index === cur[e.ladder] : e.index <= cur[e.ladder]) continue;
       cur[e.ladder] = e.index;
       curEv[e.ladder] = { k, facts: e.facts || [] };
       if (!fresh.has(k)) fresh.set(k, []);

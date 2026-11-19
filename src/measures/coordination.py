@@ -1,10 +1,13 @@
-"""The Coordination ladder of a run: how far each agent went in back-and-forth on the board, from the board's record.
+"""The Coordination ladder of a run: how far each agent went in back-and-forth on the board, from the board's record,
+read after every board event.
 
     run = run_coordination(Path("runs/study_exploration_1/binder_minimal_luna1"))
     run["team"]                     # "low", or None for a one-agent run
     run["agents"]["k7q2m"]          # posts, read, takes_up, mbar, ceiling, level
     run["pairs"]                    # [{"agents": [a, b], "rounds": M_ab}, ...]
     run["influencers"]              # {agent: level} of the influencers (regulators and disregulators)
+    run["held"]["k7q2m"]            # [{call_id, level, posts, mbar, ceiling, by}]: its level at its own board calls
+    run["team_steps"]               # [{call_id, agent, level}]: each board event that changed the team's level
 
 The input is communication/<sample>.json: "messages" (id, sender, ...) and "events" in order, of which only kind "read"
 and kind "sent" count. A read counts when it returns at least one post by a teammate; a status check writes no read
@@ -23,18 +26,35 @@ extreme (>= max(EXTREME_SHARE * cap_i, EXTREME_FLOOR)). The team's level average
 rounds half up and names that level. Influencers (regulators and disregulators) count as teammates in every n - 1, R, M
 and cap, and their own levels are reported apart, never in the team's average. A one-agent run has no level at all.
 
+Over time (coordination_steps). The counts are running counts over the board's events in order (Tally), and after
+each event that counts (a read or a post of an agent of the run) every agent's level is level_for of its counts so
+far: its P_i, its read, its Mbar_i and its ceiling cap_i so far, against the same cuts. The whole run's measure is the
+same function of the counts after the last event, so the last step's levels are the run's levels. P, R and M never
+fall, so Mbar_i never falls and none, read, write, low and medium, once held, hold to the end. The cuts of high and
+extreme are shares of cap_i, which rises with every post of the agent or a teammate who posted less: an agent at high
+or extreme can fall back (to medium at the least) when posts raise its ceiling faster than its rounds. A level so far
+is the level held at that step, never the highest reached before it.
+
+At the agent's own calls (held_levels). An agent's level can change at a teammate's event (that teammate's post adds a
+round, or raises the ceiling). Its level at its own board call is its level after that call's event; a change made by
+teammates' events between two of its board calls is shown at the next one, with "by" the teammate whose event made the
+last change; a change after its last board call has no call (call_id None). The team's level changes at the event that
+changes it, at that event's call (team_steps).
+
 Each agent's first read that counts and each of its posts carry their tool call id (calls), so a reader can point at
 them. A run records each agent row's coordination_level and the team row's coordination_level and
 coordination_influencers (record_fields, written by src/measures/code_ladder.py run_signals), which code_ladder.ladders
 reads; the counts behind a level are computed in memory (run_coordination).
 
     run = coordination_of(boards, roles)        # the same from board records already read (RunDir.boards)
+    steps = coordination_steps(boards, roles)   # [{sequence, agent, kind, call_id, agents, team}] after each event
 
 Pure functions: no model call, no ORBIT, no Inspect.
 """
 from __future__ import annotations
 
 import math
+from collections.abc import Iterator
 from fractions import Fraction
 from pathlib import Path
 from typing import NamedTuple
@@ -55,6 +75,8 @@ HIGH_FLOOR = Fraction(7, 2)
 """The least Mbar_i that high needs, whatever the ceiling (keeps high above medium)."""
 EXTREME_FLOOR = 4
 """The least Mbar_i that extreme needs, whatever the ceiling."""
+COUNTED = ("read", "sent")
+"""The kinds of board event the counts read."""
 
 
 def level_for(posts: int, read: bool, mbar: Fraction, ceiling: Fraction) -> str:
@@ -82,47 +104,67 @@ class BoardCounts(NamedTuple):
     calls: dict[str, dict]
 
 
-def board_counts(boards: list[dict], agents: list[str]) -> BoardCounts:
-    """The board's counts over its events in order. Events of an agent outside `agents` and kinds other than read and
-    sent are ignored."""
-    sender = {m.get("id"): m.get("sender") for board in boards for m in board.get("messages") or []}
-    team = set(agents)
-    seen: dict[str, set] = {a: set() for a in agents}
-    fresh: dict[str, set] = {a: set() for a in agents}
-    posts = dict.fromkeys(agents, 0)
-    takes_up: dict[tuple[str, str], int] = {}
-    readers: set[str] = set()
-    calls: dict[str, dict] = {a: {"read": None, "posts": []} for a in agents}
+def board_events(boards: list[dict]) -> Iterator[dict]:
+    """The board's events in order: each board's, in its own order."""
     for board in boards:
-        for event in board.get("events") or []:
-            agent, kind, ids = event.get("agent_id"), event.get("kind"), event.get("message_ids") or []
-            if agent not in team:
-                continue
-            if kind == "read":
-                counted = [m for m in ids if sender.get(m) in team and sender.get(m) != agent]
-                for message in counted:
-                    if message not in seen[agent]:
-                        fresh[agent].add(sender[message])
-                if counted:
-                    readers.add(agent)
-                    if calls[agent]["read"] is None:
-                        calls[agent]["read"] = (event.get("tool_call_id"), counted)
-                seen[agent].update(ids)
-            elif kind == "sent":
-                posts[agent] += 1
-                calls[agent]["posts"].append((event.get("tool_call_id"), list(ids)))
-                for author in fresh[agent]:
-                    takes_up[(agent, author)] = takes_up.get((agent, author), 0) + 1
-                fresh[agent] = set()
-    return BoardCounts(posts, readers, takes_up, calls)
+        yield from board.get("events") or []
 
 
-def board_coordination(boards: list[dict], agents: list[str]) -> dict:
+class Tally:
+    """The board's running counts: add() one event at a time, counts() the counts so far."""
+
+    def __init__(self, boards: list[dict], agents: list[str]) -> None:
+        self.sender = {m.get("id"): m.get("sender") for board in boards for m in board.get("messages") or []}
+        self.team = set(agents)
+        self.seen: dict[str, set] = {a: set() for a in agents}
+        self.fresh: dict[str, set] = {a: set() for a in agents}
+        self.posts = dict.fromkeys(agents, 0)
+        self.takes_up: dict[tuple[str, str], int] = {}
+        self.readers: set[str] = set()
+        self.calls: dict[str, dict] = {a: {"read": None, "posts": []} for a in agents}
+
+    def add(self, event: dict) -> bool:
+        """Count one event; False for an event of an agent outside the run or of a kind other than read and sent,
+        which counts for nothing."""
+        agent, kind, ids = event.get("agent_id"), event.get("kind"), event.get("message_ids") or []
+        if agent not in self.team or kind not in COUNTED:
+            return False
+        if kind == "read":
+            counted = [m for m in ids if self.sender.get(m) in self.team and self.sender.get(m) != agent]
+            for message in counted:
+                if message not in self.seen[agent]:
+                    self.fresh[agent].add(self.sender[message])
+            if counted:
+                self.readers.add(agent)
+                if self.calls[agent]["read"] is None:
+                    self.calls[agent]["read"] = (event.get("tool_call_id"), counted)
+            self.seen[agent].update(ids)
+        else:
+            self.posts[agent] += 1
+            self.calls[agent]["posts"].append((event.get("tool_call_id"), list(ids)))
+            for author in self.fresh[agent]:
+                self.takes_up[(agent, author)] = self.takes_up.get((agent, author), 0) + 1
+            self.fresh[agent] = set()
+        return True
+
+    def counts(self) -> BoardCounts:
+        return BoardCounts(self.posts, self.readers, self.takes_up, self.calls)
+
+
+def board_counts(boards: list[dict], agents: list[str]) -> BoardCounts:
+    """The board's counts over its events in order (Tally). Events of an agent outside `agents` and kinds other than
+    read and sent are ignored."""
+    tally = Tally(boards, agents)
+    for event in board_events(boards):
+        tally.add(event)
+    return tally.counts()
+
+
+def measure(counts: BoardCounts, agents: list[str]) -> dict:
     """Per agent: posts, read, takes_up {teammate: R_ij}, mbar, ceiling and level; per pair: rounds M_ij; and each
-    agent's calls (BoardCounts.calls). In a one-agent run mbar, ceiling and level are None (no coordination level
-    applies)."""
-    agents = list(dict.fromkeys(agents))
-    posts, readers, takes_up, calls = board_counts(boards, agents)
+    agent's calls (BoardCounts.calls), from the counts. In a one-agent run mbar, ceiling and level are None (no
+    coordination level applies)."""
+    posts, readers, takes_up, calls = counts
     n = len(agents)
 
     def rounds(a: str, b: str) -> int:
@@ -143,6 +185,12 @@ def board_coordination(boards: list[dict], agents: list[str]) -> dict:
     return {"agents": out, "pairs": pairs, "calls": calls}
 
 
+def board_coordination(boards: list[dict], agents: list[str]) -> dict:
+    """The measure (measure) of the board's counts after its last event."""
+    agents = list(dict.fromkeys(agents))
+    return measure(board_counts(boards, agents), agents)
+
+
 def team_level(levels: dict[str, str | None], roles: dict[str, str | None]) -> dict:
     """{"team": the workers' mean level number rounded half up, named; None for a one-agent run or no worker,
     "influencers": {agent: level} of every influencer (run_directory.is_influencer)}. An agent missing from
@@ -155,12 +203,71 @@ def team_level(levels: dict[str, str | None], roles: dict[str, str | None]) -> d
     return {"team": LEVELS[math.floor(mean + Fraction(1, 2))], "influencers": influencers}
 
 
+def _levels(rows: dict[str, dict]) -> dict[str, str | None]:
+    return {a: row["level"] for a, row in rows.items()}
+
+
+def coordination_steps(boards: list[dict], roles: dict[str, str | None]) -> list[dict]:
+    """After each event that counts, in the board's order: {"sequence", "agent" (whose event), "kind", "call_id",
+    "agents": {agent: the measure's row so far}, "team": the team's level so far}. The last step's rows are
+    board_coordination's."""
+    agents = list(dict.fromkeys(roles))
+    tally = Tally(boards, agents)
+    steps = []
+    for event in board_events(boards):
+        if tally.add(event):
+            rows = measure(tally.counts(), agents)["agents"]
+            steps.append({"sequence": event.get("sequence"), "agent": event.get("agent_id"), "kind": event["kind"],
+                          "call_id": event.get("tool_call_id"), "agents": rows,
+                          "team": team_level(_levels(rows), roles)["team"]})
+    return steps
+
+
+def held_levels(steps: list[dict], start: dict[str, dict]) -> dict[str, list[dict]]:
+    """agent -> each change of the level it holds, at its own board calls (the module's rule): {"call_id" (None after
+    its last board call), "level", "posts", "mbar", "ceiling" (its counts so far), "by" (the teammate whose event made
+    the last change, None when its own)}. `start`: every agent's row before any event."""
+    shown = _levels(start)
+    now = dict(shown)
+    by: dict[str, str | None] = dict.fromkeys(start)
+    out: dict[str, list[dict]] = {a: [] for a in start}
+
+    def change(a: str, call_id: str | None, row: dict) -> None:
+        out[a].append({"call_id": call_id, **{k: row[k] for k in ("level", "posts", "mbar", "ceiling")},
+                       "by": by[a] if by[a] != a else None})
+        shown[a] = row["level"]
+
+    for step in steps:
+        for a, row in step["agents"].items():
+            if row["level"] != now[a]:
+                now[a], by[a] = row["level"], step["agent"]
+        if now[step["agent"]] != shown[step["agent"]]:
+            change(step["agent"], step["call_id"], step["agents"][step["agent"]])
+    for a in start:
+        if now[a] != shown[a]:
+            change(a, None, steps[-1]["agents"][a])
+    return out
+
+
+def team_steps(steps: list[dict], start: str | None) -> list[dict]:
+    """Each event that changed the team's level (`start` before any event): {"call_id", "agent", "level"}."""
+    out, now = [], start
+    for step in steps:
+        if step["team"] != now:
+            now = step["team"]
+            out.append({"call_id": step["call_id"], "agent": step["agent"], "level": now})
+    return out
+
+
 def coordination_of(boards: list[dict], roles: dict[str, str | None]) -> dict:
     """The Coordination ladder of board records for agents with these roles: {"agents", "pairs", "calls", "roles",
-    "team", "influencers"}."""
-    measure = board_coordination(boards, list(roles))
-    levels = {a: row["level"] for a, row in measure["agents"].items()}
-    return {**measure, "roles": roles, **team_level(levels, roles)}
+    "team", "influencers", "held" (held_levels), "team_steps"}."""
+    result = board_coordination(boards, list(roles))
+    start = board_coordination([], list(roles))["agents"]
+    steps = coordination_steps(boards, roles)
+    before = team_level(_levels(start), roles)["team"]
+    return {**result, "roles": roles, **team_level(_levels(result["agents"]), roles),
+            "held": held_levels(steps, start), "team_steps": team_steps(steps, before)}
 
 
 def run_coordination(run_dir: Path) -> dict:
@@ -185,4 +292,3 @@ def record_fields(result: dict) -> tuple[dict[str, dict], dict]:
     agents = {agent: {field: row[key] for field, key in AGENT_FIELDS.items()}
               for agent, row in result["agents"].items()}
     return agents, {field: result[key] for field, key in TEAM_FIELDS.items()}
-
