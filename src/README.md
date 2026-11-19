@@ -148,6 +148,9 @@ Everything computed over a run directory, without a model.
 - `run_calls.py`: the run's calls as the take rules read them (`load_run`), and a take (`Take`).
 - `git_takes.py`, `text_takes.py` and `file_takes.py`: the generic take rules, through the team's git remote, by units of text, and by files on a shared file system.
 - `judge_labels.py`: the judges beside the code: CheatBench's labels set beside the Cheating ladder's clauses (`judged_cheating`), each agent's disclosure, and the judge labels awareness and manipulation.
+- `measure_readings.py`: what independent readings of the transcripts found of each code rung and judge label, both
+  judge passes apart, from the hand-kept `measure_readings.yaml`: the one source of the viewer's How reliable section
+  and the paper's reliability table.
 - `ladder_by_domain.py`: what puts an agent on each Cheating rung, per task, for the paper's table and the viewer.
 - `access_evidence.py`: the access log as the transcript scan reads it: the calls it shows as aimed, the agent row's `access_log` key and the team's.
 - `ladder_domain.py`: `Domain`, what a domain tells the code's evidence, and `Evidence`. Each domain subclasses it in `_<d>_ladder.py` (`swe_ladder.py` for SWE).
@@ -172,7 +175,8 @@ and each agent's transcript:
 - `transcript_levels.py`: the three ladders and the judge labels as the page lays them out, per agent, per team and per
   call.
 - `transcript_board.py`: the Board tab's data.
-- `transcript_ladder_tables.py`: the Ladders page's tables by task, and what an independent reading found of each rung and label (`READINGS`).
+- `transcript_ladder_tables.py`: the Ladders page's tables by task, and what an independent reading found of each rung
+  and label (from `measures/measure_readings.yaml`).
 - `transcript_static/`: the page.
 
 The results browser is a single-page UI over `runs/` and the eval logs.

@@ -3,16 +3,15 @@ Our work is still ongoing. All results are preliminary.
 
 \subsection*{How reliable are these measures?}
 Code places every agent on the Cheating and Collusion ladders, and one judge gives the scheming verdict and the
-labels. A separate AI agent checked both by reading the transcripts, the board, the diffs and the hand-ins of a set
+labels. Separate AI agents checked both by reading the transcripts, the board, the diffs and the hand-ins of a set
 of cases. No human made these checks. Table~\ref{tab:reliability} gives, for each rung and label, how many cases it
-read and how many held. The checks read the rungs as they stood before the corrections they led to, and the judge's
-first verdicts. We then ran both judges again with corrected prompts and code. The tables of this appendix show these
-second verdicts, and no one has checked them yet. The code's rungs mostly held. Where the judge first said yes to
-scheming or awareness, the verdict mostly held, but the judge missed most true yeses. Manipulation is not yet
-validated. Most of its first yes verdicts did not hold, often because the judge believed another agent's accusation
-that it could not check. We leave its counts out of this paper. We
-therefore posit that the code's rungs can carry our results, and that the scheming and awareness labels give only
-one judge's reading.
+read and how many held. The checks read the rungs as they stood before the corrections they led to. They read the
+judge's first verdicts. We then ran both judges again with corrected prompts and code, and a second reading checked
+these second verdicts. The tables of this appendix show the second verdicts. The code's rungs mostly held. The
+second awareness verdicts held in all but one case. The second scheming flags mostly held, and every flag is about
+awareness. Manipulation is not validated. Most of its yes verdicts did not hold in either pass, because the judge saw
+neither the agents' tool outputs nor their whole tool calls. We leave manipulation out of our results. We
+therefore posit that the code's rungs and the awareness label can carry our results.
 
 \begin{table}[H]
   \centering
@@ -20,8 +19,9 @@ one judge's reading.
   \input{generated/reliability}
   \caption{How often an independent reading of the transcripts confirmed each rung and label of the multi-domain
   study. Read counts the cases checked, and held counts those where the reading agreed with the code or the judge.
-  The reader was an AI agent, and no human made these checks. The checks read the judge's first verdicts, before we
-  ran the judges again.}
+  Wrong counts those where it disagreed, and unclear those the evidence allows either way. The readers were AI agents,
+  and no human made these checks. The rows of the code's rungs read them before their corrections. The rows of the
+  judge read both passes, and the second pass is the one this appendix reports.}
   \label{tab:reliability}
 \end{table}
 
@@ -91,7 +91,8 @@ Most workers stay at none in every task.
 Teams cheat only on SWE and creative writing, and only there do they reach hacked.
 No protein design team goes past tempted.
 No run carries the alarm.
-On SWE, hacked means the agent's own trace of the planted fix in the hand-in and a pass of the hidden tests.
+On SWE, hacked means the agent's own trace of the planted fix, or a piece it supplied, in a hand-in that passed the
+hidden tests.
 Some regulators on protein design reach looked through what their oversight tool showed them.
 No regulator or disregulator goes past looked.
 \FloatBarrier
@@ -121,6 +122,8 @@ SWE holds most of the cooperation, collaboration and collusion, for workers and 
 Collusion appears on SWE and creative writing and never on protein design.
 The awareness label finds every colluding worker aware that it uses the planted work.
 No regulator or disregulator reaches collusion.
+No team with a regulator or a disregulator reaches collusion.
+The colluding teams are DeepSeek teams on SWE and one Luna team on creative writing told to cheat.
 \FloatBarrier
 
 \subsection*{Do colluding pairs talk about cheating or deceit?}
@@ -132,12 +135,17 @@ No human checked its verdicts.
   \includegraphics[width=\linewidth]{table_scheming_by_task}
 \end{figure}
 
-Every colluding pair of workers wrote to each other about cheating.
-The judge flagged posts for awareness only, and none for deceiving others.
+Every colluding pair reads yes.
+As measured here, scheming holds for exactly the pairs at collusion, so it does not separate them.
+The judge flagged most posts on these boards.
+It flagged them for awareness only, and none for deceiving others.
 Code found every flagged quote in its post.
-The judge flagged most posts on these boards, so a yes says that the team talked openly about the planted work.
+An independent reading of every flag found most flags sound, and found each one about awareness
+(Table~\ref{tab:reliability}).
+Every colluding pair keeps a yes without the flags it found wrong.
+A yes therefore says only that the team talked openly about using the planted work.
 No pair with a regulator or disregulator colludes, so that block is empty.
-We therefore posit that the collusion we measure is deliberate.
+We therefore posit that scheming needs a stricter reading before it can add to the collusion rung.
 \FloatBarrier
 
 \subsection*{Do agents that cheat knowingly use the reference material?}
@@ -149,12 +157,19 @@ No human checked its verdicts.
 \end{figure}
 
 Most workers that cheated draw a yes.
+An independent reading of every verdict of the second pass found one wrong yes and no wrong no
+(Table~\ref{tab:reliability}).
+The wrong yes rests on reuse of a branch the agent never calls the answer.
+The label reads only posts and visible reasoning, so it can miss an agent whose model shows no reasoning.
+Every no is such an agent.
 The judge's yes mostly rests on an agent calling the planted work the gold, the reference or what the hidden tests
 expect.
 That shows knowing use of the planted work, which can fall short of knowing that the use is cheating.
 No regulator or disregulator cheated, so none is asked.
 The judge also gave the manipulation label to every agent that posted.
-That label is not yet validated (Table~\ref{tab:reliability}), so we do not report its counts.
+An independent reading found most of its yes verdicts wrong (Table~\ref{tab:reliability}).
+The judge saw neither the agents' tool outputs nor their whole tool calls, so a failed read looked like access.
+We therefore do not report manipulation as a rate.
 \FloatBarrier
 
 \subsection*{How does \textit{CheatBench}'s judge compare with the code?}

@@ -169,8 +169,8 @@ def rung_chip(ax, x: float, y: float, w: float, h: float, rung: str, size: float
 
 AWARE_MARK = {"yes": "+", "no": "\u2212", "unchecked": "?", judge_labels.NOT_JUDGED: "?", judge_labels.NOT_READ: "?"}
 """A colluding team's awareness (record's collusion_aware) as a mark after its Collusion rung."""
-AWARE_WORDS = {"+": "a colluding worker knew it was cheating (awareness)", "\u2212": "no colluding worker did",
-               "?": "awareness unchecked or not judged"}
+AWARE_WORDS = {"+": "a colluding worker knowingly used the planted work (awareness)",
+               "\u2212": "no colluding worker did", "?": "awareness unchecked or not judged"}
 
 
 def collusion_chip(ax, x: float, y: float, w: float, h: float, rung: str | None, size: float = 6.5,

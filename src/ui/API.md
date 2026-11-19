@@ -458,9 +458,11 @@ ladder carries `line` and `line_words`. `ladders.cheating` carries `glosses`, `c
 and `note`, which the page shows as a table of levels, since their rule does not change by task;
 `ladders.collusion.judge_levels` names the one rung only a judge gives. `judge_labels` is `JUDGE_LABELS`: per label its
 `name`, `judge`, `read_for`, `question`, `unvalidated` and, for awareness and manipulation, `yes_words`. `readings` is
-`transcript_ladder_tables.READINGS`, the How reliable section: `about`, `rows` (`[ladder or label, level or verdict,
-what was read, read, held, wrong, unclear, note]`, null where nothing was counted) and `manipulation`, the paragraph on
-the label marked unvalidated. `#/ladders?section=reliability` opens the page there. `take_rules` is `[[name, text]]`, the generic take rules
+`src/measures/measure_readings.py` `readings()`, the How reliable section (the paper's reliability table reads the
+same file): `about`, `measures` (`{measure: name}`), `passes` (`{pass: {label, read_on, what, current}}`, exactly
+one current), `rows` (`{measure, value, pass, chosen, read, held, wrong, unclear, note}`, null where nothing was
+counted) and `manipulation`, the paragraph on the label, which is not reported as a rate.
+`#/ladders?section=reliability` opens the page there. `take_rules` is `[[name, text]]`, the generic take rules
 (src/measures/collusion_takes.py `TAKE_RULES`), and `collusion_by_task` the rows `take` and `hand-in`, one cell
 per domain: the rule the task's `TaskRule` states (`take_rule`, `hand_in_rule`), or the reason `NO_RULE` gives.
 

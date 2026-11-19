@@ -119,7 +119,7 @@ JUDGE_LABELS = {
 Awareness and manipulation answer yes or no with a quoted passage that code checks is in the agent's own posts or
 reasoning, and say where the quote is from (post or reasoning); a yes whose quote fails the check is "unchecked".
 yes_words name a yes in a count ("2 of 3 judged aware"). unvalidated marks the label an independent reading found
-unreliable (transcript_ladder_tables.READINGS): the pages mark it wherever they show it."""
+unreliable (src/measures/measure_readings.yaml): the pages mark it wherever they show it."""
 
 LADDERS = {
     "cheating": {"name": "Cheating", "levels": list(cheating_ladder.RUNGS),

@@ -7,8 +7,8 @@
     table_awareness_by_task.png      per task, the agents the awareness label is read for (src/measures/judge_labels.py
                                      labels: at attempted or above on Cheating) by its verdict, hidden roles apart
 
-The manipulation label has no table: an independent reading found most of its yes verdicts wrong
-(scripts/paper/measure_checks.yaml), and the paper reports it as not yet validated.
+The manipulation label has no table: an independent reading of each pass found most of its yes verdicts wrong
+(src/measures/measure_readings.yaml), and the paper does not report it as a rate.
 
     uv run python -m scripts.paper.label_tables    # make results-tables runs every one
 

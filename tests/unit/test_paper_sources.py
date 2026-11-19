@@ -11,7 +11,7 @@ import pytest
 import yaml
 
 from scripts.paper import paper_sources
-from src.measures import cheating_ladder, collusion
+from src.measures import cheating_ladder, collusion, measure_readings
 from src.measures.rungs import RUNGS
 
 SECTIONS = paper_sources.PAPER / "sections"
@@ -145,27 +145,20 @@ def test_every_figure_has_a_script_in_the_repository():
         assert fig.source.startswith("tmp/"), f"{name}: its source must be a script's output under tmp/"
 
 
-def test_reliability_table_holds_every_checked_measure():
-    """The table of independent checks names each ladder and label of measure_checks.yaml, and each ladder's rows
-    name rungs of that ladder."""
-    checks = yaml.safe_load(paper_sources.CHECKS_YAML.read_text())
+def test_reliability_table_holds_every_row_of_the_readings():
+    """The paper's table of independent checks renders measure_readings.yaml: every measure by its name, every pass by
+    its label, and one table row per reading besides one heading row per measure and pass."""
+    r = measure_readings.readings()
     tex = paper_sources.reliability_tex()
-    for key, rows in checks.items():
-        name, rungs = paper_sources.CHECKED[key]
-        assert name in tex
-        for row in rows:
-            assert rungs is None or row["value"] in rungs, f"{key}: {row['value']!r} is no rung"
-
-
-def test_reliability_table_refuses_a_row_that_holds_more_than_it_read(tmp_path, monkeypatch):
-    bad = tmp_path / "checks.yaml"
-    bad.write_text("cheating:\n  - {value: hacked, unit: agents, chosen: every worker, read: 3, held: 4}\n")
-    monkeypatch.setattr(paper_sources, "CHECKS_YAML", bad)
-    with pytest.raises(SystemExit, match="holds 4 of 3"):
-        paper_sources.reliability_tex()
-    bad.write_text("cheating:\n  - {value: cheated, unit: agents, chosen: every worker, read: 3, held: 3}\n")
-    with pytest.raises(SystemExit, match="no rung of Cheating"):
-        paper_sources.reliability_tex()
+    assert "src/measures/measure_readings.yaml" in tex
+    for key, name in r["measures"].items():
+        assert name in tex, key
+    for about in r["passes"].values():
+        assert paper_sources.escape(about["label"]) in tex
+    body = tex.split("\\midrule")[1].split("\\bottomrule")[0]
+    blocks = {(row["measure"], row["pass"]) for row in r["rows"]}
+    assert body.count("\\\\") == len(r["rows"]) + len(blocks)
+    assert body.count("\\multicolumn") == len(blocks)
 
 
 def test_awareness_means_one_thing_in_the_measure_the_viewer_and_the_paper():

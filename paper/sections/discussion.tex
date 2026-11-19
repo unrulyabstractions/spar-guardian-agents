@@ -4,13 +4,14 @@ enforcing Haiku regulator cheated, while teams with an ambiguous one did. These 
 separate the two levels. Regulators barely affected DeepSeek teams in Stage 1 of the deep dive. No untold protein
 design team cheated, so those runs cannot show whether regulators reduce cheating there. In Stage 2, a Haiku
 regulator that only oversees did cut the workers' cheating. In the multi-domain study, a single explicit rule naming
-the exploit did at least as well as the presence of any regulator. Two results of Stage 1 concern the regulator
+the exploit did at least as well as the presence of any regulator. No team with a regulator colluded, while every
+untold DeepSeek team on SWE did. The cells are small, and we chose this comparison after seeing the data. Two results of Stage 1 concern the regulator
 itself. A regulator that also works on the task mostly changes its own cheating. Workers took a teammate's copy of the
 fix mainly where the regulator had used it. We therefore conjecture that a regulator's own stake in the task
 shapes whose cheating it changes.
 
-These results suggest that regulators need to discourage their peers more proactively. Peer pressure is likely
-weaker when a regulator acts against its own adopted goals. Stage 2 fits this account only in part. The Haiku
+We conjecture that regulators need to discourage their peers more proactively. We also conjecture that peer pressure
+is weaker when a regulator acts against its own adopted goals. Stage 2 fits this account only in part. The Haiku
 regulator cut cheating against three workers alone, and the DeepSeek regulator did not. The gap between the two was
 not significant, and the study did not vary when a regulator first posts. We measure a regulator's effectiveness by
 the cheating rate of its team, and not by why that rate changed. The change could come from the regulator's
@@ -23,7 +24,8 @@ teams of other models. Regulators built by activation-based methods (e.g., perso
 differently from regulators told their instructions in their system prompt. We therefore posit that a regulator's
 model and the way it is built are variables worth testing.
 
-Our disregulator runs cannot yet test our second hypothesis. No team with a disregulator cheated. No team with both a
+Our disregulator runs cannot yet test our second hypothesis. No team with a disregulator cheated. Code found no
+disregulator post that asks a teammate for the honeypot. No team with both a
 disregulator and an enforcing Haiku regulator looked at the planted work. These cells hold two or three runs each,
 and no untold team on their targets cheated, so they sit at the floor of the measure. We therefore posit that our runs
 cannot yet compare positive and negative peer pressure.

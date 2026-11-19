@@ -22,7 +22,7 @@ import pytest
 from src.judging import verdict_files
 from src.measures import cheating_ladder as ch
 from src.measures import collusion as cm
-from src.measures import collusion_takes, coordination, judge_labels, ladder_by_domain
+from src.measures import collusion_takes, coordination, judge_labels, ladder_by_domain, measure_readings
 from src.measures.run_directory import is_worker
 from src.measures.run_listing import Listed
 from src.ui import transcript_index as ti
@@ -669,17 +669,42 @@ def test_the_judge_labels_say_what_was_found_and_manipulation_is_marked_unvalida
         assert "unvalidatedNote(" in (STATIC / name).read_text(), name
 
 
-def test_how_reliable_counts_add_up_and_name_the_ladders_and_labels():
-    """Each reading row names a ladder or a judge label, and its held, wrong and unclear add up to what was read."""
-    readings = tables.READINGS
-    for key, level, what, read, held, wrong, unclear, note in readings["rows"]:
-        assert key in tl.LADDERS or key in tl.JUDGE_LABELS
-        assert key not in tl.LADDERS or level in tl.LADDERS[key]["levels"] or " " in level
-        if read is not None:
-            assert held + wrong + unclear == read, (key, level)
-    manipulation = [r for r in readings["rows"] if r[:2] == ["manipulation", "yes"]]
-    assert [r[3:7] for r in manipulation] == [[42, 8, 17, 17]]
-    assert "42" in readings["manipulation"] and "8 held" in readings["manipulation"]
+def test_how_reliable_shows_both_judge_passes_from_the_one_readings_file():
+    """The Ladders page's How reliable section is measure_readings.readings(), the file the paper's table reads: each
+    measure names a ladder or a judge label (scheming is the Collusion ladder's judge rung), the judge labels show
+    their first and second passes with the second current, and the manipulation paragraph says what the second reading
+    found and that the label is no rate."""
+    payload = tables.ladders_payload(tl.LADDERS, tl.ORDER, tl.JUDGE_LABELS)
+    readings = payload["readings"]
+    assert readings == measure_readings.readings()
+    for key in readings["measures"]:
+        assert key in tl.LADDERS or key in tl.JUDGE_LABELS or key in cm.RUNGS, key
+    current = [k for k, p in readings["passes"].items() if p["current"]]
+    assert current == ["judge_second"]
+    for label in ("scheming", "awareness", "manipulation"):
+        passes = {r["pass"] for r in readings["rows"] if r["measure"] == label}
+        assert passes == {"judge_first", "judge_second"}, label
+    second = [(r["read"], r["held"], r["wrong"], r["unclear"]) for r in readings["rows"]
+              if (r["measure"], r["value"], r["pass"]) == ("manipulation", "yes", "judge_second")]
+    assert second == [(49, 16, 28, 5)]
+    assert "16 held" in readings["manipulation"] and "49 yes verdicts" in readings["manipulation"]
+    assert "not reported as a rate" in readings["manipulation"]
+    view = (STATIC / "tv_view_ladders.js").read_text()
+    assert "R.passes[r.pass]" in view and "The manipulation label is not reported as a rate" in view
+
+
+def test_the_readings_file_refuses_counts_that_do_not_add_up(tmp_path):
+    good = measure_readings.READINGS_YAML.read_text()
+    bad = tmp_path / "readings.yaml"
+    bad.write_text(good.replace("read: 49, held: 16,", "read: 49, held: 17,"))
+    with pytest.raises(ValueError, match="manipulation yes"):
+        measure_readings.readings(bad)
+    bad.write_text(good.replace("{measure: cheating, value: hacked", "{measure: cheating, value: cheated"))
+    with pytest.raises(ValueError, match="no rung of cheating"):
+        measure_readings.readings(bad)
+    bad.write_text(good.replace("judge_second, chosen: every unchecked", "judge_third, chosen: every unchecked"))
+    with pytest.raises(ValueError, match="no pass"):
+        measure_readings.readings(bad)
 
 
 # --------------------------------------------------------------------------------------------- the index's rows

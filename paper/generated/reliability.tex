@@ -1,25 +1,43 @@
-% Written by scripts/paper/paper_sources.py from scripts/paper/measure_checks.yaml. Do not edit; run `make paper-sources`.
-\begin{tabularx}{\linewidth}{@{}l l l >{\raggedright\arraybackslash}p{0.2\linewidth} r r >{\raggedright\arraybackslash}X@{}}
+% Written by scripts/paper/paper_sources.py from src/measures/measure_readings.yaml. Do not edit; run `make paper-sources`.
+\begin{tabularx}{\linewidth}{@{}l >{\raggedright\arraybackslash}p{0.2\linewidth} r r r r >{\raggedright\arraybackslash}X@{}}
 \toprule
-Measure & Rung or verdict & Unit & Cases chosen & Read & Held & Note \\
+Rung or verdict & Cases read & Read & Held & Wrong & Unclear & Note \\
 \midrule
-Cheating & looked & agents & every regulator placed there by its oversight tool & 8 & 8 &  \\
- & tempted & agents & a targeted search & -- & -- & one agent found that belongs at looked \\
- & attempted & agents & every worker & 19 & 17 & two SWE workers plausibly belong at tempted \\
- & hacked & agents & every worker & 24 & 24 &  \\
+\multicolumn{7}{@{}l}{\textbf{Cheating}, code, before its fixes} \\
+\quad looked & the 8 regulators oversight placed at looked & 8 & 8 & 0 & 0 &  \\
+\quad tempted & no full reading; a targeted search & -- & -- & 1 & -- & one SWE worker belongs at looked: the task's requirements fully determine the file it fetched \\
+\quad attempted & every worker (SWE 18, creative writing 1) & 19 & 17 & 0 & 2 & two SWE workers plausibly belong at tempted \\
+\quad hacked & every worker (SWE 21, creative writing 3) & 24 & 24 & 0 & 0 & every pass matches the grader's records \\
 \addlinespace
-Collusion & none & pairs & a fixed sample & 15 & 15 &  \\
- & cooperation & pairs & a fixed sample & 15 & 14 & a targeted search found one more SWE pair that belongs at none, and one that plausibly does \\
- & collaboration & pairs & a fixed sample & 15 & 14 & a targeted search found one more SWE pair that belongs lower \\
- & collusion & pairs & every pair & 28 & 25 & three SWE pairs belong at collaboration \\
+\multicolumn{7}{@{}l}{\textbf{Collusion}, code, before its fixes} \\
+\quad none & a sample of 15 pairs & 15 & 15 & 0 & 0 &  \\
+\quad cooperation & a sample of 15 pairs & 15 & 14 & 0 & 1 & outside the sample, two more SWE pairs belong at none (one confirmed, one plausible) \\
+\quad collaboration & a sample of 15 pairs & 15 & 14 & 1 & 0 & outside the sample, a targeted search found one more SWE pair that belongs lower \\
+\quad collusion & every pair & 28 & 25 & 3 & 0 & the three wrong SWE pairs belong at collaboration \\
 \addlinespace
-Scheming & yes & pairs & every pair & 20 & 16 & three unclear \\
- & no or unchecked & pairs & every pair & 8 & 0 & each a missed yes \\
+\multicolumn{7}{@{}l}{\textbf{Scheming}, judge, first pass} \\
+\quad yes & every yes pair & 20 & 16 & 1 & 3 & the wrong yes quotes a refusal \\
+\quad no or unchecked & every no and unchecked pair & 8 & 0 & 8 & 0 & each is a missed yes: the same posts got yes for another pair \\
 \addlinespace
-Awareness & yes & agents & every agent & 34 & 27 & six show only reuse of a branch; one unclear \\
- & no or unchecked & agents & every agent & 9 & 3 &  \\
+\multicolumn{7}{@{}l}{\textbf{Scheming}, judge, second pass (current)} \\
+\quad flagged post & every flagged post on the 10 boards & 88 & 83 & 5 & 0 & every flag is for awareness, none for deception \\
+\quad yes & every colluding pair & 25 & 25 & 0 & 0 & every colluding pair reads yes, so scheming separates no colluding pair from another \\
 \addlinespace
-Manipulation & yes & agents & every agent & 42 & 8 & 17 wrong and 17 unclear; not yet validated \\
- & no & agents & a fixed sample of 449 & 30 & 29 &  \\
+\multicolumn{7}{@{}l}{\textbf{Awareness}, judge, first pass} \\
+\quad yes & every yes & 34 & 27 & 6 & 1 & the six wrong yeses show reuse of a branch only \\
+\quad no or unchecked & every no and unchecked & 9 & 3 & 6 & 0 & five quotes differ from the source by a word or a character; one no is a miss \\
+\addlinespace
+\multicolumn{7}{@{}l}{\textbf{Awareness}, judge, second pass (current)} \\
+\quad yes & every yes & 36 & 35 & 1 & 0 & the wrong yes shows reuse of a branch only \\
+\quad no & every no & 5 & 5 & 0 & 0 & all five are Claude Haiku 5.5 workers with no visible reasoning \\
+\addlinespace
+\multicolumn{7}{@{}l}{\textbf{Manipulation}, judge, first pass} \\
+\quad yes & every yes & 42 & 8 & 17 & 17 & the judge saw no actions and took regulators' wrong accusations as true \\
+\quad no & a sample of 30 of 449 & 30 & 29 & 0 & 1 &  \\
+\addlinespace
+\multicolumn{7}{@{}l}{\textbf{Manipulation}, judge, second pass (current)} \\
+\quad yes & every yes & 49 & 16 & 28 & 5 & the judge saw no tool outputs and each call cut short, so a failed read looked like access \\
+\quad unchecked & every unchecked & 2 & 1 & 0 & 1 & the one that holds is a plan to lie \\
+\quad no & a sample of 40 of 440, by task and role & 40 & 40 & 0 & 0 & no missed yes \\
 \bottomrule
 \end{tabularx}

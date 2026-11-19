@@ -77,23 +77,37 @@ function labelTable(d) {
 
 const count = v => (v == null ? '–' : String(v));
 
-/** What an independent reading found of each rung and label (d.readings, src/ui/transcript_ladder_tables.py READINGS):
- * one row per level or verdict with what was read and how many held, were wrong or were unclear, then the paragraph on
- * the manipulation label, which the pages mark as not yet validated. */
+/** What an independent reading found of each rung and label (d.readings, src/measures/measure_readings.yaml, which the
+ * paper's reliability table reads too): one row per level or verdict and per pass it read, with what was read and how
+ * many held, were wrong or were unclear. The code's rungs were read before their fixes; the judge labels were read on
+ * both passes, and the current pass's rows stand out while older ones are muted. Then the paragraph on the
+ * manipulation label, which is not reported as a rate. */
 function reliability(d) {
   const R = d.readings;
-  const name = k => (d.ladders[k] || d.judge_labels[k]).name;
   const level = (k, v) => (d.ladders[k] && d.ladders[k].levels.includes(v) ? levelChip(k, d.ladders[k], v, false) : h('span', null, v));
+  // A row is of an older pass when the same measure was read again on the current pass.
+  const current = r => R.passes[r.pass].current;
+  const older = r => !current(r) && R.rows.some(o => o.measure === r.measure && current(o));
   return h('section', { class: 'card', id: 'reliability' },
     h('h2', null, 'How reliable'),
     h('p', { class: 'small lv-about' }, R.about),
+    h('dl', { class: 'lv-terms' }, Object.values(R.passes).map(p => [
+      h('dt', null, p.label), h('dd', null, `${p.what}; read on ${p.read_on}.`)])),
     h('div', { class: 'table-wrap' }, h('table', { class: 'lv-ladder-table lv-reliability' },
-      h('thead', null, h('tr', null, ['ladder or label', 'level or verdict', 'what was read', 'read', 'held', 'wrong', 'unclear', 'note']
+      h('thead', null, h('tr', null, ['ladder or label', 'pass', 'level or verdict', 'what was read', 'read', 'held', 'wrong', 'unclear', 'note']
         .map(t => h('th', null, t)))),
-      h('tbody', null, R.rows.map(([k, v, what, read, held, wrong, unclear, note]) => h('tr', null,
-        h('td', null, h('b', null, name(k))), h('td', null, level(k, v)), h('td', null, what),
-        [read, held, wrong, unclear].map(n => h('td', { class: 'num' }, count(n))), h('td', { class: 'small' }, note)))))),
-    h('h3', { class: 'sub-h', id: 'reliability-manipulation' }, 'The manipulation label is not yet validated'),
+      h('tbody', null, R.rows.map((r, i) => {
+        const first = i === 0 || R.rows[i - 1].measure !== r.measure;
+        const p = R.passes[r.pass];
+        return h('tr', { class: [first && i > 0 && 'lv-measure-start', older(r) && 'lv-older-pass'] },
+          h('td', null, first ? h('b', null, R.measures[r.measure]) : ''),
+          h('td', { class: p.current && 'lv-current-pass', title: `${p.what}; read on ${p.read_on}` }, p.label),
+          h('td', null, level(r.measure, r.value)), h('td', null, r.chosen),
+          [r.read, r.held, r.wrong, r.unclear].map(n => h('td', { class: 'num' }, count(n))),
+          h('td', { class: 'small' }, r.note));
+      })))),
+    h('p', { class: 'small muted' }, 'Muted rows read a pass that a later one replaced.'),
+    h('h3', { class: 'sub-h', id: 'reliability-manipulation' }, 'The manipulation label is not reported as a rate'),
     h('p', { class: 'small lv-about' }, R.manipulation));
 }
 

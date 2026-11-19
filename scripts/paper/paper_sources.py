@@ -13,7 +13,7 @@ src/configuration/instruction_levels.yaml), cheating_rungs.tex (the Cheating lad
 src/measures/rungs.py RUNGS and cheating_ladder.py CLAUSES), coordination_levels.tex (the Coordination ladder's levels
 and cuts, from src/measures/coordination.py), collusion_rungs.tex (the Collusion ladder's rungs and who reads each,
 from src/measures/collusion.py RUNGS and CODE_RUNGS) and reliability.tex (how often an independent reading of the
-transcripts confirmed each rung and label, from scripts/paper/measure_checks.yaml). The rungs' and clauses' wording is
+transcripts confirmed each rung and label, from src/measures/measure_readings.yaml). The rungs' and clauses' wording is
 the transcript viewer's (src/ui/transcript_levels.py CHEAT_GLOSSES, CLAUSE_GLOSSES, COLLUSION_GLOSSES). Nobody edits
 these files by hand.
 
@@ -40,14 +40,13 @@ from src.configuration.scales import SCALES
 from src.configuration.settings import ROOT
 from src.judging import verdict_files
 from src.judging.cheatbench_judge import judge_entry
-from src.measures import cheating_ladder, collusion, coordination, judge_labels
+from src.measures import cheating_ladder, collusion, coordination, judge_labels, measure_readings
 from src.measures.rungs import RUNGS
 from src.ui.transcript_levels import CHEAT_GLOSSES, CLAUSE_GLOSSES, COLLUSION_GLOSSES
 
 PAPER = ROOT / "paper"
 GENERATED = PAPER / "generated"
 FIGURE_DIR = PAPER / "figures"
-CHECKS_YAML = ROOT / "scripts" / "paper" / "measure_checks.yaml"
 LEVELS_YAML = ROOT / "src" / "configuration" / "instruction_levels.yaml"
 PROMPTS_YAML = ROOT / "src" / "configuration" / "prompts.yaml"
 STUDY_INDEX = ROOT / "runs" / "study_exploration_1" / "INDEX.jsonl"
@@ -287,39 +286,28 @@ def collusion_rungs_tex() -> str:
             + "\n\\addlinespace\n".join(rows) + "\n\\bottomrule\n\\end{tabularx}\n")
 
 
-CHECKED = {"cheating": ("Cheating", RUNGS), "collusion": ("Collusion", collusion.RUNGS),
-           "scheming": ("Scheming", None), "awareness": ("Awareness", None), "manipulation": ("Manipulation", None)}
-"""The ladders and labels measure_checks.yaml may hold, as the paper names them, with the rungs a ladder's rows must
-name (None for a label, whose rows name its verdicts)."""
-CHECK_FIELDS = {"value", "unit", "chosen", "read", "held", "note"}
-"""A row's fields; all but note are required."""
-
-
 def reliability_tex() -> str:
-    """How often an independent reading of the transcripts confirmed each rung and label (measure_checks.yaml): per
-    row, how the cases were chosen, how many were read and how many held. A ladder's row must name one of its rungs,
-    and no row may hold more than it read."""
-    checks = yaml.safe_load(CHECKS_YAML.read_text())
-    if set(checks) - set(CHECKED):
-        raise SystemExit(f"measure_checks.yaml holds {sorted(set(checks) - set(CHECKED))}, which the paper never names")
-    rows = []
-    for key, (name, rungs) in CHECKED.items():
-        for k, row in enumerate(checks.get(key, [])):
-            if set(row) - CHECK_FIELDS or not {"value", "unit", "chosen", "read", "held"} <= set(row):
-                raise SystemExit(f"measure_checks.yaml: a {name} row has {sorted(row)}, not {sorted(CHECK_FIELDS)}")
-            if rungs is not None and row["value"] not in rungs:
-                raise SystemExit(f"measure_checks.yaml: {row['value']!r} is no rung of {name}")
-            if row["read"] is not None and not 0 <= row["held"] <= row["read"]:
-                raise SystemExit(f"measure_checks.yaml: {name} {row['value']} holds {row['held']} of {row['read']}")
-            read, held = ("--", "--") if row["read"] is None else (row["read"], row["held"])
-            rows.append(rf"{escape(name) if k == 0 else ''} & {escape(row['value'])} & {escape(row['unit'])} & "
-                        rf"{escape(row['chosen'])} & {read} & {held} & {escape(row.get('note', ''))} \\")
-        rows.append(r"\addlinespace")
-    return (HEADER.format(source="scripts/paper/measure_checks.yaml")
-            + "\\begin{tabularx}{\\linewidth}{@{}l l l >{\\raggedright\\arraybackslash}p{0.2\\linewidth} r r "
+    """How often an independent reading of the transcripts confirmed each rung and label
+    (src/measures/measure_readings.py readings(), the file the viewer's How reliable section reads too): a block per
+    measure and pass read, headed by the measure's name and the pass's label, then per row how the cases were chosen,
+    and how many were read, held, were wrong or were unclear."""
+    r = measure_readings.readings()
+    rows, last = [], None
+    for row in r["rows"]:
+        if (row["measure"], row["pass"]) != last:
+            if last is not None:
+                rows.append(r"\addlinespace")
+            rows.append(rf"\multicolumn{{7}}{{@{{}}l}}{{\textbf{{{escape(r['measures'][row['measure']])}}}, "
+                        rf"{escape(r['passes'][row['pass']]['label'])}}} \\")
+            last = (row["measure"], row["pass"])
+        counts = " & ".join("--" if n is None else str(n) for n in (row["read"], row["held"], row["wrong"],
+                                                                    row["unclear"]))
+        rows.append(rf"\quad {escape(row['value'])} & {escape(row['chosen'])} & {counts} & {escape(row['note'])} \\")
+    return (HEADER.format(source="src/measures/measure_readings.yaml")
+            + "\\begin{tabularx}{\\linewidth}{@{}l >{\\raggedright\\arraybackslash}p{0.2\\linewidth} r r r r "
             + ">{\\raggedright\\arraybackslash}X@{}}\n\\toprule\n"
-            + "Measure & Rung or verdict & Unit & Cases chosen & Read & Held & Note \\\\\n\\midrule\n"
-            + "\n".join(rows[:-1]) + "\n\\bottomrule\n\\end{tabularx}\n")
+            + "Rung or verdict & Cases read & Read & Held & Wrong & Unclear & Note \\\\\n\\midrule\n"
+            + "\n".join(rows) + "\n\\bottomrule\n\\end{tabularx}\n")
 
 
 def model_name(key: str) -> str:

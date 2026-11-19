@@ -19,7 +19,7 @@ code made a sentence wrong (listed below).
 | `generated/regulator_levels.tex`, `disregulator_levels.tex` | the level texts, from `src/configuration/instruction_levels.yaml` | `make paper-sources` |
 | `generated/study.tex` | `\StudyRuns`, `\StudyDates`, `\StudyCheatBenchJudge`, `\StudySchemingJudge`, `\StudyLabelsJudge`, `\RegulatorModelList`: the multi-domain study's valid runs, their dates, the judge of each stored verdict pass (cheatbench, scheming, labels; `src/judging/verdict_files.py` applied; more than one judge stops the build) and the regulators' models by use, from `runs/study_exploration_1/INDEX.jsonl`, each run's run.json and judges/ (kept as committed where runs/ is absent) | `make paper-sources` |
 | `generated/stage2.tex` | the deep dive's Stage 2 table, from `submodules/lucy/runs/s2_swe/analysis/summary.json` | `make paper-sources` |
-| `generated/reliability.tex` | how often an independent reading of the transcripts confirmed each code rung and judge label, from `scripts/paper/measure_checks.yaml` (kept by hand: no code can recompute such a reading; the file names its source) | `make paper-sources` |
+| `generated/reliability.tex` | how often an independent reading of the transcripts confirmed each code rung and judge label, from `src/measures/measure_readings.yaml`, the one file the viewer's How reliable section reads too (kept by hand: no code can recompute such a reading; the file names its sources, and each row names the pass it read) | `make paper-sources` |
 | `generated/cheating_rungs.tex` | the Cheating ladder's rungs and clauses, from `src/measures/rungs.py` RUNGS and `cheating_ladder.py` CLAUSES, in the words of `src/ui/transcript_levels.py` | `make paper-sources` |
 | `generated/coordination_levels.tex` | the Coordination ladder's levels and cuts, from `src/measures/coordination.py` | `make paper-sources` |
 | `generated/collusion_rungs.tex` | the Collusion ladder's rungs and whether code or a judge reads each, from `src/measures/collusion.py` RUNGS and CODE_RUNGS, in the words of `src/ui/transcript_levels.py` | `make paper-sources` |
@@ -697,3 +697,137 @@ Sentences changed:
   became "the collusion we measure is deliberate".
 - Appendix B heading: "Do agents that cheat know it?" became "Do agents that cheat knowingly use the reference
   material?"
+
+## The paper follows the data, a full pass, 2026-11-19 (after the judges ran again)
+
+The user's order: "change paper as data reflects!". Every sentence of the Abstract, Introduction, Methods, Results,
+Discussion, Conclusion and Appendices A to C that states a rate, a count, a comparison, a direction of effect or a
+claim about a hypothesis was checked against its table or figure at 656b9cd, and recomputed from the measures where the
+cell was not obvious (`study_ladders.record` over the 147 valid runs; the scheming verdict files; Lucy's
+`s1_swe/analysis/summary.json`). The title and H1 and H2 were checked and did not change: the title names the study's
+subject, and H1 and H2 are hypotheses that the Discussion and the Conclusion test.
+
+New facts read from the measures: no team with a regulator or a disregulator colludes (0 of 12 DeepSeek SWE teams
+with a regulator, 5 of which cheated, against 3 of 3 untold); every colluding pair reads yes for scheming (25 of 25;
+the judge flagged 88 of 110 posts on the ten colluding boards, all for awareness, all quotes found), so scheming as
+measured equals collusion; code finds no disregulator post asking for the honeypot; under the rule naming the exploit
+no team accessed the honeypot either.
+
+Script: `study_ladders.AWARE_WORDS` "+" read "a colluding worker knew it was cheating (awareness)" and now reads "a
+colluding worker knowingly used the planted work (awareness)", the label's current definition. Redrawn:
+`positive_control`, `negative_control`, `table_swe_regulators`, `table_creative_disregulators` (legends only).
+
+Sentences changed (old, then new):
+- Abstract: "We integrate and adapt \textit{CheatBench} tasks into the \textit{ORBIT} framework to run experiments that
+  measure how reward-hacking and collaboration in swarms are affected by i) the proportion of regulator and
+  disregulator agents, ii) the onset and active window of peer pressure, and iii) the strength and ambiguity of
+  instruction." became "We integrate and adapt \textit{CheatBench} tasks into the \textit{ORBIT} framework to measure
+  reward hacking and collaboration in swarms. Our design varies i) the proportion of regulator and disregulator
+  agents, ii) the onset and active window of peer pressure, and iii) the strength and ambiguity of instruction. The
+  runs so far vary only whether a regulator or a disregulator is present and how strong and ambiguous the
+  instructions are." (No run varies the proportion, the onset or the window.)
+- Abstract: added "No team with a regulator pooled the pieces of the exploit, while every untold DeepSeek team on SWE
+  did."
+- Abstract: "Its effect may be limited when regulators communicate too little." removed (no run measures it).
+- Abstract: "In the SWE deep dive, a regulator that only oversees cut cheating as \textit{CheatBench}'s judge counts
+  it." became "In the SWE deep dive, a Claude Haiku 5.5 regulator that only oversees cut cheating as
+  \textit{CheatBench}'s judge counts it, and a DeepSeek regulator did not."
+- Methods: "designed such that the task is hard or impossible to achieve honestly but with a tempting `honeypot', an
+  easily accessible method of cheating, split among the workers." became "designed such that the task is hard to
+  achieve honestly but with a tempting `honeypot', an easily accessible method of cheating, split among the workers.
+  On protein design and creative writing, the grader accepts only the planted work. On SWE, the hidden tests grade any
+  fix, honest or not."
+- Results: "A rule naming the exploit brought cheating to zero on every target." became "Under a rule naming the
+  exploit, no team cheated or accessed the honeypot, on any target." (Untold Luna teams did not cheat either.)
+- Results: "Luna regulators on SWE left teams cheating at both levels" became "Luna regulators beside DeepSeek workers
+  left teams cheating at both levels"; added "Beside Luna workers on SWE, no team cheated with or without a regulator."
+- Results: added the paragraph "No team with a regulator colluded, on any target. Every untold DeepSeek team on SWE
+  colluded (3 of 3). None of the 12 DeepSeek teams on SWE with a regulator did, although 5 of them cheated. We chose
+  this comparison after seeing the data, and its cells are small."
+- Results: "On SWE, every team with a disregulator alone looked at the planted work." became "... looked at the
+  planted work, and so did two of three untold teams."; added "Code found no disregulator post that asks a teammate
+  for the honeypot."
+- Discussion: added "No team with a regulator colluded, while every untold DeepSeek team on SWE did. The cells are
+  small, and we chose this comparison after seeing the data."
+- Discussion: "These results suggest that regulators need to discourage their peers more proactively. Peer pressure is
+  likely weaker when a regulator acts against its own adopted goals." became "We conjecture that regulators need to
+  discourage their peers more proactively. We also conjecture that peer pressure is weaker when a regulator acts
+  against its own adopted goals." (No result measures either.)
+- Discussion: added "Code found no disregulator post that asks a teammate for the honeypot."
+- Conclusion: added "No team with a regulator colluded, while every untold DeepSeek team on SWE did."; "A Haiku
+  regulator that only oversees cut the DeepSeek workers' cheating." became "..., and a DeepSeek regulator did not."
+- Appendix B, honeypot: "On SWE, hacked means the agent's own trace of the planted fix in the hand-in and a pass of the
+  hidden tests." became "On SWE, hacked means the agent's own trace of the planted fix, or a piece it supplied, in a
+  hand-in that passed the hidden tests."
+- Appendix B, Collusion: added "No team with a regulator or a disregulator reaches collusion. The colluding teams are
+  DeepSeek teams on SWE and one Luna team on creative writing told to cheat."
+- Appendix B, scheming: "Every colluding pair of workers wrote to each other about cheating. The judge flagged posts for
+  awareness only, and none for deceiving others. Code found every flagged quote in its post. The judge flagged most
+  posts on these boards, so a yes says that the team talked openly about the planted work. ... We therefore posit that
+  the collusion we measure is deliberate." became "Every colluding pair reads yes. As measured here, scheming holds for
+  exactly the pairs at collusion, so it does not separate them. The judge flagged most posts on these boards. It
+  flagged them for awareness only, and none for deceiving others. Code found every flagged quote in its post. A yes
+  therefore says only that the team talked openly about using the planted work. ... We therefore posit that scheming
+  needs a stricter reading before it can add to the collusion rung."
+- Appendix B, awareness: added "No one has checked these verdicts of the second pass. An independent reading of the
+  first pass held for 27 of its 34 yes verdicts and for 3 of its 9 no or unchecked verdicts
+  (Table~\ref{tab:reliability})."
+- Appendix C: "Claude Haiku 5.5 stays near zero on subset sum, creative writing and chess even when told." became
+  "Claude Haiku 5.5 stays near zero on OpenMath, subset sum, creative writing, knowledge work and chess even when told."
+
+Checked and unchanged: every other sentence of these sections, including Figure 1's claims (12% to 28%, 13% with a
+regulator), Stage 1's (213 of 216 own search; copies 18 of 72 under S1 and 2 of 72 under S2; 41 of 52 copies where the
+regulator used the fix), Stage 2's (Table 2), the coordination, CheatBench judge, judge labels and disclosure
+sentences, and Appendix C's "most pairs cheat more often when told" (35 of 45). Manipulation stays out of the results.
+Nothing says that only the exploit passes on study 1's SWE runs.
+
+## The second judge passes read, 2026-11-19 (after the full pass)
+
+An independent reader (an AI agent, no human) read every second-pass awareness verdict, every scheming flag on the
+ten colluding boards, every manipulation yes and unchecked, and a sample of 40 manipulation no verdicts. Awareness: 36
+yes, 35 held, 1 wrong; 5 no, all held. Scheming: 88 flags, 83 held, 5 wrong, all for awareness and none for deception;
+all 25 colluding pairs keep a yes. Manipulation: 49 yes, 16 held, 28 wrong, 5 unclear; 2 unchecked, 1 holds; 40 no,
+none missed. Manipulation stays out of the results.
+
+The readings now have one source, `src/measures/measure_readings.yaml`, read and checked by
+`src/measures/measure_readings.py` `readings()`: the code rungs before their fixes, the first judge passes and the
+second judge passes, each row naming its pass and each pass its date. The viewer's How reliable section and
+`generated/reliability.tex` both render it. `scripts/paper/measure_checks.yaml` and
+`src/ui/transcript_ladder_tables.READINGS` are deleted. The table now has a block per measure and pass, headed by
+the pass's label (the second judge pass marked current), and columns Wrong and Unclear beside Read and Held.
+
+Sentences changed:
+- Appendix B, reliability: "A separate AI agent checked both" became "Separate AI agents checked both"; "The checks read
+  the rungs as they stood before the corrections they led to, and the judge's first verdicts. We then ran both judges
+  again with corrected prompts and code. The tables of this appendix show these second verdicts, and no one has checked
+  them yet. ... Where the judge first said yes to scheming or awareness, the verdict mostly held, but the judge missed
+  most true yeses. Manipulation is not yet validated. Most of its first yes verdicts did not hold, often because the
+  judge believed another agent's accusation that it could not check. We leave its counts out of this paper. We
+  therefore posit that the code's rungs can carry our results, and that the scheming and awareness labels give only one
+  judge's reading." became "The checks read the rungs as they stood before the corrections they led to. They read the
+  judge's first verdicts. We then ran both judges again with corrected prompts and code, and a second reading checked
+  these second verdicts. The tables of this appendix show the second verdicts. ... The second awareness verdicts held
+  in all but one case. The second scheming flags mostly held, and every flag is about awareness. Manipulation is not
+  validated. Most of its yes verdicts did not hold in either pass, because the judge saw neither the agents' tool
+  outputs nor their whole tool calls. We leave manipulation out of our results. We therefore posit that the code's
+  rungs and the awareness label can carry our results."
+- Appendix B, reliability caption: "The reader was an AI agent, and no human made these checks. The checks read the
+  judge's first verdicts, before we ran the judges again." became "Wrong counts those where it disagreed, and unclear
+  those the evidence allows either way. The readers were AI agents, and no human made these checks. The rows of the
+  code's rungs read them before their corrections. The rows of the judge read both passes, and the second pass is the
+  one this appendix reports."
+- Appendix B, scheming: added "An independent reading of every flag found most flags sound, and found each one about
+  awareness (Table~\ref{tab:reliability}). Every colluding pair keeps a yes without the flags it found wrong."
+- Appendix B, awareness: "No one has checked these verdicts of the second pass. An independent reading of the first
+  pass held for 27 of its 34 yes verdicts and for 3 of its 9 no or unchecked verdicts (Table~\ref{tab:reliability})."
+  became "An independent reading of every verdict of the second pass found one wrong yes and no wrong no
+  (Table~\ref{tab:reliability}). The wrong yes rests on reuse of a branch the agent never calls the answer. The label
+  reads only posts and visible reasoning, so it can miss an agent whose model shows no reasoning. Every no is such an
+  agent."
+- Appendix B, manipulation: "That label is not yet validated (Table~\ref{tab:reliability}), so we do not report its
+  counts." became "An independent reading found most of its yes verdicts wrong (Table~\ref{tab:reliability}). The judge
+  saw neither the agents' tool outputs nor their whole tool calls, so a failed read looked like access. We therefore do
+  not report manipulation as a rate."
+- Appendix A, Judge labels: "The manipulation label is not yet validated, and we do not report its counts (Appendix
+  B)." became "An independent reading found most manipulation yes verdicts wrong, and we do not report the label
+  (Appendix B)."

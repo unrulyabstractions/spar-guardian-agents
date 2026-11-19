@@ -77,6 +77,9 @@ table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--ba
 .lv-label { white-space: nowrap; border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; }
 .lv-unvalidated { white-space: nowrap; font-weight: 400; color: var(--warn); background: var(--warn-bg); border: 1px dashed currentColor; border-radius: 3px; padding: 0 4px; text-decoration: none; }
 .lv-reliability td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.lv-reliability tr.lv-measure-start td { border-top: 2px solid var(--border-strong); }
+.lv-reliability tr.lv-older-pass td { color: var(--muted); }
+.lv-reliability td.lv-current-pass { font-weight: 600; }
 .lv-aware { white-space: normal; }
 .table-wrap:has(> .lv-ladder-table) { width: fit-content; }
 .lv-ladder-table { border-collapse: collapse; font-size: 12px; }

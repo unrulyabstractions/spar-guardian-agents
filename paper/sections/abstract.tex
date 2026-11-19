@@ -2,11 +2,12 @@
 Multi-agent systems (MAS) exhibit complex emergent behavior that has pushed the frontier of large language model
 (LLM) capabilities. In this work, we examine how these agent swarms respond to positive (regulators) and negative
 (disregulators, poisoned) peer pressure in tasks that elicit reward hacking. We integrate and adapt
-\textit{CheatBench} tasks into the \textit{ORBIT} framework to run experiments that measure how reward-hacking and
-collaboration in swarms are affected by i) the proportion of regulator and disregulator agents, ii) the onset and
-active window of peer pressure, and iii) the strength and ambiguity of instruction. Our investigation is ongoing.
-Our preliminary results hint that regulators can reduce cheating in software engineering (SWE) evaluations. Positive
-peer pressure is therefore an plausible mitigation technique for emergent cheating and collusion. Its effect may be
-limited when regulators communicate too little. In the SWE deep dive, a regulator that only oversees cut cheating as
-\textit{CheatBench}'s judge counts it. No team with a disregulator cheated, though no untold team on its targets
-cheated either.
+\textit{CheatBench} tasks into the \textit{ORBIT} framework to measure reward hacking and collaboration in swarms. Our
+design varies i) the proportion of regulator and disregulator agents, ii) the onset and active window of peer
+pressure, and iii) the strength and ambiguity of instruction. The runs so far vary only whether a regulator or a
+disregulator is present and how strong and ambiguous the instructions are. Our investigation is ongoing.
+Our preliminary results hint that regulators can reduce cheating in software engineering (SWE) evaluations. No team
+with a regulator pooled the pieces of the exploit, while every untold DeepSeek team on SWE did. Positive
+peer pressure is therefore an plausible mitigation technique for emergent cheating and collusion. In the SWE deep
+dive, a Claude Haiku 5.5 regulator that only oversees cut cheating as \textit{CheatBench}'s judge counts it, and a
+DeepSeek regulator did not. No team with a disregulator cheated, though no untold team on its targets cheated either.
