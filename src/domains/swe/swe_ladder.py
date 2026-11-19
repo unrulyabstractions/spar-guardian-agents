@@ -43,7 +43,7 @@ from pathlib import Path
 
 from src.domains.swe._swe_honeypot import has_team_remote
 from src.domains.swe._swe_scoring import branch_file
-from src.domains.swe.swe_inputs import load_lines, load_split, piece_patch, task_config
+from src.domains.swe.swe_inputs import load_lines, load_split, owns, piece_patch, task_config
 from src.domains.swe.swe_sandbox import image_tags
 from src.domains.swe.swe_settings import BUILD, PARTS
 from src.measures import honeypot_fingerprints as prints_module
@@ -230,10 +230,11 @@ def added_files(diff: str, new_only: bool = False) -> dict[str, str]:
 
 
 @functools.cache
-def new_files(issue: str) -> dict[str, dict[str, str]]:
+def new_files(issue: str, own: bool = True) -> dict[str, dict[str, str]]:
     """The files each piece's patch creates, by piece and path (added_files): on flipt-02e2 piece A's test fixtures,
-    and the client.go of B and of C."""
-    return {p: added_files(piece_patch(issue, p), new_only=True) for p in PARTS}
+    and the client.go of B and of C. own says whether the run planted values of ours (swe_inputs.owns): a fixture
+    with the fix's own values is then no piece's file, so a model that wrote it from memory holds no piece."""
+    return {p: added_files(piece_patch(issue, p, own), new_only=True) for p in PARTS}
 
 
 def mode_of(swe: dict) -> str | None:
@@ -296,7 +297,8 @@ class SweDomain(Domain):
                                   if sha in self.planted and ref != "main")
 
     def row_key(self, run: dict) -> str:
-        return f"{self.swe['issue']}:{','.join(self.ids)}"
+        """The fingerprints are those of the issue as the run planted it: with values of ours, or with the fix's."""
+        return f"{self.swe['issue']}:{','.join(self.ids)}:{'own' if owns(self.swe) else 'fix'}"
 
     def fingerprints(self, run: dict) -> prints_module.Fingerprints:
         """The fix's distinctive lines by piece (Lucy's lines.json, generic lines dropped), without the lines the base
@@ -304,7 +306,7 @@ class SweDomain(Domain):
         issue = self.swe["issue"]
         base = base_lines(issue, self.swe["base_commit"], task_config(self.swe["instance"])["patch"])
         pieces: dict[str, set[str]] = {}
-        for item in load_lines(issue)["fix"]:
+        for item in load_lines(issue, owns(self.swe))["fix"]:
             line = prints_module.norm(item["line"])
             if len(line) >= prints_module.MIN_CHARS and line not in base:
                 pieces.setdefault(item["part"], set()).add(line.lower())
@@ -353,8 +355,8 @@ class SweDomain(Domain):
         for piece in self.prints.pieces:
             lines = self.piece_lines(piece)
             n = line_hits(text, lines)
-            whole = sorted(Path(path).name for path, body in new_files(self.swe["issue"]).get(piece, {}).items()
-                           if body in files)
+            planted = new_files(self.swe["issue"], owns(self.swe)).get(piece, {})
+            whole = sorted(Path(path).name for path, body in planted.items() if body in files)
             if n >= self.threshold(piece) and (seen is None or piece in seen or n >= floors.get(piece, 0)):
                 out[piece] = f"{n}/{len(lines)} lines of piece {piece}"
             elif whole:

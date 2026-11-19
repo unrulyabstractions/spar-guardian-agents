@@ -4,14 +4,17 @@ tests/smoke/swe.py's collaboration scenarios.
     with GraderContainer(images["native"], "smoke-swe-collaboration") as box:
         results = asyncio.run(grade_trees(box, "flipt-02e2", trees("flipt-02e2")))
 
-Honest work writes everything the issue and its note describe, so it is the reference fix with each text the hidden
-tests need and the issue never gives (swe_settings.SECRETS) replaced by a value of the agent's own (HONEST). A set of
-pieces with honest work for the rest is the reference fix with only the texts those pieces do not hold replaced
-(secrets_held). A file a piece plants with values of its own (swe_settings.NEUTRAL_VALUES) is that piece's copy when
-the set holds the piece, else the team's own with honest values. Some piece plants every file of the fix, and
+Honest work writes everything the issue and its note describe, so it is the whole fix as we plant it (piece_patch's
+`whole`) with each text the hidden tests need and the issue never gives (swe_settings.SECRETS) replaced by a value of
+the agent's own (HONEST). A set of pieces with honest work for the rest is that fix with only the texts those pieces do
+not hold replaced (secrets_held). A file a piece plants with neutral values (swe_settings.NEUTRAL_VALUES) is that
+piece's copy when the set holds the piece, else the team's own with honest values. Where the pieces and the hidden tests
+hold values of ours (swe_settings.OWN_VALUES), `the_fix_from_memory` is the fix as its authors wrote it, which is what a
+model that remembers the public fix writes with no piece: it must fail. Some piece plants every file of the fix, and
 tests/unit/test_collaboration_swe.py proves that the pieces hold the fix's lines and nothing else, file by file, so
 `all_pieces` is the three pieces alone, with nothing the team writes. The grader's own function grades each tree
-(_swe_scoring._target_result: the diff applied to the pristine /app, CheatBench's tests/test.sh, nothing added).
+(_swe_scoring._target_result: the diff applied to the pristine /app, CheatBench's tests/test.sh as the grader gets
+it, nothing added).
 """
 from __future__ import annotations
 
@@ -23,14 +26,20 @@ from types import SimpleNamespace
 from src.domains.swe import _swe_scoring
 from src.domains.swe.swe_inputs import (
     file_blocks,
+    grader_tests,
     load_split,
-    neutral_block,
     piece_patch,
     required_tests,
     task_config,
-    task_dir,
 )
-from src.domains.swe.swe_settings import GRADE_TIMEOUT_S, GRADE_TIMEOUTS_S, NEUTRAL_VALUES, PARTS, SECRETS
+from src.domains.swe.swe_settings import (
+    GRADE_TIMEOUT_S,
+    GRADE_TIMEOUTS_S,
+    NEUTRAL_VALUES,
+    OWN_VALUES,
+    PARTS,
+    SECRETS,
+)
 from src.domains.swe.swe_task import secrets_held
 from tests.support.swe_deals import holdings
 
@@ -50,20 +59,20 @@ def planters(issue: str, path: str) -> list[str]:
 
 
 def tree(issue: str, items: tuple[str, ...]) -> str:
-    """The reference fix with every secret the items do not hold replaced by honest work's value, and each file a
-    piece plants with values of its own taken from that piece when the items hold it. Each secret stands only on lines
-    the fix adds, so the patch still applies."""
-    patch = task_config(load_split(issue)["task"])["patch"]
+    """The whole fix as we plant it, with every secret the items do not hold replaced by honest work's value, and each
+    file a piece plants with neutral values taken from that piece when the items hold it. Each secret stands only on
+    lines the fix adds, so the patch still applies."""
     held = secrets_held(issue, list(items))
     blocks = []
-    for path, block in file_blocks(patch):
-        own = path in NEUTRAL_VALUES.get(issue, {})
-        if own and set(planters(issue, path)) & set(items):
-            blocks.append(neutral_block(issue, path, block))
+    for path, block in file_blocks(piece_patch(issue, "whole")):
+        neutral = path in NEUTRAL_VALUES.get(issue, {})
+        holders = [piece for piece in planters(issue, path) if piece in items]
+        if neutral and holders:
+            blocks.append(dict(file_blocks(piece_patch(issue, holders[0])))[path])
             continue
         for piece, secret in SECRETS[issue].items():
             assert all(line.startswith("+") for line in block.splitlines() if secret in line), (issue, secret)
-            if secret not in held or own:
+            if secret not in held or neutral:
                 block = block.replace(secret, HONEST[issue][piece])
         blocks.append(block)
     return "".join(blocks)
@@ -82,6 +91,9 @@ def trees(issue: str) -> list[dict]:
         held = secrets_held(issue, list(case["items"]))
         case["missing"] = [piece for piece, secret in SECRETS[issue].items() if secret not in held]
         case["diff"] = tree(issue, case["items"])
+    if OWN_VALUES.get(issue):
+        # the fix as its authors wrote it: complete, and with neither of the values our pieces and tests hold
+        cases.insert(-1, {"name": "the_fix_from_memory", "items": (), "missing": sorted(SECRETS[issue]), "diff": patch})
     return cases
 
 
@@ -130,8 +142,8 @@ async def grade_trees(box: GraderContainer, issue: str, cases: list[dict]) -> li
     rc = (await box.exec(["bash", "-c", "rm -rf /tmp/grade && mkdir -p /tmp/grade/tests && git -C /app rev-parse HEAD"],
                          timeout=120))
     assert rc.returncode == 0 and rc.stdout.strip() == config["base_commit"], rc
-    for f in sorted((task_dir(instance) / "tests").iterdir()):
-        await box.write_file(f"/tmp/grade/tests/{f.name}", f.read_bytes())
+    for name, content in grader_tests(instance, issue).items():
+        await box.write_file(f"/tmp/grade/tests/{name}", content)
     required = required_tests(config)
     timeout = GRADE_TIMEOUTS_S.get(issue, GRADE_TIMEOUT_S)
     out = []

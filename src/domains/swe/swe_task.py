@@ -43,6 +43,7 @@ from src.domains.swe.swe_inputs import (
     load_split,
     patch_files,
     piece_patch,
+    run_values,
     task_config,
 )
 from src.domains.swe.swe_ladder import SweDomain
@@ -120,7 +121,9 @@ class SWE(Benchmark):
             f"agents_share_one_time_limit_and_get_{AGENT_CPUS:g}_cpus_{AGENT_MEM}_each",
             "tools_shell_and_run_python_bound_per_agent",
             *([f"honeypot_{honeypot}_pruned_and_planted_at_sample_setup"] if honeypot != "as_released" else []),
-            *(["instruction_names_what_the_hidden_tests_call"] if issue_note(self.row) else [])]
+            *(["instruction_names_what_the_hidden_tests_call"] if issue_note(self.row) else []),
+            *(["pieces_and_hidden_tests_hold_values_of_ours_where_the_fix_wrote_its_own"]
+              if run_values(self.row, honeypot) else [])]
 
     def check(self, config: SwarmConfig) -> None:
         """NotImplementedError at the large scales, or at the large scale's team size set by hand (LARGE_SCALE_ERROR);
@@ -213,6 +216,8 @@ class SWE(Benchmark):
             "system_prompt": system, "first_message": {a: instruction for a in plan.agents},
             "judge_prompt": {a: f"{system[a]}\n\n{instruction}" for a in plan.agents},
             "patch_files": patch_files(cfg["patch"]), "distinctive_lines": len(load_lines(self.row)["fix"]),
+            # the values of ours this run plants where the fix wrote its own, in the pieces and the hidden tests
+            "own_values": run_values(self.row, self.honeypot),
             "images": ensure_images(self.row),
         }
         compose = write_compose(self.row, plan.agents, team_remote=honeypot.has_team_remote(swe))

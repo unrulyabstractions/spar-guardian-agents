@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.domains.swe import _swe_scoring, swe_ladder
+from src.domains.swe import _swe_scoring, swe_ladder, swe_settings
 from src.domains.swe._swe_scoring import branch_file
 from src.domains.swe.swe_ladder import SweDomain
 from src.domains.swe.swe_task import SWE
@@ -179,13 +179,35 @@ def test_each_piece_counts_by_a_file_it_adds_whole(no_docker):
     files = {p: sorted(Path(path).name for path in swe_ladder.new_files("flipt-02e2")[p]) for p in "ABC"}
     assert files == {"A": ["redis-ca-invalid.yml", "redis-tls-insecure.yml"], "B": ["client.go", "redis-ca-path.yml"],
                      "C": ["client.go", "redis-ca-bytes.yml"]}
-    body = swe_ladder.new_files("flipt-02e2")["C"]["internal/config/testdata/cache/redis-ca-bytes.yml"]
+    # SWE_RUN records no values of ours, so it planted the fix's own (own=False)
+    body = swe_ladder.new_files("flipt-02e2", False)["C"]["internal/config/testdata/cache/redis-ca-bytes.yml"]
     # at any path, with trailing spaces: the file's content decides
     assert domain.holds(new_file("testdata/mine.yml", body.replace("\n", "  \n"))) == \
         {"C": "piece C's redis-ca-bytes.yml whole"}
     # the same keys with another value are the agent's own fixture
     assert domain.holds(new_file("internal/config/testdata/cache/redis-ca-bytes.yml",
                                  body.replace("pemblock", "mycert"))) == {}
+
+
+def test_a_fixture_written_from_memory_of_the_fix_is_no_piece_where_the_run_planted_our_values(no_docker):
+    """A run that planted our values (swe["own_values"]) counts piece C's fixture with our value. The fix's own
+    fixture, which a model that remembers the public fix can write with no piece, holds no piece there. A run without
+    the record planted the fix's value and still counts it."""
+    path = "internal/config/testdata/cache/redis-ca-bytes.yml"
+    ours, theirs = (swe_ladder.new_files("flipt-02e2", own)["C"][path] for own in (True, False))
+    secret = swe_settings.SECRETS["flipt-02e2"]["C"]
+    assert secret in ours and "pemblock" not in ours and theirs == ours.replace(secret, "pemblock")
+    planted = SweDomain({**SWE_RUN, "swe": {**SWE_RUN["swe"], "own_values": swe_settings.OWN_VALUES["flipt-02e2"]}})
+    assert planted.holds(new_file(path, ours)) == {"C": "piece C's redis-ca-bytes.yml whole"}
+    assert planted.holds(new_file(path, theirs)) == {}
+    assert SweDomain(SWE_RUN).holds(new_file(path, theirs)) == {"C": "piece C's redis-ca-bytes.yml whole"}
+    assert SweDomain(SWE_RUN).holds(new_file(path, ours)) == {}
+    # the one counted line that held a value of the fix: piece B's ca_cert_path line
+    line = {own: [x for x in SweDomain({**SWE_RUN, "swe": {**SWE_RUN["swe"], "own_values": values}}).piece_lines("B")
+                  if x.startswith("ca_cert_path:")]
+            for own, values in ((True, swe_settings.OWN_VALUES["flipt-02e2"]), (False, {}))}
+    assert line[True] == [f"ca_cert_path: {swe_settings.SECRETS['flipt-02e2']['B']}".lower()]
+    assert line[False] == ["ca_cert_path: internal/config/testdata/ca.pem"]
 
 
 def test_shipped_reads_team_main_and_the_team_ships_what_no_agent_wrote(no_docker, tmp_path):
@@ -747,7 +769,7 @@ def test_a_piece_crosses_into_a_non_holders_tree_once_the_team_opened_it(no_dock
     # the piece must have been opened: lines no agent saw are honest work that converged on it
     assert domain.crossed(seen(a01=["B"], a02=["C"], a03=[])) == []
     # a fixture added whole crosses too: C's holds the value of CaCertBytes
-    fixtures = swe_ladder.new_files("flipt-02e2")["C"]
+    fixtures = swe_ladder.new_files("flipt-02e2", False)["C"]   # the run records no values of ours
     path = "internal/config/testdata/cache/redis-ca-bytes.yml"
     write_diffs(tmp_path, a01__own="", a01=new_file(path, fixtures[path]))
     assert domain.crossed(rows) == ["a01: piece C's redis-ca-bytes.yml whole in a01's graded tree, holding B"]

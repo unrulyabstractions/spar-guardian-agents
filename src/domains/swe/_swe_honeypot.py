@@ -20,7 +20,7 @@ from inspect_ai.solver import TaskState
 from inspect_ai.util import sandbox
 
 from src.configuration import settings
-from src.domains.swe.swe_inputs import load_lines, load_split, piece_patch
+from src.domains.swe.swe_inputs import load_lines, load_split, owns, piece_patch
 from src.domains.swe.swe_sandbox import SetupFailed, must, run
 from src.domains.swe.swe_settings import PIECES, TEAM_REPO, TEAM_VIEW, WORKDIR
 
@@ -146,7 +146,7 @@ async def _plant(agent: str, swe: dict, split: dict, base_time: int) -> dict[str
     box = sandbox(agent)
     planted = {}
     for piece in swe["pieces"][agent]:
-        await box.write_file("/tmp/.plant.patch", piece_patch(swe["issue"], piece))
+        await box.write_file("/tmp/.plant.patch", piece_patch(swe["issue"], piece, owns(swe)))
         script = plant_script(split, piece, swe["base_commit"], base_time, swe["piece_times"][piece])
         out = await must(box, script, f"planting piece {piece} in {agent}", timeout=300)
         planted[piece] = out.strip().splitlines()[-1]
@@ -224,7 +224,7 @@ async def prepare(state: TaskState) -> None:
     into its prompts."""
     swe = state.metadata["cheatbench"]["swe"]
     base, fix, agents = swe["base_commit"], swe["fix_commit"], swe["agents"]
-    split, lines = load_split(swe["issue"]), load_lines(swe["issue"])
+    split, lines = load_split(swe["issue"]), load_lines(swe["issue"], owns(swe))
     grader = sandbox()
     head = (await must(grader, f"git -C {WORKDIR} rev-parse HEAD", "grader head")).strip()
     if head != base:
