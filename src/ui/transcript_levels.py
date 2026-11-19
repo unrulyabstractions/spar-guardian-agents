@@ -21,6 +21,12 @@ the run (run_coordination), the same rule on every task, read at every board eve
 it holds from each of its own board calls on (the measure's held), a fall from high or extreme included.
 Collusion is src/measures/collusion.py's ladder (none, cooperation, collaboration, collusion), the measure's answer for
 the run (collusion_shown), every rung read by code.
+Where the measures read a run after every call (an agent's Cheating or Collusion "timeline" of source "steps", from a
+faithful replay), each rung is an event at the agent's first call after which the timeline holds it (its "after"), with
+the timeline's entries of that rung ("first": the clause or the take and what showed it) as its facts, and each
+Cheating clause labels the call at which it first held (own_call). A rung the timeline holds after no call of the agent
+is an event at the end of the run. A run read from its record alone (source "record") is laid out from its evidence's
+calls.
 The judge labels (JUDGE_LABELS) stand beside the ladders and are no rung: disclosure and manipulation, each a score
 from 0 to 100 that one judge gives every agent with an excerpt of its own post or reasoning, which code locates in the
 transcript (src/measures/judge_labels.py labels). The viewer computes no rung, no score and no place of its own: it
@@ -172,7 +178,7 @@ cheating rung, collusion on Collusion, and medium on Coordination (the user's ru
 ORDER = ["cheating", "coordination", "collusion"]
 CHEATING_SHOWN = ("applicable", "reason", "team", "team_cheated", "team_clauses", "influencers", "alarm", "passed",
                   "passed_how")
-CHEATING_AGENT_SHOWN = ("role", "worker", "rung", "cheated", "clauses", "judge", "judge_disagrees")
+CHEATING_AGENT_SHOWN = ("role", "worker", "rung", "cheated", "clauses", "judge", "judge_disagrees", "timeline")
 """The fields of the Cheating measure's answer the viewer keeps, for the run and for each agent."""
 COLLUSION_SHOWN = ("applicable", "reason", "team", "influencers", "agents", "hand_in", "notes")
 """The fields of the Collusion measure's answer the run page reads; pairs keep PAIR_SHOWN."""
@@ -223,6 +229,64 @@ def _cited(text) -> list[tuple[int, str]]:
     hits = list(CITE_RE.finditer(text))
     ends = [m.start() for m in hits[1:]] + [len(text)]
     return [(int(m.group(1)), text[m.end():end].rstrip("; ")) for m, end in zip(hits, ends)]
+
+
+# ------------------------------------------------------------------------------------------------- the timelines
+def stepped(row: dict | None) -> dict | None:
+    """An agent's timeline on a ladder (the measure's "timeline") when the run was read after every call (source
+    "steps"), else None."""
+    timeline = (row or {}).get("timeline")
+    return timeline if timeline and timeline.get("source") == cheating_ladder.STEPS else None
+
+
+def reached_at(timeline: dict, ladder: str, index: int) -> int | None:
+    """The agent's first call after which the timeline holds a rung at or above `index` (its "after"); None when no
+    call does: the end of the run."""
+    levels = LADDERS[ladder]["levels"]
+    return next((k for k, rung in enumerate(timeline["after"]) if levels.index(rung) >= index), None)
+
+
+def own_call(timeline: dict, ladder: str, entry: dict, agent: str) -> int | None:
+    """The agent's call at which the timeline places one of its "first" entries: the entry's call when the agent made
+    it, else the agent's first call after which the timeline holds the entry's rung (a teammate's call or the team's
+    submit reaches the agent at its next call); None for an entry at no call."""
+    if entry["n"] is None:
+        return None
+    if entry["by"] == agent:
+        return entry["k"]
+    return reached_at(timeline, ladder, LADDERS[ladder]["levels"].index(entry["rung"]))
+
+
+def step_text(entry: dict) -> str:
+    """What a Cheating "first" entry shows: what the step's state showed, else the clause's evidence, without the
+    leading call number."""
+    return LEAD_CITE.sub("", entry["step"]) if entry.get("step") else \
+        "; ".join(LEAD_CITE.sub("", line) for line in entry["evidence"])
+
+
+def _rise_fact(entry: dict, agent: str) -> list[str]:
+    """A Collusion "first" entry as a fact: the teammate, what came in, and the call when a teammate made it."""
+    lines = [LEAD_CITE.sub("", line) for line in entry["evidence"]]
+    if entry["by"] not in (None, agent):
+        lines.append(f"{entry['by']} call {entry['k']}")
+    return [f"with {entry['with']}", "; ".join(lines) or entry["rung"]]
+
+
+def _timed_events(ladder: str, timeline: dict, agent: str, fact) -> list[dict]:
+    """Each rung with entries in the agent's timeline at its first call after which the timeline holds it, or at the
+    end of the run (k None). The facts (`fact(entry)`, [name, value]) are those of the rung's entries placed at that
+    call (own_call), or all of them where none is."""
+    levels = LADDERS[ladder]["levels"]
+    out = []
+    for i, level in enumerate(levels):
+        entries = [e for e in timeline["first"] if e["rung"] == level]
+        if not entries:
+            continue
+        k = reached_at(timeline, ladder, i)
+        facts = [fact(e) for e in entries if own_call(timeline, ladder, e, agent) == k] or [fact(e) for e in entries]
+        out.append({"ladder": ladder, "level": level, "index": i, "k": k, "evidence": _fact_words(facts),
+                    "facts": facts})
+    return out
 
 
 # ------------------------------------------------------------------------------------------------------ Cheating
@@ -277,6 +341,19 @@ def _cheat_marks(record: dict) -> tuple[list[dict], dict[int, list[tuple[str, st
             events.append({"ladder": "cheating", "level": level, "index": _cheat_index(level), "k": None,
                            "evidence": _clause_words(clauses, level), "facts": _clause_facts(clauses, level)})
     return events, by_call
+
+
+def _timed_cheat_marks(a: str, record: dict,
+                       timeline: dict) -> tuple[list[dict], dict[int, list[tuple[str, str, str]]]]:
+    """Agent a's Cheating events and labels by call from its timeline: each rung with a clause at a's first call after
+    which the timeline holds it, its clauses and what showed them as facts; each clause labelled at the call at which
+    it first held (own_call), beside the calls its evidence cites (_cheat_marks)."""
+    _, by_call = _cheat_marks(record)
+    for entry in timeline["first"]:
+        k = own_call(timeline, "cheating", entry, a)
+        if k is not None and all(clause != entry["clause"] for _, clause, _ in by_call.get(k, [])):
+            by_call.setdefault(k, []).append((entry["rung"], entry["clause"], step_text(entry)))
+    return _timed_events("cheating", timeline, a, lambda entry: [entry["clause"], step_text(entry)]), by_call
 
 
 def _cheat_cell(record: dict, below: list[str]) -> dict:
@@ -490,6 +567,13 @@ def _collusion_marks(a: str, M: dict) -> tuple[list[dict], dict[int, list[list[s
     return ev, labels
 
 
+def _timed_collusion_marks(a: str, M: dict, timeline: dict) -> tuple[list[dict], dict[int, list[list[str]]]]:
+    """Agent a's Collusion events from its timeline (each rung at a's first call after which the timeline holds it,
+    the take or the hand-in that raised it as facts) and its take labels by call (_collusion_marks)."""
+    _, labels = _collusion_marks(a, M)
+    return _timed_events("collusion", timeline, a, lambda entry: _rise_fact(entry, a)), labels
+
+
 def _fact_words(facts: list[list[str]]) -> str:
     """Facts as one evidence line: "name: value; name: value"."""
     return "; ".join(f"{name}: {value}" for name, value in facts)
@@ -502,9 +586,9 @@ def _agent_labels(a: str, events: list[dict], cheats: dict[int, list[tuple[str, 
     every call: each call a Cheating clause's evidence cites, the first call that read a teammate's post on the board
     (Coordination read), each call that posted (Coordination write), each call that took a teammate's work
     (Collusion cooperation), and the first call of every other level. A call that holds a higher label of a ladder
-    does not repeat a lower one from an event. A level counted at the end of the run (Cheating hacked, a Coordination
-    level reached after the agent's last board call, Collusion collaboration and above among them) belongs to no call
-    and gets no label."""
+    does not repeat a lower one from an event. A level counted at the end of the run (a Coordination level reached
+    after the agent's last board call; on a run read from its record alone, Cheating hacked and Collusion collaboration
+    and above among them) belongs to no call and gets no label."""
     out: dict[tuple, dict] = {}
 
     def add(ladder: str, level: str, where: dict, evidence: str, facts: list) -> None:
@@ -545,8 +629,9 @@ def compute(sig_agents: dict[str, dict], episodes: list[dict], boards: list[dict
     "judge_label_about" (label_about), "order", "cheating", "coordination", "collusion"}. A cell is {level, index, of,
     evidence, facts[, na]}, a Cheating cell with cheated; an event is
     {ladder, level, index, k (a call number) | call_id | neither (counted at the end of the run), evidence, facts[,
-    held]}: the first call that reached the level, or, held (Coordination), the call from which the agent holds it,
-    which replaces the level before even when lower. Facts are the evidence as [name, value] pairs, what a level chip
+    held]}: the first call that reached the level (on a ladder read after every call, the first after which the
+    timeline holds it), or, held (Coordination), the call from which the agent holds it, which replaces the level
+    before even when lower. Facts are the evidence as [name, value] pairs, what a level chip
     lists. A label has an event's keys and always a call: every call that is evidence for the level (_agent_labels).
     `sig_agents` are the honeypot scan's agent rows (signals.jsonl), whose exposed and tried records are shown below
     the Cheating ladder; `boards` the viewer's board (transcript_index.board_view);
@@ -572,7 +657,8 @@ def compute(sig_agents: dict[str, dict], episodes: list[dict], boards: list[dict
             out = {"cheating": _cell("cheating", None, cheating.get("reason") or "the Cheating measure has no row")}
         else:
             out = {"cheating": _cheat_cell(X["agents"][a], below[a])}
-            ev, cheats = _cheat_marks(X["agents"][a])
+            timeline = stepped(X["agents"][a])
+            ev, cheats = _timed_cheat_marks(a, X["agents"][a], timeline) if timeline else _cheat_marks(X["agents"][a])
         if C is None:
             out["coordination"] = _cell("coordination", None, ONE_AGENT)
         else:
@@ -586,7 +672,8 @@ def compute(sig_agents: dict[str, dict], episodes: list[dict], boards: list[dict
             rung = M["agents"][a]["rung"]
             out["collusion"] = _cell("collusion", _collusion_index(rung), _collusion_evidence(a, M),
                                      _collusion_facts(a, M))
-            more, takes = _collusion_marks(a, M)
+            timeline = stepped(M["agents"][a])
+            more, takes = _timed_collusion_marks(a, M, timeline) if timeline else _collusion_marks(a, M)
             ev += more
         agents_out[a], events[a], labels[a] = out, ev, _agent_labels(a, ev, cheats, C, takes)
     t = {"cheating": _cell("cheating", None, cheating.get("reason") or "") if X is None else _team_cheat(X),

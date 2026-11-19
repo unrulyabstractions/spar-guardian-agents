@@ -66,10 +66,10 @@ const topOf = (marks, key) => marks.reduce((m, x) => Math.max(m, x[key]), 0);
 // above): a Cheating label first, then a take (Collusion), then the Coordination level of a board read or post, else
 // plain work; a Cheating label at or above the Cheating line fills the lane's whole height. Under a ladder's lens, the
 // ramp at its highest mark: full height at or above the Cheating line, for a post that took up a teammate's new post,
-// and for a take of a planted piece, which takes the Collusion line's colour; under Cheating a call with no mark of its
-// own takes a quiet tint of the rung reached so far (sofar). Under Judge labels, the highest score's colour. kind:
-// plain, mark, sofar or dim. ramp: {cheatLine, collLine, coordLine, board: {read, post} -> the Coordination level's
-// index}.
+// for a take of a planted piece, which takes the Collusion line's colour, and for a Collusion rung at or above its
+// line; under Cheating a call with no mark of its own takes a quiet tint of the rung reached so far (sofar). Under
+// Judge labels, the highest score's colour. kind: plain, mark, sofar or dim. ramp: {cheatLine, collLine, coordLine,
+// board: {read, post} -> the Coordination level's index}.
 function callStyle(c, ramp, lens, sofar) {
   if (lens === 'all') {
     const top = ladder => topOf(c.labels.filter(l => l.ladder === ladder), 'index');
@@ -90,7 +90,7 @@ function callStyle(c, ramp, lens, sofar) {
   }
   const top = lens === 'judge' ? 0 : topOf(marks, 'index');
   if (top) {
-    const strong = lens === 'cheating' ? top >= ramp.cheatLine
+    const strong = lens === 'cheating' ? top >= ramp.cheatLine : lens === 'collusion' ? top >= ramp.collLine
       : lens === 'coordination' && marks.some(m => (m.took_up || []).length);
     return { fill: RAMP[lens][top], strong, kind: 'mark' };
   }
@@ -101,7 +101,9 @@ function callStyle(c, ramp, lens, sofar) {
 // One mark as a short line of a call's hover.
 function markWords(lens, m, d) {
   if (lens === 'cheating') return `${m.clause} · ${m.level}`;
-  if (lens === 'collusion') return `took ${m.giver}'s ${m.planted ? 'piece' : 'work'} · ${m.rule}`;
+  if (lens === 'collusion') {
+    return m.with ? `${m.level} · with ${m.with}` : `took ${m.giver}'s ${m.planted ? 'piece' : 'work'} · ${m.rule}`;
+  }
   if (lens === 'judge') return `${d.label_names[m.label]} ${m.score} · ${m.where}`;
   return firstLine(m.evidence, CLIP);
 }
@@ -353,13 +355,15 @@ export function renderBoard(el, d, opts) {
 
     // calls: a thin bar for ordinary work, a taller one for a labelled or marked call, the lane's full height for a
     // strong one (callStyle). Under the Cheating lens a line marks the call where the agent first reaches each rung,
+    // under the Collusion lens each call where it rose to a rung (a rung mark, the payload's marks with a teammate),
     // and under the Coordination lens each call from which the agent holds a new level (the payload's held, which can
     // fall); heavier where it crosses the ladder's line, with the level's name.
     const callsG = svgEl('g', { class: 'bd-calls' });
     const reachG = svgEl('g', { class: 'bd-reaches' });
     const keys = { a: [], b: [] };
     const calls = { a: [], b: [] };
-    // per call: each ladder's highest level index of the agent's calls up to it; Coordination's, the level it holds
+    // per call: each ladder's highest level index of the agent's calls up to it; Coordination's, the level it holds;
+    // Cheating's and Collusion's, where the measure read them after every call, the rung held after it (after)
     const reached = { a: [], b: [] };
     const marked = { a: 0, b: 0 };
     for (const side of SIDES) {
@@ -368,10 +372,12 @@ export function renderBoard(el, d, opts) {
       cards[side].el.hidden = side === 'b' && state.a === state.b;
       const top = {};
       let sofar = 0;
+      let rose = 0;
       let held = 0;
       for (const c of ag.calls) {
         for (const l of c.labels) top[l.ladder] = Math.max(top[l.ladder] || 0, l.index);
         if (c.held != null) top.coordination = c.held;
+        Object.assign(top, c.after);
         reached[side].push({ ...top });
         const st = callStyle(c, ramp, state.lens, sofar);
         const tall = st.strong ? LANE_H - 4 : st.kind === 'mark' ? 28 : 14;
@@ -390,6 +396,11 @@ export function renderBoard(el, d, opts) {
         if (now > sofar) {
           reach(cheat, ramp.cheatLine, sofar, now);
           sofar = now;
+        }
+        const up = state.lens === 'collusion' ? topOf(c.marks.collusion.filter(m => m.with), 'index') : 0;
+        if (up > rose) {
+          reach(coll, ramp.collLine, rose, up);
+          rose = up;
         }
         if (state.lens === 'coordination' && c.held != null && c.held !== held) {
           reach(coord, ramp.coordLine, held, c.held);
@@ -659,7 +670,8 @@ export function renderBoard(el, d, opts) {
 
   // An agent's card in its lane's colour (BOARD_CARD): fill(agent) once per pair, at(call, reached) at each move. A
   // head line (the agent, its role, its call at the position); a grid with a row per ladder and two columns, "now",
-  // the level its calls reached up to the position (Coordination: the level it holds there), and "end", its level at
+  // the level its calls reached up to the position (Coordination: the level it holds there; Cheating and Collusion,
+  // where the measure read them after every call: the rung held after its call there), and "end", its level at
   // the end of the run (the payload's final, with its evidence on hover), muted when the two agree; then its judge
   // labels' scores.
   function agentCard(side) {
@@ -788,6 +800,8 @@ export function renderBoard(el, d, opts) {
   const cheatChips = () => cheat.levels.slice(1).map(lv => [lv === cheat.line ? lineMark(cheat) : null,
     chip('cheating', cheat, lv)]);
   const formless = d.posts.some(p => p.reads.some(r => !r.form));
+  // whether the payload places Collusion's rungs at calls (rung marks: the measure read the run after every call)
+  const rungsMarked = d.agents.some(a => a.calls.some(c => c.marks.collusion.some(m => m.with)));
   const legend = h('details', { class: 'bd-legend' }, h('summary', null, 'Legend'),
     h('div', { class: 'bd-legend-body' },
       item(null, sw(null, 'bd-sw-a'), sw(null, 'bd-sw-b'), 'lanes'),
@@ -827,7 +841,9 @@ export function renderBoard(el, d, opts) {
         item('a post that took up a teammate\'s new post', sw(RAMP.coordination[ramp.board.post], 'bd-sw-tall'),
           'took up'), tick(null, 'level held')],
       collusion: [chip('collusion', coll, coll.levels[1]),
-        item('a take of a planted piece', sw(RAMP.collusion[ramp.collLine], 'bd-sw-tall'), 'planted piece')],
+        item('a take of a planted piece', sw(RAMP.collusion[ramp.collLine], 'bd-sw-tall'), 'planted piece'),
+        rungsMarked ? [coll.levels.slice(2).map(lv => [lv === coll.line ? lineMark(coll) : null,
+          chip('collusion', coll, lv)]), tick(null, 'rung reached')] : null],
       judge: [0, 25, 50, 75, 100].map(s => scoreChip(s, `score ${s}`)),
     };
     const n = [...missed.values()].reduce((x, y) => x + y, 0);

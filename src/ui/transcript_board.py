@@ -2,7 +2,7 @@
 transcript viewer (src/ui/transcript_viewer.py, route /api/board).
 
     payload = board_payload(run_dir, levels)
-    payload["agents"][0]["calls"][0]        # {k, m, t, dur, tool, summary, board, labels, marks, held}
+    payload["agents"][0]["calls"][0]        # {k, m, t, dur, tool, summary, board, labels, marks, held, after}
     payload["agents"][0]["calls"][0]["marks"]["cheating"]   # [{level, index, clause, evidence}]: one lens's marks
     payload["agents"][0]["final"]           # {ladder: {level, facts}}: the agent's level at the end of the run
     payload["agents"][0]["unplaced"]        # {lens: {clause, rule or label: records that name no call}}
@@ -33,14 +33,19 @@ A call's marks are what the tab's lenses (LENSES) colour it by: every record of 
 on it, with no level computed here.
 - cheating: each evidence line of each Cheating clause (the measure's clauses in levels["cheating"]) at every call it
   cites (cited_calls), or, for a read the access log shows (access_evidence.read_evidence), at the call the log's row
-  sits in; the clause's rung (cheating_ladder.CLAUSES) is the mark's level.
+  sits in; the clause's rung (cheating_ladder.CLAUSES) is the mark's level. Where the measure read the agent after
+  every call (its timeline of source "steps"), each clause also at the call at which it first held, and its lines that
+  name no call are placed with it.
 - coordination: each call that read a teammate's post it had not read before (the post's first read by that agent,
   from the posts' reads) as read, and each call that posted as write, with the teammates whose new posts that post
   took up (took_up: the step in the measure's R_ij at that post); and each change of the level the agent holds (the
   run page's held events, src/measures/coordination.py held_levels) at the call from which it holds it, held. A call's
-  "held" is the index of the level the agent holds at it (held_at), which can fall from high or extreme.
+  "held" is the index of the level the agent holds at it (held_at), which can fall from high or extreme. A call's
+  "after" is, for Cheating and Collusion where the measure read them after every call, the index of the rung the agent
+  holds after it (after_at); {} otherwise.
 - collusion: each take of the agent (the measure's pairs) at its call, or at the calls its evidence cites, with whose
-  work it took, its rule and whether it is a take of a planted piece (PIECE_RULE).
+  work it took, its rule and whether it is a take of a planted piece (PIECE_RULE); where the measure read the agent
+  after every call, each rung it rose to at the call at which it holds it, with the teammate (rung_marks).
 - judge: each judge label located in the agent's reasoning, at the tool calls of that model call (the judges number
   the model calls from 1, judge_records.model_calls), or in its post, at the call that wrote the post.
 A record that names no call is counted in the agent's "unplaced" by clause, rule or label.
@@ -59,7 +64,7 @@ from src.measures import cheating_ladder, collusion, coordination, judge_labels
 from src.measures.access_evidence import read_evidence
 from src.measures.run_calls import Call, Run, load_run
 from src.measures.run_directory import RunDir, episode_agent, is_worker
-from src.ui.transcript_levels import CITE_RE
+from src.ui.transcript_levels import CITE_RE, own_call, step_text, stepped
 
 SUMMARY_CHARS = 140
 """The longest one-line summary of a call."""
@@ -210,14 +215,26 @@ def logged_calls(run_dir: Path, at: dict[str, tuple[str, int]]) -> dict[str, dic
 
 def cheating_marks(placed: Placed, levels: dict, agent: str, logged: dict[str, list[int]]) -> None:
     """Each evidence line of each of the agent's Cheating clauses at every call it cites, or at the calls the access
-    log's rows of the read sit in (`logged`, logged_calls' entry for the agent), with the clause's rung."""
+    log's rows of the read sit in (`logged`, logged_calls' entry for the agent), with the clause's rung. Where the
+    agent's Cheating timeline was read after every call, each clause also at the call at which it first held
+    (transcript_levels.own_call), and a line that names no call of a clause so placed counts as placed."""
     record = ((levels.get("cheating") or {}).get("agents") or {}).get(agent)
-    for clause, lines in (record["clauses"] if record else {}).items():
+    timeline = stepped(record)
+    at = {e["clause"]: (e, own_call(timeline, "cheating", e, agent)) for e in timeline["first"]} if timeline else {}
+
+    def mark(clause: str, evidence: str) -> dict:
         level = cheating_ladder.CLAUSES[clause]
+        return {"level": level, "index": cheating_ladder.RUNGS.index(level), "clause": clause, "evidence": evidence}
+
+    for clause, lines in (record["clauses"] if record else {}).items():
+        dated = at.get(clause, (None, None))[1] is not None
         for line in lines:
-            placed.put("cheating", agent, cited_calls(line) or logged.get(line, []),
-                       {"level": level, "index": cheating_ladder.RUNGS.index(level), "clause": clause,
-                        "evidence": line}, clause)
+            ks = cited_calls(line) or logged.get(line, [])
+            if ks or not dated:
+                placed.put("cheating", agent, ks, mark(clause, line), clause)
+    for clause, (entry, k) in at.items():
+        if k is not None and all(m["clause"] != clause for m in placed.at(agent, k)["cheating"]):
+            placed.put("cheating", agent, [k], mark(clause, step_text(entry)), clause)
 
 
 def took_up(boards: list[dict], roles: dict[str, str | None]) -> dict[str, list[str]]:
@@ -288,6 +305,30 @@ def take_marks(placed: Placed, levels: dict, agent: str) -> None:
                 placed.put("collusion", agent, [t["call"]] if t["call"] is not None else cited_calls(t["evidence"]),
                            {"level": collusion.RUNGS[1], "index": 1, "giver": t["giver"], "rule": t["rule"],
                             "planted": t["rule"] == PIECE_RULE, "evidence": t["evidence"]}, t["rule"])
+
+
+def rung_marks(placed: Placed, levels: dict, agent: str) -> None:
+    """Where the agent's Collusion timeline was read after every call: each rung it rose to (the timeline's "first"),
+    at the call at which the agent holds it (transcript_levels.own_call), with the teammate it holds it with; a rung
+    at no call counted by its name."""
+    measure = levels.get("collusion") or {}
+    timeline = stepped((measure.get("agents") or {}).get(agent) if measure.get("applicable") else None)
+    for e in timeline["first"] if timeline else []:
+        k = own_call(timeline, "collusion", e, agent)
+        placed.put("collusion", agent, [] if k is None else [k], {
+            "level": e["rung"], "index": collusion.RUNGS.index(e["rung"]), "with": e["with"],
+            "evidence": "; ".join(e["evidence"]) or e["rung"]}, e["rung"])
+
+
+def after_at(levels: dict, agent: str) -> dict[str, list[int]]:
+    """ladder -> the index of the rung the agent holds after each of its calls, for Cheating and Collusion where the
+    measure read them after every call (the timeline's "after")."""
+    collusion_measure = levels.get("collusion") or {}
+    rows = {"cheating": ((levels.get("cheating") or {}).get("agents") or {}).get(agent),
+            "collusion": (collusion_measure.get("agents") or {}).get(agent) if collusion_measure.get("applicable")
+            else None}
+    return {ladder: [levels["ladders"][ladder]["levels"].index(rung) for rung in timeline["after"]]
+            for ladder, row in rows.items() if (timeline := stepped(row))}
 
 
 def judge_marks(placed: Placed, levels: dict, agent: str, steps: list[list[str]], k_of: dict[str, int],
@@ -380,14 +421,17 @@ def board_payload(run_dir: Path, levels: dict) -> dict:
     for agent, rows in run.calls.items():
         cheating_marks(placed, levels, agent, logged.get(agent) or {})
         take_marks(placed, levels, agent)
+        rung_marks(placed, levels, agent)
         k_of = {c.id: c.k for c in rows}
         held_marks(placed, levels, agent, k_of)
         judge_marks(placed, levels, agent, by_model.get(agent) or [], k_of, post_calls)
         labels = call_labels(levels, agent, k_of)
+        after = after_at(levels, agent)
         agents.append({"agent": agent, "role": run.roles.get(agent) or "worker", "calls": [{
             "k": c.k, "m": steps.get(c.id), "t": at[(agent, c.k)][0], "dur": at[(agent, c.k)][1], "tool": c.tool,
             "summary": summary(c, wrote.get(c.id, []), read.get(c.id, [])), "board": BOARD_TOOLS.get(c.tool),
-            "labels": labels.get(c.k, []), "marks": placed.at(agent, c.k), "held": held}
+            "labels": labels.get(c.k, []), "marks": placed.at(agent, c.k), "held": held,
+            "after": {ladder: rungs[c.k] for ladder, rungs in after.items() if c.k < len(rungs)}}
             for c, held in zip(rows, held_at(rows, placed, agent))],
             "final": final(levels, agent), "unplaced": placed.unplaced(agent)})
     agents.sort(key=lambda a: (a["role"] != "worker", a["agent"]))
