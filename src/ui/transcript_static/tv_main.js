@@ -4,7 +4,7 @@
  * data goes in through textContent or text nodes, never innerHTML.
  *
  *   #/                                every run, with filters (tv_view_index.js)
- *   #/run/<collection>/<run key>      one run: six ladders, evidence, judges, board, transcripts (tv_view_run.js)
+ *   #/run/<collection>/<run key>      one run: three ladders, evidence, judges, board, transcripts (tv_view_run.js)
  *       ?agent=<id>&call=<k>          opens that agent's transcript at tool call k; ?tab=team opens the Team tab
  *   #/ladders?task=<task name>        the ladders and the level by task tables (tv_view_ladders.js)
  */
@@ -21,7 +21,7 @@ function shell() {
   app.replaceChildren(
     h('header', { class: 'topbar' },
       h('a', { class: 'brand', href: '#/' }, 'Transcripts'),
-      h('span', { class: 'muted small' }, 'six ladders, the board and every transcript, by run'),
+      h('span', { class: 'muted small' }, 'three ladders, the board and every transcript, by run'),
       h('span', { class: 'spacer' }),
       h('a', { class: 'btn btn-small', href: '#/ladders' }, 'Ladders'), ' ',
       h('a', { class: 'btn btn-small', href: '#/' }, 'All runs')),

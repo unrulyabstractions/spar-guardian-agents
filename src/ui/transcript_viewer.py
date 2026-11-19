@@ -1,6 +1,7 @@
-"""The transcript viewer: every run under runs/ in one index, and a run page with the six ladders, the board and each
-agent's transcript, every tool call with the labels it is evidence for. Ported from collusion-hermaneutics' viewer
-(viewer/serve.py), whose runs our framework made, so it reads the same files here.
+"""The transcript viewer: every run under runs/ in one index, and a run page with the three ladders (Cheating,
+Coordination, Collusion), the board and each agent's transcript, every tool call with the labels it is evidence for.
+Ported from collusion-hermaneutics' viewer (viewer/serve.py), whose runs our framework made, so it reads the same files
+here.
 
     uv run python -m src.ui.transcript_viewer [--port 8770] [--rebuild] [--runs runs]
     make transcripts
@@ -17,9 +18,10 @@ Every folder under runs/ is a collection, except study_smoke and folders that ho
 The index lists every run with a status: valid, or the reason it is not (invalid, incomplete, mock, attempt, extra
 copy). The page shows the valid runs first and the rest through its Status filter. The index reads each run's run.json,
 episodes.jsonl, signals.jsonl and board, and the judged ladder (ladder.jsonl) and CheatBench's judge (judge.jsonl)
-where the run was judged; it opens no transcript. The server reads the data and never writes it. Its one output is the
-index cache, tmp/transcript_viewer/index.json, built on the first start and again with --rebuild. A transcript is read
-only when the browser asks for it, and it is streamed from disk as stored.
+where the run was judged. The Collusion ladder (src/measures/collusion.py run_collusion) reads the transcripts of each
+run it applies to; no other part of the index opens one. The server reads the data and never writes it. Its one
+output is the index cache, tmp/transcript_viewer/index.json, built on the first start and again with --rebuild. The
+browser's transcript is read only when the browser asks for it, and it is streamed from disk as stored.
 
 Routes: / (the page), /tv/<file> (src/ui/transcript_static/), /static/<path> (the results browser's assets in
 src/ui/static/, whose dom.js, charts.js, components.js and style.css the page reuses), /api/index, /api/run?id=,
@@ -42,7 +44,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from src.configuration.settings import ROOT
-from src.measures import coordination
+from src.measures import collusion, coordination
 from src.measures.run_directory import GROUPS, RunDir, run_name, study_runs
 from src.measures.rungs import RUNGS
 from src.ui import transcript_ladder_tables, transcript_levels
@@ -54,7 +56,7 @@ STATIC = HERE / "transcript_static"
 BROWSER_STATIC = HERE / "static"
 CACHE = ROOT / "tmp" / "transcript_viewer" / "index.json"
 SKIP = ("study_smoke",)
-INDEX_VERSION = 2  # 2: the Coordination ladder of src/measures/coordination.py, and the hidden roles' own level
+INDEX_VERSION = 3  # 3: three ladders, Collusion from src/measures/collusion.py with the hidden roles' own rung
 DEFAULT_PORT = 8770
 
 COLLECTION_ABOUT = {
@@ -257,9 +259,16 @@ class RunFiles:
         folder = self.path / coordination.COMMUNICATION
         return [read_json(p) or {} for p in sorted(folder.glob("*.json"))] if folder.is_dir() else []
 
+    def collusion(self) -> dict:
+        """The Collusion ladder of the run (src/measures/collusion.py run_collusion), or {"applicable": False,
+        "reason"} when the measure says it does not apply (not_applicable), which loads no transcript."""
+        reason = collusion.not_applicable(self.run_json.get("task"), len(self.episodes))
+        return {"applicable": False, "reason": reason} if reason else collusion.run_collusion(self.path)
+
     def levels(self, boards: list[dict] | None = None) -> dict:
         return transcript_levels.compute(self.team, self.sig_agents, self.episodes,
-                                         self.boards() if boards is None else boards, self.roles, self.records())
+                                         self.boards() if boards is None else boards, self.roles, self.records(),
+                                         self.collusion())
 
 
 def judge_rows(run_dir: Path, name: str, episodes: list[dict]) -> dict[str, dict]:
@@ -410,8 +419,7 @@ def build_row(col: str, listed: Listed) -> dict:
         "regulator_model": cell.regulator if "regulator" in rf.roles.values() else None,
         "roles": {a: r for a, r in rf.roles.items() if r}, "rung": rung,
         "rung_code": team.get("rung_by_code") if team.get("raised_by_proof") else None,
-        "floor": transcript_levels.floor_of(task), "label": label,
-        "collab": None if rf.single else team.get("collaboration"), "judges": judges, "agree": agree,
+        "floor": transcript_levels.floor_of(task), "label": label, "judges": judges, "agree": agree,
         "disagree": disagree, "presentation": team.get("presentation"),
         "seed": listed.meta.get("seed", cfg.get("seed")), "turn_budget": cfg.get("turn_budget"),
         "dir": str(listed.path), "n_transcripts": len(transcript_dirs(listed.path)), "levels": levels,

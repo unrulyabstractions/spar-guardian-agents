@@ -14,7 +14,7 @@ table.idx-table { font-size: 12.5px; }
 table.idx-table th { white-space: normal; vertical-align: bottom; min-width: 70px; position: sticky; top: 0; z-index: 2; }
 table.idx-table td { white-space: nowrap; vertical-align: middle; }
 table.idx-table td.wrap { white-space: normal; min-width: 13ch; max-width: 24ch; }
-table.idx-table td.lv { white-space: normal; min-width: 15ch; max-width: 22ch; }
+table.idx-table td.lv { white-space: normal; min-width: 15ch; max-width: 26ch; padding-right: 10px; }
 table.idx-table td.lv .heat { white-space: normal; }
 table.idx-table td.lv .lv-glyph, table.idx-table td.lv .lv-rank { flex: none; white-space: nowrap; }
 table.idx-table tbody tr:hover td { background: var(--hover); }
@@ -56,7 +56,7 @@ table.idx-table tr.row-disagree td:first-child { box-shadow: inset 3px 0 0 var(-
 .call-mark { display: flex; gap: 6px; align-items: baseline; font-size: 12.5px; }
 .cm-text { overflow-wrap: anywhere; color: var(--text); }
 .reasoning-hidden { font-style: italic; }
-/* six ladders: colours from the theme tokens, so light and dark both read */
+/* the ladders: colours from the theme tokens, so light and dark both read */
 .lv-table { border-collapse: collapse; width: 100%; font-size: 13px; }
 .lv-table th { font-size: 12px; color: var(--muted); font-weight: 600; }
 .lv-table th, .lv-table td { border-bottom: 1px solid var(--border); padding: 5px 8px; text-align: left; vertical-align: top; }
@@ -67,7 +67,8 @@ table.idx-table tr.row-disagree td:first-child { box-shadow: inset 3px 0 0 var(-
 .lv-name { color: var(--text); }
 .lv-hit .lv-name { font-weight: 600; }
 .lv-rank { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-.lv-proxy { margin-left: 4px; font-size: 10.5px; color: var(--muted); border: 1px solid var(--border-strong); border-radius: 3px; padding: 0 4px; }
+.lv-judge-tag { margin-left: 6px; font-size: 10.5px; color: var(--muted); border: 1px dashed var(--border-strong); border-radius: 3px; padding: 0 4px; white-space: nowrap; }
+.lv-judge-yes { color: var(--bad); font-weight: 600; }
 .lv-strip { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0 0 8px; padding: 6px 0 8px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); }
 .lv-chip { display: inline-flex; align-items: center; gap: 4px; }
 .lv-chip-name b { color: var(--text); font-weight: 600; }
@@ -82,7 +83,6 @@ table.idx-table tr.row-disagree td:first-child { box-shadow: inset 3px 0 0 var(-
 .lv-terms { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 4px 0 0; max-width: 130ch; font-size: 13.5px; }
 .lv-terms dt { font-weight: 600; }
 .lv-terms dd { margin: 0; color: var(--muted); }
-.lv-group { margin: 22px 0 8px; font-size: 15px; }
 .lv-ladder-table td .lv-glyph { margin-right: 6px; }
 
 /* transcript in the case-study viewer's style (arena-capstone script/visualize_case.html): white cards with a
@@ -190,9 +190,9 @@ table.idx-table tr.row-disagree td:first-child { box-shadow: inset 3px 0 0 var(-
 .rp-stage .case { --under: var(--under-bar, calc(var(--header-h) + 44px)); }
 .rp-stage .case .left { top: var(--under); max-height: calc(100vh - var(--under) - 12px); padding: 10px; }
 .rp-stage .case .call { scroll-margin-top: var(--under); }
-.case .cs-six { font-size: 11.5px; color: var(--muted); line-height: 1.6; margin: 0 0 8px; }
-.case .cs-six i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 3px; vertical-align: baseline; }
-.case .cs-six b { color: var(--ink-2); font-weight: 600; }
+.case .cs-ladders { font-size: 11.5px; color: var(--muted); line-height: 1.6; margin: 0 0 8px; }
+.case .cs-ladders i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 3px; vertical-align: baseline; }
+.case .cs-ladders b { color: var(--ink-2); font-weight: 600; }
 .rp-stage[data-show=reasoning] .k-tool, .rp-stage[data-show=reasoning] .k-input,
 .rp-stage[data-show=reasoning] .case .call:not(:has(.k-reasoning)) { display: none; }
 .rp-stage[data-show=tools] .k-reasoning, .rp-stage[data-show=tools] .k-input, .rp-stage[data-show=tools] .case .call.msg { display: none; }
@@ -205,13 +205,16 @@ table.idx-table tr.row-disagree td:first-child { box-shadow: inset 3px 0 0 var(-
 .cs-full-legend b { color: var(--ink-2, var(--text)); font-weight: 600; margin-right: 4px; }
 .cs-full-legend .cfl-item { display: inline-flex; align-items: center; gap: 3px; margin-right: 8px; white-space: nowrap; }
 .cs-full-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; border: 1px solid rgba(127,127,127,.4); }
-.case .cs-six-row { line-height: 1.55; }
+.case .cs-ladders-row { line-height: 1.55; }
 .heat.heat-light, .heat.heat-light .lv-rank { color: #16191a; }
 .case .cs-mile { font-size: 10px; }
-/* The Coordination ladder: the runs table's hidden-role column, the Team tab's panel, the Ladders page's level table. */
+/* Coordination and Collusion: the runs table's hidden-role columns, the Team tab's panels, the Ladders page's level
+   tables. */
 .lv-hidden-row { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; margin: 2px 0; }
 .coord-summary { display: grid; gap: 4px; margin: 4px 0 10px; }
 .coord-table tr.coord-hidden td { background: var(--surface-2, rgba(127,127,127,.06)); }
 .coord-table td.num, .coord-pairs td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .coord-pairs { margin-top: 8px; max-width: 520px; }
-.lv-coord-table td:first-child { white-space: nowrap; }
+.lv-level-table td:first-child { white-space: nowrap; }
+.collusion-pairs td { vertical-align: top; }
+.collusion-pairs td:nth-child(3), .collusion-pairs td:nth-child(5) { min-width: 260px; max-width: 520px; }

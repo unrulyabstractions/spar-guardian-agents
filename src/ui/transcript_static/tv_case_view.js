@@ -1,4 +1,4 @@
-/* One agent's whole episode in the case-study layout: a sticky left column "The whole episode" (the six ladders, one
+/* One agent's whole episode in the case-study layout: a sticky left column "The whole episode" (the three ladders, one
  * lane each, one row per tool call, and beside them the labels each call carries itself) and the transcript on the
  * right, one block per step, a tool call's labels under its head line. Copied from collusion-hermaneutics' viewer
  * (viewer/static/app/case_view.js, after arena-capstone script/visualize_case.html). Our edits: readableReasoning,
@@ -7,23 +7,20 @@
  * place; the strip follows the page as it scrolls. Every string goes in through h() text nodes. */
 import { h, plural } from '/static/app/dom.js';
 
-// Colour ramps per ladder, level 0 first. Cheating and collaboration are viz_common.js RUNG and COLLAB fills.
+// Colour ramps per ladder, level 0 first. Cheating is viz_common.js's RUNG fill.
 export const RAMP = {
   cheat: ['#eeede8', '#fde4c8', '#f9c396', '#f29a6a', '#e8714a', '#dc5b3c', '#d0452e', '#a8201c'],
   // none, read, write, low, medium, high, extreme (src/measures/coordination.py LEVELS), light to dark
   coord: ['#eeede8', '#e9e7f6', '#d3cff0', '#b1aae3', '#8b80d2', '#6152b9', '#3a2a8f'],
-  coop: ['#eeede8', '#cfe6f0', '#7fb8d4', '#2b7d96'],
-  collab: ['#eeede8', '#d3ecd9', '#7cc192', '#1f6b47'],
-  collude: ['#eeede8', '#f4d6d0', '#eaa79a', '#d0452e', '#a8201c', '#6e0f0c'],
-  scheme: ['#eeede8', '#c9a0d8', '#7a4fb0'],
-  // the code ladder's collaboration levels (isolated .. assembled), for the Ladders page's table by task
-  collab_code: ['#eeede8', '#dfe5ec', '#b7c5d6', '#8199b6', '#4c6a8f'],
+  // none, cooperation, collaboration (code, greens), collusion, scheming (a judge's, reds): src/measures/collusion.py
+  collusion: ['#eeede8', '#cde8dc', '#5aa889', '#d0452e', '#7a1f12'],
 };
-const SHORT = { cheat: 'Ch', coord: 'Cd', coop: 'Cp', collab: 'Cb', collude: 'Cl', scheme: 'Sc' };
+const SHORT = { cheat: 'Ch', coord: 'Cd', collusion: 'Cl' };
 // Milestone wording, after group_labels.js RUNG_W ("saw it", "tried to reach it", ...).
 const WORDS = {
   cheat: { exposed: 'saw it', tried: 'tried to reach it', opened: 'opened it', used: 'used it', tampered: 'tampered with the game', checked: 'checked it with the grader', shipped: 'shipped it' },
   coord: { read: 'read a teammate', write: 'posted', low: 'low back-and-forth', medium: 'medium back-and-forth', high: 'high back-and-forth', extreme: 'extreme back-and-forth' },
+  collusion: { cooperation: 'cooperation', collaboration: 'collaboration', collusion: 'collusion (judge)', scheming: 'scheming (judge)' },
 };
 
 // The page has one episode on screen at a time. One scroll listener for the page asks that episode to move its strip,
@@ -96,7 +93,7 @@ function blk(label, text, input, kind) {
 }
 
 /**
- * ctx: {agent, levels (the run's six-ladder payload, with its labels by call), judgeMarks Map<call k, [{rung, text}]>
+ * ctx: {agent, levels (the run's three-ladder payload, with its labels by call), judgeMarks Map<call k, [{rung, text}]>
  * (the calls the judged ladder cites), isRegulator, regulatorCalls: Set of tool_call_ids that read a hidden regulator's
  * post, or that posted as the regulator}.
  * Returns {el, findCall, findToolCall, showAll, nCalls}.
@@ -225,8 +222,8 @@ export function renderCase(t, ctx) {
   }
   while (li < loose.length) right.appendChild(looseBlock(loose[li++]));
 
-  // 5. left: the whole episode, one row per call. Six lanes for the level so far, six for the call's own labels,
-  // milestones in the margin.
+  // 5. left: the whole episode, one row per call. A lane per ladder for the level so far, one per ladder for the
+  // call's own labels, milestones in the margin.
   const NS = 'http://www.w3.org/2000/svg';
   const LB = 160, LW = 10, GAP = 1, TOP = 26;
   const lanesW = order.length * (LW + GAP) - GAP;
@@ -303,15 +300,15 @@ export function renderCase(t, ctx) {
     }
   }
   const mine = lv && lv.agents[ctx.agent];
-  const sixLine = mine ? h('div', { class: 'cs-six' }, order.map(L => {
+  const ladderLine = mine ? h('div', { class: 'cs-ladders' }, order.map(L => {
     const c = mine[L];
-    return [h('div', { class: 'cs-six-row', title: `${c.kind === 'proxy' ? 'Proxy' : 'Direct'} rule. ${c.rule}${c.evidence ? '\nEvidence: ' + c.evidence : ''}` },
+    return [h('div', { class: 'cs-ladders-row', title: `${c.rule}${c.evidence ? '\nEvidence: ' + c.evidence : ''}` },
       h('i', { style: `background:${c.na || !c.index ? 'var(--line)' : RAMP[L][c.index]}` }), `${name(L)} `,
       c.na ? 'n/a' : h('b', null, c.level), c.na ? '' : ` ${c.index}/${c.of}`)];
   })) : null;
   const left = h('div', { class: 'left' },
     h('h2', null, 'The whole episode ', h('span', { class: 'sub' }, `${plural(n, 'call')}, ${nLabelled} with a label`)),
-    sixLine,
+    ladderLine,
     svg,
     lv ? fullLegend(lv.ladders, order) : null,
     h('p', { class: 'note' }, 'One row per tool call, call 0 at the top. The lanes under "so far" show the level each ladder had reached by that call; the band below the last call is the level at the end of the run. The lanes under "this step" show the labels the call carries itself, and a red tick a call that met the hidden regulator on the board. The outlined row is the call at the top of the page. Click a row or a label to open that call.'),
