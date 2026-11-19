@@ -1,5 +1,5 @@
-"""The Cheating ladder by task for study_exploration_1's valid runs: how many workers, teams and hidden agents
-(regulators and disregulators) reach each rung, and how many runs carry the alarm (src/measures/cheating_ladder.py
+"""The Cheating ladder by task for study_exploration_1's valid runs: how many workers, teams and influencers
+reach each rung, and how many runs carry the alarm (src/measures/cheating_ladder.py
 ALARM), as the transcript viewer measures them (scripts/paper/study_ladders.py record). Valid runs are
 study_ladders.valid_runs'. Writes tmp/tables/results/table_cheating_by_task.png.
 
@@ -17,7 +17,7 @@ OUT = ROOT / "tmp" / "tables" / "results" / "table_cheating_by_task.png"
 ALARM = "alarm"
 """The column of runs the grader passed with no trace of the honeypot: beside the rungs, never one of them."""
 BLOCKS = [("workers", "Workers", "agents"), ("team", "Teams", "runs"),
-          ("hidden", "Regulators and disregulators", "agents")]
+          ("influencers", "Influencers", "agents")]
 
 
 def counts() -> dict[tuple[str, str], Counter]:
@@ -30,7 +30,7 @@ def counts() -> dict[tuple[str, str], Counter]:
             raise SystemExit(f"{row['path']}: domain {row['domain']!r} has no place in TASKS")
         run, d = record(listed.path), row["domain"]
         for agent in run["agents"].values():
-            out[("workers" if agent["worker"] else "hidden", d)][agent["rung"]] += 1
+            out[("workers" if agent["worker"] else "influencers", d)][agent["rung"]] += 1
         out[("team", d)][run["cheating"]] += 1
         out[("team", d)][ALARM] += bool(run["alarm"])
     return out

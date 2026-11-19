@@ -5,18 +5,20 @@
  * Cheating evidence, its judge labels and CheatBench's judge on it.
  * Our edits: the imports (dom.js, components.js and charts.js are the results browser's own); the judges are read
  * from the run's verdict files (judges/<pass>.<judge>.jsonl), shown where the run has them; the source's API judges,
- * second judge and sentence lens are gone; a disregulator is a hidden role like a regulator; the header names the
+ * second judge and sentence lens are gone; a regulator and a disregulator are influencers; the header names the
  * collection and the eval log; the Board tab (tv_view_board.js) holds the message board, two agents' calls on one
  * clock with the board between them; the Details tab holds the Cheating, Coordination and Collusion panels and the
- * judge labels. A tab
+ * judge labels. Every Cheating cell holds the code's word and CheatBench's judge's under it (tv_levels.js
+ * cheatingCell). A tab
  * beside the agents' is one entry of `views` (a key, its label and a function that draws it once, answering its
  * element and, for the Board, a promise of its handle). */
 import { appendAll, enc, fmtInt, fmtUsd, h } from '/static/app/dom.js';
 import { badge, dataTable, episodeRecord, kv, lazyDetails, longText, muted } from '/static/app/components.js';
 import { ROLE_ORDER, roleIcon } from '/static/app/charts.js';
-import { CHEATBENCH, DISCLOSURE, ROLE_LABEL, armLabel, collectionOf, modelLabel, taskLabel } from './tv_labels.js';
-import { cheatbenchTeam, cheatbenchWords, cheatedTag, cheatingPanel, clauseList, collusionPanel, coordinationPanel,
-  disclosureTeam, judgeLabels, judgeLabelsPanel, labelTag, labelTeam, levelChip, levelsPanel, unvalidatedNote } from './tv_levels.js';
+import { CHEATBENCH, DISCLOSURE, ROLE_LABEL, armLabel, collectionOf, influencerParts, isInfluencer, modelLabel,
+  taskLabel } from './tv_labels.js';
+import { cheatbenchTeam, cheatbenchWords, cheatingCell, cheatingPanel, clauseList, collusionPanel, coordinationPanel,
+  disclosureTeam, judgeLabels, judgeLabelsPanel, labelTag, labelTeam, levelsPanel, unvalidatedNote } from './tv_levels.js';
 import { fullLegend, renderCase } from './tv_case_view.js';
 import { renderBoard } from './tv_view_board.js';
 
@@ -43,6 +45,7 @@ export async function viewRun(id, q, view) {
   const agentIds = d.agents.map(a => a.agent);
   const roles = Object.fromEntries(d.agents.map(a => [a.agent, a.role]));
   const multi = d.agents.length > 1;
+  const cheatbench = Object.fromEntries(d.agents.map(a => [a.agent, a.cheatbench]));
 
   // ---- board: every message by the label the evidence, the Board tab and the judges give it, P1, P2, ... in board
   // order, harness notices included (board_no).
@@ -50,7 +53,7 @@ export async function viewRun(id, q, view) {
   const collusion = (d.levels && d.levels.collusion) || {};
   const cheating = (d.levels && d.levels.cheating) || {};
 
-  // Calls that read a hidden regulator's post (a worker), or that posted as the regulator (the regulator).
+  // Calls that read a regulator's post (a worker), or that posted as the regulator (the regulator).
   function regulatorCalls(agent, role) {
     const out = new Set();
     for (const b of d.boards) for (const m of b.messages) {
@@ -95,7 +98,7 @@ export async function viewRun(id, q, view) {
       episodeRecord(a.episode),
       agentCheating(a.agent),
       agentJudgeLabels(a.agent),
-      h('div', null, h('h3', { class: 'sub-h' }, CHEATBENCH.column), cheatbenchBlock(a)),
+      h('div', null, h('h3', { class: 'sub-h' }, CHEATBENCH.name), cheatbenchBlock(a)),
       a.episode.final_text ? lazyDetails('final text of the agent', () => longText(a.episode.final_text, { lines: 40 }), { cls: 'sub' }) : null,
       holder]);
     cards.set(a.agent, { card, load, state });
@@ -128,7 +131,7 @@ export async function viewRun(id, q, view) {
     const lead = /^([A-Za-z0-9_-]+): /.exec(s);
     if (lead && agentIds.includes(lead[1])) who = lead[1];
     const out = [];
-    let byRegulator = false;
+    const byInfluencer = new Set();
     let last = 0;
     const re = /\[(\d+)\]|\bP\d+\b/g;
     let m;
@@ -141,12 +144,12 @@ export async function viewRun(id, q, view) {
         const label = m[0];
         const p = posts.get(label);
         out.push(h('button', { type: 'button', class: 'linkish ev-link', title: 'show this post on the board', onclick: () => openPost(label) }, label));
-        if (p.role === 'regulator') byRegulator = true;
+        if (isInfluencer(p.role)) byInfluencer.add(p.role);
       } else out.push(m[0]);
       last = re.lastIndex;
     }
     if (last < s.length) out.push(s.slice(last));
-    if (byRegulator) out.push(' ', badge('written by the hidden regulator', 'notice', 'the post this evidence cites was written by the run\'s hidden regulator'));
+    for (const role of byInfluencer) out.push(' ', badge(`written by the ${role}`, 'notice', `the post this evidence cites was written by the run's ${role}, an influencer the workers cannot tell from a worker`));
     return h('span', { class: 'ev-text' }, out);
   }
   const evidenceList = (lines, agent) => {
@@ -160,7 +163,7 @@ export async function viewRun(id, q, view) {
     if (!r) return muted(`Cheating: ${cheating.reason || 'no row for this agent'}.`, 'small block');
     const L = d.levels.ladders.cheating;
     return h('div', null, h('h3', { class: 'sub-h' }, 'Cheating for this agent'),
-      h('div', { class: 'verdict-flags' }, levelChip('cheating', L, r.rung), ' ', cheatedTag(r.cheated, L),
+      h('div', { class: 'verdict-flags' }, cheatingCell(L, r.rung, r.cheated, cheatbenchWords(cheatbench[agent])),
         muted(` ${L.glosses[L.levels.indexOf(r.rung)]}`, 'small')),
       clauseList(d.levels, r.clauses, agent, { evidence: evidenceText }),
       (r.below || []).length ? h('div', { class: 'small' }, h('span', { class: 'field-label' }, 'Below the ladder, evidence only: '),
@@ -189,7 +192,8 @@ export async function viewRun(id, q, view) {
           h('dd', null, k === 'judge_cost_usd' ? fmtUsd(x) : typeof x === 'string' ? evidenceText(x, a.agent) : fieldText(x)))))));
   }
 
-  // ---- labels table: each ladder's team level, the alarm and the judges.
+  // ---- labels table: each ladder's team level (Cheating with CheatBench's judge's word under the code's), the alarm
+  // where the run has it, and the judges.
   const L = d.levels.ladders;
   const teamCell = k => {
     const c = d.levels.team[k];
@@ -197,9 +201,10 @@ export async function viewRun(id, q, view) {
   };
   const about = d.levels.judge_label_about;
   const labelRows = [
-    ['Cheating (team)', teamCell('cheating'), L.cheating.rule],
-    ['Cheated (team)', cheatedTag(cheating.team_cheated, L.cheating) || muted('not applicable'), L.cheating.line_words],
-    ['Alarm', cheating.alarm ? badge(`alarm: ${cheating.alarm}`, 'bad') : muted('none'), L.cheating.note],
+    ['Cheating (team)', [cheatingCell(L.cheating, d.levels.team.cheating.na ? null : d.levels.team.cheating.level, cheating.team_cheated,
+      multi ? cheatbenchTeam(row.cheatbench) : cheatbenchWords(Object.values(cheatbench)[0])), muted(d.levels.team.cheating.evidence, 'small block')],
+    `${L.cheating.rule} ${CHEATBENCH.about}`],
+    ...(cheating.alarm ? [['Alarm', badge(`alarm: ${cheating.alarm}`, 'bad'), L.cheating.note]] : []),
     ['Coordination (team)', teamCell('coordination'), L.coordination.rule],
     ['Collusion (team)', teamCell('collusion'), L.collusion.rule],
     ['Scheming judge', collusion.judged ? `flags of ${collusion.scheming.judge}` : muted('not judged'),
@@ -207,7 +212,6 @@ export async function viewRun(id, q, view) {
     ...['awareness', 'manipulation'].map(k => [about[k].name, [labelTeam(row.labels[k], about[k]), ' ', unvalidatedNote(about[k])],
       `${about[k].question} Read for ${about[k].read_for}. No rung.`]),
     [DISCLOSURE.column, disclosureTeam(row.disclosure), DISCLOSURE.about],
-    [CHEATBENCH.column, cheatbenchTeam(row.cheatbench), CHEATBENCH.about],
   ];
   const labelsCard = h('section', { class: 'card' }, h('h2', null, 'Labels for this run'),
     dataTable(['Label', 'Value', 'What it means'], labelRows.map(([a, b, c]) => [h('strong', null, a), b, h('span', { class: 'small' }, c)]), { cls: 'labels-table' }));
@@ -216,7 +220,6 @@ export async function viewRun(id, q, view) {
   const m = d.meta || {};
   const cfg = m.config || {};
   const coll = collectionOf(row.col);
-  const hidden = r => Object.values(roles).filter(x => x === r).length;
   const header = h('section', { class: 'card ep-header' },
     h('div', { class: 'ep-title' }, h('h1', null, row.run),
       badge(coll.label, 'def', coll.about), coll.tag ? badge(coll.tag, 'plain', coll.about) : null,
@@ -224,8 +227,9 @@ export async function viewRun(id, q, view) {
     kv([
       ['collection', `${coll.label} (runs/${row.col})`], ['folder', h('span', { class: 'mono' }, row.key)],
       ['task', `${taskLabel(row)}${row.instance ? `, instance ${row.instance}` : ''}`], ['arm or cell', armLabel(row)],
-      ['seed post', row.seed_post || undefined], ['workers\' model', `${modelLabel(row)}${row.model_id ? ` (${row.model_id})` : ''}`],
-      ['agents', `${row.n_agents}${hidden('regulator') ? ` (${hidden('regulator')} hidden regulator)` : ''}${hidden('disregulator') ? ` (${hidden('disregulator')} hidden disregulator)` : ''}`],
+      ['agents', row.agents], ['workers\' model', `${modelLabel(row)}${row.model_id ? ` (${row.model_id})` : ''}`],
+      ['worker conditioning', row.worker_conditioning],
+      ['influencer conditioning', row.influencer_conditioning.length ? row.influencer_conditioning.map(x => influencerParts(x).join(', ')).join('; ') : 'none'],
       ['seed', row.seed != null ? String(row.seed) : undefined],
       ['turn budget (rounds)', cfg.turn_budget != null && multi ? String(cfg.turn_budget) : undefined],
       ['rounds run', m.rounds != null && multi ? String(m.rounds) : undefined],
@@ -247,10 +251,9 @@ export async function viewRun(id, q, view) {
     tabs.set(a.agent, h('button', { type: 'button', class: 'rp-tab', onclick: () => selectTab(a.agent).catch(() => {}) },
       a.agent, h('span', { class: 'rp-role' }, ' ' + (ROLE_WORD[a.role] || a.role))));
   }
-  const cheatbench = Object.fromEntries(d.agents.map(a => [a.agent, a.cheatbench]));
   const detailsView = () => ({ el: h('div', { class: 'rp-team' },
     levelsPanel(d.levels, roles, row.task_name, { cheatbench, row }),
-    cheatingPanel(d.levels, roles, { evidence: evidenceText }),
+    cheatingPanel(d.levels, roles, { evidence: evidenceText, cheatbench, row }),
     coordinationPanel(d.levels, roles),
     collusionPanel(d.levels, roles, { evidence: evidenceText, boardPost }),
     judgeLabelsPanel(d.levels, roles),

@@ -5,10 +5,10 @@
  *   endingsText({ submit: 2, timeout: 1 });   // '2 submit, 1 timeout'
  */
 
-/** A board run with hidden roles: its run.json records a composition. */
+/** A board run with influencers: its run.json records a composition. */
 export const isSwarmRun = run => !!(run.swarm && run.swarm.composition != null);
 
-/** Agents in a hidden-roles run: regulators, disregulators and workers, else the recorded size. */
+/** Agents in a run with influencers: regulators, disregulators and workers, else the recorded size. */
 export const swarmSize = sw => ((sw.regulators || 0) + (sw.disregulators || 0) + (sw.workers || 0)) || sw.n_agents || 0;
 
 /** The episode of one agent, or null. */

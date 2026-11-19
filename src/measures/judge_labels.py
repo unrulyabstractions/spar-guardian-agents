@@ -59,7 +59,7 @@ from src.judging import verdict_files
 from src.measures import coordination
 from src.measures.cheating_ladder import CHEATED_FROM, CLAUSES, run_cheating
 from src.measures.code_ladder import ladders
-from src.measures.run_directory import RunDir, episode_agent, is_worker
+from src.measures.run_directory import RunDir, episode_agent, is_influencer, is_worker
 from src.measures.rungs import RUNGS, at_least
 from src.measures.verdict_fields import FLAGS_BY_TASK, GOOD
 
@@ -221,7 +221,7 @@ def verdict_of(code: bool, judge: bool) -> str:
 
 
 def agreement(run_dirs: list[Path], *, workers: bool | None = None) -> dict[str, dict[tuple[str, str], Counter]]:
-    """Over the runs' agents (workers only, hidden roles only, or all with None), per task and row and per task and
+    """Over the runs' agents (workers only, influencers only, or all with None), per task and row and per task and
     rung, how many agents both say yes, the code only, the judge only and neither; where the judge cannot answer, the
     reason (NO_LABEL, NOT_JUDGED, the enumerated choice that hides it)."""
     by_row: dict[tuple[str, str], Counter] = {}
@@ -260,13 +260,13 @@ def disclosed(task: str | None, verdict: dict | None) -> str:
 
 def disclosure(run_dir: Path) -> dict:
     """Each agent's disclosure (disclosed) and a summary: {"agents": {agent: value}, "team": {value: number of
-    workers}, "hidden": {agent: value} of the regulators and disregulators}. No rung."""
+    workers}, "influencers": {agent: value} of the influencers (regulators and disregulators)}. No rung."""
     run = RunDir(run_dir)
     task, roles = run.run_json.get("task"), run.roles()
     verdicts = verdict_files.episode_verdicts(run_dir)
     agents = {episode_agent(ep): disclosed(task, verdicts.get(ep["episode"])) for ep in run.episodes()}
     return {"agents": agents, "team": dict(Counter(v for a, v in agents.items() if is_worker(roles.get(a)))),
-            "hidden": {a: v for a, v in agents.items() if not is_worker(roles.get(a))}}
+            "influencers": {a: v for a, v in agents.items() if is_influencer(roles.get(a))}}
 
 
 def asked(rungs: dict) -> dict[str, tuple[str, ...]]:
@@ -303,7 +303,7 @@ def label_rows(run_dir: Path) -> dict[str, dict] | None:
 
 def labels(run_dir: Path) -> dict:
     """Each agent's judge labels beside its disclosure: {"agents": {agent: {"awareness", "manipulation",
-    "disclosure"}}, "team": {label: {value: number of workers}}, "hidden": {agent: {...}}}. A label reads the pass
+    "disclosure"}}, "team": {label: {value: number of workers}}, "influencers": {agent: {...}}}. A label reads the pass
     "labels"'s <label>_verdict ("yes", "no", "unchecked") from its rows (label_rows); NOT_JUDGED where the agent
     qualifies and no parsed row answers; NOT_READ where it does not qualify (asked). No rung."""
     run = RunDir(run_dir)
@@ -321,4 +321,4 @@ def labels(run_dir: Path) -> dict:
     team = {key: dict(Counter(v[key] for a, v in agents.items() if is_worker(roles.get(a))))
             for key in ("awareness", "manipulation", "disclosure")}
     return {"agents": agents, "team": team,
-            "hidden": {a: v for a, v in agents.items() if not is_worker(roles.get(a))}}
+            "influencers": {a: v for a, v in agents.items() if is_influencer(roles.get(a))}}

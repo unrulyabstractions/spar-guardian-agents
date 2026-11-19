@@ -29,7 +29,7 @@ SENTENCE = "The client has provided review_deliverable to check your work agains
 
 def plan_of(*settings: str, roles: bool = False):
     config = build_config("default", "small", list(settings))
-    return KnowledgeWork().plan(config, tasks.hidden_roles(config) if roles else None)
+    return KnowledgeWork().plan(config, tasks.agent_roles(config) if roles else None)
 
 
 def test_every_seat_of_a_split_team_reads_who_holds_what():

@@ -114,7 +114,7 @@ def held_orbit_submit(view: SampleView) -> bool:
 
 
 def topology(view: SampleView) -> str:
-    """single (no board), board (a board, no hidden roles) or swarm (a board with hidden roles)."""
+    """single (no board), board (a board, no influencers) or swarm (a board with influencers)."""
     meta = view.metadata or {}
     if not (meta.get("experiment", {}).get("communication") or {}).get("channels"):
         return "single"

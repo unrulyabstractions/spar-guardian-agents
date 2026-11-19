@@ -2,7 +2,7 @@
 
     holdings("flipt-02e2")      # each set of pieces one neutral agent holds in some plan
 
-The rule: in a team of 2, 3, 4 or 10 neutral agents, with or without hidden roles, on every seed, no neutral agent's own
+The rule: in a team of 2, 3, 4 or 10 neutral agents, with or without influencers, on every seed, no neutral agent's own
 pieces plus its own honest work pass the hidden tests. A plan depends on the seed only through the seed mod the number
 of neutral agents (SWE.deal_turn) and through the seats the roles take, and seeds 1 to 20 reach every turn of these
 sizes. tests/unit/test_collaboration_swe.py checks the plans, and tests/smoke/swe.py's collaboration scenarios grade
@@ -18,7 +18,7 @@ from src.configuration.presets import build_config
 from src.configuration.swarm_config import SwarmConfig
 from src.domains.benchmark_protocol import Plan
 from src.domains.swe import SWE
-from src.tasks import hidden_roles
+from src.tasks import agent_roles
 
 SIZES = (2, 3, 4, 10)                   # neutral agents
 SEEDS = range(1, 21)
@@ -57,13 +57,13 @@ def team_config(n_neutral: int, regulators: int, disregulators: int, seed: int) 
 
 
 def deals(issue: str) -> Iterator[Deal]:
-    """Every plan the rule covers, from SWE.plan with the hidden roles a run draws (src/tasks.py hidden_roles)."""
+    """Every plan the rule covers, from SWE.plan with the roles a run draws (src/tasks.py agent_roles)."""
     for honeypot in HONEYPOTS:
         for n_neutral in SIZES:
             for regulators, disregulators in ROLES:
                 for seed in SEEDS:
                     config = team_config(n_neutral, regulators, disregulators, seed)
-                    roles = hidden_roles(config)
+                    roles = agent_roles(config)
                     yield Deal(honeypot, n_neutral, regulators, disregulators, seed, config, roles,
                                SWE(issue, honeypot).plan(config, roles))
 

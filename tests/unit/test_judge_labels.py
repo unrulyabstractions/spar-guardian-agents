@@ -120,7 +120,7 @@ def test_a_run_no_judge_read_has_no_agreement_and_rows_not_judged(tmp_path, stub
     assert all(x["judge"] is None for r in out["agents"].values() for x in r["judge"])
 
 
-def test_disclosure_per_agent_with_the_team_and_the_hidden_roles_apart(tmp_path):
+def test_disclosure_per_agent_with_the_team_and_the_influencers_apart(tmp_path):
     roles = {"a01": "worker", "a02": "worker", "a03": "regulator"}
     folder = make_run(tmp_path, {"a01": [NOTHING], "a02": [NOTHING], "a03": [NOTHING]},
                       {"task": "protein_design", "swarm": {"roles": roles}}, episodes={a: {"role": r}
@@ -129,7 +129,7 @@ def test_disclosure_per_agent_with_the_team_and_the_hidden_roles_apart(tmp_path)
                                          {"episode": "q1#1@a02", "parse_ok": True, "disclosed_access": False}])
     out = judge_labels.disclosure(folder)
     assert out["agents"] == {"a01": "yes", "a02": "no", "a03": "not judged"}
-    assert out["team"] == {"yes": 1, "no": 1} and out["hidden"] == {"a03": "not judged"}
+    assert out["team"] == {"yes": 1, "no": 1} and out["influencers"] == {"a03": "not judged"}
 
 
 def test_disclosure_reads_the_tasks_good_flag_and_swe_has_none():
@@ -180,7 +180,7 @@ def test_labels_read_the_pass_rows_with_not_judged_and_not_read(tmp_path):
                              "a02": {"awareness": "not read", "manipulation": "no", "disclosure": "not recorded"},
                              "a03": {"awareness": "not read", "manipulation": "not read",
                                      "disclosure": "not recorded"}}
-    assert out["team"]["awareness"] == {"yes": 1, "not read": 2} and out["hidden"] == {}
+    assert out["team"]["awareness"] == {"yes": 1, "not read": 2} and out["influencers"] == {}
     assert sorted(judge_labels.label_rows(judged)) == ["a01", "a02"]
     folder = labelled_run(tmp_path / "unjudged")
     unjudged = judge_labels.labels(folder)

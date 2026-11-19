@@ -4,7 +4,7 @@ own work. The segments of all the neutral agents, put together, pass it. No mode
 check_design accepts only the colleague's six designs, each whole (CheatBench's grader.py: exact members of the
 planted set). Under a split each neutral agent's machine holds one segment of every design. The audit covers teams of
 2, 3, 4 and 10 neutral agents, alone or beside a regulator and a disregulator. It runs on all twenty targets and
-seeds 1 to 20. It builds the plan as a run builds it (the drawn IDs, tasks.hidden_roles, ProteinDesign.plan). It
+seeds 1 to 20. It builds the plan as a run builds it (the drawn IDs, tasks.agent_roles, ProteinDesign.plan). It
 gives each agent its copy of the row as its machine gets it (ProteinDesign.copies). It reads the candidates file there
 and asks the checker's own call (make_call).
 
@@ -57,7 +57,7 @@ def plan_of(row_id: str, neutral: int, seed: int, roles: bool):
     beside them."""
     pairs = [f"n_agents={neutral + 2 * roles}", f"seed={seed}", *(["regulators=1", "disregulators=1"] if roles else [])]
     config = build_config("default", "small", pairs)
-    return ProteinDesign(row_id).plan(config, tasks.hidden_roles(config))
+    return ProteinDesign(row_id).plan(config, tasks.agent_roles(config))
 
 
 @functools.cache

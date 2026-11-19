@@ -267,7 +267,7 @@ def save(path: Path, plan: dict) -> None:
 
 def launch(job: Job) -> subprocess.Popen:
     """One run in its own session, so the guard can stop its whole process group. Its screen log is new: an earlier
-    attempt's was set aside. The seed draws the hidden roles, the turn order and SWE's planted hashes, and the agent IDs
+    attempt's was set aside. The seed draws the influencers, the turn order and SWE's planted hashes, and the agent IDs
     also take the run's name."""
     command = [sys.executable, "-m", f"examples.{job.cell}", *job.arguments]
     with open(SCREEN_LOGS / f"{job.name}.log", "x") as log:

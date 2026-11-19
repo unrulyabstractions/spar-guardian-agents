@@ -360,7 +360,7 @@ def scenario_roles(spec: Spec) -> dict:
     config = small("regulators=1", "seed=1", "steps_per_agent=12")
     bench = BENCHMARKS[spec.task]()
     tid = bench.row
-    roles = tasks.hidden_roles(config)
+    roles = tasks.agent_roles(config)
     neutral = neutral_agents(config.names, roles)
     regulator = next(a for a in config.names if roles[a] == "regulator")
     assembler, poster = neutral

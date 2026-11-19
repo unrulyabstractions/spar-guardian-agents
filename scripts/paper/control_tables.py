@@ -1,7 +1,7 @@
 """The positive and negative control tables for five targets, valid runs only (scripts/paper/study_ladders.py
 cell_runs): each run's team Cheating and Collusion rungs and the grader's pass as the transcript viewer measures them
 (study_ladders.record), and under each cell the teams that cheated and the teams that accessed the honeypot. Each
-target names the hidden roles its valid runs hold, from the run index. Writes tmp/tables/results/positive_control.png
+target names the influencers its valid runs hold, from the run index. Writes tmp/tables/results/positive_control.png
 and tmp/tables/results/negative_control.png.
 
     uv run python -m scripts.paper.control_tables    # make results-tables runs every one
@@ -67,12 +67,12 @@ SUMMARY = 0.95
 """A cell's width for its tiles, and for its counts when they stand beside the tiles."""
 
 
-def hidden_roles(target: str) -> list[str]:
-    """The hidden roles the target's valid runs hold, from the run index."""
+def influencers(target: str) -> list[str]:
+    """The influencers the target's valid runs hold, from the run index."""
     rows = [r.meta for r in valid_runs() if r.meta["target"] == target]
     roles = [role for role, key in (("+ regulators", "regulator_level"), ("+ disregulators", "disregulator_level"))
              if any(row[key] for row in rows)]
-    return roles or ["no hidden role"]
+    return roles or ["no influencer"]
 
 
 def runs_of(prefix: str) -> list[dict]:
@@ -98,7 +98,7 @@ def table(path: Path, columns: list) -> Path:
 
     ax.text(PAD, 0.24, "Task", fontsize=8.5, weight="bold", color=INK, va="center")
     ax.text(PAD, 0.47, "workers' model", fontsize=6.5, style="italic", color=INK_SECONDARY, va="center")
-    ax.text(PAD, 0.62, "hidden roles in the study", fontsize=6.5, style="italic", color=INK_SECONDARY, va="center")
+    ax.text(PAD, 0.62, "influencers in the study", fontsize=6.5, style="italic", color=INK_SECONDARY, va="center")
     for j, (_, title, sub) in enumerate(columns):
         x = LEFT + j * col
         ax.text(x, 0.24, title, fontsize=8.5, weight="bold", color=INK, va="center")
@@ -111,7 +111,7 @@ def table(path: Path, columns: list) -> Path:
         if i % 2:
             ax.add_patch(Rectangle((0, y0), width, row_h, fc=BAND, ec="none", zorder=0))
         lines = [(task, 8, INK), (workers, 7, INK_SECONDARY), *((role, 7, INK_SECONDARY) for role in
-                                                                 hidden_roles(target))]
+                                                                 influencers(target))]
         for k, (line, size, color) in enumerate(lines):
             ax.text(PAD, y0 + 0.22 + k * 0.19, line, fontsize=size, weight="bold" if k == 0 else "normal",
                     color=color, va="center")

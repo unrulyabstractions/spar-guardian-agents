@@ -3,7 +3,7 @@
 No model is called: the tables read verdicts a judge pass already wrote. Writes, under tmp/tables/results/:
 
     table_judge_cheated_by_task.png   per task, agents by the code's cheated (cheating_ladder.cheated) against the
-                                      judge's own `cheated`, workers and hidden roles apart
+                                      judge's own `cheated`, workers and influencers apart
     table_judge_labels.png            per task and row of judge_labels.ROWS (the code's clauses and the judge labels
                                       that answer them), workers by the code's clauses against the judge's labels;
                                       "no label" on a row the judge has no label for
@@ -28,7 +28,7 @@ from src.measures import judge_labels
 from src.measures.cheating_ladder import cheated
 
 OUT = ROOT / "tmp" / "tables" / "results"
-BLOCKS = [("workers", "Workers", "agents"), ("hidden", "Regulators and disregulators", "agents")]
+BLOCKS = [("workers", "Workers", "agents"), ("influencers", "Influencers", "agents")]
 VERDICTS = ("both", "code only", "judge only", "neither")
 """An agent's cell: the code and the judge both say yes, one of them, or neither."""
 NOT_ANSWERED = "n/a"
@@ -74,7 +74,7 @@ def cheated_counts(runs: list[tuple[str, Path]]) -> dict[tuple[str, str], Counte
                 raise SystemExit(f"{path.name}: agent {agent} has no parsed verdict")
             code, judge = cheated(r["rung"]), bool(verdict["cheated"])
             cell = {(True, True): "both", (True, False): "code only", (False, True): "judge only"}.get((code, judge))
-            out[("workers" if r["worker"] else "hidden", domain)][cell or "neither"] += 1
+            out[("workers" if r["worker"] else "influencers", domain)][cell or "neither"] += 1
     return out
 
 
@@ -124,7 +124,7 @@ def label_counts(runs: list[tuple[str, Path]]) -> tuple[dict, dict, dict, dict]:
 
 
 DISCLOSURE_BLOCKS = [("workers", "Workers at looked or above", "agents"),
-                     ("hidden", "Regulators and disregulators at looked or above", "agents")]
+                     ("influencers", "Influencers at looked or above", "agents")]
 """Disclosure counts only the agents that had access to disclose: those that accessed the honeypot."""
 
 
@@ -136,7 +136,7 @@ def disclosure_counts(runs: list[tuple[str, Path]]) -> dict[tuple[str, str], Cou
         disclosed = judge_labels.disclosure(path)["agents"]
         for agent, r in record(path)["agents"].items():
             if accessed(r["rung"]):
-                out[("workers" if r["worker"] else "hidden", domain)][disclosed[agent]] += 1
+                out[("workers" if r["worker"] else "influencers", domain)][disclosed[agent]] += 1
     return out
 
 

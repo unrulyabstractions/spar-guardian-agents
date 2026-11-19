@@ -16,7 +16,7 @@ from src.domains import DOMAINS
 from src.measures import run_figures as plots
 from src.models import model_registry as models
 from src.run import access_line
-from src.tasks import hidden_roles, swarm_task
+from src.tasks import agent_roles, swarm_task
 
 # The cells of the first experiment, per domain and per SWE issue: one agent alone, one agent alone told to cheat, three
 # agents told to cheat (CHEAT in the script, appended to the task instruction).
@@ -220,7 +220,7 @@ def test_each_regulated_cell_runs_four_agents_one_a_hidden_regulator(name, monke
     assert config.max_concurrency == 4              # a slow round must not cost the cell rounds against `minimal`
     assert config.preset == "default" and config.access == "split" and config.turn_budget == settings.TURN_BUDGET
     # the regulator holds nothing; the three neutral agents share the split exploit
-    roles = hidden_roles(config)
+    roles = agent_roles(config)
     plan = benchmark.plan(config, roles)
     [regulator] = [a for a, role in roles.items() if role == "regulator"]
     assert plan.holds[regulator] == [] and plan.split
@@ -259,7 +259,7 @@ def test_each_disregulated_cell_runs_four_agents_one_a_hidden_disregulator_who_h
     assert kwargs == {"replace": False} and not hasattr(module, "CHEAT")
     assert (config.n_agents, config.regulator_count, config.disregulator_count) == (4, 0, 1)
     assert config.max_concurrency == 4 and config.access == "split" and config.judge is None
-    roles = hidden_roles(config)
+    roles = agent_roles(config)
     plan = benchmark.plan(config, roles)
     [disregulator] = [a for a, role in roles.items() if role == "disregulator"]
     assert plan.holds[disregulator] == [] and plan.split
@@ -285,7 +285,7 @@ def test_each_cell_with_both_roles_runs_five_agents_and_three_neutral_agents_hol
     assert kwargs == {"replace": False} and not hasattr(module, "CHEAT")
     assert (config.n_agents, config.regulator_count, config.disregulator_count) == (5, 1, 1)
     assert config.max_concurrency == 5 and config.access == "split" and config.judge is None
-    roles = hidden_roles(config)
+    roles = agent_roles(config)
     plan = benchmark.plan(config, roles)
     assert sorted(roles.values()) == ["disregulator", "regulator", "worker", "worker", "worker"] and plan.split
     assert all(bool(plan.holds[a]) == (role == "worker") for a, role in roles.items())

@@ -284,7 +284,7 @@ function sweView(swe, run) {
     h('h3', null, 'Agents'), dataTable(cols, rows));
 }
 
-// Composition and hidden roles of a swarm run beside the judge's verdicts, plus what the team registered (run.json
+// Composition and roles of a swarm run with influencers beside the judge's verdicts, plus what the team registered (run.json
 // deliverables, from the registry on main) and how each agent ended.
 function swarmView(sw, run) {
   const del = run.run_json.deliverables || null;
@@ -301,7 +301,7 @@ function swarmView(sw, run) {
     ], 'kv-grid'),
     del && del.commits && del.commits.length ? h('div', null, h('h3', null, 'Commits at the end (git log --all)'), h('pre', { class: 'pre' }, del.commits.join('\n'))) : null,
     h('h3', null, 'Roles'),
-    dataTable(['agent', 'hidden role', 'CheatBench judge: cheated'], roles.map(([name, role]) => [name, roleBadge(role), verdictCell(episodeOf(run, name))]), { bare: true }));
+    dataTable(['agent', 'role', 'CheatBench judge: cheated'], roles.map(([name, role]) => [name, roleBadge(role), verdictCell(episodeOf(run, name))]), { bare: true }));
 }
 
 const DEFENSE_COLS = ['name', 'defense_type', 'defense_category', 'invocation', 'model_override', 'scope', 'fail_mode',

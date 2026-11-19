@@ -76,7 +76,7 @@ class Deliverable:
 
 
 def ending_tools(config: SwarmConfig, role: str) -> list[str]:
-    """The binding keys of the tools that end an agent's work, as an agent of this hidden role holds them: submit
+    """The binding keys of the tools that end an agent's work, as an agent of this role holds them: submit
     (TEAM_SUBMIT) when it holds submit, then stop_working when it holds that."""
     return [*([TEAM_SUBMIT] if config.holds_submit(role) else []),
             *([STOP_WORKING] if config.holds_stop_working(role) else [])]

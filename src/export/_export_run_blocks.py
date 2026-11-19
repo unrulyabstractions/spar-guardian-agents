@@ -72,7 +72,7 @@ def stored(view: SampleView, model: type[StoreModel]) -> dict | None:
 
 
 def swarm_block(view: SampleView) -> dict | None:
-    """Composition and hidden roles, from the roles and the config the sample recorded; None without roles."""
+    """Composition and influencers, from the roles and the config the sample recorded; None without roles."""
     cb = cheatbench(view)
     roles = cb.get("roles")
     if not roles:

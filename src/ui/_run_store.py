@@ -49,7 +49,7 @@ SWE_FIELDS = ("issue", "instance", "n_agents", "mode", "honeypot", "rule", "base
 # The badge a true verdict flag takes, by the status colour the figures give it.
 FLAG_KIND = {WARNING: "warn", SERIOUS: "bad", GOOD: "good", CRITICAL: "bad"}
 # The tasks with a setting of their own, apart from openmath and SWE, by domain key: the setting key's prefix and the
-# sort order. Openmath settings sort 0 (lone agent), 1 (board) and 2 (hidden roles); SWE sorts 3.
+# sort order. Openmath settings sort 0 (lone agent), 1 (board) and 2 (influencers); SWE sorts 3.
 SETTING_KEYS = {"knowledge_work": ("kw", 4), "subset_sum": ("subset", 5), "prime_factorization": ("factor", 6),
                 "protein_design": ("protein", 7), "creative_writing": ("creative", 8), "chess": ("chess", 9)}
 # The same by CheatBench's task name, which run.json records: the prefix, the label and the sort order. The label is the
@@ -99,10 +99,11 @@ def verdict_fields(task: str | None) -> list[dict]:
 
 def setting_of(run: dict, n_agents: int) -> dict:
     """The arrangement a run was made in: the task, the communication graph (a lone agent, or every agent on one
-    board), the roster size and whether roles were hidden. {key, label, order, n} plus composition, R, D and W for
-    hidden roles. A CheatBench SWE run is set by its issue, team size, honeypot and rule."""
+    board), the roster size and whether it had influencers (regulators and disregulators, whose run.json records a
+    composition). {key, label, order, n} plus composition, R, D and W for a run with influencers. A CheatBench SWE run
+    is set by its issue, team size, honeypot and rule."""
     swarm = run.get("swarm") or {}
-    hidden = {"composition": swarm["composition"], "R": swarm.get("regulators"), "D": swarm.get("disregulators"),
+    influencers = {"composition": swarm["composition"], "R": swarm.get("regulators"), "D": swarm.get("disregulators"),
               "W": swarm.get("workers")} if swarm.get("composition") else {}
     n = 1 if run.get("topology") in (None, "single") else n_agents
     team = "lone agent" if n == 1 else f"board of {n}"
@@ -117,12 +118,12 @@ def setting_of(run: dict, n_agents: int) -> dict:
                 "label": f"SWE {swe.get('issue')} {team}" + (f" ({bits})" if bits else "")}
     if run.get("task") in TASK_SETTINGS:
         prefix, label, order = TASK_SETTINGS[run["task"]]
-        return {"key": f"{prefix}-{'roles' if hidden else 'board'}-{n}", "order": order, "n": n,
-                "label": f"{label} {team}" + (", hidden roles" if hidden else ""), **hidden}
+        return {"key": f"{prefix}-{'roles' if influencers else 'board'}-{n}", "order": order, "n": n,
+                "label": f"{label} {team}" + (", influencers" if influencers else ""), **influencers}
     if n == 1:
         return {"key": "single", "label": "lone agent", "order": 0, "n": 1}
-    if hidden:
-        return {"key": f"roles-{n}", "label": f"board of {n}, hidden roles", "order": 2, "n": n, **hidden}
+    if influencers:
+        return {"key": f"roles-{n}", "label": f"board of {n}, influencers", "order": 2, "n": n, **influencers}
     return {"key": f"board-{n}", "label": f"board of {n}", "order": 1, "n": n}
 
 

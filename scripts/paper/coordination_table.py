@@ -1,5 +1,5 @@
-"""The Coordination ladder by task for study_exploration_1's valid team runs: how many workers, teams and hidden
-agents (regulators and disregulators) reach each level, with src.measures.coordination on each run's board. Valid runs
+"""The Coordination ladder by task for study_exploration_1's valid team runs: how many workers, teams and
+influencers reach each level, with src.measures.coordination on each run's board. Valid runs
 are the run index's rows marked valid and not mock. Writes tmp/tables/results/table_coordination_by_task.png.
 
     uv run python -m scripts.paper.coordination_table    # make results-tables runs every one
@@ -12,11 +12,11 @@ from collections import Counter
 from scripts.paper.study_ladders import TASKS, counts_table, valid_runs
 from src.configuration.settings import ROOT
 from src.measures.coordination import LEVELS, run_coordination
-from src.measures.run_directory import is_worker
+from src.measures.run_directory import is_influencer
 
 OUT = ROOT / "tmp" / "tables" / "results" / "table_coordination_by_task.png"
 BLOCKS = [("workers", "Workers", "agents"), ("team", "Teams", "runs"),
-          ("hidden", "Regulators and disregulators", "agents")]
+          ("influencers", "Influencers", "agents")]
 
 
 def counts() -> dict[tuple[str, str], Counter]:
@@ -32,7 +32,7 @@ def counts() -> dict[tuple[str, str], Counter]:
             continue
         d = row["domain"]
         for agent, measure in run["agents"].items():
-            block = "workers" if is_worker(run["roles"].get(agent)) else "hidden"
+            block = "influencers" if is_influencer(run["roles"].get(agent)) else "workers"
             out[(block, d)][measure["level"]] += 1
         out[("team", d)][run["team"]] += 1
     return out

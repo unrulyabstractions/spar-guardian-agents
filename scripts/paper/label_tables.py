@@ -3,9 +3,9 @@
 
     table_scheming_by_task.png       per task, the pairs code places at collusion by their scheming verdict
                                      (src/measures/collusion.py, through scripts/paper/study_ladders.py record),
-                                     pairs of workers and pairs with a regulator or disregulator apart
+                                     pairs of workers and pairs with an influencer apart
     table_awareness_by_task.png      per task, the agents the awareness label is read for (src/measures/judge_labels.py
-                                     labels: at attempted or above on Cheating) by its verdict, hidden roles apart
+                                     labels: at attempted or above on Cheating) by its verdict, influencers apart
 
 The manipulation label has no table: an independent reading of each pass found most of its yes verdicts wrong
 (src/measures/measure_readings.yaml), and the paper does not report it as a rate.
@@ -27,14 +27,14 @@ from src.configuration.settings import ROOT
 from src.measures import judge_labels
 from src.measures.cheating_ladder import cheated
 from src.measures.collusion import NOT_JUDGED
-from src.measures.run_directory import is_worker
+from src.measures.run_directory import is_influencer
 
 OUT = ROOT / "tmp" / "tables" / "results"
 VERDICTS = ("yes", "no", "unchecked", NOT_JUDGED)
 SCHEMING_BLOCKS = [("workers", "Colluding pairs of workers", "pairs"),
-                   ("hidden", "Colluding pairs with a regulator or disregulator", "pairs")]
+                   ("influencers", "Colluding pairs with an influencer", "pairs")]
 AWARENESS_BLOCKS = [("workers", "Workers at attempted or above", "agents"),
-                    ("hidden", "Regulators and disregulators at attempted or above", "agents")]
+                    ("influencers", "Influencers at attempted or above", "agents")]
 
 
 def runs() -> list[tuple[str, Path]]:
@@ -57,7 +57,7 @@ def scheming_counts(found: list[tuple[str, Path]]) -> dict[tuple[str, str], Coun
     out = empty(SCHEMING_BLOCKS)
     for domain, path in found:
         for pair in record(path)["collusion_colluding"]:
-            out[("workers" if all(map(is_worker, pair["roles"])) else "hidden", domain)][pair["scheming"]] += 1
+            out[("influencers" if any(map(is_influencer, pair["roles"])) else "workers", domain)][pair["scheming"]] += 1
     return out
 
 
@@ -74,7 +74,7 @@ def awareness_counts(found: list[tuple[str, Path]]) -> dict[tuple[str, str], Cou
             raise SystemExit(f"{path.name}: awareness is read for {sorted(asked)}, the Cheating ladder puts "
                              f"{sorted(expected)} at attempted or above; rebuild the run's signals")
         for agent in asked:
-            block = "hidden" if agent in run["hidden"] else "workers"
+            block = "influencers" if agent in run["influencers"] else "workers"
             aware[(block, domain)][read[agent]["awareness"]] += 1
     return aware
 

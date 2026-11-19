@@ -35,7 +35,7 @@ def transcript(agent: str) -> dict:
 
 @pytest.fixture
 def runs(tmp_path) -> Path:
-    """runs/ with a two-agent board run whose roles are hidden, and a run set aside under a failed_ prefix."""
+    """runs/ with a two-agent board run with an influencer, and a run set aside under a failed_ prefix."""
     run = tmp_path / "board_run"
     (run / "communication").mkdir(parents=True)
     (run / "tools" / "graphs").mkdir(parents=True)
@@ -85,7 +85,7 @@ def test_a_run_row_carries_its_setting_verdict_fields_and_one_aggregate_block(ru
     store = Store(runs)
     assert store.run_names() == ["board_run", "failed_board_run"]
     row = store.run_row("board_run")
-    assert row["setting"] == {"key": "roles-2", "label": "board of 2, hidden roles", "order": 2, "n": 2,
+    assert row["setting"] == {"key": "roles-2", "label": "board of 2, influencers", "order": 2, "n": 2,
                               "composition": "R1D0W1", "R": 1, "D": 0, "W": 1}
     assert [f["field"] for f in row["verdict_fields"]][0] == "honey_pots_seen" and row["verdict_fields"][-1] == {
         "field": "cheated", "label": "cheated", "kind": "bad"}

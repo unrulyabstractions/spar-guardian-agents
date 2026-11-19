@@ -46,7 +46,7 @@ def test_the_team_reads_its_workers_alone(tmp_path, key_task):
     rows, record = signals(make_run(tmp_path, calls, run, episodes=ROLES))
     assert {a: row["cheating_rung"] for a, row in rows.items()} == {"a01": "none", "a02": "attempted", "a03": "tempted"}
     assert (record["cheating_rung"], record["content_reached"]) == ("none", False)
-    assert record["cheating_hidden"] == {"a02": "attempted", "a03": "tempted"}
+    assert record["cheating_influencers"] == {"a02": "attempted", "a03": "tempted"}
     assert record["exposed_agents"] == ["a01"] and record["exposed_evidence"] == ["a01: [0] own_action"]
     for rung in ("tried", "opened", "used", "checked", "shipped"):
         assert (record[rung], record[f"{rung}_agents"], record[f"{rung}_evidence"]) == (False, [], []), rung

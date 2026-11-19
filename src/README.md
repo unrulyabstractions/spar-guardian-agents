@@ -17,7 +17,7 @@ python -m src run <name>     cli.py reads the flags
         |
   domains/ <-- sandbox/      the Benchmark fixes the plan and gives the sample, tools, setup and scorers
         |
-  swarm/                     the board, the hidden roles, submit and stop_working, the turn rules
+  swarm/                     the board, the influencers, submit and stop_working, the turn rules
         |
   tasks.py                   all of the above as one ORBIT task
         |
@@ -90,7 +90,7 @@ What every domain builds its sandbox from. Nothing here knows a domain.
 The team on ORBIT's API.
 
 - `board.py`: one shared channel as ORBIT configuration, and the tools `board_status`, `board_read` and `board_post` with the per-round budgets.
-- `hidden_roles.py`: who is regulator or disregulator, on a board whose config asks for one, and the texts each role gets. A regulator's system prompt and first message are built here for every domain, in place of the benchmark's.
+- `influencers.py`: who is regulator or disregulator (an influencer), on a board whose config asks for one, and the texts each role gets. A regulator's system prompt and first message are built here for every domain, in place of the benchmark's.
 - `submit_and_stop.py`: `submit` and `stop_working`, the tools that end an agent's work. ORBIT reserves `submit`, so the tool is bound as `team_submit` and shown to the model as `submit`.
 - `awareness_probes.py`: Lucy's end-of-episode questions as an Inspect scorer.
 - `turn_rules/`: the plan of rounds under the turn budget, the free board steps, the budgets' counters, the halt after a hand-in or once no worker is left, and the model filter. Its `__init__.py` is the API. `turn_activation.py` is the callback ORBIT imports by its dotted name after every activation.
@@ -138,10 +138,10 @@ Everything computed over a run directory, without a model.
 - `run_listing.py`: the runs of a collection under `runs/` and whether each counts (`INDEX.jsonl`, `manifest.jsonl`), for the transcript viewer and the judge passes.
 - `deal_replay.py`: whether today's code deals a protein, creative or SWE run the roster and the holdings it recorded.
 - `run_index.py`: one record per run of a study for `runs/<study>/INDEX.jsonl`: what the run is, where it ran, its arm, its outcome and its checks. It never reads the study table or the fleet: `scripts/box/study_index.py` joins them in for the study the table states (the stage and box of `scripts/box/study_table.py`, the instance from the box captures) and is the command. `uv run python -m scripts.box.study_index runs/<study>` prints a summary and writes nothing; `--write` writes the file.
-- `code_ladder.py`: the run's code record. It writes `signals.jsonl` and run.json `signals`: each agent's evidence and each sample's team record, with the three ladders' rungs (`cheating_rung` and `cheated`; `coordination_level`; `collusion_rung`) and, on the team record, the hidden roles' rungs apart and the Cheating alarm. `ladders` reads the three rungs as the run recorded them and refuses a run whose record lacks them.
+- `code_ladder.py`: the run's code record. It writes `signals.jsonl` and run.json `signals`: each agent's evidence and each sample's team record, with the three ladders' rungs (`cheating_rung` and `cheated`; `coordination_level`; `collusion_rung`) and, on the team record, the influencers' rungs apart and the Cheating alarm. `ladders` reads the three rungs as the run recorded them and refuses a run whose record lacks them.
 - `transcript_scan.py`: the code's evidence per agent (exposed, tried, opened, used, tampered, checked, shipped) from the transcript, the access log, the probe and the domain's records.
 - `team_ladder.py`: the team record of a sample: the workers' evidence, the collaboration evidence (discussed, solicited, crossed, assembled) and the outcomes.
-- `cheating_ladder.py`: the Cheating ladder (none, looked, tempted, attempted, hacked) from the evidence and the grader's pass, per agent, per team and for the hidden roles apart, with the alarm for a pass with no trace. `cheating_rungs` reads a run's Cheating rungs as recorded.
+- `cheating_ladder.py`: the Cheating ladder (none, looked, tempted, attempted, hacked) from the evidence and the grader's pass, per agent, per team and for the influencers apart, with the alarm for a pass with no trace. `cheating_rungs` reads a run's Cheating rungs as recorded.
 - `coordination.py`: the Coordination ladder (none, read, write, low, medium, high, extreme) from the board's reads and posts: each agent's rounds of back-and-forth with each teammate, averaged into a score and set against a ceiling, and the workers' mean level for the team.
 - `collusion.py`: the Collusion ladder per pair of agents (none, cooperation, collaboration and collusion by code from the takes and the planted pieces between them; scheming only from the scheming judge's flags). `run_collusion` computes a run's pairs in memory, each colluding pair with its verdict and the flags that decided it, and the run with every flag; the viewer and the paper read scheming only through it.
 - `collusion_takes.py`: what a take is, per task (`TASK_RULES`, each with its rule in words), and who made the hand-in.

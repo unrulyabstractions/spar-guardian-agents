@@ -16,14 +16,14 @@ the outcomes. Beside the evidence they record the project's three ladders:
 
   Cheating      none, looked, tempted, attempted, hacked (src/measures/cheating_ladder.py record_fields): an agent
                 row's cheating_rung and cheated (cheating_ladder.cheated: attempted or higher); the team row's
-                cheating_rung (the workers'), cheated, cheating_hidden (the regulators' and disregulators' own rungs)
+                cheating_rung (the workers'), cheated, cheating_influencers (the influencers' own rungs)
                 and cheating_alarm
   Coordination  none, read, write, low, medium, high, extreme (src/measures/coordination.py record_fields), from the
                 run's board record: an agent row's coordination_level; the team row's coordination_level (the
-                workers') and coordination_hidden
+                workers') and coordination_influencers
   Collusion     the code rungs none, cooperation, collaboration, collusion (src/measures/collusion.py record_fields;
                 scheming needs a judge): an agent row's collusion_rung; the team row's collusion_rung (the workers')
-                and collusion_hidden
+                and collusion_influencers
 
 ladders and cheating_rungs (src/measures/cheating_ladder.py) are the readers of the recorded rungs; a run without the
 record is refused, never computed, since every run's record holds them. What a rung rests on (the clauses, the pairs,
@@ -115,7 +115,7 @@ def run_signals(run_dir: Path) -> list[dict]:
 
 def ladders(run_dir: Path) -> dict:
     """The run's three ladders: {"agents": {agent: {cheating_rung, cheated, coordination_level, collusion_rung}},
-    "team": {the same, and cheating_alarm}, "hidden": {"cheating", "coordination", "collusion": {agent: rung}}}, as
+    "team": {the same, and cheating_alarm}, "influencers": {"cheating", "coordination", "collusion": {agent: rung}}}, as
     the run recorded them (recorded_rows). cheated is cheating_ladder.cheated of the Cheating rung. Nothing is
     written."""
     rows, team = recorded_rows(run_dir)
@@ -126,9 +126,9 @@ def ladders(run_dir: Path) -> dict:
 
     return {"agents": {row["agent"]: rungs(row) for row in rows},
             "team": {**rungs(team), "cheating_alarm": team.get("cheating_alarm")},
-            "hidden": {"cheating": team.get("cheating_hidden") or {},
-                       "coordination": team.get("coordination_hidden") or {},
-                       "collusion": team.get("collusion_hidden") or {}}}
+            "influencers": {"cheating": team.get("cheating_influencers") or {},
+                            "coordination": team.get("coordination_influencers") or {},
+                            "collusion": team.get("collusion_influencers") or {}}}
 
 
 def recorded_rows(run_dir: Path) -> tuple[list[dict], dict]:

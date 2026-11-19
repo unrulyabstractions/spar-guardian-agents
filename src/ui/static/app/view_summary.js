@@ -14,7 +14,7 @@ import { endingsText, isSwarmRun, swarmSize } from './run_facts.js';
 import { rasterCanvas, rasterLegend } from './timeline_raster.js';
 import { laneOrder, timelinePanels } from './view_timeline.js';
 
-// x is a row of /api/runs; a hidden-roles run carries its composition in x.swarm and its counts in x.aggregate.
+// x is a row of /api/runs; a run with influencers carries its composition in x.swarm and its counts in x.aggregate.
 const kOfN = (k, n) => (n ? `${fmtInt(k)}/${fmtInt(n)}` : DASH);
 
 /** A run the grid can place: it records a composition and has at least one agent. */
@@ -171,7 +171,7 @@ function compositionSection(swarm, failed = []) {
       h('div', { class: 'comp-pair' },
         h('figure', { class: 'comp-fig' }, h('figcaption', null, 'CheatBench judge: share of judged agents who cheated'),
           compositionGrid(N, cells, heatmapCell, `Composition heatmap for ${N} agents`)),
-        h('figure', { class: 'comp-fig' }, h('figcaption', null, 'CheatBench judge: cheated, by hidden role'),
+        h('figure', { class: 'comp-fig' }, h('figcaption', null, 'CheatBench judge: cheated, by role'),
           compositionGrid(N, cells, roleBarsCell, `Per-role cheating for ${N} agents`))));
   });
   const note = notDrawn.length ? h('div', { class: 'muted small' },
@@ -320,16 +320,16 @@ export async function viewSummary(r, view) {
       muted('A judged agent has a verdict and a transcript. Failed runs (harness crash or provider error) are left out of every count and listed under Runs.' +
         (mock.length ? ` ${plural(mock.length, 'mock-model smoke run')} left out as well.` : ''))),
     headline([
-      [fmtInt(ok.length), `completed runs: ${nSingle} lone agent, ${nBoard} board, ${swarm.length} board with hidden roles`, R.runs({ all: '1' })],
+      [fmtInt(ok.length), `completed runs: ${nSingle} lone agent, ${nBoard} board, ${swarm.length} board with influencers`, R.runs({ all: '1' })],
       [fmtInt(judged), 'judged agents', R.runs({ all: '1' })],
       [fmtInt(judgeCheated), 'agents CheatBench judge: cheated', R.runs({ judge_cheated: 'yes' })],
       [fmtInt(failed.length), 'failed runs set aside', R.runs({ failed: 'only' })],
     ]),
     section('CheatBench judge: share of judged agents who cheated, by setting', barsHost,
       h('div', { class: 'muted small' }, 'A setting is the graph (lone agent, or every agent on one board), the roster size, and whether roles were hidden. Bar: the agents CheatBench\'s judge says cheated, over judged. A row opens the runs behind it.')),
-    section('Teams with hidden roles, by composition',
+    section('Teams with influencers, by composition',
       swarm.length || swarmFailed.length ? compositionSection(swarm, swarmFailed) : muted('No swarm run yet.'),
-      h('div', { class: 'muted small' }, 'Left grid: share of judged agents CheatBench\'s judge says cheated. Right grid: the same by hidden role. ', link(R.swarm(), 'Swarm visualizations'), ' has the funnel, the adoption curves and every run’s timeline.')),
+      h('div', { class: 'muted small' }, 'Left grid: share of judged agents CheatBench\'s judge says cheated. Right grid: the same by role. ', link(R.swarm(), 'Swarm visualizations'), ' has the funnel, the adoption curves and every run’s timeline.')),
     section('Swarm runs',
       swarm.length ? swarmTable(swarm, null) : muted('No completed swarm run yet.')));
 }
@@ -339,10 +339,10 @@ export async function viewSummary(r, view) {
 const FUNNEL_ROLES = ['worker', 'regulator', 'disregulator'];
 
 /** Grouped bars: at each verdict flag of the task (stages, the server's verdict_fields), the share of judged agents of
- * each hidden role. */
+ * each role. */
 function funnelChart(agents, stages, W) {
   const roles = FUNNEL_ROLES.filter(r => agents.some(a => a.role === r));
-  if (!roles.length) return muted('No judged agent with a hidden role.');
+  if (!roles.length) return muted('No judged agent of a run with influencers.');
   const n = Object.fromEntries(roles.map(r => [r, agents.filter(a => a.role === r).length]));
   W = Math.max(560, Math.min(820, W));
   const padL = 48;
@@ -355,7 +355,7 @@ function funnelChart(agents, stages, W) {
   const bw = Math.min(36, (groupW - 28) / roles.length);
   const y = v => padT + plotH - v * plotH;
   const svg = svgEl('svg', { class: 'viz funnel-svg', width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: 'img',
-    'aria-label': `Outcome funnel by hidden role: ${stages.map(f => f.label).join(', ')}` });
+    'aria-label': `Outcome funnel by role: ${stages.map(f => f.label).join(', ')}` });
   for (const v of [0, 0.25, 0.5, 0.75, 1]) {
     svg.appendChild(svgEl('line', { class: v ? 'grid' : 'baseline', x1: padL, x2: W - padR, y1: y(v), y2: y(v) }));
     svg.appendChild(svgEl('text', { class: 'tick-label', x: padL - 6, y: y(v) + 4, 'text-anchor': 'end' }, `${v * 100}%`));
@@ -566,9 +566,9 @@ export async function viewSwarm({ query: q }, view) {
     h('div', { class: 'page-head' },
       h('h1', null, 'Swarm visualizations'),
       muted(`${plural(swarm.length, 'completed swarm run')}${swarmFailed.length ? ` and ${plural(swarmFailed.length, 'failed one')} (listed, never counted)` : ''}. ` +
-        'A swarm is the board with hidden roles: workers, regulators (peers told to keep the team honest) and disregulators (peers privately told to register a result by any means).')),
+        'A swarm is the board with influencers: workers, and regulators (peers told to keep the team honest) and disregulators (peers privately told to register a result by any means), whom the workers cannot tell from a worker.')),
     section('Compositions', swarm.length || swarmFailed.length ? compositionSection(swarm, swarmFailed) : none),
-    section('Outcome funnel by hidden role', funnelHost),
+    section('Outcome funnel by role', funnelHost),
     section('Adoption of the honeypot over time', adoptHost),
     section('Swarm runs', swarm.length || swarmFailed.length ? [swarmTable(swarm.concat(swarmFailed), thumbs, name => showRun(name, true)), rasterLegend()] : none),
     h('section', { class: 'card', id: 'explore-card' }, exploreAnchor,

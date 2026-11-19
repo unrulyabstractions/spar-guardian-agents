@@ -15,8 +15,8 @@ from src.domains.openmath import _openmath_sandbox as om_sandbox
 from src.domains.openmath.openmath_task import SPLIT_DEVIATIONS
 from src.domains.swe import SWE
 from src.run import access_line
-from src.swarm.hidden_roles import assign_roles
-from src.tasks import hidden_roles, swarm_task
+from src.swarm.influencers import assign_roles
+from src.tasks import agent_roles, swarm_task
 from tests.support.ordered_ids import ordered_ids
 
 THREE = ordered_ids(3)
@@ -123,7 +123,7 @@ def split_script(bench: OpenMath, plan) -> str:
 def test_openmath_slices_follow_the_plan():
     bench = OpenMath()
     config = build_config("default", "small", ["regulators=1", "seed=2"])
-    roles = hidden_roles(config)
+    roles = agent_roles(config)
     neutral = access.neutral_agents(THREE, roles)
     regulator = next(a for a in THREE if roles[a] == "regulator")
     plan = bench.plan(config, roles)
@@ -174,7 +174,7 @@ def test_the_applied_policy_is_the_one_recorded():
     lone = swarm_task(bench, build_config("default", "small", ["n_agents=1"]))
     assert lone.dataset[0].metadata["cheatbench"]["access"]["agents"] == {"a01": ["whole"]}
     one_neutral = build_config("default", "small", ["regulators=1", "disregulators=1"])
-    assert bench.applied_access(one_neutral, hidden_roles(one_neutral)) == "all"
+    assert bench.applied_access(one_neutral, agent_roles(one_neutral)) == "all"
     for pairs in (["mode=solo_task", "access=seat1:slice1,seat2:slice2,seat3:"], ["n_agents=1", "access=seat1:whole"]):
         with pytest.raises(ValueError, match="cannot apply"):
             bench.check(build_config("default", "small", pairs))
@@ -186,7 +186,7 @@ def test_the_applied_policy_is_the_one_recorded():
     # C, which hold the hidden tests' two values, always go to two agents; the regulator holds nothing
     for seed, first in ((2, 0), (1, 1)):
         with_role = build_config("default", "small", ["regulators=1", f"seed={seed}"])
-        roles = hidden_roles(with_role)
+        roles = agent_roles(with_role)
         neutral = access.neutral_agents(with_role.seats, roles)
         regulator = next(a for a in THREE if roles[a] == "regulator")
         plan = own.plan(with_role, roles)
@@ -194,7 +194,7 @@ def test_the_applied_policy_is_the_one_recorded():
         assert plan.mode == "shared_task" and plan.pieces == {} and plan.split
     # one neutral agent among three: the whole fix for everyone
     two_roles = build_config("default", "small", ["regulators=1", "disregulators=1"])
-    assert own.plan(two_roles, hidden_roles(two_roles)).holds == {a: ["whole"] for a in THREE}
+    assert own.plan(two_roles, agent_roles(two_roles)).holds == {a: ["whole"] for a in THREE}
     assert SWE("flipt-02e2", "jigsaw").applied_access(build_config("default", "small", ["access=all"]), None) == "all"
 
 
@@ -255,11 +255,11 @@ def test_own_piece_deals_every_piece_over_the_neutral_agents_in_shared_task(n):
 
 def test_the_swe_plan_deals_jigsaw_by_role():
     config = build_config("default", "small", ["n_agents=5", "regulators=1", "disregulators=1"])
-    roles = hidden_roles(config)
+    roles = agent_roles(config)
     holds = SWE("flipt-02e2", "jigsaw").plan(config, roles).holds
     assert [holds[a] for a in config.names if roles[a] == "worker"] == [["B"], ["C"], ["A"]]
     config = build_config("default", "small", ["n_agents=3", "regulators=1"])
-    roles = hidden_roles(config)
+    roles = agent_roles(config)
     holds = SWE("flipt-02e2", "jigsaw").plan(config, roles).holds
     assert [holds[a] for a in config.names if roles[a] == "worker"] == [["B", "A"], ["C"]]
     assert all(holds[a] == [] for a in config.names if roles[a] != "worker")
@@ -295,7 +295,7 @@ def test_knowledge_work_tools_and_permissions_follow_the_plan():
     plan = bench.plan(build_config("default", "small"))
     assert flags(plan) == [(True, False), (True, False), (False, True)] and plan.split
     config = build_config("default", "small", ["regulators=1", "seed=1"])
-    roles = hidden_roles(config)
+    roles = agent_roles(config)
     regulator = next(a for a in THREE if roles[a] == "regulator")
     plan = bench.plan(config, roles)
     seats = kw_sandbox.seats(plan)

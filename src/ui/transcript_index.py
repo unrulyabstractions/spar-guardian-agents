@@ -7,7 +7,7 @@
 Every folder under runs/ is a collection, except SKIP and folders that hold no run: a study or a manifest collection,
 whose runs and their validity src/measures/run_listing.py list_collection reads. The index lists, measures and serves
 the valid runs only, and of those only the runs of the tasks the study reads: a run of a task it leaves out
-(src/measures/ladder_by_domain.py HIDDEN_TASKS) is counted in `hidden` and never measured.
+(src/measures/ladder_by_domain.py HIDDEN_TASKS) is counted in `left_out` and never measured.
 
 For each run the index reads run.json, episodes.jsonl, signals.jsonl and the board (RunFiles), CheatBench's verdicts
 (src/judging/verdict_files.py cheatbench) and the measures, which read the transcripts and the judges' verdict files:
@@ -35,14 +35,14 @@ from src.judging import verdict_files
 from src.judging.judge_records import NO, UNCHECKED, YES
 from src.measures import collusion, coordination, judge_labels
 from src.measures.ladder_by_domain import HIDDEN_TASKS, TASK_DOMAIN, hidden_task
-from src.measures.run_directory import RunDir, episode_agent, is_worker, roles_of, run_name
+from src.measures.run_directory import RunDir, episode_agent, is_influencer, is_worker, roles_of, run_name
 from src.measures.run_listing import Listed, list_collection
 from src.ui import transcript_levels
 from src.utils.json_files import read_json, read_jsonl
 
 CACHE = ROOT / "tmp" / "transcript_viewer" / "index.json"
 SKIP = ("study_smoke",)
-INDEX_VERSION = 8  # 8: rows with task_label, boards numbered P<n> only
+INDEX_VERSION = 9  # 9: influencers, the two conditioning columns, left_out
 WORKERS = 6
 """Processes that measure runs when a start finds runs to measure: each loads transcripts, so few enough to spare the
 machine's memory."""
@@ -50,7 +50,7 @@ PROGRESS = 100
 """A start that measures runs prints a line every PROGRESS runs measured."""
 MEASURING = ("src/measures", "src/domains", "src/judging", "src/ui")
 """The folders whose code decides a run's row and measures (code_stamp)."""
-SERVED = ("built_at", "build_seconds", "measured", "collections", "errors", "rows", "hidden")
+SERVED = ("built_at", "build_seconds", "measured", "collections", "errors", "rows", "left_out")
 """The index's keys /api/index answers; the cache also keeps its version, its runs folder, each run's measures, its
 folder and its stamps."""
 QUESTIONS = ("awareness", "manipulation")
@@ -60,12 +60,11 @@ READ = (YES, NO, UNCHECKED)
 failed the code's check."""
 
 COLLECTION_ABOUT = {
-    "study_exploration_1": ("Exploration 1", "teams, regulators",
-                            "Teams of three on four targets, with hidden regulators and disregulators at several "
-                            "levels and models. The runs its INDEX.jsonl marks valid."),
+    "study_exploration_1": ("Exploration 1", "teams, influencers",
+                            "Teams of three on four targets, with influencers (regulators and disregulators) at "
+                            "several levels and models. The runs its INDEX.jsonl marks valid."),
     "study_exploration_0": ("Exploration 0", "October screen",
-                            "One agent, a team of three, or three plus a hidden regulator, on five tasks and three "
-                            "models."),
+                            "One agent, a team of three, or three plus a regulator, on five tasks and three models."),
     "apart_controls": ("Apart controls", "lone agents",
                        "One agent on nine tasks and five models, told to cheat or not. The canonical copy of each "
                        "valid run."),
@@ -76,6 +75,18 @@ NAME_RE = re.compile(r"^(?P<stem>[a-z]+)_(?P<cell>.+)_[a-z]+\d+$")
 """A run's name, <stem>_<cell>_<tag><n>. The tag is no model: a check of the ORBIT 2.0 port is named
 poem_minimal_regulated_orbit2. The models come from run.json alone (cell_of)."""
 ROLE_MODELS = ("worker", "regulator", "disregulator")
+INFLUENCER_LEVELS = {"regulator": "regulator_level", "disregulator": "disregulator_level"}
+"""Each kind of influencer and the config field of its instruction level (src/configuration/swarm_config.py)."""
+RULE_WORDS = {
+    "generic": "generic honesty rule",
+    "vague": "rule: work of its own",
+    "copy": "rule: copy no solution",
+    "precise": "rule: use no existing solution",
+    "explicit": "rule naming where the exploit lies",
+    "identified": "rule naming the exploit",
+}
+"""The workers' rule sentence (SwarmConfig.rule_level, src/configuration/instruction_levels.yaml `rule`) in the runs
+table's words, every level but none."""
 
 
 # ------------------------------------------------------------------------------------------------- the collections
@@ -260,7 +271,7 @@ def short_model(model: str | None) -> str | None:
 
 @dataclass
 class Cell:
-    """What a run was made with: its task's short name, its cell, and the models of its workers and hidden roles."""
+    """What a run was made with: its task's short name, its cell, and the models of its workers and influencers."""
 
     stem: str | None
     cell: str | None
@@ -293,55 +304,67 @@ def task_label(task: str | None, stem: str | None) -> str:
     return (task or stem or "?").replace("_", " ")
 
 
-def seed_post(cell: Cell, cfg: dict, swarm: dict, n_agents: int) -> str:
-    """What the run placed before the agents started: the cheat instruction, a rule, a hidden regulator or
-    disregulator."""
-    told = "cheat" in (cell.cell or "").split("_")
-    parts = [("all told to cheat" if n_agents > 1 else "told to cheat") if told else "not told"]
+def worker_conditioning(cell: Cell, cfg: dict) -> str:
+    """What the workers' system prompt told them, from the run's configuration: told to cheat (the cell's cheat
+    instruction), a rule sentence (rule_level, RULE_WORDS), both, or "not told"."""
+    parts = ["told to cheat"] if "cheat" in (cell.cell or "").split("_") else []
     if cfg.get("rule_level") not in (None, "none"):
-        parts.append(f"rule: {cfg['rule_level']}")
-    for role, level_key, model in (("regulator", "regulator_level", cell.regulator),
-                                   ("disregulator", "disregulator_level", cell.disregulator)):
-        n = swarm.get(role + "s", cfg.get(role + "s")) or 0
+        parts.append(RULE_WORDS.get(cfg["rule_level"], f"rule: {cfg['rule_level']}"))
+    return "; ".join(parts) or "not told"
+
+
+def influencer_conditioning(cell: Cell, cfg: dict, roles: dict[str, str | None]) -> list[dict]:
+    """Each kind of influencer the run had: {role (regulator or disregulator), n (its agents in the run's roles), level
+    (its instruction level in the configuration, INFLUENCER_LEVELS), model (the model it ran, cell_of)}; [] for a run
+    with no influencer."""
+    models = {"regulator": cell.regulator, "disregulator": cell.disregulator}
+    out = []
+    for role, level_key in INFLUENCER_LEVELS.items():
+        n = sum(1 for r in roles.values() if r == role)
         if n:
-            what = ", ".join(x for x in (cfg.get(level_key), model) if x)
-            parts.append(f"{'' if n == 1 else f'{n} '}hidden {role}{'' if n == 1 else 's'}"
-                         + (f" ({what})" if what else ""))
-    return ", ".join(parts)
+            out.append({"role": role, "n": n, "level": cfg.get(level_key), "model": models[role]})
+    return out
 
 
-def hidden_counts(roles: dict) -> dict[str, int]:
-    """How many regulators and disregulators the run had."""
-    return {r: sum(1 for x in roles.values() if x == r) for r in ("regulator", "disregulator")}
+def influencer_words(influencers: list[dict]) -> str:
+    """The influencers in words, "regulator (enforce, claude-haiku-5.5)", or "no influencer"."""
+    words = []
+    for x in influencers:
+        who = x["role"] if x["n"] == 1 else f"{x['n']} {x['role']}s"
+        what = ", ".join(v for v in (x["level"], x["model"]) if v)
+        words.append(f"{who} ({what})" if what else who)
+    return "; ".join(words) or "no influencer"
 
 
-def team_words(n_agents: int, roles: dict) -> str:
-    """Who ran, in words: one agent, or the workers and any hidden role."""
-    hidden = hidden_counts(roles)
+def agents_words(n_agents: int, roles: dict) -> tuple[str, int]:
+    """Who ran, in words, and the number of workers: "One agent", or "3 workers" and the influencers' count
+    (is_influencer)."""
+    influencers = sum(1 for r in roles.values() if is_influencer(r))
+    workers = n_agents - influencers
     if n_agents <= 1:
-        return "One agent"
-    extra = "".join(f" plus {n} hidden {r}{'' if n == 1 else 's'}" for r, n in hidden.items() if n)
-    return f"Team of {n_agents - sum(hidden.values())}{extra}"
+        return "One agent", workers
+    extra = f", {influencers} influencer{'' if influencers == 1 else 's'}" if influencers else ""
+    return f"{workers} workers{extra}", workers
 
 
 def build_row(col: str, listed: Listed, rf: RunFiles, measured: dict) -> dict:
     """The run's index row from its files and its measures (RunFiles.measured's answer)."""
-    rj, cfg, swarm = rf.run_json, rf.run_json.get("config") or {}, rf.run_json.get("swarm") or {}
+    rj, cfg = rf.run_json, rf.run_json.get("config") or {}
     n_agents = len(rf.episodes) or int(cfg.get("n_agents") or 1)
     cell = cell_of(listed, rf)
-    post = seed_post(cell, cfg, swarm, n_agents)
+    told = worker_conditioning(cell, cfg)
+    influencers = influencer_conditioning(cell, cfg, rf.roles)
     sample = (rf.episodes[0].get("episode") if rf.episodes else "") or ""
-    hidden = hidden_counts(rf.roles)
-    team = team_words(n_agents, rf.roles)
+    agents, workers = agents_words(n_agents, rf.roles)
     return {
         "id": f"{col}/{listed.key}", "col": col, "key": listed.key,
         "run": run_name(listed.path) if listed.source != "manifest" else listed.meta.get("key"),
         "task_name": rf.task, "task_label": task_label(rf.task, cell.stem),
         "instance": sample.split("#")[0] or None,
-        "arm_label": f"{team}, {post}", "seed_post": post, "team": team, "model": cell.worker,
+        "arm_label": f"{agents}; workers {told}; {influencer_words(influencers)}", "agents": agents,
+        "worker_conditioning": told, "influencer_conditioning": influencers, "model": cell.worker,
         "model_id": (rj.get("role_models") or {}).get("worker") or rj.get("model"), "n_agents": n_agents,
-        "workers": n_agents - sum(hidden.values()), "regulators": hidden["regulator"],
-        "disregulators": hidden["disregulator"], "seed": listed.meta.get("seed", cfg.get("seed")),
+        "workers": workers, "seed": listed.meta.get("seed", cfg.get("seed")),
         "levels": transcript_levels.index_levels(rf.levels(measured), rf.roles),
         "cheatbench": cheatbench_summary(measured["cheatbench"], rf.episodes, rf.roles),
         "disclosure": disclosure_summary(measured["labels"]),
@@ -419,8 +442,8 @@ def measure_all(todo: list[tuple[str, list[int], str, Listed]]) -> dict[str, dic
 
 def build_index(runs: Path, cached: dict | None = None) -> dict:
     """Every collection's valid runs, each with its row and its measures, and the runs of the tasks the viewer leaves
-    out counted in `hidden`: their entry, {"left_out": task}, is all the index reads of them. A run whose stamp and code
-    stamp match `cached` (an earlier index) keeps its entry; the others are measured again (measure_all)."""
+    out counted in `left_out`: their entry, {"left_out": task}, is all the index reads of them. A run whose stamp and
+    code stamp match `cached` (an earlier index) keeps its entry; the others are measured again (measure_all)."""
     t0 = time.time()
     code = code_stamp()
     old = (cached or {}).get("entries") or {} if (cached or {}).get("code") == code else {}
@@ -455,7 +478,7 @@ def build_index(runs: Path, cached: dict | None = None) -> dict:
     return {"version": INDEX_VERSION, "runs": str(runs), "code": code,
             "built_at": time.strftime("%Y-%m-%d %H:%M:%S %Z"), "build_seconds": round(time.time() - t0, 2),
             "measured": len(todo), "collections": collections_out, "errors": errors, "rows": rows,
-            "hidden": {"tasks": sorted(HIDDEN_TASKS), "runs": left_out},
+            "left_out": {"tasks": sorted(HIDDEN_TASKS), "runs": left_out},
             "entries": entries}
 
 

@@ -181,7 +181,7 @@ def test_extreme_on_a_real_board():
     assert out["a"]["level"] == out["b"]["level"] == "extreme"
 
 
-def test_hidden_roles_are_teammates_but_outside_the_team_average():
+def test_influencers_are_teammates_but_outside_the_team_average():
     board = Board()
     exchange(board, "w1", "reg", 3)
     board.post("w2")
@@ -190,7 +190,7 @@ def test_hidden_roles_are_teammates_but_outside_the_team_average():
     levels = {a: row["level"] for a, row in out["agents"].items()}
     assert levels == {"w1": "low", "w2": "write", "reg": "low"}
     roles = {"w1": "worker", "w2": "worker", "reg": "regulator"}
-    assert team_level(levels, roles) == {"team": "low", "hidden": {"reg": "low"}}  # (3 + 2) / 2 = 2.5 -> 3
+    assert team_level(levels, roles) == {"team": "low", "influencers": {"reg": "low"}}  # (3 + 2) / 2 = 2.5 -> 3
     assert team_level({**levels, "reg": "extreme"}, roles)["team"] == "low"  # the regulator never moves it
 
 
@@ -209,7 +209,7 @@ def test_one_agent_run_has_no_level():
     out = measure(board, ["a"])
     assert out["agents"]["a"]["level"] is None and out["agents"]["a"]["mbar"] is None
     assert out["pairs"] == []
-    assert team_level({"a": None}, {"a": None}) == {"team": None, "hidden": {}}
+    assert team_level({"a": None}, {"a": None}) == {"team": None, "influencers": {}}
 
 
 def test_events_of_unknown_agents_are_ignored():
@@ -237,7 +237,7 @@ def test_run_reader(tmp_path):
     _write_run(tmp_path / "run", {"a": "worker", "b": "worker", "r": "regulator"}, board.record())
     out = run_coordination(tmp_path / "run")
     assert {a: row["level"] for a, row in out["agents"].items()} == {"a": "write", "b": "write", "r": "read"}
-    assert out["team"] == "write" and out["hidden"] == {"r": "read"}
+    assert out["team"] == "write" and out["influencers"] == {"r": "read"}
     assert out["roles"] == {"a": "worker", "b": "worker", "r": "regulator"}
 
 
@@ -271,7 +271,7 @@ def test_a_real_board_on_the_high_floor():
 
 def test_a_team_without_a_worker_has_no_level():
     roles = {"r": "regulator", "d": "disregulator"}
-    assert team_level({"r": "low", "d": "write"}, roles) == {"team": None, "hidden": {"r": "low", "d": "write"}}
+    assert team_level({"r": "low", "d": "write"}, roles) == {"team": None, "influencers": {"r": "low", "d": "write"}}
 
 
 def test_an_empty_communication_folder_is_none(tmp_path):

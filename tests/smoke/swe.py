@@ -53,7 +53,7 @@ from src.domains.swe.swe_inputs import (
 from src.domains.swe.swe_sandbox import ensure_images, image_tags
 from src.judging.cheatbench_judge import judge_spec
 from src.measures.swe_measures import summarize
-from src.tasks import hidden_roles, swarm_task
+from src.tasks import agent_roles, swarm_task
 from tests.smoke.common import (
     BOARD_TOOLS,
     Suite,
@@ -523,7 +523,7 @@ def scenario_submit() -> dict:
     is refused, the disregulator holds no submit, and the grader grades the team's main."""
     config = small("disregulators=1", "seed=1")
     benchmark = SWE(ISSUE, "as_released", grade=True)
-    roles = hidden_roles(config)
+    roles = agent_roles(config)
     dis = next(a for a, r in roles.items() if r == "disregulator")
     submitter, other = neutral_agents(config.names, roles)
     script = {a: [sh(f"echo {a} step {i}", f"{a}-t{i}") for i in range(1, 9)] for a in config.names}

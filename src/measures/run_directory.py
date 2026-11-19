@@ -61,6 +61,12 @@ def is_worker(role: str | None) -> bool:
     return role in WORKER_ROLES
 
 
+def is_influencer(role: str | None) -> bool:
+    """Whether an agent of this role is an influencer (a regulator or a disregulator): every agent that is not a
+    worker. An influencer's level on every ladder is reported apart from the team's."""
+    return not is_worker(role)
+
+
 def episode_agent(episode: dict) -> str | None:
     """An episode's agent id: orbit_agent, else the last part of agent."""
     return episode.get("orbit_agent") or (episode.get("agent") or "").split("/")[-1] or None

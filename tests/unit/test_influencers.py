@@ -1,4 +1,4 @@
-"""The hidden roles' texts (src/swarm/hidden_roles.py): the briefing and the instruction levels of a regulator and a
+"""The influencers' texts (src/swarm/influencers.py): the briefing and the instruction levels of a regulator and a
 disregulator."""
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import pytest
 from src.configuration import settings
 from src.configuration.presets import PRESETS, with_overrides
 from src.domains import DOMAINS as REGISTRY
-from src.swarm.hidden_roles import level_text, role_briefing, role_prompt, role_text
+from src.swarm.influencers import level_text, role_briefing, role_prompt, role_text
 
 DOMAINS = sorted(REGISTRY)      # instruction_levels.yaml's benchmark keys are the registry's
 

@@ -10,7 +10,7 @@ its output in logs/<study>/screen/<name>.log; a run whose signals.jsonl exists a
 level or in the group that holds it (run_directory.find_run), so a stopped screen resumes. A run started again first
 moves its earlier attempt into runs/<study>/attempts/<name>.<n>/, with its eval log and figures
 (run_directory.set_aside_attempt), so its export finds an empty folder. The seed is the sample's number, so the samples
-of a cell draw their own hidden roles, turn
+of a cell draw their own influencers, turn
 order and SWE planted hashes, as the boxes' runs do (scripts/box/box_runner.py launch). The name gives each run its own
 agent IDs. `--set seed` is refused.
 The default cells are the solo, solo_cheat and minimal_cheat scripts of every example but the vuls issue's

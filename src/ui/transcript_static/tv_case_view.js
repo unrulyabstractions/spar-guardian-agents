@@ -109,7 +109,7 @@ function blk(label, text, input, kind) {
 
 /**
  * ctx: {agent, levels (the run's three-ladder payload, with its labels by call), isRegulator, regulatorCalls: Set of
- * tool_call_ids that read a hidden regulator's post, or that posted as the regulator}.
+ * tool_call_ids that read a regulator's post, or that posted as the regulator}.
  * Returns {el, findCall, findToolCall, showAll, nCalls}.
  */
 export function renderCase(t, ctx) {
@@ -163,7 +163,7 @@ export function renderCase(t, ctx) {
   const regAt = new Set([...(ctx.regulatorCalls || [])].map(id => idOf.get(id)).filter(k => k != null));
   if (regAt.size) {
     const k0 = Math.min(...regAt);
-    miles.push({ k: k0, t: `regulator warned, call ${k0}`, head: 'regulator warned,', tail: `call ${k0}`, ladder: 'reg', tip: ctx.isRegulator ? 'this agent\'s first post as the hidden regulator' : 'the first call that read a hidden regulator\'s post' });
+    miles.push({ k: k0, t: `regulator warned, call ${k0}`, head: 'regulator warned,', tail: `call ${k0}`, ladder: 'reg', tip: ctx.isRegulator ? 'this agent\'s first post as the regulator' : 'the first call that read a regulator\'s post' });
   }
   for (const e of endEv) {
     const w = (WORDS[e.ladder] || {})[e.level];
@@ -202,8 +202,8 @@ export function renderCase(t, ctx) {
     const lines = (own.get(k) || []).map(l => line(`background:${RAMP[l.ladder][l.index]}`, null, name(l.ladder), l.level, l.evidence,
       `${name(l.ladder)}: ${l.level} (${l.index} of ${lv.ladders[l.ladder].levels.length - 1})${l.evidence ? '\n' + l.evidence : ''}`));
     if (regAt.has(k)) {
-      lines.push(line('', 'cs-reg', 'Regulator', ctx.isRegulator ? 'posted as the hidden regulator' : 'read a hidden regulator\'s post', '',
-        ctx.isRegulator ? 'this call posted on the board as the hidden regulator' : 'this call read a post the hidden regulator wrote'));
+      lines.push(line('', 'cs-reg', 'Regulator', ctx.isRegulator ? 'posted as the regulator' : 'read a regulator\'s post', '',
+        ctx.isRegulator ? 'this call posted on the board as the regulator' : 'this call read a post the regulator wrote'));
     }
     return lines.length ? h('div', { class: 'cs-labels' }, h('div', { class: 'lab' }, 'Labels of this step'), lines) : null;
   }
@@ -323,7 +323,7 @@ export function renderCase(t, ctx) {
     ladderLine,
     svg,
     lv ? fullLegend(lv.ladders, order) : null,
-    h('p', { class: 'note' }, 'One row per tool call, call 0 at the top. The lanes under "so far" show the level each ladder had reached by that call; the band below the last call is the level at the end of the run. The lanes under "this step" show the labels the call carries itself, and a red tick a call that met the hidden regulator on the board. The outlined row is the call at the top of the page. Click a row or a label to open that call.'),
+    h('p', { class: 'note' }, 'One row per tool call, call 0 at the top. The lanes under "so far" show the level each ladder had reached by that call; the band below the last call is the level at the end of the run. The lanes under "this step" show the labels the call carries itself, and a red tick a call that met the regulator on the board. The outlined row is the call at the top of the page. Click a row or a label to open that call.'),
     unplaced ? h('p', { class: 'note' }, `${plural(unplaced, 'label')} ${unplaced === 1 ? 'cites' : 'cite'} a call this transcript does not hold and ${unplaced === 1 ? 'is' : 'are'} not drawn.`) : null);
 
   // The outlined row: the call at the top of the page as it scrolls, and the call a click opened once the page

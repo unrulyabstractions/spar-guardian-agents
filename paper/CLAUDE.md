@@ -368,12 +368,12 @@ decides whether the paper reports both. No claim changed on the strength of the 
 Scripts: `study_ladders` is the one place for the valid runs (`valid_runs`, the measures' `run_listing.list_collection`
 with status valid and not mock; `cell_runs` for one cell, seeds then pilots), for the second measure (`accessed`,
 `ACCESSED_FROM`, the only `at_least` in scripts/paper), for the hand-in's pieces (`Domain.hand_in_pieces`, no longer
-parsed from evidence prose) and each hidden agent's posts and posts asking for the honeypot (`team_ladder.posts_of` and
+parsed from evidence prose) and each influencer's posts and posts asking for the honeypot (`team_ladder.posts_of` and
 `solicits`, in place of the paper's own `urges`). `save` refuses a table whose text prints below 6 pt at the page's
 width. `role_table` draws the regulator and disregulator tables; `protein_regulator_table`, `swe_regulator_table` and
 `disregulator_tables` only list their cells. The SWE regulator table lost its reverts column (a count of the
 regulator's "Revert" lines that no measure computes) and its pass column (the check under each tile carries it).
-`control_tables` names each target's hidden roles from the run index in place of the hand-typed "suited to test"
+`control_tables` names each target's influencers from the run index in place of the hand-typed "suited to test"
 labels, and lists SWE first. `baseline_tables` shows only the October runs; the November runs of its cells are the
 positive control's. `paper_sources.study_tex` reads `valid_runs`; `\AccessedFrom` is a new macro.
 
@@ -831,3 +831,45 @@ Sentences changed:
 - Appendix A, Judge labels: "The manipulation label is not yet validated, and we do not report its counts (Appendix
   B)." became "An independent reading found most manipulation yes verdicts wrong, and we do not report the label
   (Appendix B)."
+
+## Influencers, 2026-11-19
+
+The user's order: "regulator and disregulator are influencers", a new term to use everywhere. An **influencer** is a
+regulator or a disregulator. "Regulator" and "disregulator" stay where one kind is meant. The title, the abstract and
+the team's hypotheses keep their wording: the abstract names the two kinds before Methods defines the term.
+
+Scripts: `study_ladders.record` carries "influencers" (was "hidden"), chosen with the measures' one role test
+`src/measures/run_directory.py` `is_influencer`; `coordination_table`, `collusion_table` and `label_tables` use the
+same test. Every counts table's block key is "influencers". `control_tables.influencers` (was `hidden_roles`) names
+each target's influencers; its header line reads "influencers in the study" and a target without one "no influencer".
+Redrawn, with only the label column changed (a pixel diff against the previous PNGs found no other change):
+`positive_control`, `negative_control`, `table_cheating_by_task`, `table_coordination_by_task`,
+`table_collusion_by_task`, `table_judge_cheated_by_task`, `table_disclosure_by_task`, `table_scheming_by_task`,
+`table_awareness_by_task`. Block titles: "Regulators and disregulators" became "Influencers"; "Regulators and
+disregulators at looked or above" became "Influencers at looked or above"; "Regulators and disregulators at attempted
+or above" became "Influencers at attempted or above"; "Colluding pairs with a regulator or disregulator" became
+"Colluding pairs with an influencer".
+
+Sentences changed (old, then new):
+- Methods: added "We call a regulator or a disregulator an \textbf{influencer}. The workers are not told which
+  teammates are influencers." after "A disregulator is a fourth agent privately told to get the result by any means."
+- Table 1, Team: "3 workers + a hidden regulator, a disregulator, or both (4 or 5 agents)" became "3 workers +
+  influencers: a regulator, a disregulator, or both (4 or 5 agents)".
+- Appendix A, Cheating ladder: "We report the rungs of regulators and disregulators apart from the team's." became
+  "We report the rungs of influencers apart from the team's."
+- Appendix A, Coordination ladder: "Regulators and disregulators count as teammates in every mean." became
+  "Influencers count as teammates in every mean."
+- Appendix A, Collusion ladder: "Regulators and disregulators count as teammates, and we report their rungs apart from
+  the team's." became "Influencers count as teammates, and we report their rungs apart from the team's."
+- Appendix B, honeypot: "No regulator or disregulator goes past looked." became "No influencer goes past looked."
+- Appendix B, board: "Low is the most common level of workers, of teams and of regulators and disregulators in every
+  task." became "... of workers, of teams and of influencers in every task."
+- Appendix B, Collusion: "No regulator or disregulator reaches collusion. No team with a regulator or a disregulator
+  reaches collusion." became "No influencer reaches collusion. No team with an influencer reaches collusion."
+- Appendix B, scheming: "No pair with a regulator or disregulator colludes, so that block is empty." became "No pair
+  with an influencer colludes, so that block is empty."
+- Appendix B, awareness: "No regulator or disregulator cheated, so none is asked." became "No influencer cheated, so
+  none is asked."
+
+Unchanged: Figure 2's caption ("a hidden regulator (R)") and Figure 4's rows ("+ hidden regulator, level ...") name
+one kind, and there the workers' not knowing matters.

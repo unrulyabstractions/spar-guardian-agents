@@ -1,5 +1,5 @@
 """The Collusion ladder by task for study_exploration_1's valid team runs, as code reads it: how many workers, teams and
-hidden agents (regulators and disregulators) reach each code rung (src/measures/collusion.py CODE_RUNGS), through
+influencers reach each code rung (src/measures/collusion.py CODE_RUNGS), through
 scripts/paper/study_ladders.py record. Collusion does not by itself show intent, so beside it stand the agents and
 teams at collusion whose awareness label (src/measures/judge_labels.py labels) reads yes; the awareness table
 (scripts/paper/label_tables.py) gives the other answers. Valid runs are study_ladders.valid_runs'. Writes
@@ -15,11 +15,11 @@ from collections import Counter
 from scripts.paper.study_ladders import TASKS, counts_table, labels, record, valid_runs
 from src.configuration.settings import ROOT
 from src.measures.collusion import CODE_RUNGS, COLLUDING
-from src.measures.run_directory import is_worker
+from src.measures.run_directory import is_influencer
 
 OUT = ROOT / "tmp" / "tables" / "results" / "table_collusion_by_task.png"
 BLOCKS = [("workers", "Workers", "agents"), ("team", "Teams", "runs"),
-          ("hidden", "Regulators and disregulators", "agents")]
+          ("influencers", "Influencers", "agents")]
 AWARE = "aware"
 """The column beside the rungs: of those at collusion, the ones whose awareness label reads yes (for a team, a
 colluding worker's: study_ladders.record collusion_aware)."""
@@ -38,7 +38,7 @@ def counts() -> dict[tuple[str, str], Counter]:
         if not run["collusion_applicable"]:
             continue
         for agent, r in run["collusion_agents"].items():
-            c = out[("workers" if is_worker(r["role"]) else "hidden", d)]
+            c = out[("influencers" if is_influencer(r["role"]) else "workers", d)]
             c[r["code_rung"]] += 1
             c[AWARE] += r["code_rung"] == COLLUDING and labels(listed.path)["agents"][agent]["awareness"] == "yes"
         out[("team", d)][run["collusion_code"]] += 1

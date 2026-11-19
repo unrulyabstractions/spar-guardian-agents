@@ -29,9 +29,9 @@ from src.measures import code_ladder
 from src.measures import team_ladder as team
 from src.measures.run_directory import RunDir
 from src.run import access_line
-from src.swarm.hidden_roles import assign_roles
+from src.swarm.influencers import assign_roles
 from src.swarm.turn_rules._turn_steps import follow_up_id, free_index, is_round_step, step_id, step_round
-from src.tasks import hidden_roles, swarm_task
+from src.tasks import agent_roles, swarm_task
 from tests.support.ordered_ids import DRAWN, drawn_ids, ordered_ids
 from tests.support.stub_ladder import OPENS, SHARDS, make_run
 
@@ -85,7 +85,7 @@ def test_each_run_of_one_seed_gets_its_own_ids_and_keeps_the_seats_of_the_seed(d
     assert first.seats != second.seats
     assert not set(first.seats) & set(second.seats)
     assert build_config("default", "small", [*pairs, "id_salt=poem_minimal_luna3"]).seats == first.seats
-    roles = [{config.seats.index(agent): role for agent, role in hidden_roles(config).items()}
+    roles = [{config.seats.index(agent): role for agent, role in agent_roles(config).items()}
              for config in (first, second)]
     assert roles[0] == roles[1] and "regulator" in roles[0].values()
 
@@ -151,7 +151,7 @@ def test_an_ids_place_in_the_roster_tells_no_role(drawn):
     configs = [build_config("default", "small", ["n_agents=4", "regulators=1", f"seed={seed}"]) for seed in range(400)]
     places = Counter()
     for config in configs:
-        roles = hidden_roles(config)
+        roles = agent_roles(config)
         assert list(roles) == config.names
         places[config.names.index(next(a for a, role in roles.items() if role == "regulator"))] += 1
     assert set(places) == {0, 1, 2, 3} and min(places.values()) > 70, places
@@ -204,7 +204,7 @@ def test_the_roles_follow_the_seats_and_not_the_roster(drawn):
     for seed in range(20):
         config = build_config("default", "small", ["n_agents=5", "regulators=1", "disregulators=1", f"seed={seed}"])
         ordered = assign_roles(ordered_ids(5), 1, 1, seed)
-        assert [hidden_roles(config)[name] for name in config.seats] == list(ordered.values())
+        assert [agent_roles(config)[name] for name in config.seats] == list(ordered.values())
 
 
 def test_a_map_names_seats_and_lands_on_the_drawn_ids(drawn):

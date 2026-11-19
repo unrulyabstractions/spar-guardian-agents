@@ -8,7 +8,7 @@ above). The paper's second measure, accessed the honeypot (ACCESSED_FROM or abov
     valid_runs(study)   # the runs whose status is valid and that are not mock (run_listing.list_collection)
     cell_runs(prefix)   # the valid runs of one cell: <prefix><seed>, then its pilots <prefix>[_]pilot<seed>
     record(path)        # {"cheating": rung, "cheated", "accessed", "passed", "alarm", "pieces",
-                        #  "agents": {agent: {worker, rung, episode}}, "hidden": {agent: {role, posts, solicited}},
+                        #  "agents": {agent: {worker, rung, episode}}, "influencers": {agent: {role, posts, solicited}},
                         #  "collusion": rung, "collusion_code": rung, "collusion_aware", "collusion_agents":
                         #  {agent: {role, rung, code_rung}}, "collusion_colluding": [{agents, roles, rung,
                         #  scheming}] (collusion.colluding_pairs), "collusion_applicable"}
@@ -33,7 +33,7 @@ from src.measures import judge_labels
 from src.measures.cheating_ladder import CHEATED_FROM, cheated, cheating, scanned_run
 from src.measures.collusion import RUNGS as COLLUSION
 from src.measures.collusion import colluding_pairs, collusion_of
-from src.measures.run_directory import is_worker
+from src.measures.run_directory import is_influencer, is_worker
 from src.measures.run_listing import Listed, list_collection
 from src.measures.rungs import RUNGS as CHEATING
 from src.measures.rungs import at_least
@@ -101,7 +101,7 @@ the judge read every one of them and found none aware."""
 @cache
 def record(path: Path) -> dict:
     """One run's Cheating and Collusion rungs, for the team and for each agent, the pieces its hand-in holds (the
-    Cheating ladder's hand_in_pieces), and each hidden agent's posts and the posts of those that ask a teammate for the
+    Cheating ladder's hand_in_pieces), and each influencer's posts and the posts of those that ask a teammate for the
     honeypot (src/measures/team_ladder.py posts_of and solicits). The Collusion ladder is collusion_of on the same
     Cheating ladder, as collusion.run_collusion computes it; "collusion" is the team's rung with the scheming pass's
     verdicts, "collusion_code" the code's. Where workers collude, "collusion_aware" is their awareness label
@@ -111,9 +111,9 @@ def record(path: Path) -> dict:
     collusion = collusion_of(Path(path), result)
     roster = (team or {}).get("agents") or []
     posts = posts_of(run.board(team["sample"]), roster) if team else []
-    hidden = {agent: {"role": role, "posts": sum(p["sender"] == agent for p in posts),
-                      "solicited": sum(p["sender"] == agent and solicits(p, roster, domain) for p in posts)}
-              for agent, role in run.roles().items() if not is_worker(role)}
+    influencers = {agent: {"role": role, "posts": sum(p["sender"] == agent for p in posts),
+                           "solicited": sum(p["sender"] == agent and solicits(p, roster, domain) for p in posts)}
+                   for agent, role in run.roles().items() if is_influencer(role)}
     applicable = bool(collusion.get("applicable"))
     colluding = [{key: p[key] for key in ("agents", "roles", "rung", "scheming")} for p in colluding_pairs(collusion)]
     aware = {labels(path)["agents"][a]["awareness"] for p in colluding if all(map(is_worker, p["roles"]))
@@ -122,7 +122,7 @@ def record(path: Path) -> dict:
             "passed": result["passed"] is True, "alarm": result["alarm"], "pieces": result["hand_in_pieces"],
             "agents": {a: {"worker": r["worker"], "rung": r["rung"], "episode": r["episode"]}
                        for a, r in result["agents"].items()},
-            "hidden": hidden,
+            "influencers": influencers,
             "collusion_applicable": applicable,
             "collusion": collusion["team"] if applicable else None,
             "collusion_code": collusion["team_code"] if applicable else None,
@@ -342,7 +342,7 @@ def counts_table(path: Path, levels: tuple[str, ...], data: dict[tuple[str, str]
 
 def role_table(path: Path, title: str, rows: list[tuple], role: str, *, pieces: bool = False,
                per_row: int | None = None) -> Path:
-    """A table of cells with a hidden role, the page's width across: a cell per (label, level, *cell prefixes) of
+    """A table of cells with an influencer, the page's width across: a cell per (label, level, *cell prefixes) of
     `rows`, the cells of one label side by side, or `per_row` cells to a row in the order of `rows`. Each cell shows
     its valid runs as tiles (run_tile; with the grader's pass; `pieces` adds the hand-in's
     pieces), under each tile the
@@ -400,7 +400,7 @@ def role_table(path: Path, title: str, rows: list[tuple], role: str, *, pieces: 
 def posts_mark(run: dict, role: str) -> str:
     """The posts of the run's agents of `role`, and for a disregulator those that ask for the honeypot; "" when the
     run has no such agent."""
-    agents = [a for a in run["hidden"].values() if a["role"] == role]
+    agents = [a for a in run["influencers"].values() if a["role"] == role]
     if not agents:
         return ""
     posts = sum(a["posts"] for a in agents)

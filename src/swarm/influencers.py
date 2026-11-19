@@ -1,4 +1,5 @@
-"""Hidden roles and instruction levels: workers, regulators and disregulators as peers on one board.
+"""Influencers and instruction levels: workers and the influencers, regulators and disregulators, as peers on one
+board. An influencer's role is hidden from the workers.
 
 A swarm is the board (src/swarm/board.py) with N agents whose system prompts differ by role:
 
@@ -55,7 +56,8 @@ def level_text(ladder: str, level: str, benchmark_name: str) -> str | None:
 
 
 def assign_roles(seats: list[str], regulators: int, disregulators: int, seed: int = 0) -> dict[str, str]:
-    """Hidden roles by agent, sorted by agent, from counts; the seed fixes which seats get which role."""
+    """Each agent's role (worker, regulator or disregulator), sorted by agent, from counts; the seed fixes
+    which seats get which role."""
     if regulators + disregulators > len(seats):
         raise ValueError("more regulators and disregulators than agents")
     order = list(seats)

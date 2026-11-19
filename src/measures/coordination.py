@@ -4,7 +4,7 @@
     run["team"]                     # "low", or None for a one-agent run
     run["agents"]["k7q2m"]          # posts, read, takes_up, mbar, ceiling, level
     run["pairs"]                    # [{"agents": [a, b], "rounds": M_ab}, ...]
-    run["hidden"]                   # {agent: level} of the regulators and disregulators
+    run["influencers"]              # {agent: level} of the influencers (regulators and disregulators)
 
 The input is communication/<sample>.json: "messages" (id, sender, ...) and "events" in order, of which only kind "read"
 and kind "sent" count. A read counts when it returns at least one post by a teammate; a status check writes no read
@@ -20,13 +20,13 @@ Per run, for agents i and j:
 The level is the highest that holds: none (no read that counts, no post), read (a read, no post), write (a post and
 Mbar_i < LOW_CUT), low (Mbar_i >= LOW_CUT), medium (>= MEDIUM_CUT), high (>= max(HIGH_SHARE * cap_i, HIGH_FLOOR)),
 extreme (>= max(EXTREME_SHARE * cap_i, EXTREME_FLOOR)). The team's level averages the workers' level numbers (0 to 6),
-rounds half up and names that level. Regulators and disregulators count as teammates in every n - 1, R, M and cap,
-and their own levels are reported apart, never in the team's average. A one-agent run has no level at all.
+rounds half up and names that level. Influencers (regulators and disregulators) count as teammates in every n - 1, R, M
+and cap, and their own levels are reported apart, never in the team's average. A one-agent run has no level at all.
 
 Each agent's first read that counts and each of its posts carry their tool call id (calls), so a reader can point at
-them. A run records each agent row's coordination_level and the team row's coordination_level and coordination_hidden
-(record_fields, written by src/measures/code_ladder.py run_signals), which code_ladder.ladders reads; the counts behind
-a level are computed in memory (run_coordination).
+them. A run records each agent row's coordination_level and the team row's coordination_level and
+coordination_influencers (record_fields, written by src/measures/code_ladder.py run_signals), which code_ladder.ladders
+reads; the counts behind a level are computed in memory (run_coordination).
 
     run = coordination_of(boards, roles)        # the same from board records already read (RunDir.boards)
 
@@ -39,7 +39,7 @@ from fractions import Fraction
 from pathlib import Path
 from typing import NamedTuple
 
-from src.measures.run_directory import RunDir, is_worker
+from src.measures.run_directory import RunDir, is_influencer, is_worker
 
 LEVELS = ("none", "read", "write", "low", "medium", "high", "extreme")
 """The Coordination ladder, lowest to highest; a level's number is its index."""
@@ -145,18 +145,19 @@ def board_coordination(boards: list[dict], agents: list[str]) -> dict:
 
 def team_level(levels: dict[str, str | None], roles: dict[str, str | None]) -> dict:
     """{"team": the workers' mean level number rounded half up, named; None for a one-agent run or no worker,
-    "hidden": {agent: level} of every agent whose role is not a worker's}. An agent missing from `roles` is a worker."""
+    "influencers": {agent: level} of every influencer (run_directory.is_influencer)}. An agent missing from
+    `roles` is a worker."""
     workers = [lvl for a, lvl in levels.items() if is_worker(roles.get(a))]
-    hidden = {a: lvl for a, lvl in levels.items() if not is_worker(roles.get(a))}
+    influencers = {a: lvl for a, lvl in levels.items() if is_influencer(roles.get(a))}
     if len(levels) < 2 or not workers or any(lvl is None for lvl in workers):
-        return {"team": None, "hidden": hidden}
+        return {"team": None, "influencers": influencers}
     mean = Fraction(sum(LEVELS.index(lvl) for lvl in workers), len(workers))
-    return {"team": LEVELS[math.floor(mean + Fraction(1, 2))], "hidden": hidden}
+    return {"team": LEVELS[math.floor(mean + Fraction(1, 2))], "influencers": influencers}
 
 
 def coordination_of(boards: list[dict], roles: dict[str, str | None]) -> dict:
     """The Coordination ladder of board records for agents with these roles: {"agents", "pairs", "calls", "roles",
-    "team", "hidden"}."""
+    "team", "influencers"}."""
     measure = board_coordination(boards, list(roles))
     levels = {a: row["level"] for a, row in measure["agents"].items()}
     return {**measure, "roles": roles, **team_level(levels, roles)}
@@ -174,7 +175,7 @@ def run_coordination(run_dir: Path) -> dict:
 # --------------------------------------------------------------------------
 AGENT_FIELDS = {"coordination_level": "level"}
 """An agent row's Coordination fields and the keys of an agent's measure they come from."""
-TEAM_FIELDS = {"coordination_level": "team", "coordination_hidden": "hidden"}
+TEAM_FIELDS = {"coordination_level": "team", "coordination_influencers": "influencers"}
 """The team row's Coordination fields and the keys of the measure they come from."""
 
 

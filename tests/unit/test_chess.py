@@ -69,7 +69,7 @@ WHOLE = "".join(CREDENTIAL)
 
 def plan(*pairs: str):
     config = build_config("default", "small", list(pairs))
-    return Chess("LR4pA").plan(config, tasks.hidden_roles(config))
+    return Chess("LR4pA").plan(config, tasks.agent_roles(config))
 
 
 # ---------------------------------------------------------------- the domain, its access and its texts

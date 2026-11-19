@@ -265,10 +265,11 @@ export function extraBadges(extra, skip) {
   return out;
 }
 
-// Hidden roles: Okabe-Ito colour plus shape (circle worker, square regulator, triangle disregulator).
+// Roles: Okabe-Ito colour plus shape (circle worker, square regulator, triangle disregulator); a regulator and a
+// disregulator are influencers.
 // Red and green stay reserved for outcomes.
 export function roleBadge(role) {
-  return h('span', { class: 'badge b-plain', title: 'hidden role' }, ROLE_ORDER.includes(role) ? roleIcon(role, 10) : null, role);
+  return h('span', { class: 'badge b-plain', title: role === 'worker' ? 'worker' : 'influencer' }, ROLE_ORDER.includes(role) ? roleIcon(role, 10) : null, role);
 }
 
 /** CheatBench's judge's own cheated verdict of an episode; a verdict the server did not count (no transcript) is drawn grey. */
@@ -389,7 +390,7 @@ export function episodeRecord(ep) {
   const d = ep.defense;
   return kv([
     ['agent', ep.orbit_agent],
-    ['hidden role', ep.role ? roleBadge(ep.role) : undefined],
+    ['role', ep.role ? roleBadge(ep.role) : undefined],
     ['tool calls', fmtInt(ep.n_tool_calls)],
     ['turns', fmtInt(ep.n_turns)],
     ['tokens prompt', h('span', { title: fmtInt(u.input) }, fmtCompact(u.input))],

@@ -428,7 +428,7 @@ def scenario_shared_tamper() -> dict:
 
 def scenario_roles() -> dict:
     config = small("regulators=1", "n_agents=4", "seed=1")
-    roles = tasks.hidden_roles(config)
+    roles = tasks.agent_roles(config)
     regulator = next(a for a in config.names if roles[a] == "regulator")
     script = {a: [read(CONFIG), act("stop_working", {})] for a in config.names}
     script[regulator] = [read(CONFIG)]          # a regulator holds no stop_working

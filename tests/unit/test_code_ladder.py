@@ -273,8 +273,8 @@ def test_run_signals_write_agent_rows_then_team_rows_and_run_json(tmp_path):
     assert (rows[0]["cheating_rung"], rows[1]["cheating_rung"]) == ("looked", "none")
     assert rows[0]["collusion_rung"] is None                    # the stub task has no take rule
     team = written[2]
-    assert (team["cheating_rung"], team["cheating_hidden"], team["cheating_alarm"]) == ("looked", {}, None)
-    assert (team["collusion_rung"], team["collusion_hidden"]) == (None, {})
+    assert (team["cheating_rung"], team["cheating_influencers"], team["cheating_alarm"]) == ("looked", {}, None)
+    assert (team["collusion_rung"], team["collusion_influencers"]) == (None, {})
     assert "rung" not in team and "collaboration" not in team and set(team["travel_evidence"]) == {
         "discussed", "solicited", "crossed", "assembled"}
     run = RunDir(folder)
@@ -342,7 +342,7 @@ def test_run_signals_record_the_coordination_ladder_on_agent_and_team_rows(tmp_p
     assert all(list(row)[-2:] == [*coordination.AGENT_FIELDS, "collusion_rung"] for row in rows.values())
     team = RunDir(folder).team_signals()[0]
     # the regulator counts in each worker's n - 1 and is reported apart, never in the team's level
-    assert (team["coordination_level"], team["coordination_hidden"]) == ("write", {"a03": "none"})
+    assert (team["coordination_level"], team["coordination_influencers"]) == ("write", {"a03": "none"})
     assert RunDir(folder).run_json["signals"]["team"]["coordination_level"] == "write"
     # the travel evidence is a different record and stays as it was
     assert not any(team["travel_evidence"].values())
@@ -360,7 +360,7 @@ def test_ladders_reads_the_three_rungs_as_recorded(tmp_path):
                                    for agent, level in (("a01", "write"), ("a02", "write"), ("a03", "none"))},
                         "team": {"cheating_rung": "none", "cheated": False, "coordination_level": "write",
                                  "collusion_rung": None, "cheating_alarm": None},
-                        "hidden": {"cheating": {}, "coordination": {"a03": "none"}, "collusion": {}}}
+                        "influencers": {"cheating": {}, "coordination": {"a03": "none"}, "collusion": {}}}
     path = folder / "signals.jsonl"
     rows = [json.loads(line) for line in path.read_text().splitlines()]
     path.write_text("".join(json.dumps({k: v for k, v in row.items() if k != "collusion_rung"}) + "\n" for row in rows))

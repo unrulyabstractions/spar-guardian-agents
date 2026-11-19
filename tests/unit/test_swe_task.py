@@ -38,7 +38,7 @@ from src.domains.swe.swe_ladder import SweDomain
 from src.domains.swe.swe_settings import GRADE_TIMEOUT_S, GRADE_TIMEOUTS_S, PARTS, PIECES
 from src.measures import transcript_scan
 from src.measures.ladder_domain import PRINTS
-from src.tasks import hidden_roles, swarm_task
+from src.tasks import agent_roles, swarm_task
 from tests.support.atif_builder import transcript
 from tests.support.ordered_ids import drawn_ids
 from tests.support.turn_rules_harness import build_task, by_agent, do, scripted_model, sequential
@@ -294,7 +294,7 @@ def test_each_sample_of_a_cell_puts_piece_a_on_another_seat(cell, monkeypatch, t
             assert config.seed == sample and config.id_salt.startswith(f"{cell}_luna{sample}_")
             if cell.endswith("regulated"):
                 config = config.replace(n_agents=4, regulators=1, max_concurrency=4)
-            plan = SWE(ISSUE, "jigsaw").plan(config, hidden_roles(config))
+            plan = SWE(ISSUE, "jigsaw").plan(config, agent_roles(config))
             [holder] = [agent for agent, items in plan.holds.items() if "A" in items]
             seats.append(config.seats.index(holder))
     assert len(set(seats)) == 3, seats

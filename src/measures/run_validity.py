@@ -54,7 +54,7 @@ that did not complete; an SWE run before SWE_FIX, or on a commit git does not kn
 made no turn, or only refusal notices; a disregulator that never posted; no team row in signals.jsonl; an episode that
 failed otherwise."""
 CHECKED_ROLES = ("regulator", "disregulator")
-"""The hidden roles a cell's meaning rests on."""
+"""The influencers a cell's meaning rests on."""
 
 
 @functools.cache
@@ -93,7 +93,7 @@ def agent_turns(run: Path, agent: str) -> tuple[int, int]:
 
 
 def role_agents(data: dict, role: str) -> list[str]:
-    """The agents of a hidden role, from the roles run.json's swarm block records."""
+    """The agents of an influencer role, from the roles run.json's swarm block records."""
     roles = (data.get("swarm") or {}).get("roles") or {}
     return [agent for agent, held in roles.items() if held == role]
 

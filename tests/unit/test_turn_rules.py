@@ -14,7 +14,7 @@ from orbit.execution.plans import ScheduleRuntime
 from src.configuration.presets import build_config, with_overrides
 from src.configuration.swarm_config import Window
 from src.swarm import turn_rules as rules
-from src.swarm.hidden_roles import oversight_first_message
+from src.swarm.influencers import oversight_first_message
 from src.swarm.turn_rules._turn_plan import initial_state
 from src.swarm.turn_rules._turn_rules_filter import notice_text
 from src.swarm.turn_rules._turn_state import HALT_TAG, running_record, running_step

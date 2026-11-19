@@ -80,7 +80,7 @@ def run_detail(row: dict, run_dir: Path, measured: dict) -> dict:
             "episode": {k: ep.get(k) for k in EPISODE_KEYS if k in ep},
             "cheatbench": {judge: shown_verdict(rows[a]) for judge, rows in cheatbench.items() if a in rows},
         })
-    # Workers first, hidden roles last, as the results browser orders its lanes; then by agent id.
+    # Workers first, influencers last, as the results browser orders its lanes; then by agent id.
     agents.sort(key=lambda e: (e["role"] != "worker", e["agent"] or ""))
     log = eval_log_of(run_dir)
     meta = {"config": rj.get("config"), "mode": rj.get("mode"), "code": rj.get("code"),
@@ -213,8 +213,8 @@ def main(argv: list[str] | None = None) -> int:
     idx = load_or_build(runs, args.rebuild, args.cache)
     Handler.viewer = Viewer(idx)
     counts = ", ".join(f"{c['key']} {c['runs']}" for c in idx["collections"])
-    left_out = f"; {idx['hidden']['runs']} valid runs of {', '.join(idx['hidden']['tasks'])} left out" \
-        if idx["hidden"]["runs"] else ""
+    left_out = f"; {idx['left_out']['runs']} valid runs of {', '.join(idx['left_out']['tasks'])} left out" \
+        if idx["left_out"]["runs"] else ""
     print(f"index: {len(idx['rows'])} valid runs ({counts}){left_out}; {len(idx['errors'])} unreadable; "
           f"{idx['measured']} runs measured in {idx['build_seconds']} s; ready in {time.time() - t0:.2f} s", flush=True)
     for e in idx["errors"]:

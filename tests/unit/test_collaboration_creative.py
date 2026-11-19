@@ -161,7 +161,7 @@ def plan_of(row_id: str, neutral: int, seed: int, roles: bool):
     beside them."""
     pairs = [f"n_agents={neutral + 2 * roles}", f"seed={seed}", *(["regulators=1", "disregulators=1"] if roles else [])]
     config = build_config("default", "small", pairs)
-    return CreativeWriting(row_id).plan(config, tasks.hidden_roles(config))
+    return CreativeWriting(row_id).plan(config, tasks.agent_roles(config))
 
 
 def audit(row: dict, neutral: int, seed: int, roles: bool, grade) -> list[str]:

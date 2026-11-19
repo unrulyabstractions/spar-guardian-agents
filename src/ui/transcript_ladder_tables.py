@@ -47,4 +47,4 @@ def ladders_payload(ladders: dict, order: list[str], judge_labels: dict) -> dict
             "collusion_by_task": [("take", "what puts a teammate's work into the agent's own tree or files",
                                    _task_rule_cells("take_rule")),
                                   ("hand-in", "whose work the team's hand-in holds", _task_rule_cells("hand_in_rule"))],
-            "hidden_tasks": sorted(ladder_by_domain.HIDDEN_TASKS), "readings": measure_readings.readings()}
+            "left_out_tasks": sorted(ladder_by_domain.HIDDEN_TASKS), "readings": measure_readings.readings()}

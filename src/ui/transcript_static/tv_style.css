@@ -11,10 +11,18 @@
 .pager .btn[disabled] { opacity: .45; cursor: default; }
 .idx-wrap { overflow: auto; max-height: calc(100vh - var(--header-h) - 120px); }
 table.idx-table { font-size: 12.5px; }
-table.idx-table th { white-space: normal; vertical-align: bottom; min-width: 70px; position: sticky; top: 0; z-index: 2; }
+table.idx-table thead { position: sticky; top: 0; z-index: 2; }
+table.idx-table th, table.idx-table td { padding: 5px 5px; }
+table.idx-table th { white-space: normal; vertical-align: bottom; min-width: 50px; }
 table.idx-table td { white-space: nowrap; vertical-align: middle; }
-table.idx-table td.wrap { white-space: normal; min-width: 13ch; max-width: 24ch; }
-table.idx-table td.lv { white-space: normal; min-width: 15ch; max-width: 26ch; padding-right: 10px; }
+table.idx-table td.wrap { white-space: normal; min-width: 8ch; max-width: 18ch; }
+table.idx-table td.lv { white-space: normal; padding-right: 6px; }
+/* The band over the runs table's columns (tv_view_index.js GROUPS) and a rule at the left of each group. */
+table.idx-table tr.idx-band th { text-align: center; font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--muted); border-bottom: 2px solid var(--border); padding: 3px 6px; }
+table.idx-table tr.idx-band th.idx-band-team { background: var(--panel-2); }
+table.idx-table tr.idx-band th.idx-band-influencers { background: var(--panel-2); }
+table.idx-table tr.idx-band th:not(.idx-band-none), table.idx-table .idx-group-start { border-left: 2px solid var(--border); }
 table.idx-table td.lv .lv-glyph, table.idx-table td.lv .lv-rank { flex: none; white-space: nowrap; }
 table.idx-table tbody tr:hover td { background: var(--hover); }
 .idx-legend { margin-top: 16px; }
@@ -64,7 +72,6 @@ table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--ba
 .lv-ladder-table tr.lv-line-row td { border-top: 3px solid var(--text) !important; background: var(--panel-2); font-size: 11.5px; color: var(--muted); max-width: none; white-space: normal; }
 .cs-full-legend .cfl-line { font-size: 9.5px; font-weight: 700; text-transform: uppercase; padding-left: 5px; margin-right: 8px;
   border-left: 3px solid var(--ink-2, var(--text)); color: var(--ink-2, var(--text)); }
-.idx-toggle { cursor: pointer; user-select: none; font-size: 12.5px; }
 .judge-ev { margin-top: 4px; }
 .judge-flag { margin-top: 6px; }
 .judge-quote { margin: 4px 0; padding: 3px 8px; border-left: 3px solid var(--border-strong); font-size: 12px; white-space: pre-wrap;
@@ -178,11 +185,17 @@ table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--ba
 .cs-full-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; border: 1px solid rgba(127,127,127,.4); }
 .case .cs-ladders-row { line-height: 1.55; }
 .case .cs-mile { font-size: 10px; }
-/* The three ladders: the runs table's hidden-role columns, the Details tab's panels, the Ladders page's level tables;
-   the CheatBench judge's cells. */
-.lv-hidden-row { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; margin: 2px 0; }
+/* The three ladders: the runs table's influencer columns, the Details tab's panels, the Ladders page's level tables;
+   the Cheating cell, with the code's word over CheatBench's judge's, each marked by who says it. */
+.lv-influencer-row { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; margin: 2px 0; }
+.cheat-cell { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+.cheat-says { white-space: nowrap; margin-bottom: 3px; }
+.cheat-says:last-child { margin-bottom: 0; }
+.lv-who { font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); white-space: nowrap;
+  border-bottom: 1px dotted var(--border-strong, var(--border)); line-height: 1.3; }
+.idx-legend-sample { margin-top: 8px; }
 .coord-summary { display: grid; gap: 4px; margin: 4px 0 10px; }
-.coord-table tr.coord-hidden td { background: var(--surface-2, rgba(127,127,127,.06)); }
+.coord-table tr.coord-influencer td { background: var(--surface-2, rgba(127,127,127,.06)); }
 .coord-table td.num, .coord-pairs td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .coord-pairs { margin-top: 8px; max-width: 520px; }
 .lv-level-table td:first-child { white-space: nowrap; }
@@ -192,3 +205,4 @@ table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--ba
 .cheat-table td { vertical-align: top; }
 .cheat-table td:nth-child(5) { min-width: 320px; max-width: 640px; }
 .cb-cell { display: inline-flex; flex-direction: column; gap: 1px; white-space: nowrap; }
+.nowrap { white-space: nowrap; }

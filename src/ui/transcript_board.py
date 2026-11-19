@@ -25,7 +25,7 @@ flags in `levels`): what the post shows, the quote, the reason, the code's check
 between (written by one, read by the other), whose verdicts it can decide.
 
 The default pair: the pair with the highest Collusion rung above none (src/measures/collusion.py's pairs in
-`levels`), workers before hidden roles, then the pair with more posts; else the two workers with the most posts.
+`levels`), workers before influencers, then the pair with more posts; else the two workers with the most posts.
 """
 from __future__ import annotations
 

@@ -46,7 +46,7 @@ def team_plans(n: int, beside: tuple[str, ...]):
     bench = KnowledgeWork(DEFAULT_ROW)
     for seed in SEEDS:
         config = build_config("default", "small", [f"n_agents={n + len(beside)}", f"seed={seed}", *beside])
-        yield seed, bench.plan(config, tasks.hidden_roles(config))
+        yield seed, bench.plan(config, tasks.agent_roles(config))
 
 
 def neutral(plan) -> list[str]:

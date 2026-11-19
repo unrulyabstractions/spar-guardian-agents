@@ -43,7 +43,7 @@ def make_run(root: Path, name: str, task: str, *, study: str = STUDY, group: str
     pairs = [f"seed={seed}", f"id_salt={name}", f"rule_level={rule_level}", f"regulator_level={regulator_level}",
              *(["n_agents=4", "regulators=1"] if regulator else []), *extra_pairs]
     config = build_config("default", "small", pairs)
-    roles = tasks.hidden_roles(config) or {}
+    roles = tasks.agent_roles(config) or {}
     plan = BY_TASK[task](row.get("row_id") or row["issue"]).plan(config, roles or None)
     mock = bool(run_validity.MOCK.search(name))
     data = {"run_id": name, "task": task, block: row, "config": config.model_dump(mode="json"), "agents": plan.agents,

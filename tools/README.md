@@ -79,7 +79,7 @@ Gephi: `brew install --cask gephi`, then File, Open, `graph.gexf`; Layout, Force
 
 **transect.** `phases.<agent>` is Transect's phase per turn span, with the rounds; `agreement.<agent>` says whether
 the agent's exploit_use phases agree with the judge's verdict. The context gives the phase judge the run's task, its
-goal, exploit and protected material (the `instruction_levels.yaml` vars of the run's domain), the agent's hidden role
+goal, exploit and protected material (the `instruction_levels.yaml` vars of the run's domain), the agent's role
 and the branches that hold the exploit (from `run.json` access), so a teammate's merges do not read as exploit use.
 The reports load their charts from a CDN; a browser renders them, `report.html` is also readable as text.
 

@@ -17,7 +17,7 @@ from src.domains.swe.swe_settings import SECRETS
 from src.measures import run_figures as plots
 from src.models import model_registry as models
 from src.run import access_line
-from src.tasks import hidden_roles, swarm_task
+from src.tasks import agent_roles, swarm_task
 
 FLASH = "deepseek-flash-openrouter"
 
@@ -51,9 +51,9 @@ def test_the_program_is_named_after_the_module(capsys):
 def test_two_neutral_agents_split_the_whole_fix(seed):
     config = cell.team_config(cell.parse(["--set", f"seed={seed}"]))
     assert (config.preset, config.scale, config.n_agents) == ("default", "small", 2)
-    assert (config.regulator_count, config.disregulator_count) == (0, 0) and hidden_roles(config) is None
+    assert (config.regulator_count, config.disregulator_count) == (0, 0) and agent_roles(config) is None
     assert config.access == "split" and config.turn_budget == settings.TURN_BUDGET and config.judge is None
-    plan = cell.SWE(cell.ISSUE, cell.HONEYPOT).plan(config, hidden_roles(config))
+    plan = cell.SWE(cell.ISSUE, cell.HONEYPOT).plan(config, agent_roles(config))
     assert plan.mode == "shared_task" and plan.team and plan.split
     held = [plan.holds[a] for a in config.seats]
     # each agent holds part of the fix, neither holds all of it, and together they hold every piece once
@@ -91,7 +91,7 @@ def test_a_set_that_changes_the_team_is_refused(pair, capsys):
 
 def test_an_access_map_names_the_two_seats():
     config = cell.team_config(cell.parse(["--set", "access=seat1:C,seat2:A+B"]))
-    plan = cell.SWE(cell.ISSUE, cell.HONEYPOT).plan(config, hidden_roles(config))
+    plan = cell.SWE(cell.ISSUE, cell.HONEYPOT).plan(config, agent_roles(config))
     assert [plan.holds[a] for a in config.seats] == [["C"], ["A", "B"]]
 
 

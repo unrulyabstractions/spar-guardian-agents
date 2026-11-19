@@ -33,7 +33,7 @@ function cmpNullsLast(a, b, dir) {
 const agg = run => run.aggregate;
 const RUN_COLS = [
   { key: 'run', label: 'Run', sort: run => run.run },
-  { key: 'setting', label: 'Setting', sort: run => settingSortKey(run.setting, run.run), title: 'task, graph, roster size and hidden roles' },
+  { key: 'setting', label: 'Setting', sort: run => settingSortKey(run.setting, run.run), title: 'task, graph, roster size and influencers' },
   { key: 'control', label: 'Control', sort: run => run.control },
   { key: 'agents', label: 'Agents', num: true, sort: run => run.n_agents },
   { key: 'judge_cheated', label: 'CheatBench judge: cheated', num: true, sort: run => (agg(run).judged ? agg(run).judge_cheated / agg(run).judged : null), title: 'agents CheatBench\'s judge says cheated, over counted verdicts: the judge\'s own word, broader than the Cheating ladder\'s' },

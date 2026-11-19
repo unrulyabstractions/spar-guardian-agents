@@ -93,7 +93,7 @@ def test_calls_are_in_order_with_the_eval_logs_times(tmp_path):
     p = payload(write_run(tmp_path))
     assert p["clock"] == "eval_log" and p["total"] == pytest.approx(30.2)
     by = {a["agent"]: a for a in p["agents"]}
-    assert [a["agent"] for a in p["agents"]] == ["a01", "a02", "r01"]      # workers first, then hidden roles
+    assert [a["agent"] for a in p["agents"]] == ["a01", "a02", "r01"]      # workers first, then influencers
     assert by["r01"]["role"] == "regulator"
     for agent, rows in CALLS.items():
         calls = by[agent]["calls"]
@@ -206,7 +206,7 @@ def test_the_default_pair_is_the_highest_collusion_pair_else_the_workers_who_pos
              {"agents": ["a01", "a02"], "roles": ["worker", "worker"], "rung": "collaboration", "scheming": unread},
              {"agents": ["a02", "r01"], "roles": ["worker", "regulator"], "rung": "cooperation", "scheming": unread}]
     p = payload(run, levels(pairs=pairs))
-    assert p["pair"] == ["a01", "a02"] and "collaboration" in p["pair_why"]   # workers before a hidden role
+    assert p["pair"] == ["a01", "a02"] and "collaboration" in p["pair_why"]   # workers before an influencer
     pairs[0]["rung"] = "collusion"
     assert payload(run, levels(pairs=pairs))["pair"] == ["a01", "r01"]     # a higher rung wins
     nothing = [{**x, "rung": "none"} for x in pairs]

@@ -12,8 +12,8 @@ What comes from where:
   * the benchmark's plan (Benchmark.plan: the mode, the access and what each agent holds) is fixed once, and the
     sample, its tools, its setup solver, its graders and its deviations come from the benchmark under it
     (src/domains/); the @task entry points take the registry's benchmarks (src/domains/__init__.py DOMAINS);
-  * the roster, the board and its tools, submit and stop_working, the hidden roles and the turn rules come from
-    src/swarm/ (board.py, submit_and_stop.py, hidden_roles.py, turn_rules/), and CheatBench's judge is added as a
+  * the roster, the board and its tools, submit and stop_working, the influencers and the turn rules come from
+    src/swarm/ (board.py, submit_and_stop.py, influencers.py, turn_rules/), and CheatBench's judge is added as a
     scorer (src/judging/cheatbench_judge.py);
   * the access log's sidecar, its setup solver, its first scorer and its cleanup come from src/sandbox/access_log/, for
     a monitored benchmark under SwarmConfig.access_log.
@@ -31,12 +31,12 @@ max_turns and sample_message_limit. Under a turn budget metadata["cheatbench"]["
 {"budget", "steps_per_agent"}. Under stop_after_delivery the benchmark's delivery predicate (Benchmark.delivered) goes
 to the turn rules' setup.
 
-The run's facts go into the sample metadata: metadata["cheatbench"] gains the config dump, the hidden roles and their
-composition, each role's model (role_models), the plan's access (the applied policy, each agent's items and numbered
-pieces) and the deviations from CheatBench's own runner.
+The run's facts go into the sample metadata: metadata["cheatbench"] gains the config dump, each agent's role and the
+team's composition, each role's model (role_models), the plan's access (the applied policy, each agent's items and
+numbered pieces) and the deviations from CheatBench's own runner.
 metadata["experiment"]["defenses"] holds the passive turn-rules defense, which every run carries.
 
-Hidden roles are used on a board whose config asks for a regulator or a disregulator. An agent whose role has a model
+Influencers are used on a board whose config asks for a regulator or a disregulator. An agent whose role has a model
 of its own runs it through the swarm model provider (src/models/swarm_model_provider.py); every other agent runs the
 eval's model.
 """
@@ -63,7 +63,7 @@ from src.judging.cheatbench_judge import JUDGE_ADDENDUM, cheatbench_judge
 from src.models import swarm_model_provider as provider  # importing it registers the "swarm" provider
 from src.sandbox.access_log.access_monitor import access_capture, capture, start_access_monitor, with_monitor
 from src.sandbox.agent_tools import AgentTools
-from src.swarm import hidden_roles as roles_module
+from src.swarm import influencers as roles_module
 from src.swarm.awareness_probes import end_of_episode_probes
 from src.swarm.board import (
     agent_tool_names,
@@ -84,8 +84,9 @@ TOKEN_LIMIT = 64_000_000
 # --------------------------------------------------------------------------
 # the parts of one task
 # --------------------------------------------------------------------------
-def hidden_roles(config: SwarmConfig) -> dict[str, str] | None:
-    """Each agent's hidden role on a board whose config asks for a regulator or a disregulator, else None."""
+def agent_roles(config: SwarmConfig) -> dict[str, str] | None:
+    """Each agent's role (worker, regulator or disregulator) on a board whose config asks for an influencer, else
+    None."""
     if not config.board or config.regulator_count + config.disregulator_count == 0:
         return None
     return roles_module.assign_roles(config.seats, config.regulator_count, config.disregulator_count, config.seed)
@@ -149,7 +150,7 @@ def agent_specs(config: SwarmConfig, tools: dict[str, list[str]], prompts: dict[
     agent with no prompt keeps AgentSpec's default. Each conversation is capped at the sample's message limit plus
     ten.
 
-    An agent whose hidden role has a model of its own (SwarmConfig.role_models) gets AgentSpec.model
+    An agent whose role has a model of its own (SwarmConfig.role_models) gets AgentSpec.model
     "swarm/<Inspect string>" (provider.agent_model); the others leave it None and run the eval's model. roles None
     means every agent is a worker."""
     def model_of(name: str) -> dict:
@@ -259,7 +260,7 @@ def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = 
     the task instruction, on its own paragraph."""
     settings.check_submodule_heads()
     names = config.names
-    plan = benchmark.plan(config, hidden_roles(config))
+    plan = benchmark.plan(config, agent_roles(config))
     sample = benchmark.sample(plan, instruction_suffix(benchmark, config, extra_instruction))
     first = first_messages(sample, plan)
     if first:

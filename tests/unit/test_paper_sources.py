@@ -198,7 +198,7 @@ def test_the_scheming_table_counts_the_measures_verdicts(monkeypatch):
         found = collusion.ladder(list(roles), roles, collusion.piece_takes(taken), {}, dict.fromkeys(roles, "none"),
                                  taken, {}, rows[Path(path).name])
         return {"applicable": True, **found}
-    run = SimpleNamespace(roles=lambda: {})                          # no hidden agent's posts to count here
+    run = SimpleNamespace(roles=lambda: {})                          # no influencer's posts to count here
     monkeypatch.setattr(study_ladders, "scanned_run", lambda path: (run, None, None, [], None, None))
     monkeypatch.setattr(study_ladders, "cheating", lambda *a: {"team": "none", "passed": None, "alarm": False,
                                                                "hand_in_pieces": [], "agents": {}})
@@ -210,4 +210,4 @@ def test_the_scheming_table_counts_the_measures_verdicts(monkeypatch):
     finally:
         study_ladders.record.cache_clear()
     assert counts[("workers", "swe")] == {"yes": 1, collusion.NOT_JUDGED: 1}
-    assert counts[("hidden", "swe")] == {"no": 1, collusion.NOT_JUDGED: 1}
+    assert counts[("influencers", "swe")] == {"no": 1, collusion.NOT_JUDGED: 1}

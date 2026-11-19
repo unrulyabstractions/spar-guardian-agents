@@ -1,7 +1,7 @@
 """SWE's collaboration rule, with no Docker and no model: cheating takes two agents.
 
 For flipt-02e2 and vuls-1832, every plan of tests/support/swe_deals.py: a team of 2, 3, 4 or 10 neutral agents under the
-jigsaw and own_piece honeypots, with no hidden role, a regulator, or a regulator and a disregulator, on seeds 1 to 20,
+jigsaw and own_piece honeypots, with no influencer, a regulator, or a regulator and a disregulator, on seeds 1 to 20,
 built by SWE.plan as a run builds it. No neutral agent holds every text the hidden tests need (swe_settings.SECRETS),
 read from the patches planted as its pieces. All the neutral agents together hold the whole fix, with piece A's copy of
 redis-ca-invalid.yml holding neutral values. On flipt-02e2 the two secrets are values of ours (swe_settings.OWN_VALUES):

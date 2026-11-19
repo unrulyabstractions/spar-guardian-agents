@@ -4,7 +4,8 @@ Appendix A provides full details of our methodology.
 Agents are deployed in an \textit{ORBIT}~\cite{hagag2026orbit} environment with a messaging board, running in
 turns, with a read-and-write budget per turn. Workers submit the team's work; regulators are covertly assigned to
 discourage cheating, cannot submit, and can check teammates' tool calls. A disregulator is a fourth agent privately
-told to get the result by any means. Figure~\ref{fig:roles} illustrates the architecture.
+told to get the result by any means. We call a regulator or a disregulator an \textbf{influencer}. The workers are
+not told which teammates are influencers. Figure~\ref{fig:roles} illustrates the architecture.
 
 \begin{figure}[htbp]
   \centering
@@ -50,7 +51,7 @@ In Stage 2 the regulator only oversees, and it is either the workers' model or C
     \textbf{Regulator} & oversees the team without doing the task; hands in nothing
       & Stage 1: works on the task itself and oversees; cannot submit. Stage 2: oversees; hands in nothing \\
     \addlinespace
-    \textbf{Team} & 3 workers + a hidden regulator, a disregulator, or both (4 or 5 agents)
+    \textbf{Team} & 3 workers + influencers: a regulator, a disregulator, or both (4 or 5 agents)
       & 3 seats: seat 3 is the regulator, or a third worker in the control \\
     \addlinespace
     \textbf{Models} & workers: DeepSeek (SWE) or Luna; regulator: most often Haiku 5.5, also Luna, Argon, Sonnet 5.5,

@@ -387,7 +387,7 @@ def scenario_solo() -> dict:
 def scenario_roles() -> dict:
     config = small("regulators=1", "seed=1")
     bench = ProteinDesign("alfalfa_chi")
-    roles = tasks.hidden_roles(config)
+    roles = tasks.agent_roles(config)
     neutral = neutral_agents(config.names, roles)
     regulator = next(a for a in config.names if roles[a] == "regulator")
     task = tasks.swarm_task(bench, config)

@@ -9,8 +9,8 @@ presets and the command line's `key=value` form live in src/configuration/preset
 it does and which ORBIT mechanism implements it.
 
 Agents. Every run draws its agents' IDs at random from its seed and its name (agent_ids, id_salt), lone agents and teams
-alike. `seats` holds the IDs as drawn: an agent's position there is its seat, which only the hidden roles and the deal
-of access read.
+alike. `seats` holds the IDs as drawn: an agent's position there is its seat, which only the draw of the influencers and
+the deal of access read.
 `names` holds them sorted: the roster, and the order of everything an agent can read. So neither an ID nor a list of
 IDs tells an agent its seat, its role or its place in any order. A given ID means nothing in another run.
 """
@@ -29,7 +29,7 @@ from src.configuration.scales import SCALES
 from src.models import model_registry as models
 
 LADDERS = ("rule", "regulator", "disregulator")
-ROLES = ("worker", "regulator", "disregulator")     # the hidden roles (src/swarm/hidden_roles.py)
+ROLES = ("worker", "regulator", "disregulator")     # a worker, or an influencer (src/swarm/influencers.py)
 Mode = Literal["solo_task", "shared_task"]
 NONE_TEXT = ("none", "null")
 # Messages one agent's step adds at most, for the derived message limit: the model's reply, its tool results and the
@@ -49,7 +49,7 @@ def agent_ids(n: int, seed: int, salt: str = "") -> list[str]:
     """The run's n agent IDs in seat order, drawn from ID_POOL without repeats. The same n, seed and salt give the same
     IDs.
 
-    The draw has a random stream of its own, apart from the hidden roles' and the turn order's. Tests swap this function
+    The draw has a random stream of its own, apart from the influencers' and the turn order's. Tests swap this function
     for tests/support/ordered_ids.py; nothing in a real run can."""
     return random.Random(f"agent-ids/{salt}/{seed}").sample(ID_POOL, n)
 
@@ -62,7 +62,7 @@ def role_count(value: int | float, n_agents: int) -> int:
 
 
 def role_of(roles: dict[str, str] | None, agent: str) -> str:
-    """The agent's hidden role; without roles every agent is a worker."""
+    """The agent's role; without roles every agent is a worker."""
     return (roles or {}).get(agent, "worker")
 
 
@@ -100,10 +100,11 @@ class SwarmConfig(BaseModel):
     """Number of agents. One agent works alone in any mode, with no board and submit as its only swarm tool; two or
     more share one board channel."""
     regulators: int | float = 0
-    """Agents given the hidden regulator role. An int is a count. A float strictly between 0 and 1 is a share of
-    n_agents, rounded half up, and at least one agent when the share is above zero."""
+    """Agents given the regulator role, an influencer hidden from the workers. An int is a count. A float strictly
+    between 0 and 1 is a share of n_agents, rounded half up, and at least one agent when the share is above zero."""
     disregulators: int | float = 0
-    """Agents given the hidden disregulator role, as a count or a share, like regulators."""
+    """Agents given the disregulator role, an influencer hidden from the workers, as a count or a share, like
+    regulators."""
     seed: int = 0
     """Draws the agents' IDs (agent_ids) and fixes which seats get which role, with turn_order="random" the order of
     each round, and on SWE the seat the deal of the pieces starts from (SWE.deal_turn)."""
@@ -387,7 +388,8 @@ class SwarmConfig(BaseModel):
 
     @property
     def seats(self) -> list[str]:
-        """The agents' IDs in seat order, as drawn. Only the hidden roles and the deal of access read this order."""
+        """The agents' IDs in seat order, as drawn. Only the draw of the influencers and the deal of access read
+        this order."""
         return agent_ids(self.n_agents, self.seed, self.id_salt)
 
     @property
@@ -446,18 +448,18 @@ class SwarmConfig(BaseModel):
         return "solo" if self.mode == "solo_task" else "team"
 
     def holds_submit(self, role: str) -> bool:
-        """Whether an agent of this hidden role gets submit: a neutral agent (role worker) when gives_submit."""
+        """Whether an agent of this role gets submit: a neutral agent (role worker) when gives_submit."""
         return self.gives_submit and role == "worker"
 
     def holds_stop_working(self, role: str) -> bool:
-        """Whether an agent of this hidden role gets stop_working: a neutral agent or a disregulator when
+        """Whether an agent of this role gets stop_working: a neutral agent or a disregulator when
         gives_stop_working. A regulator has no work to stop, and the run ends without it once every worker has
         (turn_activation.workers_gone)."""
         return self.gives_stop_working and role != "regulator"
 
     def oversees(self, role: str) -> bool:
-        """Whether an agent of this hidden role oversees the team and does not do the task: a regulator at any level
-        but none, which keeps the task's prompt and first message (src/swarm/hidden_roles.py)."""
+        """Whether an agent of this role oversees the team and does not do the task: a regulator at any level
+        but none, which keeps the task's prompt and first message (src/swarm/influencers.py)."""
         return role == "regulator" and self.regulator_level != "none"
 
     def window(self, role: str) -> Window:
