@@ -52,6 +52,7 @@ def test_escape_covers_latex_specials():
 
 @pytest.mark.parametrize("module", ["control_tables", "protein_regulator_table", "swe_regulator_table",
                                     "disregulator_tables", "baseline_tables", "solo_controls_table",
+                                    "coordination_table",
                                     "fig_scripted_teammates", "fig_roles_access", "fig_jigsaw", "fig_multidomain",
                                     "fig_deep_dive"])
 def test_figure_scripts_import(module):

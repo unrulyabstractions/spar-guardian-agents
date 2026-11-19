@@ -8,7 +8,8 @@ paper/generated/ holds what the code defines: params.tex (the board's budgets an
 preset, the judge and its reasoning effort from settings.JUDGE_MODEL and src/judging/judge_models.yaml), scales.tex
 (from src/configuration/scales.py), regulator_suffix.tex (the regulator's common text from
 src/configuration/prompts.yaml and its three report variants), regulator_levels.tex and disregulator_levels.tex (from
-src/configuration/instruction_levels.yaml). Nobody edits these files by hand.
+src/configuration/instruction_levels.yaml) and coordination_levels.tex (the Coordination ladder's levels and cuts, from
+src/measures/coordination.py). Nobody edits these files by hand.
 
 FIGURES names each PNG in paper/figures/, the PNG in tmp/ it is copied from and the make target whose script draws
 it (`make paper-figures`, `make figures`, `make tables`, `make results-tables`). Every figure has a script here.
@@ -32,6 +33,7 @@ from src.configuration.presets import PRESETS
 from src.configuration.scales import SCALES
 from src.configuration.settings import ROOT
 from src.judging.cheatbench_judge import judge_entry
+from src.measures import coordination
 
 PAPER = ROOT / "paper"
 GENERATED = PAPER / "generated"
@@ -103,6 +105,8 @@ FIGURES: dict[str, Figure] = {
                                     RESULTS.format("solo_controls_table.py")),
     "swarm_vs_swarm_told.png": Figure("tmp/tables/results/swarm_vs_swarm_told.png",
                                       RESULTS.format("baseline_tables.py")),
+    "table_coordination_by_task.png": Figure("tmp/tables/results/table_coordination_by_task.png",
+                                             RESULTS.format("coordination_table.py")),
 }
 
 HEADER = "% Written by scripts/paper/paper_sources.py from {source}. Do not edit; run `make paper-sources`.\n"
@@ -195,6 +199,32 @@ def regulator_suffix_tex() -> str:
             + "\n\n\\medskip\n".join(parts) + "\n")
 
 
+def number(value) -> str:
+    """A cut as the paper prints it: 3, 3.5, 0.75."""
+    return f"{float(value):g}"
+
+
+def coordination_levels_tex() -> str:
+    """The Coordination ladder's levels and their conditions, from src/measures/coordination.py's constants."""
+    c = coordination
+    m = r"\bar{M}_i"
+    conditions = {
+        "none": "no read and no post",
+        "read": "a read, no post",
+        "write": rf"a post, ${m} < {number(c.LOW_CUT)}$",
+        "low": rf"${m} \geq {number(c.LOW_CUT)}$",
+        "medium": rf"${m} \geq {number(c.MEDIUM_CUT)}$",
+        "high": rf"${m} \geq \max({number(c.HIGH_SHARE)}\,c_i,\ {number(c.HIGH_FLOOR)})$",
+        "extreme": rf"${m} \geq \max({number(c.EXTREME_SHARE)}\,c_i,\ {number(c.EXTREME_FLOOR)})$",
+    }
+    if tuple(conditions) != tuple(c.LEVELS):
+        raise SystemExit(f"coordination LEVELS {c.LEVELS} differ from the paper's conditions: update both")
+    rows = [rf"{i} & {escape(level)} & {conditions[level]} \\" for i, level in enumerate(c.LEVELS)]
+    return (HEADER.format(source="src/measures/coordination.py LEVELS and cuts")
+            + "\\begin{tabular}{rll}\n\\toprule\nNumber & Level & Condition \\\\\n\\midrule\n"
+            + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n")
+
+
 def model_name(key: str) -> str:
     base = key.removesuffix("-openrouter")
     if base not in MODEL_NAMES:
@@ -264,6 +294,7 @@ def generated_files() -> dict[Path, str]:
         GENERATED / "regulator_suffix.tex": regulator_suffix_tex(),
         GENERATED / "regulator_levels.tex": levels_tex("regulator"),
         GENERATED / "disregulator_levels.tex": levels_tex("disregulator"),
+        GENERATED / "coordination_levels.tex": coordination_levels_tex(),
     }
     if STUDY_INDEX.exists():
         files[GENERATED / "study.tex"] = study_tex()

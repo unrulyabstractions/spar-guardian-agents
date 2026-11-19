@@ -4,7 +4,9 @@ Each agent's ATIF transcript goes through the SDK's convert_atif_to_agent_run. E
 activation, timeline step and turn of the agent step it came from, and the AgentRun gets the run's metadata: the
 judge's verdict where the run was judged, and the code ladder's labels, which every run has (code_rung, the agent's
 rung; team_code_rung and team_collaboration, the team's rung and collaboration level as signals.jsonl stores them).
-The board becomes one AgentRun of its own, one user message per post.
+Each AgentRun also gets the Coordination ladder (src/measures/coordination.py): coordination_level, the agent's level,
+and team_coordination_level, the workers' level. A run recorded before that measure has them computed from its board
+record, never written back. The board becomes one AgentRun of its own, one user message per post.
 """
 from __future__ import annotations
 
@@ -17,6 +19,7 @@ from docent.data_models.chat.message import SystemMessage, UserMessage
 from docent.data_models.transcript import Transcript
 from docent.sdk.integrations import convert_atif_to_agent_run
 
+from src.measures.team_ladder import coordination_fields
 from src.measures.verdict_fields import flag_names
 from src.utils.json_files import read_jsonl
 from tools.run_reader import Post, Run, Step
@@ -33,6 +36,21 @@ def code_ladder(directory: Path) -> tuple[dict[str, dict], dict]:
         stored = json.loads(run_json.read_text()) if run_json.is_file() else {}
         team = (stored.get("signals") or {}).get("team") or {}
     return {row.get("agent"): row for row in rows if row.get("row") == "agent"}, team
+
+
+@functools.cache
+def coordination(directory: Path) -> tuple[dict[str, str | None], str | None]:
+    """The Coordination ladder's levels of a run: each agent's by agent, and the team's. From the code ladder's rows
+    where they hold them, else computed from the run's board record (a run recorded before the measure). Empty for a
+    folder without run.json."""
+    agents, team = code_ladder(directory)
+    if "coordination_level" in team and all("coordination_level" in row for row in agents.values()):
+        return {agent: row["coordination_level"] for agent, row in agents.items()}, team["coordination_level"]
+    if not (directory / "run.json").is_file():
+        return {}, None
+    by_agent, team_fields = coordination_fields(directory)
+    levels = {agent: fields["coordination_level"] for agent, fields in by_agent.items()}
+    return levels, team_fields["coordination_level"]
 
 
 def run_agent_runs(run: Run, with_board: bool) -> list[AgentRun]:
@@ -94,6 +112,7 @@ def agent_metadata(run: Run, agent: str) -> dict:
         "holds": run.exploit.get("holds", {}).get(agent, []),
         "access": (access.get("agents") or {}).get(agent, {}),
         "code_rung": (code_ladder(run.directory)[0].get(agent) or {}).get("rung"),
+        "coordination_level": coordination(run.directory)[0].get(agent),
         **{field: judge.get(field) for field in flag_names(run.task)},
         "judge_summary": judge.get("summary"),
         "judge": judge,
@@ -115,6 +134,7 @@ def run_fields(run: Run) -> dict:
     return {
         "team_code_rung": team.get("rung"),
         "team_collaboration": team.get("collaboration"),
+        "team_coordination_level": coordination(run.directory)[1],
         "domain": run.domain,
         "task": run.task,
         "model": run.model,

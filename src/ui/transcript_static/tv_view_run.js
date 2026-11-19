@@ -13,7 +13,7 @@ import { ROLE_ORDER, roleIcon } from '/static/app/charts.js';
 import { COLLAB_MEANING, COLLAB_ORDER, JUDGES, RUNG_MEANING, RUNG_ORDER, ROLE_LABEL, STATUS, armLabel,
   collectionOf, modelLabel, taskLabel } from './tv_labels.js';
 import { cheatLabelBadge, yesNo } from './tv_view_index.js';
-import { levelsPanel } from './tv_levels.js';
+import { coordinationPanel, levelsPanel } from './tv_levels.js';
 import { fullLegend, renderCase } from './tv_case_view.js';
 
 const PRESENTATION_KIND = { disclosed: 'good', silent: 'warn', passed_off: 'bad', none: 'plain' };
@@ -386,6 +386,7 @@ export async function viewRun(id, q, view) {
   }
   if (multi) tabs.set('team', h('button', { type: 'button', class: 'rp-tab', onclick: () => selectTab('team') }, 'Team'));
   const teamView = h('div', { class: 'rp-team' }, d.levels ? levelsPanel(d.levels, roles, row.task_name) : null,
+    d.levels ? coordinationPanel(d.levels, roles) : null,
     d.levels ? h('section', { class: 'card' }, h('h2', null, 'Colour legend'), fullLegend(d.levels.ladders, d.levels.order)) : null, boardCard);
   async function selectTab(key) {
     current = key;

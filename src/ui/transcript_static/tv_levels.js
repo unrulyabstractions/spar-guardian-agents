@@ -38,3 +38,42 @@ export function levelsPanel(lv, roles, task) {
       h('a', { href: '#/ladders?task=' + encodeURIComponent(task || '') }, 'All ladders and the level by task tables')),
     h('table', { class: 'lv-table' }, h('thead', null, head), h('tbody', null, rows)));
 }
+
+const fix2 = v => (v == null ? '' : Number(v).toFixed(2));
+const coordChip = (lv, level) => {
+  const L = lv.ladders.coord;
+  const i = L.levels.indexOf(level);
+  return level == null ? h('span', { class: 'muted small' }, 'not applicable')
+    : h('span', { class: 'lv-cell' }, glyph(i, L.levels.length - 1, 'coord'), h('b', { class: 'lv-name' }, level), h('span', { class: 'lv-rank' }, ` (${i} of ${L.levels.length - 1})`));
+};
+
+/** Team tab: the Coordination ladder in full (src/measures/coordination.py). The team's level is the workers' mean;
+ * the hidden roles' own levels are listed apart and never enter it. One row per agent with its posts, its rounds per
+ * teammate and the rounds its posts allow, and one row per pair with its rounds. */
+export function coordinationPanel(lv, roles) {
+  const C = lv.coordination;
+  if (!C) return null;
+  const L = lv.ladders.coord;
+  const role = a => roles[a] || 'worker';
+  const hidden = Object.entries(C.hidden || {});
+  const agents = Object.entries(C.agents).sort((a, b) => (role(a[0]) !== 'worker') - (role(b[0]) !== 'worker') || a[0].localeCompare(b[0]));
+  return h('section', { class: 'card', id: 'sec-coord' },
+    h('h2', null, 'Coordination on the board'),
+    h('div', { class: 'coord-summary' },
+      h('div', null, h('span', { class: 'field-label' }, 'Team (the workers\' levels averaged, rounded half up): '), coordChip(lv, C.team)),
+      h('div', null, h('span', { class: 'field-label' }, 'Hidden roles, kept out of the team\'s level: '),
+        hidden.length ? hidden.map(([a, level], i) => [i ? '; ' : '', h('span', { class: 'mono' }, a), ` (hidden ${role(a)}) `, coordChip(lv, level)])
+          : h('span', { class: 'muted small' }, 'none in this run'))),
+    h('div', { class: 'table-wrap' }, h('table', { class: 'data compact coord-table' },
+      h('thead', null, h('tr', null, ['Agent', 'Role', 'Posts', 'Read a teammate\'s post', 'Rounds per teammate', 'Rounds its posts allow', 'Level']
+        .map(t => h('th', { scope: 'col' }, t)))),
+      h('tbody', null, agents.map(([a, r]) => h('tr', { class: role(a) !== 'worker' && 'coord-hidden' },
+        h('td', { class: 'mono' }, a), h('td', null, role(a) === 'worker' ? 'worker' : `hidden ${role(a)}`),
+        h('td', { class: 'num' }, String(r.posts)), h('td', null, r.read ? 'yes' : 'no'),
+        h('td', { class: 'num' }, fix2(r.mbar)), h('td', { class: 'num' }, fix2(r.ceiling)), h('td', null, coordChip(lv, r.level))))))),
+    C.pairs && C.pairs.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'data compact coord-pairs' },
+      h('thead', null, h('tr', null, h('th', { scope: 'col' }, 'Pair'), h('th', { scope: 'col' }, 'Rounds (the smaller of the two directions)'))),
+      h('tbody', null, C.pairs.map(p => h('tr', null, h('td', { class: 'mono' }, p.agents.join(' and ')), h('td', { class: 'num' }, String(p.rounds))))))) : null,
+    h('p', { class: 'small muted' }, L.rule),
+    L.note ? h('p', { class: 'small muted' }, L.note) : null);
+}

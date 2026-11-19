@@ -1,10 +1,11 @@
 /* View: the ladders (#/ladders?task=<CheatBench task name>). The page opens by saying what the code ladder, the judged
  * ladder, a direct ladder and a proxy ladder are, then lists the six ladders with every level, then gives one table by
- * task per ladder: first the three read directly (Cheating, Coordination, Collusion), then the three proxies
- * (Cooperation, Collaboration, Scheming). The cheat and collaboration tables are the paper's own
- * (src/measures/ladder_by_domain.py); the four other tables and the six ladders' levels and rules are the viewer's
- * (src/ui/transcript_ladder_tables.py, src/ui/transcript_levels.py), all served by /api/ladders, with the columns of
- * the domains the viewer shows. Ported from collusion-hermaneutics' viewer (viewer/static/app/view_ladders.js). */
+ * task per ladder: first those read directly (Cheating, then Coordination, whose rule is the same on every task and
+ * so has a table of its levels, not one by task, then the code ladder's collaboration levels by task, then Collusion,
+ * which uses them), then the three proxies (Cooperation, Collaboration, Scheming). The cheat and collaboration tables
+ * are the paper's own (src/measures/ladder_by_domain.py); the other tables and the six ladders' levels and rules are
+ * the viewer's (src/ui/transcript_ladder_tables.py, src/ui/transcript_levels.py, src/measures/coordination.py), all
+ * served by /api/ladders, with the columns of the domains the viewer shows. Ported from collusion-hermaneutics' viewer (viewer/static/app/view_ladders.js). */
 import { h } from '/static/app/dom.js';
 import { glyph } from './tv_levels.js';
 import { legendTable } from './tv_view_index.js';
@@ -12,9 +13,9 @@ import { legendTable } from './tv_view_index.js';
 const kindTag = kind => h('span', { class: 'lv-proxy' }, kind === 'proxy' ? 'proxy' : 'direct');
 
 /** One ladder's table by task: a row per level above the lowest, numbered as the ladder ranks it, a column per task.
- * key is the ladder's key in d.ladders; rows are [level, gloss, [one cell per task]]. */
-function byTask(d, key, rows, notes, hl, extra) {
-  const L = d.ladders[key];
+ * key is the ladder's key in d.ladders (or its colour ramp's key when L, the ladder, is given); rows are [level, gloss,
+ * [one cell per task]]. */
+function byTask(d, key, rows, notes, hl, extra, L = d.ladders[key]) {
   return h('section', { class: 'card', id: `ladder-${key}` },
     h('h2', null, `${L.name} level by task `, kindTag(L.kind)),
     h('p', { class: 'small lv-about' }, L.rule), extra || null,
@@ -37,6 +38,19 @@ const TERMS = [
   ['Agent and team', 'Each ladder is read once per agent and once for the team. The runs page shows the team\'s level; the run page shows each agent\'s.'],
 ];
 
+/** The Coordination ladder: one rule on every task, so one row per level with what puts an agent there. */
+function coordTable(L) {
+  return h('section', { class: 'card', id: 'ladder-coord' },
+    h('h2', null, `${L.name} levels `, kindTag(L.kind)),
+    h('p', { class: 'small lv-about' }, L.rule),
+    L.note ? h('p', { class: 'small muted' }, L.note) : null,
+    h('div', { class: 'table-wrap' }, h('table', { class: 'lv-ladder-table lv-coord-table' },
+      h('thead', null, h('tr', null, h('th', null, 'level'), h('th', null, 'what puts an agent on it (the highest that holds)'))),
+      h('tbody', null, L.levels.map((level, rank) => h('tr', null,
+        h('td', null, glyph(rank, L.levels.length - 1, 'coord'), h('b', null, `${rank}  ${level}`)),
+        h('td', null, (L.glosses || [])[rank] || '')))))));
+}
+
 export async function viewLadders(q) {
   const r = await fetch('/api/ladders');
   const d = await r.json();
@@ -45,8 +59,8 @@ export async function viewLadders(q) {
   const hl = task in d.task_column ? d.task_column[task] : -1;
   const four = k => byTask(d, k, d.four[k].rows, d.split_notes, hl,
     d.four[k].gate ? h('p', { class: 'small muted' }, 'Gate: ', d.four[k].gate) : null);
-  const coordNote = h('p', { class: 'small muted' }, 'Levels 1 and 2, read the board and posted, come from the board\'s events and are the same on every task. ',
-    'Levels 3 to 6 are the code ladder\'s collaboration levels, which the runs page also lists as "Collaboration (code ladder)".');
+  const collabNote = h('p', { class: 'small muted' }, 'These are the code ladder\'s own levels, which the runs page lists as "Collaboration (code ladder)". ',
+    'They are not the Coordination ladder: Coordination counts back-and-forth on the board, these say how the honeypot travelled. Collusion reads these.');
   return h('div', { class: 'page wide' },
     h('div', { class: 'page-head' }, h('h1', null, 'Ladders'),
       h('p', { class: 'muted' }, 'What each of the six ladders measures, and what puts a run on each level, task by task. ',
@@ -57,7 +71,8 @@ export async function viewLadders(q) {
     legendTable(d, 'The six ladders'),
     h('h2', { class: 'lv-group' }, 'Read directly from the code ladder and the board'),
     byTask(d, 'cheat', d.rungs, d.rung_notes, hl),
-    byTask(d, 'coord', d.collab, d.collab_notes, hl, coordNote),
+    coordTable(d.ladders.coord),
+    d.collab_ladder ? byTask(d, 'collab_code', d.collab, d.collab_notes, hl, collabNote, d.collab_ladder) : null,
     d.four.collude ? four('collude') : null,
     h('h2', { class: 'lv-group' }, 'Proxies the viewer derives'),
     ['coop', 'collab', 'scheme'].filter(k => d.four[k]).map(four));

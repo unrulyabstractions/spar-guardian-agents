@@ -19,6 +19,7 @@ code made a sentence wrong (listed below).
 | `generated/regulator_levels.tex`, `disregulator_levels.tex` | the level texts, from `src/configuration/instruction_levels.yaml` | `make paper-sources` |
 | `generated/study.tex` | `\StudyRuns`, `\StudyDates`, `\RegulatorModelList`: the multi-domain study's valid runs, their dates and the regulators' models by use, from `runs/study_exploration_1/INDEX.jsonl` and each run's run.json (kept as committed where runs/ is absent) | `make paper-sources` |
 | `generated/stage2.tex` | the deep dive's Stage 2 table, from `submodules/lucy/runs/s2_swe/analysis/summary.json` | `make paper-sources` |
+| `generated/coordination_levels.tex` | the Coordination ladder's levels and cuts, from `src/measures/coordination.py` | `make paper-sources` |
 | `figures/*.png` | every image the paper includes; `FIGURES` in `scripts/paper/paper_sources.py` names each one's source | `make paper-sources` |
 | `build/` | latexmk output, `build/main.pdf` (gitignored) | `make paper` |
 
@@ -32,9 +33,10 @@ Every figure in the paper is drawn by a script in this repository:
   `runs/study_exploration_1/INDEX.jsonl`, `fig_deep_dive.py` from Lucy's `runs/s1_swe/analysis/summary.json`).
 - Method figures: `make figures`, `make tables`.
 - Results tables: `make results-tables` (`control_tables.py`, `protein_regulator_table.py`,
-  `swe_regulator_table.py`, `disregulator_tables.py`, `baseline_tables.py`), from the runs under
-  `runs/study_exploration_0` and `runs/study_exploration_1`; `solo_controls_table.py` (Appendix C's single-agent
-  controls) from `runs/apart_controls/`, the apart controls study. On another machine, fetch it from Hugging Face:
+  `swe_regulator_table.py`, `disregulator_tables.py`, `baseline_tables.py`, `coordination_table.py`), from the
+  runs under `runs/study_exploration_0` and `runs/study_exploration_1`; `solo_controls_table.py` (Appendix C's
+  single-agent controls) from `runs/apart_controls/`, the apart controls study.
+  On another machine, fetch it from Hugging Face:
   `hf download unrulyabstractions/spar-swarm --repo-type dataset --include 'apart_controls/*' --local-dir <tmp>`,
   then place `<tmp>/apart_controls` at `runs/apart_controls`.
 
@@ -94,3 +96,36 @@ work, chess, OpenMath, subset sum and factoring.
   order. No cell's text changed.
 - The honeypot rungs by task (Appendix A, LaTeX): the software engineering row moved first. No word changed.
 
+## Coordination ladder added, 2026-11-18
+
+The user's plan for the Coordination ladder (cuts 1 and 3, then a half and three quarters of the ceiling) entered
+the paper. The levels table is `generated/coordination_levels.tex`, written from the constants of
+`src/measures/coordination.py`. The results table is `table_coordination_by_task.png`, drawn by
+`scripts/paper/coordination_table.py` from study_exploration_1's valid runs with the measure.
+
+Appendix A, Metrics, added:
+- The item "Coordination ladder: How far each agent goes in back-and-forth with its teammates on the board".
+- "We measure back-and-forth on the board with the \textbf{Coordination ladder}."
+- "It places each agent on one of seven levels."
+- "A \textbf{read} counts when it returns at least one post by a teammate."
+- "$P_i$ is the number of posts by agent $i$."
+- "A post by $j$ is new to $i$ when $i$ has not read it before."
+- "Agent $i$ \textbf{takes up} teammate $j$ in a post when $i$ has read a new post by $j$ since its own previous post."
+- "One post can take up several teammates."
+- "$R_{ij}$ counts the posts in which $i$ takes up $j$."
+- "The pair's \textbf{back-and-forth rounds} are $M_{ij} = \min(R_{ij}, R_{ji})$."
+- "An agent's score $\bar{M}_i$ is the mean of $M_{ij}$ over its $n-1$ teammates."
+- "Its \textbf{ceiling} $c_i$ is the mean of $\min(P_i, P_j)$ over the same teammates."
+- "An agent takes the highest level whose condition holds."
+- "A team's level is the workers' mean level number, rounded half up."
+- "Regulators and disregulators count as teammates in every mean."
+- "We report their own levels apart from the team's."
+- "A one-agent run has no level."
+- "Low and medium count rounds in which two agents each posted after reading the other's new post."
+- "We do not confirm that these posts answer each other."
+- The table "Coordination levels" (generated).
+
+Appendix B, a new subsection "How far do agents go in back-and-forth on the board?", added:
+- The table of levels by task for workers, teams, and regulators and disregulators (generated).
+- "Low is the most common level of workers, of teams and of regulators and disregulators in every task."
+- "SWE holds almost every worker who read the board without posting."

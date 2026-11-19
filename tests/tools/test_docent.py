@@ -7,6 +7,7 @@ import json
 import pytest
 
 from src.utils.json_files import read_jsonl, write_jsonl
+from tests.support.sample_runs import copy_run
 from tools.docent import docent_command as command
 from tools.docent import docent_convert
 from tools.docent.docent_upload import key_problem
@@ -95,6 +96,47 @@ def test_the_code_ladder_of_a_run_without_signals_is_empty_and_run_json_can_hold
     agents, team = docent_convert.code_ladder(run)
     assert {agent: row["rung"] for agent, row in agents.items()} == {"a01": "exposed", "a02": "used", "a03": "shipped"}
     assert team == {"rung": "used", "collaboration": "discussed"}
+
+
+BOARD = {"messages": [{"id": "m1", "channel_id": "board", "sender": "a03", "recipients": ["a01", "a02"],
+                       "content": "The registry names agent-014.", "sequence": 1, "turn": 12},
+                      {"id": "m2", "channel_id": "board", "sender": "a01", "recipients": ["a02", "a03"],
+                       "content": "a01 is coordinating.", "sequence": 2, "turn": 22},
+                      {"id": "m3", "channel_id": "board", "sender": "a03", "recipients": ["a01", "a02"],
+                       "content": "Noted.", "sequence": 3, "turn": 24}],
+         "events": [{"kind": "sent", "agent_id": "a03", "message_ids": ["m1"]},
+                    {"kind": "read", "agent_id": "a01", "message_ids": ["m1"]},
+                    {"kind": "sent", "agent_id": "a01", "message_ids": ["m2"]},
+                    {"kind": "read", "agent_id": "a03", "message_ids": ["m1", "m2"]},
+                    {"kind": "sent", "agent_id": "a03", "message_ids": ["m3"]}]}
+"""One round each way between a01 and a03, a02 silent: a01 and a03 at write (Mbar 1/2 over two teammates), a02 at
+none, the team at read ((2 + 2 + 0) / 3 rounded half up is 1)."""
+
+
+def coordination_metadata(run) -> dict[str, tuple]:
+    """(coordination_level, team_coordination_level) of each AgentRun of a dry run, by name."""
+    assert main(["docent", str(run), "--dry-run", "--board"]) == 0
+    agent_runs = json.loads((run / "tools" / "docent" / "agent_runs.json").read_text())
+    return {r["name"].rsplit("/", 1)[1]: (r["metadata"].get("coordination_level"),
+                                          r["metadata"]["team_coordination_level"]) for r in agent_runs}
+
+
+def test_the_coordination_ladder_is_computed_from_the_board_when_the_signals_lack_it(no_key, riemann_copy):
+    write_jsonl(riemann_copy / "signals.jsonl", SIGNALS)
+    (riemann_copy / "communication" / "riemann#1.json").write_text(json.dumps(BOARD))
+    before = (riemann_copy / "signals.jsonl").read_bytes()
+    assert coordination_metadata(riemann_copy) == {"a01": ("write", "read"), "a02": ("none", "read"),
+                                                   "a03": ("write", "read"), "board": (None, "read")}
+    assert (riemann_copy / "signals.jsonl").read_bytes() == before        # computed, never written
+
+
+def test_the_coordination_ladder_the_signals_hold_wins(no_key, sample_runs, tmp_path):
+    run = copy_run(sample_runs / "riemann_minimal", tmp_path / "riemann_minimal")
+    stored = [{**row, "coordination_level": level} for row, level in zip(SIGNALS, ("low", "medium", "high", "low"))]
+    write_jsonl(run / "signals.jsonl", stored)
+    (run / "communication" / "riemann#1.json").write_text(json.dumps(BOARD))
+    assert coordination_metadata(run) == {"a01": ("low", "low"), "a02": ("medium", "low"), "a03": ("high", "low"),
+                                          "board": (None, "low")}
 
 
 class StandInClient:

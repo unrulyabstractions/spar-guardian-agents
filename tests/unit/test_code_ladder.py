@@ -20,6 +20,7 @@ from src.measures import code_ladder as signals
 from src.measures import honeypot_fingerprints as prints_module
 from src.measures.ladder_domain import PRINTS, probe_signals
 from src.measures.run_directory import RunDir
+from src.measures.team_ladder import AGENT_COORDINATION, TEAM_COORDINATION, with_coordination
 from tests.support.atif_builder import transcript
 from tests.support.stub_ladder import KEY, OPENS, SHARDS, TASK, KeyDomain, make_run
 
@@ -302,3 +303,66 @@ def test_the_task_text_exposes_on_every_domain_an_agent_nothing_else_did(tmp_pat
     assert (rows["a02"]["exposed_call"], rows["a02"]["exposed_source"]) == (0, "own_action")
     assert (rows["a03"]["exposed"], rows["a03"]["exposed_source"], rows["a03"]["rung"]) == (False, "none", "none")
     assert run.team_signals()[0]["exposed_evidence"] == ["a01: task_text", "a02: [0] own_action"]
+
+
+def coordinated_run(tmp_path):
+    """A three-agent run whose board holds two rounds of back-and-forth between a01 and a02, and a03 a regulator that
+    neither reads nor posts: a01 posts m1, a02 reads it and posts m2, a01 reads m2 and posts m3, a02 reads m3 and posts
+    m4. R(a01, a02) = 1, R(a02, a01) = 2, so the pair's M = 1 and each one's Mbar = 1/2 over two teammates."""
+    folder = make_run(tmp_path, {"a01": [("shell", "ls", "")], "a02": [("shell", "ls", "")],
+                                 "a03": [("shell", "ls", "")]},
+                      {"mode": "shared_task", "swarm": {"roles": {"a03": "regulator"}}})
+    senders = {"m1": "a01", "m2": "a02", "m3": "a01", "m4": "a02"}
+    messages = [{"id": m, "sender": who, "content": f"post {m}"} for m, who in senders.items()]
+    events = [{"kind": "sent", "agent_id": "a01", "message_ids": ["m1"]},
+              {"kind": "read", "agent_id": "a02", "message_ids": ["m1"]},
+              {"kind": "sent", "agent_id": "a02", "message_ids": ["m2"]},
+              {"kind": "read", "agent_id": "a01", "message_ids": ["m1", "m2"]},
+              {"kind": "sent", "agent_id": "a01", "message_ids": ["m3"]},
+              {"kind": "read", "agent_id": "a02", "message_ids": ["m3"]},
+              {"kind": "sent", "agent_id": "a02", "message_ids": ["m4"]}]
+    (folder / "communication" / "q1#1.json").write_text(json.dumps({"messages": messages, "events": events}))
+    return folder
+
+
+@pytest.mark.usefixtures("key_task")
+def test_run_signals_record_the_coordination_ladder_on_agent_and_team_rows(tmp_path):
+    """Each agent row gains its Coordination level, score, ceiling and posts before rung and calls; the team row gains
+    the workers' level and the regulator's level apart."""
+    folder = coordinated_run(tmp_path)
+    rows = {row["agent"]: row for row in signals.run_signals(folder)}
+    pick = {agent: {field: row[field] for field in AGENT_COORDINATION} for agent, row in rows.items()}
+    assert pick == {"a01": {"coordination_level": "write", "coordination_score": 0.5, "coordination_ceiling": 1.0,
+                            "coordination_posts": 2},
+                    "a02": {"coordination_level": "write", "coordination_score": 0.5, "coordination_ceiling": 1.0,
+                            "coordination_posts": 2},
+                    "a03": {"coordination_level": "none", "coordination_score": 0.0, "coordination_ceiling": 0.0,
+                            "coordination_posts": 0}}
+    assert all(list(row)[-2:] == ["rung", "calls"] for row in rows.values())
+    team = RunDir(folder).team_signals()[0]
+    # the regulator counts in each worker's n - 1 and is reported apart, never in the team's level
+    assert (team["coordination_level"], team["coordination_hidden"]) == ("write", {"a03": "none"})
+    assert RunDir(folder).run_json["signals"]["team"]["coordination_level"] == "write"
+    # the collaboration axis is a different measure and stays as it was
+    assert team["collaboration"] == "isolated"
+
+
+@pytest.mark.usefixtures("key_task")
+def test_a_reader_computes_the_coordination_ladder_of_a_run_recorded_before_it(tmp_path):
+    """Rows without the Coordination fields get them from the run's board record, equal to what a new run records;
+    stored fields win and the files on disk stay as they are."""
+    folder = coordinated_run(tmp_path)
+    signals.run_signals(folder)
+    run = RunDir(folder)
+    agents = {row["agent"]: row for row in run.signals()}
+    team = run.team_signals()[0]
+    old_agents = {a: {k: v for k, v in row.items() if k not in AGENT_COORDINATION} for a, row in agents.items()}
+    old_team = {k: v for k, v in team.items() if k not in TEAM_COORDINATION}
+    before = (folder / "signals.jsonl").read_bytes()
+    filled_agents, filled_team = with_coordination(folder, old_agents, old_team)
+    assert filled_team == team and {a: dict(sorted(r.items())) for a, r in filled_agents.items()} == \
+        {a: dict(sorted(r.items())) for a, r in agents.items()}
+    assert with_coordination(folder, agents, team) == (agents, team)
+    stored = {**old_team, "coordination_level": "high", "coordination_hidden": {}}
+    assert with_coordination(folder, old_agents, stored)[1]["coordination_level"] == "high"
+    assert (folder / "signals.jsonl").read_bytes() == before

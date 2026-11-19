@@ -14,6 +14,7 @@ from src.domains.swe.swe_ladder import shows_no_file
 from src.measures import code_ladder
 from src.measures.run_directory import ACCESS_LOG, RUN_JSON, SIGNALS, RunDir
 from src.measures.shell_commands import file_counted, git_names_only, git_shows_content, stage_of
+from src.measures.team_ladder import AGENT_COORDINATION, TEAM_COORDINATION
 from src.utils.json_files import read_json, write_jsonl
 from tests.support.atif_builder import transcript
 from tests.support.stub_ladder import KEY, OPENS, SHARDS, TASK, KeyDomain, make_run
@@ -755,18 +756,28 @@ def frozen_run(root: Path, **run) -> Path:
     return make_run(root, FROZEN_CALLS, {"mode": "shared_task", **run}, posts=FROZEN_POSTS)
 
 
+def without_coordination(path: Path) -> list[str]:
+    """signals.jsonl's lines with the Coordination fields taken out, which the ladder added after the frozen file was
+    written; every other key keeps its value and its place."""
+    added = {*AGENT_COORDINATION, *TEAM_COORDINATION}
+    return [json.dumps({k: v for k, v in json.loads(line).items() if k not in added})
+            for line in path.read_text().splitlines()]
+
+
 def test_a_run_with_no_block_keeps_its_bytes(key_task, tmp_path):
-    """tests/support/frozen_signals.jsonl was written by the ladder before the access log existed."""
+    """tests/support/frozen_signals.jsonl was written by the ladder before the access log existed, and before the
+    Coordination fields, which are all a new run adds to it."""
     folder = frozen_run(tmp_path)
     code_ladder.run_signals(folder)
-    assert (folder / SIGNALS).read_bytes() == FROZEN.read_bytes()
+    assert without_coordination(folder / SIGNALS) == without_coordination(FROZEN)
+    assert without_coordination(FROZEN) == FROZEN.read_text().splitlines()
     assert not (folder / ACCESS_LOG).exists()
 
 
 def test_the_switch_off_reads_the_transcript_alone(key_task, tmp_path):
     folder = frozen_run(tmp_path, access_log={"status": "off"})
     code_ladder.run_signals(folder)
-    assert (folder / SIGNALS).read_bytes() == FROZEN.read_bytes()
+    assert without_coordination(folder / SIGNALS) == without_coordination(FROZEN)
 
 
 def test_the_report_of_a_run_with_no_block_prints_no_log_line(key_task, tmp_path):

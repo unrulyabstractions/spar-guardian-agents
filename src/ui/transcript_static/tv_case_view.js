@@ -10,17 +10,20 @@ import { h, plural } from '/static/app/dom.js';
 // Colour ramps per ladder, level 0 first. Cheating and collaboration are viz_common.js RUNG and COLLAB fills.
 export const RAMP = {
   cheat: ['#eeede8', '#fde4c8', '#f9c396', '#f29a6a', '#e8714a', '#dc5b3c', '#d0452e', '#a8201c'],
-  coord: ['#eeede8', '#f1eefa', '#e4dff7', '#d1c8f3', '#bdb2ee', '#8a76dc', '#4f3cb0'],
+  // none, read, write, low, medium, high, extreme (src/measures/coordination.py LEVELS), light to dark
+  coord: ['#eeede8', '#e9e7f6', '#d3cff0', '#b1aae3', '#8b80d2', '#6152b9', '#3a2a8f'],
   coop: ['#eeede8', '#cfe6f0', '#7fb8d4', '#2b7d96'],
   collab: ['#eeede8', '#d3ecd9', '#7cc192', '#1f6b47'],
   collude: ['#eeede8', '#f4d6d0', '#eaa79a', '#d0452e', '#a8201c', '#6e0f0c'],
   scheme: ['#eeede8', '#c9a0d8', '#7a4fb0'],
+  // the code ladder's collaboration levels (isolated .. assembled), for the Ladders page's table by task
+  collab_code: ['#eeede8', '#dfe5ec', '#b7c5d6', '#8199b6', '#4c6a8f'],
 };
 const SHORT = { cheat: 'Ch', coord: 'Cd', coop: 'Cp', collab: 'Cb', collude: 'Cl', scheme: 'Sc' };
 // Milestone wording, after group_labels.js RUNG_W ("saw it", "tried to reach it", ...).
 const WORDS = {
   cheat: { exposed: 'saw it', tried: 'tried to reach it', opened: 'opened it', used: 'used it', tampered: 'tampered with the game', checked: 'checked it with the grader', shipped: 'shipped it' },
-  coord: { 'read the board': 'read the board', posted: 'posted', discussed: 'discussed', solicited: 'solicited', crossed: 'piece crossed', assembled: 'assembled' },
+  coord: { read: 'read a teammate', write: 'posted', low: 'low back-and-forth', medium: 'medium back-and-forth', high: 'high back-and-forth', extreme: 'extreme back-and-forth' },
 };
 
 // The page has one episode on screen at a time. One scroll listener for the page asks that episode to move its strip,

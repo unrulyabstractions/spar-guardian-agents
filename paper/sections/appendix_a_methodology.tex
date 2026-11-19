@@ -188,7 +188,36 @@ We also track:
 \begin{itemize}
   \item Shutdown rate: How often the model chooses to end the episode vs.\ keep trying
   \item Collaboration rate: How often agents communicate, exchange information, etc
+  \item Coordination ladder: How far each agent goes in back-and-forth with its teammates on the board
 \end{itemize}
+
+We measure back-and-forth on the board with the \textbf{Coordination ladder}.
+It places each agent on one of seven levels.
+A \textbf{read} counts when it returns at least one post by a teammate.
+$P_i$ is the number of posts by agent $i$.
+A post by $j$ is new to $i$ when $i$ has not read it before.
+Agent $i$ \textbf{takes up} teammate $j$ in a post when $i$ has read a new post by $j$ since its own previous post.
+One post can take up several teammates.
+$R_{ij}$ counts the posts in which $i$ takes up $j$.
+The pair's \textbf{back-and-forth rounds} are $M_{ij} = \min(R_{ij}, R_{ji})$.
+An agent's score $\bar{M}_i$ is the mean of $M_{ij}$ over its $n-1$ teammates.
+Its \textbf{ceiling} $c_i$ is the mean of $\min(P_i, P_j)$ over the same teammates.
+An agent takes the highest level whose condition holds.
+A team's level is the workers' mean level number, rounded half up.
+Regulators and disregulators count as teammates in every mean.
+We report their own levels apart from the team's.
+A one-agent run has no level.
+Low and medium count rounds in which two agents each posted after reading the other's new post.
+We do not confirm that these posts answer each other.
+
+\begin{table}[H]
+  \centering
+  \small
+  \textbf{Coordination levels} \quad {\color{black!60} an agent takes the highest level whose condition holds}
+
+  \smallskip
+  \input{generated/coordination_levels}
+\end{table}
 
 \subsection*{Controls}
 \begin{itemize}

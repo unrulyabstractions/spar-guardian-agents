@@ -42,6 +42,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from src.configuration.settings import ROOT
+from src.measures import coordination
 from src.measures.run_directory import GROUPS, RunDir, run_name, study_runs
 from src.measures.rungs import RUNGS
 from src.ui import transcript_ladder_tables, transcript_levels
@@ -53,7 +54,7 @@ STATIC = HERE / "transcript_static"
 BROWSER_STATIC = HERE / "static"
 CACHE = ROOT / "tmp" / "transcript_viewer" / "index.json"
 SKIP = ("study_smoke",)
-INDEX_VERSION = 1
+INDEX_VERSION = 2  # 2: the Coordination ladder of src/measures/coordination.py, and the hidden roles' own level
 DEFAULT_PORT = 8770
 
 COLLECTION_ABOUT = {
@@ -250,9 +251,15 @@ class RunFiles:
     def boards(self) -> list[dict]:
         return board_view(self.path, (self.run_json.get("rules") or {}).get("timeline") or [], self.roles)
 
+    def records(self) -> list[dict]:
+        """The board's record as stored, communication/<sample>.json in name order, which the Coordination ladder
+        reads (src/measures/coordination.py run_coordination reads the same files the same way)."""
+        folder = self.path / coordination.COMMUNICATION
+        return [read_json(p) or {} for p in sorted(folder.glob("*.json"))] if folder.is_dir() else []
+
     def levels(self, boards: list[dict] | None = None) -> dict:
         return transcript_levels.compute(self.team, self.sig_agents, self.episodes,
-                                         self.boards() if boards is None else boards, self.roles)
+                                         self.boards() if boards is None else boards, self.roles, self.records())
 
 
 def judge_rows(run_dir: Path, name: str, episodes: list[dict]) -> dict[str, dict]:
