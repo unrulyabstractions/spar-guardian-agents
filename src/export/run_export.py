@@ -39,7 +39,7 @@ branches and the archive), the domain's own blocks (Benchmark.run_blocks: "openm
 agents, remote, shared), "delivery" (the stop-after-delivery record), "access_log" (the access log's status, for a run
 that recorded the switch: src/export/_export_access_log.py); and an episode's "access", the domain's facts
 (Benchmark.episode_facts) and "delivery" (the round and working step at which its deliverable was first seen). The
-export never writes run.json "signals": the code ladder (src/measures/code_ladder.py) adds it after the export.
+export never writes run.json "signals": the code record (src/measures/code_ladder.py) adds it after the export.
 
 Episode ids: "<sample>#<epoch>" for a single agent, "<sample>#<epoch>@<agent>" otherwise (export_episodes.episode_id).
 Verdicts come from the `verdicts` argument ({episode: verdict}, when re-judging) or from the cheatbench_judge score in
@@ -186,11 +186,11 @@ def refuse_replacing(run_dir: Path, eval_id: str | None) -> None:
 
 def write_run(eval_log_path: Path, run_dir: Path, *, verdicts: dict[str, dict] | None = None,
               replace: bool = False) -> dict:
-    """Write the run directory for one eval log, which holds one sample; return a short summary of what was written.
-    A log of several samples (inspect eval --epochs) is refused: run.json and the code ladder describe one. A directory
-    that holds another eval's run is refused before anything is written (refuse_replacing). With replace, that earlier
-    run is set aside into runs/<study>/attempts/<name>.<n>/ first, its eval log and figures with it; the log being
-    exported stays where it is."""
+    """Write the run directory for one eval log, which holds one sample; return a short summary of what was written. A
+    log of several samples (inspect eval --epochs) is refused: run.json and the code's evidence describe one. A
+    directory that holds another eval's run is refused before anything is written (refuse_replacing). With replace, that
+    earlier run is set aside into runs/<study>/attempts/<name>.<n>/ first, its eval log and figures with it; the log
+    being exported stays where it is."""
     eval_path = Path(eval_log_path)
     log = read_eval_log(str(eval_path), resolve_attachments=True)
     if len(log.samples or []) > 1:

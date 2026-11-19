@@ -33,6 +33,7 @@ from src.configuration.swarm_config import SwarmConfig
 from src.export.run_export import write_run
 from src.measures.code_ladder import run_signals
 from src.measures.run_directory import RunDir
+from src.measures.rungs import EVIDENCE
 from src.sandbox.machines import agent_machines as machines
 from src.swarm import turn_rules as rules
 from src.swarm.turn_rules._turn_state import HALT_TAG
@@ -142,11 +143,11 @@ class Suite:
         return run
 
     def ladder(self, name: str) -> dict[str, dict]:
-        """The run's agents on the code ladder, by agent."""
+        """The run's agent rows of the code's evidence and the three ladders (code_ladder.run_signals), by agent."""
         return {row["agent"]: row for row in run_signals(self.runs / name)}
 
     def team_record(self, name: str) -> dict:
-        """The code ladder's team record of the run's one sample."""
+        """The team record of the run's one sample (signals.jsonl's team row)."""
         [record] = RunDir(self.runs / name).team_signals()
         return record
 
@@ -154,6 +155,11 @@ class Suite:
         """(sender, content) of each post on the run's one board."""
         [board] = read_json_dir(self.runs / name / "communication").values()
         return [(m["sender"], m["content"]) for m in board["messages"]]
+
+
+def evidence(row: dict) -> set[str]:
+    """The kinds of the code's evidence an agent row or a team row holds (src/measures/rungs.py EVIDENCE)."""
+    return {kind for kind in EVIDENCE if row.get(kind) is True}
 
 
 def plain(value):

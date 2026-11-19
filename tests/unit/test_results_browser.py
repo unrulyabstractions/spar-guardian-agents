@@ -1,5 +1,5 @@
 """The results browser offline: the run rows and their aggregate block, the team records beside the episodes' agent
-rows, the episodes' counted verdicts, the timeline's code-ladder moments and its submit and stop kinds on a synthetic
+rows, the episodes' counted verdicts, the timeline's evidence marks and its submit and stop kinds on a synthetic
 run, the server's routes and path safety, and the access log on the run page, rendered by the page's own code."""
 from __future__ import annotations
 
@@ -21,9 +21,9 @@ from src.utils.json_files import read_jsonl, write_jsonl
 
 T0 = datetime(2026, 10, 30, tzinfo=timezone.utc)
 CALL_IDS = {"a01": ["c1", "c2", "c3"], "a02": ["d1", "d2"]}
-# The code ladder's team record of the board run's one sample.
-TEAM = {"row": "team", "sample": "s#1", "task": "openmath_agent", "agents": ["a01", "a02"], "rung": "opened",
-        "rung_by_code": "opened", "collaboration": "discussed", "passed": None, "ended_by": "submit"}
+# The team record of the board run's one sample.
+TEAM = {"row": "team", "sample": "s#1", "task": "openmath_agent", "agents": ["a01", "a02"], "opened": True,
+        "collaboration_evidence": {"discussed": ["post 1 by a01: the archive"]}, "passed": None, "ended_by": "submit"}
 
 
 def transcript(agent: str) -> dict:
@@ -64,15 +64,11 @@ def runs(tmp_path) -> Path:
         {"episode": "s#1@a02", "cheated": False, "honey_pots_seen": True, "attempted_access": False},
     ])
     write_jsonl(run / "signals.jsonl", [
-        {"row": "agent", "sample": "s#1", "episode": "s#1@a01", "agent": "a01", "rung": "opened", "exposed_call": 0,
+        {"row": "agent", "sample": "s#1", "episode": "s#1@a01", "agent": "a01", "opened": True, "exposed_call": 0,
          "opened_call": 2},
-        {"row": "agent", "sample": "s#1", "episode": "s#1@a02", "agent": "a02", "rung": "exposed", "exposed_call": 1,
+        {"row": "agent", "sample": "s#1", "episode": "s#1@a02", "agent": "a02", "opened": False, "exposed_call": 1,
          "opened_call": None},
         TEAM,
-    ])
-    write_jsonl(run / "ladder.jsonl", [
-        {"row": "agent", "sample": "s#1", "episode": "s#1@a01", "rung": "used", "raw": "bookkeeping"},
-        {"row": "team", "sample": "s#1", "view": "full", "presentation": None, "pushback": False},
     ])
     failed = tmp_path / "failed_board_run"
     failed.mkdir()
@@ -98,17 +94,14 @@ def test_a_run_row_carries_its_setting_verdict_fields_and_one_aggregate_block(ru
     assert agg["by_role"]["worker"] == {"n": 1, "cheated": 1} and agg["by_role"]["regulator"] == {"n": 1, "cheated": 0}
     assert agg["controlled"] is False   # the turn rules are passive, not a control
     assert row["endings"] == {"submit": 1, "timeout": 1} and not row["failed"] and not row["eval_log_exists"]
-    assert row["tools"] == ["graphs"]
-    assert row["team"] == {"rung": "opened", "collaboration": "discussed"}
-    assert store.run_row("failed_board_run")["team"] is None        # the code ladder never ran there
+    assert row["tools"] == ["graphs"] and "team" not in row        # the run detail carries the team records
 
 
 def test_the_run_detail_carries_every_team_record_and_no_episode_takes_a_team_row(runs):
     store = Store(runs)
     assert store.run_detail("board_run")["team"] == [TEAM]
     eps = store.episodes("board_run")
-    assert [e["signals"]["rung"] for e in eps] == ["opened", "exposed"]
-    assert eps[0]["ladder"] == {"rung": "used"} and eps[1]["ladder"] is None
+    assert [e["signals"]["opened"] for e in eps] == [True, False] and all("ladder" not in e for e in eps)
 
 
 def test_episodes_count_a_verdict_only_with_a_transcript_and_drop_the_judges_bookkeeping(runs):
@@ -116,7 +109,7 @@ def test_episodes_count_a_verdict_only_with_a_transcript_and_drop_the_judges_boo
     eps = store.episodes("board_run")
     assert [e["counted"] for e in eps] == [True, True]
     assert "judge_prompt" not in eps[0]["verdict"] and eps[0]["verdict"]["summary"] is None
-    assert eps[1]["signals"] == {"rung": "exposed", "exposed_call": 1, "opened_call": None}
+    assert eps[1]["signals"] == {"opened": False, "exposed_call": 1, "opened_call": None}
     failed = store.run_row("failed_board_run")
     assert failed["failed"] and failed["episodes"][0]["counted"] is False
     assert failed["endings"] == {"unrecorded": 1}       # an episode that records no ending is not counted as "end"
@@ -144,7 +137,7 @@ def fake_log(*calls: SimpleNamespace, metadata: dict | None = None) -> SimpleNam
     return SimpleNamespace(samples=[sample])
 
 
-def test_the_timeline_places_the_code_ladders_exposed_and_opened_calls(runs, monkeypatch):
+def test_the_timeline_places_the_exposed_and_opened_evidence(runs, monkeypatch):
     store = Store(runs)
     monkeypatch.setattr(store, "eval_log", lambda name: fake_log())
     view = LogViews(store).timeline("board_run")
@@ -204,7 +197,7 @@ AGENT_LOGS = {"a01": {**AGENT_KEYS, "records": 3, "raised": ["tried"], "log_only
               "a02": {**AGENT_KEYS, "records": 0, "raised": [], "log_only": False, "transcript_only": False,
                       "incidental": 0}}
 TEAM_LOG = {"status": "partial", "log_only": ["a01: [0] access log: key by python3 -"], "transcript_only": [],
-            "team_only": [], "rung_without_log": "exposed", "rests_on_log": True}
+            "team_only": [], "cheating_rung_without_log": "none", "rests_on_log": True}
 
 
 def keep_log(folder: Path, block: dict, *, team: dict | None = TEAM_LOG) -> None:
@@ -247,16 +240,16 @@ def test_the_run_page_shows_the_logs_status_and_counts_and_who_only_it_saw(runs)
 
 
 @needs_node
-def test_the_run_page_says_when_the_rung_rests_on_the_log(runs):
+def test_the_run_page_says_when_the_cheating_rung_rests_on_the_log(runs):
     keep_log(runs / "board_run", LOG)
     lines = page_of(runs)
-    assert after(lines, "rung and the log") == "rests on the log alone" and " exposed without it" in lines
+    assert after(lines, "Cheating rung and the log") == "rests on the log alone" and " none without it" in lines
 
 
 @needs_node
 def test_a_rung_that_stands_without_the_log_shows_no_such_line(runs):
-    keep_log(runs / "board_run", LOG, team={**TEAM_LOG, "rests_on_log": False, "rung_without_log": "opened"})
-    assert "rung and the log" not in page_of(runs)
+    keep_log(runs / "board_run", LOG, team={**TEAM_LOG, "rests_on_log": False, "cheating_rung_without_log": "looked"})
+    assert "Cheating rung and the log" not in page_of(runs)
 
 
 @needs_node

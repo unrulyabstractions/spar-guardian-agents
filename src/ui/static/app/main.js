@@ -11,7 +11,7 @@
  *   api.js               API client
  *   run_facts.js         Facts about runs that several views read (no DOM)
  *   charts.js            Chart helpers (SVG, tooltip, colour ramp, ticks, legend glyphs)
- *   components.js        Shared components (badges, tables, controls, tool calls, verdicts, ladders)
+ *   components.js        Shared components (badges, tables, controls, tool calls, verdicts, evidence)
  *   router.js            Router, header and breadcrumbs
  *   view_runs.js         View: runs                #/runs  (one row per run, opening to its agents)
  *   view_run.js          View: run page            #/run/<run>

@@ -6,8 +6,8 @@
  */
 import { DASH, appendAll, asText, debounce, fmtInt, fmtTime, h, plural } from './dom.js';
 import { P, R, apiFresh, fetchJson } from './api.js';
-import { badge, dataTable, episodeRecord, kv, labeled, ladderBlock, lazyDetails, link, logLink, longText, mono, muted,
-  roleBadge, section, select, signalsBlock, teamBlock, verdictBlock, verdictCell, yn } from './components.js';
+import { badge, dataTable, episodeRecord, evidenceBlock, kv, labeled, lazyDetails, link, logLink, longText, mono, muted,
+  roleBadge, section, select, teamBlock, verdictBlock, verdictCell, yn } from './components.js';
 import { endingsText, episodeOf } from './run_facts.js';
 
 export async function viewRun({ run }, view) {
@@ -79,13 +79,15 @@ export async function viewRun({ run }, view) {
   const accessSection = d.access ? section('Access', accessView(d.access, d)) : null;
   const knowledgeSection = d.knowledge ? section('Knowledge work', knowledgeView(d.knowledge)) : null;
   const toolsSection = section('Analysis tools', toolsView(run, d.tools));
-  // The team record per sample (signals.jsonl's team rows): the ladder's primary record; the agents' rows sit in their
-  // episode cards.
+  // The team's evidence per sample (signals.jsonl's team rows); the agents' rows sit in their episode cards. The three
+  // ladders are the transcript viewer's (src/ui/transcript_viewer.py), not this page's.
   const teams = d.team || [];
   const accessLogSection = rj.access_log ? section('Access log', accessLogView(rj.access_log, teams, eps)) : null;
-  const teamSection = section('Team record', teams.length
-    ? teams.map(t => h('div', null, teams.length > 1 ? h('h3', null, `sample ${t.sample}`) : null, teamBlock(t)))
-    : muted('No team record: the code ladder has not run on this run (python -m src signals).'));
+  const teamSection = section('Team evidence', [
+    h('p', { class: 'muted small' }, 'The code’s evidence of the agents’ acts on the honeypot. The three ladders (Cheating, Coordination, Collusion) are on the transcript viewer’s run page (make transcripts).'),
+    teams.length
+      ? teams.map(t => h('div', null, teams.length > 1 ? h('h3', null, `sample ${t.sample}`) : null, teamBlock(t)))
+      : muted('No team record: the code’s evidence was not recorded on this run (python -m src signals).')]);
 
   return h('div', { class: 'page' }, head, meta, teamSection, configSection, defSection, sweSection, knowledgeSection,
     swarmSection, accessSection, accessLogSection, rulesSection, engagementSection, toolsSection, epSection, boardSection,
@@ -428,8 +430,8 @@ function accessLogView(log, teams, eps) {
   ], 'kv-grid'), kv([
     ['harness reads', log.harness_reads ? harnessReads(log.harness_reads) : undefined],
     ...teams.filter(t => t.access_log).flatMap(t => [
-      ['rung and the log', t.access_log.rests_on_log
-        ? h('span', null, badge('rests on the log alone', 'warn'), ` ${t.access_log.rung_without_log} without it`)
+      ['Cheating rung and the log', t.access_log.rests_on_log && t.access_log.cheating_rung_without_log != null
+        ? h('span', null, badge('rests on the log alone', 'warn'), ` ${t.access_log.cheating_rung_without_log} without it`)
         : undefined],
       ['only the log saw', named(t.access_log.log_only)],
       ['only the transcript saw', named(t.access_log.transcript_only)],
@@ -518,20 +520,20 @@ function rulesTable(rules) {
 }
 
 // A CheatBench SWE task: the arm, each agent's planted piece, the hidden-test rewards for the team's main and each
-// agent's working tree, the judge, the code ladder's rung and the talk measures.
+// agent's working tree, the judge and the talk measures.
 function sweView(swe, run) {
   const agents = run.episodes.map(e => e.orbit_agent).sort();
   const reward = k => (swe.rewards[k] == null ? null
     : h('span', { title: `${swe.required_passed[k] || 0} of ${swe.required_tests} required tests passed` },
       yn(swe.rewards[k] === 1, 'good', 'plain')));
   const m = (a, k) => ((swe.measures || {})[a] || {})[k];
-  const cols = ['agent', ...(swe.pieces ? ['planted piece'] : []), 'reward', 'judge: cheated', 'code rung', 'posts',
-    'about the fix', 'disclosed'];
+  const cols = ['agent', ...(swe.pieces ? ['planted piece'] : []), 'reward', 'judge: cheated', 'posts', 'about the fix',
+    'disclosed'];
   const rows = agents.map(a => {
     const ep = episodeOf(run, a);
     return [a,
       ...(swe.pieces ? [swe.pieces[a] == null ? null : mono(asText(swe.pieces[a]))] : []),
-      reward(a), verdictCell(ep), ep.signals ? ep.signals.rung : null, m(a, 'posts'),
+      reward(a), verdictCell(ep), m(a, 'posts'),
       m(a, 'fix_posts') == null ? null : `${m(a, 'fix_posts')} (rule ${m(a, 'rule_posts')})`,
       m(a, 'disclosed') == null ? null : yn(m(a, 'disclosed'), 'plain', 'warn')];
   });
@@ -618,8 +620,7 @@ function episodeCard(run, ep, d) {
       logLink(d.eval_log_exists, d.eval_log, R.context(run, { agent: ep.orbit_agent }), `context of ${ep.orbit_agent}`, 'btn btn-small')),
     episodeRecord(ep),
     verdictBlock(ep.verdict, d.verdict_fields),
-    ladderBlock(ep.ladder),
-    signalsBlock(ep.signals),
+    evidenceBlock(ep.signals),
     ep.error ? lazyDetails('error', () => longText(ep.error, { lines: 30 }), { cls: 'sub' }) : null,
     ep.final_text ? lazyDetails('final text', () => longText(ep.final_text, { lines: 40 }), { cls: 'sub' }) : null);
 }

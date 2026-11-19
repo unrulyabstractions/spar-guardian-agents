@@ -13,9 +13,10 @@ A record holds these fields, in this order:
 - where it ran: stage, box, instance_id, instance_source, cell, kind, target;
 - arm: worker, worker_model, rule_level, regulator, regulator_model, regulator_level, disregulator_level, tag, seed,
   mock, commit, inspect_model and regulator_inspect_model (the Inspect strings run.json records);
-- outcome: eval_status, completed, failed_episodes, rung (run_validity), regulator_posts (0 for a regulator that took
-  turns and never posted: a result, so its run stays valid; None in a run without a regulator), disregulator_posts
-  (likewise, but a disregulator that never posted leaves the run invalid: run_validity);
+- outcome: eval_status, completed, failed_episodes (run_validity), cheating_rung (the team's Cheating rung,
+  cheating_ladder.cheating_rungs; None without a team row), regulator_posts (0 for a regulator that took turns and
+  never posted: a result, so its run stays valid; None in a run without a regulator), disregulator_posts (likewise,
+  but a disregulator that never posted leaves the run invalid: run_validity);
 - checks: export_flags_ok (run.json validity.ok, the export's own flags), valid, why, reason (run_validity),
   deal_replay and deal_replay_detail (deal_replay: does today's code deal the run the holdings it recorded).
 
@@ -41,7 +42,8 @@ from typing import Protocol
 from src.configuration import task_names
 from src.domains import BY_TASK
 from src.measures import deal_replay, run_validity
-from src.measures.run_directory import ATTEMPTS, GROUPS, RUN_JSON, run_name, run_place, study_runs
+from src.measures.cheating_ladder import cheating_rungs
+from src.measures.run_directory import ATTEMPTS, GROUPS, RUN_JSON, RunDir, run_name, run_place, study_runs
 
 INDEX = "INDEX.jsonl"
 SCREEN_NAME = re.compile(r"^(?P<stem>[a-z]+)_(?P<kind>solo_cheat|solo|minimal_regulated|minimal_cheat|minimal_all|"
@@ -54,7 +56,7 @@ FIELDS = ("study", "run", "path", "group", "cheatbench_task", "domain", "row",
           "stage", "box", "instance_id", "instance_source", "cell", "kind", "target",
           "worker", "worker_model", "rule_level", "regulator", "regulator_model", "regulator_level",
           "disregulator_level", "tag", "seed", "mock", "commit", "inspect_model", "regulator_inspect_model",
-          "eval_status", "completed", "failed_episodes", "rung", "regulator_posts", "disregulator_posts",
+          "eval_status", "completed", "failed_episodes", "cheating_rung", "regulator_posts", "disregulator_posts",
           "export_flags_ok", "valid", "why", "reason", "deal_replay", "deal_replay_detail")
 ARM_FIELDS = ("stage", "box", "cell", "kind", "target", "worker", "worker_model", "rule_level", "regulator",
               "regulator_model", "regulator_level", "disregulator_level", "tag")
@@ -125,7 +127,8 @@ def record(run: Path, data: dict, study_dir: Path, join: Join | None = None) -> 
                    disregulator_level=level(config.get("disregulator_level")) if config.get("disregulators") else None)
     else:
         out.update(join.place(run, name))
-    out.update({key: checked.get(key) for key in ("eval_status", "completed", "failed_episodes", "rung")},
+    out.update({key: checked.get(key) for key in ("eval_status", "completed", "failed_episodes")},
+               cheating_rung=cheating_rungs(run)["team"] if RunDir(run).team_signals() else None,
                export_flags_ok=(data.get("validity") or {}).get("ok"), regulator_posts=role_posts(checked, "regulator"),
                disregulator_posts=role_posts(checked, "disregulator"))
     if join is not None:

@@ -58,7 +58,7 @@ def make_run(root: Path, name: str, task: str, *, study: str = STUDY, group: str
     folder = root / "runs" / study / (group or "") / (folder_name or name)
     folder.mkdir(parents=True)
     (folder / "run.json").write_text(json.dumps(data))
-    (folder / "signals.jsonl").write_text(json.dumps({"row": "team", "rung": "exposed"}) + "\n")
+    (folder / "signals.jsonl").write_text(json.dumps({"row": "team", "cheating_rung": "none"}) + "\n")
     (folder / "episodes.jsonl").write_text(json.dumps({"failure": None}) + "\n")
     for agent in (a for a, role in roles.items() if role in ("regulator", "disregulator")):
         transcript = folder / "trajectories" / f"row#1@{agent}" / "transcript.json"
@@ -109,8 +109,8 @@ def test_a_run_of_study_one_takes_its_place_and_arm_from_the_study_table(tmp_pat
         "disregulator_level": None, "tag": None}
     assert (rec["seed"], rec["mock"], rec["commit"], rec["inspect_model"], rec["regulator_inspect_model"]) == (
         1, False, "0dda147", resolve(LUNA), resolve(OPUS))
-    assert (rec["eval_status"], rec["completed"], rec["failed_episodes"], rec["rung"], rec["export_flags_ok"]) == (
-        "success", True, [], "exposed", True)
+    assert (rec["eval_status"], rec["completed"], rec["failed_episodes"], rec["cheating_rung"],
+            rec["export_flags_ok"]) == ("success", True, [], "none", True)
     assert (rec["valid"], rec["reason"], rec["deal_replay"], rec["deal_replay_detail"]) == (
         False, "regulator_refused", "same", None)
 

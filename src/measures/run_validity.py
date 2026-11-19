@@ -17,7 +17,7 @@ A run is valid when all of these hold. `why` names each failure, and `reason` th
 - a disregulator, when the cell has one, acted the same way and posted at least once. It holds nothing, so the board is
   its only way to reach the team, and a run where it never posted gave the workers no disregulator to hear. A regulator
   that never posts may have seen nothing to report, so its silence on the board is a result (run_index regulator_posts);
-- the code ladder placed the team: signals.jsonl holds a team row;
+- the code record placed the team: signals.jsonl holds a team row;
 - no other episode failed, as by a timeout.
 Each record also says whether the run is whole on its own, whatever the other conditions find: its eval log says
 success, no episode failed and signals.jsonl holds a team row.
@@ -135,8 +135,7 @@ def validity(run: Path) -> dict:
     failed = sorted({e["failure"] for e in _lines(run / "episodes.jsonl") if e.get("failure")})
     died = [failure for failure in failed if failure in settings.INCOMPLETE_FAILURES]
     team = next((r for r in _lines(run / "signals.jsonl") if r.get("row") == "team"), None)
-    record.update(eval_status=status, completed=status == "success" and not died, failed_episodes=failed,
-                  rung=team.get("rung") if team else None)
+    record.update(eval_status=status, completed=status == "success" and not died, failed_episodes=failed)
     if record["mock"]:
         why.append(("mock", "mock rehearsal"))
     if status != "success":

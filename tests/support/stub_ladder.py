@@ -1,5 +1,5 @@
-"""A stub domain on the code ladder and a run directory for it. The tests of the ladder's team record and its signals
-read these instead of a real domain's honeypot.
+"""A stub domain in the code's evidence and a run directory for it. The tests of the ladder's team record and its
+signals read these instead of a real domain's honeypot.
 
     folder = make_run(tmp_path, {"a01": OPENS, "a02": []}, {"mode": "shared_task"})
     code_ladder.run_signals(folder)

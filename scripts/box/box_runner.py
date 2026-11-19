@@ -18,7 +18,7 @@ each run's cell, arguments, pid, start, end and exit. An earlier runner's plan i
 logs/<study>/screen/attempts/, never overwritten. The runner's own pid goes to ~/screen.pid.
 
 A run is done before, and is skipped, only when its export exists, its eval log says success and none of its episodes
-failed in the harness or at the provider. A run whose eval succeeded and that lacks only its code ladder gets it
+failed in the harness or at the provider. A run whose eval succeeded and that lacks only its code record gets it
 rebuilt, which costs no model call and needs no judge, and is never run again. Any other run starts again, its earlier
 screen log set aside in the same folder. Its earlier attempt moves first: the run folder, the eval log folder and the
 figures go to runs/<study>/attempts/<name>.<n>/ and the same places under logs/ and out/
@@ -211,7 +211,7 @@ def eval_status(path: Path) -> str:
 
 def outcome(name: str) -> tuple[str, str]:
     """(finished | derive | incomplete | failed, why) from what the run left in runs/<study>/<name>/: finished needs
-    run.json, its eval log with status success, the code ladder's signals.jsonl, and no episode that failed in the
+    run.json, its eval log with status success, the code record's signals.jsonl, and no episode that failed in the
     harness or at the provider (incomplete, as the results browser counts it). derive: the eval succeeded and only
     signals.jsonl is missing, which a rebuild gives with no model call."""
     run_dir = settings.RUNS / name
@@ -234,7 +234,7 @@ def outcome(name: str) -> tuple[str, str]:
 
 
 def derive(name: str) -> tuple[str, str]:
-    """Rebuild the code ladder of a run whose eval succeeded, with no model call, and read the run again."""
+    """Rebuild the code record of a run whose eval succeeded, with no model call, and read the run again."""
     subprocess.run([sys.executable, "-m", "src", "regenerate", name, "--no-export", "--no-plots"], cwd=settings.ROOT,
                    check=False)
     return outcome(name)

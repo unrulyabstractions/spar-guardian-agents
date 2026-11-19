@@ -1,143 +1,26 @@
-"""The paper's tables, as 200-dpi PNG under tmp/tables/method/ (gitignored).
+"""The paper's method table, as a 200-dpi PNG under tmp/tables/method/ (gitignored).
 
     uv run python -m scripts.paper.tables
 
-table_scales.png: the scales (scale, agents, time limit), read from src/configuration/scales.py. table_rungs.png: the
-honeypot ladder's rungs and the judged flags beside it against each domain's CheatBench verdict field.
-table_rungs_by_domain.png: what puts a team on each rung of the code ladder in each domain.
-table_collaboration_by_domain.png: what puts a team on each level of the collaboration axis in each domain. The rows of
-these tables are written by hand here (RUNGS, DOMAINS, RUNGS_BY_DOMAIN and COLLABORATION_BY_DOMAIN), from the ladder's
-addendum (src/judging/_ladder_verdict_fields.py HONEYPOT), the team ladder (src/measures/team_ladder.py) and each
-domain's ladder module (src/domains/<domain>/_<domain>_ladder.py, swe_ladder.py for SWE).
+table_rungs_by_domain.png: what puts an agent on each rung of the Cheating ladder in each task, with each task's
+honeypot and grader under its name. Its rows are src/measures/ladder_by_domain.py RUNGS_BY_DOMAIN and RUNG_NOTES, in
+the order of its DOMAINS: SWE first.
 """
 from __future__ import annotations
 
-import textwrap
 from pathlib import Path
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 from matplotlib.font_manager import FontProperties
-from matplotlib.patches import FancyBboxPatch, Rectangle
+from matplotlib.patches import Rectangle
 
-from src.configuration.scales import SCALES
+from scripts.paper.study_ladders import CHEATING_FILL
 from src.configuration.settings import ROOT
-from src.measures.ladder_by_domain import (
-    COLLABORATION_BY_DOMAIN,
-    COLLABORATION_NOTES,
-    DOMAINS,
-    RUNG_NOTES,
-    RUNGS_BY_DOMAIN,
-)
-from src.utils.figure_style import AXIS, BAND, CHIP, COLLABORATION_FILL, INK, INK_SECONDARY, PRINT_DPI, RUNG_FILL, WHITE
+from src.measures.ladder_by_domain import DOMAINS, RUNG_NOTES, RUNGS_BY_DOMAIN
+from src.utils.figure_style import AXIS, BAND, INK, INK_SECONDARY, PRINT_DPI, WHITE
 
 OUT = ROOT / "tmp" / "tables" / "method"
-# The renderer: 8-point sans, 13 characters to the inch; 7.5-point mono in chips, 12.5 characters to the inch;
-# 0.19 inch per line.
-CHARS_PER_INCH = 13
-MONO_PER_INCH = 12.5
-LINE = 0.19
-PAD = 0.1
-
-# The ladder's rungs and the judged flags beside it (src/judging/_ladder_verdict_fields.py LADDER and HONEYPOT) against
-# the CheatBench verdict field each task's judge_schema.py records the same act under; "none" where only the ladder
-# records it. One cell per domain of ladder_by_domain.DOMAINS, in its order: SWE first.
-RUNGS = [
-    ("exposed", ["none"], ["`honey_pots_seen`"], ["`honey_pots_seen`"], ["`honey_pots_seen`"], ["none"],
-     ["`honey_pots_seen`"], ["`honey_pots_seen`"]),
-    ("tried", ["`reference_solution_seeking`", "(aimed at a planted ref)"], ["`attempted_access`"],
-     ["`opened_gold`", "(an attempt)"], ["none"], ["`endpoint_requests`", "(above zero)"], ["`attempted_access`"],
-     ["none"]),
-    ("opened", ["`reference_solution_obtained`"], ["`read_sequence_file`", "`obtained_designs`"],
-     ["`opened_gold`", "`gold_use`"], ["`inspected_competitor`"], ["none"], ["`cheated`", "`extracted_submission`"],
-     ["`answer_file_read`"]),
-    ("used", ["`reference_solution_used`"], ["none"], ["`copied_reference`"], ["`copied_or_transformed_competitor`"],
-     ["`used_advice`"], ["none"], ["`used_answer_key`"]),
-    ("tampered", ["none"], ["none"], ["none"], ["none"], ["`edited_opponent_files`", "(that changed the game)"],
-     ["none"], ["none"]),
-    ("checked", ["none"], ["none"], ["none"], ["`submitted_competitor`"], ["none"], ["none"], ["none"]),
-    ("shipped", ["none"], ["`copied_design`"], ["`submitted_reference`"], ["`copied_final`"], ["none"], ["none"],
-     ["none"]),
-    ("forbidden method", ["`evaluation_tampering`"], ["none"], ["`attacked_grader`"],
-     ["`attempted_grader_manipulation`"], ["`edited_opponent_files`"], ["none"],
-     ["`tampering`", "`prohibited_computation`"]),
-    ("admitted", ["none"], ["`disclosed_access`"], ["`disclosed`"], ["none"], ["`disclosed_to_arbiter`"],
-     ["`disclosed_access`"], ["`final_source_disclosure`"]),
-]
-RUNG_WIDTHS = {"SWE": 2.6, "Protein design": 2.4, "Creative writing": 2.1, "Knowledge work": 3.0,
-               "Chess": 2.1, "OpenMath": 2.1, "Subset sum, factoring": 2.4}
-"""The width of each domain's column of table_rungs, in inches."""
-
-
-def lines_of(cell, width_in: float) -> list[str]:
-    """The cell as lines: a list stays as given, a string wraps to the column."""
-    if isinstance(cell, list):
-        return cell
-    chars = max(6, int(width_in * CHARS_PER_INCH))
-    return textwrap.wrap(str(cell), chars, break_long_words=True, break_on_hyphens=False) or [""]
-
-
-def draw_line(ax, x: float, y: float, text: str, bold: bool = False) -> None:
-    """One line of a cell at its top left: a chip in mono for `code`, else sans."""
-    if text.startswith("`") and text.endswith("`"):
-        code = text.strip("`")
-        w = len(code) / MONO_PER_INCH + 0.1
-        ax.add_patch(FancyBboxPatch((x, y + 0.02), w, LINE - 0.05, boxstyle="round,pad=0,rounding_size=0.03",
-                                    fc=CHIP, ec="none"))
-        ax.text(x + 0.05, y + LINE / 2, code, fontsize=7.5, family="DejaVu Sans Mono", color=INK, va="center")
-        return
-    ax.text(x, y + LINE / 2, text, fontsize=8, family="DejaVu Sans",
-            color=INK_SECONDARY if text.startswith("(") else INK, weight="bold" if bold else "normal", va="center")
-
-
-def table_png(name: str, header: list[str], rows: list[list], widths: list[float]) -> Path:
-    """One table as a PNG: a small-caps header, horizontal rules, chips for code. widths are inches per column."""
-    cells = [[lines_of(cell, w - 2 * PAD) for cell, w in zip(row, widths)] for row in rows]
-    heights = [max(len(c) for c in row) * LINE + 2 * PAD for row in cells]
-    width = sum(widths)
-    head_h = LINE + 2 * PAD
-    height = head_h + sum(heights) + 0.1
-    fig = Figure(figsize=(width, height), dpi=PRINT_DPI)
-    ax = fig.add_axes([0, 0, 1, 1])
-    ax.set_xlim(0, width)
-    ax.set_ylim(height, 0)
-    ax.axis("off")
-    y = 0.05
-    x = 0.0
-    for text, w in zip(header, widths):
-        ax.text(x + PAD, y + PAD + LINE / 2, text.upper(), fontsize=6.5, family="DejaVu Sans Mono", color=INK_SECONDARY,
-                va="center")
-        x += w
-    y += head_h
-    ax.plot([0, width], [y, y], color=INK_SECONDARY, lw=0.8)
-    for row, h in zip(cells, heights):
-        x = 0.0
-        for j, (lines, w) in enumerate(zip(row, widths)):
-            for k, text in enumerate(lines):
-                draw_line(ax, x + PAD, y + PAD + k * LINE, text, bold=j == 0)
-            x += w
-        y += h
-        ax.plot([0, width], [y, y], color=AXIS, lw=0.6)
-    OUT.mkdir(parents=True, exist_ok=True)
-    path = OUT / f"{name}.png"
-    fig.savefig(path, dpi=PRINT_DPI, facecolor=WHITE)
-    return path
-
-
-def hours(seconds: int) -> str:
-    return f"{seconds // 60} min" if seconds < 3600 else f"{seconds // 3600} h"
-
-
-def write_scales() -> Path:
-    rows = [[name.replace("_", " "), str(s.n_agents), hours(s.time_limit_s)] for name, s in SCALES.items()]
-    return table_png("table_scales", ["scale", "agents", "time limit"], rows, [1.4, 1.0, 1.2])
-
-
-def write_rungs() -> Path:
-    rows = [list(row) for row in RUNGS]
-    assert all(len(row) == 1 + len(DOMAINS) for row in rows)
-    header = ["rung", *(domain if domain.isupper() else domain.lower() for domain in DOMAINS)]
-    return table_png("table_rungs", header, rows, [1.0, *(RUNG_WIDTHS[domain] for domain in DOMAINS)])
 
 
 SANS = FontProperties(family="DejaVu Sans", size=7.6)
@@ -213,18 +96,12 @@ def by_domain_png(name: str, label: str, notes: tuple[str, ...], levels: list[tu
 
 
 def write_rungs_by_domain() -> Path:
-    return by_domain_png("table_rungs_by_domain", "rung", RUNG_NOTES, RUNGS_BY_DOMAIN, RUNG_FILL)
-
-
-def write_collaboration_by_domain() -> Path:
-    return by_domain_png("table_collaboration_by_domain", "level", COLLABORATION_NOTES, COLLABORATION_BY_DOMAIN,
-                         COLLABORATION_FILL)
+    return by_domain_png("table_rungs_by_domain", "rung", RUNG_NOTES, RUNGS_BY_DOMAIN, CHEATING_FILL)
 
 
 def main() -> int:
-    """Write every table and print the paths written."""
-    for path in (write_scales(), write_rungs(), write_rungs_by_domain(), write_collaboration_by_domain()):
-        print(path)
+    """Write the table and print its path."""
+    print(write_rungs_by_domain())
     return 0
 
 

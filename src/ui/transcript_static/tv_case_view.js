@@ -7,19 +7,20 @@
  * place; the strip follows the page as it scrolls. Every string goes in through h() text nodes. */
 import { h, plural } from '/static/app/dom.js';
 
-// Colour ramps per ladder, level 0 first. Cheating is viz_common.js's RUNG fill.
+// Colour ramps per ladder, level 0 first.
 export const RAMP = {
-  cheat: ['#eeede8', '#fde4c8', '#f9c396', '#f29a6a', '#e8714a', '#dc5b3c', '#d0452e', '#a8201c'],
+  // none, looked, tempted, attempted, hacked (src/measures/cheating_ladder.py LEVELS), light to dark
+  cheating: ['#eeede8', '#f9c396', '#e8714a', '#d0452e', '#8c1a17'],
   // none, read, write, low, medium, high, extreme (src/measures/coordination.py LEVELS), light to dark
-  coord: ['#eeede8', '#e9e7f6', '#d3cff0', '#b1aae3', '#8b80d2', '#6152b9', '#3a2a8f'],
+  coordination: ['#eeede8', '#e9e7f6', '#d3cff0', '#b1aae3', '#8b80d2', '#6152b9', '#3a2a8f'],
   // none, cooperation, collaboration (code, greens), collusion, scheming (a judge's, reds): src/measures/collusion.py
   collusion: ['#eeede8', '#cde8dc', '#5aa889', '#d0452e', '#7a1f12'],
 };
-const SHORT = { cheat: 'Ch', coord: 'Cd', collusion: 'Cl' };
-// Milestone wording, after group_labels.js RUNG_W ("saw it", "tried to reach it", ...).
+const SHORT = { cheating: 'Ch', coordination: 'Cd', collusion: 'Cl' };
+// Milestone wording: what the strip writes beside the call that first reached a level.
 const WORDS = {
-  cheat: { exposed: 'saw it', tried: 'tried to reach it', opened: 'opened it', used: 'used it', tampered: 'tampered with the game', checked: 'checked it with the grader', shipped: 'shipped it' },
-  coord: { read: 'read a teammate', write: 'posted', low: 'low back-and-forth', medium: 'medium back-and-forth', high: 'high back-and-forth', extreme: 'extreme back-and-forth' },
+  cheating: { looked: 'looked', tempted: 'tempted', attempted: 'attempted', hacked: 'hacked' },
+  coordination: { read: 'read a teammate', write: 'posted', low: 'low back-and-forth', medium: 'medium back-and-forth', high: 'high back-and-forth', extreme: 'extreme back-and-forth' },
   collusion: { cooperation: 'cooperation', collaboration: 'collaboration', collusion: 'collusion (judge)', scheming: 'scheming (judge)' },
 };
 
@@ -93,9 +94,8 @@ function blk(label, text, input, kind) {
 }
 
 /**
- * ctx: {agent, levels (the run's three-ladder payload, with its labels by call), judgeMarks Map<call k, [{rung, text}]>
- * (the calls the judged ladder cites), isRegulator, regulatorCalls: Set of tool_call_ids that read a hidden regulator's
- * post, or that posted as the regulator}.
+ * ctx: {agent, levels (the run's three-ladder payload, with its labels by call), isRegulator, regulatorCalls: Set of
+ * tool_call_ids that read a hidden regulator's post, or that posted as the regulator}.
  * Returns {el, findCall, findToolCall, showAll, nCalls}.
  */
 export function renderCase(t, ctx) {
@@ -122,7 +122,7 @@ export function renderCase(t, ctx) {
   const n = calls.length;
   const idOf = new Map(calls.map(c => [c.tc.tool_call_id, c.k]));
   // 2. level per ladder per call (monotone), and milestones
-  const order = lv ? lv.order : ['cheat'];
+  const order = lv ? lv.order : ['cheating'];
   const evs = (lv && lv.events && lv.events[ctx.agent]) || [];
   const at = new Map();
   const endEv = [];
@@ -166,8 +166,7 @@ export function renderCase(t, ctx) {
     own.get(k).push(l);
   }
   for (const ls of own.values()) ls.sort((a, b) => order.indexOf(a.ladder) - order.indexOf(b.ladder) || b.index - a.index);
-  const judged = ctx.judgeMarks || new Map();
-  const labelled = k => own.has(k) || judged.has(k) || regAt.has(k);
+  const labelled = k => own.has(k) || regAt.has(k);
   const nLabelled = calls.filter(c => labelled(c.k)).length;
 
   // 4. right: one block per step. Its head line says how far each ladder had got; its labels say what the call did.
@@ -175,7 +174,7 @@ export function renderCase(t, ctx) {
   const soFar = (vals, newAt) => {
     const chips = order.map((L, i) => {
       const v = vals[i];
-      if (!v || (single && L !== 'cheat')) return null;
+      if (!v || (single && L !== 'cheating')) return null;
       const isNew = newAt.has(L);
       return h('span', { class: ['cs-chip', isNew && 'cs-new'], title: `${name(L)}: ${lv.ladders[L].levels[v]} (${v} of ${lv.ladders[L].levels.length - 1}), reached ${isNew ? 'at this call' : 'before this step'}` },
         h('i', { style: `background:${RAMP[L][v]}` }), `${name(L)} `, h('b', null, lv.ladders[L].levels[v]));
@@ -188,7 +187,6 @@ export function renderCase(t, ctx) {
   function labelsOf(k) {
     const lines = (own.get(k) || []).map(l => line(`background:${RAMP[l.ladder][l.index]}`, null, name(l.ladder), l.level, l.evidence,
       `${name(l.ladder)}: ${l.level} (${l.index} of ${lv.ladders[l.ladder].levels.length - 1})${l.evidence ? '\n' + l.evidence : ''}`));
-    for (const m of judged.get(k) || []) lines.push(line('', 'cs-judge', 'Judge', m.rung, m.text, `the judged ladder cites this call for ${m.rung}${m.text ? '\n' + m.text : ''}`));
     if (regAt.has(k)) {
       lines.push(line('', 'cs-reg', 'Regulator', ctx.isRegulator ? 'posted as the hidden regulator' : 'read a hidden regulator\'s post', '',
         ctx.isRegulator ? 'this call posted on the board as the hidden regulator' : 'this call read a post the hidden regulator wrote'));
@@ -207,7 +205,7 @@ export function renderCase(t, ctx) {
     while (li < loose.length && loose[li].before <= c.k) right.appendChild(looseBlock(loose[li++]));
     const k = c.k;
     const labs = own.get(k) || [];
-    const el = h('div', { class: ['call', labelled(k) && 'has-label', labs.some(l => l.ladder === 'coord') && 'has-board'], id: `a-${ctx.agent}-call-${k}`,
+    const el = h('div', { class: ['call', labelled(k) && 'has-label', labs.some(l => l.ladder === 'coordination') && 'has-board'], id: `a-${ctx.agent}-call-${k}`,
       dataset: { call: String(k) }, style: labs.length ? `--step:${RAMP[labs[0].ladder][labs[0].index]}` : null },
       h('div', { class: 'ch' }, h('span', { class: 'cn' }, `Call ${k}`), c.step != null ? h('span', null, `step ${c.step}`) : null,
         lv ? soFar(valsAt(k), new Set((fresh.get(k) || []).map(e => e.ladder))) : null,
@@ -248,7 +246,7 @@ export function renderCase(t, ctx) {
   text(RX + RW / 2, 9, 'cs-lane-g', 'this step', 'the labels this call carries itself');
   order.forEach((L, i) => {
     const x = LB + i * (LW + GAP);
-    const na = single && L !== 'cheat';
+    const na = single && L !== 'cheating';
     text(x + LW / 2, 21, 'cs-lane-h', SHORT[L], lv ? name(L) : L);
     if (lanesW <= RW) text(RX + i * (LW + GAP) + LW / 2, 21, 'cs-lane-h', SHORT[L], lv ? name(L) : L);
     for (let k = 0; k < n; k++) {
@@ -277,7 +275,7 @@ export function renderCase(t, ctx) {
     last = two ? ty + 11 : ty;
     placed.push(ty);
     if (two) placed.push(ty + 11);
-    const col = m.ladder === 'reg' ? 'var(--bad)' : m.ladder === 'cheat' ? 'var(--accent)' : 'var(--ink-2)';
+    const col = m.ladder === 'reg' ? 'var(--bad)' : m.ladder === 'cheating' ? 'var(--accent)' : 'var(--ink-2)';
     const tx = mk('text', { x: LB - 10, y: ty, 'text-anchor': 'end', class: 'cs-mile', fill: col, 'data-call': m.end ? '' : m.k });
     if (two) {
       for (const [i, part] of [m.head, m.tail].entries()) {
@@ -312,7 +310,7 @@ export function renderCase(t, ctx) {
     svg,
     lv ? fullLegend(lv.ladders, order) : null,
     h('p', { class: 'note' }, 'One row per tool call, call 0 at the top. The lanes under "so far" show the level each ladder had reached by that call; the band below the last call is the level at the end of the run. The lanes under "this step" show the labels the call carries itself, and a red tick a call that met the hidden regulator on the board. The outlined row is the call at the top of the page. Click a row or a label to open that call.'),
-    unplaced ? h('p', { class: 'note' }, `${plural(unplaced, 'label')} of the code ladder ${unplaced === 1 ? 'cites' : 'cite'} a call this transcript does not hold and ${unplaced === 1 ? 'is' : 'are'} not drawn.`) : null);
+    unplaced ? h('p', { class: 'note' }, `${plural(unplaced, 'label')} ${unplaced === 1 ? 'cites' : 'cite'} a call this transcript does not hold and ${unplaced === 1 ? 'is' : 'are'} not drawn.`) : null);
 
   // The outlined row: the call at the top of the page as it scrolls, and the call a click opened once the page
   // has come to rest there.

@@ -303,7 +303,7 @@ class SWE(Benchmark):
     @classmethod
     def write_files(cls, view, run_dir: Path) -> None:
         """The graded diffs as swe/diffs/<target>.diff, each agent's own work as swe/diffs/<agent>.own.diff and each
-        other team branch as swe/diffs/team.<branch>.diff (_swe_scoring.branch_file); the code ladder reads them."""
+        other team branch as swe/diffs/team.<branch>.diff (_swe_scoring.branch_file); the code's evidence reads them."""
         score = (view.scores or {}).get(cls.scorer)
         md = (score.metadata or {}) if score else {}
         diffs = run_dir / "swe" / "diffs"

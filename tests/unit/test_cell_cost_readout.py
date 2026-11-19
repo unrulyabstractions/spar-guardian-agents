@@ -52,7 +52,7 @@ def write_run(root: Path, name: str, agents: list[tuple], evals: tuple[str, ...]
         ledger_row = {"calls": calls, "errored": errored[0] if errored else 0}
         episodes.append({"orbit_agent": agent, "usage": usage, "ledger": ledger_row, "failure": None})
     (run / "episodes.jsonl").write_text("".join(json.dumps(e) + "\n" for e in episodes))
-    (run / "signals.jsonl").write_text(json.dumps({"row": "team", "rung": "none"}) + "\n")
+    (run / "signals.jsonl").write_text(json.dumps({"row": "team", "cheating_rung": "none"}) + "\n")
     write_evals(root, folder or name, evals)
     return run
 

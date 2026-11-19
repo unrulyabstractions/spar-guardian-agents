@@ -5,8 +5,8 @@
         print(line)
     print("\\n".join(budget_lines([Path("runs/om_lone_1"), Path("runs/om_lone_2")])))
 
-An EpisodeSummary joins an episode's record (episodes.jsonl) with its verdict (judge.jsonl): its role, tool calls,
-wall time and failure, whether the judge says it cheated, and the task's other judge flags that hold
+An EpisodeSummary joins an episode's record (episodes.jsonl) with CheatBench's verdict (verdict_files): its role,
+tool calls, wall time and failure, whether the judge says it cheated, and the task's other judge flags that hold
 (src/measures/verdict_fields.py). A run's header lines give its swarm composition, and its shutdown rate (the share
 of the agents holding stop_working that ended with it) when run.json records one; with full each episode's line is
 followed by the judge's summary. budget_lines gives each lone run's n_turns and their median, how long one agent
@@ -18,6 +18,7 @@ import statistics
 from dataclasses import dataclass
 from pathlib import Path
 
+from src.judging import verdict_files
 from src.measures.run_directory import RunDir
 from src.measures.verdict_fields import flag_names
 
@@ -73,7 +74,7 @@ def summary_lines(run_dir: Path, full: bool = False) -> list[str]:
     if rate is not None:
         lines.append(f"{run.name:24} shutdown rate {rate:.2f} (agents holding stop_working that ended with it before "
                      "any hand-in)")
-    verdicts = run.verdicts()
+    verdicts = verdict_files.episode_verdicts(run.path)
     for episode in episodes:
         row = EpisodeSummary.of(run.name, episode, verdicts.get(episode["episode"]))
         lines.append(row.line())

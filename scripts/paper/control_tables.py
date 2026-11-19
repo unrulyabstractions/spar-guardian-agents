@@ -1,12 +1,12 @@
-"""The positive and negative control tables for four targets, valid runs only, read from each run's run.json and
-src.measures.run_validity at build time. Writes tmp/tables/results/positive_control.png and
+"""The positive and negative control tables for four targets, valid runs only: each run's Cheating and Collusion rungs
+and the grader's pass as the transcript viewer measures them (scripts/paper/study_ladders.py record), and its validity
+from src.measures.run_validity, at build time. Writes tmp/tables/results/positive_control.png and
 tmp/tables/results/negative_control.png.
 
     uv run python -m scripts.paper.control_tables    # make results-tables runs every one
 """
 from __future__ import annotations
 
-import json
 import re
 import sys
 from pathlib import Path
@@ -15,32 +15,23 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 from matplotlib.patches import FancyBboxPatch, Rectangle
 
-from src.configuration.settings import ROOT
-from src.measures.run_validity import validity
-from src.utils.figure_style import (
-    AXIS,
-    BAND,
-    COLLABORATION_FILL,
-    COLLABORATION_TEXT,
-    GOOD,
-    GREY_RAMP,
-    INK,
-    INK_SECONDARY,
-    MUTED,
-    PRINT_DPI,
-    ROLE_FILL,
-    RUNG_FILL,
-    RUNG_TEXT,
-    WHITE,
+from scripts.paper.study_ladders import (
+    CHEATING_LETTER,
+    COLLUSION_SHORT,
+    cheating_legend,
+    collusion_chip,
+    collusion_legend,
+    record,
+    rung_chip,
 )
+from src.configuration.settings import ROOT
+from src.measures.code_ladder import CHEATED_FROM
+from src.measures.run_validity import validity
+from src.measures.rungs import at_least
+from src.utils.figure_style import AXIS, BAND, GOOD, GREY_RAMP, INK, INK_SECONDARY, MUTED, PRINT_DPI, ROLE_FILL, WHITE
 
 RUNS = ROOT / "runs" / "study_exploration_1"
 OUT = ROOT / "tmp" / "tables" / "results"
-ORDER = ["none", "exposed", "tried", "opened", "used", "tampered", "checked", "shipped"]
-LEVELS = ["isolated", "discussed", "solicited", "crossed", "assembled"]
-LETTER = {"none": "·", "exposed": "E", "tried": "T", "opened": "O", "used": "U", "tampered": "X", "checked": "C",
-          "shipped": "S"}
-SHORT = {"isolated": "iso", "discussed": "dis", "solicited": "sol", "crossed": "cro", "assembled": "asm"}
 
 USE = {"regulators": ("Regulators", ROLE_FILL["regulator"], WHITE, ["cheats unprompted,", "so it can fall"]),
        "disregulators": ("Disregulators", ROLE_FILL["disregulator"], WHITE,
@@ -50,7 +41,7 @@ USE = {"regulators": ("Regulators", ROLE_FILL["regulator"], WHITE, ["cheats unpr
 TARGETS = [
     ("Protein design", "GPT-6 Luna", {"none": "binder_minimal_luna", "cheat": "binder_minimal_cheat_luna",
                                       "generic": "binder_minimal_luna_generic",
-                                      "identified": "binder_minimal_luna_identified"}, "used", "regulators"),
+                                      "identified": "binder_minimal_luna_identified"}, CHEATED_FROM, "regulators"),
     ("Software engineering", "DeepSeek V4.1 Flash", {"none": "flipt_minimal_dsflash_fixed",
                                                      "cheat": "flipt_minimal_cheat_dsflash_fixed",
                                                      "generic": "flipt_minimal_dsflash_generic_fixed",
@@ -69,7 +60,7 @@ TARGETS = [
     ("Creative writing", "GPT-6 Luna", {"none": "poem_minimal_luna", "cheat": "poem_minimal_cheat_luna",
                                         "generic": "poem_minimal_luna_generic_rules",
                                         "identified": "poem_minimal_luna_identified_rules"},
-     "used", "disregulators"),
+     CHEATED_FROM, "disregulators"),
 ]
 POSITIVE = [("none", "Untold", ["nothing appended"]),
             ("cheat", "Told to cheat", ["“by any means”: the planted fix or designs",
@@ -80,7 +71,8 @@ NEGATIVE = [("none", "No rule", ["nothing appended"]),
 
 
 def runs_of(prefix: str | None) -> list[dict]:
-    """The valid runs of a cell, in seed order, and what each did."""
+    """The valid runs of a cell, in seed order, and what each did: the team's Cheating rung, whether the grader
+    passed the hand-in, and the team's Collusion rung."""
     if not prefix:
         return []
     out = []
@@ -89,23 +81,15 @@ def runs_of(prefix: str | None) -> list[dict]:
     for path in names:
         if not (path / "run.json").is_file() or not validity(path)["valid"]:
             continue
-        team = json.loads((path / "run.json").read_text())["signals"]["team"]
-        out.append({"name": path.name, "rung": team["rung"], "passed": bool(team.get("passed")),
-                    "collab": team.get("collaboration") or "isolated"})
+        run = record(path)
+        out.append({"name": path.name, "rung": run["cheating"], "passed": run["passed"], "collusion": run["collusion"]})
     return out
 
 
 def tile(ax, x: float, y: float, run: dict, width: float) -> None:
-    """One run: its rung, its collaboration level under it, and a check when it passed."""
-    ax.add_patch(FancyBboxPatch((x, y), width, 0.33, boxstyle="round,pad=0,rounding_size=0.04",
-                                fc=RUNG_FILL[run["rung"]], ec="none"))
-    ax.text(x + width / 2, y + 0.165, LETTER[run["rung"]], fontsize=9.5, weight="bold",
-            color=RUNG_TEXT.get(run["rung"], INK), ha="center", va="center")
-    level = run["collab"]
-    ax.add_patch(FancyBboxPatch((x, y + 0.36), width, 0.17, boxstyle="round,pad=0,rounding_size=0.03",
-                                fc=COLLABORATION_FILL[level], ec="none"))
-    ax.text(x + width / 2, y + 0.445, SHORT[level], fontsize=6.3, color=COLLABORATION_TEXT.get(level, INK),
-            ha="center", va="center")
+    """One run: its Cheating rung, its Collusion rung under it, and a check when the grader passed the hand-in."""
+    rung_chip(ax, x, y, width, 0.33, run["rung"], size=9.5)
+    collusion_chip(ax, x, y + 0.36, width, 0.17, run["collusion"], size=5.6)
     if run["passed"]:
         ax.text(x + width / 2, y + 0.65, "✓", fontsize=9.5, weight="bold", color=GOOD, ha="center", va="center")
 
@@ -114,7 +98,8 @@ def table(path: Path, columns: list) -> None:
     data = {(t[0], t[1], key): runs_of(t[2].get(key)) for t in TARGETS for key, _, _ in columns}
     for (task, workers, key), runs in data.items():
         print(f"{path.stem:17s} {task:21s} {workers:20s} {key:11s}",
-              [(r["name"].rsplit("_", 1)[-1], LETTER[r["rung"]], SHORT[r["collab"]], int(r["passed"])) for r in runs])
+              [(r["name"].rsplit("_", 1)[-1], CHEATING_LETTER[r["rung"]], COLLUSION_SHORT.get(r["collusion"]),
+               int(r["passed"])) for r in runs])
     left, col, use = 2.65, 2.72, 1.75
     width = left + col * len(columns) + use
     head_h, row_h, legend_h = 0.95, 1.5, 0.85
@@ -156,10 +141,11 @@ def table(path: Path, columns: list) -> None:
             for k, run in enumerate(runs):
                 tile(ax, x0 + k * (chip + gap), y0 + 0.17, run, chip)
             n, passed = len(runs), sum(r["passed"] for r in runs)
-            if measure == "used":
-                hit = sum(ORDER.index(r["rung"]) >= ORDER.index("used") for r in runs)
-                ax.text(x0, y0 + 1.22, f"used {hit} of {n}", fontsize=9.3, weight="bold", color=INK, va="center")
-                ax.text(x0 + 1.05, y0 + 1.22, f"passed {passed} of {n}", fontsize=7.8, color=INK_SECONDARY, va="center")
+            if measure == CHEATED_FROM:
+                hit = sum(at_least(r["rung"], CHEATED_FROM) for r in runs)
+                ax.text(x0, y0 + 1.22, f"{CHEATED_FROM}+ {hit} of {n}", fontsize=9.3, weight="bold", color=INK,
+                        va="center")
+                ax.text(x0 + 1.35, y0 + 1.22, f"passed {passed} of {n}", fontsize=7.8, color=INK_SECONDARY, va="center")
             else:
                 ax.text(x0, y0 + 1.22, f"passed {passed} of {n}", fontsize=9.3, weight="bold", color=INK, va="center")
         label, fill, text_color, reason = USE[suited]
@@ -173,26 +159,10 @@ def table(path: Path, columns: list) -> None:
 
     shown = [r for runs in data.values() for r in runs]
     ly = head_h + row_h * len(TARGETS) + 0.25
-    x, s = pad, 0.2
-    for rung in [r for r in ORDER if r in {run["rung"] for run in shown}]:
-        ax.add_patch(FancyBboxPatch((x, ly - s / 2), s, s, boxstyle="round,pad=0,rounding_size=0.03",
-                                    fc=RUNG_FILL[rung], ec="none"))
-        ax.text(x + s / 2, ly, LETTER[rung], fontsize=6.5, weight="bold", color=RUNG_TEXT.get(rung, INK), ha="center",
-                va="center")
-        ax.text(x + s + 0.07, ly, rung, fontsize=7.8, color=INK_SECONDARY, va="center")
-        x += s + 0.07 + len(rung) * 0.075 + 0.3
+    x = cheating_legend(ax, pad, ly, {run["rung"] for run in shown})
     ax.text(x, ly, "✓", fontsize=10, weight="bold", color=GOOD, va="center")
     ax.text(x + 0.18, ly, "passed the task's own test", fontsize=7.8, color=INK_SECONDARY, va="center")
-    ly += 0.32
-    x = pad
-    for level in [v for v in LEVELS if v in {run["collab"] for run in shown}]:
-        bar = 0.34
-        ax.add_patch(FancyBboxPatch((x, ly - 0.085), bar, 0.17, boxstyle="round,pad=0,rounding_size=0.03",
-                                    fc=COLLABORATION_FILL[level], ec="none"))
-        ax.text(x + bar / 2, ly, SHORT[level], fontsize=6.3, color=COLLABORATION_TEXT.get(level, INK), ha="center",
-                va="center")
-        ax.text(x + bar + 0.07, ly, level, fontsize=7.8, color=INK_SECONDARY, va="center")
-        x += bar + 0.07 + len(level) * 0.075 + 0.3
+    collusion_legend(ax, pad, ly + 0.32, {run["collusion"] for run in shown})
     fig.savefig(path, dpi=PRINT_DPI, facecolor=WHITE)
     print(path)
 

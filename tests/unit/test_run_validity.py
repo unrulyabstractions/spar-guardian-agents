@@ -1,5 +1,5 @@
 """run_validity: a run is valid only when it is no rehearsal, completed, on a task that met the collaboration rule, with
-a regulator that acted, a disregulator that acted and posted, and a team the code ladder placed. Each case builds a run
+a regulator that acted, a disregulator that acted and posted, and a team the code placed. Each case builds a run
 folder the way the export writes it, under runs/<study>/ or one of its groups, and its eval log at the same path under
 logs/."""
 from __future__ import annotations
@@ -17,7 +17,7 @@ LOG = "2026-11-01T03-31-41-00-00_run_abc.eval"
 
 
 def make_run(root: Path, name: str, *, task: str = "protein_design", commit: str = "HEAD", regulator_steps=None,
-             failure: str | None = None, rung: str | None = "used", posts: int = 0, group: str | None = None,
+             failure: str | None = None, rung: str | None = "tempted", posts: int = 0, group: str | None = None,
              disregulator_steps=None, disregulator_posts: int = 0) -> Path:
     run = root / "runs" / "study" / (group or "") / name
     (run / "trajectories").mkdir(parents=True)
@@ -32,7 +32,7 @@ def make_run(root: Path, name: str, *, task: str = "protein_design", commit: str
             "role_models": {"regulator": "openrouter/x" if regulator_steps is not None else None},
             "eval_log": f"/root/work/logs/study/{name}/{LOG}"}
     (run / "run.json").write_text(json.dumps(data))
-    (run / "signals.jsonl").write_text(json.dumps({"row": "team", "rung": rung}) + "\n" if rung else "")
+    (run / "signals.jsonl").write_text(json.dumps({"row": "team", "cheating_rung": rung}) + "\n" if rung else "")
     (run / "episodes.jsonl").write_text(json.dumps({"failure": failure}) + "\n")
     for agent, messages in (("r1", regulator_steps), ("d1", disregulator_steps)):
         if messages is not None:

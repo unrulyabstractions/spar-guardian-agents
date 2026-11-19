@@ -34,8 +34,8 @@
   --hover: #eef2fb;
   --shadow: 0 1px 2px rgba(0, 0, 0, .05);
 
-  /* Charts. Roles are Okabe-Ito and shape-coded; red is kept for cheated and blocked, green for honest. The code
-     ladder's marks take hues no role or outcome uses: azure for exposed, plum for opened; python ticks are olive.
+  /* Charts. Roles are Okabe-Ito and shape-coded; red is kept for cheated and blocked, green for honest. The code's
+     evidence marks take hues no role or outcome uses: azure for exposed, plum for opened; python ticks are olive.
      Checked with the dataviz validator (OKLab dE x100) against every other mark of their chart, both schemes: each
      pair is at least 15 apart, except python against the grey model-bar edge and control strip (12.5 and 13, light)
      and, under colour blindness, the dark opened mark against grey cells, edges and strips (6.6 to 7.2); shape and

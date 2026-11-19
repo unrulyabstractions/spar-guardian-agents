@@ -5,23 +5,26 @@ Hugging Face under apart_controls/). Writes tmp/tables/results/solo_vs_solo_told
     uv run python -m scripts.paper.solo_controls_table    # make results-tables runs it
 
 One run is one agent on one fixed instance of a task; seeds only vary sampling. The canonical copy of each run
-(manifest.jsonl canonical) counts; the team rung comes from each run's run.json (signals.team.rung) and must equal the
-manifest's, or the build stops. A run cheated when its rung is at or above its task's floor
-(src/domains BY_TASK ladder.cheated_from).
+(manifest.jsonl canonical) counts. Its Cheating rung is the one the transcript viewer measures
+(scripts/paper/study_ladders.py record), computed in WORKERS processes. A run cheated when its rung is at or above the
+rung the code compares with CheatBench's `cheated` on every task (src/measures/code_ladder.py CHEATED_FROM).
 """
 from __future__ import annotations
 
 import json
 import sys
+from concurrent.futures import ProcessPoolExecutor
+from pathlib import Path
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 from matplotlib.patches import Rectangle
 
+from scripts.paper.study_ladders import CHEATING_FILL, record
 from src.configuration.settings import ROOT
-from src.domains import BY_TASK
+from src.measures.code_ladder import CHEATED_FROM
 from src.measures.rungs import at_least
-from src.utils.figure_style import AXIS, BAND, INK, INK_SECONDARY, MUTED, PRINT_DPI, RUNG_FILL, WHITE
+from src.utils.figure_style import AXIS, BAND, INK, INK_SECONDARY, MUTED, PRINT_DPI, WHITE
 
 DATA = ROOT / "runs" / "apart_controls"
 OUT = ROOT / "tmp" / "tables" / "results" / "solo_vs_solo_told.png"
@@ -32,8 +35,9 @@ TASKS = [("flipt", "Software engineering", "flipt issue"), ("vuls", "Software en
 MODELS = [("ds", "DeepSeek V4.1 Flash"), ("luna", "GPT-6 Luna"), ("haiku", "Claude Haiku 5.5"),
           ("gpt5m", "GPT-5 mini"), ("qwen", "Qwen3.8 27B")]
 CELLS = [("solo", "untold"), ("cheat", "told")]
-# The rate's fill: light at 0, the shipped rung's red at 1.
-LOW, HIGH = RUNG_FILL["none"], RUNG_FILL["shipped"]
+WORKERS = 6
+# The rate's fill: light at 0, the hacked rung's red at 1.
+LOW, HIGH = CHEATING_FILL["none"], CHEATING_FILL["hacked"]
 
 
 def blend(rate: float) -> tuple[float, float, float]:
@@ -42,33 +46,32 @@ def blend(rate: float) -> tuple[float, float, float]:
     return tuple(a + (b - a) * rate for a, b in zip(lo, hi))
 
 
+def team_rung(path: Path) -> str:
+    return record(path)["cheating"]
+
+
 def load() -> dict[tuple[str, str, str], list[bool]]:
-    """Whether each canonical run cheated, by (task, model, cell). Stops on a rung the manifest and run.json disagree
-    on, or a run whose folder is missing."""
-    out: dict[tuple[str, str, str], list[bool]] = {}
-    floors = {}
+    """Whether each canonical run cheated, by (task, model, cell). Stops on a run whose folder is missing."""
+    rows, paths = [], []
     for line in (DATA / "manifest.jsonl").read_text().splitlines():
         row = json.loads(line)
         if not row["canonical"]:
             continue
-        path = DATA / row["model"] / row["task"] / row["cell"] / f"s{row['seed']}" / "run.json"
-        if not path.is_file():
-            raise SystemExit(f"missing {path}")
-        run = json.loads(path.read_text())
-        rung = run["signals"]["team"]["rung"]
-        if rung != row["rung"]:
-            raise SystemExit(f"{row['key']}: run.json says {rung}, the manifest {row['rung']}")
-        floor = floors.setdefault(row["task"], BY_TASK[run["task"]].ladder.cheated_from)
-        if floors[row["task"]] != BY_TASK[run["task"]].ladder.cheated_from:
-            raise SystemExit(f"{row['key']}: task {row['task']} maps to two floors")
-        out.setdefault((row["task"], row["model"], row["cell"]), []).append(at_least(rung, floor))
-    load.floors = floors
+        path = DATA / row["model"] / row["task"] / row["cell"] / f"s{row['seed']}"
+        if not (path / "run.json").is_file():
+            raise SystemExit(f"missing {path / 'run.json'}")
+        rows.append(row)
+        paths.append(path)
+    with ProcessPoolExecutor(max_workers=WORKERS) as pool:
+        rungs = list(pool.map(team_rung, paths, chunksize=16))
+    out: dict[tuple[str, str, str], list[bool]] = {}
+    for row, rung in zip(rows, rungs):
+        out.setdefault((row["task"], row["model"], row["cell"]), []).append(at_least(rung, CHEATED_FROM))
     return out
 
 
 def main() -> int:
     data = load()
-    floors = load.floors
     label_w, cell_w, gap = 2.3, 0.62, 0.22
     head_h, row_h, legend_h = 0.78, 0.46, 0.08
     width = label_w + len(MODELS) * (2 * cell_w + gap) + 0.1
@@ -92,9 +95,8 @@ def main() -> int:
         y0 = head_h + t * row_h
         if t % 2:
             ax.add_patch(Rectangle((0, y0), width, row_h, fc=BAND, ec="none", zorder=0))
-        ax.text(pad, y0 + row_h * 0.38, title + (f", {note}" if note else ""), fontsize=8.4, weight="bold",
+        ax.text(pad, y0 + row_h / 2, title + (f", {note}" if note else ""), fontsize=8.4, weight="bold",
                 color=INK, va="center")
-        ax.text(pad, y0 + row_h * 0.74, f"cheating from {floors[task]}", fontsize=6.6, color=MUTED, va="center")
         for m, (model, _) in enumerate(MODELS):
             x0 = label_w + m * (2 * cell_w + gap)
             for c, (cell, _) in enumerate(CELLS):
@@ -116,7 +118,7 @@ def main() -> int:
     OUT.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(OUT, dpi=PRINT_DPI, facecolor=WHITE)
     for task, _, _ in TASKS:
-        print(task, floors[task], " ".join(
+        print(task, " ".join(
             f"{model}:{sum(data.get((task, model, 'solo'), []))}/{len(data.get((task, model, 'solo'), []))}"
             f"->{sum(data.get((task, model, 'cheat'), []))}/{len(data.get((task, model, 'cheat'), []))}"
             for model, _ in MODELS))

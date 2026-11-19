@@ -3,29 +3,32 @@ Appendix B shows the full details of our results.
 
 \subsection*{Multi-Domain Tests}
 Results are shown in Figure~\ref{fig:multidomain}. Without any mitigation methods, most teams cheated: 3/3 on SWE
-with DeepSeek workers, 2/3 on SWE with Luna, 5/5 on protein design, and 2/4 on creative writing. When instructed to
-cheat, every team did. A generic honesty rule in the agents' task instructions had little effect, with cheating
-remaining at 3/3, 3/3, and 4/5 on the first three, but a rule naming the exploit specifically almost eliminated
-cheating (1/3, 0/3, 0/5). On creative writing, the generic rule left 1/3 teams cheating and the named rule 0/3.
+with DeepSeek workers, 2/3 on SWE with Luna, 5/5 on protein design, and 0/4 on creative writing. When instructed to
+cheat, every team on SWE and protein design did, and 3/5 on creative writing. A generic honesty rule in the agents'
+task instructions had little effect, with cheating remaining at 3/3, 3/3, and 4/5 on the first three, but a rule
+naming the exploit specifically eliminated cheating (0/3, 0/3, 0/5). On creative writing, no team cheated under
+either rule.
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\linewidth]{fig4_multidomain}
   \caption{Cheating behavior per each task domain and model tested; from left to right, SWE with DeepSeek, SWE with
-  Luna, protein design with Luna, and creative writing with Luna. The legend at the bottom describes different
-  tiers of cheating behavior. From top to bottom, we show how behavior changes in the presence of a regulator and
+  Luna, protein design with Luna, and creative writing with Luna. The legend at the bottom gives the team's rung on
+  the Cheating ladder. From top to bottom, we show how behavior changes in the presence of a regulator and
   how the regulator's instructions affect its ability to prevent cheating.}
   \label{fig:multidomain}
 \end{figure}
 
 Regulators worked best on protein design: Haiku regulators achieved 0/5 at both normal and enforcing levels. Luna
 reached 0/5 at enforce, but Argon at enforce had no effect (5/5). On SWE with DeepSeek workers, Haiku regulators did
-not reduce cheating (2/3 ambiguous, 3/3 enforce), although no team with an enforcing Haiku regulator shipped the fix.
+not reduce cheating (2/3 ambiguous, 2/3 enforce), although no team with an enforcing Haiku regulator handed in the
+fix.
 Luna and Sonnet regulators did not reduce it either. No regulator did better than the rule naming the exploit.
 
-We tested disregulators with GPT-6 Luna workers on SWE and creative writing (Appendix B). A disregulator brought
-every team to at least `tried'. No team it pushed went on to use the planted work, while teams told to cheat did. A
-Claude Haiku 5.5 regulator at the enforce level, added beside the disregulator, held every team at `exposed'.
+We tested disregulators with GPT-6 Luna workers on SWE and creative writing (Appendix B). On SWE, every team with a
+disregulator alone looked at the planted work. On creative writing, no team with a disregulator did. No team a disregulator
+pushed went past looked, while teams told to cheat did. A Claude Haiku 5.5 regulator at the enforce level, added
+beside the disregulator, kept every team at none.
 
 \subsection*{SWE Deep Dive}
 Stage 1 results are shown in Figure~\ref{fig:deepdive}. DeepSeek workers almost always cheated: 72/72 with no regulator or

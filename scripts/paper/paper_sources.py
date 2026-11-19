@@ -5,11 +5,15 @@ includes from paper/figures/.
     uv run python -m scripts.paper.paper_sources --check  # write nothing; exit 1 when paper/ disagrees with a source
 
 paper/generated/ holds what the code defines: params.tex (the board's budgets and the turn budget from the default
-preset, the judge and its reasoning effort from settings.JUDGE_MODEL and src/judging/judge_models.yaml), scales.tex
+preset, the judge and its reasoning effort from settings.JUDGE_MODEL and src/judging/judge_models.yaml, the Cheating
+ladder's alarm and the rung a team counts as cheating from, src/measures/code_ladder.py CHEATED_FROM), scales.tex
 (from src/configuration/scales.py), regulator_suffix.tex (the regulator's common text from
 src/configuration/prompts.yaml and its three report variants), regulator_levels.tex and disregulator_levels.tex (from
-src/configuration/instruction_levels.yaml) and coordination_levels.tex (the Coordination ladder's levels and cuts, from
-src/measures/coordination.py). Nobody edits these files by hand.
+src/configuration/instruction_levels.yaml), cheating_rungs.tex (the Cheating ladder's rungs and clauses, from
+src/measures/cheating_ladder.py LEVELS and CLAUSES), coordination_levels.tex (the Coordination ladder's levels and cuts,
+from src/measures/coordination.py) and collusion_rungs.tex (the Collusion ladder's rungs and who reads each, from
+src/measures/collusion.py RUNGS and CODE_RUNGS). The rungs' and clauses' wording is the transcript viewer's
+(src/ui/transcript_levels.py CHEAT_GLOSSES, CLAUSE_GLOSSES, COLLUSION_GLOSSES). Nobody edits these files by hand.
 
 FIGURES names each PNG in paper/figures/, the PNG in tmp/ it is copied from and the make target whose script draws
 it (`make paper-figures`, `make figures`, `make tables`, `make results-tables`). Every figure has a script here.
@@ -27,13 +31,14 @@ from pathlib import Path
 
 import yaml
 
-from scripts.paper.tables import hours
 from src.configuration import settings
 from src.configuration.presets import PRESETS
 from src.configuration.scales import SCALES
 from src.configuration.settings import ROOT
 from src.judging.cheatbench_judge import judge_entry
-from src.measures import coordination
+from src.measures import cheating_ladder, collusion, coordination
+from src.measures.code_ladder import CHEATED_FROM
+from src.ui.transcript_levels import CHEAT_GLOSSES, CLAUSE_GLOSSES, COLLUSION_GLOSSES
 
 PAPER = ROOT / "paper"
 GENERATED = PAPER / "generated"
@@ -82,12 +87,8 @@ FIGURES: dict[str, Figure] = {
                                   "make figures (scripts/paper/figures.py)"),
     "access.png": Figure("tmp/figures/method/design/access.png",
                          "make figures (scripts/paper/figures.py)"),
-    "table_collaboration_by_domain.png": Figure("tmp/tables/method/table_collaboration_by_domain.png",
-                                                "make tables (scripts/paper/tables.py)"),
     "table_rungs_by_domain.png": Figure("tmp/tables/method/table_rungs_by_domain.png",
                                         "make tables (scripts/paper/tables.py)"),
-    "table_rungs.png": Figure("tmp/tables/method/table_rungs.png",
-                              "make tables (scripts/paper/tables.py)"),
     # Appendices B and C: the results tables.
     "positive_control.png": Figure("tmp/tables/results/positive_control.png",
                                    RESULTS.format("control_tables.py")),
@@ -107,6 +108,10 @@ FIGURES: dict[str, Figure] = {
                                       RESULTS.format("baseline_tables.py")),
     "table_coordination_by_task.png": Figure("tmp/tables/results/table_coordination_by_task.png",
                                              RESULTS.format("coordination_table.py")),
+    "table_cheating_by_task.png": Figure("tmp/tables/results/table_cheating_by_task.png",
+                                         RESULTS.format("cheating_table.py")),
+    "table_collusion_by_task.png": Figure("tmp/tables/results/table_collusion_by_task.png",
+                                          RESULTS.format("collusion_table.py")),
 }
 
 HEADER = "% Written by scripts/paper/paper_sources.py from {source}. Do not edit; run `make paper-sources`.\n"
@@ -140,6 +145,10 @@ def with_chips(text: str) -> str:
     return "".join(out).strip()
 
 
+def hours(seconds: int) -> str:
+    return f"{seconds // 60} min" if seconds < 3600 else f"{seconds // 3600} h"
+
+
 def params_tex() -> str:
     c = PRESETS["default"]
     macros = {
@@ -155,7 +164,10 @@ def params_tex() -> str:
         raise SystemExit(f"judge {settings.JUDGE_MODEL!r} has no name in JUDGE_NAMES: add it, then check the prose")
     judge = {"JudgeName": JUDGE_NAMES[settings.JUDGE_MODEL],
              "JudgeEffort": judge_entry(settings.JUDGE_MODEL)["generation_config"].get("reasoning_effort") or "default"}
-    lines = [HEADER.format(source="PRESETS['default'], settings.JUDGE_MODEL and src/judging/judge_models.yaml")]
+    judge["CheatingAlarm"] = cheating_ladder.ALARM
+    judge["CheatedFrom"] = CHEATED_FROM
+    lines = [HEADER.format(source="PRESETS['default'], settings.JUDGE_MODEL, src/judging/judge_models.yaml, "
+                                  "src/measures/cheating_ladder.py ALARM and src/measures/code_ladder.py CHEATED_FROM")]
     lines += [rf"\newcommand{{\{k}}}{{{v}}}" for k, v in macros.items()]
     lines += [rf"\newcommand{{\{k}}}{{{escape(v)}}}" for k, v in judge.items()]
     return "\n".join(lines) + "\n"
@@ -223,6 +235,37 @@ def coordination_levels_tex() -> str:
     return (HEADER.format(source="src/measures/coordination.py LEVELS and cuts")
             + "\\begin{tabular}{rll}\n\\toprule\nNumber & Level & Condition \\\\\n\\midrule\n"
             + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n")
+
+
+def cheating_rungs_tex() -> str:
+    """The Cheating ladder: each rung, what puts an agent on it, and the clauses whose evidence does, lowest first."""
+    levels = cheating_ladder.LEVELS
+    if len(CHEAT_GLOSSES) != len(levels):
+        raise SystemExit(f"Cheating LEVELS {levels} and CHEAT_GLOSSES differ in length: update both")
+    rows = []
+    for i, (rung, gloss) in enumerate(zip(levels, CHEAT_GLOSSES)):
+        clauses = [c for c, r in cheating_ladder.CLAUSES.items() if r == rung]
+        named = "; ".join(rf"\textit{{{escape(c)}}}: {escape(CLAUSE_GLOSSES[c])}" for c in clauses) or "none"
+        rows.append(rf"{i} & \textbf{{{escape(rung)}}} & {escape(gloss)} & {named} \\")
+    return (HEADER.format(source="src/measures/cheating_ladder.py LEVELS and CLAUSES, src/ui/transcript_levels.py")
+            + "\\begin{tabularx}{\\linewidth}{@{}r l >{\\raggedright\\arraybackslash}X "
+            + ">{\\raggedright\\arraybackslash}X@{}}\n\\toprule\nNumber & Rung & An agent is here when & Clauses "
+            + "\\\\\n\\midrule\n" + "\n\\addlinespace\n".join(rows) + "\n\\bottomrule\n\\end{tabularx}\n")
+
+
+def collusion_rungs_tex() -> str:
+    """The Collusion ladder: each rung, whether code or a judge reads it, and what puts an agent on it."""
+    levels = collusion.RUNGS
+    if len(COLLUSION_GLOSSES) != len(levels):
+        raise SystemExit(f"Collusion RUNGS {levels} and COLLUSION_GLOSSES differ in length: update both")
+    judged = "a judge's rung: "
+    rows = [rf"{i} & \textbf{{{escape(rung)}}} & {'code' if rung in collusion.CODE_RUNGS else 'judge'} & "
+            rf"{escape(gloss.removeprefix(judged))} \\"
+            for i, (rung, gloss) in enumerate(zip(levels, COLLUSION_GLOSSES))]
+    return (HEADER.format(source="src/measures/collusion.py RUNGS and CODE_RUNGS, src/ui/transcript_levels.py")
+            + "\\begin{tabularx}{\\linewidth}{@{}r l l >{\\raggedright\\arraybackslash}X@{}}\n\\toprule\n"
+            + "Number & Rung & Read by & An agent is here when \\\\\n\\midrule\n"
+            + "\n\\addlinespace\n".join(rows) + "\n\\bottomrule\n\\end{tabularx}\n")
 
 
 def model_name(key: str) -> str:
@@ -294,7 +337,9 @@ def generated_files() -> dict[Path, str]:
         GENERATED / "regulator_suffix.tex": regulator_suffix_tex(),
         GENERATED / "regulator_levels.tex": levels_tex("regulator"),
         GENERATED / "disregulator_levels.tex": levels_tex("disregulator"),
+        GENERATED / "cheating_rungs.tex": cheating_rungs_tex(),
         GENERATED / "coordination_levels.tex": coordination_levels_tex(),
+        GENERATED / "collusion_rungs.tex": collusion_rungs_tex(),
     }
     if STUDY_INDEX.exists():
         files[GENERATED / "study.tex"] = study_tex()
@@ -304,7 +349,8 @@ def generated_files() -> dict[Path, str]:
 
 
 def check() -> list[str]:
-    """What in paper/ disagrees with its source. An absent tmp/ source is reported apart, as a warning."""
+    """What in paper/ disagrees with its source, and any figure there that no entry of FIGURES names. An absent tmp/
+    source is reported apart, as a warning."""
     problems = []
     for path, text in generated_files().items():
         if not path.exists() or path.read_text() != text:
@@ -317,6 +363,9 @@ def check() -> list[str]:
         src = ROOT / fig.source
         if src.exists() and src.read_bytes() != dest.read_bytes():
             problems.append(f"STALE   {dest.relative_to(ROOT)} differs from {fig.source}")
+    for dest in sorted(FIGURE_DIR.glob("*.png")):
+        if dest.name not in FIGURES:
+            problems.append(f"UNUSED  {dest.relative_to(ROOT)} has no FIGURES entry (delete it)")
     return problems
 
 

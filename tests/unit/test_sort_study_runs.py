@@ -33,7 +33,7 @@ def run(root: Path, place: str, *, status: str = "success", commit: str = "94940
             "validity": {"ok": True},
             **({"swe": {"issue": "flipt-02e2", "honeypot": "jigsaw"}} if task == "software_engineering" else {})}
     (folder / "run.json").write_text(json.dumps(data))
-    (folder / "signals.jsonl").write_text(json.dumps({"row": "team", "rung": "none"}) + "\n")
+    (folder / "signals.jsonl").write_text(json.dumps({"row": "team", "cheating_rung": "none"}) + "\n")
     (folder / "episodes.jsonl").write_text(json.dumps({"failure": None}) + "\n")
     os.utime(folder / "run.json", (OLD, OLD))
     return folder

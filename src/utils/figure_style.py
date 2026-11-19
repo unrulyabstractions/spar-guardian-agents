@@ -1,6 +1,6 @@
-"""The look every figure shares: the colour tokens, the categorical, status, rung and collaboration palettes, the
-role colours, the axis chrome, the title and the legend under the axes. It imports nothing, so the run figures, the
-paper's scripts and the analysis tools (tools/.venv, without ORBIT) all draw from it.
+"""The look every figure shares: the colour tokens, the categorical and status palettes, the role colours, the axis
+chrome, the title and the legend under the axes. It imports nothing, so the run figures, the paper's scripts and the
+analysis tools (tools/.venv, without ORBIT) all draw from it.
 
     from src.utils.figure_style import ROLE_FILL, legend_below, style_axes, title_axes
     style_axes(ax, grid="y")
@@ -19,7 +19,6 @@ GRID = "#e1e0d9"             # hairlines
 AXIS = "#c3c2b7"             # the baseline and a table's rules
 PLANE = "#f0efec"            # a shared structure in a diagram, such as the board
 TOOL = "#e6e5df"             # a charged step or a kept tool result in a diagram
-CHIP = "#efeee9"             # the chip behind code in a table
 BAND = "#f7f6f2"             # a table's alternate rows
 GREY_RAMP = ("#efeee9", "#e1e0d9", "#d4d3cc", "#c7c6be", "#b9b8b0")   # neutral steps, light to dark
 
@@ -35,18 +34,6 @@ WARNING, SERIOUS, GOOD, CRITICAL = "#fab219", "#ec835a", "#0ca30c", "#d03b3b"
 ROLE_FILL = {"worker": WHITE, "regulator": CATEGORICAL[0], "disregulator": CATEGORICAL[1]}
 ROLE_EDGE = {"worker": INK_SECONDARY, "regulator": CATEGORICAL[0], "disregulator": CATEGORICAL[1]}
 ROLE_TEXT = {"worker": INK, "regulator": WHITE, "disregulator": WHITE}
-
-# The honeypot ladder's rungs (src/measures/rungs.py RUNGS) as one sequential ramp, light to dark, with "none"
-# neutral; the dark four take white text.
-RUNG_FILL = {"none": "#eeede8", "exposed": "#fde4c8", "tried": "#f9c396", "opened": "#f29a6a", "used": "#e8714a",
-             "tampered": "#dc5b3c", "checked": "#d0452e", "shipped": "#a8201c"}
-RUNG_TEXT = {"used": WHITE, "tampered": WHITE, "checked": WHITE, "shipped": WHITE}
-
-# The collaboration levels (src/measures/rungs.py COLLABORATION) as a violet ramp, apart from the rungs' hue and the
-# roles' blue, with "isolated" neutral; the dark two take white text.
-COLLABORATION_FILL = {"isolated": "#eeede8", "discussed": "#e4dff7", "solicited": "#bdb2ee", "crossed": "#8a76dc",
-                      "assembled": "#4f3cb0"}
-COLLABORATION_TEXT = {"crossed": WHITE, "assembled": WHITE}
 
 # The honeypot's hue in the setup figures: its outline and text, and its fill.
 HONEY = "#6a3d10"

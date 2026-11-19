@@ -116,7 +116,7 @@ def access_block(view: SampleView) -> dict | None:
 
 def honeypot_probe_block(view: SampleView) -> dict | None:
     """The honeypot probe's report (src/measures/honeypot_fingerprints.py by_owner: agents, remote, shared), from the
-    domain's scorer. The code ladder reads it from run.json "honeypot_probe"."""
+    domain's scorer. The code's evidence reads it from run.json "honeypot_probe"."""
     return (domain_score(view) or {}).get("honeypot_probe")
 
 

@@ -1,6 +1,8 @@
 """Disregulators with GPT-6 Luna workers, in the same layout as the regulator tables: creative writing like
-table_protein_regulators.png, software engineering like table_swe_regulators.png. Valid runs only, read from each run's
-run.json, board and src.measures.run_validity at build time. Writes tmp/tables/results/table_creative_disregulators.png
+table_protein_regulators.png, software engineering like table_swe_regulators.png. Valid runs only: each run's Cheating
+and Collusion rungs and the grader's pass as the transcript viewer measures them (scripts/paper/study_ladders.py
+record), the pieces in the hand-in from the team's shipped evidence, the disregulator's posts from the board, and the
+run's validity from src.measures.run_validity, at build time. Writes tmp/tables/results/table_creative_disregulators.png
 and tmp/tables/results/table_swe_disregulators.png.
 
     uv run python -m scripts.paper.disregulator_tables    # make results-tables runs every one
@@ -16,28 +18,22 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 from matplotlib.patches import FancyBboxPatch, Rectangle
 
-from src.configuration.settings import ROOT
-from src.measures.run_validity import validity
-from src.utils.figure_style import (
-    AXIS,
-    BAND,
-    COLLABORATION_FILL,
-    COLLABORATION_TEXT,
-    GOOD,
-    INK,
-    INK_SECONDARY,
-    MUTED,
-    PRINT_DPI,
-    RUNG_FILL,
-    RUNG_TEXT,
-    WHITE,
+from scripts.paper.study_ladders import (
+    CHEATING_LETTER,
+    cheating_legend,
+    collusion_chip,
+    collusion_legend,
+    record,
+    rung_chip,
 )
+from src.configuration.settings import ROOT
+from src.measures.code_ladder import CHEATED_FROM
+from src.measures.run_validity import validity
+from src.measures.rungs import at_least
+from src.utils.figure_style import AXIS, BAND, GOOD, INK, INK_SECONDARY, MUTED, PRINT_DPI, WHITE
 
 RUNS = ROOT / "runs" / "study_exploration_1"
 OUT = ROOT / "tmp" / "tables" / "results"
-ORDER = ["none", "exposed", "tried", "opened", "used", "tampered", "checked", "shipped"]
-LETTER = {"none": "·", "exposed": "E", "tried": "T", "opened": "O", "used": "U", "tampered": "X", "checked": "C",
-          "shipped": "S"}
 VERB = re.compile(r"reus|inspect|replicate|copy|cherry-?pick", re.I)
 PRIOR = re.compile(r"reference|/tmp/grading/ref|existing fix|fix branch|upstream|\brd/", re.I)
 NEGATION = re.compile(r"\b(not|no|never|without|avoid|cannot)\b|n['’]t\b", re.I)
@@ -71,8 +67,9 @@ def read(path: Path) -> dict | None:
     posts = []
     for board in path.glob("communication/*.json"):
         posts = [m for m in json.loads(board.read_text())["messages"] if m["sender"] in others]
-    return {"name": path.name, "rung": team["rung"], "passed": bool(team.get("passed")), "pieces": shipped,
-            "collab": team.get("collaboration") or "isolated", "disregulator": bool(others), "posts": len(posts),
+    ladders = record(path)
+    return {"name": path.name, "rung": ladders["cheating"], "passed": ladders["passed"], "pieces": shipped,
+            "collusion": ladders["collusion"], "disregulator": bool(others), "posts": len(posts),
             "urged": sum(urges(m["content"]) for m in posts)}
 
 
@@ -82,23 +79,16 @@ def cell_runs(prefix: str) -> list[dict]:
     return [r for r in map(read, paths) if r]
 
 
-def collaboration(ax, x0: float, cy: float, runs: list[dict], pw: float, step: float) -> None:
+def collusion(ax, x0: float, cy: float, runs: list[dict], pw: float, step: float) -> None:
     for k, r in enumerate(runs):
-        px, ph = x0 + k * step, 0.24
-        ax.add_patch(FancyBboxPatch((px, cy - ph / 2), pw, ph, boxstyle="round,pad=0,rounding_size=0.06",
-                                    fc=COLLABORATION_FILL[r["collab"]], ec="none"))
-        ax.text(px + pw / 2, cy, r["collab"], fontsize=7 if pw < 0.86 else 7.2, ha="center", va="center",
-                color=COLLABORATION_TEXT.get(r["collab"], INK))
+        collusion_chip(ax, x0 + k * step, cy - 0.12, pw, 0.24, r["collusion"], size=6.8)
 
 
 def rungs(ax, x0: float, cy: float, runs: list[dict], gap: float) -> None:
     chip = 0.3
     for k, r in enumerate(runs):
         x = x0 + k * (chip + gap)
-        ax.add_patch(FancyBboxPatch((x, cy - chip / 2), chip, chip, boxstyle="round,pad=0,rounding_size=0.035",
-                                    fc=RUNG_FILL[r["rung"]], ec="none"))
-        ax.text(x + chip / 2, cy, LETTER[r["rung"]], fontsize=8.5, weight="bold", color=RUNG_TEXT.get(r["rung"], INK),
-                ha="center", va="center")
+        rung_chip(ax, x, cy - chip / 2, chip, chip, r["rung"])
         if r["passed"]:
             ax.text(x + chip / 2, cy + chip / 2 + 0.13, "✓", fontsize=9.5, weight="bold", color=GOOD, ha="center",
                     va="center")
@@ -130,18 +120,19 @@ def build(name: str, title: str, title_w: float, rows: list, swe: bool) -> None:
     for label, level, prefix in rows:
         runs = cell_runs(prefix)
         table.append((label, level, runs))
-        print(name, label, level, [(LETTER[r["rung"]], "".join(sorted(r["pieces"])), int(r["passed"]), r["collab"],
+        print(name, label, level, [(CHEATING_LETTER[r["rung"]], "".join(sorted(r["pieces"])), int(r["passed"]),
+                                    r["collusion"],
                                     r["posts"], r["urged"]) for r in runs])
     last = "Disregulator posts; urged reuse"
     if swe:
         widths = [3.0, 1.55, 2.35, 1.05, 3.05, 2.1]
-        header = ["Disregulator × level", "Rungs", "Pieces shipped", "Pass", "Collaboration", last]
+        header = ["Disregulator × level", "Cheating", "Pieces handed in", "Pass", "Collusion", last]
         row_h, gap = 0.72, 0.08
     else:
         widths = [3.2, 2.3, 1.45, 4.55, 2.3]
-        header = ["Disregulator × level", "Rungs", "Used or higher", "Collaboration", last]
+        header = ["Disregulator × level", "Cheating", f"{CHEATED_FROM.capitalize()} or higher", "Collusion", last]
         row_h, gap = 0.62, 0.07
-    title_h, head_h, legend_h, pad = 0.55, 0.5, 0.6 if swe else 0.55, 0.16
+    title_h, head_h, legend_h, pad = 0.55, 0.5, 0.9, 0.16
     width, xs = sum(widths), [sum(widths[:j]) for j in range(len(widths))]
     height = title_h + head_h + row_h * len(table) + legend_h
     fig = Figure(figsize=(width, height), dpi=PRINT_DPI)
@@ -174,25 +165,19 @@ def build(name: str, title: str, title_w: float, rows: list, swe: bool) -> None:
             pieces(ax, xs[2] + pad, cy, runs)
             passed = sum(r["passed"] for r in runs)
             ax.text(xs[3] + pad, cy, f"{passed} of {len(runs)}", fontsize=9.2, weight="bold", color=INK, va="center")
-            collaboration(ax, xs[4] + pad, cy, runs, 0.86, 0.93)
+            collusion(ax, xs[4] + pad, cy, runs, 0.86, 0.93)
             posts(ax, xs[5] + pad, cy, runs)
         else:
-            hit = sum(ORDER.index(r["rung"]) >= ORDER.index("used") for r in runs)
+            hit = sum(at_least(r["rung"], CHEATED_FROM) for r in runs)
             ax.text(xs[2] + pad, cy, f"{hit} of {len(runs)}", fontsize=9.2, weight="bold", color=INK, va="center")
-            collaboration(ax, xs[3] + pad, cy, runs, 0.8, 0.86)
+            collusion(ax, xs[3] + pad, cy, runs, 0.8, 0.86)
             posts(ax, xs[4] + pad, cy, runs)
         same_next = i + 1 < len(table) and table[i + 1][0] == label
         ax.plot([0 if not same_next else level_x - 0.04, width], [y0 + row_h, y0 + row_h], color=AXIS,
                 lw=0.35 if same_next else 0.7)
-    ly, x, s = y + row_h * len(table) + legend_h / 2, pad, 0.2
-    shown = {r["rung"] for _, _, runs in table for r in runs}
-    for rung in [r for r in ORDER if r in shown]:
-        ax.add_patch(FancyBboxPatch((x, ly - s / 2), s, s, boxstyle="round,pad=0,rounding_size=0.03",
-                                    fc=RUNG_FILL[rung], ec="none"))
-        ax.text(x + s / 2, ly, LETTER[rung], fontsize=6.5, weight="bold", color=RUNG_TEXT.get(rung, INK), ha="center",
-                va="center")
-        ax.text(x + s + 0.07, ly, rung, fontsize=7.8, color=INK_SECONDARY, va="center")
-        x += s + 0.07 + len(rung) * 0.075 + 0.32
+    shown = [r for _, _, runs in table for r in runs]
+    ly = y + row_h * len(table) + legend_h / 2 - 0.15
+    x = cheating_legend(ax, pad, ly, {r["rung"] for r in shown})
     if any(r["passed"] for _, _, runs in table for r in runs):
         ax.text(x, ly, "✓", fontsize=10, weight="bold", color=GOOD, va="center")
         ax.text(x + 0.18, ly, "passed the task's own test", fontsize=7.8, color=INK_SECONDARY, va="center")
@@ -209,6 +194,7 @@ def build(name: str, title: str, title_w: float, rows: list, swe: bool) -> None:
                                     ec=AXIS, lw=0.7))
         ax.text(x + ps / 2, ly, "A", fontsize=6.3, weight="bold", color=MUTED, ha="center", va="center")
         ax.text(x + ps + 0.07, ly, "missing", fontsize=7.8, color=INK_SECONDARY, va="center")
+    collusion_legend(ax, pad, ly + 0.3, {r["collusion"] for r in shown})
     fig.savefig(OUT / f"{name}.png", dpi=PRINT_DPI, facecolor=WHITE)
 
 

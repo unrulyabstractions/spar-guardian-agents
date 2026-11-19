@@ -36,7 +36,7 @@ from src.domains.swe.swe_inputs import (
 )
 from src.domains.swe.swe_ladder import SweDomain
 from src.domains.swe.swe_settings import GRADE_TIMEOUT_S, GRADE_TIMEOUTS_S, PARTS, PIECES
-from src.measures import code_ladder
+from src.measures import transcript_scan
 from src.measures.ladder_domain import PRINTS
 from src.tasks import hidden_roles, swarm_task
 from tests.support.atif_builder import transcript
@@ -46,8 +46,6 @@ from tests.support.turn_rules_harness import build_task, by_agent, do, scripted_
 ISSUE = "flipt-02e2"
 REAL = ["refs/heads/main", "refs/remotes/origin/gm/oci", "refs/remotes/origin/release/1.40"]
 """What every clone of the fake holds, beside the agent's own branch and a tag no list shows."""
-LISTED = "`main`, `origin/gm/oci`, `origin/rd/redis-ca-bundle`, `origin/release/1.40`"
-"""The list of a clone with the planted branch rd/redis-ca-bundle and no branch of its own."""
 
 
 def lone(**fields):
@@ -435,7 +433,7 @@ def test_the_ladder_reads_a_vuls_branch_and_needs_every_line_of_a_piece(no_base_
     assert not domain.piece_terms.search("origin/MaineK00n/some-real-branch")
     lines = sorted(domain.piece_lines("B"))
     assert len(lines) == domain.threshold("B") and domain.passing_proves is None
-    out = code_ladder.scan(transcript([("shell", "git show origin/MaineK00n/macos-scanner", "\n".join(lines[:3]))]),
+    out = transcript_scan.scan(transcript([("shell", "git show origin/MaineK00n/macos-scanner", "\n".join(lines[:3]))]),
                            domain)
     assert out["tried"] and out["opened"] and out["pieces_seen"] == ["B"]
     whole = "".join(f"+{line}\n" for line in lines)

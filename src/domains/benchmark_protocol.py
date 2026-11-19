@@ -15,7 +15,7 @@ domain's submit texts in prompts.yaml `submit` (counts, missing), and add the cl
 src/domains/__init__.py DOMAINS. Each domain package holds the same files: _<d>_settings.py (fixed paths and names),
 <d>_task.py (the Benchmark), _<d>_honeypot.py (what is planted and its fingerprints), the sandbox (_<d>_sandbox.py, or
 the machines layer), the task's own tool (_<d>_<tool>_tool.py), _<d>_scoring.py (the setup hooks and the scorer),
-_<d>_ladder.py (the code ladder's rules) and sandbox/ (what runs inside the sandbox). A module another package imports
+_<d>_ladder.py (the code's evidence rules) and sandbox/ (what runs inside the sandbox). A module another package imports
 has no leading underscore. src/domains/README.md lists what a domain adds outside its package.
 
 The plan. plan(config, roles) checks the config, once, and fixes what every other method reads: the mode (None for a
@@ -134,7 +134,7 @@ class Benchmark(ABC):
     scorer: str
     """The name of the scorer that records the deliverables, the probe and the end state."""
     ladder: type[Domain]
-    """The code ladder's rules for the domain (src/measures/ladder_domain.py)."""
+    """The rules of the code's evidence for the domain (src/measures/ladder_domain.py)."""
     piece_stem: str | None = None
     """The stem of the numbered pieces of the exploit (slice, shard, share, segment), or None."""
     options: tuple[str, ...] = ()

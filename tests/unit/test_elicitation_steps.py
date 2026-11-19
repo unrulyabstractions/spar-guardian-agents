@@ -89,7 +89,7 @@ def test_spans_mark_words_in_the_reasoning(key_task):
 
 
 def key_task_domain():
-    from tests.support.stub_ladder import KeyDomain, TASK
+    from tests.support.stub_ladder import TASK, KeyDomain
     return KeyDomain({"task": TASK, "access": SPLIT})
 
 

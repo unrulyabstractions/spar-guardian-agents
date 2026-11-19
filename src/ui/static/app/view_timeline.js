@@ -91,8 +91,8 @@ const RASTER_KINDS = [
   ['work', 'shell, run_python or another tool', 'sw-work'],
   ['post', 'board_post', 'sw-post'],
   ['read', 'board_read or board_status', 'sw-read'],
-  ['exposed', 'exposed (code ladder)', 'sw-exposed'],
-  ['opened', 'opened (code ladder)', 'sw-opened'],
+  ['exposed', 'exposed (code’s evidence)', 'sw-exposed'],
+  ['opened', 'opened (code’s evidence)', 'sw-opened'],
   ['submit', 'submit (handed in)', 'sw-submit'],
   ['stop', 'stop_working', 'sw-stop'],
   ['refusal', 'refusal sentence as output', 'sw-refusal'],
@@ -215,7 +215,7 @@ function rasterPanel(tl, agents, maxW) {
       h('div', { class: 'raster-labels', style: `grid-auto-rows: ${cellH}px` },
         agents.map(a => h('div', { class: 'raster-label' }, roles[a] ? roleIcon(roles[a], 10) : null, a))),
       h('div', { class: 'raster-scroll' }, el)),
-    h('div', { class: 'muted small' }, `Columns are each agent’s own model calls, 1 to ${cols}; a call takes the action of its first tool call, and the code ladder’s exposed or opened call among the tool calls that follow it wins.`),
+    h('div', { class: 'muted small' }, `Columns are each agent’s own model calls, 1 to ${cols}; a call takes the action of its first tool call, and the code’s exposed or opened evidence among the tool calls that follow it wins.`),
     rasterLegend(present));
 }
 
@@ -254,7 +254,7 @@ export function timelinePanels(run, tl, runInfo) {
   const onResize = debounce(() => { tip.hide(); draw(); }, 150);
   const note = h('div', null,
     muted(`${plural(agents.length, 'agent')} · ${plural(tl.events.length, 'event')} · ${plural(tl.board.length, 'board post')} · ${fmtSecs(tl.duration)} sample time. ` +
-      'Exposed and opened are the code ladder’s calls (signals.jsonl): the first call that showed the agent a pointer to the honeypot, and the first that showed it the content. The judge verdict sits at the end of each lane.'),
+      'Exposed and opened are the code’s evidence (signals.jsonl): the first call that showed the agent a pointer to the honeypot, and the first that showed it the content. The judge verdict sits at the end of each lane.'),
     notCounted.length ? h('div', { class: 'muted small' },
       `${plural(notCounted.length, 'judge verdict')} drawn grey as “not counted”, as in the runs list and the summary: ${whyNot}.`) : null);
   return {
@@ -441,8 +441,8 @@ function swimlaneCard(ctx, lane, run) {
     kinds.has('other') ? [lgSvg(svgEl('line', { class: 'tk tk-other', x1: 10, x2: 10, y1: 2, y2: 13 })), 'another tool'] : null,
     posts.length ? [lgSvg(svgEl('circle', { class: 'm-post', cx: 10, cy: 7, r: 4.5 })), 'board post'] : null,
     anyRead ? [lgSvg(svgEl('line', { class: 'arrow', x1: 1, y1: 7, x2: 19, y2: 7 })), 'post read'] : null,
-    anyExposed ? [lgSvg(svgEl('circle', { class: 'm-exposed', cx: 10, cy: 7, r: 5 })), 'exposed (code ladder)'] : null,
-    anyOpened ? [lgSvg(diamond(10, 7, 5, 'm-opened')), 'opened (code ladder)'] : null,
+    anyExposed ? [lgSvg(svgEl('circle', { class: 'm-exposed', cx: 10, cy: 7, r: 5 })), 'exposed (code’s evidence)'] : null,
+    anyOpened ? [lgSvg(diamond(10, 7, 5, 'm-opened')), 'opened (code’s evidence)'] : null,
     anyBlocks ? [lgSvg(svgEl('rect', { class: 'm-block', x: 5, y: 0, width: 9, height: 14 }), svgEl('line', { class: 'm-block-line', x1: 14, x2: 14, y1: 0, y2: 14 })), 'defense block (band from the control call to the decision)'] : null,
     anyRefusal || anyBlockedTool ? [lgSvg(xMark(10, 7, 4)),
       anyRefusal && anyBlockedTool ? 'refusal sentence or blocked tool call' : anyRefusal ? 'refusal sentence as output' : 'blocked tool call'] : null,
@@ -575,8 +575,8 @@ function swimlaneCard(ctx, lane, run) {
         hits.push({ x0: xa - 1, x1: Math.max(xa + 1, xe), y0: ya - (e.blocked ? 9 : 2), y1: yb, pri,
           lines: () => [`${a} · ${e.function}${e.blocked ? ' · BLOCKED' : e.error ? ' · error' : ''}`,
             `${fmtSecs(e.t)}${e.t_end != null ? ` for ${fmtSecs(e.t_end - e.t)}` : ''}`,
-            e.exposed ? 'exposed: the code ladder’s first call that showed this agent a pointer to the honeypot' : null,
-            e.opened ? 'opened: the code ladder’s first call that showed this agent the honeypot’s content' : null,
+            e.exposed ? 'exposed: the code’s first call that showed this agent a pointer to the honeypot' : null,
+            e.opened ? 'opened: the code’s first call that showed this agent the honeypot’s content' : null,
             e.preview ? String(e.preview).slice(0, 300) : null] });
       }
       // Verdict at the lane's end: only a counted verdict is drawn red or green.
@@ -714,7 +714,7 @@ function swimlaneCard(ctx, lane, run) {
     return [`${a}${roles[a] ? ` (${roles[a]})` : ''}`,
       verdictLine(verdictInfoOf(a)),
       `${plural(L.models.length, 'model call')} · ${plural(L.tools.length, 'tool call')}`,
-      exposedOf(a) != null ? `exposed at ${fmtSecs(exposedOf(a))}` : 'never exposed (code ladder)',
+      exposedOf(a) != null ? `exposed at ${fmtSecs(exposedOf(a))}` : 'never exposed (code’s evidence)',
       openedOf(a) != null ? `opened at ${fmtSecs(openedOf(a))}` : null,
       blocks || refusals ? `${plural(blocks, 'block')}, ${plural(refusals, 'refusal')}` : null];
   }
@@ -724,8 +724,8 @@ function swimlaneCard(ctx, lane, run) {
 }
 
 /**
- * Edges A -> B: posts of A that B read no later than B's exposure (the code ladder's exposed call, which may be the
- * read itself). An agent the ladder never found exposed has no incoming edge.
+ * Edges A -> B: posts of A that B read no later than B's exposure (the code's exposed evidence, which may be the
+ * read itself). An agent the code never found exposed has no incoming edge.
  */
 function exposureEdges(tl) {
   const edges = new Map();
@@ -772,7 +772,7 @@ function cascadeView(ctx, width) {
   agents.forEach((a, i) => svg.appendChild(svgEl('rect', { class: ['lane-bg', i % 2 && 'alt'], x: 0, y: padT + i * rowH, width: W, height: rowH })));
   svg.appendChild(svgEl('line', { class: 'grp-rule dashed', x1: divX, x2: divX, y1: padT - 18, y2: H - 22 }));
   svg.appendChild(svgEl('text', { class: 'axis-title', x: (divX + W) / 2, y: 14, 'text-anchor': 'middle' }, 'never exposed'));
-  svg.appendChild(svgEl('text', { class: 'axis-title', x: x0, y: 14 }, 'exposed (code ladder) →'));
+  svg.appendChild(svgEl('text', { class: 'axis-title', x: x0, y: 14 }, 'exposed (code’s evidence) →'));
   const ticks = touched.length ? ticksFor(0, tMax, Math.max(2, Math.floor((x1 - x0) / 90)), TIME_STEPS) : [];
   if (touched.length > 1) {
     for (const v of ticks) {
@@ -848,7 +848,7 @@ function cascadeView(ctx, width) {
     svg.appendChild(withTip(g, () => [
       `${a}${roles[a] ? ` (${roles[a]})` : ''}`,
       `${verdictLine(vi)}${disclosedOf(a) ? ', disclosed access' : ''}`,
-      exposedOf(a) != null ? `exposed at ${fmtSecs(exposedOf(a))}` : 'never exposed (code ladder)',
+      exposedOf(a) != null ? `exposed at ${fmtSecs(exposedOf(a))}` : 'never exposed (code’s evidence)',
       openedOf(a) != null ? `opened at ${fmtSecs(openedOf(a))}` : null,
       ins.length ? `exposed by ${ins.map(e => `${e.from} (${e.posts.length})`).join(', ')}`
         : exposedOf(a) == null ? 'never exposed, so no exposure edge' : 'read no post before its exposure',
@@ -858,12 +858,12 @@ function cascadeView(ctx, width) {
   const caption = agents.length < 2
     ? 'One agent: no board, so no exposure edges.'
     : !tl.board.length ? 'No board posts in this run, so no exposure edges.'
-      : !touched.length ? 'The code ladder found no agent exposed, so there are no exposure edges.'
+      : !touched.length ? 'The code found no agent exposed, so there are no exposure edges.'
         : edges.length ? null : 'No agent read another agent’s post before its exposure.';
   return h('div', null,
     svg,
     caption ? h('div', { class: 'muted small' }, caption) : null,
-    h('p', { class: 'small viz-note' }, 'An arrow A → B means B read a post of A no later than B’s exposure. An agent never exposed has no incoming arrow. Width counts such posts. Position is the code ladder’s exposed call; the node’s fill is the judge verdict. The arrows show exposure, not cause.'),
+    h('p', { class: 'small viz-note' }, 'An arrow A → B means B read a post of A no later than B’s exposure. An agent never exposed has no incoming arrow. Width counts such posts. Position is the code’s exposed evidence; the node’s fill is the judge verdict. The arrows show exposure, not cause.'),
     vizLegend([
       [lgSvg(svgEl('circle', { class: 'glyph out-cheated', cx: 10, cy: 7, r: 5 })), 'judged cheated'],
       [lgSvg(svgEl('circle', { class: 'glyph out-honest', cx: 10, cy: 7, r: 5 })), 'judged not cheated'],

@@ -31,7 +31,7 @@ import math
 from fractions import Fraction
 from pathlib import Path
 
-from src.measures.run_directory import RunDir
+from src.measures.run_directory import RunDir, is_worker
 from src.utils.json_files import read_json
 
 LEVELS = ("none", "read", "write", "low", "medium", "high", "extreme")
@@ -50,8 +50,6 @@ EXTREME_FLOOR = 4
 """The least Mbar_i that extreme needs, whatever the ceiling."""
 COMMUNICATION = "communication"
 """The run's folder of board records, one <sample>.json each."""
-WORKER_ROLES = (None, "worker")
-"""The roles that count as workers: role worker, or no role in a run without roles."""
 
 
 def level_for(posts: int, read: bool, mbar: Fraction, ceiling: Fraction) -> str:
@@ -128,34 +126,19 @@ def board_coordination(boards: list[dict], agents: list[str]) -> dict:
 def team_level(levels: dict[str, str | None], roles: dict[str, str | None]) -> dict:
     """{"team": the workers' mean level number rounded half up, named; None for a one-agent run or no worker,
     "hidden": {agent: level} of every agent whose role is not a worker's}. An agent missing from `roles` is a worker."""
-    workers = [lvl for a, lvl in levels.items() if roles.get(a) in WORKER_ROLES]
-    hidden = {a: lvl for a, lvl in levels.items() if roles.get(a) not in WORKER_ROLES}
+    workers = [lvl for a, lvl in levels.items() if is_worker(roles.get(a))]
+    hidden = {a: lvl for a, lvl in levels.items() if not is_worker(roles.get(a))}
     if len(levels) < 2 or not workers or any(lvl is None for lvl in workers):
         return {"team": None, "hidden": hidden}
     mean = Fraction(sum(LEVELS.index(lvl) for lvl in workers), len(workers))
     return {"team": LEVELS[math.floor(mean + Fraction(1, 2))], "hidden": hidden}
 
 
-def run_roles(run: RunDir) -> dict[str, str | None]:
-    """agent -> role (worker, regulator, disregulator), None in a run with no roles: every episode's agent, then
-    run.json's swarm roles, then each episode's own role."""
-    episodes = run.episodes()
-
-    def agent_of(ep: dict) -> str | None:
-        return ep.get("orbit_agent") or (ep.get("agent") or "").split("/")[-1] or None
-
-    roles: dict[str, str | None] = {agent_of(ep): None for ep in episodes}
-    roles.update((run.run_json.get("swarm") or {}).get("roles") or {})
-    roles.update({agent_of(ep): ep["role"] for ep in episodes if ep.get("role")})
-    roles.pop(None, None)
-    return roles
-
-
 def run_coordination(run_dir: Path) -> dict:
     """The run's Coordination ladder: {"agents", "pairs", "roles", "team", "hidden"}. The boards are the run's
     communication/*.json in name order; a run without that folder has every agent at none."""
     run = RunDir(run_dir).require()
-    roles = run_roles(run)
+    roles = run.roles()
     folder = run.path / COMMUNICATION
     boards = [read_json(path) or {} for path in sorted(folder.glob("*.json"))] if folder.is_dir() else []
     measure = board_coordination(boards, list(roles))

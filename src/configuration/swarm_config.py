@@ -312,7 +312,7 @@ class SwarmConfig(BaseModel):
     # ---------------------------------------------------------------- the access log
     access_log: bool = True
     """Whether a sidecar records each open of the honeypot (src/sandbox/access_log/). False: no sidecar, run.json
-    access_log {"status": "off"} and no access_log.jsonl, and the code ladder reads the transcript alone."""
+    access_log {"status": "off"} and no access_log.jsonl, and the code's evidence reads the transcript alone."""
 
     # ---------------------------------------------------------------- the judge
     judge: str | None = settings.JUDGE_MODEL

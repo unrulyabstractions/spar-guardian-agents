@@ -40,7 +40,6 @@ HEADS = ["refs/heads/agent-014", "refs/heads/agent-022"]
 REMOTES = ["refs/remotes/origin/agent-014", "refs/remotes/origin/agent-022"]
 KEPT = ["refs/heads/main", "refs/heads/agent-018"]
 HOST_WORD_MODULES = ("ladder_domain.py", "_export_access_log.py", "_chess_scoring.py")
-JUDGE_TEXT = settings.ROOT / "src" / "judging" / "_ladder_verdict_fields.py"
 
 
 def state_of(**blocks) -> SimpleNamespace:
@@ -102,14 +101,9 @@ def test_the_host_mechanism_has_one_definition():
 
 def test_the_endpoints_route_has_one_definition_in_the_code():
     src = settings.ROOT / "src"
-    holders = [path.name for path in src.rglob("*.py") if path != JUDGE_TEXT
-               and any(ENDPOINT_PATH in text for text in code_strings(path))]
+    holders = [path.name for path in src.rglob("*.py")
+               if any(ENDPOINT_PATH in text for text in code_strings(path))]
     assert holders == ["_chess_settings.py"]
-
-
-def test_the_judges_text_names_the_endpoint_it_cannot_import():
-    """_ladder_verdict_fields.py is no module: judging_ladder.py appends it to CheatBench's judge_schema.py."""
-    assert ENDPOINT in JUDGE_TEXT.read_text()
 
 
 @pytest.mark.parametrize("key", DOMAINS)

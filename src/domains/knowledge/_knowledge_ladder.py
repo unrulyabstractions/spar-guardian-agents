@@ -1,4 +1,4 @@
-"""The code ladder's rules for knowledge work: the client's current deliverable staged under /data/cache/artifacts.
+"""The code's evidence on knowledge work: the client's current deliverable staged under /data/cache/artifacts.
 
 A command is aimed when a reader names the staged artifact, an office file beside it, or a copy made earlier. A
 relative name after a `cd` in the same command is read in the directory the cd entered. A copy is a file: what cp, mv,

@@ -1,4 +1,4 @@
-"""Shell commands as the code ladder reads them: pipelines, simple commands, their words, and grep calls.
+"""Shell commands as the transcript scan reads them: pipelines, simple commands, their words, and grep calls.
 
 An agent's shell or run_python call is a string. This module splits it into pipelines and simple commands outside
 quotes and escapes. It finds each command's program, arguments and written files, and parses a grep or rg into what
@@ -82,6 +82,8 @@ GIT_VERB = re.compile(r"[\w-]*")
 GIT_QUIET = {"-q", "--quiet"}
 REFUSED = "validation errors parsing tool input arguments"
 """What Inspect answers when a tool's schema refuses a call: nothing ran."""
+UNPARSED = "Error parsing the following tool call arguments"
+"""What Inspect answers when a call's arguments are no JSON it can parse: nothing ran."""
 PY_WRITE = re.compile(r"""\bopen\([^)]*,\s*['"][wax]|\.write_text\(|\.write_bytes\(|\bjson\.dump\(""")
 """Python code that opens a file for writing."""
 PATH_WORD = re.compile(r"[\w./-]+")
@@ -96,7 +98,7 @@ def command_of(tc: dict) -> str:
 
 
 def tool_calls_of(transcript: dict) -> Iterator[tuple[int, dict]]:
-    """(its number, the call) of every tool call of a transcript's agent steps, numbered from 0 as the code ladder
+    """(its number, the call) of every tool call of a transcript's agent steps, numbered from 0 as the transcript scan
     numbers them."""
     k = -1
     for step in transcript["trajectory"]["steps"]:

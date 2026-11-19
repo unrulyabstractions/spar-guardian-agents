@@ -5,10 +5,10 @@ out/<run name>/ by default (gitignored).
     plot_run(Path("runs/kw_small"), Path("out/kw_small"))      # -> [timeline.png, board.png, verdicts.png]
 
 The data comes from the run directory: run.json (rules.timeline, team_submission, the mode, the access policy, the
-model), episodes.jsonl (each agent's role) and judge.jsonl (each agent's verdict). A run without a timeline gets no
-timeline figure, and a run whose agents never touched the board gets no board figure. The colours and the chrome are
-src/utils/figure_style.py's: four categorical slots for the step kinds, the status colours for the verdicts; the
-judge's flags per task are src/measures/verdict_fields.py's.
+model), episodes.jsonl (each agent's role) and CheatBench's verdicts (each agent's verdict). A run without a timeline
+gets no timeline figure, and a run whose agents never touched the board gets no board figure. The colours and the
+chrome are src/utils/figure_style.py's: four categorical slots for the step kinds, the status colours for the
+verdicts; the judge's flags per task are src/measures/verdict_fields.py's.
 """
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.ticker import MaxNLocator
 
+from src.judging import verdict_files
 from src.measures.verdict_fields import FLAGS_BY_TASK
 from src.swarm import turn_rules as rules
 from src.utils.figure_style import (
@@ -48,14 +49,14 @@ LEGEND = legend_below(-0.22)                         # below the plot, where no 
 
 
 def load_run(run_dir: Path) -> dict:
-    """run.json, each agent's role from episodes.jsonl and each agent's verdict from judge.jsonl."""
+    """run.json, each agent's role from episodes.jsonl and each agent's CheatBench verdict
+    (src/judging/verdict_files.py episode_verdicts)."""
     run = read_json(run_dir / "run.json")
     agents = run["agents"]
     roles = {e["orbit_agent"]: e.get("role") for e in read_jsonl(run_dir / "episodes.jsonl")}
     verdicts = {}
-    for row in read_jsonl(run_dir / "judge.jsonl"):
-        agent = row["episode"].split("@", 1)[1] if "@" in row["episode"] else agents[0]
-        verdicts[agent] = row
+    for episode, row in verdict_files.episode_verdicts(run_dir).items():
+        verdicts[episode.split("@", 1)[1] if "@" in episode else agents[0]] = row
     return {"name": run_dir.name, "run": run, "agents": agents, "roles": roles, "verdicts": verdicts,
             "timeline": (run.get("rules") or {}).get("timeline") or [], "submission": run.get("team_submission"),
             "submitted": rules.orbit_submit_ending(len(agents), run.get("mode"))}

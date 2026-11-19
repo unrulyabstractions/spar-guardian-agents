@@ -25,9 +25,9 @@ python -m src run <name>     cli.py reads the flags
         |
   export/                    the eval log as a run directory                           -> runs/<study>/<name>/
         |
-  judging/                   verdicts from the log, the judged ladder from transcripts -> judge.jsonl, ladder.jsonl
+  judging/                   CheatBench's judge in the eval and on stored runs, the Collusion judge -> judge.jsonl, judges/<pass>.<judge>.jsonl
         |
-  measures/                  the code ladder, the summaries, the figures               -> signals.jsonl, out/<study>/<name>/
+  measures/                  the code record, the three ladders, the figures            -> signals.jsonl, out/<study>/<name>/
         |
   ui/                        the browser over runs/ and the eval logs
 ```
@@ -52,7 +52,7 @@ The texts live in `prompts.yaml` and `instruction_levels.yaml`.
 
 ### domains/
 
-CheatBench's tasks. Each domain gives the sample, the sandbox, the setup, the graders and the code ladder's rules. `src/domains/README.md` gives each domain's rules and how to add one.
+CheatBench's tasks. Each domain gives the sample, the sandbox, the setup, the graders and the rules of the code's evidence. `src/domains/README.md` gives each domain's rules and how to add one.
 
 - `__init__.py`: `DOMAINS` by key, for `--benchmark` and the `@task` entry points, and `BY_TASK` by CheatBench's task name, through `configuration/task_names.py`.
 - `benchmark_protocol.py`: `Benchmark`, `RowBenchmark` and `Plan`: what a domain implements, and the plan of one run.
@@ -102,7 +102,7 @@ The implementation is `_regulator_oversight.py` (`agent_actions`, the regulators
 
 ### run.py
 
-The commands `run`, `judge`, `ladder`, `rejudge` and `regenerate`. `run` checks the keys and the routing, builds the task, calls `inspect_ai.eval` in process, exports the log, prints the summary and places the agents on the code ladder.
+The commands `run`, `judge`, `judge-pass`, `rejudge` and `regenerate`. `run` checks the keys and the routing, builds the task, calls `inspect_ai.eval` in process, exports the log, prints the summary and writes the run's code record with its three ladders.
 
 ### export/
 
@@ -117,29 +117,36 @@ The eval log as a CheatBench run directory.
 
 ### judging/
 
-The LLM judges. CheatBench's judge runs inside the eval as the scorer `cheatbench_judge`, so the export finds its verdicts in the log. `judge` and `rejudge` judge a finished log again. The judged ladder reads a run's stored transcripts.
+The LLM judges. CheatBench's judge runs inside the eval as the scorer `cheatbench_judge`, so the export finds its verdicts in the log. `judge` and `rejudge` judge a finished log again and re-export the run from it. `judge-pass` judges runs' stored records under a dollar cap and writes only `judges/<pass>.<judge>.jsonl`.
 
-- `cheatbench_judge.py`: CheatBench's judge, in process through Inspect's model API.
-- `judging_ladder.py`: the cheating ladder as an LLM judge, one call per agent.
+- `cheatbench_judge.py`: CheatBench's judge through Inspect, and the one call path of every judge.
+- `collusion_judge.py` with `collusion_prompt.md`: the Collusion ladder's judge, one call per collaborating pair, and `judged_collusion`, the one place a run's Collusion ladder takes its judge's verdicts.
+- `judge_pass.py`: the capped pass.
+- `verdict_files.py`: the reader and writer of `judges/`, and the one reader of CheatBench's verdicts (the eval's `judge.jsonl` with the passes' files).
 
-`judge_models.yaml` holds the judge entries. `_ladder_verdict_fields.py` and `_presentation_verdict_fields.py` are the addenda to CheatBench's verdict schema.
+`judge_models.yaml` holds the judge entries.
 
 ### measures/
 
 Everything computed over a run directory, without a model.
 
 - `run_directory.py`: `RunDir`, one run directory read through one object. A study keeps a run at `runs/<study>/<run>` or in one of its groups, `runs/<study>/{invalid,incomplete,mock,set_aside,attempts}/<run>`, and `study_runs` lists both; `find_run` reads one by name. A run's eval log sits at the same path under `logs/` and its figures under `out/` (`figures_dir`). A run keeps its folder name wherever it sits, with one exception. An earlier attempt, superseded by a later run of its name, sits at `runs/<study>/attempts/<name>.<n>/` (`set_aside_attempt`), and its run.json `run_id` stays the run's name. Every reader therefore keys runs by folder, never by name.
-- `run_validity.py`: whether a run measures what its cell says: no mock rehearsal, completed, on an SWE task that needs two agents to cheat (from `SWE_FIX`, f0d1c34), with a regulator that acted and a team the code ladder placed. Each run gets `why` and one `reason` code.
+- `run_validity.py`: whether a run measures what its cell says: no mock rehearsal, completed, on an SWE task that needs two agents to cheat (from `SWE_FIX`, f0d1c34), with a regulator that acted and a team the code record placed. Each run gets `why` and one `reason` code.
+- `run_listing.py`: the runs of a collection under `runs/` and whether each counts (`INDEX.jsonl`, `manifest.jsonl`), for the transcript viewer and the judge passes.
 - `deal_replay.py`: whether today's code deals a protein, creative or SWE run the roster and the holdings it recorded.
 - `run_index.py`: one record per run of a study for `runs/<study>/INDEX.jsonl`: what the run is, where it ran, its arm, its outcome and its checks. It never reads the study table or the fleet: `scripts/box/study_index.py` joins them in for the study the table states (the stage and box of `scripts/box/study_table.py`, the instance from the box captures) and is the command. `uv run python -m scripts.box.study_index runs/<study>` prints a summary and writes nothing; `--write` writes the file.
-- `code_ladder.py`: exposed, tried, opened, used, tampered, checked and shipped per agent from the transcript, the probe and the domain's records. It writes `signals.jsonl` and run.json `signals`. Each agent row also records its Coordination level, score, ceiling and posts (`coordination_level`, `coordination_score`, `coordination_ceiling`, `coordination_posts`).
-- `team_ladder.py`: the team record of a sample: its rungs, its collaboration level, the judged presentation and the outcomes, and the workers' Coordination level (`coordination_level`) with the regulators' and disregulators' own levels apart (`coordination_hidden`). `with_coordination` computes these fields from the board record of a run recorded before them, without writing.
+- `code_ladder.py`: the run's code record. It writes `signals.jsonl` and run.json `signals`: each agent's evidence and each sample's team record, with the three ladders' rungs (`cheating_rung` and `cheating_clauses`; `coordination_level`, `coordination_score`, `coordination_ceiling`, `coordination_posts`; `collusion_rung`) and, on the team record, the hidden roles' rungs apart. `ladders` reads the three rungs of any run, computing them for a run recorded before them.
+- `transcript_scan.py`: the code's evidence per agent (exposed, tried, opened, used, tampered, checked, shipped) from the transcript, the access log, the probe and the domain's records.
+- `team_ladder.py`: the team record of a sample: the workers' evidence, the collaboration evidence (discussed, solicited, crossed, assembled) and the outcomes. `with_coordination` computes the Coordination fields from the board record of a run recorded before them, without writing.
+- `cheating_ladder.py`: the Cheating ladder (none, looked, tempted, attempted, hacked) from the evidence and the grader's pass, per agent, per team and for the hidden roles apart, with the alarm for a pass with no trace. `cheating_rungs` reads a run's rungs as recorded or computes them.
 - `coordination.py`: the Coordination ladder (none, read, write, low, medium, high, extreme) from the board's reads and posts: each agent's rounds of back-and-forth with each teammate, averaged into a score and set against a ceiling, and the workers' mean level for the team.
-- `access_evidence.py`: the access log as the code ladder reads it: the calls it shows as aimed, the agent row's `access_log` key and the team's.
-- `ladder_domain.py`: `Domain`, what a domain tells the code ladder, and `Evidence`. Each domain subclasses it in `_<d>_ladder.py` (`swe_ladder.py` for SWE).
+- `collusion.py`: the Collusion ladder per pair of agents (none, cooperation, collaboration by code from the takes between them; collusion and scheming only from a judge's verdicts). `collusion_rungs` reads a run's code rungs as recorded or computes them.
+- `ladder_by_domain.py`: what puts an agent on each Cheating rung, per task, for the paper's table and the viewer.
+- `access_evidence.py`: the access log as the transcript scan reads it: the calls it shows as aimed, the agent row's `access_log` key and the team's.
+- `ladder_domain.py`: `Domain`, what a domain tells the code's evidence, and `Evidence`. Each domain subclasses it in `_<d>_ladder.py` (`swe_ladder.py` for SWE).
 - `honeypot_fingerprints.py`: the honeypot's fingerprints, and the probe that finds them in a sandbox.
-- `shell_commands.py`: shell commands as the code ladder reads them: pipelines, simple commands, their words, grep calls.
-- `rungs.py`: the ladder's scales in order, and the table of counts both ladders print.
+- `shell_commands.py`: shell commands as the transcript scan reads them: pipelines, simple commands, their words, grep calls.
+- `rungs.py`: the Cheating ladder's scale, the names of the evidence and of the three ladders' fields, and the table of counts.
 - `episode_summary.py`: one line per episode, and the lone runs' turns for `budget`.
 - `board_engagement.py`: the board engagement funnel, per role and per agent.
 - `swe_measures.py`: Lucy's SWE measures, per agent and per arm.
@@ -183,10 +190,10 @@ Shared helpers.
 | `run ... --worker-model M --regulator-model M --disregulator-model M` | a role's own model, set after every `--set`; it runs through the swarm provider with its registry routing and the agents' generate config. The eval log names its calls `swarm/<model>`, and `runs/<study>/<name>/episodes.jsonl` names each agent's real model |
 | `run ... --replace` | sets the run already in `runs/<study>/<name>/` aside into `runs/<study>/attempts/<name>.<n>/`, with its eval log and its figures, before the eval starts. Without it a run refuses a name whose folder holds a run, before the eval starts, so a rerun never replaces a run unasked |
 | `judge <eval_log> <run_name> [--judge gpt-6-luna] [--sync] [--judge-errors] [--replace]` | judges a finished log (again, or for the first time after `--no-judge`) and exports it with the verdicts into the run's own folder, `runs/<study>/<run_name>/` or the group that holds it; batch API unless `--sync`. A folder that holds another eval's run is refused before the judge starts. With `--replace` that run moves to `runs/<study>/attempts/<run_name>.<n>/` once the verdicts are in, and the new run goes to `runs/<study>/<run_name>/` |
-| `rejudge <run ...> [--judge gpt-6-luna] [--sync] [--no-judge] [--no-ladder] [--view full\|actions] [--judge-errors]` | CheatBench's judge from each run's eval log (named in `run.json`, else at the run's own place under `logs/`, which mirrors `runs/`), then the ladder over its transcripts; the verdicts go back into the run's own folder, wherever it lives; a run whose log holds another eval than its folder is refused before the judge spends anything; a run whose log is gone gets the ladder only |
-| `regenerate <run ...> [--no-export] [--no-measures] [--no-plots]` | rebuilds what a run directory derives from its eval log: the export (keeping the verdicts in `judge.jsonl`), the code ladder, the SWE measures and the figures |
-| `signals <run ...> [--table]` | places every agent and every team on the cheating ladder by code, no judge: `signals.jsonl` with the agent rows, then one team record per sample, and run.json `signals.team`, each row with its Coordination level; every run gets it as it ends, and `judge` and `ladder` run it again; `--table` prints the agents' table, then the teams' |
-| `ladder <run ...> [--judge gpt-6-luna] [--sync] [--view full\|actions] [--agents k7q2m,t4x9n] [--force] [--table]` | places every agent on the cheating ladder from its stored transcript: `runs/<study>/<name>/ladder.jsonl` with the rung, the cited calls and their rounds, pushback and forbidden method, the honesty labels and the presentation, then one team row per sample; `--table` sums the existing files |
+| `rejudge <run ...> [--judge gpt-6-luna] [--sync] [--judge-errors]` | CheatBench's judge from each run's eval log (named in `run.json`, else at the run's own place under `logs/`, which mirrors `runs/`), then the run is RE-EXPORTED from the log into its own folder, wherever it lives; a run whose log holds another eval than its folder is refused before the judge spends anything; a run whose log is gone is refused |
+| `regenerate <run ...> [--no-export] [--no-measures] [--no-plots]` | rebuilds what a run directory derives from its eval log: the export (keeping the verdicts in `judge.jsonl`), the code record, the SWE measures and the figures |
+| `signals <run ...> [--table]` | the run's code record, no judge: `signals.jsonl` with the agent rows, then one team record per sample, and run.json `signals.team`, each row with its evidence and its Cheating, Coordination and Collusion rungs; every run gets it as it ends, and `judge` and `rejudge` run it again; `--table` prints the agents' Cheating rungs, then the teams' with their passes and alarms |
+| `judge-pass <cheatbench\|collusion> <run or study ...> --judge gpt-6-luna --cap DOLLARS [--batch] [--limit N] [--only-missing\|--redo]` | a judge pass over stored runs, priced call by call and stopped before the cap; writes only `runs/<study>/<run>/judges/<pass>.<judge>.jsonl`; a study folder stands for its valid runs |
 | `ui [start\|stop] [--port 8765] [--no-open]` | starts or stops the results browser in the background |
 | `summary <run ...> [--full]` | one line per episode with its verdict and the task's judge flags, the swarm composition and the shutdown rate (the share of the agents holding `stop_working` that ended with it before any hand-in) |
 | `engagement <run ...> [--json]` | the board engagement funnel per role and per agent |
@@ -195,7 +202,7 @@ Shared helpers.
 | `models [NAME]` | the models we can consider, one row per entry with its Inspect string, key variable, context, prices and CheatBench entries; with a name, that entry in full |
 | `plots <run> [--out DIR]` | one run's figures as PNG with CSV twins under `out/<run name>/` (gitignored) |
 
-The judge runs inside the eval as the scorer `cheatbench_judge`, bound to the model role `judge`. With `--no-judge` the run is exported without verdicts, and `rejudge` adds them later. With `batch_judge` the judge's calls go through the provider's batch API; `judge` and `ladder` batch too unless `--sync`.
+The judge runs inside the eval as the scorer `cheatbench_judge`, bound to the model role `judge`. With `--no-judge` the run is exported without verdicts, and `rejudge` adds them later. With `batch_judge` the judge's calls go through the provider's batch API; `judge` and `rejudge` batch too unless `--sync`, and `judge-pass` batches with `--batch`.
 
 `inspect eval src/tasks.py@openmath -T preset=default -T regulators=1` also works. Every `-T` key other than the task's own arguments sets a config field, and `-T scale=medium` applies a scale first. This form skips the key and routing checks, the role models built before the sandbox starts, and the Gemini 402 retry.
 

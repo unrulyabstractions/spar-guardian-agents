@@ -31,6 +31,7 @@ from typing import Protocol
 from inspect_ai.log import read_eval_log
 
 from src.configuration import settings, task_names
+from src.judging import verdict_files
 from src.measures.run_directory import RunDir, find_run
 from src.utils.json_files import read_json
 
@@ -217,8 +218,9 @@ def load_run(name_or_path: str | Path) -> Run:
     agents = list(run_json["agents"])
     episode_rows = stored.episodes()
     lone = lone_agent(agents, episode_rows)
+    roles = stored.roles()
     episodes = {agent_of(row["episode"], lone): row for row in episode_rows}
-    judge = {agent_of(episode, lone): row for episode, row in stored.verdicts().items()}
+    judge = {agent_of(episode, lone): row for episode, row in verdict_files.episode_verdicts(directory).items()}
     eval_log = eval_log_path(run_json.get("eval_log")) or stored.eval_log
     timeline = list((run_json.get("rules") or {}).get("timeline") or [])
     board_reads = board_read_results(directory, eval_log)
@@ -232,7 +234,7 @@ def load_run(name_or_path: str | Path) -> Run:
         domain=domain,
         model=run_json.get("model", ""),
         agents=agents,
-        roles=roles_of(agents, run_json, episodes),
+        roles={agent: roles.get(agent) or "worker" for agent in agents},
         config=run_json["config"],
         eval_log=eval_log,
         judge=judge,
@@ -370,12 +372,6 @@ def agent_of(episode: str, lone: str | None) -> str:
     if "@" in episode:
         return episode.rsplit("@", 1)[1]
     return lone or episode
-
-
-def roles_of(agents: list[str], run_json: dict, episodes: dict[str, dict]) -> dict[str, str]:
-    """Each agent's hidden role: run.json swarm.roles, else the episode's role, else worker."""
-    swarm_roles = (run_json.get("swarm") or {}).get("roles") or {}
-    return {agent: swarm_roles.get(agent) or (episodes.get(agent) or {}).get("role") or "worker" for agent in agents}
 
 
 def eval_log_path(value: str | None) -> Path | None:

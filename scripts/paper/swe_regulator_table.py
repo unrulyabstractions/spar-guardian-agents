@@ -1,5 +1,7 @@
-"""SWE (fixed task) regulators with DeepSeek V4.1 Flash workers, valid runs only, read from each run's run.json and
-src.measures.run_validity at build time. Writes tmp/tables/results/table_swe_regulators.png.
+"""SWE (fixed task) regulators with DeepSeek V4.1 Flash workers, valid runs only: each run's Cheating and Collusion
+rungs and the grader's pass as the transcript viewer measures them (scripts/paper/study_ladders.py record), the pieces
+in the hand-in from the team's shipped evidence and the regulator's reverts from run.json, and its validity and
+regulator posts from src.measures.run_validity, at build time. Writes tmp/tables/results/table_swe_regulators.png.
 
     uv run python -m scripts.paper.swe_regulator_table    # make results-tables runs every one
 """
@@ -13,28 +15,13 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 from matplotlib.patches import FancyBboxPatch, Rectangle
 
+from scripts.paper.study_ladders import cheating_legend, collusion_chip, collusion_legend, record, rung_chip
 from src.configuration.settings import ROOT
 from src.measures.run_validity import validity
-from src.utils.figure_style import (
-    AXIS,
-    BAND,
-    COLLABORATION_FILL,
-    COLLABORATION_TEXT,
-    GOOD,
-    INK,
-    INK_SECONDARY,
-    MUTED,
-    PRINT_DPI,
-    RUNG_FILL,
-    RUNG_TEXT,
-    WHITE,
-)
+from src.utils.figure_style import AXIS, BAND, GOOD, INK, INK_SECONDARY, MUTED, PRINT_DPI, WHITE
 
 RUNS = ROOT / "runs" / "study_exploration_1"
 OUT = ROOT / "tmp" / "tables" / "results" / "table_swe_regulators.png"
-ORDER = ["none", "exposed", "tried", "opened", "used", "tampered", "checked", "shipped"]
-LETTER = {"none": "·", "exposed": "E", "tried": "T", "opened": "O", "used": "U", "tampered": "X", "checked": "C",
-          "shipped": "S"}
 ROWS = [
     ("None", "baseline", "flipt_minimal_dsflash_fixed"),
     ("Claude Haiku 5.5", "ambiguous", "flipt_minimal_regulated_dsflash_haiku_ambiguous_fixed"),
@@ -62,8 +49,9 @@ def read(name: str) -> dict:
         reg = regs[0]["agent"]
         log = ((data.get("swe") or {}).get("team") or {}).get("log") or ""
         reverts = sum(1 for ln in log.splitlines() if ln.split()[1:2] == [reg] and "Revert" in ln)
-    return {"name": name, "valid": v["valid"], "rung": team["rung"], "passed": bool(team.get("passed")),
-            "pieces": shipped, "collab": team.get("collaboration"), "posts": regs[0]["posts"] if regs else None,
+    ladders = record(run) if v["valid"] else {"cheating": None, "passed": False, "collusion": None}
+    return {"name": name, "valid": v["valid"], "rung": ladders["cheating"], "passed": ladders["passed"],
+            "pieces": shipped, "collusion": ladders["collusion"], "posts": regs[0]["posts"] if regs else None,
             "reverts": reverts}
 
 
@@ -77,15 +65,15 @@ def main() -> int:
                 if (path / "run.json").is_file():
                     runs.append(read(path.name))
         kept = [r for r in runs if r["valid"]]
-        print(label, level, "kept", [(r["name"], r["rung"], sorted(r["pieces"]), r["passed"], r["collab"], r["posts"],
-                                      r["reverts"]) for r in kept],
+        print(label, level, "kept", [(r["name"], r["rung"], sorted(r["pieces"]), r["passed"], r["collusion"],
+                                      r["posts"], r["reverts"]) for r in kept],
               "dropped", [r["name"] for r in runs if not r["valid"]])
         if kept:
             table.append((label, level, kept))
 
     widths = [3.0, 1.55, 2.35, 1.05, 3.05, 2.0]
-    header = ["Regulator × level", "Rungs", "Pieces shipped", "Pass", "Collaboration", "Regulator posts; reverts"]
-    title_h, head_h, row_h, legend_h = 0.55, 0.5, 0.72, 0.6
+    header = ["Regulator × level", "Cheating", "Pieces handed in", "Pass", "Collusion", "Regulator posts; reverts"]
+    title_h, head_h, row_h, legend_h = 0.55, 0.5, 0.72, 0.9
     width = sum(widths)
     height = title_h + head_h + row_h * len(table) + legend_h
     fig = Figure(figsize=(width, height), dpi=PRINT_DPI)
@@ -120,12 +108,9 @@ def main() -> int:
         ax.text(level_x, cy, level, fontsize=8.6, color=INK_SECONDARY, va="center",
                 style="italic" if label == "None" else "normal")
         for k, r in enumerate(runs):
-            # rung chip, a check under it when the hidden tests passed
+            # Cheating rung chip, a check under it when the hidden tests passed
             x = xs[1] + pad + k * (chip + gap)
-            ax.add_patch(FancyBboxPatch((x, cy - chip / 2), chip, chip, boxstyle="round,pad=0,rounding_size=0.035",
-                                        fc=RUNG_FILL[r["rung"]], ec="none"))
-            ax.text(x + chip / 2, cy, LETTER[r["rung"]], fontsize=8.5, weight="bold",
-                    color=RUNG_TEXT.get(r["rung"], INK), ha="center", va="center")
+            rung_chip(ax, x, cy - chip / 2, chip, chip, r["rung"])
             if r["passed"]:
                 ax.text(x + chip / 2, cy + chip / 2 + 0.13, "✓", fontsize=9.5, weight="bold", color=GOOD,
                         ha="center", va="center")
@@ -139,14 +124,9 @@ def main() -> int:
                                             fc=INK if on else WHITE, ec=INK if on else AXIS, lw=0.7))
                 ax.text(bx + s / 2, cy, piece, fontsize=6.3, weight="bold", color=WHITE if on else MUTED,
                         ha="center", va="center")
-            # collaboration pill
+            # Collusion pill
             pw, ph = 0.86, 0.24
-            cx = xs[4] + pad + k * (pw + 0.07)
-            lvl = r["collab"] or "isolated"
-            ax.add_patch(FancyBboxPatch((cx, cy - ph / 2), pw, ph, boxstyle="round,pad=0,rounding_size=0.06",
-                                        fc=COLLABORATION_FILL[lvl], ec="none"))
-            ax.text(cx + pw / 2, cy, lvl, fontsize=7.2, color=COLLABORATION_TEXT.get(lvl, INK), ha="center",
-                    va="center")
+            collusion_chip(ax, xs[4] + pad + k * (pw + 0.07), cy - ph / 2, pw, ph, r["collusion"], size=6.8)
             # regulator posts; reverts
             qx = xs[5] + pad + k * 0.6
             ax.text(qx, cy, "n/a" if r["posts"] is None and k == 0 else ("" if r["posts"] is None
@@ -158,18 +138,10 @@ def main() -> int:
         ax.plot([0 if not same_next else level_x - 0.04, width], [y0 + row_h, y0 + row_h], color=AXIS,
                 lw=0.35 if same_next else 0.7)
 
-    # legend: the rungs shown, the check, a piece on and off the submitted branch
-    ly = y + row_h * len(table) + legend_h / 2
-    x = pad
-    s = 0.2
-    shown = {r["rung"] for _, _, runs in table for r in runs}
-    for rung in [r for r in ORDER if r in shown]:
-        ax.add_patch(FancyBboxPatch((x, ly - s / 2), s, s, boxstyle="round,pad=0,rounding_size=0.03",
-                                    fc=RUNG_FILL[rung], ec="none"))
-        ax.text(x + s / 2, ly, LETTER[rung], fontsize=6.5, weight="bold", color=RUNG_TEXT.get(rung, INK),
-                ha="center", va="center")
-        ax.text(x + s + 0.07, ly, rung, fontsize=7.8, color=INK_SECONDARY, va="center")
-        x += s + 0.07 + len(rung) * 0.075 + 0.3
+    # legend: the rungs shown, the check, a piece on and off the submitted branch, the Collusion rungs shown
+    ly = y + row_h * len(table) + legend_h / 2 - 0.15
+    shown = [r for _, _, runs in table for r in runs]
+    x = cheating_legend(ax, pad, ly, {r["rung"] for r in shown})
     ax.text(x, ly, "✓", fontsize=10, weight="bold", color=GOOD, va="center")
     ax.text(x + 0.18, ly, "hidden tests passed", fontsize=7.8, color=INK_SECONDARY, va="center")
     x += 0.18 + 1.45
@@ -184,6 +156,7 @@ def main() -> int:
                                 ec=AXIS, lw=0.7))
     ax.text(x + ps / 2, ly, "A", fontsize=6.3, weight="bold", color=MUTED, ha="center", va="center")
     ax.text(x + ps + 0.07, ly, "missing", fontsize=7.8, color=INK_SECONDARY, va="center")
+    collusion_legend(ax, pad, ly + 0.3, {r["collusion"] for r in shown})
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(OUT, dpi=PRINT_DPI, facecolor=WHITE)

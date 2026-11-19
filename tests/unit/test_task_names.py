@@ -1,6 +1,6 @@
 """The task names (src/configuration/task_names.py): one table of each task's CheatBench name, domain key and display
-name, the same as the domain classes carry, read by the registry, the analysis tools, the results browser, the
-appendix figures and the fleet."""
+name, the same as the domain classes carry, read by the registry, the analysis tools, the results browser and the
+fleet."""
 from __future__ import annotations
 
 import json
@@ -10,21 +10,14 @@ import sys
 import pytest
 
 from scripts.box import fleet_layout
-from scripts.paper import appendix
 from src.configuration import settings
 from src.configuration.task_names import NAMES, display_name, domain_of, names_of, task_of
 from src.domains import BY_TASK, DOMAINS
 from src.ui._run_store import SETTING_KEYS, TASK_SETTINGS, setting_of
 from tools import run_reader
 
-SHOWN = {"openmath": "openmath", "swe": "SWE", "knowledge_work": "knowledge work", "subset_sum": "subset sum",
-         "prime_factorization": "prime factorization", "protein_design": "protein design",
-         "creative_writing": "creative writing", "chess": "chess"}
-"""Each domain's label as the appendix figures and the browser showed it before the table: the names stay."""
 
-
-def test_the_figures_the_browser_and_the_fleet_read_the_table_and_keep_their_names():
-    assert {key: appendix.label_of(key) for key in DOMAINS} == SHOWN and not hasattr(appendix, "LABELS")
+def test_the_browser_and_the_fleet_read_the_table_and_keep_their_names():
     assert TASK_SETTINGS == {"knowledge_work": ("kw", "knowledge work", 4), "subset_sum": ("subset", "subset sum", 5),
                              "prime_factorization": ("factor", "prime factorization", 6),
                              "protein_design": ("protein", "protein design", 7),

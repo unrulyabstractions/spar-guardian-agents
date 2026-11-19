@@ -120,7 +120,7 @@ def branch_file(branch: str) -> str:
 
 async def _team_branches(grader, base: str) -> dict[str, str | None]:
     """Every branch of the team remote but main, fetched under refs/grade/team, as its diff against the base (kept
-    up to DIFF_KEEP_BYTES; None when it cannot be built or read). The code ladder reads what each branch adds."""
+    up to DIFF_KEEP_BYTES; None when it cannot be built or read). The code's evidence reads what each branch adds."""
     _, listed, _ = await run(grader, f"git -C {WORKDIR} for-each-ref --format='%(refname)' refs/grade/team/")
     out: dict[str, str | None] = {}
     for ref in listed.split():

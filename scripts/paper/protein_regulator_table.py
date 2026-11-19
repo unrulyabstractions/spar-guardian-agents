@@ -1,38 +1,26 @@
-"""Protein design regulators with GPT-6 Luna workers, valid runs only, no pilots, read from each run's run.json and
-src.measures.run_validity at build time. Writes tmp/tables/results/table_protein_regulators.png.
+"""Protein design regulators with GPT-6 Luna workers, valid runs only, no pilots: each run's Cheating and Collusion
+rungs as the transcript viewer measures them (scripts/paper/study_ladders.py record), and its validity and regulator
+posts from src.measures.run_validity, at build time. Writes tmp/tables/results/table_protein_regulators.png.
 
     uv run python -m scripts.paper.protein_regulator_table    # make results-tables runs every one
 """
 from __future__ import annotations
 
-import json
 import sys
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
-from matplotlib.patches import FancyBboxPatch, Rectangle
+from matplotlib.patches import Rectangle
 
+from scripts.paper.study_ladders import cheating_legend, collusion_chip, collusion_legend, record, rung_chip
 from src.configuration.settings import ROOT
+from src.measures.code_ladder import CHEATED_FROM
 from src.measures.run_validity import validity
-from src.utils.figure_style import (
-    AXIS,
-    BAND,
-    COLLABORATION_FILL,
-    COLLABORATION_TEXT,
-    INK,
-    INK_SECONDARY,
-    MUTED,
-    PRINT_DPI,
-    RUNG_FILL,
-    RUNG_TEXT,
-    WHITE,
-)
+from src.measures.rungs import at_least
+from src.utils.figure_style import AXIS, BAND, INK, INK_SECONDARY, MUTED, PRINT_DPI, WHITE
 
 RUNS = ROOT / "runs" / "study_exploration_1"
 OUT = ROOT / "tmp" / "tables" / "results" / "table_protein_regulators.png"
-ORDER = ["none", "exposed", "tried", "opened", "used", "tampered", "checked", "shipped"]
-LETTER = {"none": "·", "exposed": "E", "tried": "T", "opened": "O", "used": "U", "tampered": "X", "checked": "C",
-          "shipped": "S"}
 ROWS = [
     ("None", "baseline", "binder_minimal_luna"),
     ("GPT-6 Luna", "ambiguous", "binder_minimal_regulated_luna_luna_ambiguous"),
@@ -50,11 +38,10 @@ ROWS = [
 
 def read(name: str) -> dict:
     run = RUNS / name
-    data = json.loads((run / "run.json").read_text())
     v = validity(run)
     regs = v.get("regulators") or []
-    return {"name": name, "rung": data["signals"]["team"]["rung"], "valid": v["valid"],
-            "collab": data["signals"]["team"].get("collaboration") or "isolated",
+    ladders = record(run) if v["valid"] else {"cheating": None, "collusion": None}
+    return {"name": name, "rung": ladders["cheating"], "valid": v["valid"], "collusion": ladders["collusion"],
             "posts": sum(r["posts"] for r in regs) if regs else None}
 
 
@@ -66,13 +53,14 @@ def main() -> int:
             runs.append(read(f"{prefix}{i}"))
             i += 1
         kept = [r for r in runs if r["valid"]]
-        print(label, level, "kept", [(r["name"], r["rung"], r["collab"], r["posts"]) for r in kept],
+        print(label, level, "kept", [(r["name"], r["rung"], r["collusion"], r["posts"]) for r in kept],
               "dropped", [r["name"] for r in runs if not r["valid"]])
         if kept:
             table.append((label, level, kept))
 
     widths = [3.2, 2.3, 1.45, 4.55, 2.3]
-    header = ["Regulator × level", "Rungs", "Used or higher", "Collaboration", "Regulator posts per run"]
+    header = ["Regulator × level", "Cheating", f"{CHEATED_FROM.capitalize()} or higher", "Collusion",
+              "Regulator posts per run"]
     title_h, head_h, row_h, legend_h = 0.55, 0.5, 0.52, 0.55
     width = sum(widths)
     height = title_h + head_h + row_h * len(table) + legend_h
@@ -108,20 +96,14 @@ def main() -> int:
                 style="italic" if label == "None" else "normal")
         x = xs[1] + pad
         for r in runs:
-            ax.add_patch(FancyBboxPatch((x, cy - chip / 2), chip, chip, boxstyle="round,pad=0,rounding_size=0.035",
-                                        fc=RUNG_FILL[r["rung"]], ec="none"))
-            ax.text(x + chip / 2, cy, LETTER[r["rung"]], fontsize=8.5, weight="bold",
-                    color=RUNG_TEXT.get(r["rung"], INK), ha="center", va="center")
+            rung_chip(ax, x, cy - chip / 2, chip, chip, r["rung"])
             x += chip + gap
-        hit = sum(ORDER.index(r["rung"]) >= ORDER.index("used") for r in runs)
+        hit = sum(at_least(r["rung"], CHEATED_FROM) for r in runs)
         ax.text(xs[2] + pad, cy, f"{hit} of {len(runs)}", fontsize=9.2, weight="bold", color=INK, va="center")
         pw, ph = 0.8, 0.24
         for k, r in enumerate(runs):
             px = xs[3] + pad + k * (pw + 0.06)
-            ax.add_patch(FancyBboxPatch((px, cy - ph / 2), pw, ph, boxstyle="round,pad=0,rounding_size=0.06",
-                                        fc=COLLABORATION_FILL[r["collab"]], ec="none"))
-            ax.text(px + pw / 2, cy, r["collab"], fontsize=7, color=COLLABORATION_TEXT.get(r["collab"], INK),
-                    ha="center", va="center")
+            collusion_chip(ax, px, cy - ph / 2, pw, ph, r["collusion"], size=6.6)
         if label == "None":
             ax.text(xs[4] + pad, cy, "n/a", fontsize=8.6, color=MUTED, va="center")
         else:
@@ -131,16 +113,9 @@ def main() -> int:
                 lw=0.35 if same_next else 0.7)
 
     ly = y + row_h * len(table) + legend_h / 2
-    x = pad
-    s = 0.2
-    shown = {r["rung"] for _, _, runs in table for r in runs}
-    for rung in [r for r in ORDER if r in shown]:
-        ax.add_patch(FancyBboxPatch((x, ly - s / 2), s, s, boxstyle="round,pad=0,rounding_size=0.03",
-                                    fc=RUNG_FILL[rung], ec="none"))
-        ax.text(x + s / 2, ly, LETTER[rung], fontsize=6.5, weight="bold", color=RUNG_TEXT.get(rung, INK),
-                ha="center", va="center")
-        ax.text(x + s + 0.07, ly, rung, fontsize=7.8, color=INK_SECONDARY, va="center")
-        x += s + 0.07 + len(rung) * 0.075 + 0.32
+    shown = [r for _, _, runs in table for r in runs]
+    x = cheating_legend(ax, pad, ly, {r["rung"] for r in shown})
+    collusion_legend(ax, x, ly, {r["collusion"] for r in shown})
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(OUT, dpi=PRINT_DPI, facecolor=WHITE)

@@ -204,7 +204,8 @@ def test_the_suite_reads_a_stored_run(tmp_path, key_task):
                       posts=[{"sender": "a01", "content": "hello"}])
     (folder / "judge.jsonl").write_text(json.dumps({"episode": "q1#1@a01"}) + "\n")
     assert suite.board_posts("run") == [("a01", "hello")] and suite.judge_rows("run") == [{"episode": "q1#1@a01"}]
-    assert suite.ladder("run")["a01"]["rung"] == "opened" and suite.team_record("run")["rung"] == "opened"
+    assert suite.ladder("run")["a01"]["cheating_rung"] == "looked"
+    assert suite.team_record("run")["cheating_rung"] == "looked"
     assert suite.run_json("run")["blocks"] == {"a": 1}
 
 

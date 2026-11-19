@@ -27,6 +27,7 @@ from src.export.eval_sample_view import (
     usage_dict,
     usage_from_events,
 )
+from src.judging import verdict_files
 from src.models import model_registry as models
 from src.swarm.awareness_probes import provider_messages
 from src.swarm.turn_rules import TURN_RULES_TAG
@@ -119,7 +120,9 @@ def test_an_export_never_replaces_another_evals_run_unasked(tmp_path):
     first_id, second_id = one_sample_log(first), one_sample_log(second)
     run_dir = tmp_path / "runs" / "riemann_minimal"
     run_export.write_run(first, run_dir)
-    (run_dir / "ladder.jsonl").write_text('{"row": "team"}\n')          # the judged ladder, which no export clears
+    verdicts = verdict_files.path(run_dir, "cheatbench", "gpt-6-luna")   # a judge pass's file, which no export clears
+    verdicts.parent.mkdir()
+    verdicts.write_text('{"unit": "s#1"}\n')
     before = files_of(run_dir)
     assert json.loads(before["run.json"])["eval_id"] == first_id != second_id
     with pytest.raises(run_export.RunFolderTaken) as refused:
@@ -133,7 +136,7 @@ def test_an_export_never_replaces_another_evals_run_unasked(tmp_path):
     run_export.write_run(second, run_dir, replace=True)
     assert json.loads((run_dir / "run.json").read_text())["eval_id"] == second_id
     assert files_of(tmp_path / "runs" / "attempts" / "riemann_minimal.1") == before
-    assert "ladder.jsonl" not in files_of(run_dir)
+    assert "judges/cheatbench.gpt-6-luna.jsonl" not in files_of(run_dir)
     assert sorted(path.name for path in logs.iterdir()) == ["second.eval"]
     assert [path.name for path in (tmp_path / "logs" / "attempts" / "riemann_minimal.1").iterdir()] == ["first.eval"]
     # the attempt exported again from its own log, as regenerate and rejudge do, keeps the run's name as run_id

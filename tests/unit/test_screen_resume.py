@@ -29,7 +29,8 @@ def left(folder: Path, *, signals: bool, log: Path | None = None) -> Path:
     folder.mkdir(parents=True)
     (folder / "run.json").write_text(json.dumps({"eval_id": folder.name, "ledger": None}))
     if signals:
-        (folder / "signals.jsonl").write_text(json.dumps({"row": "team", "sample": "s", "rung": "used"}) + "\n")
+        team = {"row": "team", "sample": "s", "cheating_rung": "tempted"}
+        (folder / "signals.jsonl").write_text(json.dumps(team) + "\n")
     if log is not None:
         log.parent.mkdir(parents=True, exist_ok=True)
         log.write_text("earlier")
@@ -67,4 +68,4 @@ def test_the_summary_reads_a_finished_run_in_its_group(study, capsys):
     left(study / "runs" / "study_x" / "set_aside" / "riemann_minimal_t1", signals=True)
     assert screen.main(["--cells", CELL, "--samples", "1", "--suffix", "t", "--summary-only"]) == 0
     line = next(line for line in capsys.readouterr().out.splitlines() if line.startswith("riemann_minimal_t1"))
-    assert "team:used" in line and "(no ledger)" in line
+    assert "team:tempted" in line and "(no ledger)" in line

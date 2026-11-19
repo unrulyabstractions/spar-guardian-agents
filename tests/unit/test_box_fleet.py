@@ -1333,7 +1333,7 @@ def test_a_ladder_rebuild_finds_a_run_under_its_study_and_needs_no_judge(tmp_pat
     monkeypatch.setattr(box_runner, "outcome", lambda name: ("finished", "its eval succeeded"))
     assert box_runner.derive("binder_minimal_luna1") == ("finished", "its eval succeeded")
     built = []
-    monkeypatch.setattr(run.signals, "run_report", lambda path: built.append(path) or "the code ladder")
+    monkeypatch.setattr(run.signals, "run_report", lambda path: built.append(path) or "the code's evidence")
     monkeypatch.setattr(run.judging, "require_judge_key", lambda name: pytest.fail("a rebuild asked for a judge"))
     monkeypatch.setattr(run.judging.Judge, "of", lambda *args, **kwargs: pytest.fail("a rebuild built a judge"))
     arguments = commands[0][commands[0].index("src") + 1:]

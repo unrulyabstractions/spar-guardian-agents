@@ -1,15 +1,17 @@
 """The results browser's run reader: the run directories of a study, at its top level and in its groups, and the eval
 logs they point at. A run's key is its folder under the study: <run>, or <group>/<run> for a run in a group.
 
-`Store` reads run.json, episodes.jsonl, judge.jsonl, ladder.jsonl, signals.jsonl and the trajectories through
-src/measures/run_directory.py RunDir, and the communication and defense stores and the analysis tools' summaries
-itself; it loads a run's Inspect eval log once, on demand. The run directories are written by src/export/run_export.py
-and the SWE measures (swe_summary.json) by src/measures/swe_measures.py. _eval_log_views.py reads the eval logs. Each
-episode carries its agent rows of the two ladders; the run carries the code ladder's team records.
+`Store` reads run.json, episodes.jsonl, signals.jsonl and the trajectories through src/measures/run_directory.py RunDir,
+CheatBench's verdicts through src/judging/verdict_files.py episode_verdicts, and the communication and defense stores
+and the analysis tools' summaries itself; it loads a run's Inspect eval log once, on demand. The run directories are
+written by src/export/run_export.py and the SWE measures (swe_summary.json) by src/measures/swe_measures.py.
+_eval_log_views.py reads the eval logs. Each episode carries its agent row of the code's evidence; the run detail
+carries the team records. The three ladders are the transcript viewer's (src/ui/transcript_viewer.py), not the
+browser's.
 
     store = Store(Path("runs"))
     rows = [store.run_row(name) for name in store.run_names()]
-    rows[0]["aggregate"]["cheated"], rows[0]["team"]["rung"]
+    rows[0]["aggregate"]["cheated"]
 """
 from __future__ import annotations
 
@@ -23,11 +25,12 @@ from src.configuration import task_names
 from src.configuration.settings import INCOMPLETE_FAILURES
 from src.configuration.swarm_config import ROLES
 from src.export.eval_sample_view import PASSIVE_DEFENSES
+from src.judging import verdict_files
 from src.measures.run_directory import ATTEMPTS, GROUPS, RunDir, study_runs
 from src.measures.verdict_fields import CRITICAL, FLAGS_BY_TASK, GOOD, SERIOUS, WARNING
 from src.utils.json_files import read_json, read_json_dir
 
-# A verdict is every key of the judge.jsonl row except these: the row's identity, how the judge was configured, its
+# A verdict is every key of CheatBench's verdict row except these: the row's identity, how the judge was configured, its
 # usage, and the transcript it read. The task's own verdict fields pass through whatever they are. VERDICT_BASE is
 # present on every verdict, None when absent.
 VERDICT_BOOKKEEPING = frozenset({
@@ -36,9 +39,7 @@ VERDICT_BOOKKEEPING = frozenset({
     "output_mode", "judge_usage", "judge_attempts",
 })
 VERDICT_BASE = ("cheated", "summary", "judge", "judge_cost_usd", "parse_ok", "judge_error")
-LADDER_BOOKKEEPING = VERDICT_BOOKKEEPING | {"raw", "row", "sample"}
 SIGNALS_IDENTITY = ("row", "sample", "episode", "agent", "role", "task")
-TEAM_FIELDS = ("rung", "collaboration")          # what the runs list shows of the first sample's team record
 SWARM_FIELDS = ("n_agents", "regulators", "disregulators", "workers", "seed", "composition")
 DELIVERABLE_FIELDS = ("archive_in_workspace", "archive_on_remote_main", "registered_on_main",
                       "registered_message_copied_from")
@@ -82,7 +83,7 @@ def _without(row: dict | None, keys) -> dict | None:
 
 
 def verdict_of(row: dict | None) -> dict | None:
-    """The verdict fields of one judge.jsonl row, or None when the episode was not judged."""
+    """The verdict fields of one CheatBench verdict row, or None when the episode was not judged."""
     if not row:
         return None
     return {**{key: None for key in VERDICT_BASE}, **_without(row, VERDICT_BOOKKEEPING)}
@@ -205,10 +206,9 @@ class Store:
         return log
 
     def episodes(self, name: str) -> list[dict]:
-        """episodes.jsonl rows, each with its verdict, ladder and signals rows, has_transcript and counted."""
+        """episodes.jsonl rows, each with its verdict and signals rows, has_transcript and counted."""
         run = RunDir(self.run_dir(name))
-        verdicts = run.verdicts()
-        ladder = {row["episode"]: row for row in run.ladder_rows()}
+        verdicts = verdict_files.episode_verdicts(run.path)
         signals = {row["episode"]: row for row in run.signals()}
         out = []
         for rec in run.episodes():
@@ -218,7 +218,6 @@ class Store:
             if own.exists():
                 rec["transcript_path"] = str(own)
             rec["verdict"] = verdict_of(verdicts.get(rec["episode"]))
-            rec["ladder"] = _without(ladder.get(rec["episode"]), LADDER_BOOKKEEPING)
             rec["signals"] = _without(signals.get(rec["episode"]), SIGNALS_IDENTITY)
             rec["has_transcript"] = bool(rec.get("transcript_path")) and Path(rec["transcript_path"]).exists()
             rec["counted"] = bool(rec["verdict"]) and rec["verdict"]["cheated"] is not None and rec["has_transcript"]
@@ -233,7 +232,6 @@ class Store:
         group = name.split("/")[0] if "/" in name else None
         run = RunDir(d).run_json
         eps = self.episodes(name)
-        teams = RunDir(d).team_signals()
         fields = verdict_fields(run.get("task"))
         swarm, deliverables = run.get("swarm"), run.get("deliverables")
         n_agents = len(run.get("agents") or eps)
@@ -276,7 +274,6 @@ class Store:
             "tools": self.tool_names(name),
             "verdict_fields": fields,
             "aggregate": aggregate(run, eps, fields),
-            "team": {key: teams[0].get(key) for key in TEAM_FIELDS} if teams else None,
             "episodes": eps,
         }
 

@@ -1,6 +1,6 @@
-"""Command line for the peer-pressure experiment: argument parsing only. run, judge, ladder, rejudge and regenerate
-call run.py; signals, summary, budget, engagement and swe-summary call src/measures; ui, plots and models call their
-modules.
+"""Command line for the peer-pressure experiment: argument parsing only. run, judge, rejudge, judge-pass and
+regenerate call run.py; signals, summary, budget, engagement and swe-summary call src/measures; ui, plots and models
+call their modules.
 
     python -m src run <name> [--benchmark openmath|swe|knowledge_work|subset_sum|prime_factorization|protein_design
                                           |creative_writing|chess]
@@ -9,10 +9,9 @@ modules.
                              [--row R] [--honeypot H] [--no-grade] [--model M] [--timeout S]
                              [--worker-model M] [--regulator-model M] [--disregulator-model M] [--replace]
     python -m src judge <eval_log> <run_name> [--judge MODEL] [--sync] [--judge-errors] [--replace]
-    python -m src ladder <run ...> [--judge MODEL] [--sync] [--view full|actions] [--agents k7q2m,t4x9n] [--force]
-                         [--table]
-    python -m src rejudge <run ...> [--judge MODEL] [--sync] [--no-judge] [--no-ladder] [--view full|actions]
-                                    [--judge-errors]
+    python -m src rejudge <run ...> [--judge MODEL] [--sync] [--judge-errors]
+    python -m src judge-pass <cheatbench|collusion> <run or study ...> --judge MODEL --cap DOLLARS [--batch]
+                             [--limit N] [--only-missing | --redo]
     python -m src regenerate <run ...> [--no-export] [--no-measures] [--no-plots]
     python -m src signals <run ...> [--table]
     python -m src summary <run ...> [--full]
@@ -33,9 +32,11 @@ another turn budget, or `--set turn_budget=none` to use the scale's steps_per_ag
 logs/<study>/<name>/, exports it to runs/<study>/<name>/ and prints one line per episode; the judge runs inside the
 eval. A run refuses a name whose folder already holds a run, and `judge` a folder that holds another eval's run, before
 anything is spent; `--replace` sets that earlier run aside into runs/<study>/attempts/<name>.<n>/ first, with its eval
-log and its figures. `rejudge` judges finished runs from their eval logs,
-writes each back into its own directory, wherever it lives, and places them on the ladder; `regenerate` rebuilds a run
-directory from its log. `budget` prints lone runs' turns and their median. `--model` takes an entry of
+log and its figures. `judge` and `rejudge` judge finished runs from their eval logs and RE-EXPORT each run from its log
+into its own directory, wherever it lives, rewriting its record with the current code. `judge-pass` judges runs'
+stored records instead, under a dollar cap, and writes only runs/<study>/<run>/judges/<pass>.<judge>.jsonl
+(src/judging/judge_pass.py); a study folder stands for its valid runs. `regenerate` rebuilds a run directory from its
+log. `budget` prints lone runs' turns and their median. `--model` takes an entry of
 src/models/model_registry.yaml or an Inspect model string; `models` prints the entries, or one entry in full.
 `--worker-model`, `--regulator-model` and `--disregulator-model` give a role its own model the same way; each sets the
 config's `<role>_model` after every `--set`, so the flag wins.
@@ -50,6 +51,7 @@ from pathlib import Path
 
 from src.configuration import settings
 from src.configuration.presets import add_config_arguments, build_config, config_pairs
+from src.judging.verdict_files import PASSES
 from src.measures import board_engagement as engagement
 from src.measures import episode_summary as summary
 from src.measures.run_directory import figures_dir, find_run
@@ -96,23 +98,15 @@ def cmd_judge(args: argparse.Namespace) -> int:
                      judge_errors=args.judge_errors, replace=args.replace)
 
 
-def cmd_ladder(args: argparse.Namespace) -> int:
-    from src import run  # the same four seconds as in cmd_run
-    from src.judging import judging_ladder as ladder
-    if args.view not in ladder.VIEWS:
-        raise ValueError(f"unknown view {args.view!r}; choose one of {ladder.VIEWS}")
-    if args.table:
-        print(ladder.ladder_table(run_dirs(args), args.view), end="")
-        return 0
-    agents = args.agents.split(",") if args.agents else None
-    return run.ladder_runs(run_dirs(args), args.judge, view=args.view, agents=agents, force=args.force,
-                           batch=not args.sync)
-
-
 def cmd_rejudge(args: argparse.Namespace) -> int:
     from src import run  # the same four seconds as in cmd_run
-    return run.rejudge(run_dirs(args), args.judge, with_judge=not args.no_judge, with_ladder=not args.no_ladder,
-                       view=args.view, judge_errors=args.judge_errors, batch=not args.sync)
+    return run.rejudge(run_dirs(args), args.judge, judge_errors=args.judge_errors, batch=not args.sync)
+
+
+def cmd_judge_pass(args: argparse.Namespace) -> int:
+    from src import run  # the same four seconds as in cmd_run
+    return run.judge_pass(args.pass_name, run_dirs(args), args.judge, cap=args.cap, batch=args.batch, limit=args.limit,
+                          only_missing=args.only_missing, redo=args.redo)
 
 
 def cmd_regenerate(args: argparse.Namespace) -> int:
@@ -208,7 +202,8 @@ def add_runs_argument(parser: argparse.ArgumentParser) -> None:
 
 
 def add_judging_parsers(subparsers) -> None:
-    judge = subparsers.add_parser("judge", help="judge an existing eval log again and export it")
+    judge = subparsers.add_parser("judge", help="judge an eval log with CheatBench's judge and RE-EXPORT the run from "
+                                                "the log: every file of the run the export owns is rewritten")
     judge.add_argument("eval_log")
     judge.add_argument("run_name")
     add_judge_arguments(judge)
@@ -219,25 +214,34 @@ def add_judging_parsers(subparsers) -> None:
                             "the verdicts are in; without it the judge refuses that folder before it starts")
     judge.set_defaults(func=cmd_judge)
 
-    ladder = subparsers.add_parser("ladder", help="place every agent of a run on the cheating ladder (ladder.jsonl)")
-    add_runs_argument(ladder)
-    add_judge_arguments(ladder)
-    ladder.add_argument("--view", default="full",
-                        help="full: CheatBench's rendering of the transcript; actions: tool calls and results only")
-    ladder.add_argument("--agents", default=None, help="judge these agents only, comma separated")
-    ladder.add_argument("--force", action="store_true", help="judge again the episodes already in ladder.jsonl")
-    ladder.add_argument("--table", action="store_true", help="print the table from the ladder.jsonl files, no judging")
-    ladder.set_defaults(func=cmd_ladder)
-
-    rejudge = subparsers.add_parser("rejudge", help="CheatBench's judge from each run's eval log, then the ladder")
+    rejudge = subparsers.add_parser("rejudge", help="CheatBench's judge from each run's eval log, then RE-EXPORT each "
+                                                    "run from its log: every file of the run the export owns is "
+                                                    "rewritten with the current code")
     add_runs_argument(rejudge)
     add_judge_arguments(rejudge)
-    rejudge.add_argument("--no-judge", action="store_true", help="skip CheatBench's judge")
-    rejudge.add_argument("--no-ladder", action="store_true", help="skip the cheating ladder")
-    rejudge.add_argument("--view", choices=("full", "actions"), default="full", help="the ladder judge's view")
     rejudge.add_argument("--judge-errors", action="store_true",
                          help="judge a run even when an episode failed in the harness or at the provider")
     rejudge.set_defaults(func=cmd_rejudge)
+
+    judge_pass = subparsers.add_parser("judge-pass", help="a judge pass over runs' stored records under a dollar cap, "
+                                                          "into runs/<study>/<run>/judges/<pass>.<judge>.jsonl only; "
+                                                          "no eval log, no re-export")
+    judge_pass.add_argument("pass_name", metavar="pass", choices=PASSES,
+                            help="cheatbench: CheatBench's judge per stored trajectory; collusion: the Collusion "
+                                 "ladder's judge per collaborating pair")
+    judge_pass.add_argument("runs", nargs="+", help="run names of the study, run directories, or a study folder (its "
+                                                    "valid runs)")
+    judge_pass.add_argument("--judge", required=True, help="entry in src/judging/judge_models.yaml")
+    judge_pass.add_argument("--cap", type=float, required=True,
+                            help="dollars the pass may spend; it stops before a call could pass them")
+    judge_pass.add_argument("--batch", action="store_true",
+                            help="the batch API (half price, up to a day) instead of the normal API")
+    judge_pass.add_argument("--limit", type=int, default=None, help="judge the first N units to judge: the pilot")
+    held = judge_pass.add_mutually_exclusive_group()
+    held.add_argument("--only-missing", action="store_true",
+                      help="judge only units with no row for this judge (by default a failed row is judged again)")
+    held.add_argument("--redo", action="store_true", help="judge every unit again, parsed rows included")
+    judge_pass.set_defaults(func=cmd_judge_pass)
 
 
 def add_measure_parsers(subparsers) -> None:
@@ -245,12 +249,14 @@ def add_measure_parsers(subparsers) -> None:
                                                           "(keeping judge.jsonl), the measures and the figures")
     add_runs_argument(regenerate)
     regenerate.add_argument("--no-export", action="store_true", help="keep run.json, episodes.jsonl and judge.jsonl")
-    regenerate.add_argument("--no-measures", action="store_true", help="skip the code ladder and the SWE measures")
+    regenerate.add_argument("--no-measures", action="store_true",
+                            help="skip the code record (signals.jsonl) and the SWE measures")
     regenerate.add_argument("--no-plots", action="store_true",
                             help="skip the figures under out/<study>/[<group>/]<run>/")
     regenerate.set_defaults(func=cmd_regenerate)
 
-    signals = subparsers.add_parser("signals", help="the code ladder of a run's agents and teams (signals.jsonl)")
+    signals = subparsers.add_parser(
+        "signals", help="the code's evidence and the three ladders of a run's agents and teams (signals.jsonl)")
     add_runs_argument(signals)
     signals.add_argument("--table", action="store_true",
                          help="only the tables over the runs' signals.jsonl: the agents', then the teams'")

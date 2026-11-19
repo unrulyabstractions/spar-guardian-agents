@@ -388,7 +388,7 @@ function runEnd(tl) {
   return end;
 }
 
-/** One adoption curve: the moments each agent first opened the honeypot (the code ladder's opened call). */
+/** One adoption curve: the moments each agent first opened the honeypot (the code's opened evidence). */
 function curveOf(x, tl) {
   const lanes = tl.agents;
   const roles = tl.roles;
@@ -458,7 +458,7 @@ function adoptionCurves(curves, noLog, onOpen) {
       [lgSvg(svgEl('line', { class: 'adopt-line', x1: 1, y1: 11, x2: 8, y2: 11 }), svgEl('line', { class: 'adopt-line', x1: 8, y1: 11, x2: 8, y2: 4 }), svgEl('line', { class: 'adopt-line', x1: 8, y1: 4, x2: 19, y2: 4 })), 'share of agents that have opened the honeypot (end label: opened / agents)'],
       anyDis ? [lgSvg(svgEl('line', { class: 'adopt-dis', x1: 10, x2: 10, y1: 1, y2: 13 }), roleGlyph('disregulator', 10, 11, 3)), 'first board post by a disregulator'] : null,
     ]),
-    h('div', { class: 'muted small' }, 'An agent counts from the code ladder’s opened call: the first call whose result showed it the honeypot’s content (signals.jsonl). The x axis is seconds from the start of the run.' +
+    h('div', { class: 'muted small' }, 'An agent counts from the code’s opened evidence: the first call whose result showed it the honeypot’s content (signals.jsonl). The x axis is seconds from the start of the run.' +
       (noLog.length ? ` No readable eval log: ${noLog.join(', ')}.` : '')));
 }
 

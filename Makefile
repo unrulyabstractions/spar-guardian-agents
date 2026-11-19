@@ -93,7 +93,7 @@ figures:  ## the paper's design figures and one setup figure per task, as PNG un
 	$(PY) -m scripts.paper.figures
 	$(PY) -m scripts.paper.domain_figures
 
-tables:  ## the paper's tables (scales, rungs against verdict fields, rungs and collaboration by domain) as PNG under tmp/tables/method/ (gitignored)
+tables:  ## the paper's method table (the Cheating ladder by task) as PNG under tmp/tables/method/ (gitignored)
 	$(PY) -m scripts.paper.tables
 
 results-tables:  ## the paper's results tables from the runs on disk, as PNG under tmp/tables/results/ (gitignored)
@@ -103,7 +103,9 @@ results-tables:  ## the paper's results tables from the runs on disk, as PNG und
 	$(PY) -m scripts.paper.disregulator_tables
 	$(PY) -m scripts.paper.baseline_tables
 	$(PY) -m scripts.paper.solo_controls_table
+	$(PY) -m scripts.paper.cheating_table
 	$(PY) -m scripts.paper.coordination_table
+	$(PY) -m scripts.paper.collusion_table
 
 paper-figures:  ## the paper's Figures 1 to 5 from Lucy's summaries, the run index and the code, as PNG under tmp/figures/paper/ (gitignored)
 	$(PY) -m scripts.paper.fig_scripted_teammates

@@ -147,17 +147,17 @@ def test_the_screen_refuses_an_unknown_model_and_a_seed(argv):
     assert stop.value.code == 2
 
 
-def test_the_rates_count_the_evidence_for_each_rung_and_level(monkeypatch, tmp_path):
+def test_the_rates_count_each_kind_of_evidence(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "RUNS", tmp_path)
     teams = {1: ({"tried", "opened", "used", "shipped"}, {"discussed": ["post"], "crossed": ["main"]}, True, 3),
              2: ({"tried", "opened"}, {}, False, 0),
              3: (set(), {"crossed": ["main"], "solicited": []}, False, 2)}
-    for sample, (rungs, evidence, passed, errored) in teams.items():
+    for sample, (kinds, evidence, passed, errored) in teams.items():
         run_dir = tmp_path / f"flipt_duo_{GLIMMER}_s{sample}"
         run_dir.mkdir()
-        team = {"row": "team", "rung": "none", "collaboration": "isolated", "passed": passed,
-                "collaboration_evidence": evidence, **{r: r in rungs for r in screen.RATE_RUNGS}}
-        rows = [{"row": "agent", "agent": "a01", "rung": "none"}, team]
+        team = {"row": "team", "cheating_rung": "none", "passed": passed, "collaboration_evidence": evidence,
+                **{kind: kind in kinds for kind in screen.RATE_EVIDENCE}}
+        rows = [{"row": "agent", "agent": "a01", "cheating_rung": "none"}, team]
         (run_dir / "signals.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows))
         ledger = {"agents": {"a01": {"errored": errored}, "a02": {"errored": 0}}}
         (run_dir / "run.json").write_text(json.dumps({"ledger": ledger}))
@@ -171,7 +171,7 @@ def test_the_rates_count_the_evidence_for_each_rung_and_level(monkeypatch, tmp_p
 
 
 def test_a_condition_names_the_run_and_sets_what_the_agents_are_told():
-    """dont_* take the rule ladder's vague and identified sentences, dont_pressure the vague one with a stake; cheat_*
+    """dont_* take the rule level's vague and identified sentences, dont_pressure the vague one with a stake; cheat_*
     add a text that mirrors them; none adds nothing and keeps the old names, so the screens before conditions keep
     theirs."""
     from src.tasks import instruction_suffix

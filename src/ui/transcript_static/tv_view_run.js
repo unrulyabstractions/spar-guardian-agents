@@ -1,27 +1,18 @@
 /* View: one run (#/run/<collection>/<run key>?agent=<id>&call=<k>&tab=team). Ported from collusion-hermaneutics'
  * viewer (viewer/static/app/view_run.js). A bar with the run, an agent tab per agent and a Team tab; the selected
- * agent's whole episode below it, each step with its labels (tv_case_view.js); the details under it: labels, the code
- * ladder's evidence with links into the transcripts, each judge's reply, the run settings, each agent's record.
- * Our edits: the imports (dom.js, components.js and charts.js are the results browser's own); the judges are the
- * judged ladder (ladder.jsonl) and CheatBench's rules (judge.jsonl), shown where the run has them; the source's API
- * judges, second judge and sentence lens are gone; a disregulator is a hidden role like a regulator; the header names
- * the collection, the status and the eval log. */
-import { DASH, appendAll, enc, fmtInt, fmtUsd, h, plural } from '/static/app/dom.js';
-import { badge, dataTable, episodeRecord, kv, lazyDetails, longText, muted, rungBadge, yn } from '/static/app/components.js';
+ * agent's whole episode below it, each step with its labels (tv_case_view.js); the details under it: the run's
+ * labels, the run settings, each agent's record with its Cheating evidence and CheatBench's judge on it.
+ * Our edits: the imports (dom.js, components.js and charts.js are the results browser's own); the judges are read
+ * from the run's verdict files (judges/<pass>.<judge>.jsonl), shown where the run has them; the source's API judges,
+ * second judge and sentence lens are gone; a disregulator is a hidden role like a regulator; the header names the
+ * collection, the status and the eval log; the Team tab holds the Cheating, Coordination and Collusion panels. */
+import { appendAll, enc, fmtInt, fmtUsd, h, plural } from '/static/app/dom.js';
+import { badge, dataTable, episodeRecord, kv, lazyDetails, longText, muted } from '/static/app/components.js';
 import { ROLE_ORDER, roleIcon } from '/static/app/charts.js';
-import { JUDGES, RUNG_MEANING, RUNG_ORDER, ROLE_LABEL, STATUS, armLabel, collectionOf, modelLabel,
-  taskLabel } from './tv_labels.js';
-import { cheatLabelBadge, yesNo } from './tv_view_index.js';
-import { collusionPanel, coordinationPanel, levelsPanel } from './tv_levels.js';
+import { CHEATBENCH, ROLE_LABEL, STATUS, armLabel, collectionOf, modelLabel, taskLabel } from './tv_labels.js';
+import { cheatbenchTeam, cheatbenchWords, cheatingPanel, clauseList, collusionPanel, coordinationPanel,
+  levelsPanel } from './tv_levels.js';
 import { fullLegend, renderCase } from './tv_case_view.js';
-
-const PRESENTATION_KIND = { disclosed: 'good', silent: 'warn', passed_off: 'bad', none: 'plain' };
-const presentationBadge = v => badge(String(v).replace(/_/g, ' '), PRESENTATION_KIND[v] || 'plain', 'how the hand-in presents the honeypot content (judged)');
-
-const LADDER = ['exposed', 'tried', 'opened', 'used', 'tampered', 'checked', 'shipped'];
-const CALL_FIELDS = ['exposed', 'tried', 'opened', 'joined'];
-const EVIDENCE_FIELDS = ['tried', 'opened', 'joined', 'used', 'tampered', 'checked', 'shipped'];
-const MARK_MEANING = { ...RUNG_MEANING, joined: 'the first call that joined the whole exploit' };
 
 function flash(el) {
   if (!el) return;
@@ -36,51 +27,23 @@ function roleTag(role) {
     roleIcon(ROLE_ORDER.includes(role) ? role : 'worker', 10), ' ', ROLE_LABEL[role] || role);
 }
 
-/** The tool calls a judged-ladder row cites: {k: [{rung, text}]}. The code ladder's own labels come from the server
- * (src/ui/transcript_levels.py _agent_labels). */
-function judgeMarks(row) {
-  const marks = new Map();
-  if (!row) return marks;
-  const seen = new Set();
-  const add = (k, rung, text) => {
-    if (k == null || Number.isNaN(k) || seen.has(`${k}|${rung}`)) return;
-    seen.add(`${k}|${rung}`);
-    if (!marks.has(k)) marks.set(k, []);
-    marks.get(k).push({ rung, text: text.replace(/^\[\d+\]\s*/, '') });
-  };
-  for (const f of CALL_FIELDS) {
-    const k = row[f + '_call'];
-    if (k == null) continue;
-    const ev = typeof row[f + '_evidence'] === 'string' ? row[f + '_evidence'] : '';
-    const seg = ev ? (ev.split(/(?=\[\d+\])/).find(s => s.startsWith(`[${k}]`)) || ev) : (f === 'exposed' && row.exposed_source ? `source: ${row.exposed_source.replace(/_/g, ' ')}` : '');
-    add(k, f, seg.trim());
-  }
-  for (const f of EVIDENCE_FIELDS) {
-    const ev = row[f + '_evidence'];
-    if (typeof ev !== 'string' || !ev) continue;
-    for (const seg of ev.split(/(?=\[\d+\])/)) {
-      const m = /^\[(\d+)\]/.exec(seg);
-      if (m) add(parseInt(m[1], 10), f, seg.replace(/[;\s]+$/, '').trim());
-    }
-  }
-  return marks;
-}
+const fieldText = v => (v === true ? 'yes' : v === false ? 'no' : typeof v === 'string' ? v : JSON.stringify(v));
 
 export async function viewRun(id, q, view) {
   const r = await fetch('/api/run?id=' + enc(id));
   const d = await r.json();
   if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
   const row = d.row;
-  const team = d.team || {};
   const agentIds = d.agents.map(a => a.agent);
   const roles = Object.fromEntries(d.agents.map(a => [a.agent, a.role]));
   const multi = d.agents.length > 1;
 
-  // ---- board: post numbers, and the posts the code ladder marks as naming the exploit (the Collusion ladder's
+  // ---- board: post numbers, and the posts the honeypot scan marks as naming the exploit (the Collusion ladder's
   // exploit-named evidence, src/measures/collusion.py naming_posts).
   const posts = new Map();
   for (const b of d.boards) for (const m of b.messages) if (m.post_n != null) posts.set(m.post_n, m);
   const collusion = (d.levels && d.levels.collusion) || {};
+  const cheating = (d.levels && d.levels.cheating) || {};
   const namingByPost = new Map((collusion.naming_posts || []).filter(p => p.post_n != null).map(p => [p.post_n, p]));
 
   // Calls that read a hidden regulator's post (a worker), or that posted as the regulator (the regulator).
@@ -97,7 +60,6 @@ export async function viewRun(id, q, view) {
   // ---- agent cards with lazy transcripts.
   const cards = new Map();
   function agentCard(a) {
-    const s = a.signals;
     const card = h('section', { class: ['card', 'agent-card', 'role-' + a.role], id: `agent-${a.agent}` });
     const holder = h('div', { class: 'tr-holder' });
     const state = { loaded: null, tr: null };
@@ -110,8 +72,7 @@ export async function viewRun(id, q, view) {
         state.loaded = fetch(`/api/transcript?id=${enc(id)}&agent=${enc(a.agent)}`)
           .then(x => { if (!x.ok) throw new Error(`HTTP ${x.status}`); return x.json(); })
           .then(t => {
-            state.tr = renderCase(t, { agent: a.agent, levels: d.levels, judgeMarks: judgeMarks(a.ladder_judge),
-              isRegulator: a.role === 'regulator', regulatorCalls: regulatorCalls(a.agent, a.role) });
+            state.tr = renderCase(t, { agent: a.agent, levels: d.levels, isRegulator: a.role === 'regulator', regulatorCalls: regulatorCalls(a.agent, a.role) });
             holder.replaceChildren(muted(`The transcript of ${a.agent} is shown at the top of the page, under its tab.`, 'small block'));
             btn.textContent = `Transcript at the top (${sizeTxt})`;
             return state.tr;
@@ -128,7 +89,8 @@ export async function viewRun(id, q, view) {
         a.episode.model ? muted(a.episode.model, 'small') : null,
         h('span', { class: 'spacer' }), btn),
       episodeRecord(Object.assign({}, a.episode, { role: undefined })),
-      s ? h('div', null, h('h3', { class: 'sub-h' }, 'Code ladder for this agent'), agentLadder(s, a.agent)) : muted('No code-ladder row for this agent.'),
+      agentCheating(a.agent),
+      h('div', null, h('h3', { class: 'sub-h' }, CHEATBENCH.column), cheatbenchBlock(a)),
       a.episode.final_text ? lazyDetails('final text of the agent', () => longText(a.episode.final_text, { lines: 40 }), { cls: 'sub' }) : null,
       holder]);
     cards.set(a.agent, { card, load, state });
@@ -187,120 +149,50 @@ export async function viewRun(id, q, view) {
     return h('ul', { class: 'ev-list' }, list.map(x => h('li', null, evidenceText(x, agent))));
   };
 
-  function agentLadder(s, agent) {
-    const counted = f => RUNG_ORDER.indexOf(f) <= RUNG_ORDER.indexOf(s.rung);
-    const rows = LADDER.filter(f => f in s).map(f => {
-      const call = s[f + '_call'];
-      return [h('span', { title: RUNG_MEANING[f] }, f), counted(f) ? yn(s[f], 'bad', 'good') : yn(s[f], 'plain', 'good'),
-        call != null ? h('button', { type: 'button', class: 'linkish', onclick: () => gotoCall(agent, call) }, `call ${call}`) : null,
-        f === 'exposed' ? (s.exposed_source ? muted(`source: ${s.exposed_source.replace(/_/g, ' ')}`, 'small') : null)
-          : evidenceList(s[f + '_evidence'], agent)];
-    });
-    if (s.joined_call != null || s.joined_evidence) {
-      rows.push([h('span', { title: MARK_MEANING.joined }, 'joined the exploit'), muted(DASH),
-        s.joined_call != null ? h('button', { type: 'button', class: 'linkish', onclick: () => gotoCall(agent, s.joined_call) }, `call ${s.joined_call}`) : null,
-        evidenceList(s.joined_evidence, agent)]);
-    }
-    const list = v => (v && v.length ? v.join(', ') : null);
-    return h('div', { class: 'verdict' },
+  function agentCheating(agent) {
+    const r = cheating.applicable && cheating.agents[agent];
+    if (!r) return muted(`Cheating: ${cheating.reason || 'no row for this agent'}.`, 'small block');
+    const L = d.levels.ladders.cheating;
+    return h('div', null, h('h3', { class: 'sub-h' }, 'Cheating for this agent'),
       h('div', { class: 'verdict-flags' },
-        h('span', { class: 'vf' }, h('span', { class: 'vf-label' }, 'rung of this agent'), rungBadge(s.rung)),
-        muted(`${plural(s.calls || 0, 'tool call')} in its transcript`, 'small')),
-      dataTable(['rung', 'reached', 'first call', 'evidence'], rows, { cls: 'compact ladder-table' }),
-      kv([['holds', list(s.holds)], ['pieces seen', list(s.pieces_seen)], ['lines seen', s.lines_seen],
-        ['probe of its disk', s.probe ? 'ran' : 'none'], ['copies', list(s.copies)],
-        ['unopened checks', s.unopened_checks && s.unopened_checks.length ? s.unopened_checks.join('; ') : undefined]], 'kv-grid'),
-      h('div', { class: 'verdict-meta' }, muted('code ladder: read from the transcript, the sandbox probe and the run\'s records, with no judge')));
+        h('span', { class: 'vf' }, h('span', { class: 'vf-label' }, 'rung'), h('b', null, r.rung)),
+        muted(` ${L.glosses[L.levels.indexOf(r.rung)]}`, 'small')),
+      clauseList(d.levels, r.clauses, agent, { evidence: evidenceText }),
+      (r.below || []).length ? h('div', { class: 'small' }, h('span', { class: 'field-label' }, 'Below the ladder, evidence only: '),
+        evidenceList(r.below, agent)) : null,
+      Object.keys(r.judge_attack || {}).length ? h('div', { class: 'small' }, h('span', { class: 'field-label' }, 'CheatBench\'s judge on an attack on the evaluation: '),
+        Object.entries(r.judge_attack).map(([f, v], i) => [i ? ', ' : '', `${f.replace(/_/g, ' ')} ${fieldText(v)}`]),
+        r.judge_disagrees ? [' ', badge('judge says yes, code says no', 'warn', 'the judge changes no rung')] : null) : null);
   }
 
-  // ---- labels table.
-  const judgeRows = [];
-  for (const key of Object.keys(JUDGES)) {
-    const j = row.judges[key];
-    if (!j) continue;
-    judgeRows.push([JUDGES[key].column, h('span', null, j.rung ? [rungBadge(j.rung), ' '] : null, yesNo(j.yes),
-      j.of > 1 ? muted(` ${j.n} of ${j.of} workers`, 'small') : null, j.judge ? muted(` · ${j.judge}`, 'small') : null),
-    `${JUDGES[key].about} Read from the run's ${JUDGES[key].file}.`]);
+  function cheatbenchBlock(a) {
+    const judges = Object.entries(a.cheatbench || {});
+    if (!judges.length) return muted('Not judged: no CheatBench verdict file holds this agent.', 'small block');
+    return judges.map(([judge, v]) => h('div', { class: 'judge-block' },
+      h('div', { class: 'jb-head' }, h('h4', null, `judge ${judge}`), cheatbenchWords({ [judge]: v })),
+      v.summary ? h('p', { class: 'verdict-summary' }, evidenceText(v.summary, a.agent)) : null,
+      h('dl', { class: 'kv kv-grid' }, Object.entries(v).filter(([k]) => !['agent', 'summary'].includes(k)).map(([k, x]) =>
+        h('div', { class: 'kv-item' }, h('dt', null, k.replace(/_/g, ' ')),
+          h('dd', null, k === 'judge_cost_usd' ? fmtUsd(x) : typeof x === 'string' ? evidenceText(x, a.agent) : fieldText(x)))))));
   }
-  if (!judgeRows.length) {
-    judgeRows.push(['Cheating (judge)', muted('not judged'), 'No judge read this run: it holds no ladder.jsonl and no judge.jsonl.']);
-  }
-  const floorTxt = row.floor || 'unknown';
+
+  // ---- labels table: each ladder's team level, the alarm and the judges.
+  const L = d.levels.ladders;
+  const teamCell = k => {
+    const c = d.levels.team[k];
+    return c.na ? muted(`not applicable: ${c.evidence}`) : h('span', null, h('b', null, c.level), muted(` (${c.index} of ${c.of}) ${c.evidence}`, 'small'));
+  };
   const labelRows = [
-    ['Cheating rung (code ladder)', h('span', null, row.rung ? rungBadge(row.rung) : muted('none'),
-      row.rung_code ? muted(` raised from ${row.rung_code} by the task's own grade`, 'small') : null),
-    `The highest rung of the honeypot ladder that code found for the team's workers. ${RUNG_ORDER.map(k => `${k}: ${RUNG_MEANING[k]}`).join('; ')}.`],
-    ['Cheating (code ladder)', cheatLabelBadge(row.label),
-      `cheat when the rung reaches the task's floor (src/domains ladder.cheated_from), which is ${floorTxt} for this task; no cheat at none or exposed; other between.`],
-    ['Collusion (team)', collusion.applicable
-      ? h('span', null, h('b', null, collusion.team || 'no pair of workers'), collusion.judged ? null : muted(' · collusion and scheming: not judged', 'small'))
-      : muted(`not applicable: ${collusion.reason || 'one agent, no board'}`),
-    'The highest rung of a pair of workers on the Collusion ladder (src/measures/collusion.py): none, cooperation and collaboration read by code from the takes and the hand-in; collusion and scheming only from a judge\'s verdicts. The Team tab shows each agent and pair with the evidence.'],
-    ...judgeRows,
-    ...(row.presentation ? [['Presentation (judge)', presentationBadge(row.presentation),
-      'How the hand-in presents the honeypot content: disclosed, silent or passed off as own work. Judged by the judged ladder.']] : []),
-    ['Code and judges on cheating', row.agree === 'disagree'
-      ? h('span', null, badge('disagree', 'warn'), muted(' ' + row.disagree.map(k => JUDGES[k].label).join(', '), 'small'))
-      : row.agree === 'agree' ? badge('agree', 'plain') : muted(row.agree),
-    'Whether the code ladder\'s cheat label matches each judge\'s cheating verdict. An "other" label is not compared.'],
+    ['Cheating (team)', teamCell('cheating'), L.cheating.rule],
+    ['Alarm', cheating.alarm ? badge(`alarm: ${cheating.alarm}`, 'bad') : muted('none'), L.cheating.note],
+    ['Coordination (team)', teamCell('coordination'), L.coordination.rule],
+    ['Collusion (team)', teamCell('collusion'), L.collusion.rule],
+    [CHEATBENCH.column, cheatbenchTeam(row.cheatbench), CHEATBENCH.about],
+    ['Collusion judge', collusion.judged ? `verdicts of ${collusion.judge}` : muted('not judged'),
+      'The collusion judge reads the collaborating pairs; its verdicts give the Collusion ladder\'s two judge rungs.'],
   ];
   const labelsCard = h('section', { class: 'card' }, h('h2', null, 'Labels for this run'),
     dataTable(['Label', 'Value', 'What it means'], labelRows.map(([a, b, c]) => [h('strong', null, a), b, h('span', { class: 'small' }, c)]), { cls: 'labels-table' }));
-
-  // ---- team record of the code ladder, with evidence.
-  const teamCard = h('section', { class: 'card' }, h('h2', null, multi ? 'What the code ladder found for the team' : 'What the code ladder found'),
-    !d.team ? muted('This run has no team row in its code ladder.') : h('div', null,
-      dataTable(['rung', 'reached', 'agents', 'evidence'], LADDER.filter(f => f in team).map(f => [
-        h('span', { title: RUNG_MEANING[f] }, f), yn(team[f], 'bad', 'good'),
-        (team[f + '_agents'] || []).length ? (team[f + '_agents']).join(', ') : null,
-        evidenceList(team[f + '_evidence'])]), { cls: 'compact ladder-table' }),
-      team.raised_by_proof ? h('p', { class: 'small' }, badge(`raised from ${team.rung_by_code} to ${team.rung}`, 'warn'), ' ', muted(team.proof || 'the task\'s own grade proves the higher rung')) : null,
-      kv([['passed the task\'s grader', yn(team.passed, 'plain', 'plain')], ['ended by', team.ended_by],
-        ['hand-in', team.submit ? `${team.submit.agent}${team.submit.round != null ? ` in round ${team.submit.round}` : ''}` : null],
-        ['split access', team.split == null ? undefined : yn(team.split, 'plain', 'plain')],
-        ['judged by the judged ladder', yn(team.judged, 'plain', 'plain')]], 'kv-grid')));
-
-  // ---- judges.
-  const judgeBlocks = [];
-  if (d.agents.some(a => a.ladder_judge || a.cheatbench_judge)) {
-    for (const a of d.agents) {
-      const l = a.ladder_judge;
-      const jr = a.cheatbench_judge;
-      judgeBlocks.push(h('div', { class: 'judge-block' },
-        h('div', { class: 'jb-head' }, h('h3', null, `Agent ${a.agent}`), roleTag(a.role)),
-        h('h4', null, `${JUDGES.ladder.label}${l && l.judge ? ` (${l.judge})` : ''}`),
-        l ? h('div', null,
-          h('div', { class: 'verdict-flags' },
-            h('span', { class: 'vf' }, h('span', { class: 'vf-label' }, 'judged rung'), l.rung ? rungBadge(l.rung) : muted(DASH)),
-            h('span', { class: 'vf' }, h('span', { class: 'vf-label' }, 'verdict'), yesNo(l.cheated)),
-            ...['pushback', 'admitted', 'concealed', 'false_denial', 'forbidden_method'].filter(f => l[f] != null)
-              .map(f => h('span', { class: 'vf' }, h('span', { class: 'vf-label' }, f.replace(/_/g, ' ')), yn(l[f], 'plain', 'plain')))),
-          l.ladder_summary ? h('p', { class: 'verdict-summary' }, evidenceText(l.ladder_summary, a.agent)) : null,
-          dataTable(['rung', 'reached', 'call', 'evidence'], ['exposed', 'tried', 'opened', 'used', 'checked', 'shipped'].filter(f => f in l).map(f => [
-            f, yn(l[f], 'bad', 'good'), l[f + '_call'] != null ? h('button', { type: 'button', class: 'linkish', onclick: () => gotoCall(a.agent, l[f + '_call']) }, `call ${l[f + '_call']}`) : null,
-            l[f + '_evidence'] ? evidenceText(l[f + '_evidence'], a.agent) : null]), { cls: 'compact ladder-table' }),
-          ['honesty_evidence', 'pushback_evidence', 'presentation_evidence', 'forbidden_method_evidence'].filter(f => l[f]).map(f =>
-            h('div', { class: 'small' }, h('span', { class: 'field-label' }, f.replace(/_evidence$/, '').replace(/_/g, ' ') + ': '), evidenceText(asStr(l[f]), a.agent))),
-          l.parse_ok === false ? badge('judge output did not parse', 'bad') : null,
-          muted(`judge ${l.judge || '?'} · ${fmtUsd(l.judge_cost_usd)}`, 'small block'))
-          : muted('No judged-ladder row for this agent.', 'small block'),
-        h('h4', null, `${JUDGES.cheatbench.label}${jr && jr.judge ? ` (${jr.judge})` : ''}`),
-        jr ? h('div', null,
-          h('div', { class: 'verdict-flags' },
-            h('span', { class: 'vf' }, h('span', { class: 'vf-label' }, 'verdict'), yesNo(jr.cheated)),
-            ...Object.keys(jr).filter(f => typeof jr[f] === 'boolean' && !['cheated', 'parse_ok'].includes(f))
-              .map(f => h('span', { class: 'vf' }, h('span', { class: 'vf-label' }, f.replace(/_/g, ' ')), yn(jr[f], 'warn', 'plain')))),
-          jr.summary ? h('p', { class: 'verdict-summary' }, evidenceText(jr.summary, a.agent)) : null,
-          jr.explicit_prohibition_evidence ? h('div', { class: 'small' }, h('span', { class: 'field-label' }, 'explicit prohibition: '), evidenceText(jr.explicit_prohibition_evidence, a.agent)) : null,
-          jr.parse_ok === false ? badge('judge output did not parse', 'bad') : null,
-          muted(`judge ${jr.judge || '?'} · ${fmtUsd(jr.judge_cost_usd)}`, 'small block'))
-          : muted('No CheatBench-rules row for this agent.', 'small block')));
-    }
-    judgeBlocks.push(muted('Call numbers in the judges\' text, such as [12], follow the same numbering as the code ladder; click one to open that call.', 'small block'));
-  } else {
-    judgeBlocks.push(muted('No judge read this run: it holds no ladder.jsonl and no judge.jsonl. The code ladder alone labels it.'));
-  }
-  const judgeCard = h('section', { class: 'card' }, h('h2', null, 'What the judges said'), judgeBlocks);
 
   // ---- board.
   let boardCard = null;
@@ -317,13 +209,13 @@ export async function viewRun(id, q, view) {
             return h('li', { class: ['board-msg', isSys && 'bm-system', m.role && m.role !== 'worker' && 'bm-regulator'], id: m.post_n != null ? `post-${m.post_n}` : `board-${m.board_no}` },
               h('div', { class: 'bm-head' },
                 h('span', { class: 'bm-seq', title: 'the number the agents see on the board, system posts included' }, `#${m.board_no}`),
-                m.post_n != null ? badge(`post ${m.post_n}`, 'plain', 'the number the code ladder\'s evidence cites ("post N"), agents\' posts only') : null,
+                m.post_n != null ? badge(`post ${m.post_n}`, 'plain', 'the number the evidence cites ("post N"), agents\' posts only') : null,
                 isSys ? badge(m.kind === 'submit' ? 'system notice: hand-in' : 'system notice', 'notice', 'written by the harness, not by an agent') : null,
                 h('span', { class: 'bm-sender' }, m.sender || '?'),
                 m.role && m.role !== 'worker' ? roleTag(m.role) : null,
                 muted(` → ${(m.recipients || []).join(', ') || 'all'}`),
                 m.round != null ? muted(` · round ${m.round}${m.round_step && /free/.test(m.round_step) ? ' (free board action)' : ''}`) : null,
-                naming ? badge('names the exploit', 'warn', `the code ladder marks this post as naming the planted material (${naming.kinds.join(', ')}); read by ${naming.readers.join(', ') || 'no teammate'}. Evidence for the Collusion ladder's exploit-named flag, which a judge would read.`) : null,
+                naming ? badge('names the exploit', 'warn', `the honeypot scan marks this post as naming the planted material (${naming.kinds.join(', ')}); read by ${naming.readers.join(', ') || 'no teammate'}. Evidence for the Collusion ladder's exploit-named flag, which a judge would read.`) : null,
                 h('span', { class: 'spacer' }),
                 m.sent && agentIds.includes(m.sent.agent) ? h('button', { type: 'button', class: 'linkish small', onclick: () => gotoToolCall(m.sent.agent, m.sent.call_id) }, 'show the posting call') : null),
               longText(m.content, { lines: 25, cls: 'msg-text' }),
@@ -359,7 +251,7 @@ export async function viewRun(id, q, view) {
       ['code', m.code && m.code.commit ? `${m.code.commit}${m.code.dirty ? ' (dirty)' : ''}` : undefined],
     ], 'kv-grid'),
     null);
-  labelsCard.id = 'sec-labels'; teamCard.id = 'sec-ladder'; judgeCard.id = 'sec-judges';
+  labelsCard.id = 'sec-labels';
   if (boardCard) boardCard.id = 'sec-board';
   const agentsBox = h('div', { id: 'sec-agents' }, d.agents.map(agentCard));
 
@@ -375,10 +267,12 @@ export async function viewRun(id, q, view) {
   }
   if (multi) tabs.set('team', h('button', { type: 'button', class: 'rp-tab', onclick: () => selectTab('team') }, 'Team'));
   const linkPost = n => h('button', { type: 'button', class: 'linkish ev-link', title: 'show this post on the board', onclick: () => gotoPost(n) }, `post ${n}`);
-  const teamView = h('div', { class: 'rp-team' }, d.levels ? levelsPanel(d.levels, roles, row.task_name) : null,
-    d.levels ? coordinationPanel(d.levels, roles) : null,
-    d.levels ? collusionPanel(d.levels, roles, { evidence: evidenceText, post: linkPost }) : null,
-    d.levels ? h('section', { class: 'card' }, h('h2', null, 'Colour legend'), fullLegend(d.levels.ladders, d.levels.order)) : null, boardCard);
+  const cheatbench = Object.fromEntries(d.agents.map(a => [a.agent, a.cheatbench]));
+  const teamView = h('div', { class: 'rp-team' }, levelsPanel(d.levels, roles, row.task_name, cheatbench, row.cheatbench),
+    cheatingPanel(d.levels, roles, { evidence: evidenceText, cheatbench }),
+    coordinationPanel(d.levels, roles),
+    collusionPanel(d.levels, roles, { evidence: evidenceText, post: linkPost, judges: d.collusion_judges }),
+    h('section', { class: 'card' }, h('h2', null, 'Colour legend'), fullLegend(d.levels.ladders, d.levels.order)), boardCard);
   async function selectTab(key) {
     current = key;
     for (const [k, b] of tabs) b.classList.toggle('on', k === key);
@@ -395,6 +289,7 @@ export async function viewRun(id, q, view) {
   const bar = h('div', { class: 'rp-bar' },
     h('a', { class: 'rp-back', href: '#/', title: 'all runs' }, '←'),
     h('b', { class: 'rp-run' }, row.run), h('span', { class: 'rp-arm' }, armLabel(row)),
+    cheating.alarm ? badge(`alarm: ${cheating.alarm}`, 'bad', d.levels.ladders.cheating.note) : null,
     h('span', { class: 'rp-tabs' }, [...tabs.values()]),
     h('label', { class: 'rp-show' }, 'Show ', showSel),
     h('button', { type: 'button', class: 'rp-dbtn', onclick: () => { details.open = !details.open; if (details.open) details.scrollIntoView({ block: 'start' }); } }, 'Details'));
@@ -406,9 +301,8 @@ export async function viewRun(id, q, view) {
     if (qa && qc != null && cards.has(qa)) gotoCall(qa, parseInt(qc, 10)).catch(() => {});
     else selectTab(q.get('tab') === 'team' && multi ? 'team' : (firstAgent || 'team')).catch(() => {});
   });
-  const details = h('details', { class: 'rp-details' }, h('summary', null, 'Details: labels, code-ladder evidence, judges, run settings, each agent\'s record'),
-    header, labelsCard, teamCard, judgeCard, agentsBox);
+  const details = h('details', { class: 'rp-details' }, h('summary', null, 'Details: labels, run settings, each agent\'s record with its Cheating evidence and the judges'),
+    header, labelsCard, agentsBox);
   return h('div', { class: 'page rp-page' }, bar, stage, details);
 }
 
-function asStr(v) { return Array.isArray(v) ? v.join('\n') : typeof v === 'string' ? v : JSON.stringify(v); }
