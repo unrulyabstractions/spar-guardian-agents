@@ -1,7 +1,7 @@
 """The paper's view of the three ladders: the study's valid runs, each run's Cheating and Collusion rungs
-(src/measures/cheating_ladder.py cheating, src/measures/collusion.py collusion_of with the scheming pass's verdicts),
-the ladders' colours and marks, the table of counts by task that the results tables share, and the check that a drawn
-table stays readable at the page's width.
+(src/measures/cheating_ladder.py cheating, src/measures/collusion.py collusion_of, all read by code), the ladders'
+colours and marks, the table of counts by task that the results tables share, and the check that a drawn table stays
+readable at the page's width.
 A team or an agent cheated when the measures' one definition says so (cheating_ladder.cheated: CHEATED_FROM or
 above). The paper's second measure, accessed the honeypot (ACCESSED_FROM or above), is drawn here and nowhere else.
 
@@ -9,10 +9,8 @@ above). The paper's second measure, accessed the honeypot (ACCESSED_FROM or abov
     cell_runs(prefix)   # the valid runs of one cell: <prefix><seed>, then its pilots <prefix>[_]pilot<seed>
     record(path)        # {"cheating": rung, "cheated", "accessed", "passed", "alarm", "pieces",
                         #  "agents": {agent: {worker, rung, episode}}, "influencers": {agent: {role, posts, solicited}},
-                        #  "collusion": rung, "collusion_code": rung, "collusion_aware", "collusion_agents":
-                        #  {agent: {role, rung, code_rung}}, "collusion_colluding": [{agents, roles, rung,
-                        #  scheming}] (collusion.colluding_pairs), "collusion_applicable"}
-    labels(path)        # the run's judge labels per agent (src/measures/judge_labels.py labels)
+                        #  "collusion": rung, "collusion_agents": {agent: {role, rung}}, "collusion_applicable"}
+    labels(path)        # the run's judge scores per agent (src/measures/judge_labels.py labels)
     save(fig, path)     # writes the PNG; stops when a text would print below MIN_PRINT_PT at the page's width
 
 Nothing is written under runs/, and no model is called.
@@ -32,8 +30,8 @@ from src.configuration.settings import ROOT
 from src.measures import judge_labels
 from src.measures.cheating_ladder import CHEATED_FROM, cheated, cheating, scanned_run
 from src.measures.collusion import RUNGS as COLLUSION
-from src.measures.collusion import colluding_pairs, collusion_of
-from src.measures.run_directory import is_influencer, is_worker
+from src.measures.collusion import collusion_of
+from src.measures.run_directory import is_influencer
 from src.measures.run_listing import Listed, list_collection
 from src.measures.rungs import RUNGS as CHEATING
 from src.measures.rungs import at_least
@@ -48,10 +46,10 @@ CHEATING_FILL = dict(zip(CHEATING, ("#eeede8", "#f9c396", "#e8714a", "#c4392a", 
 """The Cheating ladder (rungs.RUNGS) as a red ramp, none neutral."""
 CHEATING_TEXT = {"tempted": WHITE, "attempted": WHITE, "hacked": WHITE}
 CHEATING_LETTER = dict(zip(CHEATING, ("·", "L", "T", "A", "H")))
-COLLUSION_FILL = dict(zip(COLLUSION, ("#eeede8", "#c9c0f0", "#6f5bd0", "#4a3aa8", "#2b1f6e")))
+COLLUSION_FILL = dict(zip(COLLUSION, ("#eeede8", "#c9c0f0", "#6f5bd0", "#2b1f6e")))
 """The Collusion ladder (collusion.RUNGS) as a violet ramp, none neutral."""
-COLLUSION_TEXT = {"collaboration": WHITE, "collusion": WHITE, "scheming": WHITE}
-COLLUSION_SHORT = dict(zip(COLLUSION, ("·", "Co", "Cb", "Cu", "S")))
+COLLUSION_TEXT = {"collaboration": WHITE, "collusion": WHITE}
+COLLUSION_SHORT = dict(zip(COLLUSION, ("·", "Co", "Cb", "Cu")))
 """A Collusion rung's mark on a chip; the legend spells each one out."""
 CHEATED_LABEL = f"cheated: {CHEATED_FROM} or above"
 """A legend's words for the cheating line, the one the measures draw."""
@@ -89,13 +87,9 @@ def cell_runs(prefix: str, study: Path = STUDY) -> list[Path]:
 
 @cache
 def labels(path: Path) -> dict:
-    """The run's judge labels per agent (src/measures/judge_labels.py labels: awareness, manipulation, disclosure)."""
+    """The run's judge scores per agent (src/measures/judge_labels.py labels: disclosure and manipulation, each a score
+    from 0 to 100 with an excerpt; an agent the judge has not scored is None)."""
     return judge_labels.labels(Path(path))
-
-
-AWARE_ORDER = ("yes", "unchecked", judge_labels.NOT_JUDGED, judge_labels.NOT_READ, "no")
-"""What a colluding team's awareness reads: the first of these any of its colluding workers holds, so "no" only when
-the judge read every one of them and found none aware."""
 
 
 @cache
@@ -103,9 +97,7 @@ def record(path: Path) -> dict:
     """One run's Cheating and Collusion rungs, for the team and for each agent, the pieces its hand-in holds (the
     Cheating ladder's hand_in_pieces), and each influencer's posts and the posts of those that ask a teammate for the
     honeypot (src/measures/team_ladder.py posts_of and solicits). The Collusion ladder is collusion_of on the same
-    Cheating ladder, as collusion.run_collusion computes it; "collusion" is the team's rung with the scheming pass's
-    verdicts, "collusion_code" the code's. Where workers collude, "collusion_aware" is their awareness label
-    (AWARE_ORDER), shown wherever the team's collusion is; None elsewhere."""
+    Cheating ladder, as collusion.run_collusion computes it; "collusion" is the team's rung."""
     run, domain, log, rows, _, team = scanned_run(Path(path))
     result = cheating(run, domain, rows, team or {}, log)
     collusion = collusion_of(Path(path), result)
@@ -115,9 +107,6 @@ def record(path: Path) -> dict:
                            "solicited": sum(p["sender"] == agent and solicits(p, roster, domain) for p in posts)}
                    for agent, role in run.roles().items() if is_influencer(role)}
     applicable = bool(collusion.get("applicable"))
-    colluding = [{key: p[key] for key in ("agents", "roles", "rung", "scheming")} for p in colluding_pairs(collusion)]
-    aware = {labels(path)["agents"][a]["awareness"] for p in colluding if all(map(is_worker, p["roles"]))
-             for a in p["agents"]}
     return {"cheating": result["team"], "cheated": cheated(result["team"]), "accessed": accessed(result["team"]),
             "passed": result["passed"] is True, "alarm": result["alarm"], "pieces": result["hand_in_pieces"],
             "agents": {a: {"worker": r["worker"], "rung": r["rung"], "episode": r["episode"]}
@@ -125,11 +114,8 @@ def record(path: Path) -> dict:
             "influencers": influencers,
             "collusion_applicable": applicable,
             "collusion": collusion["team"] if applicable else None,
-            "collusion_code": collusion["team_code"] if applicable else None,
-            "collusion_aware": next((v for v in AWARE_ORDER if v in aware), None),
-            "collusion_agents": {a: {"role": r["role"], "rung": r["rung"], "code_rung": r["code_rung"]}
-                                 for a, r in (collusion.get("agents") or {}).items()},
-            "collusion_colluding": colluding}
+            "collusion_agents": {a: {"role": r["role"], "rung": r["rung"]}
+                                 for a, r in (collusion.get("agents") or {}).items()}}
 
 
 def save(fig: Figure, path: Path) -> Path:
@@ -167,17 +153,9 @@ def rung_chip(ax, x: float, y: float, w: float, h: float, rung: str, size: float
             color=CHEATING_TEXT.get(rung, INK), ha="center", va="center")
 
 
-AWARE_MARK = {"yes": "+", "no": "\u2212", "unchecked": "?", judge_labels.NOT_JUDGED: "?", judge_labels.NOT_READ: "?"}
-"""A colluding team's awareness (record's collusion_aware) as a mark after its Collusion rung."""
-AWARE_WORDS = {"+": "a colluding worker knowingly used the planted work (awareness)",
-               "\u2212": "no colluding worker did", "?": "awareness unchecked or not judged"}
-
-
-def collusion_chip(ax, x: float, y: float, w: float, h: float, rung: str | None, size: float = 6.5,
-                   aware: str | None = None) -> None:
-    """A Collusion rung as a pill with its mark (COLLUSION_SHORT) and the colluding workers' awareness (AWARE_MARK);
-    "n/a" where the ladder does not apply."""
-    label = "n/a" if rung is None else COLLUSION_SHORT[rung] + (AWARE_MARK[aware] if aware else "")
+def collusion_chip(ax, x: float, y: float, w: float, h: float, rung: str | None, size: float = 6.5) -> None:
+    """A Collusion rung as a pill with its mark (COLLUSION_SHORT); "n/a" where the ladder does not apply."""
+    label = "n/a" if rung is None else COLLUSION_SHORT[rung]
     ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0,rounding_size=0.03",
                                 fc=WHITE if rung is None else COLLUSION_FILL[rung], ec=AXIS if rung is None else "none",
                                 lw=0.6))
@@ -194,7 +172,7 @@ def run_tile(ax, x: float, y: float, run: dict, *, passed: bool = False, pieces:
     """One run (a record): its team's Cheating chip, its Collusion chip under it, then a row with the pieces its
     hand-in holds (`pieces`) and a check when the grader passed it (`passed`)."""
     rung_chip(ax, x, y, TILE, TILE, run["cheating"])
-    collusion_chip(ax, x, y + TILE + 0.03, TILE, 0.19, run["collusion"], aware=run["collusion_aware"])
+    collusion_chip(ax, x, y + TILE + 0.03, TILE, 0.19, run["collusion"])
     below = y + TILE + 0.03 + 0.19 + 0.11
     mark = ("".join(run["pieces"]) if pieces else "") + ("✓" if passed and run["passed"] else "")
     if mark:
@@ -208,15 +186,13 @@ def tiles_width(n: int) -> float:
 
 
 def legend_items(runs: list[dict], *, passed: bool = False, pieces: bool = False, lines: bool = True) -> list[tuple]:
-    """The legend of a table of run tiles: the Cheating and Collusion rungs its runs show, the awareness marks beside
-    collusion, then the marks asked for, then the two measures' lines (`lines`, for a table that counts them)."""
+    """The legend of a table of run tiles: the Cheating and Collusion rungs its runs show, then the marks asked for,
+    then the two measures' lines (`lines`, for a table that counts them)."""
     items: list[tuple] = [("cheating", rung, rung) for rung in CHEATING if rung in {r["cheating"] for r in runs}]
     shown = {r["collusion"] for r in runs}
     items += [("collusion", rung, f"Collusion: {rung}") for rung in COLLUSION if rung in shown]
     if None in shown:
         items.append(("collusion", None, "Collusion: not applicable"))
-    marks = {AWARE_MARK[r["collusion_aware"]] for r in runs if r["collusion_aware"]}
-    items += [("text", mark, AWARE_WORDS[mark]) for mark in AWARE_WORDS if mark in marks]
     if pieces:
         items.append(("text", "AB", "pieces of the planted fix in the hand-in"))
     if passed:

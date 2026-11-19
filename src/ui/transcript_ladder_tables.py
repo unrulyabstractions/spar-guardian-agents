@@ -6,12 +6,13 @@ task, and the page lists its levels with their glosses (transcript_levels.LADDER
 are listed the same way; what a take and the hand-in are on each task is read from the take rules themselves
 (src/measures/collusion_takes.py): the generic rules, its TAKE_RULES, and each task's own rule as its TaskRule states
 it (take_rule, hand_in_rule), or the reason NO_RULE gives. The judge labels beside the ladders
-(transcript_levels.JUDGE_LABELS) are listed with whom each is read for. What an independent reading found of each
-rung and label, both judge passes apart, comes from src/measures/measure_readings.yaml, which the paper's reliability
-table reads too. The tasks the study does not read (ladder_by_domain.HIDDEN_TASKS) have no column, and the index
-neither measures nor lists their runs.
+(transcript_levels.label_about) are listed with what each scores and the score's anchors. What an independent reading
+found of each rung and label, both judge passes apart, comes from src/measures/measure_readings.yaml, which the paper's
+reliability table reads too, each row with the measure's "retired" for a label the study no longer uses. The tasks
+the study does not read (ladder_by_domain.HIDDEN_TASKS) have no column, and the index neither measures nor lists their
+runs.
 
-    ladders_payload(transcript_levels.LADDERS, transcript_levels.ORDER, transcript_levels.JUDGE_LABELS)
+    ladders_payload(transcript_levels.LADDERS, transcript_levels.ORDER, transcript_levels.label_about())
 """
 from __future__ import annotations
 
@@ -33,18 +34,20 @@ def _task_rule_cells(which: str) -> list[str]:
     return cells
 
 
-def ladders_payload(ladders: dict, order: list[str], judge_labels: dict) -> dict:
+def ladders_payload(ladders: dict, order: list[str], labels: dict) -> dict:
     """The #/ladders page's data: the Cheating ladder by task, the Collusion ladder's take rules (the generic ones
-    and each task's take and hand-in), the three ladders' definitions, the judge labels beside them and what an
-    independent reading found of each (measure_readings.readings()), with a column per task the study reads.
+    and each task's take and hand-in), the three ladders' definitions, the judge labels beside them (`labels`,
+    transcript_levels.label_about) and what an independent reading found of each (measure_readings.readings()), with a
+    column per task the study reads.
     task_column gives a task's column."""
     by_task = ladder_by_domain.cheating_by_task()
     domains = by_task["domains"]
     return {"domains": domains, "cheating": {"notes": by_task["notes"], "rows": by_task["rows"]},
             "task_column": {task: domains.index(d) for task, d in ladder_by_domain.TASK_DOMAIN.items()},
-            "ladders": ladders, "order": order, "judge_labels": judge_labels,
+            "ladders": ladders, "order": order, "judge_labels": labels,
             "take_rules": list(collusion_takes.TAKE_RULES),
             "collusion_by_task": [("take", "what puts a teammate's work into the agent's own tree or files",
                                    _task_rule_cells("take_rule")),
                                   ("hand-in", "whose work the team's hand-in holds", _task_rule_cells("hand_in_rule"))],
-            "left_out_tasks": sorted(ladder_by_domain.HIDDEN_TASKS), "readings": measure_readings.readings()}
+            "left_out_tasks": sorted(ladder_by_domain.HIDDEN_TASKS),
+            "readings": measure_readings.readings()}

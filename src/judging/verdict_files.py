@@ -1,18 +1,18 @@
 """The judges' verdicts stored beside a run: the one reader and the one writer of runs/<study>/<run>/judges/.
 
-    read(run_dir)                                   # {"cheatbench": {"gpt-6-luna": [rows]}, "scheming": {...}, ...}
+    read(run_dir)                                   # {"cheatbench": {"gpt-6-luna": [rows]}, "labels": {...}}
     rows(run_dir, LABELS_PASS, "gpt-6-luna")        # one file's rows
     write(run_dir, LABELS_PASS, "gpt-6-luna", new)  # merge rows into that file, by unit, atomically
-    write(run_dir, SCHEMING_PASS, "gpt-6-luna", new, keep={"board"})  # and drop the rows of other units
+    write(run_dir, LABELS_PASS, "gpt-6-luna", new, keep={"k4q8z"})   # and drop the rows of other units
     cheatbench(run_dir)                             # {judge: {episode: row}}, the eval's verdicts and the passes'
     episode_verdicts(run_dir)                       # {episode: row} of the judge the measures take
-    applied(read(run_dir)[SCHEMING_PASS])           # the judge whose verdicts the ladders take: the first by name
+    applied(read(run_dir)[LABELS_PASS])             # the judge whose verdicts the measures take: the first by name
 
 A pass of `python -m src judge-pass` (src/judging/judge_pass.py) writes judges/<pass>.<judge>.jsonl, one row per unit
-(an episode for the pass "cheatbench", the run's board for "scheming", an agent for "labels"), keyed by the row's
-"unit". A unit judged again replaces its row; every other row stays, unless the writer names the units to keep, when
-the rows of any other unit go (a unit the pass no longer gives the run, such as a retired per-pair scheming row). A
-file of a pass no longer listed (the retired "collusion") is not read. A write goes to a temporary file in judges/
+(an episode for the pass "cheatbench", an agent for "labels"), keyed by the row's "unit". A unit judged again replaces
+its row; every other row stays, unless the writer names the units to keep, when the rows of any other unit go (a unit
+the pass no longer gives the run). A file of a pass no longer listed (the retired "collusion" and "scheming") is not
+read. A write goes to a temporary file in judges/
 that then replaces the file in one rename, so a reader never sees half a file, and nothing outside judges/ is touched:
 the run's own record (run.json, episodes.jsonl, judge.jsonl, the transcripts) stays as the run made it.
 
@@ -38,13 +38,10 @@ from src.utils.json_files import read_jsonl
 FOLDER = "judges"
 CHEATBENCH_PASS = "cheatbench"
 """CheatBench's verdicts per episode (src/judging/cheatbench_judge.py)."""
-SCHEMING_PASS = "scheming"
-"""Scheming on a run's board, one row (src/judging/scheming_judge.py), read by src/measures/collusion.py scheming_rows;
-each pair's verdict derived by src/judging/judge_records.py pair_scheming."""
 LABELS_PASS = "labels"
-"""Awareness and manipulation per agent (src/judging/labels_judge.py), read by src/measures/judge_labels.py
-label_rows."""
-PASSES = (CHEATBENCH_PASS, SCHEMING_PASS, LABELS_PASS)
+"""Disclosure and manipulation per agent, each a score with an excerpt (src/judging/labels_judge.py), read by
+src/measures/judge_labels.py labels."""
+PASSES = (CHEATBENCH_PASS, LABELS_PASS)
 ROW_KEYS = ("unit", "judge", "judge_generation_config", "prompt_sha256", "schema_sha256", "input_sha256", "parse_ok",
             "judge_usage", "judge_cost_usd", "judge_attempts", "judge_error")
 

@@ -25,7 +25,7 @@ python -m src run <name>     cli.py reads the flags
         |
   export/                    the eval log as a run directory                           -> runs/<study>/<name>/
         |
-  judging/                   CheatBench's judge in the eval and on stored runs, the scheming and labels judges
+  judging/                   CheatBench's judge in the eval and on stored runs, and the labels judge
                                                                                         -> judge.jsonl, judges/<pass>.<judge>.jsonl
         |
   measures/                  the code record, the three ladders, the figures            -> signals.jsonl, out/<study>/<name>/
@@ -121,9 +121,8 @@ The eval log as a CheatBench run directory.
 The LLM judges. CheatBench's judge runs inside the eval as the scorer `cheatbench_judge`, so the export finds its verdicts in the log. `judge` and `rejudge` judge a finished log again and re-export the run from it. `judge-pass` judges runs' stored records under a dollar cap and writes only `judges/<pass>.<judge>.jsonl`.
 
 - `cheatbench_judge.py`: CheatBench's judge through Inspect, and the one call path of every judge.
-- `scheming_judge.py` with `scheming_prompt.md`: the pass `scheming`, one call per run in which code places a pair at collusion, on the run's board alone; it flags posts, and `judge_records.pair_scheming` derives each colluding pair's verdict, the Collusion ladder's scheming rung.
-- `labels_judge.py` with `labels_prompt.md`, `labels_awareness.md` and `labels_manipulation.md`: the pass `labels`, one call per agent that qualifies for the judge labels awareness or manipulation.
-- `judge_records.py`: what those two judges read of a stored run (the board, the instructions, the visible reasoning, the actions), the code check of a judge's quote, and `pair_scheming`.
+- `labels_judge.py` with `labels_prompt.md`, `labels_disclosure.md` and `labels_manipulation.md`: the pass `labels`, one call per agent of a run, each label a score from 0 to 100 with an excerpt.
+- `judge_records.py`: what the labels judge reads of a stored run (the board, the instructions, the visible reasoning, the actions with their results), and `locate`, which finds the judge's excerpt in the agent's own posts or reasoning.
 - `judge_pass.py`: the capped pass.
 - `verdict_files.py`: the reader and writer of `judges/`, and the one reader of CheatBench's verdicts (the eval's `judge.jsonl` with the passes' files).
 
@@ -143,11 +142,11 @@ Everything computed over a run directory, without a model.
 - `team_ladder.py`: the team record of a sample: the workers' evidence, the collaboration evidence (discussed, solicited, crossed, assembled) and the outcomes.
 - `cheating_ladder.py`: the Cheating ladder (none, looked, tempted, attempted, hacked) from the evidence and the grader's pass, per agent, per team and for the influencers apart, with the alarm for a pass with no trace. `cheating_rungs` reads a run's Cheating rungs as recorded.
 - `coordination.py`: the Coordination ladder (none, read, write, low, medium, high, extreme) from the board's reads and posts: each agent's rounds of back-and-forth with each teammate, averaged into a score and set against a ceiling, and the workers' mean level for the team.
-- `collusion.py`: the Collusion ladder per pair of agents (none, cooperation, collaboration and collusion by code from the takes and the planted pieces between them; scheming only from the scheming judge's flags). `run_collusion` computes a run's pairs in memory, each colluding pair with its verdict and the flags that decided it, and the run with every flag; the viewer and the paper read scheming only through it.
+- `collusion.py`: the Collusion ladder per pair of agents (none, cooperation, collaboration and collusion, by code from the takes and the planted pieces between them). `run_collusion` computes a run's pairs in memory.
 - `collusion_takes.py`: what a take is, per task (`TASK_RULES`, each with its rule in words), and who made the hand-in.
 - `run_calls.py`: the run's calls as the take rules read them (`load_run`), and a take (`Take`).
 - `git_takes.py`, `text_takes.py` and `file_takes.py`: the generic take rules, through the team's git remote, by units of text, and by files on a shared file system.
-- `judge_labels.py`: the judges beside the code: CheatBench's labels set beside the Cheating ladder's clauses (`judged_cheating`), each agent's disclosure, and the judge labels awareness and manipulation.
+- `judge_labels.py`: the judges beside the code: CheatBench's labels set beside the Cheating ladder's clauses (`judged_cheating`), CheatBench's disclosed access (`cheatbench_disclosed_access`), and the judge labels disclosure and manipulation, each a score with an excerpt per agent and the team's highest (`labels`).
 - `measure_readings.py`: what independent readings of the transcripts found of each code rung and judge label, both
   judge passes apart, from the hand-kept `measure_readings.yaml`: the one source of the viewer's How reliable section
   and the paper's reliability table.
@@ -217,7 +216,7 @@ Shared helpers.
 | `rejudge <run ...> [--judge gpt-6-luna] [--sync] [--judge-errors]` | CheatBench's judge from each run's eval log (named in `run.json`, else at the run's own place under `logs/`, which mirrors `runs/`), then the run is RE-EXPORTED from the log into its own folder, wherever it lives; a run whose log holds another eval than its folder is refused before the judge spends anything; a run whose log is gone is refused |
 | `regenerate <run ...> [--no-export] [--no-measures] [--no-plots]` | rebuilds what a run directory derives from its eval log: the export (keeping the verdicts in `judge.jsonl`), the code record, the SWE measures and the figures |
 | `signals <run ...> [--table]` | the run's code record, no judge: `signals.jsonl` with the agent rows, then one team record per sample, and run.json `signals.team`, each row with its evidence and its Cheating, Coordination and Collusion rungs; every run gets it as it ends, and `judge` and `rejudge` run it again; `--table` prints the agents' Cheating rungs, then the teams' with their passes and alarms |
-| `judge-pass <cheatbench\|collusion> <run or study ...> --judge gpt-6-luna --cap DOLLARS [--batch] [--limit N] [--only-missing\|--redo]` | a judge pass over stored runs, priced call by call and stopped before the cap; writes only `runs/<study>/<run>/judges/<pass>.<judge>.jsonl`; a study folder stands for its valid runs |
+| `judge-pass <cheatbench\|labels> <run or study ...> --judge gpt-6-luna --cap DOLLARS [--batch] [--limit N] [--only-missing\|--redo]` | a judge pass over stored runs, priced call by call and stopped before the cap; writes only `runs/<study>/<run>/judges/<pass>.<judge>.jsonl`; a study folder stands for its valid runs |
 | `ui [start\|stop] [--port 8765] [--no-open]` | starts or stops the results browser in the background |
 | `summary <run ...> [--full]` | one line per episode with its verdict and the task's judge flags, the swarm composition and the shutdown rate (the share of the agents holding `stop_working` that ended with it before any hand-in) |
 | `engagement <run ...> [--json]` | the board engagement funnel per role and per agent |

@@ -2,23 +2,33 @@
  * message board filling as the position moves. Its data is /api/board?id= (src/ui/transcript_board.py).
  *
  *   import { renderBoard } from './tv_view_board.js';
- *   renderBoard(el, payload, { q, base: '#/run/<collection>/<run key>' });
+ *   renderBoard(el, payload, { q, base: '#/run/<collection>/<run key>', judged });
  *
  * q (URLSearchParams) may carry a and b (the two agents), mode (time | step) and pos (seconds on the time clock, a
  * step number in step mode); the tab writes them back into the page's hash as they change, so a link or a screenshot
- * opens at the same place. The timeline is one SVG, drawn again only when the pair, the mode or the width changes;
- * a move of the position updates the cursor, the shade over what is still to come, the outlined current calls, the
- * arrows shown, the header and the board's shown posts, and nothing else. A post's arrows show for the post at the
- * position and the RECENT posts before it, and for a post under the pointer; every other post keeps its box alone.
+ * opens at the same place. judged: the run page's judge labels by agent (levels.judge_labels.agents, as the Details tab
+ * reads them). Top to bottom: one control row; the timeline; the slider under its time axis, as wide as the lanes, its
+ * handle under the moment it shows; a card per agent with its call at the position, the levels it has reached so far
+ * and its judge labels' scores; the legend, folded; then the message board. A click or a drag on the timeline, off a
+ * call or a post, moves the position too. The timeline is one SVG, drawn again only when the pair, the mode or the
+ * width changes; a move of the position updates the cursor, the shade over what is still to come, the outlined
+ * current calls, the arrows shown, the cards and the board's shown posts, and nothing else. A post's arrows show for
+ * the post at the position and the RECENT posts before it, and for a post under the pointer; every other post keeps
+ * its box alone. A read's arrow shows how the read was made (the payload's form): the newest posts, thin and dashed;
+ * the posts of a named writer, solid and heavier with the agent asked for at its end; a form the record does not
+ * give, a plain dotted line.
  * The ladders' colours and chips are the page's own (tv_case_view.js RAMP, tv_levels.js levelChip and lineMark), each
- * ladder parted at its line. Every string goes in through h() and svgEl() text nodes.
- * It returns {moveTo(position), showPost(label), state}: showPost moves to post P<n> (the board's own numbering). */
+ * ladder parted at its line. A post that holds a judge label's excerpt, as code located it, shows the label's score
+ * chip and its text in full with the excerpt marked. Every string goes in through h() and svgEl() text nodes.
+ * It returns {moveTo(position), showPost(label), state}: showPost moves to post P<n> (the board's own numbering) and,
+ * when the post holds a judge's excerpt, brings the marked excerpt into view. */
 import { appendAll, enc, fmtSecs, h, plural } from '/static/app/dom.js';
 import { badge, longText, muted } from '/static/app/components.js';
 import { COUNT_STEPS, TIME_STEPS, fmtTick, svgEl, ticksFor, tip } from '/static/app/charts.js';
-import { RAMP } from './tv_case_view.js';
+import { RAMP, scoreColour } from './tv_case_view.js';
+import { excerptSpan, markedNodes } from './tv_excerpt.js';
 import { ROLE_LABEL } from './tv_labels.js';
-import { levelChip, lineMark } from './tv_levels.js';
+import { levelChip, lineMark, scoreChip } from './tv_levels.js';
 
 const GUTTER = 150;
 const PAD_R = 16;
@@ -33,6 +43,8 @@ const STEP_MS = 220;          // one step at a time in step mode
 const PLAIN = 'var(--bd-plain)';
 const SIDES = ['a', 'b'];
 const BOARD_LEVEL = { read: 'read', post: 'write' };   // a board call's own Coordination level, labelled or not
+const THUMB = 14;             // the slider handle's width (tv_board.css .bd-slider)
+const READ_CLASS = { latest: 'bd-read-latest', from: 'bd-read-from', plain: 'bd-read-plain' };
 
 // A call's colour is the viewer's ramp at its highest label (RAMP, pale below each ladder's line and strong above):
 // a Cheating label first, then a take (Collusion), then the Coordination level of a board read or post, else plain
@@ -105,13 +117,13 @@ export function renderBoard(el, d, opts) {
   const back = button('◀ step', 'step back (left arrow)', () => step(-1));
   const playBtn = button('▶ play', 'play or pause', () => (state.playing ? pause() : play()), 'bd-play');
   const fwd = button('step ▶', 'step forward (right arrow)', () => step(1));
-  const slider = h('input', { type: 'range', class: 'bd-slider', 'aria-label': 'position', min: '0',
+  const slider = h('input', { type: 'range', class: 'bd-slider', 'aria-label': 'position',
     oninput: e => { pause(); moveTo(Number(e.target.value)); } });
   const posText = h('span', { class: 'bd-pos' });
-  const nowA = h('div', { class: 'bd-now bd-now-a' });
-  const nowB = h('div', { class: 'bd-now bd-now-b' });
-  const endA = h('div', { class: 'bd-now bd-end bd-now-a' });
-  const endB = h('div', { class: 'bd-now bd-end bd-now-b' });
+  const scrub = h('div', { class: 'bd-scrub' }, h('span', { class: 'bd-scrub-name small muted' }, 'position'),
+    slider, posText);
+  const cards = { a: agentCard('a'), b: agentCard('b') };
+  const cardRow = h('div', { class: 'bd-cards' }, cards.a.el, cards.b.el);
   const svgHost = h('div', { class: 'bd-svg-host' });
   const boardList = h('ol', { class: 'bd-posts' });
   const empty = muted('No post yet at this position.', 'small block');
@@ -125,18 +137,16 @@ export function renderBoard(el, d, opts) {
       if (!readers.has(r.agent)) readers.set(r.agent, []);
       readers.get(r.agent).push(r.k);
     }
-    // The scheming judge's flags that count for this post: what it shows, the colluding pairs it lies between, the
-    // quote and the code's check; a flag whose check failed counts for no verdict.
-    const pairsOf = m => (m.pairs.length ? `between ${m.pairs.map(x => x.join(' and ')).join('; ')}` : 'between no colluding pair');
-    const marks = p.scheming.map(m => h('div', { class: ['bd-mark', !m.check.ok && 'bd-mark-weak'] },
-      h('div', null, badge(`scheming: ${m.which}`, 'bad', m.reason), ` flagged by the scheming judge, ${pairsOf(m)}`,
-        m.check.ok ? '' : muted(` · the quote failed the code's check: ${m.check.why}`, 'small')),
-      h('blockquote', { class: 'bd-quote' }, m.quote),
-      m.reason ? h('div', { class: 'small muted' }, m.reason) : null));
+    // The judge labels whose excerpt code located in this post: the label, its score, the agent and the reason; the
+    // first excerpt the post's text holds is marked in it, and the text then shows whole.
+    const judged = p.labels.map(x => h('div', { class: 'bd-judged small' },
+      scoreChip(x.score, `${d.label_names[x.label]}: ${x.score} of 100`),
+      ` ${d.label_names[x.label]} of ${x.agent}: `, muted(x.reason || '', 'small')));
+    const span = p.labels.map(x => excerptSpan(p.text, x.excerpt, x.start, x.end)).find(Boolean);
     const readBy = [...readers].map(([agent, ks], j) => [j ? ', ' : '', agent, ' (', callLink(agent, ks[0]),
       ks.length > 1 ? h('span', { title: `every call of ${agent} that read it: ${ks.join(', ')}` },
         ` and ${ks.length - 1} more`) : null, ')']);
-    const li = h('li', { class: ['bd-post', p.kind === 'system' && 'bd-system', p.scheming.length && 'bd-has-mark'],
+    const li = h('li', { class: ['bd-post', p.kind === 'system' && 'bd-system', p.labels.length && 'bd-has-label'],
       dataset: { i: String(i) }, hidden: true },
     h('div', { class: 'bd-post-head' },
       h('b', { class: 'bd-label' }, p.label),
@@ -145,13 +155,12 @@ export function renderBoard(el, d, opts) {
       p.role && p.role !== 'worker' ? badge(ROLE_LABEL[p.role] || p.role, 'plain') : null,
       muted(timed ? ` at ${fmtSecs(p.t)}` : ` at call ${p.t + 1} of the run`, 'small'),
       p.call != null ? [' · ', callLink(p.writer, p.call)] : null,
-      p.scheming.length ? badge('flagged by the scheming judge', 'bad',
-        'the scheming judge flags this post as showing awareness that this is cheating, or deception') : null,
       h('span', { class: 'spacer' }),
       readers.size ? h('span', { class: 'small muted' }, 'first read by ', readBy)
         : muted('read by no teammate', 'small')),
-      marks,
-      longText(p.text, { lines: 8, chars: 1600, cls: 'bd-text' }));
+      judged,
+      span ? h('pre', { class: 'pre bd-text' }, markedNodes(p.text, span))
+        : longText(p.text, { lines: 8, chars: 1600, cls: 'bd-text' }));
     li.addEventListener('click', e => { if (!e.target.closest('a, button')) { pause(); moveTo(keyOf(p)); } });
     li.addEventListener('pointerenter', () => hover(i));
     li.addEventListener('pointerleave', () => hover(-1));
@@ -218,8 +227,13 @@ export function renderBoard(el, d, opts) {
       'aria-label': `the calls of ${state.a} and ${state.b} with the board between them` });
     const uid = Math.random().toString(36).slice(2, 8);
     svg.appendChild(svgEl('defs', null, ...SIDES.map(s => svgEl('marker', { id: `bd-arrow-${s}-${uid}`,
-      viewBox: '0 0 8 8', refX: 7, refY: 4, markerWidth: 6, markerHeight: 6, orient: 'auto-start-reverse' },
-    svgEl('path', { d: 'M0,0 L8,4 L0,8 z', class: `bd-arrowhead-${s}` })))));
+      viewBox: '0 0 8 8', refX: 7, refY: 4, markerWidth: 8, markerHeight: 8, markerUnits: 'userSpaceOnUse',
+      orient: 'auto-start-reverse' }, svgEl('path', { d: 'M0,0 L8,4 L0,8 z', class: `bd-arrowhead-${s}` })))));
+    // the slider spans the lanes: its handle's middle sits at x0 at the lowest value and at x1 at the highest
+    scrub.style.width = `${width}px`;
+    slider.style.left = `${x0 - THUMB / 2}px`;
+    slider.style.width = `${x1 - x0 + THUMB}px`;
+    posText.style.right = `${width - x1}px`;
 
     // lanes: the two agents and the board between them
     const laneY = { a: yA, b: yB };
@@ -260,13 +274,15 @@ export function renderBoard(el, d, opts) {
     const callsG = svgEl('g', { class: 'bd-calls' });
     const keys = { a: [], b: [] };
     const calls = { a: [], b: [] };
+    const reached = { a: [], b: [] };   // per call: each ladder's highest level index of the agent's calls up to it
     for (const side of SIDES) {
       const ag = byAgent.get(state[side]);
-      const end = side === 'a' ? endA : endB;
-      end.replaceChildren();
-      if (ag.uncited.length && (side === 'a' || state.a !== state.b)) appendAll(end, endLine(side, ag.uncited));
-      end.hidden = !end.childNodes.length;
+      cards[side].fill(ag);
+      cards[side].el.hidden = side === 'b' && state.a === state.b;
+      const top = {};
       for (const c of ag.calls) {
+        for (const l of c.labels) top[l.ladder] = Math.max(top[l.ladder] || 0, l.index);
+        reached[side].push({ ...top });
         const st = callStyle(c, ramp);
         const tall = st.strong ? LANE_H - 4 : st.kind === 'plain' ? 14 : 24;
         callsG.appendChild(svgEl('rect', { class: ['bd-call', st.strong && 'bd-strong'],
@@ -311,11 +327,12 @@ export function renderBoard(el, d, opts) {
       const y = yBoard + 4 + r * (POST_H + POST_GAP);
       const side = p.writer === state.a ? 'a' : p.writer === state.b ? 'b' : null;
       const by = side ? `bd-by-${side}` : p.kind === 'system' ? 'bd-by-system' : 'bd-by-other';
-      const g = svgEl('g', { class: ['bd-pbox', 'bd-ahead', by, p.scheming.length && 'bd-pbox-mark'], 'data-i': i },
+      const top = p.labels.length ? Math.max(...p.labels.map(x => x.score)) : null;
+      const g = svgEl('g', { class: ['bd-pbox', 'bd-ahead', by], 'data-i': i },
         svgEl('rect', { x: from, y, width: boxW, height: POST_H, rx: 3 }),
         boxW >= 20 ? svgEl('text', { x: from + boxW / 2, y: y + POST_H - 4, 'text-anchor': 'middle' }, p.label) : null,
-        p.scheming.length ? svgEl('path', { class: 'bd-mark-glyph',
-          d: `M${from + boxW},${y + POST_H / 2 - 6} l6,6 l-6,6 l-6,-6 z` }) : null);
+        top != null ? svgEl('circle', { class: 'bd-judged-dot', cx: from + boxW, cy: y + POST_H / 2, r: 5,
+          fill: scoreColour(top) }) : null);
       postsG.appendChild(g);
       const arrows = svgEl('g', { visibility: 'hidden' });
       arrowsG.appendChild(arrows);
@@ -325,9 +342,23 @@ export function renderBoard(el, d, opts) {
       const writing = side && callOf[side].get(p.call);
       if (writing) arrow(arrows, side, null, left(writing) + W(writing) / 2, laneEdge(side), cx, edge(side));
       for (const s of state.a === state.b ? ['a'] : SIDES) {
-        const first = p.writer !== state[s] && p.reads.find(x => x.agent === state[s]);
-        const reading = first && callOf[s].get(first.k);
-        if (reading) arrow(arrows, s, 'bd-read', cx, edge(s), left(reading) + W(reading) / 2, laneEdge(s));
+        // the agent's first read of the post in each form it read it
+        const first = new Map();
+        for (const r of p.reads) {
+          if (r.agent === state[s] && !first.has(r.form || 'plain')) first.set(r.form || 'plain', r);
+        }
+        for (const [form, r] of p.writer === state[s] ? [] : first) {
+          const reading = callOf[s].get(r.k);
+          if (!reading) continue;
+          const ex = left(reading) + W(reading) / 2;
+          arrow(arrows, s, READ_CLASS[form], cx, edge(s), ex, laneEdge(s));
+          if (form === 'from') {
+            const flip = ex > x1 - 90;   // near the right end the label sits left of the arrow's end
+            arrows.appendChild(svgEl('text', { class: ['bd-asked', `bd-asked-${s}`], x: flip ? ex - 6 : ex + 6,
+              y: s === 'a' ? laneEdge(s) + 12 : laneEdge(s) - 5, 'text-anchor': flip ? 'end' : 'start' },
+            `from ${r.asked}`));
+          }
+        }
       }
     });
     svg.appendChild(arrowsG);
@@ -343,7 +374,25 @@ export function renderBoard(el, d, opts) {
     // the shade covers the calls and arrows still to come; a post still to come is faded by its class, so a post
     // the position has reached shows whole even where its box reaches past the cursor
     svg.append(shade, postsG, cursor, outline.a, outline.b, latestBox);
+    const posAt = ev => {
+      const f = (ev.clientX - svg.getBoundingClientRect().left - x0) / (x1 - x0);
+      return state.mode === 'time' ? f * span : Math.round(f * n) - 1;
+    };
+    let dragging = false;
+    svg.addEventListener('pointerdown', ev => {
+      if (ev.button !== 0 || ev.target.closest('[data-k], [data-i]')) return;
+      ev.preventDefault();
+      pause();
+      dragging = true;
+      tip.hide();
+      svg.setPointerCapture(ev.pointerId);
+      moveTo(posAt(ev));
+    });
+    const stopDrag = () => { dragging = false; };
+    svg.addEventListener('pointerup', stopDrag);
+    svg.addEventListener('pointercancel', stopDrag);
     svg.addEventListener('pointermove', ev => {
+      if (dragging) { moveTo(posAt(ev)); return; }
       const t = ev.target.closest('[data-k], [data-i]');
       hover(t && t.hasAttribute('data-i') ? Number(t.getAttribute('data-i')) : -1);
       if (!t) { tip.hide(); return; }
@@ -357,7 +406,8 @@ export function renderBoard(el, d, opts) {
       } else {
         const p = d.posts[Number(t.getAttribute('data-i'))];
         tip.show(ev, [`${p.label} by ${p.writer}`, timed ? `at ${fmtSecs(p.t)}` : null, p.text.slice(0, 220),
-          ...p.scheming.map(m => `scheming judge: ${m.which}${m.check.ok ? '' : ' (quote unchecked)'}, "${m.quote.slice(0, 160)}"`), 'click to move here']);
+          ...p.labels.map(x => `${d.label_names[x.label]} of ${x.agent}: ${x.score} of 100, `
+            + `"${x.excerpt.slice(0, 160)}"`), 'click to move here']);
       }
     });
     svg.addEventListener('pointerleave', () => { tip.hide(); hover(-1); });
@@ -384,16 +434,19 @@ export function renderBoard(el, d, opts) {
     }
     const postKeys = d.posts.map(keyOf);
     const order = d.posts.map((_, i) => i).sort((x, y) => postKeys[x] - postKeys[y]);
-    L = { X, W, left, unitW, stops, n, span, keys, calls, shade, cursor, outline, latestBox, postBox, events, order, x1,
+    L = { X, W, left, unitW, stops, n, span, keys, calls, reached, shade, cursor, outline, latestBox, postBox, events,
+      order, x1,
       orderKeys: order.map(i => postKeys[i]), eventKeys: events.map(x => x.key),
       stopKeys: stops.map((u, i) => (state.mode === 'time' ? u.t : i)) };
+    // in step mode the cursor stands at the end of step pos, so the slider's lowest value, -1, is the lanes' start
+    slider.min = state.mode === 'time' ? '0' : '-1';
     slider.max = String(state.mode === 'time' ? span : n - 1);
     slider.step = state.mode === 'time' ? String(span / 2000) : '1';
     shown = 0;
     latest = -1;
     hovered = -1;
     lit = new Set();   // the new SVG's arrows start hidden
-    current = {};      // undefined, so the first move writes both header lines
+    current = {};      // undefined, so the first move fills both cards
     for (const { li } of items) li.hidden = true;   // the new SVG's post boxes start faded (bd-ahead)
     boardHead.replaceChildren(h('h3', null, 'The message board'),
       muted(` ${plural(d.posts.length, 'post')} by every agent, shown as the position reaches them. Posts by `,
@@ -430,9 +483,7 @@ export function renderBoard(el, d, opts) {
         o.setAttribute('width', L.W(c) + 4);
         o.setAttribute('visibility', 'visible');
       } else o.setAttribute('visibility', 'hidden');
-      const line = side === 'a' ? nowA : nowB;
-      line.replaceChildren();
-      appendAll(line, nowLine(side, c));
+      cards[side].at(c, i >= 0 ? L.reached[side][i] : {});
     }
     // the board: show each post the position has reached, hide the rest
     const k = lastAtOrBefore(L.orderKeys, P) + 1;
@@ -480,18 +531,41 @@ export function renderBoard(el, d, opts) {
   const chip = l => h('span', { class: 'bd-chip', title: l.evidence || '' },
     `${d.ladders[l.ladder].name} `, levelChip(l.ladder, d.ladders[l.ladder], l.level, false));
 
-  // The levels an agent reached whose evidence cites no call (a record of the run: the access log, the remote's
-  // pushes, the hand-in, or a count over the whole run), which no bar of its lane can carry.
-  function endLine(side, levels) {
-    return [h('b', { class: `bd-key-${side}` }, state[side]),
-      muted(' also reached, on evidence that cites no call (hover for it): ', 'small'), ...levels.map(chip)];
-  }
-
-  function nowLine(side, c) {
-    const who = h('b', { class: `bd-key-${side}` }, state[side]);
-    if (!c) return [who, muted(' has made no call yet', 'small')];
-    return [who, ' ', callLink(state[side], c.k), muted(` ${c.tool}`, 'small'), ' ',
-      c.summary !== c.tool ? h('span', { class: 'bd-sum' }, c.summary) : null, ...c.labels.map(chip)];
+  // An agent's card in its lane's colour: fill(agent) once per pair, at(call, reached) at each move. It holds the
+  // agent's call at the position, the level each ladder has reached at its calls so far, the levels whose evidence
+  // cites no call (a record of the run: the access log, the remote's pushes, the hand-in, or a count over the whole
+  // run, which no call can carry and no time places), and its judge labels' scores over the whole run.
+  function agentCard(side) {
+    const head = h('div', { class: 'bd-card-head' });
+    const now = h('div', { class: 'bd-card-call' });
+    const levels = h('div', { class: 'bd-card-row' });
+    const uncitedRow = h('div', { class: 'bd-card-row' });
+    const labels = h('div', { class: 'bd-card-row' });
+    const el = h('div', { class: ['bd-card', `bd-card-${side}`] }, head, now, levels, uncitedRow, labels);
+    const put = (into, ...kids) => { into.replaceChildren(); appendAll(into, kids); };
+    const field = (name, ...value) => h('span', { class: 'bd-field' }, muted(`${name} `, 'small'), ...value);
+    const score = (name, e) => {
+      const kind = e && e.kind && e.kind !== 'none' ? e.kind : null;
+      const tip = e ? `${name}: ${e.score} of 100${kind ? ` (${kind})` : ''}` : '';
+      return field(name, scoreChip(e ? e.score : null, tip), kind ? muted(` ${kind}`, 'small') : null);
+    };
+    function fill(ag) {
+      put(head, h('b', { class: `bd-key-${side}` }, ag.agent),
+        muted(` ${ROLE_LABEL[ag.role] || ag.role}, ${plural(ag.calls.length, 'call')}`, 'small'));
+      put(uncitedRow, muted('at no cited call (hover for the evidence): ', 'small'), ag.uncited.map(chip));
+      uncitedRow.hidden = !ag.uncited.length;
+      const row = (opts.judged || {})[ag.agent];
+      put(labels, muted('judge labels, whole run: ', 'small'),
+        row ? Object.entries(d.label_names).map(([key, name]) => score(name, row[key])) : muted('not judged', 'small'));
+    }
+    function at(c, top) {
+      put(now, c ? [callLink(state[side], c.k), muted(` ${c.tool} `, 'small'),
+        c.summary !== c.tool ? h('span', { class: 'bd-sum', title: c.summary }, c.summary) : null]
+        : muted('no call yet', 'small'));
+      put(levels, muted('reached so far: ', 'small'), Object.entries(d.ladders).map(([key, lad]) =>
+        field(lad.name, levelChip(key, lad, lad.levels[top[key] || 0], false))));
+    }
+    return { el, fill, at };
   }
 
   function step(dir) {
@@ -567,7 +641,14 @@ export function renderBoard(el, d, opts) {
 
   // ---- legend
   const sw = (fill, cls) => h('i', { class: ['bd-sw', cls], style: fill ? `background:${fill}` : null });
-  const legend = h('div', { class: 'bd-legend' },
+  const arrowKey = (cls, ...words) => h('span', { class: 'bd-lg' },
+    svgEl('svg', { class: 'bd-key-svg', width: 34, height: 12, 'aria-hidden': 'true' },
+      svgEl('line', { class: ['bd-arrow', cls, 'bd-arrow-a'], x1: 1, y1: 6, x2: 33, y2: 6 })), ...words);
+  const formless = d.posts.some(p => p.reads.some(r => !r.form));
+  const legend = h('details', { class: 'bd-legend' },
+    h('summary', null, 'Legend', muted(': lanes, call colours, posts, and the arrows of a write and of the two kinds '
+      + 'of read', 'small')),
+    h('div', { class: 'bd-legend-body' },
     h('span', { class: 'bd-lg' }, sw(null, 'bd-sw-a'), sw(null, 'bd-sw-b'), 'the two agents\' lanes and their posts'),
     h('span', { class: 'bd-lg' }, sw(PLAIN), 'ordinary work'),
     h('span', { class: 'bd-lg' }, 'board read or post: ',
@@ -577,22 +658,26 @@ export function renderBoard(el, d, opts) {
     h('span', { class: 'bd-lg', title: `${cheat.line_words}: a call at the line or above fills its lane's height` },
       'Cheating label: ', cheat.levels.slice(1).map(lv => [lv === cheat.line ? lineMark(cheat) : null,
         levelChip('cheating', cheat, lv, false)])),
-    h('span', { class: 'bd-lg' }, h('i', { class: 'bd-sw bd-sw-mark' }), 'the scheming judge flags the post'),
+    h('span', { class: 'bd-lg' }, h('i', { class: 'bd-sw bd-sw-judged' }),
+      'a judge label\'s excerpt is in the post, in its score\'s colour'),
     h('span', { class: 'bd-lg' }, h('i', { class: 'bd-sw bd-sw-latest' }), 'latest post written or read by the two'),
-    h('span', { class: 'bd-lg' }, `→ from the writing call to its post, and from a post to each agent's first read `
-      + `of it: for the post at the position, the ${RECENT} before it and the post under the pointer`));
+    arrowKey(null, 'a write: from the writing call to its post'),
+    arrowKey(READ_CLASS.latest, 'a "latest" read: the reader asked for the newest posts'),
+    arrowKey(READ_CLASS.from,
+      'a "from" read: the reader asked for that writer\'s posts; the agent asked for at its end'),
+    formless ? arrowKey(READ_CLASS.plain, 'a read whose form the record does not give') : null,
+    h('span', { class: 'bd-lg' }, `arrows show for the post at the position, the ${RECENT} before it and the post `
+      + 'under the pointer, to each agent\'s first read of the post in each form')));
   const notes = (d.notes || []).length ? ` ${d.notes.join(' ')}` : '';
 
-  const header = h('div', { class: 'bd-head' },
-    h('div', { class: 'bd-controls' },
-      h('label', { class: 'bd-pick' }, sw(null, 'bd-sw-a'), selA),
-      h('label', { class: 'bd-pick' }, sw(null, 'bd-sw-b'), selB),
-      back, playBtn, fwd, modeSel, slider, posText),
-    nowA, nowB, endA, endB);
+  const controls = h('div', { class: 'bd-controls' },
+    h('label', { class: 'bd-pick' }, sw(null, 'bd-sw-a'), selA),
+    h('label', { class: 'bd-pick' }, sw(null, 'bd-sw-b'), selB),
+    modeSel, back, playBtn, fwd);
   const note = muted(`Clock: ${d.clock_about}. Default pair: ${d.pair.join(' and ')}, ${d.pair_why}.${notes}`,
     'small block bd-note');
   el.replaceChildren(h('div', { class: 'bd-tab' },
-    h('section', { class: 'card bd-timeline' }, header, svgHost, legend, note),
+    h('section', { class: 'card bd-timeline' }, controls, svgHost, scrub, cardRow, legend, note),
     h('section', { class: 'card bd-board' }, boardHead, boardBox)));
 
   let resizeTimer = 0;
@@ -603,17 +688,19 @@ export function renderBoard(el, d, opts) {
     resizeTimer = setTimeout(() => build(), 120);
   }).observe(svgHost);
   build();
-  // showPost(label): post P<n> of the board, the position moved to it and its entry flashed
+  // showPost(label): post P<n> of the board, the position moved to it and its entry flashed, or, when the post holds
+  // a judge's excerpt, the marked excerpt brought to the middle and flashed
   function showPost(label) {
     const i = d.posts.findIndex(p => p.label === label);
     if (i < 0) return null;
     pause();
     moveTo(keyOf(d.posts[i]));
     const li = items[i].li;
-    li.scrollIntoView({ block: 'center' });
-    li.classList.remove('flash');
-    void li.offsetWidth;
-    li.classList.add('flash');
+    const target = li.querySelector('mark.xl-mark') || li;
+    target.scrollIntoView({ block: 'center' });
+    target.classList.remove('flash');
+    void target.offsetWidth;
+    target.classList.add('flash');
     return li;
   }
   return { moveTo, showPost, state };

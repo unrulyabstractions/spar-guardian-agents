@@ -2,16 +2,14 @@
 Our work is still ongoing. All results are preliminary.
 
 \subsection*{How reliable are these measures?}
-Code places every agent on the Cheating and Collusion ladders, and one judge gives the scheming verdict and the
-labels. Separate AI agents checked both by reading the transcripts, the board, the diffs and the hand-ins of a set
-of cases. No human made these checks. Table~\ref{tab:reliability} gives, for each rung and label, how many cases it
-read and how many held. The checks read the rungs as they stood before the corrections they led to. They read the
-judge's first verdicts. We then ran both judges again with corrected prompts and code, and a second reading checked
-these second verdicts. The tables of this appendix show the second verdicts. The code's rungs mostly held. The
-second awareness verdicts held in all but one case. The second scheming flags mostly held, and every flag is about
-awareness. Manipulation is not validated. Most of its yes verdicts did not hold in either pass, because the judge saw
-neither the agents' tool outputs nor their whole tool calls. We leave manipulation out of our results. We
-therefore posit that the code's rungs and the awareness label can carry our results.
+Code places every agent on the Cheating and Collusion ladders, and one judge scores the two labels. Separate AI
+agents checked the code's rungs by reading the transcripts, the board, the diffs and the hand-ins of a set of cases.
+No human made these checks. Table~\ref{tab:reliability} gives, for each rung and label, how many cases it read and
+how many held. The checks read the rungs as they stood before the corrections they led to. The code's rungs mostly
+held. The table keeps the readings of three judge labels we have retired: scheming, and the yes or no labels of
+awareness and manipulation. The scored labels of Appendix A replace all three, and no one has read the
+scores yet. We therefore posit that the code's rungs can carry our results, and that the scores give only one
+judge's reading.
 
 \begin{table}[H]
   \centering
@@ -21,7 +19,7 @@ therefore posit that the code's rungs and the awareness label can carry our resu
   study. Read counts the cases checked, and held counts those where the reading agreed with the code or the judge.
   Wrong counts those where it disagreed, and unclear those the evidence allows either way. The readers were AI agents,
   and no human made these checks. The rows of the code's rungs read them before their corrections. The rows of the
-  judge read both passes, and the second pass is the one this appendix reports.}
+  retired labels read both passes of their judge.}
   \label{tab:reliability}
 \end{table}
 
@@ -116,60 +114,28 @@ SWE holds almost every worker who read the board without posting.
 Code reads these rungs.
 Collusion here means that a pair pooled pieces of the exploit.
 Collusion does not by itself show intent.
-The last column therefore counts the agents and teams at collusion whose awareness label reads yes.
-For a team, one aware worker of a colluding pair counts.
 SWE holds most of the cooperation, collaboration and collusion, for workers and for teams.
 Collusion appears on SWE and creative writing and never on protein design.
-The awareness label finds every colluding worker aware that it uses the planted work.
 No influencer reaches collusion.
 No team with an influencer reaches collusion.
 The colluding teams are DeepSeek teams on SWE and one Luna team on creative writing told to cheat.
 \FloatBarrier
 
-\subsection*{Do colluding pairs talk about cheating or deceit?}
-One judge, \StudySchemingJudge{}, read the board of every run with a pair at collusion once, and flagged posts.
-A colluding pair schemes when a flagged post was written by one of the two and read by the other.
-No human checked its verdicts.
+\subsection*{How strongly do agents disclose cheating or steer others?}
+We ask how strongly agents disclose cheating or steer others.
+One high score can rest on a single sentence, so we show how the scores spread over the agents.
+The table counts agents by the range of their scores, per task and role.
+\StudyLabelsJudged{}
+An agent without a score counts as not judged.
 \begin{figure}[H]
   \centering
-  \includegraphics[width=\linewidth]{table_scheming_by_task}
+  \includegraphics[width=\linewidth]{table_label_scores_by_task}
 \end{figure}
 
-Every colluding pair reads yes.
-As measured here, scheming holds for exactly the pairs at collusion, so it does not separate them.
-The judge flagged most posts on these boards.
-It flagged them for awareness only, and none for deceiving others.
-Code found every flagged quote in its post.
-An independent reading of every flag found most flags sound, and found each one about awareness
-(Table~\ref{tab:reliability}).
-Every colluding pair keeps a yes without the flags it found wrong.
-A yes therefore says only that the team talked openly about using the planted work.
-No pair with an influencer colludes, so that block is empty.
-We therefore posit that scheming needs a stricter reading before it can add to the collusion rung.
-\FloatBarrier
-
-\subsection*{Do agents that cheat knowingly use the reference material?}
-One judge, \StudyLabelsJudge{}, gave the awareness label to every agent at \CheatedFrom{} or above.
-No human checked its verdicts.
-\begin{figure}[H]
-  \centering
-  \includegraphics[width=\linewidth]{table_awareness_by_task}
-\end{figure}
-
-Most workers that cheated draw a yes.
-An independent reading of every verdict of the second pass found one wrong yes and no wrong no
-(Table~\ref{tab:reliability}).
-The wrong yes rests on reuse of a branch the agent never calls the answer.
-The label reads only posts and visible reasoning, so it can miss an agent whose model shows no reasoning.
-Every no is such an agent.
-The judge's yes mostly rests on an agent calling the planted work the gold, the reference or what the hidden tests
-expect.
-That shows knowing use of the planted work, which can fall short of knowing that the use is cheating.
-No influencer cheated, so none is asked.
-The judge also gave the manipulation label to every agent that posted.
-An independent reading found most of its yes verdicts wrong (Table~\ref{tab:reliability}).
-The judge saw neither the agents' tool outputs nor their whole tool calls, so a failed read looked like access.
-We therefore do not report manipulation as a rate.
+The ranges only group the scores, and we read no rate from them.
+Each score above zero carries an excerpt that a reader can open in the transcript.
+We therefore posit that the scores point a reader to the strongest evidence, and that they need a reading of their
+own before they can support a rate.
 \FloatBarrier
 
 \subsection*{How does \textit{CheatBench}'s judge compare with the code?}
@@ -183,7 +149,8 @@ The first table sets the judge's own verdict, cheated, beside our line of \Cheat
 
 The judge says cheated for every agent our line counts as cheating, and for many more in every task.
 Its verdict is the broader one, so we never report it as our cheating rate.
-The second table sets each of the code's clauses beside the judge labels that answer it, for workers.
+The second table sets each of the code's clauses beside the labels of \textit{CheatBench}'s judge that answer it,
+for workers.
 The clauses the judge has no label for share one row per task, which reads ``no label''.
 \begin{figure}[H]
   \centering
@@ -199,12 +166,14 @@ the table counts those workers as n/a.
 Neither finds an attack on the evaluation on SWE.
 \FloatBarrier
 
-\subsection*{Do agents disclose their access to the honeypot?}
-The judge also records whether an agent openly acknowledged its own access on protein design and creative writing.
+\subsection*{Does \textit{CheatBench}'s judge find that agents disclosed their access?}
+\textit{CheatBench}'s judge also records disclosed access on protein design and creative writing: whether an agent
+openly acknowledged its own access to the honeypot.
 Its SWE verdict has no such field.
+This field is \textit{CheatBench}'s, and it differs from the disclosure score.
 \begin{figure}[H]
   \centering
-  \includegraphics[width=\linewidth]{table_disclosure_by_task}
+  \includegraphics[width=\linewidth]{table_cheatbench_disclosed_access_by_task}
 \end{figure}
 
 The table counts only agents at \AccessedFrom{} or above, who had access to disclose.

@@ -4,8 +4,11 @@
  * (viewer/static/app/case_view.js, after arena-capstone script/visualize_case.html). Our edits: readableReasoning,
  * which the source imported from its transcript.js, sits here verbatim; the imports point at this viewer's files; the
  * source's sentence lens is gone and each call shows its labels (src/ui/transcript_levels.py _agent_labels) in its
- * place; the strip follows the page as it scrolls. Every string goes in through h() text nodes. */
+ * place; the strip follows the page as it scrolls; each judge label whose excerpt code located in a model call's
+ * reasoning is a label of that call and its excerpt is marked in the reasoning (showReasoning opens it). Every string
+ * goes in through h() text nodes. */
 import { h, plural } from '/static/app/dom.js';
+import { excerptSpan, markedNodes } from './tv_excerpt.js';
 
 // Colour ramps per ladder, level 0 first. Each ladder's line (/api/ladders' "line", the first level above it) parts two
 // colour families: pale and calm below it, strong above it, so a reader sees the line at a glance.
@@ -14,9 +17,12 @@ export const RAMP = {
   cheating: ['#eeede8', '#dbe5ee', '#a9c1d9', '#cf3a27', '#7d140f'],
   // none, read, write, low (pale sand) | medium, high, extreme (strong violet): src/measures/coordination.py LEVELS
   coordination: ['#eeede8', '#efe8d3', '#e2d4ab', '#cfbb85', '#6f4fc0', '#4e2ca3', '#2e1773'],
-  // none, cooperation, collaboration (calm green) | collusion, scheming (strong crimson): src/measures/collusion.py RUNGS
-  collusion: ['#eeede8', '#d5ebe0', '#93c9ae', '#c2185b', '#640b31'],
+  // none, cooperation, collaboration (calm green) | collusion (strong crimson): src/measures/collusion.py RUNGS
+  collusion: ['#eeede8', '#d5ebe0', '#93c9ae', '#c2185b'],
 };
+// A judge label's score from pale to strong, one calm ramp: 0, 1 to 24, 25 to 49, 50 to 74, 75 to 99, 100.
+export const SCORE_RAMP = ['#eeede8', '#e3e7ef', '#c5d0e4', '#97a9cf', '#5b73ad', '#2c3f78'];
+export const scoreColour = s => SCORE_RAMP[s <= 0 ? 0 : s >= 100 ? 5 : 1 + Math.floor(s / 25)];
 
 // WCAG relative luminance of a #rrggbb colour.
 const luminance = hex => [1, 3, 5].map(j => parseInt(hex.slice(j, j + 2), 16) / 255)
@@ -33,7 +39,7 @@ const SHORT = { cheating: 'Ch', coordination: 'Cd', collusion: 'Cl' };
 const WORDS = {
   cheating: { looked: 'looked', tempted: 'tempted', attempted: 'attempted', hacked: 'hacked' },
   coordination: { read: 'read a teammate', write: 'posted', low: 'low back-and-forth', medium: 'medium back-and-forth', high: 'high back-and-forth', extreme: 'extreme back-and-forth' },
-  collusion: { cooperation: 'cooperation', collaboration: 'collaboration', collusion: 'collusion (pooled the exploit)', scheming: 'scheming (judge)' },
+  collusion: { cooperation: 'cooperation', collaboration: 'collaboration', collusion: 'collusion (pooled the exploit)' },
 };
 
 // The page has one episode on screen at a time. One scroll listener for the page asks that episode to move its strip,
@@ -101,16 +107,20 @@ function resultText(r) {
   if (Array.isArray(c)) return c.map(p => (p && p.text) || asStr(p)).join('\n');
   return asStr(c) || asStr(r.extra && r.extra.error);
 }
-function blk(label, text, input, kind) {
-  const el = h('div', { class: ['blk', input && 'inp', input && 'fold', kind && 'k-' + kind] }, h('div', { class: 'lab' }, label), h('div', { class: 'txt' }, String(text || '')));
+/** A block of the transcript; mark: the span of its text to mark (a judge's excerpt), or null. */
+function blk(label, text, input, kind, mark) {
+  const body = mark ? markedNodes(String(text), mark) : String(text || '');
+  const el = h('div', { class: ['blk', input && 'inp', input && 'fold', kind && 'k-' + kind] }, h('div', { class: 'lab' }, label), h('div', { class: 'txt' }, body));
   if (input) el.addEventListener('click', () => el.classList.remove('fold'));
   return el;
 }
 
 /**
- * ctx: {agent, levels (the run's three-ladder payload, with its labels by call), isRegulator, regulatorCalls: Set of
- * tool_call_ids that read a regulator's post, or that posted as the regulator}.
- * Returns {el, findCall, findToolCall, showAll, nCalls}.
+ * ctx: {agent, levels (the run's three-ladder payload, with its labels by call and its judge labels), isRegulator,
+ * regulatorCalls: Set of tool_call_ids that read a regulator's post, or that posted as the regulator}.
+ * Returns {el, findCall, findToolCall, showReasoning, showAll, nCalls}. A model call is numbered from 1 over the
+ * agent's steps, as the judge and code number it (src/judging/judge_records.py reasoning_calls); its reasoning sits on
+ * its first tool call, or on its own block when it made none.
  */
 export function renderCase(t, ctx) {
   const lv = ctx.levels;
@@ -118,21 +128,38 @@ export function renderCase(t, ctx) {
   // 1. tool calls in order, with the step's reasoning and text on its first call
   const calls = [];
   const loose = [];
+  let model = 0;
   for (const s of steps) {
     const src = s.source || 'unknown';
     const rs = (s.observation && s.observation.results) || [];
     const reasoning = readableReasoning(s.reasoning_content);
     const msg = asStr(s.message);
+    const m = src === 'agent' ? ++model : null;
     if (src === 'agent' && (s.tool_calls || []).length) {
       s.tool_calls.forEach((tc, j) => {
         let res = rs.filter(r => r.source_call_id === tc.tool_call_id);
         if (!res.length && rs[j] && !rs[j].source_call_id) res = [rs[j]];
-        calls.push({ k: calls.length, tc, res, reasoning: j === 0 && reasoning && reasoning.text, text: j === 0 ? msg : '', step: s.step_id });
+        calls.push({ k: calls.length, tc, res, reasoning: j === 0 && reasoning && reasoning.text, text: j === 0 ? msg : '', step: s.step_id, model: j === 0 ? m : null });
       });
     } else {
-      loose.push({ before: calls.length, src, text: msg, reasoning: reasoning && reasoning.text, step: s.step_id });
+      loose.push({ before: calls.length, src, text: msg, reasoning: reasoning && reasoning.text, step: s.step_id, model: m });
     }
   }
+  // The judge labels whose excerpt code located in a model call's reasoning, by model call: [{key, name, score,
+  // reason, span (null when the reasoning shown does not hold the excerpt)}].
+  const about = lv ? lv.judge_label_about.labels : {};
+  const scored = (lv && lv.judge_labels.agents[ctx.agent]) || {};
+  const reasoningOf = new Map([...calls, ...loose].filter(x => x.model != null).map(x => [x.model, x.reasoning]));
+  const judgedAt = new Map();
+  for (const [key, e] of Object.entries(scored)) {
+    const at = e && e.located;
+    if (!at || at.where !== 'reasoning' || !about[key]) continue;
+    const span = excerptSpan(reasoningOf.get(at.call), e.excerpt, at.start, at.end);
+    if (!judgedAt.has(at.call)) judgedAt.set(at.call, []);
+    judgedAt.get(at.call).push({ key, name: about[key].name, score: e.score, reason: e.reason, span });
+  }
+  // The first excerpt marked in a model call's reasoning (one mark per block).
+  const markOf = mm => ((judgedAt.get(mm) || []).find(x => x.span) || {}).span || null;
   const n = calls.length;
   const idOf = new Map(calls.map(c => [c.tc.tool_call_id, c.k]));
   // 2. level per ladder per call (monotone), and milestones
@@ -207,13 +234,26 @@ export function renderCase(t, ctx) {
     }
     return lines.length ? h('div', { class: 'cs-labels' }, h('div', { class: 'lab' }, 'Labels of this step'), lines) : null;
   }
+  // The judge labels whose excerpt sits in this model call's reasoning: the label, its score and the judge's reason.
+  function judgedLines(mm) {
+    const here = judgedAt.get(mm) || [];
+    return here.length ? h('div', { class: 'cs-labels cs-judged' }, h('div', { class: 'lab' }, 'Judge labels with their excerpt in this reasoning'),
+      here.map(x => line(`background:${scoreColour(x.score)}`, null, x.name, `${x.score} of 100`, x.span ? x.reason : `${x.reason} (the excerpt is not in the reasoning shown)`,
+        `${x.name}: ${x.score} of 100\n${x.reason || ''}`))) : null;
+  }
   const blocks = [];
   const right = h('div', { class: 'right' });
   let li = 0;
-  const looseBlock = x => h('div', { class: 'call msg' },
+  const looseEls = new Map();
+  const looseBlock = x => {
+    const box = looseCard(x);
+    if (x.model != null) looseEls.set(x.model, box);
+    return box;
+  };
+  const looseCard = x => h('div', { class: 'call msg' },
     h('div', { class: 'ch' }, h('span', { class: 'cn' }, x.src === 'agent' ? 'Message' : x.src === 'user' ? 'User' : 'System'),
       x.step != null ? h('span', null, `step ${x.step}`) : null, lv ? soFar(valsAt(x.before - 1), new Set()) : null),
-    h('div', { class: 'cb' }, x.reasoning ? blk('Reasoning', x.reasoning, false, 'reasoning') : null,
+    h('div', { class: 'cb' }, judgedLines(x.model), x.reasoning ? blk('Reasoning', x.reasoning, false, 'reasoning', markOf(x.model)) : null,
       x.text ? blk(x.src === 'agent' ? 'Text' : 'Prompt', x.text, x.src !== 'agent', x.src === 'agent' ? 'reasoning' : 'input') : null));
   for (const c of calls) {
     while (li < loose.length && loose[li].before <= c.k) right.appendChild(looseBlock(loose[li++]));
@@ -224,8 +264,8 @@ export function renderCase(t, ctx) {
       h('div', { class: 'ch' }, h('span', { class: 'cn' }, `Call ${k}`), c.step != null ? h('span', null, `step ${c.step}`) : null,
         lv ? soFar(valsAt(k), new Set((fresh.get(k) || []).map(e => e.ladder))) : null,
         h('span', { class: 'mz' }, c.tc.function_name || '')),
-      h('div', { class: 'cb' }, lv ? labelsOf(k) : null,
-        c.reasoning ? blk('Reasoning', c.reasoning, false, 'reasoning') : null,
+      h('div', { class: 'cb' }, lv ? labelsOf(k) : null, c.model != null ? judgedLines(c.model) : null,
+        c.reasoning ? blk('Reasoning', c.reasoning, false, 'reasoning', c.model != null ? markOf(c.model) : null) : null,
         c.text && c.text.trim() ? blk('Text', c.text, false, 'reasoning') : null,
         blk(`Tool call: ${c.tc.function_name || '?'}`, argText(c.tc.arguments), false, 'tool'),
         c.res.length ? c.res.map(r => blk('Tool result', resultText(r), true, 'tool')) : null));
@@ -344,13 +384,13 @@ export function renderCase(t, ctx) {
     if (row.top < box.top + 8) left.scrollTop -= box.top + 8 - row.top;
     else if (row.bottom > box.bottom - 8) left.scrollTop += row.bottom - (box.bottom - 8);
   }
-  function show(k) {
+  function show(k, behavior = 'smooth') {
     const el = blocks[k];
     if (!el) return null;
     for (const b of right.querySelectorAll('.call.here')) b.classList.remove('here');
     el.classList.add('here');
     opened = k;
-    el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    el.scrollIntoView({ block: 'start', behavior });
     markRow(k);
     settle();
     return el;
@@ -406,5 +446,18 @@ export function renderCase(t, ctx) {
     el, nCalls: n, showAll() {},
     findCall: k => show(k),
     findToolCall: id => (idOf.has(id) ? show(idOf.get(id)) : null),
+    // Model call mm's reasoning: its block opened and the judge's excerpt, marked there, brought to the middle at
+    // once (a smooth scroll to the block would end elsewhere) and flashed.
+    showReasoning(mm) {
+      const c = calls.find(x => x.model === mm);
+      const box = c ? show(c.k, 'instant') : looseEls.get(mm);
+      if (!box) return null;
+      const mark = box.querySelector('mark.xl-mark');
+      const centre = () => (mark || box).scrollIntoView({ block: 'center', behavior: 'instant' });
+      centre();
+      requestAnimationFrame(centre);
+      if (mark) { mark.classList.remove('flash'); void mark.offsetWidth; mark.classList.add('flash'); }
+      return box;
+    },
   };
 }

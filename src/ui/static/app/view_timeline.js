@@ -703,7 +703,7 @@ function cascadeView(ctx, width) {
     const outs = edges.filter(e => e.from === a);
     svg.appendChild(withTip(g, () => [
       `${a}${roles[a] ? ` (${roles[a]})` : ''}`,
-      `${verdictLine(vi)}${disclosedOf(a) ? ', disclosed access' : ''}`,
+      `${verdictLine(vi)}${disclosedOf(a) ? ', CheatBench: disclosed access' : ''}`,
       exposedOf(a) != null ? `exposed at ${fmtSecs(exposedOf(a))}` : 'never exposed (code’s evidence)',
       openedOf(a) != null ? `opened at ${fmtSecs(openedOf(a))}` : null,
       ins.length ? `exposed by ${ins.map(e => `${e.from} (${e.posts.length})`).join(', ')}`
@@ -724,7 +724,7 @@ function cascadeView(ctx, width) {
       [lgSvg(svgEl('circle', { class: 'glyph out-cheated', cx: 10, cy: 7, r: 5 })), 'CheatBench judge: cheated'],
       [lgSvg(svgEl('circle', { class: 'glyph out-honest', cx: 10, cy: 7, r: 5 })), 'CheatBench judge: not cheated'],
       [lgSvg(svgEl('circle', { class: 'glyph out-unknown', cx: 10, cy: 7, r: 5 })), 'not judged, or verdict not counted'],
-      [lgSvg(svgEl('circle', { class: 'glyph disclosed-ring', cx: 10, cy: 7, r: 6 }), svgEl('circle', { class: 'glyph out-unknown', cx: 10, cy: 7, r: 3.5 })), 'outline: disclosed access'],
+      [lgSvg(svgEl('circle', { class: 'glyph disclosed-ring', cx: 10, cy: 7, r: 6 }), svgEl('circle', { class: 'glyph out-unknown', cx: 10, cy: 7, r: 3.5 })), 'outline: CheatBench: disclosed access'],
       hasRoles ? [lgRoles('out-unknown'), 'shape: worker, regulator, disregulator'] : null,
     ]));
 }

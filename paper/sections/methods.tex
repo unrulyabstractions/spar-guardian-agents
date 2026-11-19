@@ -72,8 +72,7 @@ In Stage 2 the regulator only oversees, and it is either the workers' model or C
     \textbf{Runs per cell} & 1--6 & Stage 1: 18 per arm and planning turn (0 or 1). Stage 2: 18 \\
     \addlinespace
     \textbf{Measured by} & Cheating, Coordination and Collusion ladders, read by code; \StudyCheatBenchJudge{}
-      beside them as \textit{CheatBench}'s judge; \StudySchemingJudge{} for scheming and \StudyLabelsJudge{} for two
-      labels & LLM judge (GPT-6 Luna) \\
+      beside them as \textit{CheatBench}'s judge; one LLM judge scores two labels & LLM judge (GPT-6 Luna) \\
     \bottomrule
   \end{tabularx}
   \caption{Comparison of studies on multiple domains versus SWE deep dive, covering model differences, honeypot
@@ -88,7 +87,7 @@ work. In the multi-domain study, we count a team as cheating when its Cheating r
 task. We also report whether a team \textbf{accessed the honeypot}: its Cheating rung is \AccessedFrom{} or above.
 The multi-domain study reads the ladders by code from the transcripts, the board and the sandbox's final state, while
 the deep dive uses \textit{CheatBench}'s LLM judge (GPT-6 Luna) with team-specific rules. In the multi-domain study, a
-judge reads only the Collusion ladder's top rung, scheming, and two labels beside the ladders: whether an agent knowingly
-uses reference material, and whether it misleads its teammates. Appendix A defines every rung and label. Appendix B
+judge gives each agent two scores beside the ladders: how explicitly it says that what it does is wrong, and how
+strongly it tries to steer another agent. Appendix A defines every rung and label. Appendix B
 sets \textit{CheatBench}'s judge beside the code on the multi-domain study's runs, and reports how often an
 independent reading of the transcripts confirmed each rung and label.

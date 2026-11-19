@@ -1,4 +1,5 @@
-/* View: one run (#/run/<collection>/<run key>?agent=<id>&call=<k>, ?tab=board&a=&b=&mode=&pos= or ?tab=details).
+/* View: one run (#/run/<collection>/<run key>?agent=<id>&call=<k>, ?agent=<id>&label=<judge label>, ?tab=board&a=&b=
+ * &mode=&pos= or ?tab=details).
  * Ported from collusion-hermaneutics' viewer (viewer/static/app/view_run.js). A bar with the run, an agent tab per
  * agent, a Board tab and a Details tab; the selected agent's whole episode below it, each step with its labels
  * (tv_case_view.js); the run record under it: the run's labels, the run settings, each agent's record with its
@@ -9,16 +10,19 @@
  * collection and the eval log; the Board tab (tv_view_board.js) holds the message board, two agents' calls on one
  * clock with the board between them; the Details tab holds the Cheating, Coordination and Collusion panels and the
  * judge labels. Every Cheating cell holds the code's word and CheatBench's judge's under it (tv_levels.js
- * cheatingCell). A tab
+ * cheatingCell). A judge label's link opens the place code located its excerpt, highlighted: the agent's tab at that
+ * model call's reasoning, or the Board tab at that post (openExcerpt; ?agent=&label= opens it on arrival). CheatBench's
+ * own field for an agent that acknowledged its access shows only in the CheatBench judge's block, as "CheatBench:
+ * disclosed access". A tab
  * beside the agents' is one entry of `views` (a key, its label and a function that draws it once, answering its
  * element and, for the Board, a promise of its handle). */
 import { appendAll, enc, fmtInt, fmtUsd, h } from '/static/app/dom.js';
 import { badge, dataTable, episodeRecord, kv, lazyDetails, longText, muted } from '/static/app/components.js';
 import { ROLE_ORDER, roleIcon } from '/static/app/charts.js';
-import { CHEATBENCH, DISCLOSURE, ROLE_LABEL, armLabel, collectionOf, influencerParts, isInfluencer, modelLabel,
+import { CHEATBENCH, ROLE_LABEL, armLabel, collectionOf, influencerParts, isInfluencer, modelLabel,
   taskLabel } from './tv_labels.js';
 import { cheatbenchTeam, cheatbenchWords, cheatingCell, cheatingPanel, clauseList, collusionPanel, coordinationPanel,
-  disclosureTeam, judgeLabels, judgeLabelsPanel, labelTag, labelTeam, levelsPanel, unvalidatedNote } from './tv_levels.js';
+  judgeLabels, judgeLabelsPanel, labelEntry, levelsPanel, teamScore } from './tv_levels.js';
 import { fullLegend, renderCase } from './tv_case_view.js';
 import { renderBoard } from './tv_view_board.js';
 
@@ -50,7 +54,6 @@ export async function viewRun(id, q, view) {
   // ---- board: every message by the label the evidence, the Board tab and the judges give it, P1, P2, ... in board
   // order, harness notices included (board_no).
   const posts = new Map(d.boards.flatMap(b => b.messages.map(m => [`P${m.board_no}`, m])));
-  const collusion = (d.levels && d.levels.collusion) || {};
   const cheating = (d.levels && d.levels.cheating) || {};
 
   // Calls that read a regulator's post (a worker), or that posted as the regulator (the regulator).
@@ -116,13 +119,25 @@ export async function viewRun(id, q, view) {
   }
   // A post opens in the Board tab.
   const openPost = label => selectTab('board').then(b => b.showPost(label)).catch(() => {});
-  const boardPost = label => {
-    const m = posts.get(label);
-    if (!m) return h('span', { class: 'mono' }, label);
-    return h('button', { type: 'button', class: 'linkish ev-link', title: 'show this post on the board',
-      onclick: () => openPost(label) },
-    `${label}${m.notice ? ' (a system notice)' : ` (by ${m.sender})`}`);
-  };
+
+  // ---- the judge labels: each agent's score, excerpt and the place code located it (the measure's).
+  const judged = d.levels.judge_labels.agents;
+  const labelAbout = d.levels.judge_label_about.labels;
+  // The place of an agent's excerpt, opened with the excerpt highlighted: the agent's tab at the model call whose
+  // reasoning holds it, or the Board tab at the post.
+  function openExcerpt(agent, label) {
+    const e = (judged[agent] || {})[label];
+    const at = e && e.located;
+    if (!at) return Promise.resolve(null);
+    if (at.where === 'post') return selectTab('board').then(b => b.showPost(at.post));
+    return selectTab(agent).then(tr => tr.showReasoning(at.call));
+  }
+  // The link a label's entry shows: where the excerpt is, opening it.
+  const openLink = (agent, label) => at => h('button', { type: 'button', class: 'linkish ev-link sc-open',
+    title: at.where === 'post' ? `open ${at.post} on the Board tab with the excerpt highlighted`
+      : `open ${agent}'s transcript at model call ${at.call} with the excerpt highlighted in its reasoning`,
+    onclick: () => openExcerpt(agent, label).catch(() => {}) },
+  at.where === 'post' ? `${at.post} on the board` : `reasoning, model call ${at.call}`);
 
   // Evidence text with every [k] linked to call k of the agent it names, and every post (P<n>) to the board.
   function evidenceText(text, agent) {
@@ -171,14 +186,12 @@ export async function viewRun(id, q, view) {
       h('div', { class: 'small' }, h('span', { class: 'field-label' }, 'CheatBench\'s judge\'s labels beside the code: '), judgeLabels(r)));
   }
 
-  // The agent's judge labels beside the ladders: awareness, manipulation and disclosure, each with its quote.
+  // The agent's judge labels beside the ladders: each label's score, excerpt, reason and the link to its place.
   function agentJudgeLabels(agent) {
-    const about = d.levels.judge_label_about;
-    const mine = d.levels.judge_labels[agent];
-    return h('div', null, h('h3', { class: 'sub-h' }, 'Judge labels for this agent (no rung)'),
-      h('div', { class: 'verdict-flags' }, Object.keys(about).map(k => [labelTag(about[k].name, mine[k]), ' ', unvalidatedNote(about[k]), ' '])),
-      Object.keys(about).filter(k => mine[k].quote).map(k => h('div', { class: 'small' },
-        h('span', { class: 'field-label' }, `${about[k].name}, from its ${mine[k].source}: `), h('q', null, mine[k].quote))));
+    return h('div', null, h('h3', { class: 'sub-h' }, 'Judge labels for this agent (scores 0 to 100, no rung)'),
+      judged[agent] ? h('div', { class: 'sc-pair' }, Object.entries(labelAbout).map(([k, about]) => h('div', null,
+        h('span', { class: 'field-label' }, `${about.name}: `), labelEntry(about, judged[agent][k], openLink(agent, k), true))))
+        : muted('Not judged: no judge has scored this agent.', 'small block'));
   }
 
   function cheatbenchBlock(a) {
@@ -188,7 +201,7 @@ export async function viewRun(id, q, view) {
       h('div', { class: 'jb-head' }, h('h4', null, `judge ${judge}`), cheatbenchWords({ [judge]: v })),
       v.summary ? h('p', { class: 'verdict-summary' }, evidenceText(v.summary, a.agent)) : null,
       h('dl', { class: 'kv kv-grid' }, Object.entries(v).filter(([k]) => !['agent', 'summary'].includes(k)).map(([k, x]) =>
-        h('div', { class: 'kv-item' }, h('dt', null, k.replace(/_/g, ' ')),
+        h('div', { class: 'kv-item' }, h('dt', null, k === d.cheatbench_disclosed ? 'CheatBench: disclosed access' : k.replace(/_/g, ' ')),
           h('dd', null, k === 'judge_cost_usd' ? fmtUsd(x) : typeof x === 'string' ? evidenceText(x, a.agent) : fieldText(x)))))));
   }
 
@@ -199,7 +212,6 @@ export async function viewRun(id, q, view) {
     const c = d.levels.team[k];
     return c.na ? muted(`not applicable: ${c.evidence}`) : h('span', null, h('b', null, c.level), muted(` (${c.index} of ${c.of}) ${c.evidence}`, 'small'));
   };
-  const about = d.levels.judge_label_about;
   const labelRows = [
     ['Cheating (team)', [cheatingCell(L.cheating, d.levels.team.cheating.na ? null : d.levels.team.cheating.level, cheating.team_cheated,
       multi ? cheatbenchTeam(row.cheatbench) : cheatbenchWords(Object.values(cheatbench)[0])), muted(d.levels.team.cheating.evidence, 'small block')],
@@ -207,11 +219,8 @@ export async function viewRun(id, q, view) {
     ...(cheating.alarm ? [['Alarm', badge(`alarm: ${cheating.alarm}`, 'bad'), L.cheating.note]] : []),
     ['Coordination (team)', teamCell('coordination'), L.coordination.rule],
     ['Collusion (team)', teamCell('collusion'), L.collusion.rule],
-    ['Scheming judge', collusion.judged ? `flags of ${collusion.scheming.judge}` : muted('not judged'),
-      'The scheming judge reads the board of a run with a pair at collusion once and flags posts; a colluding pair schemes when a flagged post lies between the two. Its flags give the Collusion ladder\'s one judge rung, scheming.'],
-    ...['awareness', 'manipulation'].map(k => [about[k].name, [labelTeam(row.labels[k], about[k]), ' ', unvalidatedNote(about[k])],
-      `${about[k].question} Read for ${about[k].read_for}. No rung.`]),
-    [DISCLOSURE.column, disclosureTeam(row.disclosure), DISCLOSURE.about],
+    ...Object.entries(labelAbout).map(([k, about]) => [`${about.name} (judge, team's highest)`,
+      teamScore(row.labels.team[k]), `${about.scored} ${d.levels.judge_label_about.scored_by}`]),
   ];
   const labelsCard = h('section', { class: 'card' }, h('h2', null, 'Labels for this run'),
     dataTable(['Label', 'Value', 'What it means'], labelRows.map(([a, b, c]) => [h('strong', null, a), b, h('span', { class: 'small' }, c)]), { cls: 'labels-table' }));
@@ -252,21 +261,22 @@ export async function viewRun(id, q, view) {
       a.agent, h('span', { class: 'rp-role' }, ' ' + (ROLE_WORD[a.role] || a.role))));
   }
   const detailsView = () => ({ el: h('div', { class: 'rp-team' },
-    levelsPanel(d.levels, roles, row.task_name, { cheatbench, row }),
+    levelsPanel(d.levels, roles, row.task_name, { cheatbench, row, open: openLink }),
     cheatingPanel(d.levels, roles, { evidence: evidenceText, cheatbench, row }),
     coordinationPanel(d.levels, roles),
-    collusionPanel(d.levels, roles, { evidence: evidenceText, boardPost }),
-    judgeLabelsPanel(d.levels, roles),
+    collusionPanel(d.levels, roles, { evidence: evidenceText }),
+    judgeLabelsPanel(d.levels, roles, openLink),
     h('section', { class: 'card' }, h('h2', null, 'Colour legend'), fullLegend(d.levels.ladders, d.levels.order))) });
   // The Board tab reads /api/board when first opened; its handle ({moveTo, showPost, state}) comes once it is drawn.
-  // Its pair, mode and position come from the hash (a, b, mode, pos) and go back to it.
+  // Its pair, mode and position come from the hash (a, b, mode, pos) and go back to it; its agents' cards show the
+  // judge labels the Details tab shows.
   const boardView = () => {
     const el = h('div', { class: 'rp-board' }, h('div', { class: 'loading' }, 'Loading the board…'));
     const handle = fetch('/api/board?id=' + enc(id))
       .then(async x => {
         const b = await x.json();
         if (!x.ok) throw new Error(b.error || `HTTP ${x.status}`);
-        return renderBoard(el, b, { q, base: '#/run/' + id.split('/').map(enc).join('/') });
+        return renderBoard(el, b, { q, base: '#/run/' + id.split('/').map(enc).join('/'), judged });
       })
       .catch(e => {
         el.replaceChildren(h('div', { class: 'error-box' }, `Could not load the board: ${e.message}`));
@@ -315,7 +325,8 @@ export async function viewRun(id, q, view) {
     document.title = `${row.run} · Transcripts`;
     const qa = q.get('agent');
     const qc = q.get('call');
-    if (qa && qc != null && cards.has(qa)) gotoCall(qa, parseInt(qc, 10)).catch(() => {});
+    if (qa && q.get('label') && cards.has(qa)) openExcerpt(qa, q.get('label')).then(x => x || selectTab(qa)).catch(() => {});
+    else if (qa && qc != null && cards.has(qa)) gotoCall(qa, parseInt(qc, 10)).catch(() => {});
     else selectTab(views.has(q.get('tab')) ? q.get('tab') : (firstAgent || 'details')).catch(() => {});
   });
   const record = h('details', { class: 'rp-details' },

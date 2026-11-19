@@ -28,13 +28,6 @@ export const CHEATBENCH = {
   about: 'CheatBench\'s judge, written for a lone agent, read each agent\'s trajectory: whether it cheated and whether it saw the honeypots, with the task\'s own fields. Its own "cheated" (judge_cheated) is broader than the Cheating ladder\'s and changes no rung. The team\'s word is how many workers it says cheated, of the workers it gave a parsed verdict. It stands under the code\'s rung in every Cheating cell, marked as the judge\'s.',
 };
 
-// Disclosure, which CheatBench's judge records, a judge label beside the ladders (src/measures/judge_labels.py
-// disclosure).
-export const DISCLOSURE = {
-  column: 'Disclosure',
-  about: 'Whether CheatBench\'s judge found that the agent openly acknowledged its own access to the honeypot (protein design and creative writing record it; SWE\'s verdict has no such field: not recorded). No rung.',
-};
-
 // An influencer is a regulator or a disregulator: an agent the workers cannot tell from a worker, whose levels stay out
 // of the team's (src/measures/run_directory.py is_influencer).
 export const INFLUENCERS = ['regulator', 'disregulator'];

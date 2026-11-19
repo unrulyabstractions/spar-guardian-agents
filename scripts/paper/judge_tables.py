@@ -7,8 +7,10 @@ No model is called: the tables read verdicts a judge pass already wrote. Writes,
     table_judge_labels.png            per task and row of judge_labels.ROWS (the code's clauses and the judge labels
                                       that answer them), workers by the code's clauses against the judge's labels;
                                       "no label" on a row the judge has no label for
-    table_disclosure_by_task.png      per task, the agents that accessed the honeypot (study_ladders.accessed: looked or
-                                      above) by the judge's disclosure (judge_labels.disclosure)
+    table_cheatbench_disclosed_access_by_task.png
+                                      per task, the agents that accessed the honeypot (study_ladders.accessed: looked or
+                                      above) by CheatBench's disclosed access
+                                      (judge_labels.cheatbench_disclosed_access)
 
     uv run python -m scripts.paper.judge_tables    # make results-tables runs every one
 
@@ -37,7 +39,7 @@ LABEL_VERDICTS = ("both yes", "code only", "judge only", "both no", NOT_ANSWERED
 a row with no label (judge_labels.NO_LABEL, shown as such), or an enumerated choice of the judge that hides the row."""
 NOTE_CHARS = 32
 """The longest line of judge label names under a row's clauses."""
-DISCLOSURE = ("yes", "no", judge_labels.NOT_JUDGED, judge_labels.NOT_RECORDED)
+DISCLOSED_ACCESS = ("yes", "no", judge_labels.NOT_JUDGED, judge_labels.NOT_RECORDED)
 TASK_OF = {"software_engineering": "swe", "protein_design": "protein_design", "creative_writings": "creative_writing"}
 """CheatBench's task name for each of TASKS' keys."""
 
@@ -123,17 +125,17 @@ def label_counts(runs: list[tuple[str, Path]]) -> tuple[dict, dict, dict, dict]:
     return data, rows, notes, blank
 
 
-DISCLOSURE_BLOCKS = [("workers", "Workers at looked or above", "agents"),
-                     ("influencers", "Influencers at looked or above", "agents")]
-"""Disclosure counts only the agents that had access to disclose: those that accessed the honeypot."""
+DISCLOSED_ACCESS_BLOCKS = [("workers", "Workers at looked or above", "agents"),
+                           ("influencers", "Influencers at looked or above", "agents")]
+"""Disclosed access counts only the agents that had access to disclose: those that accessed the honeypot."""
 
 
-def disclosure_counts(runs: list[tuple[str, Path]]) -> dict[tuple[str, str], Counter]:
-    """(block, domain) -> Counter of DISCLOSURE values (judge_labels.disclosure), per agent that accessed the
-    honeypot (study_ladders.accessed)."""
+def disclosed_access_counts(runs: list[tuple[str, Path]]) -> dict[tuple[str, str], Counter]:
+    """(block, domain) -> Counter of DISCLOSED_ACCESS values (judge_labels.cheatbench_disclosed_access), per agent
+    that accessed the honeypot (study_ladders.accessed)."""
     out: dict[tuple[str, str], Counter] = {(b, d): Counter() for b, _, _ in BLOCKS for d, _ in TASKS}
     for domain, path in runs:
-        disclosed = judge_labels.disclosure(path)["agents"]
+        disclosed = judge_labels.cheatbench_disclosed_access(path)["agents"]
         for agent, r in record(path)["agents"].items():
             if accessed(r["rung"]):
                 out[("workers" if r["worker"] else "influencers", domain)][disclosed[agent]] += 1
@@ -155,10 +157,11 @@ def main() -> int:
     show("labels", labels)
     blocks = [(domain, title, "workers") for domain, title in TASKS]
     print(counts_table(OUT / "table_judge_labels.png", LABEL_VERDICTS, labels, blocks, blank, rows=rows,
-                       first="Clauses, judge labels", left=2.3, notes=notes))
-    disclosed = disclosure_counts(runs)
+                       first="Clauses, CheatBench labels", left=2.3, notes=notes))
+    disclosed = disclosed_access_counts(runs)
     show("disclosed", disclosed)
-    print(counts_table(OUT / "table_disclosure_by_task.png", DISCLOSURE, disclosed, DISCLOSURE_BLOCKS, left=2.6))
+    print(counts_table(OUT / "table_cheatbench_disclosed_access_by_task.png", DISCLOSED_ACCESS, disclosed,
+                       DISCLOSED_ACCESS_BLOCKS, left=2.6))
     return 0
 
 

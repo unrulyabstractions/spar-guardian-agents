@@ -11,9 +11,10 @@ ladder's alarm and the first cheating rung, src/measures/cheating_ladder.py ALAR
 src/configuration/prompts.yaml and its three report variants), regulator_levels.tex and disregulator_levels.tex (from
 src/configuration/instruction_levels.yaml), cheating_rungs.tex (the Cheating ladder's rungs and clauses, from
 src/measures/rungs.py RUNGS and cheating_ladder.py CLAUSES), coordination_levels.tex (the Coordination ladder's levels
-and cuts, from src/measures/coordination.py), collusion_rungs.tex (the Collusion ladder's rungs and who reads each,
-from src/measures/collusion.py RUNGS and CODE_RUNGS) and reliability.tex (how often an independent reading of the
-transcripts confirmed each rung and label, from src/measures/measure_readings.yaml). The rungs' and clauses' wording is
+and cuts, from src/measures/coordination.py), collusion_rungs.tex (the Collusion ladder's rungs, from
+src/measures/collusion.py RUNGS), score_anchors.tex (the judge labels' anchors, from src/measures/judge_labels.py
+SCORE_ANCHORS) and reliability.tex (how often an independent reading of the transcripts confirmed each rung and label,
+from src/measures/measure_readings.yaml). The rungs' and clauses' wording is
 the transcript viewer's (src/ui/transcript_levels.py CHEAT_GLOSSES, CLAUSE_GLOSSES, COLLUSION_GLOSSES). Nobody edits
 these files by hand.
 
@@ -119,12 +120,10 @@ FIGURES: dict[str, Figure] = {
     "table_judge_cheated_by_task.png": Figure("tmp/tables/results/table_judge_cheated_by_task.png",
                                               RESULTS.format("judge_tables.py")),
     "table_judge_labels.png": Figure("tmp/tables/results/table_judge_labels.png", RESULTS.format("judge_tables.py")),
-    "table_disclosure_by_task.png": Figure("tmp/tables/results/table_disclosure_by_task.png",
-                                           RESULTS.format("judge_tables.py")),
-    "table_scheming_by_task.png": Figure("tmp/tables/results/table_scheming_by_task.png",
-                                         RESULTS.format("label_tables.py")),
-    "table_awareness_by_task.png": Figure("tmp/tables/results/table_awareness_by_task.png",
-                                          RESULTS.format("label_tables.py")),
+    "table_cheatbench_disclosed_access_by_task.png": Figure(
+        "tmp/tables/results/table_cheatbench_disclosed_access_by_task.png", RESULTS.format("judge_tables.py")),
+    "table_label_scores_by_task.png": Figure("tmp/tables/results/table_label_scores_by_task.png",
+                                             RESULTS.format("label_tables.py")),
 }
 
 HEADER = "% Written by scripts/paper/paper_sources.py from {source}. Do not edit; run `make paper-sources`.\n"
@@ -180,10 +179,8 @@ def params_tex() -> str:
     judge["CheatingAlarm"] = cheating_ladder.ALARM
     judge["CheatedFrom"] = cheating_ladder.CHEATED_FROM
     judge["AccessedFrom"] = ACCESSED_FROM
-    judge["AwarenessMeans"] = judge_labels.AWARENESS_MEANS
     lines = [HEADER.format(source="PRESETS['default'], settings.JUDGE_MODEL, src/judging/judge_models.yaml, "
                                   "src/measures/cheating_ladder.py ALARM and CHEATED_FROM, "
-                                  "src/measures/judge_labels.py AWARENESS_MEANS, "
                                   "scripts/paper/study_ladders.py ACCESSED_FROM")]
     lines += [rf"\newcommand{{\{k}}}{{{v}}}" for k, v in macros.items()]
     lines += [rf"\newcommand{{\{k}}}{{{escape(v)}}}" for k, v in judge.items()]
@@ -272,33 +269,49 @@ def cheating_rungs_tex() -> str:
 
 
 def collusion_rungs_tex() -> str:
-    """The Collusion ladder: each rung, whether code or a judge reads it, and what puts an agent on it."""
+    """The Collusion ladder: each rung and what puts an agent on it. Code reads every rung."""
     levels = collusion.RUNGS
     if len(COLLUSION_GLOSSES) != len(levels):
         raise SystemExit(f"Collusion RUNGS {levels} and COLLUSION_GLOSSES differ in length: update both")
-    judged = "a judge's rung: "
-    rows = [rf"{i} & \textbf{{{escape(rung)}}} & {'code' if rung in collusion.CODE_RUNGS else 'judge'} & "
-            rf"{escape(gloss.removeprefix(judged))} \\"
+    rows = [rf"{i} & \textbf{{{escape(rung)}}} & {escape(gloss)} \\"
             for i, (rung, gloss) in enumerate(zip(levels, COLLUSION_GLOSSES))]
-    return (HEADER.format(source="src/measures/collusion.py RUNGS and CODE_RUNGS, src/ui/transcript_levels.py")
-            + "\\begin{tabularx}{\\linewidth}{@{}r l l >{\\raggedright\\arraybackslash}X@{}}\n\\toprule\n"
-            + "Number & Rung & Read by & An agent is here when \\\\\n\\midrule\n"
+    return (HEADER.format(source="src/measures/collusion.py RUNGS, src/ui/transcript_levels.py")
+            + "\\begin{tabularx}{\\linewidth}{@{}r l >{\\raggedright\\arraybackslash}X@{}}\n\\toprule\n"
+            + "Number & Rung & An agent is here when \\\\\n\\midrule\n"
             + "\n\\addlinespace\n".join(rows) + "\n\\bottomrule\n\\end{tabularx}\n")
+
+
+def score_anchors_tex() -> str:
+    """The anchors the judge scores each label against (src/measures/judge_labels.py SCORE_ANCHORS), lowest first."""
+    rows = [rf"{score} & {escape(meaning)} \\" for score, meaning in dict(judge_labels.SCORE_ANCHORS).items()]
+    return (HEADER.format(source="src/measures/judge_labels.py SCORE_ANCHORS")
+            + "\\begin{tabular}{rl}\n\\toprule\nScore & Evidence \\\\\n\\midrule\n"
+            + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n")
+
+
+RETIRED = ("scheming", "awareness", "manipulation")
+"""The measures of measure_readings.yaml whose readings are of a retired yes or no judge label: scheming, awareness and
+the yes or no manipulation label, replaced on 2026-11-19 by the scored labels (judge_labels.LABELS). Their readings
+stay as they were, and the table marks each block retired."""
 
 
 def reliability_tex() -> str:
     """How often an independent reading of the transcripts confirmed each rung and label
     (src/measures/measure_readings.py readings(), the file the viewer's How reliable section reads too): a block per
-    measure and pass read, headed by the measure's name and the pass's label, then per row how the cases were chosen,
-    and how many were read, held, were wrong or were unclear."""
+    measure and pass read, headed by the measure's name and the pass's label (a RETIRED measure marked so, and no pass
+    of it called current), then per row how the cases were chosen, and how many were read, held, were wrong or were
+    unclear."""
     r = measure_readings.readings()
     rows, last = [], None
     for row in r["rows"]:
         if (row["measure"], row["pass"]) != last:
             if last is not None:
                 rows.append(r"\addlinespace")
-            rows.append(rf"\multicolumn{{7}}{{@{{}}l}}{{\textbf{{{escape(r['measures'][row['measure']])}}}, "
-                        rf"{escape(r['passes'][row['pass']]['label'])}}} \\")
+            label = r["passes"][row["pass"]]["label"]
+            name = r["measures"][row["measure"]]
+            if row["measure"] in RETIRED:
+                name, label = f"{name} (retired yes or no label)", label.removesuffix(" (current)")
+            rows.append(rf"\multicolumn{{7}}{{@{{}}l}}{{\textbf{{{escape(name)}}}, {escape(label)}}} \\")
             last = (row["measure"], row["pass"])
         counts = " & ".join("--" if n is None else str(n) for n in (row["read"], row["held"], row["wrong"],
                                                                     row["unclear"]))
@@ -322,8 +335,8 @@ def day(iso: str) -> str:
 
 
 def study_tex() -> str:
-    """The multi-domain study's valid runs (scripts/paper/study_ladders.py valid_runs), their dates, and the regulators'
-    models by use."""
+    """The multi-domain study's valid runs (scripts/paper/study_ladders.py valid_runs), their dates, the judges of its
+    CheatBench verdicts and of its scores, and the regulators' models by use."""
     listed = valid_runs()
     valid = [r.meta for r in listed]
     dates = []
@@ -337,27 +350,36 @@ def study_tex() -> str:
         else f"{day(first)} -- {day(last)}"
     used = Counter(r["regulator_model"] for r in valid if r["regulator_model"])
     items = "\n".join(rf"  \item {model_name(k)}" for k, _ in sorted(used.items(), key=lambda kv: (-kv[1], kv[0])))
-    judges = study_judges([r.path for r in listed])
+    runs = [r.path for r in listed]
     return (HEADER.format(source="runs/study_exploration_1/INDEX.jsonl, each valid run's run.json and judges/")
             + rf"\newcommand{{\StudyRuns}}{{{len(valid)}}}" + "\n"
             + rf"\newcommand{{\StudyDates}}{{{span}}}" + "\n"
-            + "".join(rf"\newcommand{{\{macro}}}{{{name}}}" + "\n" for macro, name in judges.items())
+            + rf"\newcommand{{\StudyCheatBenchJudge}}{{{cheatbench_judge(runs)}}}" + "\n"
+            + rf"\newcommand{{\StudyLabelsJudged}}{{{labels_judged(runs)}}}" + "\n"
             + "\\newcommand{\\RegulatorModelList}{%\n\\begin{itemize}\n" + items + "\n\\end{itemize}}\n")
 
 
-def study_judges(runs: list[Path]) -> dict[str, str]:
-    """The macros naming the judge of each pass whose verdicts the measures take on the study's runs
-    (verdict_files.applied): StudyCheatBenchJudge, StudySchemingJudge and StudyLabelsJudge. A pass read by several
-    judges, or a judge outside JUDGE_NAMES, stops the build, so the prose names the one judge the tables rest on."""
-    out = {}
-    for macro, pass_name in (("StudyCheatBenchJudge", verdict_files.CHEATBENCH_PASS),
-                             ("StudySchemingJudge", verdict_files.SCHEMING_PASS),
-                             ("StudyLabelsJudge", verdict_files.LABELS_PASS)):
-        used = {verdict_files.applied(verdict_files.read(run).get(pass_name) or {}) for run in runs} - {None}
-        if len(used) != 1 or next(iter(used)) not in JUDGE_NAMES:
-            raise SystemExit(f"the study's {pass_name} verdicts come from {sorted(used)}, not one named judge")
-        out[macro] = JUDGE_NAMES[used.pop()]
-    return out
+def cheatbench_judge(runs: list[Path]) -> str:
+    """The name of the judge whose CheatBench verdicts the measures take on the study's runs (verdict_files.applied).
+    A pass read by several judges, or a judge outside JUDGE_NAMES, stops the build, so the prose names the one judge
+    the tables rest on."""
+    name = verdict_files.CHEATBENCH_PASS
+    used = {verdict_files.applied(verdict_files.read(run).get(name) or {}) for run in runs} - {None}
+    if len(used) != 1 or next(iter(used)) not in JUDGE_NAMES:
+        raise SystemExit(f"the study's {name} verdicts come from {sorted(used)}, not one named judge")
+    return JUDGE_NAMES[used.pop()]
+
+
+def labels_judged(runs: list[Path]) -> str:
+    """The sentence naming the judge whose scores the measures read on the study's runs (judge_labels.labels'
+    "judge"), or saying that no judge has scored them. Several judges, or a judge outside JUDGE_NAMES, stop the
+    build."""
+    used = {judge_labels.labels(run)["judge"] for run in runs} - {None}
+    if len(used) > 1 or not used <= set(JUDGE_NAMES):
+        raise SystemExit(f"the study's scores come from {sorted(used)}, not one named judge")
+    if not used:
+        return "No judge has scored these runs yet."
+    return f"One judge, {JUDGE_NAMES[used.pop()]}, scored every agent of these runs, and no human checked its scores."
 
 
 def stage2_tex() -> str:
@@ -400,6 +422,7 @@ def generated_files() -> dict[Path, str]:
         GENERATED / "cheating_rungs.tex": cheating_rungs_tex(),
         GENERATED / "coordination_levels.tex": coordination_levels_tex(),
         GENERATED / "collusion_rungs.tex": collusion_rungs_tex(),
+        GENERATED / "score_anchors.tex": score_anchors_tex(),
         GENERATED / "reliability.tex": reliability_tex(),
     }
     if STUDY_INDEX.exists():

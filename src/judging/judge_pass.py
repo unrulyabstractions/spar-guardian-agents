@@ -1,14 +1,11 @@
 """`python -m src judge-pass`: a judge pass over runs' stored records, under a dollar cap, into judges/ alone.
 
     python -m src judge-pass cheatbench runs/study_exploration_1 --judge gpt-6-luna --cap 5 --limit 10
-    python -m src judge-pass scheming <run> [<run> ...] --judge gpt-6-luna --cap 2 [--batch] [--only-missing]
     python -m src judge-pass labels runs/study_exploration_1 --judge gpt-6-luna --cap 5 --limit 10
 
 Passes (PASSES):
 - cheatbench: CheatBench's judge on every stored trajectory CheatBench would judge (cheatbench_units), one call each.
-- scheming: the Collusion ladder's judge on the board of every run in which code places a pair at collusion
-  (src/judging/scheming_judge.py), one call per run; each pair's verdict is derived from it in code.
-- labels: the judge labels awareness and manipulation on every agent that qualifies for one
+- labels: the judge labels disclosure and manipulation, each a score with an excerpt, on every agent of a run
   (src/judging/labels_judge.py), one call each.
 
 A pass reads each run's stored record (run.json, episodes.jsonl, the transcripts, the boards) and writes only its
@@ -19,8 +16,7 @@ transcript viewer lists them.
 Money. The pass refuses to start without a cap in dollars, and for a judge whose model has no registry price or no
 max_output. Before each call it reserves the most that call can cost: every byte of the message and of the schema
 as an input token (a byte-level tokenizer gives at most one token per byte) plus the model's max_output as output,
-at the registry's rates (the batch rates with --batch; a prompt past the long-prompt line at that line's rates), twice
-over for a unit that may be asked again after a failed quote check (Unit.recheck), its note included. A call
+at the registry's rates (the batch rates with --batch; a prompt past the long-prompt line at that line's rates). A call
 whose reservation would take the spent and reserved dollars past the cap is not made, and no later call is: the pass
 stops there. After each call its reservation is replaced by its cost from its own token counts. So the cap is never
 passed. It prints a line per call, then the calls, their tokens and their dollars.
@@ -32,9 +28,7 @@ its error, and the pass goes on. --limit N judges the first N units to judge, th
 --batch uses the provider's batch API (half price, up to a day).
 
 Units a pass no longer has. When a run's file gets a new row, the rows of units the pass no longer gives that run are
-dropped (verdict_files.write's keep): a scheming file of the retired per-pair shape (rows keyed a|b) becomes the one
-board row, and a labels row of an agent that no longer qualifies goes. A run that gets no new row keeps its file as it
-is; the readers ignore a row of the retired shape (judge_records.pair_scheming reads only the board row).
+dropped (verdict_files.write's keep).
 """
 from __future__ import annotations
 
@@ -49,7 +43,6 @@ from src.export.run_export import VERDICT_IDENTITY
 from src.judging import cheatbench_judge as judging
 from src.judging import verdict_files
 from src.judging.labels_judge import labels_units
-from src.judging.scheming_judge import scheming_units
 from src.measures.run_directory import RunDir
 from src.measures.run_listing import list_collection
 from src.models.model_registry import cost_usd
@@ -97,7 +90,6 @@ def cheatbench_units(run_dir: Path) -> tuple[list[judging.Unit], list[str]]:
 
 PASSES: dict[str, Callable[[Path], tuple[list[judging.Unit], list[str]]]] = {
     "cheatbench": cheatbench_units,
-    "scheming": scheming_units,
     "labels": labels_units,
 }
 """Each pass's units, by the pass names verdict_files.PASSES lists."""
@@ -133,13 +125,10 @@ def todo(units: list[judging.Unit], held: dict[str, dict], *, only_missing: bool
 # --------------------------------------------------------------------------
 def most_cost(judge: judging.Judge, unit: judging.Unit) -> float:
     """The most one unit can cost: every byte of the message and of the schema as an input token, plus the model's
-    max_output as output, at the judge's prices; twice over, with the most a note can add, for a unit that may be asked
-    again (Unit.recheck)."""
+    max_output as output, at the judge's prices."""
     schema = len(json.dumps(unit.schema.json_schema.model_dump(exclude_none=True)).encode())
     tokens = len(unit.text.encode()) + schema + MESSAGE_OVERHEAD
-    if unit.recheck is None:
-        return cost_usd(judge.prices, tokens, 0, judge.max_output)
-    return cost_usd(judge.prices, 2 * tokens + 4 * judging.RECHECK_CHARS, 0, 2 * judge.max_output)
+    return cost_usd(judge.prices, tokens, 0, judge.max_output)
 
 
 @dataclass

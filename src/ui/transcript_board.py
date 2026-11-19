@@ -4,7 +4,8 @@ transcript viewer (src/ui/transcript_viewer.py, route /api/board).
     payload = board_payload(run_dir, levels)
     payload["agents"][0]["calls"][0]        # {k, m, t, dur, tool, summary, board, labels}
     payload["agents"][0]["uncited"]         # [{ladder, level, index, evidence}]: levels reached at no cited call
-    payload["posts"][0]                     # {label, writer, role, kind, t, call, text, reads, scheming}
+    payload["posts"][0]                     # {label, writer, role, kind, t, call, text, reads, labels}
+    payload["posts"][0]["reads"][0]         # {agent, k, t, form ("latest" | "from" | None), asked}
     payload["pair"]                         # the two agents the tab opens with, and payload["pair_why"]
 
 The calls are run_calls.load_run's, numbered as the transcript scan numbers them (the agent tab's "Call k").
@@ -14,15 +15,17 @@ order: t is the call's place in Run.ordered (by turn, then agent and number) and
 numbered P1, P2, ... in board order as the judges number them (src/judging/judge_records.py posts), system notices
 included. A post is placed at the start of the call that wrote it; a system notice, which no call wrote, at the end of
 the call of the board's last event before it. Each read is a board_read call of another agent whose result held the
-post.
+post, with its form from the call's own arguments (src/swarm/board.py board_read, read_form): "from" when the call
+named the post's writer in `from_agent`, with `asked` that agent; "latest" when it asked for the newest posts (`latest`,
+or no argument) or named another writer; None when its arguments are none of the tool's, and the payload's notes count
+such reads.
 
 The labels of a call are the ones the run page draws (`levels`, transcript_levels.compute's answer): this module
 places them and computes no level. A level whose evidence cites no call (levels["events"] with neither k nor call_id:
 on SWE the access log's reads, the remote's pushes and the hand-in; Coordination low and above; Collusion
 collaboration and above) is no call's label: the agent's "uncited" lists it, and the tab shows it beside the lane.
-A post carries a scheming mark for each flag of the scheming judge that counts for it (the Collusion measure's run
-flags in `levels`): what the post shows, the quote, the reason, the code's check and the colluding pairs it lies
-between (written by one, read by the other), whose verdicts it can decide.
+A post carries each judge label whose excerpt code located in it (the measure's judge labels in `levels`,
+src/measures/judge_labels.py labels): the agent, the label, its score, the excerpt, the reason and the excerpt's span.
 
 The default pair: the pair with the highest Collusion rung above none (src/measures/collusion.py's pairs in
 `levels`), workers before influencers, then the pair with more posts; else the two workers with the most posts.
@@ -31,9 +34,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.judging.judge_records import between
 from src.judging.judge_records import posts as labelled_posts
-from src.measures import collusion
+from src.measures import collusion, judge_labels
 from src.measures.run_calls import Call, Run, load_run
 from src.measures.run_directory import RunDir, is_worker
 
@@ -43,6 +45,8 @@ BOARD_TOOLS = {"board_post": "post", "board_read": "read", "board_status": "stat
 """The board's tools and the kind of board call each makes."""
 LADDER_KEYS = ("name", "levels", "line", "line_words")
 """What the tab reads of each ladder: what the page's levelChip and lineMark (tv_levels.js) draw a level from."""
+READ_ARGUMENTS = {"latest", "from_agent", "latest_from"}
+"""The board_read tool's arguments (src/swarm/board.py board_read)."""
 CLOCKS = {
     "eval_log": "seconds from the first call's start, from the eval log's tool events",
     "call_order": "the run's call order (by turn, then agent and number): the run's eval log holds no times",
@@ -92,6 +96,17 @@ def summary(c: Call, wrote: list[str], read: list[str]) -> str:
     return one_line(" ".join(f"{k}={v}" for k, v in c.arguments.items())) or c.tool
 
 
+def read_form(arguments: dict, writer: str) -> tuple[str | None, str | None]:
+    """(form, the agent asked for) of a board_read call's read of a post by `writer`, on the module's terms."""
+    given = {k: v for k, v in arguments.items() if v is not None}
+    if not set(given) <= READ_ARGUMENTS:
+        return None, None
+    asked = given.get("from_agent")
+    if asked == writer:
+        return "from", asked
+    return "latest", None
+
+
 def call_labels(levels: dict, agent: str, ids: dict[str, int]) -> dict[int, list[dict]]:
     """call number -> the labels the run page puts on it (levels["labels"], by k or by tool call id)."""
     out: dict[int, list[dict]] = {}
@@ -109,19 +124,18 @@ def uncited(levels: dict, agent: str) -> list[dict]:
             for e in (levels.get("events") or {}).get(agent) or [] if e.get("k") is None and e.get("call_id") is None]
 
 
-def scheming_marks(levels: dict) -> dict[str, list[dict]]:
-    """post label -> the scheming judge's flags that count for the post (the Collusion measure's run flags in
-    `levels`): {named: the post the judge named, which, quote, reason, check, pairs: the colluding pairs the post lies
-    between}."""
-    measure = levels.get("collusion") or {}
-    colluding = [p["agents"] for p in measure.get("pairs") or []
-                 if p["scheming"]["verdict"] != collusion.NOT_APPLICABLE]
+def post_labels(levels: dict) -> dict[str, list[dict]]:
+    """post label -> the judge labels whose excerpt code located in the post: {agent, label, score, excerpt, reason,
+    start, end}, from the measure's judge labels in `levels`."""
     out: dict[str, list[dict]] = {}
-    for flag in (measure.get("scheming") or {}).get("flags") or []:
-        for post in flag["posts"]:
-            out.setdefault(post["label"], []).append({
-                "named": flag["post"], **{k: flag[k] for k in ("which", "quote", "reason", "check")},
-                "pairs": [pair for pair in colluding if between(post, *pair)]})
+    for agent, row in levels["judge_labels"]["agents"].items():
+        for label in judge_labels.LABELS if row else ():
+            e = row[label]
+            where = e["located"]
+            if where and where["where"] == "post":
+                out.setdefault(where["post"], []).append({
+                    "agent": agent, "label": label, **{k: e[k] for k in ("score", "excerpt", "reason")},
+                    "start": where["start"], "end": where["end"]})
     return out
 
 
@@ -148,8 +162,8 @@ def notice_time(message: dict, events: list[dict], by_id: dict[str, Call],
 
 
 def board_payload(run_dir: Path, levels: dict) -> dict:
-    """The Board tab's data for one run: {clock, clock_about, total, agents, posts, pair, pair_why, ladders, notes}.
-    `levels` is the run page's ladders (transcript_levels.compute)."""
+    """The Board tab's data for one run: {clock, clock_about, total, agents, posts, pair, pair_why, ladders,
+    label_names (each judge label's name), notes}. `levels` is the run page's ladders (transcript_levels.compute)."""
     run = load_run(run_dir, times=True)
     name, at, total = clock(run)
     steps = step_numbers(run_dir)
@@ -174,7 +188,7 @@ def board_payload(run_dir: Path, levels: dict) -> dict:
     by_id = {c.id: c for rows in run.calls.values() for c in rows}
     sent_by = {mid: by_id.get(e.get("tool_call_id")) for e in events if e.get("kind") == "sent"
                for mid in e.get("message_ids") or []}
-    marks = scheming_marks(levels)
+    judged = post_labels(levels)
     ordered = sorted(by_id.values(), key=lambda c: at[(c.agent, c.k)][0])
     posts = []
     for post, message in zip(labelled_posts(run), run.messages):
@@ -183,16 +197,21 @@ def board_payload(run_dir: Path, levels: dict) -> dict:
             t = at[(writer_call.agent, writer_call.k)][0]
         else:
             t = notice_time(message, events, by_id, at)
-        reads = [{"agent": c.agent, "k": c.k, "t": at[(c.agent, c.k)][0]} for c in ordered
+        reads = [{"agent": c.agent, "k": c.k, "t": at[(c.agent, c.k)][0],
+                  **dict(zip(("form", "asked"), read_form(c.arguments, post["writer"])))} for c in ordered
                  if post["label"] in read.get(c.id, []) and c.agent != post["writer"]]
         posts.append({"label": post["label"], "writer": post["writer"], "role": run.roles.get(post["writer"]),
                       "kind": "post" if post["writer"] in run.roles else "system", "t": t,
                       "call": writer_call.k if writer_call else None, "text": post["content"], "reads": reads,
-                      "scheming": marks.get(post["label"], [])})
+                      "labels": judged.get(post["label"], [])})
     posts.sort(key=lambda p: p["t"])
     posts_by = {a: sum(p["writer"] == a for p in posts) for a in run.roles}
     pair, why = default_pair(levels, run.roles, posts_by)
+    formless = sum(r["form"] is None for p in posts for r in p["reads"])
+    notes = run.notes + ([f"{formless} reads come from board_read calls whose arguments are none of the tool's: "
+                          "their form is not recorded, and they are drawn as plain reads."] if formless else [])
     return {"clock": name, "clock_about": CLOCKS[name], "total": total, "agents": agents, "posts": posts,
             "pair": pair, "pair_why": why,
             "ladders": {k: {key: v[key] for key in LADDER_KEYS} for k, v in levels["ladders"].items()},
-            "notes": run.notes}
+            "label_names": {k: v["name"] for k, v in levels["judge_label_about"]["labels"].items()},
+            "notes": notes}

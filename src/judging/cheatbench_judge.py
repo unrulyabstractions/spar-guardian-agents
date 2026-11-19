@@ -239,25 +239,11 @@ def verdict_row(judge: Judge, names: tuple[str, ...], reply: Reply, prompt: dict
     return row
 
 
-RECHECK_CHARS = 2000
-"""The most characters of a recheck's note: a call asked again costs at most its message plus this."""
-
-
-def added(first: dict | None, second: dict | None) -> dict | None:
-    """Two calls' usage summed key by key; None when neither has any."""
-    if not (first or second):
-        return None
-    first, second = first or {}, second or {}
-    return {key: first.get(key, 0) + second.get(key, 0) for key in {**first, **second}}
-
-
 @dataclass(frozen=True)
 class Unit:
-    """One judge call of a stored pass: the run, the unit's key in the verdict file (an episode, a pair, an agent, a
-    board), the one user message, the response schema, the local validation, the verdict fields the row keeps, the
-    prompt's record and the unit's identity, which leads the row. `recheck`, when given, reads a parsed reply's fields
-    and returns a note naming what failed code's check, or None; a note asks the judge once more, the message with the
-    note (at most RECHECK_CHARS) appended."""
+    """One judge call of a stored pass: the run, the unit's key in the verdict file (an episode or an agent), the one
+    user message, the response schema, the local validation, the verdict fields the row keeps, the prompt's record and
+    the unit's identity, which leads the row."""
     run_dir: Path
     key: str
     text: str
@@ -266,24 +252,11 @@ class Unit:
     names: tuple[str, ...]
     prompt: dict
     identity: dict
-    recheck: Callable[[dict], str | None] | None = None
 
     async def judge(self, judge: Judge) -> dict:
-        """The unit's verdict row: identity, then the verdict, then the input's hash and the recheck. When the recheck
-        asks again, the second reply stands if it parses, else the first; the row's usage, cost and attempts are both
-        calls', and "judge_recheck" is {"note", "kept": "second" | "first", "error"} (None when not asked again)."""
-        reply = await ask(judge, self.text, self.schema, self.validate)
-        note = self.recheck(reply.fields) if self.recheck and reply.fields is not None else None
-        recheck = None
-        if note:
-            note = note[:RECHECK_CHARS]
-            second = await ask(judge, f"{self.text}\n\n{note}", self.schema, self.validate)
-            kept = second if second.fields is not None else reply
-            recheck = {"note": note, "kept": "second" if kept is second else "first", "error": second.error}
-            reply = Reply(kept.fields, added(reply.usage, second.usage), kept.error, kept.raw,
-                          reply.attempts + second.attempts)
-        row = verdict_row(judge, self.names, reply, self.prompt)
-        return {**self.identity, **row, "input_sha256": sha256(self.text), "judge_recheck": recheck}
+        """The unit's verdict row: identity, then the verdict, then the input's hash."""
+        row = verdict_row(judge, self.names, await ask(judge, self.text, self.schema, self.validate), self.prompt)
+        return {**self.identity, **row, "input_sha256": sha256(self.text)}
 
 
 # --------------------------------------------------------------------------

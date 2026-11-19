@@ -3,15 +3,15 @@
  * which serves the valid runs only; the columns are the run's identity, its worker and influencer conditioning, the
  * team's three ladders, the judge labels and the influencers' own three ladders, under a band that names the three
  * groups; one Cheating cell holds the code's rung and cheated and, under it, CheatBench's judge's word, each marked by
- * who says it; the awareness of its agents beside a collusion rung; the judge labels awareness and manipulation (k of n
- * judged aware or manipulating) and disclosure, with no filter; the Cheating ladder's alarm marks the row and is
- * counted above the table, with no column; the task, the agents, the conditioning and the arm are the server's words;
- * a legend table under the runs shows every level of the three ladders as the cells draw it, with each ladder's line. */
+ * who says it; the judge labels disclosure and manipulation, each the team's highest score and the worker it is of,
+ * linked to that worker's excerpt, with a filter each ("at least" a number), and the influencers' own scores in the
+ * Influencers band; the Cheating ladder's alarm marks the row and is counted above the table, with no column; the task,
+ * the agents, the conditioning and the arm are the server's words; a legend table under the runs shows every level of
+ * the three ladders as the cells draw it, with each ladder's line. */
 import { enc, fmtInt, h, plural } from '/static/app/dom.js';
 import { muted, select } from '/static/app/components.js';
-import { awarenessBeside, cheatbenchTeam, cheatingCell, disclosureTeam, labelTeam, levelChip, lineMark,
-  unvalidatedNote } from './tv_levels.js';
-import { CHEATBENCH, COLLECTION_ORDER, DISCLOSURE, armLabel, collectionOf, influencerParts, modelLabel, setCollections,
+import { cheatbenchTeam, cheatingCell, labelAbout, levelChip, lineMark, scoreChip, teamScore } from './tv_levels.js';
+import { CHEATBENCH, COLLECTION_ORDER, armLabel, collectionOf, influencerParts, modelLabel, setCollections,
   taskLabel } from './tv_labels.js';
 
 let INDEX = null;
@@ -38,25 +38,21 @@ export async function loadLadders() {
 }
 
 const alarmOf = r => r.levels.alarm;
-const disclosureSort = r => (r.disclosure.value ? -1 : r.disclosure.yes);
-
-/** How many listed runs the scheming judge's verdicts reached on the Collusion ladder (the index's
- * levels.collusion_judged). */
-export const collusionJudged = rows => rows.filter(r => r.levels.collusion_judged).length;
+/** A run's team score of a label (its index row's labels.team), -1 when not judged. */
+const teamScoreOf = (r, k) => (r.labels.team[k] ? r.labels.team[k].score : -1);
+/** Where one agent's excerpt of a label opens: the run page at the agent's tab or the Board, the excerpt highlighted. */
+const excerptHref = (r, label) => agent => `#/run/${r.id.split('/').map(enc).join('/')}?agent=${enc(agent)}&label=${enc(label)}`;
 
 /** The legend under the runs, and the Ladders page's list of the three ladders: one row per ladder, every level drawn
- * as its cell with the ladder's line marked, and how the level is read. d is /api/ladders' answer. judged is how many
- * listed runs a judge read on Collusion: its judge rungs read "not judged" when none was. */
-export function legendTable(d, judged, title = 'Legend: the three ladder columns') {
+ * as its cell with the ladder's line marked, and how the level is read. d is /api/ladders' answer. */
+export function legendTable(d, title = 'Legend: the three ladder columns') {
   const rows = d.order.map(L => {
     const lad = d.ladders[L];
-    const judge = new Set(lad.judge_levels || []);
     return h('tr', null,
       h('td', null, h('b', null, lad.name)),
       h('td', { class: 'lv' }, lad.levels.map(v => [
         v === lad.line ? h('div', { class: 'idx-legend-line' }, lineMark(lad), ' ', lad.line_words) : null,
-        h('div', { class: 'idx-legend-level' }, levelChip(L, lad, v),
-          judge.has(v) ? h('span', { class: 'lv-judge-tag', title: 'only a judge\'s verdicts give this rung' }, judged ? `the one judge rung, ${judged} runs judged` : 'the one judge rung, not judged') : null)]),
+        h('div', { class: 'idx-legend-level' }, levelChip(L, lad, v))]),
         L === 'cheating' ? h('div', { class: 'idx-legend-sample' }, muted('How a Cheating cell reads (an example, no run\'s data): ', 'small block'),
           cheatingCell(lad, lad.line, true, h('span', { class: 'small' }, '1 of 3 cheated'))) : null),
       h('td', { class: 'small' }, lad.rule));
@@ -64,7 +60,7 @@ export function legendTable(d, judged, title = 'Legend: the three ladder columns
   return h('section', { class: 'card idx-legend', id: 'legend' }, h('h2', null, title),
     h('p', { class: 'small muted' }, 'A ladder cell shows the level the team reached: the colour of the level, one bar per level of the ladder, the level\'s name and its rank. ',
       'Each ladder has a line: the levels below it are drawn pale, the levels above it strong, and the bars leave a gap at it. ',
-      'All three ladders are read by code from the run\'s records; Collusion\'s top rung, scheming, comes only from a judge, and without it a run tops out at collusion. Beside a collusion rung stands the awareness of its agents. ',
+      'All three ladders are read by code from the run\'s records, with no judge. ',
       h('a', { href: '#/ladders' }, 'What these words mean, and the levels task by task')),
     h('div', { class: 'table-wrap' }, h('table', { class: 'data idx-legend-table' },
       h('thead', null, h('tr', null, ['Ladder', 'Levels, lowest to highest, and the line', 'How the level is read'].map(t => h('th', { scope: 'col' }, t)))),
@@ -75,7 +71,7 @@ const colIx = r => { const i = COLLECTION_ORDER.indexOf(r.col); return i < 0 ? 9
 const TEAM_TITLE = {
   cheating: 'The team\'s rung on the Cheating ladder, read by code: the highest rung of any worker, or of the team\'s own evidence, and whether the team cheated. Under it, CheatBench\'s judge\'s own word: how many workers it says cheated. An influencer is not in either (the Influencers columns)',
   coordination: 'The team\'s level on the Coordination ladder: the workers\' levels averaged and rounded half up; an influencer is not in it (the Influencers columns)',
-  collusion: 'The team\'s rung on the Collusion ladder: the highest rung of a pair of workers, with the awareness of the pair\'s agents beside a collusion rung; an influencer is not in it (the Influencers columns). Without a judge\'s verdicts it tops out at collusion',
+  collusion: 'The team\'s rung on the Collusion ladder, read by code: the highest rung of a pair of workers; an influencer is not in it (the Influencers columns)',
 };
 
 /** The influencer conditioning filter's value of one influencer: its kind and level. */
@@ -84,15 +80,16 @@ const NO_INFLUENCER = 'none';
 const influencerKinds = r => (r.influencer_conditioning.length ? r.influencer_conditioning.map(influencerKind) : [NO_INFLUENCER]);
 
 /** The runs table's columns, in the order the user set on 2026-11-19: the run's identity, the two conditioning
- * columns, the team's three ladders, the judge labels, then the influencers' three ladders. Each is {key, label,
- * group, title, sort(row), cell(row)}; group names the band over it (GROUPS). d is /api/ladders' answer. */
+ * columns, the team's three ladders, the judge labels, then the influencers' three ladders and their judge labels.
+ * Each is {key, label, group, title, sort(row), cell(row)}; group names the band over it (GROUPS). d is /api/ladders'
+ * answer. */
 function columns(d) {
   const lad = L => d.ladders[L];
   const rank = (L, v) => lad(L).levels.indexOf(v);
   const team = L => ({ key: 'lv_' + L, label: lad(L).name, group: 'team', title: TEAM_TITLE[L], sort: r => rank(L, r.levels.team[L]),
     cell: r => (L === 'cheating'
       ? cheatingCell(lad(L), r.levels.team[L], r.levels.cheated, cheatbenchTeam(r.cheatbench), false)
-      : [levelChip(L, lad(L), r.levels.team[L], false), L === 'collusion' ? awarenessBeside(r.levels.collusion_awareness) : null]) });
+      : levelChip(L, lad(L), r.levels.team[L], false)) });
   const influencers = L => ({ key: `lv_${L}_influencers`, label: lad(L).name, group: 'influencers',
     title: `Each influencer's own level on the ${lad(L).name} ladder, read the same way as a worker's and kept out of the team's level`,
     sort: r => Math.max(-1, ...r.levels[`${L}_influencers`].map(x => rank(L, x.level))),
@@ -102,6 +99,17 @@ function columns(d) {
       return h('span', { class: 'lv-influencers' }, xs.map(x => h('div', { class: 'lv-influencer-row' },
         h('span', { class: 'small muted' }, `${x.role} `), levelChip(L, lad(L), x.level, false))));
     } });
+  const about = d.judge_labels;
+  const label = k => ({ key: k, label: about.labels[k].name, group: 'labels',
+    title: `${about.labels[k].scored} The team's highest score of a worker (0 to 100) and which worker; the worker opens its excerpt. ${about.scored_by}`,
+    sort: r => teamScoreOf(r, k), cell: r => teamScore(r.labels.team[k], excerptHref(r, k)) });
+  const influencerLabel = k => ({ key: `${k}_influencers`, label: about.labels[k].name, group: 'influencers',
+    title: `Each influencer's own ${about.labels[k].name.toLowerCase()} score, kept out of the team's`,
+    sort: r => Math.max(-1, ...r.labels.influencers.map(x => (x[k] == null ? -1 : x[k]))),
+    cell: r => (!r.labels.influencers.length ? muted(r.n_agents > 1 ? 'no influencer' : 'one agent', 'small')
+      : h('span', { class: 'lv-influencers' }, r.labels.influencers.map(x => h('div', { class: 'lv-influencer-row' },
+        h('span', { class: 'small muted' }, `${x.role} `), x[k] == null ? muted('not judged', 'small')
+          : h('a', { href: excerptHref(r, k)(x.agent), title: `open ${x.agent}'s excerpt` }, scoreChip(x[k])))))) });
   return [
     { key: 'col', label: 'Collection', title: 'Which folder under runs/ holds the run', sort: colIx,
       cell: r => h('span', { title: `${collectionOf(r.col).tag}: ${collectionOf(r.col).about}` }, collectionOf(r.col).label) },
@@ -118,14 +126,9 @@ function columns(d) {
       cell: r => (r.influencer_conditioning.length ? r.influencer_conditioning.map(x => h('div', { class: 'small' }, influencerParts(x).map((part, i) => [i ? ' · ' : '', h('span', { class: 'nowrap' }, part)])))
         : muted(NO_INFLUENCER, 'small')) },
     ...d.order.map(team),
-    ...['awareness', 'manipulation'].map(k => {
-      const about = d.judge_labels[k];
-      return { key: k, label: about.name, group: 'labels', note: unvalidatedNote(about),
-        title: `${about.question} Read for ${about.read_for}, by ${about.judge}; the cell counts the agents it says yes of the agents it read. No rung`,
-        sort: r => (r.labels[k].read ? r.labels[k].yes / r.labels[k].read : -1), cell: r => labelTeam(r.labels[k], about) };
-    }),
-    { key: 'disclosure', label: DISCLOSURE.column, group: 'labels', title: DISCLOSURE.about, sort: disclosureSort, cell: r => disclosureTeam(r.disclosure) },
+    ...Object.keys(about.labels).map(label),
     ...d.order.map(influencers),
+    ...Object.keys(about.labels).map(influencerLabel),
   ];
 }
 
@@ -134,13 +137,15 @@ function columns(d) {
 const GROUPS = { team: 'Team', labels: 'Judge labels', influencers: 'Influencers' };
 
 // Columns whose text wraps.
-const WRAP = new Set(['col', 'run', 'task', 'agents', 'model', 'worker', 'influencer', 'awareness', 'manipulation', 'disclosure']);
+const WRAP = new Set(['col', 'run', 'task', 'agents', 'model', 'worker', 'influencer']);
 
 function uniq(a) { return [...new Set(a.filter(x => x != null))]; }
 
-/** The filters, in the order the page shows them: {key (the query key), label, options(rows) -> [[value, text]],
- * test(row, value)}. The ladder filters read the team's level only. Worker conditioning is the filter that tells runs
- * told to cheat from runs not told; influencer conditioning keeps the runs with an influencer of that kind and level. */
+/** The filters, in the order the page shows them: {key (the query key), label, options(rows) -> [[value, text]] or
+ * number (a box for a score), test(row, value)}. The ladder filters read the team's level only. Worker conditioning
+ * is the filter that tells runs told to cheat from runs not told; influencer conditioning keeps the runs with an
+ * influencer of that kind and level; "Disclosure at least" and "Manipulation at least" keep the runs whose team score
+ * is at least the number. */
 function filters(d) {
   const lad = L => d.ladders[L];
   return [
@@ -157,6 +162,8 @@ function filters(d) {
       options: rows => lad(L).levels.filter(v => rows.some(r => r.levels.team[L] === v)).map(v => [v, v]),
       test: (r, v) => r.levels.team[L] === v })),
     { key: 'cheated', label: 'Cheated (team, code)', options: () => [['yes', 'yes'], ['no', 'no']], test: (r, v) => r.levels.cheated === (v === 'yes') },
+    ...Object.entries(d.judge_labels.labels).map(([k, x]) => ({ key: `min_${k}`, label: `${x.name} at least`, number: true,
+      test: (r, v) => teamScoreOf(r, k) >= Number(v) })),
   ];
 }
 
@@ -187,6 +194,14 @@ export async function viewIndex(q) {
   const inputs = new Map();
   const changed = () => { state.page = 0; draw(); };
   for (const f of FILTERS) {
+    if (f.number) {
+      const box = h('input', { type: 'number', min: '0', max: '100', step: '1', class: 'idx-score-box', placeholder: '0 to 100',
+        'aria-label': f.label, value: state.f[f.key] });
+      box.addEventListener('input', () => { state.f[f.key] = box.value.trim(); changed(); });
+      inputs.set(f.key, box);
+      filterBox.appendChild(h('label', { class: 'field' }, h('span', { class: 'field-label' }, f.label), box));
+      continue;
+    }
     const options = [['', 'All'], ...f.options(rows)];
     if (!options.some(([v]) => v === state.f[f.key])) state.f[f.key] = '';
     const sel = select(options, state.f[f.key], v => { state.f[f.key] = v; changed(); }, { 'aria-label': f.label });
@@ -294,14 +309,11 @@ export async function viewIndex(q) {
           muted(` ${fmtInt(collectionOf(c).runs)} valid runs.`, 'small')))),
       h('p', null, h('strong', null, 'Valid runs only. '), 'The viewer lists, measures and serves the valid runs of each collection; invalid, incomplete, mock, attempt and extra-copy runs are not read.'),
       h('p', null, h('strong', null, 'Ladders. '), 'The legend under the runs lists every level and each ladder\'s line; ', h('a', { href: '#/ladders' }, 'the Ladders page'), ` says what puts a run on each. Cheated: ${ladders.ladders.cheating.line_words}.`),
-      ['awareness', 'manipulation'].map(k => h('p', null, h('strong', null, `${ladders.judge_labels[k].name}. `),
-        `${ladders.judge_labels[k].question} Read for ${ladders.judge_labels[k].read_for}, by ${ladders.judge_labels[k].judge}. No rung. `,
-        `The column counts the agents judged yes of the agents the judge read, or reads "not read". `,
-        unvalidatedNote(ladders.judge_labels[k]))),
+      h('div', null, h('strong', null, 'Judge labels. '), 'Each column shows the team\'s highest score of a worker and which worker; the worker\'s name opens its excerpt. A run no judge has scored reads "not judged".',
+        labelAbout(ladders.judge_labels)),
       h('p', null, h('strong', null, 'Influencers. '), 'A regulator or a disregulator is an influencer: an agent the workers cannot tell from a worker. Influencer conditioning names each one, its instruction level and its model. Every team column leaves the influencers out; the Influencers columns show their own levels.'),
       h('p', null, h('strong', null, 'Alarm. '), 'The grader passed the hand-in and no agent of any role, and no evidence of the team\'s own, put a trace of the honeypot in it. A row with the alarm carries a red mark at its left edge; the line above the table counts them; the run page shows it.'),
       h('p', null, h('strong', null, `${CHEATBENCH.name}. `), CHEATBENCH.about),
-      h('p', null, h('strong', null, `${DISCLOSURE.column}. `), DISCLOSURE.about),
       h('p', null, `Index built ${idx.built_at}: ${fmtInt(idx.measured)} runs measured in ${idx.build_seconds} s, the others read from the cache${idx.errors.length ? `; ${idx.errors.length} runs could not be read` : ''}. A start measures again every run whose files changed.`)));
 
   return h('div', { class: 'page wide' },
@@ -309,5 +321,5 @@ export async function viewIndex(q) {
       + (idx.left_out.runs ? ` Not listed: ${fmtInt(idx.left_out.runs)} valid runs of the tasks the study does not read (${idx.left_out.tasks.join(', ')}).` : ''))),
     about, filterBox, summary, pager,
     h('div', { class: 'table-wrap idx-wrap' }, table),
-    legendTable(ladders, collusionJudged(rows)));
+    legendTable(ladders));
 }

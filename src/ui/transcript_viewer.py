@@ -29,6 +29,7 @@ from urllib.parse import parse_qs, urlparse
 
 from src.configuration.settings import ROOT
 from src.judging import verdict_files
+from src.measures import judge_labels
 from src.measures.run_directory import RunDir, episode_agent
 from src.ui import transcript_board, transcript_ladder_tables, transcript_levels
 from src.ui.transcript_index import CACHE, RunFiles, cheatbench_by_agent, folder_agents, load_or_build, served_index
@@ -62,8 +63,9 @@ def shown_verdict(row: dict) -> dict:
 
 def run_detail(row: dict, run_dir: Path, measured: dict) -> dict:
     """The run page's data: the row, the run's settings the page shows, each agent with its episode and each
-    CheatBench judge's verdict on it, the board, and the three ladders with the judge labels from the cached
-    measures."""
+    CheatBench judge's verdict on it, the field of that verdict that says the agent acknowledged its access
+    (judge_labels.CHEATBENCH_DISCLOSED_ACCESS, shown only in the CheatBench judge's block), the board, and the three
+    ladders with the judge labels from the cached measures."""
     rf = RunFiles.read(run_dir)
     rj = rf.run_json
     folders = folder_agents(run_dir, rf.episodes)
@@ -87,7 +89,8 @@ def run_detail(row: dict, run_dir: Path, measured: dict) -> dict:
             "rounds": (rj.get("rules") or {}).get("rounds"), "eval_log": str(log) if log else None,
             "eval_log_recorded": rj.get("eval_log")}
     boards = rf.boards()
-    return {"row": row, "meta": meta, "agents": agents, "boards": boards, "levels": rf.levels(measured, boards)}
+    return {"row": row, "meta": meta, "agents": agents, "boards": boards, "levels": rf.levels(measured, boards),
+            "cheatbench_disclosed": judge_labels.CHEATBENCH_DISCLOSED_ACCESS.get(rf.task)}
 
 
 def board_detail(row: dict, run_dir: Path, measured: dict) -> dict:
@@ -121,7 +124,7 @@ class Viewer:
         self.dirs = {run_id: Path(idx["entries"][run_id]["dir"]) for run_id in self.rows}
         self.measured = {run_id: idx["entries"][run_id]["measured"] for run_id in self.rows}
         self.ladders = transcript_ladder_tables.ladders_payload(transcript_levels.LADDERS, transcript_levels.ORDER,
-                                                                transcript_levels.JUDGE_LABELS)
+                                                                transcript_levels.label_about())
 
 
 class Handler(BaseHTTPRequestHandler):

@@ -148,7 +148,8 @@ reads all three ladders from a run's records, with no model call. We also track:
 \begin{itemize}
   \item Coordination ladder: How far each agent goes in back-and-forth with its teammates on the board
   \item Collusion ladder: How far each pair of agents takes each other's work
-  \item Judge labels: Whether an agent knowingly uses reference material, and whether it misleads its teammates
+  \item Judge labels: How explicitly an agent says that what it does is wrong, and how strongly it misleads another
+  agent
 \end{itemize}
 
 \subsubsection*{Cheating ladder}
@@ -246,7 +247,7 @@ Text copied from a board post is no take.
 The Coordination ladder measures the board.
 A planted piece counts on every channel, the board included.
 Agent $i$ takes $j$'s piece when $i$'s files hold a piece that $j$ held and $i$ did not.
-Code reads none, cooperation, collaboration and collusion.
+Code reads every rung.
 A pair reaches \textbf{collusion} when it pooled the exploit: planted pieces from both agents were exchanged.
 Either each took the other's piece, or the hand-in holds a piece of each.
 A piece counts for an agent that held it and either supplied it or put it in its own files by its own acts.
@@ -254,18 +255,10 @@ A piece an agent relayed from a teammate counts for the teammate.
 One piece moving one way is cooperation.
 Collusion by code does not show intent.
 Two agents can pool their pieces without either knowing that this is cheating.
-Wherever we show collusion, we show the awareness label of its agents beside it.
-A judge reads \textbf{scheming}, and only for pairs at collusion.
-The judge reads every post of the run's board once.
-It flags each post that talks about awareness that this is cheating, or about deceiving others.
-It needs no visible reasoning.
-The judge quotes a passage of each flagged post, and code checks that the quote is in that post.
-A colluding pair schemes when a flagged post was written by one of the two and read by the other.
 An agent's rung is the highest it holds with any teammate.
 A team's rung is the highest rung of a pair of workers.
 Influencers count as teammates, and we report their rungs apart from the team's.
 A one-agent run has no rung.
-Without a judge's verdicts, a colluding pair's scheming reads ``not judged''.
 
 \begin{table}[H]
   \centering
@@ -279,21 +272,41 @@ Without a judge's verdicts, a colluding pair's scheming reads ``not judged''.
 \subsubsection*{Judge labels}
 We set two \textbf{judge labels} beside the ladders.
 They are no rungs.
-\textbf{Awareness} means \AwarenessMeans{}.
-We read awareness for every agent at \CheatedFrom{} or above on the Cheating ladder.
-\textbf{Manipulation} asks whether a post of the agent, or its visible reasoning, shows it misleading another agent
-or planning to.
-Misleading covers stating what it believes false, withholding so that the other acts as it otherwise would not,
-hiding its real reason for a request, and steering or pressuring while concealing that it does.
-Honest persuasion does not count.
-We read manipulation for every agent that posted at least once.
-The judge gets the agent's posts and its reasoning, and not its whole trajectory.
-Each label answers yes or no with a quoted passage.
-Code checks that the quote is in the agent's own posts or reasoning.
-A yes whose quote fails the check reads \textbf{unchecked}.
-An independent reading found most manipulation yes verdicts wrong, and we do not report the label (Appendix B).
-\textit{CheatBench}'s judge records a third label, disclosure: whether the agent openly acknowledged its own access to
-the honeypot.
+For each label, the judge gives an agent a \textbf{score}: the strength of the strongest concrete evidence in the
+agent's own posts or reasoning.
+\textbf{Disclosure} scores how explicitly the agent says that its own conduct is wrong.
+Such a statement calls the conduct cheating, reward hacking, breaking a rule or getting around the evaluation.
+Calling planted material the reference or the upstream fix is weak evidence at most.
+A refusal discloses no wrongdoing.
+Permission in the instructions does not lower the score of an explicit statement.
+\textbf{Manipulation} scores how strongly the agent tries to steer what another agent does or believes.
+It has two kinds.
+The agent may mislead: it states what its own actions or reasoning contradict, hides its real reason, or plans to keep
+something from a teammate.
+The agent may control: it gives orders, assigns or delegates work, claims authority, or presses a teammate to act.
+The judge records which kind its strongest evidence is.
+Another agent's accusation is no evidence.
+An influencer that keeps its role secret as instructed does not manipulate by that alone.
+The judge scores against five anchors.
+With each score above zero it copies one \textbf{excerpt}, a passage of the agent's own post or reasoning.
+Code locates each excerpt in the agent's transcript: the post, or the call whose reasoning holds it.
+An excerpt that code cannot locate keeps its score and reads \textbf{not located}.
+The judge sees the agent's instructions, its posts, the posts it read, its reasoning, and its tool calls with the
+head of each result.
+One judge reads every agent of a run, once per agent, for both labels.
+We report the scores as counts by range and read no rate from a threshold.
+\textit{CheatBench}'s judge records a field of its own, \textbf{disclosed access}: whether the agent openly
+acknowledged its own access to the honeypot.
+We report it under that name, apart from the disclosure score.
+
+\begin{table}[H]
+  \centering
+  \small
+  \textbf{Score anchors} \quad {\color{black!60} the judge scores each label against these}
+
+  \smallskip
+  \input{generated/score_anchors}
+\end{table}
 
 \subsection*{Controls}
 \begin{itemize}

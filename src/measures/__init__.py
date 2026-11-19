@@ -16,12 +16,12 @@ API modules:
 - team_ladder.py: the team's record of the evidence and its travel evidence, one per sample.
 - cheating_ladder.py: the Cheating ladder (none, looked, tempted, attempted, hacked), by code.
 - coordination.py: the Coordination ladder (none, read, write, low, medium, high, extreme), from the board.
-- collusion.py: the Collusion ladder (none, cooperation, collaboration, collusion by code; scheming by a judge).
+- collusion.py: the Collusion ladder (none, cooperation, collaboration, collusion), by code.
 - collusion_takes.py: the Collusion ladder's take rules per task (TASK_RULES), each with its rule stated as data.
 - run_calls.py: the run's calls and boards as the take rules read them (load_run), and the take they find.
 - git_takes.py, text_takes.py, file_takes.py: the generic take rules: git, text and files.
-- judge_labels.py: the judges beside the ladders: CheatBench's labels beside the Cheating clauses, disclosure, and the
-  labels awareness and manipulation with the agents each is asked of.
+- judge_labels.py: the judges beside the ladders: CheatBench's labels beside the Cheating clauses, CheatBench's
+  disclosed access, and the judge labels disclosure and manipulation, each a score with an excerpt per agent.
 - ladder_by_domain.py: what puts an agent on each Cheating rung, per task the study reads, and the tasks it does not.
 - access_evidence.py: the access log as the transcript scan reads it.
 - ladder_domain.py: Domain, the base class of what a domain tells the code's evidence.

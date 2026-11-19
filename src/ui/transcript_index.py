@@ -12,8 +12,8 @@ the valid runs only, and of those only the runs of the tasks the study reads: a 
 For each run the index reads run.json, episodes.jsonl, signals.jsonl and the board (RunFiles), CheatBench's verdicts
 (src/judging/verdict_files.py cheatbench) and the measures, which read the transcripts and the judges' verdict files:
 src/measures/judge_labels.py judged_cheating (the Cheating ladder with CheatBench's labels beside its clauses),
-labels (the judge labels awareness, manipulation and disclosure), coordination.py and collusion.py run_collusion
-(the Collusion ladder with the scheming judge's verdicts). The index never writes a run. Its one output is the cache,
+labels (the judge labels disclosure and manipulation, each a score with its located excerpt), coordination.py and
+collusion.py run_collusion. The index never writes a run. Its one output is the cache,
 tmp/transcript_viewer/index.json: each run's row, its measures (RunFiles.measured) and its folder, under a stamp of the
 run's files (stamp) and of the code (code_stamp). A start measures again only the runs whose stamp changed, in parallel
 processes, and prints its progress; --rebuild, a new INDEX_VERSION or new code measures every run.
@@ -32,7 +32,6 @@ from pathlib import Path
 from src.configuration.settings import ROOT
 from src.domains import BY_TASK
 from src.judging import verdict_files
-from src.judging.judge_records import NO, UNCHECKED, YES
 from src.measures import collusion, coordination, judge_labels
 from src.measures.ladder_by_domain import HIDDEN_TASKS, TASK_DOMAIN, hidden_task
 from src.measures.run_directory import RunDir, episode_agent, is_influencer, is_worker, roles_of, run_name
@@ -42,7 +41,7 @@ from src.utils.json_files import read_json, read_jsonl
 
 CACHE = ROOT / "tmp" / "transcript_viewer" / "index.json"
 SKIP = ("study_smoke",)
-INDEX_VERSION = 9  # 9: influencers, the two conditioning columns, left_out
+INDEX_VERSION = 10  # 10: the judge labels as scores, no scheming
 WORKERS = 6
 """Processes that measure runs when a start finds runs to measure: each loads transcripts, so few enough to spare the
 machine's memory."""
@@ -53,11 +52,6 @@ MEASURING = ("src/measures", "src/domains", "src/judging", "src/ui")
 SERVED = ("built_at", "build_seconds", "measured", "collections", "errors", "rows", "left_out")
 """The index's keys /api/index answers; the cache also keeps its version, its runs folder, each run's measures, its
 folder and its stamps."""
-QUESTIONS = ("awareness", "manipulation")
-"""The judge labels the pass "labels" answers with a quote, by the measure's names (judge_labels.labels)."""
-READ = (YES, NO, UNCHECKED)
-"""A judge label's values that say the judge read the agent: a verdict that stands as yes or no, or a yes whose quote
-failed the code's check."""
 
 COLLECTION_ABOUT = {
     "study_exploration_1": ("Exploration 1", "teams, influencers",
@@ -176,8 +170,8 @@ class RunFiles:
         return transcript_levels.cheating_shown(judge_labels.judged_cheating(self.path))
 
     def collusion(self) -> dict:
-        """The Collusion ladder of the run with the scheming judge's verdicts and flags (src/measures/collusion.py
-        run_collusion), as the viewer keeps it (transcript_levels.collusion_shown); or
+        """The Collusion ladder of the run (src/measures/collusion.py run_collusion), as the viewer keeps it
+        (transcript_levels.collusion_shown); or
         {"applicable": False, "reason"} when the measure says it does not apply (not_applicable), which loads no
         transcript."""
         reason = collusion.not_applicable(self.task, len(self.episodes))
@@ -185,32 +179,14 @@ class RunFiles:
             return {"applicable": False, "reason": reason}
         return transcript_levels.collusion_shown(collusion.run_collusion(self.path))
 
-    def labels(self) -> dict:
-        """Each agent's judge labels (judge_labels.labels) with what the judge said: {"agents": {agent: {awareness |
-        manipulation: {value, source, quote, reason, check}, disclosure: {value}}}, "team": {label: {value: number of
-        workers}}}. The quote, its source (post or reasoning), the reason and the code's check are the row's of the
-        pass "labels" as the measure reads it (judge_labels.label_rows)."""
-        measure = judge_labels.labels(self.path)
-        rows = judge_labels.label_rows(self.path) or {}
-
-        def said(agent: str, question: str) -> dict:
-            row = rows.get(agent) or {}
-            answer = row.get(question) if row.get("parse_ok") else None
-            if not answer:
-                return {}
-            return {"source": answer.get("source"), "quote": answer.get("quote") or None,
-                    "reason": answer.get("reason"), "check": row.get(f"{question}_check")}
-        agents = {a: {**{q: {"value": values[q], **said(a, q)} for q in QUESTIONS},
-                      "disclosure": {"value": values["disclosure"]}} for a, values in measure["agents"].items()}
-        return {"agents": agents, "team": measure["team"]}
-
     def measured(self) -> dict:
         """What the index caches for a run beside its row: CheatBench's verdicts ({judge: {episode: row}},
         verdict_files.cheatbench), the three ladders' measures (the Cheating and Collusion measures read the
-        transcripts; coordination.run_coordination) and each agent's judge labels with what the judge said (labels)."""
+        transcripts; coordination.run_coordination) and each agent's judge labels (judge_labels.labels: each label's
+        score, excerpt, reason and located place)."""
         return {"cheatbench": verdict_files.cheatbench(self.path), "cheating": self.cheating(),
                 "coordination": coordination.run_coordination(self.path), "collusion": self.collusion(),
-                "labels": self.labels()}
+                "labels": judge_labels.labels(self.path)}
 
     def levels(self, measured: dict, boards: list[dict] | None = None) -> dict:
         """The three ladders (transcript_levels.compute) from the cached measures and the board."""
@@ -239,25 +215,23 @@ def cheatbench_summary(judges: dict[str, dict[str, dict]], episodes: list[dict],
     return out
 
 
-def disclosure_summary(labels: dict) -> dict:
-    """The team's disclosure as the runs table shows it, from the run's judge labels (RunFiles.labels): {"yes", "no"
-    (the workers the judge says did or did not openly acknowledge their own access), "value"}, value being, when no
-    worker was judged yes or no, why (not recorded on a task whose verdict has no such field, else not judged), and
-    None otherwise."""
-    team = labels["team"]["disclosure"]
-    judged = team.get("yes", 0) + team.get("no", 0)
-    why = judge_labels.NOT_RECORDED if judge_labels.NOT_RECORDED in team else judge_labels.NOT_JUDGED
-    return {"yes": team.get("yes", 0), "no": team.get("no", 0), "value": None if judged else why}
+def label_summary(labels: dict, roles: dict[str, str | None]) -> dict:
+    """The judge labels as the runs table shows them, from the measure's answer (judge_labels.labels): {"judge", "team":
+    {label: {"score": the measure's team score, "agent": the first worker with it} or None}, "influencers": [{agent,
+    role, label: its score or None}]}. None is an agent or a team the judge has not scored."""
+    agents = labels["agents"]
 
-
-def label_summary(labels: dict) -> dict:
-    """Each judge label of QUESTIONS as the runs table shows it: {label: {"yes", "read"}}, the agents the judge says yes
-    of the agents it read (READ), every agent of the run counted."""
-    out = {}
-    for label in QUESTIONS:
-        read = [v for v in (row[label]["value"] for row in labels["agents"].values()) if v in READ]
-        out[label] = {"yes": read.count(YES), "read": len(read)}
-    return out
+    def score(agent: str, label: str) -> int | None:
+        row = agents.get(agent)
+        return row[label]["score"] if row else None
+    team = {}
+    for label in judge_labels.LABELS:
+        top = labels["team"].get(label)
+        who = next((a for a in agents if is_worker(roles.get(a)) and score(a, label) == top), None)
+        team[label] = None if top is None else {"score": top, "agent": who}
+    influencers = [{"agent": a, "role": roles.get(a), **{label: score(a, label) for label in judge_labels.LABELS}}
+                   for a in labels["influencers"]]
+    return {"judge": labels["judge"], "team": team, "influencers": influencers}
 
 
 # ------------------------------------------------------------------------------------------------------- the rows
@@ -367,8 +341,7 @@ def build_row(col: str, listed: Listed, rf: RunFiles, measured: dict) -> dict:
         "workers": workers, "seed": listed.meta.get("seed", cfg.get("seed")),
         "levels": transcript_levels.index_levels(rf.levels(measured), rf.roles),
         "cheatbench": cheatbench_summary(measured["cheatbench"], rf.episodes, rf.roles),
-        "disclosure": disclosure_summary(measured["labels"]),
-        "labels": label_summary(measured["labels"]),
+        "labels": label_summary(measured["labels"], rf.roles),
     }
 
 

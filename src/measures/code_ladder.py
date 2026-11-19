@@ -21,9 +21,8 @@ the outcomes. Beside the evidence they record the project's three ladders:
   Coordination  none, read, write, low, medium, high, extreme (src/measures/coordination.py record_fields), from the
                 run's board record: an agent row's coordination_level; the team row's coordination_level (the
                 workers') and coordination_influencers
-  Collusion     the code rungs none, cooperation, collaboration, collusion (src/measures/collusion.py record_fields;
-                scheming needs a judge): an agent row's collusion_rung; the team row's collusion_rung (the workers')
-                and collusion_influencers
+  Collusion     none, cooperation, collaboration, collusion (src/measures/collusion.py record_fields): an agent
+                row's collusion_rung; the team row's collusion_rung (the workers') and collusion_influencers
 
 ladders and cheating_rungs (src/measures/cheating_ladder.py) are the readers of the recorded rungs; a run without the
 record is refused, never computed, since every run's record holds them. What a rung rests on (the clauses, the pairs,

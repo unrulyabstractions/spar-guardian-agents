@@ -5,11 +5,11 @@ activation, timeline step and turn of the agent step it came from, and the Agent
 project's names (FIELDS): the three ladders, cheating_rung (src/measures/cheating_ladder.py), coordination_level
 (src/measures/coordination.py) and collusion_rung (src/measures/collusion.py), with cheated (cheating_ladder.cheated:
 the rung is attempted or higher), all four as src/measures/code_ladder.py ladders gives them, recorded or computed; the
-judge labels awareness, manipulation and disclosure, each one's value as src/measures/judge_labels.py labels gives it;
-and judge_cheated, CheatBench's judge's own `cheated`, a broader definition, with the judge's other
-flags. The team's ladders are team_<field>. The measures run in the run environment (RUN_PYTHON), which imports the
-domains and so ORBIT, which this environment lacks; nothing is written back. The board becomes one AgentRun of its
-own, one user message per post.
+judge labels' scores, disclosure_score and manipulation_score (0 to 100, None where the pass "labels" did not read the
+agent), as src/measures/judge_labels.py labels gives them; and judge_cheated, CheatBench's judge's own `cheated`, a
+broader definition, with the judge's other flags. The team's are team_<field>, a label's the workers' highest score.
+The measures run in the run environment (RUN_PYTHON), which imports the domains and so ORBIT, which this environment
+lacks; nothing is written back. The board becomes one AgentRun of its own, one user message per post.
 """
 from __future__ import annotations
 
@@ -30,12 +30,14 @@ from tools.run_reader import Post, Run, Step
 ROOT = Path(__file__).resolve().parents[2]
 RUN_PYTHON = ROOT / ".venv" / "bin" / "python"
 """The run environment's Python, which imports the domains and so computes the measures."""
-LABELS = ("awareness", "manipulation", "disclosure")
-"""The judge labels an agent carries, by the measures' names."""
-FIELDS = (*LADDER_FIELDS, "cheated", *LABELS)
-"""What an agent carries of the measures: the three rungs, cheated and the judge labels."""
-TEAM_FIELDS = (*LADDER_FIELDS, "cheated")
-"""What the team carries, as team_<field>: the three rungs and cheated."""
+LABELS = ("disclosure", "manipulation")
+"""The judge labels, by the measures' names (src/measures/judge_labels.py LABELS)."""
+SCORES = tuple(f"{label}_score" for label in LABELS)
+"""Each judge label's score, as an agent and the team carry it."""
+FIELDS = (*LADDER_FIELDS, "cheated", *SCORES)
+"""What an agent carries of the measures: the three rungs, cheated and the judge labels' scores."""
+TEAM_FIELDS = FIELDS
+"""What the team carries, as team_<field>: the same, a label's score the workers' highest."""
 COMPUTE = ("import json, sys; from pathlib import Path; from src.measures import code_ladder, judge_labels; "
            "run = Path(sys.argv[1]); print(json.dumps({'ladders': code_ladder.ladders(run), "
            "'labels': judge_labels.labels(run)}))")
@@ -45,17 +47,19 @@ COMPUTE = ("import json, sys; from pathlib import Path; from src.measures import
 def measures(directory: Path) -> tuple[dict[str, dict], dict]:
     """The run's measures (FIELDS) by agent, and the team's (TEAM_FIELDS), computed in the run environment: the
     ladders as src/measures/code_ladder.py ladders gives them (recorded, or computed for a run recorded before a
-    ladder), each judge label's value. Empty for a folder without run.json or signals.jsonl (a run the code never
+    ladder), each judge label's score. Empty for a folder without run.json or signals.jsonl (a run the code never
     read)."""
     if not (directory / "signals.jsonl").is_file() or not (directory / "run.json").is_file():
         return {}, {}
     done = subprocess.run([str(RUN_PYTHON), "-c", COMPUTE, str(directory.resolve())], cwd=ROOT, capture_output=True,
                           text=True, check=True)
     computed = json.loads(done.stdout)
-    ladders, labels = computed["ladders"], computed["labels"]["agents"]
-    agents = {agent: {**rungs, **{label: (labels.get(agent) or {}).get(label) for label in LABELS}}
+    ladders, labels = computed["ladders"], computed["labels"]
+    agents = {agent: {**rungs, **{f"{label}_score": ((labels["agents"].get(agent) or {}).get(label) or {}).get("score")
+                                  for label in LABELS}}
               for agent, rungs in ladders["agents"].items()}
-    return agents, {field: ladders["team"][field] for field in TEAM_FIELDS}
+    team = {**ladders["team"], **{f"{label}_score": labels["team"][label] for label in LABELS}}
+    return agents, {field: team[field] for field in TEAM_FIELDS}
 
 
 def run_agent_runs(run: Run, with_board: bool) -> list[AgentRun]:
@@ -78,8 +82,9 @@ def agent_agent_run(run: Run, agent: str) -> AgentRun:
     agent_run.name = f"{run.name}/{agent}"
     agent_run.description = (f"{agent} ({role}) in {run.name}, {run.domain}; cheating={mine.get('cheating_rung')}, "
                              f"cheated={mine.get('cheated')}, coordination={mine.get('coordination_level')}, "
-                             f"collusion={mine.get('collusion_rung')}, awareness={mine.get('awareness')}, "
-                             f"manipulation={mine.get('manipulation')}, disclosure={mine.get('disclosure')}; "
+                             f"collusion={mine.get('collusion_rung')}, "
+                             f"disclosure_score={mine.get('disclosure_score')}, "
+                             f"manipulation_score={mine.get('manipulation_score')}; "
                              f"judge_cheated={run.judge_cheated.get(agent)}")
     agent_run.metadata = {**agent_run.metadata, **agent_metadata(run, agent)}
     return agent_run

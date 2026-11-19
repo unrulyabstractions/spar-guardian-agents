@@ -72,22 +72,31 @@ table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--ba
 .lv-ladder-table tr.lv-line-row td { border-top: 3px solid var(--text) !important; background: var(--panel-2); font-size: 11.5px; color: var(--muted); max-width: none; white-space: normal; }
 .cs-full-legend .cfl-line { font-size: 9.5px; font-weight: 700; text-transform: uppercase; padding-left: 5px; margin-right: 8px;
   border-left: 3px solid var(--ink-2, var(--text)); color: var(--ink-2, var(--text)); }
-.judge-ev { margin-top: 4px; }
-.judge-flag { margin-top: 6px; }
-.judge-quote { margin: 4px 0; padding: 3px 8px; border-left: 3px solid var(--border-strong); font-size: 12px; white-space: pre-wrap;
-  overflow-wrap: anywhere; max-width: 64ch; }
 .jl-list li { white-space: normal; }
 .jl-agree { color: var(--good); font-size: 12px; }
-.lv-judge-tag { margin-left: 6px; font-size: 10.5px; color: var(--muted); border: 1px dashed var(--border-strong); border-radius: 3px; padding: 0 4px; white-space: nowrap; }
 .lv-judge-yes { color: var(--bad); font-weight: 600; }
-.lv-judge-unchecked { color: var(--warn); font-style: italic; }
-.lv-label { white-space: nowrap; border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; }
-.lv-unvalidated { white-space: nowrap; font-weight: 400; color: var(--warn); background: var(--warn-bg); border: 1px dashed currentColor; border-radius: 3px; padding: 0 4px; text-decoration: none; }
 .lv-reliability td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .lv-reliability tr.lv-measure-start td { border-top: 2px solid var(--border-strong); }
 .lv-reliability tr.lv-older-pass td { color: var(--muted); }
 .lv-reliability td.lv-current-pass { font-weight: 600; }
-.lv-aware { white-space: normal; }
+.lv-retired { color: var(--warn); font-weight: 400; white-space: normal; max-width: 22ch; }
+/* A judge label's score: a chip from pale to strong with the number on it, its excerpt, its reason and its place. */
+.sc-chip { display: inline-block; min-width: 2.4em; padding: 1px 6px; border-radius: 9px; font-size: 11.5px; font-weight: 700;
+  text-align: center; font-variant-numeric: tabular-nums; border: 1px solid rgba(0, 0, 0, .08); }
+.sc-entry { min-width: 12ch; }
+.sc-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; }
+.sc-excerpt-short { color: var(--muted); font-style: italic; max-width: 34ch; white-space: normal; overflow-wrap: anywhere; }
+.sc-excerpt { margin: 4px 0; padding: 3px 8px; border-left: 3px solid var(--border-strong); font-size: 12px; white-space: pre-wrap;
+  overflow-wrap: anywhere; max-width: 64ch; }
+.sc-full { max-width: 70ch; }
+.sc-lost { font-style: italic; }
+.sc-open { font-size: 12px; }
+.sc-pair { display: grid; gap: 8px; }
+.sc-about li { margin: 0 0 8px; line-height: 1.7; }
+.sc-table td { vertical-align: top; white-space: normal; }
+mark.xl-mark { background: #ffe58a; color: #16191a; border-radius: 2px; padding: 0 1px; box-shadow: 0 0 0 2px #e0b400; }
+mark.xl-mark.flash { animation: flash 1.6s ease-out; }
+.idx-score-box { width: 7em; }
 .table-wrap:has(> .lv-ladder-table) { width: fit-content; }
 .lv-ladder-table { border-collapse: collapse; font-size: 12px; }
 .lv-ladder-table th, .lv-ladder-table td { border: 1px solid var(--border); padding: 4px 6px; vertical-align: top; max-width: 260px; }

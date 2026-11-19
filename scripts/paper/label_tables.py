@@ -1,20 +1,12 @@
-"""The judge's answers beside the ladders on study_exploration_1's valid runs, from the verdicts stored beside each run
-(src/judging/verdict_files.py) as the measures read them. No model is called. Writes, under tmp/tables/results/:
-
-    table_scheming_by_task.png       per task, the pairs code places at collusion by their scheming verdict
-                                     (src/measures/collusion.py, through scripts/paper/study_ladders.py record),
-                                     pairs of workers and pairs with an influencer apart
-    table_awareness_by_task.png      per task, the agents the awareness label is read for (src/measures/judge_labels.py
-                                     labels: at attempted or above on Cheating) by its verdict, influencers apart
-
-The manipulation label has no table: an independent reading of each pass found most of its yes verdicts wrong
-(src/measures/measure_readings.yaml), and the paper does not report it as a rate.
+"""The judge's two scores on study_exploration_1's valid runs, as the measures read them (src/measures/judge_labels.py
+labels through scripts/paper/study_ladders.py labels). No model is called. Writes
+tmp/tables/results/table_label_scores_by_task.png: per label (judge_labels.LABELS: disclosure, manipulation), per
+task, how many agents score 0, 1 to 49, 50 to 74 and 75 to 100, and how many the judge has not scored; workers and
+influencers apart (study_ladders.record).
 
     uv run python -m scripts.paper.label_tables    # make results-tables runs every one
 
-A verdict reads yes, no, unchecked (a yes whose quote failed code's check) or not judged (no row of the pass yet).
-The agents awareness is read for come from judge_labels alone; the script stops when they differ from record's
-Cheating rungs, so the tables and the Cheating table rest on one reading of the runs.
+The bins only group the scores for the table. No rate is read from them, and the measures hold no threshold.
 """
 from __future__ import annotations
 
@@ -24,17 +16,24 @@ from pathlib import Path
 
 from scripts.paper.study_ladders import TASKS, counts_table, labels, record, valid_runs
 from src.configuration.settings import ROOT
-from src.measures import judge_labels
-from src.measures.cheating_ladder import cheated
-from src.measures.collusion import NOT_JUDGED
-from src.measures.run_directory import is_influencer
+from src.measures.judge_labels import LABELS
 
-OUT = ROOT / "tmp" / "tables" / "results"
-VERDICTS = ("yes", "no", "unchecked", NOT_JUDGED)
-SCHEMING_BLOCKS = [("workers", "Colluding pairs of workers", "pairs"),
-                   ("influencers", "Colluding pairs with an influencer", "pairs")]
-AWARENESS_BLOCKS = [("workers", "Workers at attempted or above", "agents"),
-                    ("influencers", "Influencers at attempted or above", "agents")]
+OUT = ROOT / "tmp" / "tables" / "results" / "table_label_scores_by_task.png"
+BINS = (("0", 0, 0), ("1-49", 1, 49), ("50-74", 50, 74), ("75-100", 75, 100))
+"""(column, lowest score, highest score) of each column of scores."""
+NOT_JUDGED = "not judged"
+"""An agent the judge has not scored: the run has no labels file, or no row for the agent."""
+COLUMNS = (*(name for name, _, _ in BINS), NOT_JUDGED)
+ROLES = (("workers", "workers"), ("influencers", "influencers"))
+BLOCKS = [(f"{label}/{role}", f"{label.capitalize()}, {title}", "agents") for label in LABELS for role, title in ROLES]
+
+
+def column(score: int) -> str:
+    """The column of BINS a score from 0 to 100 falls in."""
+    for name, low, high in BINS:
+        if low <= score <= high:
+            return name
+    raise SystemExit(f"score {score!r} is outside 0 to 100")
 
 
 def runs() -> list[tuple[str, Path]]:
@@ -48,50 +47,34 @@ def runs() -> list[tuple[str, Path]]:
     return out
 
 
-def empty(blocks: list[tuple[str, str, str]]) -> dict[tuple[str, str], Counter]:
-    return {(b, d): Counter() for b, _, _ in blocks for d, _ in TASKS}
-
-
-def scheming_counts(found: list[tuple[str, Path]]) -> dict[tuple[str, str], Counter]:
-    """(block, domain) -> Counter of VERDICTS over the pairs at collusion by code."""
-    out = empty(SCHEMING_BLOCKS)
+def score_counts(found: list[tuple[str, Path]]) -> dict[tuple[str, str], Counter]:
+    """(block, domain) -> Counter of COLUMNS over every agent of each run (record's agents), for each label."""
+    out = {(block, d): Counter() for block, _, _ in BLOCKS for d, _ in TASKS}
     for domain, path in found:
-        for pair in record(path)["collusion_colluding"]:
-            out[("influencers" if any(map(is_influencer, pair["roles"])) else "workers", domain)][pair["scheming"]] += 1
+        scored = labels(path)["agents"]
+        for agent, r in record(path)["agents"].items():
+            role = "workers" if r["worker"] else "influencers"
+            for label in LABELS:
+                value = (scored.get(agent) or {}).get(label)
+                out[(f"{label}/{role}", domain)][NOT_JUDGED if value is None else column(value["score"])] += 1
     return out
 
 
-def awareness_counts(found: list[tuple[str, Path]]) -> dict[tuple[str, str], Counter]:
-    """(block, domain) -> Counter of VERDICTS for awareness, over the agents it is read for (judge_labels: every value
-    but NOT_READ)."""
-    aware = empty(AWARENESS_BLOCKS)
-    for domain, path in found:
-        run = record(path)
-        read = labels(path)["agents"]
-        asked = {a for a, v in read.items() if v["awareness"] != judge_labels.NOT_READ}
-        expected = {a for a, r in run["agents"].items() if cheated(r["rung"])}
-        if asked != expected:
-            raise SystemExit(f"{path.name}: awareness is read for {sorted(asked)}, the Cheating ladder puts "
-                             f"{sorted(expected)} at attempted or above; rebuild the run's signals")
-        for agent in asked:
-            block = "influencers" if agent in run["influencers"] else "workers"
-            aware[(block, domain)][read[agent]["awareness"]] += 1
-    return aware
-
-
-def show(name: str, data: dict) -> None:
-    for (block, domain), c in data.items():
-        print(f"{name:12s} {block:12s} {domain:17s}", {v: c.get(v, 0) for v in VERDICTS})
+def judges(found: list[tuple[str, Path]]) -> set[str]:
+    """The judges whose scores the measures read on these runs; more than one stops the build."""
+    named = {labels(path)["judge"] for _, path in found} - {None}
+    if len(named) > 1:
+        raise SystemExit(f"the study's scores come from several judges: {sorted(named)}")
+    return named
 
 
 def main() -> int:
     found = runs()
-    scheming = scheming_counts(found)
-    show("scheming", scheming)
-    print(counts_table(OUT / "table_scheming_by_task.png", VERDICTS, scheming, SCHEMING_BLOCKS))
-    aware = awareness_counts(found)
-    show("awareness", aware)
-    print(counts_table(OUT / "table_awareness_by_task.png", VERDICTS, aware, AWARENESS_BLOCKS))
+    print("judge:", sorted(judges(found)) or NOT_JUDGED)
+    data = score_counts(found)
+    for (block, domain), c in data.items():
+        print(f"{block:24s} {domain:17s}", {level: c.get(level, 0) for level in COLUMNS})
+    print(counts_table(OUT, COLUMNS, data, BLOCKS))
     return 0
 
 

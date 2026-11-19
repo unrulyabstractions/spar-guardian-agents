@@ -7,8 +7,8 @@
 An agent's AgentRun is its ATIF transcript converted by docent.sdk.integrations.convert_atif_to_agent_run. Each
 message's metadata gains round, activation, schedule_step, turn and activations from the turn rules' timeline. The
 AgentRun's metadata holds kind "agent", run, agent, role; the agent's measures (docent_convert.FIELDS):
-cheating_rung, coordination_level, collusion_rung, cheated, awareness, manipulation and disclosure; the team's
-(docent_convert.TEAM_FIELDS) as team_cheating_rung, team_coordination_level, team_collusion_rung and team_cheated;
+cheating_rung, coordination_level, collusion_rung, cheated, disclosure_score and manipulation_score; the team's
+(docent_convert.TEAM_FIELDS) as team_<field>, a label's score the workers' highest;
 domain, task, model, preset, mode, scale, roster, roles, judge_cheated_by_agent, median_discovery_round, read_graph,
 rounds, access_policy, holds, access; each of the task's CheatBench judge flags (src/measures/verdict_fields.py), its
 own `cheated` as judge_cheated; judge_summary, judge (CheatBench's verdict row), discovery_round, engagement,

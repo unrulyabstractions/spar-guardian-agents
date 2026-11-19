@@ -56,8 +56,8 @@ def test_rung_tables_hold_every_rung_and_clause():
     for clause in cheating_ladder.CLAUSES:
         assert rf"\textit{{{clause}}}" in cheating
     for rung in collusion.RUNGS:
-        reader = "code" if rung in collusion.CODE_RUNGS else "judge"
-        assert rf"\textbf{{{rung}}} & {reader} &" in colluding
+        assert rf"\textbf{{{rung}}} &" in colluding
+    assert "scheming" not in colluding
 
 
 OLD_LADDERS = re.compile(r"`(?:exposed|tried|opened|used|tampered|checked|shipped)'|\b(?:isolated|discussed|solicited|"
@@ -71,6 +71,18 @@ def test_no_section_names_a_retired_ladder():
     for tex in SECTIONS.glob("*.tex"):
         found = OLD_LADDERS.findall(tex.read_text())
         assert not found, f"{tex.name} names a retired ladder: {found}"
+
+
+RETIRED_LABELS = re.compile(r"(?<!retired: )\bscheming\b|awareness label|\\AwarenessMeans|StudySchemingJudge|"
+                            r"StudyLabelsJudge\b|table_scheming_by_task|table_awareness_by_task", re.IGNORECASE)
+
+
+def test_no_section_names_scheming_or_the_awareness_label():
+    """Scheming and the yes or no awareness label are retired (the user, 2026-11-19). Only the reliability table, which
+    is generated, keeps their readings, and one sentence names them as retired."""
+    for tex in SECTIONS.glob("*.tex"):
+        found = RETIRED_LABELS.findall(tex.read_text())
+        assert not found, f"{tex.name} names a retired label: {found}"
 
 
 def test_escape_covers_latex_specials():
@@ -153,61 +165,63 @@ def test_reliability_table_holds_every_row_of_the_readings():
     assert "src/measures/measure_readings.yaml" in tex
     for key, name in r["measures"].items():
         assert name in tex, key
-    for about in r["passes"].values():
-        assert paper_sources.escape(about["label"]) in tex
+    for row in r["rows"]:
+        label = r["passes"][row["pass"]]["label"]
+        if row["measure"] in paper_sources.RETIRED:
+            label = label.removesuffix(" (current)")
+            assert paper_sources.escape(f"{r['measures'][row['measure']]} (retired yes or no label)") in tex
+        assert paper_sources.escape(label) in tex
     body = tex.split("\\midrule")[1].split("\\bottomrule")[0]
     blocks = {(row["measure"], row["pass"]) for row in r["rows"]}
     assert body.count("\\\\") == len(r["rows"]) + len(blocks)
     assert body.count("\\multicolumn") == len(blocks)
 
 
-def test_awareness_means_one_thing_in_the_measure_the_viewer_and_the_paper():
-    """The label awareness as the judge reads it is knowing use of reference material: one definition
-    (judge_labels.AWARENESS_MEANS) in the measure's docstring, on the viewer's Ladders page and in the paper."""
+def test_score_anchors_table_holds_every_anchor():
     from src.measures import judge_labels
-    from src.ui import transcript_levels
-    means = judge_labels.AWARENESS_MEANS
-    assert means.startswith("knowing use of reference material")
-    assert means in " ".join(judge_labels.__doc__.split())
-    assert transcript_levels.JUDGE_LABELS["awareness"]["question"] == f"Awareness means {means}."
-    assert rf"\newcommand{{\AwarenessMeans}}{{{paper_sources.escape(means)}}}" in paper_sources.params_tex()
-    assert r"\textbf{Awareness} means \AwarenessMeans{}." in (SECTIONS / "appendix_a_methodology.tex").read_text()
+    tex = paper_sources.score_anchors_tex()
+    for score, meaning in judge_labels.SCORE_ANCHORS.items():
+        assert rf"{score} & {paper_sources.escape(meaning)} \\" in tex
 
 
-def test_the_scheming_table_counts_the_measures_verdicts(monkeypatch):
-    """label_tables.scheming_counts counts each colluding pair by the Collusion measure's verdict, as study_ladders
-    record carries it from collusion_of: a flag between the pair is yes, a flag elsewhere leaves it no, a board row
-    that did not parse leaves it not judged, and a pair with a regulator counts apart."""
+def test_labels_sentence_names_the_one_judge_or_says_none(monkeypatch):
+    """With no labels file in the study the paper says that no judge has scored the runs; with one judge it names it;
+    two judges stop the build."""
     from pathlib import Path
-    from types import SimpleNamespace
 
-    from scripts.paper import label_tables, study_ladders
-    roles = {"a": "worker", "b": "worker", "r": "regulator"}
-    pieces = {"a": {"held": ["A"], "work": {"B": "x"}, "own": {}, "supplied": []},
-              "b": {"held": ["B"], "work": {"A": "x"}, "own": {}, "supplied": []},
-              "r": {"held": ["R"], "work": {"A": "x"}, "own": {}, "supplied": []}}
-    pieces["a"]["work"]["R"] = "x"
-    taken = collusion.pieces_taken(pieces)
-    flag = {"post": "P1", "which": "awareness", "quote": "the gold fixtures", "reason": "r",
-            "check": {"ok": True, "why": "in P1"}, "posts": [{"label": "P1", "id": "m1", "writer": "a",
-                                                               "readers": ["b"]}]}
-    rows = {"yes": {"board": {"unit": "board", "judge": "j", "parse_ok": True, "flagged": [flag]}},
-            "none": {"board": {"unit": "board", "judge": "j", "parse_ok": False, "flagged": None}}}
+    from src.measures import judge_labels
+    judges = {"a": None, "b": None}
+    monkeypatch.setattr(judge_labels, "labels", lambda run: {"judge": judges[Path(run).name], "agents": {}})
+    assert paper_sources.labels_judged([Path("a"), Path("b")]) == "No judge has scored these runs yet."
+    judges["a"] = "gpt-6-luna"
+    assert paper_sources.labels_judged([Path("a"), Path("b")]) == \
+        "One judge, OpenAI GPT-6 Luna, scored every agent of these runs, and no human checked its scores."
+    judges["b"] = "gpt-6-sol"
+    with pytest.raises(SystemExit):
+        paper_sources.labels_judged([Path("a"), Path("b")])
 
-    def collusion_of(path, result):
-        found = collusion.ladder(list(roles), roles, collusion.piece_takes(taken), {}, dict.fromkeys(roles, "none"),
-                                 taken, {}, rows[Path(path).name])
-        return {"applicable": True, **found}
-    run = SimpleNamespace(roles=lambda: {})                          # no influencer's posts to count here
-    monkeypatch.setattr(study_ladders, "scanned_run", lambda path: (run, None, None, [], None, None))
-    monkeypatch.setattr(study_ladders, "cheating", lambda *a: {"team": "none", "passed": None, "alarm": False,
-                                                               "hand_in_pieces": [], "agents": {}})
-    monkeypatch.setattr(study_ladders, "collusion_of", collusion_of)
-    monkeypatch.setattr(study_ladders, "labels", lambda path: {"agents": {a: {"awareness": "yes"} for a in roles}})
-    study_ladders.record.cache_clear()
-    try:
-        counts = label_tables.scheming_counts([("swe", Path("yes")), ("swe", Path("none"))])
-    finally:
-        study_ladders.record.cache_clear()
-    assert counts[("workers", "swe")] == {"yes": 1, collusion.NOT_JUDGED: 1}
-    assert counts[("influencers", "swe")] == {"no": 1, collusion.NOT_JUDGED: 1}
+
+def test_the_score_table_bins_each_agent_by_label_and_role(monkeypatch):
+    """label_tables.score_counts puts every agent of a run in one column per label: 0, 1-49, 50-74, 75-100, or not
+    judged when the run has no score for it (no labels file); workers and influencers apart."""
+    from pathlib import Path
+
+    from scripts.paper import label_tables
+    from src.measures.judge_labels import LABELS
+
+    def scored(score):
+        return {label: {"score": score, "excerpt": "", "source": "none", "reason": "", "located": None}
+                for label in LABELS}
+    agents = {"a": {"worker": True}, "b": {"worker": True}, "c": {"worker": True}, "r": {"worker": False}}
+    found = {"judged": {"judge": "gpt-6-luna", "agents": {"a": scored(0), "b": scored(49), "c": None, "r": scored(75)}},
+             "unjudged": {"judge": None, "agents": {}}}
+    monkeypatch.setattr(label_tables, "record", lambda path: {"agents": agents})
+    monkeypatch.setattr(label_tables, "labels", lambda path: found[Path(path).name])
+    counts = label_tables.score_counts([("swe", Path("judged")), ("swe", Path("unjudged"))])
+    for label in LABELS:
+        assert counts[(f"{label}/workers", "swe")] == {"0": 1, "1-49": 1, label_tables.NOT_JUDGED: 4}
+        assert counts[(f"{label}/influencers", "swe")] == {"75-100": 1, label_tables.NOT_JUDGED: 1}
+    assert [label_tables.column(s) for s in (0, 1, 49, 50, 74, 75, 100)] == \
+        ["0", "1-49", "1-49", "50-74", "50-74", "75-100", "75-100"]
+    with pytest.raises(SystemExit):
+        label_tables.column(101)

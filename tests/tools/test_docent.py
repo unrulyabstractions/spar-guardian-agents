@@ -38,14 +38,26 @@ def test_upload_without_key_exits_2(no_key, capsys):
 
 LADDERS = {"a01": ("none", "write", "none", False), "a02": ("tempted", "none", "cooperation", False),
            "a03": ("attempted", "write", "cooperation", True), "team": ("attempted", "read", "cooperation", True)}
-"""Each row's three ladders and cheated (docent_convert.TEAM_FIELDS: cheating_rung, coordination_level, collusion_rung,
-cheated), as src/measures/code_ladder.py ladders gives them."""
-LABELS = {"a01": ("not read", "no", "not recorded"), "a02": ("not read", "not read", "not recorded"),
-          "a03": ("yes", "unchecked", "not recorded")}
-"""Each agent's judge labels, awareness, manipulation and disclosure, as judge_labels.labels gives them."""
-ANSWER = {"ladders": {"agents": {a: dict(zip(docent_convert.TEAM_FIELDS, LADDERS[a])) for a in LABELS},
-                      "team": dict(zip(docent_convert.TEAM_FIELDS, LADDERS["team"]))},
-          "labels": {"agents": {a: dict(zip(docent_convert.LABELS, values)) for a, values in LABELS.items()}}}
+"""Each row's three ladders and cheated (RUNGS: cheating_rung, coordination_level, collusion_rung, cheated), as
+src/measures/code_ladder.py ladders gives them."""
+RUNGS = docent_convert.FIELDS[:4]
+SCORES = {"a01": (0, 10), "a02": (None, None), "a03": (85, 40), "team": (85, 40)}
+"""Each agent's judge label scores, disclosure_score and manipulation_score (a02 has no parsed row), and the team's
+highest, as judge_labels.labels gives them."""
+
+
+def evidence(score: int) -> dict:
+    return {"score": score, "excerpt": "x" if score else "", "source": "post" if score else "none", "reason": "r",
+            "located": None}
+
+
+ANSWER = {"ladders": {"agents": {a: dict(zip(RUNGS, LADDERS[a])) for a in ("a01", "a02", "a03")},
+                      "team": dict(zip(RUNGS, LADDERS["team"]))},
+          "labels": {"judge": "gpt-6-luna",
+                     "agents": {a: None if None in SCORES[a] else dict(zip(docent_convert.LABELS,
+                                                                           map(evidence, SCORES[a])))
+                                for a in ("a01", "a02", "a03")},
+                     "team": dict(zip(docent_convert.LABELS, SCORES["team"])), "influencers": {}}}
 """What the run environment answers for the run (docent_convert.COMPUTE)."""
 
 
@@ -53,7 +65,8 @@ ANSWER = {"ladders": {"agents": {a: dict(zip(docent_convert.TEAM_FIELDS, LADDERS
 def run_python(monkeypatch, tmp_path, riemann_copy):
     """A stand-in for the run environment's Python that answers ANSWER for riemann_copy, and the code record the
     measures read beside it (signals.jsonl), written without the ladders."""
-    write_jsonl(riemann_copy / "signals.jsonl", [{"row": "agent", "agent": a} for a in LABELS] + [{"row": "team"}])
+    write_jsonl(riemann_copy / "signals.jsonl", [{"row": "agent", "agent": a} for a in ("a01", "a02", "a03")]
+                + [{"row": "team"}])
     stand_in = tmp_path / "run_python"
     stand_in.write_text(f"#!/bin/sh\ntest \"$1\" = -c && test \"$3\" = {riemann_copy.resolve()} && "
                         f"echo '{json.dumps(ANSWER)}'\n")
@@ -93,15 +106,17 @@ def test_dry_run_on_riemann(no_key, riemann_copy, run_python):
     # the measures under the project's names, which a run has whether or not a judge read it, and no older name
     for agent_run in agent_runs:
         metadata = agent_run["metadata"]
-        assert tuple(metadata[f"team_{field}"] for field in docent_convert.TEAM_FIELDS) == LADDERS["team"]
-        assert not {"code_rung", "team_code_rung", "team_collaboration", "cheated_by_agent"} & set(metadata)
+        assert tuple(metadata[f"team_{field}"] for field in docent_convert.TEAM_FIELDS) == LADDERS["team"] + \
+            SCORES["team"]
+        assert not {"code_rung", "team_code_rung", "team_collaboration", "cheated_by_agent", "awareness", "scheming",
+                    "disclosure", "manipulation"} & set(metadata)
         if metadata["kind"] == "agent":
             agent = metadata["agent"]
-            assert tuple(metadata[field] for field in docent_convert.TEAM_FIELDS) == LADDERS[agent]
-            assert tuple(metadata[label] for label in docent_convert.LABELS) == LABELS[agent]
+            assert tuple(metadata[field] for field in docent_convert.FIELDS) == LADDERS[agent] + SCORES[agent]
             cheating, coordination, collusion, cheated = LADDERS[agent]
+            disclosure, manipulation = SCORES[agent]
             assert (f"cheating={cheating}, cheated={cheated}, coordination={coordination}, collusion={collusion}, "
-                    f"awareness={LABELS[agent][0]}" in agent_run["description"])
+                    f"disclosure_score={disclosure}, manipulation_score={manipulation}" in agent_run["description"])
     assert summary["agent_runs"][2]["cheated"] is True                   # the Cheating ladder's, a03 at attempted
     board = agent_runs[3]
     assert board["metadata"]["kind"] == "board"
@@ -114,19 +129,16 @@ def test_dry_run_on_riemann(no_key, riemann_copy, run_python):
 @pytest.mark.skipif(not docent_convert.RUN_PYTHON.is_file(), reason="no run environment in this checkout")
 def test_the_run_environment_answers_for_a_real_run(riemann_copy):
     """The real run environment (RUN_PYTHON) on the generated run with a code record that holds the ladders: every
-    agent carries every field of FIELDS, its ladders as recorded and its judge labels as the measure reads them (a03
-    at attempted is asked about awareness, which no judge has read), and nothing is written into the run."""
-    rows = [{"row": "agent", "agent": a, **dict(zip(docent_convert.TEAM_FIELDS[:3], LADDERS[a]))} for a in LABELS]
-    write_jsonl(riemann_copy / "signals.jsonl", [*rows, {"row": "team", **dict(zip(docent_convert.TEAM_FIELDS[:3],
-                                                                                  LADDERS["team"]))}])
+    agent carries every field of FIELDS, its ladders as recorded and its judge label scores as the measure reads them
+    (None: no judge has read the run), and nothing is written into the run."""
+    rows = [{"row": "agent", "agent": a, **dict(zip(RUNGS[:3], LADDERS[a]))} for a in ("a01", "a02", "a03")]
+    write_jsonl(riemann_copy / "signals.jsonl", [*rows, {"row": "team", **dict(zip(RUNGS[:3], LADDERS["team"]))}])
     before = sorted((p, p.stat().st_mtime_ns) for p in riemann_copy.rglob("*") if p.is_file())
     docent_convert.measures.cache_clear()
     agents, team = docent_convert.measures(riemann_copy)
-    assert {a: tuple(fields[f] for f in docent_convert.TEAM_FIELDS) for a, fields in agents.items()} == {
-        a: LADDERS[a] for a in LABELS}
-    assert tuple(team[f] for f in docent_convert.TEAM_FIELDS) == LADDERS["team"]
-    assert agents["a03"]["awareness"] == "not judged" and agents["a01"]["awareness"] == "not read"
-    assert all(isinstance(fields["disclosure"], str) for fields in agents.values())
+    assert {a: tuple(fields[f] for f in docent_convert.FIELDS) for a, fields in agents.items()} == {
+        a: LADDERS[a] + (None, None) for a in ("a01", "a02", "a03")}
+    assert tuple(team[f] for f in docent_convert.TEAM_FIELDS) == LADDERS["team"] + (None, None)
     assert sorted((p, p.stat().st_mtime_ns) for p in riemann_copy.rglob("*") if p.is_file()) == before
 
 
