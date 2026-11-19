@@ -1,12 +1,16 @@
 """A run's agent episodes and board as Docent AgentRuns.
 
 Each agent's ATIF transcript goes through the SDK's convert_atif_to_agent_run. Every message then gets the round,
-activation, timeline step and turn of the agent step it came from, and the AgentRun gets the run's metadata.
+activation, timeline step and turn of the agent step it came from, and the AgentRun gets the run's metadata: the
+judge's verdict where the run was judged, and the code ladder's labels, which every run has (code_rung, the agent's
+rung; team_code_rung and team_collaboration, the team's rung and collaboration level as signals.jsonl stores them).
 The board becomes one AgentRun of its own, one user message per post.
 """
 from __future__ import annotations
 
+import functools
 import json
+from pathlib import Path
 
 from docent.data_models.agent_run import AgentRun
 from docent.data_models.chat.message import SystemMessage, UserMessage
@@ -14,7 +18,21 @@ from docent.data_models.transcript import Transcript
 from docent.sdk.integrations import convert_atif_to_agent_run
 
 from src.measures.verdict_fields import flag_names
+from src.utils.json_files import read_jsonl
 from tools.run_reader import Post, Run, Step
+
+
+@functools.cache
+def code_ladder(directory: Path) -> tuple[dict[str, dict], dict]:
+    """The code ladder's rows of a run: each agent's by agent, and the team's. signals.jsonl holds both; a run whose
+    file has no team row keeps it in run.json. Empty for a run the code ladder never read."""
+    rows = read_jsonl(directory / "signals.jsonl")
+    team = next((row for row in rows if row.get("row") == "team"), None)
+    if team is None:
+        run_json = directory / "run.json"
+        stored = json.loads(run_json.read_text()) if run_json.is_file() else {}
+        team = (stored.get("signals") or {}).get("team") or {}
+    return {row.get("agent"): row for row in rows if row.get("row") == "agent"}, team
 
 
 def run_agent_runs(run: Run, with_board: bool) -> list[AgentRun]:
@@ -34,8 +52,10 @@ def agent_agent_run(run: Run, agent: str) -> AgentRun:
             message.metadata = {**(message.metadata or {}), **message_placement(message.metadata or {}, steps)}
     role = run.roles.get(agent, "worker")
     verdict = run.cheated.get(agent)
+    rung = (code_ladder(run.directory)[0].get(agent) or {}).get("rung")
     agent_run.name = f"{run.name}/{agent}"
-    agent_run.description = f"{agent} ({role}) in {run.name}, {run.domain}; judge cheated={verdict}"
+    agent_run.description = (f"{agent} ({role}) in {run.name}, {run.domain}; code ladder rung={rung}; "
+                             f"judge cheated={verdict}")
     agent_run.metadata = {**agent_run.metadata, **agent_metadata(run, agent)}
     return agent_run
 
@@ -58,7 +78,8 @@ def message_placement(metadata: dict, steps: dict[int, Step]) -> dict:
 
 
 def agent_metadata(run: Run, agent: str) -> dict:
-    """The agent's metadata: identity, configuration, access, the judge's verdict and the agent's own posts."""
+    """The agent's metadata: identity, configuration, access, the code ladder's rung, the judge's verdict and the
+    agent's own posts."""
     judge = run.judge.get(agent) or {}
     episode = run.episodes.get(agent) or {}
     engagement = episode.get("engagement") or {}
@@ -72,6 +93,7 @@ def agent_metadata(run: Run, agent: str) -> dict:
         "access_policy": access.get("policy"),
         "holds": run.exploit.get("holds", {}).get(agent, []),
         "access": (access.get("agents") or {}).get(agent, {}),
+        "code_rung": (code_ladder(run.directory)[0].get(agent) or {}).get("rung"),
         **{field: judge.get(field) for field in flag_names(run.task)},
         "judge_summary": judge.get("summary"),
         "judge": judge,
@@ -89,7 +111,10 @@ def agent_metadata(run: Run, agent: str) -> dict:
 def run_fields(run: Run) -> dict:
     """The fields every AgentRun of a run shares."""
     engagement = run.run_json.get("engagement") or {}
+    team = code_ladder(run.directory)[1]
     return {
+        "team_code_rung": team.get("rung"),
+        "team_collaboration": team.get("collaboration"),
         "domain": run.domain,
         "task": run.task,
         "model": run.model,

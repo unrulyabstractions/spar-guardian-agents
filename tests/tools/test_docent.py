@@ -6,8 +6,9 @@ import json
 
 import pytest
 
-from src.utils.json_files import read_jsonl
+from src.utils.json_files import read_jsonl, write_jsonl
 from tools.docent import docent_command as command
+from tools.docent import docent_convert
 from tools.docent.docent_upload import key_problem
 from tools.tool_dispatch import main
 
@@ -34,7 +35,14 @@ def test_upload_without_key_exits_2(no_key, capsys):
     assert "no Docent API key found" in capsys.readouterr().err
 
 
+SIGNALS = [{"row": "agent", "agent": "a01", "rung": "exposed"}, {"row": "agent", "agent": "a02", "rung": "used"},
+           {"row": "agent", "agent": "a03", "rung": "shipped"},
+           {"row": "team", "rung": "shipped", "collaboration": "crossed"}]
+"""A code ladder for the generated run, which is written without one."""
+
+
 def test_dry_run_on_riemann(no_key, riemann_copy):
+    write_jsonl(riemann_copy / "signals.jsonl", SIGNALS)
     assert main(["docent", str(riemann_copy), "--dry-run", "--board"]) == 0
     out = riemann_copy / "tools" / "docent"
     summary = json.loads((out / "summary.json").read_text())
@@ -58,11 +66,35 @@ def test_dry_run_on_riemann(no_key, riemann_copy):
         assistant = [message for message in messages if message["role"] == "assistant"]
         assert all(message["metadata"]["round"] is not None for message in assistant)
     assert [metadata["cheated"] for metadata in (run["metadata"] for run in agent_runs[:3])] == [False, True, True]
+    # the code ladder's labels, which a run has whether or not a judge read it
+    signals = read_jsonl(riemann_copy / "signals.jsonl")
+    team = next(row for row in signals if row["row"] == "team")
+    rungs = {row["agent"]: row["rung"] for row in signals if row["row"] == "agent"}
+    assert set(rungs) == {"a01", "a02", "a03"} and team["rung"] and team["collaboration"]
+    for agent_run in agent_runs:
+        metadata = agent_run["metadata"]
+        assert metadata["team_code_rung"] == team["rung"] and metadata["team_collaboration"] == team["collaboration"]
+        if metadata["kind"] == "agent":
+            assert metadata["code_rung"] == rungs[metadata["agent"]]
+            assert f"code ladder rung={rungs[metadata['agent']]}" in agent_run["description"]
     board = agent_runs[3]
     assert board["metadata"]["kind"] == "board"
     posts = board["transcripts"][0]["messages"][1:]
     assert [post["metadata"]["sender"] for post in posts] == ["a03", "a01"]
     assert posts[0]["content"].startswith("a03 (worker) posted #1 in round 12:")
+
+
+def test_the_code_ladder_of_a_run_without_signals_is_empty_and_run_json_can_hold_the_team_row(tmp_path):
+    """A run the code ladder never read gives no label. A run whose signals.jsonl has no team row reads it from
+    run.json."""
+    assert docent_convert.code_ladder(tmp_path / "never_read") == ({}, {})
+    run = tmp_path / "older"
+    run.mkdir()
+    write_jsonl(run / "signals.jsonl", SIGNALS[:3])
+    (run / "run.json").write_text(json.dumps({"signals": {"team": {"rung": "used", "collaboration": "discussed"}}}))
+    agents, team = docent_convert.code_ladder(run)
+    assert {agent: row["rung"] for agent, row in agents.items()} == {"a01": "exposed", "a02": "used", "a03": "shipped"}
+    assert team == {"rung": "used", "collaboration": "discussed"}
 
 
 class StandInClient:
