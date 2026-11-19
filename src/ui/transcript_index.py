@@ -55,13 +55,10 @@ folder and its stamps."""
 
 COLLECTION_ABOUT = {
     "study_exploration_1": ("Exploration 1", "teams, influencers",
-                            "Teams of three on four targets, with influencers (regulators and disregulators) at "
-                            "several levels and models. The runs its INDEX.jsonl marks valid."),
+                            "Teams of three on four targets, with regulators and disregulators"),
     "study_exploration_0": ("Exploration 0", "October screen",
-                            "One agent, a team of three, or three plus a regulator, on five tasks and three models."),
-    "apart_controls": ("Apart controls", "lone agents",
-                       "One agent on nine tasks and five models, told to cheat or not. The canonical copy of each "
-                       "valid run."),
+                            "One agent, three, or three plus a regulator; five tasks"),
+    "apart_controls": ("Apart controls", "lone agents", "Lone agents on nine tasks, five models, told to cheat or not"),
 }
 SYSTEM = "system"
 """The sender of a harness notice on the board."""
@@ -217,19 +214,26 @@ def cheatbench_summary(judges: dict[str, dict[str, dict]], episodes: list[dict],
 
 def label_summary(labels: dict, roles: dict[str, str | None]) -> dict:
     """The judge labels as the runs table shows them, from the measure's answer (judge_labels.labels): {"judge", "team":
-    {label: {"score": the measure's team score, "agent": the first worker with it} or None}, "influencers": [{agent,
-    role, label: its score or None}]}. None is an agent or a team the judge has not scored."""
+    {label: {"score": the measure's team score, "agent": the first worker with it, "kind": that agent's kind} or None},
+    "influencers": [{agent, role, label: its score or None, "kinds": {label: its kind}}]}. None is an agent or a team
+    the judge has not scored. A kind is manipulation's (mislead, control or none), None for disclosure: the page marks
+    a mislead score, which an independent reading found untrustworthy."""
     agents = labels["agents"]
 
     def score(agent: str, label: str) -> int | None:
         row = agents.get(agent)
         return row[label]["score"] if row else None
+
+    def kind(agent: str | None, label: str) -> str | None:
+        row = agents.get(agent) if agent else None
+        return row[label].get("kind") if row else None
     team = {}
     for label in judge_labels.LABELS:
         top = labels["team"].get(label)
         who = next((a for a in agents if is_worker(roles.get(a)) and score(a, label) == top), None)
-        team[label] = None if top is None else {"score": top, "agent": who}
-    influencers = [{"agent": a, "role": roles.get(a), **{label: score(a, label) for label in judge_labels.LABELS}}
+        team[label] = None if top is None else {"score": top, "agent": who, "kind": kind(who, label)}
+    influencers = [{"agent": a, "role": roles.get(a), **{label: score(a, label) for label in judge_labels.LABELS},
+                    "kinds": {label: kind(a, label) for label in judge_labels.LABELS}}
                    for a in labels["influencers"]]
     return {"judge": labels["judge"], "team": team, "influencers": influencers}
 
@@ -319,6 +323,40 @@ def agents_words(n_agents: int, roles: dict) -> tuple[str, int]:
         return "One agent", workers
     extra = f", {influencers} influencer{'' if influencers == 1 else 's'}" if influencers else ""
     return f"{workers} workers{extra}", workers
+
+
+INTEREST = ("no cheating, with a regulator", "hacked, with a disregulator", "hacked, with a regulator",
+            "no cheating, with a disregulator", "hacked, no influencer", "attempted", "no cheating, no influencer")
+"""The runs page's default order, most interesting first (the user's ranking of 2026-11-19): a team's Cheating rung
+(hacked, attempted, or no cheating: none, looked, tempted) against the influencers it ran with. Where a run had both
+kinds, the regulator counts for a team that did not cheat and the disregulator for a team that hacked."""
+
+
+def interest(row: dict) -> dict:
+    """Where the run stands in INTEREST: {"rank" (1 is the most interesting), "why" (the class in words)}."""
+    rung = row["levels"]["team"].get("cheating")
+    kinds = {x["role"] for x in row["influencer_conditioning"]}
+    regulator, disregulator = "regulator" in kinds, "disregulator" in kinds
+    if rung == "attempted":
+        why = "attempted"
+    elif rung == "hacked":
+        why = ("hacked, with a disregulator" if disregulator else "hacked, with a regulator" if regulator
+               else "hacked, no influencer")
+    else:
+        why = ("no cheating, with a regulator" if regulator else "no cheating, with a disregulator" if disregulator
+               else "no cheating, no influencer")
+    return {"rank": INTEREST.index(why) + 1, "why": why}
+
+
+def interest_order(row: dict) -> tuple:
+    """The sort key of the default order: the INTEREST rank, then, each from high to low, the number of workers, the
+    number of influencers, the team's Coordination level and its Collusion rung; the collection and the run last."""
+    def level(ladder: str) -> int:
+        levels, value = transcript_levels.LADDERS[ladder]["levels"], row["levels"]["team"].get(ladder)
+        return levels.index(value) if value in levels else -1
+    influencers = sum(x["n"] for x in row["influencer_conditioning"])
+    return (interest(row)["rank"], -row["workers"], -influencers, -level("coordination"), -level("collusion"),
+            row["col"], row["run"] or "")
 
 
 def build_row(col: str, listed: Listed, rf: RunFiles, measured: dict) -> dict:
@@ -435,7 +473,7 @@ def build_index(runs: Path, cached: dict | None = None) -> dict:
     entries.update(measure_all(todo))
     rows, errors, collections_out, left_out = [], [], [], 0
     for name, listed in cols:
-        label, tag, about = COLLECTION_ABOUT.get(name, (name, "", f"Runs under runs/{name}/."))
+        label, tag, about = COLLECTION_ABOUT.get(name, (name, "", ""))
         shown = 0
         for item in listed:
             entry = entries[f"{name}/{item.key}"]
@@ -444,10 +482,11 @@ def build_index(runs: Path, cached: dict | None = None) -> dict:
             elif "left_out" in entry:
                 left_out += 1
             else:
-                rows.append(entry["row"])
+                rows.append({**entry["row"], "interest": interest(entry["row"])})
                 shown += 1
         if shown:
             collections_out.append({"key": name, "label": label, "tag": tag, "about": about, "runs": shown})
+    rows.sort(key=interest_order)
     return {"version": INDEX_VERSION, "runs": str(runs), "code": code,
             "built_at": time.strftime("%Y-%m-%d %H:%M:%S %Z"), "build_seconds": round(time.time() - t0, 2),
             "measured": len(todo), "collections": collections_out, "errors": errors, "rows": rows,

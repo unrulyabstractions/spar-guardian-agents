@@ -18,8 +18,8 @@ from collections import defaultdict
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 
-from scripts.paper.figures import FULL, agent, arrow, blank, box, edge_point, role_legend, toward
-from scripts.paper.study_ladders import valid_runs
+from scripts.paper.figures import FULL, agent, arrow, blank, box, check_print, edge_point, role_legend, toward
+from scripts.paper.study_ladders import TEXT_WIDTH_IN, valid_runs
 from src.configuration import access_policy
 from src.configuration.settings import ROOT
 from src.configuration.swarm_config import SwarmConfig
@@ -29,8 +29,8 @@ OUT = ROOT / "tmp" / "figures" / "paper" / "fig2_roles_access.png"
 STAGE2 = ROOT / "submodules" / "lucy" / "runs" / "s2_swe"
 ROLES = ("worker", "regulator", "disregulator")
 
-LEFT_NOTE = ("R oversees and hands in nothing. D is privately told\n"
-             "to get the result by any means. Neither holds a piece.")
+LEFT_NOTE = ("R oversees and hands in nothing. D is told to get\n"
+             "the result by any means. Neither holds a piece.")
 RIGHT_NOTE = ("Stage 1: seat 3 works and can push, but cannot submit.\n"
               "Stage 2: seat 3 only oversees. Control: a third worker.")
 
@@ -118,7 +118,7 @@ def panel(fig, rect, title, seats, outside, submit, note):
     for x, (label, role, text, muted) in zip(xs, seats):
         box(ax, x - w / 2, y - 0.65, w, 1.45, None, fc=WHITE, ec=INK_SECONDARY, z=1)
         ax.text(x, y + 0.53, text, ha="center", va="center", fontsize=6.8, color=MUTED if muted else INK)
-        agent(ax, x, y - 0.12, label, role, r=0.32, fs=6.5)
+        agent(ax, x, y - 0.12, label, role, r=0.34, fs=7)
         arrow(ax, (x, y + 0.8), edge_point(0, by, bw, bh, x, y + 0.8), lw=0.7, color=MUTED, head=4)
         if submit[role]:
             diamond(ax, x + 0.3, y + 0.18)
@@ -126,12 +126,12 @@ def panel(fig, rect, title, seats, outside, submit, note):
     edge = max(xs) + w / 2 + 0.5
     for label, role, side in outside:
         x, ry = side * edge, y + 0.75
-        agent(ax, x, ry, label, role, r=0.32, fs=6.5)
+        agent(ax, x, ry, label, role, r=0.34, fs=7)
         arrow(ax, toward(x, ry, 0, by, 0.38), edge_point(0, by, bw, bh, x, ry), lw=0.7, color=MUTED, head=4)
         if submit[role]:
             diamond(ax, x + 0.3, ry + 0.3)
     box(ax, -1.3, -2.38, 2.6, 0.62, "submitted work", fc=PLANE, ec=INK_SECONDARY, fs=7)
-    ax.text(0, -2.68, note, ha="center", va="top", fontsize=6.3, style="italic", color=INK_SECONDARY,
+    ax.text(0, -2.68, note, ha="center", va="top", fontsize=7, style="italic", color=INK_SECONDARY,
             linespacing=1.3)
     return ax
 
@@ -162,7 +162,9 @@ def main() -> int:
     print(f"deep dive: {dd['episodes']} Stage 2 episodes; held {dd['held']}; seat 3 by arm {dd['seat3_role']}; "
           f"submit {dd['submit']}")
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    draw(md, dd).savefig(OUT, dpi=PRINT_DPI)
+    fig = draw(md, dd)
+    check_print(fig, OUT.name, TEXT_WIDTH_IN)
+    fig.savefig(OUT, dpi=PRINT_DPI)
     print(OUT)
     return 0
 

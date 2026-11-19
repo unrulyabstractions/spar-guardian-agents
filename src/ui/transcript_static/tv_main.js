@@ -24,7 +24,6 @@ function shell() {
   app.replaceChildren(
     h('header', { class: 'topbar' },
       h('a', { class: 'brand', href: '#/' }, 'Transcripts'),
-      h('span', { class: 'muted small' }, 'three ladders, the board and every transcript, by run'),
       h('span', { class: 'spacer' }),
       h('a', { class: 'btn btn-small', href: '#/ladders' }, 'Ladders'), ' ',
       h('a', { class: 'btn btn-small', href: '#/' }, 'All runs')),

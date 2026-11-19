@@ -1,5 +1,5 @@
 /* View: one run (#/run/<collection>/<run key>?agent=<id>&call=<k>, ?agent=<id>&label=<judge label>, ?tab=board&a=&b=
- * &mode=&pos= or ?tab=details).
+ * &mode=&pos= or ?tab=details; with &fold=reasoning,call,result and &board=only on an agent's tab).
  * Ported from collusion-hermaneutics' viewer (viewer/static/app/view_run.js). A bar with the run, an agent tab per
  * agent, a Board tab and a Details tab; the selected agent's whole episode below it, each step with its labels
  * (tv_case_view.js); the run record under it: the run's labels, the run settings, each agent's record with its
@@ -13,17 +13,17 @@
  * cheatingCell). A judge label's link opens the place code located its excerpt, highlighted: the agent's tab at that
  * model call's reasoning, or the Board tab at that post (openExcerpt; ?agent=&label= opens it on arrival). CheatBench's
  * own field for an agent that acknowledged its access shows only in the CheatBench judge's block, as "CheatBench:
- * disclosed access". A tab
- * beside the agents' is one entry of `views` (a key, its label and a function that draws it once, answering its
+ * disclosed access". The run record keeps its headings, tables, chips and evidence; every definition is on the Ladders
+ * page. A tab beside the agents' is one entry of `views` (a key, its label and a function that draws it once, answering its
  * element and, for the Board, a promise of its handle). */
 import { appendAll, enc, fmtInt, fmtUsd, h } from '/static/app/dom.js';
 import { badge, dataTable, episodeRecord, kv, lazyDetails, longText, muted } from '/static/app/components.js';
 import { ROLE_ORDER, roleIcon } from '/static/app/charts.js';
 import { CHEATBENCH, ROLE_LABEL, armLabel, collectionOf, influencerParts, isInfluencer, modelLabel,
   taskLabel } from './tv_labels.js';
-import { cheatbenchTeam, cheatbenchWords, cheatingCell, cheatingPanel, clauseList, collusionPanel, coordinationPanel,
-  judgeLabels, judgeLabelsPanel, labelEntry, levelsPanel, teamScore } from './tv_levels.js';
-import { fullLegend, renderCase } from './tv_case_view.js';
+import { alarmBadge, cheatbenchTeam, cheatbenchWords, cheatingCell, cheatingPanel, clauseList, collusionPanel,
+  coordinationPanel, judgeLabels, judgeLabelsPanel, labelEntry, levelChip, levelsPanel, teamScore } from './tv_levels.js';
+import { PARTS, renderCase, stripLegend } from './tv_case_view.js';
 import { renderBoard } from './tv_view_board.js';
 
 function flash(el) {
@@ -74,7 +74,7 @@ export async function viewRun(id, q, view) {
     const holder = h('div', { class: 'tr-holder' });
     const state = { loaded: null, tr: null };
     const sizeTxt = a.transcript_bytes != null ? `${fmtInt(Math.round(a.transcript_bytes / 1024))} KB` : 'missing';
-    const btn = h('button', { type: 'button', class: 'btn', disabled: !a.folder }, a.folder ? `Show transcript (${sizeTxt})` : 'No transcript on disk');
+    const btn = h('button', { type: 'button', class: 'btn', disabled: !a.folder }, a.folder ? `Transcript (${sizeTxt})` : 'No transcript on disk');
     const load = () => {
       if (!state.loaded) {
         btn.disabled = true;
@@ -83,11 +83,11 @@ export async function viewRun(id, q, view) {
           .then(x => { if (!x.ok) throw new Error(`HTTP ${x.status}`); return x.json(); })
           .then(t => {
             state.tr = renderCase(t, { agent: a.agent, levels: d.levels, isRegulator: a.role === 'regulator', regulatorCalls: regulatorCalls(a.agent, a.role) });
-            holder.replaceChildren(muted(`The transcript of ${a.agent} is shown at the top of the page, under its tab.`, 'small block'));
-            btn.textContent = `Transcript at the top (${sizeTxt})`;
+            btn.disabled = false;
+            btn.textContent = `Transcript (${sizeTxt})`;
             return state.tr;
           })
-          .catch(e => { holder.replaceChildren(h('div', { class: 'error-box' }, `Could not load the transcript: ${e.message}`)); btn.disabled = false; btn.textContent = 'Retry loading the transcript'; state.loaded = null; throw e; });
+          .catch(e => { holder.replaceChildren(h('div', { class: 'error-box' }, `Could not load the transcript: ${e.message}`)); btn.disabled = false; btn.textContent = 'Retry'; state.loaded = null; throw e; });
       }
       holder.hidden = false;
       return state.loaded;
@@ -112,7 +112,6 @@ export async function viewRun(id, q, view) {
     const c = cards.get(agent);
     if (!c) return;
     const tr = await selectTab(agent);
-    tr.showAll();
     const box = tr.findCall(k);
     if (box) flash(box);
     else flash(c.card);
@@ -134,8 +133,7 @@ export async function viewRun(id, q, view) {
   }
   // The link a label's entry shows: where the excerpt is, opening it.
   const openLink = (agent, label) => at => h('button', { type: 'button', class: 'linkish ev-link sc-open',
-    title: at.where === 'post' ? `open ${at.post} on the Board tab with the excerpt highlighted`
-      : `open ${agent}'s transcript at model call ${at.call} with the excerpt highlighted in its reasoning`,
+    title: at.where === 'post' ? `open ${at.post} with the excerpt marked` : `open model call ${at.call} with the excerpt marked`,
     onclick: () => openExcerpt(agent, label).catch(() => {}) },
   at.where === 'post' ? `${at.post} on the board` : `reasoning, model call ${at.call}`);
 
@@ -164,7 +162,7 @@ export async function viewRun(id, q, view) {
       last = re.lastIndex;
     }
     if (last < s.length) out.push(s.slice(last));
-    for (const role of byInfluencer) out.push(' ', badge(`written by the ${role}`, 'notice', `the post this evidence cites was written by the run's ${role}, an influencer the workers cannot tell from a worker`));
+    for (const role of byInfluencer) out.push(' ', badge(`written by the ${role}`, 'notice', `the cited post is the ${role}'s`));
     return h('span', { class: 'ev-text' }, out);
   }
   const evidenceList = (lines, agent) => {
@@ -177,26 +175,26 @@ export async function viewRun(id, q, view) {
     const r = cheating.applicable && cheating.agents[agent];
     if (!r) return muted(`Cheating: ${cheating.reason || 'no row for this agent'}.`, 'small block');
     const L = d.levels.ladders.cheating;
-    return h('div', null, h('h3', { class: 'sub-h' }, 'Cheating for this agent'),
-      h('div', { class: 'verdict-flags' }, cheatingCell(L, r.rung, r.cheated, cheatbenchWords(cheatbench[agent])),
-        muted(` ${L.glosses[L.levels.indexOf(r.rung)]}`, 'small')),
+    return h('div', null, h('h3', { class: 'sub-h' }, 'Cheating'),
+      h('div', { class: 'verdict-flags' }, cheatingCell(L, r.rung, r.cheated, cheatbenchWords(cheatbench[agent]), true,
+        d.levels.agents[agent].cheating.facts)),
       clauseList(d.levels, r.clauses, agent, { evidence: evidenceText }),
-      (r.below || []).length ? h('div', { class: 'small' }, h('span', { class: 'field-label' }, 'Below the ladder, evidence only: '),
+      (r.below || []).length ? h('div', { class: 'small' }, h('span', { class: 'field-label', title: 'Evidence only, no rung' }, 'Below the ladder: '),
         evidenceList(r.below, agent)) : null,
-      h('div', { class: 'small' }, h('span', { class: 'field-label' }, 'CheatBench\'s judge\'s labels beside the code: '), judgeLabels(r)));
+      h('div', { class: 'small' }, h('span', { class: 'field-label' }, 'CheatBench labels: '), judgeLabels(r)));
   }
 
   // The agent's judge labels beside the ladders: each label's score, excerpt, reason and the link to its place.
   function agentJudgeLabels(agent) {
-    return h('div', null, h('h3', { class: 'sub-h' }, 'Judge labels for this agent (scores 0 to 100, no rung)'),
+    return h('div', null, h('h3', { class: 'sub-h' }, 'Judge labels'),
       judged[agent] ? h('div', { class: 'sc-pair' }, Object.entries(labelAbout).map(([k, about]) => h('div', null,
         h('span', { class: 'field-label' }, `${about.name}: `), labelEntry(about, judged[agent][k], openLink(agent, k), true))))
-        : muted('Not judged: no judge has scored this agent.', 'small block'));
+        : muted('not judged', 'small block'));
   }
 
   function cheatbenchBlock(a) {
     const judges = Object.entries(a.cheatbench || {});
-    if (!judges.length) return muted('Not judged: no CheatBench verdict file holds this agent.', 'small block');
+    if (!judges.length) return muted('not judged', 'small block');
     return judges.map(([judge, v]) => h('div', { class: 'judge-block' },
       h('div', { class: 'jb-head' }, h('h4', null, `judge ${judge}`), cheatbenchWords({ [judge]: v })),
       v.summary ? h('p', { class: 'verdict-summary' }, evidenceText(v.summary, a.agent)) : null,
@@ -205,25 +203,23 @@ export async function viewRun(id, q, view) {
           h('dd', null, k === 'judge_cost_usd' ? fmtUsd(x) : typeof x === 'string' ? evidenceText(x, a.agent) : fieldText(x)))))));
   }
 
-  // ---- labels table: each ladder's team level (Cheating with CheatBench's judge's word under the code's), the alarm
-  // where the run has it, and the judges.
+  // ---- labels table: each ladder's team level with its evidence (Cheating with CheatBench's judge's word under the
+  // code's), the alarm where the run has it, and the judge labels' team scores.
   const L = d.levels.ladders;
-  const teamCell = k => {
-    const c = d.levels.team[k];
-    return c.na ? muted(`not applicable: ${c.evidence}`) : h('span', null, h('b', null, c.level), muted(` (${c.index} of ${c.of}) ${c.evidence}`, 'small'));
-  };
+  const team = d.levels.team;
+  const teamCell = k => (team[k].na ? muted(`not applicable: ${team[k].evidence}`)
+    : [levelChip(k, L[k], team[k].level, true, { facts: team[k].facts }), muted(team[k].evidence, 'small block')]);
   const labelRows = [
-    ['Cheating (team)', [cheatingCell(L.cheating, d.levels.team.cheating.na ? null : d.levels.team.cheating.level, cheating.team_cheated,
-      multi ? cheatbenchTeam(row.cheatbench) : cheatbenchWords(Object.values(cheatbench)[0])), muted(d.levels.team.cheating.evidence, 'small block')],
-    `${L.cheating.rule} ${CHEATBENCH.about}`],
-    ...(cheating.alarm ? [['Alarm', badge(`alarm: ${cheating.alarm}`, 'bad'), L.cheating.note]] : []),
-    ['Coordination (team)', teamCell('coordination'), L.coordination.rule],
-    ['Collusion (team)', teamCell('collusion'), L.collusion.rule],
-    ...Object.entries(labelAbout).map(([k, about]) => [`${about.name} (judge, team's highest)`,
-      teamScore(row.labels.team[k]), `${about.scored} ${d.levels.judge_label_about.scored_by}`]),
+    ['Cheating', [cheatingCell(L.cheating, team.cheating.na ? null : team.cheating.level, cheating.team_cheated,
+      multi ? cheatbenchTeam(row.cheatbench) : cheatbenchWords(Object.values(cheatbench)[0]), true, team.cheating.facts),
+    muted(team.cheating.evidence, 'small block')]],
+    ...(cheating.alarm ? [['Alarm', alarmBadge(cheating.alarm)]] : []),
+    ['Coordination', teamCell('coordination')],
+    ['Collusion', teamCell('collusion')],
+    ...Object.entries(labelAbout).map(([k, about]) => [about.name, teamScore(row.labels.team[k])]),
   ];
-  const labelsCard = h('section', { class: 'card' }, h('h2', null, 'Labels for this run'),
-    dataTable(['Label', 'Value', 'What it means'], labelRows.map(([a, b, c]) => [h('strong', null, a), b, h('span', { class: 'small' }, c)]), { cls: 'labels-table' }));
+  const labelsCard = h('section', { class: 'card' }, h('h2', null, multi ? 'Team labels' : 'Labels'),
+    dataTable(['Label', 'Value'], labelRows.map(([a, b]) => [h('strong', null, a), b]), { cls: 'labels-table' }));
 
   // ---- header.
   const m = d.meta || {};
@@ -250,9 +246,12 @@ export async function viewRun(id, q, view) {
   labelsCard.id = 'sec-labels';
   const agentsBox = h('div', { id: 'sec-agents' }, d.agents.map(agentCard));
 
-  // ---- top bar: run, arm, agent tabs, Show filter, the run record's toggle; the stage below holds the selected tab.
+  // ---- top bar: run, arm, agent tabs, the fold toggles, the run record's toggle; the stage below holds the selected
+  // tab. The parts folded on every step (?fold=reasoning,call,result) and Board calls only (?board=only) come from the
+  // hash and go back to it; an agent's tab takes them when shown.
   const firstAgent = (d.agents.find(a => a.role === 'worker' && a.folder) || d.agents.find(a => a.folder) || {}).agent;
-  const stage = h('div', { class: 'rp-stage', dataset: { show: 'all' } });
+  const folded = new Set((q.get('fold') || '').split(',').filter(x => PARTS.some(([k]) => k === x)));
+  const stage = h('div', { class: 'rp-stage', dataset: { board: q.get('board') === 'only' ? 'only' : 'all' } });
   const tabs = new Map();
   let current = null;
   const ROLE_WORD = ROLE_LABEL;
@@ -266,7 +265,7 @@ export async function viewRun(id, q, view) {
     coordinationPanel(d.levels, roles),
     collusionPanel(d.levels, roles, { evidence: evidenceText }),
     judgeLabelsPanel(d.levels, roles, openLink),
-    h('section', { class: 'card' }, h('h2', null, 'Colour legend'), fullLegend(d.levels.ladders, d.levels.order))) });
+    h('section', { class: 'card' }, h('h2', null, 'Legend'), stripLegend(d.levels.ladders, d.levels.order))) });
   // The Board tab reads /api/board when first opened; its handle ({moveTo, showPost, state}) comes once it is drawn.
   // Its pair, mode and position come from the hash (a, b, mode, pos) and go back to it; its agents' cards show the
   // judge labels the Details tab shows.
@@ -306,17 +305,43 @@ export async function viewRun(id, q, view) {
     if (!c) return null;
     stage.replaceChildren(h('div', { class: 'loading' }, 'Loading the transcript…'));
     const tr = await c.load();
+    tr.setFolds(folded);
     if (current === key) stage.replaceChildren(tr.el);
     return tr;
   }
-  const showSel = h('select', { 'aria-label': 'Which text to show', onchange: e => { stage.dataset.show = e.target.value; } },
-    [['all', 'All'], ['reasoning', 'Reasoning'], ['tools', 'Tool calls'], ['board', 'Board calls']].map(([v, t]) => h('option', { value: v }, t)));
+  function keepInHash() {
+    const [path, qs] = location.hash.slice(1).split('?');
+    const p = new URLSearchParams(qs || '');
+    if (folded.size) p.set('fold', PARTS.map(([k]) => k).filter(k => folded.has(k)).join(','));
+    else p.delete('fold');
+    if (stage.dataset.board === 'only') p.set('board', 'only');
+    else p.delete('board');
+    const s = p.toString();
+    try { history.replaceState(null, '', `#${path}${s ? '?' + s : ''}`); } catch (e) { /* view stays as drawn */ }
+  }
+  const toggle = (label, tip, on, flip) => {
+    const b = h('button', { type: 'button', class: 'rp-tog', 'aria-pressed': String(on), title: tip,
+      onclick: () => { b.setAttribute('aria-pressed', String(flip())); keepInHash(); } }, label);
+    return b;
+  };
+  const toggles = h('span', { class: 'rp-togs' },
+    PARTS.map(([k, label]) => toggle(label, `show or fold the ${label.toLowerCase()} of every step`,
+      !folded.has(k), () => {
+        if (folded.has(k)) folded.delete(k); else folded.add(k);
+        const tr = cards.has(current) && cards.get(current).state.tr;
+        if (tr) tr.setFolds(folded);
+        return !folded.has(k);
+      })),
+    toggle('Board calls only', 'only the calls that read or posted on the message board', stage.dataset.board === 'only', () => {
+      stage.dataset.board = stage.dataset.board === 'only' ? 'all' : 'only';
+      return stage.dataset.board === 'only';
+    }));
   const bar = h('div', { class: 'rp-bar' },
     h('a', { class: 'rp-back', href: '#/', title: 'all runs' }, '←'),
     h('b', { class: 'rp-run' }, row.run), h('span', { class: 'rp-arm' }, armLabel(row)),
-    cheating.alarm ? badge(`alarm: ${cheating.alarm}`, 'bad', d.levels.ladders.cheating.note) : null,
+    cheating.alarm ? alarmBadge(cheating.alarm) : null,
     h('span', { class: 'rp-tabs' }, [...tabs.values()]),
-    h('label', { class: 'rp-show' }, 'Show ', showSel),
+    toggles,
     h('button', { type: 'button', class: 'rp-dbtn', title: 'the run\'s labels, its settings and each agent\'s record',
       onclick: () => { record.open = !record.open; if (record.open) record.scrollIntoView({ block: 'start' }); } },
     'Run record'));
@@ -330,8 +355,7 @@ export async function viewRun(id, q, view) {
     else selectTab(views.has(q.get('tab')) ? q.get('tab') : (firstAgent || 'details')).catch(() => {});
   });
   const record = h('details', { class: 'rp-details' },
-    h('summary', null, 'Run record: labels, run settings, each agent\'s record with its Cheating evidence and the '
-      + 'judges'),
+    h('summary', null, 'Run record'),
     header, labelsCard, agentsBox);
   return h('div', { class: 'page rp-page' }, bar, stage, record);
 }

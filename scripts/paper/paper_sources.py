@@ -13,8 +13,9 @@ src/configuration/instruction_levels.yaml), cheating_rungs.tex (the Cheating lad
 src/measures/rungs.py RUNGS and cheating_ladder.py CLAUSES), coordination_levels.tex (the Coordination ladder's levels
 and cuts, from src/measures/coordination.py), collusion_rungs.tex (the Collusion ladder's rungs, from
 src/measures/collusion.py RUNGS), score_anchors.tex (the judge labels' anchors, from src/measures/judge_labels.py
-SCORE_ANCHORS) and reliability.tex (how often an independent reading of the transcripts confirmed each rung and label,
-from src/measures/measure_readings.yaml). The rungs' and clauses' wording is
+SCORE_ANCHORS), reliability.tex (how often an independent reading of the transcripts confirmed each rung and label,
+from src/measures/measure_readings.yaml) and reliability_retired.tex (the same file's readings of the retired yes or no
+labels). The rungs' and clauses' wording is
 the transcript viewer's (src/ui/transcript_levels.py CHEAT_GLOSSES, CLAUSE_GLOSSES, COLLUSION_GLOSSES). Nobody edits
 these files by hand.
 
@@ -94,6 +95,8 @@ FIGURES: dict[str, Figure] = {
                          "make figures (scripts/paper/figures.py)"),
     "table_rungs_by_domain.png": Figure("tmp/tables/method/table_rungs_by_domain.png",
                                         "make tables (scripts/paper/tables.py)"),
+    "table_rungs_by_domain_2.png": Figure("tmp/tables/method/table_rungs_by_domain_2.png",
+                                          "make tables (scripts/paper/tables.py)"),
     # Appendices B and C: the results tables.
     "positive_control.png": Figure("tmp/tables/results/positive_control.png",
                                    RESULTS.format("control_tables.py")),
@@ -103,6 +106,10 @@ FIGURES: dict[str, Figure] = {
                                            RESULTS.format("protein_regulator_table.py")),
     "table_swe_regulators.png": Figure("tmp/tables/results/table_swe_regulators.png",
                                        RESULTS.format("swe_regulator_table.py")),
+    "table_swe_luna_regulators.png": Figure("tmp/tables/results/table_swe_luna_regulators.png",
+                                            RESULTS.format("swe_regulator_table.py")),
+    "table_creative_regulators.png": Figure("tmp/tables/results/table_creative_regulators.png",
+                                            RESULTS.format("creative_regulator_table.py")),
     "table_swe_disregulators.png": Figure("tmp/tables/results/table_swe_disregulators.png",
                                           RESULTS.format("disregulator_tables.py")),
     "table_creative_disregulators.png": Figure("tmp/tables/results/table_creative_disregulators.png",
@@ -289,29 +296,21 @@ def score_anchors_tex() -> str:
             + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n")
 
 
-RETIRED = ("scheming", "awareness", "manipulation")
-"""The measures of measure_readings.yaml whose readings are of a retired yes or no judge label: scheming, awareness and
-the yes or no manipulation label, replaced on 2026-11-19 by the scored labels (judge_labels.LABELS). Their readings
-stay as they were, and the table marks each block retired."""
-
-
-def reliability_tex() -> str:
+def reliability_tex(retired: bool = False) -> str:
     """How often an independent reading of the transcripts confirmed each rung and label
-    (src/measures/measure_readings.py readings(), the file the viewer's How reliable section reads too): a block per
-    measure and pass read, headed by the measure's name and the pass's label (a RETIRED measure marked so, and no pass
-    of it called current), then per row how the cases were chosen, and how many were read, held, were wrong or were
-    unclear."""
+    (src/measures/measure_readings.py readings(), the file the viewer's How reliable section reads too): the rows of
+    the current passes, or with `retired` the rows of the passes that read the retired yes or no labels. A block per
+    measure and pass read, headed by the measure's name and the pass's label (a retired block marked "retired yes or
+    no label"), then per row how the cases were chosen, and how many were read, held, were wrong or were unclear."""
     r = measure_readings.readings()
     rows, last = [], None
-    for row in r["rows"]:
+    for row in (row for row in r["rows"] if row["retired"] is retired):
         if (row["measure"], row["pass"]) != last:
             if last is not None:
                 rows.append(r"\addlinespace")
-            label = r["passes"][row["pass"]]["label"]
-            name = r["measures"][row["measure"]]
-            if row["measure"] in RETIRED:
-                name, label = f"{name} (retired yes or no label)", label.removesuffix(" (current)")
-            rows.append(rf"\multicolumn{{7}}{{@{{}}l}}{{\textbf{{{escape(name)}}}, {escape(label)}}} \\")
+            name = r["measures"][row["measure"]] + (" (retired yes or no label)" if retired else "")
+            rows.append(rf"\multicolumn{{7}}{{@{{}}l}}{{\textbf{{{escape(name)}}}, "
+                        rf"{escape(r['passes'][row['pass']]['label'])}}} \\")
             last = (row["measure"], row["pass"])
         counts = " & ".join("--" if n is None else str(n) for n in (row["read"], row["held"], row["wrong"],
                                                                     row["unclear"]))
@@ -319,7 +318,7 @@ def reliability_tex() -> str:
     return (HEADER.format(source="src/measures/measure_readings.yaml")
             + "\\begin{tabularx}{\\linewidth}{@{}l >{\\raggedright\\arraybackslash}p{0.2\\linewidth} r r r r "
             + ">{\\raggedright\\arraybackslash}X@{}}\n\\toprule\n"
-            + "Rung or verdict & Cases read & Read & Held & Wrong & Unclear & Note \\\\\n\\midrule\n"
+            + "Rung or score & Cases read & Read & Held & Wrong & Unclear & Note \\\\\n\\midrule\n"
             + "\n".join(rows) + "\n\\bottomrule\n\\end{tabularx}\n")
 
 
@@ -424,6 +423,7 @@ def generated_files() -> dict[Path, str]:
         GENERATED / "collusion_rungs.tex": collusion_rungs_tex(),
         GENERATED / "score_anchors.tex": score_anchors_tex(),
         GENERATED / "reliability.tex": reliability_tex(),
+        GENERATED / "reliability_retired.tex": reliability_tex(retired=True),
     }
     if STUDY_INDEX.exists():
         files[GENERATED / "study.tex"] = study_tex()

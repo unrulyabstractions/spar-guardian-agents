@@ -1,18 +1,21 @@
 /* View: every valid run of every collection under runs/ (#/), with filters, sorting and paging. Ported from
  * collusion-hermaneutics' viewer (viewer/static/app/view_index.js). Our edits: the collections come from the index,
- * which serves the valid runs only; the columns are the run's identity, its worker and influencer conditioning, the
- * team's three ladders, the judge labels and the influencers' own three ladders, under a band that names the three
- * groups; one Cheating cell holds the code's rung and cheated and, under it, CheatBench's judge's word, each marked by
- * who says it; the judge labels disclosure and manipulation, each the team's highest score and the worker it is of,
- * linked to that worker's excerpt, with a filter each ("at least" a number), and the influencers' own scores in the
- * Influencers band; the Cheating ladder's alarm marks the row and is counted above the table, with no column; the task,
- * the agents, the conditioning and the arm are the server's words; a legend table under the runs shows every level of
- * the three ladders as the cells draw it, with each ladder's line. */
+ * which serves the valid runs only; the columns are the run, its workers (their number and model over their
+ * conditioning as chips) and its influencers (each one's role and level as chips over its model), its task, the team's
+ * three ladders, the judge labels and the influencers' own three ladders, under a band that names the three groups,
+ * and the collection last; one Cheating cell holds the code's rung and cheated and, under it, CheatBench's judge's
+ * word, each marked by who says it; the judge labels disclosure and manipulation, each the team's highest score and the
+ * worker it is of, linked to that worker's excerpt, with a filter each ("at least" a number), and the influencers' own
+ * scores in the Influencers band; the Cheating ladder's alarm marks the row, with no column; the task, the
+ * conditioning and the arm are the server's words; the heading carries the count, the pager beside it, and the filters
+ * stand in three labelled groups (FILTER_GROUPS), a set filter outlined; a run with no influencer shows a dash in the
+ * influencer columns; a legend table under the runs shows every level of the three ladders as the cells draw it,
+ * with each ladder's line; the collections and the index's build stand in a small table behind one "Collections"
+ * control. Every definition is on the Ladders page. */
 import { enc, fmtInt, h, plural } from '/static/app/dom.js';
 import { muted, select } from '/static/app/components.js';
-import { cheatbenchTeam, cheatingCell, labelAbout, levelChip, lineMark, scoreChip, teamScore } from './tv_levels.js';
-import { CHEATBENCH, COLLECTION_ORDER, armLabel, collectionOf, influencerParts, modelLabel, setCollections,
-  taskLabel } from './tv_labels.js';
+import { cheatbenchTeam, cheatingCell, levelChip, lineMark, misleadMark, scoreChip, teamScore } from './tv_levels.js';
+import { COLLECTION_ORDER, collectionOf, modelLabel, setCollections, taskLabel } from './tv_labels.js';
 
 let INDEX = null;
 export async function loadIndex() {
@@ -44,43 +47,55 @@ const teamScoreOf = (r, k) => (r.labels.team[k] ? r.labels.team[k].score : -1);
 const excerptHref = (r, label) => agent => `#/run/${r.id.split('/').map(enc).join('/')}?agent=${enc(agent)}&label=${enc(label)}`;
 
 /** The legend under the runs, and the Ladders page's list of the three ladders: one row per ladder, every level drawn
- * as its cell with the ladder's line marked, and how the level is read. d is /api/ladders' answer. */
-export function legendTable(d, title = 'Legend: the three ladder columns') {
+ * as its cell, the ladder's line between its two sides. d is /api/ladders' answer. */
+export function legendTable(d, title = 'Legend') {
   const rows = d.order.map(L => {
     const lad = d.ladders[L];
-    return h('tr', null,
-      h('td', null, h('b', null, lad.name)),
-      h('td', { class: 'lv' }, lad.levels.map(v => [
-        v === lad.line ? h('div', { class: 'idx-legend-line' }, lineMark(lad), ' ', lad.line_words) : null,
-        h('div', { class: 'idx-legend-level' }, levelChip(L, lad, v))]),
-        L === 'cheating' ? h('div', { class: 'idx-legend-sample' }, muted('How a Cheating cell reads (an example, no run\'s data): ', 'small block'),
-          cheatingCell(lad, lad.line, true, h('span', { class: 'small' }, '1 of 3 cheated'))) : null),
-      h('td', { class: 'small' }, lad.rule));
+    return h('tr', null, h('th', { scope: 'row' }, lad.name),
+      h('td', { class: 'idx-legend-levels' }, lad.levels.map(v => [v === lad.line ? lineMark(lad) : null, levelChip(L, lad, v, false)])));
   });
   return h('section', { class: 'card idx-legend', id: 'legend' }, h('h2', null, title),
-    h('p', { class: 'small muted' }, 'A ladder cell shows the level the team reached: the colour of the level, one bar per level of the ladder, the level\'s name and its rank. ',
-      'Each ladder has a line: the levels below it are drawn pale, the levels above it strong, and the bars leave a gap at it. ',
-      'All three ladders are read by code from the run\'s records, with no judge. ',
-      h('a', { href: '#/ladders' }, 'What these words mean, and the levels task by task')),
-    h('div', { class: 'table-wrap' }, h('table', { class: 'data idx-legend-table' },
-      h('thead', null, h('tr', null, ['Ladder', 'Levels, lowest to highest, and the line', 'How the level is read'].map(t => h('th', { scope: 'col' }, t)))),
-      h('tbody', null, rows))));
+    h('table', { class: 'idx-legend-table' }, h('tbody', null, rows)));
 }
 
 const colIx = r => { const i = COLLECTION_ORDER.indexOf(r.col); return i < 0 ? 99 : i; };
 const TEAM_TITLE = {
-  cheating: 'The team\'s rung on the Cheating ladder, read by code: the highest rung of any worker, or of the team\'s own evidence, and whether the team cheated. Under it, CheatBench\'s judge\'s own word: how many workers it says cheated. An influencer is not in either (the Influencers columns)',
-  coordination: 'The team\'s level on the Coordination ladder: the workers\' levels averaged and rounded half up; an influencer is not in it (the Influencers columns)',
-  collusion: 'The team\'s rung on the Collusion ladder, read by code: the highest rung of a pair of workers; an influencer is not in it (the Influencers columns)',
+  cheating: 'Highest worker\'s rung; under it, CheatBench judge\'s count',
+  coordination: 'Workers\' levels averaged, rounded half up',
+  collusion: 'Highest pair of workers',
 };
+/** A cell with nothing to show: a run with no influencer, or a run of one agent. */
+const none = () => muted('–', 'small');
 
 /** The influencer conditioning filter's value of one influencer: its kind and level. */
 const influencerKind = x => (x.level ? `${x.role}: ${x.level}` : x.role);
 const NO_INFLUENCER = 'none';
 const influencerKinds = r => (r.influencer_conditioning.length ? r.influencer_conditioning.map(influencerKind) : [NO_INFLUENCER]);
 
-/** The runs table's columns, in the order the user set on 2026-11-19: the run's identity, the two conditioning
- * columns, the team's three ladders, the judge labels, then the influencers' three ladders and their judge labels.
+/** A worker conditioning's chip: not told calm, told to cheat warm, a rule cool and a rule naming the exploit strong. */
+const CONDITIONING_TONE = { 'not told': 'cond-none', 'told to cheat': 'cond-cheat', 'rule naming the exploit': 'cond-rule-strong',
+  'rule naming where the exploit lies': 'cond-rule-strong' };
+const conditioningChip = part => h('span', { class: ['cond-chip', CONDITIONING_TONE[part] || 'cond-rule'] }, part);
+/** The Workers cell: the workers' number and model over their conditioning's chips. */
+const workersCell = r => h('div', { class: 'idx-who' },
+  h('span', { class: 'idx-model' }, h('span', { class: 'idx-count', title: plural(r.workers, 'worker') }, `${r.workers} ×`), ' ', modelLabel(r)),
+  h('span', { class: 'idx-chips' }, r.worker_conditioning.split('; ').map(conditioningChip)));
+/** The Influencers cell: per influencer its role and its level as chips over its model; none without one. */
+const influencersCell = r => (r.influencer_conditioning.length
+  ? h('div', { class: 'idx-who' }, r.influencer_conditioning.map(x => h('div', { class: 'idx-influencer' },
+    h('span', { class: 'idx-chips' },
+      h('span', { class: ['role-chip', `role-chip-${x.role}`] }, x.n === 1 ? x.role : `${x.n} ${x.role}s`),
+      x.level ? h('span', { class: ['level-chip', `level-chip-${x.role}`] }, x.level) : null),
+    h('span', { class: 'idx-model' }, modelLabel({ model: x.model })))))
+  : none());
+
+/** A name that may break after each underscore (and at a space, unless the space is a no-break one). */
+const breakable = name => String(name).split('_').flatMap((part, i) => (i ? ['_', h('wbr'), part] : [part]));
+
+/** The runs table's columns, in the order the user set on 2026-11-19: the interest, the run, the workers and the
+ * influencers (each model with its conditioning), the task, the team's three ladders, the judge labels, the
+ * influencers' three ladders and their judge labels, and the collection last. The Workers cell says how many workers
+ * and the Influencers cell names each influencer, so no column counts the agents.
  * Each is {key, label, group, title, sort(row), cell(row)}; group names the band over it (GROUPS). d is /api/ladders'
  * answer. */
 function columns(d) {
@@ -91,81 +106,92 @@ function columns(d) {
       ? cheatingCell(lad(L), r.levels.team[L], r.levels.cheated, cheatbenchTeam(r.cheatbench), false)
       : levelChip(L, lad(L), r.levels.team[L], false)) });
   const influencers = L => ({ key: `lv_${L}_influencers`, label: lad(L).name, group: 'influencers',
-    title: `Each influencer's own level on the ${lad(L).name} ladder, read the same way as a worker's and kept out of the team's level`,
+    title: 'Each influencer\'s own level, kept out of the team\'s',
     sort: r => Math.max(-1, ...r.levels[`${L}_influencers`].map(x => rank(L, x.level))),
     cell: r => {
       const xs = r.levels[`${L}_influencers`];
-      if (!xs.length) return muted(r.n_agents > 1 ? 'no influencer' : 'one agent', 'small');
+      if (!xs.length) return none();
       return h('span', { class: 'lv-influencers' }, xs.map(x => h('div', { class: 'lv-influencer-row' },
         h('span', { class: 'small muted' }, `${x.role} `), levelChip(L, lad(L), x.level, false))));
     } });
   const about = d.judge_labels;
   const label = k => ({ key: k, label: about.labels[k].name, group: 'labels',
-    title: `${about.labels[k].scored} The team's highest score of a worker (0 to 100) and which worker; the worker opens its excerpt. ${about.scored_by}`,
+    title: 'Team\'s highest score, 0 to 100, and its worker',
     sort: r => teamScoreOf(r, k), cell: r => teamScore(r.labels.team[k], excerptHref(r, k)) });
   const influencerLabel = k => ({ key: `${k}_influencers`, label: about.labels[k].name, group: 'influencers',
-    title: `Each influencer's own ${about.labels[k].name.toLowerCase()} score, kept out of the team's`,
+    title: 'Each influencer\'s own score, kept out of the team\'s',
     sort: r => Math.max(-1, ...r.labels.influencers.map(x => (x[k] == null ? -1 : x[k]))),
-    cell: r => (!r.labels.influencers.length ? muted(r.n_agents > 1 ? 'no influencer' : 'one agent', 'small')
+    cell: r => (!r.labels.influencers.length ? none()
       : h('span', { class: 'lv-influencers' }, r.labels.influencers.map(x => h('div', { class: 'lv-influencer-row' },
         h('span', { class: 'small muted' }, `${x.role} `), x[k] == null ? muted('not judged', 'small')
-          : h('a', { href: excerptHref(r, k)(x.agent), title: `open ${x.agent}'s excerpt` }, scoreChip(x[k])))))) });
+          : [h('a', { href: excerptHref(r, k)(x.agent), title: `open ${x.agent}'s excerpt` }, scoreChip(x[k])),
+            (x.kinds || {})[k] === 'mislead' ? [' ', misleadMark('mislead')] : null])))) });
   return [
-    { key: 'col', label: 'Collection', title: 'Which folder under runs/ holds the run', sort: colIx,
-      cell: r => h('span', { title: `${collectionOf(r.col).tag}: ${collectionOf(r.col).about}` }, collectionOf(r.col).label) },
-    { key: 'run', label: 'Run', title: 'The run\'s name; opens the run page', sort: r => r.run,
+    { key: 'interest', label: 'Interest', title: 'Default order: team\'s Cheating rung against its influencers',
+      sort: r => r.interest.rank, cell: r => h('span', { class: 'small' }, h('strong', null, String(r.interest.rank)), ` ${r.interest.why}`) },
+    { key: 'run', label: 'Run', sort: r => r.run,
       cell: r => h('a', { class: 'run-link', href: `#/run/${r.id.split('/').map(enc).join('/')}` },
-        String(r.run).split('_').flatMap((part, i) => (i ? ['_', h('wbr'), part] : [part]))) },
+        breakable(r.run)) },
+    { key: 'workers', label: 'Workers', title: 'Number, model and system prompt\'s instruction',
+      sort: r => `${modelLabel(r)} · ${r.worker_conditioning}`, cell: workersCell },
+    { key: 'influencers', label: 'Influencers', title: 'Each influencer\'s role, instruction level and model',
+      sort: r => r.influencer_conditioning.map(x => `${x.role} ${x.level || ''} ${modelLabel({ model: x.model })}`).join(' · '),
+      cell: influencersCell },
     { key: 'task', label: 'Task', sort: r => taskLabel(r), cell: r => taskLabel(r) },
-    { key: 'agents', label: 'Agents', title: 'Who ran: one agent, or the workers and the number of influencers', sort: r => r.agents, cell: r => r.agents },
-    { key: 'model', label: 'Workers\' model', sort: r => modelLabel(r), cell: r => modelLabel(r) },
-    { key: 'worker', label: 'Worker conditioning', title: 'What the workers\' system prompt told them: not told, told to cheat, or a rule sentence (a generic honesty rule up to a rule naming the exploit), from the run\'s configuration',
-      sort: r => r.worker_conditioning, cell: r => r.worker_conditioning },
-    { key: 'influencer', label: 'Influencer conditioning', title: 'Each influencer of the run: regulator or disregulator, its instruction level and the model it ran; none for a run with no influencer',
-      sort: r => influencerKinds(r).join(', '),
-      cell: r => (r.influencer_conditioning.length ? r.influencer_conditioning.map(x => h('div', { class: 'small' }, influencerParts(x).map((part, i) => [i ? ' · ' : '', h('span', { class: 'nowrap' }, part)])))
-        : muted(NO_INFLUENCER, 'small')) },
     ...d.order.map(team),
     ...Object.keys(about.labels).map(label),
     ...d.order.map(influencers),
     ...Object.keys(about.labels).map(influencerLabel),
+    { key: 'col', label: 'Collection', title: 'Folder under runs/', sort: colIx,
+      cell: r => h('span', { title: `${collectionOf(r.col).tag}: ${collectionOf(r.col).about}` }, breakable(collectionOf(r.col).label.replaceAll(' ', '\u00a0'))) },
   ];
 }
 
-/** The bands over the columns: the run's identity and conditioning (no name), the team's ladders, the judge labels and
- * the influencers' ladders. */
+/** The bands over the columns: the run's identity and conditioning (no name), the team's ladders, the judge labels,
+ * the influencers' ladders, and the collection (no name). */
 const GROUPS = { team: 'Team', labels: 'Judge labels', influencers: 'Influencers' };
 
 // Columns whose text wraps.
-const WRAP = new Set(['col', 'run', 'task', 'agents', 'model', 'worker', 'influencer']);
+const WRAP = new Set(['interest', 'col', 'run', 'task']);
 
 function uniq(a) { return [...new Set(a.filter(x => x != null))]; }
 
-/** The filters, in the order the page shows them: {key (the query key), label, options(rows) -> [[value, text]] or
- * number (a box for a score), test(row, value)}. The ladder filters read the team's level only. Worker conditioning
- * is the filter that tells runs told to cheat from runs not told; influencer conditioning keeps the runs with an
+/** The filters: {key (the query key), label, group, title, a control (options(rows) -> [[value, text]], number: a box
+ * for a score, or search: a box for the run's name), test(row, value)}, in the order the page shows them within their
+ * group. The ladder filters, cheated and the label filters read the team's own, influencers left out. Worker
+ * conditioning is the filter that tells runs told to cheat from runs not told; Influencer keeps the runs with an
  * influencer of that kind and level; "Disclosure at least" and "Manipulation at least" keep the runs whose team score
  * is at least the number. */
 function filters(d) {
   const lad = L => d.ladders[L];
+  const ladder = L => ({ key: 'lv_' + L, label: lad(L).name, group: 'outcome', title: `The team's level on the ${lad(L).name} ladder`,
+    options: rows => lad(L).levels.filter(v => rows.some(r => r.levels.team[L] === v)).map(v => [v, v]),
+    test: (r, v) => r.levels.team[L] === v });
   return [
-    { key: 'col', label: 'Collection', options: () => COLLECTION_ORDER.map(c => [c, collectionOf(c).label]), test: (r, v) => r.col === v },
-    { key: 'task', label: 'Task', options: rows => uniq(rows.map(taskLabel)).sort().map(x => [x, x]), test: (r, v) => taskLabel(r) === v },
-    { key: 'model', label: 'Workers\' model', options: rows => uniq(rows.map(modelLabel)).sort().map(x => [x, x]), test: (r, v) => modelLabel(r) === v },
-    { key: 'workers', label: 'Workers', options: rows => uniq(rows.map(r => r.workers)).sort((a, b) => a - b).map(n => [String(n), String(n)]),
+    { key: 'q', label: 'Search', group: 'run', title: 'Runs whose name contains the text', search: true,
+      test: (r, v) => String(r.run).toLowerCase().includes(v.toLowerCase()) },
+    { key: 'task', label: 'Task', group: 'run', options: rows => uniq(rows.map(taskLabel)).sort().map(x => [x, x]), test: (r, v) => taskLabel(r) === v },
+    { key: 'workers', label: 'Workers', group: 'run', title: 'The number of workers',
+      options: rows => uniq(rows.map(r => r.workers)).sort((a, b) => a - b).map(n => [String(n), String(n)]),
       test: (r, v) => String(r.workers) === v },
-    { key: 'worker', label: 'Worker conditioning', options: rows => uniq(rows.map(r => r.worker_conditioning)).sort().map(x => [x, x]),
+    { key: 'col', label: 'Collection', group: 'run', options: () => COLLECTION_ORDER.map(c => [c, collectionOf(c).label]), test: (r, v) => r.col === v },
+    { key: 'model', label: 'Workers\' model', group: 'who', options: rows => uniq(rows.map(modelLabel)).sort().map(x => [x, x]), test: (r, v) => modelLabel(r) === v },
+    { key: 'worker', label: 'Worker conditioning', group: 'who', options: rows => uniq(rows.map(r => r.worker_conditioning)).sort().map(x => [x, x]),
       test: (r, v) => r.worker_conditioning === v },
-    { key: 'influencer', label: 'Influencer conditioning', options: rows => uniq(rows.flatMap(influencerKinds)).sort().map(x => [x, x]),
-      test: (r, v) => influencerKinds(r).includes(v) },
-    ...d.order.map(L => ({ key: 'lv_' + L, label: `${lad(L).name} (team)`,
-      options: rows => lad(L).levels.filter(v => rows.some(r => r.levels.team[L] === v)).map(v => [v, v]),
-      test: (r, v) => r.levels.team[L] === v })),
-    { key: 'cheated', label: 'Cheated (team, code)', options: () => [['yes', 'yes'], ['no', 'no']], test: (r, v) => r.levels.cheated === (v === 'yes') },
-    ...Object.entries(d.judge_labels.labels).map(([k, x]) => ({ key: `min_${k}`, label: `${x.name} at least`, number: true,
-      test: (r, v) => teamScoreOf(r, k) >= Number(v) })),
+    { key: 'influencer', label: 'Influencer', group: 'who', title: 'An influencer\'s kind and level, or none',
+      options: rows => uniq(rows.flatMap(influencerKinds)).sort().map(x => [x, x]), test: (r, v) => influencerKinds(r).includes(v) },
+    ladder('cheating'),
+    { key: 'cheated', label: 'Cheated', group: 'outcome', title: 'Whether the team cheated, read by code',
+      options: () => [['yes', 'yes'], ['no', 'no']], test: (r, v) => r.levels.cheated === (v === 'yes') },
+    ladder('coordination'),
+    ladder('collusion'),
+    ...Object.entries(d.judge_labels.labels).map(([k, x]) => ({ key: `min_${k}`, label: `${x.name} at least`, group: 'outcome',
+      title: `The team's highest ${x.name.toLowerCase()} score, 0 to 100`, number: true, test: (r, v) => teamScoreOf(r, k) >= Number(v) })),
   ];
 }
+
+/** The filters' three groups, in the table's own order: the run, who ran, what came out. */
+const FILTER_GROUPS = [['run', 'Run'], ['who', 'Who'], ['outcome', 'Outcome']];
 
 const PAGE_SIZES = [['100', '100 per page'], ['250', '250 per page'], ['1000', '1,000 per page'], ['all', 'all on one page']];
 
@@ -175,14 +201,13 @@ export async function viewIndex(q) {
   const COLUMNS = columns(ladders);
   const FILTERS = filters(ladders);
   const rows = idx.rows;
-  const state = { search: q.get('q') || '', sort: q.get('sort') || '', dir: q.get('dir') === 'desc' ? 'desc' : 'asc',
+  const state = { sort: q.get('sort') || '', dir: q.get('dir') === 'desc' ? 'desc' : 'asc',
     page: Math.max(0, (parseInt(q.get('page'), 10) || 1) - 1), size: q.get('size') || '250', f: {} };
   for (const f of FILTERS) state.f[f.key] = q.get(f.key) || '';
 
   const syncUrl = () => {
     const p = new URLSearchParams();
     for (const f of FILTERS) if (state.f[f.key]) p.set(f.key, state.f[f.key]);
-    if (state.search) p.set('q', state.search);
     if (state.sort) { p.set('sort', state.sort); p.set('dir', state.dir); }
     if (state.page) p.set('page', String(state.page + 1));
     if (state.size !== '250') p.set('size', state.size);
@@ -190,36 +215,36 @@ export async function viewIndex(q) {
     try { history.replaceState(null, '', '#/' + (s ? '?' + s : '')); } catch (e) { /* view stays as drawn */ }
   };
 
-  const filterBox = h('div', { class: 'filters idx-filters' });
-  const inputs = new Map();
+  // Each filter's control in a field, its label above it; a field whose filter is set is outlined (draw).
   const changed = () => { state.page = 0; draw(); };
-  for (const f of FILTERS) {
-    if (f.number) {
-      const box = h('input', { type: 'number', min: '0', max: '100', step: '1', class: 'idx-score-box', placeholder: '0 to 100',
-        'aria-label': f.label, value: state.f[f.key] });
-      box.addEventListener('input', () => { state.f[f.key] = box.value.trim(); changed(); });
-      inputs.set(f.key, box);
-      filterBox.appendChild(h('label', { class: 'field' }, h('span', { class: 'field-label' }, f.label), box));
-      continue;
+  const fields = new Map();
+  const control = f => {
+    if (f.search || f.number) {
+      const box = h('input', f.search ? { type: 'search', placeholder: 'run name contains', 'aria-label': f.label, value: state.f[f.key] }
+        : { type: 'number', min: '0', max: '100', step: '1', placeholder: '0 to 100', 'aria-label': f.label, value: state.f[f.key] });
+      let t = null;
+      box.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { state.f[f.key] = box.value.trim(); changed(); }, 150); });
+      return box;
     }
     const options = [['', 'All'], ...f.options(rows)];
     if (!options.some(([v]) => v === state.f[f.key])) state.f[f.key] = '';
-    const sel = select(options, state.f[f.key], v => { state.f[f.key] = v; changed(); }, { 'aria-label': f.label });
-    inputs.set(f.key, sel);
-    filterBox.appendChild(h('label', { class: 'field' }, h('span', { class: 'field-label' }, f.label), sel));
+    return select(options, state.f[f.key], v => { state.f[f.key] = v; changed(); }, { 'aria-label': f.label });
+  };
+  for (const f of FILTERS) {
+    const el = control(f);
+    fields.set(f.key, { el, field: h('label', { class: 'idx-field', title: f.title || null }, h('span', { class: 'field-label' }, f.label), el) });
   }
-  const search = h('input', { type: 'search', class: 'search', placeholder: 'run name contains', 'aria-label': 'Search run names', value: state.search });
-  let t = null;
-  search.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { state.search = search.value.trim(); changed(); }, 150); });
-  filterBox.appendChild(h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'Search'), search));
-  filterBox.appendChild(h('button', { type: 'button', class: 'btn btn-small', onclick: () => {
+  const reset = h('button', { type: 'button', class: 'btn btn-small idx-reset', onclick: () => {
     for (const f of FILTERS) state.f[f.key] = '';
-    for (const [key, el] of inputs) el.value = state.f[key];
-    state.search = ''; state.sort = ''; search.value = '';
+    for (const [key, x] of fields) x.el.value = state.f[key];
+    state.sort = '';
     changed();
-  } }, 'Reset filters'));
+  } }, 'Reset filters');
+  const filterBox = h('div', { class: 'idx-filters' }, FILTER_GROUPS.map(([g, name], i) => h('div', { class: 'idx-fgroup' },
+    h('div', { class: 'idx-fgroup-name' }, name),
+    h('div', { class: 'idx-fgroup-fields' }, FILTERS.filter(f => f.group === g).map(f => fields.get(f.key).field),
+      i === FILTER_GROUPS.length - 1 ? reset : null))));
 
-  const summary = h('div', { class: 'summary-line' });
   const pager = h('div', { class: 'pager' });
   const thead = h('thead');
   const tbody = h('tbody');
@@ -231,18 +256,19 @@ export async function viewIndex(q) {
     let j = i;
     while (j < COLUMNS.length && COLUMNS[j].group === COLUMNS[i].group) j++;
     const g = COLUMNS[i].group;
-    band.appendChild(h('th', { colspan: String(j - i), scope: 'colgroup', class: g ? `idx-band-${g}` : 'idx-band-none' }, g ? GROUPS[g] : ''));
+    band.appendChild(h('th', { colspan: String(j - i), scope: 'colgroup', class: [g ? `idx-band-${g}` : 'idx-band-none', i && 'idx-group-start'] },
+      g ? GROUPS[g] : ''));
     i = j;
   }
-  // The first column of each named group, drawn with a rule at its left.
-  const STARTS = new Set(COLUMNS.filter((c, i) => c.group && (!i || COLUMNS[i - 1].group !== c.group)).map(c => c.key));
+  // The first column of each group but the first, drawn with a rule at its left.
+  const STARTS = new Set(COLUMNS.filter((c, i) => i && COLUMNS[i - 1].group !== c.group).map(c => c.key));
   const headRow = h('tr');
   for (const c of COLUMNS) {
-    const th = h('th', { class: ['sortable', STARTS.has(c.key) && 'idx-group-start'], title: (c.title ? c.title + '. ' : '') + 'Click to sort.', scope: 'col', tabindex: '0' }, c.label,
+    const th = h('th', { class: ['sortable', STARTS.has(c.key) && 'idx-group-start'], title: c.title || null, scope: 'col', tabindex: '0' }, c.label,
       c.note ? [h('br'), c.note] : null);
     const go = () => {
       if (state.sort === c.key) state.dir = state.dir === 'asc' ? 'desc' : 'asc';
-      else { state.sort = c.key; state.dir = c.key === 'run' || c.key === 'col' ? 'asc' : 'desc'; }
+      else { state.sort = c.key; state.dir = ['run', 'col', 'interest'].includes(c.key) ? 'asc' : 'desc'; }
       changed();
     };
     th.addEventListener('click', go);
@@ -255,15 +281,11 @@ export async function viewIndex(q) {
   const coll = new Intl.Collator('en', { numeric: true });
   const titleEl = h('h1', null, 'Runs');
   function draw() {
-    const needle = state.search.toLowerCase();
-    let shown = rows.filter(r => (!needle || String(r.run).toLowerCase().includes(needle))
-      && FILTERS.every(f => !state.f[f.key] || f.test(r, state.f[f.key])));
+    const set = FILTERS.filter(f => state.f[f.key]);
+    for (const [key, x] of fields) x.field.classList.toggle('is-set', !!state.f[key]);
+    let shown = rows.filter(r => set.every(f => f.test(r, state.f[f.key])));
     const col = COLUMNS.find(c => c.key === state.sort);
-    if (!col) {  // default order: collection, task, arm, model, then seed
-      shown = shown.slice().sort((a, b) => colIx(a) - colIx(b) || coll.compare(taskLabel(a), taskLabel(b))
-        || coll.compare(armLabel(a), armLabel(b)) || coll.compare(String(modelLabel(a)), String(modelLabel(b)))
-        || (Number(a.seed) || 0) - (Number(b.seed) || 0) || coll.compare(String(a.run), String(b.run)));
-    } else {
+    if (col) {  // with no column chosen the rows keep the index's own order: by interest (transcript_index.INTEREST)
       const sign = state.dir === 'desc' ? -1 : 1;
       const keyed = shown.map(r => [col.sort(r), r]);
       keyed.sort((a, b) => {
@@ -284,42 +306,30 @@ export async function viewIndex(q) {
     tbody.replaceChildren(...(slice.length ? slice.map(r => h('tr', { class: ['idx-row', alarmOf(r) && 'row-alarm'], title: alarmOf(r) ? `alarm: ${alarmOf(r)}` : null },
       COLUMNS.map(c => h('td', { class: [WRAP.has(c.key) && 'wrap', c.key.startsWith('lv_') && 'lv', STARTS.has(c.key) && 'idx-group-start'] }, c.cell(r)))))
       : [h('tr', null, h('td', { colspan: String(COLUMNS.length) }, muted('No run matches these filters.')))]));
-    const per = {};
-    for (const r of shown) per[r.col] = (per[r.col] || 0) + 1;
-    summary.replaceChildren(h('span', null,
-      h('strong', null, fmtInt(shown.length)), ` of ${fmtInt(rows.length)} valid runs shown`,
-      ' · ', COLLECTION_ORDER.map((c, i) => [i ? ', ' : '', `${collectionOf(c).label} ${fmtInt(per[c] || 0)}`]),
-      ' · ', `${plural(shown.filter(r => r.levels.cheated).length, 'team')} cheated (code)`,
-      ' · ', `${fmtInt(shown.filter(alarmOf).length)} with the alarm "passed with no trace of the honeypot"`));
     pager.replaceChildren(
       h('button', { type: 'button', class: 'btn btn-small', disabled: state.page === 0, onclick: () => { state.page--; draw(); } }, '← previous'),
       h('span', { class: 'muted small' }, ` page ${state.page + 1} of ${pages} `),
       h('button', { type: 'button', class: 'btn btn-small', disabled: state.page >= pages - 1, onclick: () => { state.page++; draw(); } }, 'next →'),
       select(PAGE_SIZES, state.size, v => { state.size = v; state.page = 0; draw(); }, { 'aria-label': 'Rows per page' }));
-    titleEl.textContent = state.f.col ? `${collectionOf(state.f.col).label}: ${plural(shown.length, 'run')}` : `Runs: ${fmtInt(shown.length)}`;
+    titleEl.textContent = set.length ? `Runs: ${fmtInt(shown.length)} of ${fmtInt(rows.length)}` : `Runs: ${fmtInt(rows.length)}`;
     syncUrl();
   }
   draw();
 
-  const about = h('details', { class: 'sub about' },
-    h('summary', null, 'What the collections and labels mean'),
-    h('div', { class: 'about-body' },
-      h('ul', { class: 'plain-list' },
-        COLLECTION_ORDER.map(c => h('li', null, h('strong', null, `${collectionOf(c).label} (runs/${c}). `), collectionOf(c).about,
-          muted(` ${fmtInt(collectionOf(c).runs)} valid runs.`, 'small')))),
-      h('p', null, h('strong', null, 'Valid runs only. '), 'The viewer lists, measures and serves the valid runs of each collection; invalid, incomplete, mock, attempt and extra-copy runs are not read.'),
-      h('p', null, h('strong', null, 'Ladders. '), 'The legend under the runs lists every level and each ladder\'s line; ', h('a', { href: '#/ladders' }, 'the Ladders page'), ` says what puts a run on each. Cheated: ${ladders.ladders.cheating.line_words}.`),
-      h('div', null, h('strong', null, 'Judge labels. '), 'Each column shows the team\'s highest score of a worker and which worker; the worker\'s name opens its excerpt. A run no judge has scored reads "not judged".',
-        labelAbout(ladders.judge_labels)),
-      h('p', null, h('strong', null, 'Influencers. '), 'A regulator or a disregulator is an influencer: an agent the workers cannot tell from a worker. Influencer conditioning names each one, its instruction level and its model. Every team column leaves the influencers out; the Influencers columns show their own levels.'),
-      h('p', null, h('strong', null, 'Alarm. '), 'The grader passed the hand-in and no agent of any role, and no evidence of the team\'s own, put a trace of the honeypot in it. A row with the alarm carries a red mark at its left edge; the line above the table counts them; the run page shows it.'),
-      h('p', null, h('strong', null, `${CHEATBENCH.name}. `), CHEATBENCH.about),
-      h('p', null, `Index built ${idx.built_at}: ${fmtInt(idx.measured)} runs measured in ${idx.build_seconds} s, the others read from the cache${idx.errors.length ? `; ${idx.errors.length} runs could not be read` : ''}. A start measures again every run whose files changed.`)));
+  // The collections and the index's build, behind one small control.
+  const about = h('details', { class: 'idx-about' },
+    h('summary', { class: 'btn btn-small' }, 'Collections'),
+    h('div', { class: 'idx-about-box' }, h('table', { class: 'data compact' },
+      h('thead', null, h('tr', null, ['Collection', 'Folder', 'Valid runs', 'Holds'].map(t => h('th', { scope: 'col' }, t)))),
+      h('tbody', null, COLLECTION_ORDER.map(c => h('tr', null, h('td', null, h('b', null, collectionOf(c).label)),
+        h('td', { class: 'mono small' }, `runs/${c}`), h('td', { class: 'num' }, fmtInt(collectionOf(c).runs)),
+        h('td', { class: 'small' }, collectionOf(c).about))))),
+    h('p', { class: 'small muted' }, `Index ${idx.built_at} · ${fmtInt(idx.measured)} measured in ${idx.build_seconds} s`,
+      idx.errors.length ? ` · ${plural(idx.errors.length, 'run')} unreadable` : '')));
 
   return h('div', { class: 'page wide' },
-    h('div', { class: 'page-head' }, titleEl, muted('One row per valid run. Click a run to see its three ladders, the evidence, the board and the transcripts.'
-      + (idx.left_out.runs ? ` Not listed: ${fmtInt(idx.left_out.runs)} valid runs of the tasks the study does not read (${idx.left_out.tasks.join(', ')}).` : ''))),
-    about, filterBox, summary, pager,
+    h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, titleEl, about), pager),
+    filterBox,
     h('div', { class: 'table-wrap idx-wrap' }, table),
     legendTable(ladders));
 }

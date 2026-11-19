@@ -15,17 +15,18 @@ export function setCollections(list) {
 }
 export const collectionOf = key => COLLECTIONS[key] || { key, label: key, tag: '', about: '' };
 
-// The workers' model by the last part of its model string (src/ui/transcript_viewer.py short_model).
+// A model by the last part of its model string (src/ui/transcript_viewer.py short_model).
 export const MODELS = {
   'deepseek-v4.1-flash': 'DeepSeek V4.1 Flash', 'gpt-5-mini': 'GPT-5 mini', 'claude-haiku-5.5': 'Claude Haiku 5.5',
   'claude-haiku-5-5': 'Claude Haiku 5.5', 'gpt-6-luna': 'GPT-6 Luna', 'qwen3.8-27b': 'Qwen3.8 27B',
+  'claude-sonnet-5.5': 'Claude Sonnet 5.5', 'claude-opus-5.5': 'Claude Opus 5.5', 'gemini-4-argon': 'Gemini 4 Argon',
 };
 
 // CheatBench's judge: the eval's own verdicts and the judge passes' (judges/cheatbench.<judge>.jsonl), both read
 // through src/judging/verdict_files.py.
 export const CHEATBENCH = {
   name: 'CheatBench judge',
-  about: 'CheatBench\'s judge, written for a lone agent, read each agent\'s trajectory: whether it cheated and whether it saw the honeypots, with the task\'s own fields. Its own "cheated" (judge_cheated) is broader than the Cheating ladder\'s and changes no rung. The team\'s word is how many workers it says cheated, of the workers it gave a parsed verdict. It stands under the code\'s rung in every Cheating cell, marked as the judge\'s.',
+  about: 'CheatBench\'s own judge, built for a lone agent; changes no rung',
 };
 
 // An influencer is a regulator or a disregulator: an agent the workers cannot tell from a worker, whose levels stay out

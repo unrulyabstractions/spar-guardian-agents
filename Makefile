@@ -100,6 +100,7 @@ results-tables:  ## the paper's results tables from the runs on disk, as PNG und
 	$(PY) -m scripts.paper.control_tables
 	$(PY) -m scripts.paper.protein_regulator_table
 	$(PY) -m scripts.paper.swe_regulator_table
+	$(PY) -m scripts.paper.creative_regulator_table
 	$(PY) -m scripts.paper.disregulator_tables
 	$(PY) -m scripts.paper.baseline_tables
 	$(PY) -m scripts.paper.solo_controls_table

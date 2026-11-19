@@ -2,38 +2,85 @@
    "viewer's own rules" from line 407 on). The page loads the results browser's src/ui/static/style.css first, which
    the source copied its other rules from. */
 .page.wide { max-width: none; }
-.about { margin: 0 0 10px; }
-.about-body { max-width: 120ch; font-size: 13.5px; }
-.about-body p { margin: 6px 0; }
-.idx-filters .field select { max-width: 260px; }
-.summary-line { margin: 6px 0; }
-.pager { display: flex; align-items: center; gap: 8px; margin: 6px 0 8px; }
+/* The runs page's Collections control (tv_view_index.js): a small button that opens a compact table under the head. */
+.idx-about { position: relative; }
+.idx-about > summary { list-style: none; cursor: pointer; }
+.idx-about > summary::-webkit-details-marker { display: none; }
+.idx-about[open] > summary { border-color: var(--accent); color: var(--accent); }
+.idx-about-box { position: absolute; z-index: 6; top: 34px; left: 0; width: max-content; max-width: 760px; padding: 8px 10px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0, 0, 0, .18); }
+.idx-about-box p { margin: 6px 0 0; }
+/* The runs page's head (tv_view_index.js): the heading with its count and the pager on one line, then the filters in
+   three labelled groups, each group's fields on one grid of equal columns, so the groups' fields line up; a label
+   above its control, every control the same height, a set filter's control outlined in the accent colour. */
+.idx-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 16px; margin-bottom: 10px; }
+.idx-title { display: flex; align-items: center; gap: 12px; }
+.pager { display: flex; align-items: center; gap: 8px; }
+.pager select { height: 28px; min-height: 28px; padding: 3px 6px; font-size: 12.5px; }
 .pager .btn[disabled] { opacity: .45; cursor: default; }
+.idx-filters { display: flex; flex-direction: column; gap: 6px; margin: 0 0 10px; padding: 8px 10px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--panel); }
+.idx-fgroup { display: flex; gap: 10px; }
+.idx-fgroup + .idx-fgroup { border-top: 1px solid var(--border); padding-top: 6px; }
+.idx-fgroup-name { flex: none; width: 6.5em; padding-top: 2px; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--muted); }
+.idx-fgroup-fields { flex: 1; display: grid; grid-template-columns: repeat(auto-fill, 158px); gap: 6px 10px; align-items: end; }
+.idx-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.idx-field .field-label { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.idx-field select, .idx-field input { box-sizing: border-box; width: 100%; height: 28px; min-height: 28px; padding: 3px 6px;
+  border-radius: 6px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font-size: 12.5px; }
+.idx-field.is-set .field-label { color: var(--accent); font-weight: 600; }
+.idx-field.is-set select, .idx-field.is-set input { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.idx-reset { height: 28px; justify-content: center; }
 .idx-wrap { overflow: auto; max-height: calc(100vh - var(--header-h) - 120px); }
 table.idx-table { font-size: 12.5px; }
 table.idx-table thead { position: sticky; top: 0; z-index: 2; }
-table.idx-table th, table.idx-table td { padding: 5px 5px; }
+table.idx-table th, table.idx-table td { padding: 5px 4px; }
 table.idx-table th { white-space: normal; vertical-align: bottom; min-width: 50px; }
 table.idx-table td { white-space: nowrap; vertical-align: middle; }
 table.idx-table td.wrap { white-space: normal; min-width: 8ch; max-width: 18ch; }
-table.idx-table td.lv { white-space: normal; padding-right: 6px; }
+table.idx-table td.lv { white-space: normal; }
+/* So the table fits a 1700 px window: cheated stands under the Cheating chip, "read the excerpt" under the score. */
+table.idx-table .cheat-says .lv-cheated { display: block; }
+table.idx-table .sc-team { display: inline-block; }
+table.idx-table .sc-team .sc-mislead { display: block; }
 /* The band over the runs table's columns (tv_view_index.js GROUPS) and a rule at the left of each group. */
 table.idx-table tr.idx-band th { text-align: center; font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase;
   color: var(--muted); border-bottom: 2px solid var(--border); padding: 3px 6px; }
 table.idx-table tr.idx-band th.idx-band-team { background: var(--panel-2); }
 table.idx-table tr.idx-band th.idx-band-influencers { background: var(--panel-2); }
-table.idx-table tr.idx-band th:not(.idx-band-none), table.idx-table .idx-group-start { border-left: 2px solid var(--border); }
+table.idx-table .idx-group-start { border-left: 2px solid var(--border); }
+/* The Workers and Influencers cells (tv_view_index.js workersCell, influencersCell): a model's name with its
+   conditioning as chips. Worker conditioning: not told calm grey, told to cheat the warning amber, a rule teal and a
+   rule naming the exploit solid teal. An influencer's role: the app's role colours, the regulator blue and the
+   disregulator orange, solid with an upper-case word; its level an outline in the same colour. None of these is a
+   ladder's colour, and each chip carries its own text colour, so both themes read. */
+.idx-who { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.idx-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 4px; white-space: nowrap; }
+.idx-model { font-weight: 600; white-space: nowrap; }
+.idx-influencer { display: flex; flex-direction: column; gap: 1px; }
+.idx-influencer .idx-model { font-weight: 400; font-size: 12px; }
+.cond-chip, .level-chip { display: inline-block; padding: 0 6px; border-radius: 3px; border: 1px solid; font-size: 11px;
+  line-height: 1.55; white-space: nowrap; }
+.cond-none { background: var(--panel-2); color: var(--muted); border-color: var(--border); }
+.cond-cheat { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); font-weight: 600; }
+.cond-rule { background: var(--new-bg); color: var(--new); border-color: var(--new); }
+.cond-rule-strong { background: var(--new); color: var(--panel); border-color: var(--new); font-weight: 600; }
+.role-chip { display: inline-block; padding: 0 5px; border-radius: 3px; font-size: 10px; font-weight: 700;
+  letter-spacing: .05em; text-transform: uppercase; line-height: 1.7; white-space: nowrap; }
+.role-chip-regulator { background: var(--role-regulator); color: #ffffff; }
+.role-chip-disregulator { background: var(--role-disregulator); color: #1c1c1a; }
+.level-chip { background: transparent; color: var(--text); }
+.level-chip-regulator { border-color: var(--role-regulator); }
+.level-chip-disregulator { border-color: var(--role-disregulator); }
 table.idx-table td.lv .lv-glyph, table.idx-table td.lv .lv-rank { flex: none; white-space: nowrap; }
 table.idx-table tbody tr:hover td { background: var(--hover); }
 .idx-legend { margin-top: 16px; }
-table.idx-legend-table { font-size: 12.5px; }
-table.idx-legend-table td { vertical-align: top; }
-table.idx-legend-table td:first-child { white-space: nowrap; }
-table.idx-legend-table td:last-child { max-width: 80ch; color: var(--muted); }
-.idx-legend-level { margin: 3px 0; }
+table.idx-legend-table { font-size: 12.5px; border-collapse: collapse; }
+table.idx-legend-table th { text-align: left; padding: 4px 12px 4px 0; white-space: nowrap; font-weight: 600; }
+.idx-legend-levels { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px 0; }
 table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
 .labels-table td:first-child { white-space: nowrap; }
-.labels-table td:last-child { max-width: 70ch; color: var(--muted); }
 .ev-list { margin: 0; padding-left: 16px; font-size: 12.5px; }
 .ev-list li { margin: 2px 0; overflow-wrap: anywhere; }
 .ev-text { overflow-wrap: anywhere; }
@@ -65,13 +112,32 @@ table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--ba
 .lv-cheated { font-size: 12px; white-space: nowrap; }
 .lv-cheated.yes { color: var(--bad); font-weight: 700; }
 .lv-cheated.no { color: var(--muted); }
+/* A level chip seen before this call: an outline in the level's colour (--lv). A label the call carries itself: the
+   filled chip with a small dot in front. */
+.lv-chip.lv-carried { background: transparent; color: var(--text); box-shadow: inset 0 0 0 1px var(--border-strong);
+  border-left: 6px solid var(--lv); border-radius: 3px; }
+.lv-own-mark { flex: none; width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 1.5px rgba(255,255,255,.6); }
+.has-pop { cursor: help; }
+.has-pop:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* A level chip's popover (tv_levels.js levelPopover): the ladder and the level, its one line, its evidence as a tiny
+   table of name and value, the link to the ladder's rule. Fixed to the window, never wider than 360 px. */
+.lv-pop { position: fixed; z-index: 50; max-width: 360px; min-width: 180px; padding: 7px 10px 6px; border-radius: 7px;
+  background: var(--panel); color: var(--text); border: 1px solid var(--border-strong); box-shadow: 0 8px 24px rgba(0, 0, 0, .22);
+  font: 12px/1.45 var(--sans); }
+.lv-pop[hidden] { display: none; }
+.lv-pop-head { font-size: 11.5px; color: var(--muted); }
+.lv-pop-head b { color: var(--text); }
+.lv-pop-gloss { margin: 2px 0 4px; }
+.lv-pop-facts { border-collapse: collapse; width: 100%; font-size: 11.5px; }
+.lv-pop-facts th, .lv-pop-facts td { padding: 2px 0; border-top: 1px solid var(--border); vertical-align: top; text-align: left; }
+.lv-pop-facts th { padding-right: 10px; color: var(--muted); font-weight: 500; white-space: nowrap; }
+.lv-pop-facts td { font-family: var(--mono); font-size: 11px; overflow-wrap: anywhere; }
+.lv-pop-more { color: var(--muted); font-size: 11px; }
+.lv-pop-link { display: inline-block; margin-top: 4px; font-size: 11px; }
 /* A ladder's line: the mark between its two sides in the legends and the row between them in the Ladders tables. */
 .lv-line-mark { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
   padding: 0 5px; border-radius: 3px; background: var(--text); color: var(--bg); }
-.idx-legend-line { margin: 6px 0 4px; padding-top: 4px; border-top: 2px solid var(--text); font-size: 11.5px; color: var(--muted); }
 .lv-ladder-table tr.lv-line-row td { border-top: 3px solid var(--text) !important; background: var(--panel-2); font-size: 11.5px; color: var(--muted); max-width: none; white-space: normal; }
-.cs-full-legend .cfl-line { font-size: 9.5px; font-weight: 700; text-transform: uppercase; padding-left: 5px; margin-right: 8px;
-  border-left: 3px solid var(--ink-2, var(--text)); color: var(--ink-2, var(--text)); }
 .jl-list li { white-space: normal; }
 .jl-agree { color: var(--good); font-size: 12px; }
 .lv-judge-yes { color: var(--bad); font-weight: 600; }
@@ -79,7 +145,8 @@ table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--ba
 .lv-reliability tr.lv-measure-start td { border-top: 2px solid var(--border-strong); }
 .lv-reliability tr.lv-older-pass td { color: var(--muted); }
 .lv-reliability td.lv-current-pass { font-weight: 600; }
-.lv-retired { color: var(--warn); font-weight: 400; white-space: normal; max-width: 22ch; }
+/* What a score can show: the mislead kind, which no reader may count without reading the excerpt, stands out. */
+.lv-warn-block td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
 /* A judge label's score: a chip from pale to strong with the number on it, its excerpt, its reason and its place. */
 .sc-chip { display: inline-block; min-width: 2.4em; padding: 1px 6px; border-radius: 9px; font-size: 11.5px; font-weight: 700;
   text-align: center; font-variant-numeric: tabular-nums; border: 1px solid rgba(0, 0, 0, .08); }
@@ -90,22 +157,22 @@ table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--ba
   overflow-wrap: anywhere; max-width: 64ch; }
 .sc-full { max-width: 70ch; }
 .sc-lost { font-style: italic; }
+/* Beside a mislead score: the link to what an independent reading found of that kind. */
+.sc-mislead { color: var(--warn); font-weight: 600; }
 .sc-open { font-size: 12px; }
 .sc-pair { display: grid; gap: 8px; }
-.sc-about li { margin: 0 0 8px; line-height: 1.7; }
 .sc-table td { vertical-align: top; white-space: normal; }
 mark.xl-mark { background: #ffe58a; color: #16191a; border-radius: 2px; padding: 0 1px; box-shadow: 0 0 0 2px #e0b400; }
 mark.xl-mark.flash { animation: flash 1.6s ease-out; }
-.idx-score-box { width: 7em; }
 .table-wrap:has(> .lv-ladder-table) { width: fit-content; }
 .lv-ladder-table { border-collapse: collapse; font-size: 12px; }
 .lv-ladder-table th, .lv-ladder-table td { border: 1px solid var(--border); padding: 4px 6px; vertical-align: top; max-width: 260px; }
 .lv-ladder-table .lv-hl { background: var(--warn-bg); }
-.lv-terms { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 4px 0 0; max-width: 130ch; font-size: 13.5px; }
-.lv-terms dt { font-weight: 600; }
-.lv-terms dd { margin: 0; color: var(--muted); }
-
+.lv-level-table td:last-child { max-width: 90ch; }
+.card > .table-wrap + .table-wrap { margin-top: 10px; }
 .lv-about { margin: 0 0 8px; max-width: 120ch; }
+/* A heading's small link (the Details tab's "by task", "reliability"). */
+.h-link { font-weight: 400; margin-left: 6px; }
 
 /* ---- case-study layout, copied from arena-capstone script/visualize_case.html (lines 10-65), scoped to .case.
    Its tokens and dark palette, its .main grid, sticky .left, .blk/.lab/.txt sections, folded inputs and .ev badges.
@@ -135,26 +202,67 @@ mark.xl-mark.flash { animation: flash 1.6s ease-out; }
 .case .txt{font-family:var(--mono);font-size:12.3px;line-height:1.75;white-space:pre-wrap;word-break:break-word}
 .case .inp .txt{font-size:11.5px;color:var(--ink-2)}
 .case .inp.fold .txt{max-height:4.4em;overflow:hidden;-webkit-mask-image:linear-gradient(#000 55%,transparent);mask-image:linear-gradient(#000 55%,transparent);cursor:pointer}
+/* A step's three parts (tv_case_view.js section), each its own section under a header strip that folds it: the
+   reasoning as prose on a warm rule, the tool call as a command on a code tint, the tool result as output, inset and a
+   shade darker. A long part starts clipped. The bar's toggles (tv_view_run.js) fold a part on every step; Board calls
+   only hides the calls without a board label. */
+.case{--rs-rule:#b9852a;--rs-bg:#fdf9f1;--rs-head:#f5ecd8;--tc-rule:#3d5f86;--tc-bg:#eef3f8;--tc-head:#dce6f1;
+  --tr-rule:#7d8884;--tr-bg:#e6e9e7;--tr-head:#d6dbd8}
+@media (prefers-color-scheme:dark){.case{--rs-rule:#d1a34f;--rs-bg:#1f1b14;--rs-head:#2b2519;--tc-rule:#7fa6d4;--tc-bg:#162029;
+  --tc-head:#1f2c3a;--tr-rule:#76817d;--tr-bg:#111415;--tr-head:#1c2122}}
+.case .sec{margin:10px 0 0;border:1px solid var(--line);border-left:4px solid var(--sec-rule);border-radius:6px;background:var(--sec-bg);overflow:hidden}
+.case .sec + .sec{margin-top:12px}
+.case .sec-reasoning{--sec-rule:var(--rs-rule);--sec-bg:var(--rs-bg);--sec-head:var(--rs-head)}
+.case .sec-call{--sec-rule:var(--tc-rule);--sec-bg:var(--tc-bg);--sec-head:var(--tc-head)}
+.case .sec-result{--sec-rule:var(--tr-rule);--sec-bg:var(--tr-bg);--sec-head:var(--tr-head);margin-left:24px;box-shadow:inset 0 2px 5px rgba(0,0,0,.09)}
+.case .sec-h{display:flex;align-items:center;gap:8px;width:100%;padding:4px 10px;border:0;background:var(--sec-head);color:var(--ink-2);
+  font:600 11px var(--sans);letter-spacing:.05em;text-transform:uppercase;text-align:left;cursor:pointer}
+.case .sec-h:hover{color:var(--ink)}
+.case .sec-h:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.case .sec-chev{flex:none;width:6px;height:6px;margin:0 2px 3px 1px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg);transition:transform .12s}
+.case .sec.folded .sec-chev{margin:0 3px 0 0;transform:rotate(-45deg)}
+.case .sec-tool{font:600 12px var(--mono);letter-spacing:0;text-transform:none;color:var(--tc-rule)}
+.case .sec-size{margin-left:auto;font-weight:400;letter-spacing:0;text-transform:none;color:var(--muted)}
+.case .sec-b{padding:6px 12px 8px}
+.case .sec.folded .sec-b{display:none}
+.case .sec-reasoning .txt{font-family:var(--sans);font-size:13.5px;line-height:1.6}
+.case .sec-call .txt{font-size:12.3px;line-height:1.6}
+.case .sec-result .txt{font-size:11.8px;line-height:1.55;color:var(--ink-2)}
+.case .sec.clipped .txt{max-height:12lh;overflow:hidden;-webkit-mask-image:linear-gradient(#000 70%,transparent);mask-image:linear-gradient(#000 70%,transparent)}
+.case .sec-more{margin-top:4px;padding:1px 8px;border:1px solid var(--line-2);border-radius:4px;background:var(--surface);color:var(--accent);font:500 11.5px var(--sans);cursor:pointer}
+.case .sec:not(.clipped) .sec-more{display:none}
+.rp-togs { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
+.rp-tog { font: 500 12px var(--sans); padding: 3px 9px; border: 1px solid var(--border); border-radius: 5px; background: var(--panel); color: var(--muted); cursor: pointer; }
+.rp-tog[aria-pressed=true] { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+.rp-tog[aria-pressed=true]::before { content: "\2713  "; }
+.rp-tog:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.rp-stage[data-board=only] .case .right .call:not(.has-board) { display: none; }
 .case .note{font-size:11.5px;color:var(--ink-2);margin:8px 0 0}
 @media (max-width:980px){.case .main{grid-template-columns:1fr}.case .left{position:static}}
 .case .cs-svg{display:block;cursor:pointer}
-.case .cs-lane-h{font-size:9px;fill:var(--muted)}
 .case .cs-lane-g{font-size:10px;font-weight:600;fill:var(--ink-2)}
 .case .cs-mile{font:600 10.5px var(--sans);cursor:pointer}
 .case .cs-tick{font:10.5px var(--sans);fill:var(--muted);cursor:pointer}
-.case .cs-strip{display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px 12px;font-size:11.5px;color:var(--muted)}
-.case .cs-sofar{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em}
-.case .cs-chip{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
-.case .cs-chip i,.case .cs-label i{flex:none;display:inline-block;width:10px;height:10px;border-radius:2px;border:1px solid var(--line-2)}
-.case .cs-chip b{color:var(--ink-2);font-weight:600}
-.case .cs-chip.cs-new b{color:var(--accent)}
+.case .cs-lane-h{font-size:10.5px;font-weight:700}
+/* A step's head line: its level chips in the ladders' order, and the regulator's mark. */
+.case .cs-chips{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px}
+.case .cs-chips .lv-chip{font-size:11.5px;padding:0 6px}
+.case .cs-chips .lv-chip.lv-carried{color:var(--ink-2)}
+.case .cs-reg-chip{display:inline-flex;align-items:center;gap:4px;padding:0 6px;border-radius:4px;background:var(--bad);color:#fff;font-size:11.5px;font-weight:600;line-height:1.5}
 .case .cs-labels{margin:8px 0 2px;padding:6px 10px;border:1px solid var(--line-2);border-radius:6px;background:var(--surface-2)}
 .case .cs-label{display:flex;align-items:baseline;gap:6px;font-size:12.5px;line-height:1.6;color:var(--ink-2);min-width:0}
-.case .cs-label i{align-self:center}
 .case .cs-label b{color:var(--ink);font-weight:600;white-space:nowrap}
-.case .cs-lname{white-space:nowrap}
-.case .cs-why{flex:1;min-width:0;color:var(--muted);font-family:var(--mono);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.case .cs-label.cs-reg i{border-color:var(--bad);background:var(--bad)}
+.case .cs-why{flex:1;min-width:0;color:var(--muted);font-size:12px}
+/* The strip's legend (tv_case_view.js stripLegend): a row per ladder, its levels' swatches in aligned cells, a rule at
+   the line. */
+.case .cs-legend{border-collapse:collapse;margin:10px 0 0;font-size:9.5px;color:var(--ink-2)}
+.case .cs-legend th{text-align:left;font-weight:600;font-size:10.5px;white-space:nowrap;padding:3px 4px 3px 0;color:var(--ink)}
+.case .cs-legend td{padding:3px 2px;vertical-align:top;white-space:nowrap;text-align:center;line-height:1.2}
+.case .cs-legend td.csl-line{border-left:2px solid var(--ink)}
+.case .cs-legend i{display:block;width:100%;min-width:14px;height:9px;margin:0 0 2px;border-radius:2px;border:1px solid var(--line-2);box-sizing:border-box}
+.case .csl-mark{display:inline-block;width:18px;font-weight:700}
+.case .csl-mark.csl-reg{width:4px;height:10px;margin:0 16px 0 0;background:var(--bad);vertical-align:-1px}
+.case .cs-legend tr:last-child td.csl-level:only-of-type{text-align:left}
 
 /* run page opened like the case-study artifact: one thin bar, then strip and transcript */
 .page.rp-page { max-width: none; }
@@ -167,32 +275,18 @@ mark.xl-mark.flash { animation: flash 1.6s ease-out; }
 .rp-tab { font: 500 12px var(--sans); padding: 3px 9px; border: 1px solid var(--border); border-radius: 5px; background: var(--panel); color: var(--text); cursor: pointer; }
 .rp-tab.on { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
 .rp-role { color: var(--muted); font-weight: 400; }
-.rp-show { color: var(--muted); font-size: 12px; margin-left: auto; }
-.rp-show select { font-size: 12px; padding: 2px 6px; }
 .rp-dbtn { font: 500 12px var(--sans); padding: 3px 9px; border: 1px solid var(--border); border-radius: 5px; background: var(--panel); color: var(--muted); cursor: pointer; }
 .rp-details { margin-top: 18px; }
 .rp-details > summary { cursor: pointer; color: var(--muted); font-size: 13px; padding: 6px 0; }
 .rp-team .card { margin-bottom: 10px; }
 .rp-stage .case { padding: 0; background: transparent; }
-/* 322 px, not the source's 280, so the strip's wider label margin (tv_case_view.js LB) fits beside the lanes. */
-.rp-stage .case .main { grid-template-columns: 322px 1fr; gap: 12px; }
+/* 384 px, not the source's 280, so the strip's label margin (tv_case_view.js LB) and its legend's level cells fit. */
+.rp-stage .case .main { grid-template-columns: 384px 1fr; gap: 12px; }
 /* --under-bar is the bar's real bottom edge, set by tv_case_view.js: the bar wraps in a narrow window. */
 .rp-stage .case { --under: var(--under-bar, calc(var(--header-h) + 44px)); }
 .rp-stage .case .left { top: var(--under); max-height: calc(100vh - var(--under) - 12px); padding: 10px; }
 .rp-stage .case .call { scroll-margin-top: var(--under); }
-.case .cs-ladders { font-size: 11.5px; color: var(--muted); line-height: 1.6; margin: 0 0 8px; }
-.case .cs-ladders i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 3px; vertical-align: baseline; }
-.case .cs-ladders b { color: var(--ink-2); font-weight: 600; }
-.rp-stage[data-show=reasoning] .k-tool, .rp-stage[data-show=reasoning] .k-input,
-.rp-stage[data-show=reasoning] .case .call:not(:has(.k-reasoning)) { display: none; }
-.rp-stage[data-show=tools] .k-reasoning, .rp-stage[data-show=tools] .k-input, .rp-stage[data-show=tools] .case .call.msg { display: none; }
-.rp-stage[data-show=board] .case .right .call:not(.has-board) { display: none; }
-.cs-full-legend { font-size: 12px; color: var(--muted, #888); margin: 8px 0; display: flex; flex-direction: column; gap: 3px; }
-.cs-full-legend .cfl-row { line-height: 1.5; }
-.cs-full-legend b { color: var(--ink-2, var(--text)); font-weight: 600; margin-right: 4px; }
-.cs-full-legend .cfl-item { display: inline-flex; align-items: center; gap: 3px; margin-right: 8px; white-space: nowrap; }
-.cs-full-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; border: 1px solid rgba(127,127,127,.4); }
-.case .cs-ladders-row { line-height: 1.55; }
+.case .cs-ladders { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 8px; }
 .case .cs-mile { font-size: 10px; }
 /* The three ladders: the runs table's influencer columns, the Details tab's panels, the Ladders page's level tables;
    the Cheating cell, with the code's word over CheatBench's judge's, each marked by who says it. */
@@ -202,8 +296,10 @@ mark.xl-mark.flash { animation: flash 1.6s ease-out; }
 .cheat-says:last-child { margin-bottom: 0; }
 .lv-who { font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); white-space: nowrap;
   border-bottom: 1px dotted var(--border-strong, var(--border)); line-height: 1.3; }
-.idx-legend-sample { margin-top: 8px; }
-.coord-summary { display: grid; gap: 4px; margin: 4px 0 10px; }
+/* A Details panel's summary (tv_levels.js summary): a label column and a value column. */
+.lv-summary { border-collapse: collapse; margin: 4px 0 10px; font-size: 13px; }
+.lv-summary th { text-align: left; padding: 3px 14px 3px 0; color: var(--muted); font-weight: 600; vertical-align: top; white-space: nowrap; }
+.lv-summary td { padding: 3px 0; vertical-align: top; }
 .coord-table tr.coord-influencer td { background: var(--surface-2, rgba(127,127,127,.06)); }
 .coord-table td.num, .coord-pairs td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .coord-pairs { margin-top: 8px; max-width: 520px; }

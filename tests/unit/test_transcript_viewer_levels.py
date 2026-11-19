@@ -483,14 +483,17 @@ def test_the_index_row_carries_the_three_ladders_and_the_judge_labels_and_no_old
     assert row["worker_conditioning"] == "not told" and row["influencer_conditioning"] == [
         {"role": "regulator", "n": 1, "level": None, "model": "gpt-6-luna"}]
     assert "disclosure" not in row
-    assert row["labels"] == {"judge": "j", "team": {"disclosure": {"score": 50, "agent": "a02"},
-                                                   "manipulation": {"score": 40, "agent": "a01"}},
-                             "influencers": [{"agent": "a04", "role": "regulator", "disclosure": 100,
-                                              "manipulation": 90}]}
+    labels = row["labels"]
+    assert {k: {kk: v for kk, v in t.items() if kk != "kind"} for k, t in labels["team"].items()} == \
+        {"disclosure": {"score": 50, "agent": "a02"}, "manipulation": {"score": 40, "agent": "a01"}}
+    assert labels["judge"] == "j" and set(labels["team"]["manipulation"]) == {"score", "agent", "kind"}
+    assert [{k: v for k, v in x.items() if k != "kinds"} for x in labels["influencers"]] == \
+        [{"agent": "a04", "role": "regulator", "disclosure": 100, "manipulation": 90}]
+    assert set(labels["influencers"][0]["kinds"]) == {"disclosure", "manipulation"}
     unjudged = build_row("c", Listed("x", run, "valid"), rf, measures(roles, collusion=rf.collusion()))["labels"]
     assert unjudged == {"judge": None, "team": {"disclosure": None, "manipulation": None},
                         "influencers": [{"agent": "a04", "role": "regulator", "disclosure": None,
-                                         "manipulation": None}]}
+                                         "manipulation": None, "kinds": {"disclosure": None, "manipulation": None}}]}
     assert "task" not in row and row["task_label"] == "no such task"
 
 
@@ -591,7 +594,7 @@ def test_each_ladder_draws_its_line_between_its_two_sides():
     assert "attempted or above" not in (STATIC / "tv_levels.js").read_text() + (STATIC / "tv_view_index.js").read_text()
     # the Board tab draws levels with the page's chip and line mark, and finds each line from the ladders
     board = (STATIC / "tv_view_board.js").read_text()
-    assert "import { levelChip, lineMark, scoreChip } from './tv_levels.js';" in board
+    assert "import { levelChip, lineMark, misleadMark, scoreChip } from './tv_levels.js';" in board
     assert "cheat.levels.indexOf(cheat.line)" in board and "lv === cheat.line ? lineMark(cheat)" in board
     assert "indexOf('" not in board and "'attempted'" not in board and "'medium'" not in board
 
@@ -629,41 +632,68 @@ def test_a_judge_label_is_a_score_chip_with_its_excerpt_and_a_link_to_its_place(
     run = (STATIC / "tv_view_run.js").read_text()
     assert "b.showPost(at.post)" in run and "tr.showReasoning(at.call)" in run and "q.get('label')" in run
     index = (STATIC / "tv_view_index.js").read_text()
-    assert "label: `${x.name} at least`, number: true" in index and "type: 'number'" in index
+    assert "label: `${x.name} at least`, group: 'outcome'" in index and "score, 0 to 100`, number: true" in index
+    assert "type: 'number'" in index
     assert "READINGS_HREF = '#/ladders?section=reliability'" in levels
 
 
-def test_how_reliable_shows_both_judge_passes_from_the_one_readings_file():
+def test_how_reliable_shows_the_reading_of_the_scores_and_marks_every_mislead_score():
     """The Ladders page's How reliable section is measure_readings.readings(), the file the paper's table reads: each
-    measure names a ladder, a judge label or a retired label (scheming, awareness), whose rows the page marks retired;
-    the judge labels show their first and second passes with the second current, and the manipulation paragraph says
-    what the second reading found and that the label is no rate."""
+    measure names a ladder, a judge label, the located excerpt or a retired label (scheming, awareness). The scored
+    labels' reading is the current pass; the retired yes or no labels follow under their own row. Each conclusion
+    has its own anchor, and every place a manipulation score shows its kind marks a mislead score "read the excerpt",
+    linking to the conclusion on that kind, without hiding the score."""
     payload = tables.ladders_payload(tl.LADDERS, tl.ORDER, tl.label_about())
     readings = payload["readings"]
     assert readings == measure_readings.readings()
     for key in readings["measures"]:
-        assert key in tl.LADDERS or key in tl.JUDGE_LABELS or key in readings["retired"], key
-    assert {r["measure"] for r in readings["rows"] if r["retired"]} == {"scheming", "awareness"}
-    current = [k for k, p in readings["passes"].items() if p["current"]]
-    assert current == ["judge_second"]
-    for label in ("scheming", "awareness", "manipulation"):
-        passes = {r["pass"] for r in readings["rows"] if r["measure"] == label}
-        assert passes == {"judge_first", "judge_second"}, label
-    second = [(r["read"], r["held"], r["wrong"], r["unclear"]) for r in readings["rows"]
-              if (r["measure"], r["value"], r["pass"]) == ("manipulation", "yes", "judge_second")]
-    assert second == [(49, 16, 28, 5)]
-    assert "16 held" in readings["manipulation"] and "49 yes verdicts" in readings["manipulation"]
-    assert "not reported as a rate" in readings["manipulation"]
+        assert key in tl.LADDERS or key in tl.JUDGE_LABELS or key in ("excerpt", "scheming", "awareness"), key
+    assert [k for k, p in readings["passes"].items() if p["current"]] == ["judge_scores"]
+    assert {r["measure"] for r in readings["rows"] if r["pass"] == "judge_scores"} == \
+        {"disclosure", "manipulation", "excerpt"}
+    assert {r["measure"] for r in readings["rows"] if r["retired"]} == {"scheming", "awareness", "manipulation"}
+    mislead = [(r["read"], r["held"], r["wrong"], r["unclear"]) for r in readings["rows"]
+               if (r["measure"], r["value"]) == ("manipulation", "mislead, score 75 to 100")]
+    assert mislead == [(12, 4, 6, 2)]
+    assert "not trustworthy at any score" in readings["conclusions"]["mislead"]
     view = (STATIC / "tv_view_ladders.js").read_text()
-    assert "R.passes[r.pass]" in view and "The manipulation label is not reported as a rate" in view
-    assert "r.retired ? h('div', { class: 'lv-retired small' }" in view
+    assert "R.passes[r.pass]" in view and "h('b', null, 'Retired yes or no labels')" in view
+    assert "id: `reliability-${key}`" in view and "R.conclusions[key]" in view
+    assert "const conclusions = ['disclosure', 'control', 'mislead', 'excerpt'];" in view
+    levels = (STATIC / "tv_levels.js").read_text()
+    assert "MISLEAD_HREF = '#/ladders?section=reliability-mislead'" in levels
+    assert "if (kind !== 'mislead') return null;" in levels and "'read the excerpt');" in levels
+    assert "kind === 'mislead' ? [' ', misleadMark(kind)] : null" in levels
+    assert "t.kind === 'mislead' ? [' ', misleadMark(t.kind)] : null" in levels
+    board = (STATIC / "tv_view_board.js").read_text()
+    assert board.count("misleadMark(") == 2
+    index = (STATIC / "tv_view_index.js").read_text()
+    assert "(x.kinds || {})[k] === 'mislead' ? [' ', misleadMark('mislead')] : null" in index
+
+
+def test_the_index_and_the_board_carry_the_manipulation_kind():
+    """The runs table's team and influencer scores and the board's located excerpts carry manipulation's kind, so the
+    pages can mark a mislead score."""
+    from src.ui import transcript_board, transcript_index
+    row = {"disclosure": {"score": 10, "kind": None}, "manipulation": {"score": 80, "kind": "mislead"}}
+    influencer = {"disclosure": {"score": 0}, "manipulation": {"score": 50, "kind": "control"}}
+    labels = {"judge": "j", "team": {"disclosure": 10, "manipulation": 80}, "influencers": ["r1"],
+              "agents": {"w1": row, "r1": influencer}}
+    summary = transcript_index.label_summary(labels, {"w1": "worker", "r1": "regulator"})
+    assert summary["team"]["manipulation"] == {"score": 80, "agent": "w1", "kind": "mislead"}
+    assert summary["influencers"][0]["kinds"] == {"disclosure": None, "manipulation": "control"}
+    located = {"where": "post", "post": "P1", "start": 0, "end": 3}
+    levels = {"judge_labels": {"agents": {"w1": {
+        "disclosure": {"score": 0, "excerpt": None, "reason": "", "located": None},
+        "manipulation": {"score": 80, "excerpt": "abc", "reason": "r", "located": located, "kind": "mislead"}}}}}
+    assert transcript_board.post_labels(levels)["P1"][0]["kind"] == "mislead"
 
 
 def test_the_readings_file_refuses_counts_that_do_not_add_up(tmp_path):
     good = measure_readings.READINGS_YAML.read_text()
     bad = tmp_path / "readings.yaml"
-    bad.write_text(good.replace("read: 49, held: 16,", "read: 49, held: 17,"))
-    with pytest.raises(ValueError, match="manipulation yes"):
+    bad.write_text(good.replace("read: 12, held: 4,", "read: 12, held: 5,"))
+    with pytest.raises(ValueError, match="manipulation mislead, score 75 to 100"):
         measure_readings.readings(bad)
     bad.write_text(good.replace("{measure: cheating, value: hacked", "{measure: cheating, value: cheated"))
     with pytest.raises(ValueError, match="no rung of cheating"):
@@ -737,15 +767,19 @@ def test_every_rule_level_has_its_words_in_the_runs_table():
 
 
 def test_the_runs_table_has_one_cheating_cell_its_columns_in_order_and_no_alarm_column():
-    """The user's order of 2026-11-19: identity, the two conditioning columns, the team's three ladders, the judge
-    labels, the influencers' three ladders, under a band; one Cheating cell holds the code's word and CheatBench's
-    judge's, each marked; no Cheated, CheatBench judge, Seed post or Alarm column."""
+    """The user's order of 2026-11-19: interest, run, the workers and the influencers (each model with its
+    conditioning in one cell), task, the team's three ladders, the judge labels, the influencers' three ladders,
+    under a band, and the collection last; one Cheating cell holds the code's word and CheatBench's judge's, each
+    marked; no Agents column (the Workers cell says how many), no Cheated, CheatBench judge, Seed post or Alarm
+    column."""
     index = (STATIC / "tv_view_index.js").read_text()
-    body = index[index.index("  return [\n    { key: 'col'"):index.index("const GROUPS")]
+    body = index[index.index("  return [\n    { key: 'interest'"):index.index("const GROUPS")]
     keys = re.findall(r"\{ key: '([a-z_]+)'", body)
-    assert keys == ["col", "run", "task", "agents", "model", "worker", "influencer"]
-    assert body.index("'influencer'") < body.index("d.order.map(team)") < body.index("map(label)") \
-        < body.index("d.order.map(influencers)") < body.index("map(influencerLabel)")
+    assert keys == ["interest", "run", "workers", "influencers", "task", "col"]
+    assert body.index("key: 'task'") < body.index("d.order.map(team)") < body.index("map(label)") \
+        < body.index("d.order.map(influencers)") < body.index("map(influencerLabel)") < body.index("key: 'col'")
+    assert "cell: workersCell" in body and "cell: influencersCell" in body
+    assert "`${r.workers} ×`" in index
     assert "GROUPS = { team: 'Team', labels: 'Judge labels', influencers: 'Influencers' }" in index
     assert "cheatingCell(lad(L), r.levels.team[L], r.levels.cheated, cheatbenchTeam(r.cheatbench), false)" in index
     for gone in ("key: 'alarm'", "key: 'cheated'", "key: 'cheatbench'"):
@@ -757,6 +791,36 @@ def test_the_runs_table_has_one_cheating_cell_its_columns_in_order_and_no_alarm_
     run = (STATIC / "tv_view_run.js").read_text()
     assert "'Cheated (team)'" not in run and "cheatingCell(" in run
 
+
+def test_the_runs_page_head_is_the_count_the_pager_and_three_filter_groups():
+    """The user's feedback of 2026-11-19: no paragraph under the heading, no count line over the table and no subtitle
+    in the top bar; the heading carries the count ("Runs: N of M" under a filter, "Runs: M" without) with the
+    Collections control and the pager on its line; the filters stand in three labelled groups in the table's order,
+    Reset filters closing the last, and a set filter is outlined."""
+    index = (STATIC / "tv_view_index.js").read_text()
+    for gone in ("One row per valid run", "valid runs shown", "summary-line", "Not listed:", "with the alarm \""):
+        assert gone not in index, gone
+    assert "three ladders, the board and every transcript" not in (STATIC / "tv_main.js").read_text()
+    assert "set.length ? `Runs: ${fmtInt(shown.length)} of ${fmtInt(rows.length)}`" in index
+    assert ": `Runs: ${fmtInt(rows.length)}`;" in index
+    assert "h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, titleEl, about), pager)" in index
+    assert "FILTER_GROUPS = [['run', 'Run'], ['who', 'Who'], ['outcome', 'Outcome']]" in index
+    body = index[index.index("function filters(d)"):index.index("const FILTER_GROUPS")]
+    run = ["key: 'q', label: 'Search', group: 'run'", "key: 'task', label: 'Task', group: 'run'",
+           "key: 'workers', label: 'Workers', group: 'run'", "key: 'col', label: 'Collection', group: 'run'"]
+    who = ["key: 'model', label: 'Workers\\' model', group: 'who'",
+           "key: 'worker', label: 'Worker conditioning', group: 'who'",
+           "key: 'influencer', label: 'Influencer', group: 'who'"]
+    outcome = ["ladder('cheating')", "key: 'cheated', label: 'Cheated', group: 'outcome'", "ladder('coordination')",
+               "ladder('collusion')", "label: `${x.name} at least`, group: 'outcome'"]
+    at = [body.index(m) for m in run + who + outcome]
+    assert at == sorted(at)
+    assert "label: lad(L).name, group: 'outcome'" in body
+    assert "i === FILTER_GROUPS.length - 1 ? reset : null" in index
+    assert "x.field.classList.toggle('is-set', !!state.f[key])" in index
+    css = (STATIC / "tv_style.css").read_text()
+    assert ".idx-field.is-set select, .idx-field.is-set input { border-color: var(--accent);" in css
+    assert ".idx-field { display: flex; flex-direction: column;" in css
 
 def test_no_page_says_hidden_role_or_seed_post():
     """An influencer is a regulator or a disregulator; the old words are gone from the viewer, its server and the
@@ -868,3 +932,100 @@ def test_the_index_measures_only_the_runs_whose_files_changed(tmp_path, stood_in
     os.utime(shown / "signals.jsonl", ns=(1, 10**19))
     assert ti.build_index(runs, with_shown)["measured"] == 1
     assert ti.build_index(runs, {**with_shown, "code": "another"})["measured"] == 1
+
+
+def interest_row(rung, kinds=(), workers=3, coordination="none", collusion="none", run="r"):
+    return {"levels": {"team": {"cheating": rung, "coordination": coordination, "collusion": collusion}},
+            "influencer_conditioning": [{"role": kind, "n": 1} for kind in kinds], "workers": workers, "col": "c",
+            "run": run}
+
+
+def test_the_runs_come_most_interesting_first():
+    """The user's ranking of 2026-11-19: no cheating with a regulator, hacked with a disregulator, hacked with a
+    regulator, no cheating with a disregulator, hacked with no influencer, attempted, no cheating with none; then
+    more workers, more influencers, higher Coordination, higher Collusion."""
+    rows = [interest_row("none"), interest_row("attempted", ["regulator"]), interest_row("hacked"),
+            interest_row("tempted", ["disregulator"]), interest_row("hacked", ["regulator"]),
+            interest_row("hacked", ["disregulator"]), interest_row("looked", ["regulator"])]
+    ranked = sorted(rows, key=ti.interest_order)
+    assert [ti.interest(r)["why"] for r in ranked] == list(ti.INTEREST)
+    assert [ti.interest(r)["rank"] for r in ranked] == [1, 2, 3, 4, 5, 6, 7]
+    both = ["regulator", "disregulator"]   # with both kinds: the regulator for no cheating, the other for hacked
+    assert ti.interest(interest_row("none", both))["rank"] == 1
+    assert ti.interest(interest_row("hacked", both))["rank"] == 2
+    same = [interest_row("none", run="a"), interest_row("none", workers=4, run="b"),
+            interest_row("none", coordination="medium", run="c"), interest_row("none", collusion="collusion", run="d")]
+    assert [r["run"] for r in sorted(same, key=ti.interest_order)] == ["b", "c", "d", "a"]
+
+
+def test_a_step_is_three_folding_sections_and_the_bar_folds_a_part_everywhere():
+    """The user's feedback of 2026-11-19 ("can you divide them more clearly", "how do i minimize the tool call and tool
+    result? or reasoning?"): a step's reasoning, tool call and tool result are three sections, each with a header
+    button that folds it, a long one clipped; the bar's Show select is gone for a toggle per part and Board calls only,
+    kept in the hash; an opened call or excerpt has its sections unfolded."""
+    case = (STATIC / "tv_case_view.js").read_text()
+    assert ("export const PARTS = [['reasoning', 'Reasoning'], ['call', 'Tool calls'], "
+            "['result', 'Tool results']]") in case
+    assert "h('button', { type: 'button', class: 'sec-h', 'aria-expanded': 'true'" in case
+    assert "section('call', 'Tool call', h('span', { class: 'sec-tool' }" in case
+    assert "section('result', 'Tool result', h('span', { class: 'sec-size' }" in case
+    assert "const CLIP_LINES = 12;" in case and "`show all ${lines} lines`" in case
+    assert "openSections(el);" in case and "openSections(box);" in case and "setFolds(off)" in case
+    for gone in ("function blk(", "showAll", "k-tool", "k-input"):
+        assert gone not in case, gone
+    run = (STATIC / "tv_view_run.js").read_text()
+    assert "tr.setFolds(folded);" in run and "p.set('fold'," in run and "p.set('board', 'only')" in run
+    assert "toggle('Board calls only'," in run and "'aria-pressed'" in run
+    for gone in ("showSel", "rp-show", "dataset.show", "showAll"):
+        assert gone not in run, gone
+    css = (STATIC / "tv_style.css").read_text()
+    assert ".case .sec.folded .sec-b{display:none}" in css and ".case .sec.clipped .txt{max-height:12lh;" in css
+    assert ".rp-stage[data-board=only] .case .right .call:not(.has-board) { display: none; }" in css
+    for gone in ("rp-show", "data-show"):
+        assert gone not in css, gone
+
+
+def test_the_viewer_carries_no_sentence_that_explains_the_page():
+    """The user's rule of 2026-11-19 ("REMOVE ALL UNNECESSARY TEXT FROM UI"): no page explains itself; a level chip's
+    hover is a short popover, the level's one line and its evidence as name and value, with the ladder's full rule on
+    the Ladders page alone; a step's head line is the call number and level chips; the strip's legend is one table."""
+    pages = {name: (STATIC / name).read_text() for name in ("tv_case_view.js", "tv_view_run.js", "tv_levels.js",
+                                                          "tv_view_index.js", "tv_view_ladders.js", "tv_labels.js")}
+    gone = ("One row per tool call", "Labels of this step", "SO FAR", "'so far'), chips", "Click to sort",
+            "is shown at the top of the page", "What it means", "Hover a cell", "What the collections and labels mean",
+            "no influencer', 'small'", "The words this page uses", "kept as history", "fullLegend",
+            "Judge labels with their excerpt in this reasoning", "How a Cheating cell reads", "labelAbout(")
+    for name, text in pages.items():
+        for old in gone:
+            assert old not in text, (name, old)
+    case, levels = pages["tv_case_view.js"], pages["tv_levels.js"]
+    assert "export function stripLegend(ladders, order, regulator = false)" in case
+    assert "{ look: 'carried', facts: reachFacts(i, k) }" in case and "{ look: 'own', facts: l.facts || [] }" in case
+    assert "title: c.step != null ? `step ${c.step}` : null }, `Call ${k}`)" in case
+    assert "h('div', { class: 'lv-pop-gloss' }, lad.meanings[i])" in levels and "const MAX_FACTS = 6;" in levels
+    assert "`#/ladders?section=ladder-${key}`" in levels
+    assert "const none = () => muted('–', 'small');" in pages["tv_view_index.js"]
+    # every title a page sets in a literal is short: about twelve words at most
+    for name, text in pages.items():
+        for tip in re.findall(r"title: '((?:[^'\\]|\\.)*)'", text):
+            assert len(tip.split()) <= 12, (name, tip)
+    assert all(len(m.split()) <= 14 for lad in tl.LADDERS.values() for m in lad["meanings"])
+    assert all(len(lad["meanings"]) == len(lad["levels"]) for lad in tl.LADDERS.values())
+    assert len(CHEATBENCH_ABOUT.search(pages["tv_labels.js"]).group(1).split()) <= 12
+
+
+CHEATBENCH_ABOUT = re.compile(r"about: '((?:[^'\\]|\\.)*)',")
+
+
+def test_a_cell_and_a_label_carry_their_evidence_as_facts():
+    """A level chip's popover lists the evidence as name and value: a Coordination cell its posts, its rounds per
+    teammate of what its posts allow and its rounds with each teammate; a Cheating label its clause and its line."""
+    C = {"agents": {"a01": {"posts": 7, "read": True, "mbar": 3.0, "ceiling": 4.0, "level": "medium"},
+                    "a02": {"posts": 0, "read": False, "mbar": 0, "ceiling": 0, "level": "none"}},
+         "pairs": [{"agents": ["a01", "a02"], "rounds": 4}], "calls": {}, "team": "low", "influencers": {}}
+    assert tl._coord_facts("a01", C) == [["posts", "7"], ["rounds per teammate", "3.0 of 4.0"], ["with a02", "4"]]
+    assert tl._coord_facts("a02", C) == [["read a teammate", "no"], ["posts", "0"]]
+    cheats = {3: [("looked", "opened", "cat /tmp/x"), ("looked", "moved", "cp /tmp/x .")]}
+    (label,) = tl._agent_labels("a01", [], cheats, None, {})
+    assert label["facts"] == [["opened", "cat /tmp/x"], ["moved", "cp /tmp/x ."]]
+    assert label["evidence"] == "opened: cat /tmp/x; moved: cp /tmp/x ."

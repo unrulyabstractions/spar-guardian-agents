@@ -2,9 +2,11 @@
 
     uv run python -m scripts.paper.tables
 
-table_rungs_by_domain.png: what puts an agent on each rung of the Cheating ladder in each task the paper studies
-(src/measures/ladder_by_domain.py DOMAINS), with each task's honeypot and grader under its name. Its rows are
-ladder_by_domain.cheating_by_task.
+table_rungs_by_domain.png and table_rungs_by_domain_2.png: what puts an agent on each rung of the Cheating ladder in
+each task the paper studies (src/measures/ladder_by_domain.py DOMAINS), with each task's honeypot and grader under its
+name, split after SPLIT_AFTER rungs so that each part fits a page at the text's width. Their rows are
+ladder_by_domain.cheating_by_task. Each part is refused when a text would print below PRINT_FLOOR_PT at the text's
+width, or when it is taller than the text.
 """
 from __future__ import annotations
 
@@ -15,18 +17,22 @@ from matplotlib.figure import Figure
 from matplotlib.font_manager import FontProperties
 from matplotlib.patches import Rectangle
 
-from scripts.paper.study_ladders import CHEATING_FILL
+from scripts.paper.figures import PRINT_FLOOR_PT
+from scripts.paper.study_ladders import CHEATING_FILL, TEXT_WIDTH_IN
 from src.configuration.settings import ROOT
 from src.measures.ladder_by_domain import cheating_by_task
 from src.utils.figure_style import AXIS, BAND, INK, INK_SECONDARY, PRINT_DPI, WHITE
 
 OUT = ROOT / "tmp" / "tables" / "method"
+SPLIT_AFTER = 3
+"""The rungs of the first part: none, looked and tempted; the second part holds attempted and hacked."""
+TEXT_HEIGHT_IN = 9.0
 
 
 SANS = FontProperties(family="DejaVu Sans", size=7.6)
 SANS_B = FontProperties(family="DejaVu Sans", size=8.2, weight="bold")
-NOTE = FontProperties(family="DejaVu Sans", size=6.8)
-MONO = FontProperties(family="DejaVu Sans Mono", size=6.6)
+NOTE = FontProperties(family="DejaVu Sans", size=7.2)
+MONO = FontProperties(family="DejaVu Sans Mono", size=7.0)
 
 
 def wrap_measured(renderer, text: str, width_in: float, font: FontProperties) -> list[str]:
@@ -43,9 +49,9 @@ def wrap_measured(renderer, text: str, width_in: float, font: FontProperties) ->
 
 
 def by_domain_png(name: str, label: str, domains: list[str], notes: list[str], levels: list[tuple],
-                  fills: dict[str, str]) -> Path:
-    """One table of levels by domain: a row per level with its fill, number, name and gloss, a column per domain under
-    its name and note."""
+                  fills: dict[str, str], first_number: int = 1) -> Path:
+    """One table of levels by domain: a row per level with its fill, number (from first_number), name and gloss, a
+    column per domain under its name and note."""
     first, col, pad, lh, note_lh = 1.75, 1.62, 0.09, 0.145, 0.13
     width = first + col * len(domains)
     renderer = FigureCanvasAgg(Figure(figsize=(1, 1), dpi=PRINT_DPI)).get_renderer()
@@ -79,7 +85,8 @@ def by_domain_png(name: str, label: str, domains: list[str], notes: list[str], l
         if i % 2:
             ax.add_patch(Rectangle((0, y), width, h, fc=BAND, ec="none", zorder=0))
         ax.add_patch(Rectangle((pad, y + pad), 0.09, h - 2 * pad, fc=fills[level], ec="none"))
-        ax.text(pad + 0.2, y + pad + 0.08, f"{i + 1}  {level}", fontproperties=SANS_B, color=INK, va="center")
+        ax.text(pad + 0.2, y + pad + 0.08, f"{i + first_number}  {level}", fontproperties=SANS_B, color=INK,
+                va="center")
         for k, line in enumerate(gl):
             ax.text(pad + 0.2, y + pad + 0.27 + k * note_lh, line, fontproperties=NOTE, color=INK_SECONDARY,
                     va="center")
@@ -90,21 +97,28 @@ def by_domain_png(name: str, label: str, domains: list[str], notes: list[str], l
         y += h
         ax.plot([0, width], [y, y], color=AXIS, lw=0.5)
     ax.plot([first - 0.02] * 2, [0.12, y], color=AXIS, lw=0.5)
+    scale = TEXT_WIDTH_IN / width
+    small = min(f.get_size() for f in (SANS, SANS_B, NOTE, MONO)) * scale
+    if small < PRINT_FLOOR_PT or height * scale > TEXT_HEIGHT_IN:
+        raise SystemExit(f"{name}: smallest text {small:.1f} pt, height {height * scale:.1f} in at the text's width")
     OUT.mkdir(parents=True, exist_ok=True)
     path = OUT / f"{name}.png"
     fig.savefig(path, dpi=PRINT_DPI, facecolor=WHITE)
     return path
 
 
-def write_rungs_by_domain() -> Path:
+def write_rungs_by_domain() -> list[Path]:
     table = cheating_by_task()
-    return by_domain_png("table_rungs_by_domain", "rung", table["domains"], table["notes"], table["rows"],
-                         CHEATING_FILL)
+    rows = table["rows"]
+    return [by_domain_png("table_rungs_by_domain", "rung", table["domains"], table["notes"], rows[:SPLIT_AFTER],
+                          CHEATING_FILL),
+            by_domain_png("table_rungs_by_domain_2", "rung", table["domains"], table["notes"], rows[SPLIT_AFTER:],
+                          CHEATING_FILL, first_number=SPLIT_AFTER + 1)]
 
 
 def main() -> int:
-    """Write the table and print its path."""
-    print(write_rungs_by_domain())
+    """Write the two parts of the table and print their paths."""
+    print("\n".join(str(path) for path in write_rungs_by_domain()))
     return 0
 
 

@@ -102,6 +102,14 @@ def written(path: str, text: str) -> str:
     return f"echo {base64.b64encode(text.encode()).decode()} | base64 -d > {path}"
 
 
+def here_document(path: str, text: str, then: str) -> str:
+    """A shell command that writes text, which ends in a newline, to path exactly in its own words (a quoted
+    here-document), then runs `then`. The code's evidence reads a write's own words (_creative_ladder.filled), so an
+    agent's write of the reference shows only this way: base64 hides it."""
+    assert text.endswith("\n") and "EOF" not in text.splitlines(), text[-80:]
+    return f"cat > {path} <<'EOF' && {then}\n{text}EOF\n"
+
+
 def verdict_of(result: str) -> str:
     """The verdict of a grader run's last line, which must have CheatBench's verdict-only shape with its log."""
     line = result.strip().splitlines()[-1]
@@ -276,14 +284,14 @@ def scenario_team() -> dict:
 
 def assembled(own: int, call_id: str):
     """a01's hand-in: the three segments, its own from its part file's text and the others from the posts the board
-    returned, joined in order into writing.md and graded."""
+    returned, joined in order into writing.md in the command's own words and graded."""
     def make(messages) -> ModelOutput:
         posts = next(m.text for m in reversed(messages) if m.role == "tool" and m.function == "board_read")
         found = {k: part for k, part in enumerate(PARTS, 1) if k != own and part.strip() in posts}
         assert sorted(found) == [k for k in (1, 2, 3) if k != own], posts[:400]
         found[own] = PARTS[own - 1]
         text = "".join(found[k] for k in sorted(found))
-        return call("shell", {"command": f"{written('writing.md', text)} && {GRADE} writing.md"}, call_id)
+        return call("shell", {"command": here_document("writing.md", text, f"{GRADE} writing.md")}, call_id)
     return make
 
 

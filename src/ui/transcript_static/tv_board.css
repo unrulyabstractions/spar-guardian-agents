@@ -13,6 +13,12 @@
 .bd-sel-a { border-color: var(--bd-a); }
 .bd-sel-b { border-color: var(--bd-b); }
 .bd-play { min-width: 78px; }
+.bd-lens-key { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-height: 20px; margin: 0 0 6px;
+  color: var(--muted); }
+.bd-lens-key[hidden] { display: none; }
+.bd-count { padding: 0 6px; border: 1px solid var(--border-strong); border-radius: 9px; font-size: 11.5px;
+  color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bd-missed { cursor: help; }
 
 /* the slider under the time axis: its handle's width is tv_view_board.js THUMB, so the handle's middle sits on the
    axis at the moment it shows */
@@ -30,19 +36,26 @@
 .bd-pos { position: absolute; top: 19px; font-variant-numeric: tabular-nums; font-size: 12.5px; color: var(--text);
   white-space: nowrap; }
 
-/* the two agents' cards */
-.bd-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 8px; margin: 2px 0 8px; }
+/* the two agents' cards, side by side and the same height: a head line, a grid of now and end per ladder, the
+   judge labels' scores */
+.bd-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 2px 0 8px; }
 .bd-card { min-width: 0; padding: 5px 10px; border-left: 4px solid; border-radius: 4px; font-size: 12.5px;
-  display: flex; flex-direction: column; gap: 3px; }
+  display: flex; flex-direction: column; gap: 4px; }
 .bd-card[hidden] { display: none; }
 .bd-card-a { border-color: var(--bd-a); background: var(--bd-a-bg); }
 .bd-card-b { border-color: var(--bd-b); background: var(--bd-b-bg); }
-.bd-card-call { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bd-card-row { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 12px; }
-.bd-card-row[hidden] { display: none; }
-.bd-field { display: inline-flex; align-items: center; gap: 2px; }
-.bd-sum { font-family: var(--mono); font-size: 12px; }
-.bd-chip { display: inline-flex; align-items: center; gap: 3px; margin-right: 6px; font-size: 11.5px; }
+.bd-card-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; white-space: nowrap; }
+.bd-sum { font-family: var(--mono); font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.bd-card-grid { display: grid; grid-template-columns: max-content max-content max-content; align-items: center;
+  gap: 2px 14px; font-size: 12px; }
+.bd-col { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.bd-ladder { color: var(--muted); }
+.bd-end { cursor: help; }
+.bd-end.bd-same { opacity: .4; }
+.bd-card-labels { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 14px; }
+.bd-score { display: inline-flex; align-items: center; gap: 5px; }
+.bd-score a { text-decoration: none; }
+.bd-kind { font-size: 11px; color: var(--muted); }
 .bd-key-a { color: var(--bd-a); font-weight: 600; }
 .bd-key-b { color: var(--bd-b); font-weight: 600; }
 .bd-call-link { font-family: var(--mono); font-size: 12px; }
@@ -64,6 +77,16 @@
 .bd-call { cursor: pointer; shape-rendering: crispEdges; }
 .bd-call:hover { stroke: var(--text); stroke-width: 1; }
 .bd-call.bd-strong { stroke: var(--text); stroke-width: .8; }
+/* under a lens (tv_view_board.js callStyle): the lanes go neutral so the ladder's colours read; a marked call is
+   outlined, the rung reached so far is a quiet tint, and a call the lens has nothing for is dimmed */
+.bd-lensed .bd-lane-a, .bd-lensed .bd-lane-b { fill: var(--panel); }
+.bd-lensed .bd-call.bd-mark { stroke: var(--text); stroke-width: .6; }
+.bd-call.bd-sofar { opacity: .8; }
+.bd-call.bd-dim { opacity: .22; }
+.bd-reach { stroke: var(--text); stroke-width: 1; stroke-dasharray: 3 2; pointer-events: none; }
+.bd-reach.bd-reach-line { stroke-width: 2.2; stroke-dasharray: none; }
+.bd-reach-text { font-size: 9.5px; font-weight: 600; fill: var(--text); paint-order: stroke; stroke: var(--panel);
+  stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
 .bd-pbox { cursor: pointer; }
 .bd-pbox.bd-ahead { opacity: .28; }
 .bd-pbox rect { stroke-width: 1.2; }
@@ -74,6 +97,8 @@
 .bd-by-other rect { fill: var(--panel-2); stroke: var(--border-strong); }
 .bd-by-other text, .bd-by-system text { fill: var(--muted); }
 .bd-by-system rect { fill: var(--notice-bg); stroke: var(--notice); stroke-dasharray: 2 2; }
+.bd-pbox.bd-pdim rect { fill: var(--panel); }
+.bd-pbox.bd-pdim text { fill: var(--muted); }
 .bd-judged-dot { stroke: var(--text); stroke-width: 1; }
 .bd-arrow { stroke-width: 1.3; opacity: .85; }
 .bd-arrow.bd-read-latest { stroke-width: 1; stroke-dasharray: 4 3; }
@@ -102,11 +127,15 @@
 .bd-sw-a { background: var(--bd-a); border-color: var(--bd-a); height: 12px; width: 6px; }
 .bd-sw-b { background: var(--bd-b); border-color: var(--bd-b); height: 12px; width: 6px; }
 .bd-sw-judged { width: 10px; height: 10px; border-radius: 50%; background: #97a9cf; border: 1px solid var(--text); }
+.bd-sw-sofar { opacity: .8; }
 .bd-sw-latest { width: 16px; height: 10px; border: 2.4px solid var(--text); background: none; }
-.bd-note { margin-top: 6px; }
+.bd-sw-post { width: 18px; height: 11px; border-radius: 3px; background: var(--bd-a); border-color: var(--bd-a); }
+.bd-sw-tall { width: 6px; height: 16px; border-color: var(--text); }
+.bd-tick { display: inline-block; width: 0; height: 14px; border-left: 1px dashed var(--text); }
+.bd-tick.bd-tick-line { border-left: 2.2px solid var(--text); }
 
 /* the message board */
-.bd-board-head h3 { display: inline; margin: 0 6px 0 0; font-size: 14px; }
+.bd-board-head { margin: 0; font-size: 14px; }
 .bd-board-box { max-height: 640px; overflow: auto; margin-top: 8px; position: relative; }
 .bd-posts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .bd-post { border: 1px solid var(--border); border-left: 4px solid var(--border-strong); border-radius: 6px;
@@ -124,5 +153,9 @@
 .bd-post.bd-mine-b .bd-writer { color: var(--bd-b); }
 .bd-post.bd-latest { outline: 2.4px solid var(--text); outline-offset: 1px; }
 .bd-post.bd-has-label { border-right: 4px solid #5b73ad; }
-.bd-judged { margin-top: 4px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.bd-readers { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+.bd-reader { font-family: var(--mono); }
+.bd-judged { margin-top: 4px; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.bd-reason { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: zoom-in; }
+.bd-reason.open { white-space: normal; cursor: zoom-out; }
 .bd-post.flash { animation: flash 1.2s ease-out; }

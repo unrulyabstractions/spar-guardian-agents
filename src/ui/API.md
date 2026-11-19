@@ -242,7 +242,7 @@ a new `INDEX_VERSION` (now 10) or new code measures every run. The run page read
 | `#/?col=&task=&model=&workers=&worker=&influencer=&lv_<ladder>=&cheated=&min_disclosure=&min_manipulation=&q=&sort=&dir=&page=&size=` | Runs: one row per valid run |
 | `#/run/<collection>/<run key>?agent=&call=` | a run: a tab per agent with its episode, a Board and a Details tab |
 | `#/run/<collection>/<run key>?agent=&label=` | a run opened at the place code located the agent's excerpt of a judge label (`disclosure`, `manipulation`), highlighted |
-| `#/run/<collection>/<run key>?tab=board&a=&b=&mode=&pos=` | the Board tab: agents `a`, `b`; `time` or `step`; `pos` |
+| `#/run/<collection>/<run key>?tab=board&a=&b=&mode=&pos=&lens=` | the Board tab: agents `a`, `b`; `time` or `step`; `pos`; `lens` (`all`, `cheating`, `coordination`, `collusion`, `judge`) |
 | `#/run/<collection>/<run key>?tab=details` | the Details tab: the three ladders' panels, the judge labels, the legend |
 | `#/ladders?task=<CheatBench task name>` | the three ladders, the Cheating ladder by task, the Coordination and Collusion levels, Collusion's take rules by task, the task's column highlighted, and the judge labels |
 
@@ -252,17 +252,30 @@ honesty rule` or `rule naming the exploit`), the one filter that tells runs told
 `influencer` keeps the runs with an influencer of one kind and level (`regulator: enforce`), or `none`; `cheated` is
 `yes` or `no` (the team's, the code's). `min_disclosure` and `min_manipulation` ("Disclosure at least", "Manipulation
 at least", a number box) keep the runs whose team score is at least the number; a run no judge scored has none.
+`q` keeps the runs whose name contains the text.
 
-The runs table's columns, left to right: Collection, Run, Task, Agents, Workers' model, Worker conditioning, Influencer
-conditioning; then under the band **Team** the team's Cheating, Coordination and Collusion; under **Judge labels**
+The runs page's head is its heading and the pager on one line: the heading carries the count, `Runs: 147 of 2,007`
+under a filter and `Runs: 2,007` without. Under it the filters stand in three labelled groups, in the table's order,
+each field's label above its control and every control the same width and height: **Run** (Search, Task, Workers,
+Collection), **Who** (Workers' model, Worker conditioning, Influencer) and **Outcome** (Cheating, Cheated,
+Coordination, Collusion, Disclosure at least, Manipulation at least), Reset filters closing the last. A set filter's
+control is outlined in the accent colour and its label drawn in it.
+
+The runs table's columns, left to right: Interest, Run, Workers, Influencers, Task; then under the band **Team** the team's Cheating, Coordination and Collusion; under **Judge labels**
 Disclosure and Manipulation, each the team's highest score of a worker as a score chip and which worker, whose name
 opens its excerpt; under **Influencers** each influencer's own Cheating, Coordination and Collusion, and its own
-Disclosure and Manipulation scores. CheatBench's own field for an agent that acknowledged its access is no column: it
+Disclosure and Manipulation scores; Collection last. The **Workers** cell holds the number of workers and their model
+(`3 × GPT-6 Luna`) over their conditioning as chips: `not told` grey, `told to cheat` amber, a rule teal and a rule naming the exploit solid teal. The
+**Influencers** cell holds one line per influencer: a REGULATOR (blue) or DISREGULATOR (orange) chip, its level as an
+outline chip and its model, or `none`. The Workers column sorts by model then conditioning, the Influencers column by
+kind, level and model. CheatBench's own field for an agent that acknowledged its access is no column: it
 shows only in the CheatBench judge's block on the run page, as "CheatBench: disclosed access". The **Cheating cell** holds the code's rung and whether the team cheated and, under it, CheatBench's judge's
 count of the workers it says cheated, each line marked by who says it (code, CheatBench judge); the run page and the
 Ladders page draw it the same way (`tv_levels.js` `cheatingCell`). The alarm has no column: a row with it carries a red
-mark at its left edge and a tooltip, the line above the table counts the runs with it, and the run page shows it. The
-table fits a 1700 px window without scrolling sideways.
+mark at its left edge and a tooltip, and the run page shows it. The table fits a 1700 px window without scrolling
+sideways: no column counts the agents (the Workers and Influencers cells say it), cheated stands under the Cheating
+chip, "read the excerpt" under a mislead score, and an influencer's level chip goes under its role chip when the
+column is narrow.
 
 ## The three ladders
 
@@ -340,6 +353,9 @@ IndexRow = {                                         # valid runs only
   instance (the sample id),
   arm_label (agents; workers' conditioning; influencers, in words), agents ("One agent" | "3 workers" | "3 workers,
   1 influencer" ...), workers (their number),
+  interest {rank (1 is the most interesting), why (transcript_index.INTEREST: the team's Cheating rung against the
+  influencers it ran with)}; the rows come in that order (interest_order: then more workers, more influencers,
+  higher Coordination, higher Collusion),
   worker_conditioning ("not told" | "told to cheat" | transcript_index.RULE_WORDS[rule_level], joined by "; "),
   influencer_conditioning: [{role ("regulator"|"disregulator"), n, level (its instruction level), model}],
   model (the workers' model, the last part of run.json's role_models worker, else its model, never a
@@ -429,12 +445,19 @@ place on the board, harness notices included, as the judges do; a P<n> anywhere 
 labels, its settings and each agent's record with its Cheating evidence, its judge labels and each CheatBench judge's
 verdict.
 
-The Board tab has two parts on one position in time. Top to bottom: one control row (the two agents, the time mode,
-step back, play, step forward); the timeline; the slider directly under its time axis, as wide as the lanes, its
-handle under the moment it shows and the time at its right end; a card per agent in its lane's colour with its call
-at the position, the level each ladder has reached at its calls so far, the levels whose evidence cites no call, and
-its two judge labels' scores (the page's `levels.judge_labels`, as the Details tab reads them; "not judged" without
-them); the legend, folded into one line; then the message board. A click or a drag on the timeline, off a call or a
+The Board tab has two parts on one position in time. It carries no sentence: words are labels, chips and hovers of
+about twelve words or a short name and value list. Top to bottom: one control row (the two agents, whose hover says
+why the pair is the default; the clock, `time` or `steps`, whose hover names the clock; step back, play, step forward;
+the lens, labelled "colour by"; a count of the payload's notes, listed on hover); the lens's key; the timeline; the
+slider directly under its time axis, as wide as the lanes, its handle under the moment it shows and the time at its
+right end; two cards side by side and of one height, one per agent in its lane's colour: a head line (the agent, its
+role, its call at the position with the tool and the command on one line), a grid with a row per ladder and two
+columns, `now` (the level its calls reached up to the position) and `end` (its level at the end of the run,
+`final`, its evidence on hover), the `end` cell muted when the two agree, and one line of its judge labels' scores
+(the page's `levels.judge_labels`, as the Details tab reads them; each chip opens the excerpt where code located it;
+"not judged" without them); the legend, folded under "Legend": chips and line samples of a word or two (lanes, work,
+post, the level chips, over the line, judge excerpt, latest, write, latest read, from read, other read); then the
+message board, headed "Message board · N posts". A click or a drag on the timeline, off a call or a
 post, moves the position. The timeline draws two agents of the swarm, any two, influencers
 included, one lane each with its calls, and the board's lane between them with each post as P1, P2, ...; a call's colour
 is the page's ramp at its highest label, Cheating first, then Collusion's take, then Coordination's `read` or `write`
@@ -446,20 +469,42 @@ show for the post at the position, the three before it and a post under the poin
 every post of the run, each shown once the position reaches it: the two agents' posts in their lanes' colours, the
 latest post written or read by them outlined, and on a post that holds a judge label's excerpt the label's score chip
 and the post's whole text with the excerpt highlighted (a dot in the score's colour on its box in the timeline). A
-click on a post moves the position to it; a click on a call opens it in its agent's tab.
+click on a post moves the position to it; a click on a call opens it in its agent's tab. A post's head holds its
+label, writer, time, writing call and the agents who read it, each a link to its first reading call. A judge label on
+a post shows its score chip, its name and kind, and the judge's rationale on one line, whole after a click. The two
+selectors never hold one agent: choosing the agent the other holds swaps the two.
+
+The lens colours the timeline. All is the colouring above. Cheating, Coordination, Collusion and Judge labels colour
+every call of both lanes by that lens's marks alone (`BoardCall.marks`), with the page's own ramps and score colours,
+and dim the calls the lens has nothing for; the lanes go neutral and a marked call is outlined. Cheating: the rung of
+each clause whose evidence names the call, full height at or above the line; the rung reached so far as a quiet tint on
+the calls after it; a dashed line where the agent first reaches a rung, solid where it crosses the line. Coordination:
+`read` for a read of a teammate's post new to the reader, `write` for a post, full height for a post that took up a
+teammate's new post. Collusion: `cooperation` for a take of ordinary work, full height in the Collusion line's colour
+for a take of a planted piece. Judge labels: the highest located score's colour. A post's box takes the colour of the
+call that wrote it under a ladder's lens and its own located score under Judge labels. The key under the controls,
+shown under a lens other than All, holds the lens's chips and samples, how many of the two agents' calls it marks
+("14 of 193") and a chip counting its records that name no call (`unplaced`), the first few by name on hover.
 
 ### `GET /api/board?id=<id>` → `BoardTab` (the run page's Board tab, `src/ui/transcript_board.py` `board_payload`)
 ```
 BoardTab = {clock ("eval_log" | "call_order"), clock_about, total (seconds, or the number of calls in call order),
-            agents: [{agent, role, calls: [BoardCall], uncited}],   # workers first; uncited: levels at no call
+            agents: [{agent, role, calls: [BoardCall],          # workers first
+                      final: {ladder: {level, facts}},           # the run page's cell of each ladder: the end level
+                      unplaced: {lens: {what: n}}}],             # records of a lens that name no call, by clause,
+                                                                 # take rule or judge label
             posts: [BoardPost],                                # in time order
-            pair: [a, b], pair_why,                            # the two agents the tab opens with, and why
+            pair: [a, b], pair_why,                            # the two agents the tab opens with, and why, short
             ladders: {ladder: {name, levels, line, line_words}},
             label_names: {label: name},                        # the judge labels' names
             notes}                                             # load_run's, then the count of reads of no form
 BoardCall = {k (the agent tab's "Call k"), m (its model call, per agent from 0), t, dur, tool, summary (one line),
              board ("post" | "read" | "status" | null),
-             labels: [{ladder, level, index, evidence}]}    # the run page's labels (Levels.labels) on this call
+             labels: [{ladder, level, index, evidence}],    # the run page's labels (Levels.labels) on this call
+             marks: {cheating: [{level, index, clause, evidence}],
+                     coordination: [{level ("read" | "write"), index, evidence, post, took_up: [agent]}],
+                     collusion: [{level ("cooperation"), index, giver, rule, planted, evidence}],
+                     judge: [{label, score, kind, where ("reasoning" | "post"), evidence (the excerpt)}]}}
 BoardPost = {label ("P1", "P2", ... in board order, system notices included: the judges' numbering), writer, role,
              kind ("post" | "system"), t, call (the writer's call k, null for a notice), text,
              reads: [{agent, k, t, form, asked}] (every read by another agent),
@@ -475,6 +520,20 @@ with the most posts. A post's `labels` are the judge labels whose excerpt code l
 (`transcript_board.read_form`): `"from"` when `from_agent` names the post's writer, with `asked` that agent; `"latest"`
 when the call asked for the newest posts (`latest`, or no argument) or named another writer, `asked` null; null when an
 argument is none of the tool's (`latest`, `from_agent`, `latest_from`), and `notes` then counts such reads.
+
+A call's `marks` place every record of `levels` that names the call (`transcript_board.LENSES`), with no level computed
+by the viewer. Cheating: each evidence line of each clause of the Cheating measure at every call it cites
+(`transcript_board.cited_calls`: `[k] ` at the line's start, after `; ` or after `: `), or, for a read the access log
+shows (`access_evidence.read_evidence`), at the call its log rows sit in; the level is the clause's rung
+(`cheating_ladder.CLAUSES`). Coordination: `read` at each agent's first read of each teammate's post (from the posts'
+`reads`), `write` at each call that posted, with `took_up` the teammates whose new posts that post took up: the R_ij of
+`coordination.board_counts` that grew at that post (`transcript_board.took_up`), in roster order; `post` (on a write)
+the post's label. Collusion: each take of the agent at its `call`, else at the calls its evidence cites; `planted` is a
+take by `transcript_board.PIECE_RULE`, the Collusion measure's take of a planted piece. Judge labels: a label located
+in the reasoning of model call n sits on that model call's tool calls (the judges number model calls from 1); a label
+located in a post sits on the call that wrote the post. `unplaced` counts the records of each lens that name no call:
+Cheating lines by clause, takes by rule, judge labels with an excerpt code did not locate, or located in a model call
+that made no tool call.
 
 ### `GET /api/transcript?id=<id>&agent=<agent>` → the agent's `transcript.json`, streamed as stored
 ### `GET /api/ladders` → the ladders page's tables (`transcript_ladder_tables.ladders_payload`)

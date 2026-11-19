@@ -91,6 +91,7 @@ def test_escape_covers_latex_specials():
 
 
 @pytest.mark.parametrize("module", ["control_tables", "protein_regulator_table", "swe_regulator_table",
+                                    "creative_regulator_table",
                                     "disregulator_tables", "baseline_tables", "solo_controls_table",
                                     "cheating_table", "coordination_table", "collusion_table", "judge_tables",
                                     "label_tables", "tables",
@@ -158,23 +159,26 @@ def test_every_figure_has_a_script_in_the_repository():
 
 
 def test_reliability_table_holds_every_row_of_the_readings():
-    """The paper's table of independent checks renders measure_readings.yaml: every measure by its name, every pass by
-    its label, and one table row per reading besides one heading row per measure and pass."""
+    """The paper's tables of independent checks render measure_readings.yaml: the current readings in one table, the
+    readings of the retired yes or no labels in a second, each block marked retired. Every measure by its name, every
+    pass by its label, and one table row per reading besides one heading row per measure and pass."""
     r = measure_readings.readings()
-    tex = paper_sources.reliability_tex()
-    assert "src/measures/measure_readings.yaml" in tex
-    for key, name in r["measures"].items():
-        assert name in tex, key
-    for row in r["rows"]:
-        label = r["passes"][row["pass"]]["label"]
-        if row["measure"] in paper_sources.RETIRED:
-            label = label.removesuffix(" (current)")
-            assert paper_sources.escape(f"{r['measures'][row['measure']]} (retired yes or no label)") in tex
-        assert paper_sources.escape(label) in tex
-    body = tex.split("\\midrule")[1].split("\\bottomrule")[0]
-    blocks = {(row["measure"], row["pass"]) for row in r["rows"]}
-    assert body.count("\\\\") == len(r["rows"]) + len(blocks)
-    assert body.count("\\multicolumn") == len(blocks)
+    for retired in (False, True):
+        tex = paper_sources.reliability_tex(retired=retired)
+        assert "src/measures/measure_readings.yaml" in tex
+        rows = [row for row in r["rows"] if row["retired"] is retired]
+        for row in rows:
+            name = r["measures"][row["measure"]] + (" (retired yes or no label)" if retired else "")
+            assert paper_sources.escape(name) in tex, row
+            assert paper_sources.escape(r["passes"][row["pass"]]["label"]) in tex, row
+        body = tex.split("\\midrule")[1].split("\\bottomrule")[0]
+        blocks = {(row["measure"], row["pass"]) for row in rows}
+        assert body.count("\\\\") == len(rows) + len(blocks)
+        assert body.count("\\multicolumn") == len(blocks)
+        assert ("retired yes or no label" in tex) is retired
+    current = paper_sources.reliability_tex()
+    for measure in ("Disclosure", "Manipulation", "Excerpt"):
+        assert rf"\textbf{{{measure}}}, judge, scored labels (current)" in current
 
 
 def test_score_anchors_table_holds_every_anchor():

@@ -7,8 +7,9 @@ are listed the same way; what a take and the hand-in are on each task is read fr
 (src/measures/collusion_takes.py): the generic rules, its TAKE_RULES, and each task's own rule as its TaskRule states
 it (take_rule, hand_in_rule), or the reason NO_RULE gives. The judge labels beside the ladders
 (transcript_levels.label_about) are listed with what each scores and the score's anchors. What an independent reading
-found of each rung and label, both judge passes apart, comes from src/measures/measure_readings.yaml, which the paper's
-reliability table reads too, each row with the measure's "retired" for a label the study no longer uses. The tasks
+found of each rung and of the scored labels, with what a reader may conclude of each score, comes from
+src/measures/measure_readings.yaml, which the paper's reliability table reads too; the readings of the retired yes or no
+labels follow, each such row with "retired". The tasks
 the study does not read (ladder_by_domain.HIDDEN_TASKS) have no column, and the index neither measures nor lists their
 runs.
 

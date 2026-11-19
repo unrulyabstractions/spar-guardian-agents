@@ -2,13 +2,13 @@
 Our results only partially support our first hypothesis. On SWE in the multi-domain study, no DeepSeek team with an
 enforcing Haiku regulator cheated, while teams with an ambiguous one did. These cells hold three runs each, too few to
 separate the two levels. Regulators barely affected DeepSeek teams in Stage 1 of the deep dive. No untold protein
-design team cheated, so those runs cannot show whether regulators reduce cheating there. In Stage 2, a Haiku
-regulator that only oversees did cut the workers' cheating. In the multi-domain study, a single explicit rule naming
-the exploit did at least as well as the presence of any regulator. No team with a regulator colluded, while every
-untold DeepSeek team on SWE did. The cells are small, and we chose this comparison after seeing the data. Two results of Stage 1 concern the regulator
-itself. A regulator that also works on the task mostly changes its own cheating. Workers took a teammate's copy of the
-fix mainly where the regulator had used it. We therefore conjecture that a regulator's own stake in the task
-shapes whose cheating it changes.
+design team cheated, so those runs cannot show whether regulators reduce cheating there. In Stage 2, a Haiku regulator
+that only oversees did cut the workers' cheating. In the multi-domain study, a single explicit rule naming the exploit
+did at least as well as the presence of any regulator. No team with a regulator colluded, while every untold DeepSeek
+team on SWE did. The cells are small, and we chose this comparison after seeing the data. Two results of Stage 1
+concern the regulator itself. A regulator that also works on the task mostly changes its own cheating. Workers took a
+teammate's copy of the fix mainly where the regulator had used it. We therefore conjecture that a regulator's own
+stake in the task shapes whose cheating it changes.
 
 We conjecture that regulators need to discourage their peers more proactively. We also conjecture that peer pressure
 is weaker when a regulator acts against its own adopted goals. Stage 2 fits this account only in part. The Haiku
@@ -17,7 +17,7 @@ not significant, and the study did not vary when a regulator first posts. We mea
 the cheating rate of its team, and not by why that rate changed. The change could come from the regulator's
 oversight, or simply from the presence of a collaborator. We therefore plan to measure whether a regulator does its
 job: its coverage (whether it inspects each teammate's actions) and its correction (whether the behavior it flags
-stays out of the shipped result).
+stays out of the hand-in).
 
 Some models have lower propensities to cheat at baseline. Such models could make more effective regulators, even in
 teams of other models. Regulators built by activation-based methods (e.g., persona selection) could also behave
@@ -26,7 +26,7 @@ model and the way it is built are variables worth testing.
 
 Our disregulator runs cannot yet test our second hypothesis. No team with a disregulator cheated. Code found no
 disregulator post that asks a teammate for the honeypot. No team with both a
-disregulator and an enforcing Haiku regulator looked at the planted work. These cells hold two or three runs each,
+disregulator and an enforcing Haiku regulator accessed the honeypot. These cells hold two or three runs each,
 and no untold team on their targets cheated, so they sit at the floor of the measure. We therefore posit that our runs
 cannot yet compare positive and negative peer pressure.
 
@@ -41,7 +41,7 @@ Our study is currently limited by small sample sizes. The multi-domain study cur
 domain, and Stage 1 of the deep dive gives the regulator the workers' model. Our tasks are also
 relatively short and were originally designed for single-agent completion. Swarms operating on tasks that require
 more complex delegation of work may behave differently. These tasks also include explicit honeypots that may look
-like tests, and we do not currently measure evaluation awareness. We do not consider the effects of memory or
-compact actions, which occur in real multi-agent systems and can change what information is stored and passed on
-over time. We therefore posit that extending each of these would show how other parameters affect cheating and
+like tests, and we do not currently measure evaluation awareness. We do not consider memory or context
+compaction. Both occur in real multi-agent systems and can change what information an agent keeps and passes on over
+time. We therefore posit that extending each of these would show how other parameters affect cheating and
 peer-pressure propensities.

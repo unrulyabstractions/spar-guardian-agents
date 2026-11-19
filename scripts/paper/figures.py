@@ -1,6 +1,7 @@
 """The seven design figures of the paper, as 200-dpi PNG under tmp/figures/method/design/ (gitignored): the topologies,
 the round structure, the context ledger, the engagement funnel, the read graph, the access split and what each role is
-told.
+told. The paper sets topology_compare and round_structure at the text's width; each is
+refused when a text would print below PRINT_FLOOR_PT there.
 
     uv run python -m scripts.paper.figures
 
@@ -13,6 +14,7 @@ import math
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch, Polygon, Rectangle
 
+from scripts.paper.study_ladders import TEXT_WIDTH_IN
 from src.configuration import access_policy
 from src.configuration.settings import ROOT
 from src.utils.figure_style import (
@@ -58,7 +60,24 @@ plt.rcParams.update(
 ROLES5 = {"k7q2m": "worker", "t4x9n": "regulator", "p8s3z": "worker", "n5j6q": "disregulator", "x2m7s": "worker"}
 
 
-def save(fig, name):
+PRINT_FLOOR_PT = 6.5
+"""The smallest text a figure the paper prints may hold, in points at the width the paper sets it."""
+
+
+def check_print(fig, name: str, printed_in: float) -> None:
+    """Stop when a text of the figure would print below PRINT_FLOOR_PT once the paper sets it printed_in inches
+    wide."""
+    scale = printed_in / fig.get_figwidth()
+    texts = [t for t in [*fig.texts, *(t for ax in fig.axes for t in ax.texts)] if t.get_text().strip()]
+    size, text = min((t.get_fontsize() * scale, t.get_text()) for t in texts)
+    if size < PRINT_FLOOR_PT:
+        raise SystemExit(f"{name}: {text!r} prints at {size:.1f} pt, below {PRINT_FLOOR_PT} pt")
+
+
+def save(fig, name, printed_in: float | None = None):
+    """Write the figure. printed_in: the width in inches the paper sets it at, checked by check_print."""
+    if printed_in is not None:
+        check_print(fig, name, printed_in)
     OUT.mkdir(parents=True, exist_ok=True)
     fig.savefig(OUT / f"{name}.png", dpi=PRINT_DPI)
     plt.close(fig)
@@ -143,31 +162,31 @@ def role_legend(fig, y, extra=(), compact=False):
 
 # ---------------------------------------------------------------- the topologies
 def fig_topology_compare():
-    fig = plt.figure(figsize=(FULL, 2.85))
+    fig = plt.figure(figsize=(FULL, 3.15))
     names = list(ROLES5)
-    pos = ring(5, 2.4)
+    pos = ring(5, 2.7)
     panels = ["Pull board (ours)", "OpenAI-HF incident"]
     for i, title in enumerate(panels):
         ax = fig.add_axes([0.03 + i / 2, 0.17, 0.44, 0.74])
-        blank(ax, (-3.2, 3.2), (-3.95, 3.45))
-        ax.text(0, 3.0, title, ha="center", va="bottom", fontsize=8.5, weight="bold")
-        cw, ch = (1.7, 0.8) if i == 0 else (2.1, 1.15)
+        blank(ax, (-3.2, 3.2), (-3.95, 3.95))
+        ax.text(0, 3.45, title, ha="center", va="bottom", fontsize=8.5, weight="bold")
+        cw, ch = (1.7, 0.8) if i == 0 else (2.4, 1.15)
         if i == 0:
             box(ax, -cw / 2, -ch / 2, cw, ch, "board", fc=PLANE, ec=INK_SECONDARY, fs=7.5)
         else:
             box(ax, -cw / 2, -ch / 2, cw, ch, None, fc=PLANE, ec=INK_SECONDARY)
-            ax.text(0, ch / 2 - 0.25, "shared cache/", fontsize=6.5, ha="center", va="center", zorder=5)
+            ax.text(0, ch / 2 - 0.25, "shared cache/", fontsize=7, ha="center", va="center", zorder=5)
             for k in range(3):
                 yy = ch / 2 - 0.55 - 0.2 * k
                 ax.plot([-cw / 2 + 0.25, -cw / 2 + 0.25 + (1.1 - 0.25 * k)], [yy, yy], color=AXIS, lw=2.0,
                         solid_capstyle="round", zorder=5)
         for (x, y), n in zip(pos, names):
-            agent(ax, x, y, n, ROLES5[n] if i == 0 else "worker")
+            agent(ax, x, y, n, ROLES5[n] if i == 0 else "worker", r=0.62, fs=7.2)
             if i == 0:
-                arrow(ax, toward(x, y, 0, 0, 0.42), edge_point(0, 0, cw, ch, x, y), rad=0.3)
-                arrow(ax, edge_point(0, 0, cw, ch, x, y), toward(x, y, 0, 0, 0.42), ls=DOT, color=MUTED, rad=0.3)
+                arrow(ax, toward(x, y, 0, 0, 0.68), edge_point(0, 0, cw, ch, x, y), rad=0.3)
+                arrow(ax, edge_point(0, 0, cw, ch, x, y), toward(x, y, 0, 0, 0.68), ls=DOT, color=MUTED, rad=0.3)
             else:
-                ax.add_patch(FancyArrowPatch(toward(x, y, 0, 0, 0.42), edge_point(0, 0, cw, ch, x, y),
+                ax.add_patch(FancyArrowPatch(toward(x, y, 0, 0, 0.68), edge_point(0, 0, cw, ch, x, y),
                                              arrowstyle="<|-|>,head_length=0.36,head_width=0.21",
                                              color=INK_SECONDARY, lw=0.8, mutation_scale=10, zorder=2))
         kx, ky = -2.9, -3.2
@@ -184,19 +203,19 @@ def fig_topology_compare():
                                         lw=0.8))
             ax.text(kx + 0.85, ky, "list / read file / write file", va="center", fontsize=7.5, color=INK_SECONDARY)
     role_legend(fig, 0.05)
-    save(fig, "topology_compare")
+    save(fig, "topology_compare", printed_in=TEXT_WIDTH_IN)
 
 
 # ---------------------------------------------------------------- the round structure
 def fig_round_structure():
     """One round, its follow-up steps and the next round, step by step per agent."""
-    fig = plt.figure(figsize=(FULL, 2.3))
+    fig = plt.figure(figsize=(FULL, 2.78))
     ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
     ax.set_xlim(0, 17.0)
-    ax.set_ylim(0.6, 6.4)
+    ax.set_ylim(0.6, 7.6)
     ax.axis("off")
     names = list(ROLES5)
-    lane_h, top = 0.62, 5.05
+    lane_h, top = 0.88, 6.1
     cols = [("r", 1.2, 3.6), ("f1", 5.0, 1.45), ("f2", 6.55, 1.45), ("f3", 8.1, 1.45), ("r1", 9.85, 3.6)]
     acts = {
         "r": {"k7q2m": "post", "t4x9n": "work", "p8s3z": "status", "n5j6q": "work", "x2m7s": "read"},
@@ -207,7 +226,7 @@ def fig_round_structure():
     }
     for j, n in enumerate(names):
         y = top - j * lane_h
-        agent(ax, 0.6, y, n, ROLES5[n], r=0.24, fs=5.8)
+        agent(ax, 0.55, y, n, ROLES5[n], r=0.44, fs=7.2)
         ax.plot([1.0, 15.8], [y - lane_h / 2, y - lane_h / 2], color=GRID, lw=0.5, zorder=0)
     ax.plot([1.0, 15.8], [top + lane_h / 2, top + lane_h / 2], color=GRID, lw=0.5, zorder=0)
     for key, x, w in cols:
@@ -234,7 +253,7 @@ def fig_round_structure():
         kx += 0.95 + len(label) * 0.128 + 0.45
     arrow(ax, (1.2, 0.8), (15.8, 0.8), color=MUTED, lw=0.7)
     ax.text(15.8, 0.95, "time", ha="right", va="bottom", fontsize=7, color=MUTED)
-    save(fig, "round_structure")
+    save(fig, "round_structure", printed_in=TEXT_WIDTH_IN)
 
 
 BOARD_ACTIONS = {"status", "read", "post", "agent_actions"}
@@ -248,7 +267,7 @@ def step(ax, a, x, y, w, h, text=True):
         style = dict(fc=WHITE, ec=INK_SECONDARY, ls="-", color=INK)
     else:
         style = dict(fc=TOOL, ec=INK_SECONDARY, ls="-", color=INK_SECONDARY)
-    box(ax, x, y, w, h, a if text else None, fc=style["fc"], ec=style["ec"], ls=style["ls"], fs=6.5,
+    box(ax, x, y, w, h, a if text else None, fc=style["fc"], ec=style["ec"], ls=style["ls"], fs=7.2,
         color=style["color"], weight="bold" if a == "submit" else "normal")
 
 

@@ -8,8 +8,9 @@
     if __name__ == "__main__":
         raise SystemExit(main(SUITE, SCENARIOS, __doc__))
 
-Every suite runs the real sandbox under Inspect's mockllm, exports the log with src.export.run_export.write_run and
-reads the run directory back the way CheatBench's judge does. A suite keeps only its own scenarios, its task builders
+Every suite runs the real sandbox under Inspect's mockllm, exports the log with src.export.run_export.write_run, writes
+the code record with src.measures.code_ladder.run_signals, as a real run does (src/run.py run), and reads the run
+directory back the way CheatBench's judge does. A suite keeps only its own scenarios, its task builders
 and the checks of its domain. The access log stays on, so every scenario also holds that the log worked (log_worked).
 """
 from __future__ import annotations
@@ -95,10 +96,11 @@ class Suite:
         return suite
 
     def run(self, name: str, task, outputs, judge: Callable | None = None, *, damaged_log: bool = False) -> tuple:
-        """Run one scenario under the mock model and export it: (the eval log, write_run's summary, the episode
-        records). `outputs` drives the agents' model and `judge` the judge role (honest_judge(spec) when None). Earlier
-        files of the same name are removed first, and the machines layer's host tools forget their states. The run's
-        access log must have worked, unless the scenario hurts it on purpose (`damaged_log`)."""
+        """Run one scenario under the mock model, export it and write its code record (run_signals), as src/run.py's
+        run does: (the eval log, write_run's summary, the episode records). `outputs` drives the agents' model and
+        `judge` the judge role (honest_judge(spec) when None). Earlier files of the same name are removed first, and the
+        machines layer's host tools forget their states. The run's access log must have worked, unless the scenario
+        hurts it on purpose (`damaged_log`)."""
         shutil.rmtree(self.logs / name, ignore_errors=True)
         shutil.rmtree(self.runs / name, ignore_errors=True)
         machines._HOST_TOOLS.clear()      # task tool states are keyed by sample, epoch and owner: one eval per scenario
@@ -108,6 +110,7 @@ class Suite:
                              display="plain", log_level="warning")
         log = read_eval_log(log.location, resolve_attachments=True)
         summary = write_run(Path(log.location), self.runs / name)
+        run_signals(self.runs / name)
         block = self.run_json(name).get("access_log")
         assert damaged_log or log_worked(block), block
         return log, summary, read_jsonl(self.runs / name / "episodes.jsonl")

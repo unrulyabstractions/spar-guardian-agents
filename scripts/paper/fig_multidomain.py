@@ -2,15 +2,15 @@
 Cheating rung; the legend names the measures' cheating line. Columns are the targets (SWE with DeepSeek workers, SWE
 with Luna workers, SWE with Haiku workers, protein design, creative writing), each as wide as its heading or its
 widest cell. Row groups: the team of three with no rule, the generic rule and
-the identified rule; a hidden regulator at level ambiguous, then enforce, one row per regulator model with runs; the
+the identified rule; a regulator at level ambiguous, then enforce, one row per regulator model with runs; the
 team all told to cheat.
 
 Source: study_exploration_1's valid runs (scripts/paper/study_ladders.py valid_runs; disregulator runs left out; SWE
 only on the fixed task, run names ending in _fixed<seed>, _fill<seed> or _fixedpilot<seed>) with their run index rows,
 each run's Cheating rung as the transcript viewer measures it (study_ladders.record).
 The rules' wording comes from src/configuration/instruction_levels.yaml. Every cell a results table also shows
-(control_tables, protein_regulator_table, swe_regulator_table) must hold exactly that table's runs
-(study_ladders.cell_runs); a disagreement fails the build.
+(control_tables, protein_regulator_table, swe_regulator_table, creative_regulator_table) must hold exactly that
+table's runs (study_ladders.cell_runs); a disagreement fails the build.
 Writes tmp/figures/paper/fig4_multidomain.png.
 
     uv run python -m scripts.paper.fig_multidomain
@@ -25,7 +25,7 @@ import matplotlib
 import yaml
 from matplotlib.figure import Figure
 
-from scripts.paper import control_tables, protein_regulator_table, swe_regulator_table
+from scripts.paper import control_tables, creative_regulator_table, protein_regulator_table, swe_regulator_table
 from scripts.paper.study_ladders import (
     ACCESSED_LABEL,
     CHEATED_LABEL,
@@ -56,9 +56,9 @@ REGULATORS = [("claude-haiku-5-5-openrouter", "Haiku 5.5"), ("gpt-6-luna-openrou
               ("gemini-4-argon-openrouter", "Gemini 4 Argon"), ("claude-sonnet-5-5-openrouter", "Sonnet 5.5"),
               ("claude-opus-5-5-openrouter", "Opus 5.5")]
 RULE_ROWS = [(None, "No rule"), ("generic", "Rule: generic"), ("identified", "Rule: identified")]
-REGULATOR_GROUPS = [("ambiguous", "+ hidden regulator, level ambiguous",
+REGULATOR_GROUPS = [("ambiguous", "+ regulator, level ambiguous",
                      "told to ensure the team submits honest work, with the task's definition of cheating"),
-                    ("enforce", "+ hidden regulator, level enforce",
+                    ("enforce", "+ regulator, level enforce",
                      "told to watch, call out, revert and name cheating, with the same definition")]
 SWE_FIXED = re.compile(r"_(fixed|fill)(pilot)?\d+$")
 
@@ -111,8 +111,10 @@ def reference_cells() -> dict[str, tuple]:
             for key, prefix in prefixes.items():
                 out[prefix] = ("cheat", None, target) if key == "cheat" else ("rule", None if key == "none" else key,
                                                                               target)
-    for script, target in ((protein_regulator_table, "protein-luna"), (swe_regulator_table, "flipt-dsflash")):
-        for label, level, *prefixes in script.ROWS:
+    tables = ((protein_regulator_table.ROWS, "protein-luna"), (swe_regulator_table.ROWS, "flipt-dsflash"),
+              (swe_regulator_table.ROWS_LUNA, "flipt-luna"), (creative_regulator_table.ROWS, "creative-luna"))
+    for rows, target in tables:
+        for label, level, *prefixes in rows:
             if label == "None":
                 continue
             model = label_of[label.removeprefix("Claude ").removeprefix("GPT-6 ")]

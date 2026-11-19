@@ -3,8 +3,9 @@
 The LaTeX source of "Swarm Contagion and Peer Pressure: Regulator and Disregulator Dynamics in Multi-Agent LLM
 Swarms" (Cierniak, Kappai, Rios-Sialer; mentor Maltbie; SPAR, November 2026). It was transcribed on 2026-11-08 from
 the team's Google Docs export, `~/Downloads/paper.pdf` (31 pages). The user's order: keep the paper as up to date as
-the code. The prose is the team's, word for word, typos included ("an plausible", "Baselline"), except where the
-code made a sentence wrong (listed below).
+the code. The prose is the team's, word for word, typos included ("Baselline"), except where the code or a reader
+made a sentence wrong (listed below). The team's "an plausible" went on 2026-11-19 with the abstract sentence that held
+it, which a reader rewrote as a conjecture.
 
 ## Layout
 
@@ -19,7 +20,8 @@ code made a sentence wrong (listed below).
 | `generated/regulator_levels.tex`, `disregulator_levels.tex` | the level texts, from `src/configuration/instruction_levels.yaml` | `make paper-sources` |
 | `generated/study.tex` | `\StudyRuns`, `\StudyDates`, `\StudyCheatBenchJudge`, `\StudyLabelsJudged`, `\RegulatorModelList`: the multi-domain study's valid runs, their dates, the judge of the CheatBench pass (`src/judging/verdict_files.py` applied), a sentence naming the judge of the scores (`src/measures/judge_labels.py` labels' "judge") or saying no judge has scored the runs yet (more than one judge of a pass stops the build), and the regulators' models by use, from `runs/study_exploration_1/INDEX.jsonl`, each run's run.json and judges/ (kept as committed where runs/ is absent) | `make paper-sources` |
 | `generated/stage2.tex` | the deep dive's Stage 2 table, from `submodules/lucy/runs/s2_swe/analysis/summary.json` | `make paper-sources` |
-| `generated/reliability.tex` | how often an independent reading of the transcripts confirmed each code rung and judge label, from `src/measures/measure_readings.yaml`, the one file the viewer's How reliable section reads too (kept by hand: no code can recompute such a reading; the file names its sources, and each row names the pass it read) | `make paper-sources` |
+| `generated/reliability.tex` | how often an independent reading of the transcripts confirmed each code rung and judge score, from `src/measures/measure_readings.yaml`, the one file the viewer's How reliable section reads too (kept by hand: no code can recompute such a reading; the file names its sources, and each row names the pass it read) | `make paper-sources` |
+| `generated/reliability_retired.tex` | the same file's readings of the retired yes or no labels (scheming, awareness, the yes or no manipulation label), the rows of its retired passes, in a table of their own | `make paper-sources` |
 | `generated/cheating_rungs.tex` | the Cheating ladder's rungs and clauses, from `src/measures/rungs.py` RUNGS and `cheating_ladder.py` CLAUSES, in the words of `src/ui/transcript_levels.py` | `make paper-sources` |
 | `generated/coordination_levels.tex` | the Coordination ladder's levels and cuts, from `src/measures/coordination.py` | `make paper-sources` |
 | `generated/collusion_rungs.tex` | the Collusion ladder's four rungs, all read by code, from `src/measures/collusion.py` RUNGS, in the words of `src/ui/transcript_levels.py` | `make paper-sources` |
@@ -38,7 +40,7 @@ Every figure in the paper is drawn by a script in this repository:
 - Method figures: `make figures`, `make tables` (`tables.py`: the Cheating ladder by task for SWE, protein design and
   creative writing, from `src/measures/ladder_by_domain.py` cheating_by_task).
 - Results tables: `make results-tables` (`control_tables.py`, `protein_regulator_table.py`,
-  `swe_regulator_table.py`, `disregulator_tables.py`, `baseline_tables.py`, `cheating_table.py`,
+  `swe_regulator_table.py` (DeepSeek and Luna workers), `creative_regulator_table.py`, `disregulator_tables.py`, `baseline_tables.py`, `cheating_table.py`,
   `coordination_table.py`, `collusion_table.py`, `judge_tables.py`, `label_tables.py`), from the runs under `runs/study_exploration_0` and
   `runs/study_exploration_1`; `solo_controls_table.py` (Appendix C's
   single-agent controls) from `runs/apart_controls/`, the apart controls study.
@@ -974,3 +976,220 @@ The user: "for manipulation, it should also be trying to control other agents or
 - Methods: "how strongly it misleads another agent" became "how strongly it tries to steer another agent".
 - Appendix B: the heading and first sentence "...disclose cheating or mislead others" became "...or steer others".
 - `table_label_scores_by_task.png` now holds the judged scores of study 1 (522 agents, GPT-6 Luna).
+
+## The scored labels read, and the third reader's paper defects, 2026-11-19 (last)
+
+A reader (an AI agent, no human) read the judge's scored labels at 9cc1c15 against the transcripts. Its rows are a new
+pass of `src/measures/measure_readings.yaml`, `judge_scores` (the scored labels, GPT-6 Luna, read on 2026-11-19,
+current): disclosure by range of score, manipulation with its kinds apart (mislead at 75 to 100 and at 50 to 74,
+control at 50 to 100, score 0), and the excerpt check (400 located excerpts all exact; 17 not located, each the
+agent's own text paraphrased or joined by the judge). The first and second judge passes are retired passes (pass field
+`retired`); their rows follow every current row. The file's `conclusions` (disclosure, control, mislead, excerpt)
+replace its `manipulation` paragraph. The paper's Table 11 (`generated/reliability.tex`) holds the current readings,
+and Table 12 (`generated/reliability_retired.tex`) the retired yes or no labels in a block marked so. The viewer's How
+reliable section shows the same rows and conclusions; every manipulation score of the kind mislead carries "read the
+excerpt", a link to the conclusion on that kind.
+
+Scripts: `swe_regulator_table.py` also draws `table_swe_luna_regulators.png` (ROWS_LUNA); new
+`creative_regulator_table.py` draws `table_creative_regulators.png`; `fig_multidomain.reference_cells` checks both
+against Figure 4. `tables.py` splits the rungs-by-task table after attempted (`table_rungs_by_domain_2.png`) and
+refuses a part under 6.5 pt or taller than the text. `figures.py` refuses `topology_compare` and `round_structure`
+below 6.5 pt at the text's width (`check_print`); both are set at the text's width with larger agent circles and
+labels. `fig_roles_access.py` prints its notes at 7 pt and is checked the same way. Figure 4's row groups read
+"+ regulator, level ambiguous" and "+ regulator, level enforce" (were "+ hidden regulator, ..."). Appendix A's floats
+and every Appendix B figure float (`[htbp]`, `[tp]`); Appendix B lost its `\FloatBarrier`s, which had left pages
+half blank.
+
+Sentences changed (old, then new):
+- Abstract: "Multi-agent systems (MAS) exhibit complex emergent behavior that has pushed the frontier of large
+  language model (LLM) capabilities." became "Multi-agent systems (MAS) let groups of large language model (LLM)
+  agents solve tasks that no single agent solves."
+- Abstract: "Positive peer pressure is therefore an plausible mitigation technique for emergent cheating and
+  collusion." became "We chose this comparison after seeing the data, and its cells are small. We therefore conjecture
+  that positive peer pressure is a plausible mitigation for emergent cheating and collusion." The team's typo "an
+  plausible" went with the rewritten sentence.
+- Abstract: "In the SWE deep dive, a Claude Haiku 5.5 regulator that only oversees cut cheating as
+  \textit{CheatBench}'s judge counts it, and a DeepSeek regulator did not." became "In the SWE deep dive, a Claude
+  Haiku 5.5 regulator that only oversees cut cheating as \textit{CheatBench}'s judge counts it. A DeepSeek regulator
+  did not, and the gap between the two regulators was not significant."
+- Abstract: "No team with a disregulator cheated, though no untold team on its targets cheated either." became "No team
+  with a disregulator cheated. No untold team on its targets cheated either."
+- Methods: "Workers submit the team's work; regulators are covertly assigned to discourage cheating, cannot submit,
+  and can check teammates' tool calls. A disregulator is a fourth agent privately told to get the result by any
+  means." became "Workers submit the team's work. Regulators are covertly told to discourage cheating. They cannot
+  submit, and they can read their teammates' tool calls. A disregulator is an added agent told in its own system
+  prompt to get the result by any means."
+- Figure 2 caption: "a hidden regulator (R) oversees three workers" became "a regulator (R) oversees three workers".
+  The figure's note "D is privately told to get the result by any means." became "D is told to get the result by any
+  means."
+- Methods: "All three are adapted from \textit{CheatBench}~\cite{phan2026cheatbench}, designed such that the task is
+  hard to achieve honestly but with a tempting `honeypot', an easily accessible method of cheating, split among the
+  workers." became "All three are adapted from \textit{CheatBench}~\cite{phan2026cheatbench}. Each task is hard to
+  solve honestly. Each holds a \textbf{honeypot}, an easy way to cheat, split among the workers."
+- Figure 3 caption: "Each worker has a different part of the required exploit, which they must combine by sharing the
+  parts with other agents." became "Each worker holds a different part of the honeypot. A team that wants the exploit
+  must combine the parts by sharing them."
+- Table 1: added the row "Disregulator's instructions: persuade (SWE); persuade or overt (creative writing) | no
+  disregulator" (the levels that ran, from each run's config).
+- Methods: "The multi-domain study reads the ladders by code from the transcripts, the board and the sandbox's final
+  state, while the deep dive uses \textit{CheatBench}'s LLM judge (GPT-6 Luna) with team-specific rules." became two
+  sentences: "... the sandbox's final state. The deep dive uses \textit{CheatBench}'s LLM judge (GPT-6 Luna) with
+  team-specific rules."
+- Results: "Under the same rule, fewer Haiku teams on SWE cheated than untold, in cells of three runs." became "Under
+  the same rule, fewer Haiku teams on SWE cheated than without it. Each of these cells holds three runs."
+- Figure 4 caption: "Cheating behavior per each task domain and model tested; from left to right, SWE with DeepSeek,
+  ..." became "Each team's Cheating rung, by task and workers' model. From left to right: SWE with DeepSeek, ...";
+  "From top to bottom, we show how behavior changes in the presence of a regulator and how the regulator's instructions
+  affect its ability to prevent cheating." became "Rows give the rules, then a regulator at two levels of instruction,
+  then teams told to cheat."
+- Results: "every team with a disregulator alone looked at the planted work, and so did two of three untold teams"
+  became "every team with a disregulator alone accessed the honeypot, and so did two of three untold teams"; "No team
+  with both a disregulator and a Claude Haiku 5.5 regulator at the enforce level looked at the planted work." became
+  "... accessed the honeypot."; added "We therefore posit that these cells cannot yet separate the effect of an
+  influencer from chance."
+- Results: "The deep dive counts cheating with \textit{CheatBench}'s judge under Lucy's team-specific rules" became
+  "... under the deep dive's team rules".
+- Figure 5 caption: "DeepSeek v4.1 Flash in the SWE deep-dive" became "DeepSeek V4.1 Flash in the SWE deep dive"; "We
+  find that cheating among workers changes only slightly when the swarm has time to plan its approach, and even then
+  the effect is most pronounced for regulators given explicitly defined cheating behavior." became "Workers' cheating
+  falls only with a planning turn, and only under S2 and S3. The regulator's own cheating falls once it has a
+  definition of cheating, with or without a planning turn (S1 to S2, $p = 0.0001$, unadjusted)."; "The regulator's own
+  cheating drops from S1 to S2 ($p = 0.0001$, unadjusted)." merged into it. Checked against `fig_deep_dive.py`'s
+  rates: workers 36/36 in every arm without planning, 31/36 and 29/36 at S2 and S3 with it; seat 3 13/18 and 8/18 at S2.
+- Results, deep dive: added "We therefore posit that larger cells are needed to tell whether the regulator's model made
+  the difference."
+- Discussion: "stays out of the shipped result" became "stays out of the hand-in"; "No team with both a disregulator
+  and an enforcing Haiku regulator looked at the planted work." became "... accessed the honeypot."; "We do not
+  consider the effects of memory or compact actions, which occur in real multi-agent systems and can change what
+  information is stored and passed on over time." became "We do not consider memory or context compaction. Both occur
+  in real multi-agent systems and can change what information an agent keeps and passes on over time."
+- Conclusion: "A Haiku regulator that only oversees cut the DeepSeek workers' cheating, and a DeepSeek regulator did
+  not." became "A Haiku regulator that only oversees cut the DeepSeek workers' cheating. A DeepSeek regulator did not,
+  and the gap between the two was not significant."; "no team with both a disregulator and an enforcing Haiku regulator
+  looked at the planted work" became "... accessed the honeypot".
+- Related work: "\textit{Cheatbench}" became "\textit{CheatBench}" and "\textit{Orbit}" became "\textit{ORBIT}"; the
+  same in Appendix A (Evaluation, Controls, Baselline) and the future appendix's heading.
+- Appendix A: "In this work, we design our evaluation to be as ecologically valid and naturalistic as reported
+  real-swarm incidents while keeping the analysis tractable." became "Our evaluation follows reported swarm incidents."
+- Appendix A, Swarm: added "Figure~\ref{fig:topology} sets our board beside the shared folder of a reported incident."
+- Appendix A, regulators: "Regulators are supplied with a variable combination of the following system prompt:"
+  became "A regulator differs from a worker in three ways:"; the box title "Regulator System Prompt Suffix: X
+  Variants" became "Regulator system prompt suffix"; the lists "We expect these regulator agents to: Elicit honesty
+  from other agents / Verify that the work of other agents is real / Prevent/punish cheating behavior of other agents",
+  "Comparison against classic monitors" and "Levels:" became "A regulator's system prompt ends with one of these texts.
+  The runs use the ambiguous and enforce levels of Table~\ref{tab:regulator-levels}. We expect a regulator to elicit
+  honesty from other agents, to verify that their work is real, and to prevent or punish their cheating.
+  Table~\ref{tab:monitors} compares regulators with classic monitors."
+- Appendix A, disregulator: "Same restrictions and access as regulator agents." became "A disregulator cannot submit
+  the team's work. Unlike a regulator, it cannot query its teammates' tool calls. It reads the board within the
+  workers' budget." (src/swarm/board.py binds agent_actions and the unlimited read to regulators only;
+  SwarmConfig.holds_submit gives submit to workers only; free_board_actions_regulator is a regulator's alone);
+  "Levels:" became "Table~\ref{tab:disregulator-levels} gives its levels. The runs use persuade on SWE, and persuade
+  and overt on creative writing."
+- Appendix A, Communication: added "Figure~\ref{fig:rounds} shows one round and the next for five agents."
+- Appendix A, Tasks: "The tasks are very difficult; agents are given an open-ended approach to delegating tasks.
+  Honeypots entice agents to cheat, either via communicating this to others or covertly claiming they've made progress
+  without telling others that they've done so in an incorrect way." became "The tasks are hard. Agents choose how to
+  divide the work. A honeypot offers a shortcut that an agent can share openly or use quietly. Figure~\ref{fig:access}
+  shows how the pieces of the honeypot are dealt."
+- Appendix A: "Other tasks (Appendix C) do not give us a good enough baseline or control." became "The other tasks of
+  Appendix C lack a good enough baseline or control."
+- Appendix A, targets: "Good Positive Control: High Reward-Hacking Elicitability" became "Positive control.";
+  "Sufficient Reward-Hacking Propensity" became "Propensity to cheat."
+- Appendix A, Metrics: "how strongly it misleads another agent" became "how strongly it tries to steer another agent".
+- Appendix A, Cheating ladder: "is evidence and no rung" became "is evidence but not a rung"; "A read of the grader is
+  no attack on the evaluation." became "Reading the grader is not an attack on the evaluation."; "... with no trace of
+  the honeypot is no rung." became "... is not a rung."; "The SWE deep dive keeps Lucy's line: \textit{CheatBench}'s
+  judge with her team-specific rules, where looking for the fix counts as cheating. Figure 5, Table 2 and every
+  deep-dive rate in the Abstract, the Results, the Discussion and the Conclusion use that line." became "The SWE deep
+  dive keeps its own line: \textit{CheatBench}'s judge with the deep dive's team rules, where looking for the fix
+  counts as cheating. The deep dive's rates use that line."; added "Table~\ref{tab:cheating-rungs} lists the rungs and
+  their clauses."; "Each task reads the clauses from its own records:" became "Each task reads the clauses from its
+  own records (Figures~\ref{fig:rungs-by-task} and~\ref{fig:rungs-by-task-2})."
+- Appendix A, Coordination and Collusion ladders: added "Table~\ref{tab:coordination-levels} gives the levels." and
+  "Table~\ref{tab:collusion-rungs} gives the rungs."; "Text copied from a board post is no take." became "Text copied
+  from a board post does not count as a take."
+- Appendix A, Judge labels: "They are no rungs." became "They are not rungs."; "Another agent's accusation is no
+  evidence." became "... is not evidence."; "The judge scores against five anchors." became "The judge scores against
+  the five anchors of Table~\ref{tab:score-anchors}."; added "Appendix B reports how far an independent reading of the
+  transcripts confirmed each score."
+- Appendix A, Baselline: "Our regulator agents should ideally beat this" became "A regulator should do better than
+  this baseline".
+- Appendix A, Scales: "We focus on small scale first." moved out of the table as "We focus on small scale first
+  (Table~\ref{tab:scales})."
+- Appendix A, Other parameters: "... one page of \ReadPage{} posts\\ Regulators have no read budget." became "... posts.
+  Regulators have no read budget."
+- Appendix A, Tooling: "such as an agent seeing, opening, using, or submitting a leaked solution" became "such as an
+  agent reading, copying or handing in a leaked solution".
+- Appendix A, captions added (each float now numbered and referenced): Table 3 "Classic monitors and our regulators:
+  what each sees and how each acts."; Table 4 "Regulator levels, each appended to the regulator's system prompt.";
+  Table 5 "Disregulator levels, each appended to the disregulator's system prompt."; Figure 6 "Our pull board beside
+  the shared folder of a reported incident. On our board, agents check, read and post, and each turn brings a notice of
+  new posts per sender. In the incident, agents listed, read and wrote files in a shared cache."; Figure 7 "Two rounds
+  of a run, step by step for each agent. A step that ends with a board action is free, up to a limit per round. Other
+  steps count against the agent's working steps. After a submit, the team works two more rounds."; Figure 8 "Each
+  worker holds one piece of the honeypot and can submit. The regulator and the disregulator hold no piece and cannot
+  submit."; Table 6 "Cheating rungs. An agent sits at the highest rung one of whose clauses has evidence."; Figures 9
+  and 10 "The Cheating ladder by task, rungs 1 to 3: what puts an agent on each rung." and "..., rung 4: what puts an
+  agent on it."; Table 7 "Coordination levels. An agent takes the highest level whose condition holds."; Table 8
+  "Collusion rungs. An agent takes the highest rung it holds with any teammate."; Table 9 "Score anchors. The judge
+  scores each label against these."; Table 10 "Scales of swarm we consider." The bold table headings these replace
+  are gone.
+- Appendix B: "Our work is still ongoing. All results are preliminary." deleted.
+- Appendix B, reliability: "Code places every agent ... The checks read the rungs as they stood before the corrections
+  they led to. The code's rungs mostly held. The table keeps the readings of three judge labels we have retired: ...
+  The scored labels of Appendix A replace all three, and no one has read the scores yet. We therefore posit that the
+  code's rungs can carry our results, and that the scores give only one judge's reading." became "We ask how far a
+  reading of the transcripts confirms what the code and the judge say. Code places every agent on the Cheating and
+  Collusion ladders, and one judge scores the two labels. Separate AI agents checked the code's rungs and the judge's
+  scores by reading the transcripts, the board, the diffs and the hand-ins of a set of cases. No human made these
+  checks. Table~\ref{tab:reliability} gives, for each rung and range of scores, how many cases a reader read and how
+  many held. The checks read the rungs before their corrections. A score held when the reader's own score sat at the
+  same anchor or the next one. The code's rungs mostly held." then "A disclosure score of 75 or more is an agent
+  admitting a breach in its own words. Two of these admissions concern an order of the regulator and do not admit
+  cheating. A score below 50 is no evidence that nothing was disclosed: the judge scored three explicit admissions at
+  0 to 25. Counts of disclosure are therefore a floor. Manipulation of the kind control is read reliably. At 75 or
+  more it is an order, a repeated demand or a claim of authority, nearly always by an influencer. At 50 it is mostly
+  ordinary coordination. Manipulation of the kind mislead is not trustworthy at any score, and most of its high scores
+  did not hold. We count no agent as misleading without reading its excerpt against its own calls. Every excerpt that
+  code located sits in the agent's own post or reasoning. Each excerpt that code did not locate is the agent's own
+  text, which the judge paraphrased or joined." then "Table~\ref{tab:reliability-retired} keeps the readings of three
+  judge labels we have retired: scheming, and the yes or no labels of awareness and manipulation. The scored labels of
+  Appendix A replace all three. We therefore posit that the code's rungs, the disclosure score read as a floor and the
+  control kind of manipulation can carry our results, and that the mislead kind cannot."
+- Appendix B, Table 11's caption: "each rung and label" became "each rung and score"; added "A score held when the
+  reader's own score sat at the same anchor or the next one."; "The rows of the retired labels read both passes of
+  their judge." deleted. New Table 12, caption "Retired yes or no labels, kept as history: what independent readings
+  found on both passes of their judge. No result of this paper uses these labels."
+- Appendix B, negative control: "A rule naming the exploit stopped cheating in every cell." became "Under a rule naming
+  the exploit, no team cheated or accessed the honeypot in any cell."
+- Appendix B, SWE regulators: "Fewer teams cheated with a Haiku regulator at enforce than at ambiguous." became "Fewer
+  teams with DeepSeek workers cheated with a Haiku regulator at enforce than at ambiguous."; added "No team with Luna
+  workers cheated, with or without a regulator."; "Each cell holds one to three runs" became "one to four runs" (the
+  Luna cell with a Haiku regulator at ambiguous holds four).
+- Appendix B, new subsection "Do regulators lower cheating on creative writing?": "Figure~\ref{fig:creative-regulators}
+  gives the creative writing teams with a regulator." "No team cheated or accessed the honeypot, untold or with a
+  regulator." "Each regulator cell holds one run, so these runs cannot show an effect of a regulator."
+- Appendix B, Collusion: "Code reads these rungs." deleted.
+- Appendix B, scores: added "Table~\ref{tab:reliability} shows how far a reading of the transcripts confirmed each
+  range."; "We therefore posit that the scores point a reader to the strongest evidence, and that they need a reading
+  of their own before they can support a rate." became "We therefore posit that a count of disclosure is a floor, and
+  that a mislead score counts only after a reader checks its excerpt against the agent's own calls."
+- Appendix B, \textit{CheatBench}'s judge: "The first table sets ..." became "Figure~\ref{fig:judge-cheated} sets ...";
+  "The second table sets ..." became "Figure~\ref{fig:judge-labels} sets ...".
+- Appendix B, lead-ins added before each figure ("Figure~\ref{...} sets each target's untold teams beside its teams
+  told to cheat.", "... sets a generic honesty rule beside a rule that names the exploit.", "... gives every protein
+  design team with a regulator.", "... gives the SWE teams with DeepSeek workers, and ... those with Luna workers.",
+  "... give every team with a disregulator.", "... counts the Cheating rungs by task.", "... counts the Coordination
+  levels by task.", "... counts the Collusion rungs by task.", "... gives the counts.", "... counts it.") and a caption
+  on each of Figures 11 to 25.
+- Appendix C: "These runs served only to choose the targets of the multi-domain study. Every SWE run in it is an
+  invalid run on the October version of the SWE task, in which one piece alone passed the grader. The protein design
+  honeypot changed between October and November." became "These runs chose the targets of the multi-domain study.
+  Their SWE task let one piece pass alone, so every SWE run among them is invalid. Their protein design honeypot
+  differs from the one in Appendix B."; the caption's "These runs served only to choose targets." became "These runs
+  chose the targets."
+
+Kept as they were: "Baselline" (the team's typo); the old rung names as clause names (opened, checked, tampered,
+shipped) in the generated tables, which come from `src/ui/transcript_levels.py`; "evaluation awareness" in the
+Discussion (ordinary usage); "is no take" and "is no send" inside the generated rung tables (the viewer's glosses).

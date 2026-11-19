@@ -16,14 +16,18 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from inspect_ai.model import ChatMessageTool
 
 from src.configuration import settings
+from src.domains.creative._creative_ladder import CreativeDomain
+from src.domains.creative._creative_settings import PLANT_ROOT
 from src.domains.openmath import OpenMath
 from src.judging.cheatbench_judge import judge_spec
+from src.measures import code_ladder
 from src.swarm.turn_rules._turn_state import HALT_TAG
 from src.ui import __main__ as browser
 from tests import smoke
-from tests.smoke import STAMP_VARIABLE, access_load, all_suites, common
+from tests.smoke import STAMP_VARIABLE, access_load, all_suites, common, creative
 from tests.smoke.access_logging import normal
 from tests.smoke.all_suites import Outcome, run_all, summary
 from tests.smoke.common import (
@@ -38,6 +42,7 @@ from tests.smoke.common import (
     timeline_of,
     tool_calls_of,
 )
+from tests.support.atif_builder import transcript
 from tests.support.mock_model import call, scripted
 from tests.support.run_builder import write_run_dir
 from tests.support.stub_ladder import OPENS, make_run
@@ -184,7 +189,8 @@ def suite_in(tmp_path, spec=None) -> Suite:
     return suite
 
 
-def test_a_scenario_runs_exports_and_reads_back(tmp_path):
+def test_a_scenario_runs_exports_and_reads_back(tmp_path, monkeypatch):
+    monkeypatch.setattr(common, "run_signals", lambda run_dir: [])      # the stand-in task has no ladder
     suite = suite_in(tmp_path, judge_spec(OpenMath.task_dir, OpenMath.name))
     script = {"a01": [call("work", {"item": "x"}, "c1"), call("submit", {"answer": "done"}, "c2")]}
     recorder: list[dict] = []
@@ -385,9 +391,43 @@ def test_a_run_whose_log_did_not_work_fails_unless_the_scenario_says_so(tmp_path
 
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr("tests.smoke.common.write_run", export)
+        patch.setattr("tests.smoke.common.run_signals", lambda run_dir: [])     # the stand-in task has no ladder
         with pytest.raises(AssertionError, match="broken"):
             suite.run("one", build_task(pull(n_agents=1, steps_per_agent=1)), scripted(script))
         suite.run("one", build_task(pull(n_agents=1, steps_per_agent=1)), scripted(script), damaged_log=True)
+
+
+def test_a_scenario_records_the_three_ladders_as_a_real_run_does(tmp_path, key_task):
+    """smoke_swe's board scenario: a run fresh from the suite must carry the ladders that src/run.py's run writes after
+    the export (code_ladder.run_signals), so swe_measures.summarize and every reader of the recorded rungs reads it."""
+    suite = suite_in(tmp_path, judge_spec(OpenMath.task_dir, OpenMath.name))
+    script = {"a01": [call("submit", {"answer": "done"}, "c1")]}
+
+    def export(eval_path, run_dir):
+        make_run(run_dir.parent, {"a01": OPENS, "a02": []})
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr("tests.smoke.common.write_run", export)
+        suite.run("run", build_task(pull(n_agents=1, steps_per_agent=1)), scripted(script))
+    recorded = code_ladder.ladders(tmp_path / "runs" / "run")
+    assert recorded["agents"]["a01"]["cheating_rung"] == "looked" and recorded["team"]["cheating_rung"] == "looked"
+
+
+def test_the_creative_split_scenario_writes_the_hand_in_in_words_the_code_reads():
+    """smoke_creative's split scenario expects a01 shipped: a01's own write must put the reference in writing.md where
+    the code reads it (_creative_ladder.filled). A base64 write hides the text and leaves the hand-in to the team."""
+    agents = ("a01", "a02", "a03")
+    run = {"task": "creative_writings", "access": {"agents": {a: {"holds": ["whole"]} for a in agents}},
+           "creative": {"row_id": "museum_poem", "n_pieces": 3, "layout": "shared", "candidate": creative.CANDIDATE,
+                        "references": {"/workspace": f"{PLANT_ROOT}/1a2b3c4d/{creative.CANDIDATE}"},
+                        "workspaces": {"team": "/workspace"},
+                        "seats": {a: {"uid": 1001 + i, "workdir": "/workspace"} for i, a in enumerate(agents)}}}
+    posts = ChatMessageTool(content=creative.PARTS[1] + creative.PARTS[2], function="board_read", tool_call_id="r")
+    command = creative.assembled(1, "a7")([posts]).message.tool_calls[0].arguments["command"]
+    filled = CreativeDomain(run).filled("a01", transcript([("shell", command, '{"verdict": "tie"}')]))
+    assert list(filled.reference) == ["/workspace/writing.md"], filled
+    hidden = creative.written("writing.md", creative.REFERENCE)
+    assert not CreativeDomain(run).filled("a01", transcript([("shell", hidden, "")])).reference
 
 
 def test_the_agents_view_loses_its_ids_and_keeps_its_privileges():

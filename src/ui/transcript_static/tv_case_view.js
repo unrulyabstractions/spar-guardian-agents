@@ -5,10 +5,13 @@
  * which the source imported from its transcript.js, sits here verbatim; the imports point at this viewer's files; the
  * source's sentence lens is gone and each call shows its labels (src/ui/transcript_levels.py _agent_labels) in its
  * place; the strip follows the page as it scrolls; each judge label whose excerpt code located in a model call's
- * reasoning is a label of that call and its excerpt is marked in the reasoning (showReasoning opens it). Every string
- * goes in through h() text nodes. */
+ * reasoning is a label of that call and its excerpt is marked in the reasoning (showReasoning opens it); a step's
+ * reasoning, tool call and tool result are three sections, each folded by its header strip; a step's head line is its
+ * call number and its levels as chips, an outline for a level reached before and a marked chip for a label of its own;
+ * the strip's legend is one small table, a row per ladder. Every string goes in through h() text nodes. */
 import { h, plural } from '/static/app/dom.js';
 import { excerptSpan, markedNodes } from './tv_excerpt.js';
+import { levelChip, scoreChip } from './tv_levels.js';
 
 // Colour ramps per ladder, level 0 first. Each ladder's line (/api/ladders' "line", the first level above it) parts two
 // colour families: pale and calm below it, strong above it, so a reader sees the line at a glance.
@@ -35,11 +38,14 @@ export function inkOn(hex) {
   return contrast(INKS[0]) >= contrast(INKS[1]) ? INKS[0] : INKS[1];
 }
 const SHORT = { cheating: 'Ch', coordination: 'Cd', collusion: 'Cl' };
+/** A ladder's own colour: its first level above the line. lad: its /api/ladders entry. */
+const inkOf = (L, lad) => RAMP[L][lad.levels.indexOf(lad.line)];
+const clip = (s, n) => (s && s.length > n ? `${s.slice(0, n - 1)}…` : s);
 // Milestone wording: what the strip writes beside the call that first reached a level.
 const WORDS = {
   cheating: { looked: 'looked', tempted: 'tempted', attempted: 'attempted', hacked: 'hacked' },
   coordination: { read: 'read a teammate', write: 'posted', low: 'low back-and-forth', medium: 'medium back-and-forth', high: 'high back-and-forth', extreme: 'extreme back-and-forth' },
-  collusion: { cooperation: 'cooperation', collaboration: 'collaboration', collusion: 'collusion (pooled the exploit)' },
+  collusion: { cooperation: 'cooperation', collaboration: 'collaboration', collusion: 'collusion' },
 };
 
 // The page has one episode on screen at a time. One scroll listener for the page asks that episode to move its strip,
@@ -78,13 +84,21 @@ export function readableReasoning(raw) {
   return { text: s };
 }
 
-/** Full colour legend: one row per ladder, every level as a swatch in ladder order, and a mark at the ladder's line. */
-export function fullLegend(ladders, order) {
-  return h('div', { class: 'cs-full-legend' }, order.map(L => h('div', { class: 'cfl-row' },
-    h('b', null, `${SHORT[L]} ${ladders[L].name}:`),
-    ladders[L].levels.map((v, i) => [
-      v === ladders[L].line ? h('span', { class: 'cfl-line', title: ladders[L].line_words }, 'line') : null,
-      h('span', { class: 'cfl-item' }, h('i', { style: `background:${RAMP[L][i]}` }), v)]))));
+/** The strip's legend: one row per ladder, its lane code and name, then every level above none as a swatch in aligned
+ * cells, a rule at the ladder's line; a row for the regulator's tick when the strip draws one. */
+export function stripLegend(ladders, order, regulator = false) {
+  const cols = Math.max(...order.map(L => ladders[L].levels.length)) - 1;
+  const row = L => {
+    const lad = ladders[L];
+    const line = lad.levels.indexOf(lad.line);
+    const cells = lad.levels.slice(1).map((v, j) => h('td', { class: ['csl-level', j + 1 === line && 'csl-line'], title: lad.meanings[j + 1] },
+      h('i', { style: `background:${RAMP[L][j + 1]}` }), v));
+    return h('tr', null, h('th', { scope: 'row' }, h('span', { class: 'csl-mark', style: `color:${inkOf(L, lad)}` }, SHORT[L]), lad.name),
+      cells, cells.length < cols ? h('td', { colspan: String(cols - cells.length) }) : null);
+  };
+  return h('table', { class: 'cs-legend' }, h('tbody', null, order.map(row),
+    regulator ? h('tr', null, h('th', { scope: 'row' }, h('span', { class: 'csl-mark csl-reg' }), 'Regulator'),
+      h('td', { class: 'csl-level', colspan: String(cols) }, 'met on the board')) : null));
 }
 
 function asStr(v) {
@@ -107,18 +121,48 @@ function resultText(r) {
   if (Array.isArray(c)) return c.map(p => (p && p.text) || asStr(p)).join('\n');
   return asStr(c) || asStr(r.extra && r.extra.error);
 }
-/** A block of the transcript; mark: the span of its text to mark (a judge's excerpt), or null. */
-function blk(label, text, input, kind, mark) {
-  const body = mark ? markedNodes(String(text), mark) : String(text || '');
-  const el = h('div', { class: ['blk', input && 'inp', input && 'fold', kind && 'k-' + kind] }, h('div', { class: 'lab' }, label), h('div', { class: 'txt' }, body));
-  if (input) el.addEventListener('click', () => el.classList.remove('fold'));
+/** A prompt the agent was given (System, User): its first lines, the whole text on a click. */
+function promptBlock(label, text) {
+  const el = h('div', { class: 'blk inp fold' }, h('div', { class: 'lab' }, label), h('div', { class: 'txt' }, String(text || '')));
+  el.addEventListener('click', () => el.classList.remove('fold'));
   return el;
+}
+
+// The parts of a step, each a section with a header strip that folds it: the run page's bar folds a part everywhere.
+export const PARTS = [['reasoning', 'Reasoning'], ['call', 'Tool calls'], ['result', 'Tool results']];
+// A section longer than this starts clipped to its first lines.
+const CLIP_LINES = 12;
+/** Fold (on) or unfold one section; its header strip stays. */
+function foldSection(el, on) {
+  el.classList.toggle('folded', on);
+  el.querySelector('.sec-h').setAttribute('aria-expanded', String(!on));
+}
+/** A step's part: part is reasoning, call or result; name and tag head its strip; mark: the span of the text to mark
+ * (a judge's excerpt), or null. */
+function section(part, name, tag, text, mark) {
+  const s = String(text || '');
+  const lines = s.split('\n').length;
+  const long = lines > CLIP_LINES;
+  const el = h('div', { class: ['sec', `sec-${part}`, long && 'clipped'], dataset: { part } },
+    h('button', { type: 'button', class: 'sec-h', 'aria-expanded': 'true', title: `fold or unfold this ${name.toLowerCase()}`,
+      onclick: () => foldSection(el, !el.classList.contains('folded')) },
+    h('span', { class: 'sec-chev', 'aria-hidden': 'true' }), h('span', { class: 'sec-name' }, name), tag),
+    h('div', { class: 'sec-b' }, h('div', { class: 'txt' }, mark ? markedNodes(s, mark) : s),
+      long ? h('button', { type: 'button', class: 'sec-more', title: 'show the whole text', onclick: () => el.classList.remove('clipped') },
+        `show all ${lines} lines`) : null));
+  return el;
+}
+const reasoningSection = (text, mark) => section('reasoning', 'Reasoning', null, text, mark);
+const textSection = text => section('reasoning', 'Text', null, text, null);
+/** Every section of a step box unfolded and unclipped. */
+function openSections(box) {
+  for (const s of box.querySelectorAll('.sec')) { foldSection(s, false); s.classList.remove('clipped'); }
 }
 
 /**
  * ctx: {agent, levels (the run's three-ladder payload, with its labels by call and its judge labels), isRegulator,
  * regulatorCalls: Set of tool_call_ids that read a regulator's post, or that posted as the regulator}.
- * Returns {el, findCall, findToolCall, showReasoning, showAll, nCalls}. A model call is numbered from 1 over the
+ * Returns {el, findCall, findToolCall, showReasoning, setFolds (a Set of PARTS keys folded everywhere), nCalls}. A model call is numbered from 1 over the
  * agent's steps, as the judge and code number it (src/judging/judge_records.py reasoning_calls); its reasoning sits on
  * its first tool call, or on its own block when it made none.
  */
@@ -174,11 +218,20 @@ export function renderCase(t, ctx) {
     at.get(k).push(e);
   }
   const level = order.map(() => new Array(n).fill(0));
+  // The event that reached each ladder's level so far, at each call: {k, facts}.
+  const reach = order.map(() => new Array(n).fill(null));
   const cur = Object.fromEntries(order.map(L => [L, 0]));
+  const curEv = Object.fromEntries(order.map(L => [L, null]));
   const fresh = new Map();
   for (let k = 0; k < n; k++) {
-    for (const e of at.get(k) || []) if (e.index > cur[e.ladder]) { cur[e.ladder] = e.index; if (!fresh.has(k)) fresh.set(k, []); fresh.get(k).push(e); }
-    order.forEach((L, i) => { level[i][k] = cur[L]; });
+    for (const e of at.get(k) || []) {
+      if (e.index <= cur[e.ladder]) continue;
+      cur[e.ladder] = e.index;
+      curEv[e.ladder] = { k, facts: e.facts || [] };
+      if (!fresh.has(k)) fresh.set(k, []);
+      fresh.get(k).push(e);
+    }
+    order.forEach((L, i) => { level[i][k] = cur[L]; reach[i][k] = curEv[L]; });
   }
   const finalIx = Object.fromEntries(order.map(L => [L, (lv && lv.agents[ctx.agent] && lv.agents[ctx.agent][L] && lv.agents[ctx.agent][L].index) || 0]));
   const single = lv ? lv.single : true;
@@ -194,7 +247,7 @@ export function renderCase(t, ctx) {
   }
   for (const e of endEv) {
     const w = (WORDS[e.ladder] || {})[e.level];
-    if (w) miles.push({ k: n, t: `${w} (end of run)`, head: w, tail: '(end of run)', ladder: e.ladder, tip: e.evidence, end: true });
+    if (w) miles.push({ k: n, t: `${w}, end`, head: `${w},`, tail: 'end', ladder: e.ladder, tip: e.evidence, end: true });
   }
   miles.sort((a, b) => a.k - b.k);
   // 3. the labels of each call itself: every call that is evidence for a level, where an event is only the first
@@ -210,36 +263,35 @@ export function renderCase(t, ctx) {
   const labelled = k => own.has(k) || regAt.has(k);
   const nLabelled = calls.filter(c => labelled(c.k)).length;
 
-  // 4. right: one block per step. Its head line says how far each ladder had got; its labels say what the call did.
+  // 4. right: one block per step. Its head line holds the call's levels as chips, in the ladders' order: the level
+  // reached before as an outline, a label the call carries itself as a marked chip.
   const name = L => lv.ladders[L].name;
-  const soFar = (vals, newAt) => {
-    const chips = order.map((L, i) => {
-      const v = vals[i];
-      if (!v || (single && L !== 'cheating')) return null;
-      const isNew = newAt.has(L);
-      return h('span', { class: ['cs-chip', isNew && 'cs-new'], title: `${name(L)}: ${lv.ladders[L].levels[v]} (${v} of ${lv.ladders[L].levels.length - 1}), reached ${isNew ? 'at this call' : 'before this step'}` },
-        h('i', { style: `background:${RAMP[L][v]}` }), `${name(L)} `, h('b', null, lv.ladders[L].levels[v]));
-    }).filter(Boolean);
-    return chips.length ? h('span', { class: 'cs-strip', title: 'the level reached so far on each ladder' }, h('span', { class: 'cs-sofar' }, 'so far'), chips) : null;
-  };
   const valsAt = k => order.map((L, i) => (k < 0 ? 0 : level[i][Math.min(k, n - 1)] || 0));
-  const line = (swatch, cls, ladder, what, why, tip) => h('div', { class: ['cs-label', cls], title: tip },
-    h('i', { style: swatch }), h('span', { class: 'cs-lname' }, ladder), h('b', null, what), why ? h('span', { class: 'cs-why' }, why) : null);
-  function labelsOf(k) {
-    const lines = (own.get(k) || []).map(l => line(`background:${RAMP[l.ladder][l.index]}`, null, name(l.ladder), l.level, l.evidence,
-      `${name(l.ladder)}: ${l.level} (${l.index} of ${lv.ladders[l.ladder].levels.length - 1})${l.evidence ? '\n' + l.evidence : ''}`));
-    if (regAt.has(k)) {
-      lines.push(line('', 'cs-reg', 'Regulator', ctx.isRegulator ? 'posted as the regulator' : 'read a regulator\'s post', '',
-        ctx.isRegulator ? 'this call posted on the board as the regulator' : 'this call read a post the regulator wrote'));
-    }
-    return lines.length ? h('div', { class: 'cs-labels' }, h('div', { class: 'lab' }, 'Labels of this step'), lines) : null;
+  const reachFacts = (i, k) => {
+    const e = k < 0 || !n ? null : reach[i][Math.min(k, n - 1)];
+    return e ? [['reached', `call ${e.k}`], ...e.facts] : [];
+  };
+  const regChip = () => h('span', { class: 'cs-reg-chip', title: ctx.isRegulator ? 'Posted as the regulator' : 'Read a regulator\'s post' },
+    h('span', { class: 'lv-own-mark', 'aria-hidden': 'true' }), 'regulator');
+  // k: the call; mine: whether the call's own labels show (a message between calls has none).
+  function headChips(k, mine) {
+    const vals = valsAt(k);
+    const labels = mine ? own.get(k) || [] : [];
+    return h('span', { class: 'cs-chips' }, order.map((L, i) => {
+      if (single && L !== 'cheating') return null;
+      const lad = lv.ladders[L];
+      const here = labels.filter(l => l.ladder === L);
+      const carried = vals[i] && !here.some(l => l.index === vals[i])
+        ? levelChip(L, lad, lad.levels[vals[i]], false, { look: 'carried', facts: reachFacts(i, k) }) : null;
+      return [carried, here.map(l => levelChip(L, lad, l.level, false, { look: 'own', facts: l.facts || [] }))];
+    }), mine && regAt.has(k) ? regChip() : null);
   }
-  // The judge labels whose excerpt sits in this model call's reasoning: the label, its score and the judge's reason.
+  // The judge labels whose excerpt sits in this model call's reasoning: the score, the label and the judge's reason.
   function judgedLines(mm) {
     const here = judgedAt.get(mm) || [];
-    return here.length ? h('div', { class: 'cs-labels cs-judged' }, h('div', { class: 'lab' }, 'Judge labels with their excerpt in this reasoning'),
-      here.map(x => line(`background:${scoreColour(x.score)}`, null, x.name, `${x.score} of 100`, x.span ? x.reason : `${x.reason} (the excerpt is not in the reasoning shown)`,
-        `${x.name}: ${x.score} of 100\n${x.reason || ''}`))) : null;
+    return here.length ? h('div', { class: 'cs-labels cs-judged' }, here.map(x => h('div', { class: 'cs-label' },
+      scoreChip(x.score, `${x.name}: ${x.score} of 100`), h('b', null, x.name),
+      h('span', { class: 'cs-why' }, x.reason || '', x.span ? null : h('i', null, ' (excerpt not in the reasoning shown)'))))) : null;
   }
   const blocks = [];
   const right = h('div', { class: 'right' });
@@ -251,36 +303,39 @@ export function renderCase(t, ctx) {
     return box;
   };
   const looseCard = x => h('div', { class: 'call msg' },
-    h('div', { class: 'ch' }, h('span', { class: 'cn' }, x.src === 'agent' ? 'Message' : x.src === 'user' ? 'User' : 'System'),
-      x.step != null ? h('span', null, `step ${x.step}`) : null, lv ? soFar(valsAt(x.before - 1), new Set()) : null),
-    h('div', { class: 'cb' }, judgedLines(x.model), x.reasoning ? blk('Reasoning', x.reasoning, false, 'reasoning', markOf(x.model)) : null,
-      x.text ? blk(x.src === 'agent' ? 'Text' : 'Prompt', x.text, x.src !== 'agent', x.src === 'agent' ? 'reasoning' : 'input') : null));
+    h('div', { class: 'ch' }, h('span', { class: 'cn', title: x.step != null ? `step ${x.step}` : null },
+      x.src === 'agent' ? 'Message' : x.src === 'user' ? 'User' : 'System'), lv ? headChips(x.before - 1, false) : null),
+    h('div', { class: 'cb' }, judgedLines(x.model), x.reasoning ? reasoningSection(x.reasoning, markOf(x.model)) : null,
+      x.text ? (x.src === 'agent' ? textSection(x.text) : promptBlock('Prompt', x.text)) : null));
   for (const c of calls) {
     while (li < loose.length && loose[li].before <= c.k) right.appendChild(looseBlock(loose[li++]));
     const k = c.k;
     const labs = own.get(k) || [];
     const el = h('div', { class: ['call', labelled(k) && 'has-label', labs.some(l => l.ladder === 'coordination') && 'has-board'], id: `a-${ctx.agent}-call-${k}`,
       dataset: { call: String(k) }, style: labs.length ? `--step:${RAMP[labs[0].ladder][labs[0].index]}` : null },
-      h('div', { class: 'ch' }, h('span', { class: 'cn' }, `Call ${k}`), c.step != null ? h('span', null, `step ${c.step}`) : null,
-        lv ? soFar(valsAt(k), new Set((fresh.get(k) || []).map(e => e.ladder))) : null,
-        h('span', { class: 'mz' }, c.tc.function_name || '')),
-      h('div', { class: 'cb' }, lv ? labelsOf(k) : null, c.model != null ? judgedLines(c.model) : null,
-        c.reasoning ? blk('Reasoning', c.reasoning, false, 'reasoning', c.model != null ? markOf(c.model) : null) : null,
-        c.text && c.text.trim() ? blk('Text', c.text, false, 'reasoning') : null,
-        blk(`Tool call: ${c.tc.function_name || '?'}`, argText(c.tc.arguments), false, 'tool'),
-        c.res.length ? c.res.map(r => blk('Tool result', resultText(r), true, 'tool')) : null));
+      h('div', { class: 'ch' }, h('span', { class: 'cn', title: c.step != null ? `step ${c.step}` : null }, `Call ${k}`),
+        lv ? headChips(k, true) : null, h('span', { class: 'mz' }, c.tc.function_name || '')),
+      h('div', { class: 'cb' }, c.model != null ? judgedLines(c.model) : null,
+        c.reasoning ? reasoningSection(c.reasoning, c.model != null ? markOf(c.model) : null) : null,
+        c.text && c.text.trim() ? textSection(c.text) : null,
+        section('call', 'Tool call', h('span', { class: 'sec-tool' }, c.tc.function_name || '?'), argText(c.tc.arguments), null),
+        c.res.map(r => {
+          const out = resultText(r);
+          return section('result', 'Tool result', h('span', { class: 'sec-size' }, plural(out.split('\n').length, 'line')), out, null);
+        })));
     blocks.push(el);
     right.appendChild(el);
   }
   while (li < loose.length) right.appendChild(looseBlock(loose[li++]));
 
   // 5. left: the whole episode, one row per call. A lane per ladder for the level so far, one per ladder for the
-  // call's own labels, milestones in the margin.
+  // call's own labels, the two groups apart, each lane headed by its code in the ladder's colour; milestones in the
+  // margin.
   const NS = 'http://www.w3.org/2000/svg';
-  const LB = 160, LW = 10, GAP = 1, TOP = 26;
+  const LB = 160, LW = 14, GAP = 5, SEP = 16, TOP = 30;
   const lanesW = order.length * (LW + GAP) - GAP;
-  const RX = LB + lanesW + 8, RW = Math.max(lanesW, 44), W = RX + RW + 2;
-  // A milestone label wider than the margin breaks before its call or "(end of run)" onto a second line.
+  const RX = LB + lanesW + SEP, RW = lanesW, W = RX + RW + 8;
+  // A milestone label wider than the margin breaks before its call or "end" onto a second line.
   const measure = document.createElement('canvas').getContext('2d');
   measure.font = '600 10px "IBM Plex Sans", system-ui, sans-serif';
   const fits = t => measure.measureText(t).width <= LB - 14;
@@ -289,26 +344,36 @@ export function renderCase(t, ctx) {
   const H = Math.ceil(n * rh) + TOP + 6 + 14;
   const svg = document.createElementNS(NS, 'svg');
   svg.setAttribute('width', W); svg.setAttribute('height', H); svg.setAttribute('class', 'cs-svg');
-  const mk = (tag, a) => { const e = document.createElementNS(NS, tag); for (const [x, y] of Object.entries(a)) e.setAttribute(x, y); return e; };
-  const text = (x, y, cls, str, tip) => {
-    const e = mk('text', { x, y, 'text-anchor': 'middle', class: cls });
-    e.textContent = str;
+  // An SVG element with its attributes and, when tip is given, its tooltip.
+  const mk = (tag, a, tip) => {
+    const e = document.createElementNS(NS, tag);
+    for (const [x, y] of Object.entries(a)) e.setAttribute(x, y);
     if (tip) { const ttl = document.createElementNS(NS, 'title'); ttl.textContent = tip; e.appendChild(ttl); }
+    return e;
+  };
+  const text = (x, y, cls, str, tip, fill) => {
+    const e = mk('text', { x, y, 'text-anchor': 'middle', class: cls, ...(fill ? { fill } : {}) }, tip);
+    e.insertBefore(document.createTextNode(str), e.firstChild);
     svg.appendChild(e);
   };
-  text(LB + lanesW / 2, 9, 'cs-lane-g', 'so far', 'the level each ladder had reached by this call');
-  text(RX + RW / 2, 9, 'cs-lane-g', 'this step', 'the labels this call carries itself');
+  text(LB + lanesW / 2, 9, 'cs-lane-g', 'so far', 'Level each ladder had reached by this call');
+  text(RX + RW / 2, 9, 'cs-lane-g', 'this step', 'Labels this call carries itself');
+  svg.appendChild(mk('line', { x1: RX - SEP / 2, y1: 2, x2: RX - SEP / 2, y2: TOP + n * rh + 12, stroke: 'var(--line)', 'stroke-width': 1 }));
+  const levelName = (L, v) => (lv ? lv.ladders[L].levels[v] : String(v));
   order.forEach((L, i) => {
     const x = LB + i * (LW + GAP);
     const na = single && L !== 'cheating';
-    text(x + LW / 2, 21, 'cs-lane-h', SHORT[L], lv ? name(L) : L);
-    if (lanesW <= RW) text(RX + i * (LW + GAP) + LW / 2, 21, 'cs-lane-h', SHORT[L], lv ? name(L) : L);
+    const ink = lv ? inkOf(L, lv.ladders[L]) : 'var(--ink-2)';
+    text(x + LW / 2, 24, 'cs-lane-h', SHORT[L], lv ? name(L) : L, ink);
+    text(RX + i * (LW + GAP) + LW / 2, 24, 'cs-lane-h', SHORT[L], lv ? name(L) : L, ink);
     for (let k = 0; k < n; k++) {
-      svg.appendChild(mk('rect', { x, y: TOP + k * rh, width: LW, height: rh + 0.3, fill: na || !level[i][k] ? 'var(--line)' : RAMP[L][level[i][k]], class: 'cs-cell', 'data-call': k }));
+      svg.appendChild(mk('rect', { x, y: TOP + k * rh, width: LW, height: rh + 0.3, fill: na || !level[i][k] ? 'var(--line)' : RAMP[L][level[i][k]], class: 'cs-cell', 'data-call': k },
+        na ? null : `call ${k}: ${lv ? name(L) : L} ${levelName(L, level[i][k])}`));
     }
     // end-of-run level (no call recorded) as a final band
     const v = finalIx[L];
-    svg.appendChild(mk('rect', { x, y: TOP + n * rh + 4, width: LW, height: 8, fill: na || !v ? 'var(--line)' : RAMP[L][v] }));
+    svg.appendChild(mk('rect', { x, y: TOP + n * rh + 4, width: LW, height: 8, fill: na || !v ? 'var(--line)' : RAMP[L][v] },
+      na ? null : `end of run: ${lv ? name(L) : L} ${levelName(L, v)}`));
   });
   svg.appendChild(mk('rect', { x: RX, y: TOP, width: RW, height: n * rh, fill: 'none', stroke: 'var(--line)', 'stroke-width': 0.5 }));
   for (let k = 0; k < n; k++) {
@@ -316,9 +381,13 @@ export function renderCase(t, ctx) {
       const i = order.indexOf(l.ladder);
       // sorted highest level first, so the first label of a ladder at this call is the one drawn
       if (i < 0 || (own.get(k).find(o => o.ladder === l.ladder) !== l)) continue;
-      svg.appendChild(mk('rect', { x: RX + i * (LW + GAP), y: TOP + k * rh, width: LW, height: Math.max(rh, 3), fill: RAMP[l.ladder][l.index], stroke: 'var(--line-2)', 'stroke-width': 0.5, 'data-call': k }));
+      svg.appendChild(mk('rect', { x: RX + i * (LW + GAP), y: TOP + k * rh, width: LW, height: Math.max(rh, 3), fill: RAMP[l.ladder][l.index], stroke: 'var(--line-2)', 'stroke-width': 0.5, 'data-call': k },
+        `call ${k}: ${name(l.ladder)} ${l.level}`));
     }
-    if (regAt.has(k)) svg.appendChild(mk('rect', { x: RX + RW - 3, y: TOP + k * rh, width: 3, height: Math.max(rh, 3), fill: 'var(--bad)', 'data-call': k }));
+    if (regAt.has(k)) {
+      svg.appendChild(mk('rect', { x: RX + RW + 3, y: TOP + k * rh, width: 4, height: Math.max(rh, 3), fill: 'var(--bad)', 'data-call': k },
+        ctx.isRegulator ? `call ${k}: posted as the regulator` : `call ${k}: met the regulator`));
+    }
   }
   let last = -99;
   const placed = [];
@@ -338,7 +407,7 @@ export function renderCase(t, ctx) {
         tx.appendChild(ts);
       }
     } else tx.textContent = m.t;
-    const tt = document.createElementNS(NS, 'title'); tt.textContent = m.tip || m.t; tx.appendChild(tt);
+    const tt = document.createElementNS(NS, 'title'); tt.textContent = clip(m.tip, 80) || m.t; tx.appendChild(tt);
     svg.appendChild(tx);
     svg.appendChild(mk('line', { x1: LB - 7, y1: ty - 3, x2: LB - 2, y2: y0, stroke: col, 'stroke-width': 1 }));
   }
@@ -351,20 +420,16 @@ export function renderCase(t, ctx) {
       svg.appendChild(tx);
     }
   }
+  // The agent's level on each ladder at the end of the run, as chips with their evidence on hover.
   const mine = lv && lv.agents[ctx.agent];
-  const ladderLine = mine ? h('div', { class: 'cs-ladders' }, order.map(L => {
-    const c = mine[L];
-    return [h('div', { class: 'cs-ladders-row', title: `${c.rule}${c.evidence ? '\nEvidence: ' + c.evidence : ''}` },
-      h('i', { style: `background:${c.na || !c.index ? 'var(--line)' : RAMP[L][c.index]}` }), `${name(L)} `,
-      c.na ? 'n/a' : h('b', null, c.level), c.na ? '' : ` ${c.index}/${c.of}`)];
-  })) : null;
+  const ladderLine = mine ? h('div', { class: 'cs-ladders' }, order.filter(L => !mine[L].na).map(L =>
+    levelChip(L, lv.ladders[L], mine[L].level, false, { facts: mine[L].facts }))) : null;
   const left = h('div', { class: 'left' },
-    h('h2', null, 'The whole episode ', h('span', { class: 'sub' }, `${plural(n, 'call')}, ${nLabelled} with a label`)),
+    h('h2', null, 'Episode ', h('span', { class: 'sub' }, `${plural(n, 'call')} · ${nLabelled} labelled`)),
     ladderLine,
     svg,
-    lv ? fullLegend(lv.ladders, order) : null,
-    h('p', { class: 'note' }, 'One row per tool call, call 0 at the top. The lanes under "so far" show the level each ladder had reached by that call; the band below the last call is the level at the end of the run. The lanes under "this step" show the labels the call carries itself, and a red tick a call that met the regulator on the board. The outlined row is the call at the top of the page. Click a row or a label to open that call.'),
-    unplaced ? h('p', { class: 'note' }, `${plural(unplaced, 'label')} ${unplaced === 1 ? 'cites' : 'cite'} a call this transcript does not hold and ${unplaced === 1 ? 'is' : 'are'} not drawn.`) : null);
+    lv ? stripLegend(lv.ladders, single ? ['cheating'] : order, regAt.size > 0) : null,
+    unplaced ? h('p', { class: 'note' }, `${plural(unplaced, 'label')} not drawn: call not in this transcript`) : null);
 
   // The outlined row: the call at the top of the page as it scrolls, and the call a click opened once the page
   // has come to rest there.
@@ -389,6 +454,7 @@ export function renderCase(t, ctx) {
     if (!el) return null;
     for (const b of right.querySelectorAll('.call.here')) b.classList.remove('here');
     el.classList.add('here');
+    openSections(el);
     opened = k;
     el.scrollIntoView({ block: 'start', behavior });
     markRow(k);
@@ -422,7 +488,7 @@ export function renderCase(t, ctx) {
     const y = top + (toGo < span ? (1 - Math.max(0, toGo) / span) * span : 0);
     let k = -1;
     for (let i = 0; i < n; i++) {
-      if (!blocks[i].offsetParent) continue;   // hidden by the Show filter
+      if (!blocks[i].offsetParent) continue;   // hidden by Board calls only
       k = i;
       if (blocks[i].getBoundingClientRect().bottom >= y) break;
     }
@@ -442,8 +508,17 @@ export function renderCase(t, ctx) {
     requestAnimationFrame(() => { queued = false; follow(); });
   });
   requestAnimationFrame(() => { if (el.isConnected) fit(); });   // the page shows the episode before the next frame
+  // The parts the run page's bar folds everywhere: applied when the page's choice changed since this episode last
+  // took it, so a section folded or opened by hand stays as it is across tab switches.
+  let foldedParts = null;
   return {
-    el, nCalls: n, showAll() {},
+    el, nCalls: n,
+    setFolds(off) {
+      const key = [...off].sort().join(',');
+      if (key === foldedParts) return;
+      foldedParts = key;
+      for (const s of right.querySelectorAll('.sec')) foldSection(s, off.has(s.dataset.part));
+    },
     findCall: k => show(k),
     findToolCall: id => (idOf.has(id) ? show(idOf.get(id)) : null),
     // Model call mm's reasoning: its block opened and the judge's excerpt, marked there, brought to the middle at
@@ -452,6 +527,7 @@ export function renderCase(t, ctx) {
       const c = calls.find(x => x.model === mm);
       const box = c ? show(c.k, 'instant') : looseEls.get(mm);
       if (!box) return null;
+      openSections(box);
       const mark = box.querySelector('mark.xl-mark');
       const centre = () => (mark || box).scrollIntoView({ block: 'center', behavior: 'instant' });
       centre();
