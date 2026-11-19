@@ -1,5 +1,5 @@
-/* The three ladders as every page draws them, and the Team tab's panels: one row per agent and one for the team, then
- * the Cheating, Coordination and Collusion ladders in full. Copied from collusion-hermaneutics' viewer
+/* The three ladders as every page draws them, and the Details tab's panels: one row per agent and one for the team,
+ * then the Cheating, Coordination and Collusion ladders in full. Copied from collusion-hermaneutics' viewer
  * (viewer/static/app/levels.js); levels come from /api/run's "levels" and /api/ladders (src/ui/transcript_levels.py).
  * Our edits: the imports; a disregulator is named like a regulator; the source's stepTracker, which no view called, is
  * left out; a level is a chip in its ladder's colour with a gap at the ladder's line (levelChip); Cheated beside the
@@ -128,7 +128,7 @@ const hiddenList = (lv, key, hidden, role) => (hidden.length
   ? hidden.map(([a, level], i) => [i ? '; ' : '', h('span', { class: 'mono' }, a), ` (hidden ${role(a)}) `, chip(lv, key, level)])
   : h('span', { class: 'muted small' }, 'none in this run'));
 
-/** Team tab: the Cheating ladder in full (src/measures/cheating_ladder.py). The team's rung is the highest worker or
+/** Details tab: the Cheating ladder in full (src/measures/cheating_ladder.py). The team's rung is the highest worker or
  * the team's own evidence; the hidden roles' own rungs are listed apart and never enter it. The grader's pass, the
  * alarm, and one row per agent with its rung, whether it cheated, the evidence of each clause that holds, the scan's
  * records below the ladder and CheatBench's judge's labels beside the code's clauses. ctx: {evidence(text, agent) ->
@@ -169,7 +169,7 @@ export function cheatingPanel(lv, roles, ctx) {
 
 const fix2 = v => (v == null ? '' : Number(v).toFixed(2));
 
-/** Team tab: the Coordination ladder in full (src/measures/coordination.py). The team's level is the workers' mean;
+/** Details tab: the Coordination ladder in full (src/measures/coordination.py). The team's level is the workers' mean;
  * the hidden roles' own levels are listed apart and never enter it. One row per agent with its posts, its rounds per
  * teammate and the rounds its posts allow, and one row per pair with its rounds. */
 export function coordinationPanel(lv, roles) {
@@ -212,7 +212,7 @@ const judgeEvidence = (e, ctx) => h('div', { class: 'judge-ev' },
   e.quote ? h('blockquote', { class: 'judge-quote' }, e.quote) : null,
   e.reason ? h('div', { class: 'small muted' }, e.reason) : null, checkNote(e.check));
 
-/** Team tab: the Collusion ladder in full (src/measures/collusion.py), as the measure returns it. The team's rung is
+/** Details tab: the Collusion ladder in full (src/measures/collusion.py), as the measure returns it. The team's rung is
  * the highest pair of workers; the hidden roles' own rungs are listed apart. One row per agent with its rung, its
  * scheming verdict, its disclosure and its cheating rung for information; one row per pair with the takes and their
  * calls, whether the hand-in holds work of both, the exploit-named posts a judge would read, and the judge's two

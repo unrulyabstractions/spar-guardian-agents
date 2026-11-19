@@ -210,8 +210,9 @@ mast.json and who_when.json.
 Start: `make transcripts`, or `uv run python -m src.ui.transcript_viewer [--port 8770] [--rebuild] [--runs runs]` from the
 repository root. It serves in the foreground until Ctrl-C or SIGTERM. `src/ui/transcript_viewer.py` is the server and the
 index builder, `src/ui/transcript_levels.py` the three ladders, `src/ui/transcript_ladder_tables.py` the Ladders page's
-tables and `src/ui/transcript_static/` the page (`tv_*.js`, `tv_style.css`). The page
-reuses the results browser's `style.css`, `app/dom.js`, `app/charts.js` and `app/components.js`, served under `/static/`.
+tables, `src/ui/transcript_board.py` the Board tab's data and `src/ui/transcript_static/` the page (`tv_*.js`,
+`tv_style.css`, `tv_board.css`). The page reuses the results browser's `style.css`, `app/dom.js`, `app/charts.js` and
+`app/components.js`, served under `/static/`.
 
 Every folder under `runs/` is a **collection**, except `study_smoke` and folders without a run. A study keeps its runs at
 its top level and in its groups (`study_runs`); its `INDEX.jsonl`, where it has one, gives each run's `valid` flag, and a
@@ -235,7 +236,9 @@ start with the cache current is ready in about 1.3 s.
 | hash | page |
 |---|---|
 | `#/?col=&task=&model=&workers=&regulator=1&disregulator=1&lv_<ladder>=&cheated=&seedpost=&q=&sort=&dir=&page=&size=` | Runs: one row per valid run |
-| `#/run/<collection>/<run key>?agent=&call=&tab=team` | a run: agent tabs and Team, the whole episode with each step's labels, the details |
+| `#/run/<collection>/<run key>?agent=&call=` | a run: a tab per agent with its episode, a Board and a Details tab |
+| `#/run/<collection>/<run key>?tab=board&a=&b=&mode=&pos=` | the Board tab: agents `a`, `b`; `time` or `step`; `pos` |
+| `#/run/<collection>/<run key>?tab=details` | the Details tab: the three ladders' panels, the judges, the legend |
 | `#/ladders?task=<CheatBench task name>` | the three ladders, the Cheating ladder by task, the Coordination and Collusion levels, and Collusion's take rules by task, the task's column highlighted |
 
 `<ladder>` is `cheating`, `coordination` or `collusion`; a ladder filter's value is the team's level. `workers` is the
@@ -373,17 +376,52 @@ rung whose evidence cites no call (an access-log read, the hand-in), Cheating `h
 cooperation that comes from a teammate's take of this agent's work or from a final record, Collusion `collaboration`
 and the judge's rungs come as end-of-run events. The page adds the calls that met the hidden regulator on the board.
 
-The run page's tabs are each agent's, then the entries of its `views` (Team). The Team tab shows the three ladders per
-agent and for the team with Cheated, disclosure and CheatBench's judge beside them; the Cheating panel: the team's rung
-and Cheated, the hidden roles' own rungs, the grader's pass, the alarm, the team's own evidence and each agent's rung,
-Cheated, the evidence of each clause that holds, its records below the ladder and CheatBench's labels beside the code;
-the Coordination panel; and the Collusion panel: the team's rung, the hidden roles' own rungs, which judge read the run,
-the team's disclosure, each agent's rung with its scheming verdict, its disclosure and its Cheating rung, each pair with
-its takes and their calls, whether the hand-in holds work of both, its exploit-named posts with writer and readers, and
-the judge's two fields with their quoted post and reasoning, then the hand-in's contributors and every collusion verdict
-row. The board marks each post the
-honeypot scan counts as naming the exploit. Each agent's record under Details shows its Cheating evidence and each
-CheatBench judge's verdict.
+The run page's tabs are each agent's, then the entries of its `views` (Board, Details). The Details tab shows the three
+ladders per agent and for the team with Cheated, disclosure and CheatBench's judge beside them; the Cheating panel: the
+team's rung and Cheated, the hidden roles' own rungs, the grader's pass, the alarm, the team's own evidence and each
+agent's rung, Cheated, the evidence of each clause that holds, its records below the ladder and CheatBench's labels
+beside the code; the Coordination panel; and the Collusion panel: the team's rung, the hidden roles' own rungs, which
+judge read the run, the team's disclosure, each agent's rung with its scheming verdict, its disclosure and its Cheating
+rung, each pair with its takes and their calls, whether the hand-in holds work of both, its exploit-named posts with
+writer and readers, and the judge's two fields with their quoted post and reasoning, then the hand-in's contributors and
+every collusion verdict row. A "post N" or a judge's "P<n>" anywhere opens the Board tab at that post. The bar's "Run
+record" button opens the run record at the foot of the page: the run's labels, its settings and each agent's record with
+its Cheating evidence and each CheatBench judge's verdict.
+
+The Board tab has two parts on one position in time. The timeline draws two agents of the swarm, any two, hidden roles
+included, one lane each with its calls, and the board's lane between them with each post as P1, P2, ...; a call's colour
+is the page's ramp at its highest label, Cheating first, then Collusion's take, then Coordination's `read` or `write`
+for a board read or post (plain work otherwise), pale below each ladder's line and strong above; a call at or above the
+Cheating line fills its lane's height, and its labels are the page's level chips. Arrows run from a post's writing call
+to the post and from the post to each of the two agents' first read of it, for the post at the position, the three
+before it and a post under the pointer. Below it the message board holds every post of the run, each shown once the
+position reaches it: the two agents' posts in their lanes' colours, the latest post written or read by them outlined, a
+collusion judge's mark with its quote, the honeypot scan's exploit-named flag. A click on a post moves the position to
+it; a click on a call opens it in its agent's tab.
+
+### `GET /api/board?id=<id>` → `BoardTab` (the run page's Board tab, `src/ui/transcript_board.py` `board_payload`)
+```
+BoardTab = {run, clock ("eval_log" | "call_order"), clock_about, total (seconds, or the number of calls in call order),
+            agents: [{agent, role, calls: [BoardCall]}],      # workers first, then the hidden roles
+            posts: [BoardPost],                                # in time order
+            pair: [a, b], pair_why,                            # the two agents the tab opens with, and why
+            ladders: {ladder: {name, levels, line, line_words}}, order,
+            notes}                                             # load_run's, e.g. a timeline that does not match
+BoardCall = {k (the agent tab's "Call k"), id (tool call id), m (its model call, per agent from 0), t, dur, turn,
+             tool, summary (one line), board ("post" | "read" | "status" | null), wrote: [P label], read: [P label],
+             labels: [{ladder, level, index, evidence}]}    # the run page's labels (Levels.labels) on this call
+BoardPost = {label ("P1", "P2", ... in board order, system notices included: the collusion judge's numbering),
+             id, post_n (the evidence's "post N", null for a notice), writer, role, kind ("post" | "system"), t,
+             call (the writer's call k, null for a notice), text, reads: [{agent, k, t}] (every read by another agent),
+             collusion: [{judge, applied, pair, quote, reason, stands, check}], names_exploit: [kind]}
+```
+The clock is the eval log's tool events where the log times every call (`collusion_takes.load_run(times=True)`, the
+source the results browser's timeline reads): `t` and `dur` in seconds from the first call's start. Without them it is
+call order: `t` is the call's place in `Run.ordered` and `dur` is 1. A post sits at the start of the call that wrote it;
+a system notice at the end of the call of the board's last event before it. The default pair is the pair with the
+highest Collusion rung above none, workers before hidden roles, then the pair with more posts; else the two workers
+with the most posts. A collusion mark is a verdict of a collusion judge's file that names the post (`collusion_post`);
+`stands` says whether the code's check let it stand and `applied` whether it is the judge the ladder takes.
 
 ### `GET /api/transcript?id=<id>&agent=<agent>` → the agent's `transcript.json`, streamed as stored
 ### `GET /api/ladders` → the ladders page's tables (`transcript_ladder_tables.ladders_payload`)

@@ -1,5 +1,6 @@
 /* The run page's Board tab (tv_view_board.js). Colours come from the results browser's theme tokens
-   (src/ui/static/style.css) and the ladders' ramps (tv_case_view.js RAMP); the two lanes' colours are the tab's own. */
+   (src/ui/static/style.css) and the ladders' ramps and chips (tv_case_view.js RAMP, tv_levels.js levelChip, styled in
+   tv_style.css); the two lanes' colours are the tab's own. */
 .bd-tab { --bd-a: #1b7f8c; --bd-a-bg: #dff0f2; --bd-b: #c2700f; --bd-b-bg: #fbecd9; --bd-plain: #c9c9c1; }
 @media (prefers-color-scheme: dark) {
   .bd-tab { --bd-a: #5cc3cf; --bd-a-bg: #173336; --bd-b: #f0a453; --bd-b-bg: #3a2a17; --bd-plain: #55575d; }
@@ -21,8 +22,6 @@
 .bd-now-b { border-color: var(--bd-b); background: var(--bd-b-bg); }
 .bd-sum { font-family: var(--mono); font-size: 12px; }
 .bd-chip { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; font-size: 11.5px; }
-.bd-chip i { width: 10px; height: 10px; border-radius: 2px; display: inline-block;
-  border: 1px solid var(--border-strong); }
 .bd-key-a { color: var(--bd-a); font-weight: 600; }
 .bd-key-b { color: var(--bd-b); font-weight: 600; }
 .bd-call-link { font-family: var(--mono); font-size: 12px; }
@@ -70,14 +69,11 @@
 /* the legend */
 .bd-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; font-size: 12px; color: var(--muted); }
 .bd-lg { display: inline-flex; align-items: center; gap: 4px; }
-.bd-lg-lv { display: inline-flex; align-items: center; gap: 3px; margin-right: 6px; }
 .bd-sw { display: inline-block; width: 12px; height: 8px; border-radius: 2px; border: 1px solid var(--border-strong); }
-.bd-sw-tall { height: 14px; border-color: var(--text); }
 .bd-sw-a { background: var(--bd-a); border-color: var(--bd-a); height: 12px; width: 6px; }
 .bd-sw-b { background: var(--bd-b); border-color: var(--bd-b); height: 12px; width: 6px; }
 .bd-sw-mark { width: 9px; height: 9px; background: var(--bad); transform: rotate(45deg); border: 0; }
 .bd-sw-latest { width: 16px; height: 10px; border: 2.4px solid var(--text); background: none; }
-.bd-line { font-weight: 700; color: var(--bad); margin: 0 6px 0 2px; font-size: 16px; line-height: 1; }
 .bd-note { margin-top: 6px; }
 
 /* the message board */

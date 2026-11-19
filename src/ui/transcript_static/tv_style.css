@@ -33,9 +33,7 @@ table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--ba
 .judge-block { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin: 8px 0; background: var(--panel); }
 .jb-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 4px; }
 .judge-block h4 { margin: 10px 0 4px; }
-.board-msg.bm-system { background: var(--notice-bg); border-style: dashed; border-color: var(--notice); }
-.board-msg.bm-regulator { border-left: 4px solid var(--role-regulator); }
-.board-msg.flash, .toolcall.flash, .card.flash { animation: flash 1.2s ease-out; }
+.toolcall.flash, .card.flash { animation: flash 1.2s ease-out; }
 .agent-card.role-regulator { border-left: 4px solid var(--role-regulator); }
 .agent-h { margin: 0; }
 .role-tag { display: inline-flex; align-items: center; gap: 2px; }
@@ -171,7 +169,7 @@ table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--ba
 .cs-full-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; border: 1px solid rgba(127,127,127,.4); }
 .case .cs-ladders-row { line-height: 1.55; }
 .case .cs-mile { font-size: 10px; }
-/* The three ladders: the runs table's hidden-role columns, the Team tab's panels, the Ladders page's level tables;
+/* The three ladders: the runs table's hidden-role columns, the Details tab's panels, the Ladders page's level tables;
    the CheatBench judge's cells. */
 .lv-hidden-row { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; margin: 2px 0; }
 .coord-summary { display: grid; gap: 4px; margin: 4px 0 10px; }

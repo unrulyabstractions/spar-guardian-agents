@@ -8,13 +8,17 @@
  * step number in step mode); the tab writes them back into the page's hash as they change, so a link or a screenshot
  * opens at the same place. The timeline is one SVG, drawn again only when the pair, the mode or the width changes;
  * a move of the position updates the cursor, the shade over what is still to come, the outlined current calls, the
- * header and the board's shown posts, and nothing else. Every string goes in through h() and svgEl() text nodes.
- * It returns {moveTo(position), showPost(n), state}: showPost moves to the post the evidence cites as "post n". */
+ * arrows shown, the header and the board's shown posts, and nothing else. A post's arrows show for the post at the
+ * position and the RECENT posts before it, and for a post under the pointer; every other post keeps its box alone.
+ * The ladders' colours and chips are the page's own (tv_case_view.js RAMP, tv_levels.js levelChip and lineMark), each
+ * ladder parted at its line. Every string goes in through h() and svgEl() text nodes.
+ * It returns {moveTo(position), showPost(label), state}: showPost moves to post P<n> (the board's own numbering). */
 import { appendAll, enc, fmtSecs, h, plural } from '/static/app/dom.js';
 import { badge, longText, muted } from '/static/app/components.js';
 import { COUNT_STEPS, TIME_STEPS, fmtTick, svgEl, ticksFor, tip } from '/static/app/charts.js';
 import { RAMP } from './tv_case_view.js';
 import { ROLE_LABEL } from './tv_labels.js';
+import { levelChip, lineMark } from './tv_levels.js';
 
 const GUTTER = 150;
 const PAD_R = 16;
@@ -23,23 +27,25 @@ const BOARD_H = 104;
 const TOP = 8;
 const POST_H = 15;
 const POST_GAP = 3;
+const RECENT = 3;             // the posts before the one at the position that keep their arrows
 const PLAY_SECONDS = 90;      // a whole run plays in this long on the time clock
 const STEP_MS = 220;          // one step at a time in step mode
 const PLAIN = 'var(--bd-plain)';
 const SIDES = ['a', 'b'];
+const BOARD_LEVEL = { read: 'read', post: 'write' };   // a board call's own Coordination level, labelled or not
 
-// A call's colour on the three ladders: a Cheating label first, then a take (Collusion), then a board call
-// (Coordination's medium, the first level of its strong family), else plain work. A Cheating label at attempted or
-// above (the Cheating line) fills the lane's whole height.
-function callStyle(c, line, board) {
+// A call's colour is the viewer's ramp at its highest label (RAMP, pale below each ladder's line and strong above):
+// a Cheating label first, then a take (Collusion), then the Coordination level of a board read or post, else plain
+// work. A Cheating label at or above the Cheating line fills the lane's whole height. ramp: {cheatLine, board: {read,
+// post} -> the Coordination level's index}.
+function callStyle(c, ramp) {
   const top = ladder => c.labels.filter(l => l.ladder === ladder).reduce((m, l) => Math.max(m, l.index), 0);
   const cheat = top('cheating');
-  if (cheat) return { fill: RAMP.cheating[cheat], strong: cheat >= line, kind: 'cheating' };
+  if (cheat) return { fill: RAMP.cheating[cheat], strong: cheat >= ramp.cheatLine, kind: 'cheating' };
   const coll = top('collusion');
   if (coll) return { fill: RAMP.collusion[coll], strong: false, kind: 'collusion' };
-  if (c.board === 'post' || c.board === 'read' || top('coordination')) {
-    return { fill: board, strong: false, kind: 'board' };
-  }
+  const coord = top('coordination') || ramp.board[c.board] || 0;
+  if (coord) return { fill: RAMP.coordination[coord], strong: false, kind: 'board' };
   return { fill: PLAIN, strong: false, kind: 'plain' };
 }
 
@@ -66,9 +72,10 @@ document.addEventListener('keydown', ev => {
 export function renderBoard(el, d, opts) {
   const byAgent = new Map(d.agents.map(a => [a.agent, a]));
   const timed = d.clock === 'eval_log';
-  const cheatLine = Math.max(1, d.ladders.cheating ? d.ladders.cheating.levels.indexOf('attempted') : 3);
-  const medium = d.ladders.coordination ? d.ladders.coordination.levels.indexOf('medium') : 4;
-  const boardFill = RAMP.coordination[Math.max(1, medium)];
+  const cheat = d.ladders.cheating;
+  const coord = d.ladders.coordination;
+  const ramp = { cheatLine: cheat.levels.indexOf(cheat.line),
+    board: Object.fromEntries(Object.entries(BOARD_LEVEL).map(([k, lv]) => [k, coord.levels.indexOf(lv)])) };
   const q = opts.q || new URLSearchParams();
   const pick = (v, fallback) => (byAgent.has(v) ? v : fallback);
   const state = {
@@ -144,6 +151,8 @@ export function renderBoard(el, d, opts) {
       marks,
       longText(p.text, { lines: 8, chars: 1600, cls: 'bd-text' }));
     li.addEventListener('click', e => { if (!e.target.closest('a, button')) { pause(); moveTo(keyOf(p)); } });
+    li.addEventListener('pointerenter', () => hover(i));
+    li.addEventListener('pointerleave', () => hover(-1));
     boardList.appendChild(li);
     return { p, li };
   });
@@ -152,6 +161,8 @@ export function renderBoard(el, d, opts) {
   let L = null;
   let shown = 0;
   let latest = -1;
+  let hovered = -1;
+  let lit = new Set();
   let current = {};
   let width = 0;
   const keyOf = x => (state.mode === 'time' ? x.t : x.u);
@@ -250,7 +261,7 @@ export function renderBoard(el, d, opts) {
     for (const side of SIDES) {
       const ag = byAgent.get(state[side]);
       for (const c of ag.calls) {
-        const st = callStyle(c, cheatLine, boardFill);
+        const st = callStyle(c, ramp);
         const tall = st.strong ? LANE_H - 4 : st.kind === 'plain' ? 14 : 24;
         callsG.appendChild(svgEl('rect', { class: ['bd-call', st.strong && 'bd-strong'],
           x: left(c), y: laneY[side] + (LANE_H - tall) / 2, width: W(c), height: tall, fill: st.fill,
@@ -261,8 +272,8 @@ export function renderBoard(el, d, opts) {
     }
     svg.appendChild(callsG);
 
-    // posts on the board lane, packed into rows so none hides another; then the arrows from each writing call and to
-    // each of the two agents' first read
+    // posts on the board lane, packed into rows so none hides another; then each post's arrows, from its writing call
+    // and to each of the two agents' first read, in a group of its own that showArrows() shows or hides
     const postsG = svgEl('g', { class: 'bd-board-posts' });
     const arrowsG = svgEl('g', { class: 'bd-arrows' });
     const rows = Math.floor((BOARD_H - 8) / (POST_H + POST_GAP));
@@ -287,7 +298,7 @@ export function renderBoard(el, d, opts) {
     const callOf = { a: new Map(byAgent.get(state.a).calls.map(c => [c.k, c])),
       b: new Map(byAgent.get(state.b).calls.map(c => [c.k, c])) };
     const laneEdge = s => (s === 'a' ? yA + LANE_H : yB);
-    const arrow = (s, cls, x1, y1, x2, y2) => arrowsG.appendChild(svgEl('line', {
+    const arrow = (into, s, cls, x1, y1, x2, y2) => into.appendChild(svgEl('line', {
       class: ['bd-arrow', cls, `bd-arrow-${s}`], x1, y1, x2, y2, 'marker-end': `url(#bd-arrow-${s}-${uid})` }));
     d.posts.forEach((p, i) => {
       const { from, r } = packed.at[i];
@@ -300,16 +311,17 @@ export function renderBoard(el, d, opts) {
         p.collusion.length ? svgEl('path', { class: 'bd-mark-glyph',
           d: `M${from + boxW},${y + POST_H / 2 - 6} l6,6 l-6,6 l-6,-6 z` }) : null);
       postsG.appendChild(g);
-      const box = { from, y, w: boxW, g };
-      postBox.set(i, box);
+      const arrows = svgEl('g', { visibility: 'hidden' });
+      arrowsG.appendChild(arrows);
+      postBox.set(i, { from, y, w: boxW, g, arrows });
       const cx = from + boxW / 2;
       const edge = s => (s === 'a' ? y : y + POST_H);
       const writing = side && callOf[side].get(p.call);
-      if (writing) arrow(side, null, left(writing) + W(writing) / 2, laneEdge(side), cx, edge(side));
+      if (writing) arrow(arrows, side, null, left(writing) + W(writing) / 2, laneEdge(side), cx, edge(side));
       for (const s of state.a === state.b ? ['a'] : SIDES) {
         const first = p.writer !== state[s] && p.reads.find(x => x.agent === state[s]);
         const reading = first && callOf[s].get(first.k);
-        if (reading) arrow(s, 'bd-read', cx, edge(s), left(reading) + W(reading) / 2, laneEdge(s));
+        if (reading) arrow(arrows, s, 'bd-read', cx, edge(s), left(reading) + W(reading) / 2, laneEdge(s));
       }
     });
     svg.appendChild(arrowsG);
@@ -327,6 +339,7 @@ export function renderBoard(el, d, opts) {
     svg.append(shade, postsG, cursor, outline.a, outline.b, latestBox);
     svg.addEventListener('pointermove', ev => {
       const t = ev.target.closest('[data-k], [data-i]');
+      hover(t && t.hasAttribute('data-i') ? Number(t.getAttribute('data-i')) : -1);
       if (!t) { tip.hide(); return; }
       if (t.hasAttribute('data-k')) {
         const side = t.getAttribute('data-side');
@@ -341,7 +354,7 @@ export function renderBoard(el, d, opts) {
           ...p.collusion.map(m => `judge ${m.judge}: collusion, "${m.quote.slice(0, 160)}"`), 'click to move here']);
       }
     });
-    svg.addEventListener('pointerleave', () => tip.hide());
+    svg.addEventListener('pointerleave', () => { tip.hide(); hover(-1); });
     svg.addEventListener('click', ev => {
       const t = ev.target.closest('[data-k], [data-i]');
       if (!t) return;
@@ -372,6 +385,8 @@ export function renderBoard(el, d, opts) {
     slider.step = state.mode === 'time' ? String(span / 2000) : '1';
     shown = 0;
     latest = -1;
+    hovered = -1;
+    lit = new Set();   // the new SVG's arrows start hidden
     current = {};      // undefined, so the first move writes both header lines
     for (const { li } of items) li.hidden = true;   // the new SVG's post boxes start faded (bd-ahead)
     boardHead.replaceChildren(h('h3', null, 'The message board'),
@@ -419,6 +434,7 @@ export function renderBoard(el, d, opts) {
     while (shown < k) reveal(L.order[shown++], true);
     while (shown > k) reveal(L.order[--shown], false);
     empty.hidden = shown > 0;
+    showArrows();
     const e = lastAtOrBefore(L.eventKeys, P);
     const now = e >= 0 ? L.events[e].i : -1;
     if (now !== latest) {
@@ -441,12 +457,25 @@ export function renderBoard(el, d, opts) {
     remember();
   }
 
+  // The arrows shown: the post at the position, the RECENT posts before it, and the post under the pointer.
+  function showArrows() {
+    const want = new Set(L.order.slice(Math.max(0, shown - 1 - RECENT), shown));
+    if (hovered >= 0) want.add(hovered);
+    for (const i of lit) if (!want.has(i)) L.postBox.get(i).arrows.setAttribute('visibility', 'hidden');
+    for (const i of want) if (!lit.has(i)) L.postBox.get(i).arrows.setAttribute('visibility', 'visible');
+    lit = want;
+  }
+  function hover(i) {
+    if (i === hovered || !L) return;
+    hovered = i;
+    showArrows();
+  }
+
   function nowLine(side, c) {
     const who = h('b', { class: `bd-key-${side}` }, state[side]);
     if (!c) return [who, muted(' has made no call yet', 'small')];
     const chip = l => h('span', { class: 'bd-chip', title: l.evidence || '' },
-      h('i', { style: `background:${RAMP[l.ladder][l.index]}` }), `${d.ladders[l.ladder].name} `,
-      h('b', null, l.level));
+      `${d.ladders[l.ladder].name} `, levelChip(l.ladder, d.ladders[l.ladder], l.level, false));
     return [who, ' ', callLink(state[side], c.k), muted(` ${c.tool}`, 'small'), ' ',
       c.summary !== c.tool ? h('span', { class: 'bd-sum' }, c.summary) : null, ...c.labels.map(chip)];
   }
@@ -523,25 +552,21 @@ export function renderBoard(el, d, opts) {
   shownTab = new WeakRef(el);
 
   // ---- legend
-  const sw = (fill, cls, tall) => h('i', { class: ['bd-sw', cls, tall && 'bd-sw-tall'],
-    style: fill ? `background:${fill}` : null });
-  const lineMark = h('span', { class: 'bd-line',
-    title: 'the Cheating line: attempted and above fill the lane\'s height' }, '|');
-  const cheat = d.ladders.cheating;
+  const sw = (fill, cls) => h('i', { class: ['bd-sw', cls], style: fill ? `background:${fill}` : null });
   const legend = h('div', { class: 'bd-legend' },
     h('span', { class: 'bd-lg' }, sw(null, 'bd-sw-a'), sw(null, 'bd-sw-b'), 'the two agents\' lanes and their posts'),
     h('span', { class: 'bd-lg' }, sw(PLAIN), 'ordinary work'),
-    h('span', { class: 'bd-lg' }, sw(boardFill), 'board read or post (Coordination)'),
-    h('span', { class: 'bd-lg' }, sw(RAMP.collusion[1]), 'took a teammate\'s work (Collusion)'),
-    cheat ? h('span', { class: 'bd-lg' }, 'Cheating label: ', cheat.levels.slice(1).map((lv, j) => {
-      const i = j + 1;
-      return [i === cheatLine ? lineMark : null,
-        h('span', { class: 'bd-lg-lv' }, sw(RAMP.cheating[i], null, i >= cheatLine), lv)];
-    })) : null,
+    h('span', { class: 'bd-lg' }, 'board read or post: ',
+      Object.values(BOARD_LEVEL).map(lv => [levelChip('coordination', coord, lv, false), ' '])),
+    h('span', { class: 'bd-lg' }, 'took a teammate\'s work: ',
+      levelChip('collusion', d.ladders.collusion, d.ladders.collusion.levels[1], false)),
+    h('span', { class: 'bd-lg', title: `${cheat.line_words}: a call at the line or above fills its lane's height` },
+      'Cheating label: ', cheat.levels.slice(1).map(lv => [lv === cheat.line ? lineMark(cheat) : null,
+        levelChip('cheating', cheat, lv, false)])),
     h('span', { class: 'bd-lg' }, h('i', { class: 'bd-sw bd-sw-mark' }), 'a judge marks the post as collusion'),
     h('span', { class: 'bd-lg' }, h('i', { class: 'bd-sw bd-sw-latest' }), 'latest post written or read by the two'),
-    h('span', { class: 'bd-lg' },
-      '→ from the writing call to its post, and from a post to each agent\'s first read of it'));
+    h('span', { class: 'bd-lg' }, `→ from the writing call to its post, and from a post to each agent's first read `
+      + `of it: for the post at the position, the ${RECENT} before it and the post under the pointer`));
   const notes = (d.notes || []).length ? ` ${d.notes.join(' ')}` : '';
 
   const header = h('div', { class: 'bd-head' },
@@ -564,9 +589,9 @@ export function renderBoard(el, d, opts) {
     resizeTimer = setTimeout(() => build(), 120);
   }).observe(svgHost);
   build();
-  // showPost(n): the post the evidence cites as "post n" (post_n), the position moved to it and its entry flashed
-  function showPost(n) {
-    const i = d.posts.findIndex(p => p.post_n === n);
+  // showPost(label): post P<n> of the board, the position moved to it and its entry flashed
+  function showPost(label) {
+    const i = d.posts.findIndex(p => p.label === label);
     if (i < 0) return null;
     pause();
     moveTo(keyOf(d.posts[i]));

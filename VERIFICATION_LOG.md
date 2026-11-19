@@ -1726,3 +1726,11 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **Viewed by me.** The viewer agent's screenshots of the runs page (2,007 valid runs, the new filters, Cheated, CheatBench judge and Disclosure columns) and the Ladders page (three ladders, each with its line drawn). The Board tab's two screenshots on its own test page; the tab is not yet hooked into the run page.
 - **The paper's headline claims changed with the line** (untold teams 3/3, 0/3, 1/5, 0/4 cheat; protein design regulators can show no effect; an enforcing Haiku regulator on SWE 0/3). Put to the user, with the option of reporting both lines. The sentences are rewritten to the strict line.
 - **UNVERIFIED by me.** The paper's pages after this change (the paper agent viewed them; I viewed none). The run pages' judged panels. The judges' verdicts against the transcripts. Docker smoke suites. Open questions put to the user: a regulator that quoted the planted sequences to stop a teammate reads attempted; three protein design workers who posted rejected sequences read attempted; a push of a file holding a design counts as built, not sent.
+
+## 2026-11-19: the run page's Board tab
+
+- **Asked by the user.** "the team tab should rather be details. Move the message board into new tab 'board' that has slider ... select two agents ... the board of messages gets filled ... posts from both selected agents highlighted."
+- **What landed.** `src/ui/transcript_board.py` (the tab's data), `tv_view_board.js`, `tv_board.css`, the route `/api/board`; the run page's tabs are each agent, Board, Details; the bar's old Details button reads Run record. Arrows are drawn for the post at the position, the three before it and a hovered post.
+- **Run by me.** The whole unit suite passed; ruff clean.
+- **Viewed by me.** Two screenshots from the real viewer on a test port: the Board tab of flipt_minimal_cheat_dsflash_fixed3 at mid-run (two lanes, the board lane, the filling message board, the post judged collusion with its quote) and its Details tab (three ladders per agent, Cheated, CheatBench judge, the judge's labels beside the code's).
+- **UNVERIFIED by me.** Play, stepping, the arrow keys, clicking a post or a call (the agent drove them; I did not). The light theme. A run with four agents beyond one screenshot the agent took.

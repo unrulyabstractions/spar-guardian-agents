@@ -5,7 +5,9 @@
  *
  *   #/                                every run, with filters (tv_view_index.js)
  *   #/run/<collection>/<run key>      one run: three ladders, evidence, judges, board, transcripts (tv_view_run.js)
- *       ?agent=<id>&call=<k>          opens that agent's transcript at tool call k; ?tab=team opens the Team tab
+ *       ?agent=<id>&call=<k>          opens that agent's transcript at tool call k
+ *       ?tab=board&a=&b=&mode=&pos=   the Board tab: agents a and b, time | step, the position (tv_view_board.js)
+ *       ?tab=details                  the Details tab: the three ladders' panels, the judges, the colour legend
  *   #/ladders?task=<task name>        the ladders and the level by task tables (tv_view_ladders.js)
  */
 import { h } from '/static/app/dom.js';

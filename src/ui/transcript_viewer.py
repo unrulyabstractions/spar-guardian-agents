@@ -24,7 +24,8 @@ stored.
 
 Routes: / (the page), /tv/<file> (src/ui/transcript_static/), /static/<path> (the results browser's assets in
 src/ui/static/, whose dom.js, charts.js, components.js and style.css the page reuses), /api/index, /api/run?id=,
-/api/transcript?id=&agent=, /api/ladders. src/ui/API.md describes them.
+/api/board?id= (the run page's Board tab, src/ui/transcript_board.py), /api/transcript?id=&agent=, /api/ladders.
+src/ui/API.md describes them.
 """
 from __future__ import annotations
 
@@ -50,7 +51,7 @@ from src.judging import collusion_judge, verdict_files
 from src.measures import collusion, coordination, judge_labels
 from src.measures.run_directory import RunDir, episode_agent, is_worker, roles_of, run_name
 from src.measures.run_listing import Listed, list_collection
-from src.ui import transcript_ladder_tables, transcript_levels
+from src.ui import transcript_board, transcript_ladder_tables, transcript_levels
 from src.utils.json_files import read_json, read_jsonl
 
 HERE = Path(__file__).resolve().parent
@@ -582,7 +583,16 @@ def run_detail(row: dict, measured: dict) -> dict:
                                  for judge, rows in sorted((measured["judges"].get(COLLUSION) or {}).items())}}
 
 
+def board_detail(row: dict, measured: dict) -> dict:
+    """The run page's Board tab (transcript_board.board_payload) from the run's files and its cached measures."""
+    rf = RunFiles.read(Path(row["dir"]))
+    boards = rf.boards()
+    return transcript_board.board_payload(rf.path, rf.levels(measured, boards), measured["judges"], boards)
+
+
 # ---------------------------------------------------------------------------------------------------------- server
+RUN_ROUTES = {"/api/run": run_detail, "/api/board": board_detail}
+"""The routes that answer for one run of the index (?id=), each from the run's row and its cached measures."""
 TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
          ".css": "text/css; charset=utf-8", ".json": "application/json", ".svg": "image/svg+xml"}
 
@@ -640,11 +650,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self.static(BROWSER_STATIC, url.path[len("/static/"):])
             if url.path == "/api/index":
                 return self.send_bytes(self.viewer.index_bytes, "application/json")
-            if url.path == "/api/run":
+            if url.path in RUN_ROUTES:
                 row = self.viewer.rows.get(q.get("id", ""))
                 if row is None:
                     return self.fail(HTTPStatus.NOT_FOUND, f"no run {q.get('id')!r} in the index")
-                return self.send_json(run_detail(row, self.viewer.measured[row["id"]]))
+                return self.send_json(RUN_ROUTES[url.path](row, self.viewer.measured[row["id"]]))
             if url.path == "/api/ladders":
                 return self.send_json(self.viewer.ladders)
             if url.path == "/api/transcript":

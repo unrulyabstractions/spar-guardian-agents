@@ -107,7 +107,9 @@ def test_the_page_names_no_old_ladder():
            "ladder_judge", "ladder.jsonl", "judge.jsonl", "exposed", "tried", "shipped", "tampered", "presentation",
            "r.floor", "rung_code", "signals", "STATUS", "row.status", "r.status ", "some agent", "judge_attack",
            "heat-strong", "heat-light", "worktime", "r.author"]
-    for path in STATIC.glob("tv_*"):
+    files = sorted(STATIC.glob("tv_*"))
+    assert {"tv_view_board.js", "tv_board.css"} <= {path.name for path in files}
+    for path in files:
         text = path.read_text()
         assert not [w for w in old if w in text], path.name
 
@@ -556,6 +558,22 @@ def test_each_ladder_draws_its_line_between_its_two_sides():
     assert tl.LADDERS["collusion"]["line"] == tl.LADDERS["collusion"]["judge_levels"][0]
     assert all(lad["line"] in lad["levels"][1:] and lad["line_words"] for lad in tl.LADDERS.values())
     assert "lad.line" in (STATIC / "tv_levels.js").read_text()
+    # the Board tab draws levels with the page's chip and line mark, and finds each line from the ladders
+    board = (STATIC / "tv_view_board.js").read_text()
+    assert "import { levelChip, lineMark } from './tv_levels.js';" in board
+    assert "cheat.levels.indexOf(cheat.line)" in board and "lv === cheat.line ? lineMark(cheat)" in board
+    assert "indexOf('" not in board and "'attempted'" not in board and "'medium'" not in board
+
+
+def test_the_run_page_has_a_board_tab_and_a_details_tab_and_serves_the_board():
+    """Tabs: each agent, Board, Details; the old Team tab and its board card are gone; the bar's button that opens
+    the run record is named apart from the Details tab; the page links every stylesheet of its own."""
+    run = (STATIC / "tv_view_run.js").read_text()
+    assert "['board', { label: 'Board', draw: boardView }], ['details', { label: 'Details', draw: detailsView }]" in run
+    assert "'Team'" not in run and "boardCard" not in run and "'Run record'" in run and "}, 'Details'))" not in run
+    page = (STATIC / "tv_index.html").read_text()
+    assert all(f'href="/tv/{path.name}"' in page for path in STATIC.glob("tv_*.css"))
+    assert tv.RUN_ROUTES == {"/api/run": tv.run_detail, "/api/board": tv.board_detail}
 
 
 # --------------------------------------------------------------------------------------------- the index's rows

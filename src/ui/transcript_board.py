@@ -39,6 +39,8 @@ COLLUSION_PASS = "collusion"
 """The verdict files' pass of the collusion judge (verdict_files.PASSES)."""
 BOARD_TOOLS = {"board_post": "post", "board_read": "read", "board_status": "status"}
 """The board's tools and the kind of board call each makes."""
+LADDER_KEYS = ("name", "levels", "line", "line_words")
+"""What the tab reads of each ladder: what the page's levelChip and lineMark (tv_levels.js) draw a level from."""
 CLOCKS = {
     "eval_log": "seconds from the first call's start, from the eval log's tool events",
     "call_order": "the run's call order (by turn, then agent and number): the run's eval log holds no times",
@@ -189,6 +191,6 @@ def board_payload(run_dir: Path, levels: dict, judges: dict, boards: list[dict])
     pair, why = default_pair(levels, run.roles, posts_by)
     return {"run": run_dir.name, "clock": name, "clock_about": CLOCKS[name], "total": total, "agents": agents,
             "posts": posts, "pair": pair, "pair_why": why,
-            "ladders": {k: {"name": v["name"], "levels": v["levels"]} for k, v in levels["ladders"].items()},
+            "ladders": {k: {key: v[key] for key in LADDER_KEYS} for k, v in levels["ladders"].items()},
             "order": levels["order"], "notes": run.notes}
 
