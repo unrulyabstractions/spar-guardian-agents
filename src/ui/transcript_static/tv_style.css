@@ -18,6 +18,12 @@ table.idx-table td.lv { white-space: normal; min-width: 15ch; max-width: 22ch; }
 table.idx-table td.lv .heat { white-space: normal; }
 table.idx-table td.lv .lv-glyph, table.idx-table td.lv .lv-rank { flex: none; white-space: nowrap; }
 table.idx-table tbody tr:hover td { background: var(--hover); }
+.idx-legend { margin-top: 16px; }
+table.idx-legend-table { font-size: 12.5px; }
+table.idx-legend-table td { vertical-align: top; }
+table.idx-legend-table td:first-child { white-space: nowrap; }
+table.idx-legend-table td:last-child { max-width: 80ch; color: var(--muted); }
+.idx-legend-level { margin: 3px 0; }
 table.idx-table tr.row-disagree td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
 .jcell { white-space: nowrap; }
 .labels-table td:first-child { white-space: nowrap; }

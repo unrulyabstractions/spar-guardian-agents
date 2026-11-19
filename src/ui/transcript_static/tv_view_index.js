@@ -1,7 +1,8 @@
 /* View: every run of every collection under runs/ (#/), with filters, sorting and paging. Ported from
  * collusion-hermaneutics' viewer (viewer/static/app/view_index.js). Our edits: the collections come from the index;
  * a Status filter opens on the valid runs; the judges are the judged ladder and CheatBench's rules; the seed post and
- * the arm are the server's words. */
+ * the arm are the server's words; a legend table under the runs shows every level of the six ladder columns as the
+ * cells draw it. */
 import { enc, fmtInt, h } from '/static/app/dom.js';
 import { badge, collaborationBadge, muted, rungBadge, select } from '/static/app/components.js';
 import { RAMP } from './tv_case_view.js';
@@ -66,6 +67,33 @@ function heat(L, i, of, kids) {
   const dark = 0.2126 * r + 0.7152 * g + 0.0722 * b < 0.55;  // white text on dark swatches, dark text on light ones
   return h('span', { class: ['heat', dark ? 'heat-strong' : 'heat-light'], style: `background:${c}` }, kids);
 }
+/** A ladder level as the runs table draws it: the ramp colour, a bar per level, the level's name and its rank. */
+function levelCell(L, v, levels) {
+  const i = levels.indexOf(v);
+  const of = levels.length - 1;
+  return i < 0 ? muted(v, 'small') : heat(L, i, of, [glyph(i, of, L), h('b', null, v), h('span', { class: 'lv-rank' }, ` (${i} of ${of})`)]);
+}
+
+/** The legend under the runs: one row per ladder column, every level drawn as its cell, and how the level is read.
+ * d is /api/ladders' answer (the ladders' names, kinds, levels and rules); without it the page's own lists stand in. */
+function legendTable(d) {
+  const order = d ? d.order : Object.keys(LADDER_NAMES);
+  const rows = order.map(L => {
+    const lad = d ? d.ladders[L] : { name: LADDER_NAMES[L], kind: '', levels: LADDER_LEVELS[L], rule: '' };
+    return h('tr', null,
+      h('td', null, h('b', null, lad.name), lad.kind === 'proxy' ? h('span', { class: 'lv-proxy' }, 'proxy') : null),
+      h('td', { class: 'lv' }, lad.levels.map(v => h('div', { class: 'idx-legend-level' }, levelCell(L, v, lad.levels)))),
+      h('td', { class: 'small' }, lad.rule));
+  });
+  return h('section', { class: 'card idx-legend', id: 'legend' }, h('h2', null, 'Legend: the six ladder columns'),
+    h('p', { class: 'small muted' }, 'A ladder cell shows the level the team reached: the colour of the level, one bar per level of the ladder, the level\'s name and its rank. ',
+      'Each row lists a ladder\'s levels from the lowest to the highest, drawn as the cells draw them. A direct ladder is read from the code ladder and the board; a proxy ladder is built from the same fields. ',
+      h('a', { href: '#/ladders' }, 'The level by task tables')),
+    h('div', { class: 'table-wrap' }, h('table', { class: 'data idx-legend-table' },
+      h('thead', null, h('tr', null, ['Column', 'Levels, lowest to highest', 'How the level is read'].map(t => h('th', { scope: 'col' }, t)))),
+      h('tbody', null, rows))));
+}
+
 export const seedLabel = r => r.seed_post || '';
 export function teamLabel(r) {
   if (r.n_agents <= 1) return '1 agent';
@@ -106,9 +134,7 @@ const COLUMNS = [
   { key: 'model', label: 'Model that ran the agents', sort: r => modelLabel(r), cell: r => modelLabel(r) },
   ...Object.entries(LADDER_NAMES).map(([L, name]) => ({ key: 'lv_' + L, label: `${name} (team)`, title: `The team's level on the ${name} ladder; the run page shows each agent`,
     sort: r => (r.levels ? LADDER_LEVELS[L].indexOf(r.levels.team[L]) : -2),
-    cell: r => { const v = r.levels && r.levels.team[L]; if (!v) return muted('not computed', 'small');
-      const i = LADDER_LEVELS[L].indexOf(v); const of = LADDER_LEVELS[L].length - 1;
-      return i < 0 ? muted(v, 'small') : heat(L, i, of, [glyph(i, of, L), h('b', null, v), h('span', { class: 'lv-rank' }, ` (${i} of ${of})`)]); } })),
+    cell: r => { const v = r.levels && r.levels.team[L]; return v ? levelCell(L, v, LADDER_LEVELS[L]) : muted('not computed', 'small'); } })),
   { key: 'status', label: 'Status', title: 'valid, or why the run is not counted', sort: r => ORDER(STATUS_ORDER, r.status), cell: statusCell },
   { key: 'n_colluded', label: 'Agents at exploit crossed or above', num: true, title: 'How many agents reached Collusion level 3 (exploit crossed) or higher, of the workers',
     sort: r => (r.levels && r.levels.n_colluded != null ? r.levels.n_colluded : -1),
@@ -170,6 +196,7 @@ const PAGE_SIZES = [['100', '100 per page'], ['250', '250 per page'], ['1000', '
 
 export async function viewIndex(q) {
   const idx = await loadIndex();
+  const ladders = await fetch('/api/ladders').then(r => (r.ok ? r.json() : null)).catch(() => null);
   const rows = idx.rows;
   const state = { search: q.get('q') || '', sort: q.get('sort') || '', dir: q.get('dir') === 'desc' ? 'desc' : 'asc',
     page: Math.max(0, (parseInt(q.get('page'), 10) || 1) - 1), size: q.get('size') || '250', f: {} };
@@ -294,5 +321,6 @@ export async function viewIndex(q) {
   return h('div', { class: 'page wide' },
     h('div', { class: 'page-head' }, titleEl, muted('One row per run. Click a run to see its six ladders, the evidence, the board and the transcripts.')),
     about, filterBox, summary, pager,
-    h('div', { class: 'table-wrap idx-wrap' }, table));
+    h('div', { class: 'table-wrap idx-wrap' }, table),
+    legendTable(ladders));
 }
