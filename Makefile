@@ -62,6 +62,12 @@ test-tools:  ## offline unit tests of the analysis tools, in their own environme
 lint:  ## ruff over src, tests, examples, elicitation, scripts and tools (ruff.toml: 120 columns, sorted imports)
 	uvx ruff check src tests examples elicitation scripts tools
 
+.PHONY: setup
+setup:  ## the environment: .venv (Python 3.11) with requirements.txt's pinned packages and ORBIT from its submodule
+	uv venv --python 3.11 .venv
+	uv pip install --python .venv/bin/python --no-deps -r requirements.txt
+	uv pip install --python .venv/bin/python --no-deps -e submodules/orbit
+
 tools-setup:  ## the analysis environment: tools/.venv (Python 3.12) and MAST's taxonomy texts
 	uv sync --project tools --python 3.12
 	$(TOOLS) -m tools.failures.fetch_mast_taxonomy
@@ -125,3 +131,13 @@ paper-check:  ## exit 1 when paper/ disagrees with the code or with tmp/; writes
 
 paper: figures tables results-tables paper-figures paper-sources  ## regenerate every source, then build paper/build/main.pdf with latexmk
 	cd paper && latexmk -pdf -interaction=nonstopmode -halt-on-error -outdir=build main.tex
+
+.PHONY: hf-upload
+hf-upload:  ## upload STUDY's runs and eval logs to the Hugging Face dataset spar-swarm (RUN="<run> ..." for some, DRY_RUN=1 to list)
+	@test -n "$(STUDY)" || { echo "make hf-upload: give STUDY=<study>, e.g. make hf-upload STUDY=study_exploration_1"; exit 2; }
+	$(PY) scripts/upload_runs_to_hf.py "$(STUDY)" $(if $(findstring command line,$(origin RUN)),--run "$(RUN)") $(if $(DRY_RUN),--dry-run)
+
+.PHONY: hf-pull
+hf-pull:  ## download STUDY's runs and eval logs from the dataset spar-swarm into runs/ and logs/ (RUN="<run> ..." for some, DRY_RUN=1 to list, FORCE=1 to replace differing files, DEST=<dir> for another root)
+	@test -n "$(STUDY)" || { echo "make hf-pull: give STUDY=<study>, e.g. make hf-pull STUDY=study_exploration_1 RUN=<run>"; exit 2; }
+	$(PY) scripts/pull_runs_from_hf.py "$(STUDY)" $(if $(findstring command line,$(origin RUN)),--run "$(RUN)") $(if $(DRY_RUN),--dry-run) $(if $(FORCE),--force) $(if $(DEST),--dest "$(DEST)")

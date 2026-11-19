@@ -310,6 +310,12 @@ A reader takes the recorded rungs and writes nothing: `cheating_ladder.cheating_
 
 `make figures` writes the paper's seven design figures under `tmp/figures/method/design/` and one setup figure per task under `tmp/figures/method/setup/`; `make tables` writes the Cheating ladder by task under `tmp/tables/method/`, from the rows `src/measures/ladder_by_domain.py` holds, and `make results-tables` writes the results tables, the Cheating, Coordination and Collusion ladders by task among them, under `tmp/tables/results/`. All are PNG and gitignored, and none calls a model.
 
+## Sharing runs
+
+The team shares runs through the Hugging Face dataset `unrulyabstractions/spar-swarm`, since `runs/` and `logs/` are not in git. Give a token once with `hf auth login`, or `export HF_TOKEN=<token>`. Then `make hf-upload STUDY=<study> RUN=<run>` uploads one run with its eval logs to `<study>/runs/` and `<study>/logs/`; without `RUN` it uploads the whole study, and `DRY_RUN=1` only lists. `scripts/upload_runs_to_hf.py --help` gives the rest.
+
+[DATA_AND_VIEWER.md](DATA_AND_VIEWER.md) shows how to set up, pull runs with `make hf-pull`, upload them and use the transcript viewer.
+
 ## Analysis tools
 
 `tools/` holds the analysis layer the midterm report names, in its own environment (`make tools-setup`: Python 3.12, Inspect Scout, Transect, Docent, NetworkX, NDlib, EoN, and MAST's taxonomy texts; Hawk runs through `uvx`). Each tool reads a run directory and writes under `runs/<study>/<name>/tools/<tool>/`, and the results browser shows those outputs on the run page. `make scout RUN=<run>` runs the cheating scanners, `make graph` the read graph with its Gephi export, `make transect` the step-by-step report per agent, `make contagion` the contagion models, `make failures` MAST and Who&When, `make docent` the Docent ingest (a key in `~/.docent/docent.env`; `--dry-run` without), and `make hawk` the Hawk scan config. `make analyse` runs scout, graph, transect, contagion, failures and hawk in that order and leaves out docent; scout, transect and failures call the judge's model, so it costs money. `tools/README.md` gives each tool's command, outputs and caveats.
