@@ -37,7 +37,7 @@ summary.json:
                     totals: {input_tokens, output_tokens, total_tokens}},
             usage is what this invocation billed: zero for calls served from the Inspect cache,
      merged_sample: {sample, accepted, errors: [str], report},
-     agents: {<agent>: {role, cheated, telemetry, timing, turns, scan_errors: [str],
+     agents: {<agent>: {role, judge_cheated, telemetry, timing, turns, scan_errors: [str],
                         agreement: {exploit_use_turns: [[start_turn, end_turn]], judge_cheated,
                                     agrees: bool | null (null when structural or unjudged)}}}}
 """

@@ -107,6 +107,7 @@ results-tables:  ## the paper's results tables from the runs on disk, as PNG und
 	$(PY) -m scripts.paper.coordination_table
 	$(PY) -m scripts.paper.collusion_table
 	$(PY) -m scripts.paper.judge_tables
+	$(PY) -m scripts.paper.label_tables
 
 paper-figures:  ## the paper's Figures 1 to 5 from Lucy's summaries, the run index and the code, as PNG under tmp/figures/paper/ (gitignored)
 	$(PY) -m scripts.paper.fig_scripted_teammates

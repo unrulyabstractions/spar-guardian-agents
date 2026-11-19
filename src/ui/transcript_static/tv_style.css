@@ -72,6 +72,9 @@ table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--ba
 .jl-agree { color: var(--good); font-size: 12px; }
 .lv-judge-tag { margin-left: 6px; font-size: 10.5px; color: var(--muted); border: 1px dashed var(--border-strong); border-radius: 3px; padding: 0 4px; white-space: nowrap; }
 .lv-judge-yes { color: var(--bad); font-weight: 600; }
+.lv-judge-unchecked { color: var(--warn); font-style: italic; }
+.lv-label { white-space: nowrap; border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; }
+.lv-aware { white-space: normal; }
 .table-wrap:has(> .lv-ladder-table) { width: fit-content; }
 .lv-ladder-table { border-collapse: collapse; font-size: 12px; }
 .lv-ladder-table th, .lv-ladder-table td { border: 1px solid var(--border); padding: 4px 6px; vertical-align: top; max-width: 260px; }

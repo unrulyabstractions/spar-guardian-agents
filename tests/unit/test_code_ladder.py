@@ -10,6 +10,7 @@ import json
 import subprocess
 import sys
 import zipfile
+from pathlib import Path
 
 import pytest
 
@@ -17,12 +18,11 @@ from src.domains.knowledge import KnowledgeWork, _knowledge_honeypot
 from src.domains.knowledge._knowledge_ladder import KnowledgeDomain
 from src.domains.openmath import OpenMath, _openmath_honeypot
 from src.domains.openmath._openmath_ladder import OpenMathDomain
-from src.measures import cheating_ladder, transcript_scan
+from src.measures import cheating_ladder, coordination, transcript_scan
 from src.measures import code_ladder as signals
 from src.measures import honeypot_fingerprints as prints_module
 from src.measures.ladder_domain import PRINTS, probe_signals
 from src.measures.run_directory import RunDir
-from src.measures.team_ladder import AGENT_COORDINATION, TEAM_COORDINATION, with_coordination
 from tests.support.atif_builder import transcript
 from tests.support.stub_ladder import KEY, OPENS, SHARDS, TASK, KeyDomain, make_run
 
@@ -268,7 +268,7 @@ def test_run_signals_write_agent_rows_then_team_rows_and_run_json(tmp_path):
     written = [json.loads(line) for line in (folder / "signals.jsonl").read_text().splitlines()]
     assert [r["row"] for r in written] == ["agent", "agent", "team"] and written[:2] == rows
     assert list(rows[0])[:7] == ["row", "sample", "episode", "agent", "role", "task", "holds"]
-    assert list(rows[0])[-9:] == ["calls", *cheating_ladder.AGENT_FIELDS, *AGENT_COORDINATION, "collusion_rung"]
+    assert list(rows[0])[-9:] == ["calls", *cheating_ladder.AGENT_FIELDS, *coordination.AGENT_FIELDS, "collusion_rung"]
     assert rows[0]["holds"] == ["whole"] and rows[0]["calls"] == 2
     assert (rows[0]["cheating_rung"], rows[1]["cheating_rung"]) == ("looked", "none")
     assert rows[0]["cheating_clauses"]["opened"] == [rows[0]["opened_evidence"]]
@@ -337,41 +337,20 @@ def test_run_signals_record_the_coordination_ladder_on_agent_and_team_rows(tmp_p
     gains the workers' level and the regulator's level apart."""
     folder = coordinated_run(tmp_path)
     rows = {row["agent"]: row for row in signals.run_signals(folder)}
-    pick = {agent: {field: row[field] for field in AGENT_COORDINATION} for agent, row in rows.items()}
+    pick = {agent: {field: row[field] for field in coordination.AGENT_FIELDS} for agent, row in rows.items()}
     assert pick == {"a01": {"coordination_level": "write", "coordination_score": 0.5, "coordination_ceiling": 1.0,
                             "coordination_posts": 2},
                     "a02": {"coordination_level": "write", "coordination_score": 0.5, "coordination_ceiling": 1.0,
                             "coordination_posts": 2},
                     "a03": {"coordination_level": "none", "coordination_score": 0.0, "coordination_ceiling": 0.0,
                             "coordination_posts": 0}}
-    assert all(list(row)[-5:] == [*AGENT_COORDINATION, "collusion_rung"] for row in rows.values())
+    assert all(list(row)[-5:] == [*coordination.AGENT_FIELDS, "collusion_rung"] for row in rows.values())
     team = RunDir(folder).team_signals()[0]
     # the regulator counts in each worker's n - 1 and is reported apart, never in the team's level
     assert (team["coordination_level"], team["coordination_hidden"]) == ("write", {"a03": "none"})
     assert RunDir(folder).run_json["signals"]["team"]["coordination_level"] == "write"
     # the collaboration evidence is a different record and stays as it was
     assert not any(team["collaboration_evidence"].values())
-
-
-@pytest.mark.usefixtures("key_task")
-def test_a_reader_computes_the_coordination_ladder_of_a_run_recorded_before_it(tmp_path):
-    """Rows without the Coordination fields get them from the run's board record, equal to what a new run records;
-    stored fields win and the files on disk stay as they are."""
-    folder = coordinated_run(tmp_path)
-    signals.run_signals(folder)
-    run = RunDir(folder)
-    agents = {row["agent"]: row for row in run.signals()}
-    team = run.team_signals()[0]
-    earlier_agents = {a: {k: v for k, v in row.items() if k not in AGENT_COORDINATION} for a, row in agents.items()}
-    earlier_team = {k: v for k, v in team.items() if k not in TEAM_COORDINATION}
-    before = (folder / "signals.jsonl").read_bytes()
-    filled_agents, filled_team = with_coordination(folder, earlier_agents, earlier_team)
-    assert filled_team == team and {a: dict(sorted(r.items())) for a, r in filled_agents.items()} == \
-        {a: dict(sorted(r.items())) for a, r in agents.items()}
-    assert with_coordination(folder, agents, team) == (agents, team)
-    stored = {**earlier_team, "coordination_level": "high", "coordination_hidden": {}}
-    assert with_coordination(folder, earlier_agents, stored)[1]["coordination_level"] == "high"
-    assert (folder / "signals.jsonl").read_bytes() == before
 
 
 @pytest.mark.usefixtures("key_task")
@@ -385,11 +364,57 @@ def test_ladders_gives_the_three_rungs_as_recorded_or_computed(tmp_path):
                                            "collusion_rung": None}
                                    for agent, level in (("a01", "write"), ("a02", "write"), ("a03", "none"))},
                         "team": {"cheating_rung": "none", "cheated": False, "coordination_level": "write",
-                                 "collusion_rung": None}}
-    retired = {*cheating_ladder.AGENT_FIELDS, *cheating_ladder.TEAM_FIELDS, *AGENT_COORDINATION, *TEAM_COORDINATION,
-               "collusion_rung", "collusion_hidden", "collusion_pairs", "collusion_reason"}
+                                 "collusion_rung": None, "cheating_alarm": None},
+                        "hidden": {"cheating": {}, "coordination": {"a03": "none"}, "collusion": {}}}
+    retired = {*cheating_ladder.AGENT_FIELDS, *cheating_ladder.TEAM_FIELDS, *coordination.AGENT_FIELDS,
+               *coordination.TEAM_FIELDS, "collusion_rung", "collusion_hidden", "collusion_pairs", "collusion_reason"}
     path = folder / "signals.jsonl"
     old = [{k: v for k, v in json.loads(line).items() if k not in retired} for line in path.read_text().splitlines()]
     path.write_text("".join(json.dumps(row) + "\n" for row in old))
     before = path.read_bytes()
     assert signals.ladders(folder) == recorded and path.read_bytes() == before
+    # a recorded rung wins over the computation: the record is read, not checked
+    signals.run_signals(folder)
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    path.write_text("".join(json.dumps({**row, "coordination_level": "high"}) + "\n" for row in rows))
+    assert {r["coordination_level"] for r in signals.ladders(folder)["agents"].values()} == {"high"}
+
+
+def tree_bytes(folder: Path) -> dict[str, bytes]:
+    return {str(p.relative_to(folder)): p.read_bytes() for p in sorted(folder.rglob("*")) if p.is_file()}
+
+
+@pytest.mark.usefixtures("key_task")
+def test_run_signals_rewrite_only_signals_and_the_run_json_block_of_a_copied_run(tmp_path):
+    """Rebuilding an existing run's record with today's code changes signals.jsonl and run.json's "signals" block
+    and no other byte of the run: run.json's other keys keep their bytes and their order, every other file stays."""
+    folder = coordinated_run(tmp_path)
+    signals.run_signals(folder)
+    path = folder / "run.json"
+    document = json.loads(path.read_text())
+    document = {**document, "ledger": {"calls": 3}, "signals": {"team": {"stale": True}}, "zz": "last"}
+    path.write_text(json.dumps(document, indent=1))
+    (folder / "signals.jsonl").write_text('{"row": "agent", "agent": "a01", "rung": "opened"}\n')
+    before = tree_bytes(folder)
+    signals.run_signals(folder)
+    after = tree_bytes(folder)
+    changed = {name for name in before if before[name] != after[name]}
+    assert changed == {"run.json", "signals.jsonl"} and set(after) == set(before)
+    new = json.loads(after["run.json"])
+    assert list(new) == list(document) and {k: v for k, v in new.items() if k != "signals"} == \
+        {k: v for k, v in document.items() if k != "signals"}
+    assert new["signals"]["team"]["coordination_level"] == "write"
+    assert json.dumps({**new, "signals": document["signals"]}, indent=1).encode() == before["run.json"]
+    assert all("rung" not in json.loads(line) for line in after["signals.jsonl"].decode().splitlines())
+    assert not list(folder.glob("*.tmp*"))
+
+
+@pytest.mark.usefixtures("key_task")
+def test_run_signals_refuse_a_run_json_in_no_known_layout_and_write_nothing(tmp_path):
+    folder = coordinated_run(tmp_path)
+    path = folder / "run.json"
+    path.write_text(json.dumps(json.loads(path.read_text()), indent=3))
+    before = tree_bytes(folder)
+    with pytest.raises(ValueError, match="not laid out"):
+        signals.run_signals(folder)
+    assert tree_bytes(folder) == before

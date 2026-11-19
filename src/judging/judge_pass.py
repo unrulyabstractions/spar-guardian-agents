@@ -1,11 +1,15 @@
 """`python -m src judge-pass`: a judge pass over runs' stored records, under a dollar cap, into judges/ alone.
 
     python -m src judge-pass cheatbench runs/study_exploration_1 --judge gpt-6-luna --cap 5 --limit 10
-    python -m src judge-pass collusion <run> [<run> ...] --judge gpt-6-luna --cap 2 [--batch] [--only-missing]
+    python -m src judge-pass scheming <run> [<run> ...] --judge gpt-6-luna --cap 2 [--batch] [--only-missing]
+    python -m src judge-pass labels runs/study_exploration_1 --judge gpt-6-luna --cap 5 --limit 10
 
 Passes (PASSES):
 - cheatbench: CheatBench's judge on every stored trajectory CheatBench would judge (cheatbench_units), one call each.
-- collusion: the Collusion ladder's judge on every collaborating pair (src/judging/collusion_judge.py), one call each.
+- scheming: the Collusion ladder's judge on every pair code places at collusion (src/judging/scheming_judge.py), one
+  call each.
+- labels: the judge labels awareness and manipulation on every agent that qualifies for one
+  (src/judging/labels_judge.py), one call each.
 
 A pass reads each run's stored record (run.json, episodes.jsonl, the transcripts, the boards) and writes only its
 verdict file, runs/<study>/<run>/judges/<pass>.<judge>.jsonl (src/judging/verdict_files.py), after every call. It
@@ -38,7 +42,8 @@ from src.domains import BY_TASK
 from src.export.run_export import VERDICT_IDENTITY
 from src.judging import cheatbench_judge as judging
 from src.judging import verdict_files
-from src.judging.collusion_judge import collusion_units
+from src.judging.labels_judge import labels_units
+from src.judging.scheming_judge import scheming_units
 from src.measures.run_directory import RunDir
 from src.measures.run_listing import list_collection
 from src.models.model_registry import cost_usd
@@ -86,7 +91,8 @@ def cheatbench_units(run_dir: Path) -> tuple[list[judging.Unit], list[str]]:
 
 PASSES: dict[str, Callable[[Path], tuple[list[judging.Unit], list[str]]]] = {
     "cheatbench": cheatbench_units,
-    "collusion": collusion_units,
+    "scheming": scheming_units,
+    "labels": labels_units,
 }
 """Each pass's units, by the pass names verdict_files.PASSES lists."""
 

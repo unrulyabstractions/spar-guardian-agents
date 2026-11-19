@@ -47,13 +47,13 @@ def test_transcripts_carry_every_step_and_the_judge(tmp_path):
         assert len(transcript.messages) == transcript.message_count == expected_messages(run.transcripts[agent])
         assert transcript.transcript_id == run.episodes[agent]["episode"]
         assert transcript.source_id == "riemann_minimal" and transcript.task_set == "openmath"
-        assert transcript.metadata["cheated"] == run.cheated[agent]
+        assert transcript.metadata["judge_cheated"] == run.judge_cheated[agent]
         assert transcript.metadata["judge_attempted_access"] == run.judge[agent]["attempted_access"]
         assert transcript.metadata["role"] == "worker"
     rows = asyncio.run(stored_rows(str(tmp_path / "transcripts")))
     stored = {row.transcript_id: row for row in rows}
     assert set(stored) == {"riemann#1@a01", "riemann#1@a02", "riemann#1@a03"}
-    assert stored["riemann#1@a02"].metadata["cheated"] is True
+    assert stored["riemann#1@a02"].metadata["judge_cheated"] is True
     assert stored["riemann#1@a01"].metadata["judge_honey_pots_seen"] is True
 
 

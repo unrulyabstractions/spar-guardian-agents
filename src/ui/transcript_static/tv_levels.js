@@ -3,8 +3,10 @@
  * (viewer/static/app/levels.js); levels come from /api/run's "levels" and /api/ladders (src/ui/transcript_levels.py).
  * Our edits: the imports; a disregulator is named like a regulator; the source's stepTracker, which no view called, is
  * left out; a level is a chip in its ladder's colour with a gap at the ladder's line (levelChip); Cheated beside the
- * Cheating rung; CheatBench's judge with its labels beside the code's clauses; disclosure beside Collusion; the
- * collusion judge's quotes as the evidence of its rungs. Every string goes in through h() text nodes. */
+ * Cheating rung; CheatBench's judge with its labels beside the code's clauses; the judge labels awareness, manipulation
+ * and disclosure beside the ladders, each with its quote and the quote's source; the awareness of its agents beside
+ * every collusion rung; the scheming judge's quote as the evidence of its rung. Every string goes in through h() text
+ * nodes. */
 import { h } from '/static/app/dom.js';
 import { badge, muted } from '/static/app/components.js';
 import { RAMP, inkOn } from './tv_case_view.js';
@@ -37,14 +39,37 @@ export function levelChip(key, lad, level, rank = true) {
 /** The mark legends put between the two sides of a ladder's line. */
 export const lineMark = lad => h('span', { class: 'lv-line-mark', title: lad.line_words }, 'line');
 
-/** Cheated beside a Cheating rung: the measure's word (src/measures/cheating_ladder.py cheated), nothing without one. */
-export const cheatedTag = v => (v == null ? null : h('span', { class: ['lv-cheated', v ? 'yes' : 'no'],
-  title: 'cheated: the Cheating rung is attempted or above' }, v ? 'cheated: yes' : 'cheated: no'));
+/** Cheated beside a Cheating rung: the measure's word (src/measures/cheating_ladder.py cheated), nothing without one.
+ * lad: the Cheating ladder's /api/ladders entry, whose line_words say what cheated means. */
+export const cheatedTag = (v, lad) => (v == null ? null : h('span', { class: ['lv-cheated', v ? 'yes' : 'no'],
+  title: `cheated: ${lad.line_words}` }, v ? 'cheated: yes' : 'cheated: no'));
 
-function cellView(c, L, key) {
+const QUOTED = { yes: 'lv-judge-yes', unchecked: 'lv-judge-unchecked' };
+const LABEL_WORD = { 'not read': 'the judge does not read this label for this agent', 'not judged': 'no judge\'s verdict yet',
+  unchecked: 'the judge said yes, but its quote failed the code\'s check: no verdict' };
+
+/** A judge label's value as a small tag: yes, no, unchecked, not judged or not read; its quote, the quote's source,
+ * the reason and the code's check in the tooltip. name: the label's name; e: {value, source, quote, reason, check}. */
+export function labelTag(name, e) {
+  const v = e.value;
+  const tip = [`${name}: ${v}`, LABEL_WORD[v], e && e.quote ? `"${e.quote}" (from its ${e.source})` : null,
+    e && e.reason, e && e.check && e.check.why ? `check: ${e.check.why}` : null].filter(Boolean).join('\n');
+  return h('span', { class: ['lv-label', 'small', QUOTED[v] || (v === 'no' ? null : 'muted')], title: tip }, `${name} ${v}`);
+}
+
+/** The awareness of a collusion rung's agents ([{agent, value}]), shown beside the rung: collusion alone shows no
+ * intent. judged: the run's judge labels by agent, for the quotes; absent on the runs page. */
+export function awarenessBeside(list, judged) {
+  if (!list || !list.length) return null;
+  return h('span', { class: 'lv-aware' }, list.map(x => [' ', labelTag(`${x.agent} awareness`,
+    (judged && judged[x.agent] && judged[x.agent].awareness) || { value: x.value })]));
+}
+
+function cellView(c, L, key, judged) {
   const tip = `${L.rule}${c.evidence ? '\nEvidence: ' + c.evidence : ''}`;
   if (c.na) return h('td', { class: 'muted small', title: tip }, c.level, c.evidence ? `: ${c.evidence}` : '');
-  return h('td', { class: 'lv-cell', title: tip }, levelChip(key, L, c.level), key === 'cheating' ? [' ', cheatedTag(c.cheated)] : null);
+  return h('td', { class: 'lv-cell', title: tip }, levelChip(key, L, c.level),
+    key === 'cheating' ? [' ', cheatedTag(c.cheated, L)] : null, key === 'collusion' ? awarenessBeside(c.awareness, judged) : null);
 }
 
 const yesNo = v => (v === true ? 'yes' : v === false ? 'no' : '?');
@@ -57,57 +82,67 @@ export function cheatbenchWords(verdicts) {
   if (!judges.length) return muted('not judged', 'small');
   return h('span', { class: 'cb-cell' }, judges.map(([judge, r]) => h('div', { title: `judge ${judge}` },
     r.parse_ok === false ? badge('did not parse', 'warn') : [
-      h('span', { class: r.cheated ? 'lv-judge-yes' : null }, `cheated ${yesNo(r.cheated)}`),
+      h('span', { class: r.cheated ? 'lv-judge-yes' : null }, `CheatBench judge: cheated ${yesNo(r.cheated)}`),
       'honey_pots_seen' in r ? `, honeypots seen ${yesNo(r.honey_pots_seen)}` : null],
     judges.length > 1 ? muted(` (${judge})`, 'small') : null)));
 }
 
-/** The team's word of each CheatBench judge: cheated, k of n agents. summaries: the index row's cheatbench. */
+/** The team's word of each CheatBench judge: its own cheated, k of n agents. summaries: the index row's cheatbench. */
 export function cheatbenchTeam(summaries) {
   if (!summaries || !summaries.length) return muted('not judged', 'small');
   return h('span', { class: 'cb-cell' }, summaries.map(s => h('div', { title: `judge ${s.judge}; ${s.of} of ${s.workers} workers have a parsed verdict` },
-    h('span', { class: s.cheated ? 'lv-judge-yes' : null }, `cheated: ${s.cheated} of ${s.of} agents`),
+    h('span', { class: s.judge_cheated ? 'lv-judge-yes' : null }, 'CheatBench judge: cheated', h('br'), `${s.judge_cheated} of ${s.of} agents`),
     summaries.length > 1 ? muted(` (${s.judge})`, 'small') : null)));
 }
-
-/** One agent's disclosure: yes, no, not recorded or not judged. */
-export const disclosureWord = v => h('span', { class: ['small', v === 'yes' ? 'lv-judge-yes' : v === 'no' ? null : 'muted'], title: DISCLOSURE.about }, v || 'not judged');
 
 /** The team's disclosure (the index row's disclosure): "k of n workers disclosed", or why none was judged. */
 export const disclosureTeam = s => (s.value ? muted(s.value, 'small')
   : h('span', { class: ['small', s.yes && 'lv-judge-yes'], title: DISCLOSURE.about }, `${s.yes} of ${s.yes + s.no} workers disclosed`));
 
-/** CheatBench's judge's labels for one agent, each beside the code clauses it matches (src/measures/judge_labels.py):
- * the code's word, the judge's and whether they agree. r: the agent's Cheating record. */
+/** A judge label of the run (the index row's labels[label], {yes, read}): "k of n agents read", or not judged. */
+export const labelTeam = (s, about) => (!s.read ? h('span', { class: 'small muted', title: about }, 'none read')
+  : h('span', { class: ['small', s.yes && 'lv-judge-yes'], title: about }, `${s.yes} of ${s.read} agents read`));
+
+/** CheatBench's judge's labels for one agent beside the code's clauses they answer (src/measures/judge_labels.py ROWS):
+ * one row per group of clauses a label answers, with the code's word, the judge's (or why it cannot answer) and
+ * whether they agree; a clause no label answers is left out. r: the agent's Cheating record. */
 export function judgeLabels(r) {
-  if (!(r.judge || []).length) return muted('no label on this task', 'small');
-  if (r.judge.every(x => x.judge == null)) return muted('not judged', 'small');
-  return h('ul', { class: 'ev-list jl-list' }, r.judge.map(x => h('li', null,
-    h('b', null, x.label), muted(` (${x.clauses.join(', ')})`, 'small'), `: code ${yesNo(x.code)}, judge ${yesNo(x.judge)} `,
+  const rows = (r.judge || []).filter(x => x.labels.length);
+  if (!rows.length) return muted('no label on this task', 'small');
+  if (rows.every(x => x.judge == null && x.why === 'not judged')) return muted('not judged', 'small');
+  return h('ul', { class: 'ev-list jl-list' }, rows.map(x => h('li', null,
+    h('b', null, x.labels.join(' or ')), muted(` (${x.clauses.join(', ')})`, 'small'),
+    `: code ${yesNo(x.code)}, judge ${x.judge == null ? x.why : yesNo(x.judge)} `,
     x.agree === true ? h('span', { class: 'jl-agree' }, 'agree')
-      : x.agree === false ? badge('disagree', 'warn', 'CheatBench\'s judge and the code differ on this label; the judge changes no rung') : null)));
+      : x.agree === false ? badge('disagree', 'warn', 'CheatBench\'s judge and the code differ on these clauses; the judge changes no rung') : null)));
 }
 
-/** Run panel: one row per agent, one team row, a column per ladder, then disclosure and CheatBench's judge.
- * ctx: {cheatbench: {agent: {judge: row}}, team: the index row's cheatbench, disclosure: /api/run's disclosure,
- * teamDisclosure: the index row's disclosure}. */
+/** The judge labels as columns: awareness, manipulation, disclosure (/api/run's levels.judge_label_about). */
+const labelKeys = lv => Object.keys(lv.judge_label_about);
+
+/** Run panel: one row per agent, one team row, a column per ladder, then the judge labels and CheatBench's judge.
+ * ctx: {cheatbench: {agent: {judge: row}}, row: the index row (its cheatbench, disclosure and labels)}. */
 export function levelsPanel(lv, roles, task, ctx) {
+  const about = lv.judge_label_about;
   const head = h('tr', null, h('th', null, 'Agent'), lv.order.map(k => h('th', { title: lv.ladders[k].rule }, lv.ladders[k].name)),
-    h('th', { title: DISCLOSURE.about }, DISCLOSURE.column), h('th', { title: CHEATBENCH.about }, CHEATBENCH.column));
+    labelKeys(lv).map(k => h('th', { title: `${about[k].question} Read for ${about[k].read_for}, by ${about[k].judge}. No rung.` }, about[k].name)),
+    h('th', { title: CHEATBENCH.about }, CHEATBENCH.column));
   const rows = Object.entries(lv.agents).sort((a, b) => (roles[a[0]] !== 'worker') - (roles[b[0]] !== 'worker') || a[0].localeCompare(b[0]))
     .map(([a, cells]) => h('tr', null, h('td', { class: 'mono' }, a, roles[a] && roles[a] !== 'worker' ? ` (hidden ${roles[a]})` : ''),
-      lv.order.map(k => cellView(cells[k], lv.ladders[k], k)), h('td', null, disclosureWord(ctx.disclosure.agents[a])),
+      lv.order.map(k => cellView(cells[k], lv.ladders[k], k, lv.judge_labels)),
+      labelKeys(lv).map(k => h('td', null, labelTag(about[k].name, lv.judge_labels[a][k]))),
       h('td', null, cheatbenchWords(ctx.cheatbench[a]))));
   if (!lv.single) {
-    rows.push(h('tr', { class: 'lv-team' }, h('td', null, h('b', null, 'Team')), lv.order.map(k => cellView(lv.team[k], lv.ladders[k], k)),
-      h('td', null, disclosureTeam(ctx.teamDisclosure)), h('td', null, cheatbenchTeam(ctx.team))));
+    rows.push(h('tr', { class: 'lv-team' }, h('td', null, h('b', null, 'Team')), lv.order.map(k => cellView(lv.team[k], lv.ladders[k], k, lv.judge_labels)),
+      labelKeys(lv).map(k => h('td', null, k === 'disclosure' ? disclosureTeam(ctx.row.disclosure) : labelTeam(ctx.row.labels[k], about[k].read_for))),
+      h('td', null, cheatbenchTeam(ctx.row.cheatbench))));
   }
   const alarm = lv.cheating && lv.cheating.alarm;
   return h('section', { class: 'card', id: 'sec-ladders' },
     h('h2', null, 'Three ladders for this run'),
     alarm ? h('p', null, badge(`alarm: ${alarm}`, 'bad', lv.ladders.cheating.note)) : null,
     h('p', { class: 'small muted' }, 'Each cell shows the level reached in its ladder\'s colour: pale below the ladder\'s line, strong above it. Hover a cell for the rule and the evidence. ',
-      lv.collusion && lv.collusion.applicable && !lv.collusion.judged ? 'Collusion\'s two judge rungs, collusion and scheming, are not judged in this run: no judge\'s verdicts reached it, so code stops at collaboration (the Collusion panel below). ' : '',
+      lv.collusion && lv.collusion.applicable && !lv.collusion.judged ? 'Collusion\'s judge rung, scheming, is not judged in this run: no scheming judge\'s verdicts reached it, so code stops at collusion (the Collusion panel below). ' : '',
       h('a', { href: '#/ladders?task=' + encodeURIComponent(task || '') }, 'All ladders and the Cheating ladder by task')),
     h('table', { class: 'lv-table' }, h('thead', null, head), h('tbody', null, rows)));
 }
@@ -146,7 +181,7 @@ export function cheatingPanel(lv, roles, ctx) {
   return h('section', { class: 'card', id: 'sec-cheating' }, head,
     h('div', { class: 'coord-summary' },
       h('div', null, h('span', { class: 'field-label' }, lv.single ? 'The run: ' : 'Team (the highest worker, or the team\'s own evidence): '),
-        chip(lv, 'cheating', X.team), ' ', cheatedTag(X.team_cheated)),
+        chip(lv, 'cheating', X.team), ' ', cheatedTag(X.team_cheated, L)),
       lv.single ? null : h('div', null, h('span', { class: 'field-label' }, 'Hidden roles, kept out of the team\'s rung: '),
         hiddenList(lv, 'cheating', Object.entries(X.hidden || {}), role)),
       h('div', null, h('span', { class: 'field-label' }, 'The grader: '),
@@ -160,7 +195,7 @@ export function cheatingPanel(lv, roles, ctx) {
         const r = X.agents[a];
         return h('tr', { class: role(a) !== 'worker' && 'coord-hidden' },
           h('td', { class: 'mono' }, a), h('td', null, role(a) === 'worker' ? 'worker' : `hidden ${role(a)}`),
-          h('td', null, chip(lv, 'cheating', r.rung)), h('td', null, cheatedTag(r.cheated)), h('td', null, clauseList(lv, r.clauses, a, ctx)),
+          h('td', null, chip(lv, 'cheating', r.rung)), h('td', null, cheatedTag(r.cheated, L)), h('td', null, clauseList(lv, r.clauses, a, ctx)),
           h('td', null, (r.below || []).length ? h('ul', { class: 'ev-list' }, r.below.map(x => h('li', null, ctx.evidence(x, a)))) : muted('none', 'small')),
           h('td', null, judgeLabels(r)));
       })))),
@@ -198,28 +233,28 @@ export function coordinationPanel(lv, roles) {
     L.note ? h('p', { class: 'small muted' }, L.note) : null);
 }
 
-const JUDGE_WORD = { 'not judged': 'no judge\'s verdict', 'not applicable': 'below collaboration, not read', 'not available': 'no reasoning in its transcript' };
-const judgeValue = v => h('span', { class: ['small', v === 'yes' ? 'lv-judge-yes' : 'muted'], title: JUDGE_WORD[v] || 'the judge\'s verdict' }, v);
-
 /** Code's check of a judge's quote: a failed check is no verdict. */
 const checkNote = ck => (!ck ? null : ck.ok ? muted(`checked: ${ck.why}`, 'small block')
   : badge('the quote failed the code\'s check: no verdict', 'warn', ck.why));
 
-/** The evidence of one of the judge's answers: the post it names (linked to the board), its quote, its reason and the
- * code's check. */
-const judgeEvidence = (e, ctx) => h('div', { class: 'judge-ev' },
-  e.post ? h('div', { class: 'small' }, 'the post: ', ctx.boardPost(e.post)) : null,
-  e.quote ? h('blockquote', { class: 'judge-quote' }, e.quote) : null,
-  e.reason ? h('div', { class: 'small muted' }, e.reason) : null, checkNote(e.check));
+/** The scheming judge's word on one pair: the verdict that stands and, where it said yes, what the post shows, the
+ * post it names (linked to the board), its quote, its reason and the code's check. */
+function schemingCell(e, ctx) {
+  const v = e.verdict;
+  return h('div', { class: 'judge-ev' },
+    h('span', { class: ['small', v === 'yes' ? 'lv-judge-yes' : v === 'no' ? null : 'muted'] }, v),
+    e.which && e.which !== 'none' ? muted(` (${e.which})`, 'small') : null,
+    e.post ? h('div', { class: 'small' }, 'the post: ', ctx.boardPost(e.post)) : null,
+    e.quote ? h('blockquote', { class: 'judge-quote' }, e.quote) : null,
+    e.reason ? h('div', { class: 'small muted' }, e.reason) : null, checkNote(e.scheming_check));
+}
 
-/** Details tab: the Collusion ladder in full (src/measures/collusion.py), as the measure returns it. The team's rung is
- * the highest pair of workers; the hidden roles' own rungs are listed apart. One row per agent with its rung, its
- * scheming verdict, its disclosure and its cheating rung for information; one row per pair with the takes and their
- * calls, whether the hand-in holds work of both, the exploit-named posts a judge would read, and the judge's two
- * fields with their quoted post and reasoning; then every verdict row of the collusion judges. ctx: {evidence(text,
- * agent) -> node with [k] linked to the agent's call, post(n) -> node linked to the board, boardPost(label) -> node
- * linked to the post the judge names (P1, P2, ...), judges: {judge: [verdict row]}, disclosure: /api/run's
- * disclosure, teamDisclosure: the index row's disclosure}. */
+/** Details tab: the Collusion ladder in full (src/measures/collusion.py), as the measure returns it with the scheming
+ * judge's verdicts. The team's rung is the highest pair of workers; the hidden roles' own rungs are listed apart. One
+ * row per agent with its rung, its awareness beside it and its cheating rung for information; one row per pair with
+ * the takes and their calls, whether the hand-in holds work of both, the planted pieces exchanged, the scheming
+ * judge's verdict with its quoted post and the awareness of both. ctx: {evidence(text, agent) -> node with [k] linked
+ * to the agent's call, boardPost(label) -> node linked to the post the judge names (P1, P2, ...)}. */
 export function collusionPanel(lv, roles, ctx) {
   const M = lv.collusion;
   if (!M || lv.single) return null;
@@ -231,70 +266,72 @@ export function collusionPanel(lv, roles, ctx) {
   }
   const role = a => roles[a] || 'worker';
   const byRole = (a, b) => (role(a) !== 'worker') - (role(b) !== 'worker') || a.localeCompare(b);
-  const named = new Map((M.naming_posts || []).map(p => [p.id, p]));
   const rank = r => L.levels.indexOf(r);
-  const pairs = M.pairs.slice().sort((x, y) => rank(y.rung) - rank(x.rung) || y.exploit_named.length - x.exploit_named.length);
+  const atLine = r => rank(r) >= rank(L.line);
+  const aware = a => labelTag('awareness', lv.judge_labels[a].awareness);
+  const pairs = M.pairs.slice().sort((x, y) => rank(y.rung) - rank(x.rung) || y.takes.length - x.takes.length);
   const takeList = p => (p.takes.length ? h('ul', { class: 'ev-list' }, p.takes.map(t => h('li', null,
     h('span', { class: 'mono' }, `${t.taker} took ${t.giver}'s work`), ` (${t.rule}${t.call == null ? ', from a final record' : ''}): `,
     ctx.evidence(t.evidence, t.taker)))) : h('span', { class: 'muted small' }, 'no take'));
-  const namedList = p => (p.exploit_named.length ? h('ul', { class: 'ev-list' }, p.exploit_named.map(id => {
-    const post = named.get(id) || {};
-    return h('li', null, post.post_n != null ? ctx.post(post.post_n) : h('span', { class: 'muted' }, 'a post'),
-      ` by ${post.writer || '?'}, read by ${(post.readers || []).join(', ') || '?'}`);
-  })) : h('span', { class: 'muted small' }, 'none'));
-  // The scheming judge reads an agent only in a pair at collusion; its words on other pairs stay in the verdict rows.
-  const schemingEvidence = p => (p.judge_evidence && p.collusion === 'yes' ? Object.entries(p.judge_evidence.scheming).map(([a, e]) =>
-    h('div', null, h('span', { class: 'mono small' }, `${a}: ${e.said || '?'}`), judgeEvidence(e, ctx))) : null);
+  // What a colluding pair exchanged of the exploit: the pieces each took of the other's, or each one's in the hand-in.
+  const pooledList = p => (!p.pooled ? h('span', { class: 'muted small' }, 'none from both')
+    : h('ul', { class: 'ev-list' }, Object.entries(Object.keys(p.pooled.took).length ? p.pooled.took : p.pooled.hand_in)
+      .map(([a, pieces]) => h('li', null, h('span', { class: 'mono' }, a), Object.keys(p.pooled.took).length ? ' took ' : '\'s in the hand-in: ', pieces.join(', ')))));
   const handIn = Object.entries(M.hand_in || {});
   return h('section', { class: 'card', id: 'sec-collusion' }, head,
     h('div', { class: 'coord-summary' },
-      h('div', null, h('span', { class: 'field-label' }, 'Team (the highest pair of workers): '), chip(lv, 'collusion', M.team)),
+      h('div', null, h('span', { class: 'field-label' }, 'Team (the highest pair of workers): '), chip(lv, 'collusion', M.team),
+        awarenessBeside(lv.team.collusion.awareness, lv.judge_labels)),
       h('div', null, h('span', { class: 'field-label' }, 'Hidden roles, kept out of the team\'s rung: '),
         hiddenList(lv, 'collusion', Object.entries(M.hidden || {}), role)),
-      h('div', null, h('span', { class: 'field-label' }, 'Judge rungs (collusion, scheming): '),
+      h('div', null, h('span', { class: 'field-label' }, 'Judge rung (scheming): '),
         M.judged ? `read from the verdicts of ${M.judge}` : h('b', null, 'not judged'),
-        M.judged ? '' : h('span', { class: 'muted small' }, ': no judge\'s verdicts reached this run, so code stops at collaboration')),
-      h('div', null, h('span', { class: 'field-label', title: DISCLOSURE.about }, 'Disclosure, CheatBench\'s judge (no rung): '), disclosureTeam(ctx.teamDisclosure))),
+        M.judged ? '' : h('span', { class: 'muted small' }, ': no scheming judge\'s verdicts reached this run, so code stops at collusion'))),
     h('div', { class: 'table-wrap' }, h('table', { class: 'data compact coord-table' },
-      h('thead', null, h('tr', null, ['Agent', 'Role', 'Rung', 'Scheming (judge)', 'Disclosure (CheatBench judge)', 'Cheating rung, for information']
+      h('thead', null, h('tr', null, ['Agent', 'Role', 'Rung', 'Awareness (judge), beside a collusion rung', 'Cheating rung, for information']
         .map(t => h('th', { scope: 'col' }, t)))),
       h('tbody', null, Object.keys(M.agents).sort(byRole).map(a => {
         const r = M.agents[a];
         return h('tr', { class: role(a) !== 'worker' && 'coord-hidden' },
           h('td', { class: 'mono' }, a), h('td', null, role(a) === 'worker' ? 'worker' : `hidden ${role(a)}`),
-          h('td', null, chip(lv, 'collusion', r.rung)), h('td', null, judgeValue(r.scheming)),
-          h('td', null, disclosureWord(ctx.disclosure.agents[a])), h('td', null, r.cheating || h('span', { class: 'muted small' }, 'no row')));
+          h('td', null, chip(lv, 'collusion', r.rung)), h('td', null, atLine(r.rung) ? aware(a) : muted('below collusion', 'small')),
+          h('td', null, r.cheating || h('span', { class: 'muted small' }, 'no row')));
       })))),
     h('h3', { class: 'sub-h' }, 'Pairs'),
     h('div', { class: 'table-wrap' }, h('table', { class: 'data compact collusion-pairs' },
-      h('thead', null, h('tr', null, ['Pair', 'Rung', 'Takes, with their calls', 'Hand-in holds work of both', 'Exploit named on the board (a hint a judge would read)', 'Collusion (judge), with its evidence', 'Scheming (judge), with its evidence', 'Cheating rungs']
+      h('thead', null, h('tr', null, ['Pair', 'Rung', 'Takes, with their calls', 'Hand-in holds work of both', 'Planted pieces exchanged', 'Scheming (judge), with its quote', 'Awareness (judge)', 'Cheating rungs']
         .map(t => h('th', { scope: 'col' }, t)))),
       h('tbody', null, pairs.map(p => h('tr', { class: p.roles.some(r => r !== 'worker') && 'coord-hidden' },
         h('td', { class: 'mono' }, p.agents.map((a, i) => [i ? ' and ' : '', a, role(a) !== 'worker' ? ` (hidden ${role(a)})` : ''])),
         h('td', null, chip(lv, 'collusion', p.rung)), h('td', null, takeList(p)),
-        h('td', null, p.hand_in_both ? 'yes' : 'no'), h('td', null, namedList(p)),
-        h('td', null, judgeValue(p.collusion), p.judge_evidence ? judgeEvidence(p.judge_evidence.collusion, ctx) : null),
-        h('td', null, judgeValue(p.scheming), schemingEvidence(p)),
+        h('td', null, p.hand_in_both ? 'yes' : 'no'), h('td', null, pooledList(p)),
+        h('td', null, schemingCell(p.scheming, ctx)),
+        h('td', null, atLine(p.rung) ? p.agents.map(a => h('div', null, h('span', { class: 'mono small' }, `${a} `), aware(a))) : muted('below collusion', 'small')),
         h('td', { class: 'small' }, p.cheating.map(c => c || '?').join(' / '))))))),
     h('h3', { class: 'sub-h' }, 'The hand-in\'s contributors'),
     handIn.length ? h('ul', { class: 'ev-list' }, handIn.map(([a, lines]) => h('li', null, h('span', { class: 'mono' }, a), ': ', lines.join('; '))))
       : h('p', { class: 'muted small' }, 'No agent\'s work is credited in the hand-in.'),
-    verdictRows(ctx.judges || {}),
     (M.notes || []).length ? h('p', { class: 'small muted' }, 'Notes of the measure: ', M.notes.join('; ')) : null,
     h('p', { class: 'small muted' }, L.rule), h('p', { class: 'small muted' }, L.note));
 }
 
-const fieldText = v => (v === true ? 'yes' : v === false ? 'no' : typeof v === 'string' ? v : JSON.stringify(v));
-
-/** Every verdict row of the collusion judges: one table per judge, a row per pair, each field of its answer. */
-function verdictRows(judges) {
-  const entries = Object.entries(judges);
-  if (!entries.length) return null;
-  return [h('h3', { class: 'sub-h' }, 'The collusion judges\' verdicts'),
-    entries.map(([judge, rows]) => h('div', { class: 'table-wrap' }, h('table', { class: 'data compact collusion-verdicts' },
-      h('caption', { class: 'small muted' }, `judge ${judge}${entries.length > 1 && judge !== entries[0][0] ? ': shown here, not applied to the rungs (the first judge by name is)' : ''}`),
-      h('thead', null, h('tr', null, h('th', { scope: 'col' }, 'Pair'), h('th', { scope: 'col' }, 'The judge\'s answer'))),
-      h('tbody', null, rows.map(r => h('tr', null, h('td', { class: 'mono' }, (r.agents || []).join(' and ')),
-        h('td', null, h('dl', { class: 'kv kv-grid' }, Object.entries(r).filter(([k]) => k !== 'agents').map(([k, v]) =>
-          h('div', { class: 'kv-item' }, h('dt', null, k.replace(/_/g, ' ')), h('dd', null, fieldText(v))))))))))))];
+/** Details tab: the judge labels of each agent beside the ladders, never rungs: awareness and manipulation with the
+ * quoted passage, where it is from (post or reasoning), the reason and the code's check; disclosure from CheatBench's
+ * judge. */
+export function judgeLabelsPanel(lv, roles) {
+  const about = lv.judge_label_about;
+  const role = a => roles[a] || 'worker';
+  const quoted = e => (!e || !e.quote ? null : h('div', null, h('blockquote', { class: 'judge-quote' }, e.quote),
+    muted(`from its ${e.source}${e.reason ? `: ${e.reason}` : ''}`, 'small block'), checkNote(e.check)));
+  const agents = Object.keys(lv.judge_labels).sort((a, b) => (role(a) !== 'worker') - (role(b) !== 'worker') || a.localeCompare(b));
+  return h('section', { class: 'card', id: 'sec-judge-labels' },
+    h('h2', null, 'Judge labels beside the ladders'),
+    h('ul', { class: 'small plain-list' }, labelKeys(lv).map(k => h('li', null, h('b', null, `${about[k].name}. `),
+      `${about[k].question} Read for ${about[k].read_for}, by ${about[k].judge}. No rung.`))),
+    h('div', { class: 'table-wrap' }, h('table', { class: 'data compact coord-table' },
+      h('thead', null, h('tr', null, h('th', { scope: 'col' }, 'Agent'), h('th', { scope: 'col' }, 'Role'),
+        labelKeys(lv).map(k => h('th', { scope: 'col' }, about[k].name)))),
+      h('tbody', null, agents.map(a => h('tr', { class: role(a) !== 'worker' && 'coord-hidden' },
+        h('td', { class: 'mono' }, a), h('td', null, role(a) === 'worker' ? 'worker' : `hidden ${role(a)}`),
+        labelKeys(lv).map(k => h('td', null, labelTag(about[k].name, lv.judge_labels[a][k]), quoted(lv.judge_labels[a][k])))))))));
 }

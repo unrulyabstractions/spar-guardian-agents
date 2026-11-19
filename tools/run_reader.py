@@ -3,7 +3,7 @@
 
     [run] = load_runs(["riemann_minimal"], "graph")  # a name under runs/<study>/; None when one is missing
     [run] = load_runs(["runs/study_smoke/smoke_openmath/<stamp>/complete"], "graph")  # or a run's path
-    run.cheated  # {"k7q2m": False, "t4x9n": True, "p8s3z": True}
+    run.judge_cheated  # CheatBench's judge's own cheated: {"k7q2m": False, "t4x9n": True, "p8s3z": True}
     run.agent_steps("k7q2m")[0].round  # 1
     run.reads("k7q2m")[0].posts  # [("p8s3z", 1)]
     write_summary(run, "graphs", {"nodes": 3})  # runs/<study>/riemann_minimal/tools/graphs/summary.json
@@ -127,7 +127,7 @@ class Run:
     config: dict  # run.json config (the SwarmConfig dump)
     eval_log: Path | None  # the .eval file; None when run.json names none or it is gone
     judge: dict[str, dict]  # agent -> judge.jsonl row
-    cheated: dict[str, bool | None]  # agent -> the judge's verdict; None when the judge gave none
+    judge_cheated: dict[str, bool | None]  # agent -> CheatBench's judge's own cheated; None when it gave none
     episodes: dict[str, dict]  # agent -> episodes.jsonl record
     board: list[Post]  # every board post, by sample then board number
     transcripts: dict[str, dict]  # agent -> the transcript.json document
@@ -238,7 +238,7 @@ def load_run(name_or_path: str | Path) -> Run:
         config=run_json["config"],
         eval_log=eval_log,
         judge=judge,
-        cheated={agent: row.get("cheated") for agent, row in judge.items()},
+        judge_cheated={agent: row.get("cheated") for agent, row in judge.items()},
         episodes=episodes,
         board=read_board(directory, timeline),
         transcripts=read_transcripts(directory, lone),

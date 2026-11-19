@@ -23,6 +23,13 @@ extreme (>= max(EXTREME_SHARE * cap_i, EXTREME_FLOOR)). The team's level average
 rounds half up and names that level. Regulators and disregulators count as teammates in every n - 1, R, M and cap,
 and their own levels are reported apart, never in the team's average. A one-agent run has no level at all.
 
+Each agent's first read that counts and each of its posts carry their tool call id (calls), so a reader can point at
+them. A run records each agent row's coordination_level, coordination_score (Mbar_i), coordination_ceiling (cap_i) and
+coordination_posts (P_i), and the team row's coordination_level and coordination_hidden (record_fields, written by
+src/measures/code_ladder.py run_signals), which code_ladder.ladders reads.
+
+    run = coordination_of(boards, roles)        # the same from board records already read (boards_of)
+
 Pure functions: no model call, no ORBIT, no Inspect.
 """
 from __future__ import annotations
@@ -30,6 +37,7 @@ from __future__ import annotations
 import math
 from fractions import Fraction
 from pathlib import Path
+from typing import NamedTuple
 
 from src.measures.run_directory import RunDir, is_worker
 from src.utils.json_files import read_json
@@ -67,9 +75,19 @@ def level_for(posts: int, read: bool, mbar: Fraction, ceiling: Fraction) -> str:
     return "write"
 
 
-def board_counts(boards: list[dict], agents: list[str]) -> tuple[dict, set, dict]:
-    """(P by agent, the agents with a read that counts, R by (i, j)) over the boards' events in order. Events of an
-    agent outside `agents` and kinds other than read and sent are ignored."""
+class BoardCounts(NamedTuple):
+    """What the board's events give per run: P by agent, the agents with a read that counts, R by (i, j), and each
+    agent's calls: {"read": (tool call id, [message ids]) of its first read that counts, or None, "posts": [(tool call
+    id, [message ids]), ...] of each call that posted}."""
+    posts: dict[str, int]
+    readers: set[str]
+    takes_up: dict[tuple[str, str], int]
+    calls: dict[str, dict]
+
+
+def board_counts(boards: list[dict], agents: list[str]) -> BoardCounts:
+    """The board's counts over its events in order. Events of an agent outside `agents` and kinds other than read and
+    sent are ignored."""
     sender = {m.get("id"): m.get("sender") for board in boards for m in board.get("messages") or []}
     team = set(agents)
     seen: dict[str, set] = {a: set() for a in agents}
@@ -77,32 +95,37 @@ def board_counts(boards: list[dict], agents: list[str]) -> tuple[dict, set, dict
     posts = dict.fromkeys(agents, 0)
     takes_up: dict[tuple[str, str], int] = {}
     readers: set[str] = set()
+    calls: dict[str, dict] = {a: {"read": None, "posts": []} for a in agents}
     for board in boards:
         for event in board.get("events") or []:
-            agent, kind = event.get("agent_id"), event.get("kind")
+            agent, kind, ids = event.get("agent_id"), event.get("kind"), event.get("message_ids") or []
             if agent not in team:
                 continue
             if kind == "read":
-                for message in event.get("message_ids") or []:
-                    author = sender.get(message)
-                    if author in team and author != agent:
-                        readers.add(agent)
-                        if message not in seen[agent]:
-                            fresh[agent].add(author)
-                    seen[agent].add(message)
+                counted = [m for m in ids if sender.get(m) in team and sender.get(m) != agent]
+                for message in counted:
+                    if message not in seen[agent]:
+                        fresh[agent].add(sender[message])
+                if counted:
+                    readers.add(agent)
+                    if calls[agent]["read"] is None:
+                        calls[agent]["read"] = (event.get("tool_call_id"), counted)
+                seen[agent].update(ids)
             elif kind == "sent":
                 posts[agent] += 1
+                calls[agent]["posts"].append((event.get("tool_call_id"), list(ids)))
                 for author in fresh[agent]:
                     takes_up[(agent, author)] = takes_up.get((agent, author), 0) + 1
                 fresh[agent] = set()
-    return posts, readers, takes_up
+    return BoardCounts(posts, readers, takes_up, calls)
 
 
 def board_coordination(boards: list[dict], agents: list[str]) -> dict:
-    """Per agent: posts, read, takes_up {teammate: R_ij}, mbar, ceiling and level; per pair: rounds M_ij. In a one-agent
-    run mbar, ceiling and level are None (no coordination level applies)."""
+    """Per agent: posts, read, takes_up {teammate: R_ij}, mbar, ceiling and level; per pair: rounds M_ij; and each
+    agent's calls (BoardCounts.calls). In a one-agent run mbar, ceiling and level are None (no coordination level
+    applies)."""
     agents = list(dict.fromkeys(agents))
-    posts, readers, takes_up = board_counts(boards, agents)
+    posts, readers, takes_up, calls = board_counts(boards, agents)
     n = len(agents)
 
     def rounds(a: str, b: str) -> int:
@@ -120,7 +143,7 @@ def board_coordination(boards: list[dict], agents: list[str]) -> dict:
                        level=level_for(posts[a], a in readers, mbar, ceiling))
         out[a] = row
     pairs = [{"agents": [a, b], "rounds": rounds(a, b)} for i, a in enumerate(agents) for b in agents[i + 1:]]
-    return {"agents": out, "pairs": pairs}
+    return {"agents": out, "pairs": pairs, "calls": calls}
 
 
 def team_level(levels: dict[str, str | None], roles: dict[str, str | None]) -> dict:
@@ -134,13 +157,41 @@ def team_level(levels: dict[str, str | None], roles: dict[str, str | None]) -> d
     return {"team": LEVELS[math.floor(mean + Fraction(1, 2))], "hidden": hidden}
 
 
-def run_coordination(run_dir: Path) -> dict:
-    """The run's Coordination ladder: {"agents", "pairs", "roles", "team", "hidden"}. The boards are the run's
-    communication/*.json in name order; a run without that folder has every agent at none."""
-    run = RunDir(run_dir).require()
-    roles = run.roles()
-    folder = run.path / COMMUNICATION
-    boards = [read_json(path) or {} for path in sorted(folder.glob("*.json"))] if folder.is_dir() else []
+def boards_of(run_dir: Path) -> list[dict]:
+    """The run's board records: communication/*.json in name order; [] for a run without that folder."""
+    folder = Path(run_dir) / COMMUNICATION
+    return [read_json(path) or {} for path in sorted(folder.glob("*.json"))] if folder.is_dir() else []
+
+
+def coordination_of(boards: list[dict], roles: dict[str, str | None]) -> dict:
+    """The Coordination ladder of board records for agents with these roles: {"agents", "pairs", "calls", "roles",
+    "team", "hidden"}."""
     measure = board_coordination(boards, list(roles))
     levels = {a: row["level"] for a, row in measure["agents"].items()}
     return {**measure, "roles": roles, **team_level(levels, roles)}
+
+
+def run_coordination(run_dir: Path) -> dict:
+    """The run's Coordination ladder (coordination_of) from its board records (boards_of); a run without them has every
+    agent at none."""
+    run = RunDir(run_dir).require()
+    return coordination_of(boards_of(run.path), run.roles())
+
+
+# --------------------------------------------------------------------------
+# what a run records
+# --------------------------------------------------------------------------
+AGENT_FIELDS = {"coordination_level": "level", "coordination_score": "mbar", "coordination_ceiling": "ceiling",
+                "coordination_posts": "posts"}
+"""An agent row's Coordination fields and the keys of an agent's measure they come from."""
+TEAM_FIELDS = {"coordination_level": "team", "coordination_hidden": "hidden"}
+"""The team row's Coordination fields and the keys of the measure they come from."""
+
+
+def record_fields(result: dict) -> tuple[dict[str, dict], dict]:
+    """What a run records of its Coordination ladder (`result`, coordination_of's answer): {agent: the agent row's
+    AGENT_FIELDS} and the team row's TEAM_FIELDS."""
+    agents = {agent: {field: row[key] for field, key in AGENT_FIELDS.items()}
+              for agent, row in result["agents"].items()}
+    return agents, {field: result[key] for field, key in TEAM_FIELDS.items()}
+

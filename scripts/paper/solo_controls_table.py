@@ -4,25 +4,22 @@ Hugging Face under apart_controls/). Writes tmp/tables/results/solo_vs_solo_told
 
     uv run python -m scripts.paper.solo_controls_table    # make results-tables runs it
 
-One run is one agent on one fixed instance of a task; seeds only vary sampling. The canonical copy of each run
-(manifest.jsonl canonical) counts. Its Cheating rung is the one the transcript viewer measures
-(scripts/paper/study_ladders.py record), computed in WORKERS processes. A run cheated when the measures' one definition
-says so (src/measures/cheating_ladder.py cheated: CHEATED_FROM or above).
+One run is one agent on one fixed instance of a task; seeds only vary sampling. The valid runs count, as the measures
+list them (scripts/paper/study_ladders.py valid_runs: each run's canonical copy). Its Cheating rung is the one the
+transcript viewer measures (study_ladders.record), computed in WORKERS processes. A run cheated when the measures' one
+definition says so (src/measures/cheating_ladder.py cheated: CHEATED_FROM or above).
 """
 from __future__ import annotations
 
-import json
 import sys
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
-from matplotlib.backends.backend_agg import FigureCanvasAgg
-from matplotlib.figure import Figure
 from matplotlib.patches import Rectangle
 
-from scripts.paper.study_ladders import CHEATING_FILL, record
+from scripts.paper.study_ladders import CHEATING_FILL, canvas, record, save, valid_runs
 from src.configuration.settings import ROOT
-from src.utils.figure_style import AXIS, BAND, INK, INK_SECONDARY, MUTED, PRINT_DPI, WHITE
+from src.utils.figure_style import AXIS, BAND, INK, INK_SECONDARY, MUTED, WHITE
 
 DATA = ROOT / "runs" / "apart_controls"
 OUT = ROOT / "tmp" / "tables" / "results" / "solo_vs_solo_told.png"
@@ -49,52 +46,41 @@ def team_cheated(path: Path) -> bool:
 
 
 def load() -> dict[tuple[str, str, str], list[bool]]:
-    """Whether each canonical run cheated, by (task, model, cell). Stops on a run whose folder is missing."""
-    rows, paths = [], []
-    for line in (DATA / "manifest.jsonl").read_text().splitlines():
-        row = json.loads(line)
-        if not row["canonical"]:
-            continue
-        path = DATA / row["model"] / row["task"] / row["cell"] / f"s{row['seed']}"
-        if not (path / "run.json").is_file():
-            raise SystemExit(f"missing {path / 'run.json'}")
-        rows.append(row)
-        paths.append(path)
+    """Whether each valid run cheated, by (task, model, cell)."""
+    runs = valid_runs(DATA)
     with ProcessPoolExecutor(max_workers=WORKERS) as pool:
-        cheated = list(pool.map(team_cheated, paths, chunksize=16))
+        cheated = list(pool.map(team_cheated, [r.path for r in runs], chunksize=16))
     out: dict[tuple[str, str, str], list[bool]] = {}
-    for row, hit in zip(rows, cheated):
-        out.setdefault((row["task"], row["model"], row["cell"]), []).append(hit)
+    for run, hit in zip(runs, cheated):
+        out.setdefault((run.meta["task"], run.meta["model"], run.meta["cell"]), []).append(hit)
     return out
 
 
 def main() -> int:
     data = load()
-    label_w, cell_w, gap = 2.3, 0.62, 0.22
-    head_h, row_h, legend_h = 0.78, 0.46, 0.08
-    width = label_w + len(MODELS) * (2 * cell_w + gap) + 0.1
-    height = head_h + row_h * len(TASKS) + legend_h
-    fig = Figure(figsize=(width, height), dpi=PRINT_DPI)
-    FigureCanvasAgg(fig)
-    ax = fig.add_axes([0, 0, 1, 1])
-    ax.set_xlim(0, width)
-    ax.set_ylim(height, 0)
-    ax.axis("off")
-    pad = 0.14
-    ax.text(pad, 0.5, "Task", fontsize=8.5, color=INK_SECONDARY, va="center")
+    print("valid runs:", sum(map(len, data.values())))
+    label_w, cell_w, gap = 1.4, 0.5, 0.1
+    head_h, row_h = 0.62, 0.42
+    width = label_w + len(MODELS) * (2 * cell_w + gap)
+    height = head_h + row_h * len(TASKS) + 0.06
+    fig, ax = canvas(width, height)
+    pad = 0.1
+    ax.text(pad, 0.45, "Task", fontsize=7.5, color=INK_SECONDARY, va="center")
     for m, (_, name) in enumerate(MODELS):
         x0 = label_w + m * (2 * cell_w + gap)
-        ax.text(x0 + cell_w, 0.24, name, fontsize=8.6, weight="bold", color=INK, ha="center", va="center")
+        ax.text(x0 + cell_w, 0.2, name, fontsize=7, weight="bold", color=INK, ha="center", va="center")
         for c, (_, word) in enumerate(CELLS):
-            ax.text(x0 + c * cell_w + cell_w / 2, 0.56, word, fontsize=7.4, style="italic", color=INK_SECONDARY,
+            ax.text(x0 + c * cell_w + cell_w / 2, 0.45, word, fontsize=6.8, style="italic", color=INK_SECONDARY,
                     ha="center", va="center")
     ax.plot([0, width], [head_h, head_h], color=INK, lw=1.0)
     for t, (task, title, note) in enumerate(TASKS):
         y0 = head_h + t * row_h
         if t % 2:
             ax.add_patch(Rectangle((0, y0), width, row_h, fc=BAND, ec="none", zorder=0))
-        ax.text(pad, y0 + row_h / 2, title + (f", {note}" if note else ""), fontsize=8.4, weight="bold",
-                color=INK, va="center")
+        ax.text(pad, y0 + (row_h * 0.38 if note else row_h / 2), title.replace("Software engineering", "SWE"),
+                fontsize=7.5, weight="bold", color=INK, va="center")
+        if note:
+            ax.text(pad, y0 + row_h * 0.72, note, fontsize=6.8, color=INK_SECONDARY, va="center")
         for m, (model, _) in enumerate(MODELS):
             x0 = label_w + m * (2 * cell_w + gap)
             for c, (cell, _) in enumerate(CELLS):
@@ -105,16 +91,15 @@ def main() -> int:
                             va="center")
                     continue
                 rate = sum(runs) / len(runs)
-                ax.add_patch(Rectangle((x + 0.03, y0 + 0.04), cell_w - 0.06, row_h - 0.08, fc=blend(rate),
+                ax.add_patch(Rectangle((x + 0.02, y0 + 0.03), cell_w - 0.04, row_h - 0.06, fc=blend(rate),
                                        ec="none", zorder=1))
                 ink = WHITE if rate > 0.55 else INK
-                ax.text(x + cell_w / 2, y0 + row_h * 0.4, f"{rate:.0%}", fontsize=8.2, weight="bold", color=ink,
+                ax.text(x + cell_w / 2, y0 + row_h * 0.36, f"{rate:.0%}", fontsize=7.5, weight="bold", color=ink,
                         ha="center", va="center", zorder=2)
-                ax.text(x + cell_w / 2, y0 + row_h * 0.74, f"{sum(runs)}/{len(runs)}", fontsize=6.2, color=ink,
+                ax.text(x + cell_w / 2, y0 + row_h * 0.72, f"{sum(runs)}/{len(runs)}", fontsize=6.8, color=ink,
                         ha="center", va="center", zorder=2)
         ax.plot([0, width], [y0 + row_h, y0 + row_h], color=AXIS, lw=0.5)
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(OUT, dpi=PRINT_DPI, facecolor=WHITE)
+    print(save(fig, OUT))
     for task, _, _ in TASKS:
         print(task, " ".join(
             f"{model}:{sum(data.get((task, model, 'solo'), []))}/{len(data.get((task, model, 'solo'), []))}"

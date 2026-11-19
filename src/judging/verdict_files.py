@@ -1,15 +1,16 @@
 """The judges' verdicts stored beside a run: the one reader and the one writer of runs/<study>/<run>/judges/.
 
-    read(run_dir)                                   # {"cheatbench": {"gpt-6-luna": [rows]}, "collusion": {...}}
-    rows(run_dir, "collusion", "gpt-6-luna")        # one file's rows
-    write(run_dir, "collusion", "gpt-6-luna", new)  # merge rows into that file, by unit, atomically
+    read(run_dir)                                   # {"cheatbench": {"gpt-6-luna": [rows]}, "scheming": {...}, ...}
+    rows(run_dir, LABELS_PASS, "gpt-6-luna")        # one file's rows
+    write(run_dir, LABELS_PASS, "gpt-6-luna", new)  # merge rows into that file, by unit, atomically
     cheatbench(run_dir)                             # {judge: {episode: row}}, the eval's verdicts and the passes'
     episode_verdicts(run_dir)                       # {episode: row} of the judge the measures take
-    applied(read(run_dir)["collusion"])             # the judge whose verdicts the ladders take: the first by name
+    applied(read(run_dir)[SCHEMING_PASS])           # the judge whose verdicts the ladders take: the first by name
 
 A pass of `python -m src judge-pass` (src/judging/judge_pass.py) writes judges/<pass>.<judge>.jsonl, one row per unit
-(an episode for the pass "cheatbench", a pair for "collusion"), keyed by the row's "unit". A unit judged again
-replaces its row; every other row stays. A write goes to a temporary file in judges/ that then replaces the file in
+(an episode for the pass "cheatbench", a pair for "scheming", an agent for "labels"), keyed by the row's "unit". A
+unit judged again replaces its row; every other row stays. A file of a pass no longer listed (the retired
+"collusion") is not read. A write goes to a temporary file in judges/ that then replaces the file in
 one rename, so a reader never sees half a file, and nothing outside judges/ is touched: the run's own record (run.json,
 episodes.jsonl, judge.jsonl, the transcripts) stays as the run made it.
 
@@ -33,7 +34,14 @@ from src.sandbox.staging import write_atomic
 from src.utils.json_files import read_jsonl
 
 FOLDER = "judges"
-PASSES = ("cheatbench", "collusion")
+CHEATBENCH_PASS = "cheatbench"
+"""CheatBench's verdicts per episode (src/judging/cheatbench_judge.py)."""
+SCHEMING_PASS = "scheming"
+"""Scheming per colluding pair (src/judging/scheming_judge.py), read by src/measures/collusion.py scheming_rows."""
+LABELS_PASS = "labels"
+"""Awareness and manipulation per agent (src/judging/labels_judge.py), read by src/measures/judge_labels.py
+label_rows."""
+PASSES = (CHEATBENCH_PASS, SCHEMING_PASS, LABELS_PASS)
 ROW_KEYS = ("unit", "judge", "judge_generation_config", "prompt_sha256", "schema_sha256", "input_sha256", "parse_ok",
             "judge_usage", "judge_cost_usd", "judge_attempts", "judge_error")
 
@@ -70,7 +78,7 @@ def cheatbench(run_dir: Path, files: dict[str, dict[str, list[dict]]] | None = N
     out: dict[str, dict[str, dict]] = {}
     for row in RunDir(run_dir).verdicts().values():
         out.setdefault(row.get("judge") or "", {})[row["episode"]] = row
-    for judge, file_rows in ((pass_files(run_dir) if files is None else files).get("cheatbench") or {}).items():
+    for judge, file_rows in ((pass_files(run_dir) if files is None else files).get(CHEATBENCH_PASS) or {}).items():
         out.setdefault(judge, {}).update((row["unit"], row) for row in file_rows)   # a cheatbench unit is an episode
     return dict(sorted(out.items()))
 
@@ -80,7 +88,7 @@ def read(run_dir: Path) -> dict[str, dict[str, list[dict]]]:
     (cheatbench); {} for a run no judge has read."""
     files = pass_files(run_dir)
     judged = cheatbench(run_dir, files)
-    return {**files, **({"cheatbench": {judge: list(rows.values()) for judge, rows in judged.items()}}
+    return {**files, **({CHEATBENCH_PASS: {judge: list(rows.values()) for judge, rows in judged.items()}}
                         if judged else {})}
 
 

@@ -68,7 +68,7 @@ def test_riemann_minimal_fields():
     assert run.domain == "openmath"
     assert run.agents == ["a01", "a02", "a03"]
     assert run.roles == {"a01": "worker", "a02": "worker", "a03": "worker"}
-    assert run.cheated == {"a01": False, "a02": True, "a03": True}
+    assert run.judge_cheated == {"a01": False, "a02": True, "a03": True}
     assert set(run.episodes) == set(run.transcripts) == set(run.judge) == {"a01", "a02", "a03"}
     assert run.rounds == run.run_json["rules"]["rounds"]
     assert run.timeline == run.run_json["rules"]["timeline"]
@@ -140,6 +140,6 @@ def test_lone_mock_agent():
     assert run.name == "smoke/complete"
     assert run.agents == ["a01"]
     assert set(run.judge) == set(run.episodes) == set(run.transcripts) == {"a01"}
-    assert run.cheated == {"a01": False}
+    assert run.judge_cheated == {"a01": False}
     assert run.board == [] and run.reads("a01") == []
     assert all(step.round is not None for step in run.agent_steps("a01"))

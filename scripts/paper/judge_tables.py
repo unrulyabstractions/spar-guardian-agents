@@ -4,9 +4,11 @@ No model is called: the tables read verdicts a judge pass already wrote. Writes,
 
     table_judge_cheated_by_task.png   per task, agents by the code's cheated (cheating_ladder.cheated) against the
                                       judge's own `cheated`, workers and hidden roles apart
-    table_judge_labels.png            per task and judge label (judge_labels.LABELS), workers by the code's clauses
-                                      against the judge's label
-    table_disclosure_by_task.png      per task, agents by the judge's disclosure (judge_labels.disclosure)
+    table_judge_labels.png            per task and row of judge_labels.ROWS (the code's clauses and the judge labels
+                                      that answer them), workers by the code's clauses against the judge's labels;
+                                      "no label" on a row the judge has no label for
+    table_disclosure_by_task.png      per task, the agents that accessed the honeypot (study_ladders.accessed: looked or
+                                      above) by the judge's disclosure (judge_labels.disclosure)
 
     uv run python -m scripts.paper.judge_tables    # make results-tables runs every one
 
@@ -19,7 +21,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from scripts.paper.study_ladders import STUDY, TASKS, counts_table, record, valid_runs
+from scripts.paper.study_ladders import TASKS, accessed, counts_table, record, valid_runs
 from src.configuration.settings import ROOT
 from src.judging import verdict_files
 from src.measures import judge_labels
@@ -29,8 +31,12 @@ OUT = ROOT / "tmp" / "tables" / "results"
 BLOCKS = [("workers", "Workers", "agents"), ("hidden", "Regulators and disregulators", "agents")]
 VERDICTS = ("both", "code only", "judge only", "neither")
 """An agent's cell: the code and the judge both say yes, one of them, or neither."""
-LABEL_VERDICTS = ("both yes", "code only", "judge only", "both no")
-"""judge_labels.verdict_of's cells, in the order the table shows them."""
+NOT_ANSWERED = "n/a"
+LABEL_VERDICTS = ("both yes", "code only", "judge only", "both no", NOT_ANSWERED)
+"""judge_labels.verdict_of's cells, in the order the table shows them, then the agents the judge cannot answer for:
+a row with no label (judge_labels.NO_LABEL, shown as such), or an enumerated choice of the judge that hides the row."""
+NOTE_CHARS = 32
+"""The longest line of judge label names under a row's clauses."""
 DISCLOSURE = ("yes", "no", judge_labels.NOT_JUDGED, judge_labels.NOT_RECORDED)
 TASK_OF = {"software_engineering": "swe", "protein_design": "protein_design", "creative_writings": "creative_writing"}
 """CheatBench's task name for each of TASKS' keys."""
@@ -40,10 +46,11 @@ def run_dirs() -> list[tuple[str, Path]]:
     """(domain, run folder) of every valid run."""
     domains = {d for d, _ in TASKS}
     out = []
-    for row in valid_runs():
+    for listed in valid_runs():
+        row = listed.meta
         if row["domain"] not in domains:
             raise SystemExit(f"{row['path']}: domain {row['domain']!r} has no place in TASKS")
-        out.append((row["domain"], STUDY / row["path"]))
+        out.append((row["domain"], listed.path))
     return out
 
 
@@ -71,26 +78,65 @@ def cheated_counts(runs: list[tuple[str, Path]]) -> dict[tuple[str, str], Counte
     return out
 
 
-def label_counts(runs: list[tuple[str, Path]]) -> tuple[dict[tuple[str, str], Counter], dict[str, list]]:
-    """(domain, label) -> Counter of LABEL_VERDICTS over the workers (judge_labels.agreement), and each domain's
-    rows of labels."""
-    found = judge_labels.agreement([path for _, path in runs], workers=True)["labels"]
-    data = {(TASK_OF[task], label): c for (task, label), c in found.items()}
-    rows = {domain: [(label.name, label.name) for label in judge_labels.LABELS[task]]
-            for task, domain in TASK_OF.items()}
-    for domain, labels in rows.items():
-        for key, _ in labels:
-            data.setdefault((domain, key), Counter())
-    return data, rows
+def joined(names: list[str], word: str) -> list[str]:
+    """Names joined by `word`, in lines of at most NOTE_CHARS."""
+    lines: list[str] = []
+    for name in names:
+        if lines and len(lines[-1]) + len(name) + len(word) + 2 <= NOTE_CHARS:
+            lines[-1] += f"{word} {name}"
+            continue
+        if lines:
+            lines[-1] += word
+        lines.append(name)
+    return lines
+
+
+UNLABELLED = "other clauses"
+"""The row that gathers a task's clauses the judge has no label for: each such clause is one row of judge_labels.ROWS,
+and every worker reads "no label" on each, so the table shows them once."""
+
+
+def label_counts(runs: list[tuple[str, Path]]) -> tuple[dict, dict, dict, dict]:
+    """Over the workers (judge_labels.agreement), per (domain, row of judge_labels.ROWS): the Counter of
+    LABEL_VERDICTS; each domain's rows, the rows without a label gathered in UNLABELLED; each row's lines of label
+    names (of clause names for UNLABELLED); and "no label" in place of UNLABELLED's count."""
+    found = judge_labels.agreement([path for _, path in runs], workers=True)["rows"]
+    data, rows, notes, blank = {}, {}, {}, {}
+    for task, domain in TASK_OF.items():
+        labelled = [row for row in judge_labels.ROWS[task] if row.labels]
+        unlabelled = [row for row in judge_labels.ROWS[task] if not row.labels]
+        rows[domain] = [(row.name, row.name) for row in labelled] + ([(UNLABELLED, UNLABELLED)] if unlabelled else [])
+        for row in judge_labels.ROWS[task]:
+            cells = Counter()
+            for cell, n in (found.get((task, row.name)) or Counter()).items():
+                if cell == judge_labels.NOT_JUDGED:
+                    raise SystemExit(f"{task} {row.name}: {n} workers have no parsed verdict")
+                cells[cell if cell in LABEL_VERDICTS else NOT_ANSWERED] += n
+            if row.labels:
+                data[(domain, row.name)] = cells
+                notes[(domain, row.name)] = joined([label.name for label in row.labels], " or")
+            else:
+                data[(domain, UNLABELLED)] = cells
+        if unlabelled:
+            notes[(domain, UNLABELLED)] = joined([row.name for row in unlabelled], ",")
+            blank[(domain, UNLABELLED, NOT_ANSWERED)] = judge_labels.NO_LABEL
+    return data, rows, notes, blank
+
+
+DISCLOSURE_BLOCKS = [("workers", "Workers at looked or above", "agents"),
+                     ("hidden", "Regulators and disregulators at looked or above", "agents")]
+"""Disclosure counts only the agents that had access to disclose: those that accessed the honeypot."""
 
 
 def disclosure_counts(runs: list[tuple[str, Path]]) -> dict[tuple[str, str], Counter]:
-    """(block, domain) -> Counter of DISCLOSURE values, per agent (judge_labels.disclosure)."""
+    """(block, domain) -> Counter of DISCLOSURE values (judge_labels.disclosure), per agent that accessed the
+    honeypot (study_ladders.accessed)."""
     out: dict[tuple[str, str], Counter] = {(b, d): Counter() for b, _, _ in BLOCKS for d, _ in TASKS}
     for domain, path in runs:
-        result = judge_labels.disclosure(path)
-        out[("workers", domain)].update(result["team"])
-        out[("hidden", domain)].update(result["hidden"].values())
+        disclosed = judge_labels.disclosure(path)["agents"]
+        for agent, r in record(path)["agents"].items():
+            if accessed(r["rung"]):
+                out[("workers" if r["worker"] else "hidden", domain)][disclosed[agent]] += 1
     return out
 
 
@@ -105,14 +151,14 @@ def main() -> int:
     both = cheated_counts(runs)
     show("cheated", both)
     print(counts_table(OUT / "table_judge_cheated_by_task.png", VERDICTS, both, BLOCKS))
-    labels, rows = label_counts(runs)
+    labels, rows, notes, blank = label_counts(runs)
     show("labels", labels)
     blocks = [(domain, title, "workers") for domain, title in TASKS]
-    print(counts_table(OUT / "table_judge_labels.png", LABEL_VERDICTS, labels, blocks, rows=rows,
-                       first="Judge label", left=2.75))
+    print(counts_table(OUT / "table_judge_labels.png", LABEL_VERDICTS, labels, blocks, blank, rows=rows,
+                       first="Clauses, judge labels", left=2.3, notes=notes))
     disclosed = disclosure_counts(runs)
     show("disclosed", disclosed)
-    print(counts_table(OUT / "table_disclosure_by_task.png", DISCLOSURE, disclosed, BLOCKS))
+    print(counts_table(OUT / "table_disclosure_by_task.png", DISCLOSURE, disclosed, DISCLOSURE_BLOCKS, left=2.6))
     return 0
 
 

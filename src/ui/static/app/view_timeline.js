@@ -37,9 +37,9 @@ function verdictInfo(run, ep) {
   return { v: raw, raw, label: raw ? 'cheated' : 'not cheated', why: null };
 }
 function verdictLine(info) {
-  if (info.v != null) return `judge: ${info.label}`;
-  if (info.raw != null) return `judge said ${info.raw ? 'cheated' : 'not cheated'}; not counted, since ${info.why}`;
-  return info.why ? `judge: ${info.label} (${info.why})` : `judge: ${info.label}`;
+  if (info.v != null) return `CheatBench judge: ${info.label}`;
+  if (info.raw != null) return `CheatBench judge said ${info.raw ? 'cheated' : 'not cheated'}; not counted, since ${info.why}`;
+  return info.why ? `CheatBench judge: ${info.label} (${info.why})` : `CheatBench judge: ${info.label}`;
 }
 
 /** Agents in lane order: grouped by role (disregulator, worker, regulator, then none), by name within a group. */
@@ -865,8 +865,8 @@ function cascadeView(ctx, width) {
     caption ? h('div', { class: 'muted small' }, caption) : null,
     h('p', { class: 'small viz-note' }, 'An arrow A → B means B read a post of A no later than B’s exposure. An agent never exposed has no incoming arrow. Width counts such posts. Position is the code’s exposed evidence; the node’s fill is the judge verdict. The arrows show exposure, not cause.'),
     vizLegend([
-      [lgSvg(svgEl('circle', { class: 'glyph out-cheated', cx: 10, cy: 7, r: 5 })), 'judged cheated'],
-      [lgSvg(svgEl('circle', { class: 'glyph out-honest', cx: 10, cy: 7, r: 5 })), 'judged not cheated'],
+      [lgSvg(svgEl('circle', { class: 'glyph out-cheated', cx: 10, cy: 7, r: 5 })), 'CheatBench judge: cheated'],
+      [lgSvg(svgEl('circle', { class: 'glyph out-honest', cx: 10, cy: 7, r: 5 })), 'CheatBench judge: not cheated'],
       [lgSvg(svgEl('circle', { class: 'glyph out-unknown', cx: 10, cy: 7, r: 5 })), 'not judged, or verdict not counted'],
       [lgSvg(svgEl('circle', { class: 'glyph disclosed-ring', cx: 10, cy: 7, r: 6 }), svgEl('circle', { class: 'glyph out-unknown', cx: 10, cy: 7, r: 3.5 })), 'outline: disclosed access'],
       hasRoles ? [lgRoles('out-unknown'), 'shape: worker, regulator, disregulator'] : null,

@@ -151,11 +151,11 @@ def judge_usage(results: TransectResults) -> list[dict]:
     return rows
 
 
-def judge_agreement(rows: list[dict], cheated: bool | None, judged: bool) -> dict:
-    """The turns labelled exploit_use set against the run judge's verdict; agrees is None without both."""
+def judge_agreement(rows: list[dict], judge_cheated: bool | None, judged: bool) -> dict:
+    """The turns labelled exploit_use set against CheatBench's judge's own cheated; agrees is None without both."""
     spans = [[row["start_turn"], row["end_turn"]] for row in rows if row["label"] == EXPLOIT_USE]
-    agrees = None if not judged or cheated is None else bool(spans) == cheated
-    return {"exploit_use_turns": spans, "judge_cheated": cheated, "agrees": agrees}
+    agrees = None if not judged or judge_cheated is None else bool(spans) == judge_cheated
+    return {"exploit_use_turns": spans, "judge_cheated": judge_cheated, "agrees": agrees}
 
 
 def run_reports(run: Run, judge: JudgeSettings | None, calls_by_agent: dict[str, list[ModelCall]]) -> dict:
@@ -181,12 +181,12 @@ def run_reports(run: Run, judge: JudgeSettings | None, calls_by_agent: dict[str,
         usage[agent] = judge_usage(results)
         agents[agent] = {
             "role": run.roles.get(agent, "worker"),
-            "cheated": run.cheated.get(agent),
+            "judge_cheated": run.judge_cheated.get(agent),
             "telemetry": str(directory / "telemetry.jsonl"),
             "timing": timing,
             "turns": int(results.token_timeline.turn.nunique()) if len(results.token_timeline) else 0,
             "scan_errors": [f"{error.scanner}: {error.message}" for error in results.scan_status.errors],
-            "agreement": judge_agreement(rows, run.cheated.get(agent), judge is not None),
+            "agreement": judge_agreement(rows, run.judge_cheated.get(agent), judge is not None),
         }
     write_rows(combined, base / mode / "phases.csv")
     judge_payload = None

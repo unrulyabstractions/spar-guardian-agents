@@ -9,7 +9,7 @@ from __future__ import annotations
 import sys
 from collections import Counter
 
-from scripts.paper.study_ladders import STUDY, TASKS, counts_table, valid_runs
+from scripts.paper.study_ladders import TASKS, counts_table, valid_runs
 from src.configuration.settings import ROOT
 from src.measures.coordination import LEVELS, run_coordination
 from src.measures.run_directory import is_worker
@@ -23,10 +23,11 @@ def counts() -> dict[tuple[str, str], Counter]:
     """(block, domain) -> Counter of levels, over the valid runs with at least two agents."""
     out: dict[tuple[str, str], Counter] = {(b, d): Counter() for b, _, _ in BLOCKS for d, _ in TASKS}
     domains = {d for d, _ in TASKS}
-    for row in valid_runs():
+    for listed in valid_runs():
+        row = listed.meta
         if row["domain"] not in domains:
             raise SystemExit(f"{row['path']}: domain {row['domain']!r} has no place in TASKS")
-        run = run_coordination(STUDY / row["path"])
+        run = run_coordination(listed.path)
         if len(run["agents"]) < 2:
             continue
         d = row["domain"]

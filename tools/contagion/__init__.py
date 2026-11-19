@@ -9,8 +9,8 @@ disclosure flag (DISCLOSURE_FLAGS; scout has no disclosure scanner). Knowledge w
 come from runs/<study>/<name>/tools/scout/summary.json when present: its "onset" field for cheating, and the found round
 of regulator_intervened under "agents" for honesty. A disclosure flag counts at the last round, and summary notes say
 so. Without scout, or with a scout that ran grep only or none of the opened, used and submitted scanners, the onsets
-come from the judge, which gives no round, so a cheated agent or a disclosing one counts as adopted at the last round.
-The graph is the read edges
+come from CheatBench's judge, which gives no round, so an agent it says cheated (judge_cheated) or a disclosing one
+counts as adopted at the last round. The graph is the read edges
 of runs/<study>/<name>/tools/graphs/graph.gexf, made undirected, when present; otherwise the complete graph on the
 agents, since a board is broadcast. Each model is seeded with the first adopters, runs from their round to the last, and
 has its parameter fitted by least squares of its mean curve on the observed curve over a grid. The models: SI and the

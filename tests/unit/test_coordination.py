@@ -11,6 +11,7 @@ from src.measures.coordination import (
     HIGH_FLOOR,
     LEVELS,
     board_coordination,
+    board_counts,
     level_for,
     run_coordination,
     team_level,
@@ -277,3 +278,18 @@ def test_an_empty_communication_folder_is_none(tmp_path):
     _write_run(tmp_path / "run", {"a": "worker", "b": "worker"}, [])
     out = run_coordination(tmp_path / "run")
     assert out["team"] == "none" and out["pairs"] == [{"agents": ["a", "b"], "rounds": 0}]
+
+
+def test_board_counts_name_each_agents_first_counting_read_and_each_post_by_its_call():
+    """The calls a reader points at: the first read that returned a teammate's post (a harness notice or the agent's
+    own post is no such read), and each post, by tool call id."""
+    board = {"messages": [{"id": "s0", "sender": "system"}, {"id": "m1", "sender": "a"}, {"id": "m2", "sender": "b"}],
+             "events": [{"kind": "read", "agent_id": "b", "message_ids": ["s0"], "tool_call_id": "b0"},
+                        {"kind": "sent", "agent_id": "a", "message_ids": ["m1"], "tool_call_id": "a0"},
+                        {"kind": "read", "agent_id": "a", "message_ids": ["m1"], "tool_call_id": "a1"},
+                        {"kind": "read", "agent_id": "b", "message_ids": ["s0", "m1"], "tool_call_id": "b1"},
+                        {"kind": "sent", "agent_id": "b", "message_ids": ["m2"], "tool_call_id": "b2"}]}
+    counts = board_counts([board], ["a", "b"])
+    assert counts.calls == {"a": {"read": None, "posts": [("a0", ["m1"])]},
+                            "b": {"read": ("b1", ["m1"]), "posts": [("b2", ["m2"])]}}
+    assert counts.posts == {"a": 1, "b": 1} and counts.readers == {"b"} and counts.takes_up == {("b", "a"): 1}

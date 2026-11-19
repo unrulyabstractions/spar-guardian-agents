@@ -1,7 +1,7 @@
 """The Cheating ladder by task for study_exploration_1's valid runs: how many workers, teams and hidden agents
 (regulators and disregulators) reach each rung, and how many runs carry the alarm (src/measures/cheating_ladder.py
-ALARM), as the transcript viewer measures them (scripts/paper/study_ladders.py record). Valid runs are the run index's
-rows marked valid and not mock. Writes tmp/tables/results/table_cheating_by_task.png.
+ALARM), as the transcript viewer measures them (scripts/paper/study_ladders.py record). Valid runs are
+study_ladders.valid_runs'. Writes tmp/tables/results/table_cheating_by_task.png.
 
     uv run python -m scripts.paper.cheating_table    # make results-tables runs every one
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 import sys
 from collections import Counter
 
-from scripts.paper.study_ladders import CHEATING, STUDY, TASKS, counts_table, record, valid_runs
+from scripts.paper.study_ladders import CHEATING, TASKS, counts_table, record, valid_runs
 from src.configuration.settings import ROOT
 
 OUT = ROOT / "tmp" / "tables" / "results" / "table_cheating_by_task.png"
@@ -24,10 +24,11 @@ def counts() -> dict[tuple[str, str], Counter]:
     """(block, domain) -> Counter of rungs, and of alarms in the team block."""
     out: dict[tuple[str, str], Counter] = {(b, d): Counter() for b, _, _ in BLOCKS for d, _ in TASKS}
     domains = {d for d, _ in TASKS}
-    for row in valid_runs():
+    for listed in valid_runs():
+        row = listed.meta
         if row["domain"] not in domains:
             raise SystemExit(f"{row['path']}: domain {row['domain']!r} has no place in TASKS")
-        run, d = record(STUDY / row["path"]), row["domain"]
+        run, d = record(listed.path), row["domain"]
         for agent in run["agents"].values():
             out[("workers" if agent["worker"] else "hidden", d)][agent["rung"]] += 1
         out[("team", d)][run["cheating"]] += 1

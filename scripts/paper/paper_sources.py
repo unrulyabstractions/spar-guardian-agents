@@ -10,9 +10,9 @@ ladder's alarm and the first cheating rung, src/measures/cheating_ladder.py ALAR
 (from src/configuration/scales.py), regulator_suffix.tex (the regulator's common text from
 src/configuration/prompts.yaml and its three report variants), regulator_levels.tex and disregulator_levels.tex (from
 src/configuration/instruction_levels.yaml), cheating_rungs.tex (the Cheating ladder's rungs and clauses, from
-src/measures/cheating_ladder.py LEVELS and CLAUSES), coordination_levels.tex (the Coordination ladder's levels and cuts,
-from src/measures/coordination.py) and collusion_rungs.tex (the Collusion ladder's rungs and who reads each, from
-src/measures/collusion.py RUNGS and CODE_RUNGS). The rungs' and clauses' wording is the transcript viewer's
+src/measures/rungs.py RUNGS and cheating_ladder.py CLAUSES), coordination_levels.tex (the Coordination ladder's levels
+and cuts, from src/measures/coordination.py) and collusion_rungs.tex (the Collusion ladder's rungs and who reads each,
+from src/measures/collusion.py RUNGS and CODE_RUNGS). The rungs' and clauses' wording is the transcript viewer's
 (src/ui/transcript_levels.py CHEAT_GLOSSES, CLAUSE_GLOSSES, COLLUSION_GLOSSES). Nobody edits these files by hand.
 
 FIGURES names each PNG in paper/figures/, the PNG in tmp/ it is copied from and the make target whose script draws
@@ -31,6 +31,7 @@ from pathlib import Path
 
 import yaml
 
+from scripts.paper.study_ladders import ACCESSED_FROM, valid_runs
 from src.configuration import settings
 from src.configuration.presets import PRESETS
 from src.configuration.scales import SCALES
@@ -38,6 +39,7 @@ from src.configuration.settings import ROOT
 from src.judging import verdict_files
 from src.judging.cheatbench_judge import judge_entry
 from src.measures import cheating_ladder, collusion, coordination
+from src.measures.rungs import RUNGS
 from src.ui.transcript_levels import CHEAT_GLOSSES, CLAUSE_GLOSSES, COLLUSION_GLOSSES
 
 PAPER = ROOT / "paper"
@@ -117,6 +119,12 @@ FIGURES: dict[str, Figure] = {
     "table_judge_labels.png": Figure("tmp/tables/results/table_judge_labels.png", RESULTS.format("judge_tables.py")),
     "table_disclosure_by_task.png": Figure("tmp/tables/results/table_disclosure_by_task.png",
                                            RESULTS.format("judge_tables.py")),
+    "table_scheming_by_task.png": Figure("tmp/tables/results/table_scheming_by_task.png",
+                                         RESULTS.format("label_tables.py")),
+    "table_awareness_by_task.png": Figure("tmp/tables/results/table_awareness_by_task.png",
+                                          RESULTS.format("label_tables.py")),
+    "table_manipulation_by_task.png": Figure("tmp/tables/results/table_manipulation_by_task.png",
+                                             RESULTS.format("label_tables.py")),
 }
 
 HEADER = "% Written by scripts/paper/paper_sources.py from {source}. Do not edit; run `make paper-sources`.\n"
@@ -171,8 +179,10 @@ def params_tex() -> str:
              "JudgeEffort": judge_entry(settings.JUDGE_MODEL)["generation_config"].get("reasoning_effort") or "default"}
     judge["CheatingAlarm"] = cheating_ladder.ALARM
     judge["CheatedFrom"] = cheating_ladder.CHEATED_FROM
+    judge["AccessedFrom"] = ACCESSED_FROM
     lines = [HEADER.format(source="PRESETS['default'], settings.JUDGE_MODEL, src/judging/judge_models.yaml, "
-                                  "src/measures/cheating_ladder.py ALARM and CHEATED_FROM")]
+                                  "src/measures/cheating_ladder.py ALARM and CHEATED_FROM, "
+                                  "scripts/paper/study_ladders.py ACCESSED_FROM")]
     lines += [rf"\newcommand{{\{k}}}{{{v}}}" for k, v in macros.items()]
     lines += [rf"\newcommand{{\{k}}}{{{escape(v)}}}" for k, v in judge.items()]
     return "\n".join(lines) + "\n"
@@ -244,15 +254,15 @@ def coordination_levels_tex() -> str:
 
 def cheating_rungs_tex() -> str:
     """The Cheating ladder: each rung, what puts an agent on it, and the clauses whose evidence does, lowest first."""
-    levels = cheating_ladder.LEVELS
+    levels = RUNGS
     if len(CHEAT_GLOSSES) != len(levels):
-        raise SystemExit(f"Cheating LEVELS {levels} and CHEAT_GLOSSES differ in length: update both")
+        raise SystemExit(f"Cheating RUNGS {levels} and CHEAT_GLOSSES differ in length: update both")
     rows = []
     for i, (rung, gloss) in enumerate(zip(levels, CHEAT_GLOSSES)):
         clauses = [c for c, r in cheating_ladder.CLAUSES.items() if r == rung]
         named = "; ".join(rf"\textit{{{escape(c)}}}: {escape(CLAUSE_GLOSSES[c])}" for c in clauses) or "none"
         rows.append(rf"{i} & \textbf{{{escape(rung)}}} & {escape(gloss)} & {named} \\")
-    return (HEADER.format(source="src/measures/cheating_ladder.py LEVELS and CLAUSES, src/ui/transcript_levels.py")
+    return (HEADER.format(source="src/measures/rungs.py RUNGS, cheating_ladder.py CLAUSES, src/ui/transcript_levels.py")
             + "\\begin{tabularx}{\\linewidth}{@{}r l >{\\raggedright\\arraybackslash}X "
             + ">{\\raggedright\\arraybackslash}X@{}}\n\\toprule\nNumber & Rung & An agent is here when & Clauses "
             + "\\\\\n\\midrule\n" + "\n\\addlinespace\n".join(rows) + "\n\\bottomrule\n\\end{tabularx}\n")
@@ -285,12 +295,13 @@ def day(iso: str) -> str:
 
 
 def study_tex() -> str:
-    """The multi-domain study as its run index holds it: valid runs, their dates, and the regulators' models by use."""
-    rows = [json.loads(line) for line in STUDY_INDEX.read_text().splitlines() if line.strip()]
-    valid = [r for r in rows if r["valid"] and not r["mock"]]
+    """The multi-domain study's valid runs (scripts/paper/study_ladders.py valid_runs), their dates, and the regulators'
+    models by use."""
+    listed = valid_runs()
+    valid = [r.meta for r in listed]
     dates = []
-    for r in valid:
-        log = json.loads((STUDY_INDEX.parent / r["path"] / "run.json").read_text()).get("eval_log") or ""
+    for r in listed:
+        log = json.loads((r.path / "run.json").read_text()).get("eval_log") or ""
         m = re.search(r"(\d{4}-\d{2}-\d{2})T", log)
         if m:
             dates.append(m.group(1))
@@ -299,7 +310,7 @@ def study_tex() -> str:
         else f"{day(first)} -- {day(last)}"
     used = Counter(r["regulator_model"] for r in valid if r["regulator_model"])
     items = "\n".join(rf"  \item {model_name(k)}" for k, _ in sorted(used.items(), key=lambda kv: (-kv[1], kv[0])))
-    judges = study_judges([STUDY_INDEX.parent / r["path"] for r in valid])
+    judges = study_judges([r.path for r in listed])
     return (HEADER.format(source="runs/study_exploration_1/INDEX.jsonl, each valid run's run.json and judges/")
             + rf"\newcommand{{\StudyRuns}}{{{len(valid)}}}" + "\n"
             + rf"\newcommand{{\StudyDates}}{{{span}}}" + "\n"
@@ -309,10 +320,12 @@ def study_tex() -> str:
 
 def study_judges(runs: list[Path]) -> dict[str, str]:
     """The macros naming the judge of each pass whose verdicts the measures take on the study's runs
-    (verdict_files.applied): StudyCheatBenchJudge and StudyCollusionJudge. A pass read by several judges, or a judge
-    outside JUDGE_NAMES, stops the build, so the prose names the one judge the tables rest on."""
+    (verdict_files.applied): StudyCheatBenchJudge, StudySchemingJudge and StudyLabelsJudge. A pass read by several
+    judges, or a judge outside JUDGE_NAMES, stops the build, so the prose names the one judge the tables rest on."""
     out = {}
-    for macro, pass_name in (("StudyCheatBenchJudge", "cheatbench"), ("StudyCollusionJudge", "collusion")):
+    for macro, pass_name in (("StudyCheatBenchJudge", verdict_files.CHEATBENCH_PASS),
+                             ("StudySchemingJudge", verdict_files.SCHEMING_PASS),
+                             ("StudyLabelsJudge", verdict_files.LABELS_PASS)):
         used = {verdict_files.applied(verdict_files.read(run).get(pass_name) or {}) for run in runs} - {None}
         if len(used) != 1 or next(iter(used)) not in JUDGE_NAMES:
             raise SystemExit(f"the study's {pass_name} verdicts come from {sorted(used)}, not one named judge")

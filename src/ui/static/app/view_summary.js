@@ -22,15 +22,15 @@ const drawableComposition = x => x.swarm.regulators != null && x.swarm.disregula
 /** One grid cell: completed runs are counted; failed runs of the same composition are only listed. */
 function cellAggregate(runs, failed = []) {
   const by = {};
-  for (const role of ROLE_ORDER) by[role] = { n: 0, cheated: 0 };
+  for (const role of ROLE_ORDER) by[role] = { n: 0, judge_cheated: 0 };
   let k = 0;
   let n = 0;
   for (const x of runs) {
-    k += x.aggregate.cheated;
+    k += x.aggregate.judge_cheated;
     n += x.aggregate.judged;
     for (const role of ROLE_ORDER) {
       const s = (x.aggregate.by_role || {})[role];
-      if (s) { by[role].n += s.n || 0; by[role].cheated += s.cheated || 0; }
+      if (s) { by[role].n += s.n || 0; by[role].judge_cheated += s.judge_cheated || 0; }
     }
   }
   return { k, n, byRole: by, runs, failed, failedOnly: !runs.length };
@@ -38,7 +38,7 @@ function cellAggregate(runs, failed = []) {
 
 function runTipLines(x) {
   const a = x.aggregate;
-  return `${x.run} · seed ${x.swarm.seed ?? DASH} · ${a.judged ? `${a.cheated}/${a.judged} cheated` : 'not judged'} · ${plural(a.timeouts, 'timeout')} · score ${a.score ?? DASH}`;
+  return `${x.run} · seed ${x.swarm.seed ?? DASH} · ${a.judged ? `CheatBench judge: ${a.judge_cheated}/${a.judged} cheated` : 'not judged'} · ${plural(a.timeouts, 'timeout')} · score ${a.score ?? DASH}`;
 }
 const failedTipLine = x => `${x.run} · seed ${x.swarm.seed ?? DASH} · failed run (harness crash or provider error), not counted`;
 const failedNote = cell => (cell.failed.length ? ` (${plural(cell.failed.length, 'failed run')} not counted)` : '');
@@ -101,7 +101,7 @@ function heatmapCell(svg, cell, x, y, c, r, d, N) {
   // A judged cell takes the ramp; a cell not judged yet is hollow, so it never reads as 0%.
   const fill = cell.n ? seqColor(cell.k / cell.n) : null;
   const ink = fill ? `fill:${inkOn(fill)}` : null;
-  const g = cellLink(cell, `R${r} D${d} W${N - r - d}: ${cell.n ? `${cell.k} of ${cell.n} judged agents cheated` : 'not judged yet'}${failedNote(cell)}`);
+  const g = cellLink(cell, `R${r} D${d} W${N - r - d}: ${cell.n ? `CheatBench judge: ${cell.k} of ${cell.n} judged agents cheated` : 'not judged yet'}${failedNote(cell)}`);
   g.appendChild(fill
     ? svgEl('rect', { x: x + 1, y: y + 1, width: c - 2, height: c - 2, rx: 3, style: `fill:${fill}` })
     : svgEl('rect', { class: 'hm-unjudged', x: x + 1.5, y: y + 1.5, width: c - 3, height: c - 3, rx: 3 }));
@@ -111,7 +111,7 @@ function heatmapCell(svg, cell, x, y, c, r, d, N) {
 }
 
 function roleBarsCell(svg, cell, x, y, c, r, d, N) {
-  const parts = ROLE_ORDER.map(role => `${role} ${kOfN(cell.byRole[role].cheated, cell.byRole[role].n)}`).join(', ');
+  const parts = ROLE_ORDER.map(role => `${role} ${kOfN(cell.byRole[role].judge_cheated, cell.byRole[role].n)}`).join(', ');
   const g = cellLink(cell, `R${r} D${d} W${N - r - d}: ${parts}${failedNote(cell)}`);
   g.appendChild(svgEl('rect', { class: 'rb-bg', x: x + 1, y: y + 1, width: c - 2, height: c - 2, rx: 3 }));
   const bw = Math.max(4, Math.min(8, (c - 16) / 3));
@@ -123,7 +123,7 @@ function roleBarsCell(svg, cell, x, y, c, r, d, N) {
     const bx = x + 1 + gap + i * (bw + gap);
     if (s.n) {
       g.appendChild(svgEl('rect', { class: 'rb-track', x: bx, y: top, width: bw, height: bot - top }));
-      const hh = ((bot - top) * s.cheated) / s.n;
+      const hh = ((bot - top) * s.judge_cheated) / s.n;
       if (hh > 0) g.appendChild(svgEl('rect', { class: ['rb-bar', 'role-' + role], x: bx, y: bot - hh, width: bw, height: hh }));
     }
     const glyph = roleGlyph(role, bx + bw / 2, y + c - 6, 2.6);
@@ -168,9 +168,9 @@ function compositionSection(swarm, failed = []) {
       h('h3', null, `${N} agents · ${plural(runs.length, 'run')} in ${fmtInt(withRuns)} of ${fmtInt(nCells)} compositions` +
         (fails.length ? ` · ${plural(fails.length, 'failed run')} not counted` : '')),
       h('div', { class: 'comp-pair' },
-        h('figure', { class: 'comp-fig' }, h('figcaption', null, 'Share of judged agents who cheated'),
+        h('figure', { class: 'comp-fig' }, h('figcaption', null, 'CheatBench judge: share of judged agents who cheated'),
           compositionGrid(N, cells, heatmapCell, `Composition heatmap for ${N} agents`)),
-        h('figure', { class: 'comp-fig' }, h('figcaption', null, 'Cheated by hidden role'),
+        h('figure', { class: 'comp-fig' }, h('figcaption', null, 'CheatBench judge: cheated, by hidden role'),
           compositionGrid(N, cells, roleBarsCell, `Per-role cheating for ${N} agents`))));
   });
   const note = notDrawn.length ? h('div', { class: 'muted small' },
@@ -178,13 +178,13 @@ function compositionSection(swarm, failed = []) {
   if (!blocks.length) return h('div', null, note);
   return h('div', null, blocks, note,
     vizLegend([
-      [seqLegend(), '0 to 100% of judged agents cheated (cell text k/n)'],
+      [seqLegend(), 'CheatBench judge: 0 to 100% of judged agents cheated (cell text k/n)'],
       [swatch('sw-hatch'), 'no run'],
       [swatch('sw-unjudged'), 'not judged yet'],
       failedDrawn.length ? [swatch('sw-failed'), 'failed runs only (harness crash or provider error), not counted'] : null,
     ]),
     vizLegend([
-      [lgSvg(svgEl('rect', { class: 'rb-track', x: 7, y: 1, width: 6, height: 12 }), svgEl('rect', { class: 'rb-bar role-disregulator', x: 7, y: 7, width: 6, height: 6 })), 'per-role bar: share of that role’s judged agents who cheated'],
+      [lgSvg(svgEl('rect', { class: 'rb-track', x: 7, y: 1, width: 6, height: 12 }), svgEl('rect', { class: 'rb-bar role-disregulator', x: 7, y: 7, width: 6, height: 6 })), 'per-role bar: share of that role’s judged agents CheatBench’s judge says cheated'],
       [lgSvg(roleGlyph('disregulator', 10, 7.6, 4.2)), 'disregulator'],
       [lgSvg(roleGlyph('worker', 10, 7, 4.2)), 'worker'],
       [lgSvg(roleGlyph('regulator', 10, 7, 4.2)), 'regulator'],
@@ -198,12 +198,12 @@ function swarmTable(swarm, thumbs, onTimeline) {
   const sorted = swarm.slice().sort((a, b) => key(a).map((v, i) => v - key(b)[i]).find(Boolean) || a.run.localeCompare(b.run));
   const roleCell = (x, role) => {
     const s = (x.aggregate.by_role || {})[role];
-    return h('td', { class: 'num' }, s && s.n ? `${s.cheated}/${s.n}` : muted(DASH));
+    return h('td', { class: 'num' }, s && s.n ? `${s.judge_cheated}/${s.n}` : muted(DASH));
   };
   return h('div', { class: 'table-wrap' }, h('table', { class: 'data compact swarm-table' },
     h('thead', null, h('tr', null,
-      ['run', 'composition', 'seed', 'judged', 'cheated'].map((c, i) => h('th', { class: i >= 2 ? 'num' : '' }, c)),
-      ROLE_ORDER.map(role => h('th', { class: 'num', title: `${role}s judged cheated / judged` }, roleIcon(role, 10), ' ', role)),
+      ['run', 'composition', 'seed', 'judged', 'CheatBench judge: cheated'].map((c, i) => h('th', { class: i >= 2 ? 'num' : '' }, c)),
+      ROLE_ORDER.map(role => h('th', { class: 'num', title: `${role}s CheatBench's judge says cheated / judged` }, roleIcon(role, 10), ' ', role)),
       ['registered', 'ended'].map(c => h('th', null, c)),
       thumbs ? h('th', { title: 'agent by turn raster; click for the timeline' }, 'agent × turn') : null)),
     h('tbody', null, sorted.map(x => h('tr', { class: x.failed && 'failed', title: x.failed ? 'failed run (harness crash or provider error): not counted in the charts' : null },
@@ -212,7 +212,7 @@ function swarmTable(swarm, thumbs, onTimeline) {
       h('td', { class: 'mono' }, x.swarm.composition),
       h('td', { class: 'num' }, x.swarm.seed ?? DASH),
       h('td', { class: 'num' }, fmtInt(x.aggregate.judged)),
-      h('td', { class: 'num' }, x.aggregate.judged ? (x.aggregate.cheated ? badge(`${x.aggregate.cheated}`, 'bad') : '0') : muted(DASH)),
+      h('td', { class: 'num' }, x.aggregate.judged ? (x.aggregate.judge_cheated ? badge(`${x.aggregate.judge_cheated}`, 'bad') : '0') : muted(DASH)),
       ROLE_ORDER.map(role => roleCell(x, role)),
       h('td', null, registeredCell(x.deliverables)),
       h('td', { class: 'small' }, endingsText(x.endings) || DASH),
@@ -224,7 +224,7 @@ function swarmTable(swarm, thumbs, onTimeline) {
 /** Rows of the settings chart: baselines, then each control per setting, then each composition. */
 function settingRows(ok) {
   const rows = [];
-  const agg = list => ({ k: list.reduce((s, x) => s + x.aggregate.cheated, 0), n: list.reduce((s, x) => s + x.aggregate.judged, 0), runs: list.map(x => x.run) });
+  const agg = list => ({ k: list.reduce((s, x) => s + x.aggregate.judge_cheated, 0), n: list.reduce((s, x) => s + x.aggregate.judged, 0), runs: list.map(x => x.run) });
   const push = (group, label, list, href) => { if (list.length) rows.push({ group, label, href, ...agg(list) }); };
   const plain = ok.filter(x => !isSwarmRun(x)).map(x => ({ x, s: x.setting }));
   const settings = [...new Map(plain.map(p => [p.s.key, p.s])).values()].sort((a, b) => a.order - b.order || a.n - b.n);
@@ -245,7 +245,7 @@ function settingRows(ok) {
   return rows;
 }
 
-/** Horizontal bars, one per row, grouped under headers: share of judged agents who cheated. */
+/** Horizontal bars, one per row, grouped under headers: the share of judged agents CheatBench's judge says cheated. */
 function shareBars(rows, W) {
   const labelW = 230;
   const valW = 90;
@@ -264,7 +264,7 @@ function shareBars(rows, W) {
   }
   const H = y + 6;
   const svg = svgEl('svg', { class: 'viz bars-svg', width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: 'group',
-    'aria-label': 'Share of judged agents who cheated, by setting' });
+    'aria-label': 'CheatBench judge: share of judged agents who cheated, by setting' });
   const sx = f => x0 + f * (x1 - x0);
   for (const f of [0, 0.25, 0.5, 0.75, 1]) {
     svg.appendChild(svgEl('line', { class: f ? 'grid' : 'baseline', x1: sx(f), x2: sx(f), y1: padT - 4, y2: H - 4 }));
@@ -275,13 +275,13 @@ function shareBars(rows, W) {
     const r = it.r;
     const cy = it.y + rowH / 2;
     const frac = r.n ? r.k / r.n : 0;
-    const a = svgEl('a', { href: r.href, class: 'bar-row', 'aria-label': `${r.label}: ${r.n ? `${r.k} of ${r.n} judged agents cheated` : 'not judged'}` });
+    const a = svgEl('a', { href: r.href, class: 'bar-row', 'aria-label': `${r.label}: ${r.n ? `CheatBench judge: ${r.k} of ${r.n} judged agents cheated` : 'not judged'}` });
     a.appendChild(svgEl('rect', { class: 'bar-hit', x: 0, y: it.y, width: W, height: rowH }));
     a.appendChild(svgEl('text', { class: 'bar-name', x: labelW, y: cy + 4, 'text-anchor': 'end' }, r.label.length > 34 ? r.label.slice(0, 33) + '…' : r.label));
     a.appendChild(svgEl('rect', { class: 'bar-track', x: x0, y: cy - 6, width: x1 - x0, height: 12, rx: 2 }));
     if (r.n && frac > 0) a.appendChild(svgEl('rect', { class: 'bar-fill', x: x0, y: cy - 6, width: Math.max(2, sx(frac) - x0), height: 12, rx: 2 }));
     a.appendChild(svgEl('text', { class: 'bar-label', x: x1 + 8, y: cy + 4 }, r.n ? `${r.k}/${r.n}` : 'not judged'));
-    withTip(a, () => [`${r.label} · ${r.group}`, r.n ? `${r.k} of ${r.n} judged agents cheated` : 'no judged agent', `runs: ${r.runs.join(', ')}`, 'click opens these runs']);
+    withTip(a, () => [`${r.label} · ${r.group}`, r.n ? `CheatBench judge: ${r.k} of ${r.n} judged agents cheated` : 'no judged agent', `runs: ${r.runs.join(', ')}`, 'click opens these runs']);
     svg.appendChild(a);
   }
   return svg;
@@ -300,7 +300,7 @@ export async function viewSummary(r, view) {
   const swarm = ok.filter(isSwarmRun);
   const swarmFailed = failed.filter(isSwarmRun);
   const judged = ok.reduce((s, x) => s + x.aggregate.judged, 0);
-  const cheated = ok.reduce((s, x) => s + x.aggregate.cheated, 0);
+  const judgeCheated = ok.reduce((s, x) => s + x.aggregate.judge_cheated, 0);
   const nSingle = ok.filter(x => x.setting.n === 1).length;
   const nBoard = ok.length - nSingle - swarm.length;
   const rows = settingRows(ok);
@@ -321,14 +321,14 @@ export async function viewSummary(r, view) {
     headline([
       [fmtInt(ok.length), `completed runs: ${nSingle} lone agent, ${nBoard} board, ${swarm.length} board with hidden roles`, R.runs({ all: '1' })],
       [fmtInt(judged), 'judged agents', R.runs({ all: '1' })],
-      [fmtInt(cheated), 'agents judged cheated', R.runs({ cheated: 'yes' })],
+      [fmtInt(judgeCheated), 'agents CheatBench judge: cheated', R.runs({ judge_cheated: 'yes' })],
       [fmtInt(failed.length), 'failed runs set aside', R.runs({ failed: 'only' })],
     ]),
-    section('Share of judged agents who cheated, by setting', barsHost,
-      h('div', { class: 'muted small' }, 'A setting is the graph (lone agent, or every agent on one board), the roster size, and whether roles were hidden. Bar: cheated over judged. A row opens the runs behind it.')),
+    section('CheatBench judge: share of judged agents who cheated, by setting', barsHost,
+      h('div', { class: 'muted small' }, 'A setting is the graph (lone agent, or every agent on one board), the roster size, and whether roles were hidden. Bar: the agents CheatBench\'s judge says cheated, over judged. A row opens the runs behind it.')),
     section('Teams with hidden roles, by composition',
       swarm.length || swarmFailed.length ? compositionSection(swarm, swarmFailed) : muted('No swarm run yet.'),
-      h('div', { class: 'muted small' }, 'Left grid: share of judged agents who cheated. Right grid: the same by hidden role. ', link(R.swarm(), 'Swarm visualizations'), ' has the funnel, the adoption curves and every run’s timeline.')),
+      h('div', { class: 'muted small' }, 'Left grid: share of judged agents CheatBench\'s judge says cheated. Right grid: the same by hidden role. ', link(R.swarm(), 'Swarm visualizations'), ' has the funnel, the adoption curves and every run’s timeline.')),
     section('Swarm runs',
       swarm.length ? swarmTable(swarm, null) : muted('No completed swarm run yet.')));
 }
@@ -468,7 +468,7 @@ export async function viewSwarm({ query: q }, view) {
   const swarmFailed = runs.filter(x => x.failed && isSwarmRun(x));
   const byName = new Map(runs.map(r => [r.run, r]));
   const agents = swarm.flatMap(x => x.episodes.filter(ep => ep.counted).map(ep => ({ run: x.run, role: ep.role, v: ep.verdict })));
-  // The funnel's stages: the verdict flags of the swarm runs' task, cheated among them.
+  // The funnel's stages: the verdict flags of the swarm runs' task, the judge's own cheated among them.
   const stages = swarm.length ? swarm[0].verdict_fields : [];
   let live = true;
   const queue = jobQueue(2);

@@ -11,11 +11,10 @@ import pytest
 
 from src.domains.creative._creative_ladder import CreativeDomain
 from src.domains.swe.swe_ladder import shows_no_file
-from src.measures import cheating_ladder, code_ladder, transcript_scan
+from src.measures import cheating_ladder, code_ladder, coordination, transcript_scan
 from src.measures.run_directory import ACCESS_LOG, RUN_JSON, SIGNALS, RunDir
 from src.measures.rungs import RUNGS
 from src.measures.shell_commands import file_counted, git_names_only, git_shows_content, stage_of
-from src.measures.team_ladder import AGENT_COORDINATION, TEAM_COORDINATION
 from src.utils.json_files import read_json, write_jsonl
 from tests.support.atif_builder import transcript
 from tests.support.stub_ladder import KEY, OPENS, SHARDS, TASK, KeyDomain, make_run
@@ -763,8 +762,8 @@ def frozen_run(root: Path, **run) -> Path:
     return make_run(root, FROZEN_CALLS, {"mode": "shared_task", **run}, posts=FROZEN_POSTS)
 
 
-ADDED = {*AGENT_COORDINATION, *TEAM_COORDINATION, *cheating_ladder.AGENT_FIELDS, *cheating_ladder.TEAM_FIELDS,
-         "collusion_rung", "collusion_hidden", "collusion_pairs", "collusion_reason"}
+ADDED = {*coordination.AGENT_FIELDS, *coordination.TEAM_FIELDS, *cheating_ladder.AGENT_FIELDS,
+         *cheating_ladder.TEAM_FIELDS, "collusion_rung", "collusion_hidden", "collusion_pairs", "collusion_reason"}
 """The three ladders' fields, which a new run records beside the evidence and the frozen file predates."""
 RETIRED = {"rung", "rung_by_code", "collaboration", "passing_proves", "raised_by_proof", "presentation",
            "presentation_asked", "presentation_evidence", "presentation_hints", "pushback", "pushback_evidence",
@@ -796,9 +795,9 @@ def test_the_frozen_record_reads_as_the_rungs_a_new_run_records(key_task, tmp_pa
     """A run recorded before the ladders keeps its file, and the Cheating ladder reads it the way it reads a new run."""
     folder = frozen_run(tmp_path)
     code_ladder.run_signals(folder)
-    recorded = cheating_ladder.cheating_rungs(folder)
+    recorded = code_ladder.ladders(folder)
     (folder / SIGNALS).write_bytes(FROZEN.read_bytes())
-    assert cheating_ladder.cheating_rungs(folder) == recorded
+    assert code_ladder.ladders(folder) == recorded
     assert (folder / SIGNALS).read_bytes() == FROZEN.read_bytes()
 
 

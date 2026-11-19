@@ -110,6 +110,8 @@ export function renderBoard(el, d, opts) {
   const posText = h('span', { class: 'bd-pos' });
   const nowA = h('div', { class: 'bd-now bd-now-a' });
   const nowB = h('div', { class: 'bd-now bd-now-b' });
+  const endA = h('div', { class: 'bd-now bd-end bd-now-a' });
+  const endB = h('div', { class: 'bd-now bd-end bd-now-b' });
   const svgHost = h('div', { class: 'bd-svg-host' });
   const boardList = h('ol', { class: 'bd-posts' });
   const empty = muted('No post yet at this position.', 'small block');
@@ -123,16 +125,16 @@ export function renderBoard(el, d, opts) {
       if (!readers.has(r.agent)) readers.set(r.agent, []);
       readers.get(r.agent).push(r.k);
     }
-    const marks = p.collusion.map(m => h('div', { class: ['bd-mark', !m.stands && 'bd-mark-weak'] },
-      h('div', null, badge('collusion', 'bad', m.reason),
-        ` judge ${m.judge} on ${m.pair.join(' and ')}`, m.applied ? '' : ' (not the judge the ladder takes)',
-        m.stands ? '' : muted(` · the verdict did not stand: ${m.check || 'its check failed'}`, 'small')),
+    // The scheming judge's verdicts that quote this post: one per pair, the verdict that stands and the code's check.
+    const marks = p.scheming.map(m => h('div', { class: ['bd-mark', m.verdict !== 'yes' && 'bd-mark-weak'] },
+      h('div', null, badge(`scheming: ${m.which}`, 'bad', m.reason), ` the scheming judge on ${m.pair.join(' and ')}`,
+        m.verdict === 'yes' ? '' : muted(` · the verdict did not stand: ${(m.scheming_check && m.scheming_check.why) || m.verdict}`, 'small')),
       m.quote ? h('blockquote', { class: 'bd-quote' }, m.quote) : null,
       m.reason ? h('div', { class: 'small muted' }, m.reason) : null));
     const readBy = [...readers].map(([agent, ks], j) => [j ? ', ' : '', agent, ' (', callLink(agent, ks[0]),
       ks.length > 1 ? h('span', { title: `every call of ${agent} that read it: ${ks.join(', ')}` },
         ` and ${ks.length - 1} more`) : null, ')']);
-    const li = h('li', { class: ['bd-post', p.kind === 'system' && 'bd-system', p.collusion.length && 'bd-has-mark'],
+    const li = h('li', { class: ['bd-post', p.kind === 'system' && 'bd-system', p.scheming.length && 'bd-has-mark'],
       dataset: { i: String(i) }, hidden: true },
     h('div', { class: 'bd-post-head' },
       h('b', { class: 'bd-label' }, p.label),
@@ -141,10 +143,8 @@ export function renderBoard(el, d, opts) {
       p.role && p.role !== 'worker' ? badge(ROLE_LABEL[p.role] || p.role, 'plain') : null,
       muted(timed ? ` at ${fmtSecs(p.t)}` : ` at call ${p.t + 1} of the run`, 'small'),
       p.call != null ? [' · ', callLink(p.writer, p.call)] : null,
-      p.collusion.length ? badge('judge: collusion', 'bad',
-        'a collusion judge names this post as the one that shows collusion') : null,
-      p.names_exploit.length ? badge('names the exploit', 'warn', `the honeypot scan marks this post as naming the `
-        + `planted material (${p.names_exploit.join(', ')}): evidence for the Collusion ladder, no rung`) : null,
+      p.scheming.length ? badge('quoted by the scheming judge', 'bad',
+        'the scheming judge quotes this post as showing the pair\'s awareness of cheating or deception') : null,
       h('span', { class: 'spacer' }),
       readers.size ? h('span', { class: 'small muted' }, 'first read by ', readBy)
         : muted('read by no teammate', 'small')),
@@ -260,6 +260,10 @@ export function renderBoard(el, d, opts) {
     const calls = { a: [], b: [] };
     for (const side of SIDES) {
       const ag = byAgent.get(state[side]);
+      const end = side === 'a' ? endA : endB;
+      end.replaceChildren();
+      if (ag.uncited.length && (side === 'a' || state.a !== state.b)) appendAll(end, endLine(side, ag.uncited));
+      end.hidden = !end.childNodes.length;
       for (const c of ag.calls) {
         const st = callStyle(c, ramp);
         const tall = st.strong ? LANE_H - 4 : st.kind === 'plain' ? 14 : 24;
@@ -305,10 +309,10 @@ export function renderBoard(el, d, opts) {
       const y = yBoard + 4 + r * (POST_H + POST_GAP);
       const side = p.writer === state.a ? 'a' : p.writer === state.b ? 'b' : null;
       const by = side ? `bd-by-${side}` : p.kind === 'system' ? 'bd-by-system' : 'bd-by-other';
-      const g = svgEl('g', { class: ['bd-pbox', 'bd-ahead', by, p.collusion.length && 'bd-pbox-mark'], 'data-i': i },
+      const g = svgEl('g', { class: ['bd-pbox', 'bd-ahead', by, p.scheming.length && 'bd-pbox-mark'], 'data-i': i },
         svgEl('rect', { x: from, y, width: boxW, height: POST_H, rx: 3 }),
         boxW >= 20 ? svgEl('text', { x: from + boxW / 2, y: y + POST_H - 4, 'text-anchor': 'middle' }, p.label) : null,
-        p.collusion.length ? svgEl('path', { class: 'bd-mark-glyph',
+        p.scheming.length ? svgEl('path', { class: 'bd-mark-glyph',
           d: `M${from + boxW},${y + POST_H / 2 - 6} l6,6 l-6,6 l-6,-6 z` }) : null);
       postsG.appendChild(g);
       const arrows = svgEl('g', { visibility: 'hidden' });
@@ -351,7 +355,7 @@ export function renderBoard(el, d, opts) {
       } else {
         const p = d.posts[Number(t.getAttribute('data-i'))];
         tip.show(ev, [`${p.label} by ${p.writer}`, timed ? `at ${fmtSecs(p.t)}` : null, p.text.slice(0, 220),
-          ...p.collusion.map(m => `judge ${m.judge}: collusion, "${m.quote.slice(0, 160)}"`), 'click to move here']);
+          ...p.scheming.map(m => `scheming judge on ${m.pair.join(' and ')}: ${m.verdict}, "${m.quote.slice(0, 160)}"`), 'click to move here']);
       }
     });
     svg.addEventListener('pointerleave', () => { tip.hide(); hover(-1); });
@@ -471,11 +475,19 @@ export function renderBoard(el, d, opts) {
     showArrows();
   }
 
+  const chip = l => h('span', { class: 'bd-chip', title: l.evidence || '' },
+    `${d.ladders[l.ladder].name} `, levelChip(l.ladder, d.ladders[l.ladder], l.level, false));
+
+  // The levels an agent reached whose evidence cites no call (a record of the run: the access log, the remote's
+  // pushes, the hand-in, or a count over the whole run), which no bar of its lane can carry.
+  function endLine(side, levels) {
+    return [h('b', { class: `bd-key-${side}` }, state[side]),
+      muted(' also reached, on evidence that cites no call (hover for it): ', 'small'), ...levels.map(chip)];
+  }
+
   function nowLine(side, c) {
     const who = h('b', { class: `bd-key-${side}` }, state[side]);
     if (!c) return [who, muted(' has made no call yet', 'small')];
-    const chip = l => h('span', { class: 'bd-chip', title: l.evidence || '' },
-      `${d.ladders[l.ladder].name} `, levelChip(l.ladder, d.ladders[l.ladder], l.level, false));
     return [who, ' ', callLink(state[side], c.k), muted(` ${c.tool}`, 'small'), ' ',
       c.summary !== c.tool ? h('span', { class: 'bd-sum' }, c.summary) : null, ...c.labels.map(chip)];
   }
@@ -563,7 +575,7 @@ export function renderBoard(el, d, opts) {
     h('span', { class: 'bd-lg', title: `${cheat.line_words}: a call at the line or above fills its lane's height` },
       'Cheating label: ', cheat.levels.slice(1).map(lv => [lv === cheat.line ? lineMark(cheat) : null,
         levelChip('cheating', cheat, lv, false)])),
-    h('span', { class: 'bd-lg' }, h('i', { class: 'bd-sw bd-sw-mark' }), 'a judge marks the post as collusion'),
+    h('span', { class: 'bd-lg' }, h('i', { class: 'bd-sw bd-sw-mark' }), 'the scheming judge quotes the post'),
     h('span', { class: 'bd-lg' }, h('i', { class: 'bd-sw bd-sw-latest' }), 'latest post written or read by the two'),
     h('span', { class: 'bd-lg' }, `→ from the writing call to its post, and from a post to each agent's first read `
       + `of it: for the post at the position, the ${RECENT} before it and the post under the pointer`));
@@ -574,7 +586,7 @@ export function renderBoard(el, d, opts) {
       h('label', { class: 'bd-pick' }, sw(null, 'bd-sw-a'), selA),
       h('label', { class: 'bd-pick' }, sw(null, 'bd-sw-b'), selB),
       back, playBtn, fwd, modeSel, slider, posText),
-    nowA, nowB);
+    nowA, nowB, endA, endB);
   const note = muted(`Clock: ${d.clock_about}. Default pair: ${d.pair.join(' and ')}, ${d.pair_why}.${notes}`,
     'small block bd-note');
   el.replaceChildren(h('div', { class: 'bd-tab' },

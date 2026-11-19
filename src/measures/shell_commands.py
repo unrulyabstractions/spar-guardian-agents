@@ -33,9 +33,20 @@ LEAD = re.compile(r"[\s({]*(?:\w+=\S*\s+|(?:do|sudo|env|time|nice|nohup|command|
                   r"xargs\s+(?:-\S+\s+(?:\d+\s+)?)*|timeout\s+(?:-\S+\s+)*\S+\s+)*")
 COUNTERS = {"wc", "test", "[", "stat", "ls", "du", "file", "md5sum", "sha1sum", "sha256sum", "cksum"}
 COPIERS = {"cp", "mv", "rsync"}
-# the file python code writes by a literal name: open(name, "w") or Path(name).write_text(...)
-PYTHON_WRITE = re.compile(r"""\b(?:open|Path)\(\s*['"]([^'"]+)['"]"""
-                          r"""(?:\s*,\s*['"][wax]|\s*\)\.write_(?:text|bytes)\()""")
+READERS = {"cat", "head", "tail", "sed", "awk", "cp", "mv", "rsync", "tac", "paste", "sort", "uniq", "cut", "nl"}
+"""Programs that read the files they name (a copier's target and sed's or awk's script aside)."""
+CHANGERS = {"rm", "mv", "chmod", "chown", "truncate", "ln", "unlink", "shred", "touch", "install", "chattr", "setfacl"}
+"""Programs that change or remove the file they name, beside the files a stage writes."""
+# python naming a file by a literal string: open(name[, mode]) or Path(name)[.method(]; the mode or the method says
+# whether it reads, writes or changes the file
+LITERAL = r"""r?['"]([^'"\n]+)['"]"""
+PY_FILE = re.compile(rf"""\b(?:open|Path)\(\s*{LITERAL}\s*(?:,\s*(?:mode\s*=\s*)?['"](\w*\+?)['"])?"""
+                     r"""(?:\s*\)\s*\.(\w+)\()?""")
+PY_CHANGE = (re.compile(rf"""\bos\.(?:remove|unlink|rename|replace|chmod|truncate)\(\s*{LITERAL}"""),
+             re.compile(rf"""\bshutil\.(?:move|copy\w*)\(\s*r?['"][^'"\n]+['"]\s*,\s*{LITERAL}"""))
+"""python that removes, renames or replaces a file it names, and the target of shutil's copy or move."""
+PY_WRITERS = {"write_text", "write_bytes"}
+PY_CHANGERS = {"unlink", "rename", "replace", "chmod", "touch", "symlink_to"}
 PYTHON = re.compile(r"python[\d.]*")
 GREP_VALUES = {"grep": "efABCmdD", "rg": "efABCmgtTjMEr"}         # short options that take a value
 GREP_LONG_VALUES = {"regexp", "file", "after-context", "before-context", "context", "max-count", "include",
@@ -266,6 +277,19 @@ class Stage(NamedTuple):
         """The files sed -i edits in place, which keep what the script leaves alone."""
         return self.operands[1:] if self.program == "sed" and any(a.startswith("-i") for a in self.args) else []
 
+    @property
+    def changes(self) -> list[str]:
+        """The files it writes, edits, copies onto, removes, moves, links or changes the mode of, as it names them."""
+        return [*self.writes, *self.edited, *self.copy_target, *(self.operands if self.program in CHANGERS else [])]
+
+    @property
+    def reads(self) -> list[str]:
+        """The files a reader names (READERS): its operands, a copier's target and sed's or awk's script left out."""
+        if self.program not in READERS:
+            return []
+        ops = self.operands[:-1] if self.program in COPIERS else self.operands
+        return ops[1:] if self.program in ("sed", "awk") else ops
+
 
 def stage_of(stage: str) -> Stage:
     """A simple command's text as a Stage."""
@@ -364,7 +388,13 @@ class Block(NamedTuple):
     def writes(self) -> list[str]:
         """The files it replaces, as absolute paths: redirects, tee, a copier's last file, python's writes by name."""
         stages = [path for s in self.stages for path in (*s.writes, *s.copy_target)]
-        return [*stages, *(absolute(path, self.directory) for path in PYTHON_WRITE.findall(self.text))]
+        return [*stages, *(absolute(path, self.directory) for path in python_files(self.text).writes)]
+
+    @property
+    def reads(self) -> list[str]:
+        """The files it names to its readers, as absolute paths: Stage.reads and python's literal opens for reading."""
+        return [absolute(path, self.directory)
+                for path in [*(p for s in self.stages for p in s.reads), *python_files(self.text).reads]]
 
     @property
     def edits(self) -> list[str]:
@@ -402,6 +432,38 @@ def command_blocks(cmd: str, directory: str) -> list[Block]:
         else:
             out.append(Block([located(stage, directory) for stage in stages], text, directory))
     return out
+
+
+class PythonFiles(NamedTuple):
+    """The files python code names by a literal string, by what it does with them."""
+    reads: list[str]
+    writes: list[str]
+    changes: list[str]
+
+
+def python_files(code: str) -> PythonFiles:
+    """What python code does with the files it names by a literal string (PY_FILE, PY_CHANGE): an open for writing
+    (w, a, x) or a Path's write_text or write_bytes writes; those, a Path's unlink, rename, replace, chmod, touch or
+    symlink_to, os's removals and renames and shutil's copy or move target change; any other open or Path reads."""
+    reads, writes, changes = [], [], []
+    for path, mode, method in PY_FILE.findall(code):
+        if mode[:1] in ("w", "a", "x") or method in PY_WRITERS:
+            writes.append(path)
+            changes.append(path)
+        elif method in PY_CHANGERS:
+            changes.append(path)
+        else:
+            reads.append(path)
+    changes += [m.group(1) for pattern in PY_CHANGE for m in pattern.finditer(code)]
+    return PythonFiles(reads, writes, changes)
+
+
+def changed_paths(cmd: str) -> set[str]:
+    """The paths a command writes, removes, moves, links or changes the mode of, as it names them: its stages' changes
+    (here-documents are data) and the literal paths python changes (python_files). written_paths' every path-like word
+    of python code that writes a file is left out: it names the files the code only reads too."""
+    stages = (stage_of(s) for pipeline in shell_pipelines(strip_heredocs(cmd)) for s in pipeline)
+    return {path for stage in stages for path in stage.changes} | set(python_files(cmd).changes)
 
 
 def written_paths(cmd: str) -> set[str]:

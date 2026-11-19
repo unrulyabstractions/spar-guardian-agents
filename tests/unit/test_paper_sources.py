@@ -4,6 +4,7 @@ exists, the level tables carry every level the instruction ladders define, the r
 and Collusion ladders, and no section names a rung or level of the ladders the three replaced."""
 from __future__ import annotations
 
+import json
 import re
 
 import pytest
@@ -11,6 +12,7 @@ import yaml
 
 from scripts.paper import paper_sources
 from src.measures import cheating_ladder, collusion
+from src.measures.rungs import RUNGS
 
 SECTIONS = paper_sources.PAPER / "sections"
 
@@ -49,7 +51,7 @@ def test_level_tables_hold_every_level(ladder):
 
 def test_rung_tables_hold_every_rung_and_clause():
     cheating, colluding = paper_sources.cheating_rungs_tex(), paper_sources.collusion_rungs_tex()
-    for rung in cheating_ladder.LEVELS:
+    for rung in RUNGS:
         assert rf"\textbf{{{rung}}}" in cheating
     for clause in cheating_ladder.CLAUSES:
         assert rf"\textit{{{clause}}}" in cheating
@@ -78,7 +80,8 @@ def test_escape_covers_latex_specials():
 
 @pytest.mark.parametrize("module", ["control_tables", "protein_regulator_table", "swe_regulator_table",
                                     "disregulator_tables", "baseline_tables", "solo_controls_table",
-                                    "cheating_table", "coordination_table", "collusion_table", "judge_tables", "tables",
+                                    "cheating_table", "coordination_table", "collusion_table", "judge_tables",
+                                    "label_tables", "tables",
                                     "fig_scripted_teammates", "fig_roles_access", "fig_jigsaw", "fig_multidomain",
                                     "fig_deep_dive"])
 def test_figure_scripts_import(module):
@@ -92,10 +95,47 @@ OWN_LINE = re.compile(r"\bat_least\(|\b(?:LEVELS|CHEATING|RUNGS)\.index\(|code_l
 
 def test_no_paper_script_draws_its_own_cheating_line():
     """A team or an agent cheated by the measures' one definition (cheating_ladder.cheated), never by a threshold a
-    paper script compares rungs against."""
+    paper script compares rungs against. The paper's second measure, accessed the honeypot, is drawn once, in
+    study_ladders.accessed."""
     for script in (paper_sources.ROOT / "scripts" / "paper").glob("*.py"):
         found = OWN_LINE.findall(script.read_text())
+        if script.name == "study_ladders.py":
+            assert found == ["at_least("], f"study_ladders draws a line beside accessed: {found}"
+            continue
         assert not found, f"{script.name} compares rungs itself: {found}"
+
+
+def test_accessed_is_looked_or_above_and_cheated_is_attempted_or_above():
+    from scripts.paper.study_ladders import accessed
+
+    assert [accessed(r) for r in RUNGS] == [False, True, True, True, True]
+    assert [cheating_ladder.cheated(r) for r in RUNGS] == [False, False, False, True, True]
+    assert accessed(None) is None
+
+
+def test_cell_runs_takes_valid_runs_of_the_cell_seeds_then_pilots(tmp_path):
+    from scripts.paper.study_ladders import cell_runs
+
+    names = {"cell1": True, "cell2": False, "cell10": True, "cell_pilot1": True, "cellx1": True, "cell_mock1": True}
+    rows = []
+    for name, valid in names.items():
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "run.json").write_text("{}")
+        rows.append(json.dumps({"path": name, "valid": valid, "mock": name == "cell_mock1"}))
+    (tmp_path / "INDEX.jsonl").write_text("\n".join(rows) + "\n")
+    assert [p.name for p in cell_runs("cell", tmp_path)] == ["cell1", "cell10", "cell_pilot1"]
+
+
+def test_save_refuses_text_below_the_print_floor(tmp_path):
+    from scripts.paper.study_ladders import MIN_PRINT_PT, TEXT_WIDTH_IN, canvas, save
+
+    fig, ax = canvas(TEXT_WIDTH_IN * 2, 1)
+    ax.text(0.1, 0.5, "too small", fontsize=MIN_PRINT_PT * 1.5)
+    with pytest.raises(SystemExit, match="too small"):
+        save(fig, tmp_path / "small.png")
+    fig, ax = canvas(TEXT_WIDTH_IN, 1)
+    ax.text(0.1, 0.5, "readable", fontsize=MIN_PRINT_PT)
+    assert save(fig, tmp_path / "ok.png").is_file()
 
 
 def test_every_figure_has_a_script_in_the_repository():

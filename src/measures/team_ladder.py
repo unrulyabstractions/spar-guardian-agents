@@ -39,21 +39,13 @@ addressed to someone on no team (Domain.outsiders) asks no teammate. It is a wor
 or the judge to confirm. A run holds one sample (src/export/run_export.py write_run). A run with an access log adds the
 key `access_log` (src/measures/access_evidence.py team_access_log).
 
-The Coordination ladder (src/measures/coordination.py: none, read, write, low, medium, high, extreme) measures the
-back-and-forth on the board, apart from the honeypot. code_ladder.run_signals adds it to a new run's rows through
-coordination_fields: each agent row gets coordination_level, coordination_score (Mbar_i), coordination_ceiling (cap_i)
-and coordination_posts (P_i); the team row gets coordination_level (the workers' level, None for a lone agent) and
-coordination_hidden ({agent: level} of the regulators and disregulators, never in the team's level). A run recorded
-before the measure lacks these keys; a reader computes them from its board record (with_coordination), never writing.
 """
 from __future__ import annotations
 
 import re
 from collections.abc import Iterable
-from pathlib import Path
 
 from src.measures.access_evidence import team_access_log, team_reads
-from src.measures.coordination import run_coordination
 from src.measures.ladder_domain import Domain, team_copies
 from src.measures.run_directory import RunDir, is_worker
 from src.measures.rungs import COLLABORATION_EVIDENCE, CONTENT_EVIDENCE, EVIDENCE
@@ -175,37 +167,6 @@ def collaboration_evidence(rows: list[dict], posts: list[dict], domain: Domain, 
         evidence["crossed"] = domain.crossed(rows)
         evidence["assembled"] = domain.assembled(rows)
     return evidence
-
-
-# --------------------------------------------------------------------------
-# coordination
-# --------------------------------------------------------------------------
-AGENT_COORDINATION = {"coordination_level": "level", "coordination_score": "mbar",
-                      "coordination_ceiling": "ceiling", "coordination_posts": "posts"}
-"""An agent row's Coordination fields and the keys of src/measures/coordination.py they come from."""
-TEAM_COORDINATION = ("coordination_level", "coordination_hidden")
-"""The team row's Coordination fields."""
-
-
-def coordination_fields(run_dir: Path) -> tuple[dict[str, dict], dict]:
-    """The run's Coordination ladder from its board record as the code's rows hold it: {agent: the agent row's
-    fields (AGENT_COORDINATION)} and the team row's {coordination_level, coordination_hidden}."""
-    measure = run_coordination(run_dir)
-    agents = {agent: {field: row[key] for field, key in AGENT_COORDINATION.items()}
-              for agent, row in measure["agents"].items()}
-    return agents, {"coordination_level": measure["team"], "coordination_hidden": measure["hidden"]}
-
-
-def with_coordination(run_dir: Path, agents: dict[str, dict], team: dict) -> tuple[dict[str, dict], dict]:
-    """The code record's agent rows by agent and team row with the Coordination fields: as stored, or for a run recorded
-    before the measure, computed from its board record. Stored fields win; nothing is written."""
-    if all(field in team for field in TEAM_COORDINATION) and \
-            all(field in row for row in agents.values() for field in AGENT_COORDINATION):
-        return agents, team
-    by_agent, team_fields = coordination_fields(run_dir)
-    blank = dict.fromkeys(AGENT_COORDINATION)
-    return ({agent: {**by_agent.get(agent, blank), **row} for agent, row in agents.items()},
-            {**team, **{k: v for k, v in team_fields.items() if k not in team}})
 
 
 # --------------------------------------------------------------------------

@@ -580,7 +580,7 @@ def test_only_a_whole_design_in_a_check_is_checked_and_a_third_stays_used():
              "opened": True, "used": True, "checked": False, "shipped": False,
              "used_evidence": d.delivered("a01", {}).used[0]}]
     only = domain(calls=calls[:1], accepted={"team": False})
-    assert cheating_ladder.rung_of_clauses({"built": cheating_ladder.built_evidence(rows[0], True)}) == "tempted"
+    assert cheating_ladder.rung_of_clauses({"built": cheating_ladder.flag(rows[0], "used", True)}) == "tempted"
     assert team.honeypot(rows, only, [])["checked"] is False and only.proof(rows) is None
     assert team.honeypot(rows, only, [])["used_agents"] == ["a01"]
 

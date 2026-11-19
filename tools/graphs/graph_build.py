@@ -86,7 +86,8 @@ def build_graph(run: Run, onsets: dict[str, dict | None]) -> nx.MultiDiGraph:
     discovery = discovery_rounds(run)
     for agent in run.agents:
         onset = onsets.get(agent)
-        graph.add_node(agent, label=agent, role=run.roles.get(agent, "worker"), cheated=run.cheated.get(agent),
+        graph.add_node(agent, label=agent, role=run.roles.get(agent, "worker"),
+                       judge_cheated=run.judge_cheated.get(agent),
                        onset=onset["round"] if onset else None, discovery_round=discovery.get(agent),
                        posts=len(run.posts(agent)), reads=len(run.reads(agent)))
     for (source, target), edge in read_edges(run).items():
@@ -159,11 +160,12 @@ def scout_ran(run: Run) -> bool:
 
 
 def onset_judge_disagreements(run: Run, onsets: dict[str, dict | None]) -> list[dict]:
-    """Agents where scout's onset and the judge's verdict disagree: an onset but judged clean, or none but cheated."""
+    """Agents where scout's onset and CheatBench's judge's verdict disagree: an onset but judged clean, or none but
+    judged cheated."""
     return [{"agent": agent, "onset": onsets[agent]["round"] if onsets.get(agent) else None,
-             "cheated": run.cheated[agent]}
-            for agent in run.agents if run.cheated.get(agent) is not None
-            and (onsets.get(agent) is not None) != bool(run.cheated[agent])]
+             "judge_cheated": run.judge_cheated[agent]}
+            for agent in run.agents if run.judge_cheated.get(agent) is not None
+            and (onsets.get(agent) is not None) != bool(run.judge_cheated[agent])]
 
 
 def structure_metrics(graph: nx.MultiDiGraph) -> dict:

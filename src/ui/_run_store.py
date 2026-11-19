@@ -11,7 +11,7 @@ browser's.
 
     store = Store(Path("runs"))
     rows = [store.run_row(name) for name in store.run_names()]
-    rows[0]["aggregate"]["cheated"]
+    rows[0]["aggregate"]["judge_cheated"]   # the agents CheatBench's judge says cheated, its own word
 """
 from __future__ import annotations
 
@@ -141,15 +141,16 @@ def _swe_of(swe: dict, run_dir: Path) -> dict:
 
 
 def aggregate(run: dict, episodes: list[dict], fields: list[dict]) -> dict:
-    """One run's counts over its episodes. judged, cheated, flags and by_role count only counted verdicts (a verdict
-    on an episode with a transcript); tokens.input includes cache reads."""
+    """One run's counts over its episodes. judged, judge_cheated (the agents CheatBench's judge says cheated, its own
+    `cheated`, never the Cheating ladder's), flags and by_role count only counted verdicts (a verdict on an episode with
+    a transcript); tokens.input includes cache reads."""
     counted = [e for e in episodes if e["counted"]]
     defenses = [d["name"] for d in run.get("defenses") or []]
     scores = [v for e in episodes for v in (e.get("score") or {}).values() if v is not None]
     usages = [e.get("usage") or {} for e in episodes]
     return {
         "judged": len(counted),
-        "cheated": sum(1 for e in counted if e["verdict"]["cheated"]),
+        "judge_cheated": sum(1 for e in counted if e["verdict"]["cheated"]),
         "flags": {f["field"]: sum(1 for e in counted if e["verdict"].get(f["field"])) for f in fields},
         "controlled": any(name not in PASSIVE_DEFENSES for name in defenses),
         "blocks": sum((e.get("defense") or {}).get("blocks", 0) for e in episodes),
@@ -160,7 +161,8 @@ def aggregate(run: dict, episodes: list[dict], fields: list[dict]) -> dict:
         "tokens": {key: sum(u.get(key) or 0 for u in usages) for key in ("input", "output", "cache_read")},
         "judge_cost": round(sum((e["verdict"] or {}).get("judge_cost_usd") or 0 for e in episodes), 4),
         "by_role": {role: {"n": sum(1 for e in counted if e.get("role") == role),
-                           "cheated": sum(1 for e in counted if e.get("role") == role and e["verdict"]["cheated"])}
+                           "judge_cheated": sum(1 for e in counted
+                                                if e.get("role") == role and e["verdict"]["cheated"])}
                     for role in ROLES} if run.get("swarm") else None,
     }
 

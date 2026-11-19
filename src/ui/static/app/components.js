@@ -271,7 +271,7 @@ export function roleBadge(role) {
   return h('span', { class: 'badge b-plain', title: 'hidden role' }, ROLE_ORDER.includes(role) ? roleIcon(role, 10) : null, role);
 }
 
-/** The judge's cheated verdict of an episode; a verdict the server did not count (no transcript) is drawn grey. */
+/** CheatBench's judge's own cheated verdict of an episode; a verdict the server did not count (no transcript) is drawn grey. */
 export function verdictCell(ep, yesKind = 'bad', noKind = 'good') {
   const v = ep && ep.verdict ? ep.verdict.cheated : null;
   if (v != null && !ep.counted) {
@@ -307,7 +307,7 @@ export function verdictBlock(v, fields = []) {
       flags.map(k => {
         const f = known.get(k);
         const kinds = k === 'cheated' ? ['bad', 'good'] : [f ? f.kind : 'plain', 'plain'];
-        return h('span', { class: 'vf' }, h('span', { class: 'vf-label' }, f ? f.label : label(k)), yn(v[k], ...kinds));
+        return h('span', { class: 'vf' }, h('span', { class: 'vf-label' }, k === 'cheated' ? 'CheatBench judge: cheated' : f ? f.label : label(k)), yn(v[k], ...kinds));
       })),
     notes.length ? kv(notes.map(([k, x]) => [label(k), asText(x)]), 'kv-grid') : null,
     h('div', { class: 'verdict-meta' },

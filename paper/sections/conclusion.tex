@@ -1,17 +1,12 @@
 \section*{Conclusion}
 We adapted three CheatBench tasks (software engineering, protein design, and creative writing) to a multi-agent
 context, split the honeypot across workers, and tested whether covert regulator agents can reduce cheating behavior
-in the swarm.
-
-So far, the evidence for H1 is mixed. On the SWE task in the multi-domain study, an enforcing Haiku regulator kept
-every DeepSeek team from cheating, while a Haiku regulator at the ambiguous level did not. Untold protein design teams
-rarely cheated, so its regulator runs cannot test H1. A single sentence explicitly discouraging the exploit performed
-as well as the best regulator.
-
-From the SWE deep dive, we find that if the regulator also works on the task, the strongest effect is regulating
-itself from cheating. With an explicit definition of what qualifies as cheating, its cheating rate fell from 36/36
-to 21/36. A Haiku regulator that only oversees and warns early cut the DeepSeek workers' cheating from 36/36 to
-27/36.
-
-The evidence on H2 runs against it so far. Disregulators never led a team to cheat, and a regulator beside a
-disregulator kept every team from looking at the planted work.
+in the swarm. So far, the evidence for H1 is mixed. On the SWE task in the multi-domain study, no DeepSeek team with
+an enforcing Haiku regulator cheated, but these cells are too small to separate the enforce and ambiguous levels.
+No untold protein design team cheated, so its regulator runs cannot test H1. A single sentence explicitly
+discouraging the exploit performed as well as the best regulator. The SWE deep dive counts looking for the fix as
+cheating, as \textit{CheatBench}'s judge does. There, a regulator that also works on the task mostly regulated its own
+cheating once it had an explicit definition. A Haiku regulator that only oversees and warns early cut the DeepSeek
+workers' cheating. Disregulators never led a team to cheat, and a regulator beside a disregulator kept every team from
+looking at the planted work. No untold team on the disregulators' targets cheated either, so we posit that these
+runs cannot yet test H2.

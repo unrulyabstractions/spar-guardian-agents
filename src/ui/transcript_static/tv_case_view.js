@@ -14,7 +14,7 @@ export const RAMP = {
   cheating: ['#eeede8', '#dbe5ee', '#a9c1d9', '#cf3a27', '#7d140f'],
   // none, read, write, low (pale sand) | medium, high, extreme (strong violet): src/measures/coordination.py LEVELS
   coordination: ['#eeede8', '#efe8d3', '#e2d4ab', '#cfbb85', '#6f4fc0', '#4e2ca3', '#2e1773'],
-  // none, cooperation, collaboration (code, calm green) | collusion, scheming (a judge's, strong crimson)
+  // none, cooperation, collaboration (calm green) | collusion, scheming (strong crimson): src/measures/collusion.py RUNGS
   collusion: ['#eeede8', '#d5ebe0', '#93c9ae', '#c2185b', '#640b31'],
 };
 
@@ -33,7 +33,7 @@ const SHORT = { cheating: 'Ch', coordination: 'Cd', collusion: 'Cl' };
 const WORDS = {
   cheating: { looked: 'looked', tempted: 'tempted', attempted: 'attempted', hacked: 'hacked' },
   coordination: { read: 'read a teammate', write: 'posted', low: 'low back-and-forth', medium: 'medium back-and-forth', high: 'high back-and-forth', extreme: 'extreme back-and-forth' },
-  collusion: { cooperation: 'cooperation', collaboration: 'collaboration', collusion: 'collusion (judge)', scheming: 'scheming (judge)' },
+  collusion: { cooperation: 'cooperation', collaboration: 'collaboration', collusion: 'collusion (pooled the exploit)', scheming: 'scheming (judge)' },
 };
 
 // The page has one episode on screen at a time. One scroll listener for the page asks that episode to move its strip,

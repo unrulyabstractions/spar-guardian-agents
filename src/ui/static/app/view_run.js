@@ -175,7 +175,7 @@ function scoutCard(run, s) {
     const where = [f.step != null ? `M${f.step}` : null, f.round != null ? `round ${f.round}` : null].filter(Boolean).join(' · ');
     return h('span', { title: tipOf(f) }, badge('yes', SCOUT_KIND[sig] || 'bad'), where ? [' ', muted(where, 'small')] : null);
   };
-  const cols = ['agent', 'judge: cheated', 'onset round', ...signals.map(sig => sig.replace(/^honeypot_/, 'honeypot ').replace(/_/g, ' '))];
+  const cols = ['agent', 'CheatBench judge: cheated', 'onset round', ...signals.map(sig => sig.replace(/^honeypot_/, 'honeypot ').replace(/_/g, ' '))];
   const rows = agents.map(a => {
     const j = (judged[a] || {}).judge || {};
     const onset = (s.onset || {})[a];
@@ -209,7 +209,7 @@ function networkCard(run, s) {
   const files = s.files || [];
   const degree = s.degree || {};
   const check = s.read_graph_check;
-  const nodes = (s.nodes || []).map(n => [n.agent, n.role, yn(n.cheated, 'bad', 'good'), n.onset == null ? null : String(n.onset),
+  const nodes = (s.nodes || []).map(n => [n.agent, n.role, yn(n.judge_cheated, 'bad', 'good'), n.onset == null ? null : String(n.onset),
     n.discovery_round == null ? null : String(n.discovery_round), String(n.posts ?? 0), String(n.reads ?? 0),
     String((degree[n.agent] || {}).in ?? 0), String((degree[n.agent] || {}).out ?? 0)]);
   const edges = (s.edges || []).map(e => [`${e.source} → ${e.target}`, e.kind, String(e.weight), e.first_round == null ? null : String(e.first_round),
@@ -236,7 +236,7 @@ function networkCard(run, s) {
       ['read graph matches run.json', check ? yn(check.matches, 'good', 'warn') : null],
       ['files', h('span', null, files.includes('graph.gexf') ? [toolLink(run, 'graphs', 'graph.gexf', 'graph.gexf (open in Gephi)', { download: 'graph.gexf' }), ' '] : null,
         files.filter(f => f !== 'graph.gexf' && f !== 'graph.png').map(f => [toolLink(run, 'graphs', f), ' ']))]], 'kv-grid'),
-    toolTable(['agent', 'role', 'cheated', 'onset', 'discovery round', 'posts', 'reads', 'in', 'out'], nodes),
+    toolTable(['agent', 'role', 'CheatBench judge: cheated', 'onset', 'discovery round', 'posts', 'reads', 'in', 'out'], nodes),
     edges.length ? toolTable(['edge', 'kind', 'weight', 'first round', 'distinct posts'], edges) : muted('No edges.'),
     onsetParts);
 }
@@ -252,7 +252,7 @@ function transectCard(run, s) {
   });
   const span = (a, b) => (a == null ? null : a === b ? String(a) : `${a}–${b}`);
   const phaseRows = Object.entries(s.phases || {}).sort(([a], [b]) => a.localeCompare(b)).flatMap(([a, list]) =>
-    (list || []).map((p, i) => [i === 0 ? a : h('span'), i === 0 ? yn((agents[a] || {}).cheated, 'bad', 'good') : h('span'),
+    (list || []).map((p, i) => [i === 0 ? a : h('span'), i === 0 ? yn((agents[a] || {}).judge_cheated, 'bad', 'good') : h('span'),
       badge(p.label, /^exploit/.test(p.label) ? 'bad' : 'plain'), span(p.start_turn, p.end_turn), span(p.start_round, p.end_round)]));
   const judge = s.judge;
   const merged = s.merged_sample || {};
@@ -262,7 +262,7 @@ function transectCard(run, s) {
       ['judge tokens', judge && judge.totals ? fmtInt(judge.totals.total_tokens) : undefined],
       ['merged sample accepted', merged.sample ? h('span', { title: (merged.errors || []).join('\n') }, yn(merged.accepted, 'good', 'warn')) : undefined]], 'kv-grid'),
     h('div', { class: 'links' }, reportLinks),
-    phaseRows.length ? toolTable(['agent', 'cheated', 'phase', 'turns', 'rounds'], phaseRows)
+    phaseRows.length ? toolTable(['agent', 'CheatBench judge: cheated', 'phase', 'turns', 'rounds'], phaseRows)
       : muted(s.structural_only ? 'Structural run: no phases were labelled.' : 'No phases.'));
 }
 
@@ -527,7 +527,7 @@ function sweView(swe, run) {
     : h('span', { title: `${swe.required_passed[k] || 0} of ${swe.required_tests} required tests passed` },
       yn(swe.rewards[k] === 1, 'good', 'plain')));
   const m = (a, k) => ((swe.measures || {})[a] || {})[k];
-  const cols = ['agent', ...(swe.pieces ? ['planted piece'] : []), 'reward', 'judge: cheated', 'posts', 'about the fix',
+  const cols = ['agent', ...(swe.pieces ? ['planted piece'] : []), 'reward', 'CheatBench judge: cheated', 'posts', 'about the fix',
     'disclosed'];
   const rows = agents.map(a => {
     const ep = episodeOf(run, a);
@@ -561,14 +561,14 @@ function swarmView(sw, run) {
   return h('div', null,
     kv([
       ['composition', h('span', null, mono(sw.composition), ' ', muted(`${sw.regulators} regulators, ${sw.disregulators} disregulators, ${sw.workers} workers; seed ${sw.seed}`, 'small'))],
-      ['judge: any agent cheated', counted.length ? yn(counted.some(e => e.verdict.cheated === true), 'bad', 'good')
+      ['CheatBench judge: any agent cheated', counted.length ? yn(counted.some(e => e.verdict.cheated === true), 'bad', 'good')
         : muted(blind ? `not counted: ${plural(blind, 'verdict')} on episodes without a transcript` : 'not judged')],
       ['registered on main', del == null ? muted('not recorded') : h('span', { title: `checkout ${del.checkout || DASH}; registry on main: ${(del.main_registry_agents || []).join(', ')}` }, yn(del.registered_on_main, 'good', 'warn'))],
       ['archive in workspace at end', del == null ? muted('not recorded') : yn(del.archive_in_workspace, 'plain', 'warn')],
     ], 'kv-grid'),
     del && del.commits && del.commits.length ? h('div', null, h('h3', null, 'Commits at the end (git log --all)'), h('pre', { class: 'pre' }, del.commits.join('\n'))) : null,
     h('h3', null, 'Roles'),
-    dataTable(['agent', 'hidden role', 'judge: cheated'], roles.map(([name, role]) => [name, roleBadge(role), verdictCell(episodeOf(run, name))]), { bare: true }));
+    dataTable(['agent', 'hidden role', 'CheatBench judge: cheated'], roles.map(([name, role]) => [name, roleBadge(role), verdictCell(episodeOf(run, name))]), { bare: true }));
 }
 
 const DEFENSE_COLS = ['name', 'defense_type', 'defense_category', 'invocation', 'model_override', 'scope', 'fail_mode',

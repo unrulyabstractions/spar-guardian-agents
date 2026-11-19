@@ -1,7 +1,7 @@
 """graph.png and its CSV twin graph.csv: agents on a ring (or a seeded spring layout), read and oversight arrows.
 
 The colours are src/utils/figure_style.py's: the role colours for the nodes (a worker white with a dark edge) and the
-critical status colour for the ring of an agent judged cheated.
+critical status colour for the ring of an agent CheatBench's judge says cheated (judge_cheated).
 """
 from __future__ import annotations
 
@@ -79,14 +79,14 @@ def plot_graph(graph: nx.MultiDiGraph, agents: list[str], title: str, subtitle: 
     for node in agents:
         data = graph.nodes[node]
         x, y = positions[node]
-        if data["cheated"]:
+        if data["judge_cheated"]:
             ax.scatter([x], [y], s=RING_SIZE, facecolor="none", edgecolor=CRITICAL, linewidth=3, zorder=3)
         role = data["role"]
         ax.scatter([x], [y], s=NODE_SIZE, color=ROLE_FILL.get(role, MUTED), edgecolor=ROLE_EDGE.get(role, MUTED),
                    linewidth=1.5, zorder=3)
         ax.text(x, y, node, color=ROLE_TEXT.get(role, WHITE), fontsize=NODE_FONT, fontweight="bold", ha="center",
                 va="center", zorder=5)
-        rows.append(["node", node, "", "", data["role"], data["cheated"], round(x, 4), round(y, 4), "", "", ""])
+        rows.append(["node", node, "", "", data["role"], data["judge_cheated"], round(x, 4), round(y, 4), "", "", ""])
     ax.set_xlim(-1.45, 1.45)
     ax.set_ylim(-1.45, 1.45)
     ax.set_aspect("equal")
@@ -94,7 +94,7 @@ def plot_graph(graph: nx.MultiDiGraph, agents: list[str], title: str, subtitle: 
     handles = [Line2D([], [], marker="o", markerfacecolor=ROLE_FILL[role], markeredgecolor=ROLE_EDGE[role],
                       markeredgewidth=1.5, linestyle="none", markersize=9, label=role) for role in roles]
     handles.append(Line2D([], [], marker="o", markerfacecolor="none", markeredgecolor=CRITICAL, markeredgewidth=2.5,
-                          linestyle="none", markersize=11, label="judged cheated (ring)"))
+                          linestyle="none", markersize=11, label="CheatBench judge: cheated (ring)"))
     handles.append(Line2D([], [], color=INK_SECONDARY, linewidth=2, label="read: reader to author, width = posts"))
     handles.append(Line2D([], [], color=MUTED, linewidth=1.5, linestyle=(0, (4, 3)),
                           label="oversight: regulator to target"))
@@ -102,7 +102,7 @@ def plot_graph(graph: nx.MultiDiGraph, agents: list[str], title: str, subtitle: 
     fig.savefig(out, bbox_inches="tight", facecolor=SURFACE)
     with out.with_suffix(".csv").open("w", newline="") as handle:
         writer = csv.writer(handle)
-        writer.writerow(["element", "source", "target", "kind", "role", "cheated", "x", "y", "weight", "first_round",
-                         "line_width"])
+        writer.writerow(["element", "source", "target", "kind", "role", "judge_cheated", "x", "y", "weight",
+                         "first_round", "line_width"])
         writer.writerows(rows)
     return out

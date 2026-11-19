@@ -1,90 +1,49 @@
 """The ladder tables of the transcript viewer's #/ladders page, by task: level rows, task columns, one cell per task.
 
-The Cheating table by task is the paper's own (src/measures/ladder_by_domain.py cheating_by_task).
-Coordination has no table by task: its rule is the same on every task, and the page lists its levels with their
-glosses (transcript_levels.LADDERS["coordination"]). Collusion's levels are listed the same way; what a take and the
-hand-in are on each task is read from the take rules themselves (src/measures/collusion_takes.py): the generic rules
-from its docstring, and each task's own rule from the docstrings of its TASK_RULES functions, or the reason NO_RULE
-gives.
+The Cheating table by task is the paper's own (src/measures/ladder_by_domain.py cheating_by_task), with its columns:
+the tasks the study reads (ladder_by_domain.DOMAINS). Coordination has no table by task: its rule is the same on every
+task, and the page lists its levels with their glosses (transcript_levels.LADDERS["coordination"]). Collusion's levels
+are listed the same way; what a take and the hand-in are on each task is read from the take rules themselves
+(src/measures/collusion_takes.py): the generic rules, its TAKE_RULES, and each task's own rule from the docstrings of
+its TASK_RULES functions, or the reason NO_RULE gives. The judge labels beside the ladders
+(transcript_levels.JUDGE_LABELS) are listed with whom each is read for. The tasks the study does not read
+(ladder_by_domain.HIDDEN_TASKS) have no column, and the index neither measures nor lists their runs.
 
-The columns follow ladder_by_domain.DOMAINS: SWE first, then the tasks by their weight in the studies. The viewer
-leaves out the domains of HIDDEN_DOMAINS: their columns here and their runs in the index (hidden_task). The paper's
-tables keep every domain.
-
-    ladders_payload(transcript_levels.LADDERS, transcript_levels.ORDER)   # what /api/ladders answers
-    hidden_task("chess")                                                  # True: the index does not list its runs
+    ladders_payload(transcript_levels.LADDERS, transcript_levels.ORDER, transcript_levels.JUDGE_LABELS)
 """
 from __future__ import annotations
 
 import inspect
-import re
 
 from src.measures import collusion_takes, ladder_by_domain
 
-HIDDEN_DOMAINS = ("Knowledge work", "Chess", "OpenMath", "Subset sum, factoring")
-"""The domains the viewer leaves out, at the user's orders of 2026-11-18 and 2026-11-19 (knowledge work): their columns
-of the by-task tables, and their runs, which the index neither measures nor serves. An empty tuple shows every domain
-again."""
-SHOWN = [i for i, domain in enumerate(ladder_by_domain.DOMAINS) if domain not in HIDDEN_DOMAINS]
-"""The columns of ladder_by_domain.DOMAINS the viewer shows, in their order."""
-assert set(ladder_by_domain.DOMAINS) >= set(HIDDEN_DOMAINS)
-
-RULE_LINE = re.compile(r"^- (\w+): (.*)$")
-
-
-def hidden_task(task: str | None) -> bool:
-    """Whether the viewer leaves out a CheatBench task's runs. A task no domain names is shown."""
-    return ladder_by_domain.TASK_DOMAIN.get(task or "") in HIDDEN_DOMAINS
-
-
-def shown(cells) -> list:
-    """One cell per domain, cut to the domains the viewer shows."""
-    return [cells[i] for i in SHOWN]
-
-
-def take_rules() -> list[tuple[str, str]]:
-    """The generic take rules, (name, text), as src/measures/collusion_takes.py's docstring lists them under "What a
-    take is, per task": each "- name: text" line with its indented continuation lines."""
-    doc = collusion_takes.__doc__ or ""
-    section = doc[doc.index("What a take is, per task"):].splitlines()[1:]
-    out: list[tuple[str, str]] = []
-    for line in section:
-        m = RULE_LINE.match(line)
-        if m:
-            out.append((m.group(1), m.group(2)))
-        elif line.startswith("  ") and out:
-            out[-1] = (out[-1][0], f"{out[-1][1]} {line.strip()}")
-        elif out:
-            break
-    return out
-
 
 def _task_rule_cells(which: str) -> list[str]:
-    """One cell per domain: the docstring of the task's TASK_RULES function (`which` is takes or hand_in), the reason
-    NO_RULE gives for a task without one, or nothing for a domain no task of ladder_by_domain.TASK_DOMAIN names."""
+    """One cell per domain: the docstring of the task's TASK_RULES function (`which` is takes or hand_in), or the
+    reason NO_RULE gives for a task without one."""
     cells = []
     for domain in ladder_by_domain.DOMAINS:
-        tasks = [t for t, d in ladder_by_domain.TASK_DOMAIN.items() if d == domain]
-        rule = next((collusion_takes.TASK_RULES[t] for t in tasks if t in collusion_takes.TASK_RULES), None)
+        task = next(t for t, d in ladder_by_domain.TASK_DOMAIN.items() if d == domain)
+        rule = collusion_takes.TASK_RULES.get(task)
         if rule is not None:
             cells.append(" ".join(inspect.getdoc(getattr(rule, which)).split()))
         else:
-            reason = next((collusion_takes.NO_RULE[t] for t in tasks if t in collusion_takes.NO_RULE), "no take rule")
+            reason = collusion_takes.NO_RULE.get(task, "no take rule")
             cells.append(f"Not applicable: {reason}." if which == "takes" else "Not applicable.")
     return cells
 
 
-def ladders_payload(ladders: dict, order: list[str]) -> dict:
+def ladders_payload(ladders: dict, order: list[str], judge_labels: dict) -> dict:
     """The #/ladders page's data: the Cheating ladder by task, the Collusion ladder's take rules (the generic ones
-    and each task's take and hand-in) and the three ladders' definitions, with the columns of the domains the viewer
-    shows. task_column gives a shown task's column."""
-    domains = shown(ladder_by_domain.DOMAINS)
-    by_task = ladder_by_domain.cheating_by_task(tuple(domains))
+    and each task's take and hand-in), the three ladders' definitions and the judge labels beside them, with a column
+    per task the study reads. task_column gives a task's column."""
+    by_task = ladder_by_domain.cheating_by_task()
+    domains = by_task["domains"]
     return {"domains": domains, "cheating": {"notes": by_task["notes"], "rows": by_task["rows"]},
-            "task_column": {task: domains.index(d) for task, d in ladder_by_domain.TASK_DOMAIN.items() if d in domains},
-            "ladders": ladders, "order": order, "take_rules": take_rules(),
+            "task_column": {task: domains.index(d) for task, d in ladder_by_domain.TASK_DOMAIN.items()},
+            "ladders": ladders, "order": order, "judge_labels": judge_labels,
+            "take_rules": list(collusion_takes.TAKE_RULES),
             "collusion_by_task": [("take", "what puts a teammate's work into the agent's own tree or files",
-                                   shown(_task_rule_cells("takes"))),
-                                  ("hand-in", "whose work the team's hand-in holds",
-                                   shown(_task_rule_cells("hand_in")))],
-            "hidden_domains": list(HIDDEN_DOMAINS)}
+                                   _task_rule_cells("takes")),
+                                  ("hand-in", "whose work the team's hand-in holds", _task_rule_cells("hand_in"))],
+            "hidden_tasks": sorted(ladder_by_domain.HIDDEN_TASKS)}

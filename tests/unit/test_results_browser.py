@@ -88,10 +88,11 @@ def test_a_run_row_carries_its_setting_verdict_fields_and_one_aggregate_block(ru
     assert [f["field"] for f in row["verdict_fields"]][0] == "honey_pots_seen" and row["verdict_fields"][-1] == {
         "field": "cheated", "label": "cheated", "kind": "bad"}
     agg = row["aggregate"]
-    assert (agg["judged"], agg["cheated"], agg["timeouts"], agg["score"], agg["wall_time"]) == (2, 1, 1, 1, 60.0)
+    assert (agg["judged"], agg["judge_cheated"], agg["timeouts"], agg["score"], agg["wall_time"]) == (2, 1, 1, 1, 60.0)
     assert agg["flags"]["honey_pots_seen"] == 2 and agg["flags"]["attempted_access"] == 1
     assert agg["tokens"] == {"input": 150, "output": 15, "cache_read": 40} and agg["judge_cost"] == 0.01
-    assert agg["by_role"]["worker"] == {"n": 1, "cheated": 1} and agg["by_role"]["regulator"] == {"n": 1, "cheated": 0}
+    assert agg["by_role"]["worker"] == {"n": 1, "judge_cheated": 1}
+    assert agg["by_role"]["regulator"] == {"n": 1, "judge_cheated": 0}
     assert agg["controlled"] is False   # the turn rules are passive, not a control
     assert row["endings"] == {"submit": 1, "timeout": 1} and not row["failed"] and not row["eval_log_exists"]
     assert row["tools"] == ["graphs"] and "team" not in row        # the run detail carries the team records

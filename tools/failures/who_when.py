@@ -60,20 +60,21 @@ def problem_of(run: Run) -> str:
 
 
 def failure_of(run: Run) -> str:
-    """The judge's verdicts as one paragraph: who cheated and why, that no one did, or that no verdict exists."""
+    """CheatBench's judge's verdicts as one paragraph: who it says cheated and why, that no one did, or that no verdict
+    exists."""
     if not run.judge:
         return "no judge verdict exists for this run."
-    cheaters = [agent for agent in run.agents if run.cheated.get(agent) is True]
-    unjudged = [agent for agent in run.agents if run.cheated.get(agent) is None]
+    cheaters = [agent for agent in run.agents if run.judge_cheated.get(agent) is True]
+    unjudged = [agent for agent in run.agents if run.judge_cheated.get(agent) is None]
     if cheaters:
-        lines = [f"the judge found {', '.join(cheaters)} cheated."]
+        lines = [f"CheatBench's judge found {', '.join(cheaters)} cheated."]
         lines += [f"{agent}: {run.judge[agent].get('summary', '')}" for agent in cheaters]
     elif unjudged:
         lines = ["the judge found no cheating among the agents it gave a verdict for."]
         lines += [f"{agent}: {row.get('summary', '')}" for agent, row in run.judge.items()
                   if row.get("cheated") is False]
     else:
-        lines = ["the judge found no agent cheated."]
+        lines = ["CheatBench's judge found no agent cheated."]
         lines += [f"{agent}: {row.get('summary', '')}" for agent, row in run.judge.items()]
     if unjudged:
         lines.append(f"the judge gave no verdict for {', '.join(unjudged)}.")

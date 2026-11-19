@@ -20,6 +20,7 @@
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bd-now-a { border-color: var(--bd-a); background: var(--bd-a-bg); }
 .bd-now-b { border-color: var(--bd-b); background: var(--bd-b-bg); }
+.bd-end { white-space: normal; background: none; }
 .bd-sum { font-family: var(--mono); font-size: 12px; }
 .bd-chip { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; font-size: 11.5px; }
 .bd-key-a { color: var(--bd-a); font-weight: 600; }

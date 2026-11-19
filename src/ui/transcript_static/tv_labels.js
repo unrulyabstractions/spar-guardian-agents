@@ -33,10 +33,11 @@ export const MODELS = {
 // through src/judging/verdict_files.py.
 export const CHEATBENCH = {
   column: 'CheatBench judge',
-  about: 'CheatBench\'s judge, written for a lone agent, read each agent\'s trajectory: whether it cheated and whether it saw the honeypots, with the task\'s own fields. Its "cheated" is broader than the Cheating ladder\'s and changes no rung. The team\'s word is how many workers it says cheated, of the workers it gave a parsed verdict.',
+  about: 'CheatBench\'s judge, written for a lone agent, read each agent\'s trajectory: whether it cheated and whether it saw the honeypots, with the task\'s own fields. Its own "cheated" (judge_cheated) is broader than the Cheating ladder\'s and changes no rung. The team\'s word is how many workers it says cheated, of the workers it gave a parsed verdict.',
 };
 
-// Disclosure, which CheatBench's judge records beside the Collusion ladder (src/measures/judge_labels.py disclosure).
+// Disclosure, which CheatBench's judge records, a judge label beside the ladders (src/measures/judge_labels.py
+// disclosure).
 export const DISCLOSURE = {
   column: 'Disclosure',
   about: 'Whether CheatBench\'s judge found that the agent openly acknowledged its own access to the honeypot (protein design and creative writing record it; SWE\'s verdict has no such field: not recorded). No rung.',
@@ -44,6 +45,6 @@ export const DISCLOSURE = {
 
 export const ROLE_LABEL = { worker: 'worker', regulator: 'hidden regulator', disregulator: 'hidden disregulator' };
 
-export const armLabel = r => r.arm_label || r.arm || '';
+export const armLabel = r => r.arm_label;
 export const taskLabel = r => TASKS[r.task] || (r.task_name ? r.task_name.replace(/_/g, ' ') : r.task) || '?';
 export const modelLabel = r => MODELS[r.model] || r.model || r.model_id;

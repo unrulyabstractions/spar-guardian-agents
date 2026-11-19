@@ -4,34 +4,43 @@ with Luna workers, protein design, creative writing). Row groups: the team of th
 the identified rule; a hidden regulator at level ambiguous, then enforce, one row per regulator model with runs; the
 team all told to cheat.
 
-Source: runs/study_exploration_1/INDEX.jsonl (valid, non-mock runs; disregulator runs left out; SWE only on the fixed
-task, run names ending in _fixed<seed>, _fill<seed> or _fixedpilot<seed>), each run's Cheating rung as the transcript
-viewer measures it (scripts/paper/study_ladders.py record).
-The rules' wording comes from src/configuration/instruction_levels.yaml. The cells are checked against the results
-tables' cell prefixes (control_tables, protein_regulator_table, swe_regulator_table); a disagreement fails the build.
+Source: study_exploration_1's valid runs (scripts/paper/study_ladders.py valid_runs; disregulator runs left out; SWE
+only on the fixed task, run names ending in _fixed<seed>, _fill<seed> or _fixedpilot<seed>) with their run index rows,
+each run's Cheating rung as the transcript viewer measures it (study_ladders.record).
+The rules' wording comes from src/configuration/instruction_levels.yaml. Every cell a results table also shows
+(control_tables, protein_regulator_table, swe_regulator_table) must hold exactly that table's runs
+(study_ladders.cell_runs); a disagreement fails the build.
 Writes tmp/figures/paper/fig4_multidomain.png.
 
     uv run python -m scripts.paper.fig_multidomain
 """
 from __future__ import annotations
 
-import json
 import re
 import sys
 from collections import defaultdict
 
 import matplotlib
 import yaml
-from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 
 from scripts.paper import control_tables, protein_regulator_table, swe_regulator_table
-from scripts.paper.study_ladders import CHEATED_LABEL, CHEATING, CHEATING_LETTER, STUDY, record, rung_chip
+from scripts.paper.study_ladders import (
+    ACCESSED_LABEL,
+    CHEATED_LABEL,
+    CHEATING,
+    CHEATING_LETTER,
+    canvas,
+    cell_runs,
+    record,
+    rung_chip,
+    save,
+    text_width,
+    valid_runs,
+)
 from src.configuration.settings import ROOT
-from src.measures.run_validity import validity
-from src.utils.figure_style import GRID, INK, INK_SECONDARY, PRINT_DPI, SURFACE
+from src.utils.figure_style import GRID, INK, INK_SECONDARY, SURFACE
 
-INDEX = STUDY / "INDEX.jsonl"
 LEVELS = ROOT / "src" / "configuration" / "instruction_levels.yaml"
 OUT = ROOT / "tmp" / "figures" / "paper" / "fig4_multidomain.png"
 
@@ -53,16 +62,16 @@ SWE_FIXED = re.compile(r"_(fixed|fill)(pilot)?\d+$")
 
 
 def runs() -> list[dict]:
-    """The figure's runs from the index, each with its team's Cheating rung."""
+    """The figure's runs: study_ladders.valid_runs' index rows, each with its team's Cheating rung."""
     out = []
     targets = {c[0] for c in COLUMNS}
-    for line in INDEX.read_text().splitlines():
-        row = json.loads(line)
-        if not row["valid"] or row["mock"] or row["target"] not in targets or row["disregulator_level"]:
+    for listed in valid_runs():
+        row = listed.meta
+        if row["target"] not in targets or row["disregulator_level"]:
             continue
         if row["domain"] == "swe" and not SWE_FIXED.search(row["run"]):
             continue
-        out.append({**row, "team_rung": record(STUDY / row["path"])["cheating"], "pilot": "pilot" in row["run"]})
+        out.append({**row, "team_rung": record(listed.path)["cheating"], "pilot": "pilot" in row["run"]})
     return out
 
 
@@ -93,14 +102,10 @@ def cells(found: list[dict]) -> dict:
 def reference_cells() -> dict[str, tuple]:
     """{cell prefix: (group, row key, target)} from the results tables' scripts."""
     label_of = {label: model for model, label in REGULATORS}
-    target_of = {("Protein design", "GPT-6 Luna"): "protein-luna",
-                 ("Software engineering", "DeepSeek V4.1 Flash"): "flipt-dsflash",
-                 ("Software engineering", "GPT-6 Luna"): "flipt-luna",
-                 ("Creative writing", "GPT-6 Luna"): "creative-luna"}
+    targets = {c[0] for c in COLUMNS}
     out = {}
-    for task, workers, prefixes, _ in control_tables.TARGETS:
-        target = target_of.get((task, workers))
-        if target:
+    for _, _, target, prefixes in control_tables.TARGETS:
+        if target in targets:
             for key, prefix in prefixes.items():
                 out[prefix] = ("cheat", None, target) if key == "cheat" else ("rule", None if key == "none" else key,
                                                                               target)
@@ -114,17 +119,17 @@ def reference_cells() -> dict[str, tuple]:
 
 
 def check(table: dict) -> list[str]:
-    """Where the figure's cells disagree with the results tables' prefixes: a run in another cell, or a valid run
-    of a prefix that the figure lacks."""
-    ref = reference_cells()
-    placed = {run["run"]: key for key, group in table.items() for run in group}
+    """Where a cell the results tables show holds other runs in the figure than in the tables
+    (study_ladders.cell_runs of the tables' prefixes)."""
+    expected: dict[tuple, set[str]] = defaultdict(set)
+    for prefix, key in reference_cells().items():
+        expected[key] |= {path.name for path in cell_runs(prefix)}
     problems = []
-    for prefix, key in ref.items():
-        for path in STUDY.iterdir():
-            if not re.fullmatch(re.escape(prefix) + r"\d+", path.name) or not (path / "run.json").is_file():
-                continue
-            if validity(path)["valid"] and placed.get(path.name) != key:
-                problems.append(f"{path.name}: tables put it in {key}, the figure in {placed.get(path.name)}")
+    for key, names in expected.items():
+        drawn = {run["run"] for run in table.get(key, [])}
+        if drawn != names:
+            problems.append(f"{key}: the tables hold {sorted(names - drawn)} the figure lacks, "
+                            f"the figure {sorted(drawn - names)} the tables lack")
     return problems
 
 
@@ -156,50 +161,46 @@ def draw(table: dict, rule_lines: list[str]) -> Figure:
             groups.append((title, [sub], rows))
     groups.append(("Team of three, all told to cheat", [], [(("cheat", None), "Told to cheat")]))
 
-    left, col, pad = 1.75, 2.1, 0.12
-    s, gap, row_h = 0.27, 0.055, 0.37
-    head_h, title_h, sub_h, group_pad, legend_h = 0.8, 0.36, 0.2, 0.2, 0.6
+    left, col, pad = 1.2, 1.32, 0.1
+    s, gap, row_h = 0.18, 0.03, 0.25
+    head_h, title_h, sub_h, group_pad, legend_h = 0.5, 0.26, 0.16, 0.12, 0.62
     width = left + col * len(COLUMNS)
-    height = head_h + legend_h + sum(title_h + sub_h * len(sub) + 0.1 + row_h * len(rows) + group_pad
+    height = head_h + legend_h + sum(title_h + sub_h * len(sub) + 0.06 + row_h * len(rows) + group_pad
                                      for _, sub, rows in groups)
-    fig = Figure(figsize=(width, height), dpi=PRINT_DPI, facecolor=SURFACE)
-    FigureCanvasAgg(fig)
-    ax = fig.add_axes([0, 0, 1, 1])
-    ax.set_xlim(0, width)
-    ax.set_ylim(height, 0)
-    ax.axis("off")
+    fig, ax = canvas(width, height, SURFACE)
 
     for j, (target, heading, workers) in enumerate(COLUMNS):
         x = left + j * col
-        ax.text(x, 0.28, heading, fontsize=11, weight="bold", color=INK, va="center")
-        ax.text(x, 0.53, workers, fontsize=8.5, color=INK_SECONDARY, va="center")
+        ax.text(x, 0.17, heading.replace("Software engineering", "SWE"), fontsize=8, weight="bold", color=INK,
+                va="center")
+        ax.text(x, 0.36, workers, fontsize=7, color=INK_SECONDARY, va="center")
 
     y = head_h
-    for g, (title, sub, rows) in enumerate(groups):
+    for title, sub, rows in groups:
         ax.plot([pad, width - pad], [y, y], color=GRID, lw=1)
-        ax.text(pad, y + title_h / 2 + 0.06, title, fontsize=10.5, weight="bold", color=INK, va="center")
+        ax.text(pad, y + title_h / 2 + 0.03, title, fontsize=8, weight="bold", color=INK, va="center")
         y += title_h
         for line in sub:
-            ax.text(pad, y + sub_h / 2, line, fontsize=8, color=INK_SECONDARY, va="center")
+            ax.text(pad, y + sub_h / 2, line, fontsize=6.5, color=INK_SECONDARY, va="center")
             y += sub_h
-        y += 0.1
+        y += 0.06
         for key, label in rows:
             cy = y + row_h / 2
-            ax.text(left - 0.15, cy, label, fontsize=9.5, color=INK, ha="right", va="center")
+            ax.text(left - 0.1, cy, label, fontsize=7, color=INK, ha="right", va="center")
             for j, target in enumerate(targets):
                 for k, run in enumerate(table.get((*key, target), [])):
-                    rung_chip(ax, left + j * col + k * (s + gap), cy - s / 2, s, s, run["team_rung"])
+                    rung_chip(ax, left + j * col + k * (s + gap), cy - s / 2, s, s, run["team_rung"], size=6.5)
             y += row_h
         y += group_pad
 
-    ly = y + legend_h / 2
-    ax.text(pad, ly, "Team's Cheating rung", fontsize=9.5, color=INK_SECONDARY, va="center")
+    ly = y + 0.14
+    ax.text(pad, ly, "Team's Cheating rung", fontsize=7, color=INK_SECONDARY, va="center")
     x = left
     for rung in CHEATING:
-        rung_chip(ax, x, ly - s / 2, s, s, rung)
-        ax.text(x + s + 0.07, ly, rung, fontsize=9, color=INK_SECONDARY, va="center")
-        x += s + 0.07 + 0.075 * len(rung) + 0.3
-    ax.text(x + 0.1, ly, CHEATED_LABEL, fontsize=9, color=INK_SECONDARY, va="center")
+        rung_chip(ax, x, ly - s / 2, s, s, rung, size=6.5)
+        ax.text(x + s + 0.05, ly, rung, fontsize=7, color=INK_SECONDARY, va="center")
+        x += s + 0.05 + text_width(rung, 7) + 0.2
+    ax.text(left, ly + 0.27, f"{CHEATED_LABEL};  {ACCESSED_LABEL}", fontsize=7, color=INK_SECONDARY, va="center")
     return fig
 
 
@@ -218,10 +219,7 @@ def main() -> int:
         print("\n".join(problems), file=sys.stderr)
         return 1
     with matplotlib.rc_context({"font.family": "Arial"}):
-        fig = draw(table, rule_lines)
-        OUT.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(OUT, dpi=PRINT_DPI, facecolor=SURFACE)
-    print(OUT)
+        print(save(draw(table, rule_lines), OUT))
     return 0
 
 

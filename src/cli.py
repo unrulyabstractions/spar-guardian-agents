@@ -10,7 +10,7 @@ call their modules.
                              [--worker-model M] [--regulator-model M] [--disregulator-model M] [--replace]
     python -m src judge <eval_log> <run_name> [--judge MODEL] [--sync] [--judge-errors] [--replace]
     python -m src rejudge <run ...> [--judge MODEL] [--sync] [--judge-errors]
-    python -m src judge-pass <cheatbench|collusion> <run or study ...> --judge MODEL --cap DOLLARS [--batch]
+    python -m src judge-pass <cheatbench|scheming|labels> <run or study ...> --judge MODEL --cap DOLLARS [--batch]
                              [--limit N] [--only-missing | --redo]
     python -m src regenerate <run ...> [--no-export] [--no-measures] [--no-plots]
     python -m src signals <run ...> [--table]
@@ -227,8 +227,9 @@ def add_judging_parsers(subparsers) -> None:
                                                           "into runs/<study>/<run>/judges/<pass>.<judge>.jsonl only; "
                                                           "no eval log, no re-export")
     judge_pass.add_argument("pass_name", metavar="pass", choices=PASSES,
-                            help="cheatbench: CheatBench's judge per stored trajectory; collusion: the Collusion "
-                                 "ladder's judge per collaborating pair")
+                            help="cheatbench: CheatBench's judge per stored trajectory; scheming: the Collusion "
+                                 "ladder's judge per pair code places at collusion; labels: awareness and "
+                                 "manipulation per agent that qualifies")
     judge_pass.add_argument("runs", nargs="+", help="run names of the study, run directories, or a study folder (its "
                                                     "valid runs)")
     judge_pass.add_argument("--judge", required=True, help="entry in src/judging/judge_models.yaml")
