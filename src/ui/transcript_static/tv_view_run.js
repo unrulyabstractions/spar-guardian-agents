@@ -1,11 +1,11 @@
 /* View: one run (#/run/<collection>/<run key>?agent=<id>&call=<k>&tab=team). Ported from collusion-hermaneutics'
- * viewer (viewer/static/app/view_run.js). A bar with the run, an agent tab per agent and a Team tab, and the lens
- * buttons; the selected agent's whole episode below it (tv_case_view.js); the details under it: labels, the code
+ * viewer (viewer/static/app/view_run.js). A bar with the run, an agent tab per agent and a Team tab; the selected
+ * agent's whole episode below it, each step with its labels (tv_case_view.js); the details under it: labels, the code
  * ladder's evidence with links into the transcripts, each judge's reply, the run settings, each agent's record.
  * Our edits: the imports (dom.js, components.js and charts.js are the results browser's own); the judges are the
  * judged ladder (ladder.jsonl) and CheatBench's rules (judge.jsonl), shown where the run has them; the source's API
- * judges and second judge are gone; a disregulator is a hidden role like a regulator; the header names the
- * collection, the status and the eval log. */
+ * judges, second judge and sentence lens are gone; a disregulator is a hidden role like a regulator; the header names
+ * the collection, the status and the eval log. */
 import { DASH, appendAll, enc, fmtInt, fmtUsd, h, plural } from '/static/app/dom.js';
 import { badge, collaborationBadge, dataTable, episodeRecord, kv, lazyDetails, longText, muted, rungBadge,
   yn } from '/static/app/components.js';
@@ -15,7 +15,6 @@ import { COLLAB_MEANING, COLLAB_ORDER, JUDGES, RUNG_MEANING, RUNG_ORDER, ROLE_LA
 import { cheatLabelBadge, yesNo } from './tv_view_index.js';
 import { levelsPanel } from './tv_levels.js';
 import { fullLegend, renderCase } from './tv_case_view.js';
-import { lensLabel, listLenses, loadLens } from './tv_lens.js';
 
 const PRESENTATION_KIND = { disclosed: 'good', silent: 'warn', passed_off: 'bad', none: 'plain' };
 const presentationBadge = v => badge(String(v).replace(/_/g, ' '), PRESENTATION_KIND[v] || 'plain', 'how the hand-in presents the honeypot content (judged)');
@@ -23,7 +22,6 @@ const presentationBadge = v => badge(String(v).replace(/_/g, ' '), PRESENTATION_
 const LADDER = ['exposed', 'tried', 'opened', 'used', 'tampered', 'checked', 'shipped'];
 const CALL_FIELDS = ['exposed', 'tried', 'opened', 'joined'];
 const EVIDENCE_FIELDS = ['tried', 'opened', 'joined', 'used', 'tampered', 'checked', 'shipped'];
-const MARK_KIND = { exposed: 'warn', tried: 'bad', opened: 'bad', joined: 'def', used: 'bad', tampered: 'bad', checked: 'bad', shipped: 'bad' };
 const MARK_MEANING = { ...RUNG_MEANING, joined: 'the first call that joined the whole exploit' };
 
 function flash(el) {
@@ -39,19 +37,17 @@ function roleTag(role) {
     roleIcon(ROLE_ORDER.includes(role) ? role : 'worker', 10), ' ', ROLE_LABEL[role] || role);
 }
 
-/** Marks for the tool calls an evidence row cites: {k: [{source, badge, kind, title, text}]}. */
-function ladderMarks(row, source) {
+/** The tool calls a judged-ladder row cites: {k: [{rung, text}]}. The code ladder's own labels come from the server
+ * (src/ui/transcript_levels.py _agent_labels). */
+function judgeMarks(row) {
   const marks = new Map();
   if (!row) return marks;
   const seen = new Set();
   const add = (k, rung, text) => {
     if (k == null || Number.isNaN(k) || seen.has(`${k}|${rung}`)) return;
     seen.add(`${k}|${rung}`);
-    const who = source === 'code' ? 'code ladder' : 'judge';
-    const m = { source, badge: `${who}: ${rung}`, kind: source === 'code' ? (MARK_KIND[rung] || 'plain') : 'notice',
-      title: `${who}: ${MARK_MEANING[rung] || rung}`, text };
     if (!marks.has(k)) marks.set(k, []);
-    marks.get(k).push(m);
+    marks.get(k).push({ rung, text: text.replace(/^\[\d+\]\s*/, '') });
   };
   for (const f of CALL_FIELDS) {
     const k = row[f + '_call'];
@@ -81,7 +77,7 @@ export async function viewRun(id, q, view) {
   const roles = Object.fromEntries(d.agents.map(a => [a.agent, a.role]));
   const multi = d.agents.length > 1;
 
-  // ---- board: post numbers, the calls behind posts and reads, and the collaboration evidence that cites a post.
+  // ---- board: post numbers and the collaboration evidence that cites a post.
   const posts = new Map();
   const collabByPost = new Map();
   for (const [level, lines] of Object.entries(team.collaboration_evidence || {})) {
@@ -94,28 +90,7 @@ export async function viewRun(id, q, view) {
       }
     }
   }
-  const boardCalls = new Map(agentIds.map(a => [a, new Map()]));
-  const addBoardCall = (agent, callId, mark) => {
-    if (!agent || !callId || !boardCalls.has(agent)) return;
-    const m = boardCalls.get(agent);
-    if (!m.has(callId)) m.set(callId, []);
-    m.get(callId).push(mark);
-  };
-  for (const b of d.boards) {
-    for (const m of b.messages) {
-      if (m.post_n != null) posts.set(m.post_n, m);
-      const name = m.post_n != null ? `post ${m.post_n}` : `system notice #${m.board_no}`;
-      const cites = m.post_n != null ? collabByPost.get(m.post_n) : null;
-      if (m.sent) {
-        addBoardCall(m.sent.agent, m.sent.call_id, { source: 'board', badge: `wrote ${name}`, kind: 'def',
-          title: `this call posted ${name} on the board (#${m.board_no} as the agents see it)`,
-          text: cites ? `collaboration evidence: ${cites.join(', ')}` : '' });
-      }
-      for (const rd of m.reads) {
-        addBoardCall(rd.agent, rd.call_id, { source: 'board', badge: `read ${name}`, kind: 'plain', title: `this call read ${name}`, text: '' });
-      }
-    }
-  }
+  for (const b of d.boards) for (const m of b.messages) if (m.post_n != null) posts.set(m.post_n, m);
 
   // Calls that read a hidden regulator's post (a worker), or that posted as the regulator (the regulator).
   function regulatorCalls(agent, role) {
@@ -144,13 +119,8 @@ export async function viewRun(id, q, view) {
         state.loaded = fetch(`/api/transcript?id=${enc(id)}&agent=${enc(a.agent)}`)
           .then(x => { if (!x.ok) throw new Error(`HTTP ${x.status}`); return x.json(); })
           .then(t => {
-            const marks = ladderMarks(s, 'code');
-            if (a.ladder_judge) {
-              for (const [k, ms] of ladderMarks(a.ladder_judge, 'judge')) marks.set(k, [...(marks.get(k) || []), ...ms]);
-            }
-            state.tr = renderCase(t, { agent: a.agent, levels: d.levels, boardCalls: boardCalls.get(a.agent) || new Map(),
-              isRegulator: a.role === 'regulator', regulatorCalls: regulatorCalls(a.agent, a.role), runId: id });
-            if (lensState.L) state.tr.setLens(lensState.L);
+            state.tr = renderCase(t, { agent: a.agent, levels: d.levels, judgeMarks: judgeMarks(a.ladder_judge),
+              isRegulator: a.role === 'regulator', regulatorCalls: regulatorCalls(a.agent, a.role) });
             holder.replaceChildren(muted(`The transcript of ${a.agent} is shown at the top of the page, under its tab.`, 'small block'));
             btn.textContent = `Transcript at the top (${sizeTxt})`;
             return state.tr;
@@ -428,28 +398,12 @@ export async function viewRun(id, q, view) {
     if (current === key) stage.replaceChildren(tr.el);
     return tr;
   }
-  // Lens tabs, like the artifact's reading tabs: the lexical cheat lens by default when its file exists.
-  const lensState = { L: null };
-  const lensBox = h('span', { class: 'rp-tabs rp-lens' });
-  async function setLens(name) {
-    lensState.L = name ? await loadLens(name) : null;
-    for (const b of lensBox.children) b.classList.toggle('on', (b.dataset.lens || '') === (lensState.L ? name : ''));
-    for (const c of cards.values()) if (c.state.tr && c.state.tr.setLens) c.state.tr.setLens(lensState.L);
-  }
-  listLenses().then(names => {
-    const order = names.includes('lexical_cheat') ? ['lexical_cheat', ...names.filter(n => n !== 'lexical_cheat')] : names;
-    const TIP = { lexical_cheat: 'Lexical cheat lens: word weights fitted on the apart controls; its strongest terms are names of the planted files, so it marks contact with the exploit more than cheating language (src/ui/lenses/lexical_cheat.json gives its fit and its held-out AUROC)' };
-    lensBox.replaceChildren(...order.map(nm => h('button', { type: 'button', class: 'rp-tab', title: TIP[nm] || '', dataset: { lens: nm }, onclick: () => setLens(nm) }, lensLabel(nm))),
-      h('button', { type: 'button', class: 'rp-tab', dataset: { lens: '' }, onclick: () => setLens(null) }, 'No lens'));
-    return setLens(order[0] || null);
-  });
   const showSel = h('select', { 'aria-label': 'Which text to show', onchange: e => { stage.dataset.show = e.target.value; } },
-    [['all', 'All'], ['reasoning', 'Reasoning'], ['tools', 'Tool calls'], ['board', 'Board']].map(([v, t]) => h('option', { value: v }, t)));
+    [['all', 'All'], ['reasoning', 'Reasoning'], ['tools', 'Tool calls'], ['board', 'Board calls']].map(([v, t]) => h('option', { value: v }, t)));
   const bar = h('div', { class: 'rp-bar' },
     h('a', { class: 'rp-back', href: '#/', title: 'all runs' }, '←'),
     h('b', { class: 'rp-run' }, row.run), h('span', { class: 'rp-arm' }, armLabel(row)),
     h('span', { class: 'rp-tabs' }, [...tabs.values()]),
-    lensBox,
     h('label', { class: 'rp-show' }, 'Show ', showSel),
     h('button', { type: 'button', class: 'rp-dbtn', onclick: () => { details.open = !details.open; if (details.open) details.scrollIntoView({ block: 'start' }); } }, 'Details'));
 

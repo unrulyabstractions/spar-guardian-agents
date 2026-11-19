@@ -217,7 +217,7 @@ mast.json and who_when.json.
 Start: `make transcripts`, or `uv run python -m src.ui.transcript_viewer [--port 8770] [--rebuild] [--runs runs]` from the
 repository root. It serves in the foreground until Ctrl-C or SIGTERM. `src/ui/transcript_viewer.py` is the server and the
 index builder, `src/ui/transcript_levels.py` the six ladders, `src/ui/transcript_ladder_tables.py` the ladder tables by
-task, `src/ui/transcript_static/` the page (`tv_*.js`, `tv_style.css`) and `src/ui/lenses/` the sentence lenses. The page
+task and `src/ui/transcript_static/` the page (`tv_*.js`, `tv_style.css`). The page
 reuses the results browser's `style.css`, `app/dom.js`, `app/charts.js` and `app/components.js`, served under `/static/`.
 
 Every folder under `runs/` is a **collection**, except `study_smoke` and folders without a run. A study keeps its runs at
@@ -232,7 +232,7 @@ copy`. The server never writes the data. Its one output is the index cache, `tmp
 | hash | page |
 |---|---|
 | `#/?status=&col=&task=&model=&team=&seedpost=&label=&collab=&judged=&agree=&lv_<ladder>=&q=&sort=&dir=&page=&size=` | Runs: one row per run; status defaults to valid |
-| `#/run/<collection>/<run key>?agent=&call=&tab=team` | a run: agent tabs and Team, the lens buttons, the whole episode, the details |
+| `#/run/<collection>/<run key>?agent=&call=&tab=team` | a run: agent tabs and Team, the whole episode with each step's labels, the details |
 | `#/ladders?task=<CheatBench task name>` | the six ladders and the level by task tables, the task's column highlighted |
 
 ## Endpoints
@@ -264,13 +264,20 @@ Agent = {agent, role, folder (its trajectories/ folder), transcript_bytes, episo
          signals (its signals.jsonl agent row), ladder_judge (its ladder.jsonl row), cheatbench_judge (its judge.jsonl row)}
 Board = {sample, event_counts, messages: [{board_no, post_n, kind ("post"|"submit"|"system"), sender, role, recipients,
          content, round, round_step, sent: {agent, call_id}, reads: [{agent, call_id}]}]}
-Levels = {agents: {agent: {<ladder>: Cell}}, team: {<ladder>: Cell}, events: {agent: [Event]}, single, ladders, order}
+Levels = {agents: {agent: {<ladder>: Cell}}, team: {<ladder>: Cell}, events: {agent: [Event]}, labels: {agent: [Label]},
+          single, ladders, order}
 Cell = {level, index, of, kind ("direct"|"proxy"), rule, evidence, na?}
 Event = {ladder, level, index, k (a call number) | call_id | neither (counted at the end of the run), evidence}
+Label = {ladder, level, index, k (a call number) | call_id, evidence}
 ```
+An event is the first call that reached a level; the strip's "so far" lanes and each step's head line come from the
+events. A label is every call that is evidence for a level; a step shows its own labels under its head line and in the
+strip's "this step" lanes. The labels are each call the code ladder cites for a rung (`[k] ...` in its evidence), each
+call that read the board, each call that posted, at the level the collaboration evidence gives its post, and the first
+call of every other level. A level counted at the end of the run has no label. The page adds the calls the judged ladder
+cites and the calls that met the hidden regulator on the board.
 
 ### `GET /api/transcript?id=<id>&agent=<agent>` → the agent's `transcript.json`, streamed as stored
-### `GET /api/lenses` → `{lenses: [name]}`; `GET /api/lens?name=<name>` → `src/ui/lenses/<name>.json`
 ### `GET /api/ladders` → the ladders page's tables (`transcript_ladder_tables.ladders_payload`)
 
-An unknown run, agent, lens or path gets 404 `{"error"}`, a server fault 500 `{"error"}`.
+An unknown run, agent or path gets 404 `{"error"}`, a server fault 500 `{"error"}`.

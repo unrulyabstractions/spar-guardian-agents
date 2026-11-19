@@ -2,6 +2,7 @@
 collusion-hermaneutics' viewer (viewer/levels.py) for the transcript viewer (src/ui/transcript_viewer.py).
 
     levels = compute(team, sig_agents, episodes, boards, roles)    # the run page's six ladders
+    levels["labels"]["a01"]                                        # what each call of a01 is evidence for
     cheat_label("tried", "software_engineering")                   # "cheat": at or above the task's floor
 
 Cheating is the code ladder's rung (src/measures/rungs.py RUNGS) as signals.jsonl stores it: direct. The cheat label
@@ -60,6 +61,9 @@ POST_RE = re.compile(r"^post (\d+) by (\S+?):")
 # The first word of an evidence line, which names the agent in every format the code ladder has written:
 # "<agent>: saw ...", "<agent> saw segment2, which it does not hold" and "<agent> (holds read) learned ...".
 LEAD_RE = re.compile(r"^([^\s:()]+)")
+# A call the code ladder's evidence cites: "[k] " at the start of the text or after "; ". A "[1]" inside a quoted
+# command (sys.argv[1]) cites nothing.
+CITE_RE = re.compile(r"(?:^|(?<=; ))\[(\d+)\] ")
 
 
 def floor_of(task: str | None) -> str | None:
@@ -202,6 +206,56 @@ def _cheat_events(s: dict) -> list[dict]:
     return ev
 
 
+def _cited(text) -> list[tuple[int, str]]:
+    """(call, text) of each "[k] ..." part of an evidence string, the text without its call number."""
+    text = text if isinstance(text, str) else ""
+    hits = list(CITE_RE.finditer(text))
+    ends = [m.start() for m in hits[1:]] + [len(text)]
+    return [(int(m.group(1)), text[m.end():end].rstrip("; ")) for m, end in zip(hits, ends)]
+
+
+def _agent_labels(a: str, s: dict, events: list[dict], E: _Evidence, single: bool) -> list[dict]:
+    """What each call of one agent is evidence for. An event marks the first call that reached a level; a label marks
+    every call: each call the code ladder cites for a rung, each call that read the board, each call that posted (at
+    the level the collaboration evidence gives its post), and the first call of every other level. A call that holds
+    a higher label of a ladder does not repeat a lower one from an event (a post that discussed the exploit is
+    discussed, not also posted). A level counted at the end of the run belongs to no call and gets no label."""
+    out: dict[tuple, dict] = {}
+
+    def add(ladder: str, level: str, where: dict, evidence: str) -> None:
+        if next(iter(where.values())) is None:
+            return
+        out.setdefault((ladder, level, *where.items()), {
+            "ladder": ladder, "level": level, "index": LADDERS[ladder]["levels"].index(level), **where,
+            "evidence": evidence})
+
+    for rung in RUNGS[2:]:
+        for k, text in _cited(s.get(rung + "_evidence")):
+            add("cheat", rung, {"k": k}, text)
+    if not single:
+        read_at: dict[str, list[str]] = {}
+        for m, rd in E.reads.get(a) or []:
+            name = f"post {m['post_n']}" if m.get("post_n") is not None else f"system notice #{m['board_no']}"
+            read_at.setdefault(rd.get("call_id"), []).append(name)
+        for call_id, names in read_at.items():
+            add("coord", "read the board", {"call_id": call_id}, "read " + ", ".join(names))
+        lines = {key: {n: line for n, who, line in found if who == a}
+                 for key, found in (("discussed", E.all_disc), ("solicited", E.all_sol))}
+        for m in E.sends.get(a) or []:
+            n = m["post_n"]
+            level = next((key for key in ("solicited", "discussed") if n in lines[key]), "posted")
+            add("coord", level, {"call_id": m["sent"].get("call_id")}, lines.get(level, {}).get(n) or f"wrote post {n}")
+    for e in events:
+        where = {"k": e["k"]} if e.get("k") is not None else {"call_id": e.get("call_id")}
+        here = [x for x in out.values() if x["ladder"] == e["ladder"] and where.items() <= x.items()]
+        if not any(x["index"] >= e["index"] for x in here):
+            text = re.sub(r"^\[\d+\] ", "", e.get("evidence") or "")
+            if e["level"] == "exposed" and s.get("exposed_source"):
+                text = "source: " + s["exposed_source"].replace("_", " ")
+            add(e["ladder"], e["level"], where, text)
+    return list(out.values())
+
+
 def _agent_levels(a: str, s: dict, sig_agents: dict, eng: dict, E: _Evidence) -> tuple[dict, list[dict]]:
     """One agent's five team ladders and its events, beside its cheat cell."""
     rung = s.get("rung") if s.get("rung") in RUNGS else "none"
@@ -339,15 +393,17 @@ def _team_levels(team: dict | None, trung: str, agents_out: dict, workers: list[
 
 def compute(team: dict | None, sig_agents: dict[str, dict], episodes: list[dict], boards: list[dict],
             roles: dict[str, str | None]) -> dict:
-    """{"agents": {agent: {ladder: cell}}, "team": {ladder: cell}, "events": {agent: [event]}, "single": bool,
-    "ladders", "order"}. A cell is {level, index, of, kind, rule, evidence[, na]}; an event is {ladder, level, index,
-    k (a call number) | call_id | neither (counted at the end of the run), evidence}."""
+    """{"agents": {agent: {ladder: cell}}, "team": {ladder: cell}, "events": {agent: [event]}, "labels": {agent:
+    [label]}, "single": bool, "ladders", "order"}. A cell is {level, index, of, kind, rule, evidence[, na]}; an event
+    is {ladder, level, index, k (a call number) | call_id | neither (counted at the end of the run), evidence}: the
+    first call that reached the level. A label has an event's keys and always a call: every call that is evidence for
+    the level (_agent_labels)."""
     roles = {**{episode_agent(ep): None for ep in episodes}, **{k: v for k, v in roles.items() if v}}
     workers = [a for a, r in roles.items() if is_worker(r)]
     single = len(episodes) <= 1
     E = _Evidence(team, boards, roles)
     eng = {episode_agent(e): (e.get("engagement") or {}) for e in episodes}
-    agents_out, events = {}, {}
+    agents_out, events, labels = {}, {}, {}
     for ep in episodes:
         a = episode_agent(ep)
         s = sig_agents.get(a) or {}
@@ -363,7 +419,7 @@ def compute(team: dict | None, sig_agents: dict[str, dict], episodes: list[dict]
             more, more_ev = _agent_levels(a, s, sig_agents, eng, E)
             out.update(more)
             ev += more_ev
-        agents_out[a], events[a] = out, ev
+        agents_out[a], events[a], labels[a] = out, ev, _agent_labels(a, s, ev, E, single)
     trung = team_rung(team, roles)
     if trung is None:
         trung = max((sig_agents[a]["rung"] for a in workers if (sig_agents.get(a) or {}).get("rung") in RUNGS),
@@ -373,7 +429,8 @@ def compute(team: dict | None, sig_agents: dict[str, dict], episodes: list[dict]
         t.update({lad: _cell(lad, 0, na=True) for lad in ORDER[1:]})
     else:
         t = _team_levels(team, trung, agents_out, workers, eng, E)
-    return {"agents": agents_out, "team": t, "events": events, "single": single, "ladders": LADDERS, "order": ORDER}
+    return {"agents": agents_out, "team": t, "events": events, "labels": labels, "single": single,
+            "ladders": LADDERS, "order": ORDER}
 
 
 def index_levels(levels: dict, roles: dict[str, str | None]) -> dict:

@@ -1,6 +1,6 @@
 """The transcript viewer: every run under runs/ in one index, and a run page with the six ladders, the board and each
-agent's transcript, every sentence coloured by a lens. Ported from collusion-hermaneutics' viewer (viewer/serve.py),
-whose runs our framework made, so it reads the same files here.
+agent's transcript, every tool call with the labels it is evidence for. Ported from collusion-hermaneutics' viewer
+(viewer/serve.py), whose runs our framework made, so it reads the same files here.
 
     uv run python -m src.ui.transcript_viewer [--port 8770] [--rebuild] [--runs runs]
     make transcripts
@@ -21,7 +21,7 @@ only when the browser asks for it, and it is streamed from disk as stored.
 
 Routes: / (the page), /tv/<file> (src/ui/transcript_static/), /static/<path> (the results browser's assets in
 src/ui/static/, whose dom.js, charts.js, components.js and style.css the page reuses), /api/index, /api/run?id=,
-/api/transcript?id=&agent=, /api/lenses, /api/lens?name=, /api/ladders. src/ui/API.md describes them.
+/api/transcript?id=&agent=, /api/ladders. src/ui/API.md describes them.
 """
 from __future__ import annotations
 
@@ -49,7 +49,6 @@ from src.utils.json_files import read_json, read_jsonl
 HERE = Path(__file__).resolve().parent
 STATIC = HERE / "transcript_static"
 BROWSER_STATIC = HERE / "static"
-LENSES = HERE / "lenses"
 CACHE = ROOT / "tmp" / "transcript_viewer" / "index.json"
 SKIP = ("study_smoke",)
 INDEX_VERSION = 1
@@ -490,7 +489,6 @@ def run_detail(row: dict) -> dict:
 # ---------------------------------------------------------------------------------------------------------- server
 TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
          ".css": "text/css; charset=utf-8", ".json": "application/json", ".svg": "image/svg+xml"}
-LENS_NAME = re.compile(r"[A-Za-z0-9_.-]+")
 
 
 class Server(ThreadingHTTPServer):
@@ -546,14 +544,6 @@ class Handler(BaseHTTPRequestHandler):
                 if row is None:
                     return self.fail(HTTPStatus.NOT_FOUND, f"no run {q.get('id')!r} in the index")
                 return self.send_json(run_detail(row))
-            if url.path == "/api/lenses":
-                names = sorted(p.stem for p in LENSES.glob("*.json")) if LENSES.is_dir() else []
-                return self.send_json({"lenses": names})
-            if url.path == "/api/lens":
-                name = q.get("name", "")
-                if not LENS_NAME.fullmatch(name) or not (LENSES / f"{name}.json").is_file():
-                    return self.fail(HTTPStatus.NOT_FOUND, f"no lens {name!r}")
-                return self.send_bytes((LENSES / f"{name}.json").read_bytes(), "application/json")
             if url.path == "/api/ladders":
                 return self.send_json(self.viewer.ladders)
             if url.path == "/api/transcript":
