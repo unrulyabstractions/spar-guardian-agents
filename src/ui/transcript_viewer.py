@@ -9,6 +9,8 @@ Every folder under runs/ is a collection, except study_smoke and folders that ho
 - a study (study_exploration_0, study_exploration_1) keeps its runs at its top level and in its groups
   (src/measures/run_directory.py study_runs). Where the study has an INDEX.jsonl, its valid flag says which runs are
   valid. Without one, a run at the top level is valid and a run in a group carries the group's name.
+- the runs of the tasks the viewer leaves out (transcript_ladder_tables.HIDDEN_DOMAINS) stay in the cache and are not
+  served (shown_index).
 - a manifest collection (apart_controls) lists its runs in manifest.jsonl: the canonical copy of each at
   <model>/<task>/<cell>/s<seed>/, the extra copies at extra_duplicate_samples/<model>/<task>/<cell>/s<seed>__<host>/.
 
@@ -431,6 +433,21 @@ def build_index(runs: Path) -> dict:
             "build_seconds": round(time.time() - t0, 2), "collections": cols, "errors": errors, "rows": rows}
 
 
+def shown_index(idx: dict) -> dict:
+    """The index as the viewer serves it: without the runs of the tasks it leaves out
+    (transcript_ladder_tables.hidden_task), each collection's status counts taken again, a collection left with no
+    run dropped, and `hidden` saying which domains and how many runs were left out. The cache keeps every run, so a
+    change of the list needs no rebuild."""
+    rows = [row for row in idx["rows"] if not transcript_ladder_tables.hidden_task(row.get("task_name"))]
+    statuses: dict[str, dict[str, int]] = {}
+    for row in rows:
+        counts = statuses.setdefault(row["col"], {})
+        counts[row["status"]] = counts.get(row["status"], 0) + 1
+    cols = [{**col, "statuses": statuses[col["key"]]} for col in idx["collections"] if col["key"] in statuses]
+    return {**idx, "rows": rows, "collections": cols,
+            "hidden": {"domains": list(transcript_ladder_tables.HIDDEN_DOMAINS), "runs": len(idx["rows"]) - len(rows)}}
+
+
 def load_or_build(runs: Path, rebuild: bool) -> dict:
     """The cached index when it is of this version and these runs, else a fresh build, written to the cache."""
     if not rebuild and CACHE.is_file():
@@ -590,10 +607,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"no runs folder at {runs}", file=sys.stderr)
         return 1
     t0 = time.time()
-    idx = load_or_build(runs, args.rebuild)
+    idx = shown_index(load_or_build(runs, args.rebuild))
     counts = ", ".join(f"{c['key']} {sum(c['statuses'].values())}" for c in idx["collections"])
-    print(f"index: {len(idx['rows'])} runs ({counts}); {len(idx['errors'])} unreadable; built {idx['built_at']} in "
-          f"{idx['build_seconds']} s; loaded in {time.time() - t0:.2f} s", flush=True)
+    left_out = f"; {idx['hidden']['runs']} runs of {', '.join(idx['hidden']['domains'])} left out" \
+        if idx["hidden"]["runs"] else ""
+    print(f"index: {len(idx['rows'])} runs ({counts}){left_out}; {len(idx['errors'])} unreadable; built "
+          f"{idx['built_at']} in {idx['build_seconds']} s; loaded in {time.time() - t0:.2f} s", flush=True)
     for e in idx["errors"]:
         print(f"  unreadable {e['id']}: {e['error']}", file=sys.stderr)
     Handler.viewer = Viewer(idx)

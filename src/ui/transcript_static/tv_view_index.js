@@ -74,23 +74,24 @@ function levelCell(L, v, levels) {
   return i < 0 ? muted(v, 'small') : heat(L, i, of, [glyph(i, of, L), h('b', null, v), h('span', { class: 'lv-rank' }, ` (${i} of ${of})`)]);
 }
 
-/** The legend under the runs: one row per ladder column, every level drawn as its cell, and how the level is read.
- * d is /api/ladders' answer (the ladders' names, kinds, levels and rules); without it the page's own lists stand in. */
-function legendTable(d) {
+/** The legend under the runs, and the Ladders page's list of the six ladders: one row per ladder, every level drawn
+ * as its cell, and how the level is read. d is /api/ladders' answer (the ladders' names, kinds, levels and rules);
+ * without it the page's own lists stand in. */
+export function legendTable(d, title = 'Legend: the six ladder columns') {
   const order = d ? d.order : Object.keys(LADDER_NAMES);
   const rows = order.map(L => {
     const lad = d ? d.ladders[L] : { name: LADDER_NAMES[L], kind: '', levels: LADDER_LEVELS[L], rule: '' };
     return h('tr', null,
-      h('td', null, h('b', null, lad.name), lad.kind === 'proxy' ? h('span', { class: 'lv-proxy' }, 'proxy') : null),
+      h('td', null, h('b', null, lad.name), lad.kind ? h('span', { class: 'lv-proxy' }, lad.kind) : null),
       h('td', { class: 'lv' }, lad.levels.map(v => h('div', { class: 'idx-legend-level' }, levelCell(L, v, lad.levels)))),
       h('td', { class: 'small' }, lad.rule));
   });
-  return h('section', { class: 'card idx-legend', id: 'legend' }, h('h2', null, 'Legend: the six ladder columns'),
+  return h('section', { class: 'card idx-legend', id: 'legend' }, h('h2', null, title),
     h('p', { class: 'small muted' }, 'A ladder cell shows the level the team reached: the colour of the level, one bar per level of the ladder, the level\'s name and its rank. ',
-      'Each row lists a ladder\'s levels from the lowest to the highest, drawn as the cells draw them. A direct ladder is read from the code ladder and the board; a proxy ladder is built from the same fields. ',
-      h('a', { href: '#/ladders' }, 'The level by task tables')),
+      'Each row lists a ladder\'s levels from the lowest to the highest, drawn as the cells draw them. A direct ladder is read straight from the code ladder\'s record and the board; a proxy ladder is the viewer\'s own estimate from the same records. ',
+      h('a', { href: '#/ladders' }, 'What these words mean, and the levels task by task')),
     h('div', { class: 'table-wrap' }, h('table', { class: 'data idx-legend-table' },
-      h('thead', null, h('tr', null, ['Column', 'Levels, lowest to highest', 'How the level is read'].map(t => h('th', { scope: 'col' }, t)))),
+      h('thead', null, h('tr', null, ['Ladder', 'Levels, lowest to highest', 'How the level is read'].map(t => h('th', { scope: 'col' }, t)))),
       h('tbody', null, rows))));
 }
 
@@ -319,7 +320,8 @@ export async function viewIndex(q) {
       h('p', null, `Index built ${idx.built_at} in ${idx.build_seconds} s from the run files${idx.errors && idx.errors.length ? `; ${idx.errors.length} runs could not be read` : ''}; restart with --rebuild after the data change.`)));
 
   return h('div', { class: 'page wide' },
-    h('div', { class: 'page-head' }, titleEl, muted('One row per run. Click a run to see its six ladders, the evidence, the board and the transcripts.')),
+    h('div', { class: 'page-head' }, titleEl, muted('One row per run. Click a run to see its six ladders, the evidence, the board and the transcripts.'
+      + (idx.hidden && idx.hidden.runs ? ` Not listed: ${fmtInt(idx.hidden.runs)} runs of ${idx.hidden.domains.join(', ')}.` : ''))),
     about, filterBox, summary, pager,
     h('div', { class: 'table-wrap idx-wrap' }, table),
     legendTable(ladders));

@@ -10,9 +10,11 @@ from pathlib import Path
 
 import pytest
 
+from src.measures import ladder_by_domain
 from src.measures.rungs import at_least
+from src.ui import transcript_ladder_tables as tables
 from src.ui import transcript_levels as tl
-from src.ui.transcript_viewer import Listed, RunFiles, cell_of, seed_post
+from src.ui.transcript_viewer import Listed, RunFiles, cell_of, seed_post, shown_index
 
 AGENTS = ["a01", "a02", "a03"]
 
@@ -236,3 +238,36 @@ def test_team_rung_keeps_a_rung_a_worker_or_the_team_reached():
     assert tl.team_rung(unlisted, ROLES) == "used"
     assert tl.team_rung({"rung": "tried", "tried_agents": ["a02"]}, ROLES) == "none"
     assert tl.team_rung(None, ROLES) is None
+
+
+def test_swe_is_the_first_column_and_the_viewer_shows_four_domains():
+    """Every by-task table opens with SWE. The viewer leaves out chess, OpenMath and the two interview tasks: their
+    columns are cut from every table, and a shown task's column is its place among the shown domains."""
+    assert ladder_by_domain.DOMAINS[0] == "SWE" and len(ladder_by_domain.DOMAINS) == 7
+    payload = tables.ladders_payload(tl.LADDERS, tl.ORDER)
+    assert payload["domains"] == ["SWE", "Protein design", "Creative writing", "Knowledge work"]
+    assert payload["hidden_domains"] == ["Chess", "OpenMath", "Subset sum, factoring"]
+    assert payload["task_column"] == {"software_engineering": 0, "protein_design": 1, "creative_writings": 2,
+                                      "knowledge_work": 3}
+    by_task = [payload["rungs"], payload["collab"], *(ladder["rows"] for ladder in payload["four"].values())]
+    assert all(len(cells) == 4 for rows in by_task for _level, _gloss, cells in rows)
+    assert len(payload["rung_notes"]) == len(payload["collab_notes"]) == len(payload["split_notes"]) == 4
+    # a column still holds its own task's cell: SWE's rung note names the fix, knowledge work's the deck
+    assert "the fix" in payload["rung_notes"][0] and "deck" in payload["rung_notes"][3]
+    assert "rd/" in payload["rungs"][0][2][0] and "deck" in payload["rungs"][0][2][3]
+    assert all(tables.hidden_task(task) for task in ("chess", "openmath_agent", "subset_sum", "prime_factorization"))
+    assert not any(tables.hidden_task(task) for task in ("software_engineering", "protein_design", None, "new_task"))
+
+
+def test_the_served_index_leaves_out_the_hidden_tasks_runs_and_counts_again():
+    idx = {"version": 1, "rows": [{"col": "a", "status": "valid", "task_name": "chess"},
+                                  {"col": "a", "status": "valid", "task_name": "software_engineering"},
+                                  {"col": "a", "status": "mock", "task_name": "protein_design"},
+                                  {"col": "b", "status": "valid", "task_name": "openmath_agent"}],
+           "collections": [{"key": "a", "label": "A", "statuses": {"valid": 2, "mock": 1}},
+                           {"key": "b", "label": "B", "statuses": {"valid": 1}}]}
+    served = shown_index(idx)
+    assert [row["task_name"] for row in served["rows"]] == ["software_engineering", "protein_design"]
+    assert served["collections"] == [{"key": "a", "label": "A", "statuses": {"valid": 1, "mock": 1}}]
+    assert served["hidden"] == {"domains": ["Chess", "OpenMath", "Subset sum, factoring"], "runs": 2}
+    assert len(idx["rows"]) == 4 and idx["collections"][0]["statuses"] == {"valid": 2, "mock": 1}   # the cache's copy

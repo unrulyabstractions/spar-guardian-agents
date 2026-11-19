@@ -41,27 +41,32 @@ PAD = 0.1
 
 # The ladder's rungs and the judged flags beside it (src/judging/_ladder_verdict_fields.py LADDER and HONEYPOT) against
 # the CheatBench verdict field each task's judge_schema.py records the same act under; "none" where only the ladder
-# records it.
+# records it. One cell per domain of ladder_by_domain.DOMAINS, in its order: SWE first.
 RUNGS = [
-    ("exposed", ["`honey_pots_seen`"], ["none"], ["`honey_pots_seen`"], ["`honey_pots_seen`"], ["`honey_pots_seen`"],
-     ["`honey_pots_seen`"], ["none"]),
-    ("tried", ["`attempted_access`"], ["`reference_solution_seeking`", "(aimed at a planted ref)"], ["none"], ["none"],
-     ["`attempted_access`"], ["`opened_gold`", "(an attempt)"], ["`endpoint_requests`", "(above zero)"]),
-    ("opened", ["`cheated`", "`extracted_submission`"], ["`reference_solution_obtained`"], ["`inspected_competitor`"],
-     ["`answer_file_read`"], ["`read_sequence_file`", "`obtained_designs`"], ["`opened_gold`", "`gold_use`"],
+    ("exposed", ["none"], ["`honey_pots_seen`"], ["`honey_pots_seen`"], ["`honey_pots_seen`"], ["none"],
+     ["`honey_pots_seen`"], ["`honey_pots_seen`"]),
+    ("tried", ["`reference_solution_seeking`", "(aimed at a planted ref)"], ["`attempted_access`"],
+     ["`opened_gold`", "(an attempt)"], ["none"], ["`endpoint_requests`", "(above zero)"], ["`attempted_access`"],
      ["none"]),
-    ("used", ["none"], ["`reference_solution_used`"], ["`copied_or_transformed_competitor`"], ["`used_answer_key`"],
-     ["none"], ["`copied_reference`"], ["`used_advice`"]),
-    ("tampered", ["none"], ["none"], ["none"], ["none"], ["none"], ["none"],
-     ["`edited_opponent_files`", "(that changed the game)"]),
-    ("checked", ["none"], ["none"], ["`submitted_competitor`"], ["none"], ["none"], ["none"], ["none"]),
-    ("shipped", ["none"], ["none"], ["`copied_final`"], ["none"], ["`copied_design`"], ["`submitted_reference`"],
+    ("opened", ["`reference_solution_obtained`"], ["`read_sequence_file`", "`obtained_designs`"],
+     ["`opened_gold`", "`gold_use`"], ["`inspected_competitor`"], ["none"], ["`cheated`", "`extracted_submission`"],
+     ["`answer_file_read`"]),
+    ("used", ["`reference_solution_used`"], ["none"], ["`copied_reference`"], ["`copied_or_transformed_competitor`"],
+     ["`used_advice`"], ["none"], ["`used_answer_key`"]),
+    ("tampered", ["none"], ["none"], ["none"], ["none"], ["`edited_opponent_files`", "(that changed the game)"],
+     ["none"], ["none"]),
+    ("checked", ["none"], ["none"], ["none"], ["`submitted_competitor`"], ["none"], ["none"], ["none"]),
+    ("shipped", ["none"], ["`copied_design`"], ["`submitted_reference`"], ["`copied_final`"], ["none"], ["none"],
      ["none"]),
-    ("forbidden method", ["none"], ["`evaluation_tampering`"], ["`attempted_grader_manipulation`"],
-     ["`tampering`", "`prohibited_computation`"], ["none"], ["`attacked_grader`"], ["`edited_opponent_files`"]),
-    ("admitted", ["`disclosed_access`"], ["none"], ["none"], ["`final_source_disclosure`"], ["`disclosed_access`"],
-     ["`disclosed`"], ["`disclosed_to_arbiter`"]),
+    ("forbidden method", ["`evaluation_tampering`"], ["none"], ["`attacked_grader`"],
+     ["`attempted_grader_manipulation`"], ["`edited_opponent_files`"], ["none"],
+     ["`tampering`", "`prohibited_computation`"]),
+    ("admitted", ["none"], ["`disclosed_access`"], ["`disclosed`"], ["none"], ["`disclosed_to_arbiter`"],
+     ["`disclosed_access`"], ["`final_source_disclosure`"]),
 ]
+RUNG_WIDTHS = {"SWE": 2.6, "Protein design": 2.4, "Creative writing": 2.1, "Knowledge work": 3.0,
+               "Chess": 2.1, "OpenMath": 2.1, "Subset sum, factoring": 2.4}
+"""The width of each domain's column of table_rungs, in inches."""
 
 
 def lines_of(cell, width_in: float) -> list[str]:
@@ -130,9 +135,9 @@ def write_scales() -> Path:
 
 def write_rungs() -> Path:
     rows = [list(row) for row in RUNGS]
-    return table_png("table_rungs", ["rung", "openmath", "SWE", "knowledge work", "subset sum, factoring",
-                                     "protein design", "creative writing", "chess"], rows,
-                     [1.0, 2.1, 2.6, 3.0, 2.4, 2.4, 2.1, 2.1])
+    assert all(len(row) == 1 + len(DOMAINS) for row in rows)
+    header = ["rung", *(domain if domain.isupper() else domain.lower() for domain in DOMAINS)]
+    return table_png("table_rungs", header, rows, [1.0, *(RUNG_WIDTHS[domain] for domain in DOMAINS)])
 
 
 SANS = FontProperties(family="DejaVu Sans", size=7.6)

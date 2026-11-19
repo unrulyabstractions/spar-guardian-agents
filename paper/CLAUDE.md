@@ -83,3 +83,14 @@ The user's order that day: "UPDATE EVERYTHING". Each change below was listed to 
 - Table 1: the deep dive's pieces are A and B + C; passing needs all three; looking at one's own piece counts as
   cheating.
 - References: the PDF's [49] repeated [6] and is dropped.
+
+## Changed on 2026-11-18
+
+The user's order: SWE is always the first column, the other tasks follow by their weight in the studies, and the paper
+follows. The order is `src/measures/ladder_by_domain.py` DOMAINS: SWE, protein design, creative writing, knowledge
+work, chess, OpenMath, subset sum and factoring.
+
+- `table_rungs_by_domain`, `table_collaboration_by_domain` and `table_rungs` are redrawn with their columns in that
+  order. No cell's text changed.
+- The honeypot rungs by task (Appendix A, LaTeX): the software engineering row moved first. No word changed.
+

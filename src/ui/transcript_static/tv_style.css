@@ -79,6 +79,11 @@ table.idx-table tr.row-disagree td:first-child { box-shadow: inset 3px 0 0 var(-
 .lv-ladder-table th, .lv-ladder-table td { border: 1px solid var(--border); padding: 4px 6px; vertical-align: top; max-width: 260px; }
 .lv-ladder-table .lv-hl { background: var(--warn-bg); }
 .lv-def ol { margin: 4px 0; }
+.lv-terms { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 4px 0 0; max-width: 130ch; font-size: 13.5px; }
+.lv-terms dt { font-weight: 600; }
+.lv-terms dd { margin: 0; color: var(--muted); }
+.lv-group { margin: 22px 0 8px; font-size: 15px; }
+.lv-ladder-table td .lv-glyph { margin-right: 6px; }
 
 /* transcript in the case-study viewer's style (arena-capstone script/visualize_case.html): white cards with a
    thin line, a small muted head line, labelled blocks, monospace text at a loose line height */
