@@ -268,7 +268,7 @@ def test_run_signals_write_agent_rows_then_team_rows_and_run_json(tmp_path):
     written = [json.loads(line) for line in (folder / "signals.jsonl").read_text().splitlines()]
     assert [r["row"] for r in written] == ["agent", "agent", "team"] and written[:2] == rows
     assert list(rows[0])[:7] == ["row", "sample", "episode", "agent", "role", "task", "holds"]
-    assert list(rows[0])[-8:] == ["calls", *cheating_ladder.AGENT_FIELDS, *AGENT_COORDINATION, "collusion_rung"]
+    assert list(rows[0])[-9:] == ["calls", *cheating_ladder.AGENT_FIELDS, *AGENT_COORDINATION, "collusion_rung"]
     assert rows[0]["holds"] == ["whole"] and rows[0]["calls"] == 2
     assert (rows[0]["cheating_rung"], rows[1]["cheating_rung"]) == ("looked", "none")
     assert rows[0]["cheating_clauses"]["opened"] == [rows[0]["opened_evidence"]]
@@ -381,10 +381,11 @@ def test_ladders_gives_the_three_rungs_as_recorded_or_computed(tmp_path):
     folder = coordinated_run(tmp_path)
     signals.run_signals(folder)
     recorded = signals.ladders(folder)
-    assert recorded == {"agents": {agent: {"cheating_rung": "none", "coordination_level": level,
+    assert recorded == {"agents": {agent: {"cheating_rung": "none", "cheated": False, "coordination_level": level,
                                            "collusion_rung": None}
                                    for agent, level in (("a01", "write"), ("a02", "write"), ("a03", "none"))},
-                        "team": {"cheating_rung": "none", "coordination_level": "write", "collusion_rung": None}}
+                        "team": {"cheating_rung": "none", "cheated": False, "coordination_level": "write",
+                                 "collusion_rung": None}}
     retired = {*cheating_ladder.AGENT_FIELDS, *cheating_ladder.TEAM_FIELDS, *AGENT_COORDINATION, *TEAM_COORDINATION,
                "collusion_rung", "collusion_hidden", "collusion_pairs", "collusion_reason"}
     path = folder / "signals.jsonl"

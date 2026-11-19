@@ -15,7 +15,6 @@ table.idx-table th { white-space: normal; vertical-align: bottom; min-width: 70p
 table.idx-table td { white-space: nowrap; vertical-align: middle; }
 table.idx-table td.wrap { white-space: normal; min-width: 13ch; max-width: 24ch; }
 table.idx-table td.lv { white-space: normal; min-width: 15ch; max-width: 26ch; padding-right: 10px; }
-table.idx-table td.lv .heat { white-space: normal; }
 table.idx-table td.lv .lv-glyph, table.idx-table td.lv .lv-rank { flex: none; white-space: nowrap; }
 table.idx-table tbody tr:hover td { background: var(--hover); }
 .idx-legend { margin-top: 16px; }
@@ -46,12 +45,33 @@ table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--ba
 .lv-table th { font-size: 12px; color: var(--muted); font-weight: 600; }
 .lv-table th, .lv-table td { border-bottom: 1px solid var(--border); padding: 5px 8px; text-align: left; vertical-align: top; }
 .lv-team td { background: var(--panel-2); }
-.lv-glyph { display: inline-flex; gap: 1px; margin-right: 5px; vertical-align: middle; }
-.lv-seg { width: 5px; height: 11px; background: var(--border); border-radius: 1px; }
-.lv-seg.on { background: var(--bad); }
-.lv-name { color: var(--text); }
-.lv-hit .lv-name { font-weight: 600; }
+/* A level chip (tv_levels.js levelChip): the ladder's colour at the level, the text colour that reads on it, and bars
+   in that text colour, filled up to the level, with a gap at the ladder's line. */
+.lv-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 4px; white-space: nowrap;
+  font-size: 12px; line-height: 1.5; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
+.lv-chip b { font-weight: 600; }
+.lv-chip .lv-rank { color: inherit; opacity: .8; }
+.lv-glyph { display: inline-flex; gap: 1px; vertical-align: middle; }
+.lv-seg { width: 4px; height: 10px; background: currentColor; opacity: .25; border-radius: 1px; }
+.lv-seg.on { opacity: 1; }
+.lv-seg.at-line { margin-left: 3px; }
 .lv-rank { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.lv-cheated { font-size: 12px; white-space: nowrap; }
+.lv-cheated.yes { color: var(--bad); font-weight: 700; }
+.lv-cheated.no { color: var(--muted); }
+/* A ladder's line: the mark between its two sides in the legends and the row between them in the Ladders tables. */
+.lv-line-mark { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  padding: 0 5px; border-radius: 3px; background: var(--text); color: var(--bg); }
+.idx-legend-line { margin: 6px 0 4px; padding-top: 4px; border-top: 2px solid var(--text); font-size: 11.5px; color: var(--muted); }
+.lv-ladder-table tr.lv-line-row td { border-top: 3px solid var(--text) !important; background: var(--panel-2); font-size: 11.5px; color: var(--muted); max-width: none; white-space: normal; }
+.cs-full-legend .cfl-line { font-size: 9.5px; font-weight: 700; text-transform: uppercase; padding-left: 5px; margin-right: 8px;
+  border-left: 3px solid var(--ink-2, var(--text)); color: var(--ink-2, var(--text)); }
+.idx-toggle { cursor: pointer; user-select: none; font-size: 12.5px; }
+.judge-ev { margin-top: 4px; }
+.judge-quote { margin: 4px 0; padding: 3px 8px; border-left: 3px solid var(--border-strong); font-size: 12px; white-space: pre-wrap;
+  overflow-wrap: anywhere; max-width: 64ch; }
+.jl-list li { white-space: normal; }
+.jl-agree { color: var(--good); font-size: 12px; }
 .lv-judge-tag { margin-left: 6px; font-size: 10.5px; color: var(--muted); border: 1px dashed var(--border-strong); border-radius: 3px; padding: 0 4px; white-space: nowrap; }
 .lv-judge-yes { color: var(--bad); font-weight: 600; }
 .table-wrap:has(> .lv-ladder-table) { width: fit-content; }
@@ -61,7 +81,6 @@ table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--ba
 .lv-terms { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 4px 0 0; max-width: 130ch; font-size: 13.5px; }
 .lv-terms dt { font-weight: 600; }
 .lv-terms dd { margin: 0; color: var(--muted); }
-.lv-ladder-table td .lv-glyph { margin-right: 6px; }
 
 .lv-about { margin: 0 0 8px; max-width: 120ch; }
 
@@ -145,16 +164,12 @@ table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--ba
 .rp-stage[data-show=reasoning] .case .call:not(:has(.k-reasoning)) { display: none; }
 .rp-stage[data-show=tools] .k-reasoning, .rp-stage[data-show=tools] .k-input, .rp-stage[data-show=tools] .case .call.msg { display: none; }
 .rp-stage[data-show=board] .case .right .call:not(.has-board) { display: none; }
-.heat { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
-.heat.heat-strong, .heat.heat-strong .lv-rank { color: #fff; }
-.heat .lv-glyph .lv-seg { outline: 1px solid rgba(127,127,127,.35); }
 .cs-full-legend { font-size: 12px; color: var(--muted, #888); margin: 8px 0; display: flex; flex-direction: column; gap: 3px; }
 .cs-full-legend .cfl-row { line-height: 1.5; }
 .cs-full-legend b { color: var(--ink-2, var(--text)); font-weight: 600; margin-right: 4px; }
 .cs-full-legend .cfl-item { display: inline-flex; align-items: center; gap: 3px; margin-right: 8px; white-space: nowrap; }
 .cs-full-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; border: 1px solid rgba(127,127,127,.4); }
 .case .cs-ladders-row { line-height: 1.55; }
-.heat.heat-light, .heat.heat-light .lv-rank { color: #16191a; }
 .case .cs-mile { font-size: 10px; }
 /* The three ladders: the runs table's hidden-role columns, the Team tab's panels, the Ladders page's level tables;
    the CheatBench judge's cells. */
@@ -166,8 +181,9 @@ table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--ba
 .lv-level-table td:first-child { white-space: nowrap; }
 .collusion-pairs td { vertical-align: top; }
 .collusion-pairs td:nth-child(3), .collusion-pairs td:nth-child(5) { min-width: 260px; max-width: 520px; }
+.collusion-pairs td:nth-child(6), .collusion-pairs td:nth-child(7) { min-width: 240px; max-width: 440px; }
 .cheat-table td { vertical-align: top; }
-.cheat-table td:nth-child(4) { min-width: 320px; max-width: 640px; }
+.cheat-table td:nth-child(5) { min-width: 320px; max-width: 640px; }
 .cb-cell { display: inline-flex; flex-direction: column; gap: 1px; white-space: nowrap; }
 .collusion-verdicts td { vertical-align: top; }
 .collusion-verdicts caption { text-align: left; caption-side: top; padding: 4px 0; }

@@ -198,6 +198,14 @@ class CreativeDomain(Domain):
         return sorted(piece for piece, lines in self.prints.pieces.items()
                       if lines and line_hits(text, set(lines)) >= self.segment_need(piece, aimed))
 
+    def hand_in_pieces(self) -> set[str]:
+        """The segments the hand-in's writing.md holds (pieces_seen), or "whole" where the reference is not cut and
+        the hand-in holds its lines or names (holds)."""
+        writings = (self.records().get("writings") or {}).values()
+        if self.prints.pieces:
+            return {piece for found in writings for piece in self.pieces_seen(found.get("text") or "")}
+        return {"whole"} if any(self.holds(found) for found in writings) else set()
+
     def joined(self, text: str) -> str | None:
         """Every segment of a cut reference in one text."""
         if not self.prints.pieces or len(self.pieces_seen(text)) < len(self.prints.pieces):

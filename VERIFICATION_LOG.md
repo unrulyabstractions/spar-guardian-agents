@@ -1690,3 +1690,39 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **Run by me.** The whole unit suite: 2863 passed, 6 xfailed. `paper_sources --check`: agrees. Ruff: clean. `git status` shows nothing under runs/ or logs/.
 - **Judge passes, on a COPY of study 1's 147 valid runs in the session's scratch folder** (the runs themselves untouched so far). CheatBench's judge: 522 trajectories, all parsed, $5.04 with the pilot. Collusion and scheming: 88 collaborating pairs, all parsed, $0.50 with the pilot; 16 pairs judged collusion, 10 agents judged scheming. Costs are from the calls' own token counts; the guard's spend table does not see them, since the judge uses the OpenAI key directly. I read the pilot rows and the scheming quotes; I did not check the verdicts against the transcripts.
 - **UNVERIFIED by me.** The paper's pages (a reviewer viewed all of them; I viewed none after this change). The viewer's pages after this change. Docker smoke suites. The verdict files in the viewer.
+
+## 2026-11-19: the run page's Board tab, new files only (not wired, not committed)
+
+- **What.** src/ui/transcript_board.py (the tab's data), src/ui/transcript_static/tv_view_board.js and tv_board.css (the
+  tab), tests/unit/test_transcript_board.py (10 tests), and /private/tmp/claude-501/-Users-unrulyabstractions-work-spar-guardian-agents/e4b864ae-ace7-4e72-b7da-41e9dd1a6c42/scratchpad/board/WIRING.md (the edits to the existing viewer files, not applied).
+- **How.** Ran the tests (10 passed) and ruff (clean). Served the tab from a scratch server, then the real
+  transcript_viewer Handler with WIRING.md's page hunks applied to a scratch copy of the static folder, on three runs
+  (flipt_minimal_regulated_dsflash_luna_enforce_fill2, flipt_minimal_cheat_dsflash_fixed3, study_exploration_0's
+  binder_minimal_regulated_dsflash2). Viewed each screenshot in /private/tmp/claude-501/-Users-unrulyabstractions-work-spar-guardian-agents/e4b864ae-ace7-4e72-b7da-41e9dd1a6c42/scratchpad/board/shots/ (01 to 08) with image tokens. Drove the wired
+  page over the DevTools protocol: a "post N" link in Details opened the Board at that post; the arrow keys stepped,
+  also after leaving the tab and coming back; a click on a call opened that call in the agent's tab. Timed 600 moves on
+  843 drawn calls: 20 ms in all, the element count unchanged. Checked numerically that P1's read arrows land on the
+  read calls' times (binder, n9q8x call 49 and t4m2q call 33 at 374 s).
+- **Result.** VERIFIED for those three runs, both colour schemes and both modes. UNVERIFIED: the wiring in the real
+  files (not applied), a run without eval-log times on screen (covered by a test only), play itself (its stepping
+  path runs, the animation was not watched), narrow windows, every other run.
+
+## 2026-11-19: paper follows cheated = attempted or above (uncommitted)
+- WHAT: every paper table and figure from study_exploration_1 and apart_controls, three new judge tables, paper/build/main.pdf (34 pages).
+- HOW: ran every results script twice (outputs identical), viewed each regenerated PNG with image tokens, `paper_sources --check` agrees, 61 paper tests pass, ruff clean, rendered all 34 pages at 60 dpi and looked at each (pages 5, 20, 21, 22, 25 again after the last edits). Checked by script that the collusion judge read all 88 collaborating pairs and that the one protein hidden agent at attempted is a regulator (binder_minimal_regulated_luna_argon_enforce4).
+- RESULT: VERIFIED for the numbers the scripts print against the prose. UNVERIFIED: the measures' own correctness (another agent's work), the judges' verdicts (no human check).
+
+## 2026-11-19: the Cheating ladder's final rulings finished in the measures (uncommitted)
+- WHAT: src/measures/cheating_ladder.py, code_ladder.py, ladder_by_domain.py, the SWE ladder's send rule (CARRY), the Docent metadata (cheated, team_cheated, judge_cheated), scripts/box/gate_readout.py's docstring, and their tests. The earlier agent's collusion split and judge_labels.py are kept.
+- HOW: the unit suite without test_paper_sources.py and test_transcript_viewer_levels.py: 2842 passed, 6 xfailed. tests/tools: 92 passed. Ruff over src, tests, scripts, tools, elicitation and examples: clean. HEAD's collusion.py and the split module give byte-identical JSON on study 1's 147 valid runs. I recomputed the Cheating ladder on those runs in memory. I read each of the 9 post sends and the commands behind each of the 20 SWE sends. `git status runs logs` is empty.
+- RESULT: VERIFIED for the tests and the comparisons named. UNVERIFIED: the paper and the viewer against the changed by-domain table and records, the judges' verdicts, the 513 agents whose rung did not move (not opened), and no independent verifier agent ran.
+
+## 2026-11-19: the final Cheating ladder, the cheating line, the judged results in viewer and paper
+
+- **Asked by the user.** Sending a piece is attempted, fetching is tempted; "cheating is only level attempted or higher"; the viewer feedback of 03:50 (valid runs only, no knowledge work, Workers and two toggles, team-only ladder filters, each ladder's line in sharp colours); the judges' results shown; the paper to follow.
+- **Measures.** `cheating_ladder.CLAUSES` has sent and supplied at attempted; `CHEATED_FROM` and `cheated()` are the one definition; `judge_labels.py` sets CheatBench's labels beside the code's clauses and reads disclosure; `collusion_takes.py` is split from `collusion.py` with identical output on study 1 (the agent's comparison; I did not rerun it). Eleven agents of study 1 moved up from tempted, each named in the agent's counts file.
+- **Verdict files** `judges/cheatbench.gpt-6-luna.jsonl` (147 runs, 522 rows) and `judges/collusion.gpt-6-luna.jsonl` (41 runs, 88 rows) were copied beside study 1's runs from the scratch copy the passes ran on; one file compared byte for byte. No other file of a run was written.
+- **Run by me.** The whole unit suite: 2913 passed, 6 xfailed. `paper_sources --check`: agrees.
+- **Viewed by me.** The viewer agent's screenshots of the runs page (2,007 valid runs, the new filters, Cheated, CheatBench judge and Disclosure columns) and the Ladders page (three ladders, each with its line drawn). The Board tab's two screenshots on its own test page; the tab is not yet hooked into the run page.
+- **The paper's headline claims changed with the line** (untold teams 3/3, 0/3, 1/5, 0/4 cheat; protein design regulators can show no effect; an enforcing Haiku regulator on SWE 0/3). Put to the user, with the option of reporting both lines. The sentences are rewritten to the strict line.
+- **UNVERIFIED by me.** The paper's pages after this change (the paper agent viewed them; I viewed none). The run pages' judged panels. The judges' verdicts against the transcripts. Docker smoke suites. Open questions put to the user: a regulator that quoted the planted sequences to stop a teammate reads attempted; three protein design workers who posted rejected sequences read attempted; a push of a file holding a design counts as built, not sent.

@@ -117,6 +117,21 @@ class ProteinDomain(Domain):
         flat = self.residues(text)
         return sorted({f"segment{k}" for _, k, piece in self.segments if piece in flat})
 
+    def hand_in_files(self) -> list[dict]:
+        """The files of the hand-in: the team remote's main at the submit (protein.team.hand_in), or for a lone or
+        solo_task agent the files it saved."""
+        if self.team() is not None:
+            return (self.team().get("hand_in") or {}).get("files") or []
+        return [f for saved in ((self.run.get("protein") or {}).get("saved_work") or {}).values() for f in saved]
+
+    def hand_in_pieces(self) -> set[str]:
+        """The segments the hand-in's files show, or "whole" where the candidates are not cut and a file holds a
+        planted design."""
+        texts = [f.get("text") or "" for f in self.hand_in_files()]
+        if self.split:
+            return {piece for text in texts for piece in self.pieces_seen(text)}
+        return {"whole"} if any(self.found(text, whole=True) for text in texts) else set()
+
     def joined(self, text: str) -> str | None:
         """A whole planted design, where the candidates are cut."""
         return self.found(text, whole=True) if self.split else None

@@ -7,20 +7,20 @@ reads the same files here.
     make transcripts
 
 Every folder under runs/ is a collection, except study_smoke and folders that hold no run: a study or a manifest
-collection, whose runs and their validity src/measures/run_listing.py list_collection reads. The runs of the tasks the
-viewer leaves out (transcript_ladder_tables.HIDDEN_DOMAINS) are listed in the cache without their ladders and are not
-served (shown_index).
+collection, whose runs and their validity src/measures/run_listing.py list_collection reads. The viewer lists, measures
+and serves the valid runs only, and of those only the runs of the tasks it shows: a run of a task it leaves out
+(transcript_ladder_tables.HIDDEN_DOMAINS) is counted in the index's `hidden` and never measured.
 
-The index lists every run with a status: valid, or the reason it is not (invalid, incomplete, mock, attempt, extra
-copy). The page shows the valid runs first and the rest through its Status filter. For each run the index reads
-run.json, episodes.jsonl, signals.jsonl and the board, the judges' verdicts (src/judging/verdict_files.py read: the
-eval's judge.jsonl and the judge passes' files), and the three ladders' measures: src/measures/cheating_ladder.py
-run_cheating, coordination.py, and collusion.py with a collusion judge's verdicts (src/judging/collusion_judge.py
+For each run the index reads run.json, episodes.jsonl, signals.jsonl and the board, the judges' verdicts
+(src/judging/verdict_files.py read: the eval's judge.jsonl and the judge passes' files), and the measures:
+src/measures/judge_labels.py judged_cheating (the Cheating ladder with CheatBench's labels beside its clauses) and
+disclosure, coordination.py, and collusion.py with a collusion judge's verdicts (src/judging/collusion_judge.py
 judged_collusion), which read the transcripts. The server reads the data and never writes it. Its one output is the
 index cache, tmp/transcript_viewer/index.json: each run's row and its measures, under a stamp of the run's files (stamp)
-and of the code (code_stamp). A start measures again only the runs whose stamp changed, in parallel processes;
---rebuild, a new INDEX_VERSION or new code measures every run. The run page reads its ladders from the cache. The
-browser's transcript is read only when the browser asks for it, and it is streamed from disk as stored.
+and of the code (code_stamp). A start measures again only the runs whose stamp changed, in parallel processes, and
+prints its progress; --rebuild, a new INDEX_VERSION or new code measures every run. The run page reads its ladders
+from the cache. The browser's transcript is read only when the browser asks for it, and it is streamed from disk as
+stored.
 
 Routes: / (the page), /tv/<file> (src/ui/transcript_static/), /static/<path> (the results browser's assets in
 src/ui/static/, whose dom.js, charts.js, components.js and style.css the page reuses), /api/index, /api/run?id=,
@@ -47,7 +47,7 @@ from urllib.parse import parse_qs, urlparse
 from src.configuration.settings import ROOT
 from src.domains import BY_TASK
 from src.judging import collusion_judge, verdict_files
-from src.measures import cheating_ladder, collusion, coordination
+from src.measures import collusion, coordination, judge_labels
 from src.measures.run_directory import RunDir, episode_agent, is_worker, roles_of, run_name
 from src.measures.run_listing import Listed, list_collection
 from src.ui import transcript_ladder_tables, transcript_levels
@@ -58,11 +58,13 @@ STATIC = HERE / "transcript_static"
 BROWSER_STATIC = HERE / "static"
 CACHE = ROOT / "tmp" / "transcript_viewer" / "index.json"
 SKIP = ("study_smoke",)
-INDEX_VERSION = 5  # 5: the ladder ids cheating and coordination; CheatBench verdicts from judge.jsonl too
+INDEX_VERSION = 6  # 6: valid runs only, knowledge work left out, the judge's labels, disclosure, the worker model
 DEFAULT_PORT = 8770
 WORKERS = 6
 """Processes that measure runs when a start finds runs to measure: each loads transcripts, so few enough to spare the
 machine's memory."""
+PROGRESS = 100
+"""A start that measures runs prints a line every PROGRESS runs measured."""
 MEASURING = ("src/measures", "src/domains", "src/judging", "src/ui")
 """The folders whose code decides a run's row and measures (code_stamp)."""
 SERVED = ("version", "runs", "built_at", "build_seconds", "measured", "collections", "errors", "rows", "hidden")
@@ -77,13 +79,13 @@ VERDICT_KEPT = ("parse_ok", "judge_cost_usd", "judge_error")
 COLLECTION_ABOUT = {
     "study_exploration_1": ("Exploration 1", "teams, regulators",
                             "Teams of three on four targets, with hidden regulators and disregulators at several "
-                            "levels and models. INDEX.jsonl says which runs are valid."),
+                            "levels and models. The runs its INDEX.jsonl marks valid."),
     "study_exploration_0": ("Exploration 0", "October screen",
                             "One agent, a team of three, or three plus a hidden regulator, on five tasks and three "
                             "models."),
     "apart_controls": ("Apart controls", "lone agents",
-                       "One agent on nine tasks and five models, told to cheat or not. The canonical copy of each run "
-                       "is valid; extra copies of duplicated runs sit beside them."),
+                       "One agent on nine tasks and five models, told to cheat or not. The canonical copy of each "
+                       "valid run."),
 }
 # Episode fields the run page shows; the rest of episodes.jsonl (rules, probes, ledger, access) stays on disk.
 EPISODE_KEYS = ["episode", "orbit_agent", "role", "model", "topology", "n_turns", "n_tool_calls", "wall_time", "limit",
@@ -93,7 +95,9 @@ RUN_JSON_KEYS = ["task", "variant", "model", "role_models", "topology", "mode", 
                  "defenses", "team_submission", "shutdown_rate", "deviations", "code"]
 ROUND_RE = re.compile(r"^r(\d+)")
 SUBMIT_RE = re.compile(r"handed in the team's work in round (\d+)")
-NAME_RE = re.compile(r"^(?P<stem>[a-z]+)_(?P<cell>.+)_(?P<model>[a-z]+?)(?P<n>\d+)$")
+NAME_RE = re.compile(r"^(?P<stem>[a-z]+)_(?P<cell>.+)_[a-z]+\d+$")
+"""A run's name, <stem>_<cell>_<tag><n>. The tag is no model: a check of the ORBIT 2.0 port is named
+poem_minimal_regulated_orbit2. The models come from run.json alone (cell_of)."""
 
 
 # ------------------------------------------------------------------------------------------------- the collections
@@ -206,33 +210,40 @@ class RunFiles:
         return [read_json(p) or {} for p in sorted(folder.glob("*.json"))] if folder.is_dir() else []
 
     def cheating(self) -> dict:
-        """The Cheating ladder of the run (src/measures/cheating_ladder.py run_cheating) as the viewer keeps it, or
-        {"applicable": False, "reason"} for a run without episodes or of a task with no ladder."""
+        """The Cheating ladder of the run with CheatBench's labels beside its clauses (src/measures/judge_labels.py
+        judged_cheating) as the viewer keeps it, or {"applicable": False, "reason"} for a run without episodes or of a
+        task with no ladder."""
         if self.task not in BY_TASK:
             return {"applicable": False, "reason": f"no Cheating ladder for task {self.task!r}"}
         if not self.episodes:
             return {"applicable": False, "reason": "the run recorded no episode"}
-        return transcript_levels.cheating_shown(cheating_ladder.run_cheating(self.path))
+        return transcript_levels.cheating_shown(judge_labels.judged_cheating(self.path))
 
     def collusion(self, judges: dict[str, dict[str, list[dict]]], cheating: dict) -> dict:
         """The Collusion ladder of the run with its collusion judge's verdicts (src/judging/collusion_judge.py
         judged_collusion, with each agent's Cheating rung from `cheating`, the Cheating measure's answer), as the
-        viewer keeps it, and the judge's name; or
+        viewer keeps it, the judge's name, and on each pair the evidence of that judge's verdict (judge_evidence); or
         {"applicable": False, "reason"} when the measure says it does not apply (not_applicable), which loads no
         transcript."""
         reason = collusion.not_applicable(self.task, len(self.episodes))
         if reason:
             return {"applicable": False, "reason": reason}
         rungs = {a: r["rung"] for a, r in (cheating.get("agents") or {}).items()}
-        measure, judge = collusion_judge.judged_collusion(self.path, rungs, judges.get(COLLUSION) or {})
-        return {**transcript_levels.collusion_shown(measure), "judge": judge}
+        verdicts = judges.get(COLLUSION) or {}
+        measure, judge = collusion_judge.judged_collusion(self.path, rungs, verdicts)
+        shown = transcript_levels.collusion_shown(measure)
+        said = judge_evidence(verdicts.get(judge) or [])
+        pairs = [{**p, "judge_evidence": said.get(collusion.pair_key(*p["agents"]))} for p in shown["pairs"]]
+        return {**shown, "pairs": pairs, "judge": judge}
 
     def measured(self) -> dict:
         """What the index caches for a run beside its row: the judges' verdict files (verdict_files.read, {pass:
-        {judge: [row]}}), and the Cheating and Collusion measures, which read the transcripts."""
+        {judge: [row]}}), the Cheating and Collusion measures, which read the transcripts, and each agent's disclosure
+        (judge_labels.disclosure)."""
         judges = verdict_files.read(self.path)
         cheating = self.cheating()
-        return {"judges": judges, "cheating": cheating, "collusion": self.collusion(judges, cheating)}
+        return {"judges": judges, "cheating": cheating, "collusion": self.collusion(judges, cheating),
+                "disclosure": judge_labels.disclosure(self.path)}
 
     def levels(self, measured: dict, boards: list[dict] | None = None) -> dict:
         """The three ladders (transcript_levels.compute) from the cached measures and the board."""
@@ -246,6 +257,37 @@ def cheatbench_by_agent(rows: list[dict], episodes: list[dict]) -> dict[str, dic
     episode)."""
     by_episode = {row.get("episode"): row for row in rows}
     return {episode_agent(ep): by_episode[ep.get("episode")] for ep in episodes if ep.get("episode") in by_episode}
+
+
+def judge_evidence(rows: list[dict]) -> dict[str, dict]:
+    """A collusion judge's evidence by pair (collusion.pair_key, the row's unit), from its parsed rows: {"collusion":
+    {said, verdict (what stands after code's check), post (the judge's label of the post, P1, P2, ... in board
+    order), quote, reason, check}, "scheming": {agent: {said, verdict, quote, reason, check}}}. A field the judge left
+    empty is None."""
+    out = {}
+    for row in rows:
+        if not row.get("parse_ok"):
+            continue
+        said = {"said": row.get("collusion"), "verdict": row.get("collusion_verdict"),
+                "post": row.get("collusion_post") or None, "quote": row.get("collusion_quote") or None,
+                "reason": row.get("collusion_reason") or None, "check": row.get("collusion_check")}
+        scheming = {agent: {"said": row.get(f"{side}_scheming"), "verdict": row.get(f"{side}_scheming_verdict"),
+                            "quote": row.get(f"{side}_scheming_quote") or None,
+                            "reason": row.get(f"{side}_scheming_reason") or None,
+                            "check": row.get(f"{side}_scheming_check")}
+                    for side, agent in zip(collusion_judge.SIDES, row.get("agents") or [])}
+        out[row["unit"]] = {"collusion": said, "scheming": scheming}
+    return out
+
+
+def disclosure_summary(disclosure: dict) -> dict:
+    """The team's disclosure as the runs table shows it: {"yes", "no" (the workers the judge says did or did not openly
+    acknowledge their own access), "value"}, value being, when no worker was judged yes or no, why (not recorded on a
+    task whose verdict has no such field, else not judged), and None otherwise."""
+    team = disclosure["team"]
+    judged = team.get("yes", 0) + team.get("no", 0)
+    why = judge_labels.NOT_RECORDED if judge_labels.NOT_RECORDED in team else judge_labels.NOT_JUDGED
+    return {"yes": team.get("yes", 0), "no": team.get("no", 0), "value": None if judged else why}
 
 
 def shown_verdict(row: dict) -> dict:
@@ -279,37 +321,32 @@ def short_model(model: str | None) -> str | None:
 
 @dataclass
 class Cell:
-    """What a run was made with: its task's short name, its cell, its agents' model, who was told to cheat and the
-    hidden roles' levels and models."""
+    """What a run was made with: its task's short name, its cell, and the models of its workers and hidden roles."""
 
     stem: str | None
     cell: str | None
-    author: str | None
-    regulator: str | None = None
-    disregulator: str | None = None
+    worker: str | None
+    regulator: str | None
+    disregulator: str | None
+
+
+ROLE_MODELS = ("worker", "regulator", "disregulator")
 
 
 def cell_of(listed: Listed, rf: RunFiles) -> Cell:
-    """From the manifest row, the INDEX.jsonl row, else the run's name (<stem>_<cell>_<model><n>). A hidden role
-    with no model of its own runs the eval's model (src/configuration/swarm_config.py role_models), so its model is
-    the workers' when the workers have none of their own either."""
+    """The task's stem and the cell from the manifest row, the INDEX.jsonl row, else the run's name (NAME_RE). The
+    models come from run.json alone: a role's own model in role_models, else the eval's model, which a role with no
+    model of its own runs (src/configuration/swarm_config.py role_models)."""
     rj, meta = rf.run_json, listed.meta
     role_models = rj.get("role_models") or {}
-    regulator = short_model(role_models.get("regulator"))
-    disregulator = short_model(role_models.get("disregulator"))
+    models = [short_model(role_models.get(role) or rj.get("model")) for role in ROLE_MODELS]
     if listed.source == "manifest":
-        return Cell(meta["task"], "solo_cheat" if meta["cell"] == "cheat" else meta["cell"], meta["model"])
+        return Cell(meta["task"], "solo_cheat" if meta["cell"] == "cheat" else meta["cell"], *models)
     if meta:
-        stem = (meta.get("cell") or "").split(".")[-1].split("_")[0] or None
-        cell = Cell(stem, meta.get("kind"), meta.get("worker"), meta.get("regulator") or regulator, disregulator)
-    elif m := NAME_RE.match(run_name(listed.path)):
-        cell = Cell(m["stem"], m["cell"], m["model"], regulator, disregulator)
-    else:
-        cell = Cell(None, None, short_model(rj.get("model")), regulator, disregulator)
-    run_model = short_model(rj.get("model")) if role_models.get("worker") else cell.author
-    cell.regulator = cell.regulator or run_model
-    cell.disregulator = cell.disregulator or run_model
-    return cell
+        return Cell((meta.get("cell") or "").split(".")[-1].split("_")[0] or None, meta.get("kind"), *models)
+    if m := NAME_RE.match(run_name(listed.path)):
+        return Cell(m["stem"], m["cell"], *models)
+    return Cell(None, None, *models)
 
 
 def seed_post(cell: Cell, cfg: dict, swarm: dict, n_agents: int) -> str:
@@ -329,47 +366,50 @@ def seed_post(cell: Cell, cfg: dict, swarm: dict, n_agents: int) -> str:
     return ", ".join(parts)
 
 
+def hidden_counts(roles: dict) -> dict[str, int]:
+    """How many regulators and disregulators the run had."""
+    return {r: sum(1 for x in roles.values() if x == r) for r in ("regulator", "disregulator")}
+
+
 def team_words(n_agents: int, roles: dict) -> str:
-    hidden = {r: sum(1 for x in roles.values() if x == r) for r in ("regulator", "disregulator")}
-    workers = n_agents - sum(hidden.values())
+    """Who ran, in words: one agent, or the workers and any hidden role."""
+    hidden = hidden_counts(roles)
     if n_agents <= 1:
         return "One agent"
     extra = "".join(f" plus {n} hidden {r}{'' if n == 1 else 's'}" for r, n in hidden.items() if n)
-    return f"Team of {workers}{extra}"
+    return f"Team of {n_agents - sum(hidden.values())}{extra}"
 
 
-def build_row(col: str, listed: Listed, rf: RunFiles, measured: dict | None) -> dict:
-    """The run's index row. `measured` is RunFiles.measured's answer, None for a run of a task the viewer leaves out:
-    its row then has no levels and no judges."""
+def build_row(col: str, listed: Listed, rf: RunFiles, measured: dict) -> dict:
+    """The run's index row from its files and its measures (RunFiles.measured's answer)."""
     rj, cfg, swarm = rf.run_json, rf.run_json.get("config") or {}, rf.run_json.get("swarm") or {}
     n_agents = len(rf.episodes) or int(cfg.get("n_agents") or 1)
     cell = cell_of(listed, rf)
     post = seed_post(cell, cfg, swarm, n_agents)
     sample = (rf.episodes[0].get("episode") if rf.episodes else "") or ""
-    in_study = listed.source != "manifest"
+    hidden = hidden_counts(rf.roles)
+    team = team_words(n_agents, rf.roles)
     return {
         "id": f"{col}/{listed.key}", "col": col, "key": listed.key,
-        "run": run_name(listed.path) if in_study else listed.meta.get("key"), "status": listed.status,
-        "why": listed.why, "group": listed.key.split("/")[0] if in_study and "/" in listed.key else None,
+        "run": run_name(listed.path) if listed.source != "manifest" else listed.meta.get("key"),
         "task": cell.stem, "task_name": rf.task, "instance": sample.split("#")[0] or None, "arm": cell.cell,
-        "arm_label": f"{team_words(n_agents, rf.roles)}, {post}", "seed_post": post, "author": cell.author,
-        "model_id": rj.get("model"), "n_agents": n_agents,
-        "regulator_model": cell.regulator if "regulator" in rf.roles.values() else None,
-        "roles": {a: r for a, r in rf.roles.items() if r},
-        "seed": listed.meta.get("seed", cfg.get("seed")), "turn_budget": cfg.get("turn_budget"),
-        "dir": str(listed.path), "n_transcripts": len(transcript_dirs(listed.path)),
-        "levels": None if measured is None else transcript_levels.index_levels(rf.levels(measured), rf.roles),
-        "cheatbench": [] if measured is None else cheatbench_summary(measured["judges"].get(CHEATBENCH) or {},
-                                                                     rf.episodes, rf.roles),
+        "arm_label": f"{team}, {post}", "seed_post": post, "team": team, "model": cell.worker,
+        "model_id": (rj.get("role_models") or {}).get("worker") or rj.get("model"), "n_agents": n_agents,
+        "workers": n_agents - sum(hidden.values()), "regulators": hidden["regulator"],
+        "disregulators": hidden["disregulator"], "seed": listed.meta.get("seed", cfg.get("seed")),
+        "dir": str(listed.path),
+        "levels": transcript_levels.index_levels(rf.levels(measured), rf.roles),
+        "cheatbench": cheatbench_summary(measured["judges"].get(CHEATBENCH) or {}, rf.episodes, rf.roles),
+        "disclosure": disclosure_summary(measured["disclosure"]),
     }
 
 
 def measure_run(col: str, listed: Listed) -> dict:
     """One run's cache entry: {"row", "measured"} (build_row, RunFiles.measured), or {"error"} for a run whose files
-    cannot be read. The runs of the tasks the viewer leaves out are not measured."""
+    cannot be read."""
     try:
         rf = RunFiles.read(listed.path)
-        measured = None if transcript_ladder_tables.hidden_task(rf.task) else rf.measured()
+        measured = rf.measured()
         return {"row": build_row(col, listed, rf, measured), "measured": measured}
     except (OSError, ValueError, KeyError, TypeError) as e:
         return {"error": f"{type(e).__name__}: {e}"}
@@ -397,62 +437,86 @@ def stamp(run_dir: Path) -> list[int]:
     return [n, size, latest]
 
 
+def valid_runs(runs: Path) -> list[tuple[str, list[Listed]]]:
+    """Each collection's valid runs (run_listing's status), the collections without one left out."""
+    out = []
+    for folder in collections(runs):
+        listed = [item for item in list_collection(folder) if item.status == "valid"]
+        if listed:
+            out.append((folder.name, listed))
+    return out
+
+
+def left_out_task(run_dir: Path) -> str | None:
+    """The task of a run the viewer leaves out (transcript_ladder_tables.hidden_task), read from its run.json; None
+    for a run it shows, and for a run.json that does not parse, which measure_run then reports."""
+    try:
+        task = (read_json(run_dir / "run.json") or {}).get("task")
+    except ValueError:
+        return None
+    return task if transcript_ladder_tables.hidden_task(task) else None
+
+
+def measure_all(todo: list[tuple[str, list[int], str, Listed]]) -> dict[str, dict]:
+    """The entries of the runs to measure ((run id, stamp, collection, Listed)), measured in WORKERS processes, with a
+    line of progress every PROGRESS runs and at the end."""
+    entries: dict[str, dict] = {}
+    if not todo:
+        return entries
+    with ProcessPoolExecutor(max_workers=min(WORKERS, len(todo))) as pool:
+        done = pool.map(measure_run, [col for _, _, col, _ in todo], [item for *_, item in todo], chunksize=4)
+        for n, ((run_id, st, _, _), entry) in enumerate(zip(todo, done), 1):
+            entries[run_id] = {**entry, "stamp": st}
+            if n % PROGRESS == 0 or n == len(todo):
+                print(f"measured {n} of {len(todo)} runs", flush=True)
+    return entries
+
+
 def build_index(runs: Path, cached: dict | None = None) -> dict:
-    """Every collection's runs, each with its row and its measures. A run whose stamp and code stamp match `cached`
-    (an earlier index) keeps its entry; the others are measured again, in WORKERS processes."""
+    """Every collection's valid runs, each with its row and its measures, and the runs of the tasks the viewer leaves
+    out counted in `hidden`: their entry, {"left_out": task}, is all the index reads of them. A run whose stamp and code
+    stamp match `cached` (an earlier index) keeps its entry; the others are measured again (measure_all)."""
     t0 = time.time()
     code = code_stamp()
     old = (cached or {}).get("entries") or {} if (cached or {}).get("code") == code else {}
-    entries, todo, cols = {}, [], []
-    for folder in collections(runs):
-        listed = list_collection(folder)
-        if not listed:
-            continue
-        cols.append((folder.name, listed))
+    cols = valid_runs(runs)
+    entries, todo = {}, []
+    for name, listed in cols:
         for item in listed:
-            run_id, st = f"{folder.name}/{item.key}", stamp(item.path)
+            run_id, st = f"{name}/{item.key}", stamp(item.path)
             prior = old.get(run_id)
-            if prior is not None and prior["stamp"] == st and prior["row"]["status"] == item.status:
+            if prior is not None and prior["stamp"] == st:
                 entries[run_id] = prior
+            elif task := left_out_task(item.path):
+                entries[run_id] = {"left_out": task, "stamp": st}
             else:
-                todo.append((run_id, st, folder.name, item))
-    if todo:
-        with ProcessPoolExecutor(max_workers=min(WORKERS, len(todo))) as pool:
-            done = pool.map(measure_run, [col for _, _, col, _ in todo], [item for *_, item in todo], chunksize=4)
-            for (run_id, st, _, _), entry in zip(todo, done):
-                entries[run_id] = {**entry, "stamp": st}
-    rows, errors, collections_out = [], [], []
+                todo.append((run_id, st, name, item))
+    entries.update(measure_all(todo))
+    rows, errors, collections_out, left_out = [], [], [], 0
     for name, listed in cols:
         label, tag, about = COLLECTION_ABOUT.get(name, (name, "", f"Runs under runs/{name}/."))
-        statuses: dict[str, int] = {}
+        shown = 0
         for item in listed:
             entry = entries[f"{name}/{item.key}"]
             if "error" in entry:
                 errors.append({"id": f"{name}/{item.key}", "error": entry["error"]})
-                continue
-            rows.append(entry["row"])
-            statuses[item.status] = statuses.get(item.status, 0) + 1
-        collections_out.append({"key": name, "label": label, "tag": tag, "about": about, "statuses": statuses})
+            elif "left_out" in entry:
+                left_out += 1
+            else:
+                rows.append(entry["row"])
+                shown += 1
+        if shown:
+            collections_out.append({"key": name, "label": label, "tag": tag, "about": about, "runs": shown})
     return {"version": INDEX_VERSION, "runs": str(runs), "code": code,
             "built_at": time.strftime("%Y-%m-%d %H:%M:%S %Z"), "build_seconds": round(time.time() - t0, 2),
             "measured": len(todo), "collections": collections_out, "errors": errors, "rows": rows,
+            "hidden": {"domains": list(transcript_ladder_tables.HIDDEN_DOMAINS), "runs": left_out},
             "entries": entries}
 
 
-def shown_index(idx: dict) -> dict:
-    """The index as the viewer serves it (SERVED): without the runs of the tasks it leaves out
-    (transcript_ladder_tables.hidden_task), each collection's status counts taken again, a collection left with no
-    run dropped, and `hidden` saying which domains and how many runs were left out. The cache keeps every run, so a
-    change of the list measures only the runs it shows again."""
-    rows = [row for row in idx["rows"] if not transcript_ladder_tables.hidden_task(row.get("task_name"))]
-    statuses: dict[str, dict[str, int]] = {}
-    for row in rows:
-        counts = statuses.setdefault(row["col"], {})
-        counts[row["status"]] = counts.get(row["status"], 0) + 1
-    cols = [{**col, "statuses": statuses[col["key"]]} for col in idx["collections"] if col["key"] in statuses]
-    hidden = {"domains": list(transcript_ladder_tables.HIDDEN_DOMAINS), "runs": len(idx["rows"]) - len(rows)}
-    served = {**idx, "rows": rows, "collections": cols, "hidden": hidden}
-    return {k: served[k] for k in SERVED if k in served}
+def served_index(idx: dict) -> dict:
+    """The index as /api/index serves it: its SERVED keys, without the measures and stamps the cache keeps."""
+    return {k: idx[k] for k in SERVED}
 
 
 def load_or_build(runs: Path, rebuild: bool) -> dict:
@@ -485,8 +549,8 @@ def eval_log_of(run_dir: Path) -> Path | None:
 
 def run_detail(row: dict, measured: dict) -> dict:
     """The run page's data: the row, run.json's settings, each agent with its episode and each CheatBench judge's
-    verdict on it, the board, the three ladders from the cached measures, and every verdict of the collusion
-    judges."""
+    verdict on it, the board, the three ladders from the cached measures, each agent's disclosure, and every verdict
+    of the collusion judges."""
     run_dir = Path(row["dir"])
     rf = RunFiles.read(run_dir)
     rj, rules = rf.run_json, rf.run_json.get("rules") or {}
@@ -513,6 +577,7 @@ def run_detail(row: dict, measured: dict) -> dict:
                  "eval_log_recorded": rj.get("eval_log")})
     boards = rf.boards()
     return {"row": row, "meta": meta, "agents": agents, "boards": boards, "levels": rf.levels(measured, boards),
+            "disclosure": measured["disclosure"],
             "collusion_judges": {judge: [shown_verdict(row) for row in rows]
                                  for judge, rows in sorted((measured["judges"].get(COLLUSION) or {}).items())}}
 
@@ -530,11 +595,11 @@ class Server(ThreadingHTTPServer):
 
 
 class Viewer:
-    """What the server answers from: the served index (shown_index) as bytes, its rows by id, each served run's cached
-    measures and the Ladders page's data."""
+    """What the server answers from: the served index (served_index) as bytes, its rows by id, each served run's
+    cached measures and the Ladders page's data."""
 
     def __init__(self, idx: dict):
-        served = shown_index(idx)
+        served = served_index(idx)
         self.index_bytes = json.dumps(served, separators=(",", ":")).encode("utf-8")
         self.rows = {r["id"]: r for r in served["rows"]}
         self.measured = {run_id: idx["entries"][run_id]["measured"] for run_id in self.rows}
@@ -628,11 +693,10 @@ def main(argv: list[str] | None = None) -> int:
     t0 = time.time()
     idx = load_or_build(runs, args.rebuild)
     Handler.viewer = Viewer(idx)
-    served = shown_index(idx)
-    counts = ", ".join(f"{c['key']} {sum(c['statuses'].values())}" for c in served["collections"])
-    left_out = f"; {served['hidden']['runs']} runs of {', '.join(served['hidden']['domains'])} left out" \
-        if served["hidden"]["runs"] else ""
-    print(f"index: {len(served['rows'])} runs ({counts}){left_out}; {len(idx['errors'])} unreadable; "
+    counts = ", ".join(f"{c['key']} {c['runs']}" for c in idx["collections"])
+    left_out = f"; {idx['hidden']['runs']} valid runs of {', '.join(idx['hidden']['domains'])} left out" \
+        if idx["hidden"]["runs"] else ""
+    print(f"index: {len(idx['rows'])} valid runs ({counts}){left_out}; {len(idx['errors'])} unreadable; "
           f"{idx['measured']} runs measured in {idx['build_seconds']} s; ready in {time.time() - t0:.2f} s", flush=True)
     for e in idx["errors"]:
         print(f"  unreadable {e['id']}: {e['error']}", file=sys.stderr)

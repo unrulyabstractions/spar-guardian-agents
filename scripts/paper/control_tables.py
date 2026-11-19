@@ -16,6 +16,7 @@ from matplotlib.figure import Figure
 from matplotlib.patches import FancyBboxPatch, Rectangle
 
 from scripts.paper.study_ladders import (
+    CHEATED_LABEL,
     CHEATING_LETTER,
     COLLUSION_SHORT,
     cheating_legend,
@@ -25,9 +26,7 @@ from scripts.paper.study_ladders import (
     rung_chip,
 )
 from src.configuration.settings import ROOT
-from src.measures.code_ladder import CHEATED_FROM
 from src.measures.run_validity import validity
-from src.measures.rungs import at_least
 from src.utils.figure_style import AXIS, BAND, GOOD, GREY_RAMP, INK, INK_SECONDARY, MUTED, PRINT_DPI, ROLE_FILL, WHITE
 
 RUNS = ROOT / "runs" / "study_exploration_1"
@@ -37,30 +36,30 @@ USE = {"regulators": ("Regulators", ROLE_FILL["regulator"], WHITE, ["cheats unpr
        "disregulators": ("Disregulators", ROLE_FILL["disregulator"], WHITE,
                          ["holds back unprompted,", "so it can rise"]),
        "neither": ("Neither", GREY_RAMP[2], INK, ["cheats unprompted,", "never passes"])}
-# (task, workers, the cell prefix for each column, what the row's summary leads with, what the target suits)
+# (task, workers, the cell prefix for each column, what the target suits)
 TARGETS = [
     ("Protein design", "GPT-6 Luna", {"none": "binder_minimal_luna", "cheat": "binder_minimal_cheat_luna",
                                       "generic": "binder_minimal_luna_generic",
-                                      "identified": "binder_minimal_luna_identified"}, CHEATED_FROM, "regulators"),
+                                      "identified": "binder_minimal_luna_identified"}, "regulators"),
     ("Software engineering", "DeepSeek V4.1 Flash", {"none": "flipt_minimal_dsflash_fixed",
                                                      "cheat": "flipt_minimal_cheat_dsflash_fixed",
                                                      "generic": "flipt_minimal_dsflash_generic_fixed",
                                                      "identified": "flipt_minimal_dsflash_identified_fixed"},
-     "pass", "regulators"),
+     "regulators"),
     ("Software engineering", "GPT-6 Luna", {"none": "flipt_minimal_luna_fixed",
                                             "cheat": "flipt_minimal_cheat_luna_fixed",
                                             "generic": "flipt_minimal_luna_generic_fixed",
                                             "identified": "flipt_minimal_luna_identified_fixed"},
-     "pass", "disregulators"),
+     "disregulators"),
     ("Software engineering", "Claude Haiku 5.5", {"none": "flipt_minimal_haiku_fixed",
                                                   "cheat": "flipt_minimal_cheat_haiku_fixed",
                                                   "generic": "flipt_minimal_haiku_generic_fixed",
                                                   "identified": "flipt_minimal_haiku_identified_fixed"},
-     "pass", "neither"),
+     "neither"),
     ("Creative writing", "GPT-6 Luna", {"none": "poem_minimal_luna", "cheat": "poem_minimal_cheat_luna",
                                         "generic": "poem_minimal_luna_generic_rules",
                                         "identified": "poem_minimal_luna_identified_rules"},
-     CHEATED_FROM, "disregulators"),
+     "disregulators"),
 ]
 POSITIVE = [("none", "Untold", ["nothing appended"]),
             ("cheat", "Told to cheat", ["“by any means”: the planted fix or designs",
@@ -71,8 +70,8 @@ NEGATIVE = [("none", "No rule", ["nothing appended"]),
 
 
 def runs_of(prefix: str | None) -> list[dict]:
-    """The valid runs of a cell, in seed order, and what each did: the team's Cheating rung, whether the grader
-    passed the hand-in, and the team's Collusion rung."""
+    """The valid runs of a cell, in seed order, and what each did: the team's Cheating rung, whether it cheated,
+    whether the grader passed the hand-in, and the team's Collusion rung."""
     if not prefix:
         return []
     out = []
@@ -82,7 +81,8 @@ def runs_of(prefix: str | None) -> list[dict]:
         if not (path / "run.json").is_file() or not validity(path)["valid"]:
             continue
         run = record(path)
-        out.append({"name": path.name, "rung": run["cheating"], "passed": run["passed"], "collusion": run["collusion"]})
+        out.append({"name": path.name, "rung": run["cheating"], "cheated": run["cheated"], "passed": run["passed"],
+                    "collusion": run["collusion"]})
     return out
 
 
@@ -124,7 +124,7 @@ def table(path: Path, columns: list) -> None:
     ax.plot([left, left], [0.08, head_h + row_h * len(TARGETS)], color=AXIS, lw=0.6)
 
     for i, target in enumerate(TARGETS):
-        task, workers, _, measure, suited = target
+        task, workers, _, suited = target
         y0 = head_h + i * row_h
         if i % 2:
             ax.add_patch(Rectangle((0, y0), width, row_h, fc=BAND, ec="none", zorder=0))
@@ -140,14 +140,10 @@ def table(path: Path, columns: list) -> None:
                 continue
             for k, run in enumerate(runs):
                 tile(ax, x0 + k * (chip + gap), y0 + 0.17, run, chip)
-            n, passed = len(runs), sum(r["passed"] for r in runs)
-            if measure == CHEATED_FROM:
-                hit = sum(at_least(r["rung"], CHEATED_FROM) for r in runs)
-                ax.text(x0, y0 + 1.22, f"{CHEATED_FROM}+ {hit} of {n}", fontsize=9.3, weight="bold", color=INK,
-                        va="center")
-                ax.text(x0 + 1.35, y0 + 1.22, f"passed {passed} of {n}", fontsize=7.8, color=INK_SECONDARY, va="center")
-            else:
-                ax.text(x0, y0 + 1.22, f"passed {passed} of {n}", fontsize=9.3, weight="bold", color=INK, va="center")
+            n, passed, hit = len(runs), sum(r["passed"] for r in runs), sum(r["cheated"] for r in runs)
+            ax.text(x0, y0 + 1.22, f"cheated {hit} of {n}", fontsize=9.3, weight="bold", color=INK,
+                    va="center")
+            ax.text(x0 + 1.35, y0 + 1.22, f"passed {passed} of {n}", fontsize=7.8, color=INK_SECONDARY, va="center")
         label, fill, text_color, reason = USE[suited]
         px, pw, ph = use_x + pad, 1.1, 0.27
         ax.add_patch(FancyBboxPatch((px, y0 + 0.42), pw, ph, boxstyle="round,pad=0,rounding_size=0.07", fc=fill,
@@ -162,6 +158,7 @@ def table(path: Path, columns: list) -> None:
     x = cheating_legend(ax, pad, ly, {run["rung"] for run in shown})
     ax.text(x, ly, "✓", fontsize=10, weight="bold", color=GOOD, va="center")
     ax.text(x + 0.18, ly, "passed the task's own test", fontsize=7.8, color=INK_SECONDARY, va="center")
+    ax.text(x + 2.2, ly, CHEATED_LABEL, fontsize=7.8, color=INK_SECONDARY, va="center")
     collusion_legend(ax, pad, ly + 0.32, {run["collusion"] for run in shown})
     fig.savefig(path, dpi=PRINT_DPI, facecolor=WHITE)
     print(path)

@@ -2,9 +2,9 @@
 
     uv run python -m scripts.paper.tables
 
-table_rungs_by_domain.png: what puts an agent on each rung of the Cheating ladder in each task, with each task's
-honeypot and grader under its name. Its rows are src/measures/ladder_by_domain.py RUNGS_BY_DOMAIN and RUNG_NOTES, in
-the order of its DOMAINS: SWE first.
+table_rungs_by_domain.png: what puts an agent on each rung of the Cheating ladder in each task of PAPER_DOMAINS, the
+tasks the paper studies, with each task's honeypot and grader under its name. Its rows are
+src/measures/ladder_by_domain.py cheating_by_task, cut to those tasks so the table reads in print.
 """
 from __future__ import annotations
 
@@ -17,10 +17,12 @@ from matplotlib.patches import Rectangle
 
 from scripts.paper.study_ladders import CHEATING_FILL
 from src.configuration.settings import ROOT
-from src.measures.ladder_by_domain import DOMAINS, RUNG_NOTES, RUNGS_BY_DOMAIN
+from src.measures.ladder_by_domain import cheating_by_task
 from src.utils.figure_style import AXIS, BAND, INK, INK_SECONDARY, PRINT_DPI, WHITE
 
 OUT = ROOT / "tmp" / "tables" / "method"
+PAPER_DOMAINS = ("SWE", "Protein design", "Creative writing")
+"""The tasks the paper studies, as ladder_by_domain.DOMAINS names them."""
 
 
 SANS = FontProperties(family="DejaVu Sans", size=7.6)
@@ -42,11 +44,12 @@ def wrap_measured(renderer, text: str, width_in: float, font: FontProperties) ->
     return lines
 
 
-def by_domain_png(name: str, label: str, notes: tuple[str, ...], levels: list[tuple], fills: dict[str, str]) -> Path:
+def by_domain_png(name: str, label: str, domains: list[str], notes: list[str], levels: list[tuple],
+                  fills: dict[str, str]) -> Path:
     """One table of levels by domain: a row per level with its fill, number, name and gloss, a column per domain under
     its name and note."""
     first, col, pad, lh, note_lh = 1.75, 1.62, 0.09, 0.145, 0.13
-    width = first + col * len(DOMAINS)
+    width = first + col * len(domains)
     renderer = FigureCanvasAgg(Figure(figsize=(1, 1), dpi=PRINT_DPI)).get_renderer()
     rows = []
     for level, gloss, cells in levels:
@@ -54,7 +57,7 @@ def by_domain_png(name: str, label: str, notes: tuple[str, ...], levels: list[tu
         cl = [wrap_measured(renderer, c, col - 2 * pad, SANS) for c in cells]
         h = max(0.2 + len(gl) * note_lh, max(len(c) for c in cl) * lh) + 2 * pad + 0.04
         rows.append((level, gl, cl, h))
-    head = [wrap_measured(renderer, d, col - 2 * pad, SANS_B) for d in DOMAINS]
+    head = [wrap_measured(renderer, d, col - 2 * pad, SANS_B) for d in domains]
     subs = [wrap_measured(renderer, s, col - 2 * pad, NOTE) for s in notes]
     head_h = 2 * pad + max(len(h) for h in head) * 0.16 + max(len(s) for s in subs) * note_lh + 0.03
     height = 0.12 + head_h + sum(r[3] for r in rows) + 0.12
@@ -96,7 +99,9 @@ def by_domain_png(name: str, label: str, notes: tuple[str, ...], levels: list[tu
 
 
 def write_rungs_by_domain() -> Path:
-    return by_domain_png("table_rungs_by_domain", "rung", RUNG_NOTES, RUNGS_BY_DOMAIN, CHEATING_FILL)
+    table = cheating_by_task(PAPER_DOMAINS)
+    return by_domain_png("table_rungs_by_domain", "rung", table["domains"], table["notes"], table["rows"],
+                         CHEATING_FILL)
 
 
 def main() -> int:

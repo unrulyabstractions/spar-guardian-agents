@@ -7,15 +7,27 @@
  * place; the strip follows the page as it scrolls. Every string goes in through h() text nodes. */
 import { h, plural } from '/static/app/dom.js';
 
-// Colour ramps per ladder, level 0 first.
+// Colour ramps per ladder, level 0 first. Each ladder's line (/api/ladders' "line", the first level above it) parts two
+// colour families: pale and calm below it, strong above it, so a reader sees the line at a glance.
 export const RAMP = {
-  // none, looked, tempted, attempted, hacked (src/measures/cheating_ladder.py LEVELS), light to dark
-  cheating: ['#eeede8', '#f9c396', '#e8714a', '#d0452e', '#8c1a17'],
-  // none, read, write, low, medium, high, extreme (src/measures/coordination.py LEVELS), light to dark
-  coordination: ['#eeede8', '#e9e7f6', '#d3cff0', '#b1aae3', '#8b80d2', '#6152b9', '#3a2a8f'],
-  // none, cooperation, collaboration (code, greens), collusion, scheming (a judge's, reds): src/measures/collusion.py
-  collusion: ['#eeede8', '#cde8dc', '#5aa889', '#d0452e', '#7a1f12'],
+  // none, looked, tempted (calm blue-grey) | attempted, hacked (strong red): src/measures/cheating_ladder.py LEVELS
+  cheating: ['#eeede8', '#dbe5ee', '#a9c1d9', '#cf3a27', '#7d140f'],
+  // none, read, write, low (pale sand) | medium, high, extreme (strong violet): src/measures/coordination.py LEVELS
+  coordination: ['#eeede8', '#efe8d3', '#e2d4ab', '#cfbb85', '#6f4fc0', '#4e2ca3', '#2e1773'],
+  // none, cooperation, collaboration (code, calm green) | collusion, scheming (a judge's, strong crimson)
+  collusion: ['#eeede8', '#d5ebe0', '#93c9ae', '#c2185b', '#640b31'],
 };
+
+// WCAG relative luminance of a #rrggbb colour.
+const luminance = hex => [1, 3, 5].map(j => parseInt(hex.slice(j, j + 2), 16) / 255)
+  .map(c => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+  .reduce((sum, c, i) => sum + [0.2126, 0.7152, 0.0722][i] * c, 0);
+const INKS = ['#ffffff', '#16191a'];
+/** The text colour that reads on a swatch: white or near-black, whichever has the higher WCAG contrast. */
+export function inkOn(hex) {
+  const contrast = ink => { const [a, b] = [luminance(hex), luminance(ink)].sort((x, y) => y - x); return (a + 0.05) / (b + 0.05); };
+  return contrast(INKS[0]) >= contrast(INKS[1]) ? INKS[0] : INKS[1];
+}
 const SHORT = { cheating: 'Ch', coordination: 'Cd', collusion: 'Cl' };
 // Milestone wording: what the strip writes beside the call that first reached a level.
 const WORDS = {
@@ -60,11 +72,13 @@ export function readableReasoning(raw) {
   return { text: s };
 }
 
-/** Full colour legend: one row per ladder, every level as a swatch in ladder order. */
+/** Full colour legend: one row per ladder, every level as a swatch in ladder order, and a mark at the ladder's line. */
 export function fullLegend(ladders, order) {
   return h('div', { class: 'cs-full-legend' }, order.map(L => h('div', { class: 'cfl-row' },
     h('b', null, `${SHORT[L]} ${ladders[L].name}:`),
-    ladders[L].levels.map((v, i) => h('span', { class: 'cfl-item' }, h('i', { style: `background:${RAMP[L][i]}` }), v)))));
+    ladders[L].levels.map((v, i) => [
+      v === ladders[L].line ? h('span', { class: 'cfl-line', title: ladders[L].line_words }, 'line') : null,
+      h('span', { class: 'cfl-item' }, h('i', { style: `background:${RAMP[L][i]}` }), v)]))));
 }
 
 function asStr(v) {

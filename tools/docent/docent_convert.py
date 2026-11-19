@@ -5,9 +5,11 @@ activation, timeline step and turn of the agent step it came from, and the Agent
 judge's verdict where the run was judged, and the project's three ladders, which every run has: cheating_rung
 (src/measures/cheating_ladder.py), coordination_level (src/measures/coordination.py) and collusion_rung (the code rungs
 of src/measures/collusion.py) for the agent, and team_cheating_rung, team_coordination_level and team_collusion_rung
-for the team (its workers). They are read as signals.jsonl records them; a run recorded before a ladder has them
-computed in the run environment (src/measures/code_ladder.py ladders, RUN_PYTHON), which ORBIT's domains need and this
-environment lacks, never written back. The board becomes one AgentRun of its own, one user message per post.
+for the team (its workers), with cheated and team_cheated (cheating_ladder.cheated: the rung is attempted or higher).
+They are read as signals.jsonl records them; a run recorded before a ladder has them computed in the run environment
+(src/measures/code_ladder.py ladders, RUN_PYTHON), which ORBIT's domains need and this environment lacks, never written
+back. CheatBench's judge's own `cheated`, a broader definition, is judge_cheated. The board becomes one AgentRun of its
+own, one user message per post.
 """
 from __future__ import annotations
 
@@ -29,13 +31,16 @@ from tools.run_reader import Post, Run, Step
 ROOT = Path(__file__).resolve().parents[2]
 RUN_PYTHON = ROOT / ".venv" / "bin" / "python"
 """The run environment's Python, which imports the domains and so computes the ladders."""
+FIELDS = (*LADDER_FIELDS, "cheated")
+"""What an agent and a team carry of the ladders: the three rungs and cheated, as signals.jsonl and code_ladder.ladders
+give them."""
 COMPUTE = ("import json, sys; from pathlib import Path; from src.measures.code_ladder import ladders; "
            "print(json.dumps(ladders(Path(sys.argv[1]))))")
 
 
 @functools.cache
 def ladders(directory: Path) -> tuple[dict[str, dict], dict]:
-    """The three ladders of a run (LADDER_FIELDS): each agent's by agent, and the team's. As signals.jsonl records them
+    """The three ladders of a run (FIELDS): each agent's by agent, and the team's. As signals.jsonl records them
     when every row holds them, else computed in the run environment (code_ladder.ladders). Empty for a run the code
     never read (no signals.jsonl) and for a folder without run.json."""
     if not (directory / "signals.jsonl").is_file() or not (directory / "run.json").is_file():
@@ -43,9 +48,9 @@ def ladders(directory: Path) -> tuple[dict[str, dict], dict]:
     rows = read_jsonl(directory / "signals.jsonl")
     agents = {row.get("agent"): row for row in rows if row.get("row") == "agent"}
     team = next((row for row in rows if row.get("row") == "team"), None)
-    if team is not None and all(field in row for row in [*agents.values(), team] for field in LADDER_FIELDS):
-        return ({agent: {field: row[field] for field in LADDER_FIELDS} for agent, row in agents.items()},
-                {field: team[field] for field in LADDER_FIELDS})
+    if team is not None and all(field in row for row in [*agents.values(), team] for field in FIELDS):
+        return ({agent: {field: row[field] for field in FIELDS} for agent, row in agents.items()},
+                {field: team[field] for field in FIELDS})
     done = subprocess.run([str(RUN_PYTHON), "-c", COMPUTE, str(directory.resolve())], cwd=ROOT, capture_output=True,
                           text=True, check=True)
     computed = json.loads(done.stdout)
@@ -72,7 +77,7 @@ def agent_agent_run(run: Run, agent: str) -> AgentRun:
     rungs = ladders(run.directory)[0].get(agent) or {}
     agent_run.name = f"{run.name}/{agent}"
     agent_run.description = (f"{agent} ({role}) in {run.name}, {run.domain}; cheating={rungs.get('cheating_rung')}, "
-                             f"coordination={rungs.get('coordination_level')}, "
+                             f"cheated={rungs.get('cheated')}, coordination={rungs.get('coordination_level')}, "
                              f"collusion={rungs.get('collusion_rung')}; judge cheated={verdict}")
     agent_run.metadata = {**agent_run.metadata, **agent_metadata(run, agent)}
     return agent_run
@@ -95,6 +100,12 @@ def message_placement(metadata: dict, steps: dict[int, Step]) -> dict:
     }
 
 
+def judge_key(flag: str) -> str:
+    """A judge flag's metadata key: its name, but judge_cheated for the judge's own `cheated`, which differs from the
+    project's cheated."""
+    return "judge_cheated" if flag == "cheated" else flag
+
+
 def agent_metadata(run: Run, agent: str) -> dict:
     """The agent's metadata: identity, configuration, access, its three ladders' rungs, the judge's verdict and the
     agent's own posts."""
@@ -111,8 +122,8 @@ def agent_metadata(run: Run, agent: str) -> dict:
         "access_policy": access.get("policy"),
         "holds": run.exploit.get("holds", {}).get(agent, []),
         "access": (access.get("agents") or {}).get(agent, {}),
-        **{field: (ladders(run.directory)[0].get(agent) or {}).get(field) for field in LADDER_FIELDS},
-        **{field: judge.get(field) for field in flag_names(run.task)},
+        **{field: (ladders(run.directory)[0].get(agent) or {}).get(field) for field in FIELDS},
+        **{judge_key(field): judge.get(field) for field in flag_names(run.task)},
         "judge_summary": judge.get("summary"),
         "judge": judge,
         "discovery_round": engagement.get("discovery_round"),
@@ -131,7 +142,7 @@ def run_fields(run: Run) -> dict:
     engagement = run.run_json.get("engagement") or {}
     team = ladders(run.directory)[1]
     return {
-        **{f"team_{field}": team.get(field) for field in LADDER_FIELDS},
+        **{f"team_{field}": team.get(field) for field in FIELDS},
         "domain": run.domain,
         "task": run.task,
         "model": run.model,

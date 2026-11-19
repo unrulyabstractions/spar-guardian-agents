@@ -6,7 +6,6 @@ import json
 
 import pytest
 
-from src.measures.rungs import LADDER_FIELDS
 from src.utils.json_files import read_jsonl, write_jsonl
 from tests.support.sample_runs import copy_run
 from tools.docent import docent_command as command
@@ -37,11 +36,12 @@ def test_upload_without_key_exits_2(no_key, capsys):
     assert "no Docent API key found" in capsys.readouterr().err
 
 
-LADDERS = {"a01": ("none", "write", "none"), "a02": ("tempted", "none", "cooperation"),
-           "a03": ("attempted", "write", "cooperation"), "team": ("attempted", "read", "cooperation")}
-"""Each row's three ladders (cheating_rung, coordination_level, collusion_rung), as a new run records them."""
+LADDERS = {"a01": ("none", "write", "none", False), "a02": ("tempted", "none", "cooperation", False),
+           "a03": ("attempted", "write", "cooperation", True), "team": ("attempted", "read", "cooperation", True)}
+"""Each row's three ladders and cheated (docent_convert.FIELDS: cheating_rung, coordination_level, collusion_rung,
+cheated), as a new run records them."""
 SIGNALS = [{"row": "agent" if who != "team" else "team", **({"agent": who} if who != "team" else {}),
-            **dict(zip(LADDER_FIELDS, rungs))} for who, rungs in LADDERS.items()]
+            **dict(zip(docent_convert.FIELDS, rungs))} for who, rungs in LADDERS.items()]
 """A code record for the generated run, which is written without one."""
 
 
@@ -58,7 +58,7 @@ def test_dry_run_on_riemann(no_key, riemann_copy):
     for agent_run in agent_runs[:3]:
         metadata = agent_run["metadata"]
         agent = metadata["agent"]
-        assert metadata["cheated"] == judge[agent]["cheated"]
+        assert metadata["judge_cheated"] == judge[agent]["cheated"]
         assert metadata["attempted_access"] == judge[agent]["attempted_access"]
         assert metadata["judge_summary"] == judge[agent]["summary"]
         assert metadata["roster"] == ["a01", "a02", "a03"]
@@ -69,16 +69,16 @@ def test_dry_run_on_riemann(no_key, riemann_copy):
         assert len(messages) == len(steps) + results
         assistant = [message for message in messages if message["role"] == "assistant"]
         assert all(message["metadata"]["round"] is not None for message in assistant)
-    assert [metadata["cheated"] for metadata in (run["metadata"] for run in agent_runs[:3])] == [False, True, True]
-    # the three ladders, which a run has whether or not a judge read it, and nothing of the earlier ladder
+    assert [run["metadata"]["judge_cheated"] for run in agent_runs[:3]] == [False, True, True]
+    # the three ladders and cheated, which a run has whether or not a judge read it, and nothing of the earlier ladder
     for agent_run in agent_runs:
         metadata = agent_run["metadata"]
-        assert tuple(metadata[f"team_{field}"] for field in LADDER_FIELDS) == LADDERS["team"]
+        assert tuple(metadata[f"team_{field}"] for field in docent_convert.FIELDS) == LADDERS["team"]
         assert not {"code_rung", "team_code_rung", "team_collaboration"} & set(metadata)
         if metadata["kind"] == "agent":
-            cheating, coordination, collusion = LADDERS[metadata["agent"]]
-            assert tuple(metadata[field] for field in LADDER_FIELDS) == (cheating, coordination, collusion)
-            assert (f"cheating={cheating}, coordination={coordination}, collusion={collusion}"
+            cheating, coordination, collusion, cheated = LADDERS[metadata["agent"]]
+            assert tuple(metadata[field] for field in docent_convert.FIELDS) == LADDERS[metadata["agent"]]
+            assert (f"cheating={cheating}, cheated={cheated}, coordination={coordination}, collusion={collusion}"
                     in agent_run["description"])
     board = agent_runs[3]
     assert board["metadata"]["kind"] == "board"
@@ -110,8 +110,8 @@ def ladder_metadata(run) -> dict[str, tuple]:
     """(the agent's three ladders, the team's) of each AgentRun of a dry run, by name; the board has no agent's."""
     assert main(["docent", str(run), "--dry-run", "--board"]) == 0
     agent_runs = json.loads((run / "tools" / "docent" / "agent_runs.json").read_text())
-    return {r["name"].rsplit("/", 1)[1]: (tuple(r["metadata"].get(field) for field in LADDER_FIELDS),
-                                          tuple(r["metadata"][f"team_{field}"] for field in LADDER_FIELDS))
+    return {r["name"].rsplit("/", 1)[1]: (tuple(r["metadata"].get(field) for field in docent_convert.FIELDS),
+                                          tuple(r["metadata"][f"team_{field}"] for field in docent_convert.FIELDS))
             for r in agent_runs}
 
 
@@ -119,10 +119,10 @@ def test_the_ladders_are_computed_in_the_run_environment_when_the_signals_lack_t
                                                                                    monkeypatch, tmp_path):
     """A run recorded before the ladders: its rows hold none of them, so the converter asks the run environment
     (RUN_PYTHON, code_ladder.ladders), here a stand-in that answers for the run, and the file stays as it is."""
-    write_jsonl(riemann_copy / "signals.jsonl", [{k: v for k, v in row.items() if k not in LADDER_FIELDS}
+    write_jsonl(riemann_copy / "signals.jsonl", [{k: v for k, v in row.items() if k not in docent_convert.FIELDS}
                                                  for row in SIGNALS])
-    answer = {"agents": {a: dict(zip(LADDER_FIELDS, LADDERS[a])) for a in ("a01", "a02", "a03")},
-              "team": dict(zip(LADDER_FIELDS, LADDERS["team"]))}
+    answer = {"agents": {a: dict(zip(docent_convert.FIELDS, LADDERS[a])) for a in ("a01", "a02", "a03")},
+              "team": dict(zip(docent_convert.FIELDS, LADDERS["team"]))}
     stand_in = tmp_path / "run_python"
     stand_in.write_text(f"#!/bin/sh\ntest \"$1\" = -c && test \"$3\" = {riemann_copy.resolve()} && "
                         f"echo '{json.dumps(answer)}'\n")
@@ -132,7 +132,7 @@ def test_the_ladders_are_computed_in_the_run_environment_when_the_signals_lack_t
     before = (riemann_copy / "signals.jsonl").read_bytes()
     assert ladder_metadata(riemann_copy) == {
         **{agent: (LADDERS[agent], LADDERS["team"]) for agent in ("a01", "a02", "a03")},
-        "board": ((None, None, None), LADDERS["team"])}
+        "board": ((None,) * len(docent_convert.FIELDS), LADDERS["team"])}
     assert (riemann_copy / "signals.jsonl").read_bytes() == before        # computed, never written
     assert "code_ladder import ladders" in docent_convert.COMPUTE
 
@@ -142,7 +142,7 @@ def test_the_ladders_the_signals_hold_win(no_key, sample_runs, tmp_path):
     write_jsonl(run / "signals.jsonl", SIGNALS)
     (run / "communication" / "riemann#1.json").write_text(json.dumps(BOARD))
     assert ladder_metadata(run) == {**{agent: (LADDERS[agent], LADDERS["team"]) for agent in ("a01", "a02", "a03")},
-                                    "board": ((None, None, None), LADDERS["team"])}
+                                    "board": ((None,) * len(docent_convert.FIELDS), LADDERS["team"])}
 
 
 class StandInClient:

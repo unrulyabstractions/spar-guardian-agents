@@ -3,8 +3,9 @@
 The Cheating table by task is the paper's own (src/measures/ladder_by_domain.py cheating_by_task).
 Coordination has no table by task: its rule is the same on every task, and the page lists its levels with their
 glosses (transcript_levels.LADDERS["coordination"]). Collusion's levels are listed the same way; what a take and the
-hand-in are on each task is read from src/measures/collusion.py itself: the generic take rules from its docstring, and
-each task's own rule from the docstrings of its TASK_RULES functions, or the reason NO_RULE gives.
+hand-in are on each task is read from the take rules themselves (src/measures/collusion_takes.py): the generic rules
+from its docstring, and each task's own rule from the docstrings of its TASK_RULES functions, or the reason NO_RULE
+gives.
 
 The columns follow ladder_by_domain.DOMAINS: SWE first, then the tasks by their weight in the studies. The viewer
 leaves out the domains of HIDDEN_DOMAINS: their columns here and their runs in the index (hidden_task). The paper's
@@ -18,11 +19,12 @@ from __future__ import annotations
 import inspect
 import re
 
-from src.measures import collusion, ladder_by_domain
+from src.measures import collusion_takes, ladder_by_domain
 
-HIDDEN_DOMAINS = ("Chess", "OpenMath", "Subset sum, factoring")
-"""The domains the viewer leaves out, at the user's order of 2026-11-18: their columns of the by-task tables and their
-runs in the index. An empty tuple shows every domain again."""
+HIDDEN_DOMAINS = ("Knowledge work", "Chess", "OpenMath", "Subset sum, factoring")
+"""The domains the viewer leaves out, at the user's orders of 2026-11-18 and 2026-11-19 (knowledge work): their columns
+of the by-task tables, and their runs, which the index neither measures nor serves. An empty tuple shows every domain
+again."""
 SHOWN = [i for i, domain in enumerate(ladder_by_domain.DOMAINS) if domain not in HIDDEN_DOMAINS]
 """The columns of ladder_by_domain.DOMAINS the viewer shows, in their order."""
 assert set(ladder_by_domain.DOMAINS) >= set(HIDDEN_DOMAINS)
@@ -41,9 +43,9 @@ def shown(cells) -> list:
 
 
 def take_rules() -> list[tuple[str, str]]:
-    """The generic take rules, (name, text), as src/measures/collusion.py's docstring lists them under "What a take
-    is, per task": each "- name: text" line with its indented continuation lines."""
-    doc = collusion.__doc__ or ""
+    """The generic take rules, (name, text), as src/measures/collusion_takes.py's docstring lists them under "What a
+    take is, per task": each "- name: text" line with its indented continuation lines."""
+    doc = collusion_takes.__doc__ or ""
     section = doc[doc.index("What a take is, per task"):].splitlines()[1:]
     out: list[tuple[str, str]] = []
     for line in section:
@@ -63,11 +65,11 @@ def _task_rule_cells(which: str) -> list[str]:
     cells = []
     for domain in ladder_by_domain.DOMAINS:
         tasks = [t for t, d in ladder_by_domain.TASK_DOMAIN.items() if d == domain]
-        rule = next((collusion.TASK_RULES[t] for t in tasks if t in collusion.TASK_RULES), None)
+        rule = next((collusion_takes.TASK_RULES[t] for t in tasks if t in collusion_takes.TASK_RULES), None)
         if rule is not None:
             cells.append(" ".join(inspect.getdoc(getattr(rule, which)).split()))
         else:
-            reason = next((collusion.NO_RULE[t] for t in tasks if t in collusion.NO_RULE), "no take rule")
+            reason = next((collusion_takes.NO_RULE[t] for t in tasks if t in collusion_takes.NO_RULE), "no take rule")
             cells.append(f"Not applicable: {reason}." if which == "takes" else "Not applicable.")
     return cells
 

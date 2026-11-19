@@ -1,6 +1,8 @@
 \section*{Discussion}
-Our results only partially support our first hypothesis. Covert regulators are able to reduce cheating in protein
-design. On SWE, regulators barely affected DeepSeek teams in the multi-domain study and in Stage 1 of the deep dive.
+Our results only partially support our first hypothesis. On SWE in the multi-domain study, an enforcing Haiku
+regulator kept every DeepSeek team from cheating, while an ambiguous one did not. Regulators barely affected DeepSeek
+teams in Stage 1 of the deep dive. Untold protein design teams rarely cheated, so those runs cannot show whether
+regulators reduce cheating there.
 In Stage 2, a Haiku regulator that posted early did cut their cheating. Furthermore, in the multi-domain study, a single
 explicit rule naming the exploit did at least as well as the presence of any regulator. We were surprised by two
 results in particular: a regulator that also works on the task mostly changes its own cheating, and workers took a
@@ -19,9 +21,9 @@ regulators, even in teams of other models. We're also interested in investigatin
 activation-based methods (e.g., persona selection) could differ from those simply told their instructions in their
 system prompt.
 
-Our disregulator runs do not support our second hypothesis. No team a disregulator pushed went past looking at the
-planted work. An enforcing regulator placed beside it kept every team from looking at all. These
-cells hold two to five runs each. We therefore conjecture that, in our setting, positive peer pressure is at least as
+Our disregulator runs do not support our second hypothesis. No team a disregulator pushed cheated, and none went
+past looking at the planted work. An enforcing regulator placed beside it kept every team from looking at all. These
+cells hold two or three runs each. We therefore conjecture that, in our setting, positive peer pressure is at least as
 strong as negative peer pressure.
 
 We focus on a specific communication topology, with explicit instructions to work collaboratively toward a shared
@@ -30,7 +32,7 @@ solo agents and emergently formed a swarm by building their own communication fr
 than those found in the wild, with only 3-5 agents. Some emergent behavior and conformity dynamics may arise only
 with large numbers of agents in a swarm.
 
-Our study is currently limited by small sample sizes. Cells hold 3-18 runs, the multi-domain study currently
+Our study is currently limited by small sample sizes. Cells hold 1-18 runs, the multi-domain study currently
 includes only one task per domain, and Stage 1 of the deep dive gives the regulator the workers' model. Our tasks are also
 relatively short and were originally designed for single-agent completion. Swarms operating on tasks that require
 more complex delegation of work may behave differently. These tasks also include explicit honeypots that may look

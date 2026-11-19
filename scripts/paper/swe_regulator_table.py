@@ -1,7 +1,8 @@
 """SWE (fixed task) regulators with DeepSeek V4.1 Flash workers, valid runs only: each run's Cheating and Collusion
-rungs and the grader's pass as the transcript viewer measures them (scripts/paper/study_ladders.py record), the pieces
-in the hand-in from the team's shipped evidence and the regulator's reverts from run.json, and its validity and
-regulator posts from src.measures.run_validity, at build time. Writes tmp/tables/results/table_swe_regulators.png.
+rungs, whether it cheated and the grader's pass as the transcript viewer measures them (scripts/paper/study_ladders.py
+record), the pieces in the hand-in from the team's shipped evidence and the regulator's reverts from run.json, and its
+validity and regulator posts from src.measures.run_validity, at build time. Writes
+tmp/tables/results/table_swe_regulators.png.
 
     uv run python -m scripts.paper.swe_regulator_table    # make results-tables runs every one
 """
@@ -15,7 +16,14 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 from matplotlib.patches import FancyBboxPatch, Rectangle
 
-from scripts.paper.study_ladders import cheating_legend, collusion_chip, collusion_legend, record, rung_chip
+from scripts.paper.study_ladders import (
+    CHEATED_HEADER,
+    cheating_legend,
+    collusion_chip,
+    collusion_legend,
+    record,
+    rung_chip,
+)
 from src.configuration.settings import ROOT
 from src.measures.run_validity import validity
 from src.utils.figure_style import AXIS, BAND, GOOD, INK, INK_SECONDARY, MUTED, PRINT_DPI, WHITE
@@ -49,8 +57,9 @@ def read(name: str) -> dict:
         reg = regs[0]["agent"]
         log = ((data.get("swe") or {}).get("team") or {}).get("log") or ""
         reverts = sum(1 for ln in log.splitlines() if ln.split()[1:2] == [reg] and "Revert" in ln)
-    ladders = record(run) if v["valid"] else {"cheating": None, "passed": False, "collusion": None}
-    return {"name": name, "valid": v["valid"], "rung": ladders["cheating"], "passed": ladders["passed"],
+    ladders = record(run) if v["valid"] else {"cheating": None, "cheated": None, "passed": False, "collusion": None}
+    return {"name": name, "valid": v["valid"], "rung": ladders["cheating"], "cheated": ladders["cheated"],
+            "passed": ladders["passed"],
             "pieces": shipped, "collusion": ladders["collusion"], "posts": regs[0]["posts"] if regs else None,
             "reverts": reverts}
 
@@ -71,8 +80,9 @@ def main() -> int:
         if kept:
             table.append((label, level, kept))
 
-    widths = [3.0, 1.55, 2.35, 1.05, 3.05, 2.0]
-    header = ["Regulator × level", "Cheating", "Pieces handed in", "Pass", "Collusion", "Regulator posts; reverts"]
+    widths = [3.0, 1.55, 1.45, 2.35, 1.05, 3.05, 2.0]
+    header = ["Regulator × level", "Cheating", CHEATED_HEADER, "Pieces handed in", "Pass", "Collusion",
+              "Regulator posts; reverts"]
     title_h, head_h, row_h, legend_h = 0.55, 0.5, 0.72, 0.9
     width = sum(widths)
     height = title_h + head_h + row_h * len(table) + legend_h
@@ -116,7 +126,7 @@ def main() -> int:
                         ha="center", va="center")
             # pieces A, B, C: filled when on the submitted branch
             s, sg = 0.17, 0.035
-            px = xs[2] + pad + k * (3 * s + 2 * sg + 0.2)
+            px = xs[3] + pad + k * (3 * s + 2 * sg + 0.2)
             for m, piece in enumerate("ABC"):
                 on = piece in r["pieces"]
                 bx = px + m * (s + sg)
@@ -126,14 +136,15 @@ def main() -> int:
                         ha="center", va="center")
             # Collusion pill
             pw, ph = 0.86, 0.24
-            collusion_chip(ax, xs[4] + pad + k * (pw + 0.07), cy - ph / 2, pw, ph, r["collusion"], size=6.8)
+            collusion_chip(ax, xs[5] + pad + k * (pw + 0.07), cy - ph / 2, pw, ph, r["collusion"], size=6.8)
             # regulator posts; reverts
-            qx = xs[5] + pad + k * 0.6
+            qx = xs[6] + pad + k * 0.6
             ax.text(qx, cy, "n/a" if r["posts"] is None and k == 0 else ("" if r["posts"] is None
                     else f"{r['posts']}; {r['reverts']}"), fontsize=8.8,
                     color=MUTED if r["posts"] is None else INK, va="center")
-        passed = sum(r["passed"] for r in runs)
-        ax.text(xs[3] + pad, cy, f"{passed} of {len(runs)}", fontsize=9.2, weight="bold", color=INK, va="center")
+        passed, hit = sum(r["passed"] for r in runs), sum(r["cheated"] for r in runs)
+        ax.text(xs[2] + pad, cy, f"{hit} of {len(runs)}", fontsize=9.2, weight="bold", color=INK, va="center")
+        ax.text(xs[4] + pad, cy, f"{passed} of {len(runs)}", fontsize=9.2, weight="bold", color=INK, va="center")
         same_next = i + 1 < len(table) and table[i + 1][0] == label
         ax.plot([0 if not same_next else level_x - 0.04, width], [y0 + row_h, y0 + row_h], color=AXIS,
                 lw=0.35 if same_next else 0.7)

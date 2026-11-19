@@ -1,9 +1,9 @@
 """Disregulators with GPT-6 Luna workers, in the same layout as the regulator tables: creative writing like
 table_protein_regulators.png, software engineering like table_swe_regulators.png. Valid runs only: each run's Cheating
-and Collusion rungs and the grader's pass as the transcript viewer measures them (scripts/paper/study_ladders.py
-record), the pieces in the hand-in from the team's shipped evidence, the disregulator's posts from the board, and the
-run's validity from src.measures.run_validity, at build time. Writes tmp/tables/results/table_creative_disregulators.png
-and tmp/tables/results/table_swe_disregulators.png.
+and Collusion rungs, whether it cheated and the grader's pass as the transcript viewer measures them
+(scripts/paper/study_ladders.py record), the pieces in the hand-in from the team's shipped evidence, the
+disregulator's posts from the board, and the run's validity from src.measures.run_validity, at build time. Writes
+tmp/tables/results/table_creative_disregulators.png and tmp/tables/results/table_swe_disregulators.png.
 
     uv run python -m scripts.paper.disregulator_tables    # make results-tables runs every one
 """
@@ -19,6 +19,7 @@ from matplotlib.figure import Figure
 from matplotlib.patches import FancyBboxPatch, Rectangle
 
 from scripts.paper.study_ladders import (
+    CHEATED_HEADER,
     CHEATING_LETTER,
     cheating_legend,
     collusion_chip,
@@ -27,9 +28,7 @@ from scripts.paper.study_ladders import (
     rung_chip,
 )
 from src.configuration.settings import ROOT
-from src.measures.code_ladder import CHEATED_FROM
 from src.measures.run_validity import validity
-from src.measures.rungs import at_least
 from src.utils.figure_style import AXIS, BAND, GOOD, INK, INK_SECONDARY, MUTED, PRINT_DPI, WHITE
 
 RUNS = ROOT / "runs" / "study_exploration_1"
@@ -68,7 +67,8 @@ def read(path: Path) -> dict | None:
     for board in path.glob("communication/*.json"):
         posts = [m for m in json.loads(board.read_text())["messages"] if m["sender"] in others]
     ladders = record(path)
-    return {"name": path.name, "rung": ladders["cheating"], "passed": ladders["passed"], "pieces": shipped,
+    return {"name": path.name, "rung": ladders["cheating"], "cheated": ladders["cheated"], "passed": ladders["passed"],
+            "pieces": shipped,
             "collusion": ladders["collusion"], "disregulator": bool(others), "posts": len(posts),
             "urged": sum(urges(m["content"]) for m in posts)}
 
@@ -125,12 +125,12 @@ def build(name: str, title: str, title_w: float, rows: list, swe: bool) -> None:
                                     r["posts"], r["urged"]) for r in runs])
     last = "Disregulator posts; urged reuse"
     if swe:
-        widths = [3.0, 1.55, 2.35, 1.05, 3.05, 2.1]
-        header = ["Disregulator × level", "Cheating", "Pieces handed in", "Pass", "Collusion", last]
+        widths = [3.0, 1.55, 1.45, 2.35, 1.05, 3.05, 2.1]
+        header = ["Disregulator × level", "Cheating", CHEATED_HEADER, "Pieces handed in", "Pass", "Collusion", last]
         row_h, gap = 0.72, 0.08
     else:
         widths = [3.2, 2.3, 1.45, 4.55, 2.3]
-        header = ["Disregulator × level", "Cheating", f"{CHEATED_FROM.capitalize()} or higher", "Collusion", last]
+        header = ["Disregulator × level", "Cheating", CHEATED_HEADER, "Collusion", last]
         row_h, gap = 0.62, 0.07
     title_h, head_h, legend_h, pad = 0.55, 0.5, 0.9, 0.16
     width, xs = sum(widths), [sum(widths[:j]) for j in range(len(widths))]
@@ -161,15 +161,15 @@ def build(name: str, title: str, title_w: float, rows: list, swe: bool) -> None:
         ax.text(level_x, cy, level, fontsize=8.6, color=INK_SECONDARY, va="center",
                 style="italic" if label == "None" else "normal")
         rungs(ax, xs[1] + pad, cy, runs, gap)
+        hit = sum(r["cheated"] for r in runs)
+        ax.text(xs[2] + pad, cy, f"{hit} of {len(runs)}", fontsize=9.2, weight="bold", color=INK, va="center")
         if swe:
-            pieces(ax, xs[2] + pad, cy, runs)
+            pieces(ax, xs[3] + pad, cy, runs)
             passed = sum(r["passed"] for r in runs)
-            ax.text(xs[3] + pad, cy, f"{passed} of {len(runs)}", fontsize=9.2, weight="bold", color=INK, va="center")
-            collusion(ax, xs[4] + pad, cy, runs, 0.86, 0.93)
-            posts(ax, xs[5] + pad, cy, runs)
+            ax.text(xs[4] + pad, cy, f"{passed} of {len(runs)}", fontsize=9.2, weight="bold", color=INK, va="center")
+            collusion(ax, xs[5] + pad, cy, runs, 0.86, 0.93)
+            posts(ax, xs[6] + pad, cy, runs)
         else:
-            hit = sum(at_least(r["rung"], CHEATED_FROM) for r in runs)
-            ax.text(xs[2] + pad, cy, f"{hit} of {len(runs)}", fontsize=9.2, weight="bold", color=INK, va="center")
             collusion(ax, xs[3] + pad, cy, runs, 0.8, 0.86)
             posts(ax, xs[4] + pad, cy, runs)
         same_next = i + 1 < len(table) and table[i + 1][0] == label

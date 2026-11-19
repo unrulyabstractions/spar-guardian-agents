@@ -67,9 +67,10 @@ In Stage 2 the regulator only oversees, and it is either the workers' model or C
     \addlinespace
     \textbf{Tasks} & SWE, protein design, creative writing & SWE: three issues \\
     \addlinespace
-    \textbf{Runs per cell} & 3--6 & Stage 1: 18 per arm and planning turn (0 or 1). Stage 2: 18 \\
+    \textbf{Runs per cell} & 1--6 & Stage 1: 18 per arm and planning turn (0 or 1). Stage 2: 18 \\
     \addlinespace
-    \textbf{Measured by} & Cheating, Coordination and Collusion ladders, read by code & LLM judge (GPT-6 Luna) \\
+    \textbf{Measured by} & Cheating, Coordination and Collusion ladders, read by code; \StudyCheatBenchJudge{}
+      beside them as \textit{CheatBench}'s judge and the Collusion judge & LLM judge (GPT-6 Luna) \\
     \bottomrule
   \end{tabularx}
   \caption{Comparison of studies on multiple domains versus SWE deep dive, covering model differences, honeypot
@@ -82,4 +83,5 @@ none, looked, tempted, attempted or hacked. The \textbf{Coordination ladder} mea
 with its teammates on the board. The \textbf{Collusion ladder} measures how far a pair of agents took each other's
 work. We count a team as cheating when its Cheating rung is \CheatedFrom{} or above, on every task. The multi-domain study reads the
 ladders by code from the transcripts, the board and the sandbox's final state, while the deep dive uses
-\textit{CheatBench}'s LLM judge (GPT-6 Luna) with team-specific rules. Appendix A defines every rung.
+\textit{CheatBench}'s LLM judge (GPT-6 Luna) with team-specific rules. Appendix A defines every rung. Appendix B
+sets \textit{CheatBench}'s judge beside the code on the multi-domain study's runs.

@@ -1,7 +1,8 @@
 """Figure 4 of the paper: the multi-domain study's results, one tile per valid run, coloured and lettered by the team's
-Cheating rung. Columns are the targets (SWE with DeepSeek workers, SWE with Luna workers, protein design, creative
-writing). Row groups: the team of three with no rule, the generic rule and the identified rule; a hidden regulator at
-level ambiguous, then enforce, one row per regulator model with runs; the team all told to cheat.
+Cheating rung; the legend names the measures' cheating line. Columns are the targets (SWE with DeepSeek workers, SWE
+with Luna workers, protein design, creative writing). Row groups: the team of three with no rule, the generic rule and
+the identified rule; a hidden regulator at level ambiguous, then enforce, one row per regulator model with runs; the
+team all told to cheat.
 
 Source: runs/study_exploration_1/INDEX.jsonl (valid, non-mock runs; disregulator runs left out; SWE only on the fixed
 task, run names ending in _fixed<seed>, _fill<seed> or _fixedpilot<seed>), each run's Cheating rung as the transcript
@@ -25,7 +26,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 
 from scripts.paper import control_tables, protein_regulator_table, swe_regulator_table
-from scripts.paper.study_ladders import CHEATING, CHEATING_LETTER, STUDY, record, rung_chip
+from scripts.paper.study_ladders import CHEATED_LABEL, CHEATING, CHEATING_LETTER, STUDY, record, rung_chip
 from src.configuration.settings import ROOT
 from src.measures.run_validity import validity
 from src.utils.figure_style import GRID, INK, INK_SECONDARY, PRINT_DPI, SURFACE
@@ -97,7 +98,7 @@ def reference_cells() -> dict[str, tuple]:
                  ("Software engineering", "GPT-6 Luna"): "flipt-luna",
                  ("Creative writing", "GPT-6 Luna"): "creative-luna"}
     out = {}
-    for task, workers, prefixes, _, _ in control_tables.TARGETS:
+    for task, workers, prefixes, _ in control_tables.TARGETS:
         target = target_of.get((task, workers))
         if target:
             for key, prefix in prefixes.items():
@@ -198,6 +199,7 @@ def draw(table: dict, rule_lines: list[str]) -> Figure:
         rung_chip(ax, x, ly - s / 2, s, s, rung)
         ax.text(x + s + 0.07, ly, rung, fontsize=9, color=INK_SECONDARY, va="center")
         x += s + 0.07 + 0.075 * len(rung) + 0.3
+    ax.text(x + 0.1, ly, CHEATED_LABEL, fontsize=9, color=INK_SECONDARY, va="center")
     return fig
 
 

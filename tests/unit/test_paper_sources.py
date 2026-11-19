@@ -78,13 +78,24 @@ def test_escape_covers_latex_specials():
 
 @pytest.mark.parametrize("module", ["control_tables", "protein_regulator_table", "swe_regulator_table",
                                     "disregulator_tables", "baseline_tables", "solo_controls_table",
-                                    "cheating_table", "coordination_table", "collusion_table", "tables",
+                                    "cheating_table", "coordination_table", "collusion_table", "judge_tables", "tables",
                                     "fig_scripted_teammates", "fig_roles_access", "fig_jigsaw", "fig_multidomain",
                                     "fig_deep_dive"])
 def test_figure_scripts_import(module):
     """Every script that draws a paper figure or table imports without its data on disk and exposes main."""
     mod = __import__(f"scripts.paper.{module}", fromlist=["main"])
     assert callable(mod.main)
+
+
+OWN_LINE = re.compile(r"\bat_least\(|\b(?:LEVELS|CHEATING|RUNGS)\.index\(|code_ladder")
+
+
+def test_no_paper_script_draws_its_own_cheating_line():
+    """A team or an agent cheated by the measures' one definition (cheating_ladder.cheated), never by a threshold a
+    paper script compares rungs against."""
+    for script in (paper_sources.ROOT / "scripts" / "paper").glob("*.py"):
+        found = OWN_LINE.findall(script.read_text())
+        assert not found, f"{script.name} compares rungs itself: {found}"
 
 
 def test_every_figure_has_a_script_in_the_repository():

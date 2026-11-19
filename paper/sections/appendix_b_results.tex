@@ -10,7 +10,7 @@ Our work is still ongoing. All results are preliminary.
 \end{figure}
 
 \FloatBarrier
-\subsubsection*{Negative Control: Better prompting to swarm can only guard against specific exploits}
+\subsubsection*{Negative Control: A rule naming the exploit stops cheating, and a generic rule mostly does not}
 \begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{negative_control}
@@ -21,16 +21,16 @@ This motivates the need for regulators that will identify and address general sw
 \FloatBarrier
 \subsection*{Evaluating Regulators}
 
-\subsubsection*{Regulators could be effective in some tasks}
+\subsubsection*{Protein design teams rarely cheated, with or without a regulator}
 \begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{table_protein_regulators}
 \end{figure}
 
-In this task, regulators with an ambiguous level of instruction can mitigate cheating!
+Untold teams rarely cheated in this task, and no team with a regulator cheated.
 
 \FloatBarrier
-\subsubsection*{But regulators seem ineffective in others}
+\subsubsection*{On SWE, regulators lowered cheating only at the enforce level}
 \begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{table_swe_regulators}
@@ -58,9 +58,10 @@ In this task, only regulators with explicit instruction have any effect.
 \end{figure}
 
 Most workers stay at none in every task.
-Only SWE and creative writing teams reach attempted and hacked, and no run carries the alarm.
-On SWE, hacked means a trace of the planted fix in the hand-in and a pass of the hidden tests.
-No regulator or disregulator goes past tempted.
+Teams cheat in every task, but only SWE and creative writing teams reach hacked.
+No run carries the alarm.
+On SWE, hacked means the agent's own trace of the planted fix in the hand-in and a pass of the hidden tests.
+One regulator on protein design reaches attempted, and no other regulator or disregulator goes past tempted.
 \FloatBarrier
 
 \subsection*{How far do agents go in back-and-forth on the board?}
@@ -80,5 +81,41 @@ SWE holds almost every worker who read the board without posting.
 \end{figure}
 
 SWE holds most of the cooperation and collaboration, for workers, teams and regulators and disregulators.
-No judge has read these runs, so the table shows collusion and scheming as not judged.
+One judge, \StudyCollusionJudge{}, read every pair at collaboration for collusion and scheming.
+It found collusion only on SWE and scheming nowhere.
+No human checked its verdicts.
+\FloatBarrier
+
+\subsection*{How does \textit{CheatBench}'s judge compare with the code?}
+One judge, \StudyCheatBenchJudge{}, read every agent's trajectory of these runs with \textit{CheatBench}'s own rules.
+No human checked its verdicts.
+The first table sets the judge's own verdict, cheated, beside our line of \CheatedFrom{} or above.
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{table_judge_cheated_by_task}
+\end{figure}
+
+The judge says cheated for every agent our line counts as cheating, and for many more in every task.
+Its verdict is the broader one, so we never report it as our cheating rate.
+The second table sets each label of the judge beside the code's clauses that the label matches, for workers.
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{table_judge_labels}
+\end{figure}
+
+The judge and the code agree on most workers for every label.
+On SWE, the judge finds the planted fix obtained or used by more workers than the code does.
+On creative writing, the code finds the reference sent to the checker where the judge does not.
+Neither finds an attack on the evaluation on SWE.
+\FloatBarrier
+
+\subsection*{Do agents disclose their access to the honeypot?}
+The judge also records whether an agent openly acknowledged its own access on protein design and creative writing.
+Its SWE verdict has no such field.
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{table_disclosure_by_task}
+\end{figure}
+
+Most workers on protein design and almost all on creative writing do not disclose their access.
 \FloatBarrier

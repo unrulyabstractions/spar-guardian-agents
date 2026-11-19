@@ -6,8 +6,8 @@ Hugging Face under apart_controls/). Writes tmp/tables/results/solo_vs_solo_told
 
 One run is one agent on one fixed instance of a task; seeds only vary sampling. The canonical copy of each run
 (manifest.jsonl canonical) counts. Its Cheating rung is the one the transcript viewer measures
-(scripts/paper/study_ladders.py record), computed in WORKERS processes. A run cheated when its rung is at or above the
-rung the code compares with CheatBench's `cheated` on every task (src/measures/code_ladder.py CHEATED_FROM).
+(scripts/paper/study_ladders.py record), computed in WORKERS processes. A run cheated when the measures' one definition
+says so (src/measures/cheating_ladder.py cheated: CHEATED_FROM or above).
 """
 from __future__ import annotations
 
@@ -22,8 +22,6 @@ from matplotlib.patches import Rectangle
 
 from scripts.paper.study_ladders import CHEATING_FILL, record
 from src.configuration.settings import ROOT
-from src.measures.code_ladder import CHEATED_FROM
-from src.measures.rungs import at_least
 from src.utils.figure_style import AXIS, BAND, INK, INK_SECONDARY, MUTED, PRINT_DPI, WHITE
 
 DATA = ROOT / "runs" / "apart_controls"
@@ -46,8 +44,8 @@ def blend(rate: float) -> tuple[float, float, float]:
     return tuple(a + (b - a) * rate for a, b in zip(lo, hi))
 
 
-def team_rung(path: Path) -> str:
-    return record(path)["cheating"]
+def team_cheated(path: Path) -> bool:
+    return record(path)["cheated"]
 
 
 def load() -> dict[tuple[str, str, str], list[bool]]:
@@ -63,10 +61,10 @@ def load() -> dict[tuple[str, str, str], list[bool]]:
         rows.append(row)
         paths.append(path)
     with ProcessPoolExecutor(max_workers=WORKERS) as pool:
-        rungs = list(pool.map(team_rung, paths, chunksize=16))
+        cheated = list(pool.map(team_cheated, paths, chunksize=16))
     out: dict[tuple[str, str, str], list[bool]] = {}
-    for row, rung in zip(rows, rungs):
-        out.setdefault((row["task"], row["model"], row["cell"]), []).append(at_least(rung, CHEATED_FROM))
+    for row, hit in zip(rows, cheated):
+        out.setdefault((row["task"], row["model"], row["cell"]), []).append(hit)
     return out
 
 

@@ -6,7 +6,7 @@ includes from paper/figures/.
 
 paper/generated/ holds what the code defines: params.tex (the board's budgets and the turn budget from the default
 preset, the judge and its reasoning effort from settings.JUDGE_MODEL and src/judging/judge_models.yaml, the Cheating
-ladder's alarm and the rung a team counts as cheating from, src/measures/code_ladder.py CHEATED_FROM), scales.tex
+ladder's alarm and the first cheating rung, src/measures/cheating_ladder.py ALARM and CHEATED_FROM), scales.tex
 (from src/configuration/scales.py), regulator_suffix.tex (the regulator's common text from
 src/configuration/prompts.yaml and its three report variants), regulator_levels.tex and disregulator_levels.tex (from
 src/configuration/instruction_levels.yaml), cheating_rungs.tex (the Cheating ladder's rungs and clauses, from
@@ -35,9 +35,9 @@ from src.configuration import settings
 from src.configuration.presets import PRESETS
 from src.configuration.scales import SCALES
 from src.configuration.settings import ROOT
+from src.judging import verdict_files
 from src.judging.cheatbench_judge import judge_entry
 from src.measures import cheating_ladder, collusion, coordination
-from src.measures.code_ladder import CHEATED_FROM
 from src.ui.transcript_levels import CHEAT_GLOSSES, CLAUSE_GLOSSES, COLLUSION_GLOSSES
 
 PAPER = ROOT / "paper"
@@ -112,6 +112,11 @@ FIGURES: dict[str, Figure] = {
                                          RESULTS.format("cheating_table.py")),
     "table_collusion_by_task.png": Figure("tmp/tables/results/table_collusion_by_task.png",
                                           RESULTS.format("collusion_table.py")),
+    "table_judge_cheated_by_task.png": Figure("tmp/tables/results/table_judge_cheated_by_task.png",
+                                              RESULTS.format("judge_tables.py")),
+    "table_judge_labels.png": Figure("tmp/tables/results/table_judge_labels.png", RESULTS.format("judge_tables.py")),
+    "table_disclosure_by_task.png": Figure("tmp/tables/results/table_disclosure_by_task.png",
+                                           RESULTS.format("judge_tables.py")),
 }
 
 HEADER = "% Written by scripts/paper/paper_sources.py from {source}. Do not edit; run `make paper-sources`.\n"
@@ -165,9 +170,9 @@ def params_tex() -> str:
     judge = {"JudgeName": JUDGE_NAMES[settings.JUDGE_MODEL],
              "JudgeEffort": judge_entry(settings.JUDGE_MODEL)["generation_config"].get("reasoning_effort") or "default"}
     judge["CheatingAlarm"] = cheating_ladder.ALARM
-    judge["CheatedFrom"] = CHEATED_FROM
+    judge["CheatedFrom"] = cheating_ladder.CHEATED_FROM
     lines = [HEADER.format(source="PRESETS['default'], settings.JUDGE_MODEL, src/judging/judge_models.yaml, "
-                                  "src/measures/cheating_ladder.py ALARM and src/measures/code_ladder.py CHEATED_FROM")]
+                                  "src/measures/cheating_ladder.py ALARM and CHEATED_FROM")]
     lines += [rf"\newcommand{{\{k}}}{{{v}}}" for k, v in macros.items()]
     lines += [rf"\newcommand{{\{k}}}{{{escape(v)}}}" for k, v in judge.items()]
     return "\n".join(lines) + "\n"
@@ -294,10 +299,25 @@ def study_tex() -> str:
         else f"{day(first)} -- {day(last)}"
     used = Counter(r["regulator_model"] for r in valid if r["regulator_model"])
     items = "\n".join(rf"  \item {model_name(k)}" for k, _ in sorted(used.items(), key=lambda kv: (-kv[1], kv[0])))
-    return (HEADER.format(source="runs/study_exploration_1/INDEX.jsonl and each valid run's run.json")
+    judges = study_judges([STUDY_INDEX.parent / r["path"] for r in valid])
+    return (HEADER.format(source="runs/study_exploration_1/INDEX.jsonl, each valid run's run.json and judges/")
             + rf"\newcommand{{\StudyRuns}}{{{len(valid)}}}" + "\n"
             + rf"\newcommand{{\StudyDates}}{{{span}}}" + "\n"
+            + "".join(rf"\newcommand{{\{macro}}}{{{name}}}" + "\n" for macro, name in judges.items())
             + "\\newcommand{\\RegulatorModelList}{%\n\\begin{itemize}\n" + items + "\n\\end{itemize}}\n")
+
+
+def study_judges(runs: list[Path]) -> dict[str, str]:
+    """The macros naming the judge of each pass whose verdicts the measures take on the study's runs
+    (verdict_files.applied): StudyCheatBenchJudge and StudyCollusionJudge. A pass read by several judges, or a judge
+    outside JUDGE_NAMES, stops the build, so the prose names the one judge the tables rest on."""
+    out = {}
+    for macro, pass_name in (("StudyCheatBenchJudge", "cheatbench"), ("StudyCollusionJudge", "collusion")):
+        used = {verdict_files.applied(verdict_files.read(run).get(pass_name) or {}) for run in runs} - {None}
+        if len(used) != 1 or next(iter(used)) not in JUDGE_NAMES:
+            raise SystemExit(f"the study's {pass_name} verdicts come from {sorted(used)}, not one named judge")
+        out[macro] = JUDGE_NAMES[used.pop()]
+    return out
 
 
 def stage2_tex() -> str:

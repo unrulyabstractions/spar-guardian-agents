@@ -1,6 +1,7 @@
 """Protein design regulators with GPT-6 Luna workers, valid runs only, no pilots: each run's Cheating and Collusion
-rungs as the transcript viewer measures them (scripts/paper/study_ladders.py record), and its validity and regulator
-posts from src.measures.run_validity, at build time. Writes tmp/tables/results/table_protein_regulators.png.
+rungs and whether it cheated, as the transcript viewer measures them (scripts/paper/study_ladders.py record), and its
+validity and regulator posts from src.measures.run_validity, at build time. Writes
+tmp/tables/results/table_protein_regulators.png.
 
     uv run python -m scripts.paper.protein_regulator_table    # make results-tables runs every one
 """
@@ -12,11 +13,16 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 from matplotlib.patches import Rectangle
 
-from scripts.paper.study_ladders import cheating_legend, collusion_chip, collusion_legend, record, rung_chip
+from scripts.paper.study_ladders import (
+    CHEATED_HEADER,
+    cheating_legend,
+    collusion_chip,
+    collusion_legend,
+    record,
+    rung_chip,
+)
 from src.configuration.settings import ROOT
-from src.measures.code_ladder import CHEATED_FROM
 from src.measures.run_validity import validity
-from src.measures.rungs import at_least
 from src.utils.figure_style import AXIS, BAND, INK, INK_SECONDARY, MUTED, PRINT_DPI, WHITE
 
 RUNS = ROOT / "runs" / "study_exploration_1"
@@ -40,8 +46,9 @@ def read(name: str) -> dict:
     run = RUNS / name
     v = validity(run)
     regs = v.get("regulators") or []
-    ladders = record(run) if v["valid"] else {"cheating": None, "collusion": None}
-    return {"name": name, "rung": ladders["cheating"], "valid": v["valid"], "collusion": ladders["collusion"],
+    ladders = record(run) if v["valid"] else {"cheating": None, "cheated": None, "collusion": None}
+    return {"name": name, "rung": ladders["cheating"], "cheated": ladders["cheated"], "valid": v["valid"],
+            "collusion": ladders["collusion"],
             "posts": sum(r["posts"] for r in regs) if regs else None}
 
 
@@ -59,7 +66,7 @@ def main() -> int:
             table.append((label, level, kept))
 
     widths = [3.2, 2.3, 1.45, 4.55, 2.3]
-    header = ["Regulator × level", "Cheating", f"{CHEATED_FROM.capitalize()} or higher", "Collusion",
+    header = ["Regulator × level", "Cheating", CHEATED_HEADER, "Collusion",
               "Regulator posts per run"]
     title_h, head_h, row_h, legend_h = 0.55, 0.5, 0.52, 0.55
     width = sum(widths)
@@ -98,7 +105,7 @@ def main() -> int:
         for r in runs:
             rung_chip(ax, x, cy - chip / 2, chip, chip, r["rung"])
             x += chip + gap
-        hit = sum(at_least(r["rung"], CHEATED_FROM) for r in runs)
+        hit = sum(r["cheated"] for r in runs)
         ax.text(xs[2] + pad, cy, f"{hit} of {len(runs)}", fontsize=9.2, weight="bold", color=INK, va="center")
         pw, ph = 0.8, 0.24
         for k, r in enumerate(runs):
