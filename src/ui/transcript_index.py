@@ -34,15 +34,15 @@ from src.domains import BY_TASK
 from src.judging import verdict_files
 from src.judging.judge_records import NO, UNCHECKED, YES
 from src.measures import collusion, coordination, judge_labels
-from src.measures.ladder_by_domain import HIDDEN_TASKS, hidden_task
-from src.measures.run_directory import episode_agent, is_worker, roles_of, run_name
+from src.measures.ladder_by_domain import HIDDEN_TASKS, TASK_DOMAIN, hidden_task
+from src.measures.run_directory import RunDir, episode_agent, is_worker, roles_of, run_name
 from src.measures.run_listing import Listed, list_collection
 from src.ui import transcript_levels
 from src.utils.json_files import read_json, read_jsonl
 
 CACHE = ROOT / "tmp" / "transcript_viewer" / "index.json"
 SKIP = ("study_smoke",)
-INDEX_VERSION = 7  # 7: the final Collusion ladder with the scheming judge, the judge labels, rows without dir and arm
+INDEX_VERSION = 8  # 8: rows with task_label, boards numbered P<n> only
 WORKERS = 6
 """Processes that measure runs when a start finds runs to measure: each loads transcripts, so few enough to spare the
 machine's memory."""
@@ -111,15 +111,11 @@ def folder_agents(run_dir: Path, episodes: list[dict]) -> dict[str, str]:
 
 
 def board_view(run_dir: Path, roles: dict) -> list[dict]:
-    """The board of each sample in list order: each message's id, its place on the board (board_no, the label P<n> the
-    Board tab and the judges give it), its post number (post_n, counted over the agents' posts; None for a harness
-    notice), its sender and the sender's role, and the tool calls that sent it and read it."""
-    cdir = run_dir / coordination.COMMUNICATION
-    if not cdir.is_dir():
-        return []
+    """Each sample's board (RunDir.boards): each message's id, its place on the board (board_no, the label P<n> the run
+    page, the Board tab and the judges give it), whether it is a harness notice, its sender and the sender's role, and
+    the tool calls that sent it and read it."""
     boards = []
-    for path in sorted(cdir.glob("*.json")):
-        c = read_json(path) or {}
+    for c in RunDir(run_dir).boards():
         sent, reads = {}, {}
         for e in c.get("events") or []:
             for mid in e.get("message_ids") or []:
@@ -127,14 +123,10 @@ def board_view(run_dir: Path, roles: dict) -> list[dict]:
                     sent[mid] = {"agent": e.get("agent_id"), "call_id": e.get("tool_call_id")}
                 elif e.get("kind") == "read":
                     reads.setdefault(mid, []).append({"agent": e.get("agent_id"), "call_id": e.get("tool_call_id")})
-        msgs, n_post = [], 0
-        for i, m in enumerate(c.get("messages") or []):
-            sender = m.get("sender")
-            n_post += sender != SYSTEM
-            msgs.append({"id": m.get("id"), "board_no": i + 1, "post_n": None if sender == SYSTEM else n_post,
-                         "sender": sender, "role": roles.get(sender), "sent": sent.get(m.get("id")),
-                         "reads": reads.get(m.get("id"), [])})
-        boards.append({"sample": path.stem, "messages": msgs})
+        boards.append({"messages": [
+            {"id": m.get("id"), "board_no": i, "notice": m.get("sender") == SYSTEM, "sender": m.get("sender"),
+             "role": roles.get(m.get("sender")), "sent": sent.get(m.get("id")), "reads": reads.get(m.get("id"), [])}
+            for i, m in enumerate(c.get("messages") or [], 1)]})
     return boards
 
 
@@ -173,14 +165,14 @@ class RunFiles:
         return transcript_levels.cheating_shown(judge_labels.judged_cheating(self.path))
 
     def collusion(self) -> dict:
-        """The Collusion ladder of the run with the scheming judge's verdicts (src/measures/collusion.py
-        run_collusion) and what each verdict row said (collusion.scheming_rows), as the viewer keeps it; or
+        """The Collusion ladder of the run with the scheming judge's verdicts and flags (src/measures/collusion.py
+        run_collusion), as the viewer keeps it (transcript_levels.collusion_shown); or
         {"applicable": False, "reason"} when the measure says it does not apply (not_applicable), which loads no
         transcript."""
         reason = collusion.not_applicable(self.task, len(self.episodes))
         if reason:
             return {"applicable": False, "reason": reason}
-        return transcript_levels.collusion_shown(collusion.run_collusion(self.path), collusion.scheming_rows(self.path))
+        return transcript_levels.collusion_shown(collusion.run_collusion(self.path))
 
     def labels(self) -> dict:
         """Each agent's judge labels (judge_labels.labels) with what the judge said: {"agents": {agent: {awareness |
@@ -293,6 +285,14 @@ def cell_of(listed: Listed, rf: RunFiles) -> Cell:
     return Cell(None, None, *models)
 
 
+def task_label(task: str | None, stem: str | None) -> str:
+    """The run's task in the pages' words: its domain (ladder_by_domain.TASK_DOMAIN, the tasks the study reads) and the
+    stem of its cell, as "SWE (flipt)"; the task's name for a task with no domain."""
+    if task in TASK_DOMAIN:
+        return f"{TASK_DOMAIN[task]} ({stem})" if stem else TASK_DOMAIN[task]
+    return (task or stem or "?").replace("_", " ")
+
+
 def seed_post(cell: Cell, cfg: dict, swarm: dict, n_agents: int) -> str:
     """What the run placed before the agents started: the cheat instruction, a rule, a hidden regulator or
     disregulator."""
@@ -336,7 +336,8 @@ def build_row(col: str, listed: Listed, rf: RunFiles, measured: dict) -> dict:
     return {
         "id": f"{col}/{listed.key}", "col": col, "key": listed.key,
         "run": run_name(listed.path) if listed.source != "manifest" else listed.meta.get("key"),
-        "task": cell.stem, "task_name": rf.task, "instance": sample.split("#")[0] or None,
+        "task_name": rf.task, "task_label": task_label(rf.task, cell.stem),
+        "instance": sample.split("#")[0] or None,
         "arm_label": f"{team}, {post}", "seed_post": post, "team": team, "model": cell.worker,
         "model_id": (rj.get("role_models") or {}).get("worker") or rj.get("model"), "n_agents": n_agents,
         "workers": n_agents - sum(hidden.values()), "regulators": hidden["regulator"],

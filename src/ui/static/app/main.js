@@ -15,10 +15,12 @@
  *   router.js            Router, header and breadcrumbs
  *   view_runs.js         View: runs                #/runs  (one row per run, opening to its agents)
  *   view_run.js          View: run page            #/run/<run>
+ *   view_run_tools.js    The run page's analysis tool cards
  *   view_transcript.js   View: transcript          #/run/<run>/episode/<episode>
  *   view_context.js      View: context windows     #/run/<run>/context?agent=<name>&call=<i>
  *   view_sample.js       View: sample              #/run/<run>/sample
  *   view_timeline.js     View: timeline            #/run/<run>/timeline (raster, swimlanes, exposure cascade)
+ *   timeline_raster.js   The timeline's agent by turn raster, also drawn as the summary's thumbnails
  *   view_summary.js      Views: summary            #/        (cheating by setting, composition grids, swarm runs)
  *                        and swarm visualizations  #/swarm   (grids, funnel, adoption curves, run explorer)
  *   main.js              Boot

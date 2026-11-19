@@ -11,13 +11,15 @@ API modules:
 - run_index.py: one record per run of a study, for runs/<study>/INDEX.jsonl; scripts/box/study_index.py writes it.
 - episode_summary.py: one line per episode, and the turns of lone agents' runs.
 - code_ladder.py: the run's code record (signals.jsonl, run.json "signals"): the evidence and the three ladders' rungs,
-  rewritten from a run's stored files (run_signals), and the one reader of the three rungs (ladders).
+  rewritten from a run's stored files (run_signals), and the reader of the three recorded rungs (ladders).
 - transcript_scan.py: the code's evidence of each agent's acts, from its transcript, access log and disk.
-- team_ladder.py: the team's record of the evidence and its collaboration evidence, one per sample.
+- team_ladder.py: the team's record of the evidence and its travel evidence, one per sample.
 - cheating_ladder.py: the Cheating ladder (none, looked, tempted, attempted, hacked), by code.
 - coordination.py: the Coordination ladder (none, read, write, low, medium, high, extreme), from the board.
 - collusion.py: the Collusion ladder (none, cooperation, collaboration, collusion by code; scheming by a judge).
-- collusion_takes.py: the Collusion ladder's take rules per task and the run's calls they read.
+- collusion_takes.py: the Collusion ladder's take rules per task (TASK_RULES), each with its rule stated as data.
+- run_calls.py: the run's calls and boards as the take rules read them (load_run), and the take they find.
+- git_takes.py, text_takes.py, file_takes.py: the generic take rules: git, text and files.
 - judge_labels.py: the judges beside the ladders: CheatBench's labels beside the Cheating clauses, disclosure, and the
   labels awareness and manipulation with the agents each is asked of.
 - ladder_by_domain.py: what puts an agent on each Cheating rung, per task the study reads, and the tasks it does not.

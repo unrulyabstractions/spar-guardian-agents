@@ -1,13 +1,13 @@
 """The results browser's run reader: the run directories of a study, at its top level and in its groups, and the eval
 logs they point at. A run's key is its folder under the study: <run>, or <group>/<run> for a run in a group.
 
-`Store` reads run.json, episodes.jsonl, signals.jsonl and the trajectories through src/measures/run_directory.py RunDir,
-CheatBench's verdicts through src/judging/verdict_files.py episode_verdicts, and the communication and defense stores
-and the analysis tools' summaries itself; it loads a run's Inspect eval log once, on demand. The run directories are
-written by src/export/run_export.py and the SWE measures (swe_summary.json) by src/measures/swe_measures.py.
-_eval_log_views.py reads the eval logs. Each episode carries its agent row of the code's evidence; the run detail
-carries the team records. The three ladders are the transcript viewer's (src/ui/transcript_viewer.py), not the
-browser's.
+`Store` reads run.json, episodes.jsonl, signals.jsonl, the trajectories and each sample's board through
+src/measures/run_directory.py RunDir, CheatBench's verdicts through src/judging/verdict_files.py episode_verdicts, and
+the defense store and the analysis tools' summaries itself; it loads a run's Inspect eval log once, on demand. The run
+directories are written by src/export/run_export.py and the SWE measures (swe_summary.json) by
+src/measures/swe_measures.py. _eval_log_views.py reads the eval logs. Each episode carries its agent row of the code's
+evidence; the run detail carries the team records. The three ladders are the transcript viewer's
+(src/ui/transcript_viewer.py), not the browser's.
 
     store = Store(Path("runs"))
     rows = [store.run_row(name) for name in store.run_names()]
@@ -27,6 +27,7 @@ from src.configuration.swarm_config import ROLES
 from src.export.eval_sample_view import PASSIVE_DEFENSES
 from src.judging import verdict_files
 from src.measures.run_directory import ATTEMPTS, GROUPS, RunDir, study_runs
+from src.measures.team_ladder import sample_of
 from src.measures.verdict_fields import CRITICAL, FLAGS_BY_TASK, GOOD, SERIOUS, WARNING
 from src.utils.json_files import read_json, read_json_dir
 
@@ -286,7 +287,9 @@ class Store:
         detail = self.run_row(name)
         detail["run_json"] = RunDir(d).run_json
         detail["team"] = RunDir(d).team_signals()
-        detail["communication"] = read_json_dir(d / "communication")
+        stored = RunDir(d)
+        detail["communication"] = {sample: board for sample in sorted({sample_of(ep) for ep in stored.episodes()})
+                                   if (board := stored.board(sample))}
         detail["defense"] = read_json_dir(d / "defense")
         detail["tools"] = {tool: _tool_summary(d / "tools" / tool / "summary.json") for tool in detail["tools"]}
         return detail

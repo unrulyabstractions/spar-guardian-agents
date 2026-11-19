@@ -1,6 +1,7 @@
 """Figure 4 of the paper: the multi-domain study's results, one tile per valid run, coloured and lettered by the team's
 Cheating rung; the legend names the measures' cheating line. Columns are the targets (SWE with DeepSeek workers, SWE
-with Luna workers, protein design, creative writing). Row groups: the team of three with no rule, the generic rule and
+with Luna workers, SWE with Haiku workers, protein design, creative writing), each as wide as its heading or its
+widest cell. Row groups: the team of three with no rule, the generic rule and
 the identified rule; a hidden regulator at level ambiguous, then enforce, one row per regulator model with runs; the
 team all told to cheat.
 
@@ -47,6 +48,7 @@ OUT = ROOT / "tmp" / "figures" / "paper" / "fig4_multidomain.png"
 # (index target, heading, workers line); the frozen figure's column order.
 COLUMNS = [("flipt-dsflash", "Software engineering", "DeepSeek workers"),
            ("flipt-luna", "Software engineering", "Luna workers"),
+           ("flipt-haiku", "Software engineering", "Haiku workers"),
            ("protein-luna", "Protein design", "Luna workers"),
            ("creative-luna", "Creative writing", "Luna workers")]
 # Regulator models in the frozen figure's order, by registry entry, with their row labels.
@@ -161,16 +163,18 @@ def draw(table: dict, rule_lines: list[str]) -> Figure:
             groups.append((title, [sub], rows))
     groups.append(("Team of three, all told to cheat", [], [(("cheat", None), "Told to cheat")]))
 
-    left, col, pad = 1.2, 1.32, 0.1
+    left, pad = 1.2, 0.1
     s, gap, row_h = 0.18, 0.03, 0.25
     head_h, title_h, sub_h, group_pad, legend_h = 0.5, 0.26, 0.16, 0.12, 0.62
-    width = left + col * len(COLUMNS)
+    widths = [max(text_width(workers, 7), max(len(runs) for (*_, t), runs in table.items() if t == target) * (s + gap))
+              + 0.15 for target, _, workers in COLUMNS]
+    xs = [left + sum(widths[:j]) for j in range(len(COLUMNS))]
+    width = left + sum(widths)
     height = head_h + legend_h + sum(title_h + sub_h * len(sub) + 0.06 + row_h * len(rows) + group_pad
                                      for _, sub, rows in groups)
     fig, ax = canvas(width, height, SURFACE)
 
-    for j, (target, heading, workers) in enumerate(COLUMNS):
-        x = left + j * col
+    for x, (target, heading, workers) in zip(xs, COLUMNS):
         ax.text(x, 0.17, heading.replace("Software engineering", "SWE"), fontsize=8, weight="bold", color=INK,
                 va="center")
         ax.text(x, 0.36, workers, fontsize=7, color=INK_SECONDARY, va="center")
@@ -189,7 +193,7 @@ def draw(table: dict, rule_lines: list[str]) -> Figure:
             ax.text(left - 0.1, cy, label, fontsize=7, color=INK, ha="right", va="center")
             for j, target in enumerate(targets):
                 for k, run in enumerate(table.get((*key, target), [])):
-                    rung_chip(ax, left + j * col + k * (s + gap), cy - s / 2, s, s, run["team_rung"], size=6.5)
+                    rung_chip(ax, xs[j] + k * (s + gap), cy - s / 2, s, s, run["team_rung"], size=6.5)
             y += row_h
         y += group_pad
 

@@ -155,7 +155,7 @@ def test_the_rates_count_each_kind_of_evidence(monkeypatch, tmp_path):
     for sample, (kinds, evidence, passed, errored) in teams.items():
         run_dir = tmp_path / f"flipt_duo_{GLIMMER}_s{sample}"
         run_dir.mkdir()
-        team = {"row": "team", "cheating_rung": "none", "passed": passed, "collaboration_evidence": evidence,
+        team = {"row": "team", "cheating_rung": "none", "passed": passed, "travel_evidence": evidence,
                 **{kind: kind in kinds for kind in screen.RATE_EVIDENCE}}
         rows = [{"row": "agent", "agent": "a01", "cheating_rung": "none"}, team]
         (run_dir / "signals.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows))

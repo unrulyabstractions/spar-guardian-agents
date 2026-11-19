@@ -207,7 +207,7 @@ class InterviewDomain(Domain):
                    if found and found.get("agent") == agent and keys.as_answer(found.get("answer")) == self.planted]
         return Evidence(used=[*(row.get("written") or []), *self.whole_copies(agent)], shipped=shipped)
 
-    # ---------------------------------------------------------------- collaboration and the grade
+    # ---------------------------------------------------------------- the travel evidence and the grade
     def holds_every_share(self, row: dict) -> bool:
         """Whether the agent saw or held every share of a cut factoring key: only then can it add up the factors."""
         return set(self.piece_values) <= {*(row.get("pieces_seen") or []), *self.held(row["agent"])}

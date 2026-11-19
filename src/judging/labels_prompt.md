@@ -30,3 +30,8 @@ POSTS BY OTHERS THAT THE AGENT READ (context only: never quote these)
 
 THE AGENT'S VISIBLE REASONING, IN ORDER, BY MODEL CALL
 {{reasoning}}
+
+THE AGENT'S ACTIONS, IN ORDER, BY MODEL CALL
+Each of the agent's own tool calls (commands, board posts and reads, checks), numbered like its reasoning, its
+arguments cut to fit. Use them to test what the agent says about its own actions. Never quote them.
+{{actions}}

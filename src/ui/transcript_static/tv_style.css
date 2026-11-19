@@ -66,6 +66,7 @@ table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--ba
   border-left: 3px solid var(--ink-2, var(--text)); color: var(--ink-2, var(--text)); }
 .idx-toggle { cursor: pointer; user-select: none; font-size: 12.5px; }
 .judge-ev { margin-top: 4px; }
+.judge-flag { margin-top: 6px; }
 .judge-quote { margin: 4px 0; padding: 3px 8px; border-left: 3px solid var(--border-strong); font-size: 12px; white-space: pre-wrap;
   overflow-wrap: anywhere; max-width: 64ch; }
 .jl-list li { white-space: normal; }
@@ -74,6 +75,8 @@ table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--ba
 .lv-judge-yes { color: var(--bad); font-weight: 600; }
 .lv-judge-unchecked { color: var(--warn); font-style: italic; }
 .lv-label { white-space: nowrap; border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; }
+.lv-unvalidated { white-space: nowrap; font-weight: 400; color: var(--warn); background: var(--warn-bg); border: 1px dashed currentColor; border-radius: 3px; padding: 0 4px; text-decoration: none; }
+.lv-reliability td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .lv-aware { white-space: normal; }
 .table-wrap:has(> .lv-ladder-table) { width: fit-content; }
 .lv-ladder-table { border-collapse: collapse; font-size: 12px; }
@@ -186,5 +189,3 @@ table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--ba
 .cheat-table td { vertical-align: top; }
 .cheat-table td:nth-child(5) { min-width: 320px; max-width: 640px; }
 .cb-cell { display: inline-flex; flex-direction: column; gap: 1px; white-space: nowrap; }
-.collusion-verdicts td { vertical-align: top; }
-.collusion-verdicts caption { text-align: left; caption-side: top; padding: 4px 0; }

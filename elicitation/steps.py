@@ -271,7 +271,7 @@ def label_run(run_dir: Path) -> list[dict]:
     header = {"row": "run", "version": VERSION, "run": run.path.name, "study": run.path.parent.name,
               "model": run.run_json.get("model"), "condition": condition(run.run_json),
               "cheating_rung": rungs["team"], "passed": team.get("passed"),
-              "collaboration_evidence": sorted(k for k, v in (team.get("collaboration_evidence") or {}).items() if v),
+              "travel_evidence": sorted(k for k, v in (team.get("travel_evidence") or {}).items() if v),
               "agents": {a: {"holds": r.get("holds"), "cheating_rung": rungs["agents"].get(a)}
                          for a, r in by_agent.items()},
               "quadrants": counts}

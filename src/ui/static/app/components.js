@@ -319,10 +319,10 @@ export function verdictBlock(v, fields = []) {
     v.summary ? h('p', { class: 'verdict-summary' }, v.summary) : null);
 }
 
-// The code's evidence (src/measures/rungs.py EVIDENCE and COLLABORATION_EVIDENCE), by the names signals.jsonl records
+// The code's evidence (src/measures/rungs.py EVIDENCE and TRAVEL_EVIDENCE), by the names signals.jsonl records
 // it under. It is evidence, no ladder: the transcript viewer lays out the three ladders read from it.
 const EVIDENCE = ['exposed', 'tried', 'opened', 'used', 'tampered', 'checked', 'shipped'];
-const COLLABORATION_EVIDENCE = ['discussed', 'solicited', 'crossed', 'assembled'];
+const TRAVEL_EVIDENCE = ['discussed', 'solicited', 'crossed', 'assembled'];
 
 const vfItem = (name, node) => h('span', { class: 'vf' }, h('span', { class: 'vf-label' }, name), node);
 
@@ -350,7 +350,8 @@ export function evidenceBlock(s) {
 }
 
 // The team's record of a sample (signals.jsonl's team row, src/measures/team_ladder.py): the workers' evidence, the
-// collaboration evidence, the grader's pass and how the run ended. Each kind lists the agents whose rows hold it.
+// travel evidence (how the honeypot travelled between agents), the grader's pass and how the run ended. Each kind
+// lists the agents whose rows hold it.
 export function teamBlock(t) {
   if (!t) return null;
   const list = v => (v && v.length ? v.join(', ') : null);
@@ -361,10 +362,10 @@ export function teamBlock(t) {
     sub.ends_after_round != null ? `the run ends after round ${sub.ends_after_round}` : null,
     sub.snapshot ? `snapshot ${String(sub.snapshot).slice(0, 12)}` : null].filter(Boolean).join('; ');
   const own = Object.entries(t.own_submits || {}).map(([a, r]) => `${a} r${r ?? DASH}`).join(', ');
-  const collab = t.collaboration_evidence || {};
+  const travel = t.travel_evidence || {};
   return h('div', { class: 'verdict' },
     h('div', { class: 'verdict-flags' },
-      ...COLLABORATION_EVIDENCE.map(c => vfItem(c, yn(Boolean((collab[c] || []).length), 'plain', 'plain')))),
+      ...TRAVEL_EVIDENCE.map(c => vfItem(c, yn(Boolean((travel[c] || []).length), 'plain', 'plain')))),
     kv([...acts,
       ['agents', list(t.agents)],
       ['mode', t.mode],
@@ -380,7 +381,7 @@ export function teamBlock(t) {
     ], 'kv-grid'),
     h('div', { class: 'verdict-meta' }, muted('team record: the code’s evidence over every worker, the board and the hand-in')),
     evidenceDetails([...EVIDENCE.map(f => [f, t[f + '_evidence']]), ['proof', t.proof],
-      ...COLLABORATION_EVIDENCE.map(c => [c, collab[c]])]));
+      ...TRAVEL_EVIDENCE.map(c => [c, travel[c]])]));
 }
 
 export function episodeRecord(ep) {

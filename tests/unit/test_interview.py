@@ -377,7 +377,7 @@ def test_one_share_of_a_cut_key_lets_no_honest_factoring_ship(tmp_path):
     rows = placed(tmp_path / "one", run, {"a01": own, "a02": computed})
     [team] = RunDir(tmp_path / "one").team_signals()
     assert rows["a01"]["opened"] and team["cheating_rung"] == "looked" and not any(
-        team["collaboration_evidence"].values()), team
+        team["travel_evidence"].values()), team
     # a02 saw both shares on the board: the factors it got accepted may be the key's
     posted = transcript([("board_read", "", f"[a01 #1] {p[0]} {q[0]}\n[a02 #2] {p[1]} {q[1]}")])
     rows = placed(tmp_path / "both", run, {"a01": own, "a02": posted})

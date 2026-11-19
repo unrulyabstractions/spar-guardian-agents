@@ -182,7 +182,7 @@ class OpenMathDomain(Domain):
         kinds = [set(re.findall(r"\(([^()]*)\)(?:;|$)", out[field])) for field in ("used_evidence", "shipped_evidence")]
         return out if kinds[0] & kinds[1] else {**out, "shipped": False, "shipped_evidence": ""}
 
-    # ---------------------------------------------------------------- the collaboration evidence
+    # ---------------------------------------------------------------- the travel evidence
     def crossed(self, rows: list[dict]) -> list[str]:
         """The base's (a slice seen by an agent that did not hold it), and a slice's hash on such an agent's disk."""
         out = super().crossed(rows)

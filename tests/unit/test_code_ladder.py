@@ -268,15 +268,14 @@ def test_run_signals_write_agent_rows_then_team_rows_and_run_json(tmp_path):
     written = [json.loads(line) for line in (folder / "signals.jsonl").read_text().splitlines()]
     assert [r["row"] for r in written] == ["agent", "agent", "team"] and written[:2] == rows
     assert list(rows[0])[:7] == ["row", "sample", "episode", "agent", "role", "task", "holds"]
-    assert list(rows[0])[-9:] == ["calls", *cheating_ladder.AGENT_FIELDS, *coordination.AGENT_FIELDS, "collusion_rung"]
+    assert list(rows[0])[-5:] == ["calls", *cheating_ladder.AGENT_FIELDS, *coordination.AGENT_FIELDS, "collusion_rung"]
     assert rows[0]["holds"] == ["whole"] and rows[0]["calls"] == 2
     assert (rows[0]["cheating_rung"], rows[1]["cheating_rung"]) == ("looked", "none")
-    assert rows[0]["cheating_clauses"]["opened"] == [rows[0]["opened_evidence"]]
     assert rows[0]["collusion_rung"] is None                    # the stub task has no take rule
     team = written[2]
     assert (team["cheating_rung"], team["cheating_hidden"], team["cheating_alarm"]) == ("looked", {}, None)
-    assert (team["collusion_rung"], team["collusion_reason"]) == (None, "no take rule for task 'key_task'")
-    assert "rung" not in team and "collaboration" not in team and set(team["collaboration_evidence"]) == {
+    assert (team["collusion_rung"], team["collusion_hidden"]) == (None, {})
+    assert "rung" not in team and "collaboration" not in team and set(team["travel_evidence"]) == {
         "discussed", "solicited", "crossed", "assembled"}
     run = RunDir(folder)
     assert [r["agent"] for r in run.signals()] == ["a01", "a02"] and [t["sample"] for t in run.team_signals()] == [
@@ -333,30 +332,26 @@ def coordinated_run(tmp_path):
 
 @pytest.mark.usefixtures("key_task")
 def test_run_signals_record_the_coordination_ladder_on_agent_and_team_rows(tmp_path):
-    """Each agent row gains its Coordination level, score, ceiling and posts after its Cheating fields; the team row
-    gains the workers' level and the regulator's level apart."""
+    """Each agent row gains its Coordination level after its Cheating fields; the team row gains the workers' level and
+    the regulator's level apart."""
     folder = coordinated_run(tmp_path)
     rows = {row["agent"]: row for row in signals.run_signals(folder)}
     pick = {agent: {field: row[field] for field in coordination.AGENT_FIELDS} for agent, row in rows.items()}
-    assert pick == {"a01": {"coordination_level": "write", "coordination_score": 0.5, "coordination_ceiling": 1.0,
-                            "coordination_posts": 2},
-                    "a02": {"coordination_level": "write", "coordination_score": 0.5, "coordination_ceiling": 1.0,
-                            "coordination_posts": 2},
-                    "a03": {"coordination_level": "none", "coordination_score": 0.0, "coordination_ceiling": 0.0,
-                            "coordination_posts": 0}}
-    assert all(list(row)[-5:] == [*coordination.AGENT_FIELDS, "collusion_rung"] for row in rows.values())
+    assert pick == {"a01": {"coordination_level": "write"}, "a02": {"coordination_level": "write"},
+                    "a03": {"coordination_level": "none"}}
+    assert all(list(row)[-2:] == [*coordination.AGENT_FIELDS, "collusion_rung"] for row in rows.values())
     team = RunDir(folder).team_signals()[0]
     # the regulator counts in each worker's n - 1 and is reported apart, never in the team's level
     assert (team["coordination_level"], team["coordination_hidden"]) == ("write", {"a03": "none"})
     assert RunDir(folder).run_json["signals"]["team"]["coordination_level"] == "write"
-    # the collaboration evidence is a different record and stays as it was
-    assert not any(team["collaboration_evidence"].values())
+    # the travel evidence is a different record and stays as it was
+    assert not any(team["travel_evidence"].values())
 
 
 @pytest.mark.usefixtures("key_task")
-def test_ladders_gives_the_three_rungs_as_recorded_or_computed(tmp_path):
-    """A new run's three ladders come back from its rows; a run recorded before them gets the same rungs computed, and
-    its file stays as it is."""
+def test_ladders_reads_the_three_rungs_as_recorded(tmp_path):
+    """A run's three ladders come back from its rows. A run whose record lacks them is refused, its file left as it is,
+    and a recorded rung wins over the computation: the record is read, not checked."""
     folder = coordinated_run(tmp_path)
     signals.run_signals(folder)
     recorded = signals.ladders(folder)
@@ -366,16 +361,13 @@ def test_ladders_gives_the_three_rungs_as_recorded_or_computed(tmp_path):
                         "team": {"cheating_rung": "none", "cheated": False, "coordination_level": "write",
                                  "collusion_rung": None, "cheating_alarm": None},
                         "hidden": {"cheating": {}, "coordination": {"a03": "none"}, "collusion": {}}}
-    retired = {*cheating_ladder.AGENT_FIELDS, *cheating_ladder.TEAM_FIELDS, *coordination.AGENT_FIELDS,
-               *coordination.TEAM_FIELDS, "collusion_rung", "collusion_hidden", "collusion_pairs", "collusion_reason"}
     path = folder / "signals.jsonl"
-    old = [{k: v for k, v in json.loads(line).items() if k not in retired} for line in path.read_text().splitlines()]
-    path.write_text("".join(json.dumps(row) + "\n" for row in old))
-    before = path.read_bytes()
-    assert signals.ladders(folder) == recorded and path.read_bytes() == before
-    # a recorded rung wins over the computation: the record is read, not checked
-    signals.run_signals(folder)
     rows = [json.loads(line) for line in path.read_text().splitlines()]
+    path.write_text("".join(json.dumps({k: v for k, v in row.items() if k != "collusion_rung"}) + "\n" for row in rows))
+    before = path.read_bytes()
+    with pytest.raises(ValueError, match="holds no ladder rungs"):
+        signals.ladders(folder)
+    assert path.read_bytes() == before
     path.write_text("".join(json.dumps({**row, "coordination_level": "high"}) + "\n" for row in rows))
     assert {r["coordination_level"] for r in signals.ladders(folder)["agents"].values()} == {"high"}
 

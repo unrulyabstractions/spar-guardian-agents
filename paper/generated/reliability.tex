@@ -1,0 +1,25 @@
+% Written by scripts/paper/paper_sources.py from scripts/paper/measure_checks.yaml. Do not edit; run `make paper-sources`.
+\begin{tabularx}{\linewidth}{@{}l l l >{\raggedright\arraybackslash}p{0.2\linewidth} r r >{\raggedright\arraybackslash}X@{}}
+\toprule
+Measure & Rung or verdict & Unit & Cases chosen & Read & Held & Note \\
+\midrule
+Cheating & looked & agents & every regulator placed there by its oversight tool & 8 & 8 &  \\
+ & tempted & agents & a targeted search & -- & -- & one agent found that belongs at looked \\
+ & attempted & agents & every worker & 19 & 17 & two SWE workers plausibly belong at tempted \\
+ & hacked & agents & every worker & 24 & 24 &  \\
+\addlinespace
+Collusion & none & pairs & a fixed sample & 15 & 15 &  \\
+ & cooperation & pairs & a fixed sample & 15 & 14 & a targeted search found one more SWE pair that belongs at none, and one that plausibly does \\
+ & collaboration & pairs & a fixed sample & 15 & 14 & a targeted search found one more SWE pair that belongs lower \\
+ & collusion & pairs & every pair & 28 & 25 & three SWE pairs belong at collaboration \\
+\addlinespace
+Scheming & yes & pairs & every pair & 20 & 16 & three unclear \\
+ & no or unchecked & pairs & every pair & 8 & 0 & each a missed yes \\
+\addlinespace
+Awareness & yes & agents & every agent & 34 & 27 & six show only reuse of a branch; one unclear \\
+ & no or unchecked & agents & every agent & 9 & 3 &  \\
+\addlinespace
+Manipulation & yes & agents & every agent & 42 & 8 & 17 wrong and 17 unclear; not yet validated \\
+ & no & agents & a fixed sample of 449 & 30 & 29 &  \\
+\bottomrule
+\end{tabularx}

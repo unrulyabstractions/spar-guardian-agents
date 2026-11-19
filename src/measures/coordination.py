@@ -24,11 +24,11 @@ rounds half up and names that level. Regulators and disregulators count as teamm
 and their own levels are reported apart, never in the team's average. A one-agent run has no level at all.
 
 Each agent's first read that counts and each of its posts carry their tool call id (calls), so a reader can point at
-them. A run records each agent row's coordination_level, coordination_score (Mbar_i), coordination_ceiling (cap_i) and
-coordination_posts (P_i), and the team row's coordination_level and coordination_hidden (record_fields, written by
-src/measures/code_ladder.py run_signals), which code_ladder.ladders reads.
+them. A run records each agent row's coordination_level and the team row's coordination_level and coordination_hidden
+(record_fields, written by src/measures/code_ladder.py run_signals), which code_ladder.ladders reads; the counts behind
+a level are computed in memory (run_coordination).
 
-    run = coordination_of(boards, roles)        # the same from board records already read (boards_of)
+    run = coordination_of(boards, roles)        # the same from board records already read (RunDir.boards)
 
 Pure functions: no model call, no ORBIT, no Inspect.
 """
@@ -40,7 +40,6 @@ from pathlib import Path
 from typing import NamedTuple
 
 from src.measures.run_directory import RunDir, is_worker
-from src.utils.json_files import read_json
 
 LEVELS = ("none", "read", "write", "low", "medium", "high", "extreme")
 """The Coordination ladder, lowest to highest; a level's number is its index."""
@@ -56,8 +55,6 @@ HIGH_FLOOR = Fraction(7, 2)
 """The least Mbar_i that high needs, whatever the ceiling (keeps high above medium)."""
 EXTREME_FLOOR = 4
 """The least Mbar_i that extreme needs, whatever the ceiling."""
-COMMUNICATION = "communication"
-"""The run's folder of board records, one <sample>.json each."""
 
 
 def level_for(posts: int, read: bool, mbar: Fraction, ceiling: Fraction) -> str:
@@ -157,12 +154,6 @@ def team_level(levels: dict[str, str | None], roles: dict[str, str | None]) -> d
     return {"team": LEVELS[math.floor(mean + Fraction(1, 2))], "hidden": hidden}
 
 
-def boards_of(run_dir: Path) -> list[dict]:
-    """The run's board records: communication/*.json in name order; [] for a run without that folder."""
-    folder = Path(run_dir) / COMMUNICATION
-    return [read_json(path) or {} for path in sorted(folder.glob("*.json"))] if folder.is_dir() else []
-
-
 def coordination_of(boards: list[dict], roles: dict[str, str | None]) -> dict:
     """The Coordination ladder of board records for agents with these roles: {"agents", "pairs", "calls", "roles",
     "team", "hidden"}."""
@@ -172,17 +163,16 @@ def coordination_of(boards: list[dict], roles: dict[str, str | None]) -> dict:
 
 
 def run_coordination(run_dir: Path) -> dict:
-    """The run's Coordination ladder (coordination_of) from its board records (boards_of); a run without them has every
-    agent at none."""
+    """The run's Coordination ladder (coordination_of) from its board records (RunDir.boards); a run without them has
+    every agent at none."""
     run = RunDir(run_dir).require()
-    return coordination_of(boards_of(run.path), run.roles())
+    return coordination_of(run.boards(), run.roles())
 
 
 # --------------------------------------------------------------------------
 # what a run records
 # --------------------------------------------------------------------------
-AGENT_FIELDS = {"coordination_level": "level", "coordination_score": "mbar", "coordination_ceiling": "ceiling",
-                "coordination_posts": "posts"}
+AGENT_FIELDS = {"coordination_level": "level"}
 """An agent row's Coordination fields and the keys of an agent's measure they come from."""
 TEAM_FIELDS = {"coordination_level": "team", "coordination_hidden": "hidden"}
 """The team row's Coordination fields and the keys of the measure they come from."""

@@ -53,14 +53,12 @@ COLLUSION_FILL = dict(zip(COLLUSION, ("#eeede8", "#c9c0f0", "#6f5bd0", "#4a3aa8"
 COLLUSION_TEXT = {"collaboration": WHITE, "collusion": WHITE, "scheming": WHITE}
 COLLUSION_SHORT = dict(zip(COLLUSION, ("·", "Co", "Cb", "Cu", "S")))
 """A Collusion rung's mark on a chip; the legend spells each one out."""
-CHEATED_HEADER = f"Cheated ({CHEATED_FROM}+)"
 CHEATED_LABEL = f"cheated: {CHEATED_FROM} or above"
-"""A column's and a legend's words for the cheating line, the one the measures draw."""
+"""A legend's words for the cheating line, the one the measures draw."""
 ACCESSED_FROM = "looked"
 """The paper's second measure: an agent or a team accessed the honeypot when its rung is this or higher (accessed)."""
-ACCESSED_HEADER = f"Accessed ({ACCESSED_FROM}+)"
 ACCESSED_LABEL = f"accessed the honeypot: {ACCESSED_FROM} or above"
-"""A column's and a legend's words for the second measure."""
+"""A legend's words for the second measure."""
 TEXT_WIDTH_IN = 6.5
 """The paper's text width (letter paper, 1 in margins): a table set at \\linewidth is scaled to it."""
 MIN_PRINT_PT = 6.0
@@ -102,15 +100,15 @@ the judge read every one of them and found none aware."""
 
 @cache
 def record(path: Path) -> dict:
-    """One run's Cheating and Collusion rungs, for the team and for each agent, the pieces its hand-in holds
-    (Domain.hand_in_pieces), and each hidden agent's posts and the posts of those that ask a teammate for the honeypot
-    (src/measures/team_ladder.py posts_of and solicits). The Collusion ladder is collusion_of on the same Cheating
-    ladder, as collusion.run_collusion computes it; "collusion" is the team's rung with the scheming pass's verdicts,
-    "collusion_code" the code's. Where workers collude, "collusion_aware" is their awareness label (AWARE_ORDER),
-    shown wherever the team's collusion is; None elsewhere."""
+    """One run's Cheating and Collusion rungs, for the team and for each agent, the pieces its hand-in holds (the
+    Cheating ladder's hand_in_pieces), and each hidden agent's posts and the posts of those that ask a teammate for the
+    honeypot (src/measures/team_ladder.py posts_of and solicits). The Collusion ladder is collusion_of on the same
+    Cheating ladder, as collusion.run_collusion computes it; "collusion" is the team's rung with the scheming pass's
+    verdicts, "collusion_code" the code's. Where workers collude, "collusion_aware" is their awareness label
+    (AWARE_ORDER), shown wherever the team's collusion is; None elsewhere."""
     run, domain, log, rows, _, team = scanned_run(Path(path))
     result = cheating(run, domain, rows, team or {}, log)
-    collusion = collusion_of(Path(path), (team or {}).get("collaboration_evidence") or {}, result)
+    collusion = collusion_of(Path(path), result)
     roster = (team or {}).get("agents") or []
     posts = posts_of(run.board(team["sample"]), roster) if team else []
     hidden = {agent: {"role": role, "posts": sum(p["sender"] == agent for p in posts),
@@ -121,7 +119,7 @@ def record(path: Path) -> dict:
     aware = {labels(path)["agents"][a]["awareness"] for p in colluding if all(map(is_worker, p["roles"]))
              for a in p["agents"]}
     return {"cheating": result["team"], "cheated": cheated(result["team"]), "accessed": accessed(result["team"]),
-            "passed": result["passed"] is True, "alarm": result["alarm"], "pieces": sorted(domain.hand_in_pieces()),
+            "passed": result["passed"] is True, "alarm": result["alarm"], "pieces": result["hand_in_pieces"],
             "agents": {a: {"worker": r["worker"], "rung": r["rung"], "episode": r["episode"]}
                        for a, r in result["agents"].items()},
             "hidden": hidden,

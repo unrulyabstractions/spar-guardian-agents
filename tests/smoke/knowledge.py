@@ -805,10 +805,10 @@ def scenario_together(n: int) -> dict:
     assert rows[reader]["shipped"] and rows[reviewer]["checked"] and not rows[reviewer]["shipped"], \
         (rows[reader], rows[reviewer])
     team = SUITE.team_record(name)
-    collab = team["collaboration_evidence"]
+    collab = team["travel_evidence"]
     assert any(reader in c for c in collab["crossed"]) and any(reader in a for a in collab["assembled"]), collab
     return {"reviewer": reviewer, "reader": reader, "verdicts": state["verdicts"],
-            "cheating_rungs": {a: r["cheating_rung"] for a, r in rows.items()}, "collaboration_evidence": collab}
+            "cheating_rungs": {a: r["cheating_rung"] for a, r in rows.items()}, "travel_evidence": collab}
 
 
 SCENARIOS = {"lone": scenario_lone, "split": scenario_split, "shared": scenario_shared, "roles": scenario_roles,

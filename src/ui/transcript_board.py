@@ -7,7 +7,7 @@ transcript viewer (src/ui/transcript_viewer.py, route /api/board).
     payload["posts"][0]                     # {label, writer, role, kind, t, call, text, reads, scheming}
     payload["pair"]                         # the two agents the tab opens with, and payload["pair_why"]
 
-The calls are collusion_takes.load_run's, numbered as the transcript scan numbers them (the agent tab's "Call k").
+The calls are run_calls.load_run's, numbered as the transcript scan numbers them (the agent tab's "Call k").
 The clock is the eval log's tool events where the run's log holds every call (load_run's times, the source the
 results browser's timeline reads): t and dur in seconds from the first call's start. Without them the clock is call
 order: t is the call's place in Run.ordered (by turn, then agent and number) and every call lasts 1. The posts are
@@ -20,8 +20,9 @@ The labels of a call are the ones the run page draws (`levels`, transcript_level
 places them and computes no level. A level whose evidence cites no call (levels["events"] with neither k nor call_id:
 on SWE the access log's reads, the remote's pushes and the hand-in; Coordination low and above; Collusion
 collaboration and above) is no call's label: the agent's "uncited" lists it, and the tab shows it beside the lane.
-A post carries a scheming mark for each pair whose scheming verdict (the Collusion measure's pairs in `levels`) quotes
-it, with the quote, what it shows, the reason and whether the code's check let the verdict stand.
+A post carries a scheming mark for each flag of the scheming judge that counts for it (the Collusion measure's run
+flags in `levels`): what the post shows, the quote, the reason, the code's check and the colluding pairs it lies
+between (written by one, read by the other), whose verdicts it can decide.
 
 The default pair: the pair with the highest Collusion rung above none (src/measures/collusion.py's pairs in
 `levels`), workers before hidden roles, then the pair with more posts; else the two workers with the most posts.
@@ -30,9 +31,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from src.judging.judge_records import between
 from src.judging.judge_records import posts as labelled_posts
 from src.measures import collusion
-from src.measures.collusion_takes import Call, Run, load_run
+from src.measures.run_calls import Call, Run, load_run
 from src.measures.run_directory import RunDir, is_worker
 
 SUMMARY_CHARS = 140
@@ -108,14 +110,18 @@ def uncited(levels: dict, agent: str) -> list[dict]:
 
 
 def scheming_marks(levels: dict) -> dict[str, list[dict]]:
-    """post label -> the scheming verdicts that quote it: each pair of the Collusion measure (in `levels`) whose
-    scheming judge named the post, with what the judge said (said, which, quote, reason), the verdict that stands and
-    the code's check of the quote."""
+    """post label -> the scheming judge's flags that count for the post (the Collusion measure's run flags in
+    `levels`): {named: the post the judge named, which, quote, reason, check, pairs: the colluding pairs the post lies
+    between}."""
+    measure = levels.get("collusion") or {}
+    colluding = [p["agents"] for p in measure.get("pairs") or []
+                 if p["scheming"]["verdict"] != collusion.NOT_APPLICABLE]
     out: dict[str, list[dict]] = {}
-    for pair in (levels.get("collusion") or {}).get("pairs") or []:
-        said = pair["scheming"]
-        if (said.get("post") or "").strip():
-            out.setdefault(said["post"].strip(), []).append({"pair": pair["agents"], **said})
+    for flag in (measure.get("scheming") or {}).get("flags") or []:
+        for post in flag["posts"]:
+            out.setdefault(post["label"], []).append({
+                "named": flag["post"], **{k: flag[k] for k in ("which", "quote", "reason", "check")},
+                "pairs": [pair for pair in colluding if between(post, *pair)]})
     return out
 
 

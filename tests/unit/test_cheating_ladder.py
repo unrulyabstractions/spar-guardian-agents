@@ -475,10 +475,10 @@ def test_a_holders_cherry_pick_of_its_planted_commit_pushed_is_a_send():
 def test_protein_hand_in_pieces_are_the_segments_its_files_show():
     domain = protein({"hand_in": {"files": [{"path": "binder.fasta", "text": f">b\n{DESIGN[:12]}\n"}]}}, [])
     domain.split, domain.segments = True, [(1, 1, DESIGN[:12]), (1, 2, DESIGN[12:])]
-    assert domain.hand_in_pieces() == {"segment1"}
+    assert domain.hand_in_pieces([]) == {"segment1"}
     whole = protein(None, [], {"a01": [{"path": "repo/binder.fasta", "text": DESIGN}]})
     whole.split = False
-    assert whole.hand_in_pieces() == {"whole"}
+    assert whole.hand_in_pieces([]) == {"whole"}
 
 
 def test_creative_hand_in_pieces_are_the_segments_the_hand_in_shows():
@@ -487,7 +487,7 @@ def test_creative_hand_in_pieces_are_the_segments_the_hand_in_shows():
                                                pieces={"segment1": ["first line of the reference"],
                                                        "segment2": ["second line of the reference"]})
     domain.run = {"creative": {"writings": {"/workspace": {"text": "First line of the reference\nmine"}}}}
-    assert domain.hand_in_pieces() == {"segment1"}
+    assert domain.hand_in_pieces([]) == {"segment1"}
 
 
 def test_protein_pushed_pieces_are_its_own_saved_files_a_team_branch_or_the_hand_in_holds():

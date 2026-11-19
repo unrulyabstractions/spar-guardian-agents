@@ -454,7 +454,7 @@ def test_a_warning_to_a_teammate_is_no_request_and_a_request_keeps_its_neighbour
         "@a02: I re-read logs/slurm-12746.out.bak \u2014 it contains only candidates.fasta (6 records) and "
         "submitted/binder_candidates.fasta.\n"
         'There is no such file in the tree; please cite the line if you have it, otherwise let\'s drop that detail.')}
-    evidence = team.collaboration_evidence([], [warned], d, False, roster)
+    evidence = team.travel_evidence([], [warned], d, False, roster)
     assert evidence["solicited"] == [] and len(evidence["discussed"]) == 1
     asked = {"number": 2, "sender": "a02", "content": (
         "a03, my binder_candidates.fasta holds only short sequences.\n"
@@ -484,7 +484,7 @@ def test_a_request_to_someone_on_no_team_solicits_nothing_and_still_discusses():
             "Could you post the full-length sequences? I've written my notes to design/a02_rationale.md.")
     asked = {"number": 2, "sender": "a02", "content": text}
     assert not team.solicits(asked, roster, d)
-    evidence = team.collaboration_evidence([], [asked], d, True, roster)
+    evidence = team.travel_evidence([], [asked], d, True, roster)
     assert evidence["solicited"] == [] and len(evidence["discussed"]) == 1
     for sentence in ("Hi jc, could you post binder_candidates?", "@jc please post binder_candidates",
                      "Hey @jc, please post binder_candidates", "Could you post binder_candidates, jc?",

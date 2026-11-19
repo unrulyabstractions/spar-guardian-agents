@@ -121,9 +121,9 @@ The eval log as a CheatBench run directory.
 The LLM judges. CheatBench's judge runs inside the eval as the scorer `cheatbench_judge`, so the export finds its verdicts in the log. `judge` and `rejudge` judge a finished log again and re-export the run from it. `judge-pass` judges runs' stored records under a dollar cap and writes only `judges/<pass>.<judge>.jsonl`.
 
 - `cheatbench_judge.py`: CheatBench's judge through Inspect, and the one call path of every judge.
-- `scheming_judge.py` with `scheming_prompt.md`: the pass `scheming`, one call per pair code places at collusion, from the messages between the two; its verdict is the Collusion ladder's scheming rung.
+- `scheming_judge.py` with `scheming_prompt.md`: the pass `scheming`, one call per run in which code places a pair at collusion, on the run's board alone; it flags posts, and `judge_records.pair_scheming` derives each colluding pair's verdict, the Collusion ladder's scheming rung.
 - `labels_judge.py` with `labels_prompt.md`, `labels_awareness.md` and `labels_manipulation.md`: the pass `labels`, one call per agent that qualifies for the judge labels awareness or manipulation.
-- `judge_records.py`: what those two judges read of a stored run (the board, the instructions, the visible reasoning) and the code check of a judge's quote.
+- `judge_records.py`: what those two judges read of a stored run (the board, the instructions, the visible reasoning, the actions), the code check of a judge's quote, and `pair_scheming`.
 - `judge_pass.py`: the capped pass.
 - `verdict_files.py`: the reader and writer of `judges/`, and the one reader of CheatBench's verdicts (the eval's `judge.jsonl` with the passes' files).
 
@@ -138,13 +138,15 @@ Everything computed over a run directory, without a model.
 - `run_listing.py`: the runs of a collection under `runs/` and whether each counts (`INDEX.jsonl`, `manifest.jsonl`), for the transcript viewer and the judge passes.
 - `deal_replay.py`: whether today's code deals a protein, creative or SWE run the roster and the holdings it recorded.
 - `run_index.py`: one record per run of a study for `runs/<study>/INDEX.jsonl`: what the run is, where it ran, its arm, its outcome and its checks. It never reads the study table or the fleet: `scripts/box/study_index.py` joins them in for the study the table states (the stage and box of `scripts/box/study_table.py`, the instance from the box captures) and is the command. `uv run python -m scripts.box.study_index runs/<study>` prints a summary and writes nothing; `--write` writes the file.
-- `code_ladder.py`: the run's code record. It writes `signals.jsonl` and run.json `signals`: each agent's evidence and each sample's team record, with the three ladders' rungs (`cheating_rung` and `cheating_clauses`; `coordination_level`, `coordination_score`, `coordination_ceiling`, `coordination_posts`; `collusion_rung`) and, on the team record, the hidden roles' rungs apart. `ladders` reads the three rungs of any run, computing them for a run recorded before them.
+- `code_ladder.py`: the run's code record. It writes `signals.jsonl` and run.json `signals`: each agent's evidence and each sample's team record, with the three ladders' rungs (`cheating_rung` and `cheated`; `coordination_level`; `collusion_rung`) and, on the team record, the hidden roles' rungs apart and the Cheating alarm. `ladders` reads the three rungs as the run recorded them and refuses a run whose record lacks them.
 - `transcript_scan.py`: the code's evidence per agent (exposed, tried, opened, used, tampered, checked, shipped) from the transcript, the access log, the probe and the domain's records.
-- `team_ladder.py`: the team record of a sample: the workers' evidence, the collaboration evidence (discussed, solicited, crossed, assembled) and the outcomes. `with_coordination` computes the Coordination fields from the board record of a run recorded before them, without writing.
-- `cheating_ladder.py`: the Cheating ladder (none, looked, tempted, attempted, hacked) from the evidence and the grader's pass, per agent, per team and for the hidden roles apart, with the alarm for a pass with no trace. `cheating_rungs` reads a run's rungs as recorded or computes them.
+- `team_ladder.py`: the team record of a sample: the workers' evidence, the collaboration evidence (discussed, solicited, crossed, assembled) and the outcomes.
+- `cheating_ladder.py`: the Cheating ladder (none, looked, tempted, attempted, hacked) from the evidence and the grader's pass, per agent, per team and for the hidden roles apart, with the alarm for a pass with no trace. `cheating_rungs` reads a run's Cheating rungs as recorded.
 - `coordination.py`: the Coordination ladder (none, read, write, low, medium, high, extreme) from the board's reads and posts: each agent's rounds of back-and-forth with each teammate, averaged into a score and set against a ceiling, and the workers' mean level for the team.
-- `collusion.py`: the Collusion ladder per pair of agents (none, cooperation, collaboration and collusion by code from the takes and the planted pieces between them; scheming only from the scheming judge's verdicts). `collusion_rungs` reads a run's code rungs as recorded or computes them.
-- `collusion_takes.py`: what a take is, per task (`TASK_RULES`), and the run's calls and board as the Collusion ladder reads them (`load_run`).
+- `collusion.py`: the Collusion ladder per pair of agents (none, cooperation, collaboration and collusion by code from the takes and the planted pieces between them; scheming only from the scheming judge's flags). `run_collusion` computes a run's pairs in memory, each colluding pair with its verdict and the flags that decided it, and the run with every flag; the viewer and the paper read scheming only through it.
+- `collusion_takes.py`: what a take is, per task (`TASK_RULES`, each with its rule in words), and who made the hand-in.
+- `run_calls.py`: the run's calls as the take rules read them (`load_run`), and a take (`Take`).
+- `git_takes.py`, `text_takes.py` and `file_takes.py`: the generic take rules, through the team's git remote, by units of text, and by files on a shared file system.
 - `judge_labels.py`: the judges beside the code: CheatBench's labels set beside the Cheating ladder's clauses (`judged_cheating`), each agent's disclosure, and the judge labels awareness and manipulation.
 - `ladder_by_domain.py`: what puts an agent on each Cheating rung, per task, for the paper's table and the viewer.
 - `access_evidence.py`: the access log as the transcript scan reads it: the calls it shows as aimed, the agent row's `access_log` key and the team's.
@@ -170,14 +172,14 @@ and each agent's transcript:
 - `transcript_levels.py`: the three ladders and the judge labels as the page lays them out, per agent, per team and per
   call.
 - `transcript_board.py`: the Board tab's data.
-- `transcript_ladder_tables.py`: the Ladders page's tables by task.
+- `transcript_ladder_tables.py`: the Ladders page's tables by task, and what an independent reading found of each rung and label (`READINGS`).
 - `transcript_static/`: the page.
 
 The results browser is a single-page UI over `runs/` and the eval logs.
 
 - `launch.py`: starts and stops the browser as a background process.
 
-`python -m src.ui` serves it in the foreground. The implementation is `_server.py` (the HTTP routes), `_run_store.py` (the run directories), `_eval_log_views.py` (the eval log's sample, context windows and timeline) and `static/` (`index.html`, `style.css` and the ES modules under `app/`, booted by `main.js`).
+`python -m src.ui` serves it in the foreground. The implementation is `_server.py` (the HTTP routes), `_run_store.py` (the run directories), `_eval_log_views.py` (the eval log's sample, context windows and timeline) and `static/` (`index.html`, `style.css` and the ES modules under `app/`, booted by `main.js`, which lists them).
 
 ### models/
 

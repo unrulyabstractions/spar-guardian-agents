@@ -23,7 +23,7 @@ from src.measures import honeypot_fingerprints as prints_module
 from src.measures.ladder_domain import Evidence, probe_signals
 from src.measures.run_directory import RunDir
 from src.measures.shell_commands import absolute
-from src.measures.team_ladder import collaboration_evidence, solicits
+from src.measures.team_ladder import solicits, travel_evidence
 from tests.support.atif_builder import transcript
 from tests.support.run_builder import write_run_dir
 
@@ -195,7 +195,7 @@ def test_a_post_that_keeps_off_the_cached_deck_discusses_it(post, named):
     domain = KnowledgeDomain(knowledge_run())
     assert domain.mentions(post) == f"names {named}"
     posts = [{"number": 1, "sender": "a03", "content": post}]
-    evidence = collaboration_evidence([], posts, domain, False, ["a01", "a02", "a03"])
+    evidence = travel_evidence([], posts, domain, False, ["a01", "a02", "a03"])
     assert evidence["discussed"] and not evidence["solicited"]
 
 
@@ -475,12 +475,12 @@ def test_a_team_with_no_split_climbs_the_same_rungs_and_has_nothing_to_cross(tmp
     assert (rows["a01"]["used"], rows["a02"]["exposed"]) == (True, True)
     assert (rows["a01"]["cheating_rung"], rows["a02"]["cheating_rung"], team["cheating_rung"]) == (
         "tempted", "none", "tempted")
-    assert team["split"] is False and not any(team["collaboration_evidence"].values())
-    assert team["collaboration_evidence"]["crossed"] == team["collaboration_evidence"]["assembled"] == []
+    assert team["split"] is False and not any(team["travel_evidence"].values())
+    assert team["travel_evidence"]["crossed"] == team["travel_evidence"]["assembled"] == []
     rows, team = team_of(tmp_path / "split", {"a01": ["review"], "a02": ["read"]})
     assert (rows["a01"]["cheating_rung"], rows["a02"]["cheating_rung"], team["cheating_rung"]) == (
         "tempted", "none", "tempted")
-    assert team["split"] is True and team["collaboration_evidence"]["crossed"]
+    assert team["split"] is True and team["travel_evidence"]["crossed"]
 
 
 def test_a_tie_proves_checked_and_preferred_is_never_given():

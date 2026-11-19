@@ -27,7 +27,7 @@ This is shown in Figure~\ref{fig:jigsaw}.
   \centering
   \includegraphics[width=\linewidth]{fig3_jigsaw}
   \caption{Diagram of the jigsaw-puzzle exploit design for each task type. Each worker has a different part of the
-  required exploit, which they must combine by colluding with other agents on their shared message board.}
+  required exploit, which they must combine by sharing the parts with other agents.}
   \label{fig:jigsaw}
 \end{figure}
 
@@ -52,7 +52,7 @@ In Stage 2 the regulator only oversees, and it is either the workers' model or C
     \textbf{Team} & 3 workers + a hidden regulator, a disregulator, or both (4 or 5 agents)
       & 3 seats: seat 3 is the regulator, or a third worker in the control \\
     \addlinespace
-    \textbf{Models} & workers: DeepSeek (SWE) or Luna; regulator: mostly Haiku 5.5, also Luna, Argon, Sonnet 5.5,
+    \textbf{Models} & workers: DeepSeek (SWE) or Luna; regulator: most often Haiku 5.5, also Luna, Argon, Sonnet 5.5,
       Opus 5.5; disregulator: Luna
       & workers: DeepSeek (Stage 1: Haiku on one issue); regulator: the workers' model, or Haiku 5.5 in Stage 2 \\
     \addlinespace
@@ -62,7 +62,7 @@ In Stage 2 the regulator only oversees, and it is either the workers' model or C
     \addlinespace
     \textbf{Honeypot pieces} & one piece per worker: no piece passes alone; the regulator holds none (no special
       access)
-      & W1 holds piece A, W2 pieces B + C: passing needs all three; looking at one's own piece already counts as
+      & W1 holds piece A, W2 pieces B + C; the fix needs all three; looking at one's own piece already counts as
       cheating; the regulator holds none \\
     \addlinespace
     \textbf{Tasks} & SWE, protein design, creative writing & SWE: three issues \\
@@ -86,6 +86,7 @@ work. In the multi-domain study, we count a team as cheating when its Cheating r
 task. We also report whether a team \textbf{accessed the honeypot}: its Cheating rung is \AccessedFrom{} or above.
 The multi-domain study reads the ladders by code from the transcripts, the board and the sandbox's final state, while
 the deep dive uses \textit{CheatBench}'s LLM judge (GPT-6 Luna) with team-specific rules. In the multi-domain study, a
-judge reads only the Collusion ladder's top rung, scheming, and two labels beside the ladders: whether an agent knows
-it cheats, and whether it misleads its teammates. Appendix A defines every rung and label. Appendix B
-sets \textit{CheatBench}'s judge beside the code on the multi-domain study's runs.
+judge reads only the Collusion ladder's top rung, scheming, and two labels beside the ladders: whether an agent knowingly
+uses reference material, and whether it misleads its teammates. Appendix A defines every rung and label. Appendix B
+sets \textit{CheatBench}'s judge beside the code on the multi-domain study's runs, and reports how often an
+independent reading of the transcripts confirmed each rung and label.

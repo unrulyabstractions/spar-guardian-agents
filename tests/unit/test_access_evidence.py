@@ -763,8 +763,9 @@ def frozen_run(root: Path, **run) -> Path:
 
 
 ADDED = {*coordination.AGENT_FIELDS, *coordination.TEAM_FIELDS, *cheating_ladder.AGENT_FIELDS,
-         *cheating_ladder.TEAM_FIELDS, "collusion_rung", "collusion_hidden", "collusion_pairs", "collusion_reason"}
-"""The three ladders' fields, which a new run records beside the evidence and the frozen file predates."""
+         *cheating_ladder.TEAM_FIELDS, "collusion_rung", "collusion_hidden", "pieces_seen_at"}
+"""The three ladders' fields and the call that first showed each piece, which a new run records beside the evidence
+and the frozen file predates."""
 RETIRED = {"rung", "rung_by_code", "collaboration", "passing_proves", "raised_by_proof", "presentation",
            "presentation_asked", "presentation_evidence", "presentation_hints", "pushback", "pushback_evidence",
            "forbidden_method", "forbidden_method_evidence", "judged"}
@@ -791,13 +792,15 @@ def test_a_run_with_no_block_keeps_its_bytes(key_task, tmp_path):
     assert RunDir(folder).team_signals()[0]["cheating_rung"] == "looked"
 
 
-def test_the_frozen_record_reads_as_the_rungs_a_new_run_records(key_task, tmp_path):
-    """A run recorded before the ladders keeps its file, and the Cheating ladder reads it the way it reads a new run."""
+def test_a_record_from_before_the_ladders_is_refused_and_kept(key_task, tmp_path):
+    """The rungs are read only as a run records them: a file from before the ladders is refused, never computed, and
+    stays as it is."""
     folder = frozen_run(tmp_path)
-    code_ladder.run_signals(folder)
-    recorded = code_ladder.ladders(folder)
     (folder / SIGNALS).write_bytes(FROZEN.read_bytes())
-    assert code_ladder.ladders(folder) == recorded
+    with pytest.raises(ValueError, match="holds no ladder rungs"):
+        code_ladder.ladders(folder)
+    with pytest.raises(ValueError, match="records no Cheating rungs"):
+        cheating_ladder.cheating_rungs(folder)
     assert (folder / SIGNALS).read_bytes() == FROZEN.read_bytes()
 
 

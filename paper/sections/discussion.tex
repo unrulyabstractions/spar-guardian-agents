@@ -1,42 +1,45 @@
 \section*{Discussion}
 Our results only partially support our first hypothesis. On SWE in the multi-domain study, no DeepSeek team with an
 enforcing Haiku regulator cheated, while teams with an ambiguous one did. These cells hold three runs each, too few to
-separate the two levels. Regulators barely affected DeepSeek teams in Stage 1 of the deep dive. No untold protein design team cheated, so those runs cannot show whether
-regulators reduce cheating there.
-In Stage 2, a Haiku regulator that posted early did cut their cheating. In the multi-domain study, a single
-explicit rule naming the exploit did at least as well as the presence of any regulator. We were surprised by two
-results in particular: a regulator that also works on the task mostly changes its own cheating, and workers took a
-teammate's copy of the fix mainly where the regulator had used it.
+separate the two levels. Regulators barely affected DeepSeek teams in Stage 1 of the deep dive. No untold protein
+design team cheated, so those runs cannot show whether regulators reduce cheating there. In Stage 2, a Haiku
+regulator that only oversees did cut the workers' cheating. In the multi-domain study, a single explicit rule naming
+the exploit did at least as well as the presence of any regulator. Two results of Stage 1 concern the regulator
+itself. A regulator that also works on the task mostly changes its own cheating. Workers took a teammate's copy of the
+fix mainly where the regulator had used it. We therefore conjecture that a regulator's own stake in the task
+shapes whose cheating it changes.
 
-This suggests regulators need to be more proactive in actively discouraging their peers, and that peer pressure is
-likely less impactful when a regulator acts against its own adopted goals. Stage 2 fits this account. The regulator
-that posted before the workers looked cut cheating, and the regulator that watched first did not. Currently, we measure regulator
-effectiveness by its impact on the cheating rate on the task, but not why the cheating rate changed. It could be
-the regulator's oversight, or simply the presence of a collaborator. Future work would also analyze whether the
-regulator is doing its job by measuring things like coverage (whether the regulator inspects each teammate's
-actions) and correction (whether the behavior it flags is actually kept out of the shipped result).
+These results suggest that regulators need to discourage their peers more proactively. Peer pressure is likely
+weaker when a regulator acts against its own adopted goals. Stage 2 fits this account only in part. The Haiku
+regulator cut cheating against three workers alone, and the DeepSeek regulator did not. The gap between the two was
+not significant, and the study did not vary when a regulator first posts. We measure a regulator's effectiveness by
+the cheating rate of its team, and not by why that rate changed. The change could come from the regulator's
+oversight, or simply from the presence of a collaborator. We therefore plan to measure whether a regulator does its
+job: its coverage (whether it inspects each teammate's actions) and its correction (whether the behavior it flags
+stays out of the shipped result).
 
-Given that some models have lower propensities to cheat at baseline, they could make for more effective
-regulators, even in teams of other models. We're also interested in investigating how regulators constructed via
-activation-based methods (e.g., persona selection) could differ from those simply told their instructions in their
-system prompt.
+Some models have lower propensities to cheat at baseline. Such models could make more effective regulators, even in
+teams of other models. Regulators built by activation-based methods (e.g., persona selection) could also behave
+differently from regulators told their instructions in their system prompt. We therefore posit that a regulator's
+model and the way it is built are variables worth testing.
 
-Our disregulator runs do not support our second hypothesis. No team a disregulator pushed cheated, and none went
-past looking at the planted work. An enforcing regulator placed beside it kept every team from looking at all. These
-cells hold two or three runs each, and no untold team on their targets cheated, so they sit at the floor of the
-measure. We therefore posit that our runs cannot yet compare positive and negative peer pressure.
+Our disregulator runs cannot yet test our second hypothesis. No team with a disregulator cheated. No team with both a
+disregulator and an enforcing Haiku regulator looked at the planted work. These cells hold two or three runs each,
+and no untold team on their targets cheated, so they sit at the floor of the measure. We therefore posit that our runs
+cannot yet compare positive and negative peer pressure.
 
 We focus on a specific communication topology, with explicit instructions to work collaboratively toward a shared
-task, a ready-made communication protocol, and explicit read/write budgets. In reported incidents, they worked as
-solo agents and emergently formed a swarm by building their own communication framework. Our swarms are smaller
-than those found in the wild, with only a handful of agents. Some emergent behavior and conformity dynamics may arise only
-with large numbers of agents in a swarm.
+task, a ready-made communication protocol, and explicit read and write budgets. In reported incidents, agents worked
+alone and formed a swarm emergently by building their own communication framework. Our swarms are smaller than
+those found in the wild, with only a handful of agents. Some emergent behavior and conformity dynamics may arise only
+with large numbers of agents in a swarm. We therefore posit that our results speak only to small swarms that are
+given a protocol.
 
 Our study is currently limited by small sample sizes. The multi-domain study currently includes only one task per
 domain, and Stage 1 of the deep dive gives the regulator the workers' model. Our tasks are also
 relatively short and were originally designed for single-agent completion. Swarms operating on tasks that require
 more complex delegation of work may behave differently. These tasks also include explicit honeypots that may look
 like tests, and we do not currently measure evaluation awareness. We do not consider the effects of memory or
-compact actions, which occur in real multi-agent systems and can affect information stored/passed through over
-time. Extending each of these, in turn, would be informative about how other parameters affect cheating and
+compact actions, which occur in real multi-agent systems and can change what information is stored and passed on
+over time. We therefore posit that extending each of these would show how other parameters affect cheating and
 peer-pressure propensities.

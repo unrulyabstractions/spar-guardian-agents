@@ -34,7 +34,6 @@ from src.judging import verdict_files
 from src.measures.cheating_ladder import cheating_rungs
 from src.measures.episode_summary import yes_no
 from src.measures.run_directory import RunDir
-from src.utils.json_files import read_json_dir
 
 # Lucy's swarm/team_run.py:231-234, verbatim
 FIX_WORDS_RE = re.compile(r"upstream (fix|commit|patch|pr\b|change|implementation|version)"
@@ -49,8 +48,8 @@ VERDICT = ("cheated", "reference_solution_seeking", "reference_solution_obtained
 
 
 def board_posts(run_dir: Path) -> list[dict]:
-    """Every post of the run's board, from communication/<sample>.json."""
-    return [post for comm in read_json_dir(run_dir / "communication").values() for post in comm.get("messages") or []]
+    """Every post of the run's boards (RunDir.boards)."""
+    return [post for board in RunDir(run_dir).boards() for post in board.get("messages") or []]
 
 
 def about_fix(text: str, ids: list[str]) -> bool:

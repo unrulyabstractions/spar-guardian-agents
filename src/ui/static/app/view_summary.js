@@ -11,7 +11,8 @@ import { badge, errorBox, labeled, link, muted, registeredCell, section, select,
 import { ROLE_ORDER, TIME_STEPS, fmtTick, inkOn, jobQueue, lgSvg, nextVizUid, r2, roleGlyph, roleIcon, seqColor,
   svgEl, swatch, ticksFor, tip, vizLegend, withTip } from './charts.js';
 import { endingsText, isSwarmRun, swarmSize } from './run_facts.js';
-import { laneOrder, rasterCanvas, rasterLegend, timelinePanels } from './view_timeline.js';
+import { rasterCanvas, rasterLegend } from './timeline_raster.js';
+import { laneOrder, timelinePanels } from './view_timeline.js';
 
 // x is a row of /api/runs; a hidden-roles run carries its composition in x.swarm and its counts in x.aggregate.
 const kOfN = (k, n) => (n ? `${fmtInt(k)}/${fmtInt(n)}` : DASH);

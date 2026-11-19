@@ -3,16 +3,18 @@
     read(run_dir)                                   # {"cheatbench": {"gpt-6-luna": [rows]}, "scheming": {...}, ...}
     rows(run_dir, LABELS_PASS, "gpt-6-luna")        # one file's rows
     write(run_dir, LABELS_PASS, "gpt-6-luna", new)  # merge rows into that file, by unit, atomically
+    write(run_dir, SCHEMING_PASS, "gpt-6-luna", new, keep={"board"})  # and drop the rows of other units
     cheatbench(run_dir)                             # {judge: {episode: row}}, the eval's verdicts and the passes'
     episode_verdicts(run_dir)                       # {episode: row} of the judge the measures take
     applied(read(run_dir)[SCHEMING_PASS])           # the judge whose verdicts the ladders take: the first by name
 
 A pass of `python -m src judge-pass` (src/judging/judge_pass.py) writes judges/<pass>.<judge>.jsonl, one row per unit
-(an episode for the pass "cheatbench", a pair for "scheming", an agent for "labels"), keyed by the row's "unit". A
-unit judged again replaces its row; every other row stays. A file of a pass no longer listed (the retired
-"collusion") is not read. A write goes to a temporary file in judges/ that then replaces the file in
-one rename, so a reader never sees half a file, and nothing outside judges/ is touched: the run's own record (run.json,
-episodes.jsonl, judge.jsonl, the transcripts) stays as the run made it.
+(an episode for the pass "cheatbench", the run's board for "scheming", an agent for "labels"), keyed by the row's
+"unit". A unit judged again replaces its row; every other row stays, unless the writer names the units to keep, when
+the rows of any other unit go (a unit the pass no longer gives the run, such as a retired per-pair scheming row). A
+file of a pass no longer listed (the retired "collusion") is not read. A write goes to a temporary file in judges/
+that then replaces the file in one rename, so a reader never sees half a file, and nothing outside judges/ is touched:
+the run's own record (run.json, episodes.jsonl, judge.jsonl, the transcripts) stays as the run made it.
 
 Every row carries what makes it reproducible and priced: the unit, the judge entry and its generation config, the
 hashes of the prompt, the schema and the exact input, parse_ok, the call's usage, its cost in dollars, the attempts and
@@ -37,7 +39,8 @@ FOLDER = "judges"
 CHEATBENCH_PASS = "cheatbench"
 """CheatBench's verdicts per episode (src/judging/cheatbench_judge.py)."""
 SCHEMING_PASS = "scheming"
-"""Scheming per colluding pair (src/judging/scheming_judge.py), read by src/measures/collusion.py scheming_rows."""
+"""Scheming on a run's board, one row (src/judging/scheming_judge.py), read by src/measures/collusion.py scheming_rows;
+each pair's verdict derived by src/judging/judge_records.py pair_scheming."""
 LABELS_PASS = "labels"
 """Awareness and manipulation per agent (src/judging/labels_judge.py), read by src/measures/judge_labels.py
 label_rows."""
@@ -109,16 +112,19 @@ def by_unit(file_rows: list[dict]) -> dict[str, dict]:
     return {row["unit"]: row for row in file_rows}
 
 
-def write(run_dir: Path, pass_name: str, judge: str, new_rows: list[dict]) -> Path:
+def write(run_dir: Path, pass_name: str, judge: str, new_rows: list[dict], keep: set[str] | None = None) -> Path:
     """Merge `new_rows` into the pass's file by unit (a unit judged again replaces its row; the others stay, in their
-    order, new units after them) and replace the file in one rename. Refuses a row that lacks a key of ROW_KEYS or
-    names another judge."""
+    order, new units after them, except, when `keep` is given, a held row of a unit not in it) and replace the file in
+    one rename. Refuses a row that lacks a key of ROW_KEYS, names another judge, or is of a unit not in `keep`."""
     for row in new_rows:
         missing = [key for key in ROW_KEYS if key not in row]
         if missing:
             raise ValueError(f"verdict row of {row.get('unit')!r} lacks {', '.join(missing)}")
         if row["judge"] != judge:
             raise ValueError(f"verdict row of {row['unit']!r} is by {row['judge']!r}, not {judge!r}")
+        if keep is not None and row["unit"] not in keep:
+            raise ValueError(f"verdict row of {row['unit']!r} is of no unit to keep")
     target = path(run_dir, pass_name, judge)
-    merged = by_unit(read_jsonl(target)) | by_unit(new_rows)
+    held = by_unit(read_jsonl(target))
+    merged = {u: r for u, r in held.items() if keep is None or u in keep} | by_unit(new_rows)
     return write_atomic(target, "".join(json.dumps(row) + "\n" for row in merged.values()).encode())

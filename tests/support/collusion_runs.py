@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.measures.collusion_takes import TOOLS, Call, Run, Take
+from src.measures.run_calls import Call, Run, Take
+from src.measures.shell_commands import TOOLS
 
 LINES = "the brass lantern swings above the flooded quay\nand gulls argue over the copper roofs at dusk"
 HAND_IN = "/workspace/writing.md"

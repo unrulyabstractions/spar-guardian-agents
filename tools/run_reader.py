@@ -54,7 +54,6 @@ class Post:
     content: str
     turn: int | None  # the timeline's turn counter when it was posted
     round: int | None  # the round of the sender's activation at that turn; None without a timeline
-    sample: str  # the communication file's sample, such as "riemann#1"
 
 
 @dataclass(frozen=True)
@@ -240,7 +239,7 @@ def load_run(name_or_path: str | Path) -> Run:
         judge=judge,
         judge_cheated={agent: row.get("cheated") for agent, row in judge.items()},
         episodes=episodes,
-        board=read_board(directory, timeline),
+        board=read_board(stored, timeline),
         transcripts=read_transcripts(directory, lone),
         rounds=int((run_json.get("rules") or {}).get("rounds") or 0),
         timeline=timeline,
@@ -411,19 +410,18 @@ def read_log(eval_log: Path) -> dict[str, str]:
     return {call_id: text for call_id, text in results.items() if seen[call_id] == 1}
 
 
-def read_board(directory: Path, timeline: list[dict]) -> list[Post]:
-    """Every post on the board channel of every communication/<sample>.json, numbered by board position."""
+def read_board(stored: RunDir, timeline: list[dict]) -> list[Post]:
+    """Every post on the board channel of each sample's board (RunDir.boards), numbered by board position."""
     turns = {(entry.get("agent"), entry.get("turn")): entry.get("step") for entry in timeline}
     posts = []
-    for path in sorted((directory / "communication").glob("*.json")):
-        messages = read_json(path).get("messages") or []
+    for record in stored.boards():
+        messages = record.get("messages") or []
         board = [message for message in messages if message.get("channel_id", BOARD_ID) == BOARD_ID]
         for number, message in enumerate(sorted(board, key=lambda m: m.get("sequence", 0)), 1):
             turn = message.get("turn")
             posts.append(Post(number=number, sequence=message.get("sequence", 0), sender=message.get("sender", ""),
                               recipients=list(message.get("recipients") or []), content=message.get("content", ""),
-                              turn=turn, round=round_of(turns.get((message.get("sender"), turn))),
-                              sample=path.stem))
+                              turn=turn, round=round_of(turns.get((message.get("sender"), turn)))))
     return posts
 
 

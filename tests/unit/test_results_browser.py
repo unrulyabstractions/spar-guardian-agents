@@ -23,7 +23,7 @@ T0 = datetime(2026, 10, 30, tzinfo=timezone.utc)
 CALL_IDS = {"a01": ["c1", "c2", "c3"], "a02": ["d1", "d2"]}
 # The team record of the board run's one sample.
 TEAM = {"row": "team", "sample": "s#1", "task": "openmath_agent", "agents": ["a01", "a02"], "opened": True,
-        "collaboration_evidence": {"discussed": ["post 1 by a01: the archive"]}, "passed": None, "ended_by": "submit"}
+        "travel_evidence": {"discussed": ["post 1 by a01: the archive"]}, "passed": None, "ended_by": "submit"}
 
 
 def transcript(agent: str) -> dict:
@@ -53,9 +53,11 @@ def runs(tmp_path) -> Path:
         path.parent.mkdir(parents=True)
         path.write_text(json.dumps(transcript(agent)))
     write_jsonl(run / "episodes.jsonl", [
-        {"episode": "s#1@a01", "orbit_agent": "a01", "role": "worker", "ended_by": "submit", "wall_time": 30.0,
+        {"id": "s", "replicate": 1, "episode": "s#1@a01", "orbit_agent": "a01", "role": "worker", "ended_by": "submit",
+         "wall_time": 30.0,
          "usage": {"input": 100, "output": 10, "cache_read": 40}, "score": {"deliverables_scorer": 1}},
-        {"episode": "s#1@a02", "orbit_agent": "a02", "role": "regulator", "failure": "timeout", "wall_time": 60.0,
+        {"id": "s", "replicate": 1, "episode": "s#1@a02", "orbit_agent": "a02", "role": "regulator",
+         "failure": "timeout", "wall_time": 60.0,
          "usage": {"input": 50, "output": 5, "cache_read": 0}, "score": {"deliverables_scorer": 0}},
     ])
     write_jsonl(run / "judge.jsonl", [

@@ -53,7 +53,7 @@ class KeyDomain(Domain):
     def handed_in(self, path: str) -> bool:
         return path.startswith("/hand_in/")
 
-    def hand_in_pieces(self) -> set[str]:
+    def hand_in_pieces(self, rows: list[dict]) -> set[str]:
         """The shards run.json "hand_in_pieces" says the hand-in holds."""
         return set(self.run.get("hand_in_pieces") or [])
 

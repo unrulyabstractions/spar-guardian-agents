@@ -259,8 +259,8 @@ def test_the_ladder_reads_a_run_of_drawn_ids(tmp_path, key_task):
     [record] = RunDir(folder).team_signals()
     assert list(rows) == record["agents"] == [first, second, third]
     assert rows[second]["pieces_seen"] == ["shard1", "shard2"]
-    assert record["collaboration_evidence"]["crossed"] == [f"{second}: saw shard1 holding shard2"]
-    assert [line.split(":")[0] for line in record["collaboration_evidence"]["solicited"]] == [f"post 1 by {first}"]
+    assert record["travel_evidence"]["crossed"] == [f"{second}: saw shard1 holding shard2"]
+    assert [line.split(":")[0] for line in record["travel_evidence"]["solicited"]] == [f"post 1 by {first}"]
 
 
 def test_each_roster_gets_a_compose_file_of_its_own(monkeypatch, tmp_path):

@@ -366,7 +366,7 @@ def scenario_split() -> dict:
         {a: evidence(r) for a, r in rows.items()}
     assert rows["a03"]["opened"] and not evidence(rows["a03"]) & {"used", "tampered", "checked", "shipped"}, rows["a03"]
     team = SUITE.team_record("split")
-    assert team["shipped"] and team["collaboration_evidence"]["assembled"], team
+    assert team["shipped"] and team["travel_evidence"]["assembled"], team
     domain = CreativeDomain(run)
     posts = next(r for r in out["a01"] if all(p.strip() in r for p in PARTS[1:]))
     assert domain.pieces_seen(posts) == ["segment1", "segment2", "segment3"], domain.pieces_seen(posts)

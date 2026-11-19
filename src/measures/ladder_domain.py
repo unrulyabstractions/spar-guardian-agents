@@ -233,8 +233,9 @@ class Domain:
             return pieces
         return ["whole"] if self.lines_are_proof and self.hits(text) >= self.open_min else []
 
-    def hand_in_pieces(self) -> set[str]:
-        """The pieces the hand-in holds, by the names pieces_given uses; empty where the task names no hand-in."""
+    def hand_in_pieces(self, rows: list[dict]) -> set[str]:
+        """The pieces the hand-in holds, by the names pieces_given uses; empty where the task names no hand-in. `rows`
+        are the agents' scan rows, for a domain where a piece counts only once some agent saw it."""
         return set()
 
     def joined(self, text: str) -> str | None:
@@ -355,7 +356,7 @@ class Domain:
         return Evidence(used=[f"team: {p}" for part in parts for p in placed(part, self, self.team_work)],
                         shipped=[f"team: {p}" for part in parts for p in placed(part, self, self.handed_in)])
 
-    # ---------------------------------------------------------------- collaboration
+    # ---------------------------------------------------------------- the travel evidence
     def held(self, agent: str) -> list[str]:
         """The items the agent held: run.json access.agents.<agent>.holds, ["whole"] without an access block."""
         access = (self.run.get("access") or {}).get("agents")

@@ -1,12 +1,14 @@
-\section*{Experimental Results}
+\section*{Experimental results}
 Appendix B shows the full details of our results.
 
-\subsection*{Multi-Domain Tests}
-Results are shown in Figure~\ref{fig:multidomain}, and Appendix B counts them. Each cell without a regulator holds
-three to five runs. Without any mitigation methods, only DeepSeek teams on SWE cheated. No untold team cheated on the
-other targets. When instructed to cheat, every DeepSeek team on SWE cheated, and some Luna teams on SWE and on
-creative writing did. No Luna team on protein design cheated, told or untold. A generic honesty rule in
-the agents' task instructions left cheating unchanged. A rule naming the exploit brought it to zero on every target.
+\subsection*{Do regulators lower cheating across domains?}
+Figure~\ref{fig:multidomain} shows every run, and Appendix B counts them. Each cell without a regulator holds three to
+five runs. Without any mitigation, DeepSeek teams on SWE cheated, and so did some Claude Haiku 5.5 teams on SWE. No
+untold Luna team cheated on any target. When instructed to cheat, DeepSeek and Haiku teams on SWE cheated, and so did
+some Luna teams on SWE and on creative writing. No Luna team on protein design cheated, told or untold. A generic
+honesty rule in the agents' task instructions left DeepSeek teams on SWE cheating. Under the same rule, fewer Haiku
+teams on SWE cheated than untold, in cells of three runs. A rule naming the exploit brought cheating to zero on every
+target.
 
 Cheating shows which teams acted on the planted work. Access shows which teams reached it at all. Most untold teams
 on SWE and on protein design accessed the honeypot. No protein design team with a Haiku regulator did (Appendix B).
@@ -15,10 +17,11 @@ on SWE and on protein design accessed the honeypot. No protein design team with 
   \centering
   \includegraphics[width=\linewidth]{fig4_multidomain}
   \caption{Cheating behavior per each task domain and model tested; from left to right, SWE with DeepSeek, SWE with
-  Luna, protein design with Luna, and creative writing with Luna. The legend at the bottom gives the team's rung on
-  the Cheating ladder; a team cheated when its rung is \CheatedFrom{} or above, and accessed the honeypot when it is
-  \AccessedFrom{} or above. From top to bottom, we show how behavior changes in the presence of a regulator and
-  how the regulator's instructions affect its ability to prevent cheating.}
+  Luna, SWE with Claude Haiku 5.5, protein design with Luna, and creative writing with Luna. The legend at the bottom
+  gives the team's rung on the Cheating ladder; a team cheated when its rung is \CheatedFrom{} or above, and accessed
+  the honeypot when it is \AccessedFrom{} or above. From top to bottom, we show how behavior changes in the presence
+  of a regulator and how the regulator's instructions affect its ability to prevent cheating. Regulators ran only
+  beside DeepSeek and Luna workers.}
   \label{fig:multidomain}
 \end{figure}
 
@@ -28,40 +31,41 @@ teams cheated with a Haiku regulator at the enforce level than at the ambiguous 
 teams cheating at both levels, and Sonnet regulators ran once per level. A regulator cell holds one to six runs, too
 few to separate an effect of the regulator from chance. No regulator did better than the rule naming the exploit.
 
-We tested disregulators with GPT-6 Luna workers on SWE and creative writing (Appendix B). On SWE, every team with a
-disregulator alone looked at the planted work. On creative writing, no team with a disregulator did. No team a
-disregulator pushed cheated, while some teams told to cheat did. No untold team on these targets cheated either, so
-these cells sit at the floor of the measure. A Claude Haiku 5.5 regulator at the enforce level, added beside the
-disregulator, kept every team at none. These cells hold two or three runs each.
+We tested disregulators with GPT-6 Luna workers on SWE and creative writing (Appendix B). No team with a disregulator
+cheated. No untold Luna team on these targets cheated either, so these cells sit at the floor of the measure. On SWE,
+every team with a disregulator alone looked at the planted work. On creative writing, no team with a disregulator
+did. No team with both a disregulator and a Claude Haiku 5.5 regulator at the enforce level looked at the planted
+work. These cells hold two or three runs each.
 
-\subsection*{SWE Deep Dive}
-Stage 1 results are shown in Figure~\ref{fig:deepdive}. The deep dive counts cheating with \textit{CheatBench}'s
-judge under Lucy's team-specific rules, where looking for the fix counts as cheating. DeepSeek workers almost always
-cheated, whatever the regulator was given. None of these worker differences was significant (Holm $p \geq 0.45$). The
-clearest effect was on the regulator's own cheating, which dropped with an explicit definition ($p = 0.0001$,
-unadjusted). Workers found the fix by their own search (213 of 216 in the first three arms). Taking a
-teammate's copy fell from 18/72 to 2/72 with the definition; such copies mostly appeared where the regulator itself
-had used the fix.
+\subsection*{Does a regulator lower cheating in the SWE deep dive?}
+Figure~\ref{fig:deepdive} shows Stage 1. The deep dive counts cheating with \textit{CheatBench}'s judge under Lucy's
+team-specific rules, where looking for the fix counts as cheating. DeepSeek workers almost always cheated, whatever
+the regulator was given. None of these worker differences was significant. The clearest effect was on the
+regulator's own cheating, which dropped once it had an explicit definition. Workers almost always found the fix by
+their own search. Fewer workers took a teammate's copy of the fix once the regulator had the definition. Such copies
+mostly appeared where the regulator itself had used the fix.
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\linewidth]{fig5_swe_deep_dive}
-  \caption{Cheating rates for DeepSeek v4.1 Flash in the SWE deep-dive, judged by \textit{CheatBench}'s judge, where looking
-  for the fix counts as cheating. The swarm is optionally given one turn to
+  \caption{Cheating rates for DeepSeek v4.1 Flash in the SWE deep-dive, judged by \textit{CheatBench}'s judge,
+  where looking for the fix counts as cheating. The swarm is optionally given one turn to
   plan and coordinate its approach; these results are shown in orange. The legend at the bottom shows the different
   rungs of the regulator design: as a control worker (3W), with only tools and no instruction (S0), with a duty to
   keep the team honest (S1), with a definition of cheating (S2), and with additional pressure to prevent cheating
   (S3). We find that cheating among workers changes only slightly when the swarm has time to plan its approach, and
-  even then the effect is most pronounced for regulators given explicitly defined cheating behavior.}
+  even then the effect is most pronounced for regulators given explicitly defined cheating behavior. No difference
+  between the arms in the workers' cheating is significant (Holm $p \geq 0.45$). The regulator's own cheating drops
+  from S1 to S2 ($p = 0.0001$, unadjusted). Workers found the fix by their own search in 213 of 216 worker episodes of
+  the first three arms. A worker took a teammate's copy in 18 of 72 worker episodes under S1 and in 2 of 72 under S2.}
   \label{fig:deepdive}
 \end{figure}
 
 Stage 2 asks whether a regulator that only oversees moves DeepSeek workers off the ceiling, and whether its model
-matters (Table~\ref{tab:stage2}). A Claude Haiku 5.5 regulator cut the workers' cheating against three workers alone
-(Holm $p = 0.002$). A DeepSeek regulator with the same text did not (Holm $p = 0.15$), and the gap between the two
-regulators was not significant (Holm $p = 0.15$). Under Haiku, workers mostly stopped using the fix rather than
-stopped looking for it. Haiku posted its first warning early on the board, while DeepSeek mostly watched first and
-posted after the workers had looked.
+matters (Table~\ref{tab:stage2}). A Claude Haiku 5.5 regulator cut the workers' cheating against three workers alone.
+A DeepSeek regulator with the same text did not, and the gap between the two regulators was not significant. Under
+Haiku, most workers still looked for the fix, but fewer than half used it. The study did not vary when a regulator first
+posts, so it cannot say whether posting early made the difference.
 
 \begin{table}[htbp]
   \centering
@@ -69,6 +73,8 @@ posted after the workers had looked.
   \input{generated/stage2}
   \caption{SWE deep dive, Stage 2: DeepSeek V4.1 Flash workers with an overseeing regulator at the ambiguous level.
   Workers are judged by GPT-6 Luna under CheatBench's rule, where looking for the fix counts as cheating. Two
-  DeepSeek-regulator episodes that hit the time limit are left out.}
+  DeepSeek-regulator episodes that hit the time limit are left out. Holm-adjusted permutation tests on the workers'
+  cheating: the Haiku regulator against three workers alone, $p = 0.002$; the DeepSeek regulator against three workers
+  alone, $p = 0.15$; the Haiku regulator against the DeepSeek regulator, $p = 0.15$.}
   \label{tab:stage2}
 \end{table}

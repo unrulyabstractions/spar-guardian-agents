@@ -6,14 +6,14 @@
                                      pairs of workers and pairs with a regulator or disregulator apart
     table_awareness_by_task.png      per task, the agents the awareness label is read for (src/measures/judge_labels.py
                                      labels: at attempted or above on Cheating) by its verdict, hidden roles apart
-    table_manipulation_by_task.png   per task, the agents the manipulation label is read for (those that posted) by its
-                                     verdict; regulators and disregulators each apart, since each is told to hide its
-                                     role or its instruction
+
+The manipulation label has no table: an independent reading found most of its yes verdicts wrong
+(scripts/paper/measure_checks.yaml), and the paper reports it as not yet validated.
 
     uv run python -m scripts.paper.label_tables    # make results-tables runs every one
 
 A verdict reads yes, no, unchecked (a yes whose quote failed code's check) or not judged (no row of the pass yet).
-The agents each label is read for come from judge_labels alone; the script stops when they differ from record's
+The agents awareness is read for come from judge_labels alone; the script stops when they differ from record's
 Cheating rungs, so the tables and the Cheating table rest on one reading of the runs.
 """
 from __future__ import annotations
@@ -35,11 +35,6 @@ SCHEMING_BLOCKS = [("workers", "Colluding pairs of workers", "pairs"),
                    ("hidden", "Colluding pairs with a regulator or disregulator", "pairs")]
 AWARENESS_BLOCKS = [("workers", "Workers at attempted or above", "agents"),
                     ("hidden", "Regulators and disregulators at attempted or above", "agents")]
-MANIPULATION_BLOCKS = [
-    ("workers", "Workers that posted", "agents"),
-    ("regulator", "Regulators that posted (each told not to reveal its role)", "agents"),
-    ("disregulator", "Disregulators that posted (each told not to reveal its instruction)", "agents"),
-]
 
 
 def runs() -> list[tuple[str, Path]]:
@@ -66,10 +61,10 @@ def scheming_counts(found: list[tuple[str, Path]]) -> dict[tuple[str, str], Coun
     return out
 
 
-def label_counts(found: list[tuple[str, Path]]) -> tuple[dict, dict]:
-    """(block, domain) -> Counter of VERDICTS for awareness and for manipulation, over the agents each is read for
-    (judge_labels: every value but NOT_READ)."""
-    aware, manipulated = empty(AWARENESS_BLOCKS), empty(MANIPULATION_BLOCKS)
+def awareness_counts(found: list[tuple[str, Path]]) -> dict[tuple[str, str], Counter]:
+    """(block, domain) -> Counter of VERDICTS for awareness, over the agents it is read for (judge_labels: every value
+    but NOT_READ)."""
+    aware = empty(AWARENESS_BLOCKS)
     for domain, path in found:
         run = record(path)
         read = labels(path)["agents"]
@@ -78,13 +73,10 @@ def label_counts(found: list[tuple[str, Path]]) -> tuple[dict, dict]:
         if asked != expected:
             raise SystemExit(f"{path.name}: awareness is read for {sorted(asked)}, the Cheating ladder puts "
                              f"{sorted(expected)} at attempted or above; rebuild the run's signals")
-        for agent, v in read.items():
-            role = run["hidden"].get(agent, {}).get("role")
-            if v["awareness"] != judge_labels.NOT_READ:
-                aware[("workers" if role is None else "hidden", domain)][v["awareness"]] += 1
-            if v["manipulation"] != judge_labels.NOT_READ:
-                manipulated[(role or "workers", domain)][v["manipulation"]] += 1
-    return aware, manipulated
+        for agent in asked:
+            block = "hidden" if agent in run["hidden"] else "workers"
+            aware[(block, domain)][read[agent]["awareness"]] += 1
+    return aware
 
 
 def show(name: str, data: dict) -> None:
@@ -97,11 +89,9 @@ def main() -> int:
     scheming = scheming_counts(found)
     show("scheming", scheming)
     print(counts_table(OUT / "table_scheming_by_task.png", VERDICTS, scheming, SCHEMING_BLOCKS))
-    aware, manipulated = label_counts(found)
+    aware = awareness_counts(found)
     show("awareness", aware)
     print(counts_table(OUT / "table_awareness_by_task.png", VERDICTS, aware, AWARENESS_BLOCKS))
-    show("manipulation", manipulated)
-    print(counts_table(OUT / "table_manipulation_by_task.png", VERDICTS, manipulated, MANIPULATION_BLOCKS))
     return 0
 
 

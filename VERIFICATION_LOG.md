@@ -1745,3 +1745,10 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **Run by me.** The whole unit suite: 2941 passed, 6 xfailed. `paper_sources --check`: agrees. Ruff clean. Tools tests: 91 passed.
 - **Viewed by me**, from a test copy of the viewer on port 8793: the runs page (Awareness, Manipulation, Disclosure, CheatBench judge columns), the Details tab of flipt_minimal_cheat_dsflash_fixed3 (three ladders, awareness beside collusion, the labels, the clauses with the judge's labels beside), its Board tab (a post quoted by the scheming judge, with the quote).
 - **UNVERIFIED by me.** The paper's 42 pages (the paper agent viewed them). The Ladders page and a regulated run's Details tab (screenshots taken, not opened). Docker smoke suites. The Docent collection online still has the old labels.
+
+## 2026-11-19, the joins after the judges' second passes (uncommitted)
+- **Scheming re-run, first attempt: BROKEN, $0.** 10 calls, 0 parsed: OpenAI refused the BoardVerdict schema (nested Flag reached it as `items: {}`). Fixed in `cheatbench_judge.response_schema` (`inlined`), with a test; the labels schemas hash the same. A second run (not mine) parsed 10/10 for $0.02.
+- **Measures.** `collusion.py` is the one reader of the scheming board row: per pair verdict and deciding flags, per run every flag. Viewer and paper read it. VERIFIED by tests and by reading the viewer's /api/board answer for flipt_minimal_cheat_dsflash_fixed3.
+- **Viewed by me** (test viewer on 8811, headless Chrome): runs page, Ladders page (How reliable, judge labels), Details tab collusion panel and Board tab of flipt_minimal_cheat_dsflash_fixed3. VERIFIED by looking.
+- **Paper.** `make paper` rc 0, `make paper-check` agrees; pages 5, 18, 21, 22, 26, 34, 35, 36 rendered at 70 dpi and viewed. VERIFIED.
+- **UNVERIFIED.** No independent reading of the second scheming and labels verdicts; manipulation stays unvalidated.

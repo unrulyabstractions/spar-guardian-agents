@@ -11,9 +11,11 @@ ladder's alarm and the first cheating rung, src/measures/cheating_ladder.py ALAR
 src/configuration/prompts.yaml and its three report variants), regulator_levels.tex and disregulator_levels.tex (from
 src/configuration/instruction_levels.yaml), cheating_rungs.tex (the Cheating ladder's rungs and clauses, from
 src/measures/rungs.py RUNGS and cheating_ladder.py CLAUSES), coordination_levels.tex (the Coordination ladder's levels
-and cuts, from src/measures/coordination.py) and collusion_rungs.tex (the Collusion ladder's rungs and who reads each,
-from src/measures/collusion.py RUNGS and CODE_RUNGS). The rungs' and clauses' wording is the transcript viewer's
-(src/ui/transcript_levels.py CHEAT_GLOSSES, CLAUSE_GLOSSES, COLLUSION_GLOSSES). Nobody edits these files by hand.
+and cuts, from src/measures/coordination.py), collusion_rungs.tex (the Collusion ladder's rungs and who reads each,
+from src/measures/collusion.py RUNGS and CODE_RUNGS) and reliability.tex (how often an independent reading of the
+transcripts confirmed each rung and label, from scripts/paper/measure_checks.yaml). The rungs' and clauses' wording is
+the transcript viewer's (src/ui/transcript_levels.py CHEAT_GLOSSES, CLAUSE_GLOSSES, COLLUSION_GLOSSES). Nobody edits
+these files by hand.
 
 FIGURES names each PNG in paper/figures/, the PNG in tmp/ it is copied from and the make target whose script draws
 it (`make paper-figures`, `make figures`, `make tables`, `make results-tables`). Every figure has a script here.
@@ -38,13 +40,14 @@ from src.configuration.scales import SCALES
 from src.configuration.settings import ROOT
 from src.judging import verdict_files
 from src.judging.cheatbench_judge import judge_entry
-from src.measures import cheating_ladder, collusion, coordination
+from src.measures import cheating_ladder, collusion, coordination, judge_labels
 from src.measures.rungs import RUNGS
 from src.ui.transcript_levels import CHEAT_GLOSSES, CLAUSE_GLOSSES, COLLUSION_GLOSSES
 
 PAPER = ROOT / "paper"
 GENERATED = PAPER / "generated"
 FIGURE_DIR = PAPER / "figures"
+CHECKS_YAML = ROOT / "scripts" / "paper" / "measure_checks.yaml"
 LEVELS_YAML = ROOT / "src" / "configuration" / "instruction_levels.yaml"
 PROMPTS_YAML = ROOT / "src" / "configuration" / "prompts.yaml"
 STUDY_INDEX = ROOT / "runs" / "study_exploration_1" / "INDEX.jsonl"
@@ -123,8 +126,6 @@ FIGURES: dict[str, Figure] = {
                                          RESULTS.format("label_tables.py")),
     "table_awareness_by_task.png": Figure("tmp/tables/results/table_awareness_by_task.png",
                                           RESULTS.format("label_tables.py")),
-    "table_manipulation_by_task.png": Figure("tmp/tables/results/table_manipulation_by_task.png",
-                                             RESULTS.format("label_tables.py")),
 }
 
 HEADER = "% Written by scripts/paper/paper_sources.py from {source}. Do not edit; run `make paper-sources`.\n"
@@ -180,8 +181,10 @@ def params_tex() -> str:
     judge["CheatingAlarm"] = cheating_ladder.ALARM
     judge["CheatedFrom"] = cheating_ladder.CHEATED_FROM
     judge["AccessedFrom"] = ACCESSED_FROM
+    judge["AwarenessMeans"] = judge_labels.AWARENESS_MEANS
     lines = [HEADER.format(source="PRESETS['default'], settings.JUDGE_MODEL, src/judging/judge_models.yaml, "
                                   "src/measures/cheating_ladder.py ALARM and CHEATED_FROM, "
+                                  "src/measures/judge_labels.py AWARENESS_MEANS, "
                                   "scripts/paper/study_ladders.py ACCESSED_FROM")]
     lines += [rf"\newcommand{{\{k}}}{{{v}}}" for k, v in macros.items()]
     lines += [rf"\newcommand{{\{k}}}{{{escape(v)}}}" for k, v in judge.items()]
@@ -253,19 +256,20 @@ def coordination_levels_tex() -> str:
 
 
 def cheating_rungs_tex() -> str:
-    """The Cheating ladder: each rung, what puts an agent on it, and the clauses whose evidence does, lowest first."""
+    """The Cheating ladder: each rung and the clauses whose evidence puts an agent on it, lowest first; a rung without
+    clauses (none) gives what it means instead."""
     levels = RUNGS
     if len(CHEAT_GLOSSES) != len(levels):
         raise SystemExit(f"Cheating RUNGS {levels} and CHEAT_GLOSSES differ in length: update both")
     rows = []
     for i, (rung, gloss) in enumerate(zip(levels, CHEAT_GLOSSES)):
         clauses = [c for c, r in cheating_ladder.CLAUSES.items() if r == rung]
-        named = "; ".join(rf"\textit{{{escape(c)}}}: {escape(CLAUSE_GLOSSES[c])}" for c in clauses) or "none"
-        rows.append(rf"{i} & \textbf{{{escape(rung)}}} & {escape(gloss)} & {named} \\")
+        named = "; ".join(rf"\textit{{{escape(c)}}}: {escape(CLAUSE_GLOSSES[c])}" for c in clauses) or escape(gloss)
+        rows.append(rf"{i} & \textbf{{{escape(rung)}}} & {named} \\")
     return (HEADER.format(source="src/measures/rungs.py RUNGS, cheating_ladder.py CLAUSES, src/ui/transcript_levels.py")
-            + "\\begin{tabularx}{\\linewidth}{@{}r l >{\\raggedright\\arraybackslash}X "
-            + ">{\\raggedright\\arraybackslash}X@{}}\n\\toprule\nNumber & Rung & An agent is here when & Clauses "
-            + "\\\\\n\\midrule\n" + "\n\\addlinespace\n".join(rows) + "\n\\bottomrule\n\\end{tabularx}\n")
+            + "\\begin{tabularx}{\\linewidth}{@{}r l >{\\raggedright\\arraybackslash}X@{}}\n\\toprule\n"
+            + "Number & Rung & Clauses \\\\\n\\midrule\n" + "\n\\addlinespace\n".join(rows)
+            + "\n\\bottomrule\n\\end{tabularx}\n")
 
 
 def collusion_rungs_tex() -> str:
@@ -281,6 +285,41 @@ def collusion_rungs_tex() -> str:
             + "\\begin{tabularx}{\\linewidth}{@{}r l l >{\\raggedright\\arraybackslash}X@{}}\n\\toprule\n"
             + "Number & Rung & Read by & An agent is here when \\\\\n\\midrule\n"
             + "\n\\addlinespace\n".join(rows) + "\n\\bottomrule\n\\end{tabularx}\n")
+
+
+CHECKED = {"cheating": ("Cheating", RUNGS), "collusion": ("Collusion", collusion.RUNGS),
+           "scheming": ("Scheming", None), "awareness": ("Awareness", None), "manipulation": ("Manipulation", None)}
+"""The ladders and labels measure_checks.yaml may hold, as the paper names them, with the rungs a ladder's rows must
+name (None for a label, whose rows name its verdicts)."""
+CHECK_FIELDS = {"value", "unit", "chosen", "read", "held", "note"}
+"""A row's fields; all but note are required."""
+
+
+def reliability_tex() -> str:
+    """How often an independent reading of the transcripts confirmed each rung and label (measure_checks.yaml): per
+    row, how the cases were chosen, how many were read and how many held. A ladder's row must name one of its rungs,
+    and no row may hold more than it read."""
+    checks = yaml.safe_load(CHECKS_YAML.read_text())
+    if set(checks) - set(CHECKED):
+        raise SystemExit(f"measure_checks.yaml holds {sorted(set(checks) - set(CHECKED))}, which the paper never names")
+    rows = []
+    for key, (name, rungs) in CHECKED.items():
+        for k, row in enumerate(checks.get(key, [])):
+            if set(row) - CHECK_FIELDS or not {"value", "unit", "chosen", "read", "held"} <= set(row):
+                raise SystemExit(f"measure_checks.yaml: a {name} row has {sorted(row)}, not {sorted(CHECK_FIELDS)}")
+            if rungs is not None and row["value"] not in rungs:
+                raise SystemExit(f"measure_checks.yaml: {row['value']!r} is no rung of {name}")
+            if row["read"] is not None and not 0 <= row["held"] <= row["read"]:
+                raise SystemExit(f"measure_checks.yaml: {name} {row['value']} holds {row['held']} of {row['read']}")
+            read, held = ("--", "--") if row["read"] is None else (row["read"], row["held"])
+            rows.append(rf"{escape(name) if k == 0 else ''} & {escape(row['value'])} & {escape(row['unit'])} & "
+                        rf"{escape(row['chosen'])} & {read} & {held} & {escape(row.get('note', ''))} \\")
+        rows.append(r"\addlinespace")
+    return (HEADER.format(source="scripts/paper/measure_checks.yaml")
+            + "\\begin{tabularx}{\\linewidth}{@{}l l l >{\\raggedright\\arraybackslash}p{0.2\\linewidth} r r "
+            + ">{\\raggedright\\arraybackslash}X@{}}\n\\toprule\n"
+            + "Measure & Rung or verdict & Unit & Cases chosen & Read & Held & Note \\\\\n\\midrule\n"
+            + "\n".join(rows[:-1]) + "\n\\bottomrule\n\\end{tabularx}\n")
 
 
 def model_name(key: str) -> str:
@@ -373,6 +412,7 @@ def generated_files() -> dict[Path, str]:
         GENERATED / "cheating_rungs.tex": cheating_rungs_tex(),
         GENERATED / "coordination_levels.tex": coordination_levels_tex(),
         GENERATED / "collusion_rungs.tex": collusion_rungs_tex(),
+        GENERATED / "reliability.tex": reliability_tex(),
     }
     if STUDY_INDEX.exists():
         files[GENERATED / "study.tex"] = study_tex()

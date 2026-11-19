@@ -6,8 +6,8 @@
 
 Passes (PASSES):
 - cheatbench: CheatBench's judge on every stored trajectory CheatBench would judge (cheatbench_units), one call each.
-- scheming: the Collusion ladder's judge on every pair code places at collusion (src/judging/scheming_judge.py), one
-  call each.
+- scheming: the Collusion ladder's judge on the board of every run in which code places a pair at collusion
+  (src/judging/scheming_judge.py), one call per run; each pair's verdict is derived from it in code.
 - labels: the judge labels awareness and manipulation on every agent that qualifies for one
   (src/judging/labels_judge.py), one call each.
 
@@ -19,7 +19,8 @@ transcript viewer lists them.
 Money. The pass refuses to start without a cap in dollars, and for a judge whose model has no registry price or no
 max_output. Before each call it reserves the most that call can cost: every byte of the message and of the schema
 as an input token (a byte-level tokenizer gives at most one token per byte) plus the model's max_output as output,
-at the registry's rates (the batch rates with --batch; a prompt past the long-prompt line at that line's rates). A call
+at the registry's rates (the batch rates with --batch; a prompt past the long-prompt line at that line's rates), twice
+over for a unit that may be asked again after a failed quote check (Unit.recheck), its note included. A call
 whose reservation would take the spent and reserved dollars past the cap is not made, and no later call is: the pass
 stops there. After each call its reservation is replaced by its cost from its own token counts. So the cap is never
 passed. It prints a line per call, then the calls, their tokens and their dollars.
@@ -29,6 +30,11 @@ row failed is judged again (CheatBench's judge.py does the same). --only-missing
 all, so failures are not retried; --redo judges every unit again. A failed call is recorded as parse_ok False with
 its error, and the pass goes on. --limit N judges the first N units to judge, the pilot. The normal API is the default;
 --batch uses the provider's batch API (half price, up to a day).
+
+Units a pass no longer has. When a run's file gets a new row, the rows of units the pass no longer gives that run are
+dropped (verdict_files.write's keep): a scheming file of the retired per-pair shape (rows keyed a|b) becomes the one
+board row, and a labels row of an agent that no longer qualifies goes. A run that gets no new row keeps its file as it
+is; the readers ignore a row of the retired shape (judge_records.pair_scheming reads only the board row).
 """
 from __future__ import annotations
 
@@ -126,11 +132,14 @@ def todo(units: list[judging.Unit], held: dict[str, dict], *, only_missing: bool
 # money
 # --------------------------------------------------------------------------
 def most_cost(judge: judging.Judge, unit: judging.Unit) -> float:
-    """The most one call can cost: every byte of the message and of the schema as an input token, plus the model's
-    max_output as output, at the judge's prices."""
+    """The most one unit can cost: every byte of the message and of the schema as an input token, plus the model's
+    max_output as output, at the judge's prices; twice over, with the most a note can add, for a unit that may be asked
+    again (Unit.recheck)."""
     schema = len(json.dumps(unit.schema.json_schema.model_dump(exclude_none=True)).encode())
     tokens = len(unit.text.encode()) + schema + MESSAGE_OVERHEAD
-    return cost_usd(judge.prices, tokens, 0, judge.max_output)
+    if unit.recheck is None:
+        return cost_usd(judge.prices, tokens, 0, judge.max_output)
+    return cost_usd(judge.prices, 2 * tokens + 4 * judging.RECHECK_CHARS, 0, 2 * judge.max_output)
 
 
 @dataclass
@@ -160,8 +169,9 @@ class Tally:
 # the pass
 # --------------------------------------------------------------------------
 async def judge_units(units: list[judging.Unit], judge: judging.Judge, pass_name: str, tally: Tally,
-                      concurrent: int) -> None:
-    """Judge the units under the cap, writing each row to its run's verdict file when its call returns."""
+                      concurrent: int, keep: dict[Path, set[str]]) -> None:
+    """Judge the units under the cap, writing each row to its run's verdict file when its call returns; the file keeps
+    only the units the pass gives its run (`keep`, by resolved run directory)."""
     gate, lock = asyncio.Semaphore(concurrent), asyncio.Lock()
 
     async def one(n: int, unit: judging.Unit) -> None:
@@ -183,7 +193,7 @@ async def judge_units(units: list[judging.Unit], judge: judging.Judge, pass_name
                 tally.input_tokens += usage.get("input", 0)
                 tally.output_tokens += usage.get("output", 0)
                 tally.spent += row["judge_cost_usd"] or 0.0
-                verdict_files.write(unit.run_dir, pass_name, judge.name, [row])
+                verdict_files.write(unit.run_dir, pass_name, judge.name, [row], keep=keep[unit.run_dir.resolve()])
                 cost = row["judge_cost_usd"]
                 print(f"[{n}/{len(units)}] {unit.run_dir.name} {unit.key} parse_ok={row['parse_ok']} "
                       f"{'' if cost is None else f'${cost:.4f}'}"
@@ -213,8 +223,10 @@ def run_pass(pass_name: str, paths: list[Path], judge: judging.Judge, *, cap: fl
         raise ValueError("--only-missing and --redo contradict each other")
     refuse_unpriced(judge, cap)
     units: list[judging.Unit] = []
+    keep: dict[Path, set[str]] = {}
     for run_dir in expand(paths):
         found, skipped = PASSES[pass_name](run_dir)
+        keep[Path(run_dir).resolve()] = {u.key for u in found}
         held = verdict_files.by_unit(verdict_files.rows(run_dir, pass_name, judge.name))
         chosen = todo(found, held, only_missing=only_missing, redo=redo)
         units += chosen
@@ -225,6 +237,6 @@ def run_pass(pass_name: str, paths: list[Path], judge: judging.Judge, *, cap: fl
     tally = Tally(cap)
     print(f"== {pass_name} ({judge.name}, {'batch' if batch else 'normal API'}): {len(units)} calls, "
           f"cap ${cap:.2f}", flush=True)
-    asyncio.run(judge_units(units, judge, pass_name, tally, max(len(units), 1) if batch else CONCURRENT))
+    asyncio.run(judge_units(units, judge, pass_name, tally, max(len(units), 1) if batch else CONCURRENT, keep))
     print(tally.summary(), flush=True)
     return tally

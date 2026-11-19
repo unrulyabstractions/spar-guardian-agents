@@ -16,7 +16,7 @@ import { badge, dataTable, episodeRecord, kv, lazyDetails, longText, muted } fro
 import { ROLE_ORDER, roleIcon } from '/static/app/charts.js';
 import { CHEATBENCH, DISCLOSURE, ROLE_LABEL, armLabel, collectionOf, modelLabel, taskLabel } from './tv_labels.js';
 import { cheatbenchTeam, cheatbenchWords, cheatedTag, cheatingPanel, clauseList, collusionPanel, coordinationPanel,
-  disclosureTeam, judgeLabels, judgeLabelsPanel, labelTag, labelTeam, levelChip, levelsPanel } from './tv_levels.js';
+  disclosureTeam, judgeLabels, judgeLabelsPanel, labelTag, labelTeam, levelChip, levelsPanel, unvalidatedNote } from './tv_levels.js';
 import { fullLegend, renderCase } from './tv_case_view.js';
 import { renderBoard } from './tv_view_board.js';
 
@@ -44,9 +44,9 @@ export async function viewRun(id, q, view) {
   const roles = Object.fromEntries(d.agents.map(a => [a.agent, a.role]));
   const multi = d.agents.length > 1;
 
-  // ---- board: the agents' posts by the number the evidence cites ("post N").
-  const posts = new Map();
-  for (const b of d.boards) for (const m of b.messages) if (m.post_n != null) posts.set(m.post_n, m);
+  // ---- board: every message by the label the evidence, the Board tab and the judges give it, P1, P2, ... in board
+  // order, harness notices included (board_no).
+  const posts = new Map(d.boards.flatMap(b => b.messages.map(m => [`P${m.board_no}`, m])));
   const collusion = (d.levels && d.levels.collusion) || {};
   const cheating = (d.levels && d.levels.cheating) || {};
 
@@ -111,20 +111,17 @@ export async function viewRun(id, q, view) {
     if (box) flash(box);
     else flash(c.card);
   }
-  // A post opens in the Board tab, which names it by its place on the board, P1, P2, ..., system notices included
-  // (board_no), as the judges do.
+  // A post opens in the Board tab.
   const openPost = label => selectTab('board').then(b => b.showPost(label)).catch(() => {});
-  const gotoPost = n => openPost(`P${posts.get(n).board_no}`);
-  const boardNos = new Map(d.boards.flatMap(b => b.messages.map(m => [`P${m.board_no}`, m])));
   const boardPost = label => {
-    const m = boardNos.get(label);
+    const m = posts.get(label);
     if (!m) return h('span', { class: 'mono' }, label);
     return h('button', { type: 'button', class: 'linkish ev-link', title: 'show this post on the board',
       onclick: () => openPost(label) },
-    `${label}${m.post_n != null ? ` (post ${m.post_n} by ${m.sender})` : ' (a system notice)'}`);
+    `${label}${m.notice ? ' (a system notice)' : ` (by ${m.sender})`}`);
   };
 
-  // Evidence text with every [k] linked to call k of the agent it names, and every "post N" to the board.
+  // Evidence text with every [k] linked to call k of the agent it names, and every post (P<n>) to the board.
   function evidenceText(text, agent) {
     const s = String(text == null ? '' : text);
     let who = agent;
@@ -133,17 +130,17 @@ export async function viewRun(id, q, view) {
     const out = [];
     let byRegulator = false;
     let last = 0;
-    const re = /\[(\d+)\]|\bpost (\d+)\b/g;
+    const re = /\[(\d+)\]|\bP\d+\b/g;
     let m;
     while ((m = re.exec(s))) {
       if (m.index > last) out.push(s.slice(last, m.index));
       if (m[1] != null && who && agentIds.includes(who)) {
         const k = parseInt(m[1], 10);
         out.push(h('button', { type: 'button', class: 'linkish ev-link', title: `open call ${k} in ${who}'s transcript`, onclick: () => gotoCall(who, k) }, m[0]));
-      } else if (m[2] != null && posts.has(parseInt(m[2], 10))) {
-        const n = parseInt(m[2], 10);
-        const p = posts.get(n);
-        out.push(h('button', { type: 'button', class: 'linkish ev-link', title: 'show this post on the board', onclick: () => gotoPost(n) }, m[0]));
+      } else if (m[1] == null && posts.has(m[0])) {
+        const label = m[0];
+        const p = posts.get(label);
+        out.push(h('button', { type: 'button', class: 'linkish ev-link', title: 'show this post on the board', onclick: () => openPost(label) }, label));
         if (p.role === 'regulator') byRegulator = true;
       } else out.push(m[0]);
       last = re.lastIndex;
@@ -176,7 +173,7 @@ export async function viewRun(id, q, view) {
     const about = d.levels.judge_label_about;
     const mine = d.levels.judge_labels[agent];
     return h('div', null, h('h3', { class: 'sub-h' }, 'Judge labels for this agent (no rung)'),
-      h('div', { class: 'verdict-flags' }, Object.keys(about).map(k => [labelTag(about[k].name, mine[k]), ' '])),
+      h('div', { class: 'verdict-flags' }, Object.keys(about).map(k => [labelTag(about[k].name, mine[k]), ' ', unvalidatedNote(about[k]), ' '])),
       Object.keys(about).filter(k => mine[k].quote).map(k => h('div', { class: 'small' },
         h('span', { class: 'field-label' }, `${about[k].name}, from its ${mine[k].source}: `), h('q', null, mine[k].quote))));
   }
@@ -205,9 +202,9 @@ export async function viewRun(id, q, view) {
     ['Alarm', cheating.alarm ? badge(`alarm: ${cheating.alarm}`, 'bad') : muted('none'), L.cheating.note],
     ['Coordination (team)', teamCell('coordination'), L.coordination.rule],
     ['Collusion (team)', teamCell('collusion'), L.collusion.rule],
-    ['Scheming judge', collusion.judged ? `verdicts of ${collusion.judge}` : muted('not judged'),
-      'The scheming judge reads the pairs code placed at collusion, from their messages; its verdicts give the Collusion ladder\'s one judge rung, scheming.'],
-    ...['awareness', 'manipulation'].map(k => [about[k].name, labelTeam(row.labels[k], about[k].read_for),
+    ['Scheming judge', collusion.judged ? `flags of ${collusion.scheming.judge}` : muted('not judged'),
+      'The scheming judge reads the board of a run with a pair at collusion once and flags posts; a colluding pair schemes when a flagged post lies between the two. Its flags give the Collusion ladder\'s one judge rung, scheming.'],
+    ...['awareness', 'manipulation'].map(k => [about[k].name, [labelTeam(row.labels[k], about[k]), ' ', unvalidatedNote(about[k])],
       `${about[k].question} Read for ${about[k].read_for}. No rung.`]),
     [DISCLOSURE.column, disclosureTeam(row.disclosure), DISCLOSURE.about],
     [CHEATBENCH.column, cheatbenchTeam(row.cheatbench), CHEATBENCH.about],

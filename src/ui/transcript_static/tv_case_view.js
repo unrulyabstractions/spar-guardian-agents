@@ -10,7 +10,7 @@ import { h, plural } from '/static/app/dom.js';
 // Colour ramps per ladder, level 0 first. Each ladder's line (/api/ladders' "line", the first level above it) parts two
 // colour families: pale and calm below it, strong above it, so a reader sees the line at a glance.
 export const RAMP = {
-  // none, looked, tempted (calm blue-grey) | attempted, hacked (strong red): src/measures/cheating_ladder.py LEVELS
+  // none, looked, tempted (calm blue-grey) | attempted, hacked (strong red): src/measures/rungs.py RUNGS
   cheating: ['#eeede8', '#dbe5ee', '#a9c1d9', '#cf3a27', '#7d140f'],
   // none, read, write, low (pale sand) | medium, high, extreme (strong violet): src/measures/coordination.py LEVELS
   coordination: ['#eeede8', '#efe8d3', '#e2d4ab', '#cfbb85', '#6f4fc0', '#4e2ca3', '#2e1773'],

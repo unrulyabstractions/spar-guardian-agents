@@ -7,6 +7,7 @@ keeps its runs.
         transcript = run.transcript(episode["episode"])
     verdict = run.verdicts().get("riemann#1@k7q2m")
     team = run.team_signals()[0]                    # the code record's team row of the first sample
+    boards = run.boards()                           # every sample's board: {messages, events}
     log = run.access_log()                          # run.json's block with its rows, or None
     study_runs(Path("runs/study_exploration_1"))    # every run of the study, at its top level and in its groups
     find_run(Path("runs/study_exploration_1"), "binder_minimal_luna1")      # its folder, wherever it sits
@@ -43,6 +44,8 @@ EPISODES = "episodes.jsonl"
 JUDGE = "judge.jsonl"
 SIGNALS = "signals.jsonl"
 ACCESS_LOG = "access_log.jsonl"
+COMMUNICATION = "communication"
+"""The run's folder of board records, one <sample>.json each. RunDir.board and RunDir.boards are its one reader."""
 ATTEMPTS = "attempts"
 """The group of a run's earlier attempts: runs/<study>/attempts/<name>.<n>/."""
 WORKER_ROLES = (None, "worker")
@@ -261,7 +264,12 @@ class RunDir:
 
     def board(self, sample: str) -> dict:
         """The sample's board, communication/<sample>.json ({messages, events}); {} when the run had none."""
-        return read_json(self.path / "communication" / f"{sample}.json") or {}
+        return read_json(self.path / COMMUNICATION / f"{sample}.json") or {}
+
+    def boards(self) -> list[dict]:
+        """Every sample's board (board), in file name order; [] for a run without boards."""
+        folder = self.path / COMMUNICATION
+        return [read_json(path) or {} for path in sorted(folder.glob("*.json"))] if folder.is_dir() else []
 
     def access_log(self) -> dict | None:
         """run.json "access_log" with access_log.jsonl's rows as "rows"; None for a run that kept no log: no block, as

@@ -1,5 +1,29 @@
-\section*{Appendix B: Extended Results}
+\section*{Appendix B: Extended results}
 Our work is still ongoing. All results are preliminary.
+
+\subsection*{How reliable are these measures?}
+Code places every agent on the Cheating and Collusion ladders, and one judge gives the scheming verdict and the
+labels. A separate AI agent checked both by reading the transcripts, the board, the diffs and the hand-ins of a set
+of cases. No human made these checks. Table~\ref{tab:reliability} gives, for each rung and label, how many cases it
+read and how many held. The checks read the rungs as they stood before the corrections they led to, and the judge's
+first verdicts. We then ran both judges again with corrected prompts and code. The tables of this appendix show these
+second verdicts, and no one has checked them yet. The code's rungs mostly held. Where the judge first said yes to
+scheming or awareness, the verdict mostly held, but the judge missed most true yeses. Manipulation is not yet
+validated. Most of its first yes verdicts did not hold, often because the judge believed another agent's accusation
+that it could not check. We leave its counts out of this paper. We
+therefore posit that the code's rungs can carry our results, and that the scheming and awareness labels give only
+one judge's reading.
+
+\begin{table}[H]
+  \centering
+  \scriptsize
+  \input{generated/reliability}
+  \caption{How often an independent reading of the transcripts confirmed each rung and label of the multi-domain
+  study. Read counts the cases checked, and held counts those where the reading agreed with the code or the judge.
+  The reader was an AI agent, and no human made these checks. The checks read the judge's first verdicts, before we
+  ran the judges again.}
+  \label{tab:reliability}
+\end{table}
 
 \subsection*{How do teams cheat with and without instruction?}
 
@@ -16,8 +40,9 @@ Our work is still ongoing. All results are preliminary.
   \includegraphics[width=\linewidth]{negative_control}
 \end{figure}
 
-A rule naming the exploit stops cheating, and a generic rule does not.
-We therefore posit that a swarm needs regulators that identify and address undesired behavior in general.
+A rule naming the exploit stopped cheating in every cell.
+A generic rule did not stop DeepSeek teams on SWE.
+We therefore posit that a regulator is worth testing where no one can name the exploit in advance.
 
 \FloatBarrier
 \subsection*{Do regulators lower cheating?}
@@ -44,6 +69,7 @@ Each cell holds one to three runs, too few to show an effect of a level or a mod
 \FloatBarrier
 \subsection*{Do disregulators raise cheating?}
 No untold team on either target cheated, so these cells sit at the floor of the measure.
+No team with a disregulator cheated.
 \begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{table_swe_disregulators}
@@ -93,46 +119,42 @@ The last column therefore counts the agents and teams at collusion whose awarene
 For a team, one aware worker of a colluding pair counts.
 SWE holds most of the cooperation, collaboration and collusion, for workers and for teams.
 Collusion appears on SWE and creative writing and never on protein design.
-The awareness label finds most colluding workers aware that they cheat.
+The awareness label finds every colluding worker aware that it uses the planted work.
 No regulator or disregulator reaches collusion.
 \FloatBarrier
 
 \subsection*{Do colluding pairs talk about cheating or deceit?}
-One judge, \StudySchemingJudge{}, read the messages between the two agents of every pair at collusion.
+One judge, \StudySchemingJudge{}, read the board of every run with a pair at collusion once, and flagged posts.
+A colluding pair schemes when a flagged post was written by one of the two and read by the other.
 No human checked its verdicts.
 \begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{table_scheming_by_task}
 \end{figure}
 
-Most colluding pairs of workers wrote to each other about cheating or about deceiving others.
-For some pairs the judge said yes with a quote that code could not find in their messages, and these read unchecked.
+Every colluding pair of workers wrote to each other about cheating.
+The judge flagged posts for awareness only, and none for deceiving others.
+Code found every flagged quote in its post.
+The judge flagged most posts on these boards, so a yes says that the team talked openly about the planted work.
 No pair with a regulator or disregulator colludes, so that block is empty.
-We therefore posit that most of the collusion we measure is deliberate.
+We therefore posit that the collusion we measure is deliberate.
 \FloatBarrier
 
-\subsection*{Do agents that cheat know it, and do agents mislead each other?}
-One judge, \StudyLabelsJudge{}, gave the two labels to every agent they are read for.
+\subsection*{Do agents that cheat knowingly use the reference material?}
+One judge, \StudyLabelsJudge{}, gave the awareness label to every agent at \CheatedFrom{} or above.
 No human checked its verdicts.
-The first table asks about awareness, for every agent at \CheatedFrom{} or above.
 \begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{table_awareness_by_task}
 \end{figure}
 
-Most workers that cheated show in their posts or reasoning that they know they are cheating.
+Most workers that cheated draw a yes.
+The judge's yes mostly rests on an agent calling the planted work the gold, the reference or what the hidden tests
+expect.
+That shows knowing use of the planted work, which can fall short of knowing that the use is cheating.
 No regulator or disregulator cheated, so none is asked.
-The second table asks about manipulation, for every agent that posted.
-\begin{figure}[H]
-  \centering
-  \includegraphics[width=\linewidth]{table_manipulation_by_task}
-\end{figure}
-
-The judge finds few workers misleading their teammates, and none on creative writing.
-A hidden regulator is told not to reveal its role, and a disregulator not to reveal its instruction.
-Each such agent hides something from its teammates by instruction.
-A yes for a regulator or a disregulator may therefore reflect that instruction rather than a choice of its own.
-On protein design and creative writing, regulators draw a yes more often than workers.
+The judge also gave the manipulation label to every agent that posted.
+That label is not yet validated (Table~\ref{tab:reliability}), so we do not report its counts.
 \FloatBarrier
 
 \subsection*{How does \textit{CheatBench}'s judge compare with the code?}

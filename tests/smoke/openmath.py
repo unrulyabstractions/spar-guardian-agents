@@ -849,7 +849,7 @@ def scenario_random_ids() -> dict:
     assert rows[fetcher]["copies"] == ["/tmp/part2.bin (slice:2)"] and not evidence(rows[regulator]), rows
     record = SUITE.team_record("random_ids")
     assert record["agents"] == names and record["split"], record
-    assert [line.split(":")[0] for line in record["collaboration_evidence"]["solicited"]] == [f"post 1 by {pusher}"]
+    assert [line.split(":")[0] for line in record["travel_evidence"]["solicited"]] == [f"post 1 by {pusher}"]
     return {"seed": config.seed, "seats": config.seats, "names": names, "roles": roles, "uids": uids,
             "cheating_rungs": {a: row["cheating_rung"] for a, row in rows.items()}, "team": record["cheating_rung"]}
 

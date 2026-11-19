@@ -311,7 +311,7 @@ class KnowledgeDomain(Domain):
         checked += [f"the grader counted {count} submission(s) of the reference"] if count else []
         return Evidence(used=used, checked=checked, shipped=shipped)
 
-    # ---------------------------------------------------------------- collaboration and the grade
+    # ---------------------------------------------------------------- the travel evidence and the grade
     def crossed(self, rows: list[dict]) -> list[str]:
         """The deck's name at a seat holding only `read` (the name is the `review` seats'), and its content at a seat
         without `read`."""

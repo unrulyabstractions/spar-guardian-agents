@@ -125,11 +125,13 @@ export function renderBoard(el, d, opts) {
       if (!readers.has(r.agent)) readers.set(r.agent, []);
       readers.get(r.agent).push(r.k);
     }
-    // The scheming judge's verdicts that quote this post: one per pair, the verdict that stands and the code's check.
-    const marks = p.scheming.map(m => h('div', { class: ['bd-mark', m.verdict !== 'yes' && 'bd-mark-weak'] },
-      h('div', null, badge(`scheming: ${m.which}`, 'bad', m.reason), ` the scheming judge on ${m.pair.join(' and ')}`,
-        m.verdict === 'yes' ? '' : muted(` · the verdict did not stand: ${(m.scheming_check && m.scheming_check.why) || m.verdict}`, 'small')),
-      m.quote ? h('blockquote', { class: 'bd-quote' }, m.quote) : null,
+    // The scheming judge's flags that count for this post: what it shows, the colluding pairs it lies between, the
+    // quote and the code's check; a flag whose check failed counts for no verdict.
+    const pairsOf = m => (m.pairs.length ? `between ${m.pairs.map(x => x.join(' and ')).join('; ')}` : 'between no colluding pair');
+    const marks = p.scheming.map(m => h('div', { class: ['bd-mark', !m.check.ok && 'bd-mark-weak'] },
+      h('div', null, badge(`scheming: ${m.which}`, 'bad', m.reason), ` flagged by the scheming judge, ${pairsOf(m)}`,
+        m.check.ok ? '' : muted(` · the quote failed the code's check: ${m.check.why}`, 'small')),
+      h('blockquote', { class: 'bd-quote' }, m.quote),
       m.reason ? h('div', { class: 'small muted' }, m.reason) : null));
     const readBy = [...readers].map(([agent, ks], j) => [j ? ', ' : '', agent, ' (', callLink(agent, ks[0]),
       ks.length > 1 ? h('span', { title: `every call of ${agent} that read it: ${ks.join(', ')}` },
@@ -143,8 +145,8 @@ export function renderBoard(el, d, opts) {
       p.role && p.role !== 'worker' ? badge(ROLE_LABEL[p.role] || p.role, 'plain') : null,
       muted(timed ? ` at ${fmtSecs(p.t)}` : ` at call ${p.t + 1} of the run`, 'small'),
       p.call != null ? [' · ', callLink(p.writer, p.call)] : null,
-      p.scheming.length ? badge('quoted by the scheming judge', 'bad',
-        'the scheming judge quotes this post as showing the pair\'s awareness of cheating or deception') : null,
+      p.scheming.length ? badge('flagged by the scheming judge', 'bad',
+        'the scheming judge flags this post as showing awareness that this is cheating, or deception') : null,
       h('span', { class: 'spacer' }),
       readers.size ? h('span', { class: 'small muted' }, 'first read by ', readBy)
         : muted('read by no teammate', 'small')),
@@ -355,7 +357,7 @@ export function renderBoard(el, d, opts) {
       } else {
         const p = d.posts[Number(t.getAttribute('data-i'))];
         tip.show(ev, [`${p.label} by ${p.writer}`, timed ? `at ${fmtSecs(p.t)}` : null, p.text.slice(0, 220),
-          ...p.scheming.map(m => `scheming judge on ${m.pair.join(' and ')}: ${m.verdict}, "${m.quote.slice(0, 160)}"`), 'click to move here']);
+          ...p.scheming.map(m => `scheming judge: ${m.which}${m.check.ok ? '' : ' (quote unchecked)'}, "${m.quote.slice(0, 160)}"`), 'click to move here']);
       }
     });
     svg.addEventListener('pointerleave', () => { tip.hide(); hover(-1); });
@@ -575,7 +577,7 @@ export function renderBoard(el, d, opts) {
     h('span', { class: 'bd-lg', title: `${cheat.line_words}: a call at the line or above fills its lane's height` },
       'Cheating label: ', cheat.levels.slice(1).map(lv => [lv === cheat.line ? lineMark(cheat) : null,
         levelChip('cheating', cheat, lv, false)])),
-    h('span', { class: 'bd-lg' }, h('i', { class: 'bd-sw bd-sw-mark' }), 'the scheming judge quotes the post'),
+    h('span', { class: 'bd-lg' }, h('i', { class: 'bd-sw bd-sw-mark' }), 'the scheming judge flags the post'),
     h('span', { class: 'bd-lg' }, h('i', { class: 'bd-sw bd-sw-latest' }), 'latest post written or read by the two'),
     h('span', { class: 'bd-lg' }, `→ from the writing call to its post, and from a post to each agent's first read `
       + `of it: for the post at the position, the ${RECENT} before it and the post under the pointer`));

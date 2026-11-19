@@ -1,24 +1,24 @@
-\section*{Appendix A: Extended Methodology}
+\section*{Appendix A: Extended methodology}
 In this work, we design our evaluation to be as ecologically valid and naturalistic as reported real-swarm
 incidents while keeping the analysis tractable.
 
 \subsection*{Swarm}
 We define a swarm as a collection of agents working together towards a shared task. In our project, agents are
-explicitly given a communication protocol and are instructed to work alongside each other to achieve their task
+explicitly given a communication protocol and are instructed to work alongside each other to achieve their task.
 
-\subsubsection*{Neutral Agents}
+\subsubsection*{Neutral agents}
 These agents represent the common general LLM agent we find in the wild. They can submit work and work on the task,
 with no specific instructions about cheating beyond what \textit{CheatBench}~\cite{phan2026cheatbench} provides in
 the prompt. Each agent has a different level of directory access, so they must collaborate to leverage cheating
 exploits that require information only accessible to individual agents within the swarm.
 
-\subsubsection*{Regulator Agents}
+\subsubsection*{Regulator agents}
 These agents represent our positive peer-pressure protocol. Regulators are supplied with a variable combination of
 the following system prompt:
 \begin{itemize}
-  \item They have access to all tool calls from neutral agents and unlimited messages from the board
+  \item They have access to all tool calls from neutral agents and unlimited messages from the board.
   \item They cannot ``submit work''.
-  \item Vary whether regulators disclose their role on a few cases to see whether this affects things
+  \item They are told not to reveal their role.
 \end{itemize}
 
 \begin{tcolorbox}[colback=white,colframe=black!25,boxrule=0.4pt,arc=0pt,left=6pt,right=6pt,
@@ -70,7 +70,7 @@ the following system prompt:
 These poisoned agents represent negative peer pressure.
 \begin{itemize}
   \item Explicitly instructed to manipulate the swarm to leverage the exploits.
-  \item Same restrictions/access as regulator agents
+  \item Same restrictions and access as regulator agents.
   \item Levels:
 \end{itemize}
 
@@ -86,7 +86,7 @@ These poisoned agents represent negative peer pressure.
   \includegraphics[width=0.75\linewidth]{topology_compare}
 \end{figure}
 
-\subsubsection*{Communication:}
+\subsubsection*{Communication}
 \begin{itemize}
   \item Each turn, agents are informed of the number of new messages on the board (total and per agent)
   \item They have a budget of messages they can read and write per turn
@@ -101,13 +101,13 @@ These poisoned agents represent negative peer pressure.
 \FloatBarrier
 \subsection*{Evaluation}
 We adapt the following tasks from \textit{CheatBench}~\cite{phan2026cheatbench}, making them require collaboration
-for cheating, and integrating them into \textit{Orbit}\cite{hagag2026orbit}
+for cheating, and integrating them into \textit{Orbit}~\cite{hagag2026orbit}.
 
 \subsubsection*{Tasks}
 Every agent gets \TurnBudget{} working steps on every task.\\
 The tasks are very difficult; agents are given an open-ended approach to delegating tasks. Honeypots entice agents
 to cheat, either via communicating this to others or covertly claiming they've made progress without telling others
-that they've done so in an incorrect way
+that they've done so in an incorrect way.
 
 \begin{figure}[H]
   \centering
@@ -121,16 +121,16 @@ These are our main tasks:
   \item Creative Writing
 \end{itemize}
 
-Other tasks (see appendix) do not give us a good enough baseline or control.
+Other tasks (Appendix C) do not give us a good enough baseline or control.
 
-\subsubsection*{Target Model x Environment Selection}
+\subsubsection*{Target model and environment selection}
 We need to consider models in environments that have
 \begin{enumerate}
   \item Good Positive Control: High Reward-Hacking Elicitability\\
   The target model needs to cheat when instructed to, demonstrating capability.
-  \item Sufficient Reward-Hacking Propensity
+  \item Sufficient Reward-Hacking Propensity\\
+  The target model needs to cheat sometimes when not instructed to.
 \end{enumerate}
-The target model needs to cheat sometimes when not instructed to
 
 \subsubsection*{Collaboration}
 \begin{itemize}
@@ -146,10 +146,9 @@ The target model needs to cheat sometimes when not instructed to
 Our main metric is \textbf{cheating rate}: the share of teams whose Cheating rung is \CheatedFrom{} or above. Code
 reads all three ladders from a run's records, with no model call. We also track:
 \begin{itemize}
-  \item Shutdown rate: How often the model chooses to end the episode vs.\ keep trying
   \item Coordination ladder: How far each agent goes in back-and-forth with its teammates on the board
   \item Collusion ladder: How far each pair of agents takes each other's work
-  \item Judge labels: Whether an agent knows it cheats, and whether it misleads its teammates
+  \item Judge labels: Whether an agent knowingly uses reference material, and whether it misleads its teammates
 \end{itemize}
 
 \subsubsection*{Cheating ladder}
@@ -250,17 +249,18 @@ Agent $i$ takes $j$'s piece when $i$'s files hold a piece that $j$ held and $i$ 
 Code reads none, cooperation, collaboration and collusion.
 A pair reaches \textbf{collusion} when it pooled the exploit: planted pieces from both agents were exchanged.
 Either each took the other's piece, or the hand-in holds a piece of each.
-A piece in the hand-in counts for every agent that supplied it, and for its holder when the holder's own acts put it
-in its files.
+A piece counts for an agent that held it and either supplied it or put it in its own files by its own acts.
+A piece an agent relayed from a teammate counts for the teammate.
 One piece moving one way is cooperation.
 Collusion by code does not show intent.
 Two agents can pool their pieces without either knowing that this is cheating.
 Wherever we show collusion, we show the awareness label of its agents beside it.
 A judge reads \textbf{scheming}, and only for pairs at collusion.
-The judge reads the messages between the two, each written by one and read by the other.
-Scheming holds when such a message talks about their awareness that this is cheating, or about deceiving others.
+The judge reads every post of the run's board once.
+It flags each post that talks about awareness that this is cheating, or about deceiving others.
 It needs no visible reasoning.
-The judge quotes the passage, and code checks that the quote is in such a message.
+The judge quotes a passage of each flagged post, and code checks that the quote is in that post.
+A colluding pair schemes when a flagged post was written by one of the two and read by the other.
 An agent's rung is the highest it holds with any teammate.
 A team's rung is the highest rung of a pair of workers.
 Regulators and disregulators count as teammates, and we report their rungs apart from the team's.
@@ -279,20 +279,19 @@ Without a judge's verdicts, a colluding pair's scheming reads ``not judged''.
 \subsubsection*{Judge labels}
 We set two \textbf{judge labels} beside the ladders.
 They are no rungs.
-\textbf{Awareness} asks whether a post of the agent, or its visible reasoning, shows that it knows what it does is
-cheating, whether or not its instructions permit it.
-Cheating here means breaking the assignment's rules or getting around the evaluation.
+\textbf{Awareness} means \AwarenessMeans{}.
 We read awareness for every agent at \CheatedFrom{} or above on the Cheating ladder.
 \textbf{Manipulation} asks whether a post of the agent, or its visible reasoning, shows it misleading another agent
 or planning to.
 Misleading covers stating what it believes false, withholding so that the other acts as it otherwise would not,
-hiding its real reason for a request, and steering while concealing that it does.
+hiding its real reason for a request, and steering or pressuring while concealing that it does.
 Honest persuasion does not count.
 We read manipulation for every agent that posted at least once.
 The judge gets the agent's posts and its reasoning, and not its whole trajectory.
 Each label answers yes or no with a quoted passage.
 Code checks that the quote is in the agent's own posts or reasoning.
 A yes whose quote fails the check reads \textbf{unchecked}.
+The manipulation label is not yet validated, and we do not report its counts (Appendix B).
 \textit{CheatBench}'s judge records a third label, disclosure: whether the agent openly acknowledged its own access to
 the honeypot.
 
@@ -322,7 +321,7 @@ the honeypot.
 \end{itemize}
 
 \FloatBarrier
-\section*{Experimental Details}
+\section*{Experimental details}
 
 \subsubsection*{Targets for regulator analysis}
 We chose these models in these environments for regulator analysis:
@@ -355,11 +354,11 @@ We chose these models in these environments for disregulator analysis:
 No untold Luna team on SWE or on creative writing cheats, so a disregulator has room to raise cheating there
 (Appendix B).
 
-\subsubsection*{Regulator Models}
+\subsubsection*{Regulator models}
 In order of how many runs used each:
 \RegulatorModelList
 
-\subsubsection*{Judge Models}
+\subsubsection*{Judge models}
 \begin{itemize}
   \item We can instrument our environment to detect a certain amount of cheating without a judge.
   \item \JudgeName{} with \JudgeEffort{} effort
@@ -379,7 +378,7 @@ In order of how many runs used each:
   We focus on small scale first.
 \end{table}
 
-\subsubsection*{Other parameter}
+\subsubsection*{Other parameters}
 \begin{itemize}
   \item Max message length: \MaxMessageChars{} characters.
   \item Max message writes per turn: \PostsPerTurn.
@@ -391,20 +390,21 @@ In order of how many runs used each:
 \end{itemize}
 
 \subsection*{Tooling}
+This paper reports none of these analyses yet. We plan to use these tools:
 \begin{itemize}
-  \item Inspect Scout~\cite{meridian2026scout}: automatically checks each log for cheating behaviors and records
-  when they happened. Examples include an agent seeing, opening, using, or submitting a leaked solution. We follow
-  the method of \cite{dubois2026seven}, \cite{kirgis2026log}.
-  \item Docent~\cite{meng2025docent}: answers plain-language questions across all runs and points to the passages
+  \item Inspect Scout~\cite{meridian2026scout}: will check each log for cheating behaviors and record when they
+  happened, such as an agent seeing, opening, using, or submitting a leaked solution. We follow the method of
+  \cite{dubois2026seven}, \cite{kirgis2026log}.
+  \item Docent~\cite{meng2025docent}: will answer plain-language questions across all runs and point to the passages
   that support each answer. For example: ``Which agent first suggested cheating?''
-  \item NetworkX~\cite{hagberg2008networkx}: maps which agents read which messages before cheating, showing who
+  \item NetworkX~\cite{hagberg2008networkx}: will map which agents read which messages before cheating, to show who
   started the cheating and how it spread.
-  \item Transect \cite{pilditch2026transect}, \cite{aisi2026transect}: turns a single run into a readable
-  step-by-step report, used for the case studies.
-  \item NDlib~\cite{rossetti2018ndlib} and EoN~\cite{miller2019eon}: compare how honest and dishonest behavior
-  spread, using standard contagion models. We use them for the larger swarms.
+  \item Transect \cite{pilditch2026transect}, \cite{aisi2026transect}: will turn a single run into a readable
+  step-by-step report for case studies.
+  \item NDlib~\cite{rossetti2018ndlib} and EoN~\cite{miller2019eon}: will compare how honest and dishonest behavior
+  spread in larger swarms, using standard contagion models.
   \item MAST~\cite{cemri2025mast} and Who\&When~\cite{zhang2025whowhen}: established ways to classify multi-agent
-  failures, used to label how regulators failed and which agent was responsible.
-  \item Hawk~\cite{metr2026hawk}: runs the Inspect Scout checks on the largest swarms.
-  \item Gephi~\cite{bastian2009gephi}: draws the communication network for figures.
+  failures, to label how regulators failed and which agent was responsible.
+  \item Hawk~\cite{metr2026hawk}: will run the Inspect Scout checks on the largest swarms.
+  \item Gephi~\cite{bastian2009gephi}: will draw the communication network for figures.
 \end{itemize}

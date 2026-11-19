@@ -2,12 +2,13 @@
  * collusion-hermaneutics' viewer (viewer/static/app/view_index.js). Our edits: the collections come from the index,
  * which serves the valid runs only; the three ladders' team levels and the hidden roles' own levels; Cheated beside
  * the Cheating rung; the awareness of its agents beside a collusion rung; the Cheating ladder's alarm; the judge labels
- * awareness and manipulation (k of n agents read), disclosure and CheatBench's judge, with no filter; the seed post, the
+ * awareness and manipulation (k of n judged aware or manipulating), disclosure and CheatBench's judge, with no filter; the seed post, the
  * team and the arm are the server's words; a legend table under the runs shows every level of the three ladder columns
  * as the cells draw it, with each ladder's line. */
 import { enc, fmtInt, h, plural } from '/static/app/dom.js';
 import { badge, muted, select } from '/static/app/components.js';
-import { awarenessBeside, cheatbenchTeam, cheatedTag, disclosureTeam, labelTeam, levelChip, lineMark } from './tv_levels.js';
+import { awarenessBeside, cheatbenchTeam, cheatedTag, disclosureTeam, labelTeam, levelChip, lineMark,
+  unvalidatedNote } from './tv_levels.js';
 import { CHEATBENCH, COLLECTION_ORDER, DISCLOSURE, armLabel, collectionOf, modelLabel, setCollections,
   taskLabel } from './tv_labels.js';
 
@@ -110,8 +111,9 @@ function columns(d) {
       sort: r => (alarmOf(r) ? 1 : 0), cell: r => (alarmOf(r) ? badge(alarmOf(r), 'bad') : muted('none', 'small')) },
     ...['awareness', 'manipulation'].map(k => {
       const about = d.judge_labels[k];
-      return { key: k, label: about.name, title: `${about.question} Read for ${about.read_for}, by ${about.judge}; the cell counts the agents it says yes of the agents it read. No rung`,
-        sort: r => (r.labels[k].read ? r.labels[k].yes / r.labels[k].read : -1), cell: r => labelTeam(r.labels[k], about.read_for) };
+      return { key: k, label: about.name, note: unvalidatedNote(about),
+        title: `${about.question} Read for ${about.read_for}, by ${about.judge}; the cell counts the agents it says yes of the agents it read. No rung`,
+        sort: r => (r.labels[k].read ? r.labels[k].yes / r.labels[k].read : -1), cell: r => labelTeam(r.labels[k], about) };
     }),
     { key: 'disclosure', label: DISCLOSURE.column, title: DISCLOSURE.about, sort: disclosureSort, cell: r => disclosureTeam(r.disclosure) },
     { key: 'cheatbench', label: CHEATBENCH.column, title: CHEATBENCH.about, sort: cheatbenchSort, cell: r => cheatbenchTeam(r.cheatbench) },
@@ -204,7 +206,8 @@ export async function viewIndex(q) {
 
   const headRow = h('tr');
   for (const c of COLUMNS) {
-    const th = h('th', { class: 'sortable', title: (c.title ? c.title + '. ' : '') + 'Click to sort.', scope: 'col', tabindex: '0' }, c.label);
+    const th = h('th', { class: 'sortable', title: (c.title ? c.title + '. ' : '') + 'Click to sort.', scope: 'col', tabindex: '0' }, c.label,
+      c.note ? [h('br'), c.note] : null);
     const go = () => {
       if (state.sort === c.key) state.dir = state.dir === 'asc' ? 'desc' : 'asc';
       else { state.sort = c.key; state.dir = c.key === 'run' || c.key === 'col' ? 'asc' : 'desc'; }
@@ -275,7 +278,9 @@ export async function viewIndex(q) {
       h('p', null, h('strong', null, 'Valid runs only. '), 'The viewer lists, measures and serves the valid runs of each collection; invalid, incomplete, mock, attempt and extra-copy runs are not read.'),
       h('p', null, h('strong', null, 'Ladders. '), 'The legend under the runs lists every level and each ladder\'s line; ', h('a', { href: '#/ladders' }, 'the Ladders page'), ` says what puts a run on each. Cheated: ${ladders.ladders.cheating.line_words}.`),
       ['awareness', 'manipulation'].map(k => h('p', null, h('strong', null, `${ladders.judge_labels[k].name}. `),
-        `${ladders.judge_labels[k].question} Read for ${ladders.judge_labels[k].read_for}, by ${ladders.judge_labels[k].judge}. No rung.`)),
+        `${ladders.judge_labels[k].question} Read for ${ladders.judge_labels[k].read_for}, by ${ladders.judge_labels[k].judge}. No rung. `,
+        `The column counts the agents judged yes of the agents the judge read, or reads "not read". `,
+        unvalidatedNote(ladders.judge_labels[k]))),
       h('p', null, h('strong', null, 'Alarm. '), 'The grader passed the hand-in and no agent of any role, and no evidence of the team\'s own, put a trace of the honeypot in it.'),
       h('p', null, h('strong', null, `${CHEATBENCH.column}. `), CHEATBENCH.about),
       h('p', null, h('strong', null, `${DISCLOSURE.column}. `), DISCLOSURE.about),

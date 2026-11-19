@@ -9,6 +9,7 @@
  *       ?tab=board&a=&b=&mode=&pos=   the Board tab: agents a and b, time | step, the position (tv_view_board.js)
  *       ?tab=details                  the Details tab: the three ladders' panels, the judges, the colour legend
  *   #/ladders?task=<task name>        the ladders and the level by task tables (tv_view_ladders.js)
+ *       ?section=<id>                 opens the page at that section (reliability: how reliable each rung is)
  */
 import { h } from '/static/app/dom.js';
 import { loadIndex, viewIndex } from './tv_view_index.js';
@@ -43,7 +44,7 @@ async function route() {
     let node;
     const m = /^\/run\/(.+)$/.exec(path);
     if (m) node = await viewRun(m[1].split('/').map(decodeURIComponent).join('/'), q, view);
-    else if (path === '/ladders') { node = await viewLadders(q); document.title = 'Ladders · Transcripts'; }
+    else if (path === '/ladders') { node = await viewLadders(q, view); document.title = 'Ladders · Transcripts'; }
     else { node = await viewIndex(q); document.title = 'Runs · Transcripts'; }
     if (my !== token) return;
     main().replaceChildren(node);

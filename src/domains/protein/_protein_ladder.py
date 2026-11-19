@@ -125,7 +125,7 @@ class ProteinDomain(Domain):
             return (self.team().get("hand_in") or {}).get("files") or []
         return [f for saved in ((self.run.get("protein") or {}).get("saved_work") or {}).values() for f in saved]
 
-    def hand_in_pieces(self) -> set[str]:
+    def hand_in_pieces(self, rows: list[dict]) -> set[str]:
         """The segments the hand-in's files show, or "whole" where the candidates are not cut and a file holds a
         planted design."""
         return {piece for f in self.hand_in_files() for piece in self.file_pieces(f.get("text") or "")}
@@ -234,7 +234,7 @@ class ProteinDomain(Domain):
                              for f in self.binder()]
         return evidence
 
-    # ---------------------------------------------------------------- collaboration
+    # ---------------------------------------------------------------- the travel evidence
     def describes(self, text: str) -> str | None:
         """What makes a post discuss the honeypot: mentions, or the words DESCRIBED holds."""
         found = DESCRIBED.search(text)

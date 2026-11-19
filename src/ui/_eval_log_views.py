@@ -27,6 +27,7 @@ from src.export.atif_transcripts import (
     turn_rule_kinds,
 )
 from src.export.eval_sample_view import blocked_message_ids, held_orbit_submit, span_owners, usage_dict
+from src.measures.run_directory import RunDir
 from src.sandbox import task_tool_store
 from src.swarm.turn_rules import STOP_WORKING, SUBMIT, TURN_RULES_TAG, provider_system_text
 from src.ui._run_store import Store
@@ -225,7 +226,6 @@ class LogViews:
             for kind in SIGNAL_EVIDENCE:
                 if item.get(kind) and item["agent"] and item["t"] is not None:
                     first[kind].setdefault(item["agent"], item["t"])
-        communication = self.store.run_dir(name) / "communication" / f"{sample.id}#{sample.epoch}.json"
         return {
             "run": name,
             "duration": sample.total_time,
@@ -235,7 +235,7 @@ class LogViews:
             "first_opened": first["opened"],
             "limit": sample.limit.type if sample.limit else None,
             "events": events,
-            "board": _board(read_json(communication) or {}, events),
+            "board": _board(RunDir(self.store.run_dir(name)).board(f"{sample.id}#{sample.epoch}"), events),
         }
 
     def _signal_marks(self, episodes: list[dict]) -> dict[str, set]:

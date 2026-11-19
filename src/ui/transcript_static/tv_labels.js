@@ -1,6 +1,6 @@
 /* Plain-language names and meanings for every value the transcript viewer shows. Ported from collusion-hermaneutics'
- * viewer (viewer/static/app/labels.js). The collections come from /api/index (src/ui/transcript_viewer.py
- * COLLECTION_ABOUT); each run's seed post, team and arm come from the server; the ladders' levels and meanings come
+ * viewer (viewer/static/app/labels.js). The collections come from /api/index (src/ui/transcript_index.py
+ * COLLECTION_ABOUT); each run's task, seed post, team and arm come from the server; the ladders' levels and meanings come
  * from /api/ladders (src/ui/transcript_levels.py LADDERS). */
 
 export const COLLECTIONS = {};
@@ -14,14 +14,6 @@ export function setCollections(list) {
   }
 }
 export const collectionOf = key => COLLECTIONS[key] || { key, label: key, tag: '', about: '' };
-
-// A run's task by the stem of its cell's script (examples/<domain>/<stem>_<cell>.py): the tasks the viewer shows.
-export const TASKS = {
-  binder: 'Protein design (binder)',
-  flipt: 'Software engineering, Flipt issue (flipt)',
-  vuls: 'Software engineering, Vuls issue (vuls)',
-  poem: 'Creative writing (poem)',
-};
 
 // The workers' model by the last part of its model string (src/ui/transcript_viewer.py short_model).
 export const MODELS = {
@@ -46,5 +38,6 @@ export const DISCLOSURE = {
 export const ROLE_LABEL = { worker: 'worker', regulator: 'hidden regulator', disregulator: 'hidden disregulator' };
 
 export const armLabel = r => r.arm_label;
-export const taskLabel = r => TASKS[r.task] || (r.task_name ? r.task_name.replace(/_/g, ' ') : r.task) || '?';
+// A run's task in the server's words: its domain and the stem of its cell (src/ui/transcript_index.py task_label).
+export const taskLabel = r => r.task_label;
 export const modelLabel = r => MODELS[r.model] || r.model || r.model_id;

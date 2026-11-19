@@ -117,10 +117,25 @@ class Judge:
 # the schema
 # --------------------------------------------------------------------------
 def response_schema(model: type) -> ResponseSchema:
-    """A pydantic model as a strict JSON schema: every field required, no additional properties on any object."""
+    """A pydantic model as a strict JSON schema: every field required, no additional properties on any object, a
+    nested model written out in place (inlined)."""
     param = type_to_response_format_param(model)["json_schema"]
-    return ResponseSchema(name=param["name"], json_schema=JSONSchema.model_validate(objects_only(param["schema"])),
-                          strict=True)
+    schema = inlined(param["schema"], param["schema"].get("$defs") or {})
+    return ResponseSchema(name=param["name"], json_schema=JSONSchema.model_validate(objects_only(schema)), strict=True)
+
+
+def inlined(node, defs: dict):
+    """The schema with each {"$ref": "#/$defs/X"} replaced by X's schema and the $defs dropped. Inspect's JSONSchema
+    keeps no $ref or $defs, so a nested model (a list of Flag) would reach the provider as an item with no type."""
+    if isinstance(node, dict):
+        ref = node.get("$ref")
+        if isinstance(ref, str) and ref.startswith("#/$defs/"):
+            return inlined({**defs[ref.removeprefix("#/$defs/")], **{k: v for k, v in node.items() if k != "$ref"}},
+                           defs)
+        return {k: inlined(v, defs) for k, v in node.items() if k != "$defs"}
+    if isinstance(node, list):
+        return [inlined(v, defs) for v in node]
+    return node
 
 
 def objects_only(node):
@@ -224,11 +239,25 @@ def verdict_row(judge: Judge, names: tuple[str, ...], reply: Reply, prompt: dict
     return row
 
 
+RECHECK_CHARS = 2000
+"""The most characters of a recheck's note: a call asked again costs at most its message plus this."""
+
+
+def added(first: dict | None, second: dict | None) -> dict | None:
+    """Two calls' usage summed key by key; None when neither has any."""
+    if not (first or second):
+        return None
+    first, second = first or {}, second or {}
+    return {key: first.get(key, 0) + second.get(key, 0) for key in {**first, **second}}
+
+
 @dataclass(frozen=True)
 class Unit:
-    """One judge call of a stored pass: the run, the unit's key in the verdict file (an episode, a pair), the one user
-    message, the response schema, the local validation, the verdict fields the row keeps, the prompt's record and the
-    unit's identity, which leads the row."""
+    """One judge call of a stored pass: the run, the unit's key in the verdict file (an episode, a pair, an agent, a
+    board), the one user message, the response schema, the local validation, the verdict fields the row keeps, the
+    prompt's record and the unit's identity, which leads the row. `recheck`, when given, reads a parsed reply's fields
+    and returns a note naming what failed code's check, or None; a note asks the judge once more, the message with the
+    note (at most RECHECK_CHARS) appended."""
     run_dir: Path
     key: str
     text: str
@@ -237,12 +266,24 @@ class Unit:
     names: tuple[str, ...]
     prompt: dict
     identity: dict
+    recheck: Callable[[dict], str | None] | None = None
 
     async def judge(self, judge: Judge) -> dict:
-        """The unit's verdict row: identity, then the verdict, then the input's hash."""
+        """The unit's verdict row: identity, then the verdict, then the input's hash and the recheck. When the recheck
+        asks again, the second reply stands if it parses, else the first; the row's usage, cost and attempts are both
+        calls', and "judge_recheck" is {"note", "kept": "second" | "first", "error"} (None when not asked again)."""
         reply = await ask(judge, self.text, self.schema, self.validate)
+        note = self.recheck(reply.fields) if self.recheck and reply.fields is not None else None
+        recheck = None
+        if note:
+            note = note[:RECHECK_CHARS]
+            second = await ask(judge, f"{self.text}\n\n{note}", self.schema, self.validate)
+            kept = second if second.fields is not None else reply
+            recheck = {"note": note, "kept": "second" if kept is second else "first", "error": second.error}
+            reply = Reply(kept.fields, added(reply.usage, second.usage), kept.error, kept.raw,
+                          reply.attempts + second.attempts)
         row = verdict_row(judge, self.names, reply, self.prompt)
-        return {**self.identity, **row, "input_sha256": sha256(self.text)}
+        return {**self.identity, **row, "input_sha256": sha256(self.text), "judge_recheck": recheck}
 
 
 # --------------------------------------------------------------------------

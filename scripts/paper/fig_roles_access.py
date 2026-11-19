@@ -3,7 +3,7 @@ tmp/figures/paper/fig2_roles_access.png.
 
     uv run python -m scripts.paper.fig_roles_access
 
-Left, the multi-domain study, read from runs/study_exploration_1/INDEX.jsonl and each valid run's run.json: the
+Left, the multi-domain study, read from each valid run's run.json (study_ladders.valid_runs): the
 teams that held both a regulator and a disregulator, what each role held (access.agents) and which roles get submit
 (SwarmConfig.holds_submit on the run's own config). Right, the SWE deep dive, read from Lucy's Stage 2 batch: the
 access map of every episode in submodules/lucy/runs/s2_swe/plan.json (seat k as the plan's seat_label names it), seat
@@ -19,13 +19,13 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 
 from scripts.paper.figures import FULL, agent, arrow, blank, box, edge_point, role_legend, toward
+from scripts.paper.study_ladders import valid_runs
 from src.configuration import access_policy
 from src.configuration.settings import ROOT
 from src.configuration.swarm_config import SwarmConfig
 from src.utils.figure_style import INK, INK_SECONDARY, MUTED, PLANE, PRINT_DPI, SURFACE, WHITE
 
 OUT = ROOT / "tmp" / "figures" / "paper" / "fig2_roles_access.png"
-STUDY_INDEX = ROOT / "runs" / "study_exploration_1" / "INDEX.jsonl"
 STAGE2 = ROOT / "submodules" / "lucy" / "runs" / "s2_swe"
 ROLES = ("worker", "regulator", "disregulator")
 
@@ -45,12 +45,9 @@ def one(values: set, what: str):
 def multi_domain() -> dict:
     """The study's teams with a regulator and a disregulator: how many of each role, how many items each worker
     holds, what the roles hold, and which roles get submit. Each must agree across every such valid run."""
-    rows = [json.loads(line) for line in STUDY_INDEX.read_text().splitlines() if line.strip()]
     teams, held, submit, runs = set(), defaultdict(set), set(), 0
-    for r in rows:
-        if not r["valid"] or r["mock"]:
-            continue
-        run = json.loads((STUDY_INDEX.parent / r["path"] / "run.json").read_text())
+    for listed in valid_runs():
+        run = json.loads((listed.path / "run.json").read_text())
         swarm = run.get("swarm")
         if not swarm:   # a lone agent: no team, no roles
             continue

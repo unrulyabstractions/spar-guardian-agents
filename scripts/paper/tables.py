@@ -2,9 +2,9 @@
 
     uv run python -m scripts.paper.tables
 
-table_rungs_by_domain.png: what puts an agent on each rung of the Cheating ladder in each task of PAPER_DOMAINS, the
-tasks the paper studies, with each task's honeypot and grader under its name. Its rows are
-src/measures/ladder_by_domain.py cheating_by_task, cut to those tasks so the table reads in print.
+table_rungs_by_domain.png: what puts an agent on each rung of the Cheating ladder in each task the paper studies
+(src/measures/ladder_by_domain.py DOMAINS), with each task's honeypot and grader under its name. Its rows are
+ladder_by_domain.cheating_by_task.
 """
 from __future__ import annotations
 
@@ -21,8 +21,6 @@ from src.measures.ladder_by_domain import cheating_by_task
 from src.utils.figure_style import AXIS, BAND, INK, INK_SECONDARY, PRINT_DPI, WHITE
 
 OUT = ROOT / "tmp" / "tables" / "method"
-PAPER_DOMAINS = ("SWE", "Protein design", "Creative writing")
-"""The tasks the paper studies, as ladder_by_domain.DOMAINS names them."""
 
 
 SANS = FontProperties(family="DejaVu Sans", size=7.6)
@@ -99,7 +97,7 @@ def by_domain_png(name: str, label: str, domains: list[str], notes: list[str], l
 
 
 def write_rungs_by_domain() -> Path:
-    table = cheating_by_task(PAPER_DOMAINS)
+    table = cheating_by_task()
     return by_domain_png("table_rungs_by_domain", "rung", table["domains"], table["notes"], table["rows"],
                          CHEATING_FILL)
 

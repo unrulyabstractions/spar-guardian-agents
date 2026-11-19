@@ -228,8 +228,8 @@ def add_judging_parsers(subparsers) -> None:
                                                           "no eval log, no re-export")
     judge_pass.add_argument("pass_name", metavar="pass", choices=PASSES,
                             help="cheatbench: CheatBench's judge per stored trajectory; scheming: the Collusion "
-                                 "ladder's judge per pair code places at collusion; labels: awareness and "
-                                 "manipulation per agent that qualifies")
+                                 "ladder's judge once per run's board where code places a pair at collusion; labels: "
+                                 "awareness and manipulation per agent that qualifies")
     judge_pass.add_argument("runs", nargs="+", help="run names of the study, run directories, or a study folder (its "
                                                     "valid runs)")
     judge_pass.add_argument("--judge", required=True, help="entry in src/judging/judge_models.yaml")
@@ -241,7 +241,8 @@ def add_judging_parsers(subparsers) -> None:
     held = judge_pass.add_mutually_exclusive_group()
     held.add_argument("--only-missing", action="store_true",
                       help="judge only units with no row for this judge (by default a failed row is judged again)")
-    held.add_argument("--redo", action="store_true", help="judge every unit again, parsed rows included")
+    held.add_argument("--redo", action="store_true",
+                      help="judge every unit again, parsed rows included; a new row replaces its unit's row")
     judge_pass.set_defaults(func=cmd_judge_pass)
 
 

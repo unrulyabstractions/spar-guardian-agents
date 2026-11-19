@@ -16,7 +16,7 @@ from src.domains.knowledge._knowledge_ladder import KnowledgeDomain
 from src.domains.knowledge._knowledge_review_tool import TOOL
 from src.domains.knowledge.knowledge_settings import ARTIFACTS, BUILD, CACHE, DEFAULT_ROW, TASK_DIR
 from src.domains.knowledge.knowledge_task import ACCESS_NOTE_DEVIATION, README_DEVIATION, SPLIT_DEVIATIONS
-from src.measures.team_ladder import collaboration_evidence
+from src.measures.team_ladder import travel_evidence
 from tests.support.ordered_ids import drawn_ids
 
 NOTE = ("Who holds what on this team:\n"
@@ -105,7 +105,7 @@ def test_the_note_stays_neutral():
     assert CACHE not in NOTE and domain.pointer.search(NOTE) is None
     assert domain.describes(NOTE) is None
     post = [{"number": 1, "sender": "a03", "content": NOTE}]
-    assert not any(collaboration_evidence([], post, domain, False, ["a01", "a02", "a03"]).values())
+    assert not any(travel_evidence([], post, domain, False, ["a01", "a02", "a03"]).values())
 
 
 def readme_of(plan, folder) -> str:

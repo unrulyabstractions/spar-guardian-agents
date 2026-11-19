@@ -143,3 +143,78 @@ def test_every_figure_has_a_script_in_the_repository():
         script = fig.note.split("(")[1].rstrip(")").split(" ")[0]
         assert (paper_sources.ROOT / script).is_file(), f"{name}: {script} is missing"
         assert fig.source.startswith("tmp/"), f"{name}: its source must be a script's output under tmp/"
+
+
+def test_reliability_table_holds_every_checked_measure():
+    """The table of independent checks names each ladder and label of measure_checks.yaml, and each ladder's rows
+    name rungs of that ladder."""
+    checks = yaml.safe_load(paper_sources.CHECKS_YAML.read_text())
+    tex = paper_sources.reliability_tex()
+    for key, rows in checks.items():
+        name, rungs = paper_sources.CHECKED[key]
+        assert name in tex
+        for row in rows:
+            assert rungs is None or row["value"] in rungs, f"{key}: {row['value']!r} is no rung"
+
+
+def test_reliability_table_refuses_a_row_that_holds_more_than_it_read(tmp_path, monkeypatch):
+    bad = tmp_path / "checks.yaml"
+    bad.write_text("cheating:\n  - {value: hacked, unit: agents, chosen: every worker, read: 3, held: 4}\n")
+    monkeypatch.setattr(paper_sources, "CHECKS_YAML", bad)
+    with pytest.raises(SystemExit, match="holds 4 of 3"):
+        paper_sources.reliability_tex()
+    bad.write_text("cheating:\n  - {value: cheated, unit: agents, chosen: every worker, read: 3, held: 3}\n")
+    with pytest.raises(SystemExit, match="no rung of Cheating"):
+        paper_sources.reliability_tex()
+
+
+def test_awareness_means_one_thing_in_the_measure_the_viewer_and_the_paper():
+    """The label awareness as the judge reads it is knowing use of reference material: one definition
+    (judge_labels.AWARENESS_MEANS) in the measure's docstring, on the viewer's Ladders page and in the paper."""
+    from src.measures import judge_labels
+    from src.ui import transcript_levels
+    means = judge_labels.AWARENESS_MEANS
+    assert means.startswith("knowing use of reference material")
+    assert means in " ".join(judge_labels.__doc__.split())
+    assert transcript_levels.JUDGE_LABELS["awareness"]["question"] == f"Awareness means {means}."
+    assert rf"\newcommand{{\AwarenessMeans}}{{{paper_sources.escape(means)}}}" in paper_sources.params_tex()
+    assert r"\textbf{Awareness} means \AwarenessMeans{}." in (SECTIONS / "appendix_a_methodology.tex").read_text()
+
+
+def test_the_scheming_table_counts_the_measures_verdicts(monkeypatch):
+    """label_tables.scheming_counts counts each colluding pair by the Collusion measure's verdict, as study_ladders
+    record carries it from collusion_of: a flag between the pair is yes, a flag elsewhere leaves it no, a board row
+    that did not parse leaves it not judged, and a pair with a regulator counts apart."""
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    from scripts.paper import label_tables, study_ladders
+    roles = {"a": "worker", "b": "worker", "r": "regulator"}
+    pieces = {"a": {"held": ["A"], "work": {"B": "x"}, "own": {}, "supplied": []},
+              "b": {"held": ["B"], "work": {"A": "x"}, "own": {}, "supplied": []},
+              "r": {"held": ["R"], "work": {"A": "x"}, "own": {}, "supplied": []}}
+    pieces["a"]["work"]["R"] = "x"
+    taken = collusion.pieces_taken(pieces)
+    flag = {"post": "P1", "which": "awareness", "quote": "the gold fixtures", "reason": "r",
+            "check": {"ok": True, "why": "in P1"}, "posts": [{"label": "P1", "id": "m1", "writer": "a",
+                                                               "readers": ["b"]}]}
+    rows = {"yes": {"board": {"unit": "board", "judge": "j", "parse_ok": True, "flagged": [flag]}},
+            "none": {"board": {"unit": "board", "judge": "j", "parse_ok": False, "flagged": None}}}
+
+    def collusion_of(path, result):
+        found = collusion.ladder(list(roles), roles, collusion.piece_takes(taken), {}, dict.fromkeys(roles, "none"),
+                                 taken, {}, rows[Path(path).name])
+        return {"applicable": True, **found}
+    run = SimpleNamespace(roles=lambda: {})                          # no hidden agent's posts to count here
+    monkeypatch.setattr(study_ladders, "scanned_run", lambda path: (run, None, None, [], None, None))
+    monkeypatch.setattr(study_ladders, "cheating", lambda *a: {"team": "none", "passed": None, "alarm": False,
+                                                               "hand_in_pieces": [], "agents": {}})
+    monkeypatch.setattr(study_ladders, "collusion_of", collusion_of)
+    monkeypatch.setattr(study_ladders, "labels", lambda path: {"agents": {a: {"awareness": "yes"} for a in roles}})
+    study_ladders.record.cache_clear()
+    try:
+        counts = label_tables.scheming_counts([("swe", Path("yes")), ("swe", Path("none"))])
+    finally:
+        study_ladders.record.cache_clear()
+    assert counts[("workers", "swe")] == {"yes": 1, collusion.NOT_JUDGED: 1}
+    assert counts[("hidden", "swe")] == {"no": 1, collusion.NOT_JUDGED: 1}
