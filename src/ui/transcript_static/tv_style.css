@@ -589,3 +589,16 @@ table.sum-table.is-detailed td.sum-cell { min-width: 220px; }
 .case .cs-ladders { gap: 10px 22px; }
 .case .cs-ladder { display: inline-flex; align-items: center; gap: 5px; }
 .case .cs-ladder-mark { font-weight: 700; font-size: 11px; }
+/* Generous spacing on the run page (the user, 2026-11-20: "what is preventing you making spacing 3-4x"). */
+.rp-bar { padding: 22px 24px; gap: 14px 24px; margin-bottom: 28px; }
+@media (min-width:1000px) and (min-height:560px) {
+  .rp-stage .case .left { gap: 56px; padding: 28px 24px; }
+}
+.case .cs-ladders { flex-wrap: nowrap; gap: 14px; }
+.case .cs-ladders .lv-chip { font-size: 11px; white-space: nowrap; }
+.case .cs-legend th, .case .cs-legend td { padding-top: 14px; padding-bottom: 14px; }
+.case .cs-legend { margin-top: 0; }
+@media (min-width:1000px) and (min-height:560px) {
+  .rp-stage .case .main { grid-template-columns: 440px minmax(0, 1fr); gap: 20px; }
+  .rp-stage .case .left { padding: 28px 20px; }
+}

@@ -42,7 +42,7 @@ export function inkOn(hex) {
 const SHORT = { cheating: 'H', coordination: 'C', collusion: 'K' };
 // The strip pane's height besides the strip's rows: its padding, heading, chips and legend, the strip's own head and
 // end band, and the pane's bottom gap (tv_style.css .rp-stage .case .left).
-const STRIP_CHROME = 400;
+const STRIP_CHROME = 540;
 /** A ladder's own colour: its first level above the line. lad: its /api/ladders entry. */
 const inkOf = (L, lad) => RAMP[L][lad.levels.indexOf(lad.line)];
 const clip = (s, n) => (s && s.length > n ? `${s.slice(0, n - 1)}…` : s);
