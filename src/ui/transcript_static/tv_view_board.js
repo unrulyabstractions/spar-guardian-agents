@@ -8,7 +8,8 @@
  * number in step mode) and lens (LENSES); the tab writes them back into the page's hash as they change, so a link or a
  * screenshot opens at the same place. judged: the run page's judge labels by agent (levels.judge_labels.agents, as the
  * Details tab reads them). Top to bottom: one control row, with the lens; the lens's key, chips and a count; the
- * timeline; the slider under its time axis, as wide as the lanes, its handle under the moment it shows; a card per
+ * timeline; the slider under its time axis, as wide as the lanes, its handle under the moment it shows, the position's
+ * readout at its left end; a card per
  * agent (agentCard); the legend, folded; then the message board. The page carries no sentence: words are labels,
  * chips and short hovers (UI_TEXT_DIET). A click or a drag on the timeline, off a call or a post, moves the position
  * too. The two selectors never hold
@@ -216,9 +217,9 @@ export function renderBoard(el, d, opts) {
   const fwd = button('step ▶', 'step forward (right arrow)', () => step(1));
   const slider = h('input', { type: 'range', class: 'bd-slider', 'aria-label': 'position',
     oninput: e => { pause(); moveTo(Number(e.target.value)); } });
-  // The position's readout stands at the controls' right end; the slider has its row to itself.
+  // The position's readout stands in the gutter at the slider's left end, on the slider's row.
   const posText = h('span', { class: 'bd-pos' });
-  const scrub = h('div', { class: 'bd-scrub' }, h('span', { class: 'bd-scrub-name small muted' }, 'position'), slider);
+  const scrub = h('div', { class: 'bd-scrub' }, posText, slider);
   const cards = { a: agentCard('a'), b: agentCard('b') };
   const cardRow = h('div', { class: 'bd-cards' }, cards.a.el, cards.b.el);
   const svgHost = h('div', { class: 'bd-svg-host' });
@@ -355,6 +356,7 @@ export function renderBoard(el, d, opts) {
     scrub.style.width = `${width}px`;
     slider.style.left = `${x0 - THUMB / 2}px`;
     slider.style.width = `${x1 - x0 + THUMB}px`;
+    posText.style.width = `${x0 - THUMB / 2 - 8}px`;
 
     // lanes: the two agents and the board between them
     const laneY = { a: yA, b: yB };
@@ -643,9 +645,10 @@ export function renderBoard(el, d, opts) {
     L.shade.setAttribute('x', x);
     L.shade.setAttribute('width', Math.max(0, L.x1 - x));
     slider.value = String(P);
-    posText.textContent = state.mode === 'time'
-      ? `${timed ? fmtAt(P) : `call ${Math.floor(P) + 1}`} of ${timed ? fmtAt(L.span) : plural(L.span, 'call')}`
-      : `step ${P + 1} of ${L.n}${timed ? ` (${fmtAt(L.stops[P].t)} of ${fmtAt(d.total)})` : ''}`;
+    posText.replaceChildren(...(state.mode === 'time'
+      ? [`${timed ? fmtAt(P) : `call ${Math.floor(P) + 1}`} of ${timed ? fmtAt(L.span) : plural(L.span, 'call')}`]
+      : [h('span', null, `step ${P + 1} of ${L.n}`), timed ? h('span', null, `${fmtAt(L.stops[P].t)} of ${fmtAt(d.total)}`) : null]
+        .filter(Boolean)));
     for (const side of SIDES) {
       const i = lastAtOrBefore(L.keys[side], P);
       const c = i >= 0 ? L.calls[side][i] : null;
@@ -919,7 +922,7 @@ export function renderBoard(el, d, opts) {
     h('label', { class: 'bd-pick' }, sw(null, 'bd-sw-b'), selB),
     modeSel, back, playBtn, fwd, lensBar,
     notes.length ? h('span', { class: 'bd-count', title: fewOf(notes).filter(Boolean).join('\n') },
-      plural(notes.length, 'note')) : null, posText);
+      plural(notes.length, 'note')) : null);
   el.replaceChildren(h('div', { class: 'bd-tab' },
     h('section', { class: 'card bd-timeline' }, controls, lensKeyRow, svgHost, scrub, cardRow, legend),
     h('section', { class: 'card bd-board' }, boardHead, boardBox)));

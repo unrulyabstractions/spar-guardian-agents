@@ -19,11 +19,11 @@ from __future__ import annotations
 
 from src.measures import collusion_takes, ladder_by_domain, measure_readings
 
-
 # The rules' own names for a threshold, as the page shows them: each constant by its value, the text rule's parameter
 # by what it is.
 _PLAIN = {"`least`": "a task's minimum number of", "SWE_MIN_LINES": str(collusion_takes.SWE_MIN_LINES),
-          "PROTEIN_TYPED": str(collusion_takes.PROTEIN_TYPED), "CREATIVE_HAND_IN": str(collusion_takes.CREATIVE_HAND_IN)}
+          "PROTEIN_TYPED": str(collusion_takes.PROTEIN_TYPED),
+          "CREATIVE_HAND_IN": str(collusion_takes.CREATIVE_HAND_IN)}
 
 
 def _plain(text: str) -> str:

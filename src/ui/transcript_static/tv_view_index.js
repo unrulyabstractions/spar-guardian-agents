@@ -349,9 +349,27 @@ export async function viewIndex(q) {
     h('p', { class: 'small muted', title: `${fmtInt(idx.measured)} measured in ${idx.build_seconds} s` }, `Index ${idx.built_at}`,
       idx.errors.length ? ` · ${plural(idx.errors.length, 'run')} unreadable` : '')));
 
+  // The table's head sticks at the top of its own scrolling box; when the page scrolls that box's top under the site
+  // bar, the head moves down by as much, so the whole head stays under the bar. Dropped once the page leaves.
+  const wrap = h('div', { class: 'table-wrap idx-wrap' }, table);
+  let mounted = false;
+  const keepHead = () => {
+    if (!wrap.isConnected) {
+      if (mounted) { window.removeEventListener('scroll', keepHead); window.removeEventListener('resize', keepHead); }
+      return;
+    }
+    mounted = true;
+    const bar = document.querySelector('header.topbar');
+    const under = bar ? bar.getBoundingClientRect().bottom : 0;
+    thead.style.top = `${Math.max(0, Math.ceil(under - wrap.getBoundingClientRect().top))}px`;
+  };
+  window.addEventListener('scroll', keepHead, { passive: true });
+  window.addEventListener('resize', keepHead, { passive: true });
+  requestAnimationFrame(keepHead);
+
   return h('div', { class: 'page wide' },
     h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, titleEl, about), pager),
     filterBox,
-    h('div', { class: 'table-wrap idx-wrap' }, table),
+    wrap,
     legendTable(ladders));
 }

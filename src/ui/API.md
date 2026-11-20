@@ -246,7 +246,7 @@ a new `INDEX_VERSION` (now 13) or new code measures every run. The run page read
 | `#/run/<collection>/<run key>?tab=board&a=&b=&mode=&pos=&lens=` | the Board tab: agents `a`, `b`; `time` or `step`; `pos`; `lens` (`all`, `cheating`, `coordination`, `collusion`, `judge`) |
 | `#/run/<collection>/<run key>?tab=details` | the Details tab: the three ladders' panels, the judge labels, the legend |
 | `#/ladders?task=<CheatBench task name>` | the three ladders, the Cheating ladder by task, the Coordination and Collusion levels, Collusion's take rules by task, the task's column highlighted, and the judge labels |
-| `#/summary?col=<collection>&hide=&task=&wmodel=&imodel=&detail=` | Summary: one collection's runs, a row per workers' model and task (and number of workers when team sizes mix), a column per condition in the order Baseline, negative controls, regulators, positive control, disregulators, both; influencers by role, level and model (`/api/summary`); `col` defaults to `study_exploration_1`; `hide` lists the influencer bands toggled off (`regulator`, `disregulator`, `both`); `task` and `wmodel` keep the rows of one task or one workers' model and recount the All row; `imodel` keeps the influencer columns holding one model, Baseline and the controls staying; each cell shows each ladder's share of teams at or above its line (H, C, K), or with `detail=1` each ladder's level counts, and its runs at the bottom |
+| `#/summary?col=<collection>&hide=&task=&wmodel=&imodel=&detail=` | Summary: one collection's runs, a row per workers' model and task (and number of workers when team sizes mix), a column per condition in the order Baseline, negative controls, regulators, positive control, disregulators, both; influencers by role, level and model (`/api/summary`); `col` defaults to `study_exploration_1`; `hide` lists the influencer bands toggled off (`regulator`, `disregulator`, `both`); `task` and `wmodel` keep the rows of one task or one workers' model and recount the All row, and a value the collection does not hold falls back to All; the heading counts the runs shown (`Summary: 66 of 147 runs` under a filter or a hidden band); `imodel` keeps the influencer columns holding one model, Baseline and the controls staying; each cell shows each ladder's share of teams at or above its line (H, C, K), or with `detail=1` each ladder's level counts, and its runs at the bottom |
 
 `<ladder>` is `cheating`, `coordination` or `collusion`; a ladder filter's value is the team's level. `workers` is the
 number of workers; `worker` is the worker conditioning (`baseline`, `told to cheat`, a rule's words such as `generic
@@ -452,8 +452,8 @@ The Board tab has two parts on one position in time. It carries no sentence: wor
 about twelve words or a short name and value list. Top to bottom: one control row (the two agents, whose hover says
 why the pair is the default; the clock, `time` or `steps`, whose hover names the clock; step back, play, step forward;
 the lens, labelled "colour by"; a count of the payload's notes, listed on hover); the lens's key; the timeline; the
-slider directly under its time axis, as wide as the lanes, its handle under the moment it shows and the time at its
-right end; two cards side by side and of one height, one per agent in its lane's colour: a head line (the agent, its
+slider directly under its time axis, as wide as the lanes, its handle under the moment it shows and the position's
+readout in the gutter at its left end (in step mode the step over its time); two cards side by side and of one height, one per agent in its lane's colour: a head line (the agent, its
 role, its call at the position with the tool and the command on one line), a grid with a row per ladder and two
 columns, `now` (the level its calls reached up to the position) and `end` (its level at the end of the run,
 `final`, its evidence on hover), the `end` cell muted when the two agree, and one line of its judge labels' scores

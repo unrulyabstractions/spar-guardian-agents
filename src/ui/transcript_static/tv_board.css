@@ -28,10 +28,9 @@
 
 /* the slider under the time axis: its handle's width is tv_view_board.js THUMB, so the handle's middle sits on the
    axis at the moment it shows */
-.bd-scrub { position: relative; height: 22px; overflow: hidden; }
-.bd-scrub-name { position: absolute; left: 18px; top: 1px; }
-.bd-slider { position: absolute; top: 0; height: 18px; margin: 0; padding: 0; background: none; cursor: pointer;
-  -webkit-appearance: none; appearance: none; }
+.bd-scrub { position: relative; display: flex; align-items: center; min-height: 24px; overflow: hidden; }
+.bd-slider { position: absolute; top: 50%; transform: translateY(-50%); height: 18px; margin: 0; padding: 0; background: none;
+  cursor: pointer; -webkit-appearance: none; appearance: none; }
 .bd-slider::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: var(--border-strong); }
 .bd-slider::-moz-range-track { height: 4px; border-radius: 2px; background: var(--border-strong); }
 .bd-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px;
@@ -39,7 +38,10 @@
   box-sizing: border-box; }
 .bd-slider::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--text);
   border: 2px solid var(--panel); box-sizing: border-box; }
-.bd-pos { margin-left: auto; font-variant-numeric: tabular-nums; font-size: 12.5px; color: var(--text); white-space: nowrap; }
+/* the readout in the gutter, right against the slider's left end; a step's time on a second line */
+.bd-pos { flex: none; box-sizing: border-box; display: flex; flex-direction: column; align-items: flex-end; padding-left: 6px;
+  font-variant-numeric: tabular-nums; font-size: 12px; line-height: 1.3; color: var(--text); text-align: right; }
+.bd-pos > span + span { color: var(--muted); font-size: 11px; }
 
 /* the two agents' cards, side by side and the same height: a head line, a grid of now and end per ladder, the
    judge labels' scores */

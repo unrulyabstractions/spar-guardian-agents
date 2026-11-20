@@ -128,10 +128,12 @@ export async function viewSummary(q) {
   const hidden = new Set((q.get('hide') || '').split(',').filter(g => BANDS.some(([b]) => b === g)));
   // The two model filters: the workers' model keeps its rows; an influencer's model keeps the influencer columns
   // holding it (Baseline and the controls stay).
-  const wmodel = q.get('wmodel') || '';
+  // A value the collection does not hold falls back to All, as the pickers show it.
+  const known = (v, list) => (list.includes(v) ? v : '');
+  const wmodel = known(q.get('wmodel') || '', s.rows.map(r => r.model));
   const detailed = q.get('detail') === '1';
-  const task = q.get('task') || '';
-  const imodel = q.get('imodel') || '';
+  const task = known(q.get('task') || '', s.rows.map(r => r.task));
+  const imodel = known(q.get('imodel') || '', s.columns.flatMap(c => c.influencers.map(x => x.model)));
   const rows = s.rows.filter(r => (!wmodel || r.model === wmodel) && (!task || r.task === task));
   // The columns shown: not hidden, holding the influencer model chosen, and holding a cell in some row shown. A
   // control hides with the influencers it is weighed against: the negative controls with the regulators, the positive
@@ -194,8 +196,11 @@ export async function viewSummary(q) {
     h('th', { scope: 'row', class: 'sum-model' }, modelLabel({ model: r.model })),
     h('td', { class: 'sum-task' }, r.task), s.by_workers ? h('td', { class: 'num sum-workers' }, String(r.workers)) : null,
     cells(r.cells)));
+  const totals = wmodel || task ? summed(rows, s.columns, ladders) : s.totals;
   const total = h('tr', { class: 'sum-total' }, h('th', { scope: 'row', colspan: String(lead), class: 'sum-model' }, 'All'),
-    cells(wmodel || task ? summed(rows, s.columns, ladders) : s.totals));
+    cells(totals));
+  // The heading counts the runs the table shows: the All row's cells over the columns shown.
+  const shownRuns = C.reduce((t, c) => t + (totals[c.key] ? totals[c.key].n : 0), 0);
 
   const picker = select(cols.map(c => [c, collectionOf(c).label]), col, v => nav({ col: v }), { 'aria-label': 'Collection' });
   const table = h('table', { class: ['data', 'sum-table', detailed && 'is-detailed'] },
@@ -211,7 +216,7 @@ export async function viewSummary(q) {
     }
   });
   return h('div', { class: 'page wide' },
-    h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, h('h1', null, `Summary: ${fmtInt(s.total)} runs`), picker, tPick, wPick, iPick,
+    h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, h('h1', null, shownRuns === s.total ? `Summary: ${fmtInt(s.total)} runs` : `Summary: ${fmtInt(shownRuns)} of ${fmtInt(s.total)} runs`), picker, tPick, wPick, iPick,
       counted !== s.total ? badge(`cells hold ${counted}`, 'bad', 'Cells and the collection disagree') : null), toggles),
     h('div', { class: 'table-wrap sum-wrap' }, table));
 }

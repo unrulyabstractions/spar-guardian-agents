@@ -2,6 +2,8 @@
    "viewer's own rules" from line 407 on). The page loads the results browser's src/ui/static/style.css first, which
    the source copied its other rules from. */
 .page.wide { max-width: none; }
+/* Every cell of a viewer table's row on the row's middle; a table that needs another alignment says so below. */
+table.data th, table.data td { vertical-align: middle; }
 /* The runs page's Collections control (tv_view_index.js): a small button that opens a compact table under the head. */
 .idx-about { position: relative; }
 .idx-about > summary { list-style: none; cursor: pointer; }
@@ -115,6 +117,13 @@ table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--ba
 .lv-table .lv-agent { width: 1%; white-space: nowrap; }
 .lv-table td.lv-cell .cheat-cell { display: inline-flex; flex-direction: column; align-items: center; }
 .lv-team td { background: var(--panel-2); }
+/* The judge score columns centred as the ladders' columns: each score line, its excerpt under it, and the Team row's
+   chip on the column's middle, a mislead mark hanging at its right out of the flow. */
+.lv-table th.lv-label-cell, .lv-table td.lv-label-cell { text-align: center; }
+.lv-table td.lv-label-cell .sc-line { justify-content: center; }
+.lv-table td.lv-label-cell .sc-excerpt-short { margin: 0 auto; }
+.lv-table tr.lv-team .sc-team { position: relative; }
+.lv-table tr.lv-team .sc-team .sc-mislead { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); margin-left: 3px; }
 /* A level chip (tv_levels.js levelChip): the ladder's colour at the level, the text colour that reads on it, and bars
    in that text colour, filled up to the level, with a gap at the ladder's line. */
 .lv-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 4px; white-space: nowrap;
@@ -180,12 +189,12 @@ table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--ba
 .sc-mislead { color: var(--warn); font-weight: 600; }
 .sc-open { font-size: 12px; }
 .sc-pair { display: grid; gap: 8px; }
-.sc-table td { vertical-align: top; white-space: normal; }
+.sc-table td { vertical-align: middle; white-space: normal; }
 mark.xl-mark { background: #ffe58a; color: #16191a; border-radius: 2px; padding: 0 1px; box-shadow: 0 0 0 2px #e0b400; }
 mark.xl-mark.flash { animation: flash 1.6s ease-out; }
 .table-wrap:has(> .lv-ladder-table) { width: fit-content; }
 .lv-ladder-table { border-collapse: collapse; font-size: 12px; }
-.lv-ladder-table th, .lv-ladder-table td { border: 1px solid var(--border); padding: 4px 6px; vertical-align: top; max-width: 260px; }
+.lv-ladder-table th, .lv-ladder-table td { border: 1px solid var(--border); padding: 4px 6px; vertical-align: middle; max-width: 260px; }
 /* a chip column: the chip on its cell's middle both ways; a level column with a gloss, on its row's middle */
 .lv-ladder-table td.chip { vertical-align: middle; text-align: center; }
 .lv-ladder-table td.mid { vertical-align: middle; }
@@ -283,8 +292,8 @@ mark.xl-mark.flash { animation: flash 1.6s ease-out; }
    the line. */
 .case .cs-legend{border-collapse:collapse;margin:10px 0 0;font-size:10px;color:var(--ink-2);table-layout:fixed;width:388px}
 .case .cs-legend col.csl-name-col{width:88px}
-.case .cs-legend th{text-align:left;font-weight:600;font-size:10.5px;white-space:nowrap;padding:3px 4px 3px 0;color:var(--ink)}
-.case .cs-legend td{padding:3px 1px;vertical-align:top;white-space:nowrap;text-align:center;line-height:1.2}
+.case .cs-legend th{text-align:left;font-weight:600;font-size:10.5px;white-space:nowrap;padding:3px 4px 3px 0;color:var(--ink);vertical-align:middle}
+.case .cs-legend td{padding:3px 2px;vertical-align:middle;white-space:nowrap;text-align:center;line-height:1.2}
 .case .cs-legend td.csl-line{border-left:2px solid var(--ink)}
 .case .cs-legend i{display:block;width:100%;min-width:14px;height:9px;margin:0 0 2px;border-radius:2px;border:1px solid var(--line-2);box-sizing:border-box}
 .case .csl-mark{display:inline-block;width:18px;font-weight:700}
@@ -326,12 +335,12 @@ mark.xl-mark.flash { animation: flash 1.6s ease-out; }
   border-bottom: 1px dotted var(--border-strong, var(--border)); line-height: 1.3; }
 /* A Details panel's summary (tv_levels.js summary): a label column and a value column. */
 .lv-summary { border-collapse: collapse; margin: 4px 0 10px; font-size: 13px; }
-.lv-summary th { text-align: left; padding: 3px 14px 3px 0; color: var(--muted); font-weight: 600; vertical-align: top; white-space: nowrap; }
-.lv-summary td { padding: 3px 0; vertical-align: top; }
+.lv-summary th { text-align: left; padding: 3px 14px 3px 0; color: var(--muted); font-weight: 600; vertical-align: middle; white-space: nowrap; }
+.lv-summary td { padding: 3px 0; vertical-align: middle; }
 .coord-table tr.coord-influencer td { background: var(--surface-2, rgba(127,127,127,.06)); }
 .coord-table td.num, .coord-pairs td.num { font-variant-numeric: tabular-nums; }
 /* The Details tables: the Agent and Role cells on their row's middle; each chip and short value centred in its
-   column; the lists (clauses, evidence, takes, labels) left and top. */
+   column; the lists (clauses, evidence, takes, labels) left, on the row's middle. */
 .coord-table td:nth-child(-n+2) { vertical-align: middle; }
 .coord-agents th:nth-child(n+3), .coord-agents td:nth-child(n+3), .coll-agents th:nth-child(n+3), .coll-agents td:nth-child(n+3),
 .coord-pairs th:last-child, .coord-pairs td:last-child { text-align: center; vertical-align: middle; }
@@ -346,10 +355,10 @@ table.collusion-pairs td:nth-child(2), table.collusion-pairs td:nth-child(4), ta
 .lv-chip-pair { display: inline-flex; flex-wrap: wrap; justify-content: center; gap: 3px; }
 table.sc-table td:nth-child(-n+2) { vertical-align: middle; }
 .lv-level-table td:first-child { white-space: nowrap; }
-.collusion-pairs td { vertical-align: top; }
+.collusion-pairs td { vertical-align: middle; }
 .collusion-pairs td:nth-child(3), .collusion-pairs td:nth-child(5) { min-width: 260px; max-width: 520px; }
 .collusion-pairs td:nth-child(6), .collusion-pairs td:nth-child(7) { min-width: 240px; max-width: 440px; }
-.cheat-table td { vertical-align: top; }
+.cheat-table td { vertical-align: middle; }
 .cheat-table td:nth-child(5) { min-width: 320px; max-width: 640px; }
 .cb-cell { display: inline-flex; flex-direction: column; gap: 1px; white-space: nowrap; }
 .nowrap { white-space: nowrap; }
@@ -437,6 +446,11 @@ table.idx-table .sc-team .sc-mislead { position: absolute; left: 100%; top: 50%;
 .lv-influencers { display: inline-flex; flex-direction: column; gap: 3px; vertical-align: middle; }
 .lv-influencers .lv-influencer-row { flex-direction: row; align-items: center; justify-content: center; gap: 4px; margin: 0; }
 .lv-influencers.is-pair .lv-influencer-row { height: 57px; }
+/* With two influencers the levels stand in a grid: the R and D marks in one column, each chip from one left edge
+   beside them, the block on the cell's middle. */
+.lv-influencers.is-pair { display: inline-grid; grid-template-columns: auto auto; grid-auto-rows: 57px; column-gap: 4px;
+  row-gap: 3px; align-items: center; justify-items: start; }
+.lv-influencers.is-pair .lv-influencer-row { display: contents; }
 .role-chip.role-mark { padding: 0 4px; letter-spacing: 0; }
 /* The Run column: wide enough that a name breaks at an underscore at most once or twice; on one line in a wide window. */
 table.idx-table td.wrap:first-child { min-width: 20ch; max-width: 34ch; }
@@ -457,6 +471,15 @@ table.idx-table td.lv, table.idx-table th.lv { padding-left: 6px; padding-right:
 .rp-details .kv-grid .kv-item.kv-wide { grid-column: 1 / -1; }
 .rp-details .kv-grid .kv-item.kv-mid { grid-column: span 2; }
 .rp-details .kv-grid .kv-item:not(.kv-wide) > dd { white-space: nowrap; }
+/* The grid measures itself: where it holds one column, a middle pair spans that one column too, so no implicit column
+   opens and a long pair's 1 / -1 is the whole width. */
+.rp-details .kv-grid { container-type: inline-size; }
+.rp-details .kv-grid .kv-item > dd { min-width: 0; }
+.rp-details .kv-grid .kv-item.kv-wide > dd { overflow-wrap: anywhere; }
+@container (max-width: 503px) {
+  .rp-details .kv-grid .kv-item.kv-mid { grid-column: 1 / -1; }
+  .rp-details .kv-grid .kv-item.kv-mid > dd { white-space: normal; overflow-wrap: anywhere; }
+}
 /* The Team labels card: as wide as its chips, each value centred in its column. */
 .rp-details table.labels-table { width: auto; min-width: 420px; }
 .rp-details .table-wrap:has(> .labels-table) { width: fit-content; }

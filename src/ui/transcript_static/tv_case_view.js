@@ -92,14 +92,18 @@ export function readableReasoning(raw) {
 }
 
 /** The strip's legend: one row per ladder, its lane code and name, then every level above none as a swatch in a grid of
- * equal columns, a rule at the ladder's line; a ladder with half the levels or fewer takes two columns a level; a row
- * for the regulator's tick when the strip draws one. */
+ * equal columns, a rule at the ladder's line; the grid holds every ladder's count of levels a whole number of times
+ * (their least common multiple, while that stays small), so each ladder's levels share the row equally and a long name
+ * gets the room of a ladder with fewer levels; a row for the regulator's tick when the strip draws one. */
 export function stripLegend(ladders, order, regulator = false) {
-  const cols = Math.max(...order.map(L => ladders[L].levels.length)) - 1;
+  const counts = order.map(L => ladders[L].levels.length - 1);
+  const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+  const lcm = counts.reduce((a, b) => (a * b) / gcd(a, b), 1);
+  const cols = lcm <= 24 ? lcm : Math.max(...counts);
   const row = L => {
     const lad = ladders[L];
     const line = lad.levels.indexOf(lad.line);
-    const span = (lad.levels.length - 1) * 2 <= cols ? 2 : 1;
+    const span = cols % (lad.levels.length - 1) === 0 ? cols / (lad.levels.length - 1) : 1;
     const cells = lad.levels.slice(1).map((v, j) => h('td', { class: ['csl-level', j + 1 === line && 'csl-line'],
       colspan: span > 1 ? String(span) : null, title: clipWords(`${v}: ${lad.meanings[j + 1]}`) },
     h('i', { style: `background:${RAMP[L][j + 1]}` }), v));
