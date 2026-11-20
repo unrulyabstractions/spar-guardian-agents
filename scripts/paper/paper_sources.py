@@ -292,12 +292,14 @@ def score_anchors_tex() -> str:
 def reliability_tex() -> str:
     """How often an independent reading of the transcripts confirmed each rung and score
     (src/measures/measure_readings.py readings(), the file the viewer's How reliable section reads too). The paper
-    shows only the rows of passes that are not retired. A block per measure, headed by the measure's name alone, then
+    shows only the rows of current passes: a pass that read an older state of the code or a retired label stays in
+    the viewer alone. A block per measure, headed by the measure's name alone, then
     per row how the cases were chosen, and how many were read, held, were wrong or were unclear. A measure read on
     two such passes, or whose rows are not together, stops the build, since its name would head two blocks."""
     r = measure_readings.readings()
     rows, passes, last = [], {}, None
-    for row in (row for row in r["rows"] if not row["retired"]):
+    current = {name for name, about in r["passes"].items() if about.get("current") and not about.get("retired")}
+    for row in (row for row in r["rows"] if row["pass"] in current):
         if passes.setdefault(row["measure"], row["pass"]) != row["pass"]:
             raise SystemExit(f"measure_readings.yaml: {row['measure']} is read on two passes that are not retired")
         if row["measure"] != last:

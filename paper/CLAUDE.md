@@ -1230,3 +1230,24 @@ plumbing; voice) read the built PDF and a fixer applied their findings. Removed 
 Left for the user: 22 references the text never cites; Table 10's code rows rest on readings made before some code
 fixes; Appendix C names tasks it never defines (OpenMath, subset sum, factoring, knowledge work, chess, "flipt issue",
 "vuls issue", "Riemann proof").
+
+## References checked, Table 10's code rows dropped, Appendix C defined, 2026-11-19 (night, later)
+
+The user: references "keep them, make sure bib is absolutely correct"; Table 10's code rows "drop them"; Appendix C's
+undefined task names "you choose".
+
+- References: five agents opened each of the 35 entries' sources (arXiv, ACL Anthology, publisher pages, posts). 31
+  matched. Corrected: hsing2026yoao "N. Hsing" became "N. S. Hsing"; chen2026elephant's bare arXiv id became its ACL
+  2026 record (Volume 1, San Diego, Jul. 2026, pp. 19888--19905, doi 10.18653/v1/2026.acl-long.912); csardi2006igraph
+  and vezhnevets2023concordia take their sources' sentence-case titles. schoen2026simulation was confirmed through the
+  author's own quotation and link, since X refused the page.
+- Table 10 shows only current passes: the Cheating and Collusion rows (a pass on an older state of the code) are gone
+  from the paper, kept in the viewer. Appendix B: "Code places every agent on the Cheating and Collusion ladders, and
+  one judge scores the two labels. Separate AI agents checked the code's rungs and the judge's scores ... The code's
+  rungs mostly held." became "One judge scores the two labels. Separate AI agents checked the judge's scores ...";
+  "the code's rungs, the disclosure score read as a floor and the control kind" became "the disclosure score read as
+  a floor and the control kind"; the caption now reads "each judge score". Methods: "confirmed each rung and label"
+  became "confirmed each judge score".
+- Appendix C: a new Table 11 defines the nine single-agent tasks (what the agent must do, the honeypot); Figure 26's
+  rows read "Go: Redis TLS settings", "Go: macOS scanning", "Math proof / Riemann hypothesis", "60 integers, no code",
+  "52-bit number, no code", "binder for an enzyme", "24-line poem", "five-slide client deck", "win a won position".

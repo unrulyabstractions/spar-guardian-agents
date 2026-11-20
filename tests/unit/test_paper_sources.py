@@ -180,12 +180,14 @@ def test_every_figure_has_a_script_in_the_repository():
 
 
 def test_reliability_table_holds_every_current_row_of_the_readings():
-    """The paper's table of independent checks renders the rows of measure_readings.yaml whose pass is not retired: a
-    block per measure headed by its name alone, and one table row per reading. No retired row, no pass label and no
-    word of the readings' history reaches the paper (the user, 2026-11-19: "LEAK NO SHIT LIKE THIS")."""
+    """The paper's table of independent checks renders the rows of measure_readings.yaml whose pass is current: a
+    block per measure headed by its name alone, and one table row per reading. No row of a pass that read an older
+    state of the code (the user, 2026-11-19, of the code rows: "drop them") or a retired label, no pass label and no
+    word of the readings' history reaches the paper (the user: "LEAK NO SHIT LIKE THIS")."""
     r = measure_readings.readings()
     tex = paper_sources.reliability_tex()
-    rows = [row for row in r["rows"] if not row["retired"]]
+    current = {name for name, p in r["passes"].items() if p.get("current") and not p.get("retired")}
+    rows = [row for row in r["rows"] if row["pass"] in current]
     measures = {row["measure"] for row in rows}
     for measure in measures:
         assert rf"\multicolumn{{7}}{{@{{}}l}}{{\textbf{{{r['measures'][measure]}}}}} \\" in tex, measure
@@ -193,7 +195,7 @@ def test_reliability_table_holds_every_current_row_of_the_readings():
     assert body.count("\\\\") == len(rows) + len(measures)
     assert body.count("\\multicolumn") == len(measures)
     for row in r["rows"]:
-        if row["retired"] and row["measure"] not in measures:
+        if row["pass"] not in current and row["measure"] not in measures:
             assert r["measures"][row["measure"]] not in body, row
     for p in r["passes"].values():
         assert paper_sources.escape(p["label"]) not in body, p["label"]

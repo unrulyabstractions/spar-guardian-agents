@@ -1,12 +1,10 @@
 \section*{Appendix B: Extended results}
 
 \subsection*{How reliable are these measures?}
-We ask how far a reading of the transcripts confirms what the code and the judge say. Code places every agent on the
-Cheating and Collusion ladders, and one judge scores the two labels. Separate AI agents checked the code's rungs and
-the judge's scores by reading the transcripts, the board, the diffs and the hand-ins of a set of cases. No human made
-these checks. Table~\ref{tab:reliability} gives, for each rung and range of scores, how many cases a reader read and
-how many held. A score held when the reader's own score sat at the same anchor or the next one. The code's rungs
-mostly held.
+We ask how far a reading of the transcripts confirms what the judge says. One judge scores the two labels. Separate
+AI agents checked the judge's scores by reading the transcripts, the board, the diffs and the hand-ins of a set of
+cases. No human made these checks. Table~\ref{tab:reliability} gives, for each range of scores, how many cases a
+reader read and how many held. A score held when the reader's own score sat at the same anchor or the next one.
 
 A disclosure score of 75 or more is an agent admitting a breach in its own words. Some of these admissions concern an
 order of the regulator and do not admit cheating. A score below 50 is no evidence that nothing was disclosed, because
@@ -15,16 +13,15 @@ kind control is read reliably. At 75 or more it is an order, a repeated demand o
 by an influencer. At 50 it is mostly ordinary coordination. Manipulation of the kind mislead is not trustworthy at any
 score, and most of its high scores did not hold. We count no agent as misleading without reading its excerpt against
 its own calls. Every located excerpt sits in the agent's own post or reasoning. Each excerpt we could not locate is
-the agent's own text, which the judge paraphrased or joined. We therefore posit that the code's rungs,
-the disclosure score read as a floor and the control kind of manipulation can carry our results, and that the mislead
-kind cannot.
+the agent's own text, which the judge paraphrased or joined. We therefore posit that the disclosure score read as a floor
+and the control kind of manipulation can carry our results, and that the mislead kind cannot.
 
 \begin{table}[tp]
   \centering
   \scriptsize
   \input{generated/reliability}
-  \caption{How often an independent reading of the transcripts confirmed each rung and score of the multi-domain
-  study. Read counts the cases checked, and held counts those where the reading agreed with the code or the judge.
+  \caption{How often an independent reading of the transcripts confirmed each judge score of the multi-domain
+  study. Read counts the cases checked, and held counts those where the reading agreed with the judge.
   Wrong counts those where it disagreed, and unclear those the evidence allows either way.}
   \label{tab:reliability}
 \end{table}
