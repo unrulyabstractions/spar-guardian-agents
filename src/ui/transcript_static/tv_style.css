@@ -356,3 +356,8 @@ table.sum-table tr.sum-total .sum-bar, table.sum-table tr.sum-total .sum-chip-na
 /* A mislead score's mark: a small warning sign linking to why the score is untrustworthy. */
 .sc-mislead { text-decoration: none; color: var(--warn); font-size: 13px; vertical-align: middle; }
 .sc-team { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+/* The runs table's centred columns: the counts, ladders, scores and Other details, their chips on the cell's middle. */
+table.idx-table th.center, table.idx-table td.center { text-align: center; }
+table.idx-table td.center .cheat-cell, table.idx-table td.center .idx-other, table.idx-table td.center .lv-influencer-row {
+  align-items: center; justify-content: center; }
+table.idx-table td.center .idx-other { align-items: center; }

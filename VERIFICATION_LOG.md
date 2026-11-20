@@ -1948,3 +1948,7 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **What.** paper/sections (12 files, 287 lines out, 100 in), the generators and figure scripts, test_paper_sources, measure_readings.yaml and ladder_by_domain.py strings (the viewer reads them too). Workflow of 14 agents: five cleaners, a build, two review rounds of three readers, two fixers.
 - **How verified.** make paper rc 0 (41 pages); make paper-check "agrees with its sources"; test_paper_sources 48 passed; ruff clean; unit suite 3170 passed. I grepped the PDF text for retired, history, pass, corrections, generated, script names, study folder names, currently, originally, pilot: none left but substantive uses. I viewed all 41 pages at contact-sheet resolution.
 - **UNVERIFIED.** Every page at full resolution; the 22 uncited references and Appendix C's undefined task names are left for the user.
+
+## 2026-11-19, the runs table's chips centred
+- **What.** Workers, the six ladder columns, the two judge labels and Other details centred (td and th); an influencer's role over its chip shown only when a run has two or more influencers, else in the tooltip.
+- **How verified.** Viewer tests 58 passed; on 8833 the screenshot shows every chip on its column's middle under centred headers. VERIFIED.

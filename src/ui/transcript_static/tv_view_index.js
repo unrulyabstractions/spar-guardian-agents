@@ -116,8 +116,8 @@ function columns(d) {
     cell: r => {
       const xs = r.levels[`${L}_influencers`];
       if (!xs.length) return none();
-      return h('span', { class: 'lv-influencers' }, xs.map(x => h('div', { class: 'lv-influencer-row' },
-        h('span', { class: 'small muted' }, `${x.role} `), levelChip(L, lad(L), x.level, false))));
+      return h('span', { class: 'lv-influencers' }, xs.map(x => h('div', { class: 'lv-influencer-row', title: x.role },
+        xs.length > 1 ? h('span', { class: 'small muted' }, x.role) : null, levelChip(L, lad(L), x.level, false))));
     } });
   const about = d.judge_labels;
   const label = k => ({ key: k, label: about.labels[k].name, group: 'labels',
@@ -150,6 +150,8 @@ const GROUPS = { team: 'Team', labels: 'Judge labels', influencers: 'Influencers
 
 // Columns whose text wraps.
 const WRAP = new Set(['run', 'task']);
+// Columns whose cells sit centred: the counts, the ladders, the scores and Other details.
+const CENTER = k => k.startsWith('lv_') || ['workers', 'disclosure', 'manipulation', 'other'].includes(k);
 
 function uniq(a) { return [...new Set(a.filter(x => x != null))]; }
 
@@ -282,7 +284,7 @@ export async function viewIndex(q) {
   const STARTS = new Set(COLUMNS.filter((c, i) => i && COLUMNS[i - 1].group !== c.group).map(c => c.key));
   const headRow = h('tr');
   for (const c of COLUMNS) {
-    const th = h('th', { class: ['sortable', STARTS.has(c.key) && 'idx-group-start'], title: c.title || null, scope: 'col', tabindex: '0' }, c.label,
+    const th = h('th', { class: ['sortable', STARTS.has(c.key) && 'idx-group-start', CENTER(c.key) && 'center'], title: c.title || null, scope: 'col', tabindex: '0' }, c.label,
       c.note ? [h('br'), c.note] : null);
     const go = () => {
       if (state.sort === c.key) state.dir = state.dir === 'asc' ? 'desc' : 'asc';
@@ -322,7 +324,7 @@ export async function viewIndex(q) {
     if (state.page >= pages) state.page = pages - 1;
     const slice = shown.slice(state.page * size, state.page * size + size);
     tbody.replaceChildren(...(slice.length ? slice.map(r => h('tr', { class: ['idx-row', alarmOf(r) && 'row-alarm'], title: alarmOf(r) ? `alarm: ${alarmOf(r)}` : null },
-      COLUMNS.map(c => h('td', { class: [WRAP.has(c.key) && 'wrap', c.key.startsWith('lv_') && 'lv', STARTS.has(c.key) && 'idx-group-start'] }, c.cell(r)))))
+      COLUMNS.map(c => h('td', { class: [WRAP.has(c.key) && 'wrap', c.key.startsWith('lv_') && 'lv', STARTS.has(c.key) && 'idx-group-start', CENTER(c.key) && 'center'] }, c.cell(r)))))
       : [h('tr', null, h('td', { colspan: String(COLUMNS.length) }, muted('No run matches these filters.')))]));
     pager.replaceChildren(
       h('button', { type: 'button', class: 'btn btn-small', disabled: state.page === 0, onclick: () => { state.page--; draw(); } }, '← previous'),
