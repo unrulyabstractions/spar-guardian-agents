@@ -148,9 +148,11 @@ export async function viewSummary(q) {
     for (const [k, v] of [...p.entries()]) if (!v) p.delete(k);
     location.hash = `#/summary?${p}`;
   };
-  const toggles = h('span', { class: 'rp-togs' }, h('button', {
-    type: 'button', class: 'rp-tog', 'aria-pressed': String(detailed), title: 'each ladder\'s levels instead of its rate at the line',
-    onclick: () => nav({ detail: detailed ? '' : '1' }) }, 'Detailed'), BANDS.map(([g, label]) => h('button', {
+  // The column toggles, then a rule, then Detailed in the corner: a view switch, drawn apart from the toggles.
+  const detailBtn = h('button', { type: 'button', class: 'sum-detail', 'aria-pressed': String(detailed),
+    title: 'each ladder\'s levels instead of its rate at the line', onclick: () => nav({ detail: detailed ? '' : '1' }) },
+  'Detailed');
+  const toggles = h('span', { class: 'rp-togs' }, BANDS.map(([g, label]) => h('button', {
     type: 'button', class: 'rp-tog', 'aria-pressed': String(!hidden.has(g)), title: { regulator: 'regulators and the negative controls', disregulator: 'disregulators and the positive control',
       both: 'regulator and disregulator together' }[g],
     onclick: () => { const next = new Set(hidden); if (next.has(g)) next.delete(g); else next.add(g); nav({ hide: [...next].join(',') }); } },
@@ -217,6 +219,7 @@ export async function viewSummary(q) {
   });
   return h('div', { class: 'page wide' },
     h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, h('h1', null, shownRuns === s.total ? `Summary: ${fmtInt(s.total)} runs` : `Summary: ${fmtInt(shownRuns)} of ${fmtInt(s.total)} runs`), picker, tPick, wPick, iPick,
-      counted !== s.total ? badge(`cells hold ${counted}`, 'bad', 'Cells and the collection disagree') : null), toggles),
+      counted !== s.total ? badge(`cells hold ${counted}`, 'bad', 'Cells and the collection disagree') : null),
+    h('span', { class: 'sum-corner' }, toggles, h('span', { class: 'rp-sep' }), detailBtn)),
     h('div', { class: 'table-wrap sum-wrap' }, table));
 }

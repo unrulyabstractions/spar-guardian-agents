@@ -639,3 +639,8 @@ table.sum-table.is-detailed td.sum-cell { min-width: 220px; }
 /* The run record at the bottom of Details, under its own heading. */
 .rp-record-in { margin-top: 28px; }
 .rp-record-h { font-size: 15px; margin: 0 0 12px; }
+/* Summary: the column toggles, a rule, then Detailed in the corner, drawn as a view switch apart from the toggles. */
+.sum-corner { display: inline-flex; align-items: center; gap: 14px; margin-left: auto; }
+.sum-detail { font: 600 12px var(--sans); padding: 5px 14px; border-radius: 999px; border: 1px solid var(--accent);
+  background: none; color: var(--accent); cursor: pointer; }
+.sum-detail[aria-pressed=true] { background: var(--accent); color: var(--panel); }

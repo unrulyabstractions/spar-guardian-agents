@@ -2151,3 +2151,10 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   buttons are Board, Details, Calls, System, User messages, Reasoning; Details' last child is the run record. Bar and
   Details screenshots viewed (the record's header, settings and team labels under "Run record"). Viewer tests 184 passed.
 - **Result.** VERIFIED.
+
+## 2026-11-20: Summary page, Detailed in the corner as a switch apart from the column toggles
+- **What.** Detailed left the toggle group: the column toggles, a rule, then Detailed at the right corner as a rounded
+  accent switch, filled when on.
+- **How verified.** Summary on 8833 at 1400 wide, plain and ?detail=1, head cropped and viewed: Regulators,
+  Disregulators, Both, a rule, then Detailed outlined (off) and filled (on). Viewer tests passed.
+- **Result.** VERIFIED.
