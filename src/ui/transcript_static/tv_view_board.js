@@ -31,7 +31,7 @@
 import { appendAll, enc, firstLine, fmtSecs, h, plural } from '/static/app/dom.js';
 import { badge, longText, muted } from '/static/app/components.js';
 import { COUNT_STEPS, TIME_STEPS, fmtTick, svgEl, ticksFor, tip, withTip } from '/static/app/charts.js';
-import { RAMP, inkOn, scoreColour } from './tv_case_view.js';
+import { RAMP, centreVertically, inkOn, scoreColour } from './tv_case_view.js';
 import { excerptSpan, markedNodes } from './tv_excerpt.js';
 import { ROLE_LABEL } from './tv_labels.js';
 import { levelChip, lineMark, misleadMark, scoreChip } from './tv_levels.js';
@@ -944,7 +944,7 @@ export function renderBoard(el, d, opts) {
     moveTo(keyOf(d.posts[i]));
     const li = items[i].li;
     const target = li.querySelector('mark.xl-mark') || li;
-    target.scrollIntoView({ block: 'center' });
+    centreVertically(target);
     target.classList.remove('flash');
     void target.offsetWidth;
     target.classList.add('flash');

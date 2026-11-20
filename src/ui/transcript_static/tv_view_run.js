@@ -23,7 +23,7 @@ import { CHEATBENCH, ROLE_LABEL, armLabel, collectionOf, influencerParts, isInfl
   taskLabel } from './tv_labels.js';
 import { alarmBadge, cheatbenchTeam, cheatbenchWords, cheatingCell, cheatingPanel, clauseList, collusionPanel,
   coordinationPanel, judgeLabels, judgeLabelsPanel, labelEntry, levelChip, levelsPanel, teamScore } from './tv_levels.js';
-import { PARTS, renderCase, stripLegend } from './tv_case_view.js';
+import { PARTS, centreVertically, renderCase, stripLegend } from './tv_case_view.js';
 import { renderBoard } from './tv_view_board.js';
 
 // The run page fills the window under the site's bar (tv_style.css .rp-page): its top is the site bar's real bottom
@@ -37,7 +37,7 @@ window.addEventListener('resize', placePage, { passive: true });
 
 function flash(el) {
   if (!el) return;
-  el.scrollIntoView({ block: 'center' });
+  centreVertically(el);
   el.classList.remove('flash');
   void el.offsetWidth;
   el.classList.add('flash');

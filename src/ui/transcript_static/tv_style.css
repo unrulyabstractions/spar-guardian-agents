@@ -333,7 +333,7 @@ mark.xl-mark.flash { animation: flash 1.6s ease-out; }
     flex-direction: column; padding: 0 16px 10px; }
   .rp-page > .rp-bar { position: static; flex: none; margin: 0 -16px 8px; padding: 6px 16px; }
   .rp-page > .rp-stage { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-  .rp-page > .rp-stage.rp-stage-case { overflow: hidden; }
+  .rp-page > .rp-stage.rp-stage-case { overflow: clip; }
   .rp-stage-case > .case { height: 100%; }
   .rp-stage .case .main { grid-template-columns: 410px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 12px;
     height: 100%; align-items: stretch; }
@@ -575,4 +575,4 @@ table.sum-table.is-detailed td.sum-cell { min-width: 220px; }
 .case .right, .case .step-box, .case .step-b, .case .call, .case .cb, .case .sec, .case .sec-b { min-width: 0; max-width: 100%; }
 .case .txt { overflow-wrap: anywhere; word-break: break-word; max-width: 100%; }
 .rp-stage .case .right { overflow-x: hidden; }
-html, body { overflow-x: hidden; }
+html, body { overflow-x: clip; }

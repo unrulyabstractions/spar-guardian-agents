@@ -67,6 +67,21 @@ function followPage() {
 window.addEventListener('scroll', followPage, { passive: true });
 window.addEventListener('resize', followPage, { passive: true });
 
+/** Bring el to the middle of the nearest box that scrolls up and down (or the window), moving only that one, up or
+ * down: scrollIntoView would also shift every clipped ancestor, sideways too, where no reader can scroll it back. */
+export function centreVertically(el) {
+  if (!el) return;
+  let box = el.parentElement;
+  while (box && !/(auto|scroll)/.test(getComputedStyle(box).overflowY)) box = box.parentElement;
+  const r = el.getBoundingClientRect();
+  if (!box || box === document.body || box === document.documentElement) {
+    window.scrollTo({ top: window.scrollY + r.top + r.height / 2 - window.innerHeight / 2 });
+    return;
+  }
+  const b = box.getBoundingClientRect();
+  box.scrollTop += r.top + r.height / 2 - (b.top + box.clientHeight / 2);
+}
+
 /** Reasoning as text, or a note when the provider hid it. */
 export function readableReasoning(raw) {
   if (raw == null || raw === '') return null;
@@ -702,7 +717,7 @@ export function renderCase(t, ctx) {
       unfold(box);
       openSections(box);
       const mark = box.querySelector('mark.xl-mark');
-      const centre = () => (mark || box).scrollIntoView({ block: 'center', behavior: 'instant' });
+      const centre = () => centreVertically(mark || box);
       centre();
       requestAnimationFrame(centre);
       if (mark) { mark.classList.remove('flash'); void mark.offsetWidth; mark.classList.add('flash'); }

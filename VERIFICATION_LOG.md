@@ -2002,3 +2002,7 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 ## 2026-11-20, the wheel scrolls the steps wherever the pointer is
 - **What.** A wheel over the strip's pane scrolls the steps unless the strip itself has more to scroll; the test pin for the two-pane breakpoint follows f7a89f2 (that commit went out with this one test failing).
 - **How verified.** On 8833 at 1288x706, real CDP mouseWheel events (5 x 400): over the steps the pane scrolled 0 -> 2000, over the strip panel now 2000 -> 4000 (before: no movement); at 736x403 the page scrolls under either. Viewer, board and summary tests 106 passed.
+
+## 2026-11-20, jumps no longer shift clipped containers
+- **What.** The user could not scroll the strip's panel back up: a jump (scrollIntoView) had scrolled clipped ancestors (the stage, the page) where no reader can undo it. centreVertically (tv_case_view.js) moves only the nearest box that scrolls up and down; used by showReasoning, the run page's flash and the Board's post jump; the stage and the page clip instead of hide, so they cannot be scrolled at all.
+- **How verified.** On 8833 at 1288x706, binder_minimal_luna4?agent=k7x6z&call=30: after the jump every element with a scroll offset was listed: only .case .right (11420 px); the panel's top at 121 px. Viewer, board and summary tests 106 passed.
