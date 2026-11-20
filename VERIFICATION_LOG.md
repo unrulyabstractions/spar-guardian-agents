@@ -2143,3 +2143,11 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   choosing n2j5p in Influencers showed it and reset Workers; opening Board reset both. Two bar screenshots viewed.
   Viewer tests passed.
 - **Result.** VERIFIED.
+
+## 2026-11-20: A− and A+ removed; the run record ends Details
+- **What.** The text-size buttons and their --tv-zoom rule are gone; the Run record button is gone and the record is
+  the last section of Details under the heading "Run record".
+- **How verified.** flipt_minimal_regulated_dsflash_sonnet_ambiguous_fill1 on 8833 in headless Chrome: the bar's
+  buttons are Board, Details, Calls, System, User messages, Reasoning; Details' last child is the run record. Bar and
+  Details screenshots viewed (the record's header, settings and team labels under "Run record"). Viewer tests 184 passed.
+- **Result.** VERIFIED.

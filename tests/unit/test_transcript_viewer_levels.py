@@ -1135,13 +1135,15 @@ def test_the_run_page_is_two_panes_with_a_slider_and_a_step_holds_its_messages()
     assert "h('div', { class: 'ch' }, foldButton('call'), h('span', { class: 'cn', title: x.step" in case
     assert "promptSection(x.text)" in case and "promptBlock" not in case and "'Prompt'" not in case
     run = (STATIC / "tv_view_run.js").read_text()
-    assert "h('details', { class: 'rp-details' }" not in run and "place(key, record)" in run
+    # the run record ends Details (the user, 2026-11-20); it has no button of its own
+    assert "h('details', { class: 'rp-details' }" not in run and "place(key, record)" not in run
+    assert "h('h2', { class: 'rp-record-h' }, 'Run record'), record)" in run
     css = (STATIC / "tv_style.css").read_text()
-    # the user, 2026-11-20, of pinch-zoom: the run page scrolls as one document, with A- and A+ for text size
+    # the user, 2026-11-20, of pinch-zoom: the run page scrolls as one document; A- and A+ were later removed
     assert ".page.rp-page { position: fixed;" not in css and ".rp-stage .case .right { overflow-y: auto;" not in css
-    assert ".rp-stage .case .right { zoom: var(--tv-zoom, 1); }" in css and ".case .cs-slider {" in css
+    assert "--tv-zoom" not in css and ".case .cs-slider {" in css
     assert "html, body { overflow-x" not in css
-    assert "'A−'" in run and "'A+'" in run and "localStorage.setItem('tv-zoom'" in run
+    assert "'A−'" not in run and "'A+'" not in run and "tv-zoom" not in run
 
 
 def test_the_viewer_carries_no_sentence_that_explains_the_page():

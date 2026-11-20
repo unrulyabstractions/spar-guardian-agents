@@ -323,8 +323,8 @@ mark.xl-mark.flash { animation: flash 1.6s ease-out; }
 @media (min-width:1000px) and (min-height:560px) { .rp-stage .case .main { grid-template-columns: 410px minmax(0, 1fr); gap: 12px; } }
 .rp-stage .case .call, .rp-stage .case .step-box { scroll-margin-top: var(--under); }
 /* The run page scrolls as one document (no fixed panes): pinch-zoom and Cmd zoom then behave as on any page. The
-   strip's panel stays sticky beside the steps; A- and A+ in the run bar size the steps' text (--tv-zoom). */
-.rp-stage .case .right { zoom: var(--tv-zoom, 1); }
+   strip's panel stays sticky beside the steps. */
+
 /* The strip's slider (tv_case_view.js): a track the strip's height, a row per call, and a handle at the call at the top
    of the steps. */
 .case .cs-strip { position: relative; }
@@ -636,3 +636,6 @@ table.sum-table.is-detailed td.sum-cell { min-width: 220px; }
 .rp-pick.on { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
 .rp-pick:not(.on) { color: var(--muted); }
 .rp-sep { align-self: stretch; border-left: 1px solid var(--border-strong, var(--border)); margin: 2px 0; }
+/* The run record at the bottom of Details, under its own heading. */
+.rp-record-in { margin-top: 28px; }
+.rp-record-h { font-size: 15px; margin: 0 0 12px; }

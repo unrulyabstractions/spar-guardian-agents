@@ -1,9 +1,9 @@
 /* View: one run (#/run/<collection>/<run key>?agent=<id>&call=<k>, ?agent=<id>&label=<judge label>, ?tab=board&a=&b=
  * &mode=&pos= or ?tab=details; with &fold=calls,system,user,reasoning (or none) on an agent's tab).
- * Ported from collusion-hermaneutics' viewer (viewer/static/app/view_run.js). A bar with the run, an agent tab per
- * agent, a Board tab and a Details tab; the selected agent's whole episode below it, each step with its labels
- * (tv_case_view.js); the run record under it: the run's labels, the run settings, each agent's record with its
- * Cheating evidence, its judge labels and CheatBench's judge on it.
+ * Ported from collusion-hermaneutics' viewer (viewer/static/app/view_run.js). A bar with the run, a select of its
+ * workers and one of its influencers, a Board tab and a Details tab; the selected agent's whole episode below it, each
+ * step with its labels (tv_case_view.js). Details ends with the run record: the run's labels, the run settings, each
+ * agent's record with its Cheating evidence, its judge labels and CheatBench's judge on it.
  * Our edits: the imports (dom.js, components.js and charts.js are the results browser's own); the judges are read
  * from the run's verdict files (judges/<pass>.<judge>.jsonl), shown where the run has them; the source's API judges,
  * second judge and sentence lens are gone; a regulator and a disregulator are influencers; the header names the
@@ -270,7 +270,7 @@ export async function viewRun(id, q, view) {
   labelsCard.id = 'sec-labels';
   const agentsBox = h('div', { id: 'sec-agents' }, d.agents.map(agentCard));
 
-  // ---- top bar: run, arm, agent tabs, the fold toggles, the run record's toggle; the stage below holds the selected
+  // ---- top bar: run, arm, the agents' selects, Board and Details, the fold toggles; the stage below holds the selected
   // tab. The parts folded on every step (?fold=calls,system,user,reasoning; none for nothing; without it DEFAULT_FOLDS)
   // come from the hash and go back to it; an agent's tab takes them when shown.
   // Agents ordered most interesting first: highest on Cheating, then Coordination, then Collusion, then as listed. A
@@ -303,7 +303,9 @@ export async function viewRun(id, q, view) {
     collusionPanel(d.levels, roles, { evidence: evidenceText }),
     judgeLabelsPanel(d.levels, roles, openLink),
     // the strip's legend, in the case layout its rules are scoped to
-    h('section', { class: 'card' }, h('h2', null, 'Legend'), h('div', { class: 'case' }, stripLegend(d.levels.ladders, d.levels.order)))) });
+    h('section', { class: 'card' }, h('h2', null, 'Legend'), h('div', { class: 'case' }, stripLegend(d.levels.ladders, d.levels.order))),
+    // the run record last: the run's labels, its settings and each agent's record
+    h('section', { class: 'rp-record-in' }, h('h2', { class: 'rp-record-h' }, 'Run record'), record)) });
   // The Board tab reads /api/board when first opened; its handle ({moveTo, showPost, state}) comes once it is drawn.
   // Its pair, mode and position come from the hash (a, b, mode, pos) and go back to it; its agents' cards show the
   // judge labels the Details tab shows.
@@ -340,7 +342,6 @@ export async function viewRun(id, q, view) {
     stage.replaceChildren(el);
     scroller().scrollTop = scrolled.get(key) || 0;
   }
-  let shown = null;   // the tab the run record's button goes back to
   async function selectTab(key) {
     for (const [k, b] of tabs) b.classList.toggle('on', k === key);
     for (const sel of pickers) {
@@ -348,10 +349,7 @@ export async function viewRun(id, q, view) {
       sel.value = mine ? key : '';
       sel.classList.toggle('on', mine);
     }
-    recordBtn.setAttribute('aria-pressed', String(key === 'record'));
-    toggles.hidden = views.has(key) || key === 'record';   // the fold toggles act on an agent's steps only
-    if (key !== 'record') shown = key;
-    if (key === 'record') { place(key, record); return null; }
+    toggles.hidden = views.has(key);   // the fold toggles act on an agent's steps only
     if (views.has(key)) {
       if (!drawn.has(key)) drawn.set(key, views.get(key).draw());
       const v = drawn.get(key);
@@ -390,19 +388,7 @@ export async function viewRun(id, q, view) {
         if (tr) { tr.setFolds(folded); tr.refresh(); }
         return !folded.has(k);
       })));
-  // A- and A+: the steps' text size, kept across runs (localStorage), from 70% to 200%.
-  const ZOOMS = [0.7, 0.8, 0.9, 1, 1.1, 1.25, 1.4, 1.6, 1.8, 2];
-  const zoomAt = () => { const z = Number(localStorage.getItem('tv-zoom')) || 1; return ZOOMS.reduce((a, b) => (Math.abs(b - z) < Math.abs(a - z) ? b : a)); };
-  const setZoom = z => { localStorage.setItem('tv-zoom', String(z)); document.documentElement.style.setProperty('--tv-zoom', String(z)); };
-  setZoom(zoomAt());
-  const zoomBy = d => () => setZoom(ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, ZOOMS.indexOf(zoomAt()) + d))]);
-  const zoomBtns = h('span', { class: 'rp-zoom' },
-    h('button', { type: 'button', class: 'rp-dbtn', title: 'smaller text', onclick: zoomBy(-1) }, 'A−'),
-    h('button', { type: 'button', class: 'rp-dbtn', title: 'larger text', onclick: zoomBy(1) }, 'A+'));
-  // The run record is shown in the stage in place of a tab; its button goes back to the tab shown before.
-  const recordBtn = h('button', { type: 'button', class: 'rp-dbtn', 'aria-pressed': 'false', title: 'the run\'s labels, settings and records',
-    onclick: () => selectTab(current === 'record' && shown ? shown : 'record').catch(() => {}) }, 'Run record');
-  // Two rows: the run and who ran it; under it the tabs, with the fold toggles and the run record's button at the right.
+  // Two rows: the run and who ran it; under it the agents' selects, with the fold toggles at the right.
   // Board and Details sit in the top row's right corner; the agents' selects open the second row.
   const viewTabs = [...tabs].filter(([k]) => views.has(k)).map(([, b]) => b);
   const bar = h('div', { class: 'rp-bar' },
@@ -413,7 +399,7 @@ export async function viewRun(id, q, view) {
       viewTabs.length ? h('span', { class: ['rp-tabs', 'rp-view-tabs'] }, viewTabs) : null),
     h('div', { class: 'rp-row' },
       h('span', { class: 'rp-picks' }, pickers.flatMap((sel, i) => (i ? [h('span', { class: 'rp-sep' }), sel] : [sel]))),
-      h('span', { class: 'rp-right' }, toggles, zoomBtns, recordBtn)));
+      h('span', { class: 'rp-right' }, toggles)));
 
   view.mounted(() => {
     document.title = `${row.run} · Transcripts`;
