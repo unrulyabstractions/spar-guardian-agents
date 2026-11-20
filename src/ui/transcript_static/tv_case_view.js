@@ -507,6 +507,13 @@ export function renderCase(t, ctx) {
     tx.textContent = String(k);
     svg.appendChild(tx);
   }
+  // Where one step (model turn) ends and the next begins: a fainter line across the lanes, with no number.
+  for (let k = 1; k < n; k++) {
+    if (calls[k].step === calls[k - 1].step) continue;
+    const y = TOP + k * rh;
+    svg.appendChild(mk('line', { x1: LB, y1: y, x2: LB + lanesW, y2: y, class: 'cs-stepline' }));
+    svg.appendChild(mk('line', { x1: RX, y1: y, x2: RX + RW, y2: y, class: 'cs-stepline' }));
+  }
   // The agent's level on each ladder at the end of the run, as chips with their evidence on hover.
   const mine = lv && lv.agents[ctx.agent];
   const ladderLine = mine ? h('div', { class: 'cs-ladders' }, order.filter(L => !mine[L].na).map(L =>
@@ -518,11 +525,11 @@ export function renderCase(t, ctx) {
   const thumb = h('div', { class: 'cs-thumb' });
   const slider = h('div', { class: 'cs-slider', role: 'slider', tabindex: n ? '0' : null, 'aria-label': 'call',
     'aria-orientation': 'vertical', 'aria-valuemin': '0', 'aria-valuemax': String(Math.max(0, n - 1)),
-    style: `left:${W + 2}px;top:${TOP}px;height:${Math.max(1, n * rh)}px`, hidden: !n },
+    style: `left:${W + 12}px;top:${TOP}px;height:${Math.max(1, n * rh)}px`, hidden: !n },
   h('div', { class: 'cs-track' }), thumb);
   const left = h('div', { class: 'left' },
     ladderLine,
-    h('div', { class: 'cs-strip', style: `width:${W + 22}px` }, svg, slider),
+    h('div', { class: 'cs-strip', style: `width:${W + 34}px` }, svg, slider),
     lv ? stripLegend(lv.ladders, single ? ['cheating'] : order, regAt.size > 0) : null,
     unplaced ? h('p', { class: 'note' }, `${plural(unplaced, 'label')} not drawn: call not in this transcript`) : null);
 

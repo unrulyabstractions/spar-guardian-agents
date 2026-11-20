@@ -325,14 +325,9 @@ mark.xl-mark.flash { animation: flash 1.6s ease-out; }
 .rp-stage .case .left { padding: 10px; top: var(--under); max-height: calc(100vh - var(--under) - 12px); }
 @media (min-width:1000px) and (min-height:560px) { .rp-stage .case .main { grid-template-columns: 410px minmax(0, 1fr); gap: 12px; } }
 .rp-stage .case .call, .rp-stage .case .step-box { scroll-margin-top: var(--under); }
-/* Two panes from 1000 x 560 CSS px: the run page fills the window under the site bar (tv_view_run.js sets --rp-top), the run bar
-   on top and the stage under it; a view or the run record scrolls in the stage; an agent's strip and steps are each
-   their own pane, the steps scrolling in theirs, padded at the end so the last call can reach the top. The strip's
-   pane is 410 px, so the strip's label margin (tv_case_view.js LB), its slider and its legend's level cells fit. */
 /* The run page scrolls as one document (no fixed panes): pinch-zoom and Cmd zoom then behave as on any page. The
    strip's panel stays sticky beside the steps; A- and A+ in the run bar size the steps' text (--tv-zoom). */
 .rp-stage .case .right { zoom: var(--tv-zoom, 1); }
-}
 /* The strip's slider (tv_case_view.js): a track the strip's height, a row per call, and a handle at the call at the top
    of the steps. */
 .case .cs-strip { position: relative; }
@@ -344,7 +339,8 @@ mark.xl-mark.flash { animation: flash 1.6s ease-out; }
 .case .cs-slider:hover .cs-track { background: var(--muted); }
 .case .cs-slider.dragging .cs-thumb { cursor: grabbing; transform: scale(1.12); }
 .case .cs-slider:focus-visible .cs-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
-.case .cs-ladders { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 8px; }
+.case .cs-ladders { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 18px; }
+.case .cs-ladders .lv-chip { font-size: 11.5px; }
 .case .cs-mile { font-size: 10px; }
 /* The three ladders: the runs table's influencer columns, the Details tab's panels, the Ladders page's level tables;
    the Cheating cell, with the code's word over CheatBench's judge's, each marked by who says it. */
@@ -568,3 +564,12 @@ table.sum-table.is-detailed td.sum-cell { min-width: 220px; }
 .case .txt { overflow-wrap: anywhere; word-break: break-word; max-width: 100%; }
 .rp-stage .case .right { overflow-x: clip; }
 .rp-zoom { display: inline-flex; gap: 2px; }
+/* The strip's legend: room between its rows and above it. */
+.case .cs-legend { margin-top: 18px; }
+.case .cs-legend th, .case .cs-legend td { padding-top: 6px; padding-bottom: 6px; }
+/* The strip's step boundaries: a fainter line than the numbered grid, dashed. */
+.case .cs-stepline { stroke: var(--text); stroke-opacity: .16; stroke-width: 1; stroke-dasharray: 2 2; pointer-events: none; }
+/* The run bar: room around it and between its groups. */
+.rp-bar { padding: 12px 18px; gap: 10px 18px; margin-bottom: 14px; }
+.rp-bar .rp-tabs { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.rp-who { gap: 12px; }
