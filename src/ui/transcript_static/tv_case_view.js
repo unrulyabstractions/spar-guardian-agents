@@ -4,7 +4,9 @@
  * (viewer/static/app/case_view.js, after arena-capstone script/visualize_case.html). Our edits: readableReasoning,
  * which the source imported from its transcript.js, sits here verbatim; the imports point at this viewer's files; the
  * source's sentence lens is gone and each call shows its labels (src/ui/transcript_levels.py _agent_labels) in its
- * place; the strip follows the page as it scrolls; each judge label whose excerpt code located in a model call's
+ * place; the run page shows the strip and the steps as two panes, the steps scrolling in theirs, and the strip follows
+ * them, with a slider beside it that brings any call to the top; a step holds the messages that fed its model turn,
+ * then its calls; every box folds to its header; each judge label whose excerpt code located in a model call's
  * reasoning is a label of that call and its excerpt is marked in the reasoning (showReasoning opens it); a step's
  * reasoning, tool call and tool result are three sections, each folded by its header strip; a step's head line is its
  * call number and its levels as chips, an outline for a level reached before and a marked chip for a label of its own;
@@ -53,8 +55,9 @@ const WORDS = {
   collusion: { cooperation: 'cooperation', collaboration: 'collaboration', collusion: 'collusion' },
 };
 
-// The page has one episode on screen at a time. One scroll listener for the page asks that episode to move its strip,
-// and a WeakMap holds the episodes, so an episode the page dropped is freed.
+// The page has one episode on screen at a time. One scroll listener for the page (a narrow window's one column) asks that
+// episode to move its strip, and a WeakMap holds the episodes, so an episode the page dropped is freed; the steps' own
+// pane has its own listener.
 const FOLLOW = new WeakMap();
 function followPage() {
   const shown = document.querySelector('.case');
@@ -137,13 +140,6 @@ function resultText(r) {
   if (Array.isArray(c)) return c.map(p => (p && p.text) || asStr(p)).join('\n');
   return asStr(c) || asStr(r.extra && r.extra.error);
 }
-/** A prompt the agent was given (System, User): its first lines, the whole text on a click. */
-function promptBlock(label, text) {
-  const el = h('div', { class: 'blk inp fold' }, h('div', { class: 'lab' }, label), h('div', { class: 'txt' }, String(text || '')));
-  el.addEventListener('click', () => el.classList.remove('fold'));
-  return el;
-}
-
 // The parts of a step, each a section with a header strip that folds it: the run page's bar folds a part everywhere.
 export const PARTS = [['step', 'Steps'], ['reasoning', 'Reasoning'], ['call', 'Tool calls'], ['result', 'Tool results']];
 // A section longer than this starts clipped to its first lines.
@@ -170,6 +166,9 @@ function section(part, name, tag, text, mark) {
 }
 const reasoningSection = (text, mark) => section('reasoning', 'Reasoning', null, text, mark);
 const textSection = text => section('reasoning', 'Text', null, text, null);
+/** A prompt the agent was given (System, User): a section headed by its length, long ones clipped. */
+const promptSection = text => section('prompt', 'Text', h('span', { class: 'sec-size' },
+  plural(String(text || '').split('\n').length, 'line')), text, null);
 /** A chevron that folds its step box or call box to its header. */
 function foldButton(kind) {
   return h('button', { type: 'button', class: 'box-fold', 'aria-expanded': 'true', title: `fold or unfold this ${kind}`,
@@ -180,6 +179,15 @@ function foldButton(kind) {
       e.currentTarget.setAttribute('aria-expanded', String(!on));
     } }, h('span', { class: 'sec-chev', 'aria-hidden': 'true' }));
 }
+/** A box and the step around it unfolded. */
+function unfold(box) {
+  for (const b of [box, box.closest('.step-box')]) {
+    if (!b || !b.classList.contains('folded')) continue;
+    b.classList.remove('folded');
+    const btn = b.querySelector(':scope > .ch > .box-fold, :scope > .step-h > .box-fold');
+    if (btn) btn.setAttribute('aria-expanded', 'true');
+  }
+}
 /** Every section of a step box unfolded and unclipped. */
 function openSections(box) {
   for (const s of box.querySelectorAll('.sec')) { foldSection(s, false); s.classList.remove('clipped'); }
@@ -188,16 +196,18 @@ function openSections(box) {
 /**
  * ctx: {agent, levels (the run's three-ladder payload, with its labels by call and its judge labels), isRegulator,
  * regulatorCalls: Set of tool_call_ids that read a regulator's post, or that posted as the regulator}.
- * Returns {el, findCall, findToolCall, showReasoning, setFolds (a Set of PARTS keys folded everywhere), nCalls}. A model call is numbered from 1 over the
+ * Returns {el, findCall, findToolCall, showReasoning, setFolds (a Set of PARTS keys folded everywhere), refresh, nCalls}. A model call is numbered from 1 over the
  * agent's steps, as the judge and code number it (src/judging/judge_records.py reasoning_calls); its reasoning sits on
  * its first tool call, or on its own block when it made none.
  */
 export function renderCase(t, ctx) {
   const lv = ctx.levels;
   const steps = (t && t.trajectory && t.trajectory.steps) || [];
-  // 1. tool calls in order, with the step's reasoning and text on its first call
+  // 1. tool calls in order, with the step's reasoning and text on its first call; the episode in order as model turns
+  // ({turn: true, step, calls, msg: its message when it made no call}) and the messages that feed the next turn ({msg})
   const calls = [];
   const loose = [];
+  const seq = [];
   let model = 0;
   for (const s of steps) {
     const src = s.source || 'unknown';
@@ -206,13 +216,18 @@ export function renderCase(t, ctx) {
     const msg = asStr(s.message);
     const m = src === 'agent' ? ++model : null;
     if (src === 'agent' && (s.tool_calls || []).length) {
-      s.tool_calls.forEach((tc, j) => {
+      const mine = s.tool_calls.map((tc, j) => {
         let res = rs.filter(r => r.source_call_id === tc.tool_call_id);
         if (!res.length && rs[j] && !rs[j].source_call_id) res = [rs[j]];
-        calls.push({ k: calls.length, tc, res, reasoning: j === 0 && reasoning && reasoning.text, text: j === 0 ? msg : '', step: s.step_id, model: j === 0 ? m : null });
+        const c = { k: calls.length, tc, res, reasoning: j === 0 && reasoning && reasoning.text, text: j === 0 ? msg : '', step: s.step_id, model: j === 0 ? m : null };
+        calls.push(c);
+        return c;
       });
+      seq.push({ turn: true, step: s.step_id, calls: mine });
     } else {
-      loose.push({ before: calls.length, src, text: msg, reasoning: reasoning && reasoning.text, step: s.step_id, model: m });
+      const x = { before: calls.length, src, text: msg, reasoning: reasoning && reasoning.text, step: s.step_id, model: m };
+      loose.push(x);
+      seq.push(src === 'agent' ? { turn: true, step: s.step_id, calls: [], msg: x } : { msg: x });
     }
   }
   // The judge labels whose excerpt code located in a model call's reasoning, by model call: [{key, name, score,
@@ -321,22 +336,19 @@ export function renderCase(t, ctx) {
   }
   const blocks = [];
   const right = h('div', { class: 'right' });
-  let li = 0;
   const looseEls = new Map();
   const looseBlock = x => {
     const box = looseCard(x);
     if (x.model != null) looseEls.set(x.model, box);
     return box;
   };
+  // A message box folds to its header as a call does; its text is a section of its own.
   const looseCard = x => h('div', { class: 'call cs-msg' },
-    h('div', { class: 'ch' }, h('span', { class: 'cn', title: x.step != null ? `step ${x.step}` : null },
+    h('div', { class: 'ch' }, foldButton('call'), h('span', { class: 'cn', title: x.step != null ? `step ${x.step}` : null },
       x.src === 'agent' ? 'Message' : x.src === 'user' ? 'User' : 'System'), lv ? headChips(x.before - 1, false) : null),
     h('div', { class: 'cb' }, judgedLines(x.model), x.reasoning ? reasoningSection(x.reasoning, markOf(x.model)) : null,
-      x.text ? (x.src === 'agent' ? textSection(x.text) : promptBlock('Prompt', x.text)) : null));
-  // A step encloses the calls of one model turn; a step and a call each fold to their header.
-  let stepBox = null;
-  for (const c of calls) {
-    while (li < loose.length && loose[li].before <= c.k) { right.appendChild(looseBlock(loose[li++])); stepBox = null; }
+      x.text ? (x.src === 'agent' ? textSection(x.text) : promptSection(x.text)) : null));
+  const callCard = c => {
     const k = c.k;
     const labs = own.get(k) || [];
     const el = h('div', { class: ['call', labelled(k) && 'has-label', labs.some(l => l.ladder === 'coordination') && 'has-board'], id: `a-${ctx.agent}-call-${k}`,
@@ -352,16 +364,31 @@ export function renderCase(t, ctx) {
           return section('result', 'Tool result', h('span', { class: 'sec-size' }, plural(out.split('\n').length, 'line')), out, null);
         })));
     blocks.push(el);
-    const sid = c.step != null ? c.step : `k${k}`;
-    if (!stepBox || stepBox.dataset.step !== String(sid)) {
-      stepBox = h('div', { class: 'step-box', dataset: { step: String(sid) } },
-        h('div', { class: 'step-h' }, foldButton('step'), h('span', { class: 'step-n' }, c.step != null ? `Step ${c.step}` : `Call ${k}`)),
-        h('div', { class: 'step-b' }));
-      right.appendChild(stepBox);
-    }
-    stepBox.querySelector('.step-b').appendChild(el);
+    return el;
+  };
+  // A step encloses one model turn: the messages that fed it (the System and User prompts in the first), then its calls
+  // or its message. A step and each box in it fold to their header.
+  const stepBody = (step, label) => {
+    const box = h('div', { class: 'step-box', dataset: { step: String(step != null ? step : '') } },
+      h('div', { class: 'step-h' }, foldButton('step'), h('span', { class: 'step-n' }, label)),
+      h('div', { class: 'step-b' }));
+    right.appendChild(box);
+    return box.lastChild;
+  };
+  let fed = [];
+  for (const it of seq) {
+    if (!it.turn) { fed.push(it.msg); continue; }
+    const body = stepBody(it.step, it.step != null ? `Step ${it.step}` : it.calls.length ? `Call ${it.calls[0].k}` : 'Message');
+    for (const x of fed) body.appendChild(looseBlock(x));
+    fed = [];
+    if (it.msg) body.appendChild(looseBlock(it.msg));
+    for (const c of it.calls) body.appendChild(callCard(c));
   }
-  while (li < loose.length) right.appendChild(looseBlock(loose[li++]));
+  // Messages after the last turn: a step of their own.
+  if (fed.length) {
+    const body = stepBody(fed[0].step, fed[0].step != null ? `Step ${fed[0].step}` : 'Message');
+    for (const x of fed) body.appendChild(looseBlock(x));
+  }
 
   // 5. left: the whole episode, one row per call. A lane per ladder for the level so far, one per ladder for the
   // call's own labels, the two groups apart, each lane headed by its code in the ladder's colour; milestones in the
@@ -471,9 +498,16 @@ export function renderCase(t, ctx) {
     h('span', { class: 'cs-ladder', title: lv.ladders[L].name },
       h('span', { class: 'cs-ladder-mark', style: `color:${inkOf(L, lv.ladders[L])}` }, SHORT[L]),
       levelChip(L, lv.ladders[L], mine[L].level, false, { facts: mine[L].facts })))) : null;
+  // A slider beside the strip, a row per call as the strip's: its handle at the call at the top of the steps, and a drag,
+  // a click on its track or the arrow keys bring a call there.
+  const thumb = h('div', { class: 'cs-thumb' });
+  const slider = h('div', { class: 'cs-slider', role: 'slider', tabindex: n ? '0' : null, 'aria-label': 'call',
+    'aria-orientation': 'vertical', 'aria-valuemin': '0', 'aria-valuemax': String(Math.max(0, n - 1)),
+    style: `left:${W + 2}px;top:${TOP}px;height:${Math.max(1, n * rh)}px`, hidden: !n },
+  h('div', { class: 'cs-track' }), thumb);
   const left = h('div', { class: 'left' },
     ladderLine,
-    svg,
+    h('div', { class: 'cs-strip', style: `width:${W + 22}px` }, svg, slider),
     lv ? stripLegend(lv.ladders, single ? ['cheating'] : order, regAt.size > 0) : null,
     unplaced ? h('p', { class: 'note' }, `${plural(unplaced, 'label')} not drawn: call not in this transcript`) : null);
 
@@ -483,36 +517,81 @@ export function renderCase(t, ctx) {
   let marked = -1;
   let opened = null;
   let rest = 0;
+  let dragging = false;
+  let seeking = false;
   function markRow(k) {
     if (k === marked) return;
     marked = k;
     if (mark) mark.remove();
     mark = mk('rect', { x: LB - 1, y: TOP + k * rh - 1, width: RX + RW - LB + 2, height: Math.max(3, rh + 2), fill: 'none', stroke: 'var(--accent)', 'stroke-width': 2 });
     svg.appendChild(mark);
+    thumb.style.top = `${k * rh + rh / 2}px`;
+    slider.setAttribute('aria-valuenow', String(k));
+    slider.title = `call ${k}`;
     // The strip scrolls inside its own column when it is taller than the window: keep the outlined row in sight.
     const box = left.getBoundingClientRect();
     const row = mark.getBoundingClientRect();
     if (row.top < box.top + 8) left.scrollTop -= box.top + 8 - row.top;
     else if (row.bottom > box.bottom - 8) left.scrollTop += row.bottom - (box.bottom - 8);
   }
+  // The steps scroll in their own pane (tv_style.css), or with the page in a narrow window's one column.
+  const paned = () => getComputedStyle(right).overflowY !== 'visible';
+  // box at the top of the steps' pane, or of the page under the run page's bar.
+  function toTop(box, behavior) {
+    if (!paned()) {
+      const bar = document.querySelector('.rp-bar');
+      const under = bar ? bar.offsetHeight + (parseFloat(getComputedStyle(bar).top) || 0) + 8 : 8;
+      window.scrollTo({ top: Math.max(0, window.scrollY + box.getBoundingClientRect().top - under), behavior });
+      return;
+    }
+    const off = () => box.getBoundingClientRect().top - right.getBoundingClientRect().top - 8;
+    right.scrollTo({ top: Math.max(0, right.scrollTop + off()), behavior });
+    // A smooth scroll can end short when the steps above it change height on the way: once it ends, the box is put
+    // at the top, unless the reader has scrolled since (a second and a half later).
+    if (behavior !== 'smooth') return;
+    const asked = Date.now();
+    right.addEventListener('scrollend', () => {
+      if (Date.now() - asked < 1500 && Math.abs(off()) > 2) right.scrollTop += off();
+    }, { once: true });
+  }
+  // The box that shows call k: its own, its step's when the step is folded, or none when Board calls only hides it.
+  function shownBox(k) {
+    const b = blocks[k];
+    if (b.offsetParent) return b;
+    const step = b.closest('.step-box.folded');
+    return step && step.offsetParent ? step : null;
+  }
   function show(k, behavior = 'smooth') {
     const el = blocks[k];
     if (!el) return null;
     for (const b of right.querySelectorAll('.call.here')) b.classList.remove('here');
     el.classList.add('here');
-    for (const box of [el, el.closest('.step-box')]) if (box) box.classList.remove('folded');
+    unfold(el);
     openSections(el);
     opened = k;
-    el.scrollIntoView({ block: 'start', behavior });
+    toTop(el, behavior);
     markRow(k);
     settle();
     return el;
+  }
+  // The slider's call brought to the top of the steps at once, or the nearest call shown, which the handle then marks.
+  function seek(k) {
+    if (!n) return;
+    k = Math.max(0, Math.min(n - 1, k));
+    let box = null;
+    for (let i = k; i < n && !box; i++) if ((box = shownBox(i))) k = i;
+    for (let i = k - 1; i >= 0 && !box; i--) if ((box = shownBox(i))) k = i;
+    opened = k;
+    seeking = true;   // the strip keeps the slider's call until the pane comes to rest
+    markRow(k);
+    if (box) toTop(box, 'instant');
+    settle();
   }
   // A call near the end of the page cannot reach the top, so the scroll alone would outline another row. Once the
   // page has stopped moving, the row of the call the click opened is outlined again.
   function settle() {
     clearTimeout(rest);
-    rest = setTimeout(() => { if (opened != null) markRow(opened); opened = null; }, 250);
+    rest = setTimeout(() => { if (opened != null) markRow(opened); opened = null; seeking = false; }, 250);
   }
   // The run page's bar wraps onto a second line in a narrow window. The strip and an opened call sit under its real
   // bottom edge (tv_style.css reads --under-bar).
@@ -522,22 +601,32 @@ export function renderCase(t, ctx) {
     const now = bar ? `${Math.round(bar.getBoundingClientRect().bottom + 8)}px` : '';
     if (now && now !== under) el.style.setProperty('--under-bar', under = now);
   }
+  // The steps' window: the pane's top, height and what is left below it, or the page's under the bar.
+  function frame() {
+    if (paned()) {
+      const r = right.getBoundingClientRect();
+      return { top: r.top, height: right.clientHeight, toGo: right.scrollHeight - right.scrollTop - right.clientHeight };
+    }
+    const bar = document.querySelector('.rp-bar');
+    const top = bar ? bar.getBoundingClientRect().bottom : 0;
+    return { top, height: window.innerHeight - top, toGo: document.documentElement.scrollHeight - window.scrollY - window.innerHeight };
+  }
   function follow() {
     fit();
-    if (!n) return;
+    if (!n || dragging || seeking) return;
     if (opened != null) settle();
-    const bar = document.querySelector('.rp-bar');
-    // The call at the top of the page: the first one with 60 px or more showing under the bar. Over the last
-    // screen of the page that line slides to the bottom of the window, so the last calls get their turn too.
-    const top = (bar ? bar.getBoundingClientRect().bottom : 0) + 60;
-    const toGo = document.documentElement.scrollHeight - window.scrollY - window.innerHeight;
-    const span = Math.max(1, window.innerHeight - top);
-    const y = top + (toGo < span ? (1 - Math.max(0, toGo) / span) * span : 0);
+    // The call at the top of the steps: the first one with 40 px or more showing. Over the last screen that line
+    // slides to the bottom, so the last calls get their turn too.
+    const f = frame();
+    const top = f.top + 40;
+    const span = Math.max(1, f.top + f.height - top);
+    const y = top + (f.toGo < span ? (1 - Math.max(0, f.toGo) / span) * span : 0);
     let k = -1;
     for (let i = 0; i < n; i++) {
-      if (!blocks[i].offsetParent) continue;   // hidden by Board calls only
+      const box = shownBox(i);
+      if (!box) continue;   // hidden by Board calls only
       k = i;
-      if (blocks[i].getBoundingClientRect().bottom >= y) break;
+      if (box.getBoundingClientRect().bottom >= y) break;
     }
     if (k >= 0) markRow(k);
   }
@@ -548,18 +637,43 @@ export function renderCase(t, ctx) {
     if (k == null) { const r = svg.getBoundingClientRect(); k = Math.floor((e.clientY - r.top - TOP) / rh); }
     if (k >= 0 && k < n) show(k);
   });
+  const callAt = y => { const r = slider.getBoundingClientRect(); return Math.floor((y - r.top) / rh); };
+  slider.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    try { slider.setPointerCapture(e.pointerId); } catch (x) { /* a synthetic pointer: the moves still reach the slider */ }
+    dragging = true;
+    slider.classList.add('dragging');
+    slider.focus({ preventScroll: true });
+    seek(callAt(e.clientY));
+  });
+  slider.addEventListener('pointermove', e => { if (dragging) seek(callAt(e.clientY)); });
+  const release = () => { if (!dragging) return; dragging = false; slider.classList.remove('dragging'); settle(); };
+  slider.addEventListener('pointerup', release);
+  slider.addEventListener('pointercancel', release);
+  slider.addEventListener('lostpointercapture', release);
+  const KEYS = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1, PageDown: 10, PageUp: -10 };
+  slider.addEventListener('keydown', e => {
+    const k = e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : e.key in KEYS ? Math.max(0, marked) + KEYS[e.key] : null;
+    if (k == null) return;
+    e.preventDefault();
+    seek(k);
+  });
   const el = h('div', { class: 'case' }, h('div', { class: 'main' }, left, right));
-  FOLLOW.set(el, () => {
+  const schedule = () => {
     if (queued) return;
     queued = true;
     requestAnimationFrame(() => { queued = false; follow(); });
-  });
+  };
+  FOLLOW.set(el, schedule);
+  right.addEventListener('scroll', schedule, { passive: true });
   requestAnimationFrame(() => { if (el.isConnected) fit(); });   // the page shows the episode before the next frame
   // The parts the run page's bar folds everywhere: applied when the page's choice changed since this episode last
   // took it, so a section folded or opened by hand stays as it is across tab switches.
   let foldedParts = null;
   return {
     el, nCalls: n,
+    refresh: schedule,   // the strip and its slider brought back to the steps, after the page showed or changed them
     setFolds(off) {
       const key = [...off].sort().join(',');
       if (key === foldedParts) return;
@@ -575,6 +689,7 @@ export function renderCase(t, ctx) {
       const c = calls.find(x => x.model === mm);
       const box = c ? show(c.k, 'instant') : looseEls.get(mm);
       if (!box) return null;
+      unfold(box);
       openSections(box);
       const mark = box.querySelector('mark.xl-mark');
       const centre = () => (mark || box).scrollIntoView({ block: 'center', behavior: 'instant' });

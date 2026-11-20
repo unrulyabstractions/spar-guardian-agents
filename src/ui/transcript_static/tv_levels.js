@@ -65,7 +65,8 @@ document.addEventListener('mouseover', e => { const t = popTarget(e); if (t && P
 document.addEventListener('mouseout', e => { if (leaving(e, popTarget(e))) hidePop(); });
 document.addEventListener('focusin', e => { const t = popTarget(e); if (t && POPS.has(t)) showPop(t); });
 document.addEventListener('focusout', e => { if (leaving(e, popTarget(e))) hidePop(); });
-window.addEventListener('scroll', () => { if (popFor) hidePop(true); }, { passive: true });
+// any scroll, the page's or a pane's (the run page's steps), takes the popover away
+document.addEventListener('scroll', () => { if (popFor) hidePop(true); }, { passive: true, capture: true });
 
 /** el shows the popover build() draws on hover and focus. */
 export function withPopover(el, build) {

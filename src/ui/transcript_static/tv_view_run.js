@@ -26,6 +26,15 @@ import { alarmBadge, cheatbenchTeam, cheatbenchWords, cheatingCell, cheatingPane
 import { PARTS, renderCase, stripLegend } from './tv_case_view.js';
 import { renderBoard } from './tv_view_board.js';
 
+// The run page fills the window under the site's bar (tv_style.css .rp-page): its top is the site bar's real bottom
+// edge, which wraps in a narrower window.
+function placePage() {
+  const page = document.querySelector('.rp-page');
+  const top = document.querySelector('.topbar');
+  if (page && top) page.style.setProperty('--rp-top', `${Math.round(top.getBoundingClientRect().bottom)}px`);
+}
+window.addEventListener('resize', placePage, { passive: true });
+
 function flash(el) {
   if (!el) return;
   el.scrollIntoView({ block: 'center' });
@@ -306,22 +315,36 @@ export async function viewRun(id, q, view) {
     const open = () => selectTab(key).catch(() => {});
     tabs.set(key, h('button', { type: 'button', class: 'rp-tab', onclick: open }, v.label));
   }
-  async function selectTab(key) {
+  // Each tab keeps where it was scrolled to: the stage for a view or the run record, an agent's steps pane for an agent.
+  const scrolled = new Map();
+  const scroller = () => stage.querySelector(':scope > .case .right') || stage;
+  function place(key, el) {
+    if (current != null) scrolled.set(current, scroller().scrollTop);
     current = key;
+    stage.classList.toggle('rp-stage-case', el.classList.contains('case'));
+    stage.replaceChildren(el);
+    scroller().scrollTop = scrolled.get(key) || 0;
+  }
+  let shown = null;   // the tab the run record's button goes back to
+  async function selectTab(key) {
     for (const [k, b] of tabs) b.classList.toggle('on', k === key);
-    toggles.hidden = views.has(key);   // the fold toggles act on an agent's steps only
+    recordBtn.setAttribute('aria-pressed', String(key === 'record'));
+    toggles.hidden = views.has(key) || key === 'record';   // the fold toggles act on an agent's steps only
+    if (key !== 'record') shown = key;
+    if (key === 'record') { place(key, record); return null; }
     if (views.has(key)) {
       if (!drawn.has(key)) drawn.set(key, views.get(key).draw());
       const v = drawn.get(key);
-      stage.replaceChildren(v.el);
+      place(key, v.el);
       return v.handle || null;
     }
     const c = cards.get(key);
     if (!c) return null;
-    stage.replaceChildren(h('div', { class: 'loading' }, 'Loading the transcript…'));
+    place(null, h('div', { class: 'loading' }, 'Loading the transcript…'));
+    current = key;
     const tr = await c.load();
     tr.setFolds(folded);
-    if (current === key) stage.replaceChildren(tr.el);
+    if (current === key) { current = null; place(key, tr.el); tr.refresh(); }
     return tr;
   }
   function keepInHash() {
@@ -344,13 +367,18 @@ export async function viewRun(id, q, view) {
       !folded.has(k), () => {
         if (folded.has(k)) folded.delete(k); else folded.add(k);
         const tr = cards.has(current) && cards.get(current).state.tr;
-        if (tr) tr.setFolds(folded);
+        if (tr) { tr.setFolds(folded); tr.refresh(); }
         return !folded.has(k);
       })),
     toggle('Board calls only', 'only the calls that read or posted on the message board', stage.dataset.board === 'only', () => {
       stage.dataset.board = stage.dataset.board === 'only' ? 'all' : 'only';
+      const tr = cards.has(current) && cards.get(current).state.tr;
+      if (tr) tr.refresh();
       return stage.dataset.board === 'only';
     }));
+  // The run record is shown in the stage in place of a tab; its button goes back to the tab shown before.
+  const recordBtn = h('button', { type: 'button', class: 'rp-dbtn', 'aria-pressed': 'false', title: 'the run\'s labels, settings and records',
+    onclick: () => selectTab(current === 'record' && shown ? shown : 'record').catch(() => {}) }, 'Run record');
   const bar = h('div', { class: 'rp-bar' },
     h('a', { class: 'rp-back', href: '#/', title: 'all runs' }, '←'),
     h('b', { class: 'rp-run' }, row.run), whoChips(row),
@@ -358,25 +386,18 @@ export async function viewRun(id, q, view) {
     h('span', { class: 'rp-tabs' }, [...tabs.values()]),
     // the fold toggles and the run record's button wrap as one group at the right
     h('span', { class: 'rp-right' }, toggles,
-      h('button', { type: 'button', class: 'rp-dbtn', title: 'the run\'s labels, settings and records',
-        onclick: () => {
-          record.open = !record.open;
-          // the record's top just under the sticky bar, never behind it
-          if (record.open) window.scrollTo({ top: record.getBoundingClientRect().top + window.scrollY - bar.getBoundingClientRect().bottom - 8 });
-        } },
-      'Run record')));
+      recordBtn));
 
   view.mounted(() => {
     document.title = `${row.run} · Transcripts`;
+    placePage();
     const qa = q.get('agent');
     const qc = q.get('call');
     if (qa && q.get('label') && cards.has(qa)) openExcerpt(qa, q.get('label')).then(x => x || selectTab(qa)).catch(() => {});
     else if (qa && qc != null && cards.has(qa)) gotoCall(qa, parseInt(qc, 10)).catch(() => {});
     else selectTab(views.has(q.get('tab')) ? q.get('tab') : (firstAgent || 'details')).catch(() => {});
   });
-  const record = h('details', { class: 'rp-details' },
-    h('summary', null, 'Run record'),
-    header, labelsCard, agentsBox);
-  return h('div', { class: 'page rp-page' }, bar, stage, record);
+  const record = h('div', { class: 'rp-details rp-record' }, header, labelsCard, agentsBox);
+  return h('div', { class: 'page rp-page' }, bar, stage);
 }
 

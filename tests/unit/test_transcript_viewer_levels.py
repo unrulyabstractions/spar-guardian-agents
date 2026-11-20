@@ -1116,6 +1116,24 @@ def test_a_step_is_three_folding_sections_and_the_bar_folds_a_part_everywhere():
         assert gone not in css, gone
 
 
+def test_the_run_page_is_two_panes_with_a_slider_and_a_step_holds_its_messages():
+    """The user's feedback of 2026-11-20 ("doesnt work, put more explicit vertical slider", "steps should include their
+    user msg?", "why cant u minimize these"): the run page fills the window, the strip and the steps each a pane and the
+    steps scrolling in theirs, so the strip stays in view without position: sticky; a slider beside the strip brings a
+    call to the top of the steps; a step box holds the messages that fed its model turn; every message box folds."""
+    case = (STATIC / "tv_case_view.js").read_text()
+    assert "role: 'slider'" in case and "right.addEventListener('scroll', schedule" in case
+    assert "slider.addEventListener('pointerdown'" in case and "slider.addEventListener('keydown'" in case
+    assert "for (const x of fed) body.appendChild(looseBlock(x));" in case
+    assert "h('div', { class: 'ch' }, foldButton('call'), h('span', { class: 'cn', title: x.step" in case
+    assert "promptSection(x.text)" in case and "promptBlock" not in case and "'Prompt'" not in case
+    run = (STATIC / "tv_view_run.js").read_text()
+    assert "h('details', { class: 'rp-details' }" not in run and "place(key, record)" in run
+    css = (STATIC / "tv_style.css").read_text()
+    assert "@media (min-width: 701px) {\n  .page.rp-page { position: fixed;" in css
+    assert ".rp-stage .case .right { overflow-y: auto;" in css and ".case .cs-slider {" in css
+
+
 def test_the_viewer_carries_no_sentence_that_explains_the_page():
     """The user's rule of 2026-11-19 ("REMOVE ALL UNNECESSARY TEXT FROM UI"): no page explains itself; a level chip's
     hover is a short popover, the level's one line and its evidence as name and value, with the ladder's full rule on

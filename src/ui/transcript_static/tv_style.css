@@ -246,6 +246,7 @@ mark.xl-mark.flash { animation: flash 1.6s ease-out; }
 .case .sec + .sec{margin-top:12px}
 .case .sec-reasoning{--sec-rule:var(--rs-rule);--sec-bg:var(--rs-bg);--sec-head:var(--rs-head)}
 .case .sec-call{--sec-rule:var(--tc-rule);--sec-bg:var(--tc-bg);--sec-head:var(--tc-head)}
+.case .sec-prompt{--sec-rule:var(--line-2);--sec-bg:var(--surface);--sec-head:var(--head)}
 .case .sec-result{--sec-rule:var(--tr-rule);--sec-bg:var(--tr-bg);--sec-head:var(--tr-head);margin-left:24px;box-shadow:inset 0 2px 5px rgba(0,0,0,.09)}
 .case .sec-h{display:flex;align-items:center;gap:8px;width:100%;padding:4px 10px;border:0;background:var(--sec-head);color:var(--ink-2);
   font:600 11px var(--sans);letter-spacing:.05em;text-transform:uppercase;text-align:left;cursor:pointer}
@@ -272,6 +273,8 @@ mark.xl-mark.flash { animation: flash 1.6s ease-out; }
 .rp-togs[hidden] { display: none; }
 .rp-tog:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .rp-stage[data-board=only] .case .right .call:not(.has-board) { display: none; }
+/* and a step none of whose calls touched the board */
+.rp-stage[data-board=only] .case .right .step-box:not(:has(.call.has-board)) { display: none; }
 .case .note{font-size:11.5px;color:var(--ink-2);margin:8px 0 0}
 @media (max-width:700px){.case .main{grid-template-columns:1fr}.case .left{position:static}}
 .case .cs-svg{display:block;cursor:pointer}
@@ -313,16 +316,42 @@ mark.xl-mark.flash { animation: flash 1.6s ease-out; }
 .rp-tab.on { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
 .rp-role { color: var(--muted); font-weight: 400; }
 .rp-dbtn { font: 500 12px var(--sans); padding: 3px 9px; border: 1px solid var(--border); border-radius: 5px; background: var(--panel); color: var(--muted); cursor: pointer; }
-.rp-details { margin-top: 18px; }
-.rp-details > summary { cursor: pointer; color: var(--muted); font-size: 13px; padding: 6px 0; }
+.rp-dbtn[aria-pressed=true] { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
 .rp-team .card { margin-bottom: 10px; }
 .rp-stage .case { padding: 0; background: transparent; }
-/* 384 px, not the source's 280, so the strip's label margin (tv_case_view.js LB) and its legend's level cells fit. */
-.rp-stage .case .main { grid-template-columns: 410px 1fr; gap: 12px; }
-/* --under-bar is the bar's real bottom edge, set by tv_case_view.js: the bar wraps in a narrow window. */
+/* A narrow window (700 px or less) has one column and the page scrolls under the run bar. --under-bar is the bar's real
+   bottom edge, set by tv_case_view.js: the bar wraps there. */
 .rp-stage .case { --under: var(--under-bar, calc(var(--header-h) + 44px)); }
-.rp-stage .case .left { top: var(--under); max-height: calc(100vh - var(--under) - 12px); padding: 10px; }
-.rp-stage .case .call { scroll-margin-top: var(--under); }
+.rp-stage .case .left { padding: 10px; }
+.rp-stage .case .call, .rp-stage .case .step-box { scroll-margin-top: var(--under); }
+/* Two panes from 701 px: the run page fills the window under the site bar (tv_view_run.js sets --rp-top), the run bar
+   on top and the stage under it; a view or the run record scrolls in the stage; an agent's strip and steps are each
+   their own pane, the steps scrolling in theirs, padded at the end so the last call can reach the top. The strip's
+   pane is 410 px, so the strip's label margin (tv_case_view.js LB), its slider and its legend's level cells fit. */
+@media (min-width: 701px) {
+  .page.rp-page { position: fixed; top: var(--rp-top, var(--header-h)); left: 0; right: 0; bottom: 0; display: flex;
+    flex-direction: column; padding: 0 16px 10px; }
+  .rp-page > .rp-bar { position: static; flex: none; margin: 0 -16px 8px; padding: 6px 16px; }
+  .rp-page > .rp-stage { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  .rp-page > .rp-stage.rp-stage-case { overflow: hidden; }
+  .rp-stage-case > .case { height: 100%; }
+  .rp-stage .case .main { grid-template-columns: 410px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 12px;
+    height: 100%; align-items: stretch; }
+  .rp-stage .case .left { position: static; max-height: none; overflow: auto; }
+  .rp-stage .case .right { overflow-y: auto; overscroll-behavior: contain; padding: 0 8px 50vh 0; }
+  .rp-stage .case .call, .rp-stage .case .step-box { scroll-margin-top: 8px; }
+}
+/* The strip's slider (tv_case_view.js): a track the strip's height, a row per call, and a handle at the call at the top
+   of the steps. */
+.case .cs-strip { position: relative; }
+.case .cs-slider { position: absolute; width: 18px; cursor: pointer; touch-action: none; outline: none; }
+.case .cs-track { position: absolute; left: 7px; top: -2px; bottom: -2px; width: 4px; border-radius: 2px; background: var(--line-2); }
+.case .cs-thumb { position: absolute; left: 0; top: 0; width: 18px; height: 12px; margin-top: -6px; box-sizing: border-box;
+  border-radius: 6px; background: var(--accent); border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--accent), 0 1px 3px rgba(0, 0, 0, .25);
+  cursor: grab; }
+.case .cs-slider:hover .cs-track { background: var(--muted); }
+.case .cs-slider.dragging .cs-thumb { cursor: grabbing; transform: scale(1.12); }
+.case .cs-slider:focus-visible .cs-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
 .case .cs-ladders { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 8px; }
 .case .cs-mile { font-size: 10px; }
 /* The three ladders: the runs table's influencer columns, the Details tab's panels, the Ladders page's level tables;
