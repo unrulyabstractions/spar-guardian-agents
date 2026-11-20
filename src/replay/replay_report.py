@@ -33,7 +33,8 @@ class ReplayReport:
     remote. end compares the end state with the stored one, part by part; seconds holds each phase's wall time and
     the calls' and snapshots' summed time, slowest the slowest calls. options holds the opt-in remedies the replay ran
     with ({"pem": bool, "warm_image": bool}), swaps each call whose drawn certificates gave way to the recorded ones
-    (random_content.py)."""
+    (random_content.py). read_before lists each call that read the team remote before an overlapping write, by the
+    record's evidence, and played against the remote's refs as they stood before it (replay_run.play_before)."""
     run: str
     run_dir: str
     faithful: bool
@@ -59,6 +60,7 @@ class ReplayReport:
     parallel: bool = True
     options: dict = field(default_factory=dict)
     swaps: list[dict] = field(default_factory=list)
+    read_before: list[dict] = field(default_factory=list)
     code: dict = field(default_factory=dict)
     schema: int = SCHEMA
 

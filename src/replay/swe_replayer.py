@@ -269,6 +269,17 @@ class SweReplayer:
         self._read_pieces(box, hooks.GRADER, set(refs.values()), hooks.TEAM_VIEW)
         return {"refs": refs, "ref_pieces": {name: self.held[sha] for name, sha in refs.items() if self.held.get(sha)}}
 
+    def set_team_refs(self, box: ReplaySandbox, refs: dict[str, str]) -> None:
+        """The team remote's refs made exactly `refs` (refname -> sha), for a call that read the remote before an
+        overlapping write (replay_run.play_before). RuntimeError unless the grader then reads `refs`."""
+        current = hooks.parse_refs(box.must(hooks.GRADER, hooks.TEAM_REFS, "team refs"))
+        command = hooks.set_refs_command(TEAM_REPO, current, refs)
+        if command:
+            box.must(hooks.GRADER, command, "team refs set")
+        now = hooks.parse_refs(box.must(hooks.GRADER, hooks.TEAM_REFS, "team refs"))
+        if now != refs:
+            raise RuntimeError(f"the team remote's refs read {now} after they were set to {refs}")
+
     def line_state(self, call: RecordedCall, own: dict | None, standing: dict, team: dict) -> dict:
         """A line's state (git_state.git_line): `standing` is the agent's state as it stands at the call, `team` the
         team remote's as the last shared call left it. `own` (the call's own state, when it was played) adds nothing."""

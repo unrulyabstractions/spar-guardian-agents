@@ -13,6 +13,11 @@ machine: their line carries the recorded output's place and the agent's state as
 that did change a machine (creative writing's submit, which keeps writing.md). A replay that is refused, fails or ends
 elsewhere than the stored end state is not faithful (replay_report.py).
 
+Two shared calls of different agents may overlap in time, and their start times then do not say which touched the team
+remote first. Where the record shows that a call read the remote before an overlapping earlier call wrote it
+(git_state.read_before_write), the call plays against the remote's refs as they stood before that write, and the refs
+the write made are put back after it (play_before). A replayer opts in with set_team_refs.
+
 A replayer (REPLAYERS) gives the task's sandbox (services, volumes, image), its setup and calls (setup, initial,
 in_sandbox, shared, command, execute, after, team_state), each line's state (line_state) and its end state
 (end_state): swe_replayer.py, protein_replay.py, creative_replay.py.
@@ -32,6 +37,7 @@ from src.configuration import settings
 from src.measures.run_directory import RunDir
 from src.measures.run_listing import list_collection
 from src.replay.creative_replay import CreativeReplayer
+from src.replay.git_state import changed_refs, read_before_write
 from src.replay.output_match import cause_of, match_of
 from src.replay.protein_replay import ProteinReplayer
 from src.replay.recorded_calls import RecordedCall, ReplayRefused, recorded_calls
@@ -80,12 +86,37 @@ def play_call(box, replayer, call: RecordedCall, limit: int, swap=None) -> dict:
             "undated": undated, "swapped": swapped, "ran": ran, "snapshot": time.time() - started - ran}
 
 
-def play(box, replayer, calls: list[RecordedCall], limit: int, parallel: bool, swap=None) -> dict[int, dict]:
+def play_before(box, replayer, call: RecordedCall, limit: int, swap, write: tuple, refs: dict[str, str]) -> dict:
+    """play_call with the team remote's refs set back to how they stood before `write` (the writing call and the refs
+    it changed), then put back to `refs`, the refs the write left. The result's team is the remote's once put back,
+    and read_before names the write. A call that changes the refs meanwhile is a RuntimeError."""
+    writer, changed = write
+    before = {name: sha for name, sha in refs.items() if name not in changed}
+    before.update({name: old for name, (old, _) in changed.items() if old is not None})
+    replayer.set_team_refs(box, before)
+    try:
+        result = play_call(box, replayer, call, limit, swap)
+    finally:
+        replayer.set_team_refs(box, refs)
+    if result["team"]["refs"] != before:
+        raise RuntimeError(f"n{call.n} changed the team remote while it stood before n{writer.n}'s write")
+    result["team"] = replayer.team_state(box)
+    result["read_before"] = {"writer": writer.n, "refs": {name: list(pair) for name, pair in changed.items()}}
+    return result
+
+
+def play(box, replayer, calls: list[RecordedCall], limit: int, parallel: bool, swap=None,
+         team0: dict | None = None) -> dict[int, dict]:
     """Every sandbox call, each as play_call, by n. A shared call (or every call without parallel) waits for all
-    earlier ones and runs alone."""
+    earlier ones and runs alone. With a replayer's set_team_refs, a shared call that the record shows read the team
+    remote before the last write to it (git_state.read_before_write) plays as play_before. `team0` is the remote's
+    state before the first call."""
     lanes = {agent: ThreadPoolExecutor(max_workers=1) for agent in replayer.agents}
     pending: list[Future] = []
     done: dict[int, dict] = {}
+    rewinds = getattr(replayer, "set_team_refs", None) is not None
+    refs = dict((team0 or {}).get("refs") or {})   # the team remote's refs as the last shared call left them
+    write = None                                    # the last shared call that changed them, and the refs it changed
     try:
         for call in calls:
             if not replayer.in_sandbox(call):
@@ -94,7 +125,14 @@ def play(box, replayer, calls: list[RecordedCall], limit: int, parallel: bool, s
                 wait(pending)
                 done.update((f.result()["call"].n, f.result()) for f in pending)
                 pending = []
+                if rewinds and write and read_before_write(call, replayer.command(call), *write):
+                    done[call.n] = play_before(box, replayer, call, limit, swap, write, refs)
+                    continue
                 done[call.n] = play_call(box, replayer, call, limit, swap)
+                if rewinds and done[call.n]["team"] is not None:
+                    changed = changed_refs(refs, done[call.n]["team"]["refs"])
+                    if changed:
+                        write, refs = (call, changed), dict(done[call.n]["team"]["refs"])
             else:
                 pending.append(lanes[call.agent].submit(play_call, box, replayer, call, limit, swap))
         wait(pending)
@@ -139,6 +177,8 @@ def fill_report(report: ReplayReport, calls: list[RecordedCall], played: dict[in
     report.undated = [d for _, r in sorted(played.items()) for d in r["undated"]]
     report.swaps = [{"n": n, "agent": r["call"].agent, "k": r["call"].k, **r["swapped"]}
                     for n, r in sorted(played.items()) if r.get("swapped")]
+    report.read_before = [{"n": n, "agent": r["call"].agent, "k": r["call"].k, **r["read_before"]}
+                          for n, r in sorted(played.items()) if r.get("read_before")]
     report.slowest = [{"n": n, "agent": r["call"].agent, "seconds": round(r["ran"], 1),
                        "recorded_seconds": round(r["call"].t1 - r["call"].t0, 1),
                        "command": replayer.command(r["call"])[:120]}
@@ -186,7 +226,7 @@ def replay(run_dir: Path, out_dir: Path, *, parallel: bool = True, pem: bool = F
             initial, team0 = replayer.initial(box), replayer.team_state(box)
             report.seconds["setup"] = round(time.time() - mark, 1)
             mark = time.time()
-            played = play(box, replayer, calls, limit, parallel, swap)
+            played = play(box, replayer, calls, limit, parallel, swap, team0)
             report.seconds["calls"] = round(time.time() - mark, 1)
             mark = time.time()
             report.end = replayer.end_state(box, out_dir / END)

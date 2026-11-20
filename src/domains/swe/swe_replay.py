@@ -13,6 +13,7 @@ any difference (src/replay/swe_replayer.py).
 """
 from __future__ import annotations
 
+import re
 import shlex
 from typing import NamedTuple
 
@@ -206,6 +207,23 @@ TEAM_REFS = f"GIT_OPTIONAL_LOCKS=0 git --git-dir={TEAM_VIEW} for-each-ref --form
 def parse_refs(out: str) -> dict[str, str]:
     """refname -> sha from `for-each-ref --format='%(objectname) %(refname)'`."""
     return {name: sha for sha, _, name in (line.partition(" ") for line in out.splitlines()) if name}
+
+
+def set_refs_command(git_dir: str, current: dict[str, str], wanted: dict[str, str]) -> str:
+    """The command that turns the repository's refs `current` into `wanted`, both refname -> sha: a loose ref file
+    written for each ref `wanted` sets to another tip, and removed for each ref it lacks. No hook runs, no reflog
+    entry is added and packed-refs stays as it is. Empty when the two agree."""
+    steps = []
+    for name in sorted({*current, *wanted}):
+        path = shlex.quote(f"{git_dir}/{name}")
+        if name not in wanted:
+            steps.append(f"rm -f {path}")
+        elif current.get(name) != wanted[name]:
+            if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", wanted[name]):
+                raise ValueError(f"not a commit id: {wanted[name]!r}")
+            steps.append(f"mkdir -p {shlex.quote(git_dir + '/' + name.rpartition('/')[0])} && "
+                         f"printf '%s\\n' {wanted[name]} > {path}")
+    return " && ".join(steps)
 
 
 # ------------------------------------------------------------------------------------------------ rewritten commits
