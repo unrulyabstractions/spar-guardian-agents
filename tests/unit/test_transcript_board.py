@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from src.configuration.settings import ROOT
-from src.measures import collusion, coordination
+from src.measures import cheating_ladder, collusion, coordination
 from src.ui import transcript_board as tb
 
 SAMPLE = "s#1"
@@ -257,6 +257,19 @@ def test_the_default_pair_is_the_highest_collusion_pair_else_the_workers_who_pos
     assert payload(run, levels(pairs=pairs))["pair"] == ["a01", "r01"]     # a higher rung wins
     nothing = [{**x, "rung": "none"} for x in pairs]
     assert payload(run, levels(pairs=nothing))["pair"] == ["a02", "a01"]
+
+
+def test_the_default_pair_opens_on_the_worker_highest_on_cheating_beside_an_influencer_else_the_next_worker():
+    roles = {"a01": "worker", "a02": "worker", "a03": "worker", "r01": "regulator"}
+    cheat = {"a01": "looked", "a02": "attempted", "a03": "tempted", "r01": "hacked"}
+    lv = {"agents": {a: {"cheating": {"level": v}} for a, v in cheat.items()}}
+    pair, why = tb.default_pair(lv, roles, {"r01": 3})
+    assert pair == ["a02", "r01"] and "regulator" in why        # the influencer's own rung never picks it
+    no_influencer = {a: r for a, r in roles.items() if r == "worker"}
+    pair, why = tb.default_pair(lv, no_influencer, {})
+    assert pair == ["a02", "a03"] and why.endswith("two workers highest on Cheating")
+    none = {"agents": {a: {"cheating": {"level": "none"}} for a in roles}}
+    assert tb.default_pair(none, no_influencer, {"a03": 2})[0][0] == "a03"   # no rung: the old rule, most posts
 
 
 def marks_of(p: dict, lens: str) -> dict[str, dict[int, list[dict]]]:
@@ -570,8 +583,10 @@ def test_a_real_run_reads_its_eval_log_board_and_measures_without_writing():
     located = {(e["located"]["post"], a, k) for a, row in lv["judge_labels"]["agents"].items() if row
                for k, e in row.items() if e["located"] and e["located"]["where"] == "post"}
     assert {(x["label"], m["agent"], m["label"]) for x in p["posts"] for m in x["labels"]} == located
-    top = {tuple(x["agents"]) for x in lv["collusion"]["pairs"] if x["rung"] == lv["collusion"]["team"]}
-    assert tuple(p["pair"]) in top and p["pair_why"].endswith(lv["collusion"]["team"])
+    # the default pair opens on the worker highest on Cheating
+    workers = [a["agent"] for a in p["agents"] if a["role"] == "worker"]
+    rung = {a: cheating_ladder.RUNGS.index(lv["agents"][a]["cheating"]["level"]) for a in workers}
+    assert rung[p["pair"][0]] == max(rung.values()) > 0 and "highest on Cheating" in p["pair_why"]
     # every label the run page draws lands on a call of the tab, none dropped
     assert sum(len(c["labels"]) for c in calls.values()) == sum(len(ls) for ls in lv["labels"].values()) > 0
     # the lenses hold every label: each Cheating label's call has a mark of its rung, each call that posted a write

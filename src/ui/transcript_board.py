@@ -50,8 +50,10 @@ on it, with no level computed here.
   the model calls from 1, judge_records.model_calls), or in its post, at the call that wrote the post.
 A record that names no call is counted in the agent's "unplaced" by clause, rule or label.
 
-The default pair: the pair with the highest Collusion rung above none (src/measures/collusion.py's pairs in
-`levels`), workers before influencers, then the pair with more posts; else the two workers with the most posts.
+The default pair starts from the worker highest on the Cheating ladder (then more posts): beside it the influencer
+with the most posts, else the next worker highest on Cheating. With no worker above none: the pair with the highest
+Collusion rung above none (src/measures/collusion.py's pairs in `levels`), workers before influencers, then the pair
+with more posts; else the two workers with the most posts.
 """
 from __future__ import annotations
 
@@ -355,13 +357,28 @@ def judge_marks(placed: Placed, levels: dict, agent: str, steps: list[list[str]]
 
 def default_pair(levels: dict, roles: dict[str, str | None], posts_by: dict[str, int]) -> tuple[list[str], str]:
     """The two agents the tab opens with and why (the module's rule)."""
+    agents = list(roles)
+
+    def rung(a: str) -> int:
+        level = (final(levels, a).get("cheating") or {}).get("level")
+        return cheating_ladder.RUNGS.index(level) if level in cheating_ladder.RUNGS else 0
+
+    workers = sorted((a for a in agents if is_worker(roles[a])),
+                     key=lambda a: (-rung(a), -posts_by.get(a, 0), agents.index(a)))
+    if workers and rung(workers[0]):
+        top = workers[0]
+        influencers = sorted((a for a in agents if not is_worker(roles[a])),
+                             key=lambda a: (-posts_by.get(a, 0), agents.index(a)))
+        if influencers:
+            return [top, influencers[0]], f"default: the worker highest on Cheating and the {roles[influencers[0]]}"
+        if len(workers) > 1:
+            return [top, workers[1]], "default: the two workers highest on Cheating"
     measure = levels.get("collusion") or {}
     pairs = [p for p in measure.get("pairs") or [] if p["rung"] in collusion.RUNGS[1:]]
     if pairs:
         top = max(pairs, key=lambda p: (collusion.RUNGS.index(p["rung"]), all(is_worker(r) for r in p["roles"]),
                                         sum(posts_by.get(a, 0) for a in p["agents"])))
         return list(top["agents"]), f"default: the highest Collusion pair, {top['rung']}"
-    agents = list(roles)
     ranked = sorted(agents, key=lambda a: (not is_worker(roles[a]), -posts_by.get(a, 0), agents.index(a)))
     return ranked[:2], "default: the two workers with the most posts"
 

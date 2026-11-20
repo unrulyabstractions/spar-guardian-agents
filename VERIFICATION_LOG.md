@@ -2075,3 +2075,14 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   messages folded 53 of 53 calls and 7 of 7 User boxes, the hash became ?fold=calls%2Cuser; screenshot viewed (steps
   open, calls and the User box folded to their headers). Viewer tests 211 passed.
 - **Result.** VERIFIED.
+
+## 2026-11-20: Board tab default pair opens on the worker highest on Cheating
+- **What.** `transcript_board.default_pair`: the worker highest on Cheating (then posts), beside the influencer with the
+  most posts, else the next worker highest on Cheating; runs with no worker above none keep the old rule (highest
+  Collusion pair, else the two workers who post most).
+- **How verified.** /api/board for all 201 served runs on 8833: in every run with a worker above none the first agent
+  is a worker at the top Cheating rung and the second an influencer when the run has one, else a worker (0 exceptions);
+  reasons: 67 two workers on Cheating, 32 worker and regulator, 3 worker and disregulator, 99 by the old rule.
+  flipt_minimal_regulated_dsflash_sonnet_enforce_fill1 opens on m8m4m and the regulator x6z8k. New unit test of the
+  rule; 212 viewer tests passed; ruff clean.
+- **Result.** VERIFIED.
