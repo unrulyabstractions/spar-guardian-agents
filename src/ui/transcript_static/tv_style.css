@@ -272,9 +272,6 @@ mark.xl-mark.flash { animation: flash 1.6s ease-out; }
 .rp-tog[aria-pressed=true]::before { visibility: visible; }
 .rp-togs[hidden] { display: none; }
 .rp-tog:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.rp-stage[data-board=only] .case .right .call:not(.has-board) { display: none; }
-/* and a step none of whose calls touched the board */
-.rp-stage[data-board=only] .case .right .step-box:not(:has(.call.has-board)) { display: none; }
 .case .note{font-size:11.5px;color:var(--ink-2);margin:8px 0 0}
 @media not all and (min-width:1000px) and (min-height:560px){.case .main{grid-template-columns:1fr}.case .left{position:static;max-height:none}}
 .case .cs-svg{display:block;cursor:pointer}
@@ -618,3 +615,13 @@ table.sum-table.is-detailed td.sum-cell { min-width: 220px; }
 .rp-who-part { flex-direction: column; align-items: flex-start; gap: 6px; }
 .rp-who-model { font-size: 13px; white-space: nowrap; }
 .rp-who-chips { display: inline-flex; align-items: center; gap: 4px; }
+/* Board and Details are views of the whole run, not agents: set apart by a rule and a filled, accented look. */
+.rp-tab-view { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.rp-tab:not(.rp-tab-view) + .rp-tab-view { margin-left: 14px; position: relative; }
+.rp-tab:not(.rp-tab-view) + .rp-tab-view::before { content: ""; position: absolute; left: -11px; top: 15%; bottom: 15%;
+  border-left: 1px solid var(--border-strong, var(--border)); }
+.rp-tab-view.on { background: var(--accent); color: var(--panel); }
+/* The bar's two rows: the run and who ran it, then the tabs with the toggles at the right. */
+.rp-bar { flex-direction: column; align-items: stretch; flex-wrap: nowrap; }
+.rp-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; }
+.rp-row .rp-right { margin-left: auto; }

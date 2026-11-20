@@ -2114,3 +2114,16 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   command, and get_agent_observations about the ordered name a01 was refused "no such agent". Full unit suite 3178
   passed, 6 xfailed; ruff clean; paper-check agrees.
 - **Result.** VERIFIED. Not run: any paid model run with the new tools.
+
+## 2026-11-20: run page bar in two rows, three toggles gone, results folded, the run opens on the top cheater
+- **What.** Board calls only, Tool calls and Tool results toggles removed; every tool result starts folded, every tool
+  call open. Board and Details tabs drawn apart from the agent tabs (accent fill, a rule before them). The bar is two
+  rows: the run and its models, then the tabs with the toggles at the right. A run opens on the worker highest on
+  Cheating, then on Coordination.
+- **How verified.** binder_minimal_luna4 on 8833: 53 of 53 results folded, 0 of 53 tool calls folded, toggles Calls,
+  System, User messages, Reasoning; screenshot viewed (results folded to "TOOL RESULT n lines", Board and Details
+  accented after a rule). Bar of the ambiguous_fill1 run cropped and viewed: two rows as described. Selected tab
+  checked in headless Chrome on four runs (ambiguous_fill1 j3x6n, enforce_fill1 m8m4m, binder_minimal_luna4 k7x6z,
+  flipt_minimal_dsflash_fixed2 k8m6p), each the expected top worker. Full unit suite 3178 passed before the default-tab
+  change; viewer tests after it passed.
+- **Result.** VERIFIED.

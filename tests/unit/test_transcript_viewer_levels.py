@@ -1091,11 +1091,13 @@ def test_the_runs_come_most_interesting_first():
 def test_a_step_is_three_folding_sections_and_the_bar_folds_a_part_everywhere():
     """The user's feedback of 2026-11-19 ("can you divide them more clearly", "how do i minimize the tool call and tool
     result? or reasoning?"): a step's reasoning, tool call and tool result are three sections, each with a header
-    button that folds it, a long one clipped; the bar's Show select is gone for a toggle per part and Board calls only,
-    kept in the hash; an opened call or excerpt has its sections unfolded."""
+    button that folds it, a long one clipped; the bar's Show select is gone for a toggle per part, kept in the hash; an
+    opened call or excerpt has its sections unfolded. Since 2026-11-20 the bar keeps Calls, System, User messages and
+    Reasoning; a tool result starts folded and a tool call open, and Board calls only is gone."""
     case = (STATIC / "tv_case_view.js").read_text()
     assert ("export const PARTS = [['calls', 'Calls'], ['system', 'System'], ['user', 'User messages'], "
-            "['reasoning', 'Reasoning'],\n  ['call', 'Tool calls'], ['result', 'Tool results']];") in case
+            "['reasoning', 'Reasoning']];") in case
+    assert "for (const s of right.querySelectorAll('.sec-reasoning')) foldSection(s, off.has('reasoning'));" in case
     # the System prompt and the User messages start folded
     assert "export const DEFAULT_FOLDS = ['system', 'user'];" in case
     # steps never fold; calls and User messages fold, one at a time or all from the bar
@@ -1103,19 +1105,20 @@ def test_a_step_is_three_folding_sections_and_the_bar_folds_a_part_everywhere():
     assert "for (const b of right.querySelectorAll('.cs-user')) foldBox(b, off.has('user'));" in case
     assert "h('button', { type: 'button', class: 'sec-h', 'aria-expanded': 'true'" in case
     assert "section('call', 'Tool call', h('span', { class: 'sec-tool' }" in case
-    assert "section('result', 'Tool result', h('span', { class: 'sec-size' }" in case
+    assert "const el = section('result', 'Tool result', h('span', { class: 'sec-size' }" in case
+    assert "foldSection(el, true);\n          return el;" in case                 # every result starts folded
     assert "const CLIP_LINES = 12;" in case and "`show all ${lines} lines`" in case
     assert "openSections(el);" in case and "openSections(box);" in case and "setFolds(off)" in case
     for gone in ("function blk(", "showAll", "k-tool", "k-input"):
         assert gone not in case, gone
     run = (STATIC / "tv_view_run.js").read_text()
-    assert "tr.setFolds(folded);" in run and "p.set('fold'," in run and "p.set('board', 'only')" in run
-    assert "toggle('Board calls only'," in run and "'aria-pressed'" in run
+    assert "tr.setFolds(folded);" in run and "p.set('fold'," in run and "'aria-pressed'" in run
+    assert "Board calls only" not in run and "data-board" not in run
     for gone in ("showSel", "rp-show", "dataset.show", "showAll"):
         assert gone not in run, gone
     css = (STATIC / "tv_style.css").read_text()
     assert ".case .sec.folded .sec-b{display:none}" in css and ".case .sec.clipped .txt{max-height:12lh;" in css
-    assert ".rp-stage[data-board=only] .case .right .call:not(.has-board) { display: none; }" in css
+    assert "data-board=only" not in css
     for gone in ("rp-show", "data-show"):
         assert gone not in css, gone
 

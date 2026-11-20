@@ -1,6 +1,5 @@
 /* View: one run (#/run/<collection>/<run key>?agent=<id>&call=<k>, ?agent=<id>&label=<judge label>, ?tab=board&a=&b=
- * &mode=&pos= or ?tab=details; with &fold=calls,system,user,reasoning,call,result (or none) and &board=only on an
- * agent's tab).
+ * &mode=&pos= or ?tab=details; with &fold=calls,system,user,reasoning (or none) on an agent's tab).
  * Ported from collusion-hermaneutics' viewer (viewer/static/app/view_run.js). A bar with the run, an agent tab per
  * agent, a Board tab and a Details tab; the selected agent's whole episode below it, each step with its labels
  * (tv_case_view.js); the run record under it: the run's labels, the run settings, each agent's record with its
@@ -272,12 +271,16 @@ export async function viewRun(id, q, view) {
   const agentsBox = h('div', { id: 'sec-agents' }, d.agents.map(agentCard));
 
   // ---- top bar: run, arm, agent tabs, the fold toggles, the run record's toggle; the stage below holds the selected
-  // tab. The parts folded on every step (?fold=calls,system,user,reasoning,call,result; none for nothing; without it
-  // DEFAULT_FOLDS) and Board calls only (?board=only) come from the hash and go back to it; an agent's tab takes them
-  // when shown.
-  const firstAgent = (d.agents.find(a => a.role === 'worker' && a.folder) || d.agents.find(a => a.folder) || {}).agent;
+  // tab. The parts folded on every step (?fold=calls,system,user,reasoning; none for nothing; without it DEFAULT_FOLDS)
+  // come from the hash and go back to it; an agent's tab takes them when shown.
+  // The tab a run opens on: the worker highest on Cheating, then on Coordination, then the first listed.
+  const rankOf = (a, L) => (((d.levels && d.levels.agents && d.levels.agents[a.agent]) || {})[L] || {}).index || 0;
+  const firstAgent = (d.agents.filter(a => a.role === 'worker' && a.folder)
+    .map((a, i) => ({ a, key: [-rankOf(a, 'cheating'), -rankOf(a, 'coordination'), i] }))
+    .sort((x, y) => x.key[0] - y.key[0] || x.key[1] - y.key[1] || x.key[2] - y.key[2])[0] || {}).a?.agent
+    || (d.agents.find(a => a.folder) || {}).agent;
   const folded = new Set(q.has('fold') ? q.get('fold').split(',').filter(x => PARTS.some(([k]) => k === x)) : DEFAULT_FOLDS);
-  const stage = h('div', { class: 'rp-stage', dataset: { board: q.get('board') === 'only' ? 'only' : 'all' } });
+  const stage = h('div', { class: 'rp-stage' });
   const tabs = new Map();
   let current = null;
   // A tab names the agent and its role, the role alone (worker, regulator, disregulator).
@@ -317,7 +320,7 @@ export async function viewRun(id, q, view) {
   const drawn = new Map();
   for (const [key, v] of views) {
     const open = () => selectTab(key).catch(() => {});
-    tabs.set(key, h('button', { type: 'button', class: 'rp-tab', onclick: open }, v.label));
+    tabs.set(key, h('button', { type: 'button', class: ['rp-tab', 'rp-tab-view'], onclick: open }, v.label));
   }
   // Each tab keeps where it was scrolled to: the stage for a view or the run record, an agent's steps pane for an agent.
   const scrolled = new Map();
@@ -357,8 +360,7 @@ export async function viewRun(id, q, view) {
     const listed = PARTS.map(([k]) => k).filter(k => folded.has(k)).join(',');
     if (listed === PARTS.map(([k]) => k).filter(k => DEFAULT_FOLDS.includes(k)).join(',')) p.delete('fold');
     else p.set('fold', listed || 'none');
-    if (stage.dataset.board === 'only') p.set('board', 'only');
-    else p.delete('board');
+    p.delete('board');
     const s = p.toString();
     try { history.replaceState(null, '', `#${path}${s ? '?' + s : ''}`); } catch (e) { /* view stays as drawn */ }
   }
@@ -374,13 +376,7 @@ export async function viewRun(id, q, view) {
         const tr = cards.has(current) && cards.get(current).state.tr;
         if (tr) { tr.setFolds(folded); tr.refresh(); }
         return !folded.has(k);
-      })),
-    toggle('Board calls only', 'only the calls that read or posted on the message board', stage.dataset.board === 'only', () => {
-      stage.dataset.board = stage.dataset.board === 'only' ? 'all' : 'only';
-      const tr = cards.has(current) && cards.get(current).state.tr;
-      if (tr) tr.refresh();
-      return stage.dataset.board === 'only';
-    }));
+      })));
   // A- and A+: the steps' text size, kept across runs (localStorage), from 70% to 200%.
   const ZOOMS = [0.7, 0.8, 0.9, 1, 1.1, 1.25, 1.4, 1.6, 1.8, 2];
   const zoomAt = () => { const z = Number(localStorage.getItem('tv-zoom')) || 1; return ZOOMS.reduce((a, b) => (Math.abs(b - z) < Math.abs(a - z) ? b : a)); };
@@ -393,14 +389,15 @@ export async function viewRun(id, q, view) {
   // The run record is shown in the stage in place of a tab; its button goes back to the tab shown before.
   const recordBtn = h('button', { type: 'button', class: 'rp-dbtn', 'aria-pressed': 'false', title: 'the run\'s labels, settings and records',
     onclick: () => selectTab(current === 'record' && shown ? shown : 'record').catch(() => {}) }, 'Run record');
+  // Two rows: the run and who ran it; under it the tabs, with the fold toggles and the run record's button at the right.
   const bar = h('div', { class: 'rp-bar' },
-    h('a', { class: 'rp-back', href: '#/', title: 'all runs' }, '←'),
-    h('b', { class: 'rp-run' }, row.run), whoChips(row),
-    cheating.alarm ? alarmBadge(cheating.alarm) : null,
-    h('span', { class: 'rp-tabs' }, [...tabs.values()]),
-    // the fold toggles and the run record's button wrap as one group at the right
-    h('span', { class: 'rp-right' }, toggles, zoomBtns,
-      recordBtn));
+    h('div', { class: 'rp-row' },
+      h('a', { class: 'rp-back', href: '#/', title: 'all runs' }, '←'),
+      h('b', { class: 'rp-run' }, row.run), whoChips(row),
+      cheating.alarm ? alarmBadge(cheating.alarm) : null),
+    h('div', { class: 'rp-row' },
+      h('span', { class: 'rp-tabs' }, [...tabs.values()]),
+      h('span', { class: 'rp-right' }, toggles, zoomBtns, recordBtn)));
 
   view.mounted(() => {
     document.title = `${row.run} · Transcripts`;

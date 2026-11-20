@@ -156,9 +156,9 @@ function resultText(r) {
   return asStr(c) || asStr(r.extra && r.extra.error);
 }
 // The parts of a step, each a section with a header strip that folds it: the run page's bar folds a part everywhere.
-// The bar's toggles: whole calls, the System prompt, User messages, and the sections of every call. Steps never fold.
-export const PARTS = [['calls', 'Calls'], ['system', 'System'], ['user', 'User messages'], ['reasoning', 'Reasoning'],
-  ['call', 'Tool calls'], ['result', 'Tool results']];
+// The bar's toggles: whole calls, the System prompt, User messages and every step's reasoning. Steps never fold; a tool
+// result starts folded and a tool call open, each folding on its own header.
+export const PARTS = [['calls', 'Calls'], ['system', 'System'], ['user', 'User messages'], ['reasoning', 'Reasoning']];
 // Folded when the page opens: the System prompt and the User messages.
 export const DEFAULT_FOLDS = ['system', 'user'];
 // A section longer than this starts clipped to its first lines.
@@ -398,7 +398,9 @@ export function renderCase(t, ctx) {
         section('call', 'Tool call', h('span', { class: 'sec-tool' }, c.tc.function_name || '?'), argText(c.tc.arguments), null),
         c.res.map(r => {
           const out = resultText(r);
-          return section('result', 'Tool result', h('span', { class: 'sec-size' }, plural(out.split('\n').length, 'line')), out, null);
+          const el = section('result', 'Tool result', h('span', { class: 'sec-size' }, plural(out.split('\n').length, 'line')), out, null);
+          foldSection(el, true);
+          return el;
         })));
     blocks.push(el);
     return el;
@@ -648,7 +650,7 @@ export function renderCase(t, ctx) {
       if (Date.now() - asked < 1500 && Math.abs(off()) > 2) right.scrollTop += off();
     }, { once: true });
   }
-  // The box that shows call k: its own, its step's when the step is folded, or none when Board calls only hides it.
+  // The box that shows call k: its own, or its step's when the step is folded.
   function shownBox(k) {
     const b = blocks[k];
     if (b.offsetParent) return b;
@@ -718,7 +720,7 @@ export function renderCase(t, ctx) {
     let k = -1;
     for (let i = 0; i < n; i++) {
       const box = shownBox(i);
-      if (!box) continue;   // hidden by Board calls only
+      if (!box) continue;
       k = i;
       if (box.getBoundingClientRect().bottom >= y) break;
     }
@@ -772,7 +774,7 @@ export function renderCase(t, ctx) {
       const key = [...off].sort().join(',');
       if (key === foldedParts) return;
       foldedParts = key;
-      for (const s of right.querySelectorAll('.sec:not(.sec-tooldef):not(.sec-tools)')) foldSection(s, off.has(s.dataset.part));
+      for (const s of right.querySelectorAll('.sec-reasoning')) foldSection(s, off.has('reasoning'));
       const foldBox = (b, on) => {
         b.classList.toggle('folded', on);
         const btn = b.querySelector(':scope > .ch > .box-fold');
