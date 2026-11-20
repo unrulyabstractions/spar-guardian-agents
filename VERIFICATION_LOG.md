@@ -2019,3 +2019,7 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **What.** ▲ and ▼ beside the slider's handle, moving with it: the previous step's first call and the next step's.
 - **How verified.** On 8833, poem_minimal_regulated_luna1 a01: ▼ three times took the top to Step 4, 5, 7 (calls 1, 2, 3; Step 6 holds no call), ▲ back to Step 5 (call 2); the buttons' top follows the handle (thumb 223 -> 241, buttons 207 -> 225); screenshot viewed. Viewer, board and summary tests 106 passed.
 - **Then.** The step buttons sit fixed at the slider's vertical middle (the user: "centered vertical and not move with slider"): on 8833 their top stayed at 355 px over four clicks while the handle moved (223 -> 241); screenshot viewed. Viewer tests 59 passed.
+
+## 2026-11-20, the strip's panel fills the window's height
+- **What.** The panel is the window's height under the bar, a column with 28 px gaps: the ladder chips at the top, the strip (rows up to 18 px, so a short episode fills the space; STRIP_CHROME 400 reserved for chips, gaps and legend), the legend at the bottom.
+- **How verified.** On 8833, poem_minimal_regulated_luna1 at 1288x1000 and 1288x900: screenshots viewed, chips at top, strip filling the middle, the whole legend at the bottom with spaced rows, nothing cut. Viewer, board and summary tests 106 passed.

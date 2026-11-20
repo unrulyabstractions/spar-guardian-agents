@@ -578,3 +578,12 @@ table.sum-table.is-detailed td.sum-cell { min-width: 220px; }
 .case .cs-stepbtn { width: 22px; height: 20px; padding: 0; border: 1px solid var(--border); border-radius: 4px; background: var(--panel);
   color: var(--text); font-size: 10px; line-height: 1; cursor: pointer; }
 .case .cs-stepbtn:hover { border-color: var(--accent); color: var(--accent); }
+/* The strip's panel fills the window's height: the ladder chips at the top, the strip under them with room, the
+   legend at the bottom; clear gaps between the three. */
+@media (min-width:1000px) and (min-height:560px) {
+  .rp-stage .case .left { display: flex; flex-direction: column; gap: 28px; height: calc(100vh - var(--under) - 12px);
+    padding: 18px 16px; box-sizing: border-box; }
+  .rp-stage .case .left > .cs-ladders { margin: 0; }
+  .rp-stage .case .left > .cs-strip { flex: none; }
+  .rp-stage .case .left > .cs-legend { margin-top: auto; }
+}

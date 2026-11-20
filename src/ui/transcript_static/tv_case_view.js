@@ -42,7 +42,7 @@ export function inkOn(hex) {
 const SHORT = { cheating: 'H', coordination: 'C', collusion: 'K' };
 // The strip pane's height besides the strip's rows: its padding, heading, chips and legend, the strip's own head and
 // end band, and the pane's bottom gap (tv_style.css .rp-stage .case .left).
-const STRIP_CHROME = 260;
+const STRIP_CHROME = 400;
 /** A ladder's own colour: its first level above the line. lad: its /api/ladders entry. */
 const inkOf = (L, lad) => RAMP[L][lad.levels.indexOf(lad.line)];
 const clip = (s, n) => (s && s.length > n ? `${s.slice(0, n - 1)}…` : s);
@@ -421,7 +421,8 @@ export function renderCase(t, ctx) {
   const bar = document.querySelector('.rp-bar');
   const underBar = bar ? bar.getBoundingClientRect().bottom + 8 : 120;
   const maxH = Math.max(200, Math.min(window.innerHeight - underBar - STRIP_CHROME, 900));
-  const rh = Math.max(2, Math.min(9, maxH / Math.max(n, 1)));
+  // A short episode takes the panel's height (rows up to 18 px), so the strip fills it rather than leaving a gap.
+  const rh = Math.max(2, Math.min(18, maxH / Math.max(n, 1)));
   const H = Math.ceil(n * rh) + TOP + 6 + 14;
   const svg = document.createElementNS(NS, 'svg');
   svg.setAttribute('width', W); svg.setAttribute('height', H); svg.setAttribute('class', 'cs-svg');
