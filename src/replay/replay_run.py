@@ -52,12 +52,16 @@ def tool_output(tool: str, output: str, limit: int) -> str:
     return truncated.output if truncated else output
 
 
-def play_call(box, replayer, call: RecordedCall, limit: int) -> dict:
+def play_call(box, replayer, call: RecordedCall, limit: int, swap=None) -> dict:
     """One call in its machine: its output against the recorded one, the agent's state after it and, where it may
-    have touched the team remote, the team's."""
+    have touched the team remote, the team's. With `swap` (random_content.CertificateSwap) the certificates and keys
+    the call drew give way to the recorded ones before its commits are dated."""
     started = time.time()
     output, timed_out = replayer.execute(box, call)
     ran = time.time() - started
+    swapped = None
+    if swap is not None:
+        output, swapped = swap.apply(box, call.agent, call.result, output, replayer.command(call))
     output, state, dated, undated = replayer.after(box, call, output)
     team = replayer.team_state(box) if replayer.shared(call) else None
     if call.error == "timeout" or timed_out:
@@ -66,10 +70,10 @@ def play_call(box, replayer, call: RecordedCall, limit: int) -> dict:
         match = match_of(call.result, tool_output(call.tool, output, limit))
     cause = cause_of(call.result, output, replayer.command(call)) if match == "differs" else None
     return {"call": call, "match": match, "cause": cause, "state": state, "team": team, "dated": dated,
-            "undated": undated, "ran": ran, "snapshot": time.time() - started - ran}
+            "undated": undated, "swapped": swapped, "ran": ran, "snapshot": time.time() - started - ran}
 
 
-def play(box, replayer, calls: list[RecordedCall], limit: int, parallel: bool) -> dict[int, dict]:
+def play(box, replayer, calls: list[RecordedCall], limit: int, parallel: bool, swap=None) -> dict[int, dict]:
     """Every sandbox call, each as play_call, by n. A shared call (or every call without parallel) waits for all
     earlier ones and runs alone."""
     lanes = {agent: ThreadPoolExecutor(max_workers=1) for agent in replayer.agents}
@@ -83,9 +87,9 @@ def play(box, replayer, calls: list[RecordedCall], limit: int, parallel: bool) -
                 wait(pending)
                 done.update((f.result()["call"].n, f.result()) for f in pending)
                 pending = []
-                done[call.n] = play_call(box, replayer, call, limit)
+                done[call.n] = play_call(box, replayer, call, limit, swap)
             else:
-                pending.append(lanes[call.agent].submit(play_call, box, replayer, call, limit))
+                pending.append(lanes[call.agent].submit(play_call, box, replayer, call, limit, swap))
         wait(pending)
         done.update((f.result()["call"].n, f.result()) for f in pending)
     finally:
@@ -112,7 +116,7 @@ def step_rows(replayer, calls: list[RecordedCall], played: dict[int, dict], init
                      "state": {"head": state["head"], "branch": state["branch"], "refs": state["refs"],
                                "team_refs": team["refs"],
                                "pieces": pieces_state(replayer.pieces, set(state["tree_pieces"]), state["ref_pieces"],
-                                                      team["ref_pieces"]),
+                                                      team["ref_pieces"], state.get("tree_lines")),
                                "dirty": state["dirty"]}})
     return rows
 
@@ -129,6 +133,8 @@ def fill_report(report: ReplayReport, calls: list[RecordedCall], played: dict[in
                          for n, r in sorted(played.items()) if r["match"] in ("order", "differs")]
     report.dated = [d for _, r in sorted(played.items()) for d in r["dated"]]
     report.undated = [d for _, r in sorted(played.items()) for d in r["undated"]]
+    report.swaps = [{"n": n, "agent": r["call"].agent, "k": r["call"].k, **r["swapped"]}
+                    for n, r in sorted(played.items()) if r.get("swapped")]
     report.slowest = [{"n": n, "agent": r["call"].agent, "seconds": round(r["ran"], 1),
                        "recorded_seconds": round(r["call"].t1 - r["call"].t0, 1),
                        "command": replayer.command(r["call"])[:120]}
@@ -138,14 +144,17 @@ def fill_report(report: ReplayReport, calls: list[RecordedCall], played: dict[in
     report.seconds["snapshots_in_series"] = round(sum(r["snapshot"] for r in played.values()), 1)
 
 
-def replay(run_dir: Path, out_dir: Path, *, parallel: bool = True) -> ReplayReport:
+def replay(run_dir: Path, out_dir: Path, *, parallel: bool = True, pem: bool = False,
+           warm_image: bool = False) -> ReplayReport:
     """Play the run back and write out_dir/steps.jsonl and out_dir/replay.json. Never raises for the run itself: a
-    refusal or a failure is the report's `refused` or `error`, and the report is not faithful."""
+    refusal or a failure is the report's `refused` or `error`, and the report is not faithful. Opt-in remedies: `pem`
+    swaps the certificates and keys a call draws for the recorded ones (random_content.py), `warm_image` runs every
+    machine on the run's image with Go's build cache filled (warm_image.py); replay.json's options name them."""
     run = RunDir(Path(run_dir))
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     report = ReplayReport(run=run.name, run_dir=str(run.path), faithful=False, parallel=parallel,
-                          code=settings.code_state())
+                          options={"pem": pem, "warm_image": warm_image}, code=settings.code_state())
     wall = time.time()
     try:
         run.require()
@@ -154,6 +163,12 @@ def replay(run_dir: Path, out_dir: Path, *, parallel: bool = True) -> ReplayRepo
             raise ReplayRefused(f"no replay for task {report.task!r}; it replays {', '.join(REPLAYERS)}")
         calls = recorded_calls(run)
         replayer = REPLAYERS[report.task](run, calls)
+        for wanted, hook in ((pem, "certificate_swap"), (warm_image, "use_warm_image")):
+            if wanted and not hasattr(replayer, hook):
+                raise ReplayRefused(f"the {report.task} replay has no {hook}")
+        swap = replayer.certificate_swap() if pem else None
+        if warm_image:
+            replayer.use_warm_image()
         report.image = replayer.image()
         if not report.image["id"]:
             raise ReplayRefused(f"the image {report.image['tag']} is not on this host")
@@ -167,7 +182,7 @@ def replay(run_dir: Path, out_dir: Path, *, parallel: bool = True) -> ReplayRepo
             initial, team0 = replayer.initial(box), replayer.team_state(box)
             report.seconds["setup"] = round(time.time() - mark, 1)
             mark = time.time()
-            played = play(box, replayer, calls, limit, parallel)
+            played = play(box, replayer, calls, limit, parallel, swap)
             report.seconds["calls"] = round(time.time() - mark, 1)
             mark = time.time()
             report.end = replayer.end_state(box, out_dir / END)
@@ -203,10 +218,10 @@ def runs_of(paths: list[Path]) -> list[Path]:
 
 
 def replay_runs(paths: list[Path], out: Path, *, only_missing: bool = False, parallel: bool = True, jobs: int = 1,
-                log=print) -> int:
-    """Each run of runs_of(paths) into out/<run>/, `jobs` runs at once (each its own compose project); with
-    only_missing a run whose replay.json exists is skipped. Returns 0 when every replay played was faithful, 1
-    otherwise."""
+                pem: bool = False, warm_image: bool = False, log=print) -> int:
+    """Each run of runs_of(paths) into out/<run>/, `jobs` runs at once (each its own compose project), with replay's
+    opt-in remedies; with only_missing a run whose replay.json exists is skipped. Returns 0 when every replay played was
+    faithful, 1 otherwise."""
     todo = []
     for path in runs_of(paths):
         if only_missing and read_report(Path(out) / path.name) is not None:
@@ -215,7 +230,7 @@ def replay_runs(paths: list[Path], out: Path, *, only_missing: bool = False, par
             todo.append(path)
 
     def one(path: Path) -> bool:
-        report = replay(path, Path(out) / path.name, parallel=parallel)
+        report = replay(path, Path(out) / path.name, parallel=parallel, pem=pem, warm_image=warm_image)
         shares = ", ".join(f"{k} {v:.1%}" for k, v in sorted(report.shares().items()))
         why = report.refused or (report.error or "").split("\n")[0] or "its end state differs"
         verdict = "faithful" if report.faithful else f"NOT faithful: {why}"

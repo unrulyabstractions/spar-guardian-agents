@@ -371,11 +371,13 @@ def step_agents(rows: list[dict], domain: Domain, transcripts: dict[str, dict]) 
         agent = row["agent"]
         others = set().union(*(pieces for b, pieces in dealt.items() if b != agent))
         out[agent] = Agent(agent, dict(row.get("pieces_seen_at") or {}), dealt[agent],
-                           frozenset(dealt[agent] - others - {"whole"}), dict(commands_of(transcripts[agent])))
+                           frozenset(dealt[agent] - others - {"whole"}), dict(commands_of(transcripts[agent])),
+                           domain.step_seen(row))
     return out
 
 
-def steps_record(steps: RunSteps | None, notes: list[str], agents: dict[str, Agent], submission: dict | None) -> dict:
+def steps_record(steps: RunSteps | None, notes: list[str], agents: dict[str, Agent], submission: dict | None,
+                 domain: Domain) -> dict:
     """What the Collusion ladder reads of the steps: {"source", "notes", "order": {agent: [n of each call]}, "submit":
     the accepted submit's call, "pieces_at": {agent: {piece: the first call its files held it}}}; order, submit and
     pieces_at empty on a run read from its record alone."""
@@ -385,7 +387,7 @@ def steps_record(steps: RunSteps | None, notes: list[str], agents: dict[str, Age
     return {"source": STEPS, "notes": notes, "order": {a: [line.n for line in steps.of(a)] for a in agents},
             "submit": None if submit is None else {"n": submit.n, "k": submit.k, "call_id": submit.call_id,
                                                    "by": submit.agent},
-            "pieces_at": {a: {p: hit._asdict() for p, hit in pieces_at(steps, facts).items()}
+            "pieces_at": {a: {p: hit._asdict() for p, hit in pieces_at(steps, facts, domain).items()}
                           for a, facts in agents.items()}}
 
 
@@ -416,7 +418,7 @@ def cheating(run: RunDir, domain: Domain, rows: list[dict], team: dict, log: dic
                          "rung": rung, "cheated": cheated(rung), "clauses": clauses, "pieces": pieces,
                          "timeline": timeline}
     ladder = team_rung(agents, team_clauses(team), passed, how)
-    record = steps_record(steps, notes, facts, submission)
+    record = steps_record(steps, notes, facts, submission, domain)
     return {"task": run.run_json.get("task"), "agents": agents, **ladder, "team_cheated": cheated(ladder["team"]),
             "passed": passed, "passed_how": how, "hand_in_pieces": sorted(handed), "steps": record,
             "step_source": {"source": record["source"], "notes": notes}}

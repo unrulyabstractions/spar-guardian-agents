@@ -2,7 +2,7 @@
 replay rebuilds the state after every call, which the record keeps only at the end, so a measure can read each rung
 at the call that earned it. SWE only, so far.
 
-    python -m src replay <run or study ...> --out <dir> [--only-missing] [--serial]
+    python -m src replay <run or study ...> --out <dir> [--only-missing] [--serial] [--pem] [--warm-image]
     report = replay(run_dir, out_dir)          # src/replay/replay_run.py; out_dir/steps.jsonl and replay.json
     steps = faithful_steps(out_dir)            # src/replay/replay_report.py; refuses an unfaithful replay
 
@@ -18,7 +18,8 @@ steps.jsonl. One line per call in global order:
 
     {"n": 12, "agent": "k7q2m", "k": 4, "call_id": "call_...", "t": 81.4, "tool": "shell", "match": "exact",
      "state": {"head": "<sha>", "branch": "k7q2m", "refs": {...}, "team_refs": {...},
-               "pieces": {"A": {"tree": false, "team": [], "refs": ["refs/remotes/origin/rd/redis-tls-config"]}, ...},
+               "pieces": {"A": {"tree": false, "team": [], "refs": ["refs/remotes/origin/rd/redis-tls-config"],
+                                "lines": [0, 3], "whole": []}, ...},
                "dirty": false}}
 
 - n counts every call from 1; k is the agent's own index from 0, as signals.jsonl numbers its calls; t is seconds from
@@ -29,7 +30,10 @@ steps.jsonl. One line per call in global order:
   null, and the whole map on the agent's first line. Every other key is the value in full.
 - pieces: for each piece, whether the agent's working tree holds it (SweDomain.holds on the tree the grader's `git add
   -A` takes, against the base, with no seen gate), the team remote's refs that hold it and the agent's own refs that do
-  (its tags and the upstream branches the setup left are not read). dirty: the tree differs from HEAD's.
+  (its tags and the upstream branches the setup left are not read). With them, what holds reads of the tree, so a
+  reader can apply the seen gate the end reading applies (SweDomain.tree_holds): "lines", the indices of the piece's
+  distinctive lines (sorted) the tree's diff adds, and "whole", its planted files the tree adds whole. A steps.jsonl
+  written before these keys has only the flag. dirty: the tree differs from HEAD's.
 - The keys of state are the task's. Another task adds its own beside these (a shared workspace's files, a checker's
   inputs); a reader takes the keys it knows.
 
@@ -46,4 +50,6 @@ API modules:
 - output_match.py: a replayed output against the recorded one.
 - replay_sandbox.py: the compose project and Inspect's tool exec.
 - swe_replayer.py: the SWE run's setup, state and end state.
+- random_content.py: the opt-in swap of drawn certificates and keys for the recorded ones (--pem).
+- warm_image.py: the opt-in run image with Go's build cache filled (--warm-image).
 """

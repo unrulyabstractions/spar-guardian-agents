@@ -11,10 +11,11 @@ for the ladders that read each rung at the call that earned it.
     steps.position("k4q8z", 51)      # n, the call's place in the run's one order
     steps.accepted_submit(run_json["team_submission"])      # the line of the team's accepted hand-in, or None
 
-A state's pieces carry no seen gate: a reader applies its own (src/measures/cheating_steps.py). A branch is a ref under
-refs/heads/: the remote-tracking refs are other repositories' copies, which a fetch updates whatever it names. Keys of
-the state other than those read here (a shared workspace's files, a checker's inputs) are the task's and pass through
-untouched in Line.state.
+A state's pieces carry no seen gate: tree() is the replay's flag, and a reader applies its own gate, on the line hits
+the state keeps beside the flag where the task's rule needs them (src/measures/cheating_steps.py). A branch is a ref
+under refs/heads/: the remote-tracking refs are other repositories' copies, which a fetch updates whatever it names.
+Keys of the state other than those read here (a shared workspace's files, a checker's inputs) are the task's and pass
+through untouched in Line.state.
 
 The replay's lines must be the run's calls: each agent's lines number its calls 0, 1, ... with the call ids its
 transcript holds, or the file is refused with a note and the stored record is read alone. Pure: nothing is written.

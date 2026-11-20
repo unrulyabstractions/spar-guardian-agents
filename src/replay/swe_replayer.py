@@ -27,8 +27,10 @@ from src.domains.swe.swe_settings import DIFF_KEEP_BYTES, TEAM_REPO, TOOL_TIMEOU
 from src.measures.run_directory import RunDir
 from src.measures.shell_commands import PYTHON_TOOLS, TOOLS
 from src.replay.commit_dates import RecordedIds, find_date, renamed_text, reparent, retime
+from src.replay.random_content import CertificateSwap
 from src.replay.recorded_calls import RecordedCall, ReplayRefused
 from src.replay.replay_sandbox import ReplaySandbox
+from src.replay.warm_image import described, warm_image
 from src.sandbox.agent_tools import PYTHON_COMMANDS
 from src.sandbox.docker_images import image_id
 
@@ -59,15 +61,35 @@ class SweReplayer:
         self.lock = threading.Lock()
         self.initial_refs: dict[str, dict[str, str]] = {}
         self.last: dict[str, dict] = {}
+        self.warm: str | None = None               # the warm image's tag, once use_warm_image built it
 
     # ---------------------------------------------------------------- the sandbox
     def services(self) -> dict[str, dict]:
-        return hooks.services(self.swe)
+        services = hooks.services(self.swe)
+        if self.warm:
+            services = {name: {**service, "image": self.warm} for name, service in services.items()}
+        return services
 
     def image(self) -> dict:
-        tag = hooks.image(self.swe)
-        local, recorded = image_id(tag), (self.swe.get("images") or {}).get("native_id")
+        tag, recorded = hooks.image(self.swe), (self.swe.get("images") or {}).get("native_id")
+        if self.warm:
+            return described(tag, self.warm, recorded)
+        local = image_id(tag)
         return {"tag": tag, "id": local, "run_id": recorded, "own": bool(local) and local == recorded}
+
+    def use_warm_image(self, log=print) -> str:
+        """Every machine on the run's image with Go's build cache filled (warm_image.py), built when missing."""
+        self.warm = warm_image(hooks.image(self.swe), WORKDIR, log)
+        return self.warm
+
+    def certificate_swap(self) -> CertificateSwap:
+        """The swap of drawn certificates and keys for the recorded ones (random_content.py): each agent's own stored
+        diffs (its graded tree, its own diff, its branch on the team remote), and the record's every call, whose text
+        no drawn line may appear in."""
+        own = {agent: [f"{agent}.diff", f"{agent}.own.diff", branch_file(agent)] for agent in self.agents}
+        record = "\n".join(text for call in self.calls
+                           for text in (*map(str, call.arguments.values()), call.result))
+        return CertificateSwap(self.run.path / "swe" / "diffs", own, record)
 
     def build(self, box: ReplaySandbox) -> dict:
         """prepare()'s setup with the record's values: {"base_time", "agents": {agent: {"refs", "planted"}},
@@ -206,8 +228,13 @@ class SweReplayer:
         command = hooks.snapshot_command(self.base, (previous or {}).get("tree", ""), new_commits=new_commits)
         done = box.exec(agent, command, stdin="".join(f"^{t}\n" for t in tips).encode() if new_commits else None)
         read = hooks.parse_snapshot(done.stdout.decode(errors="replace"))
-        tree_pieces = sorted(self.domain.holds(read["diff"])) if read["diff"] is not None else \
-            (previous or {}).get("tree_pieces", [])
+        if read["diff"] is not None:
+            reading = self.domain.diff_reading(read["diff"])
+            tree_pieces = sorted(p for p, (hit, whole) in reading.items() if self.domain.held_how(p, hit, whole))
+            tree_lines = self.domain.tree_reading(reading)
+        else:
+            tree_pieces = (previous or {}).get("tree_pieces", [])
+            tree_lines = (previous or {}).get("tree_lines", {})
         refs = {name: sha for name, sha in read["refs"].items() if not name.startswith("refs/tags/")}
         initial = self.initial_refs.get(agent, {})
         readable = {name: sha for name, sha in refs.items()
@@ -215,7 +242,8 @@ class SweReplayer:
                             and (not initial or initial.get(name) == sha))}
         self._read_pieces(box, agent, set(readable.values()), None)
         return {"head": read["head"], "branch": read["branch"], "refs": refs, "tree": read["tree"],
-                "tree_pieces": tree_pieces, "dirty": bool(read["tree"]) and read["tree"] != read["head_tree"],
+                "tree_pieces": tree_pieces, "tree_lines": tree_lines,
+                "dirty": bool(read["tree"]) and read["tree"] != read["head_tree"],
                 "ref_pieces": {name: self.held[sha] for name, sha in readable.items() if self.held.get(sha)},
                 "new": read["new"]}
 

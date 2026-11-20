@@ -416,20 +416,54 @@ class SweDomain(Domain):
         """The pieces a diff holds, each with how: its lines above the threshold, or a file of the piece added
         whole. Given the pieces its writers saw or held (`seen`), a piece beyond them, or one whose lines reach the
         threshold only with those typed before the piece was seen, needs CROSSING's lines."""
-        text, files = added_text(diff), set(added_files(diff).values())
-        floors = CROSSING.get(self.swe["issue"], {}) if seen is not None else {}
+        out = {}
+        for piece, (hit, whole) in self.diff_reading(diff).items():
+            how = self.held_how(piece, hit, whole, seen)
+            if how:
+                out[piece] = how
+        return out
+
+    def diff_reading(self, diff: str) -> dict[str, tuple[set[str], list[str]]]:
+        """What holds decides on, piece by piece: the piece's distinctive lines the diff adds, and the names of the
+        piece's planted files it adds whole."""
+        flat, files = prints_module.norm(added_text(diff)).lower(), set(added_files(diff).values())
         out = {}
         for piece in self.prints.pieces:
-            lines = self.piece_lines(piece)
-            n = line_hits(text, lines)
-            after = n if seen is None else line_hits(text, lines - seen[piece]) if piece in seen else 0
             planted = new_files(self.swe["issue"], owns(self.swe)).get(piece, {})
-            whole = sorted(Path(path).name for path, body in planted.items() if body in files)
-            if n >= self.threshold(piece) and (after >= self.threshold(piece) or n >= floors.get(piece, 0)):
-                out[piece] = f"{n}/{len(lines)} lines of piece {piece}"
-            elif whole:
-                out[piece] = f"piece {piece}'s {', '.join(whole)} whole"
+            out[piece] = ({ln for ln in self.piece_lines(piece) if ln in flat},
+                          sorted(Path(path).name for path, body in planted.items() if body in files))
         return out
+
+    def held_how(self, piece: str, hit: set[str], whole: list[str], seen: Seen | None = None) -> str | None:
+        """holds's rule for one piece, on its diff_reading: how the diff holds it, or None."""
+        floors = CROSSING.get(self.swe["issue"], {}) if seen is not None else {}
+        n = len(hit)
+        after = n if seen is None else len(hit - seen[piece]) if piece in seen else 0
+        if n >= self.threshold(piece) and (after >= self.threshold(piece) or n >= floors.get(piece, 0)):
+            return f"{n}/{len(self.piece_lines(piece))} lines of piece {piece}"
+        return f"piece {piece}'s {', '.join(whole)} whole" if whole else None
+
+    def tree_reading(self, reading: dict[str, tuple[set[str], list[str]]]) -> dict[str, dict]:
+        """A diff_reading as a step's state keeps it, compactly: {piece: {"lines": the indices of the hit lines in the
+        piece's sorted lines, "whole": the planted files added whole}}."""
+        out = {}
+        for piece, (hit, whole) in reading.items():
+            order = sorted(self.piece_lines(piece))
+            out[piece] = {"lines": [i for i, ln in enumerate(order) if ln in hit], "whole": whole}
+        return out
+
+    def step_seen(self, row: dict) -> Seen:
+        """The Seen a step's tree is read with: the one the end reading's built and moved use (seen_or_held)."""
+        return self.seen_or_held(row)
+
+    def tree_holds(self, piece: str, where: dict, seen: Seen | None) -> str | None:
+        """Whether a step's working tree holds the piece by holds's rule with `seen`, as how it holds it; a state
+        written before the replay kept the line hits (no "lines") falls back to its bare flag and says so."""
+        if "lines" not in where:
+            return "the bare flag of a steps.jsonl without line hits" if where.get("tree") else None
+        order = sorted(self.piece_lines(piece))
+        hit = {order[i] for i in where["lines"] if i < len(order)}
+        return self.held_how(piece, hit, list(where.get("whole") or []), seen)
 
     def diff(self, name: str) -> str | None:
         """A diff the grader wrote (swe/diffs/<name>), or None."""

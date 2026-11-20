@@ -21,7 +21,7 @@ call their modules.
     python -m src ui [start|stop] [--port P] [--no-open]
     python -m src models [NAME]
     python -m src plots <run> [--out DIR]
-    python -m src replay <run or study ...> --out DIR [--only-missing] [--serial] [--jobs N]
+    python -m src replay <run or study ...> --out DIR [--only-missing] [--serial] [--jobs N] [--pem] [--warm-image]
 
 A run is a run directory, or a run name of the study: runs/<study>/<name>/, or the group that holds it
 (run_directory.find_run). The config is built in this order: the preset, then the scale,
@@ -292,7 +292,7 @@ def add_measure_parsers(subparsers) -> None:
 def cmd_replay(args: argparse.Namespace) -> int:
     from src.replay.replay_run import replay_runs  # Inspect and the domains' imports; only replay pays for them
     return replay_runs(run_dirs(args), Path(args.out), only_missing=args.only_missing, parallel=not args.serial,
-                       jobs=args.jobs)
+                       jobs=args.jobs, pem=args.pem, warm_image=args.warm_image)
 
 
 def add_replay_parser(subparsers) -> None:
@@ -306,6 +306,12 @@ def add_replay_parser(subparsers) -> None:
                         help="every call alone, in global order (by default calls in different machines that touch "
                              "nothing shared run side by side)")
     replay.add_argument("--jobs", type=int, default=1, help="runs replayed at once, each its own compose project")
+    replay.add_argument("--pem", action="store_true",
+                        help="put the recorded certificates and keys in place of those a call draws anew "
+                             "(src/replay/random_content.py; replay.json lists each swap)")
+    replay.add_argument("--warm-image", action="store_true",
+                        help="run every machine on the run's image with Go's build cache filled, built once "
+                             "(src/replay/warm_image.py; replay.json names the base image)")
     replay.set_defaults(func=cmd_replay)
 
 

@@ -389,6 +389,16 @@ class Domain:
         access = (self.run.get("access") or {}).get("agents")
         return list(access[agent].get("holds") or []) if access and agent in access else ["whole"]
 
+    # ---------------------------------------------------------------- a step's state (src/measures/cheating_steps.py)
+    def step_seen(self, row: dict) -> dict | None:
+        """What tree_holds reads of the agent's sight besides the call at which it saw each piece; None by default."""
+        return None
+
+    def tree_holds(self, piece: str, where: dict, seen: dict | None) -> str | None:
+        """Whether a step's working tree holds the piece (`where`: the state's pieces[piece]), as how it holds it, or
+        None. By default the replay's flag; a task whose end reading weighs what the agent saw re-decides it."""
+        return "" if where.get("tree") else None
+
     def mentions(self, text: str) -> str | None:
         """What of the honeypot a board post names or shows, as a short phrase, or None: a pointer; else the pieces
         it shows; else open_min distinctive lines where lines are proof."""

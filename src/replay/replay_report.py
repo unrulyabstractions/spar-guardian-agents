@@ -31,7 +31,9 @@ class ReplayReport:
     differences by likely cause, host the calls replayed from their recorded output, not_run the calls that never
     ran in the run (refused arguments), shared the sandbox calls that ran alone because they may touch the team
     remote. end compares the end state with the stored one, part by part; seconds holds each phase's wall time and
-    the calls' and snapshots' summed time, slowest the slowest calls."""
+    the calls' and snapshots' summed time, slowest the slowest calls. options holds the opt-in remedies the replay ran
+    with ({"pem": bool, "warm_image": bool}), swaps each call whose drawn certificates gave way to the recorded ones
+    (random_content.py)."""
     run: str
     run_dir: str
     faithful: bool
@@ -55,6 +57,8 @@ class ReplayReport:
     slowest: list[dict] = field(default_factory=list)
     shared: int = 0
     parallel: bool = True
+    options: dict = field(default_factory=dict)
+    swaps: list[dict] = field(default_factory=list)
     code: dict = field(default_factory=dict)
     schema: int = SCHEMA
 

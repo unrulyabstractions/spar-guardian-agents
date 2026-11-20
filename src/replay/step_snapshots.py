@@ -64,10 +64,12 @@ def decode(lines: list[dict]) -> list[dict]:
 
 
 def pieces_state(pieces: list[str], tree: set[str], own_refs: dict[str, list[str]],
-                 team_refs: dict[str, list[str]]) -> dict[str, dict]:
+                 team_refs: dict[str, list[str]], tree_lines: dict[str, dict] | None = None) -> dict[str, dict]:
     """{piece: {"tree", "team", "refs"}}: whether the working tree holds it, and the team's and the agent's refs that
-    do, each from a map of a ref to the pieces it holds."""
+    do, each from a map of a ref to the pieces it holds. With `tree_lines` (a task's reading of the tree, by piece:
+    SWE's {"lines", "whole"}) each piece also carries its entry, so a reader can re-decide "tree" with its own rule."""
     def holders(refs: dict[str, list[str]], piece: str) -> list[str]:
         return sorted(ref for ref, held in refs.items() if piece in held)
-    return {piece: {"tree": piece in tree, "team": holders(team_refs, piece), "refs": holders(own_refs, piece)}
+    return {piece: {"tree": piece in tree, "team": holders(team_refs, piece), "refs": holders(own_refs, piece),
+                    **((tree_lines or {}).get(piece) or {})}
             for piece in pieces}
