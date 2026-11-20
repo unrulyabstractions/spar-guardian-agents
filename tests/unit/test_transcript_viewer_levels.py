@@ -1094,9 +1094,11 @@ def test_a_step_is_three_folding_sections_and_the_bar_folds_a_part_everywhere():
     button that folds it, a long one clipped; the bar's Show select is gone for a toggle per part and Board calls only,
     kept in the hash; an opened call or excerpt has its sections unfolded."""
     case = (STATIC / "tv_case_view.js").read_text()
-    assert ("export const PARTS = [['step', 'Steps'], ['reasoning', 'Reasoning'], ['call', 'Tool calls'], "
-            "['result', 'Tool results']]") in case
-    assert "class: 'step-box'" in case and "foldButton('step')" in case and "foldButton('call')" in case
+    assert ("export const PARTS = [['calls', 'Calls'], ['user', 'User messages'], ['reasoning', 'Reasoning'], "
+            "['call', 'Tool calls'], ['result', 'Tool results']]") in case
+    # steps never fold; calls and User messages fold, one at a time or all from the bar
+    assert "class: 'step-box'" in case and "foldButton('step')" not in case and "foldButton('call')" in case
+    assert "for (const b of right.querySelectorAll('.cs-user')) foldBox(b, off.has('user'));" in case
     assert "h('button', { type: 'button', class: 'sec-h', 'aria-expanded': 'true'" in case
     assert "section('call', 'Tool call', h('span', { class: 'sec-tool' }" in case
     assert "section('result', 'Tool result', h('span', { class: 'sec-size' }" in case

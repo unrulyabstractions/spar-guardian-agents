@@ -156,7 +156,8 @@ function resultText(r) {
   return asStr(c) || asStr(r.extra && r.extra.error);
 }
 // The parts of a step, each a section with a header strip that folds it: the run page's bar folds a part everywhere.
-export const PARTS = [['step', 'Steps'], ['reasoning', 'Reasoning'], ['call', 'Tool calls'], ['result', 'Tool results']];
+// The bar's toggles: whole calls, User messages, and the sections of every call. Steps never fold.
+export const PARTS = [['calls', 'Calls'], ['user', 'User messages'], ['reasoning', 'Reasoning'], ['call', 'Tool calls'], ['result', 'Tool results']];
 // A section longer than this starts clipped to its first lines.
 const CLIP_LINES = 12;
 /** Fold (on) or unfold one section; its header strip stays. */
@@ -378,7 +379,7 @@ export function renderCase(t, ctx) {
   let toolsDue = !!(ctx.tools && ctx.tools.tools && ctx.tools.tools.length);
   const toolsHere = () => { if (!toolsDue) return null; toolsDue = false; return toolsSection(ctx.tools); };
   // A message box folds to its header as a call does; its text is a section of its own.
-  const looseCard = x => h('div', { class: 'call cs-msg' },
+  const looseCard = x => h('div', { class: ['call', 'cs-msg', x.src === 'user' && 'cs-user'] },
     h('div', { class: 'ch' }, foldButton('call'), h('span', { class: 'cn', title: x.step != null ? `step ${x.step}` : null },
       x.src === 'agent' ? 'Message' : x.src === 'user' ? 'User' : 'System'), lv ? headChips(x.before - 1, false) : null),
     h('div', { class: 'cb' }, judgedLines(x.model), x.reasoning ? reasoningSection(x.reasoning, markOf(x.model)) : null,
@@ -418,7 +419,7 @@ export function renderCase(t, ctx) {
     c.reasoning ? reasoningSection(c.reasoning, markOf(c.model)) : null, c.text && c.text.trim() ? textSection(c.text) : null);
   const stepBody = (step, label, nCalls) => {
     const box = h('div', { class: 'step-box', dataset: { step: String(step != null ? step : '') } },
-      h('div', { class: 'step-h' }, foldButton('step'), h('span', { class: 'step-n' }, label), nCalls ? foldCalls(nCalls) : null),
+      h('div', { class: 'step-h' }, h('span', { class: 'step-n' }, label), nCalls ? foldCalls(nCalls) : null),
       h('div', { class: 'step-b' }));
     right.appendChild(box);
     return box.lastChild;
@@ -769,7 +770,14 @@ export function renderCase(t, ctx) {
       if (key === foldedParts) return;
       foldedParts = key;
       for (const s of right.querySelectorAll('.sec:not(.sec-tooldef):not(.sec-tools)')) foldSection(s, off.has(s.dataset.part));
-      for (const b of right.querySelectorAll('.step-box')) b.classList.toggle('folded', off.has('step'));
+      const foldBox = (b, on) => {
+        b.classList.toggle('folded', on);
+        const btn = b.querySelector(':scope > .ch > .box-fold');
+        if (btn) btn.setAttribute('aria-expanded', String(!on));
+      };
+      for (const b of right.querySelectorAll('.call[data-call]')) foldBox(b, off.has('calls'));
+      for (const b of right.querySelectorAll('.cs-user')) foldBox(b, off.has('user'));
+      for (const b of right.querySelectorAll('.step-calls')) b.setAttribute('aria-expanded', String(!off.has('calls')));
     },
     findCall: k => show(k),
     findToolCall: id => (idOf.has(id) ? show(idOf.get(id)) : null),

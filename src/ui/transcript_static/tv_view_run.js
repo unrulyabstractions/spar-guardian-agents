@@ -1,5 +1,5 @@
 /* View: one run (#/run/<collection>/<run key>?agent=<id>&call=<k>, ?agent=<id>&label=<judge label>, ?tab=board&a=&b=
- * &mode=&pos= or ?tab=details; with &fold=reasoning,call,result and &board=only on an agent's tab).
+ * &mode=&pos= or ?tab=details; with &fold=calls,user,reasoning,call,result and &board=only on an agent's tab).
  * Ported from collusion-hermaneutics' viewer (viewer/static/app/view_run.js). A bar with the run, an agent tab per
  * agent, a Board tab and a Details tab; the selected agent's whole episode below it, each step with its labels
  * (tv_case_view.js); the run record under it: the run's labels, the run settings, each agent's record with its
@@ -271,7 +271,7 @@ export async function viewRun(id, q, view) {
   const agentsBox = h('div', { id: 'sec-agents' }, d.agents.map(agentCard));
 
   // ---- top bar: run, arm, agent tabs, the fold toggles, the run record's toggle; the stage below holds the selected
-  // tab. The parts folded on every step (?fold=reasoning,call,result) and Board calls only (?board=only) come from the
+  // tab. The parts folded on every step (?fold=calls,user,reasoning,call,result) and Board calls only (?board=only) come from the
   // hash and go back to it; an agent's tab takes them when shown.
   const firstAgent = (d.agents.find(a => a.role === 'worker' && a.folder) || d.agents.find(a => a.folder) || {}).agent;
   const folded = new Set((q.get('fold') || '').split(',').filter(x => PARTS.some(([k]) => k === x)));

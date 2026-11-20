@@ -2067,3 +2067,11 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **How verified.** Screenshot of flipt_minimal_dsflash_fixed2's Board tab at 1400x1300 on 8833 viewed: both cards
   aligned, scores under END with "control" beside, lanes and arrows intact. Viewer and board tests passed.
 - **Result.** VERIFIED.
+
+## 2026-11-20: run page toggles, calls and User messages fold, steps do not
+- **What.** The bar's Steps toggle and each step's chevron are gone; new toggles Calls (every call box) and User
+  messages (every User box) beside Reasoning, Tool calls and Tool results, kept in the hash (?fold=calls,user,...).
+- **How verified.** binder_minimal_luna4 k7x6z on 8833 in headless Chrome: 0 step chevrons; clicking Calls and User
+  messages folded 53 of 53 calls and 7 of 7 User boxes, the hash became ?fold=calls%2Cuser; screenshot viewed (steps
+  open, calls and the User box folded to their headers). Viewer tests 211 passed.
+- **Result.** VERIFIED.
