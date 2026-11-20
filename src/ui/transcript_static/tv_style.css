@@ -322,24 +322,16 @@ mark.xl-mark.flash { animation: flash 1.6s ease-out; }
 /* A small or zoomed-in window (under 1000 x 560 CSS px) has one column and the page scrolls under the run bar. --under-bar is the bar's real
    bottom edge, set by tv_case_view.js: the bar wraps there. */
 .rp-stage .case { --under: var(--under-bar, calc(var(--header-h) + 44px)); }
-.rp-stage .case .left { padding: 10px; }
+.rp-stage .case .left { padding: 10px; top: var(--under); max-height: calc(100vh - var(--under) - 12px); }
+@media (min-width:1000px) and (min-height:560px) { .rp-stage .case .main { grid-template-columns: 410px minmax(0, 1fr); gap: 12px; } }
 .rp-stage .case .call, .rp-stage .case .step-box { scroll-margin-top: var(--under); }
 /* Two panes from 1000 x 560 CSS px: the run page fills the window under the site bar (tv_view_run.js sets --rp-top), the run bar
    on top and the stage under it; a view or the run record scrolls in the stage; an agent's strip and steps are each
    their own pane, the steps scrolling in theirs, padded at the end so the last call can reach the top. The strip's
    pane is 410 px, so the strip's label margin (tv_case_view.js LB), its slider and its legend's level cells fit. */
-@media (min-width: 1000px) and (min-height: 560px) {
-  .page.rp-page { position: fixed; top: var(--rp-top, var(--header-h)); left: 0; right: 0; bottom: 0; display: flex;
-    flex-direction: column; padding: 0 16px 10px; }
-  .rp-page > .rp-bar { position: static; flex: none; margin: 0 -16px 8px; padding: 6px 16px; }
-  .rp-page > .rp-stage { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-  .rp-page > .rp-stage.rp-stage-case { overflow: clip; }
-  .rp-stage-case > .case { height: 100%; }
-  .rp-stage .case .main { grid-template-columns: 410px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 12px;
-    height: 100%; align-items: stretch; }
-  .rp-stage .case .left { position: static; max-height: none; overflow: auto; }
-  .rp-stage .case .right { overflow-y: auto; overscroll-behavior: contain; padding: 0 8px 50vh 0; }
-  .rp-stage .case .call, .rp-stage .case .step-box { scroll-margin-top: 8px; }
+/* The run page scrolls as one document (no fixed panes): pinch-zoom and Cmd zoom then behave as on any page. The
+   strip's panel stays sticky beside the steps; A- and A+ in the run bar size the steps' text (--tv-zoom). */
+.rp-stage .case .right { zoom: var(--tv-zoom, 1); }
 }
 /* The strip's slider (tv_case_view.js): a track the strip's height, a row per call, and a handle at the call at the top
    of the steps. */
@@ -574,5 +566,5 @@ table.sum-table.is-detailed td.sum-cell { min-width: 220px; }
    sideways. */
 .case .right, .case .step-box, .case .step-b, .case .call, .case .cb, .case .sec, .case .sec-b { min-width: 0; max-width: 100%; }
 .case .txt { overflow-wrap: anywhere; word-break: break-word; max-width: 100%; }
-.rp-stage .case .right { overflow-x: hidden; }
-html, body { overflow-x: clip; }
+.rp-stage .case .right { overflow-x: clip; }
+.rp-zoom { display: inline-flex; gap: 2px; }

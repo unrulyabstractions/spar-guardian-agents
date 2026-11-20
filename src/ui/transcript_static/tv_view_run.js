@@ -376,6 +376,15 @@ export async function viewRun(id, q, view) {
       if (tr) tr.refresh();
       return stage.dataset.board === 'only';
     }));
+  // A- and A+: the steps' text size, kept across runs (localStorage), from 70% to 200%.
+  const ZOOMS = [0.7, 0.8, 0.9, 1, 1.1, 1.25, 1.4, 1.6, 1.8, 2];
+  const zoomAt = () => { const z = Number(localStorage.getItem('tv-zoom')) || 1; return ZOOMS.reduce((a, b) => (Math.abs(b - z) < Math.abs(a - z) ? b : a)); };
+  const setZoom = z => { localStorage.setItem('tv-zoom', String(z)); document.documentElement.style.setProperty('--tv-zoom', String(z)); };
+  setZoom(zoomAt());
+  const zoomBy = d => () => setZoom(ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, ZOOMS.indexOf(zoomAt()) + d))]);
+  const zoomBtns = h('span', { class: 'rp-zoom' },
+    h('button', { type: 'button', class: 'rp-dbtn', title: 'smaller text', onclick: zoomBy(-1) }, 'A−'),
+    h('button', { type: 'button', class: 'rp-dbtn', title: 'larger text', onclick: zoomBy(1) }, 'A+'));
   // The run record is shown in the stage in place of a tab; its button goes back to the tab shown before.
   const recordBtn = h('button', { type: 'button', class: 'rp-dbtn', 'aria-pressed': 'false', title: 'the run\'s labels, settings and records',
     onclick: () => selectTab(current === 'record' && shown ? shown : 'record').catch(() => {}) }, 'Run record');
@@ -385,7 +394,7 @@ export async function viewRun(id, q, view) {
     cheating.alarm ? alarmBadge(cheating.alarm) : null,
     h('span', { class: 'rp-tabs' }, [...tabs.values()]),
     // the fold toggles and the run record's button wrap as one group at the right
-    h('span', { class: 'rp-right' }, toggles,
+    h('span', { class: 'rp-right' }, toggles, zoomBtns,
       recordBtn));
 
   view.mounted(() => {

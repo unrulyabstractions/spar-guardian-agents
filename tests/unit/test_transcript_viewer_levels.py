@@ -1117,10 +1117,10 @@ def test_a_step_is_three_folding_sections_and_the_bar_folds_a_part_everywhere():
 
 
 def test_the_run_page_is_two_panes_with_a_slider_and_a_step_holds_its_messages():
-    """The user's feedback of 2026-11-20 ("doesnt work, put more explicit vertical slider", "steps should include their
-    user msg?", "why cant u minimize these"): the run page fills the window, the strip and the steps each a pane and the
-    steps scrolling in theirs, so the strip stays in view without position: sticky; a slider beside the strip brings a
-    call to the top of the steps; a step box holds the messages that fed its model turn; every message box folds."""
+    """The user's feedback of 2026-11-20 ("put more explicit vertical slider", "steps should include their user msg?",
+    "why cant u minimize these", and pinch-zoom locking fixed panes): the run page scrolls as one document, the strip's
+    panel beside the steps; a slider beside the strip brings a call to the top; A- and A+ size the steps' text; a step
+    box holds the messages that fed its model turn; every message box folds."""
     case = (STATIC / "tv_case_view.js").read_text()
     assert "role: 'slider'" in case and "right.addEventListener('scroll', schedule" in case
     assert "slider.addEventListener('pointerdown'" in case and "slider.addEventListener('keydown'" in case
@@ -1130,8 +1130,11 @@ def test_the_run_page_is_two_panes_with_a_slider_and_a_step_holds_its_messages()
     run = (STATIC / "tv_view_run.js").read_text()
     assert "h('details', { class: 'rp-details' }" not in run and "place(key, record)" in run
     css = (STATIC / "tv_style.css").read_text()
-    assert "@media (min-width: 1000px) and (min-height: 560px) {\n  .page.rp-page { position: fixed;" in css
-    assert ".rp-stage .case .right { overflow-y: auto;" in css and ".case .cs-slider {" in css
+    # the user, 2026-11-20, of pinch-zoom: the run page scrolls as one document, with A- and A+ for text size
+    assert ".page.rp-page { position: fixed;" not in css and ".rp-stage .case .right { overflow-y: auto;" not in css
+    assert ".rp-stage .case .right { zoom: var(--tv-zoom, 1); }" in css and ".case .cs-slider {" in css
+    assert "html, body { overflow-x" not in css
+    assert "'A−'" in run and "'A+'" in run and "localStorage.setItem('tv-zoom'" in run
 
 
 def test_the_viewer_carries_no_sentence_that_explains_the_page():
