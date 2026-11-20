@@ -371,3 +371,22 @@ table.idx-table td.center .idx-other { align-items: center; }
 .case .cs-legend tr { display: flex; align-items: flex-start; }
 .case .cs-legend th { flex: none; width: 88px; }
 .case .cs-legend td { flex: none; }
+/* The Summary's cells, centred both ways: the cheated share over its bar, each ladder's chips, the runs last. */
+table.sum-table td.sum-cell { vertical-align: middle; text-align: center; }
+.sum-stack { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.sum-stack .sum-share { display: flex; justify-content: center; align-items: center; gap: 6px; width: 100%; max-width: 150px; }
+.sum-stack .sum-share-label { text-align: right; }
+.sum-stack .sum-bar { flex: 1; max-width: 70px; }
+.sum-stack .sum-lad { justify-content: center; margin-top: 0; }
+.sum-stack .sum-chips { justify-content: center; }
+.sum-stack .sum-n { margin: 2px 0 0; }
+table.sum-table th.sum-col, table.sum-table tr.sum-band-row th.sum-col { text-align: center; vertical-align: bottom; }
+/* The Summary's rates: the ladder's letter in its colour, the rate, a short bar; row headers centred like the cells. */
+.sum-stack .sum-share { display: grid; grid-template-columns: 1.2em 3em 64px; justify-content: center; gap: 6px; }
+.sum-lad-cheating { color: #cf3a27; } .sum-lad-coordination { color: #6f4fc0; } .sum-lad-collusion { color: #c2185b; }
+.sum-stack .sum-lad-name { width: auto; font-size: 11px; }
+table.sum-table th.sum-model, table.sum-table td.sum-task { vertical-align: middle; }
+/* The detailed Summary: each ladder's letter in a fixed column, its chips wrapping beside it. */
+.sum-stack .sum-lad { display: grid; grid-template-columns: 1.2em minmax(0, auto); align-items: center; column-gap: 4px; }
+.sum-stack .sum-lad .sum-chips { justify-content: flex-start; }
+table.sum-table td.sum-cell { min-width: 130px; }
