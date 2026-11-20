@@ -7,10 +7,15 @@ and no network, writing steps.jsonl (the state after every call) and replay.json
 
 The calls run in their recorded global order (recorded_calls.py). A call that may touch what the agents share (the team
 remote) runs alone, after every earlier call; the others run in their agents' own machines beside each other, each
-agent's in its own order, which changes no output since nothing else connects the machines. Host tools (the board,
-submit, stop_working, a regulator's oversight) change no machine: their line carries the recorded output's place and
-the agent's state as it was. A replay that is refused, fails or ends elsewhere than the stored end state is not
-faithful (replay_report.py).
+agent's in its own order, which changes no output since nothing else connects the machines. A task whose agents share
+one machine says every call is shared. Host tools (the board, submit, stop_working, a regulator's oversight) change no
+machine: their line carries the recorded output's place and the agent's state as it was. A task plays a host call
+that did change a machine (creative writing's submit, which keeps writing.md). A replay that is refused, fails or ends
+elsewhere than the stored end state is not faithful (replay_report.py).
+
+A replayer (REPLAYERS) gives the task's sandbox (services, volumes, image), its setup and calls (setup, initial,
+in_sandbox, shared, command, execute, after, team_state), each line's state (line_state) and its end state
+(end_state): swe_replayer.py, protein_replay.py, creative_replay.py.
 """
 from __future__ import annotations
 
@@ -26,16 +31,18 @@ from inspect_ai.model._call_tools import truncate_tool_output  # Inspect's own t
 from src.configuration import settings
 from src.measures.run_directory import RunDir
 from src.measures.run_listing import list_collection
+from src.replay.creative_replay import CreativeReplayer
 from src.replay.output_match import cause_of, match_of
+from src.replay.protein_replay import ProteinReplayer
 from src.replay.recorded_calls import RecordedCall, ReplayRefused, recorded_calls
 from src.replay.replay_report import REPORT, STEPS, ReplayReport, read_report, write_report
 from src.replay.replay_sandbox import ReplaySandbox, project_name
-from src.replay.step_snapshots import encode, pieces_state
+from src.replay.step_snapshots import encode
 from src.replay.swe_replayer import SweReplayer
 from src.sandbox import staging
 
-REPLAYERS = {SweReplayer.task: SweReplayer}
-"""The tasks a replay can play back, by CheatBench's task name."""
+REPLAYERS = {r.task: r for r in (SweReplayer, ProteinReplayer, CreativeReplayer)}
+"""The tasks a replay can play back, by the task name run.json records."""
 DEFAULT_TOOL_OUTPUT = 16 * 1024
 """Inspect's limit on a tool's output when the run set none (GenerateConfig.max_tool_output)."""
 END = "end"
@@ -100,8 +107,9 @@ def play(box, replayer, calls: list[RecordedCall], limit: int, parallel: bool, s
 
 def step_rows(replayer, calls: list[RecordedCall], played: dict[int, dict], initial: dict[str, dict],
               team0: dict) -> list[dict]:
-    """One row per call in global order with its state in full: a played call's own, any other call's agent's state
-    as it stood, and the team remote as its last shared call left it."""
+    """One row per call in global order with its state in full, as the task's line_state builds it from the call's own
+    state (a played call's, else None), the agent's state as it stands (the played call's, else as its last played
+    call left it) and the shared state (team_state's, as the last shared call left it)."""
     agent_state, team, rows = dict(initial), team0, []
     first = calls[0].t0 if calls else 0.0
     for call in calls:
@@ -109,15 +117,11 @@ def step_rows(replayer, calls: list[RecordedCall], played: dict[int, dict], init
         if result is not None:
             agent_state[call.agent] = result["state"]
             team = result["team"] or team
-        state = agent_state[call.agent]
         rows.append({"n": call.n, "agent": call.agent, "k": call.k, "call_id": call.id,
                      "t": round(call.t0 - first, 3), "tool": call.tool,
                      "match": result["match"] if result else RECORDED,
-                     "state": {"head": state["head"], "branch": state["branch"], "refs": state["refs"],
-                               "team_refs": team["refs"],
-                               "pieces": pieces_state(replayer.pieces, set(state["tree_pieces"]), state["ref_pieces"],
-                                                      team["ref_pieces"], state.get("tree_lines")),
-                               "dirty": state["dirty"]}})
+                     "state": replayer.line_state(call, result["state"] if result else None, agent_state[call.agent],
+                                                  team)})
     return rows
 
 
@@ -173,7 +177,7 @@ def replay(run_dir: Path, out_dir: Path, *, parallel: bool = True, pem: bool = F
         if not report.image["id"]:
             raise ReplayRefused(f"the image {report.image['tag']} is not on this host")
         limit = (run.run_json.get("config") or {}).get("tool_output_bytes") or DEFAULT_TOOL_OUTPUT
-        compose = staging.write_compose(out_dir / "compose.yaml", replayer.services(), {"team": {}})
+        compose = staging.write_compose(out_dir / "compose.yaml", replayer.services(), replayer.volumes())
         mark = time.time()
         with ReplaySandbox(project_name(run.name), compose) as box:
             report.seconds["compose_up"] = round(time.time() - mark, 1)

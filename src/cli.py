@@ -299,7 +299,8 @@ def add_replay_parser(subparsers) -> None:
     replay = subparsers.add_parser("replay", help="play stored runs back in their sandboxes from their recorded calls "
                                                   "(no model, no network): out/<run>/steps.jsonl and replay.json")
     replay.add_argument("runs", nargs="+", help="run names of the study, run directories, or a study folder (its "
-                                                "valid runs of a task the replay plays back: SWE)")
+                                                "valid runs of a task the replay plays back: SWE, protein design, "
+                                                "creative writing)")
     replay.add_argument("--out", required=True, help="the folder that gets one folder per run")
     replay.add_argument("--only-missing", action="store_true", help="skip a run whose replay.json exists")
     replay.add_argument("--serial", action="store_true",

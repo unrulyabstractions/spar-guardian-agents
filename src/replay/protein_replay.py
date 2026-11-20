@@ -6,7 +6,8 @@ arguments, the commits given their recorded ids, the state after every call and 
     replayer.setup(box)                       # ReplayRefused unless each agent's staged files are the recorded ones
     output, timed_out = replayer.execute(box, call)
     output, state, dated, undated = replayer.after(box, call, output)
-    replayer.end_state(box)                   # {"equal": bool, "parts": {...}, "differences": {...}}
+    line = replayer.line_state(call, own, standing, team)    # the state a line of steps.jsonl carries
+    replayer.end_state(box, keep)             # {"equal": bool, "parts": {...}, "differences": {...}}
 
 It keeps SweReplayer's interface (src/replay/swe_replayer.py), the one replay_run.replay drives.
 
@@ -24,15 +25,17 @@ The state after a call, the acting agent's (the SWE keys, then this task's):
 - check: on a check_design line, the pieces and the whole design its sequence held, and its verdict.
 The team remote's state is {"refs", "ref_pieces", "ref_designs"}. Every piece and design is read by ProteinDomain
 (file_pieces, pieces_seen, found).
+
+A line of steps.jsonl (line_state) carries the git keys SWE's lines carry (git_state.git_line), then files and
+ref_designs, team_designs (the team remote's ref_designs) and check. Only a check_design call's own line holds a
+check; every other line holds null, so a check is never carried to a later line.
 """
 from __future__ import annotations
 
 import copy
 import json
 import shlex
-import subprocess
 import threading
-import time
 from pathlib import Path
 
 from src.domains.protein import ProteinDesign
@@ -46,10 +49,10 @@ from src.domains.protein.protein_task import sha256s
 from src.measures.run_directory import RunDir
 from src.measures.shell_commands import PYTHON_TOOLS, TOOLS
 from src.replay.commit_dates import RecordedIds, find_date, renamed_text, reparent, retime
+from src.replay.git_state import SHARED, git_line
 from src.replay.output_match import mask
 from src.replay.recorded_calls import RecordedCall, ReplayRefused
-from src.replay.replay_sandbox import TIMEOUT_RCS, Exec, ReplaySandbox
-from src.replay.swe_replayer import SHARED
+from src.replay.replay_sandbox import ReplaySandbox
 from src.sandbox import cheatbench_task_files as task_files
 from src.sandbox import sandbox_hygiene as hygiene
 from src.sandbox import staging
@@ -67,6 +70,9 @@ NEW_COMMITS = ("git rev-list --topo-order --reverse --all --not {tips} 2>/dev/nu
 """The commits new since the tips the replay last saw, each with its committer."""
 READ_TIMEOUT_S = 120
 """The longest a read of the replay's own (a snapshot, a script) may take."""
+AS_AGENT = {"user": AGENT_NAME, "workdir": WORKDIR, "timeout": READ_TIMEOUT_S}
+"""How the replay's own commands in a machine run: as the seat's user in /workspace (docker exec --user, as Inspect
+ran the seat's commands), within READ_TIMEOUT_S."""
 
 
 def snapshot_command(work: str, tips: list[str] | None) -> str:
@@ -168,6 +174,10 @@ class ProteinReplayer:
         volumes = {"volumes": [f"team:{TEAM_DIR}"]} if self.team else {}
         return {a: staging.compose_service(working_dir=WORKDIR, image=machines.IMAGE, **volumes) for a in self.agents}
 
+    def volumes(self) -> dict[str, dict]:
+        """The compose project's volumes: the team remote's, where the run had one."""
+        return {"team": {}} if self.team else {}
+
     def image(self) -> dict:
         """The machines' image here and the run's; recipe says whether its label is today's python311.Dockerfile."""
         local = image_id(machines.IMAGE)
@@ -175,28 +185,6 @@ class ProteinReplayer:
         return {"tag": machines.IMAGE, "id": local, "run_id": self.block.get("image"),
                 "own": bool(local) and local == self.block.get("image"),
                 "recipe": label == recipe_sha256(machines.DOCKERFILE)}
-
-    def as_user(self, box: ReplaySandbox, service: str, argv: list[str], *, stdin: bytes | None = None,
-                timeout: int = READ_TIMEOUT_S, user: str = AGENT_NAME) -> Exec:
-        """argv in the service's container as `user` in /workspace (docker exec --user, as Inspect ran the seat's
-        commands)."""
-        command = ["docker", "exec", *(["-i"] if stdin is not None else []), "--user", user, "--workdir", WORKDIR,
-                   box.container(service), *argv]
-        start = time.time()
-        try:
-            done = subprocess.run(command, input=stdin, capture_output=True, timeout=timeout,
-                                  stdin=None if stdin is not None else subprocess.DEVNULL)
-            return Exec(done.returncode, done.stdout, done.stderr, time.time() - start)
-        except subprocess.TimeoutExpired as expired:
-            return Exec(-9, expired.stdout or b"", expired.stderr or b"", time.time() - start)
-
-    def must_user(self, box: ReplaySandbox, service: str, argv: list[str], what: str, *,
-                  stdin: bytes | None = None, user: str = AGENT_NAME) -> bytes:
-        done = self.as_user(box, service, argv, stdin=stdin, user=user)
-        if done.rc != 0:
-            raise RuntimeError(f"{what} failed in {service} (rc={done.rc}): "
-                               f"{(done.stderr or done.stdout).decode(errors='replace')[-1500:]}")
-        return done.stdout
 
     # ---------------------------------------------------------------- the setup
     def copies(self) -> dict[str, dict[str, bytes]]:
@@ -228,12 +216,12 @@ class ProteinReplayer:
             box.must(self.first, scoring.TEAM_REMOTE_INIT, "the team remote")
         for agent in self.agents:
             if not self.team:
-                self.must_user(box, agent, ["git", "init", "--quiet", self.work], f"{agent}'s repository")
+                box.must_run(agent, ["git", "init", "--quiet", self.work], f"{agent}'s repository", **AS_AGENT)
                 continue
             box.must(agent, f"git config --system --add safe.directory {TEAM_REMOTE}", f"{agent}: safe.directory")
             script = scoring.TEAM_REPO_INIT.format(branch=TEAM_BRANCH, work=shlex.quote(self.work),
                                                    remote=TEAM_REMOTE, name=shlex.quote(agent))
-            self.must_user(box, agent, ["bash", "-c", script], f"{agent}'s repository")
+            box.must_run(agent, ["bash", "-c", script], f"{agent}'s repository", **AS_AGENT)
         self.probe = {a: self.probe_agent(box, a) for a in self.agents}
         return {"copies_match": True, "probe": self.probe}
 
@@ -246,7 +234,8 @@ class ProteinReplayer:
         recorded = (self.block.get("probe") or {}).get(agent) or {}
         out = {}
         for name, command in scoring.PROBE_COMMANDS.items():
-            done = self.as_user(box, agent, ["bash", "-lc", command.format(**fields)], timeout=PROBE_TIMEOUT_S)
+            done = box.run(agent, ["bash", "-lc", command.format(**fields)], user=AGENT_NAME, workdir=WORKDIR,
+                           timeout=PROBE_TIMEOUT_S)
             got = {"rc": done.rc, "out": done.stdout.decode(errors="replace")[-KEEP_OUT:],
                    "err": done.stderr.decode(errors="replace")[-KEEP_ERR:]}
             want = recorded.get(name) or {}
@@ -280,13 +269,10 @@ class ProteinReplayer:
             stdin = self.command(call).encode()
         else:
             argv, stdin = ["bash", "--login", "-c", self.command(call)], None
-        done = self.as_user(box, call.agent, ["/usr/bin/timeout", "-k", "5s", f"{TOOL_TIMEOUT_S}s", *argv],
-                            stdin=stdin, timeout=TOOL_TIMEOUT_S + 60)
+        output, timed_out = box.tool(call.agent, argv, TOOL_TIMEOUT_S, WORKDIR, stdin=stdin, user=AGENT_NAME)
         if seat.reap:
             box.run(call.agent, script_command(hygiene.REAP, AGENT_NAME), timeout=READ_TIMEOUT_S)
-        stdout, stderr = done.stdout.decode(errors="replace"), done.stderr.decode(errors="replace")
-        timed_out = done.rc == -9 or (done.rc in TIMEOUT_RCS and done.seconds >= TOOL_TIMEOUT_S)
-        return (f"{stderr}\n" if stderr else "") + stdout, timed_out
+        return output, timed_out
 
     def check(self, call: RecordedCall) -> str:
         """The checker's call on the recorded arguments, in its owner's state; its text, as the tool returned it or
@@ -318,15 +304,15 @@ class ProteinReplayer:
         dated, undated, renames, bodies = [], [], {}, {}
         local = RecordedIds([call.result])
         for sha in mine:
-            body = reparent(self.must_user(box, agent, ["git", "-C", self.work, "cat-file", "commit", sha],
-                                           f"read {sha}"), renames)
+            body = reparent(box.must_run(agent, ["git", "-C", self.work, "cat-file", "commit", sha], f"read {sha}",
+                                         **AS_AGENT), renames)
             found = find_date(body, lambda s: local.matching(s) or self.ids.matching(s), call.t0, call.t1)
             if found is None:
                 undated.append({"n": call.n, "agent": agent, "k": call.k, "sha": sha})
                 continue
             bodies[found.sha] = retime(body, found.seconds, found.tz.encode(), found.author_too)
-            written = self.must_user(box, agent, ["bash", "-c", write_object_command(self.git_dir)],
-                                     f"write {found.sha}", stdin=bodies[found.sha]).decode().strip()
+            written = box.must_run(agent, ["bash", "-c", write_object_command(self.git_dir)], f"write {found.sha}",
+                                   stdin=bodies[found.sha], **AS_AGENT).decode().strip()
             if written != found.sha:
                 raise RuntimeError(f"git wrote {written} for the dated commit {found.sha}")
             renames[sha] = found.sha
@@ -342,16 +328,16 @@ class ProteinReplayer:
     def rename(self, box: ReplaySandbox, agent: str, renames: dict[str, str], bodies: dict[str, bytes]) -> None:
         """The agent's refs onto the dated commits; and the team remote's, where the call already pushed the old ones,
         written as `user` so the shared repository keeps its owners."""
-        self.must_user(box, agent, ["bash", "-c", rename_command(self.git_dir, renames)], f"{agent}: dated refs")
+        box.must_run(agent, ["bash", "-c", rename_command(self.git_dir, renames)], f"{agent}: dated refs", **AS_AGENT)
         if not self.team:
             return
         pushed = {old: new for old, new in renames.items()
                   if box.exec(agent, f"git --git-dir={TEAM_REMOTE} cat-file -e {old}^{{commit}}").rc == 0}
         for new in pushed.values():
-            self.must_user(box, agent, ["bash", "-c", write_object_command(TEAM_REMOTE)], f"team copy of {new}",
-                           stdin=bodies[new])
+            box.must_run(agent, ["bash", "-c", write_object_command(TEAM_REMOTE)], f"team copy of {new}",
+                         stdin=bodies[new], **AS_AGENT)
         if pushed:
-            self.must_user(box, agent, ["bash", "-c", rename_command(TEAM_REMOTE, pushed)], "team: dated refs")
+            box.must_run(agent, ["bash", "-c", rename_command(TEAM_REMOTE, pushed)], "team: dated refs", **AS_AGENT)
 
     # ---------------------------------------------------------------- the state
     def holding(self, file: dict) -> dict:
@@ -376,9 +362,10 @@ class ProteinReplayer:
             todo = sorted(sha for sha in shas if sha not in self.held)
         if not todo:
             return
-        found = last_json(self.must_user(box, service, script_command(scoring.TEAM_BINDER, git_dir, self.work,
-                                                                       json.dumps(self.staged), *todo),
-                                         f"{service}: the commits' files", user=user))
+        found = last_json(box.must_run(service, script_command(scoring.TEAM_BINDER, git_dir, self.work,
+                                                               json.dumps(self.staged), *todo),
+                                       f"{service}: the commits' files", user=user, workdir=WORKDIR,
+                                       timeout=READ_TIMEOUT_S))
         with self.lock:
             for sha in todo:
                 self.held[sha] = {f["path"]: {**self.holding(f), "sha256": f["sha256"]}
@@ -399,8 +386,8 @@ class ProteinReplayer:
     def snapshot(self, box: ReplaySandbox, agent: str, previous: dict | None, new_commits: bool = False) -> dict:
         """The agent's state (the module's docstring); with new_commits the commits new since `previous` as "new"."""
         tips = sorted({*(previous or {}).get("refs", {}).values()}) if new_commits else None
-        read = parse_snapshot(self.must_user(box, agent, ["bash", "-c", snapshot_command(self.work, tips)],
-                                             f"{agent}'s snapshot").decode(errors="replace"))
+        read = parse_snapshot(box.must_run(agent, ["bash", "-c", snapshot_command(self.work, tips)],
+                                           f"{agent}'s snapshot", **AS_AGENT).decode(errors="replace"))
         files = self.machine_files(box, agent)
         self.read_commits(box, agent, self.git_dir, set(read["refs"].values()), AGENT_NAME)
         ref_pieces, ref_designs = self.ref_readings(read["refs"])
@@ -424,16 +411,26 @@ class ProteinReplayer:
         ref_pieces, ref_designs = self.ref_readings(refs)
         return {"refs": refs, "ref_pieces": ref_pieces, "ref_designs": ref_designs}
 
+    def line_state(self, call: RecordedCall, own: dict | None, standing: dict, team: dict) -> dict:
+        """A line's state (the module's docstring): `standing` is the agent's state as it stands at the call, `team`
+        the team remote's as the last shared call left it, `own` the call's own state when it was played, else None.
+        The check comes from `own` alone."""
+        return {**git_line(self.pieces, standing, team), "files": standing["files"],
+                "ref_designs": standing["ref_designs"], "team_designs": team["ref_designs"],
+                "check": (own or {}).get("check")}
+
     # ---------------------------------------------------------------- the end state
-    def end_state(self, box: ReplaySandbox) -> dict:
+    def end_state(self, box: ReplaySandbox, keep: Path | None = None) -> dict:
         """The scorer's reading at the end against run.json protein: each agent's saved work and changed staged files,
         the team remote's branches, hand-in and log, every check_design call and each owner's state, and the setup's
-        probe. "equal" is all of them."""
+        probe. "equal" is all of them. With `keep` the replayed readings are kept there as end.json."""
         parts: dict[str, bool] = {f"{a}.probe": all(self.probe.get(a, {}).values()) for a in self.agents}
         differences: dict[str, object] = {}
+        readings: dict[str, object] = {}
 
         def compare(name: str, replayed, stored) -> None:
             parts[name] = replayed == stored
+            readings[name] = replayed
             if not parts[name]:
                 differences[name] = {"replayed": replayed, "stored": stored}
 
@@ -463,6 +460,9 @@ class ProteinReplayer:
         compare("checker.calls", self.checks, [recorded_check(c) for c in self.block.get("calls") or []])
         compare("checker.states", {o: copy.deepcopy(s) for o, (s, _) in self.checkers.items()},
                 self.block.get("states") or {})
+        if keep is not None:
+            keep.mkdir(parents=True, exist_ok=True)
+            (keep / "end.json").write_text(json.dumps(readings, indent=1, default=list))
         return {"equal": all(parts.values()), "parts": parts, "differences": differences}
 
     def binders(self, box: ReplaySandbox, revs: list[str]) -> dict:

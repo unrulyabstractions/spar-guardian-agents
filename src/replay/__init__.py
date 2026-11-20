@@ -1,20 +1,23 @@
 """A stored run played back in its sandbox from its recorded tool calls alone: no model call, no network, no key. The
 replay rebuilds the state after every call, which the record keeps only at the end, so a measure can read each rung
-at the call that earned it. SWE only, so far.
+at the call that earned it. It plays back software engineering, protein design and creative writing runs.
 
     python -m src replay <run or study ...> --out <dir> [--only-missing] [--serial] [--pem] [--warm-image]
     report = replay(run_dir, out_dir)          # src/replay/replay_run.py; out_dir/steps.jsonl and replay.json
     steps = faithful_steps(out_dir)            # src/replay/replay_report.py; refuses an unfaithful replay
 
 How. The record gives the calls (the transcripts: each call's agent and number k; the eval log: arguments, output,
-times). The setup is the run's own (src/domains/swe/swe_replay.py), and the replay refuses a run whose refs or
-planted commits come out other than run.json records them. Each sandbox call then runs in its agent's machine as
-Inspect ran it, in the recorded order. A commit the call makes gets the date in the call's window that gives its
-recorded id (commit_dates.py), so later commands that name it find it. Host tools (board_read, board_post,
-board_status, submit, stop_working, a regulator's agent_actions) are replayed from their recorded outputs: they change
-no machine. At the end the grader's own commands read the end state, which must equal the stored one byte for byte.
+times). The setup is the run's own (SWE: src/domains/swe/swe_replay.py; protein design and creative writing: their
+domains' staging), and the replay refuses a run whose setup comes out other than run.json records it (SWE's refs and
+planted commits, protein's staged files, creative's staging and probe). Each sandbox call then runs in its agent's
+machine as Inspect ran it, as its seat's user where the task has one, in the recorded order. A commit the call makes
+gets the date in the call's window that gives its recorded id (commit_dates.py), so later commands that name it find
+it. Host tools (board_read, board_post, board_status, submit, stop_working, a regulator's agent_actions) are replayed
+from their recorded outputs: they change no machine. Two do run: protein design's check_design, re-run on the host on
+its recorded arguments, and creative writing's submit, which keeps writing.md. At the end the grader's own commands
+read the end state, which must equal the stored one.
 
-steps.jsonl. One line per call in global order:
+steps.jsonl. One line per call in global order. An SWE line:
 
     {"n": 12, "agent": "k7q2m", "k": 4, "call_id": "call_...", "t": 81.4, "tool": "shell", "match": "exact",
      "state": {"head": "<sha>", "branch": "k7q2m", "refs": {...}, "team_refs": {...},
@@ -34,8 +37,11 @@ steps.jsonl. One line per call in global order:
   reader can apply the seen gate the end reading applies (SweDomain.tree_holds): "lines", the indices of the piece's
   distinctive lines (sorted) the tree's diff adds, and "whole", its planted files the tree adds whole. A steps.jsonl
   written before these keys has only the flag. dirty: the tree differs from HEAD's.
-- The keys of state are the task's. Another task adds its own beside these (a shared workspace's files, a checker's
-  inputs); a reader takes the keys it knows.
+- The keys of state are the task's (each replayer's line_state). Protein design's lines carry SWE's keys, then files
+  (every file of the agent's machine that holds a piece or the whole design), ref_designs, team_designs and check (the
+  check_design call's reading, on its own line alone, else null): protein_replay.py. Creative writing's lines carry
+  the shared files and the pieces each holds, each workspace's hand-in, the call's checks and the pieces its output
+  showed or its arguments said: creative_replay.py. A reader takes the keys it knows.
 
 replay.json holds the counts of each match, the likely causes of each difference, the dated commits, the setup's
 check, the end state part by part, the image (and whether it is the run's own), wall seconds by phase and `faithful`.
@@ -48,8 +54,11 @@ API modules:
 - recorded_calls.py: the recorded calls in global order.
 - commit_dates.py: the date that gives a commit its recorded id.
 - output_match.py: a replayed output against the recorded one.
-- replay_sandbox.py: the compose project and Inspect's tool exec.
+- replay_sandbox.py: the compose project and Inspect's tool exec, as a seat's user.
+- git_state.py: what the git tasks share: the calls that touch the team remote, a line's git keys.
 - swe_replayer.py: the SWE run's setup, state and end state.
+- protein_replay.py: the protein design run's.
+- creative_replay.py: the creative writing run's.
 - random_content.py: the opt-in swap of drawn certificates and keys for the recorded ones (--pem).
 - warm_image.py: the opt-in run image with Go's build cache filled (--warm-image).
 """

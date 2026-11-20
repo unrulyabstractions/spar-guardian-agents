@@ -9,11 +9,10 @@ the pieces are CreativeDomain's (src/domains/creative/_creative_ladder.py).
     output, timed_out = replayer.execute(box, call)
     output, state, named, unnamed = replayer.after(box, call, output)
     world = replayer.team_state(box)          # the files, the pieces they hold and the hand-in
-    line = replayer.line_state(call, state, world)
-    replayer.end_state(box)                   # {"equal": bool, "parts": {...}, "counts": {...}}
+    line = replayer.line_state(call, own, standing, world)   # the state a line of steps.jsonl carries
+    replayer.end_state(box, keep)             # {"equal": bool, "parts": {...}, "counts": {...}}
 
-It keeps SweReplayer's interface (src/replay/swe_replayer.py), the one replay_run.replay drives, and adds line_state,
-the state a line of steps.jsonl carries.
+It keeps SweReplayer's interface (src/replay/swe_replayer.py), the one replay_run.replay drives.
 
 Each sample draws random values with `secrets`: the reference's directory /tmp/grading/ref/<8 hex> (run.json
 creative.references), the review endpoint's port (creative.review_url) and each workspace's token (the probe's reading
@@ -34,7 +33,6 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-import subprocess
 import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
@@ -70,7 +68,7 @@ from src.measures.run_directory import RunDir
 from src.measures.shell_commands import PYTHON_TOOLS, TOOLS, line_hits
 from src.replay.output_match import match_of
 from src.replay.recorded_calls import RecordedCall, ReplayRefused
-from src.replay.replay_sandbox import ReplaySandbox
+from src.replay.replay_sandbox import ReplaySandbox, timed_out, under_timeout
 from src.sandbox import sandbox_hygiene as hygiene
 from src.sandbox.agent_tools import TOOL_TIMEOUT_S, WORKDIR, Seat, python_command
 from src.sandbox.docker_images import image_id
@@ -124,6 +122,8 @@ CALL_KEYS = ("n", "owner", "verdict", "similarity", "reference_held", "reference
 """What the end state compares: of a hand-in, of a grading log and of a review endpoint call (times left out)."""
 BLOCK_KEYS = ("layout", "candidate", "references", "review_url", "workspaces", "seats", "planted")
 """The keys of run.json's creative block the staging must reproduce."""
+HOST_GRACE_S = 10
+"""How long past a command's timeout the host waits for the in-container timeout to fire, as Inspect waits."""
 
 
 class RecordedSecrets:
@@ -281,29 +281,23 @@ def unordered(items: list | None) -> list[str]:
 
 
 class ContainerBox:
-    """One container of the replay's sandbox behind the exec of Inspect's sandbox, which the run's own probe, guard,
-    reap, snapshot and scorer scripts take as their box. A timeout raises TimeoutError, as Inspect's does."""
+    """One container of the replay's sandbox behind the exec of Inspect's docker sandbox, which the run's own probe,
+    guard, reap, snapshot and scorer scripts take as their box. The command runs through ReplaySandbox.run as `user`
+    in `cwd`. With a timeout it runs under the in-container timeout and raises TimeoutError when that fires, as
+    Inspect's does."""
 
     def __init__(self, box: ReplaySandbox, service: str = DEFAULT_SERVICE) -> None:
-        self.container = box.container(service)
-
-    def argv(self, cmd: list[str], *, stdin: bool, cwd: str | None, env: dict[str, str] | None,
-             user: str | None) -> list[str]:
-        return ["docker", "exec", *(["-i"] if stdin else []), *(["--user", user] if user else []),
-                *(["--workdir", cwd] if cwd else []), *(f"--env={k}={v}" for k, v in (env or {}).items()),
-                self.container, *cmd]
+        self.box, self.service = box, service
 
     async def exec(self, cmd: list[str], input: str | bytes | None = None, cwd: str | None = None,
-                   env: dict[str, str] | None = None, user: str | None = None,
-                   timeout: int | None = None) -> ExecResult[str]:
+                   user: str | None = None, timeout: int | None = None) -> ExecResult[str]:
         data = input.encode() if isinstance(input, str) else input
-        argv = self.argv(cmd, stdin=data is not None, cwd=cwd, env=env, user=user)
-        try:
-            done = await asyncio.to_thread(subprocess.run, argv, input=data, capture_output=True, timeout=timeout,
-                                           stdin=None if data is not None else subprocess.DEVNULL)
-        except subprocess.TimeoutExpired:
-            raise TimeoutError(f"Command timed out after {timeout} seconds") from None
-        return ExecResult(done.returncode == 0, done.returncode, done.stdout.decode("utf-8", "replace"),
+        argv = cmd if timeout is None else under_timeout(cmd, timeout)
+        done = await asyncio.to_thread(self.box.run, self.service, argv, stdin=data, workdir=cwd, user=user,
+                                       timeout=None if timeout is None else timeout + HOST_GRACE_S)
+        if timeout is not None and timed_out(done, timeout):
+            raise TimeoutError(f"Command timed out after {timeout} seconds")
+        return ExecResult(done.rc == 0, done.rc, done.stdout.decode("utf-8", "replace"),
                           done.stderr.decode("utf-8", "replace"))
 
 
@@ -413,6 +407,10 @@ class CreativeReplayer:
     # ---------------------------------------------------------------- the sandbox
     def services(self) -> dict[str, dict]:
         return self.staging.services
+
+    def volumes(self) -> dict[str, dict]:
+        """The compose project's volumes: none, the agents share one container."""
+        return {}
 
     def image(self) -> dict:
         recorded = self.block.get("images") or {}
@@ -554,16 +552,18 @@ class CreativeReplayer:
             self.world = self.reading.world(self.scan(box))
         return self.world
 
-    def line_state(self, call: RecordedCall, state: dict | None, world: dict) -> dict:
-        """The state a line of steps.jsonl carries: `state` is the call's own (after's) when it was played, else
-        None; `world` is team_state's as the last played call left it (StateReading.line)."""
-        return self.reading.line(call, state, world)
+    def line_state(self, call: RecordedCall, own: dict | None, standing: dict, world: dict) -> dict:
+        """The state a line of steps.jsonl carries (StateReading.line): `own` is the call's own (after's) when it was
+        played, else None; `world` is team_state's as the last played call left it. `standing`, the agent's state as
+        it stands, adds nothing: the world holds every agent's files."""
+        return self.reading.line(call, own, world)
 
     # ---------------------------------------------------------------- the end state
-    def end_state(self, box: ReplaySandbox) -> dict:
+    def end_state(self, box: ReplaySandbox, keep: Path | None = None) -> dict:
         """The scorer's reading at the end of the run, compared with the stored one: the processes and shared files
         (hygiene.sandbox_state), each workspace's hand-in and every grading log (writing_files.py), every review
-        endpoint call, the honeypot probe by owner, passed and each submit's snapshot. "equal" is all of them."""
+        endpoint call, the honeypot probe by owner, passed and each submit's snapshot. "equal" is all of them. With
+        `keep` the reading is kept there as end.json."""
         toolbox = ContainerBox(box)
         owners = {agent: seat.uid for agent, seat in self.seats.items()}
         dirs = list(dict.fromkeys([*hygiene.STATE_DIRS, WORKDIR, PLANT_ROOT]))
@@ -579,6 +579,10 @@ class CreativeReplayer:
         roots = list(dict.fromkeys([*self.block["workspaces"].values(), "/home", "/tmp"]))
         probed = prints_module.by_owner(run_async(prints_module.probe(
             roots, self.reading.domain.prints, skip=self.plant_dirs, box=toolbox)), owners)
+        if keep is not None:
+            keep.mkdir(parents=True, exist_ok=True)
+            (keep / "end.json").write_text(json.dumps({"sandbox": state, "writing_files": found, "review_calls": calls,
+                                                       "honeypot_probe": probed}, indent=1))
         delivered = [w.get("verdict") for w in found["writings"].values() if w.get("exists")]
         parts = {"writings": self.writings_differ(found["writings"]),
                  "grader_logs": list_differs(self.recorded_logs, found["logs"], LOG_KEYS),

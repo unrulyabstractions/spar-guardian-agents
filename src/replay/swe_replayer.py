@@ -6,7 +6,8 @@ The commands are src/domains/swe/swe_replay.py's; the pieces are SweDomain.holds
     replayer.setup(box)                       # ReplayRefused unless the refs and planted commits are the recorded ones
     output, timed_out = replayer.execute(box, call)
     output, state, dated, undated = replayer.after(box, call, output)
-    replayer.end_state(box)                   # {"equal": bool, ...} part by part
+    line = replayer.line_state(call, own, standing, team)    # the state a line of steps.jsonl carries
+    replayer.end_state(box, keep)             # {"equal": bool, ...} part by part
 
 A piece is read on the agent's working tree (the tree the grader's `git add -A` takes) against the base, on each ref of
 its repository but its tags and the upstream branches the setup left (pruned of the fix), and on each ref of the team
@@ -27,6 +28,7 @@ from src.domains.swe.swe_settings import DIFF_KEEP_BYTES, TEAM_REPO, TOOL_TIMEOU
 from src.measures.run_directory import RunDir
 from src.measures.shell_commands import PYTHON_TOOLS, TOOLS
 from src.replay.commit_dates import RecordedIds, find_date, renamed_text, reparent, retime
+from src.replay.git_state import SHARED, git_line
 from src.replay.random_content import CertificateSwap
 from src.replay.recorded_calls import RecordedCall, ReplayRefused
 from src.replay.replay_sandbox import ReplaySandbox
@@ -34,9 +36,6 @@ from src.replay.warm_image import described, warm_image
 from src.sandbox.agent_tools import PYTHON_COMMANDS
 from src.sandbox.docker_images import image_id
 
-SHARED = re.compile(r"\bteam\b|/team|\bgit\b[^\n]*\b(?:push|fetch|pull|remote|ls-remote|clone|submodule)\b")
-"""A call that may read or write the team remote: it runs alone, after every earlier call and before every later one.
-Any other call touches only its agent's machine and may run beside other agents' calls."""
 UPSTREAM = "refs/remotes/origin/"
 
 
@@ -69,6 +68,10 @@ class SweReplayer:
         if self.warm:
             services = {name: {**service, "image": self.warm} for name, service in services.items()}
         return services
+
+    def volumes(self) -> dict[str, dict]:
+        """The compose project's volumes: the team remote's."""
+        return {"team": {}}
 
     def image(self) -> dict:
         tag, recorded = hooks.image(self.swe), (self.swe.get("images") or {}).get("native_id")
@@ -265,6 +268,11 @@ class SweReplayer:
         refs = hooks.parse_refs(box.must(hooks.GRADER, hooks.TEAM_REFS, "team refs"))
         self._read_pieces(box, hooks.GRADER, set(refs.values()), hooks.TEAM_VIEW)
         return {"refs": refs, "ref_pieces": {name: self.held[sha] for name, sha in refs.items() if self.held.get(sha)}}
+
+    def line_state(self, call: RecordedCall, own: dict | None, standing: dict, team: dict) -> dict:
+        """A line's state (git_state.git_line): `standing` is the agent's state as it stands at the call, `team` the
+        team remote's as the last shared call left it. `own` (the call's own state, when it was played) adds nothing."""
+        return git_line(self.pieces, standing, team)
 
     # ---------------------------------------------------------------- the end state
     def read_end(self, box: ReplaySandbox) -> dict:

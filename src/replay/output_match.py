@@ -2,12 +2,13 @@
 
     match_of(recorded, replayed)          # "exact", "masked" (equal once times and durations are masked), "order"
                                           # (equal as a set of lines once masked) or "differs"
-    cause_of(recorded, replayed, cmd)     # for "differs": commit_hash, network, object_store, clock, environment,
-                                          # numbers or other
+    cause_of(recorded, replayed, cmd)     # for "differs": commit_hash, platform, network, object_store, clock,
+                                          # environment, numbers or other
 
 The causes are the classes the pilot of 2026-11-19 named: filesystem enumeration order (the match class "order"), git's
-object-store layout after the setup's gc, the wall clock, the host and the image, commit hashes and the network. Each
-rule reads the texts alone, so a cause is a likely reading, never a proof. Pure.
+object-store layout after the setup's gc, the wall clock, the host and the image, commit hashes and the network. The
+platform is the host's CPU: a run recorded on x86_64 and replayed on aarch64 lists a compiled extension under another
+name and size. Each rule reads the texts alone, so a cause is a likely reading, never a proof. Pure.
 """
 from __future__ import annotations
 
@@ -26,6 +27,8 @@ MASKS = [
 report."""
 HEX = re.compile(r"\b[0-9a-f]{7,40}\b")
 NUMBER = re.compile(r"\d+")
+ARCH = re.compile(r"\b(?:x86_64|aarch64|amd64|arm64)\b")
+"""A CPU's name, as a compiled extension's file name or the host's description carries it."""
 NETWORK = re.compile(r"\b(?:curl|wget|getent|ping|nslookup)\b|https?://|go (?:get|mod download)|proxy\.golang|"
                      r"resolve host|dial tcp", re.I)
 OBJECT_STORE = re.compile(r"count-objects|\.git/objects|\bpack-|\bgc\b|\bfsck\b|du -|size-pack|verify-pack")
@@ -53,12 +56,17 @@ def match_of(recorded: str, replayed: str) -> str:
 
 
 def cause_of(recorded: str, replayed: str, command: str) -> str:
-    """The likeliest cause of a difference: commit_hash (equal once ids are masked, in any line order), network,
+    """The likeliest cause of a difference: commit_hash (equal once ids are masked, in any line order), platform (a
+    CPU's name in either text, and equal once CPU names and numbers are masked, in any line order), network,
     object_store, clock, environment (the host, the image, processes), numbers (equal once every number is masked:
     sizes, counts, process ids), else other."""
     a, b = HEX.sub("<H>", mask(recorded)), HEX.sub("<H>", mask(replayed))
     if a == b or sorted(a.splitlines()) == sorted(b.splitlines()):
         return "commit_hash"
+    if ARCH.search(recorded) or ARCH.search(replayed):
+        pa, pb = (NUMBER.sub("<N>", ARCH.sub("<ARCH>", text)) for text in (a, b))
+        if pa == pb or sorted(pa.splitlines()) == sorted(pb.splitlines()):
+            return "platform"
     if NETWORK.search(command) or NETWORK.search(recorded):
         return "network"
     if OBJECT_STORE.search(command):

@@ -6,7 +6,6 @@ from __future__ import annotations
 import io
 import json
 import tarfile
-from types import SimpleNamespace
 
 import pytest
 
@@ -18,7 +17,6 @@ from src.replay.creative_replay import (
     OTHER,
     WHOLE,
     WORKSPACE,
-    ContainerBox,
     RecordedSecrets,
     StateReading,
     compared,
@@ -152,9 +150,3 @@ def test_comparisons_name_what_differs():
     assert compared({"a": 1, "b": 2}, {"a": 1, "b": 3}, ("a", "b")) == {"b": (2, 3)}
     assert list_differs([{"n": 1}, {"n": 2}], [{"n": 1}], ("n",)) == [{"at": 1, "n": (2, None)}]
 
-
-def test_container_box_runs_as_the_seats_user_in_its_directory():
-    box = ContainerBox(SimpleNamespace(container=lambda service: f"replay-x-{service}-1"))
-    assert box.argv(["bash", "--login", "-c", "ls"], stdin=True, cwd="/workspace", env=None, user="k7q2m") == \
-        ["docker", "exec", "-i", "--user", "k7q2m", "--workdir", "/workspace", "replay-x-default-1", "bash",
-         "--login", "-c", "ls"]

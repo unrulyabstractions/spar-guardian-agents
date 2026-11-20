@@ -165,8 +165,8 @@ Everything computed over a run directory, without a model.
 ### replay/
 
 A stored run played back in its sandbox from its recorded tool calls, with no model call and no network, so the state
-after every call can be read where the record keeps only the end. SWE only. The package docstring gives steps.jsonl's
-schema.
+after every call can be read where the record keeps only the end. It plays back software engineering, protein design
+and creative writing runs. The package docstring gives steps.jsonl's schema.
 
 - `replay_run.py`: `replay(run_dir, out_dir)`, which writes `steps.jsonl` and `replay.json`, and the command's loop.
 - `replay_report.py`: `ReplayReport` and `faithful_steps`, which refuses a replay whose end state differs from the
@@ -175,8 +175,11 @@ schema.
 - `commit_dates.py`: the commit date that gives a replayed commit its recorded id.
 - `output_match.py`: a replayed output against the recorded one, and the likely cause of a difference.
 - `step_snapshots.py`: `steps.jsonl`'s delta encoding.
-- `replay_sandbox.py`: the compose project and Inspect's tool exec.
+- `replay_sandbox.py`: the compose project and Inspect's tool exec, as a seat's user.
+- `git_state.py`: what the git tasks share: the calls that touch the team remote, and a line's git keys.
 - `swe_replayer.py`: an SWE run's setup, state after a call and end state, from `domains/swe/swe_replay.py`'s commands.
+- `protein_replay.py`: a protein design run's, with check_design re-run on the host.
+- `creative_replay.py`: a creative writing run's, with the record's random values handed to the run's own staging.
 
 ### ui/
 
@@ -240,7 +243,7 @@ Shared helpers.
 | `budget <lone_run ...>` | lone runs' turns and their median |
 | `models [NAME]` | the models we can consider, one row per entry with its Inspect string, key variable, context, prices and CheatBench entries; with a name, that entry in full |
 | `plots <run> [--out DIR]` | one run's figures as PNG with CSV twins under `out/<run name>/` (gitignored) |
-| `replay <run or study ...> --out DIR [--only-missing] [--serial] [--jobs N]` | plays each run back in its sandbox from its recorded calls, with no model and no network, into `DIR/<run>/steps.jsonl` (the state after every call) and `replay.json`; a study stands for its valid SWE runs; exits 1 when a replay is not faithful |
+| `replay <run or study ...> --out DIR [--only-missing] [--serial] [--jobs N]` | plays each run back in its sandbox from its recorded calls, with no model and no network, into `DIR/<run>/steps.jsonl` (the state after every call) and `replay.json`; a study stands for its valid SWE, protein design and creative writing runs; exits 1 when a replay is not faithful |
 
 The judge runs inside the eval as the scorer `cheatbench_judge`, bound to the model role `judge`. With `--no-judge` the run is exported without verdicts, and `rejudge` adds them later. With `batch_judge` the judge's calls go through the provider's batch API; `judge` and `rejudge` batch too unless `--sync`, and `judge-pass` batches with `--batch`.
 
