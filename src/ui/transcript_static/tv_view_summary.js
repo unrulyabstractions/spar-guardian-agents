@@ -37,7 +37,7 @@ function runsHref(filters) {
 /** k of n with a thin bar, filled in `colour`. */
 const share = (label, k, n, colour) => h('div', { class: 'sum-share', title: `${label}: ${k} of ${n}` },
   h('span', { class: 'sum-share-label' }, label),
-  h('span', { class: ['sum-share-k', k > 0 && 'is-some'] }, `${k}/${n}`),
+  h('span', { class: ['sum-share-k', k > 0 && 'is-some'] }, `${n ? Math.round((100 * k) / n) : 0}%`),
   h('span', { class: 'sum-bar' }, h('span', { style: `width:${n ? Math.round((100 * k) / n) : 0}%;background:${colour}` })));
 
 const SHORT = { cheating: 'H', coordination: 'C', collusion: 'K' };
@@ -59,12 +59,10 @@ function cellView(c, d) {
   if (!c) return h('td', { class: 'sum-cell sum-empty' }, muted('–'));
   const n = plural(c.n, 'run');
   return h('td', { class: 'sum-cell' },
-    c.filters ? h('a', { class: 'sum-n', href: runsHref(c.filters), title: 'Open these runs' }, n)
-      : h('span', { class: 'sum-n', title: 'No runs-page filter keeps exactly these' }, n),
     share('cheated', c.cheated, c.n, RAMP.cheating[3]),
-    share('accessed', c.accessed, c.n, RAMP.cheating[2]),
-    share('passed', c.passed, c.n, 'var(--good)'),
-    d.order.map(L => ladderChips(L, d.ladders[L], c.levels[L])));
+    d.order.map(L => ladderChips(L, d.ladders[L], c.levels[L])),
+    c.filters ? h('a', { class: 'sum-n', href: runsHref(c.filters), title: 'Open these runs' }, n)
+      : h('span', { class: 'sum-n', title: 'No runs-page filter keeps exactly these' }, n));
 }
 
 /** A column's header: its label, or for influencers three short lines: role chips, level chips, models. */
@@ -88,13 +86,57 @@ function colLabel(c) {
 const colTitle = c => [c.worker, ...(c.influencers.length
   ? c.influencers.map(x => `${x.role} ${x.level || 'no level'} ${modelLabel({ model: x.model })}`) : ['no influencer'])].join('; ');
 
+/** The All row over some rows: each column's cells summed, the ladders' level counts in each ladder's order; no
+ * link, since the runs page has no filter for a set of rows. */
+function summed(rows, columns, d) {
+  const out = {};
+  for (const c of columns) {
+    const cs = rows.map(r => r.cells[c.key]).filter(Boolean);
+    if (!cs.length) continue;
+    const add = k => cs.reduce((t, x) => t + x[k], 0);
+    const levels = {};
+    for (const L of d.order) {
+      const by = new Map();
+      for (const x of cs) for (const [v, n] of x.levels[L] || []) by.set(v, (by.get(v) || 0) + n);
+      const order = d.ladders[L].levels;
+      levels[L] = [...by.entries()].sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]));
+    }
+    out[c.key] = { n: add('n'), cheated: add('cheated'), accessed: add('accessed'), passed: add('passed'), levels, filters: null };
+  }
+  return out;
+}
+
 export async function viewSummary(q) {
   const ladders = await loadLadders();
   const cols = COLLECTION_ORDER;
   const col = cols.includes(q.get('col')) ? q.get('col') : (cols.includes('study_exploration_1') ? 'study_exploration_1' : cols[0]);
   const s = await loadSummary(col);
-  const C = s.columns;
-  const counted = s.rows.reduce((t, r) => t + C.reduce((u, c) => u + (r.cells[c.key] ? r.cells[c.key].n : 0), 0), 0);
+  // The influencer bands the page hides (hide=regulator,disregulator,both), each toggled by its button.
+  const BANDS = [['regulator', 'Regulators'], ['disregulator', 'Disregulators'], ['both', 'Both']]
+    .filter(([g]) => s.columns.some(c => c.group === g));
+  const hidden = new Set((q.get('hide') || '').split(',').filter(g => BANDS.some(([b]) => b === g)));
+  // The two model filters: the workers' model keeps its rows; an influencer's model keeps the influencer columns
+  // holding it (Baseline and the controls stay).
+  const wmodel = q.get('wmodel') || '';
+  const imodel = q.get('imodel') || '';
+  const rows = s.rows.filter(r => !wmodel || r.model === wmodel);
+  const C = s.columns.filter(c => !hidden.has(c.group)
+    && (!imodel || !c.influencers.length || c.influencers.some(x => x.model === imodel)));
+  const counted = s.rows.reduce((t, r) => t + s.columns.reduce((u, c) => u + (r.cells[c.key] ? r.cells[c.key].n : 0), 0), 0);
+  const nav = (over = {}) => {
+    const p = new URLSearchParams({ col, hide: [...hidden].join(','), wmodel, imodel, ...over });
+    for (const [k, v] of [...p.entries()]) if (!v) p.delete(k);
+    location.hash = `#/summary?${p}`;
+  };
+  const toggles = h('span', { class: 'rp-togs' }, BANDS.map(([g, label]) => h('button', {
+    type: 'button', class: 'rp-tog', 'aria-pressed': String(!hidden.has(g)), title: `show or hide the ${label.toLowerCase()} columns`,
+    onclick: () => { const next = new Set(hidden); if (next.has(g)) next.delete(g); else next.add(g); nav({ hide: [...next].join(',') }); } },
+    label)));
+  const uniqueModels = list => [...new Set(list)].sort((a, b) => modelLabel({ model: a }).localeCompare(modelLabel({ model: b })));
+  const wPick = select([['', 'All workers\' models'], ...uniqueModels(s.rows.map(r => r.model)).map(m => [m, modelLabel({ model: m })])],
+    wmodel, v => nav({ wmodel: v }), { 'aria-label': 'Workers\' model' });
+  const iPick = select([['', 'All influencer models'], ...uniqueModels(s.columns.flatMap(c => c.influencers.map(x => x.model)).filter(Boolean))
+    .map(m => [m, modelLabel({ model: m })])], imodel, v => nav({ imodel: v }), { 'aria-label': 'Influencer model' });
   const lead = s.by_workers ? 3 : 2;
 
   // The band over the condition columns: one cell per run of columns of the same group. A group of one column named
@@ -124,17 +166,17 @@ export async function viewSummary(q) {
     if (starts.has(c.key)) td.classList.add('sum-group-start');
     return td;
   });
-  const body = s.rows.map(r => h('tr', null,
+  const body = rows.map(r => h('tr', null,
     h('th', { scope: 'row', class: 'sum-model' }, modelLabel({ model: r.model })),
     h('td', { class: 'sum-task' }, r.task), s.by_workers ? h('td', { class: 'num' }, String(r.workers)) : null,
     cells(r.cells)));
-  const total = h('tr', { class: 'sum-total' }, h('th', { scope: 'row', colspan: String(lead) }, 'All'), cells(s.totals));
+  const total = h('tr', { class: 'sum-total' }, h('th', { scope: 'row', colspan: String(lead) }, 'All'),
+    cells(wmodel ? summed(rows, s.columns, ladders) : s.totals));
 
-  const picker = select(cols.map(c => [c, collectionOf(c).label]), col, v => { location.hash = `#/summary?col=${encodeURIComponent(v)}`; },
-    { 'aria-label': 'Collection' });
+  const picker = select(cols.map(c => [c, collectionOf(c).label]), col, v => nav({ col: v }), { 'aria-label': 'Collection' });
   return h('div', { class: 'page wide' },
-    h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, h('h1', null, `Summary: ${fmtInt(s.total)} runs`), picker,
-      counted !== s.total ? badge(`cells hold ${counted}`, 'bad', 'Cells and the collection disagree') : null)),
+    h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, h('h1', null, `Summary: ${fmtInt(s.total)} runs`), picker, wPick, iPick,
+      counted !== s.total ? badge(`cells hold ${counted}`, 'bad', 'Cells and the collection disagree') : null), toggles),
     h('div', { class: 'table-wrap sum-wrap' }, h('table', { class: 'data sum-table' },
       h('thead', null, h('tr', { class: 'sum-band-row' }, band), head), h('tbody', null, body, total))));
 }

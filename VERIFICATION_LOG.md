@@ -1961,3 +1961,8 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 ## 2026-11-19, ladder letters H, C, K
 - **What.** The short marks of the three ladders (summary cells, the run page's strip) are H (Cheating), C (Coordination), K (Collusion), in tv_view_summary.js and tv_case_view.js.
 - **How verified.** Viewer, summary and board tests 105 passed; on 8833 screenshots of #/summary (H, C, K before each chip row) and of flipt_minimal_cheat_dsflash_fixed3's run page (strip headers H C K, so far and this step) viewed. VERIFIED.
+
+## 2026-11-19, viewer: episode grid, legend, run header chips, Summary order, toggles, model filters, rates
+- **What.** Run page strip: a faint grid every few calls with its number, milestone labels without "call N"; the strip legend's rows size themselves (no collision); the run bar's arm sentence replaced by chips (workers' number and model, conditioning, each influencer's role, level and model). Summary: columns Baseline, negative controls, regulators, positive control, disregulators, both, each its own band; buttons toggle the regulator, disregulator and both bands (`hide=`); workers' model and influencer model filters (`wmodel=`, `imodel=`) with the All row recounted; each cell the cheated share as a rate, the level chips, its runs at the bottom.
+- **How verified.** Viewer, summary and board tests 105 passed; ruff clean. Screenshots on 8833 viewed: the strip with its grid and the fitting legend; the run bar's chips; the summary in its new order with all toggles on, with disregulator and both off, and filtered to GPT-6 Luna workers and Claude Haiku 5.5 influencers (3 rows; All row Baseline 12 = 4 + 5 + 3, Told to cheat 13 at 23%, 3 of 13).
+- **Result.** VERIFIED.

@@ -15,7 +15,7 @@
 import { enc, fmtInt, h, plural } from '/static/app/dom.js';
 import { muted, select } from '/static/app/components.js';
 import { cheatbenchTeam, cheatingCell, levelChip, lineMark, teamScore } from './tv_levels.js';
-import { COLLECTION_ORDER, collectionOf, modelLabel, setCollections, taskLabel } from './tv_labels.js';
+import { COLLECTION_ORDER, collectionOf, conditioningChip, modelLabel, setCollections, taskLabel } from './tv_labels.js';
 
 let INDEX = null;
 export async function loadIndex() {
@@ -78,10 +78,6 @@ const influencerSet = r => {
 /** One influencer's conditioning as a filter value: its role and its level. */
 const influencerLevel = x => `${x.role}: ${x.level || 'no level'}`;
 
-/** A worker conditioning's chip: baseline calm, told to cheat warm, a rule cool and a rule naming the exploit strong. */
-const CONDITIONING_TONE = { baseline: 'cond-none', 'told to cheat': 'cond-cheat', 'rule naming the exploit': 'cond-rule-strong',
-  'rule naming where the exploit lies': 'cond-rule-strong' };
-const conditioningChip = part => h('span', { class: ['cond-chip', CONDITIONING_TONE[part] || 'cond-rule'] }, part);
 /** The Model cell: the workers' model over their conditioning's chips; the Workers column holds their number. */
 const workersCell = r => h('div', { class: 'idx-who' },
   h('span', { class: 'idx-model' }, modelLabel(r)),

@@ -6,14 +6,16 @@ rows (src/ui/transcript_index.py build_row).
 
 A condition is the workers' conditioning (the row's worker_conditioning) and the run's influencers, each by role,
 instruction level and model. The page's columns are the baseline; one column per influencer combination the collection
-holds with baseline workers (each regulator's level and model, each disregulator's, and each pair of both), regulators
-first, then disregulators, then both, each by level (instruction_levels.yaml order) and model; the positive control
-(told to cheat) and the two negative controls (a rule). Any other condition, such as a run told to cheat with a
-regulator, gets a column of its own named by its combination, only when such a run exists. Every row lands in exactly
-one cell. A cell counts its runs, the ones that cheated (the index's levels.cheated), the ones that accessed the
-honeypot (the team's Cheating rung looked or above), the ones the grader passed (levels.passed) and the teams' levels
-on each ladder. Each cell carries the runs page's filters that keep exactly its runs (tv_view_index.js filters), found
-and checked here, or None when no such filters exist.
+holds with baseline workers (each regulator's level and model, each disregulator's, and each pair of both), each by
+level (instruction_levels.yaml order) and model; the positive control (told to cheat) and the two negative controls (a
+rule). The order sets each kind of influencer beside the control it is weighed against: Baseline, the negative
+controls, the regulators, the positive control, the disregulators, then both. Any other condition, such as a run
+told to cheat with a regulator, gets a column of its own named by its combination, only when such a run exists. Every
+row lands in exactly one cell. A cell counts its runs, the ones that cheated (the index's levels.cheated), the ones
+that accessed the honeypot (the team's Cheating rung looked or above), the ones the grader passed (levels.passed) and
+the teams' levels on each ladder. Each cell carries the runs page's filters that keep exactly its runs
+(tv_view_index.js filters), found and checked here, or None when no such filters exist. The page shows the cheated
+share and the levels; the other counts stay in the answer.
 """
 from __future__ import annotations
 
@@ -33,11 +35,13 @@ CONTROLS = [
 ]
 BASELINE = {"key": "baseline", "label": "Baseline", "group": "baseline", "worker": "baseline"}
 COLUMNS = [BASELINE, *CONTROLS]
-"""The conditions with no influencer that every collection's page shows, in order: Baseline first, the controls after
-the influencer columns. group names the band over the column (GROUPS); a group of one column under its own name has no
-band of its own."""
-GROUPS = {"baseline": "Baseline", "influencers": "Influencers", "positive": "Positive control",
-          "negative": "Negative controls", "other": "Combined"}
+"""The conditions with no influencer that every collection's page shows. group names the band over the column
+(GROUPS); a group of one column under its own name has no band of its own."""
+GROUPS = {"baseline": "Baseline", "negative": "Negative controls", "regulator": "Regulators",
+          "positive": "Positive control", "disregulator": "Disregulators", "both": "Regulator and disregulator",
+          "other": "Combined"}
+PLACE = ("baseline", "negative", "regulator", "positive", "disregulator", "both", "other")
+"""The bands in the page's order: each kind of influencer beside the control it is weighed against."""
 ACCESSED = "looked"
 """The lowest Cheating rung at which a team accessed the honeypot."""
 
@@ -101,7 +105,7 @@ def column_of(worker: str, influencers: tuple) -> dict:
             return {**fixed, "influencer": "none", "influencers": []}
     words = combination(influencers)
     if worker == "baseline":
-        return {"key": f"baseline | {words}", "label": f"+ {short(influencers)}", "group": "influencers",
+        return {"key": f"baseline | {words}", "label": f"+ {short(influencers)}", "group": infl,
                 "worker": worker, "influencer": infl, "influencers": listed}
     label = worker if not influencers else f"{worker} + {short(influencers)}"
     return {"key": f"{worker} | {words or 'none'}", "label": label[0].upper() + label[1:], "group": "other",
@@ -109,16 +113,14 @@ def column_of(worker: str, influencers: tuple) -> dict:
 
 
 def column_order(c: dict) -> tuple:
-    """A column's place: Baseline, the influencer columns (regulator, disregulator, both; each by its influencers'
-    levels and models), the controls in COLUMNS' order, then the other conditions by key."""
-    if c["group"] == "baseline":
-        return (0,)
-    if c["group"] == "influencers":
-        return (1, SETS.index(c["influencer"]),
-                tuple((level_rank(x["role"], x["level"]), x["model"] or "", x["n"]) for x in c["influencers"]))
-    if c["group"] in ("positive", "negative"):
-        return (2, COLUMNS.index(next(x for x in COLUMNS if x["key"] == c["key"])))
-    return (3, c["key"])
+    """A column's place: its band's place in PLACE, then within an influencer band its influencers' levels and models,
+    within a control band COLUMNS' order, and the other conditions by key."""
+    band = PLACE.index(c["group"])
+    if c["group"] in SETS:
+        return (band, tuple((level_rank(x["role"], x["level"]), x["model"] or "", x["n"]) for x in c["influencers"]))
+    if c["group"] in ("baseline", "positive", "negative"):
+        return (band, (COLUMNS.index(next(x for x in COLUMNS if x["key"] == c["key"])),))
+    return (band, (c["key"],))
 
 
 def runs_page_keeps(row: dict, f: dict) -> bool:

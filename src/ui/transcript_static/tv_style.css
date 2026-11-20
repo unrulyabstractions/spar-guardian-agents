@@ -255,9 +255,9 @@ mark.xl-mark.flash { animation: flash 1.6s ease-out; }
 .case .cs-why{flex:1;min-width:0;color:var(--muted);font-size:12px}
 /* The strip's legend (tv_case_view.js stripLegend): a row per ladder, its levels' swatches in aligned cells, a rule at
    the line. */
-.case .cs-legend{border-collapse:collapse;margin:10px 0 0;font-size:9.5px;color:var(--ink-2)}
+.case .cs-legend{border-collapse:collapse;margin:10px 0 0;font-size:9px;color:var(--ink-2)}
 .case .cs-legend th{text-align:left;font-weight:600;font-size:10.5px;white-space:nowrap;padding:3px 4px 3px 0;color:var(--ink)}
-.case .cs-legend td{padding:3px 2px;vertical-align:top;white-space:nowrap;text-align:center;line-height:1.2}
+.case .cs-legend td{padding:3px 4px;vertical-align:top;white-space:nowrap;text-align:center;line-height:1.2}
 .case .cs-legend td.csl-line{border-left:2px solid var(--ink)}
 .case .cs-legend i{display:block;width:100%;min-width:14px;height:9px;margin:0 0 2px;border-radius:2px;border:1px solid var(--line-2);box-sizing:border-box}
 .case .csl-mark{display:inline-block;width:18px;font-weight:700}
@@ -361,3 +361,13 @@ table.idx-table th.center, table.idx-table td.center { text-align: center; }
 table.idx-table td.center .cheat-cell, table.idx-table td.center .idx-other, table.idx-table td.center .lv-influencer-row {
   align-items: center; justify-content: center; }
 table.idx-table td.center .idx-other { align-items: center; }
+/* The episode strip's grid: a faint line every few calls, its number small at the right. */
+.case .cs-grid { stroke: var(--text); stroke-opacity: .12; stroke-width: 1; pointer-events: none; }
+.case .cs-tick { font-size: 9px; }
+/* The run page's bar: who ran as chips. */
+.rp-who { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; }
+.rp-who-part { display: inline-flex; align-items: center; gap: 4px; }
+/* Each ladder's row of the strip legend sizes its own cells, so a long row never pushes past the panel. */
+.case .cs-legend tr { display: flex; align-items: flex-start; }
+.case .cs-legend th { flex: none; width: 88px; }
+.case .cs-legend td { flex: none; }

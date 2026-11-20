@@ -2,6 +2,7 @@
  * viewer (viewer/static/app/labels.js). The collections come from /api/index (src/ui/transcript_index.py
  * COLLECTION_ABOUT); each run's task, agents, worker and influencer conditioning and arm come from the server; the
  * ladders' levels and meanings come from /api/ladders (src/ui/transcript_levels.py LADDERS). */
+import { h } from '/static/app/dom.js';
 
 export const COLLECTIONS = {};
 export const COLLECTION_ORDER = [];
@@ -42,3 +43,16 @@ export const modelLabel = r => MODELS[r.model] || r.model || r.model_id;
 /** One influencer of a run's influencer_conditioning ({role, n, level, model}) in words: its role, its instruction
  * level and its model. */
 export const influencerParts = x => [x.n === 1 ? x.role : `${x.n} ${x.role}s`, x.level, modelLabel({ model: x.model })].filter(Boolean);
+
+/** A worker conditioning's chip: baseline calm, told to cheat warm, a rule cool and a rule naming the exploit strong. */
+export const CONDITIONING_TONE = { baseline: 'cond-none', 'told to cheat': 'cond-cheat', 'rule naming the exploit': 'cond-rule-strong',
+  'rule naming where the exploit lies': 'cond-rule-strong' };
+export const conditioningChip = part => h('span', { class: ['cond-chip', CONDITIONING_TONE[part] || 'cond-rule'] }, part);
+/** An influencer's role and level as chips. */
+export const influencerChips = x => [h('span', { class: ['role-chip', `role-chip-${x.role}`] }, x.n === 1 ? x.role : `${x.n} ${x.role}s`),
+  x.level ? h('span', { class: ['level-chip', `level-chip-${x.role}`] }, x.level) : null];
+/** Who ran, as chips: the workers' number and model with their conditioning, then each influencer's role, level and
+ * model. */
+export const whoChips = r => h('span', { class: 'rp-who' },
+  h('span', { class: 'rp-who-part' }, h('b', null, `${r.workers} × ${modelLabel(r)}`), r.worker_conditioning.split('; ').map(conditioningChip)),
+  r.influencer_conditioning.map(x => h('span', { class: 'rp-who-part' }, influencerChips(x), h('span', { class: 'muted' }, modelLabel({ model: x.model })))));

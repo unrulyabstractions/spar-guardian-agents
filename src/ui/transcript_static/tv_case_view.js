@@ -239,12 +239,12 @@ export function renderCase(t, ctx) {
   const miles = [];
   for (const [k, es] of fresh) for (const e of es) {
     const w = (WORDS[e.ladder] || {})[e.level];
-    if (w) miles.push({ k, t: `${w}, call ${k}`, head: `${w},`, tail: `call ${k}`, ladder: e.ladder, tip: e.evidence });
+    if (w) miles.push({ k, t: w, head: w, tail: '', ladder: e.ladder, tip: `call ${k}: ${e.evidence || w}` });
   }
   const regAt = new Set([...(ctx.regulatorCalls || [])].map(id => idOf.get(id)).filter(k => k != null));
   if (regAt.size) {
     const k0 = Math.min(...regAt);
-    miles.push({ k: k0, t: `regulator warned, call ${k0}`, head: 'regulator warned,', tail: `call ${k0}`, ladder: 'reg', tip: ctx.isRegulator ? 'this agent\'s first post as the regulator' : 'the first call that read a regulator\'s post' });
+    miles.push({ k: k0, t: 'regulator warned', head: 'regulator', tail: 'warned', ladder: 'reg', tip: `call ${k0}: ${ctx.isRegulator ? 'this agent\'s first post as the regulator' : 'the first call that read a regulator\'s post'}` });
   }
   for (const e of endEv) {
     const w = (WORDS[e.ladder] || {})[e.level];
@@ -335,7 +335,7 @@ export function renderCase(t, ctx) {
   const NS = 'http://www.w3.org/2000/svg';
   const LB = 160, LW = 14, GAP = 5, SEP = 16, TOP = 30;
   const lanesW = order.length * (LW + GAP) - GAP;
-  const RX = LB + lanesW + SEP, RW = lanesW, W = RX + RW + 8;
+  const RX = LB + lanesW + SEP, RW = lanesW, W = RX + RW + 30;
   // A milestone label wider than the margin breaks before its call or "end" onto a second line.
   const measure = document.createElement('canvas').getContext('2d');
   measure.font = '600 10px "IBM Plex Sans", system-ui, sans-serif';
@@ -413,13 +413,14 @@ export function renderCase(t, ctx) {
     svg.appendChild(mk('line', { x1: LB - 7, y1: ty - 3, x2: LB - 2, y2: y0, stroke: col, 'stroke-width': 1 }));
   }
   if (last + 8 > H) svg.setAttribute('height', Math.ceil(last + 8));
-  for (let k = 0; k < n; k += 10) {
-    const y = TOP + k * rh + 3;
-    if (placed.every(py => Math.abs(py - y) > 12)) {
-      const tx = mk('text', { x: LB - 10, y, 'text-anchor': 'end', class: 'cs-tick', 'data-call': k });
-      tx.textContent = `call ${k}`;
-      svg.appendChild(tx);
-    }
+  // A faint grid across the lanes, a line every `step` calls, its call number at the right.
+  const step = [5, 10, 20, 25, 50, 100, 200, 500].find(s => s * rh >= 28) || 1000;
+  for (let k = 0; k <= n; k += step) {
+    const y = TOP + k * rh;
+    svg.appendChild(mk('line', { x1: LB - 3, y1: y, x2: RX + RW + 2, y2: y, class: 'cs-grid' }));
+    const tx = mk('text', { x: RX + RW + 5, y: y + 3, class: 'cs-tick', 'data-call': Math.min(k, n - 1) });
+    tx.textContent = String(k);
+    svg.appendChild(tx);
   }
   // The agent's level on each ladder at the end of the run, as chips with their evidence on hover.
   const mine = lv && lv.agents[ctx.agent];

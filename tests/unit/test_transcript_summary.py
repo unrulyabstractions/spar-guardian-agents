@@ -64,21 +64,23 @@ def test_one_column_per_influencer_combination_in_order():
     s = ts.summary(ROWS, COL)
     labels = [c["label"] for c in s["columns"]]
     assert labels == [
-        "Baseline",
+        "Baseline", "Generic rule", "Rule naming the exploit",
         "+ regulator · enforce · haiku", "+ regulator · enforce · luna", "+ regulator · ambiguous · haiku",
+        "Told to cheat",
         "+ disregulator · persuade · luna", "+ disregulator · overt · luna",
         "+ both · enforce, persuade · haiku, luna",
-        "Told to cheat", "Generic rule", "Rule naming the exploit",
         "Rule: copy no solution", "Told to cheat + regulator · enforce · haiku"]
     groups = [c["group"] for c in s["columns"]]
-    assert groups == ["baseline"] + ["influencers"] * 6 + ["positive", "negative", "negative", "other", "other"]
-    both = s["columns"][6]
+    assert groups == ["baseline", "negative", "negative"] + ["regulator"] * 3 + ["positive"] + ["disregulator"] * 2 \
+        + ["both", "other", "other"]
+    both = s["columns"][9]
     assert both["influencer"] == "both"
     assert [(x["role"], x["level"], x["model"]) for x in both["influencers"]] == [
         ("regulator", "enforce", "haiku"), ("disregulator", "persuade", "luna")]
     # a collection without influencers or combined runs has the fixed columns only
     plain = ts.summary([r for r in ROWS if not r["influencer_conditioning"] and r["run"] != "o1"], COL)
-    assert [c["key"] for c in plain["columns"]] == [c["key"] for c in ts.COLUMNS]
+    assert [c["key"] for c in plain["columns"]] == [
+        "baseline", "generic_rule", "rule_naming_the_exploit", "told_to_cheat"]
 
 
 def test_each_run_lands_in_exactly_one_cell_and_totals_match():

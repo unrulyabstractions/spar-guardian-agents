@@ -19,7 +19,7 @@
 import { appendAll, enc, fmtInt, fmtUsd, h } from '/static/app/dom.js';
 import { badge, dataTable, episodeRecord, kv, lazyDetails, longText, muted } from '/static/app/components.js';
 import { ROLE_ORDER, roleIcon } from '/static/app/charts.js';
-import { CHEATBENCH, ROLE_LABEL, armLabel, collectionOf, influencerParts, isInfluencer, modelLabel,
+import { CHEATBENCH, ROLE_LABEL, armLabel, collectionOf, influencerParts, isInfluencer, modelLabel, whoChips,
   taskLabel } from './tv_labels.js';
 import { alarmBadge, cheatbenchTeam, cheatbenchWords, cheatingCell, cheatingPanel, clauseList, collusionPanel,
   coordinationPanel, judgeLabels, judgeLabelsPanel, labelEntry, levelChip, levelsPanel, teamScore } from './tv_levels.js';
@@ -338,7 +338,7 @@ export async function viewRun(id, q, view) {
     }));
   const bar = h('div', { class: 'rp-bar' },
     h('a', { class: 'rp-back', href: '#/', title: 'all runs' }, '←'),
-    h('b', { class: 'rp-run' }, row.run), h('span', { class: 'rp-arm' }, armLabel(row)),
+    h('b', { class: 'rp-run' }, row.run), whoChips(row),
     cheating.alarm ? alarmBadge(cheating.alarm) : null,
     h('span', { class: 'rp-tabs' }, [...tabs.values()]),
     toggles,
