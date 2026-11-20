@@ -527,7 +527,7 @@ export function renderCase(t, ctx) {
     'aria-orientation': 'vertical', 'aria-valuemin': '0', 'aria-valuemax': String(Math.max(0, n - 1)),
     style: `left:${W + 12}px;top:${TOP}px;height:${Math.max(1, n * rh)}px`, hidden: !n },
   h('div', { class: 'cs-track' }), thumb);
-  // One step back or forward, beside the slider's handle: the previous step's first call, or the next step's.
+  // One step back or forward, beside the slider at its middle: the previous step's first call, or the next step's.
   const stepJump = d => () => {
     if (!n) return;
     const at = Math.max(0, marked);
@@ -543,7 +543,7 @@ export function renderCase(t, ctx) {
     }
     seek(k);
   };
-  const stepBtns = h('div', { class: 'cs-stepbtns', style: `left:${W + 34}px;top:${TOP}px`, hidden: !n },
+  const stepBtns = h('div', { class: 'cs-stepbtns', style: `left:${W + 34}px;top:${TOP + (n * rh) / 2 - 22}px`, hidden: !n },
     h('button', { type: 'button', class: 'cs-stepbtn', title: 'previous step', 'aria-label': 'previous step', onclick: stepJump(-1) }, '▲'),
     h('button', { type: 'button', class: 'cs-stepbtn', title: 'next step', 'aria-label': 'next step', onclick: stepJump(1) }, '▼'));
   const left = h('div', { class: 'left' },
@@ -567,7 +567,6 @@ export function renderCase(t, ctx) {
     mark = mk('rect', { x: LB - 1, y: TOP + k * rh - 1, width: RX + RW - LB + 2, height: Math.max(3, rh + 2), fill: 'none', stroke: 'var(--accent)', 'stroke-width': 2 });
     svg.appendChild(mark);
     thumb.style.top = `${k * rh + rh / 2}px`;
-    stepBtns.style.top = `${TOP + k * rh + rh / 2 - 22}px`;
     slider.setAttribute('aria-valuenow', String(k));
     slider.title = `call ${k}`;
     // The strip scrolls inside its own column when it is taller than the window: keep the outlined row in sight.
