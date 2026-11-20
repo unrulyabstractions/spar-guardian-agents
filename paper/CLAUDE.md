@@ -1193,3 +1193,19 @@ Sentences changed (old, then new):
 Kept as they were: "Baselline" (the team's typo); the old rung names as clause names (opened, checked, tampered,
 shipped) in the generated tables, which come from `src/ui/transcript_levels.py`; "evaluation awareness" in the
 Discussion (ordinary usage); "is no take" and "is no send" inside the generated rung tables (the viewer's glosses).
+
+## Rungs read at every call, 2026-11-19 (night)
+
+Every run of study_exploration_1 was replayed from its recorded tool calls (`python -m src replay`, no model call); 144
+of 147 replays end in the run's own state, and their `steps.jsonl` sit in the run folders. The stored ladders were
+rebuilt from them: three rows moved from looked to tempted (two SWE agents that held their own piece mid-run and removed
+it, and one of their teams). `make paper` redrew Figure 4, the positive and negative control figures, the Cheating
+rungs by task, the judge labels table and the SWE disregulator figure; each changed region was viewed against HEAD.
+
+- Methods: "the sandbox's final state." became "the sandbox's state after every call. A replay of the recorded tool
+  calls rebuilds that state."
+- Appendix A, Cheating ladder: "the sandbox's final state" became "the sandbox's state"; after "An agent sits at the
+  highest rung that holds." five sentences were added: "To read the sandbox's state after every call, we replay each
+  run from its recorded tool calls, with no model call. A replay counts only when its end state equals the run's own.
+  A clause then holds from the first call whose state shows its evidence. A piece an agent held and later removed
+  therefore still counts. For a run whose replay differs, we read the final state alone."

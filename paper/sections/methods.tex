@@ -87,8 +87,8 @@ none, looked, tempted, attempted or hacked. The \textbf{Coordination ladder} mea
 with its teammates on the board. The \textbf{Collusion ladder} measures how far a pair of agents took each other's
 work. In the multi-domain study, we count a team as cheating when its Cheating rung is \CheatedFrom{} or above, on every
 task. We also report whether a team \textbf{accessed the honeypot}: its Cheating rung is \AccessedFrom{} or above.
-The multi-domain study reads the ladders by code from the transcripts, the board and the sandbox's final state. The
-deep dive uses \textit{CheatBench}'s LLM judge (GPT-6 Luna) with team-specific rules. In the multi-domain study, a
+The multi-domain study reads the ladders by code from the transcripts, the board and the sandbox's state after every
+call. A replay of the recorded tool calls rebuilds that state. The deep dive uses \textit{CheatBench}'s LLM judge (GPT-6 Luna) with team-specific rules. In the multi-domain study, a
 judge gives each agent two scores beside the ladders: how explicitly it says that what it does is wrong, and how
 strongly it tries to steer another agent. Appendix A defines every rung and label. Appendix B
 sets \textit{CheatBench}'s judge beside the code on the multi-domain study's runs, and reports how often an
