@@ -98,9 +98,9 @@ const influencersCell = r => (r.influencer_conditioning.length
 /** A name that may break after each underscore (and at a space, unless the space is a no-break one). */
 const breakable = name => String(name).split('_').flatMap((part, i) => (i ? ['_', h('wbr'), part] : [part]));
 
-/** The runs table's columns, in the order the user set on 2026-11-19: the interest, the run, the workers and the
- * influencers (each model with its conditioning), the task, the team's three ladders, the judge labels, the
- * influencers' three ladders and their judge labels, and the collection last. The Workers cell says how many workers
+/** The runs table's columns, in the order the user set on 2026-11-19: the run, the workers and the influencers (each
+ * model with its conditioning), the task, the team's three ladders, the judge labels, the influencers' three ladders
+ * and their judge labels, the interest, and the collection last. The Workers cell says how many workers
  * and the Influencers cell names each influencer, so no column counts the agents.
  * Each is {key, label, group, title, sort(row), cell(row)}; group names the band over it (GROUPS). d is /api/ladders'
  * answer. */
@@ -133,8 +133,6 @@ function columns(d) {
           : [h('a', { href: excerptHref(r, k)(x.agent), title: `open ${x.agent}'s excerpt` }, scoreChip(x[k])),
             (x.kinds || {})[k] === 'mislead' ? [' ', misleadMark('mislead')] : null])))) });
   return [
-    { key: 'interest', label: 'Interest', title: 'Default order: team\'s Cheating rung against its influencers',
-      sort: r => r.interest.rank, cell: r => h('span', { class: 'small' }, h('strong', null, String(r.interest.rank)), ` ${r.interest.why}`) },
     { key: 'run', label: 'Run', sort: r => r.run,
       cell: r => h('a', { class: 'run-link', href: `#/run/${r.id.split('/').map(enc).join('/')}` },
         breakable(r.run)) },
@@ -148,6 +146,8 @@ function columns(d) {
     ...Object.keys(about.labels).map(label),
     ...d.order.map(influencers),
     ...Object.keys(about.labels).map(influencerLabel),
+    { key: 'interest', label: 'Interest', title: 'Default order: team\'s Cheating rung against its influencers',
+      sort: r => r.interest.rank, cell: r => h('span', { class: 'small' }, h('strong', null, String(r.interest.rank)), ` ${r.interest.why}`) },
     { key: 'col', label: 'Collection', title: 'Folder under runs/', sort: colIx,
       cell: r => h('span', { title: `${collectionOf(r.col).tag}: ${collectionOf(r.col).about}` }, breakable(collectionOf(r.col).label.replaceAll(' ', '\u00a0'))) },
   ];
