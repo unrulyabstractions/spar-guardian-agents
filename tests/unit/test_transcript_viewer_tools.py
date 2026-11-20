@@ -1,13 +1,14 @@
-"""The transcript viewer's tool definitions: each agent's tools as its first model call carried them, a defense's own
-calls left out, and a change of tools between calls flagged. No server, no Docker."""
+"""The transcript viewer's tool definitions: each agent's tools as its first model call sent them to the provider (the
+event's own list only when no request was recorded), a defense's own calls left out, and a change of tools between
+calls flagged. No server, no Docker."""
 from __future__ import annotations
 
 from inspect_ai.event import ModelEvent, SpanBeginEvent
 from inspect_ai.log import EvalDataset, EvalLog, EvalSample, EvalSpec, write_eval_log
-from inspect_ai.model import GenerateConfig, ModelOutput
+from inspect_ai.model import GenerateConfig, ModelCall, ModelOutput
 from inspect_ai.tool import ToolInfo, ToolParam, ToolParams
 
-from src.ui.transcript_viewer import agent_tools
+from src.ui.transcript_viewer import agent_tools, sent_tool
 
 
 def tool(name: str) -> ToolInfo:
@@ -54,3 +55,22 @@ def test_a_change_of_tools_between_calls_is_flagged(tmp_path):
     got = agent_tools(write_log(tmp_path / "x.eval", events))["k7x6z"]
     assert [t["name"] for t in got["tools"]] == ["shell"]
     assert got["same_in_every_call"] is False
+
+
+def test_the_tools_sent_to_the_provider_win_over_the_events_list(tmp_path):
+    sent = {"tools": [{"type": "function", "function": {"name": "shell", "description": "Run it.",
+                                                         "parameters": {"type": "object", "properties": {}}}}]}
+    e = call("a", "shell", "channel_post")
+    e.call = ModelCall(request=sent, response={})
+    got = agent_tools(write_log(tmp_path / "x.eval", [SpanBeginEvent(id="a", name="k7x6z", type="agent"), e]))["k7x6z"]
+    empty = {"type": "object", "properties": {}}
+    assert got["tools"] == [{"name": "shell", "description": "Run it.", "parameters": empty}]
+    assert got["from_request"] is True
+
+
+def test_a_sent_tool_reads_the_chat_responses_and_anthropic_formats():
+    schema = {"type": "object"}
+    want = {"name": "x", "description": "d", "parameters": schema}
+    assert sent_tool({"type": "function", "function": {"name": "x", "description": "d", "parameters": schema}}) == want
+    assert sent_tool({"type": "function", "name": "x", "description": "d", "parameters": schema}) == want
+    assert sent_tool({"name": "x", "description": "d", "input_schema": schema}) == want

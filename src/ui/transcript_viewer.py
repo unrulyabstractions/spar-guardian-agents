@@ -98,10 +98,30 @@ def run_detail(row: dict, run_dir: Path, measured: dict) -> dict:
             "cheatbench_disclosed": judge_labels.CHEATBENCH_DISCLOSED_ACCESS.get(rf.task)}
 
 
+def sent_tool(t: dict) -> dict:
+    """One tool of a provider request as {name, description, parameters}: OpenAI's chat format nests it under
+    "function", the Responses format and Anthropic's do not, and Anthropic names the schema input_schema."""
+    f = t.get("function") if isinstance(t.get("function"), dict) else t
+    return {"name": f.get("name"), "description": f.get("description"),
+            "parameters": f.get("parameters", f.get("input_schema"))}
+
+
+def sent_tools(e) -> list[dict] | None:
+    """The tools a model event's provider request carried (e.call.request), or None when the event recorded no
+    request. The event's own tools list can hold more: the turn rules withhold ORBIT's channel tools from the provider
+    (src/swarm/turn_rules/_turn_state.py CHANNEL_TOOLS), so only the request says what the model received."""
+    request = e.call.request if e.call and isinstance(e.call.request, dict) else None
+    if request is None:
+        return None
+    return [sent_tool(t) for t in request.get("tools") or []]
+
+
 def agent_tools(log_path: Path) -> dict[str, dict]:
-    """Each agent's tool definitions as its model calls carried them beside the messages: {agent: {"tools": [{name,
-    description, parameters}], "tool_choice", "same_in_every_call"}}. The first call's set stands for the agent;
-    same_in_every_call says whether every later call carried the same names. A defense's own calls are left out."""
+    """Each agent's tool definitions as its model calls sent them to the provider beside the messages: {agent:
+    {"tools": [{name, description, parameters}], "tool_choice", "same_in_every_call", "from_request"}}. The first
+    call's set stands for the agent; same_in_every_call says whether every later call sent the same names. A call
+    whose request was not recorded falls back to the event's tools list (from_request false). A defense's own calls
+    are left out."""
     sample = read_eval_log(str(log_path), resolve_attachments=True).samples[0]
     owner = span_owners(sample)
     out: dict[str, dict] = {}
@@ -111,15 +131,18 @@ def agent_tools(log_path: Path) -> dict[str, dict]:
         agent, defense = owner(e.span_id)
         if agent is None or defense is not None:
             continue
-        names = [t.name for t in e.tools or []]
+        sent = sent_tools(e)
+        tools = sent if sent is not None else [
+            {"name": t.name, "description": t.description, "parameters": t.parameters.model_dump(exclude_none=True)}
+            for t in e.tools or []]
+        names = [t["name"] for t in tools]
         if agent in out:
             out[agent]["same_in_every_call"] &= names == out[agent]["_names"]
             continue
         choice = e.tool_choice if isinstance(e.tool_choice, str) or e.tool_choice is None else \
             getattr(e.tool_choice, "name", str(e.tool_choice))
-        out[agent] = {"tools": [{"name": t.name, "description": t.description,
-                                 "parameters": t.parameters.model_dump(exclude_none=True)} for t in e.tools or []],
-                      "tool_choice": choice, "same_in_every_call": True, "_names": names}
+        out[agent] = {"tools": tools, "tool_choice": choice, "same_in_every_call": True,
+                      "from_request": sent is not None, "_names": names}
     for v in out.values():
         del v["_names"]
     return out

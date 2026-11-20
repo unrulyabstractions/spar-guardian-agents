@@ -2039,3 +2039,17 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   folded, names in their own case, check_design opened shows its description and schema. New tests
   tests/unit/test_transcript_viewer_tools.py (2) plus the viewer tests: 181 passed; ruff clean; node --check on both JS files.
 - RESULT: VERIFIED.
+
+## 2026-11-20: Tools box corrected to the tools sent; steps from 1; reasoning above its calls
+- **What.** The earlier Tools box (a6f0a1c) read the model event's tools list, which holds ORBIT's channel_post,
+  channel_read and channel_list; the turn rules withhold those from the provider, so the box showed three tools the
+  agents never received (the user caught it). `agent_tools` now reads the provider request (`call.request`), with the
+  event's list only when no request was recorded. The tools sit in the System box under its text. Steps are numbered by
+  model turn from 1 (the transcript's step ids counted System and User). A turn's reasoning and text sit at the head of
+  its step, above its calls, not inside call 0; each step's header has a button folding all its calls.
+- **How verified.** Requests of binder_minimal_luna4 and flipt_minimal_dsflash_fixed2 read with Inspect: events list 11
+  and 10 tools, requests 8 and 7, no channel tool. All 702 agents of the 201 served runs on 8833: every one from the
+  request, 0 vary, 0 failures, no channel tool among the names. Screenshots of flipt_minimal_dsflash_fixed2 k8m6p
+  viewed: Step 1, System with Text and Tools (7), reasoning above Call 0 and Call 1, "2 calls" folds both; in the page,
+  0 reasoning sections inside calls and 106 at step heads. Tests 183 viewer tests plus 4 tool tests passed; ruff clean.
+- **Result.** VERIFIED. The earlier a6f0a1c entry's tool list was BROKEN (it included the withheld channel tools).

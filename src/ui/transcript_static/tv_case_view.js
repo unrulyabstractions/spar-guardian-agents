@@ -218,8 +218,8 @@ function openSections(box) {
 export function renderCase(t, ctx) {
   const lv = ctx.levels;
   const steps = (t && t.trajectory && t.trajectory.steps) || [];
-  // 1. tool calls in order, with the step's reasoning and text on its first call; the episode in order as model turns
-  // ({turn: true, step, calls, msg: its message when it made no call}) and the messages that feed the next turn ({msg})
+  // 1. tool calls in order (the step's reasoning and text kept on its first call's record); the episode in order as model
+  // turns ({turn: true, step, calls, msg: its message when it made no call}) and the messages that feed the next turn ({msg})
   const calls = [];
   const loose = [];
   const seq = [];
@@ -357,12 +357,32 @@ export function renderCase(t, ctx) {
     if (x.model != null) looseEls.set(x.model, box);
     return box;
   };
+  // The tool definitions every model call sent the provider beside its messages; the model reads them with the system
+  // prompt, so they sit in the System box under its text: one section per tool, folded to its name, with its
+  // description and its parameters' schema as sent.
+  const toolsTag = tl => [plural(tl.tools.length, 'tool'), tl.tool_choice && tl.tool_choice !== 'auto' ? ` · ${tl.tool_choice}` : '',
+    tl.same_in_every_call ? '' : ' · first call'].join('');
+  const toolList = tl => h('div', { class: 'tool-list' }, tl.tools.map(t => {
+    const el = section('tooldef', t.name || '?', null, `${t.description || ''}\n\n${JSON.stringify(t.parameters || {}, null, 2)}`, null);
+    foldSection(el, true);
+    return el;
+  }));
+  const toolsSection = tl => {
+    const el = h('div', { class: ['sec', 'sec-prompt', 'sec-tools'], dataset: { part: 'tools' } },
+      h('button', { type: 'button', class: 'sec-h', 'aria-expanded': 'true', title: 'fold or unfold the tools',
+        onclick: () => foldSection(el, !el.classList.contains('folded')) },
+      h('span', { class: 'sec-chev', 'aria-hidden': 'true' }), h('span', { class: 'sec-name' }, 'Tools'), h('span', { class: 'sec-size' }, toolsTag(tl))),
+      h('div', { class: 'sec-b' }, toolList(tl)));
+    return el;
+  };
+  let toolsDue = !!(ctx.tools && ctx.tools.tools && ctx.tools.tools.length);
+  const toolsHere = () => { if (!toolsDue) return null; toolsDue = false; return toolsSection(ctx.tools); };
   // A message box folds to its header as a call does; its text is a section of its own.
   const looseCard = x => h('div', { class: 'call cs-msg' },
     h('div', { class: 'ch' }, foldButton('call'), h('span', { class: 'cn', title: x.step != null ? `step ${x.step}` : null },
       x.src === 'agent' ? 'Message' : x.src === 'user' ? 'User' : 'System'), lv ? headChips(x.before - 1, false) : null),
     h('div', { class: 'cb' }, judgedLines(x.model), x.reasoning ? reasoningSection(x.reasoning, markOf(x.model)) : null,
-      x.text ? (x.src === 'agent' ? textSection(x.text) : promptSection(x.text)) : null));
+      x.text ? (x.src === 'agent' ? textSection(x.text) : promptSection(x.text)) : null, x.src === 'system' ? toolsHere() : null));
   const callCard = c => {
     const k = c.k;
     const labs = own.get(k) || [];
@@ -370,9 +390,7 @@ export function renderCase(t, ctx) {
       dataset: { call: String(k) }, style: labs.length ? `--step:${RAMP[labs[0].ladder][labs[0].index]}` : null },
       h('div', { class: 'ch' }, foldButton('call'), h('span', { class: 'cn' }, `Call ${k}`),
         lv ? headChips(k, true) : null, h('span', { class: 'mz' }, c.tc.function_name || '')),
-      h('div', { class: 'cb' }, c.model != null ? judgedLines(c.model) : null,
-        c.reasoning ? reasoningSection(c.reasoning, c.model != null ? markOf(c.model) : null) : null,
-        c.text && c.text.trim() ? textSection(c.text) : null,
+      h('div', { class: 'cb' },
         section('call', 'Tool call', h('span', { class: 'sec-tool' }, c.tc.function_name || '?'), argText(c.tc.arguments), null),
         c.res.map(r => {
           const out = resultText(r);
@@ -383,38 +401,45 @@ export function renderCase(t, ctx) {
   };
   // A step encloses one model turn: the messages that fed it (the System and User prompts in the first), then its calls
   // or its message. A step and each box in it fold to their header.
-  // The tool definitions every model call carried beside its messages: a box of their own at the head of the first step,
-  // one section per tool, folded to its name, with its description and its parameters' schema as sent.
-  const toolsCard = tl => h('div', { class: 'call cs-msg cs-tools' },
-    h('div', { class: 'ch' }, foldButton('call'), h('span', { class: 'cn' }, 'Tools'),
-      h('span', { class: 'mz' }, [plural(tl.tools.length, 'tool'), tl.tool_choice && tl.tool_choice !== 'auto' ? ` · ${tl.tool_choice}` : '',
-        tl.same_in_every_call ? '' : ' · first call'].join(''))),
-    h('div', { class: 'cb' }, tl.tools.map(t => {
-      const el = section('tooldef', t.name, null, `${t.description || ''}\n\n${JSON.stringify(t.parameters || {}, null, 2)}`, null);
-      foldSection(el, true);
-      return el;
-    })));
-  let toolsDue = !!(ctx.tools && ctx.tools.tools && ctx.tools.tools.length);
-  const stepBody = (step, label) => {
+  // A step with calls has a button that folds or unfolds all its calls at once.
+  const foldCalls = n => h('button', { type: 'button', class: 'step-calls', 'aria-expanded': 'true', title: 'fold or unfold every call of this step',
+    onclick: e => {
+      const btn = e.currentTarget;
+      const on = btn.getAttribute('aria-expanded') === 'true';
+      for (const c of btn.closest('.step-box').querySelectorAll(':scope > .step-b > .call[data-call]')) {
+        c.classList.toggle('folded', on);
+        const b = c.querySelector(':scope > .ch > .box-fold');
+        if (b) b.setAttribute('aria-expanded', String(!on));
+      }
+      btn.setAttribute('aria-expanded', String(!on));
+    } }, h('span', { class: 'sec-chev', 'aria-hidden': 'true' }), plural(n, 'call'));
+  // The model turn's own reasoning, text and the judge labels located in it: above its calls, outside any one call.
+  const turnHead = c => h('div', { class: 'step-think' }, judgedLines(c.model),
+    c.reasoning ? reasoningSection(c.reasoning, markOf(c.model)) : null, c.text && c.text.trim() ? textSection(c.text) : null);
+  const stepBody = (step, label, nCalls) => {
     const box = h('div', { class: 'step-box', dataset: { step: String(step != null ? step : '') } },
-      h('div', { class: 'step-h' }, foldButton('step'), h('span', { class: 'step-n' }, label)),
+      h('div', { class: 'step-h' }, foldButton('step'), h('span', { class: 'step-n' }, label), nCalls ? foldCalls(nCalls) : null),
       h('div', { class: 'step-b' }));
     right.appendChild(box);
-    if (toolsDue) { box.lastChild.appendChild(toolsCard(ctx.tools)); toolsDue = false; }
     return box.lastChild;
   };
-  let fed = [];
+  // Steps are numbered by model turn from 1; the transcript's own step ids count the System and User messages too.
+  let fed = [], turnNo = 0;
   for (const it of seq) {
     if (!it.turn) { fed.push(it.msg); continue; }
-    const body = stepBody(it.step, it.step != null ? `Step ${it.step}` : it.calls.length ? `Call ${it.calls[0].k}` : 'Message');
+    const body = stepBody(it.step, `Step ${++turnNo}`, it.calls.length);
     for (const x of fed) body.appendChild(looseBlock(x));
+    // No System message in the first step: the tools head it in a box of their own.
+    if (toolsDue) body.prepend(h('div', { class: 'call cs-msg' }, h('div', { class: 'ch' }, foldButton('call'), h('span', { class: 'cn' }, 'Tools')),
+      h('div', { class: 'cb' }, toolsHere())));
     fed = [];
     if (it.msg) body.appendChild(looseBlock(it.msg));
+    if (it.calls.length && it.calls[0].model != null) body.appendChild(turnHead(it.calls[0]));
     for (const c of it.calls) body.appendChild(callCard(c));
   }
   // Messages after the last turn: a step of their own.
   if (fed.length) {
-    const body = stepBody(fed[0].step, fed[0].step != null ? `Step ${fed[0].step}` : 'Message');
+    const body = stepBody(fed[0].step, 'After the last step');
     for (const x of fed) body.appendChild(looseBlock(x));
   }
 
@@ -743,7 +768,7 @@ export function renderCase(t, ctx) {
       const key = [...off].sort().join(',');
       if (key === foldedParts) return;
       foldedParts = key;
-      for (const s of right.querySelectorAll('.sec:not(.sec-tooldef)')) foldSection(s, off.has(s.dataset.part));
+      for (const s of right.querySelectorAll('.sec:not(.sec-tooldef):not(.sec-tools)')) foldSection(s, off.has(s.dataset.part));
       for (const b of right.querySelectorAll('.step-box')) b.classList.toggle('folded', off.has('step'));
     },
     findCall: k => show(k),
