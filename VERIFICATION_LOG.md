@@ -2023,3 +2023,4 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 ## 2026-11-20, the strip's panel fills the window's height
 - **What.** The panel is the window's height under the bar, a column with 28 px gaps: the ladder chips at the top, the strip (rows up to 18 px, so a short episode fills the space; STRIP_CHROME 400 reserved for chips, gaps and legend), the legend at the bottom.
 - **How verified.** On 8833, poem_minimal_regulated_luna1 at 1288x1000 and 1288x900: screenshots viewed, chips at top, strip filling the middle, the whole legend at the bottom with spaced rows, nothing cut. Viewer, board and summary tests 106 passed.
+- **Then.** The legend at the window's bottom was wrong on a tall window (the user's screenshot): the panel is as tall as its content, the chips, the strip and the legend each 32 px apart; the chip pairs 22 px apart. Screenshots at 1300x1650 and 1288x900 viewed (legend just under the strip in both). Tests 96 passed.

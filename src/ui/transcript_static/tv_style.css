@@ -578,12 +578,14 @@ table.sum-table.is-detailed td.sum-cell { min-width: 220px; }
 .case .cs-stepbtn { width: 22px; height: 20px; padding: 0; border: 1px solid var(--border); border-radius: 4px; background: var(--panel);
   color: var(--text); font-size: 10px; line-height: 1; cursor: pointer; }
 .case .cs-stepbtn:hover { border-color: var(--accent); color: var(--accent); }
-/* The strip's panel fills the window's height: the ladder chips at the top, the strip under them with room, the
-   legend at the bottom; clear gaps between the three. */
+/* The strip's panel: the ladder chips, the strip and the legend, each 32 px from the next. */
 @media (min-width:1000px) and (min-height:560px) {
-  .rp-stage .case .left { display: flex; flex-direction: column; gap: 28px; height: calc(100vh - var(--under) - 12px);
-    padding: 18px 16px; box-sizing: border-box; }
+  .rp-stage .case .left { display: flex; flex-direction: column; gap: 32px; padding: 20px 18px; box-sizing: border-box; }
   .rp-stage .case .left > .cs-ladders { margin: 0; }
   .rp-stage .case .left > .cs-strip { flex: none; }
-  .rp-stage .case .left > .cs-legend { margin-top: auto; }
+  .rp-stage .case .left > .cs-legend { margin-top: 0; }
 }
+/* The ladder chips: each letter close to its chip, clear room between the three pairs. */
+.case .cs-ladders { gap: 10px 22px; }
+.case .cs-ladder { display: inline-flex; align-items: center; gap: 5px; }
+.case .cs-ladder-mark { font-weight: 700; font-size: 11px; }
