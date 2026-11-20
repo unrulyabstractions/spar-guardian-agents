@@ -2127,3 +2127,9 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   flipt_minimal_dsflash_fixed2 k8m6p), each the expected top worker. Full unit suite 3178 passed before the default-tab
   change; viewer tests after it passed.
 - **Result.** VERIFIED.
+
+## 2026-11-20: Board and Details back in the bar's top-right corner
+- **What.** Board and Details sit at the right end of the bar's first row; the agent tabs open the second row.
+- **How verified.** Bar of flipt_minimal_regulated_dsflash_sonnet_ambiguous_fill1 on 8833 cropped and viewed: Board
+  and Details top right, agent tabs left on row 2, toggles right on row 2. Viewer tests passed.
+- **Result.** VERIFIED.

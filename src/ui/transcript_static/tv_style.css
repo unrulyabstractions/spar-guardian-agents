@@ -625,3 +625,7 @@ table.sum-table.is-detailed td.sum-cell { min-width: 220px; }
 .rp-bar { flex-direction: column; align-items: stretch; flex-wrap: nowrap; }
 .rp-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; }
 .rp-row .rp-right { margin-left: auto; }
+/* Board and Details: the top row's right corner, with no rule before them there. */
+.rp-row .rp-view-tabs { margin-left: auto; }
+.rp-view-tabs .rp-tab-view::before { content: none; }
+.rp-view-tabs .rp-tab-view { margin-left: 0; }

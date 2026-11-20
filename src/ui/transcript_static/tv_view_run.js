@@ -390,13 +390,17 @@ export async function viewRun(id, q, view) {
   const recordBtn = h('button', { type: 'button', class: 'rp-dbtn', 'aria-pressed': 'false', title: 'the run\'s labels, settings and records',
     onclick: () => selectTab(current === 'record' && shown ? shown : 'record').catch(() => {}) }, 'Run record');
   // Two rows: the run and who ran it; under it the tabs, with the fold toggles and the run record's button at the right.
+  // Board and Details sit in the top row's right corner; the agents' tabs open the second row.
+  const agentTabs = [...tabs].filter(([k]) => !views.has(k)).map(([, b]) => b);
+  const viewTabs = [...tabs].filter(([k]) => views.has(k)).map(([, b]) => b);
   const bar = h('div', { class: 'rp-bar' },
     h('div', { class: 'rp-row' },
       h('a', { class: 'rp-back', href: '#/', title: 'all runs' }, '←'),
       h('b', { class: 'rp-run' }, row.run), whoChips(row),
-      cheating.alarm ? alarmBadge(cheating.alarm) : null),
+      cheating.alarm ? alarmBadge(cheating.alarm) : null,
+      viewTabs.length ? h('span', { class: ['rp-tabs', 'rp-view-tabs'] }, viewTabs) : null),
     h('div', { class: 'rp-row' },
-      h('span', { class: 'rp-tabs' }, [...tabs.values()]),
+      h('span', { class: 'rp-tabs' }, agentTabs),
       h('span', { class: 'rp-right' }, toggles, zoomBtns, recordBtn)));
 
   view.mounted(() => {
