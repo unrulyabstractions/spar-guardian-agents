@@ -536,6 +536,16 @@ export function renderCase(t, ctx) {
   }
   // The steps scroll in their own pane (tv_style.css), or with the page in a narrow window's one column.
   const paned = () => getComputedStyle(right).overflowY !== 'visible';
+  // A wheel over the strip's pane scrolls the steps, unless the strip itself has more to scroll that way: the steps
+  // move wherever the pointer is.
+  left.addEventListener('wheel', e => {
+    if (!paned() || e.ctrlKey) return;
+    const dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? right.clientHeight : 1);
+    const leftCan = dy > 0 ? left.scrollTop + left.clientHeight < left.scrollHeight - 1 : left.scrollTop > 0;
+    if (leftCan || !dy) return;
+    e.preventDefault();
+    right.scrollTop += dy;
+  }, { passive: false });
   // box at the top of the steps' pane, or of the page under the run page's bar.
   function toTop(box, behavior) {
     if (!paned()) {

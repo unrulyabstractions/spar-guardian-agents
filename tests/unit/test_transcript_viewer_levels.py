@@ -1130,7 +1130,7 @@ def test_the_run_page_is_two_panes_with_a_slider_and_a_step_holds_its_messages()
     run = (STATIC / "tv_view_run.js").read_text()
     assert "h('details', { class: 'rp-details' }" not in run and "place(key, record)" in run
     css = (STATIC / "tv_style.css").read_text()
-    assert "@media (min-width: 701px) {\n  .page.rp-page { position: fixed;" in css
+    assert "@media (min-width: 1000px) and (min-height: 560px) {\n  .page.rp-page { position: fixed;" in css
     assert ".rp-stage .case .right { overflow-y: auto;" in css and ".case .cs-slider {" in css
 
 

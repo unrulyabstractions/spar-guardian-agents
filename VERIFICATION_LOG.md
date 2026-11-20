@@ -1998,3 +1998,7 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 ## 2026-11-20, zoomed-in windows get one column and page scroll
 - **What.** The two fixed panes only from 1000 x 560 CSS px; a smaller or zoomed-in window gets one column and the page scrolls (the user: "zoomin gets it locked").
 - **How verified.** On 8833, binder_minimal_luna4: at 736x403 (175% zoom of 1288x706) the page scrolls (scrollY 2500, document 24369 px) and the steps use the full width, screenshot viewed; at 1288x706 the two panes stay (window scroll 0, stage hidden overflow). Viewer tests 59 passed.
+
+## 2026-11-20, the wheel scrolls the steps wherever the pointer is
+- **What.** A wheel over the strip's pane scrolls the steps unless the strip itself has more to scroll; the test pin for the two-pane breakpoint follows f7a89f2 (that commit went out with this one test failing).
+- **How verified.** On 8833 at 1288x706, real CDP mouseWheel events (5 x 400): over the steps the pane scrolled 0 -> 2000, over the strip panel now 2000 -> 4000 (before: no movement); at 736x403 the page scrolls under either. Viewer, board and summary tests 106 passed.
