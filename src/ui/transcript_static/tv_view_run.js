@@ -273,21 +273,29 @@ export async function viewRun(id, q, view) {
   // ---- top bar: run, arm, agent tabs, the fold toggles, the run record's toggle; the stage below holds the selected
   // tab. The parts folded on every step (?fold=calls,system,user,reasoning; none for nothing; without it DEFAULT_FOLDS)
   // come from the hash and go back to it; an agent's tab takes them when shown.
-  // The tab a run opens on: the worker highest on Cheating, then on Coordination, then the first listed.
-  const rankOf = (a, L) => (((d.levels && d.levels.agents && d.levels.agents[a.agent]) || {})[L] || {}).index || 0;
-  const firstAgent = (d.agents.filter(a => a.role === 'worker' && a.folder)
-    .map((a, i) => ({ a, key: [-rankOf(a, 'cheating'), -rankOf(a, 'coordination'), i] }))
-    .sort((x, y) => x.key[0] - y.key[0] || x.key[1] - y.key[1] || x.key[2] - y.key[2])[0] || {}).a?.agent
-    || (d.agents.find(a => a.folder) || {}).agent;
+  // Agents ordered most interesting first: highest on Cheating, then Coordination, then Collusion, then as listed. A
+  // run opens on the first worker of that order with a transcript.
+  const cellOf = (a, L) => (((d.levels && d.levels.agents && d.levels.agents[a.agent]) || {})[L] || {});
+  const ranked = list => list.map((a, i) => ({ a, key: [...['cheating', 'coordination', 'collusion'].map(L => -(cellOf(a, L).index || 0)), i] }))
+    .sort((x, y) => x.key.reduce((r, v, j) => r || v - y.key[j], 0)).map(x => x.a);
+  const workers = ranked(d.agents.filter(a => a.role === 'worker'));
+  const influencers = ranked(d.agents.filter(a => a.role !== 'worker'));
+  const firstAgent = ((workers.find(a => a.folder) || d.agents.find(a => a.folder)) || {}).agent;
   const folded = new Set(q.has('fold') ? q.get('fold').split(',').filter(x => PARTS.some(([k]) => k === x)) : DEFAULT_FOLDS);
   const stage = h('div', { class: 'rp-stage' });
   const tabs = new Map();
   let current = null;
-  // A tab names the agent and its role, the role alone (worker, regulator, disregulator).
-  for (const a of d.agents) {
-    tabs.set(a.agent, h('button', { type: 'button', class: 'rp-tab', onclick: () => selectTab(a.agent).catch(() => {}) },
-      a.agent, h('span', { class: 'rp-role' }, ' ' + a.role)));
-  }
+  // Two selects, Workers and Influencers, each in that order; an option names the agent, an influencer's role, and its
+  // Cheating level. A select shows its group's name when the page shows none of its agents, so any choice opens one.
+  const option = a => h('option', { value: a.agent },
+    [a.agent, a.role !== 'worker' ? a.role : null, cellOf(a, 'cheating').level].filter(Boolean).join(' · '));
+  const picker = (name, list) => {
+    const sel = h('select', { class: 'rp-pick', title: name, onchange: () => sel.value && selectTab(sel.value).catch(() => {}) },
+      h('option', { value: '', disabled: true, hidden: true }, name), list.map(option));
+    sel.value = '';
+    return sel;
+  };
+  const pickers = [picker('Workers', workers), influencers.length ? picker('Influencers', influencers) : null].filter(Boolean);
   const detailsView = () => ({ el: h('div', { class: 'rp-team' },
     levelsPanel(d.levels, roles, row.task_name, { cheatbench, row, open: openLink }),
     cheatingPanel(d.levels, roles, { evidence: evidenceText, cheatbench, row }),
@@ -335,6 +343,11 @@ export async function viewRun(id, q, view) {
   let shown = null;   // the tab the run record's button goes back to
   async function selectTab(key) {
     for (const [k, b] of tabs) b.classList.toggle('on', k === key);
+    for (const sel of pickers) {
+      const mine = [...sel.options].some(o => o.value && o.value === key);
+      sel.value = mine ? key : '';
+      sel.classList.toggle('on', mine);
+    }
     recordBtn.setAttribute('aria-pressed', String(key === 'record'));
     toggles.hidden = views.has(key) || key === 'record';   // the fold toggles act on an agent's steps only
     if (key !== 'record') shown = key;
@@ -390,8 +403,7 @@ export async function viewRun(id, q, view) {
   const recordBtn = h('button', { type: 'button', class: 'rp-dbtn', 'aria-pressed': 'false', title: 'the run\'s labels, settings and records',
     onclick: () => selectTab(current === 'record' && shown ? shown : 'record').catch(() => {}) }, 'Run record');
   // Two rows: the run and who ran it; under it the tabs, with the fold toggles and the run record's button at the right.
-  // Board and Details sit in the top row's right corner; the agents' tabs open the second row.
-  const agentTabs = [...tabs].filter(([k]) => !views.has(k)).map(([, b]) => b);
+  // Board and Details sit in the top row's right corner; the agents' selects open the second row.
   const viewTabs = [...tabs].filter(([k]) => views.has(k)).map(([, b]) => b);
   const bar = h('div', { class: 'rp-bar' },
     h('div', { class: 'rp-row' },
@@ -400,7 +412,7 @@ export async function viewRun(id, q, view) {
       cheating.alarm ? alarmBadge(cheating.alarm) : null,
       viewTabs.length ? h('span', { class: ['rp-tabs', 'rp-view-tabs'] }, viewTabs) : null),
     h('div', { class: 'rp-row' },
-      h('span', { class: 'rp-tabs' }, agentTabs),
+      h('span', { class: 'rp-picks' }, pickers.flatMap((sel, i) => (i ? [h('span', { class: 'rp-sep' }), sel] : [sel]))),
       h('span', { class: 'rp-right' }, toggles, zoomBtns, recordBtn)));
 
   view.mounted(() => {

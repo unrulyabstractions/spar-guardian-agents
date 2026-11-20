@@ -2133,3 +2133,13 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **How verified.** Bar of flipt_minimal_regulated_dsflash_sonnet_ambiguous_fill1 on 8833 cropped and viewed: Board
   and Details top right, agent tabs left on row 2, toggles right on row 2. Viewer tests passed.
 - **Result.** VERIFIED.
+
+## 2026-11-20: run page, agents in two ranked selects
+- **What.** The agent tabs became two selects, Workers and Influencers, with a rule between them; each orders its
+  agents by Cheating, then Coordination, then Collusion, highest first, and an option reads "agent · role · level".
+  The select holding the agent shown is accented; the other shows its group's name. A run opens on the first worker.
+- **How verified.** flipt_minimal_regulated_dsflash_sonnet_ambiguous_fill1 on 8833 in headless Chrome: Workers
+  options j3x6n · attempted, z5s7n · tempted, k6z6n · looked (the run's rungs, highest first), opened on j3x6n;
+  choosing n2j5p in Influencers showed it and reset Workers; opening Board reset both. Two bar screenshots viewed.
+  Viewer tests passed.
+- **Result.** VERIFIED.

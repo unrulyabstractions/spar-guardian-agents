@@ -629,3 +629,10 @@ table.sum-table.is-detailed td.sum-cell { min-width: 220px; }
 .rp-row .rp-view-tabs { margin-left: auto; }
 .rp-view-tabs .rp-tab-view::before { content: none; }
 .rp-view-tabs .rp-tab-view { margin-left: 0; }
+/* The agents' two selects, Workers and Influencers, a rule between them; the one holding the agent shown is accented. */
+.rp-picks { display: inline-flex; align-items: center; gap: 14px; }
+.rp-pick { font: 500 12px var(--sans); padding: 4px 8px; border: 1px solid var(--border); border-radius: 5px;
+  background: var(--panel); color: var(--text); cursor: pointer; max-width: 320px; }
+.rp-pick.on { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+.rp-pick:not(.on) { color: var(--muted); }
+.rp-sep { align-self: stretch; border-left: 1px solid var(--border-strong, var(--border)); margin: 2px 0; }
