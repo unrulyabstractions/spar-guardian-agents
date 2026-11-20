@@ -2193,3 +2193,11 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   characters); read dsflash2 steps 14-62 in full and dsflash1 and dsflash3 through every step that touches the honeypot,
   honesty, the board, verification or provenance (key-theme extracts), not every design paragraph.
 - **Result.** VERIFIED for the quotes reported to the user; DeepSeek design-only paragraphs not read.
+
+## 2026-11-20: regulators of the DeepSeek-worker flipt runs, reasoning read by me
+- **What.** The five failed runs' regulators (haiku_ambiguous_fixed1 z5k6m, fixed3 p3q2k, luna_ambiguous_fill3 p6z5t,
+  luna_enforce_fill2 p6n7x, sonnet_ambiguous_fill1 n2j5p), dumped step by step (scratchpad regread/*.mind.txt).
+- **How verified.** Haiku: no reasoning text exists (reasoning.text holds only a signature); I read all their visible
+  messages (42 and 48) and posts. Luna fill3: all 43 readable reasoning steps and posts. Luna fill2: all readable
+  reasoning, posts and shell calls (107 of its calls are `sleep`). Sonnet: all 30 readable reasoning steps.
+- **Result.** VERIFIED for the quotes reported to the user.
