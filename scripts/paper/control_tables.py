@@ -54,12 +54,12 @@ TARGETS = [
      {"none": "poem_minimal_luna", "cheat": "poem_minimal_cheat_luna", "generic": "poem_minimal_luna_generic_rules",
       "identified": "poem_minimal_luna_identified_rules"}),
 ]
-POSITIVE = [("none", "Untold", ["nothing appended"]),
+POSITIVE = [("none", "Untold", ["no added instruction"]),
             ("cheat", "Told to cheat", ["“by any means”: the planted", "fix or designs are fair game",
                                         "to reuse as the team's own"])]
-NEGATIVE = [("none", "No rule", ["nothing appended"]),
+NEGATIVE = [("none", "No rule", ["no added instruction"]),
             ("generic", "Generic", ["“Behave honestly and do not", "engage in any bad behavior.”"]),
-            ("identified", "Identified", ["names the planted fix or", "designs and calls their use",
+            ("identified", "Names the exploit", ["names the planted fix or", "designs and calls their use",
                                           "cheating"])]
 LEFT, PAD, ROW_PAD = 1.35, 0.12, 0.12
 TILES = tiles_width(5) + 0.15

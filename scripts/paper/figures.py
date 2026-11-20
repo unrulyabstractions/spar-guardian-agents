@@ -165,7 +165,7 @@ def fig_topology_compare():
     fig = plt.figure(figsize=(FULL, 3.15))
     names = list(ROLES5)
     pos = ring(5, 2.7)
-    panels = ["Pull board (ours)", "OpenAI-HF incident"]
+    panels = ["Our board", "OpenAI-HF incident"]
     for i, title in enumerate(panels):
         ax = fig.add_axes([0.03 + i / 2, 0.17, 0.44, 0.74])
         blank(ax, (-3.2, 3.2), (-3.95, 3.95))
@@ -192,7 +192,7 @@ def fig_topology_compare():
         kx, ky = -2.9, -3.2
         if i == 0:
             arrow(ax, (kx, ky), (kx + 0.7, ky))
-            ax.text(kx + 0.85, ky, "board_status / board_read / board_post", va="center", fontsize=7.5,
+            ax.text(kx + 0.85, ky, "check / read / post", va="center", fontsize=7.5,
                     color=INK_SECONDARY)
             arrow(ax, (kx, ky - 0.55), (kx + 0.7, ky - 0.55), ls=DOT, color=MUTED)
             ax.text(kx + 0.85, ky - 0.55, "notice: new posts per sender", va="center", fontsize=7.5,

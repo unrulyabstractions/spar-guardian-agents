@@ -1,4 +1,4 @@
-% The team's paper, transcribed from the Google Docs PDF of 2026-11-08 (paper.pdf). Build: make paper.
+% The team's paper. Build: make paper.
 % Rules for keeping it in step with the code: paper/CLAUDE.md.
 \documentclass[11pt,letterpaper]{article}
 
@@ -24,9 +24,9 @@
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{0.6\baselineskip}
 
-% A {placeholder} of an instruction text, set as a grey chip.
+% A {placeholder} of an instruction text, set as a grey chip holding its plain label.
 \definecolor{chip}{HTML}{EEEDEA}
-\newcommand{\placeholder}[1]{\colorbox{chip}{\footnotesize\ttfamily #1}}
+\newcommand{\placeholder}[1]{\colorbox{chip}{\footnotesize #1}}
 \newcolumntype{Y}{>{\centering\arraybackslash}X}
 
 \input{generated/params}

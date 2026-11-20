@@ -1,11 +1,12 @@
 """The LaTeX paper in paper/ keeps step with the code: each file under paper/generated/ equals what
 scripts/paper/paper_sources.py renders from the code now, every figure the paper includes is named in FIGURES and
-exists, the level tables carry every level the instruction ladders define, the rung tables every rung of the Cheating
+exists, the level tables carry the levels the study's runs used, the rung tables every rung of the Cheating
 and Collusion ladders, and no section names a rung or level of the ladders the three replaced."""
 from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 
 import pytest
 import yaml
@@ -41,12 +42,29 @@ def test_every_generated_file_is_input_by_the_paper():
 
 
 @pytest.mark.parametrize("ladder", ["regulator", "disregulator"])
-def test_level_tables_hold_every_level(ladder):
+def test_level_tables_hold_only_the_levels_the_study_used(ladder):
+    """A level table prints the levels the multi-domain study's runs used and no other level of the ladder."""
     spec = yaml.safe_load(paper_sources.LEVELS_YAML.read_text())[ladder]
     tex = paper_sources.levels_tex(ladder)
     for level in spec["order"]:
-        if spec[level].get("text") is not None:
-            assert rf"\textbf{{{level}}}" in tex
+        assert (rf"\textbf{{{level}}}" in tex) == (level in paper_sources.STUDY_LEVELS[ladder]), level
+
+
+def test_study_levels_are_the_levels_of_the_valid_runs():
+    """STUDY_LEVELS equals the levels the study's valid runs carry, and a run of any other level stops the build."""
+    if not paper_sources.STUDY_INDEX.exists():
+        pytest.skip("the run index is not on this machine")
+    from scripts.paper.study_ladders import valid_runs
+    runs = [r.meta for r in valid_runs()]
+    paper_sources.check_study_levels(runs)
+    with pytest.raises(SystemExit):
+        paper_sources.check_study_levels([*runs, {"regulator_level": "pressure", "disregulator_level": None}])
+
+
+def test_regulator_box_holds_only_the_common_text():
+    """The prompt box prints the text every regulator gets after its level, and no level of the ladder."""
+    tex = paper_sources.regulator_suffix_tex()
+    assert "Level" not in tex and "[COMMON]" not in tex
 
 
 def test_rung_tables_hold_every_rung_and_clause():
@@ -73,13 +91,14 @@ def test_no_section_names_a_retired_ladder():
         assert not found, f"{tex.name} names a retired ladder: {found}"
 
 
-RETIRED_LABELS = re.compile(r"(?<!retired: )\bscheming\b|awareness label|\\AwarenessMeans|StudySchemingJudge|"
-                            r"StudyLabelsJudge\b|table_scheming_by_task|table_awareness_by_task", re.IGNORECASE)
+RETIRED_LABELS = re.compile(r"\bscheming\b|awareness label|\\AwarenessMeans|StudySchemingJudge|"
+                            r"StudyLabelsJudge\b|table_scheming_by_task|table_awareness_by_task|reliability_retired",
+                            re.IGNORECASE)
 
 
 def test_no_section_names_scheming_or_the_awareness_label():
-    """Scheming and the yes or no awareness label are retired (the user, 2026-11-19). Only the reliability table, which
-    is generated, keeps their readings, and one sentence names them as retired."""
+    """Scheming and the yes or no awareness label are retired (the user, 2026-11-19), and the paper neither names them
+    nor inputs a table of their readings."""
     for tex in SECTIONS.glob("*.tex"):
         found = RETIRED_LABELS.findall(tex.read_text())
         assert not found, f"{tex.name} names a retired label: {found}"
@@ -87,7 +106,9 @@ def test_no_section_names_scheming_or_the_awareness_label():
 
 def test_escape_covers_latex_specials():
     assert paper_sources.escape("50% of a_b & {c} #1 $2") == r"50\% of a\_b \& \{c\} \#1 \$2"
-    assert paper_sources.with_chips("use {prior_work} now") == r"use \placeholder{\{prior\_work\}} now"
+    assert paper_sources.with_chips("use {prior_work} now") == r"use \placeholder{[planted work]} now"
+    with pytest.raises(SystemExit):
+        paper_sources.with_chips("use {no_such_slot} now")
 
 
 @pytest.mark.parametrize("module", ["control_tables", "protein_regulator_table", "swe_regulator_table",
@@ -158,27 +179,27 @@ def test_every_figure_has_a_script_in_the_repository():
         assert fig.source.startswith("tmp/"), f"{name}: its source must be a script's output under tmp/"
 
 
-def test_reliability_table_holds_every_row_of_the_readings():
-    """The paper's tables of independent checks render measure_readings.yaml: the current readings in one table, the
-    readings of the retired yes or no labels in a second, each block marked retired. Every measure by its name, every
-    pass by its label, and one table row per reading besides one heading row per measure and pass."""
+def test_reliability_table_holds_every_current_row_of_the_readings():
+    """The paper's table of independent checks renders the rows of measure_readings.yaml whose pass is not retired: a
+    block per measure headed by its name alone, and one table row per reading. No retired row, no pass label and no
+    word of the readings' history reaches the paper (the user, 2026-11-19: "LEAK NO SHIT LIKE THIS")."""
     r = measure_readings.readings()
-    for retired in (False, True):
-        tex = paper_sources.reliability_tex(retired=retired)
-        assert "src/measures/measure_readings.yaml" in tex
-        rows = [row for row in r["rows"] if row["retired"] is retired]
-        for row in rows:
-            name = r["measures"][row["measure"]] + (" (retired yes or no label)" if retired else "")
-            assert paper_sources.escape(name) in tex, row
-            assert paper_sources.escape(r["passes"][row["pass"]]["label"]) in tex, row
-        body = tex.split("\\midrule")[1].split("\\bottomrule")[0]
-        blocks = {(row["measure"], row["pass"]) for row in rows}
-        assert body.count("\\\\") == len(rows) + len(blocks)
-        assert body.count("\\multicolumn") == len(blocks)
-        assert ("retired yes or no label" in tex) is retired
-    current = paper_sources.reliability_tex()
-    for measure in ("Disclosure", "Manipulation", "Excerpt"):
-        assert rf"\textbf{{{measure}}}, judge, scored labels (current)" in current
+    tex = paper_sources.reliability_tex()
+    rows = [row for row in r["rows"] if not row["retired"]]
+    measures = {row["measure"] for row in rows}
+    for measure in measures:
+        assert rf"\multicolumn{{7}}{{@{{}}l}}{{\textbf{{{r['measures'][measure]}}}}} \\" in tex, measure
+    body = tex.split("\\midrule")[1].split("\\bottomrule")[0]
+    assert body.count("\\\\") == len(rows) + len(measures)
+    assert body.count("\\multicolumn") == len(measures)
+    for row in r["rows"]:
+        if row["retired"] and row["measure"] not in measures:
+            assert r["measures"][row["measure"]] not in body, row
+    for p in r["passes"].values():
+        assert paper_sources.escape(p["label"]) not in body, p["label"]
+    assert not re.search(r"retired|current|before its fixes|first pass|second pass", body, re.IGNORECASE)
+    assert not (paper_sources.GENERATED / "reliability_retired.tex").exists()
+    assert "reliability_retired" not in Path(paper_sources.__file__).read_text()
 
 
 def test_score_anchors_table_holds_every_anchor():

@@ -29,12 +29,6 @@ OUT = ROOT / "tmp" / "figures" / "paper" / "fig2_roles_access.png"
 STAGE2 = ROOT / "submodules" / "lucy" / "runs" / "s2_swe"
 ROLES = ("worker", "regulator", "disregulator")
 
-LEFT_NOTE = ("R oversees and hands in nothing. D is told to get\n"
-             "the result by any means. Neither holds a piece.")
-RIGHT_NOTE = ("Stage 1: seat 3 works and can push, but cannot submit.\n"
-              "Stage 2: seat 3 only oversees. Control: a third worker.")
-
-
 def one(values: set, what: str):
     """The single value every run agrees on, or an error naming the disagreement."""
     if len(values) != 1:
@@ -105,11 +99,11 @@ def pieces(items) -> str:
     return ("piece " if len(items) == 1 else "pieces ") + " + ".join(str(i) for i in items)
 
 
-def panel(fig, rect, title, seats, outside, submit, note):
-    """One study: the board, the seats in boxes with what they hold, the agents outside the boxes, the submitted
-    work and the note. seats is [(label, role, text, muted)], outside [(label, role, side)]."""
+def panel(fig, rect, title, seats, outside, submit):
+    """One study: the board, the seats in boxes with what they hold, the agents outside the boxes and the submitted
+    work. seats is [(label, role, text, muted)], outside [(label, role, side)]."""
     ax = fig.add_axes(rect)
-    blank(ax, (-3.3, 3.3), (-3.45, 3.05))
+    blank(ax, (-3.3, 3.3), (-2.55, 3.05))
     ax.text(0, 2.95, title, ha="center", va="top", fontsize=8.5, weight="bold")
     bw, bh, by = 1.6, 0.55, 2.15
     box(ax, -bw / 2, by - bh / 2, bw, bh, "board", fc=PLANE, ec=INK_SECONDARY, fs=7.5)
@@ -131,24 +125,22 @@ def panel(fig, rect, title, seats, outside, submit, note):
         if submit[role]:
             diamond(ax, x + 0.3, ry + 0.3)
     box(ax, -1.3, -2.38, 2.6, 0.62, "submitted work", fc=PLANE, ec=INK_SECONDARY, fs=7)
-    ax.text(0, -2.68, note, ha="center", va="top", fontsize=7, style="italic", color=INK_SECONDARY,
-            linespacing=1.3)
     return ax
 
 
 def draw(md: dict, dd: dict) -> Figure:
-    fig = Figure(figsize=(FULL, 2.95))
+    fig = Figure(figsize=(FULL, 2.6))
     FigureCanvasAgg(fig)
     workers = [(f"W{k}", "worker", f"piece {k}" if n == 1 else f"{n} pieces", False)
                for k, n in enumerate(md["worker_items"], 1)]
     outside = [*[("R", "regulator", -1)] * md["regulators"], *[("D", "disregulator", 1)] * md["disregulators"]]
-    panel(fig, [0.0, 0.13, 0.5, 0.87], "Multi-domain study", workers, outside, md["submit"], LEFT_NOTE)
+    panel(fig, [0.0, 0.1475, 0.5, 0.85], "Multi-domain study", workers, outside, md["submit"])
     seat3 = dd["seat3_role"]
     s_role = "regulator" if "regulator" in seat3.values() else "worker"
     seats = [("W1", "worker", pieces(dd["held"]["W1"]), False), ("W2", "worker", pieces(dd["held"]["W2"]), False),
              ("S", s_role, pieces(dd["held"]["seat3"]), not dd["held"]["seat3"])]
-    panel(fig, [0.5, 0.13, 0.5, 0.87], "SWE deep dive", seats, [], dd["submit"], RIGHT_NOTE)
-    role_legend(fig, 0.06, extra=[(lambda ax, x, y: diamond(ax, x, y, s=16), "can submit the team's work")],
+    panel(fig, [0.5, 0.1475, 0.5, 0.85], "SWE deep dive", seats, [], dd["submit"])
+    role_legend(fig, 0.068, extra=[(lambda ax, x, y: diamond(ax, x, y, s=16), "can submit the team's work")],
                 compact=True)
     return fig
 

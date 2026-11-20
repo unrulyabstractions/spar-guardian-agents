@@ -1209,3 +1209,24 @@ rungs by task, the judge labels table and the SWE disregulator figure; each chan
   run from its recorded tool calls, with no model call. A replay counts only when its end state equals the run's own.
   A clause then holds from the first call whose state shows its evidence. A piece an agent held and later removed
   therefore still counts. For a run whose replay differs, we read the final state alone."
+
+## Radical clean, 2026-11-19 (night)
+
+The user, on reading the retired-labels caption: "PLEASE, RADICALLY CLEAN PAPER, I SAID LEAK NO SHIT LIKE THIS". Five
+agents cleaned the sections and the generators, then two rounds of three readers (process history; provenance and
+plumbing; voice) read the built PDF and a fixer applied their findings. Removed or rewritten:
+
+- The retired yes or no labels: Table "reliability_retired", its generator, its \input, caption, label and the
+  sentence citing it; `paper/generated/reliability_retired.tex` deleted. Table 10 no longer says its rows read the
+  code "before their corrections".
+- Dates of work (Table 1's run dates and stage dates), "so far", "currently", "originally", "Our investigation is
+  ongoing", "We chose this comparison after seeing the data" (now "This comparison is post hoc"), "Early exploratory".
+- Plumbing in figures and tables: check_design as a tool name (now "the design checker"), "identified" rule (now "names
+  the exploit"), "nothing appended" (now "no added instruction"), "Pull board (ours)" (now "Our board"), Figure 2's two
+  notes, Table 10's "checked by code" (now "matched byte for byte"); the scales table and its generator.
+- Rung colours follow the viewer: none, looked and tempted calm blue-grey; attempted and hacked strong red; Collusion
+  green, collusion crimson (`scripts/paper/study_ladders.py`).
+
+Left for the user: 22 references the text never cites; Table 10's code rows rest on readings made before some code
+fixes; Appendix C names tasks it never defines (OpenMath, subset sum, factoring, knowledge work, chess, "flipt issue",
+"vuls issue", "Riemann proof").

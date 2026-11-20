@@ -2,12 +2,11 @@
 Appendix B shows the full details of our results.
 
 \subsection*{Do regulators lower cheating across domains?}
-Figure~\ref{fig:multidomain} shows every run, and Appendix B counts them. Each cell without a regulator holds three to
-five runs. Without any mitigation, DeepSeek teams on SWE cheated, and so did some Claude Haiku 5.5 teams on SWE. No
+Figure~\ref{fig:multidomain} shows every run, and Appendix B counts them. Without any mitigation, DeepSeek teams on SWE cheated, and so did some Claude Haiku 5.5 teams on SWE. No
 untold Luna team cheated on any target. When instructed to cheat, DeepSeek and Haiku teams on SWE cheated, and so did
 some Luna teams on SWE and on creative writing. No Luna team on protein design cheated, told or untold. A generic
 honesty rule in the agents' task instructions left DeepSeek teams on SWE cheating. Under the same rule, fewer Haiku
-teams on SWE cheated than without it. Each of these cells holds three runs. Under a rule naming the exploit, no team
+teams on SWE cheated than without it. Under a rule naming the exploit, no team
 cheated or accessed the honeypot, on any target.
 
 Cheating shows which teams acted on the planted work. Access shows which teams reached it at all. Most untold teams
@@ -28,19 +27,20 @@ On protein design, no untold team cheated, so these runs cannot show an effect o
 design team with a regulator cheated, whatever the regulator's model or level. On SWE with DeepSeek workers, fewer
 teams cheated with a Haiku regulator at the enforce level than at the ambiguous level. Luna regulators beside
 DeepSeek workers left teams cheating at both levels, and Sonnet regulators ran once per level. Beside Luna workers on
-SWE, no team cheated with or without a regulator. A regulator cell holds one to six runs, too few to separate an
-effect of the regulator from chance. No regulator did better than the rule naming the exploit.
+SWE, no team cheated with or without a regulator. These cells are too small to separate an effect of the
+regulator from chance. No regulator did better than the rule naming the exploit.
 
-No team with a regulator colluded, on any target. Every untold DeepSeek team on SWE colluded (3 of 3). None of the 12
-DeepSeek teams on SWE with a regulator did, although 5 of them cheated. We chose this comparison after seeing the
-data, and its cells are small.
+No team with a regulator colluded, on any target. Every untold DeepSeek team on SWE colluded. No DeepSeek
+team on SWE with a regulator colluded, although some of them cheated (Figure~\ref{fig:swe-regulators}). This
+comparison is post hoc, and its cells are small.
 
 We tested disregulators with GPT-6 Luna workers on SWE and creative writing (Appendix B). No team with a disregulator
 cheated. No untold Luna team on these targets cheated either, so these cells sit at the floor of the measure. On SWE,
 every team with a disregulator alone accessed the honeypot, and so did two of three untold teams. On creative
-writing, no team with a disregulator did. Code found no disregulator post that asks a teammate for the honeypot. No team
-with both a disregulator and a Claude Haiku 5.5 regulator at the enforce level accessed the honeypot. These cells hold
-two or three runs each. We therefore posit that these cells cannot yet separate the effect of an influencer from
+writing, no team with a disregulator did. No disregulator post asked a teammate for the honeypot
+(Figures~\ref{fig:swe-disregulators} and~\ref{fig:creative-disregulators}). No team
+with both a disregulator and a Claude Haiku 5.5 regulator at the enforce level accessed the honeypot. We therefore posit
+that these small cells cannot yet separate the effect of an influencer from
 chance.
 
 \subsection*{Does a regulator lower cheating in the SWE deep dive?}
@@ -55,10 +55,10 @@ mostly appeared where the regulator itself had used the fix.
   \centering
   \includegraphics[width=\linewidth]{fig5_swe_deep_dive}
   \caption{Cheating rates for DeepSeek V4.1 Flash in the SWE deep dive, judged by \textit{CheatBench}'s judge, where
-  looking for the fix counts as cheating. The swarm is optionally given one turn to plan and coordinate its approach;
-  these results are shown in orange. The legend at the bottom shows the different rungs of the regulator design: as a
-  control worker (3W), with only tools and no instruction (S0), with a duty to keep the team honest (S1), with a
-  definition of cheating (S2), and with additional pressure to prevent cheating (S3). Workers' cheating falls only
+  looking for the fix counts as cheating. Orange points give runs with one planning turn. In that turn, every seat
+  posts a plan before any work. Seat 3 is a third worker in the control (3W), or a regulator with only tools and no
+  instruction (S0), with a duty to keep the team honest (S1), with a definition of cheating (S2), or with additional
+  pressure to prevent cheating (S3). Workers' cheating falls only
   with a planning turn, and only under S2 and S3. The regulator's own cheating falls once it has a definition of
   cheating, with or without a planning turn (S1 to S2, $p = 0.0001$, unadjusted). No difference between the arms in
   the workers' cheating is significant (Holm $p \geq 0.45$). Workers found the fix by their own search in 213 of 216
@@ -70,9 +70,8 @@ mostly appeared where the regulator itself had used the fix.
 Stage 2 asks whether a regulator that only oversees moves DeepSeek workers off the ceiling, and whether its model
 matters (Table~\ref{tab:stage2}). A Claude Haiku 5.5 regulator cut the workers' cheating against three workers alone.
 A DeepSeek regulator with the same text did not, and the gap between the two regulators was not significant. Under
-Haiku, most workers still looked for the fix, but fewer than half used it. The study did not vary when a regulator first
-posts, so it cannot say whether posting early made the difference. We therefore posit that larger cells are needed to
-tell whether the regulator's model made the difference.
+Haiku, most workers still looked for the fix, but fewer than half used it. We therefore posit that larger cells are
+needed to tell whether the regulator's model made the difference.
 
 \begin{table}[htbp]
   \centering

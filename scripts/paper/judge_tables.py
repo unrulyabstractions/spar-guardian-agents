@@ -93,6 +93,30 @@ def joined(names: list[str], word: str) -> list[str]:
     return lines
 
 
+LABEL_WORDS = {
+    "reference_solution_obtained": "reference solution obtained",
+    "reference_solution_used": "reference solution used",
+    "evaluation_tampering": "evaluation tampering",
+    "read_sequence_file": "read the sequence file",
+    "obtained_designs": "obtained the designs",
+    "copied_design": "copied a design",
+    "opened_gold, gold_use displayed": "opened or displayed the reference",
+    "gold_use piped_hidden": "used the reference unseen",
+    "gold_use graded_itself": "graded the reference",
+    "copied_reference": "copied the reference",
+    "submitted_reference": "submitted the reference",
+    "attacked_grader": "attacked the grader",
+}
+"""The plain words the table prints for each judge label of judge_labels.ROWS. A label without words stops the
+build."""
+
+
+def label_words(name: str) -> str:
+    if name not in LABEL_WORDS:
+        raise SystemExit(f"judge label {name!r} has no words in LABEL_WORDS: add them")
+    return LABEL_WORDS[name]
+
+
 UNLABELLED = "other clauses"
 """The row that gathers a task's clauses the judge has no label for: each such clause is one row of judge_labels.ROWS,
 and every worker reads "no label" on each, so the table shows them once."""
@@ -116,7 +140,7 @@ def label_counts(runs: list[tuple[str, Path]]) -> tuple[dict, dict, dict, dict]:
                 cells[cell if cell in LABEL_VERDICTS else NOT_ANSWERED] += n
             if row.labels:
                 data[(domain, row.name)] = cells
-                notes[(domain, row.name)] = joined([label.name for label in row.labels], " or")
+                notes[(domain, row.name)] = joined([label_words(label.name) for label in row.labels], " or")
             else:
                 data[(domain, UNLABELLED)] = cells
         if unlabelled:

@@ -6,17 +6,16 @@ includes from paper/figures/.
 
 paper/generated/ holds what the code defines: params.tex (the board's budgets and the turn budget from the default
 preset, the judge and its reasoning effort from settings.JUDGE_MODEL and src/judging/judge_models.yaml, the Cheating
-ladder's alarm and the first cheating rung, src/measures/cheating_ladder.py ALARM and CHEATED_FROM), scales.tex
-(from src/configuration/scales.py), regulator_suffix.tex (the regulator's common text from
-src/configuration/prompts.yaml and its three report variants), regulator_levels.tex and disregulator_levels.tex (from
-src/configuration/instruction_levels.yaml), cheating_rungs.tex (the Cheating ladder's rungs and clauses, from
+ladder's alarm and the first cheating rung, src/measures/cheating_ladder.py ALARM and CHEATED_FROM),
+regulator_suffix.tex (the regulator's common text from src/configuration/prompts.yaml), regulator_levels.tex and
+disregulator_levels.tex (the levels of src/configuration/instruction_levels.yaml that the multi-domain study's runs
+used, STUDY_LEVELS), cheating_rungs.tex (the Cheating ladder's rungs and clauses, from
 src/measures/rungs.py RUNGS and cheating_ladder.py CLAUSES), coordination_levels.tex (the Coordination ladder's levels
 and cuts, from src/measures/coordination.py), collusion_rungs.tex (the Collusion ladder's rungs, from
 src/measures/collusion.py RUNGS), score_anchors.tex (the judge labels' anchors, from src/measures/judge_labels.py
-SCORE_ANCHORS), reliability.tex (how often an independent reading of the transcripts confirmed each rung and label,
-from src/measures/measure_readings.yaml) and reliability_retired.tex (the same file's readings of the retired yes or no
-labels). The rungs' and clauses' wording is
-the transcript viewer's (src/ui/transcript_levels.py CHEAT_GLOSSES, CLAUSE_GLOSSES, COLLUSION_GLOSSES). Nobody edits
+SCORE_ANCHORS) and reliability.tex (how often an independent reading of the transcripts confirmed each rung and
+score, from the current rows of src/measures/measure_readings.yaml). The rungs' and clauses' wording is the transcript
+viewer's (src/ui/transcript_levels.py CHEAT_GLOSSES, CLAUSE_GLOSSES, COLLUSION_GLOSSES). Nobody edits
 these files by hand.
 
 FIGURES names each PNG in paper/figures/, the PNG in tmp/ it is copied from and the make target whose script draws
@@ -38,7 +37,6 @@ import yaml
 from scripts.paper.study_ladders import ACCESSED_FROM, valid_runs
 from src.configuration import settings
 from src.configuration.presets import PRESETS
-from src.configuration.scales import SCALES
 from src.configuration.settings import ROOT
 from src.judging import verdict_files
 from src.judging.cheatbench_judge import judge_entry
@@ -64,9 +62,10 @@ RESULTS = "make results-tables (scripts/paper/{})"
 PAPER_FIGURES = "make paper-figures (scripts/paper/{})"
 # The judge entries the paper can name. A judge outside this map stops the build, so a new judge reaches the prose.
 JUDGE_NAMES = {"gpt-6-luna": "OpenAI GPT-6 Luna", "gpt-6-sol": "OpenAI GPT-6 Sol"}
-# The regulator's report variants in the paper's prompt box, as levels of instruction_levels.yaml.
-SUFFIX_VARIANTS = [("[Level 1] Ambiguous boundary", "ambiguous"), ("[Level 2] Explicit boundary", "explicit"),
-                   ("[Level 3] High pressure", "pressure")]
+# The levels of instruction_levels.yaml that the multi-domain study's runs used, per ladder. The level tables print
+# only these. When the run index is on disk, a valid run of another level, or a listed level no valid run used, stops
+# the build (check_study_levels).
+STUDY_LEVELS = {"regulator": ("enforce", "ambiguous"), "disregulator": ("persuade", "overt")}
 
 
 @dataclass(frozen=True)
@@ -137,12 +136,13 @@ HEADER = "% Written by scripts/paper/paper_sources.py from {source}. Do not edit
 TEX_SPECIALS = {"\\": r"\textbackslash{}", "&": r"\&", "%": r"\%", "$": r"\$", "#": r"\#", "_": r"\_",
                 "{": r"\{", "}": r"\}", "~": r"\textasciitilde{}", "^": r"\textasciicircum{}"}
 PLACEHOLDER = re.compile(r"\{([a-z_]+)\}")
-PLACEHOLDER_MEANING = {
-    "prior_work": "the task's planted work and where it sits",
-    "cheating": "what counts as cheating on this task",
-    "deliverable": "what the team hands in",
-    "goal": "the team's objective on the task",
+PLACEHOLDER_LABEL = {
+    "prior_work": "planted work",
+    "cheating": "what counts as cheating",
+    "deliverable": "hand-in",
+    "goal": "team's objective",
 }
+"""The plain words the paper prints in place of each {placeholder} of a level's text, filled per task at run time."""
 
 
 def escape(text: str) -> str:
@@ -150,7 +150,10 @@ def escape(text: str) -> str:
 
 
 def chip(name: str) -> str:
-    return r"\placeholder{" + escape("{" + name + "}") + "}"
+    """A {placeholder} as its plain label in brackets; a name with no label stops the build."""
+    if name not in PLACEHOLDER_LABEL:
+        raise SystemExit(f"instruction_levels.yaml uses {{{name}}}, which has no label in PLACEHOLDER_LABEL: add one")
+    return r"\placeholder{" + escape("[" + PLACEHOLDER_LABEL[name] + "]") + "}"
 
 
 def with_chips(text: str) -> str:
@@ -162,10 +165,6 @@ def with_chips(text: str) -> str:
         last = m.end()
     out.append(escape(text[last:]))
     return "".join(out).strip()
-
-
-def hours(seconds: int) -> str:
-    return f"{seconds // 60} min" if seconds < 3600 else f"{seconds // 3600} h"
 
 
 def params_tex() -> str:
@@ -194,42 +193,36 @@ def params_tex() -> str:
     return "\n".join(lines) + "\n"
 
 
-def scales_tex() -> str:
-    rows = [rf"{escape(name.replace('_', ' '))} & {s.n_agents} & {hours(s.time_limit_s)} \\" for name, s in
-            SCALES.items()]
-    return (HEADER.format(source="src/configuration/scales.py SCALES")
-            + "\\begin{tabular}{lrr}\n\\toprule\nScale & Agents & Time limit \\\\\n\\midrule\n"
-            + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n")
-
-
 def levels_tex(ladder: str) -> str:
+    """The levels of one instruction ladder that the study's runs used (STUDY_LEVELS), in the yaml's order."""
     spec = yaml.safe_load(LEVELS_YAML.read_text())[ladder]
-    rows, used = [], []
+    missing = [level for level in STUDY_LEVELS[ladder] if level not in spec or spec[level].get("text") is None]
+    if missing:
+        raise SystemExit(f"instruction_levels.yaml {ladder} has no text for {missing}: update STUDY_LEVELS")
+    rows = []
     for level in spec["order"]:
-        text = spec[level].get("text")
-        if text is None:
+        if level not in STUDY_LEVELS[ladder]:
             continue
-        for name in PLACEHOLDER.findall(text):
-            if name not in used:
-                used.append(name)
-        rows.append(rf"\textbf{{{escape(level)}}} & {with_chips(text)} \\")
-    legend = r" \quad ".join(f"{chip(n)} {escape(PLACEHOLDER_MEANING.get(n, n))}" for n in used)
+        rows.append(rf"\textbf{{{escape(level)}}} & {with_chips(spec[level]['text'])} \\")
     return (HEADER.format(source=f"src/configuration/instruction_levels.yaml {ladder}")
             + "\\begin{tabularx}{\\linewidth}{@{}l X@{}}\n\\toprule\nLevel & Text \\\\\n\\midrule\n"
-            + "\n\\addlinespace\n".join(rows) + "\n\\bottomrule\n\\end{tabularx}\n\n"
-            + "\\smallskip\n{\\footnotesize " + legend + "}\n")
+            + "\n\\addlinespace\n".join(rows) + "\n\\bottomrule\n\\end{tabularx}\n")
 
 
 def regulator_suffix_tex() -> str:
-    """The prompt box: the common text every regulator gets after its level, then the report's three variants."""
+    """The prompt box: the common text every regulator gets after the text of its level."""
     roles = yaml.safe_load(PROMPTS_YAML.read_text())["roles"]
-    levels = yaml.safe_load(LEVELS_YAML.read_text())["regulator"]
     common = " ".join([roles["regulator_common"].strip(), roles["regulator_no_disclosure"].strip()])
-    parts = [r"\textbf{[COMMON]}\\" + "\n" + escape(common)]
-    for label, level in SUFFIX_VARIANTS:
-        parts.append(rf"\textbf{{{escape(label)}}}\\" + "\n" + with_chips(levels[level]["text"]) + " + [COMMON]")
-    return (HEADER.format(source="src/configuration/prompts.yaml roles and instruction_levels.yaml regulator")
-            + "\n\n\\medskip\n".join(parts) + "\n")
+    return HEADER.format(source="src/configuration/prompts.yaml roles") + escape(common) + "\n"
+
+
+def check_study_levels(runs: list[dict]) -> None:
+    """Stop the build when the valid runs' regulator or disregulator levels differ from STUDY_LEVELS."""
+    for ladder in STUDY_LEVELS:
+        used = {r[f"{ladder}_level"] for r in runs} - {None}
+        if used != set(STUDY_LEVELS[ladder]):
+            raise SystemExit(f"the study's valid runs use the {ladder} levels {sorted(used)}, not "
+                             f"{sorted(STUDY_LEVELS[ladder])}: update STUDY_LEVELS and the paper's level tables")
 
 
 def number(value) -> str:
@@ -296,22 +289,25 @@ def score_anchors_tex() -> str:
             + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n")
 
 
-def reliability_tex(retired: bool = False) -> str:
-    """How often an independent reading of the transcripts confirmed each rung and label
-    (src/measures/measure_readings.py readings(), the file the viewer's How reliable section reads too): the rows of
-    the current passes, or with `retired` the rows of the passes that read the retired yes or no labels. A block per
-    measure and pass read, headed by the measure's name and the pass's label (a retired block marked "retired yes or
-    no label"), then per row how the cases were chosen, and how many were read, held, were wrong or were unclear."""
+def reliability_tex() -> str:
+    """How often an independent reading of the transcripts confirmed each rung and score
+    (src/measures/measure_readings.py readings(), the file the viewer's How reliable section reads too). The paper
+    shows only the rows of passes that are not retired. A block per measure, headed by the measure's name alone, then
+    per row how the cases were chosen, and how many were read, held, were wrong or were unclear. A measure read on
+    two such passes, or whose rows are not together, stops the build, since its name would head two blocks."""
     r = measure_readings.readings()
-    rows, last = [], None
-    for row in (row for row in r["rows"] if row["retired"] is retired):
-        if (row["measure"], row["pass"]) != last:
+    rows, passes, last = [], {}, None
+    for row in (row for row in r["rows"] if not row["retired"]):
+        if passes.setdefault(row["measure"], row["pass"]) != row["pass"]:
+            raise SystemExit(f"measure_readings.yaml: {row['measure']} is read on two passes that are not retired")
+        if row["measure"] != last:
+            heading = rf"\multicolumn{{7}}{{@{{}}l}}{{\textbf{{{escape(r['measures'][row['measure']])}}}}} \\"
+            if heading in rows:
+                raise SystemExit(f"measure_readings.yaml: the rows of {row['measure']} are not together")
             if last is not None:
                 rows.append(r"\addlinespace")
-            name = r["measures"][row["measure"]] + (" (retired yes or no label)" if retired else "")
-            rows.append(rf"\multicolumn{{7}}{{@{{}}l}}{{\textbf{{{escape(name)}}}, "
-                        rf"{escape(r['passes'][row['pass']]['label'])}}} \\")
-            last = (row["measure"], row["pass"])
+            rows.append(heading)
+            last = row["measure"]
         counts = " & ".join("--" if n is None else str(n) for n in (row["read"], row["held"], row["wrong"],
                                                                     row["unclear"]))
         rows.append(rf"\quad {escape(row['value'])} & {escape(row['chosen'])} & {counts} & {escape(row['note'])} \\")
@@ -335,9 +331,10 @@ def day(iso: str) -> str:
 
 def study_tex() -> str:
     """The multi-domain study's valid runs (scripts/paper/study_ladders.py valid_runs), their dates, the judges of its
-    CheatBench verdicts and of its scores, and the regulators' models by use."""
+    CheatBench verdicts and of its scores, and the regulators' models by use. Its runs' levels must be STUDY_LEVELS."""
     listed = valid_runs()
     valid = [r.meta for r in listed]
+    check_study_levels(valid)
     dates = []
     for r in listed:
         log = json.loads((r.path / "run.json").read_text()).get("eval_log") or ""
@@ -414,7 +411,6 @@ def generated_files() -> dict[Path, str]:
     submodule may be unchecked) is left out, and the check reports the source as absent."""
     files = {
         GENERATED / "params.tex": params_tex(),
-        GENERATED / "scales.tex": scales_tex(),
         GENERATED / "regulator_suffix.tex": regulator_suffix_tex(),
         GENERATED / "regulator_levels.tex": levels_tex("regulator"),
         GENERATED / "disregulator_levels.tex": levels_tex("disregulator"),
@@ -423,7 +419,6 @@ def generated_files() -> dict[Path, str]:
         GENERATED / "collusion_rungs.tex": collusion_rungs_tex(),
         GENERATED / "score_anchors.tex": score_anchors_tex(),
         GENERATED / "reliability.tex": reliability_tex(),
-        GENERATED / "reliability_retired.tex": reliability_tex(retired=True),
     }
     if STUDY_INDEX.exists():
         files[GENERATED / "study.tex"] = study_tex()

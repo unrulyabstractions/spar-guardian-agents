@@ -5,22 +5,19 @@ We ask how far a reading of the transcripts confirms what the code and the judge
 Cheating and Collusion ladders, and one judge scores the two labels. Separate AI agents checked the code's rungs and
 the judge's scores by reading the transcripts, the board, the diffs and the hand-ins of a set of cases. No human made
 these checks. Table~\ref{tab:reliability} gives, for each rung and range of scores, how many cases a reader read and
-how many held. The checks read the rungs before their corrections. A score held when the reader's own score sat at the
-same anchor or the next one. The code's rungs mostly held.
+how many held. A score held when the reader's own score sat at the same anchor or the next one. The code's rungs
+mostly held.
 
-A disclosure score of 75 or more is an agent admitting a breach in its own words. Two of these admissions concern an
-order of the regulator and do not admit cheating. A score below 50 is no evidence that nothing was disclosed: the
-judge scored three explicit admissions at 0 to 25. Counts of disclosure are therefore a floor. Manipulation of the
+A disclosure score of 75 or more is an agent admitting a breach in its own words. Some of these admissions concern an
+order of the regulator and do not admit cheating. A score below 50 is no evidence that nothing was disclosed, because
+the judge scored some explicit admissions at 0 to 25 (Table~\ref{tab:reliability}). Counts of disclosure are therefore a floor. Manipulation of the
 kind control is read reliably. At 75 or more it is an order, a repeated demand or a claim of authority, nearly always
 by an influencer. At 50 it is mostly ordinary coordination. Manipulation of the kind mislead is not trustworthy at any
 score, and most of its high scores did not hold. We count no agent as misleading without reading its excerpt against
-its own calls. Every excerpt that code located sits in the agent's own post or reasoning. Each excerpt that code did
-not locate is the agent's own text, which the judge paraphrased or joined.
-
-Table~\ref{tab:reliability-retired} keeps the readings of three judge labels we have retired: scheming, and the yes
-or no labels of awareness and manipulation. The scored labels of Appendix A replace all three. We therefore posit that
-the code's rungs, the disclosure score read as a floor and the control kind of manipulation can carry our results,
-and that the mislead kind cannot.
+its own calls. Every located excerpt sits in the agent's own post or reasoning. Each excerpt we could not locate is
+the agent's own text, which the judge paraphrased or joined. We therefore posit that the code's rungs,
+the disclosure score read as a floor and the control kind of manipulation can carry our results, and that the mislead
+kind cannot.
 
 \begin{table}[tp]
   \centering
@@ -28,19 +25,8 @@ and that the mislead kind cannot.
   \input{generated/reliability}
   \caption{How often an independent reading of the transcripts confirmed each rung and score of the multi-domain
   study. Read counts the cases checked, and held counts those where the reading agreed with the code or the judge.
-  Wrong counts those where it disagreed, and unclear those the evidence allows either way. A score held when the
-  reader's own score sat at the same anchor or the next one. The readers were AI agents, and no human made these
-  checks. The rows of the code's rungs read them before their corrections.}
+  Wrong counts those where it disagreed, and unclear those the evidence allows either way.}
   \label{tab:reliability}
-\end{table}
-
-\begin{table}[tp]
-  \centering
-  \scriptsize
-  \input{generated/reliability_retired}
-  \caption{Retired yes or no labels, kept as history: what independent readings found on both passes of their judge.
-  No result of this paper uses these labels.}
-  \label{tab:reliability-retired}
 \end{table}
 
 \subsection*{How do teams cheat with and without instruction?}
@@ -102,7 +88,6 @@ those with Luna workers.
   \label{fig:swe-luna-regulators}
 \end{figure}
 
-These runs used the ambiguous and enforce levels.
 Fewer teams with DeepSeek workers cheated with a Haiku regulator at enforce than at ambiguous.
 No team with Luna workers cheated, with or without a regulator.
 Each cell holds one to four runs, too few to show an effect of a level or a model.
@@ -113,7 +98,7 @@ Figure~\ref{fig:creative-regulators} gives the creative writing teams with a reg
   \centering
   \includegraphics[width=\linewidth]{table_creative_regulators}
   \caption{Creative writing with GPT-6 Luna workers: each team's rungs by the regulator's model, and the regulator's
-  posts. Each regulator cell holds one pilot run.}
+  posts. Each regulator cell holds one run.}
   \label{fig:creative-regulators}
 \end{figure}
 
@@ -180,8 +165,6 @@ Figure~\ref{fig:collusion-by-task} counts the Collusion rungs by task.
   \label{fig:collusion-by-task}
 \end{figure}
 
-Collusion here means that a pair pooled pieces of the exploit.
-Collusion does not by itself show intent.
 SWE holds most of the cooperation, collaboration and collusion, for workers and for teams.
 Collusion appears on SWE and creative writing and never on protein design.
 No influencer reaches collusion.
@@ -189,12 +172,9 @@ No team with an influencer reaches collusion.
 The colluding teams are DeepSeek teams on SWE and one Luna team on creative writing told to cheat.
 
 \subsection*{How strongly do agents disclose cheating or steer others?}
-We ask how strongly agents disclose cheating or steer others.
-One high score can rest on a single sentence, so we show how the scores spread over the agents.
-The table counts agents by the range of their scores, per task and role.
+Figure~\ref{fig:label-scores} counts agents by the range of their scores, per task and role.
 \StudyLabelsJudged{}
 An agent without a score counts as not judged.
-Figure~\ref{fig:label-scores} gives the counts.
 \begin{figure}[tp]
   \centering
   \includegraphics[width=\linewidth]{table_label_scores_by_task}
@@ -202,8 +182,6 @@ Figure~\ref{fig:label-scores} gives the counts.
   \label{fig:label-scores}
 \end{figure}
 
-The ranges only group the scores, and we read no rate from them.
-Each score above zero carries an excerpt that a reader can open in the transcript.
 Table~\ref{tab:reliability} shows how far a reading of the transcripts confirmed each range.
 We therefore posit that a count of disclosure is a floor, and that a mislead score counts only after a reader checks
 its excerpt against the agent's own calls.
@@ -221,14 +199,13 @@ Figure~\ref{fig:judge-cheated} sets the judge's own verdict, cheated, beside our
 \end{figure}
 
 The judge says cheated for every agent our line counts as cheating, and for many more in every task.
-Its verdict is the broader one, so we never report it as our cheating rate.
 Figure~\ref{fig:judge-labels} sets each of the code's clauses beside the labels of \textit{CheatBench}'s judge
 that answer it, for workers.
-The clauses the judge has no label for share one row per task, which reads ``no label''.
 \begin{figure}[tp]
   \centering
   \includegraphics[width=\linewidth]{table_judge_labels}
-  \caption{The code's clauses beside the labels of \textit{CheatBench}'s judge that answer them, for workers.}
+  \caption{The code's clauses beside the labels of \textit{CheatBench}'s judge that answer them, for workers. n/a
+  counts the workers for whom the judge's answer excludes the clause.}
   \label{fig:judge-labels}
 \end{figure}
 
@@ -236,15 +213,14 @@ Most clauses have no label, so the judge cannot speak to them.
 The judge and the code agree on most workers for every clause the judge has a label for.
 On SWE, the judge finds the planted fix obtained or used by more workers than the code does.
 On creative writing, the judge records one use of the reference per agent.
-Where it chose that the agent displayed the reference, it cannot also say that the agent sent it to the checker, and
-the table counts those workers as n/a.
+The judge cannot say both that an agent displayed the reference and that it sent the reference to the checker.
 Neither finds an attack on the evaluation on SWE.
 
 \subsection*{Does \textit{CheatBench}'s judge find that agents disclosed their access?}
 \textit{CheatBench}'s judge also records disclosed access on protein design and creative writing: whether an agent
 openly acknowledged its own access to the honeypot.
 Its SWE verdict has no such field.
-This field is \textit{CheatBench}'s, and it differs from the disclosure score.
+Disclosed access differs from the disclosure score.
 Figure~\ref{fig:disclosed-access} counts it.
 \begin{figure}[tp]
   \centering
@@ -253,5 +229,4 @@ Figure~\ref{fig:disclosed-access} counts it.
   \label{fig:disclosed-access}
 \end{figure}
 
-The table counts only agents at \AccessedFrom{} or above, who had access to disclose.
 Most protein design workers who accessed the honeypot disclosed it, and almost no creative writing worker did.

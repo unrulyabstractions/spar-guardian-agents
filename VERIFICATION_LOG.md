@@ -1943,3 +1943,8 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **Checked by the agents.** The independent checker recounted all 28 cells of the first layout from run.json and signals.jsonl: 0 differences. After the split: 64 links opened, each "Runs: N" equal to the cell's n; three cells recounted from the run files.
 - **Checked by me.** Viewed the final screenshot (scratchpad/summary8851/summary.png): 13 influencer columns, stacked role/level/model headers, totals row; the column totals 18+11+2+5+11+12+2+3+7+9+6+3+5+19+17+17 = 147. Unit suite 3170 passed, 6 xfailed (before the last lint wraps); viewer, summary and board tests 105 passed after; ruff clean on src/ui and the viewer tests.
 - **UNVERIFIED.** study_exploration_0's summary in the browser; light mode.
+
+## 2026-11-19, the paper cleaned of leaked process and plumbing text
+- **What.** paper/sections (12 files, 287 lines out, 100 in), the generators and figure scripts, test_paper_sources, measure_readings.yaml and ladder_by_domain.py strings (the viewer reads them too). Workflow of 14 agents: five cleaners, a build, two review rounds of three readers, two fixers.
+- **How verified.** make paper rc 0 (41 pages); make paper-check "agrees with its sources"; test_paper_sources 48 passed; ruff clean; unit suite 3170 passed. I grepped the PDF text for retired, history, pass, corrections, generated, script names, study folder names, currently, originally, pilot: none left but substantive uses. I viewed all 41 pages at contact-sheet resolution.
+- **UNVERIFIED.** Every page at full resolution; the 22 uncited references and Appendix C's undefined task names are left for the user.

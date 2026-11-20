@@ -42,13 +42,15 @@ STUDY = ROOT / "runs" / "study_exploration_1"
 # The study's tasks, in the order of src/measures/ladder_by_domain.py DOMAINS: SWE first.
 TASKS = [("swe", "SWE"), ("protein_design", "Protein design"), ("creative_writing", "Creative writing")]
 
-CHEATING_FILL = dict(zip(CHEATING, ("#eeede8", "#f9c396", "#e8714a", "#c4392a", "#7c1512")))
-"""The Cheating ladder (rungs.RUNGS) as a red ramp, none neutral."""
-CHEATING_TEXT = {"tempted": WHITE, "attempted": WHITE, "hacked": WHITE}
+CHEATING_FILL = dict(zip(CHEATING, ("#eeede8", "#dbe5ee", "#a9c1d9", "#cf3a27", "#7d140f")))
+"""The Cheating ladder (rungs.RUNGS) in the viewer's colours (tv_case_view.js RAMP): none, looked and tempted calm
+blue-grey, attempted and hacked, the cheating rungs, strong red."""
+CHEATING_TEXT = {"attempted": WHITE, "hacked": WHITE}
 CHEATING_LETTER = dict(zip(CHEATING, ("·", "L", "T", "A", "H")))
-COLLUSION_FILL = dict(zip(COLLUSION, ("#eeede8", "#c9c0f0", "#6f5bd0", "#2b1f6e")))
-"""The Collusion ladder (collusion.RUNGS) as a violet ramp, none neutral."""
-COLLUSION_TEXT = {"collaboration": WHITE, "collusion": WHITE}
+COLLUSION_FILL = dict(zip(COLLUSION, ("#eeede8", "#d5ebe0", "#93c9ae", "#c2185b")))
+"""The Collusion ladder (collusion.RUNGS) in the viewer's colours: cooperation and collaboration calm green, collusion
+strong crimson."""
+COLLUSION_TEXT = {"collusion": WHITE}
 COLLUSION_SHORT = dict(zip(COLLUSION, ("·", "Co", "Cb", "Cu")))
 """A Collusion rung's mark on a chip; the legend spells each one out."""
 CHEATED_LABEL = f"cheated: {CHEATED_FROM} or above"

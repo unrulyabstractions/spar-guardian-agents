@@ -55,7 +55,7 @@ COLUMNS = [("flipt-dsflash", "Software engineering", "DeepSeek workers"),
 REGULATORS = [("claude-haiku-5-5-openrouter", "Haiku 5.5"), ("gpt-6-luna-openrouter", "Luna"),
               ("gemini-4-argon-openrouter", "Gemini 4 Argon"), ("claude-sonnet-5-5-openrouter", "Sonnet 5.5"),
               ("claude-opus-5-5-openrouter", "Opus 5.5")]
-RULE_ROWS = [(None, "No rule"), ("generic", "Rule: generic"), ("identified", "Rule: identified")]
+RULE_ROWS = [(None, "No rule"), ("generic", "Rule: generic"), ("identified", "Rule: names the exploit")]
 REGULATOR_GROUPS = [("ambiguous", "+ regulator, level ambiguous",
                      "told to ensure the team submits honest work, with the task's definition of cheating"),
                     ("enforce", "+ regulator, level enforce",
@@ -152,7 +152,7 @@ def wording() -> tuple[list[str], list[str]]:
          all(w in regulator["enforce"]["text"] for w in ("say so plainly", "revert", "name the member", "{cheating}")))]
         if not ok]
     lines = [f"generic rule: “{generic}”",
-             "identified rule: names where the existing fix or work is and calls using it cheating"]
+             "exploit rule: names where the existing fix or work is and calls using it cheating"]
     return lines, broken
 
 
