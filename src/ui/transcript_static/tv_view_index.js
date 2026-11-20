@@ -69,6 +69,8 @@ const none = () => muted('–', 'small');
 
 /** The influencers a run holds: none, regulator, disregulator or both. */
 const INFLUENCER_SETS = ['regulator', 'disregulator', 'both', 'none'];
+/** An Influencer filter value: any (at least one influencer) or one of INFLUENCER_SETS. */
+const influencerIs = (r, v) => (v === 'any' ? influencerSet(r) !== 'none' : influencerSet(r) === v);
 const influencerSet = r => {
   const roles = new Set(r.influencer_conditioning.map(x => x.role));
   return roles.size > 1 ? 'both' : roles.size ? [...roles][0] : 'none';
@@ -76,8 +78,8 @@ const influencerSet = r => {
 /** One influencer's conditioning as a filter value: its role and its level. */
 const influencerLevel = x => `${x.role}: ${x.level || 'no level'}`;
 
-/** A worker conditioning's chip: not told calm, told to cheat warm, a rule cool and a rule naming the exploit strong. */
-const CONDITIONING_TONE = { 'not told': 'cond-none', 'told to cheat': 'cond-cheat', 'rule naming the exploit': 'cond-rule-strong',
+/** A worker conditioning's chip: baseline calm, told to cheat warm, a rule cool and a rule naming the exploit strong. */
+const CONDITIONING_TONE = { baseline: 'cond-none', 'told to cheat': 'cond-cheat', 'rule naming the exploit': 'cond-rule-strong',
   'rule naming where the exploit lies': 'cond-rule-strong' };
 const conditioningChip = part => h('span', { class: ['cond-chip', CONDITIONING_TONE[part] || 'cond-rule'] }, part);
 /** The Workers cell: the workers' number and model over their conditioning's chips. */
@@ -163,7 +165,7 @@ function uniq(a) { return [...new Set(a.filter(x => x != null))]; }
 /** The filters: {key (the query key), label, group, title, a control (options(rows) -> [[value, text]], number: a box
  * for a score, or search: a box for the run's name), test(row, value)}, in the order the page shows them within their
  * group. The ladder filters, cheated and the label filters read the team's own, influencers left out. Worker
- * conditioning is the filter that tells runs told to cheat from runs not told; Influencer keeps the runs with an
+ * conditioning is the filter that tells runs told to cheat from baseline runs, baseline first; Influencer keeps the runs with an
  * influencer of that kind and level; "Disclosure at least" and "Manipulation at least" keep the runs whose team score
  * is at least the number. */
 function filters(d) {
@@ -180,15 +182,15 @@ function filters(d) {
       test: (r, v) => String(r.workers) === v },
     { key: 'col', label: 'Collection', group: 'run', options: () => COLLECTION_ORDER.map(c => [c, collectionOf(c).label]), test: (r, v) => r.col === v },
     { key: 'model', label: 'Workers\' model', group: 'who', options: rows => uniq(rows.map(modelLabel)).sort().map(x => [x, x]), test: (r, v) => modelLabel(r) === v },
-    { key: 'worker', label: 'Worker conditioning', group: 'who', options: rows => uniq(rows.map(r => r.worker_conditioning)).sort().map(x => [x, x]),
+    { key: 'worker', label: 'Worker conditioning', group: 'who', options: rows => uniq(rows.map(r => r.worker_conditioning)).sort((a, b) => (b === 'baseline') - (a === 'baseline') || a.localeCompare(b)).map(x => [x, x]),
       test: (r, v) => r.worker_conditioning === v },
     { key: 'influencer', label: 'Influencer', group: 'who', title: 'Which influencers the run holds',
-      options: rows => INFLUENCER_SETS.filter(k => rows.some(r => influencerSet(r) === k)).map(k => [k, k]),
-      test: (r, v) => influencerSet(r) === v },
+      options: rows => ['any', ...INFLUENCER_SETS].filter(k => rows.some(r => influencerIs(r, k))).map(k => [k, k]),
+      test: (r, v) => influencerIs(r, v) },
     { key: 'influencer_level', label: 'Influencer conditioning', group: 'who', dependsOn: 'influencer',
       title: 'An influencer\'s instruction level',
       options: (rows, f) => {
-        const kept = rows.filter(r => !f.influencer || influencerSet(r) === f.influencer);
+        const kept = rows.filter(r => !f.influencer || influencerIs(r, f.influencer));
         const one = ['regulator', 'disregulator'].includes(f.influencer);
         return uniq(kept.flatMap(r => r.influencer_conditioning.map(influencerLevel))).sort()
           .map(v => [v, one ? v.slice(v.indexOf(': ') + 2) : v]);

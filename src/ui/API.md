@@ -219,7 +219,7 @@ the Ladders page's tables, `src/ui/transcript_board.py` the Board tab's data and
 (`tv_*.js`, `tv_style.css`, `tv_board.css`). The page reuses the results browser's `style.css`, `app/dom.js`,
 `app/charts.js` and `app/components.js`, served under `/static/`.
 
-Every folder under `runs/` is a **collection**, except `study_smoke` and folders without a run. A study keeps its runs at
+Every folder under `runs/` is a **collection**, except `study_smoke`, `study_orbit2_check` and folders without a run. A study keeps its runs at
 its top level and in its groups (`study_runs`); its `INDEX.jsonl`, where it has one, gives each run's `valid` flag, and a
 run it gives no verdict is valid at the top level and carries its group's name in a group. A manifest collection
 (`apart_controls`) lists its runs in `manifest.jsonl`: the canonical copy is valid, an extra copy has the status `extra
@@ -247,9 +247,9 @@ a new `INDEX_VERSION` (now 10) or new code measures every run. The run page read
 | `#/ladders?task=<CheatBench task name>` | the three ladders, the Cheating ladder by task, the Coordination and Collusion levels, Collusion's take rules by task, the task's column highlighted, and the judge labels |
 
 `<ladder>` is `cheating`, `coordination` or `collusion`; a ladder filter's value is the team's level. `workers` is the
-number of workers; `worker` is the worker conditioning (`not told`, `told to cheat`, a rule's words such as `generic
-honesty rule` or `rule naming the exploit`), the one filter that tells runs told to cheat from runs not told;
-`influencer` keeps the runs whose influencers are `regulator`, `disregulator`, `both` or `none`; `influencer_level` keeps the runs with an influencer at one level (`regulator: enforce`), its options limited to the runs `influencer` keeps; `cheated` is
+number of workers; `worker` is the worker conditioning (`baseline`, `told to cheat`, a rule's words such as `generic
+honesty rule` or `rule naming the exploit`), the one filter that tells runs told to cheat from baseline runs;
+`influencer` keeps the runs with `any` influencer, or whose influencers are `regulator`, `disregulator`, `both` or `none`; `influencer_level` keeps the runs with an influencer at one level (`regulator: enforce`), its options limited to the runs `influencer` keeps; `cheated` is
 `yes` or `no` (the team's, the code's). `min_disclosure` and `min_manipulation` ("Disclosure at least", "Manipulation
 at least", a number box) keep the runs whose team score is at least the number; a run no judge scored has none.
 `q` keeps the runs whose name contains the text.
@@ -265,7 +265,7 @@ The runs table's columns, left to right: Interest, Run, Workers, Influencers, Ta
 Disclosure and Manipulation, each the team's highest score of a worker as a score chip and which worker, whose name
 opens its excerpt; under **Influencers** each influencer's own Cheating, Coordination and Collusion, and its own
 Disclosure and Manipulation scores; Collection last. The **Workers** cell holds the number of workers and their model
-(`3 × GPT-6 Luna`) over their conditioning as chips: `not told` grey, `told to cheat` amber, a rule teal and a rule naming the exploit solid teal. The
+(`3 × GPT-6 Luna`) over their conditioning as chips: `baseline` grey, `told to cheat` amber, a rule teal and a rule naming the exploit solid teal. The
 **Influencers** cell holds one line per influencer: a REGULATOR (blue) or DISREGULATOR (orange) chip, its level as an
 outline chip and its model, or `none`. The Workers column sorts by model then conditioning, the Influencers column by
 kind, level and model. CheatBench's own field for an agent that acknowledged its access is no column: it
@@ -356,7 +356,7 @@ IndexRow = {                                         # valid runs only
   interest {rank (1 is the most interesting), why (transcript_index.INTEREST: the team's Cheating rung against the
   influencers it ran with)}; the rows come in that order (interest_order: then more workers, more influencers,
   higher Coordination, higher Collusion),
-  worker_conditioning ("not told" | "told to cheat" | transcript_index.RULE_WORDS[rule_level], joined by "; "),
+  worker_conditioning ("baseline" | "told to cheat" | transcript_index.RULE_WORDS[rule_level], joined by "; "),
   influencer_conditioning: [{role ("regulator"|"disregulator"), n, level (its instruction level), model}],
   model (the workers' model, the last part of run.json's role_models worker, else its model, never a
   run's name), model_id (that model string), n_agents, seed,

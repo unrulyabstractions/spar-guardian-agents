@@ -51,7 +51,7 @@ table.idx-table tr.idx-band th.idx-band-team { background: var(--panel-2); }
 table.idx-table tr.idx-band th.idx-band-influencers { background: var(--panel-2); }
 table.idx-table .idx-group-start { border-left: 2px solid var(--border); }
 /* The Workers and Influencers cells (tv_view_index.js workersCell, influencersCell): a model's name with its
-   conditioning as chips. Worker conditioning: not told calm grey, told to cheat the warning amber, a rule teal and a
+   conditioning as chips. Worker conditioning: baseline calm grey, told to cheat the warning amber, a rule teal and a
    rule naming the exploit solid teal. An influencer's role: the app's role colours, the regulator blue and the
    disregulator orange, solid with an upper-case word; its level an outline in the same colour. None of these is a
    ladder's colour, and each chip carries its own text colour, so both themes read. */

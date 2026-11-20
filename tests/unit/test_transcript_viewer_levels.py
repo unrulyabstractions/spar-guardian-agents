@@ -591,7 +591,7 @@ def test_the_index_row_carries_the_three_ladders_and_the_judge_labels_and_no_old
                                   "collusion_influencers", "alarm"}
     assert set(row["levels"]["team"]) == set(tl.ORDER) and row["cheatbench"] == []
     assert row["workers"] == 3 and row["agents"] == "3 workers, 1 influencer" and row["model"] == "gpt-6-luna"
-    assert row["worker_conditioning"] == "not told" and row["influencer_conditioning"] == [
+    assert row["worker_conditioning"] == "baseline" and row["influencer_conditioning"] == [
         {"role": "regulator", "n": 1, "level": None, "model": "gpt-6-luna"}]
     assert "disclosure" not in row
     labels = row["labels"]
@@ -840,7 +840,7 @@ def test_the_influencer_conditioning_names_the_regulators_level_and_model(tmp_pa
     cell = cell_of(Listed("run", run, "valid", meta=meta), rf)
     assert influencer_conditioning(cell, rf.run_json["config"], rf.roles) == [
         {"role": "regulator", "n": 1, "level": "ambiguous", "model": expected}]
-    assert worker_conditioning(cell, rf.run_json["config"]) == "not told"
+    assert worker_conditioning(cell, rf.run_json["config"]) == "baseline"
     assert ti.influencer_words([{"role": "regulator", "n": 1, "level": "ambiguous", "model": expected}]) == \
         f"regulator (ambiguous, {expected})"
 
@@ -860,7 +860,7 @@ def test_the_influencer_conditioning_names_a_disregulator_and_none_for_a_team_wi
 
 
 @pytest.mark.parametrize("cell,rule,expected", [
-    ("minimal", "none", "not told"),
+    ("minimal", "none", "baseline"),
     ("minimal_cheat", None, "told to cheat"),
     ("solo_cheat", "none", "told to cheat"),
     ("minimal", "generic", "generic honesty rule"),

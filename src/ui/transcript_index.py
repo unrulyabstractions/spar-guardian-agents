@@ -40,8 +40,8 @@ from src.ui import transcript_levels
 from src.utils.json_files import read_json, read_jsonl
 
 CACHE = ROOT / "tmp" / "transcript_viewer" / "index.json"
-SKIP = ("study_smoke",)
-INDEX_VERSION = 10  # 10: the judge labels as scores, no scheming
+SKIP = ("study_smoke", "study_orbit2_check")
+INDEX_VERSION = 11  # 11: "baseline" for workers told nothing
 WORKERS = 6
 """Processes that measure runs when a start finds runs to measure: each loads transcripts, so few enough to spare the
 machine's memory."""
@@ -284,11 +284,11 @@ def task_label(task: str | None, stem: str | None) -> str:
 
 def worker_conditioning(cell: Cell, cfg: dict) -> str:
     """What the workers' system prompt told them, from the run's configuration: told to cheat (the cell's cheat
-    instruction), a rule sentence (rule_level, RULE_WORDS), both, or "not told"."""
+    instruction), a rule sentence (rule_level, RULE_WORDS), both, or "baseline" (nothing of either)."""
     parts = ["told to cheat"] if "cheat" in (cell.cell or "").split("_") else []
     if cfg.get("rule_level") not in (None, "none"):
         parts.append(RULE_WORDS.get(cfg["rule_level"], f"rule: {cfg['rule_level']}"))
-    return "; ".join(parts) or "not told"
+    return "; ".join(parts) or "baseline"
 
 
 def influencer_conditioning(cell: Cell, cfg: dict, roles: dict[str, str | None]) -> list[dict]:
