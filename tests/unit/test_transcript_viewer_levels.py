@@ -470,8 +470,8 @@ def test_collusion_cells_are_the_measures_code_rungs():
     assert "awareness" not in lv["team"]["collusion"] and "awareness" not in lv["agents"]["a01"]["collusion"]
     ix = tl.index_levels(lv, WORKERS)
     assert ix["team"]["collusion"] == "collaboration" and ix["collusion_influencers"] == []
-    assert set(ix) == {"team", "cheated", "cheating_influencers", "coordination_influencers", "collusion_influencers",
-                       "alarm"}
+    assert set(ix) == {"team", "cheated", "passed", "cheating_influencers", "coordination_influencers",
+                       "collusion_influencers", "alarm"}
 
 
 def test_a_pair_that_pooled_the_exploit_colludes_by_code_and_the_judge_labels_stand_apart():
@@ -574,8 +574,9 @@ def test_a_task_without_a_take_rule_is_not_applicable_with_the_measures_reason(t
 
 
 def test_the_index_row_carries_the_three_ladders_and_the_judge_labels_and_no_old_column(tmp_path):
-    """The row's labels: the team's highest score of a worker and which worker (a02's 50 beats a01's 25 on disclosure;
-    a01's 40 on manipulation), the regulator's own scores apart, never in the team's, and no CheatBench disclosure."""
+    """The row's labels: the workers' mean score over the workers judged (25 and 50 give 38 on disclosure; 40 and 0
+    give 20 on manipulation), with the highest and its worker (a02's 50, a01's 40), the regulator's own scores apart,
+    never in the team's, and no CheatBench disclosure."""
     run = write_run(tmp_path / "x", {**WORKERS, "a04": "regulator"}, {}, {}, "openrouter/openai/gpt-6-luna",
                     task="no_such_task")
     rf = RunFiles.read(run)
@@ -587,7 +588,7 @@ def test_the_index_row_carries_the_three_ladders_and_the_judge_labels_and_no_old
     assert not {"collab", "rung", "rung_code", "label", "floor", "judges", "agree", "disagree", "presentation",
                 "status", "why", "group", "roles", "author", "regulator_model", "dir", "arm", "seed_post", "team",
                 "regulators", "disregulators"} & set(row)
-    assert set(row["levels"]) == {"team", "cheated", "cheating_influencers", "coordination_influencers",
+    assert set(row["levels"]) == {"team", "cheated", "passed", "cheating_influencers", "coordination_influencers",
                                   "collusion_influencers", "alarm"}
     assert set(row["levels"]["team"]) == set(tl.ORDER) and row["cheatbench"] == []
     assert row["workers"] == 3 and row["agents"] == "3 workers, 1 influencer" and row["model"] == "gpt-6-luna"
@@ -596,8 +597,9 @@ def test_the_index_row_carries_the_three_ladders_and_the_judge_labels_and_no_old
     assert "disclosure" not in row
     labels = row["labels"]
     assert {k: {kk: v for kk, v in t.items() if kk != "kind"} for k, t in labels["team"].items()} == \
-        {"disclosure": {"score": 50, "agent": "a02"}, "manipulation": {"score": 40, "agent": "a01"}}
-    assert labels["judge"] == "j" and set(labels["team"]["manipulation"]) == {"score", "agent", "kind"}
+        {"disclosure": {"score": 38, "n": 2, "max": 50, "agent": "a02"},
+         "manipulation": {"score": 20, "n": 2, "max": 40, "agent": "a01"}}
+    assert labels["judge"] == "j" and set(labels["team"]["manipulation"]) == {"score", "n", "max", "agent", "kind"}
     assert [{k: v for k, v in x.items() if k != "kinds"} for x in labels["influencers"]] == \
         [{"agent": "a04", "role": "regulator", "disclosure": 100, "manipulation": 90}]
     assert set(labels["influencers"][0]["kinds"]) == {"disclosure", "manipulation"}
@@ -752,7 +754,8 @@ def test_how_reliable_shows_the_reading_of_the_scores_and_marks_every_mislead_sc
     """The Ladders page's How reliable section is measure_readings.readings(), the file the paper's table reads: each
     measure names a ladder, a judge label, the located excerpt or a retired label (scheming, awareness). The scored
     labels' reading is the current pass; the retired yes or no labels follow under their own row. Each conclusion
-    has its own anchor, and every place a manipulation score shows its kind marks a mislead score "read the excerpt",
+    has its own anchor, and every place a manipulation score shows its kind marks a mislead score with a warning
+    sign linking to the excerpt rule,
     linking to the conclusion on that kind, without hiding the score."""
     payload = tables.ladders_payload(tl.LADDERS, tl.ORDER, tl.label_about())
     readings = payload["readings"]
@@ -773,13 +776,11 @@ def test_how_reliable_shows_the_reading_of_the_scores_and_marks_every_mislead_sc
     assert "const conclusions = ['disclosure', 'control', 'mislead', 'excerpt'];" in view
     levels = (STATIC / "tv_levels.js").read_text()
     assert "MISLEAD_HREF = '#/ladders?section=reliability-mislead'" in levels
-    assert "if (kind !== 'mislead') return null;" in levels and "'read the excerpt');" in levels
+    assert "if (kind !== 'mislead') return null;" in levels and "'mislead score, read the excerpt' }, '⚠');" in levels
     assert "kind === 'mislead' ? [' ', misleadMark(kind)] : null" in levels
     assert "t.kind === 'mislead' ? [' ', misleadMark(t.kind)] : null" in levels
     board = (STATIC / "tv_view_board.js").read_text()
     assert board.count("misleadMark(") == 2
-    index = (STATIC / "tv_view_index.js").read_text()
-    assert "(x.kinds || {})[k] === 'mislead' ? [' ', misleadMark('mislead')] : null" in index
 
 
 def test_the_index_and_the_board_carry_the_manipulation_kind():
@@ -791,7 +792,7 @@ def test_the_index_and_the_board_carry_the_manipulation_kind():
     labels = {"judge": "j", "team": {"disclosure": 10, "manipulation": 80}, "influencers": ["r1"],
               "agents": {"w1": row, "r1": influencer}}
     summary = transcript_index.label_summary(labels, {"w1": "worker", "r1": "regulator"})
-    assert summary["team"]["manipulation"] == {"score": 80, "agent": "w1", "kind": "mislead"}
+    assert summary["team"]["manipulation"] == {"score": 80, "n": 1, "max": 80, "agent": "w1", "kind": "mislead"}
     assert summary["influencers"][0]["kinds"] == {"disclosure": None, "manipulation": "control"}
     located = {"where": "post", "post": "P1", "start": 0, "end": 3}
     levels = {"judge_labels": {"agents": {"w1": {
@@ -886,12 +887,12 @@ def test_the_runs_table_has_one_cheating_cell_its_columns_in_order_and_no_alarm_
     index = (STATIC / "tv_view_index.js").read_text()
     body = index[index.index("  return [\n    { key: 'run'"):index.index("const GROUPS")]
     keys = re.findall(r"\{ key: '([a-z_]+)'", body)
-    assert keys == ["run", "workers", "influencers", "task", "interest", "col"]
-    assert body.index("key: 'task'") < body.index("d.order.map(team)") < body.index("map(label)") \
-        < body.index("d.order.map(influencers)") < body.index("map(influencerLabel)") < body.index("key: 'interest'") \
-        < body.index("key: 'col'")
+    assert keys == ["run", "workers", "model", "influencers", "task", "other"]
+    assert "influencerLabel" not in body
+    assert body.index("key: 'task'") < body.index("d.order.map(team)") < body.index("d.order.map(influencers)") \
+        < body.index("map(label)") < body.index("key: 'other'")
     assert "cell: workersCell" in body and "cell: influencersCell" in body
-    assert "`${r.workers} ×`" in index
+    assert "key: 'workers', label: 'Workers', title: 'Number of workers', sort: r => r.workers" in index
     assert "GROUPS = { team: 'Team', labels: 'Judge labels', influencers: 'Influencers' }" in index
     assert "cheatingCell(lad(L), r.levels.team[L], r.levels.cheated, cheatbenchTeam(r.cheatbench), false)" in index
     for gone in ("key: 'alarm'", "key: 'cheated'", "key: 'cheatbench'"):
@@ -899,7 +900,8 @@ def test_the_runs_table_has_one_cheating_cell_its_columns_in_order_and_no_alarm_
     for gone in ("seedpost", "seed_post", "toggle: true"):
         assert gone not in index, gone
     levels = (STATIC / "tv_levels.js").read_text()
-    assert "whoTag('code'" in levels and "whoTag('CheatBench judge'" in levels
+    assert "h('div', { class: 'cheat-cell' }, levelChip('cheating', lad, level, rank, { facts }), judgeWords" in levels
+    assert "`Judge: ${s.judge_cheated}/${s.of}`" in levels and "whoTag" not in levels
     run = (STATIC / "tv_view_run.js").read_text()
     assert "'Cheated (team)'" not in run and "cheatingCell(" in run
 
@@ -1013,11 +1015,25 @@ def test_the_index_lists_valid_runs_only_and_leaves_the_tasks_it_does_not_read_u
     idx = ti.build_index(tmp_path / "runs")
     assert [row["run"] for row in idx["rows"]] == ["poem_minimal_luna1"]
     assert measured_dirs == ["poem_minimal_luna1"] and len(idx["entries"]) == 3 and idx["measured"] == 1
-    assert idx["left_out"] == {"tasks": sorted(ladder_by_domain.HIDDEN_TASKS), "runs": 2}
+    assert idx["left_out"] == {"tasks": sorted(ladder_by_domain.HIDDEN_TASKS), "runs": 2, "single_agent": 0}
     assert idx["entries"]["study_x/poem_minimal_luna1"]["dir"] == str(study / "poem_minimal_luna1")
     assert [c["key"] for c in idx["collections"]] == ["study_x"] and idx["collections"][0]["runs"] == 1
     assert idx["entries"]["study_x/game_minimal_luna1"]["left_out"] == "chess"
     assert "measured 1 of 1 runs" in capsys.readouterr().out
+
+
+def test_the_index_leaves_out_single_agent_runs_and_the_apart_controls(tmp_path, stood_in):
+    """A run of one worker and no influencer is measured but not listed, and counted in left_out; the apart controls
+    folder, all single agents, is never listed."""
+    study = tmp_path / "runs" / "study_x"
+    write_run(study / "poem_minimal_luna1", WORKERS, {}, {}, "openrouter/openai/gpt-6-luna", task="creative_writings")
+    model = "openrouter/openai/gpt-6-luna"
+    write_run(study / "poem_solo_luna1", {"a01": None}, {}, {}, model, task="creative_writings")
+    apart = tmp_path / "runs" / "apart_controls"
+    write_run(apart / "poem_minimal_luna1", WORKERS, {}, {}, "m", task="creative_writings")
+    idx = ti.build_index(tmp_path / "runs")
+    assert [row["run"] for row in idx["rows"]] == ["poem_minimal_luna1"] and idx["left_out"]["single_agent"] == 1
+    assert [c["key"] for c in idx["collections"]] == ["study_x"]
     assert set(ti.served_index(idx)) == set(ti.SERVED) and not {"version", "runs", "entries"} & set(ti.SERVED)
 
 

@@ -10,11 +10,13 @@
  *       ?tab=details                  the Details tab: the three ladders' panels, the judges, the colour legend
  *   #/ladders?task=<task name>        the ladders and the level by task tables (tv_view_ladders.js)
  *       ?section=<id>                 opens the page at that section (reliability: how reliable each rung is)
+ *   #/summary?col=<collection>        a collection's runs by workers' model, task and condition (tv_view_summary.js)
  */
 import { h } from '/static/app/dom.js';
 import { loadIndex, viewIndex } from './tv_view_index.js';
 import { viewRun } from './tv_view_run.js';
 import { viewLadders } from './tv_view_ladders.js';
+import { viewSummary } from './tv_view_summary.js';
 
 const main = () => document.getElementById('main');
 let token = 0;
@@ -26,6 +28,7 @@ function shell() {
       h('a', { class: 'brand', href: '#/' }, 'Transcripts'),
       h('span', { class: 'spacer' }),
       h('a', { class: 'btn btn-small', href: '#/ladders' }, 'Ladders'), ' ',
+      h('a', { class: 'btn btn-small', href: '#/summary' }, 'Summary'), ' ',
       h('a', { class: 'btn btn-small', href: '#/' }, 'All runs')),
     h('main', { id: 'main', tabindex: '-1' }));
 }
@@ -44,6 +47,7 @@ async function route() {
     const m = /^\/run\/(.+)$/.exec(path);
     if (m) node = await viewRun(m[1].split('/').map(decodeURIComponent).join('/'), q, view);
     else if (path === '/ladders') { node = await viewLadders(q, view); document.title = 'Ladders · Transcripts'; }
+    else if (path === '/summary') { node = await viewSummary(q); document.title = 'Summary · Transcripts'; }
     else { node = await viewIndex(q); document.title = 'Runs · Transcripts'; }
     if (my !== token) return;
     main().replaceChildren(node);

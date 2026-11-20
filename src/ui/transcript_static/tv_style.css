@@ -42,8 +42,6 @@ table.idx-table td.wrap { white-space: normal; min-width: 8ch; max-width: 18ch; 
 table.idx-table td.lv { white-space: normal; }
 /* So the table fits a 1700 px window: cheated stands under the Cheating chip, "read the excerpt" under the score. */
 table.idx-table .cheat-says .lv-cheated { display: block; }
-table.idx-table .sc-team { display: inline-block; }
-table.idx-table .sc-team .sc-mislead { display: block; }
 /* The band over the runs table's columns (tv_view_index.js GROUPS) and a rule at the left of each group. */
 table.idx-table tr.idx-band th { text-align: center; font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase;
   color: var(--muted); border-bottom: 2px solid var(--border); padding: 3px 6px; }
@@ -135,8 +133,8 @@ table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--ba
 .lv-pop-more { color: var(--muted); font-size: 11px; }
 .lv-pop-link { display: inline-block; margin-top: 4px; font-size: 11px; }
 /* A ladder's line: the mark between its two sides in the legends and the row between them in the Ladders tables. */
-.lv-line-mark { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
-  padding: 0 5px; border-radius: 3px; background: var(--text); color: var(--bg); }
+.lv-line-mark { display: inline-block; width: 3px; height: 1.6em; margin: 0 6px; vertical-align: middle; border-radius: 1px;
+  background: var(--text); }
 .lv-ladder-table tr.lv-line-row td { border-top: 3px solid var(--text) !important; background: var(--panel-2); font-size: 11.5px; color: var(--muted); max-width: none; white-space: normal; }
 .jl-list li { white-space: normal; }
 .jl-agree { color: var(--good); font-size: 12px; }
@@ -150,6 +148,8 @@ table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--ba
 /* A judge label's score: a chip from pale to strong with the number on it, its excerpt, its reason and its place. */
 .sc-chip { display: inline-block; min-width: 2.4em; padding: 1px 6px; border-radius: 9px; font-size: 11.5px; font-weight: 700;
   text-align: center; font-variant-numeric: tabular-nums; border: 1px solid rgba(0, 0, 0, .08); }
+/* The runs table's Interest: the class's rank as a plain chip, its words in the tooltip. */
+.interest-chip { background: var(--panel-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--border-strong); }
 .sc-entry { min-width: 12ch; }
 .sc-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; }
 .sc-excerpt-short { color: var(--muted); font-style: italic; max-width: 34ch; white-space: normal; overflow-wrap: anywhere; }
@@ -311,3 +311,48 @@ mark.xl-mark.flash { animation: flash 1.6s ease-out; }
 .cheat-table td:nth-child(5) { min-width: 320px; max-width: 640px; }
 .cb-cell { display: inline-flex; flex-direction: column; gap: 1px; white-space: nowrap; }
 .nowrap { white-space: nowrap; }
+/* The Summary page (tv_view_summary.js): a row per workers' model and task, a column per condition under a band of
+   groups, a rule at the left of each group, an influencer column's header three lines (role, level, model); a cell
+   holds its runs (a link), three k of n lines with a thin bar each and the three ladders' level counts as chips in
+   the ladders' colours. */
+.sum-wrap { overflow: auto; max-height: calc(100vh - var(--header-h) - 90px); }
+table.sum-table { font-size: 12px; border-collapse: separate; border-spacing: 0; }
+table.sum-table thead { position: sticky; top: 0; z-index: 2; }
+table.sum-table th, table.sum-table td { padding: 5px 6px; vertical-align: top; }
+table.sum-table th.sum-col { min-width: 140px; white-space: normal; vertical-align: bottom; }
+table.sum-table tr.sum-band-row th { text-align: center; font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--muted); border-bottom: 2px solid var(--border); padding: 3px 6px; }
+table.sum-table tr.sum-band-row th.sum-col { text-align: left; font-size: 12px; letter-spacing: normal; text-transform: none;
+  border-bottom: 1px solid var(--border); padding: 5px 6px; }
+table.sum-table .sum-group-start { border-left: 2px solid var(--border); }
+table.sum-table th.sum-model { white-space: nowrap; text-align: left; }
+table.sum-table td.sum-task { white-space: nowrap; }
+table.sum-table td.sum-empty { text-align: center; vertical-align: middle; }
+table.sum-table tr.sum-total > * { border-top: 2px solid var(--border-strong); background: var(--panel-2); }
+table.sum-table tr.sum-total .sum-bar, table.sum-table tr.sum-total .sum-chip-na { background: var(--border); }
+.sum-n { display: inline-block; font-weight: 700; font-size: 12.5px; margin-bottom: 3px; }
+.sum-share { display: grid; grid-template-columns: 4.6em 4.8em 1fr; align-items: center; gap: 4px; line-height: 1.35; }
+.sum-share-label { color: var(--muted); font-size: 11px; }
+.sum-share-k { font-variant-numeric: tabular-nums; color: var(--muted); }
+.sum-share-k.is-some { color: var(--text); font-weight: 600; }
+.sum-bar { display: block; height: 5px; min-width: 34px; background: var(--panel-2); border-radius: 2px; overflow: hidden; }
+.sum-bar > span { display: block; height: 100%; }
+.sum-lad { display: flex; align-items: flex-start; gap: 4px; margin-top: 3px; }
+.sum-lad-name { flex: none; width: 1.6em; font-size: 10px; font-weight: 700; color: var(--muted); padding-top: 1px; }
+.sum-chips { display: flex; flex-wrap: wrap; gap: 2px; }
+.sum-chip { display: inline-block; padding: 0 4px; border-radius: 3px; font-size: 10.5px; line-height: 1.5; white-space: nowrap;
+  font-variant-numeric: tabular-nums; }
+.sum-chip-na { background: var(--panel-2); color: var(--muted); }
+.sum-col-line { white-space: nowrap; line-height: 1.6; }
+.sum-col-model { font-weight: 600; }
+/* CheatBench's judge beside the code's Cheating chip: a small outlined chip, red when a worker cheated by its word. */
+.cb-chip { display: inline-block; padding: 0 5px; border-radius: 4px; font-size: 11px; font-weight: 600; white-space: nowrap;
+  color: var(--muted); box-shadow: inset 0 0 0 1px var(--border-strong); vertical-align: middle; }
+.cb-chip.cb-yes { color: var(--bad); box-shadow: inset 0 0 0 1px var(--bad); }
+.cb-chip + .cb-chip { margin-left: 3px; }
+.cheat-cell { white-space: nowrap; }
+/* The runs table's Other details: the interest chip over the collection. */
+.idx-other { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; white-space: nowrap; }
+/* A mislead score's mark: a small warning sign linking to why the score is untrustworthy. */
+.sc-mislead { text-decoration: none; color: var(--warn); font-size: 13px; vertical-align: middle; }
+.sc-team { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }

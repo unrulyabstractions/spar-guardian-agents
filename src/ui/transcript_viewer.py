@@ -11,8 +11,8 @@ cached measures (run_detail, board_detail) and serves the page. The server reads
 
 Routes: / (the page), /tv/<file> (src/ui/transcript_static/), /static/<path> (the results browser's assets in
 src/ui/static/, whose dom.js, charts.js, components.js and style.css the page reuses), /api/index, /api/run?id=,
-/api/board?id= (the run page's Board tab, src/ui/transcript_board.py), /api/transcript?id=&agent=, /api/ladders.
-src/ui/API.md describes them.
+/api/board?id= (the run page's Board tab, src/ui/transcript_board.py), /api/transcript?id=&agent=, /api/ladders,
+/api/summary?col= (the Summary page, src/ui/transcript_summary.py). src/ui/API.md describes them.
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ from src.configuration.settings import ROOT
 from src.judging import verdict_files
 from src.measures import judge_labels
 from src.measures.run_directory import RunDir, episode_agent
-from src.ui import transcript_board, transcript_ladder_tables, transcript_levels
+from src.ui import transcript_board, transcript_ladder_tables, transcript_levels, transcript_summary
 from src.ui.transcript_index import CACHE, RunFiles, cheatbench_by_agent, folder_agents, load_or_build, served_index
 from src.utils.json_files import read_jsonl
 
@@ -115,7 +115,7 @@ class Server(ThreadingHTTPServer):
 
 class Viewer:
     """What the server answers from: the served index (served_index) as bytes, its rows by id, each served run's
-    folder and cached measures, and the Ladders page's data."""
+    folder and cached measures, the Ladders page's data and the Summary page's, by collection."""
 
     def __init__(self, idx: dict):
         served = served_index(idx)
@@ -125,6 +125,7 @@ class Viewer:
         self.measured = {run_id: idx["entries"][run_id]["measured"] for run_id in self.rows}
         self.ladders = transcript_ladder_tables.ladders_payload(transcript_levels.LADDERS, transcript_levels.ORDER,
                                                                 transcript_levels.label_about())
+        self.summaries = {c["key"]: transcript_summary.summary(served["rows"], c["key"]) for c in served["collections"]}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -169,6 +170,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(RUN_ROUTES[url.path](row, self.viewer.dirs[run_id], self.viewer.measured[run_id]))
             if url.path == "/api/ladders":
                 return self.send_json(self.viewer.ladders)
+            if url.path == "/api/summary":
+                col = q.get("col") or next(iter(self.viewer.summaries), "")
+                if col not in self.viewer.summaries:
+                    return self.fail(HTTPStatus.NOT_FOUND, f"no collection {col!r} in the index")
+                return self.send_json(self.viewer.summaries[col])
             if url.path == "/api/transcript":
                 return self.transcript(q.get("id", ""), q.get("agent", ""))
             return self.fail(HTTPStatus.NOT_FOUND, "no such path")

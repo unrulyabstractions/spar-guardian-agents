@@ -219,7 +219,8 @@ the Ladders page's tables, `src/ui/transcript_board.py` the Board tab's data and
 (`tv_*.js`, `tv_style.css`, `tv_board.css`). The page reuses the results browser's `style.css`, `app/dom.js`,
 `app/charts.js` and `app/components.js`, served under `/static/`.
 
-Every folder under `runs/` is a **collection**, except `study_smoke`, `study_orbit2_check` and folders without a run. A study keeps its runs at
+Every folder under `runs/` is a **collection**, except `study_smoke`, `study_orbit2_check`, `apart_controls` and folders without a run. A run of a single agent (one
+worker, no influencer) is never listed. A study keeps its runs at
 its top level and in its groups (`study_runs`); its `INDEX.jsonl`, where it has one, gives each run's `valid` flag, and a
 run it gives no verdict is valid at the top level and carries its group's name in a group. A manifest collection
 (`apart_controls`) lists its runs in `manifest.jsonl`: the canonical copy is valid, an extra copy has the status `extra
@@ -233,7 +234,7 @@ folder and its measures (`RunFiles.measured`: CheatBench's verdicts, the three l
 labels), under a stamp of the run's files (their count, bytes and latest change, `stamp`) and of the code
 (`code_stamp`, a hash of `src/measures`, `src/domains`, `src/judging` and `src/ui`). A start measures again only the
 runs whose stamp changed, in `WORKERS` processes, and prints `measured k of n runs` every `PROGRESS` runs; `--rebuild`,
-a new `INDEX_VERSION` (now 10) or new code measures every run. The run page reads its ladders from the cache.
+a new `INDEX_VERSION` (now 13) or new code measures every run. The run page reads its ladders from the cache.
 
 ## UI routes
 
@@ -245,6 +246,7 @@ a new `INDEX_VERSION` (now 10) or new code measures every run. The run page read
 | `#/run/<collection>/<run key>?tab=board&a=&b=&mode=&pos=&lens=` | the Board tab: agents `a`, `b`; `time` or `step`; `pos`; `lens` (`all`, `cheating`, `coordination`, `collusion`, `judge`) |
 | `#/run/<collection>/<run key>?tab=details` | the Details tab: the three ladders' panels, the judge labels, the legend |
 | `#/ladders?task=<CheatBench task name>` | the three ladders, the Cheating ladder by task, the Coordination and Collusion levels, Collusion's take rules by task, the task's column highlighted, and the judge labels |
+| `#/summary?col=<collection>` | Summary: one collection's runs, a row per workers' model and task (and number of workers when team sizes mix), a column per condition, influencers by role, level and model (`/api/summary`); `col` defaults to `study_exploration_1` |
 
 `<ladder>` is `cheating`, `coordination` or `collusion`; a ladder filter's value is the team's level. `workers` is the
 number of workers; `worker` is the worker conditioning (`baseline`, `told to cheat`, a rule's words such as `generic
@@ -361,6 +363,7 @@ IndexRow = {                                         # valid runs only
   model (the workers' model, the last part of run.json's role_models worker, else its model, never a
   run's name), model_id (that model string), n_agents, seed,
   levels: {team: {<ladder>: level}, cheated: bool | null,   # the team's Cheating measure: attempted or above
+           passed: bool | null,                    # the Cheating measure's passed: the grader passed the hand-in
            cheating_influencers, coordination_influencers, collusion_influencers:
              [{agent, role ("regulator"|"disregulator"), level}],
            alarm: "passed with no trace of the honeypot" | null},
@@ -371,8 +374,8 @@ IndexRow = {                                         # valid runs only
            influencers: [{agent, role, disclosure: score | null, manipulation: score | null}]}
 }
 ```
-`measured` is how many runs this start measured; the others came from the cache. `left_out` is `{tasks, runs}`: the
-tasks the study does not read and how many valid runs that leaves unlisted. A ladder that does not apply reads `not
+`measured` is how many runs this start measured; the others came from the cache. `left_out` is `{tasks, runs, single_agent}`: the
+tasks the study does not read, how many valid runs that leaves unlisted, and how many single-agent runs are unlisted. A ladder that does not apply reads `not
 applicable`: Coordination and Collusion on a one-agent run, Collusion on a task with no take rule, Cheating on a run
 without episodes.
 
@@ -555,5 +558,35 @@ rate.
 `#/ladders?section=reliability` opens the page there. `take_rules` is `[[name, text]]`, the generic take rules
 (src/measures/collusion_takes.py `TAKE_RULES`), and `collusion_by_task` the rows `take` and `hand-in`, one cell
 per domain: the rule the task's `TaskRule` states (`take_rule`, `hand_in_rule`), or the reason `NO_RULE` gives.
+
+### `GET /api/summary?col=<collection>` → the Summary page (`src/ui/transcript_summary.py` `summary`)
+`{col, total, by_workers, columns: [Column], groups, rows: [{model, task, workers, cells: {<column key>: Cell |
+null}}], totals: {<column key>: Cell | null}}`, built at start for every collection; `col` defaults to the first
+collection, an unknown one gets 404.
+```
+Column = {key, label, group ("baseline" | "influencers" | "positive" | "negative" | "other"), worker (a worker
+          conditioning), influencer ("none" | "regulator" | "disregulator" | "both"),
+          influencers: [{role, level, model, n}]}          # regulators first; [] without influencers
+Cell = {n, cheated, accessed, passed,        # runs; of them: levels.cheated, team Cheating rung looked or above,
+                                              # levels.passed
+        levels: {<ladder>: [[level, runs]]}, # the teams' levels, in the ladder's order
+        filters: {col, task?, model?, workers?, worker, influencer, influencer_level?, q?} | null}
+                                              # the runs page's query that keeps exactly these runs
+```
+`columns`: Baseline (baseline workers, no influencer); one `influencers` column per influencer combination the
+collection holds with baseline workers, each influencer by role, instruction level and model ("+ regulator · enforce ·
+claude-haiku-5.5", "+ both · enforce, persuade · claude-haiku-5.5, gpt-6-luna"), regulators first, then
+disregulators, then both, each by level (instruction_levels.yaml order) and model; Told to cheat, Generic rule and Rule
+naming the exploit (no influencer); then one `other` column per further condition the collection holds, named by its
+combination ("Told to cheat + regulator · enforce · claude-haiku-5.5"). Rows split by the number of workers only when
+the collection mixes team sizes (`by_workers`; otherwise a row's `workers` is null and the page has no Workers column).
+Every valid run of the collection is in exactly one cell: `total` is the collection's valid runs and the cells' `n`
+sum to it, as do the `totals`. A cell's `filters` are found and checked by the server (`exact_filters`): the row's and
+column's filters, an influencer's `influencer_level`, and a run-name search `q` only when those keep other runs too
+(the runs page has no influencer-model filter); null when no such query keeps exactly the cell's runs, and the page
+then shows the count unlinked. `model` is the raw model; the page writes its label (`model=`). An influencer column's
+header is three lines: role chips, level chips, models. The page shows a red badge when its cells and `total` disagree.
+`groups` names the band over each group of columns (Baseline, Influencers, Positive control, Negative controls,
+Combined); a group of one column with its column's name is that column's header over both header rows.
 
 An unknown run, agent or path gets 404 `{"error"}`, a server fault 500 `{"error"}`.

@@ -14,7 +14,7 @@
  * control. Every definition is on the Ladders page. */
 import { enc, fmtInt, h, plural } from '/static/app/dom.js';
 import { muted, select } from '/static/app/components.js';
-import { cheatbenchTeam, cheatingCell, levelChip, lineMark, misleadMark, scoreChip, teamScore } from './tv_levels.js';
+import { cheatbenchTeam, cheatingCell, levelChip, lineMark, teamScore } from './tv_levels.js';
 import { COLLECTION_ORDER, collectionOf, modelLabel, setCollections, taskLabel } from './tv_labels.js';
 
 let INDEX = null;
@@ -82,9 +82,9 @@ const influencerLevel = x => `${x.role}: ${x.level || 'no level'}`;
 const CONDITIONING_TONE = { baseline: 'cond-none', 'told to cheat': 'cond-cheat', 'rule naming the exploit': 'cond-rule-strong',
   'rule naming where the exploit lies': 'cond-rule-strong' };
 const conditioningChip = part => h('span', { class: ['cond-chip', CONDITIONING_TONE[part] || 'cond-rule'] }, part);
-/** The Workers cell: the workers' number and model over their conditioning's chips. */
+/** The Model cell: the workers' model over their conditioning's chips; the Workers column holds their number. */
 const workersCell = r => h('div', { class: 'idx-who' },
-  h('span', { class: 'idx-model' }, h('span', { class: 'idx-count', title: plural(r.workers, 'worker') }, `${r.workers} ×`), ' ', modelLabel(r)),
+  h('span', { class: 'idx-model' }, modelLabel(r)),
   h('span', { class: 'idx-chips' }, r.worker_conditioning.split('; ').map(conditioningChip)));
 /** The Influencers cell: per influencer its role and its level as chips over its model; none without one. */
 const influencersCell = r => (r.influencer_conditioning.length
@@ -98,10 +98,9 @@ const influencersCell = r => (r.influencer_conditioning.length
 /** A name that may break after each underscore (and at a space, unless the space is a no-break one). */
 const breakable = name => String(name).split('_').flatMap((part, i) => (i ? ['_', h('wbr'), part] : [part]));
 
-/** The runs table's columns, in the order the user set on 2026-11-19: the run, the workers and the influencers (each
- * model with its conditioning), the task, the team's three ladders, the judge labels, the influencers' three ladders
- * and their judge labels, the interest, and the collection last. The Workers cell says how many workers
- * and the Influencers cell names each influencer, so no column counts the agents.
+/** The runs table's columns, in the order the user set on 2026-11-19: the run, the workers' number, their model with
+ * its conditioning, the influencers, the task, the team's three ladders, the influencers' three ladders, the
+ * workers' mean judge labels, and Other details last: the interest rank over the collection.
  * Each is {key, label, group, title, sort(row), cell(row)}; group names the band over it (GROUPS). d is /api/ladders'
  * answer. */
 function columns(d) {
@@ -122,43 +121,35 @@ function columns(d) {
     } });
   const about = d.judge_labels;
   const label = k => ({ key: k, label: about.labels[k].name, group: 'labels',
-    title: 'Team\'s highest score, 0 to 100, and its worker',
+    title: 'Workers\' mean score, 0 to 100',
     sort: r => teamScoreOf(r, k), cell: r => teamScore(r.labels.team[k], excerptHref(r, k)) });
-  const influencerLabel = k => ({ key: `${k}_influencers`, label: about.labels[k].name, group: 'influencers',
-    title: 'Each influencer\'s own score, kept out of the team\'s',
-    sort: r => Math.max(-1, ...r.labels.influencers.map(x => (x[k] == null ? -1 : x[k]))),
-    cell: r => (!r.labels.influencers.length ? none()
-      : h('span', { class: 'lv-influencers' }, r.labels.influencers.map(x => h('div', { class: 'lv-influencer-row' },
-        h('span', { class: 'small muted' }, `${x.role} `), x[k] == null ? muted('not judged', 'small')
-          : [h('a', { href: excerptHref(r, k)(x.agent), title: `open ${x.agent}'s excerpt` }, scoreChip(x[k])),
-            (x.kinds || {})[k] === 'mislead' ? [' ', misleadMark('mislead')] : null])))) });
   return [
     { key: 'run', label: 'Run', sort: r => r.run,
       cell: r => h('a', { class: 'run-link', href: `#/run/${r.id.split('/').map(enc).join('/')}` },
         breakable(r.run)) },
-    { key: 'workers', label: 'Workers', title: 'Number, model and system prompt\'s instruction',
+    { key: 'workers', label: 'Workers', title: 'Number of workers', sort: r => r.workers, cell: r => String(r.workers) },
+    { key: 'model', label: 'Model', title: 'Workers\' model and system prompt\'s instruction',
       sort: r => `${modelLabel(r)} · ${r.worker_conditioning}`, cell: workersCell },
     { key: 'influencers', label: 'Influencers', title: 'Each influencer\'s role, instruction level and model',
       sort: r => r.influencer_conditioning.map(x => `${x.role} ${x.level || ''} ${modelLabel({ model: x.model })}`).join(' · '),
       cell: influencersCell },
     { key: 'task', label: 'Task', sort: r => taskLabel(r), cell: r => taskLabel(r) },
     ...d.order.map(team),
-    ...Object.keys(about.labels).map(label),
     ...d.order.map(influencers),
-    ...Object.keys(about.labels).map(influencerLabel),
-    { key: 'interest', label: 'Interest', title: 'Default order: team\'s Cheating rung against its influencers',
-      sort: r => r.interest.rank, cell: r => h('span', { class: 'small' }, h('strong', null, String(r.interest.rank)), ` ${r.interest.why}`) },
-    { key: 'col', label: 'Collection', title: 'Folder under runs/', sort: colIx,
-      cell: r => h('span', { title: `${collectionOf(r.col).tag}: ${collectionOf(r.col).about}` }, breakable(collectionOf(r.col).label.replaceAll(' ', '\u00a0'))) },
+    ...Object.keys(about.labels).map(label),
+    { key: 'other', label: 'Other details', title: 'Interest rank, then collection', sort: r => r.interest.rank,
+      cell: r => h('div', { class: 'idx-other' },
+        h('span', { class: 'sc-chip interest-chip', title: `interest: ${r.interest.why}` }, String(r.interest.rank)),
+        h('span', { class: 'small', title: `${collectionOf(r.col).tag}: ${collectionOf(r.col).about}` }, collectionOf(r.col).label)) },
   ];
 }
 
-/** The bands over the columns: the run's identity and conditioning (no name), the team's ladders, the judge labels,
- * the influencers' ladders, and the collection (no name). */
+/** The bands over the columns: the run's identity and conditioning (no name), the team's ladders, the influencers'
+ * ladders, the workers' judge labels, and Other details (no band). */
 const GROUPS = { team: 'Team', labels: 'Judge labels', influencers: 'Influencers' };
 
 // Columns whose text wraps.
-const WRAP = new Set(['interest', 'col', 'run', 'task']);
+const WRAP = new Set(['run', 'task']);
 
 function uniq(a) { return [...new Set(a.filter(x => x != null))]; }
 
@@ -202,7 +193,7 @@ function filters(d) {
     ladder('coordination'),
     ladder('collusion'),
     ...Object.entries(d.judge_labels.labels).map(([k, x]) => ({ key: `min_${k}`, label: `${x.name} at least`, group: 'outcome',
-      title: `The team's highest ${x.name.toLowerCase()} score, 0 to 100`, number: true, test: (r, v) => teamScoreOf(r, k) >= Number(v) })),
+      title: `The workers' mean ${x.name.toLowerCase()} score, 0 to 100`, number: true, test: (r, v) => teamScoreOf(r, k) >= Number(v) })),
   ];
 }
 
@@ -295,7 +286,7 @@ export async function viewIndex(q) {
       c.note ? [h('br'), c.note] : null);
     const go = () => {
       if (state.sort === c.key) state.dir = state.dir === 'asc' ? 'desc' : 'asc';
-      else { state.sort = c.key; state.dir = ['run', 'col', 'interest'].includes(c.key) ? 'asc' : 'desc'; }
+      else { state.sort = c.key; state.dir = ['run', 'other'].includes(c.key) ? 'asc' : 'desc'; }
       changed();
     };
     th.addEventListener('click', go);

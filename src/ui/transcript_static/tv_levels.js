@@ -12,7 +12,7 @@
 import { h } from '/static/app/dom.js';
 import { badge, muted } from '/static/app/components.js';
 import { RAMP, inkOn, scoreColour } from './tv_case_view.js';
-import { CHEATBENCH, ROLE_LABEL, isInfluencer } from './tv_labels.js';
+import { ROLE_LABEL, isInfluencer } from './tv_labels.js';
 
 /** A ladder's bars: one per level above the lowest, filled up to `index`, with a gap before the ladder's line. lad:
  * the ladder's /api/ladders entry ({levels, line}). The bars take the text colour of what holds them. */
@@ -113,7 +113,7 @@ export function levelChip(key, lad, level, rank = true, opts = {}) {
 }
 
 /** The mark legends put between the two sides of a ladder's line. */
-export const lineMark = lad => h('span', { class: 'lv-line-mark', title: lad.line_words }, 'line');
+export const lineMark = lad => h('span', { class: 'lv-line-mark', title: lad.line_words, role: 'separator', 'aria-label': 'line' });
 
 /** Cheated beside a Cheating rung: the measure's word (src/measures/cheating_ladder.py cheated), nothing without one.
  * lad: the Cheating ladder's /api/ladders entry, whose line_words say what cheated means. */
@@ -141,8 +141,8 @@ export const MISLEAD_HREF = '#/ladders?section=reliability-mislead';
  * misleading until a reader has read its excerpt against its own calls. Nothing for any other kind. */
 export function misleadMark(kind) {
   if (kind !== 'mislead') return null;
-  return h('a', { class: 'sc-mislead small', href: MISLEAD_HREF, title: 'Mislead scores are untrustworthy: read the excerpt' },
-    'read the excerpt');
+  return h('a', { class: 'sc-mislead', href: MISLEAD_HREF, title: 'Mislead score: untrustworthy, read the excerpt',
+    'aria-label': 'mislead score, read the excerpt' }, '⚠');
 }
 
 /** One agent's judge label (the measure's {score, excerpt, source, reason, located}, and for manipulation its kind,
@@ -164,30 +164,24 @@ export function labelEntry(about, e, open, full = false) {
     full && e.reason ? muted(e.reason, 'small block') : null);
 }
 
-/** The team's score of a label (the index row's labels.team[label], {score, agent}): the chip and the worker it is
- * of; "not judged" without one. href(agent): where the agent's excerpt opens, or nothing. */
+/** The team's score of a label (the index row's labels.team[label], {score: the workers' mean, n, max, agent}): the
+ * mean's chip, which opens the highest-scoring worker's excerpt; "not judged" without one. href(agent): where the
+ * agent's excerpt opens, or nothing. */
 export function teamScore(t, href) {
-  if (!t) return muted('not judged', 'small');
-  const who = href && t.agent ? h('a', { href: href(t.agent), class: 'mono small', title: `open ${t.agent}'s excerpt` }, t.agent)
-    : h('span', { class: 'mono small' }, t.agent || '');
-  return h('span', { class: 'sc-team' }, scoreChip(t.score, `the team's highest score, of ${t.agent}`), ' ', who,
+  if (!t) return h('span', { class: 'muted', title: 'not judged' }, '–');
+  const tip = `workers' mean of ${t.n}; highest ${t.max}, ${t.agent}`;
+  const chip = scoreChip(t.score, tip);
+  return h('span', { class: 'sc-team' }, href && t.agent ? h('a', { href: href(t.agent), title: tip }, chip) : chip,
     t.kind === 'mislead' ? [' ', misleadMark(t.kind)] : null);
 }
 
-/** Who says what a line of a cell says: the code or a judge. */
-const whoTag = (who, tip) => h('span', { class: 'lv-who', title: tip }, who);
 
 /** A Cheating cell, the same on every page: the code's rung and whether it cheated, and under it CheatBench's judge's
  * own word (judgeWords: cheatbenchTeam or cheatbenchWords), each line marked by who says it, so the two are never
  * confused. lad: the Cheating ladder's /api/ladders entry; rank: whether the chip shows the rung's rank; facts: the
  * evidence the chip's popover lists. */
 export function cheatingCell(lad, level, cheated, judgeWords, rank = true, facts = []) {
-  return h('div', { class: 'cheat-cell' },
-    whoTag('code', 'Read by code from the run\'s records'),
-    h('div', { class: 'cheat-says' }, levelChip('cheating', lad, level, rank, { facts }),
-      cheated == null ? null : [' ', cheatedTag(cheated, lad)]),
-    whoTag('CheatBench judge', CHEATBENCH.about),
-    h('div', { class: 'cheat-says' }, judgeWords));
+  return h('div', { class: 'cheat-cell' }, levelChip('cheating', lad, level, rank, { facts }), judgeWords ? [' ', judgeWords] : null);
 }
 
 /** A ladder's cell in the run's table: the chip with its evidence on hover, or not applicable and why. judgeWords:
@@ -216,10 +210,10 @@ export function cheatbenchWords(verdicts) {
 
 /** The team's word of each CheatBench judge: its own cheated, k of n workers. summaries: the index row's cheatbench. */
 export function cheatbenchTeam(summaries) {
-  if (!summaries || !summaries.length) return muted('not judged', 'small');
-  return h('span', { class: 'cb-cell' }, summaries.map(s => h('span', { class: 'small', title: `judge ${s.judge}; ${s.of} of ${s.workers} workers parsed` },
-    h('span', { class: s.judge_cheated ? 'lv-judge-yes' : null }, `${s.judge_cheated} of ${s.of} cheated`),
-    summaries.length > 1 ? muted(` (${s.judge})`, 'small') : null)));
+  if (!summaries || !summaries.length) return h('span', { class: 'cb-chip cb-none', title: 'CheatBench judge: not judged' }, 'Judge: –');
+  return h('span', { class: 'cb-cell' }, summaries.map(s => h('span', {
+    class: ['cb-chip', s.judge_cheated ? 'cb-yes' : null],
+    title: `CheatBench judge ${s.judge}: ${s.judge_cheated} of ${s.of} workers cheated` }, `Judge: ${s.judge_cheated}/${s.of}`)));
 }
 
 /** CheatBench's judge's labels for one agent beside the code's clauses they answer (src/measures/judge_labels.py ROWS):

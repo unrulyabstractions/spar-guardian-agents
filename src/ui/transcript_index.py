@@ -40,8 +40,10 @@ from src.ui import transcript_levels
 from src.utils.json_files import read_json, read_jsonl
 
 CACHE = ROOT / "tmp" / "transcript_viewer" / "index.json"
-SKIP = ("study_smoke", "study_orbit2_check")
-INDEX_VERSION = 11  # 11: "baseline" for workers told nothing
+SKIP = ("study_smoke", "study_orbit2_check", "apart_controls")
+"""Folders under runs/ the viewer never lists: mock smokes, a port check and the apart controls, whose runs are all
+single agents."""
+INDEX_VERSION = 14  # 11 baseline; 12 levels.passed; 13 workers' mean label score; 14 single agents left out
 WORKERS = 6
 """Processes that measure runs when a start finds runs to measure: each loads transcripts, so few enough to spare the
 machine's memory."""
@@ -214,7 +216,8 @@ def cheatbench_summary(judges: dict[str, dict[str, dict]], episodes: list[dict],
 
 def label_summary(labels: dict, roles: dict[str, str | None]) -> dict:
     """The judge labels as the runs table shows them, from the measure's answer (judge_labels.labels): {"judge", "team":
-    {label: {"score": the measure's team score, "agent": the first worker with it, "kind": that agent's kind} or None},
+    {label: {"score": the workers' mean score, rounded, "n": the workers scored, "max": the highest worker score,
+    "agent": the first worker with it, "kind": that agent's kind} or None},
     "influencers": [{agent, role, label: its score or None, "kinds": {label: its kind}}]}. None is an agent or a team
     the judge has not scored. A kind is manipulation's (mislead, control or none), None for disclosure: the page marks
     a mislead score, which an independent reading found untrustworthy."""
@@ -230,8 +233,11 @@ def label_summary(labels: dict, roles: dict[str, str | None]) -> dict:
     team = {}
     for label in judge_labels.LABELS:
         top = labels["team"].get(label)
+        scored = [s for a in agents if is_worker(roles.get(a)) and (s := score(a, label)) is not None]
         who = next((a for a in agents if is_worker(roles.get(a)) and score(a, label) == top), None)
-        team[label] = None if top is None else {"score": top, "agent": who, "kind": kind(who, label)}
+        team[label] = None if top is None or not scored else {
+            "score": int(sum(scored) / len(scored) + 0.5), "n": len(scored), "max": top, "agent": who,
+            "kind": kind(who, label)}
     influencers = [{"agent": a, "role": roles.get(a), **{label: score(a, label) for label in judge_labels.LABELS},
                     "kinds": {label: kind(a, label) for label in judge_labels.LABELS}}
                    for a in labels["influencers"]]
@@ -474,7 +480,7 @@ def build_index(runs: Path, cached: dict | None = None) -> dict:
             else:
                 todo.append((run_id, st, name, item))
     entries.update(measure_all(todo))
-    rows, errors, collections_out, left_out = [], [], [], 0
+    rows, errors, collections_out, left_out, single = [], [], [], 0, 0
     for name, listed in cols:
         label, tag, about = COLLECTION_ABOUT.get(name, (name, "", ""))
         shown = 0
@@ -484,6 +490,8 @@ def build_index(runs: Path, cached: dict | None = None) -> dict:
                 errors.append({"id": f"{name}/{item.key}", "error": entry["error"]})
             elif "left_out" in entry:
                 left_out += 1
+            elif single_agent(entry["row"]):
+                single += 1
             else:
                 rows.append({**entry["row"], "interest": interest(entry["row"])})
                 shown += 1
@@ -493,8 +501,13 @@ def build_index(runs: Path, cached: dict | None = None) -> dict:
     return {"version": INDEX_VERSION, "runs": str(runs), "code": code,
             "built_at": time.strftime("%Y-%m-%d %H:%M:%S %Z"), "build_seconds": round(time.time() - t0, 2),
             "measured": len(todo), "collections": collections_out, "errors": errors, "rows": rows,
-            "left_out": {"tasks": sorted(HIDDEN_TASKS), "runs": left_out},
+            "left_out": {"tasks": sorted(HIDDEN_TASKS), "runs": left_out, "single_agent": single},
             "entries": entries}
+
+
+def single_agent(row: dict) -> bool:
+    """Whether the run had one agent: one worker and no influencer. The viewer lists teams only."""
+    return row["workers"] + sum(x.get("n", 1) for x in row["influencer_conditioning"]) == 1
 
 
 def served_index(idx: dict) -> dict:

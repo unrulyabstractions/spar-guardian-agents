@@ -1,0 +1,140 @@
+/* View: one collection's runs by condition (#/summary?col=<collection>), from /api/summary
+ * (src/ui/transcript_summary.py). A row per workers' model and task (and number of workers, only in a collection that
+ * mixes team sizes); a column per condition: the baseline, one column per influencer combination with baseline workers
+ * (role, instruction level and model, stacked on three lines in the header), the positive control (told to cheat), the
+ * two negative controls (a rule), and a column per other combination the collection holds. A cell: its runs (a link
+ * to the runs page filtered to exactly them, when the server found such filters), cheated, accessed and passed as k of
+ * n with a bar each, and the teams' level counts on the three ladders as chips in the ladders' colours. A last row
+ * totals each column. Labels and values only: every definition is on the Ladders page. */
+import { fmtInt, h, plural } from '/static/app/dom.js';
+import { badge, muted, select } from '/static/app/components.js';
+import { RAMP, inkOn } from './tv_case_view.js';
+import { loadLadders } from './tv_view_index.js';
+import { COLLECTION_ORDER, collectionOf, modelLabel } from './tv_labels.js';
+
+const SUMMARIES = new Map();
+/** /api/summary's answer for one collection. */
+async function loadSummary(col) {
+  if (!SUMMARIES.has(col)) {
+    const r = await fetch(`/api/summary?col=${encodeURIComponent(col)}`);
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || `summary: HTTP ${r.status}`);
+    SUMMARIES.set(col, d);
+  }
+  return SUMMARIES.get(col);
+}
+
+/** The runs page's address that keeps exactly a cell's runs: its filters, the model as the runs page names it. */
+function runsHref(filters) {
+  const p = new URLSearchParams();
+  for (const k of ['col', 'task', 'model', 'workers', 'worker', 'influencer', 'influencer_level', 'q']) {
+    const v = k === 'model' && filters.model ? modelLabel({ model: filters.model }) : filters[k];
+    if (v != null && v !== '') p.set(k, v);
+  }
+  return `#/?${p.toString()}`;
+}
+
+/** k of n with a thin bar, filled in `colour`. */
+const share = (label, k, n, colour) => h('div', { class: 'sum-share', title: `${label}: ${k} of ${n}` },
+  h('span', { class: 'sum-share-label' }, label),
+  h('span', { class: ['sum-share-k', k > 0 && 'is-some'] }, `${k}/${n}`),
+  h('span', { class: 'sum-bar' }, h('span', { style: `width:${n ? Math.round((100 * k) / n) : 0}%;background:${colour}` })));
+
+const SHORT = { cheating: 'Ch', coordination: 'Cd', collusion: 'Cl' };
+/** One ladder's level counts as chips in the ladder's colours; "n/a" where the ladder does not apply. */
+function ladderChips(key, lad, counts) {
+  const chips = counts.map(([level, n]) => {
+    const i = lad.levels.indexOf(level);
+    if (i < 0) return h('span', { class: 'sum-chip sum-chip-na', title: `${lad.name}: ${level}` }, `n/a ${n}`);
+    const bg = RAMP[key][i];
+    return h('span', { class: 'sum-chip', style: `background:${bg};color:${inkOn(bg)}`, title: `${lad.name}: ${level}` },
+      `${level} ${n}`);
+  });
+  return h('div', { class: 'sum-lad' }, h('span', { class: 'sum-lad-name', title: lad.name }, SHORT[key]), h('span', { class: 'sum-chips' }, chips));
+}
+
+/** A cell: its runs (linked when the server found the filters that keep exactly them), cheated, accessed and passed,
+ * and the three ladders' chips. */
+function cellView(c, d) {
+  if (!c) return h('td', { class: 'sum-cell sum-empty' }, muted('–'));
+  const n = plural(c.n, 'run');
+  return h('td', { class: 'sum-cell' },
+    c.filters ? h('a', { class: 'sum-n', href: runsHref(c.filters), title: 'Open these runs' }, n)
+      : h('span', { class: 'sum-n', title: 'No runs-page filter keeps exactly these' }, n),
+    share('cheated', c.cheated, c.n, RAMP.cheating[3]),
+    share('accessed', c.accessed, c.n, RAMP.cheating[2]),
+    share('passed', c.passed, c.n, 'var(--good)'),
+    d.order.map(L => ladderChips(L, d.ladders[L], c.levels[L])));
+}
+
+/** A column's header: its label, or for influencers three short lines: role chips, level chips, models. */
+function colLabel(c) {
+  const xs = c.influencers;
+  if (!xs.length) return c.label;
+  const role = x => (x.n === 1 ? x.role : `${x.n} ${x.role}s`);
+  const set = c.influencer === 'both' ? 'both' : role(xs[0]);
+  return [
+    c.group === 'other' ? h('div', { class: 'sum-col-line' }, c.worker[0].toUpperCase() + c.worker.slice(1)) : null,
+    h('div', { class: 'sum-col-line' }, '+ ', c.influencer === 'both'
+      ? xs.map((x, i) => [i ? ' ' : null, h('span', { class: ['role-chip', `role-chip-${x.role}`] }, role(x))])
+      : h('span', { class: ['role-chip', `role-chip-${xs[0].role}`] }, set)),
+    h('div', { class: 'sum-col-line' }, xs.map((x, i) => [i ? ' ' : null,
+      h('span', { class: ['level-chip', `level-chip-${x.role}`] }, x.level || 'no level')])),
+    h('div', { class: 'sum-col-line sum-col-model' }, xs.map(x => modelLabel({ model: x.model })).join(', ')),
+  ];
+}
+
+/** A column's tooltip: its workers' conditioning and each influencer's role, level and model. */
+const colTitle = c => [c.worker, ...(c.influencers.length
+  ? c.influencers.map(x => `${x.role} ${x.level || 'no level'} ${modelLabel({ model: x.model })}`) : ['no influencer'])].join('; ');
+
+export async function viewSummary(q) {
+  const ladders = await loadLadders();
+  const cols = COLLECTION_ORDER;
+  const col = cols.includes(q.get('col')) ? q.get('col') : (cols.includes('study_exploration_1') ? 'study_exploration_1' : cols[0]);
+  const s = await loadSummary(col);
+  const C = s.columns;
+  const counted = s.rows.reduce((t, r) => t + C.reduce((u, c) => u + (r.cells[c.key] ? r.cells[c.key].n : 0), 0), 0);
+  const lead = s.by_workers ? 3 : 2;
+
+  // The band over the condition columns: one cell per run of columns of the same group. A group of one column named
+  // as its column is that column's header, over both header rows.
+  const starts = new Set(C.filter((c, i) => i === 0 || C[i - 1].group !== c.group).map(c => c.key));
+  const colHead = (c, more = {}) => h('th', { scope: 'col', class: ['sum-col', starts.has(c.key) && 'sum-group-start'],
+    title: colTitle(c), ...more }, colLabel(c));
+  const band = [h('th', { colspan: String(lead), class: 'sum-band-none' }, '')];
+  const spanned = new Set();
+  for (let i = 0; i < C.length;) {
+    let j = i;
+    while (j < C.length && C[j].group === C[i].group) j++;
+    if (j - i === 1 && s.groups[C[i].group] === C[i].label) {
+      band.push(colHead(C[i], { rowspan: '2' }));
+      spanned.add(C[i].key);
+    } else {
+      band.push(h('th', { colspan: String(j - i), scope: 'colgroup', class: ['sum-band', `sum-band-${C[i].group}`, 'sum-group-start'] },
+        s.groups[C[i].group]));
+    }
+    i = j;
+  }
+  const head = h('tr', null, h('th', { scope: 'col' }, 'Workers\' model'), h('th', { scope: 'col' }, 'Task'),
+    s.by_workers ? h('th', { scope: 'col', title: 'Workers per team' }, 'Workers') : null,
+    C.filter(c => !spanned.has(c.key)).map(c => colHead(c)));
+  const cells = cs => C.map(c => {
+    const td = cellView(cs[c.key], ladders);
+    if (starts.has(c.key)) td.classList.add('sum-group-start');
+    return td;
+  });
+  const body = s.rows.map(r => h('tr', null,
+    h('th', { scope: 'row', class: 'sum-model' }, modelLabel({ model: r.model })),
+    h('td', { class: 'sum-task' }, r.task), s.by_workers ? h('td', { class: 'num' }, String(r.workers)) : null,
+    cells(r.cells)));
+  const total = h('tr', { class: 'sum-total' }, h('th', { scope: 'row', colspan: String(lead) }, 'All'), cells(s.totals));
+
+  const picker = select(cols.map(c => [c, collectionOf(c).label]), col, v => { location.hash = `#/summary?col=${encodeURIComponent(v)}`; },
+    { 'aria-label': 'Collection' });
+  return h('div', { class: 'page wide' },
+    h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, h('h1', null, `Summary: ${fmtInt(s.total)} runs`), picker,
+      counted !== s.total ? badge(`cells hold ${counted}`, 'bad', 'Cells and the collection disagree') : null)),
+    h('div', { class: 'table-wrap sum-wrap' }, h('table', { class: 'data sum-table' },
+      h('thead', null, h('tr', { class: 'sum-band-row' }, band), head), h('tbody', null, body, total))));
+}

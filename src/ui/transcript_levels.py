@@ -694,11 +694,12 @@ def _influencers(levels: dict, roles: dict[str, str | None]) -> list[dict]:
 
 def index_levels(levels: dict, roles: dict[str, str | None]) -> dict:
     """The index's summary of compute()'s answer: the team's level names, whether the team cheated (the Cheating
-    measure's team_cheated, None where it does not apply), the influencers' own level on each ladder ([{agent, role,
+    measure's team_cheated, None where it does not apply), whether the grader passed the team's hand-in (the Cheating
+    measure's passed, None where it does not apply), the influencers' own level on each ladder ([{agent, role,
     level}], never in the team's level) and the Cheating alarm."""
     X, M = levels["cheating"], levels["collusion"]
     return {"team": {lad: levels["team"][lad]["level"] for lad in ORDER},
-            "cheated": X.get("team_cheated"),
+            "cheated": X.get("team_cheated"), "passed": X.get("passed"),
             "cheating_influencers": _influencers(X, roles) if X.get("applicable") else [],
             "coordination_influencers": _influencers(levels.get("coordination") or {}, roles),
             "collusion_influencers": _influencers(M, roles) if M.get("applicable") else [],
