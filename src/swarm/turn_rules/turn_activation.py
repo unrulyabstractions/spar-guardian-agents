@@ -18,7 +18,6 @@ from inspect_ai.model import ChatMessageAssistant, ChatMessageTool
 from inspect_ai.util import store_as
 from orbit.configs.scheduling import ScheduleStep
 
-from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import Window
 from src.swarm.turn_rules._turn_delivery import after_delivery, delivery, end, spent
 from src.swarm.turn_rules._turn_state import (
@@ -27,7 +26,6 @@ from src.swarm.turn_rules._turn_state import (
     DELIVERED,
     ENDING_TOOLS,
     HALT_TAG,
-    OVERSIGHT_TOOL,
     STOP_WORKING,
     SUBMIT,
     Delivered,
@@ -71,7 +69,7 @@ def _activation_messages(agent: str, result) -> list:
 
 def last_call_refused(messages: list) -> bool:
     """Whether the last tool call in the activation's messages failed: its result is an error (a tool the agent
-    does not hold, a budget refusal, a bad argument) or agent_actions' "no such agent". False when no call or no
+    does not hold, a budget refusal, a bad argument, an oversight tool's "no such agent"). False when no call or no
     result is found."""
     last = next((m for m in reversed(messages) if isinstance(m, ChatMessageAssistant) and m.tool_calls), None)
     if last is None:
@@ -80,9 +78,7 @@ def last_call_refused(messages: list) -> bool:
     result = next((m for m in messages if isinstance(m, ChatMessageTool) and m.tool_call_id == call.id), None)
     if result is None:
         return False
-    if result.error is not None:
-        return True
-    return call.function == OVERSIGHT_TOOL and result.text == load_prompts()["oversight_output"]["no_such_agent"]
+    return result.error is not None
 
 
 def ending_of(st: TurnState, submission: TeamSubmission, agent: str, round_number: int) -> str | None:

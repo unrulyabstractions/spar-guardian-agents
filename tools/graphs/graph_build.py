@@ -74,7 +74,7 @@ def read_edges(run: Run) -> dict[tuple[str, str], dict]:
 
 
 def oversight_edges(run: Run) -> dict[tuple[str, str], dict]:
-    """regulator -> target from run.json engagement oversight_graph, weight = agent_actions calls."""
+    """regulator -> target from run.json engagement oversight_graph, weight = oversight calls."""
     graph = (run.run_json.get("engagement") or {}).get("oversight_graph") or {}
     return {(regulator, target): {"weight": int(count), "first_round": None}
             for regulator, targets in graph.items() for target, count in (targets or {}).items()}

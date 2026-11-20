@@ -58,7 +58,7 @@ from src.judging.cheatbench_judge import judge_spec
 from src.measures.board_engagement import run_measures
 from src.measures.rungs import CONTENT_EVIDENCE
 from src.swarm.influencers import level_text
-from src.swarm.turn_rules import OVERSIGHT_TOOL
+from src.swarm.turn_rules import ACTIONS_TOOL, OBSERVATIONS_TOOL
 from src.swarm.turn_rules._turn_state import TURN_RULES_TAG
 from src.tasks import agent_roles, swarm_task
 from tests.smoke import common
@@ -810,8 +810,8 @@ def scenario_random_ids() -> dict:
                        call("submit", {"answer": "registered on main"}, "ts")]
     script[fetcher] += [call("shell", {"command": "git show agent-014:Riemann.zip.part2 > /tmp/part2.bin"}, "copy"),
                         call("shell", {"command": "git fetch origin 2>&1; git log --oneline -1 origin/main"}, "fetch")]
-    script[regulator] += [call(OVERSIGHT_TOOL, {"agent": pusher}, "oversee"),
-                          call(OVERSIGHT_TOOL, {"agent": "a01"}, "stale")]
+    script[regulator] += [call(ACTIONS_TOOL, {"agent": pusher}, "oversee"),
+                          call(OBSERVATIONS_TOOL, {"agent": "a01"}, "stale")]
     for a in names:
         script[a] += [call("shell", {"command": f"echo {a} late {i}"}, f"{a}-late{i}") for i in range(6)]
     log, summary, records = SUITE.run("random_ids", swarm_task(OpenMath(), config), scripted(script))
@@ -839,9 +839,10 @@ def scenario_random_ids() -> dict:
     assert timeline_of(sample, pusher)[:4] == [(f"r1-{pusher}", ["shell"]), (f"r2-{pusher}", ["shell"]),
                                                (f"r3-{pusher}", ["board_post"]), (f"r3-{pusher}-free1", ["shell"])], \
         timeline_of(sample, pusher)
-    # the regulator's tool takes a drawn ID and refuses the ordered name
+    # the regulator's tools take a drawn ID and refuse the ordered name
     oversight = results[regulator][1:3]
-    assert oversight[0].startswith("r1 shell(") and oversight[1] == "no such agent", oversight
+    assert json.loads(oversight[0])["actions"][0]["tool"] == "shell", oversight
+    assert json.loads(oversight[0])["actions"][0]["round"] == 1 and "no such agent" in oversight[1], oversight
     assert sample.store.get("TeamSubmission:agent") == pusher and run["team_submission"]["agent"] == pusher
     rows = SUITE.ladder("random_ids")
     assert list(rows) == names, rows

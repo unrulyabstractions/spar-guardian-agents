@@ -24,9 +24,9 @@ The tools keep no store of their own. They read and write ORBIT's communication 
 read_messages honours a concurrent round's snapshot, so an agent sees the board as of its step's start. A post's
 number (#17) is its position on the board, oldest first; it does not change when later posts arrive.
 
-agent_actions (src/swarm/_regulator_oversight.py) is bound to regulators only, over every teammate. submit and
-stop_working are not board tools (src/swarm/submit_and_stop.py); a submit that hands in the team's work posts a notice
-as the system (system_post).
+get_agent_actions and get_agent_observations (src/swarm/_regulator_oversight.py) are bound to regulators only, over
+every teammate. submit and stop_working are not board tools (src/swarm/submit_and_stop.py); a submit that hands in
+the team's work posts a notice as the system (system_post).
 
 Budgets per round (SwarmConfig.reads_per_turn, posts_per_turn; turn_rules.spend). board_read returns at most the posts
 left in the agent's read budget for the round, the newest of its selection, and says how many it left out; with none
@@ -56,11 +56,13 @@ from orbit.tools import ToolFactory
 
 from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import SwarmConfig, role_of
-from src.swarm._regulator_oversight import agent_actions
+from src.swarm._regulator_oversight import get_agent_actions, get_agent_observations
 from src.swarm.turn_rules import (
+    ACTIONS_TOOL,
     BOARD_ID,
     BOARD_TOOLS,
-    OVERSIGHT_TOOL,
+    OBSERVATIONS_TOOL,
+    OVERSIGHT_TOOLS,
     SYSTEM_SENDER,
     budget_used,
     record_board_action,
@@ -238,10 +240,10 @@ def system_post(text: str, agents: list[str], board: str = BOARD_ID) -> None:
 
 def board_bindings(config: SwarmConfig, board: str = BOARD_ID,
                    roles: dict[str, str] | None = None) -> dict[str, ToolFactory]:
-    """ORBIT tool_bindings for the board tools and agent_actions, built per agent. Empty without a board.
+    """ORBIT tool_bindings for the board tools and the oversight tools, built per agent. Empty without a board.
 
     A binding is built only for the agents whose AgentSpec.tools names it (agent_tool_names). A regulator (roles)
-    reads without the read_page cap and without a read budget; agent_actions covers every teammate on the roster
+    reads without the read_page cap and without a read budget; the oversight tools cover every teammate on the roster
     (config.names), so a refusal never tells roles apart."""
     if not config.board:
         return {}
@@ -254,12 +256,13 @@ def board_bindings(config: SwarmConfig, board: str = BOARD_ID,
                 ctx.agent_name, None if regulator(ctx) else config.read_page, board,
                 None if regulator(ctx) else config.reads_per_turn)),
             "board_post": ToolFactory(lambda ctx: board_post(ctx.agent_name, board, config.posts_per_turn)),
-            OVERSIGHT_TOOL: ToolFactory(lambda ctx: agent_actions(ctx.agent_name, config.names))}
+            ACTIONS_TOOL: ToolFactory(lambda ctx: get_agent_actions(ctx.agent_name, config.names)),
+            OBSERVATIONS_TOOL: ToolFactory(lambda ctx: get_agent_observations(ctx.agent_name, config.names))}
 
 
 def agent_tool_names(config: SwarmConfig, roles: dict[str, str] | None = None) -> dict[str, list[str]]:
-    """The board tool names each agent of the roster gets: the three board tools, and agent_actions for a
+    """The board tool names each agent of the roster gets: the three board tools, and the oversight tools for a
     regulator. None without a board."""
     if not config.board:
         return {n: [] for n in config.names}
-    return {n: [*BOARD_TOOLS, *([OVERSIGHT_TOOL] if role_of(roles, n) == "regulator" else [])] for n in config.names}
+    return {n: [*BOARD_TOOLS, *(OVERSIGHT_TOOLS if role_of(roles, n) == "regulator" else ())] for n in config.names}

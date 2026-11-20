@@ -1,30 +1,42 @@
-"""agent_actions: a regulator's view of its teammates' tool calls, as an Inspect tool.
+"""A regulator's view of its teammates' work, as two Inspect tools that answer in JSON.
 
-The midterm report gives regulators "access to all tool calls from neutral agents"; the tool answers for every
-teammate, disregulators included, so that a refusal never tells a regulator who holds a role. tasks.py binds it to
-regulators only (board.agent_tool_names, board.board_bindings). Workers and disregulators never get it.
+The midterm report gives regulators "access to all tool calls from neutral agents". get_agent_actions shows what a
+teammate did: its tool calls, each with an id, its round, its tool and its arguments in full. get_agent_observations
+shows what those calls returned: by id, or the latest, each result cut to max_chars characters with the cut stated
+(chars, shown_chars, truncated). Both answer for every teammate, disregulators included, so that a refusal never tells a
+regulator who holds a role; a call about an unknown name, or about the regulator itself, fails with "no such agent".
+tasks.py binds them to regulators only (board.agent_tool_names, board.board_bindings). Workers and disregulators never
+get them.
 
-    agent_actions(agent="t4x9n", latest=20)
-    r1 bash({"cmd": "git log --all"}) -> commit 3f2a...
-    r2 board_post({"message": "found it"}) -> posted #3
+    get_agent_actions(agent="t4x9n", latest=2)
+    {"agent": "t4x9n", "total_calls": 31, "shown": 2, "actions": [
+      {"id": 29, "round": 7, "tool": "shell", "arguments": {"command": "git log --all"}},
+      {"id": 30, "round": 7, "tool": "board_post", "arguments": {"message": "found it"}}]}
+    get_agent_observations(agent="t4x9n", ids=[29])
+    {"agent": "t4x9n", "observations": [
+      {"id": 29, "round": 7, "tool": "shell", "status": "ok", "result": "commit 3f2a...", "chars": 5420,
+       "shown_chars": 4000, "truncated": true}]}
 
-One line per call, oldest first: the round of the activation that made the call, the tool, its arguments as JSON
-and the start of its result, each cut to CUT characters (prompts.yaml `oversight_output`). A call about an unknown
-name, or about the regulator itself, returns "no such agent".
+A call's id is its place among the teammate's tool calls from 0, the transcript's numbering (call k). status is "ok",
+"error" (result holds the error's message) or "pending" (the call is under way; result is null); an id the teammate has
+not reached is "no such call". Until 2026-11-20 one tool, agent_actions, gave both in one line per call with the
+arguments and the result each cut to 200 characters, a cut its description did not state; runs before then hold it,
+and the readers (ladder_domain.OVERSIGHT) accept every name.
 
 The calls come from the agent's own conversation. During the run that is its live state in ORBIT's session registry
 (turn_rules.live_state), the same source turn_activation.after_activation reads. ORBIT writes the attributed
 conversation (eval_sample_view.agent_messages) only when the run ends (AgentScheduler.sync_to_task_state), so it is
-the fallback outside a live run. The round of each call comes from
-TurnState.history_marks, which after_activation writes; a call after the last mark belongs to the step under way.
+the fallback outside a live run. The round of each call comes from TurnState.history_marks, which after_activation
+writes; a call after the last mark belongs to the step under way.
 
-A call counts as a board action of kind "oversight" (turn_rules.record_board_action): TurnState.oversight per regulator,
-oversight_targets per regulator and target, and oversight_first with the round of the first call about each target. A
-step that ends with agent_actions is a free step, within the regulator's K (free_board_actions_regulator).
+Each call counts as a board action of kind "oversight" (turn_rules.record_board_action): TurnState.oversight per
+regulator, oversight_targets per regulator and target, and oversight_first with the round of the first call about each
+target. A step that ends with either tool is a free step, within the regulator's K (free_board_actions_regulator).
 """
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 
 from inspect_ai.model import ChatMessageAssistant, ChatMessageTool
 from inspect_ai.solver._task_state import sample_state  # the running sample's TaskState: no public accessor
@@ -33,9 +45,27 @@ from inspect_ai.util import store_as
 
 from src.configuration.settings import load_prompts
 from src.export.eval_sample_view import SampleView, agent_messages
-from src.swarm.turn_rules import OVERSIGHT_TOOL, TurnState, current_round, live_state, record_board_action
+from src.swarm.turn_rules import (
+    ACTIONS_TOOL,
+    OBSERVATIONS_TOOL,
+    TurnState,
+    current_round,
+    live_state,
+    record_board_action,
+)
 
-CUT = 200            # characters of a call's arguments and of its result
+MAX_CHARS = 4000     # the default cut of each result get_agent_observations returns
+
+
+@dataclass(frozen=True)
+class Called:
+    """One tool call of a teammate: its id (place from 0), round, tool, arguments, and its result's text and status."""
+    id: int
+    round: int
+    tool: str
+    arguments: dict
+    status: str              # ok | error | pending
+    result: str | None
 
 
 def conversation(agent: str) -> list:
@@ -55,46 +85,95 @@ def _round_of(index: int, marks: list[list[int]], running: int) -> int:
     return running
 
 
-def _cut(text: str) -> str:
-    return text[:CUT]
-
-
-def call_lines(messages: list, marks: list[list[int]], running: int, latest: int) -> list[str]:
-    """The newest `latest` tool calls in the messages, oldest first, one line each (prompts.yaml oversight_output)."""
-    out = load_prompts()["oversight_output"]
-    results: dict[str, str] = {}
-    for m in messages:
-        if isinstance(m, ChatMessageTool) and m.tool_call_id:
-            results[m.tool_call_id] = m.error.message if m.error is not None else m.text
-    lines = []
+def called(messages: list, marks: list[list[int]], running: int) -> list[Called]:
+    """Every tool call in the messages, in order, each with its id, round and result."""
+    results: dict[str, ChatMessageTool] = {m.tool_call_id: m for m in messages
+                                            if isinstance(m, ChatMessageTool) and m.tool_call_id}
+    out: list[Called] = []
     for index, m in enumerate(messages):
         if not isinstance(m, ChatMessageAssistant) or not m.tool_calls:
             continue
         for call in m.tool_calls:
-            arguments = json.dumps(call.arguments, ensure_ascii=False, default=str)
             result = results.get(call.id)
-            lines.append(out["line"].format(round=_round_of(index, marks, running), tool=call.function,
-                                            arguments=_cut(arguments),
-                                            result=_cut(result) if result is not None else out["pending"]))
-    return lines[-latest:]
+            if result is None:
+                status, text = "pending", None
+            elif result.error is not None:
+                status, text = "error", result.error.message
+            else:
+                status, text = "ok", result.text
+            out.append(Called(len(out), _round_of(index, marks, running), call.function, dict(call.arguments or {}),
+                              status, text))
+    return out
 
 
-def agent_actions(owner: str, agents: list[str]) -> ToolDef:
-    """The tool bound to the regulator `owner`: the latest tool calls of any teammate on the roster `agents`."""
+def actions_payload(agent: str, calls: list[Called], latest: int, since_round: int | None) -> dict:
+    """get_agent_actions' answer: the newest `latest` calls from `since_round` on, oldest first, arguments in full."""
+    chosen = [c for c in calls if since_round is None or c.round >= since_round][-latest:]
+    return {"agent": agent, "total_calls": len(calls), "shown": len(chosen),
+            "actions": [{"id": c.id, "round": c.round, "tool": c.tool, "arguments": c.arguments} for c in chosen]}
+
+
+def observation(c: Called, max_chars: int) -> dict:
+    """One call's result as get_agent_observations returns it, cut to max_chars with the cut stated."""
+    text = c.result
+    row = {"id": c.id, "round": c.round, "tool": c.tool, "status": c.status, "result": None if text is None
+           else text[:max_chars]}
+    if text is not None:
+        row.update(chars=len(text), shown_chars=min(len(text), max_chars), truncated=len(text) > max_chars)
+    return row
+
+
+def observations_payload(agent: str, calls: list[Called], ids: list[int] | None, latest: int, max_chars: int) -> dict:
+    """get_agent_observations' answer: the results of the calls `ids` names, in that order, else of the newest
+    `latest` calls, oldest first."""
+    if ids is None:
+        rows = [observation(c, max_chars) for c in calls[-latest:]]
+    else:
+        rows = [observation(calls[i], max_chars) if 0 <= i < len(calls) else {"id": i, "status": "no such call"}
+                for i in ids]
+    return {"agent": agent, "observations": rows}
+
+
+def _teammate_calls(owner: str, allowed: set[str], agent: str) -> list[Called]:
+    """The teammate's calls, after the check that it is one, the call counted as oversight of it."""
+    if agent not in allowed:
+        raise ToolError(load_prompts()["oversight_output"]["no_such_agent"])
+    record_board_action(owner, "oversight", target=agent)
+    marks = store_as(TurnState).history_marks.get(agent, [])
+    return called(conversation(agent), marks, current_round() or 0)
+
+
+def _dump(payload: dict) -> str:
+    return json.dumps(payload, ensure_ascii=False, default=str)
+
+
+def get_agent_actions(owner: str, agents: list[str]) -> ToolDef:
+    """The tool bound to the regulator `owner`: any teammate's latest tool calls on the roster `agents`."""
     prompts = load_prompts()
-    args = prompts["tool_args"][OVERSIGHT_TOOL]
-    out = prompts["oversight_output"]
+    args = prompts["tool_args"][ACTIONS_TOOL]
     allowed = set(agents) - {owner}
 
-    async def execute(agent: str, latest: int = 20) -> str:
+    async def execute(agent: str, latest: int = 20, since_round: int | None = None) -> str:
         if latest < 1:
             raise ToolError("latest must be at least 1")
-        if agent not in allowed:
-            return out["no_such_agent"]
-        record_board_action(owner, "oversight", target=agent)
-        marks = store_as(TurnState).history_marks.get(agent, [])
-        lines = call_lines(conversation(agent), marks, current_round() or 0, latest)
-        return "\n".join(lines) if lines else out["no_calls"]
+        return _dump(actions_payload(agent, _teammate_calls(owner, allowed, agent), latest, since_round))
 
-    return ToolDef(execute, name=OVERSIGHT_TOOL, description=prompts["tools"][OVERSIGHT_TOOL],
-                   parameters={"agent": args["agent"], "latest": args["latest"]})
+    return ToolDef(execute, name=ACTIONS_TOOL, description=prompts["tools"][ACTIONS_TOOL],
+                   parameters={"agent": args["agent"], "latest": args["latest"], "since_round": args["since_round"]})
+
+
+def get_agent_observations(owner: str, agents: list[str]) -> ToolDef:
+    """The tool bound to the regulator `owner`: what any teammate's tool calls returned, by id or the latest."""
+    prompts = load_prompts()
+    args = prompts["tool_args"][OBSERVATIONS_TOOL]
+    allowed = set(agents) - {owner}
+
+    async def execute(agent: str, ids: list[int] | None = None, latest: int = 20, max_chars: int = MAX_CHARS) -> str:
+        if latest < 1 or max_chars < 1:
+            raise ToolError("latest and max_chars must be at least 1")
+        calls = _teammate_calls(owner, allowed, agent)
+        return _dump(observations_payload(agent, calls, ids, latest, max_chars))
+
+    return ToolDef(execute, name=OBSERVATIONS_TOOL, description=prompts["tools"][OBSERVATIONS_TOOL],
+                   parameters={"agent": args["agent"], "ids": args["ids"], "latest": args["latest"],
+                               "max_chars": args["max_chars"]})

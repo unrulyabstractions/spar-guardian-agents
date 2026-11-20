@@ -226,7 +226,7 @@ function engagementView(g, eps) {
     ['posts', g.posts],
     ['reads refused by the budget', g.reads_refused],
     ['posts refused by the budget', g.posts_refused],
-    ['oversight queries (agent_actions)', g.oversight],
+    ['oversight queries', g.oversight],
   ], 'kv-grid');
   const senders = m => Object.entries(m || {}).sort().map(([s, n]) => `${s} ${n}`).join(', ');
   const cols = ['agent', 'role', 'discovery round', 'checks', 'reads', 'posts', 'work steps', 'free steps', 'notices',

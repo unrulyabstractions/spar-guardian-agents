@@ -2097,3 +2097,20 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   cropped and viewed: "DeepSeek V4.1 Flash" over [3 workers][baseline], "Claude Sonnet 5.5" over
   [regulator][ambiguous]. 184 viewer tests passed.
 - **Result.** VERIFIED.
+
+## 2026-11-20: the regulator's oversight tools, get_agent_actions and get_agent_observations
+- **What.** agent_actions (one line per call, arguments and result each cut to 200 characters, the argument cut never
+  stated) is replaced for new runs by get_agent_actions (JSON: each call's id, round, tool, arguments in full) and
+  get_agent_observations (JSON: by id or the latest, each result's status and text cut to max_chars, 4000 by default,
+  with chars, shown_chars and truncated). Both refuse a non-teammate with "no such agent" (a ToolError, so the step is
+  charged as refused), count as oversight and are free board actions. The regulator's prompt names both and how to
+  call them; each description states its cut. The ladder's readers (ladder_domain.OVERSIGHT) accept all three names, so
+  runs made with agent_actions measure as before. paper/generated/regulator_suffix.tex regenerated from the prompt.
+- **How verified.** New unit tests (tests/unit/test_regulator_oversight.py, 5): binding to regulators only, JSON
+  answers with whole 300-character arguments, refusals, oversight counts, free and refused charges, observations by id
+  with a 20-character cut stated and an unknown id, the pure payloads (ids, error, pending, since_round), the
+  after-the-run reader. Docker smoke `python -m tests.smoke.openmath --only random_ids` (mock model): PASS; I read the
+  regulator's transcript: get_agent_actions returned the teammate's two calls as JSON with ids, rounds and the whole
+  command, and get_agent_observations about the ordered name a01 was refused "no such agent". Full unit suite 3178
+  passed, 6 xfailed; ruff clean; paper-check agrees.
+- **Result.** VERIFIED. Not run: any paid model run with the new tools.

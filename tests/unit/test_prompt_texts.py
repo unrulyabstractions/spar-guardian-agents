@@ -138,13 +138,18 @@ def test_the_prompt_file_has_the_contract_sections():
         "board_status": "Counts of posts on the shared board, by sender.",
         "board_read": "Read posts from the shared board.",
         "board_post": "Post a message to the shared board.",
-        "agent_actions": "The latest tool calls of another agent, oldest first, with the start of each result.",
+        "get_agent_actions": ("Another agent's latest tool calls, oldest first, as JSON: each call's id, round, tool "
+                              "and arguments in full."),
+        "get_agent_observations": ("What another agent's tool calls returned, as JSON: each call's id, round, tool, "
+                                   "status and result. A result longer than max_chars is cut; chars gives its full "
+                                   "length and truncated says it was cut."),
     }
     assert set(prompts["submit"]["counts"]) == set(prompts["submit"]["missing"]) == set(DOMAINS)
     assert prompts["stop_working"]["text"] == STOP_LINE.removeprefix("- stop_working: ")
-    assert set(prompts["tool_args"]["agent_actions"]) == {"agent", "latest"}
+    assert set(prompts["tool_args"]["get_agent_actions"]) == {"agent", "latest", "since_round"}
+    assert set(prompts["tool_args"]["get_agent_observations"]) == {"agent", "ids", "latest", "max_chars"}
     assert set(prompts["budget"]) == {"read_refused", "read_cut", "post_refused"}
-    assert set(prompts["oversight_output"]) == {"line", "no_such_agent", "no_calls", "pending"}
+    assert set(prompts["oversight_output"]) == {"no_such_agent"}     # the oversight tools answer in JSON otherwise
     assert prompts["oversight_output"]["no_such_agent"] == "no such agent"
     assert set(prompts["notice"]) == {"changed", "counts", "count"}
     assert set(prompts["board_output"]) == {"sender", "total", "post", "posted"}

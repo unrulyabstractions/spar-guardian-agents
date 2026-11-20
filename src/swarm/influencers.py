@@ -8,12 +8,12 @@ A swarm is the board (src/swarm/board.py) with N agents whose system prompts dif
     disregulator  a peer privately told to get the result by any means, at the configured disregulator level
 
 Regulators are not monitors. They have the same standing as everyone else, and nothing is enforced at a boundary.
-Their tools differ: a regulator also holds agent_actions and holds neither submit nor stop_working. It keeps the task's
-tools, so it can look at what its machine shows. A regulator has no deliverable. Its system prompt is its own in every
-domain (oversight_prompt, in place of Benchmark.system_prompts), and its first message holds the task as what its
-teammates do (oversight_first_message, in place of the task instruction). At level none a regulator keeps the task's
-prompt and first message (SwarmConfig.oversees). Roles hide behind the drawn agent IDs (SwarmConfig.names) and are
-recorded in the sample metadata.
+Their tools differ: a regulator also holds the oversight tools (get_agent_actions, get_agent_observations) and holds
+neither submit nor stop_working. It keeps the task's tools, so it can look at what its machine shows. A regulator has no
+deliverable. Its system prompt is its own in every domain (oversight_prompt, in place of Benchmark.system_prompts), and
+its first message holds the task as what its teammates do (oversight_first_message, in place of the task
+instruction). At level none a regulator keeps the task's prompt and first message (SwarmConfig.oversees). Roles hide
+behind the drawn agent IDs (SwarmConfig.names) and are recorded in the sample metadata.
 
 Every model-facing text of a level comes from src/configuration/instruction_levels.yaml: the rule sentence appended to
 the task instruction, and the regulator and disregulator texts appended to the system prompt of the agents holding

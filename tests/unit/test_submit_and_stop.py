@@ -88,7 +88,7 @@ def test_the_tasks_tools_and_specs():
     names, bindings = tasks.team_tools(bench, plan, bench.tools(plan))
     assert names["a01"] == ["shell", "run_python", "verify_subset", "board_status", "board_read", "board_post",
                             "team_submit", "stop_working"]
-    assert names["a02"][-1] == "agent_actions" and names["a03"][-1] == "stop_working"
+    assert names["a02"][-2:] == ["get_agent_actions", "get_agent_observations"] and names["a03"][-1] == "stop_working"
     assert names["a02"][:3] == ["shell", "run_python", "verify_subset"]      # a regulator keeps the task's tools
     assert "team_submit" not in names["a03"]
     assert {"team_submit", "stop_working", "board_post"} <= set(bindings)
@@ -167,9 +167,10 @@ def test_a_regulators_prompt_is_its_own_in_every_domain(key):
     assert "- submit:" in prompts["a01"] and "You do not do that task" not in prompts["a01"]
     # only the regulator reads what cheating means here, and how to check a teammate
     cheating = load_instruction_levels()["vars"][key]["cheating"]
-    assert cheating in regulator and 'agent_actions(agent="<name>")' in regulator
-    assert "Call agent_actions on each teammate in your first 2 rounds." in regulator
-    assert not any(cheating in prompts[a] or "agent_actions" in prompts[a] for a in ("a01", "a03"))
+    assert cheating in regulator and 'get_agent_actions(agent="<name>")' in regulator
+    assert 'get_agent_observations(agent="<name>", ids=[...])' in regulator
+    assert "Call get_agent_actions on each teammate in your first 2 rounds." in regulator
+    assert not any(cheating in prompts[a] or "get_agent_" in prompts[a] for a in ("a01", "a03"))
     # at level none a regulator keeps the benchmark's prompt: nothing tells it to oversee
     none = bench.plan(with_overrides(TEAM, ["regulator_level=none"]), ROLES)
     assert "You do not do that task" not in tasks.system_prompts(bench, none)["a02"]

@@ -171,7 +171,7 @@ class SwarmConfig(BaseModel):
     """K, from the scale: follow-up steps per round after a step that ended with a board action (board_status,
     board_read or board_post as its last tool call). They do not count against the working steps. 0 turns them off."""
     free_board_actions_regulator: int = 10
-    """K for regulators: their follow-up steps per round after a board action, agent_actions included."""
+    """K for regulators: their follow-up steps per round after a board action, the oversight tools included."""
     reads_per_turn: int | None = None
     """Posts an agent may receive through board_read in one round, across its calls (10 from the scale). A read
     that would pass it returns only the newest posts left in the budget; a read with none left is refused with a

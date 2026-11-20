@@ -12,7 +12,7 @@ domains' staging), and the replay refuses a run whose setup comes out other than
 planted commits, protein's staged files, creative's staging and probe). Each sandbox call then runs in its agent's
 machine as Inspect ran it, as its seat's user where the task has one, in the recorded order. A commit the call makes
 gets the date in the call's window that gives its recorded id (commit_dates.py), so later commands that name it find
-it. Host tools (board_read, board_post, board_status, submit, stop_working, a regulator's agent_actions) are replayed
+it. Host tools (board_read, board_post, board_status, submit, stop_working, a regulator's oversight tools) are replayed
 from their recorded outputs: they change no machine. Two do run: protein design's check_design, re-run on the host on
 its recorded arguments, and creative writing's submit, which keeps writing.md. At the end the grader's own commands
 read the end state, which must equal the stored one.

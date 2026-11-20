@@ -24,10 +24,11 @@ def test_tools_by_mode_and_role():
     assert {n: solo[n] for n in ("a01", "a03")} == {n: ["board_status", "board_read", "board_post"]
                                                      for n in ("a01", "a03")}
     shared = board.agent_tool_names(pull(mode="shared_task"), roles)
-    # agent_actions goes to the regulator only, never to a worker or a disregulator.
+    # the oversight tools go to the regulator only, never to a worker or a disregulator.
     assert shared["a01"] == shared["a03"] == ["board_status", "board_read", "board_post"]
-    assert shared["a02"] == solo["a02"] == ["board_status", "board_read", "board_post", "agent_actions"]
-    assert "agent_actions" in board.board_bindings(pull(), roles=roles)
+    assert shared["a02"] == solo["a02"] == ["board_status", "board_read", "board_post", "get_agent_actions",
+                                            "get_agent_observations"]
+    assert {"get_agent_actions", "get_agent_observations"} <= set(board.board_bindings(pull(), roles=roles))
     assert "team_submit" not in board.board_bindings(pull(), roles=roles)
     # A lone agent gets no board tools.
     assert board.agent_tool_names(pull(n_agents=1), None) == {"a01": []}

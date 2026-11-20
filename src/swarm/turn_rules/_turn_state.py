@@ -36,9 +36,11 @@ STOP_WORKING = "stop_working"
 ENDING_TOOLS = (SUBMIT, STOP_WORKING)     # a step ending in one that went through is neither charged nor free
 SYSTEM_SENDER = "system"                  # the sender of the board's notice of the team's hand-in
 ORBIT_SUBMITTED = "submitted"   # TurnState.ended of ORBIT's own submit, in logs made before submit and stop_working
-OVERSIGHT_TOOL = "agent_actions"                         # a regulator's tool (src/swarm/_regulator_oversight.py)
+ACTIONS_TOOL = "get_agent_actions"                       # a regulator's tools (src/swarm/_regulator_oversight.py)
+OBSERVATIONS_TOOL = "get_agent_observations"
+OVERSIGHT_TOOLS = (ACTIONS_TOOL, OBSERVATIONS_TOOL)
 CHECK_ROUNDS = 2                                         # a regulator's first rounds, for its check of each teammate
-BOARD_ACTIONS = (*BOARD_TOOLS, OVERSIGHT_TOOL)           # a step whose last call is one of these is free
+BOARD_ACTIONS = (*BOARD_TOOLS, *OVERSIGHT_TOOLS)         # a step whose last call is one of these is free
 CHANNEL_TOOLS = frozenset({"channel_post", "channel_read", "channel_list"})   # ORBIT's, withheld from the provider
 # The TurnState count each board action kind goes to.
 KIND_FIELDS = {"check": "checks", "read": "reads", "post": "posts", "oversight": "oversight"}
@@ -51,7 +53,7 @@ class TurnState(StoreModel):
     that went through). It is free when its last tool call is a board action (BOARD_ACTIONS) that succeeded and the
     agent's K (free_caps) is above 0; it is charged otherwise, and a failed board action, submit or stop_working is
     charged with the timeline charge "refused". checks, reads and posts count the board tools; oversight counts a
-    regulator's agent_actions calls about a teammate."""
+    regulator's oversight calls about a teammate."""
 
     agents: list[str] = Field(default_factory=list)
     workers: list[str] = Field(default_factory=list)        # the agents of role worker, every agent without roles
@@ -75,7 +77,7 @@ class TurnState(StoreModel):
     posts: dict[str, int] = Field(default_factory=dict)         # board_post calls that posted
     discovery_round: dict[str, int] = Field(default_factory=dict)   # round of the first check or read
     read_senders: dict[str, dict[str, int]] = Field(default_factory=dict)  # reader -> sender -> posts returned
-    oversight: dict[str, int] = Field(default_factory=dict)     # agent_actions calls about a teammate
+    oversight: dict[str, int] = Field(default_factory=dict)     # oversight calls about a teammate
     oversight_targets: dict[str, dict[str, int]] = Field(default_factory=dict)  # regulator -> target -> calls
     oversight_first: dict[str, dict[str, int]] = Field(default_factory=dict)    # regulator -> target -> first round
     turn_reads: dict[str, list[int]] = Field(default_factory=dict)  # [round, posts received through board_read]
@@ -201,7 +203,7 @@ def record_board_action(agent: str, kind: str, senders: list[str] | None = None,
     names agents only; an oversight call counts its target in oversight_targets, and oversight_first keeps the round
     of the first call about that target.
     The first check or read sets the agent's discovery round (round_number, or the round of the step under way).
-    Called by the board tools and agent_actions."""
+    Called by the board tools and the oversight tools."""
     st = store_as(TurnState)
     field = KIND_FIELDS[kind]
     setattr(st, field, bump(getattr(st, field), agent))

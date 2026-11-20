@@ -4,7 +4,7 @@
 
 Nodes are the run's agents. Edges are of two kinds. A read edge goes reader -> author; its weight is the posts of
 that author the reader's board_read calls returned, repeats counted as run.json engagement read_graph counts them.
-An oversight edge goes regulator -> target from engagement oversight_graph; its weight is the agent_actions calls.
+An oversight edge goes regulator -> target from engagement oversight_graph; its weight is the oversight calls.
 A cheating onset comes from the scout tool's runs/<study>/<name>/tools/scout/summary.json "onset" ({agent: round or
 null}); without it every onset is None. The onset's step (an index in trajectory.steps) is the earliest atif_step of a
 found honeypot_opened, honeypot_used or honeypot_submitted in scout's "agents" findings in the onset round. A read

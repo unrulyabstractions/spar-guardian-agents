@@ -6,10 +6,11 @@
 `python -m src engagement <run ...> [--json]` prints it. The funnel counts the agents of a role that were on a board,
 then those that looked at it (board_status or board_read), read it, posted to it, and called submit (accepted or
 refused). Each agent line gives its round of discovery, its checks, reads and posts, its working and free steps, the
-board_read and board_post calls the per-turn budgets refused, its agent_actions queries (a regulator's oversight),
-whether it called submit, and whom it read and queried; "--" stands for a value the run did not record. The numbers
-come from the `engagement` blocks src/export/run_export.py writes into episodes.jsonl and run.json, and the team's
-submission from run.json `team_submission`. A run without a board says so in one line.
+board_read and board_post calls the per-turn budgets refused, its oversight queries (a regulator's get_agent_actions and
+get_agent_observations, agent_actions before 2026-11-20), whether it called submit, and whom it read and queried; "--"
+stands for a value the run did not record. The numbers come from the `engagement` blocks src/export/run_export.py writes
+into episodes.jsonl and run.json, and the team's submission from run.json `team_submission`. A run without a board
+says so in one line.
 """
 from __future__ import annotations
 
