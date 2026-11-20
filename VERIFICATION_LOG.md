@@ -2086,3 +2086,14 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   flipt_minimal_regulated_dsflash_sonnet_enforce_fill1 opens on m8m4m and the regulator x6z8k. New unit test of the
   rule; 212 viewer tests passed; ruff clean.
 - **Result.** VERIFIED.
+
+## 2026-11-20: run page, System and User folded by default; the bar's who grouped by model
+- **What.** A System toggle beside User messages; both start folded (DEFAULT_FOLDS), the hash keeps only a departure
+  from the default (?fold=none when nothing is folded). The run bar shows one group per model: its name over its chips
+  (workers: count and conditioning; each influencer: role and level).
+- **How verified.** binder_minimal_luna4 on 8833 in headless Chrome: on open 1 of 1 System box and 7 of 7 User boxes
+  folded, the System and User toggles off; clicking both unfolded all and set ?fold=none; screenshot viewed (System and
+  User folded to their headers above step 1's reasoning). Bar of flipt_minimal_regulated_dsflash_sonnet_ambiguous_fill1
+  cropped and viewed: "DeepSeek V4.1 Flash" over [3 workers][baseline], "Claude Sonnet 5.5" over
+  [regulator][ambiguous]. 184 viewer tests passed.
+- **Result.** VERIFIED.

@@ -156,8 +156,11 @@ function resultText(r) {
   return asStr(c) || asStr(r.extra && r.extra.error);
 }
 // The parts of a step, each a section with a header strip that folds it: the run page's bar folds a part everywhere.
-// The bar's toggles: whole calls, User messages, and the sections of every call. Steps never fold.
-export const PARTS = [['calls', 'Calls'], ['user', 'User messages'], ['reasoning', 'Reasoning'], ['call', 'Tool calls'], ['result', 'Tool results']];
+// The bar's toggles: whole calls, the System prompt, User messages, and the sections of every call. Steps never fold.
+export const PARTS = [['calls', 'Calls'], ['system', 'System'], ['user', 'User messages'], ['reasoning', 'Reasoning'],
+  ['call', 'Tool calls'], ['result', 'Tool results']];
+// Folded when the page opens: the System prompt and the User messages.
+export const DEFAULT_FOLDS = ['system', 'user'];
 // A section longer than this starts clipped to its first lines.
 const CLIP_LINES = 12;
 /** Fold (on) or unfold one section; its header strip stays. */
@@ -379,7 +382,7 @@ export function renderCase(t, ctx) {
   let toolsDue = !!(ctx.tools && ctx.tools.tools && ctx.tools.tools.length);
   const toolsHere = () => { if (!toolsDue) return null; toolsDue = false; return toolsSection(ctx.tools); };
   // A message box folds to its header as a call does; its text is a section of its own.
-  const looseCard = x => h('div', { class: ['call', 'cs-msg', x.src === 'user' && 'cs-user'] },
+  const looseCard = x => h('div', { class: ['call', 'cs-msg', x.src === 'user' && 'cs-user', x.src === 'system' && 'cs-system'] },
     h('div', { class: 'ch' }, foldButton('call'), h('span', { class: 'cn', title: x.step != null ? `step ${x.step}` : null },
       x.src === 'agent' ? 'Message' : x.src === 'user' ? 'User' : 'System'), lv ? headChips(x.before - 1, false) : null),
     h('div', { class: 'cb' }, judgedLines(x.model), x.reasoning ? reasoningSection(x.reasoning, markOf(x.model)) : null,
@@ -777,6 +780,7 @@ export function renderCase(t, ctx) {
       };
       for (const b of right.querySelectorAll('.call[data-call]')) foldBox(b, off.has('calls'));
       for (const b of right.querySelectorAll('.cs-user')) foldBox(b, off.has('user'));
+      for (const b of right.querySelectorAll('.cs-system')) foldBox(b, off.has('system'));
       for (const b of right.querySelectorAll('.step-calls')) b.setAttribute('aria-expanded', String(!off.has('calls')));
     },
     findCall: k => show(k),

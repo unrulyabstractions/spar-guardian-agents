@@ -613,3 +613,8 @@ table.sum-table.is-detailed td.sum-cell { min-width: 220px; }
 .case .step-calls[aria-expanded=false] .sec-chev { transform: rotate(-45deg); }
 .case .step-think { display: flex; flex-direction: column; gap: 8px; }
 .case .step-think:empty { display: none; }
+/* The bar's who: a group per model, its name over its chips, the groups side by side. */
+.rp-who { align-items: flex-start; gap: 22px; }
+.rp-who-part { flex-direction: column; align-items: flex-start; gap: 6px; }
+.rp-who-model { font-size: 13px; white-space: nowrap; }
+.rp-who-chips { display: inline-flex; align-items: center; gap: 4px; }

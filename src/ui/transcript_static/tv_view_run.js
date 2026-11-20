@@ -1,5 +1,6 @@
 /* View: one run (#/run/<collection>/<run key>?agent=<id>&call=<k>, ?agent=<id>&label=<judge label>, ?tab=board&a=&b=
- * &mode=&pos= or ?tab=details; with &fold=calls,user,reasoning,call,result and &board=only on an agent's tab).
+ * &mode=&pos= or ?tab=details; with &fold=calls,system,user,reasoning,call,result (or none) and &board=only on an
+ * agent's tab).
  * Ported from collusion-hermaneutics' viewer (viewer/static/app/view_run.js). A bar with the run, an agent tab per
  * agent, a Board tab and a Details tab; the selected agent's whole episode below it, each step with its labels
  * (tv_case_view.js); the run record under it: the run's labels, the run settings, each agent's record with its
@@ -23,7 +24,7 @@ import { CHEATBENCH, ROLE_LABEL, armLabel, collectionOf, influencerParts, isInfl
   taskLabel } from './tv_labels.js';
 import { alarmBadge, cheatbenchTeam, cheatbenchWords, cheatingCell, cheatingPanel, clauseList, collusionPanel,
   coordinationPanel, judgeLabels, judgeLabelsPanel, labelEntry, levelChip, levelsPanel, teamScore } from './tv_levels.js';
-import { PARTS, centreVertically, renderCase, stripLegend } from './tv_case_view.js';
+import { DEFAULT_FOLDS, PARTS, centreVertically, renderCase, stripLegend } from './tv_case_view.js';
 import { renderBoard } from './tv_view_board.js';
 
 // The run page fills the window under the site's bar (tv_style.css .rp-page): its top is the site bar's real bottom
@@ -271,10 +272,11 @@ export async function viewRun(id, q, view) {
   const agentsBox = h('div', { id: 'sec-agents' }, d.agents.map(agentCard));
 
   // ---- top bar: run, arm, agent tabs, the fold toggles, the run record's toggle; the stage below holds the selected
-  // tab. The parts folded on every step (?fold=calls,user,reasoning,call,result) and Board calls only (?board=only) come from the
-  // hash and go back to it; an agent's tab takes them when shown.
+  // tab. The parts folded on every step (?fold=calls,system,user,reasoning,call,result; none for nothing; without it
+  // DEFAULT_FOLDS) and Board calls only (?board=only) come from the hash and go back to it; an agent's tab takes them
+  // when shown.
   const firstAgent = (d.agents.find(a => a.role === 'worker' && a.folder) || d.agents.find(a => a.folder) || {}).agent;
-  const folded = new Set((q.get('fold') || '').split(',').filter(x => PARTS.some(([k]) => k === x)));
+  const folded = new Set(q.has('fold') ? q.get('fold').split(',').filter(x => PARTS.some(([k]) => k === x)) : DEFAULT_FOLDS);
   const stage = h('div', { class: 'rp-stage', dataset: { board: q.get('board') === 'only' ? 'only' : 'all' } });
   const tabs = new Map();
   let current = null;
@@ -352,8 +354,9 @@ export async function viewRun(id, q, view) {
   function keepInHash() {
     const [path, qs] = location.hash.slice(1).split('?');
     const p = new URLSearchParams(qs || '');
-    if (folded.size) p.set('fold', PARTS.map(([k]) => k).filter(k => folded.has(k)).join(','));
-    else p.delete('fold');
+    const listed = PARTS.map(([k]) => k).filter(k => folded.has(k)).join(',');
+    if (listed === PARTS.map(([k]) => k).filter(k => DEFAULT_FOLDS.includes(k)).join(',')) p.delete('fold');
+    else p.set('fold', listed || 'none');
     if (stage.dataset.board === 'only') p.set('board', 'only');
     else p.delete('board');
     const s = p.toString();

@@ -1094,8 +1094,10 @@ def test_a_step_is_three_folding_sections_and_the_bar_folds_a_part_everywhere():
     button that folds it, a long one clipped; the bar's Show select is gone for a toggle per part and Board calls only,
     kept in the hash; an opened call or excerpt has its sections unfolded."""
     case = (STATIC / "tv_case_view.js").read_text()
-    assert ("export const PARTS = [['calls', 'Calls'], ['user', 'User messages'], ['reasoning', 'Reasoning'], "
-            "['call', 'Tool calls'], ['result', 'Tool results']]") in case
+    assert ("export const PARTS = [['calls', 'Calls'], ['system', 'System'], ['user', 'User messages'], "
+            "['reasoning', 'Reasoning'],\n  ['call', 'Tool calls'], ['result', 'Tool results']];") in case
+    # the System prompt and the User messages start folded
+    assert "export const DEFAULT_FOLDS = ['system', 'user'];" in case
     # steps never fold; calls and User messages fold, one at a time or all from the bar
     assert "class: 'step-box'" in case and "foldButton('step')" not in case and "foldButton('call')" in case
     assert "for (const b of right.querySelectorAll('.cs-user')) foldBox(b, off.has('user'));" in case

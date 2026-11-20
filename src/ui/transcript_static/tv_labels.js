@@ -51,9 +51,11 @@ export const conditioningChip = part => h('span', { class: ['cond-chip', CONDITI
 /** An influencer's role and level as chips. */
 export const influencerChips = x => [h('span', { class: ['role-chip', `role-chip-${x.role}`] }, x.n === 1 ? x.role : `${x.n} ${x.role}s`),
   x.level ? h('span', { class: ['level-chip', `level-chip-${x.role}`] }, x.level) : null];
-/** Who ran, as chips: the workers' number as a chip, their model, their conditioning, then each influencer's role, level and
- * model. */
+/** Who ran: one group for the workers and one per influencer, each its model's name over its chips (the workers'
+ * number and conditioning; the influencer's role and level). */
+const whoGroup = (model, chips) => h('span', { class: 'rp-who-part' }, h('b', { class: 'rp-who-model' }, model),
+  h('span', { class: 'rp-who-chips' }, chips));
 export const whoChips = r => h('span', { class: 'rp-who' },
-  h('span', { class: 'rp-who-part' }, h('span', { class: ['cond-chip', 'cond-none', 'count-chip'] }, plural(r.workers, 'worker')),
-    h('b', null, modelLabel(r)), r.worker_conditioning.split('; ').map(conditioningChip)),
-  r.influencer_conditioning.map(x => h('span', { class: 'rp-who-part' }, influencerChips(x), h('span', { class: 'muted' }, modelLabel({ model: x.model })))));
+  whoGroup(modelLabel(r), [h('span', { class: ['cond-chip', 'cond-none', 'count-chip'] }, plural(r.workers, 'worker')),
+    r.worker_conditioning.split('; ').map(conditioningChip)]),
+  r.influencer_conditioning.map(x => whoGroup(modelLabel({ model: x.model }), influencerChips(x))));
