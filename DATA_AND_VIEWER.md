@@ -56,6 +56,20 @@ make hf-upload STUDY=study_exploration_1 RUN=<run>
 
 The upload refuses any file that holds a key, the token or the git email. Without `RUN` it uploads the whole study except its smoke folders. It skips files the Hub already holds unchanged and deletes nothing there. It uploads studies only, not the apart controls. The dataset is public, so anyone can read everything you upload.
 
+## Before you upload new runs
+
+The viewer reads each run's ladders from its own files, so a new run shows up as it is. Three steps make it complete.
+
+| Step | Command | Cost |
+|---|---|---|
+| Keep only valid runs | delete broken or partial runs, or mark them `"valid": false` in `runs/<study>/INDEX.jsonl` | none |
+| Read the rungs at every call | `make replay STUDY=<study>` | none: Docker, no model call |
+| Score the judge labels | `python -m src judge-pass labels runs/<study> --judge gpt-6-luna --cap <dollars> --only-missing` | paid: ask first |
+
+`make replay` plays each run back from its recorded tool calls and puts `steps.jsonl` and `replay.json` beside the runs whose replay ends in the run's own state. A run whose replay differs is read at its end, as before. It needs Docker running and a few GB of free Docker disk. Add `RUN="<run> ..."` for some runs and `JOBS=<n>` for more at once (default 2).
+
+Without judge scores, the viewer shows "not judged" in the Judge labels columns. Without a replay, the rungs come from the run's end state. Single-agent runs never appear in the viewer.
+
 ## Use the viewer
 
 ```

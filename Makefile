@@ -75,6 +75,11 @@ hf-pull:  ## download STUDY's runs and eval logs from the dataset spar-swarm int
 	@test -n "$(STUDY)" || { echo "make hf-pull: give STUDY=<study>, e.g. make hf-pull STUDY=study_exploration_1 RUN=<run>"; exit 2; }
 	$(PY) scripts/pull_runs_from_hf.py "$(STUDY)" $(if $(findstring command line,$(origin RUN)),--run "$(RUN)") $(if $(DRY_RUN),--dry-run) $(if $(FORCE),--force) $(if $(DEST),--dest "$(DEST)")
 
+.PHONY: replay
+replay:  ## replay STUDY's runs from their recorded calls in Docker (no model call) and put each faithful replay's steps beside its run (RUN="<run> ..." for some, JOBS=2)
+	@test -n "$(STUDY)" || { echo "make replay: give STUDY=<study>, e.g. make replay STUDY=study_exploration_1"; exit 2; }
+	$(PY) scripts/replay_study.py "$(STUDY)" $(if $(findstring command line,$(origin RUN)),$(foreach r,$(RUN),--run "$(r)")) $(if $(JOBS),--jobs $(JOBS))
+
 .PHONY: setup
 setup:  ## the environment: .venv (Python 3.11) with requirements.txt's pinned packages and ORBIT from its submodule
 	uv venv --python 3.11 .venv

@@ -1928,3 +1928,8 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **What.** tv_view_board.js `placeReaches`: labels go in up to three rows per lane, left of their line at the right edge, with a dotted lead when all rows are full; drawn after every line; each label hovers and opens its call. Agent's work; a new test runs placeReaches in node.
 - **Checked by me.** Viewed the agent's after_collusion_zoom.png: cooperation, collaboration and collusion read cleanly in both lanes, each at its line. Board and viewer tests pass with the rest of the tree.
 - **UNVERIFIED.** The dotted lead on screen (unit test only); light mode.
+
+## 2026-11-19, make replay and the guide's "Before you upload new runs"
+- **What.** scripts/replay_study.py and `make replay STUDY= [RUN=] [JOBS=]`: replays a study's valid runs that hold no replay.json into tmp/replay/<study>/, then copies steps.jsonl and replay.json of faithful replays only into the run folders. DATA_AND_VIEWER.md gains the checklist (valid runs, make replay, judge-pass with a cap and the user's yes).
+- **How verified.** 2 unit tests (only faithful replays placed; a run with a replay, an unfaithful replay and a replay with no run folder change nothing; runs with a replay are not played again); ruff clean; `make -n` shows the expected command; `make replay STUDY=study_exploration_1 RUN=poem_minimal_cheat_luna1` skips the run (it holds a replay) and places nothing.
+- **UNVERIFIED.** A real end-to-end `make replay` on a study without replays (the underlying `python -m src replay` is verified on 146 runs).
