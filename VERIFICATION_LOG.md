@@ -1994,3 +1994,7 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 ## 2026-11-20, the transcript always fits its pane
 - **What.** Steps, calls, sections and text capped at the pane's width; any long unbroken string wraps (overflow-wrap: anywhere); the steps pane and the page never scroll sideways.
 - **How verified.** On 8833, binder_minimal_luna4 at 1288, 1000, 900 and 760 px wide: document and pane scrollWidth equal their widths, no element past the right edge; the top of the steps viewed at 1288x706 (System and User text wrapped inside Step 3). Viewer tests 59 passed. The user's own overflow was not reproduced in headless Chrome.
+
+## 2026-11-20, zoomed-in windows get one column and page scroll
+- **What.** The two fixed panes only from 1000 x 560 CSS px; a smaller or zoomed-in window gets one column and the page scrolls (the user: "zoomin gets it locked").
+- **How verified.** On 8833, binder_minimal_luna4: at 736x403 (175% zoom of 1288x706) the page scrolls (scrollY 2500, document 24369 px) and the steps use the full width, screenshot viewed; at 1288x706 the two panes stay (window scroll 0, stage hidden overflow). Viewer tests 59 passed.

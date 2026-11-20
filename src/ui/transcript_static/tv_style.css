@@ -276,7 +276,7 @@ mark.xl-mark.flash { animation: flash 1.6s ease-out; }
 /* and a step none of whose calls touched the board */
 .rp-stage[data-board=only] .case .right .step-box:not(:has(.call.has-board)) { display: none; }
 .case .note{font-size:11.5px;color:var(--ink-2);margin:8px 0 0}
-@media (max-width:700px){.case .main{grid-template-columns:1fr}.case .left{position:static}}
+@media not all and (min-width:1000px) and (min-height:560px){.case .main{grid-template-columns:1fr}.case .left{position:static;max-height:none}}
 .case .cs-svg{display:block;cursor:pointer}
 .case .cs-lane-g{font-size:10px;font-weight:600;fill:var(--ink-2)}
 .case .cs-mile{font:600 10.5px var(--sans);cursor:pointer}
@@ -319,16 +319,16 @@ mark.xl-mark.flash { animation: flash 1.6s ease-out; }
 .rp-dbtn[aria-pressed=true] { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
 .rp-team .card { margin-bottom: 10px; }
 .rp-stage .case { padding: 0; background: transparent; }
-/* A narrow window (700 px or less) has one column and the page scrolls under the run bar. --under-bar is the bar's real
+/* A small or zoomed-in window (under 1000 x 560 CSS px) has one column and the page scrolls under the run bar. --under-bar is the bar's real
    bottom edge, set by tv_case_view.js: the bar wraps there. */
 .rp-stage .case { --under: var(--under-bar, calc(var(--header-h) + 44px)); }
 .rp-stage .case .left { padding: 10px; }
 .rp-stage .case .call, .rp-stage .case .step-box { scroll-margin-top: var(--under); }
-/* Two panes from 701 px: the run page fills the window under the site bar (tv_view_run.js sets --rp-top), the run bar
+/* Two panes from 1000 x 560 CSS px: the run page fills the window under the site bar (tv_view_run.js sets --rp-top), the run bar
    on top and the stage under it; a view or the run record scrolls in the stage; an agent's strip and steps are each
    their own pane, the steps scrolling in theirs, padded at the end so the last call can reach the top. The strip's
    pane is 410 px, so the strip's label margin (tv_case_view.js LB), its slider and its legend's level cells fit. */
-@media (min-width: 701px) {
+@media (min-width: 1000px) and (min-height: 560px) {
   .page.rp-page { position: fixed; top: var(--rp-top, var(--header-h)); left: 0; right: 0; bottom: 0; display: flex;
     flex-direction: column; padding: 0 16px 10px; }
   .rp-page > .rp-bar { position: static; flex: none; margin: 0 -16px 8px; padding: 6px 16px; }
