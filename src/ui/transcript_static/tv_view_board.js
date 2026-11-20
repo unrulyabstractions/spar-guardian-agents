@@ -52,6 +52,11 @@ const THUMB = 14;             // the slider handle's width (tv_board.css .bd-sli
 const READ_CLASS = { latest: 'bd-read-latest', from: 'bd-read-from', plain: 'bd-read-plain' };
 const HOVER_LINES = 4;        // the most marks, facts or names a hover lists
 const CLIP = 70;              // the longest line of a hover
+const REACH_ROWS = 3;         // the rows of reach labels a lane holds
+const REACH_ROW_H = 11;       // one row's height
+const REACH_PAD = 3;          // between a reach line and its label
+const REACH_GAP = 4;          // the least space between two labels of one row
+const REACH_FONT = '600 9.5px';   // tv_board.css .bd-reach-text
 
 // At most HOVER_LINES of a list, then how many more.
 const fewOf = list => [...list.slice(0, HOVER_LINES), list.length > HOVER_LINES ? `+${list.length - HOVER_LINES} more`
@@ -106,6 +111,36 @@ function markWords(lens, m, d) {
   }
   if (lens === 'judge') return `${d.label_names[m.label]} ${m.score} · ${m.where}`;
   return firstLine(m.evidence, CLIP);
+}
+
+// The reach labels of one lane in rows, so no label covers another. A label sits right of its call's line, or left
+// of it where it would pass x1, in the first row free there. With no row free it takes the row that frees first,
+// moved right past that row's last label, and a lead joins it to its line. items: [{x, w}] in call order, x the line,
+// w the label's width. Returns [{row, tx, anchor, lead}]: lead is null, or the x where the moved label starts.
+export function placeReaches(items, x1, rows = REACH_ROWS) {
+  const ends = new Array(rows).fill(-Infinity);
+  return items.map(({ x, w }) => {
+    const flip = x + REACH_PAD + w > x1;
+    const from = flip ? x - REACH_PAD - w : x + REACH_PAD;
+    let row = ends.findIndex(e => e + REACH_GAP <= from);
+    if (row >= 0) {
+      ends[row] = from + w;
+      return { row, tx: flip ? x - REACH_PAD : from, anchor: flip ? 'end' : 'start', lead: null };
+    }
+    row = ends.indexOf(Math.min(...ends));
+    const moved = ends[row] + REACH_GAP;
+    ends[row] = moved + w;
+    return { row, tx: moved, anchor: 'start', lead: moved };
+  });
+}
+
+// A label's width in the reach labels' font, measured on a canvas; a rough width where no canvas measures.
+let measureCtx = null;
+function textWidth(text, family) {
+  measureCtx = measureCtx || document.createElement('canvas').getContext('2d');
+  if (!measureCtx) return text.length * 6;
+  measureCtx.font = `${REACH_FONT} ${family || 'sans-serif'}`;
+  return Math.ceil(measureCtx.measureText(text).width) + 1;
 }
 
 const lastAtOrBefore = (keys, p) => {
@@ -357,7 +392,7 @@ export function renderBoard(el, d, opts) {
     // strong one (callStyle). Under the Cheating lens a line marks the call where the agent first reaches each rung,
     // under the Collusion lens each call where it rose to a rung (a rung mark, the payload's marks with a teammate),
     // and under the Coordination lens each call from which the agent holds a new level (the payload's held, which can
-    // fall); heavier where it crosses the ladder's line, with the level's name.
+    // fall); heavier where it crosses the ladder's line, with the level's name, set in rows so none covers another.
     const callsG = svgEl('g', { class: 'bd-calls' });
     const reachG = svgEl('g', { class: 'bd-reaches' });
     const keys = { a: [], b: [] };
@@ -365,6 +400,7 @@ export function renderBoard(el, d, opts) {
     // per call: each ladder's highest level index of the agent's calls up to it; Coordination's, the level it holds;
     // Cheating's and Collusion's, where the measure read them after every call, the rung held after it (after)
     const reached = { a: [], b: [] };
+    const reaches = { a: [], b: [] };   // per side, each reach in call order: {x, k, text, crosses}
     const marked = { a: 0, b: 0 };
     for (const side of SIDES) {
       const ag = byAgent.get(state[side]);
@@ -385,13 +421,8 @@ export function renderBoard(el, d, opts) {
           x: left(c), y: laneY[side] + (LANE_H - tall) / 2, width: W(c), height: tall, fill: st.fill,
           'data-side': side, 'data-k': c.k }));
         if (st.kind === 'mark') marked[side] += 1;
-        const reach = (lad, line, was, now) => {
-          const x = left(c);
-          const crosses = (now >= line) !== (was >= line);
-          reachG.append(svgEl('line', { class: ['bd-reach', crosses && 'bd-reach-line'], x1: x, x2: x,
-            y1: laneY[side], y2: laneY[side] + LANE_H }),
-          svgEl('text', { class: 'bd-reach-text', x: x + 3, y: laneY[side] + 9 }, lad.levels[now]));
-        };
+        const reach = (lad, line, was, now) => reaches[side].push({ x: left(c), k: c.k, text: lad.levels[now],
+          crosses: (now >= line) !== (was >= line) });
         const now = state.lens === 'cheating' ? topOf(c.marks.cheating, 'index') : 0;
         if (now > sofar) {
           reach(cheat, ramp.cheatLine, sofar, now);
@@ -410,6 +441,24 @@ export function renderBoard(el, d, opts) {
         calls[side].push(c);
       }
     }
+    // each reach: its line, and its label in rows (placeReaches); a label hovers and opens its call as the call does.
+    // The labels go over every line, so a later line never strikes through an earlier label.
+    const family = getComputedStyle(svgHost).getPropertyValue('--sans').trim();
+    const reachText = svgEl('g', { class: 'bd-reach-labels' });
+    for (const side of SIDES) {
+      const at = placeReaches(reaches[side].map(r => ({ x: r.x, w: textWidth(r.text, family) })), x1);
+      reaches[side].forEach((r, i) => {
+        const { row, tx, anchor, lead } = at[i];
+        const y = laneY[side] + 9 + row * REACH_ROW_H;
+        reachG.append(svgEl('line', { class: ['bd-reach', r.crosses && 'bd-reach-line'], x1: r.x, x2: r.x,
+          y1: laneY[side], y2: laneY[side] + LANE_H }),
+        ...(lead == null ? [] : [svgEl('line', { class: 'bd-reach-lead', x1: r.x, x2: lead - 1, y1: y - 3,
+          y2: y - 3 })]));
+        reachText.append(svgEl('text', { class: 'bd-reach-text', x: tx, y, 'text-anchor': anchor, 'data-side': side,
+          'data-k': r.k }, r.text));
+      });
+    }
+    reachG.append(reachText);
     svg.append(callsG, reachG);
 
     // posts on the board lane, packed into rows so none hides another; then each post's arrows, from its writing call

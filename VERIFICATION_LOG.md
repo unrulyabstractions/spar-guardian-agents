@@ -1923,3 +1923,8 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **Checked by me.** Opened both replay.json: faithful, `read_before` as above, steps carry line hits; `faithful_steps` accepts both (44 and 382 lines). Replay tests 52 passed; ruff clean.
 - **Result.** VERIFIED for the two runs. The four before/after replays are the agent's, not repeated by me.
 - **Then.** Both runs' steps.jsonl and replay.json copied into their run folders (`cp -n`, `cmp` equal) and their ladders rebuilt (signals.jsonl and run.json backed up to scratchpad/backup2 first): every agent now reads its steps, and no rung changes. study_exploration_1 has steps for 146 of 147 runs; flipt_minimal_regulated_dsflash_luna_enforce_fill2 stays unfaithful (a key never recorded). VERIFIED.
+
+## 2026-11-19, the Board tab's reach labels stack instead of overlapping
+- **What.** tv_view_board.js `placeReaches`: labels go in up to three rows per lane, left of their line at the right edge, with a dotted lead when all rows are full; drawn after every line; each label hovers and opens its call. Agent's work; a new test runs placeReaches in node.
+- **Checked by me.** Viewed the agent's after_collusion_zoom.png: cooperation, collaboration and collusion read cleanly in both lanes, each at its line. Board and viewer tests pass with the rest of the tree.
+- **UNVERIFIED.** The dotted lead on screen (unit test only); light mode.

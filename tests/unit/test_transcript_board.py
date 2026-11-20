@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import subprocess
 import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -479,7 +481,55 @@ def test_the_board_tab_carries_no_sentence_and_its_cards_have_now_and_end():
     assert ".bd-cards { display: grid; grid-template-columns: 1fr 1fr;" in css and ".bd-end.bd-same" in css
 
 
-REAL = ROOT / "runs" / "study_exploration_1" / "flipt_minimal_cheat_dsflash_fixed3"
+def place_reaches(items: list[dict], x1: float) -> list[dict]:
+    """The Board tab's own placeReaches, run in node on these labels."""
+    board = (Path(tb.__file__).parent / "transcript_static" / "tv_view_board.js").read_text()
+    consts = "\n".join(line for line in board.splitlines() if line.startswith("const REACH_"))
+    func = re.search(r"^export function placeReaches\(.*?^}$", board, flags=re.S | re.M).group(0)
+    script = (f"{consts}\n{func.removeprefix('export ')}\n"
+              f"console.log(JSON.stringify(placeReaches({json.dumps(items)}, {x1})));")
+    done = subprocess.run(["node", "-e", script], capture_output=True, text=True, timeout=60)
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout)
+
+
+def spans(items: list[dict], at: list[dict]) -> list[tuple[int, float, float]]:
+    """Each placed label's row and its left and right ends."""
+    return [(p["row"], p["tx"] - (i["w"] if p["anchor"] == "end" else 0),
+             p["tx"] + (0 if p["anchor"] == "end" else i["w"])) for i, p in zip(items, at)]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node runs the tab's layout")
+def test_reach_labels_never_overlap_and_each_keeps_its_call():
+    """Rungs reached seconds apart (k4q8z in flipt_minimal_cheat_dsflash_fixed3: cooperation, collaboration and
+    collusion within a few pixels) stack in rows, each label at its own line; a label that would pass the lanes' end
+    sits left of its line; with every row taken a label moves right with a lead to its line. Each label holds its
+    call, so its hover and click are the call's."""
+    close = [{"x": 1000, "w": 58}, {"x": 1005, "w": 64}, {"x": 1030, "w": 44}]
+    assert place_reaches(close, 1584) == [
+        {"row": 0, "tx": 1003, "anchor": "start", "lead": None},
+        {"row": 1, "tx": 1008, "anchor": "start", "lead": None},
+        {"row": 2, "tx": 1033, "anchor": "start", "lead": None}]
+    apart = [{"x": 160, "w": 32}, {"x": 300, "w": 40}, {"x": 720, "w": 50}]
+    assert [p["row"] for p in place_reaches(apart, 1584)] == [0, 0, 0]
+    assert place_reaches([{"x": 1560, "w": 35}], 1584) == [{"row": 0, "tx": 1557, "anchor": "end", "lead": None}]
+    crowd = [{"x": 500 + 2 * i, "w": 50} for i in range(5)]
+    at = place_reaches(crowd, 1584)
+    assert [p["row"] for p in at] == [0, 1, 2, 0, 1]
+    assert [p["lead"] is None for p in at] == [True, True, True, False, False]
+    assert all(p["lead"] == p["tx"] > i["x"] for i, p in zip(crowd[3:], at[3:]))
+    for items in (close, apart, crowd, [{"x": 100 + 7 * i, "w": 20 + 9 * (i % 4)} for i in range(40)]):
+        placed = spans(items, place_reaches(items, 1584))
+        for i, (row, lo, hi) in enumerate(placed):
+            assert all(row != r2 or hi <= lo2 or hi2 <= lo for r2, lo2, hi2 in placed[i + 1:]), (items, placed)
+    board = (Path(tb.__file__).parent / "transcript_static" / "tv_view_board.js").read_text()
+    assert "'text-anchor': anchor, 'data-side': side,\n          'data-k': r.k }, r.text)" in board
+    assert "reachG.append(reachText);" in board    # the labels over every line
+    css = (Path(tb.__file__).parent / "transcript_static" / "tv_board.css").read_text()
+    assert "stroke-width: 3px; stroke-linejoin: round; cursor: pointer; }" in css and ".bd-reach-lead {" in css
+
+
+REAL =ROOT / "runs" / "study_exploration_1" / "flipt_minimal_cheat_dsflash_fixed3"
 
 
 def files_of(folder: Path) -> list[tuple[str, int, int]]:

@@ -86,7 +86,9 @@
 .bd-reach { stroke: var(--text); stroke-width: 1; stroke-dasharray: 3 2; pointer-events: none; }
 .bd-reach.bd-reach-line { stroke-width: 2.2; stroke-dasharray: none; }
 .bd-reach-text { font-size: 9.5px; font-weight: 600; fill: var(--text); paint-order: stroke; stroke: var(--panel);
-  stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
+  stroke-width: 3px; stroke-linejoin: round; cursor: pointer; }
+.bd-reach-text:hover { text-decoration: underline; }
+.bd-reach-lead { stroke: var(--text); stroke-width: 1; stroke-dasharray: 1 2; pointer-events: none; }
 .bd-pbox { cursor: pointer; }
 .bd-pbox.bd-ahead { opacity: .28; }
 .bd-pbox rect { stroke-width: 1.2; }
