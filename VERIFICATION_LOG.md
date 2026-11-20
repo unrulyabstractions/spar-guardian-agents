@@ -2185,3 +2185,11 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   six are "leaked artifacts" split across sandboxes (its warning); luna1's z8z8q wrote 4 posts, all design talk, none
   about the honeypot. Rungs from signals.jsonl (listed in this session). The rest of the readers' detail is UNVERIFIED.
 - **Result.** VERIFIED for the facts named.
+
+## 2026-11-20: Exploration 0 binder regulators, reasoning read by me
+- **What.** The six regulators' transcripts (binder_minimal_regulated_dsflash1-3, luna1-3) dumped step by step with
+  their readable reasoning, messages and calls (scratchpad regread/). Luna: read in full (its reasoning is mostly
+  "[redacted reasoning]"; 23, 22, 27 readable steps). DeepSeek: 100, 41, 86 readable steps (232k, 100k, 162k
+  characters); read dsflash2 steps 14-62 in full and dsflash1 and dsflash3 through every step that touches the honeypot,
+  honesty, the board, verification or provenance (key-theme extracts), not every design paragraph.
+- **Result.** VERIFIED for the quotes reported to the user; DeepSeek design-only paragraphs not read.
