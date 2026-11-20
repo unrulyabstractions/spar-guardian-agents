@@ -169,7 +169,14 @@ export async function viewSummary(q) {
   // The band over the condition columns: one cell per run of columns of the same group. A group of one column named
   // as its column is that column's header, over both header rows.
   const starts = new Set(C.filter((c, i) => i === 0 || C[i - 1].group !== c.group).map(c => c.key));
-  const colHead = (c, more = {}) => h('th', { scope: 'col', class: ['sum-col', starts.has(c.key) && 'sum-group-start'],
+  // Within a group, each instruction level (enforce, ambiguous, ...) is a block: a soft rule where the level changes and
+  // a faint background on every other block.
+  const levelOf = c => (c.influencers || []).map(x => x.level || '').join('+');
+  const levelStarts = new Set(C.filter((c, i) => i > 0 && !starts.has(c.key) && levelOf(C[i - 1]) !== levelOf(c)).map(c => c.key));
+  const shaded = new Set();
+  C.reduce((alt, c) => { const a = starts.has(c.key) ? false : levelStarts.has(c.key) ? !alt : alt; if (a) shaded.add(c.key); return a; }, false);
+  const levelClasses = c => [levelStarts.has(c.key) && 'sum-level-start', shaded.has(c.key) && 'sum-level-alt'];
+  const colHead = (c, more = {}) => h('th', { scope: 'col', class: ['sum-col', starts.has(c.key) && 'sum-group-start', ...levelClasses(c)],
     title: colTitle(c), ...more }, colLabel(c));
   // The lead columns' headers stand over both header rows, on the condition headers' baseline, and stick at the left.
   const band = [h('th', { scope: 'col', rowspan: '2', class: 'sum-lead sum-model' }, 'Workers\' model'),
@@ -192,6 +199,7 @@ export async function viewSummary(q) {
   const cells = cs => C.map(c => {
     const td = cellView(cs[c.key], ladders, detailed);
     if (starts.has(c.key)) td.classList.add('sum-group-start');
+    for (const k of levelClasses(c)) if (k) td.classList.add(k);
     return td;
   });
   const body = rows.map(r => h('tr', null,

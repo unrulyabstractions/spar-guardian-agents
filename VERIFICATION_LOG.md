@@ -2158,3 +2158,11 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **How verified.** Summary on 8833 at 1400 wide, plain and ?detail=1, head cropped and viewed: Regulators,
   Disregulators, Both, a rule, then Detailed outlined (off) and filled (on). Viewer tests passed.
 - **Result.** VERIFIED.
+
+## 2026-11-20: Summary, instruction levels set apart within a group
+- **What.** Within a column group, a dashed soft rule where the influencers' level changes (enforce to ambiguous) and a
+  faint shade on every other level block.
+- **How verified.** Summary on 8833 at 1400x520 viewed: a dashed rule between the last enforce column (GPT-6 Luna) and
+  the first ambiguous column (Claude Haiku 5.5), the ambiguous block faintly shaded; group rules unchanged. Viewer
+  tests passed.
+- **Result.** VERIFIED.

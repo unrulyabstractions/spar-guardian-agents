@@ -644,3 +644,6 @@ table.sum-table.is-detailed td.sum-cell { min-width: 220px; }
 .sum-detail { font: 600 12px var(--sans); padding: 5px 14px; border-radius: 999px; border: 1px solid var(--accent);
   background: none; color: var(--accent); cursor: pointer; }
 .sum-detail[aria-pressed=true] { background: var(--accent); color: var(--panel); }
+/* Summary: within a group, a soft rule where the instruction level changes and a faint shade on every other level. */
+table.sum-table .sum-level-start { border-left: 1px dashed var(--border); }
+table.sum-table .sum-level-alt { background: color-mix(in srgb, var(--text) 3%, transparent); }
