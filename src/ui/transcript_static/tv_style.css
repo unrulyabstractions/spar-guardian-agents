@@ -570,3 +570,9 @@ table.sum-table.is-detailed td.sum-cell { min-width: 220px; }
 .case .box-fold { border: 0; background: none; padding: 0 2px; cursor: pointer; color: var(--muted); display: inline-flex; align-items: center; }
 .case .box-fold[aria-expanded=false] .sec-chev { transform: rotate(-45deg); }
 .case .step-box.folded > .step-h .sec-chev, .case .call.folded > .ch .sec-chev { transform: rotate(-45deg); }
+/* The transcript always fits its pane: no box grows past it, any long unbroken string wraps, and the page never shifts
+   sideways. */
+.case .right, .case .step-box, .case .step-b, .case .call, .case .cb, .case .sec, .case .sec-b { min-width: 0; max-width: 100%; }
+.case .txt { overflow-wrap: anywhere; word-break: break-word; max-width: 100%; }
+.rp-stage .case .right { overflow-x: hidden; }
+html, body { overflow-x: hidden; }
