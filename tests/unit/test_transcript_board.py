@@ -479,9 +479,11 @@ def test_the_board_tab_carries_no_sentence_and_its_cards_have_now_and_end():
     assert "arrowKey(READ_CLASS.latest, 'latest read')" in board and "arrowKey(READ_CLASS.from, 'from read')" in board
     css = (Path(tb.__file__).parent / "transcript_static" / "tv_board.css").read_text()
     # the two cards side by side, each at most 640 px wide, so a wide window leaves no empty panel in a card
-    assert ".bd-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 640px));" in css and ".bd-end.bd-same" in css
+    assert ".bd-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 640px));" in css
+    assert ".bd-end.bd-same" in css
     # the judge labels' scores are rows of the card's grid, each chip under "end"
-    assert "grid.append(...(row ? Object.keys(d.label_names).flatMap(key => cardScore(ag.agent, key, row[key]))" in board
+    assert ("grid.append(h('span', { class: 'bd-rule' }), ...(row ? Object.keys(d.label_names)"
+            ".flatMap(key => cardScore(ag.agent, key, row[key]))") in board
 
 
 def place_reaches(items: list[dict], x1: float) -> list[dict]:
