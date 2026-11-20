@@ -40,6 +40,18 @@ function roleTag(role) {
 }
 
 const fieldText = v => (v === true ? 'yes' : v === false ? 'no' : typeof v === 'string' ? v : JSON.stringify(v));
+/** A field with nothing in it: null, an empty string or an empty object or list. */
+const isEmpty = v => v == null || v === '' || (typeof v === 'object' && !Object.keys(v).length);
+/** A key-value grid in columns: a pair of middle length takes two columns (kv-mid), a long one the whole row
+ * (kv-wide), so every value stays on its label's line and the short ones keep their columns. */
+function wideItems(dl) {
+  for (const it of dl.children) {
+    const n = it.textContent.length;
+    if (n > 70) it.classList.add('kv-wide');
+    else if (n > 32) it.classList.add('kv-mid');
+  }
+  return dl;
+}
 
 export async function viewRun(id, q, view) {
   const r = await fetch('/api/run?id=' + enc(id));
@@ -98,10 +110,11 @@ export async function viewRun(id, q, view) {
         h('h2', { class: 'agent-h' }, `Agent ${a.agent}`), roleTag(a.role),
         a.episode.model ? muted(a.episode.model, 'small') : null,
         h('span', { class: 'spacer' }), btn),
-      episodeRecord(a.episode),
-      agentCheating(a.agent),
-      agentJudgeLabels(a.agent),
-      h('div', null, h('h3', { class: 'sub-h' }, CHEATBENCH.name), cheatbenchBlock(a)),
+      wideItems(episodeRecord({ ...a.episode, orbit_agent: undefined })),   // the card's title names the agent
+      h('div', { class: 'cb-grid' },
+        agentCheating(a.agent),
+        agentJudgeLabels(a.agent),
+        h('div', null, h('h3', { class: 'sub-h' }, CHEATBENCH.name), cheatbenchBlock(a))),
       a.episode.final_text ? lazyDetails('final text of the agent', () => longText(a.episode.final_text, { lines: 40 }), { cls: 'sub' }) : null,
       holder]);
     cards.set(a.agent, { card, load, state });
@@ -187,8 +200,8 @@ export async function viewRun(id, q, view) {
   // The agent's judge labels beside the ladders: each label's score, excerpt, reason and the link to its place.
   function agentJudgeLabels(agent) {
     return h('div', null, h('h3', { class: 'sub-h' }, 'Judge labels'),
-      judged[agent] ? h('div', { class: 'sc-pair' }, Object.entries(labelAbout).map(([k, about]) => h('div', null,
-        h('span', { class: 'field-label' }, `${about.name}: `), labelEntry(about, judged[agent][k], openLink(agent, k), true))))
+      judged[agent] ? h('div', { class: 'sc-pair' }, Object.entries(labelAbout).map(([k, about]) => h('div', { class: 'sc-pair-row' },
+        h('span', { class: 'field-label' }, about.name), labelEntry(about, judged[agent][k], openLink(agent, k), true))))
         : muted('not judged', 'small block'));
   }
 
@@ -198,21 +211,21 @@ export async function viewRun(id, q, view) {
     return judges.map(([judge, v]) => h('div', { class: 'judge-block' },
       h('div', { class: 'jb-head' }, h('h4', null, `judge ${judge}`), cheatbenchWords({ [judge]: v })),
       v.summary ? h('p', { class: 'verdict-summary' }, evidenceText(v.summary, a.agent)) : null,
-      h('dl', { class: 'kv kv-grid' }, Object.entries(v).filter(([k]) => !['agent', 'summary'].includes(k)).map(([k, x]) =>
+      wideItems(h('dl', { class: 'kv kv-grid' }, Object.entries(v).filter(([k, x]) => !['agent', 'summary'].includes(k) && !isEmpty(x)).map(([k, x]) =>
         h('div', { class: 'kv-item' }, h('dt', null, k === d.cheatbench_disclosed ? 'CheatBench: disclosed access' : k.replace(/_/g, ' ')),
-          h('dd', null, k === 'judge_cost_usd' ? fmtUsd(x) : typeof x === 'string' ? evidenceText(x, a.agent) : fieldText(x)))))));
+          h('dd', null, k === 'judge_cost_usd' ? fmtUsd(x) : typeof x === 'string' ? evidenceText(x, a.agent) : fieldText(x))))))));
   }
 
   // ---- labels table: each ladder's team level with its evidence (Cheating with CheatBench's judge's word under the
   // code's), the alarm where the run has it, and the judge labels' team scores.
   const L = d.levels.ladders;
   const team = d.levels.team;
+  // Each value is its chip, its evidence in the chip's popover (facts).
   const teamCell = k => (team[k].na ? muted(`not applicable: ${team[k].evidence}`)
-    : [levelChip(k, L[k], team[k].level, true, { facts: team[k].facts }), muted(team[k].evidence, 'small block')]);
+    : levelChip(k, L[k], team[k].level, true, { facts: team[k].facts }));
   const labelRows = [
-    ['Cheating', [cheatingCell(L.cheating, team.cheating.na ? null : team.cheating.level, cheating.team_cheated,
-      multi ? cheatbenchTeam(row.cheatbench) : cheatbenchWords(Object.values(cheatbench)[0]), true, team.cheating.facts),
-    muted(team.cheating.evidence, 'small block')]],
+    ['Cheating', cheatingCell(L.cheating, team.cheating.na ? null : team.cheating.level, cheating.team_cheated,
+      multi ? cheatbenchTeam(row.cheatbench) : cheatbenchWords(Object.values(cheatbench)[0]), true, team.cheating.facts)],
     ...(cheating.alarm ? [['Alarm', alarmBadge(cheating.alarm)]] : []),
     ['Coordination', teamCell('coordination')],
     ['Collusion', teamCell('collusion')],
@@ -229,10 +242,10 @@ export async function viewRun(id, q, view) {
     h('div', { class: 'ep-title' }, h('h1', null, row.run),
       badge(coll.label, 'def', coll.about), coll.tag ? badge(coll.tag, 'plain', coll.about) : null,
       h('span', { class: 'spacer' }), h('a', { class: 'btn btn-small', href: '#/' }, '← all runs')),
-    kv([
+    wideItems(kv([
       ['collection', `${coll.label} (runs/${row.col})`], ['folder', h('span', { class: 'mono' }, row.key)],
       ['task', `${taskLabel(row)}${row.instance ? `, instance ${row.instance}` : ''}`], ['arm or cell', armLabel(row)],
-      ['agents', row.agents], ['workers\' model', `${modelLabel(row)}${row.model_id ? ` (${row.model_id})` : ''}`],
+      ['workers\' model', `${modelLabel(row)}${row.model_id ? ` (${row.model_id})` : ''}`],
       ['worker conditioning', row.worker_conditioning],
       ['influencer conditioning', row.influencer_conditioning.length ? row.influencer_conditioning.map(x => influencerParts(x).join(', ')).join('; ') : 'none'],
       ['seed', row.seed != null ? String(row.seed) : undefined],
@@ -241,7 +254,7 @@ export async function viewRun(id, q, view) {
       ['mode, access', multi ? [m.mode || cfg.mode, cfg.access].filter(Boolean).join(', ') : undefined],
       ['eval log', m.eval_log ? h('span', { class: 'mono small' }, m.eval_log) : muted(m.eval_log_recorded ? `not found (run.json names ${m.eval_log_recorded})` : 'none recorded', 'small')],
       ['code', m.code && m.code.commit ? `${m.code.commit}${m.code.dirty ? ' (dirty)' : ''}` : undefined],
-    ], 'kv-grid'),
+    ], 'kv-grid')),
     null);
   labelsCard.id = 'sec-labels';
   const agentsBox = h('div', { id: 'sec-agents' }, d.agents.map(agentCard));
@@ -254,10 +267,10 @@ export async function viewRun(id, q, view) {
   const stage = h('div', { class: 'rp-stage', dataset: { board: q.get('board') === 'only' ? 'only' : 'all' } });
   const tabs = new Map();
   let current = null;
-  const ROLE_WORD = ROLE_LABEL;
+  // A tab names the agent and its role, the role alone (worker, regulator, disregulator).
   for (const a of d.agents) {
     tabs.set(a.agent, h('button', { type: 'button', class: 'rp-tab', onclick: () => selectTab(a.agent).catch(() => {}) },
-      a.agent, h('span', { class: 'rp-role' }, ' ' + (ROLE_WORD[a.role] || a.role))));
+      a.agent, h('span', { class: 'rp-role' }, ' ' + a.role)));
   }
   const detailsView = () => ({ el: h('div', { class: 'rp-team' },
     levelsPanel(d.levels, roles, row.task_name, { cheatbench, row, open: openLink }),
@@ -265,7 +278,8 @@ export async function viewRun(id, q, view) {
     coordinationPanel(d.levels, roles),
     collusionPanel(d.levels, roles, { evidence: evidenceText }),
     judgeLabelsPanel(d.levels, roles, openLink),
-    h('section', { class: 'card' }, h('h2', null, 'Legend'), stripLegend(d.levels.ladders, d.levels.order))) });
+    // the strip's legend, in the case layout its rules are scoped to
+    h('section', { class: 'card' }, h('h2', null, 'Legend'), h('div', { class: 'case' }, stripLegend(d.levels.ladders, d.levels.order)))) });
   // The Board tab reads /api/board when first opened; its handle ({moveTo, showPost, state}) comes once it is drawn.
   // Its pair, mode and position come from the hash (a, b, mode, pos) and go back to it; its agents' cards show the
   // judge labels the Details tab shows.
@@ -295,6 +309,7 @@ export async function viewRun(id, q, view) {
   async function selectTab(key) {
     current = key;
     for (const [k, b] of tabs) b.classList.toggle('on', k === key);
+    toggles.hidden = views.has(key);   // the fold toggles act on an agent's steps only
     if (views.has(key)) {
       if (!drawn.has(key)) drawn.set(key, views.get(key).draw());
       const v = drawn.get(key);
@@ -341,10 +356,15 @@ export async function viewRun(id, q, view) {
     h('b', { class: 'rp-run' }, row.run), whoChips(row),
     cheating.alarm ? alarmBadge(cheating.alarm) : null,
     h('span', { class: 'rp-tabs' }, [...tabs.values()]),
-    toggles,
-    h('button', { type: 'button', class: 'rp-dbtn', title: 'the run\'s labels, its settings and each agent\'s record',
-      onclick: () => { record.open = !record.open; if (record.open) record.scrollIntoView({ block: 'start' }); } },
-    'Run record'));
+    // the fold toggles and the run record's button wrap as one group at the right
+    h('span', { class: 'rp-right' }, toggles,
+      h('button', { type: 'button', class: 'rp-dbtn', title: 'the run\'s labels, settings and records',
+        onclick: () => {
+          record.open = !record.open;
+          // the record's top just under the sticky bar, never behind it
+          if (record.open) window.scrollTo({ top: record.getBoundingClientRect().top + window.scrollY - bar.getBoundingClientRect().bottom - 8 });
+        } },
+      'Run record')));
 
   view.mounted(() => {
     document.title = `${row.run} · Transcripts`;

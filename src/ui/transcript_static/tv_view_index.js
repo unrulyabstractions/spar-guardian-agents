@@ -1,7 +1,7 @@
 /* View: every valid run of every collection under runs/ (#/), with filters, sorting and paging. Ported from
  * collusion-hermaneutics' viewer (viewer/static/app/view_index.js). Our edits: the collections come from the index,
  * which serves the valid runs only; the columns are the run, its workers (their number and model over their
- * conditioning as chips) and its influencers (each one's role and level as chips over its model), its task, the team's
+ * conditioning as chips) and its influencers (each one's model over its role and level as chips), its task, the team's
  * three ladders, the judge labels and the influencers' own three ladders, under a band that names the three groups,
  * and the collection last; one Cheating cell holds the code's rung and cheated and, under it, CheatBench's judge's
  * word, each marked by who says it; the judge labels disclosure and manipulation, each the team's highest score and the
@@ -82,13 +82,14 @@ const influencerLevel = x => `${x.role}: ${x.level || 'no level'}`;
 const workersCell = r => h('div', { class: 'idx-who' },
   h('span', { class: 'idx-model' }, modelLabel(r)),
   h('span', { class: 'idx-chips' }, r.worker_conditioning.split('; ').map(conditioningChip)));
-/** The Influencers cell: per influencer its role and its level as chips over its model; none without one. */
+/** The Influencers cell: per influencer its model over its role and its level as chips, as the Model cell stacks
+ * them; none without one. */
 const influencersCell = r => (r.influencer_conditioning.length
-  ? h('div', { class: 'idx-who' }, r.influencer_conditioning.map(x => h('div', { class: 'idx-influencer' },
+  ? h('div', { class: ['idx-who', r.influencer_conditioning.length > 1 && 'is-pair'] }, r.influencer_conditioning.map(x => h('div', { class: 'idx-influencer' },
+    h('span', { class: 'idx-model' }, modelLabel({ model: x.model })),
     h('span', { class: 'idx-chips' },
       h('span', { class: ['role-chip', `role-chip-${x.role}`] }, x.n === 1 ? x.role : `${x.n} ${x.role}s`),
-      x.level ? h('span', { class: ['level-chip', `level-chip-${x.role}`] }, x.level) : null),
-    h('span', { class: 'idx-model' }, modelLabel({ model: x.model })))))
+      x.level ? h('span', { class: ['level-chip', `level-chip-${x.role}`] }, x.level) : null))))
   : none());
 
 /** A name that may break after each underscore (and at a space, unless the space is a no-break one). */
@@ -110,10 +111,13 @@ function columns(d) {
     title: 'Each influencer\'s own level, kept out of the team\'s',
     sort: r => Math.max(-1, ...r.levels[`${L}_influencers`].map(x => rank(L, x.level))),
     cell: r => {
-      const xs = r.levels[`${L}_influencers`];
+      // in the Influencers cell's order, so each level stands level with its influencer
+      const at = x => r.influencer_conditioning.findIndex(c => c.role === x.role);
+      const xs = r.levels[`${L}_influencers`].slice().sort((a, b) => at(a) - at(b));
       if (!xs.length) return none();
-      return h('span', { class: 'lv-influencers' }, xs.map(x => h('div', { class: 'lv-influencer-row', title: x.role },
-        xs.length > 1 ? h('span', { class: 'small muted' }, x.role) : null, levelChip(L, lad(L), x.level, false))));
+      return h('span', { class: ['lv-influencers', xs.length > 1 && 'is-pair'] }, xs.map(x => h('div', { class: 'lv-influencer-row', title: x.role },
+        xs.length > 1 ? h('span', { class: ['role-chip', 'role-mark', `role-chip-${x.role}`] }, x.role === 'regulator' ? 'R' : 'D') : null,
+        levelChip(L, lad(L), x.level, false))));
     } });
   const about = d.judge_labels;
   const label = k => ({ key: k, label: about.labels[k].name, group: 'labels',
@@ -280,7 +284,7 @@ export async function viewIndex(q) {
   const STARTS = new Set(COLUMNS.filter((c, i) => i && COLUMNS[i - 1].group !== c.group).map(c => c.key));
   const headRow = h('tr');
   for (const c of COLUMNS) {
-    const th = h('th', { class: ['sortable', STARTS.has(c.key) && 'idx-group-start', CENTER(c.key) && 'center'], title: c.title || null, scope: 'col', tabindex: '0' }, c.label,
+    const th = h('th', { class: ['sortable', STARTS.has(c.key) && 'idx-group-start', CENTER(c.key) && 'center', c.key.startsWith('lv_') && 'lv'], title: c.title || null, scope: 'col', tabindex: '0' }, c.label,
       c.note ? [h('br'), c.note] : null);
     const go = () => {
       if (state.sort === c.key) state.dir = state.dir === 'asc' ? 'desc' : 'asc';
@@ -320,7 +324,8 @@ export async function viewIndex(q) {
     if (state.page >= pages) state.page = pages - 1;
     const slice = shown.slice(state.page * size, state.page * size + size);
     tbody.replaceChildren(...(slice.length ? slice.map(r => h('tr', { class: ['idx-row', alarmOf(r) && 'row-alarm'], title: alarmOf(r) ? `alarm: ${alarmOf(r)}` : null },
-      COLUMNS.map(c => h('td', { class: [WRAP.has(c.key) && 'wrap', c.key.startsWith('lv_') && 'lv', STARTS.has(c.key) && 'idx-group-start', CENTER(c.key) && 'center'] }, c.cell(r)))))
+      COLUMNS.map(c => h('td', { class: [WRAP.has(c.key) && 'wrap', c.key.startsWith('lv_') && 'lv', STARTS.has(c.key) && 'idx-group-start',
+        (CENTER(c.key) || (c.key === 'influencers' && !r.influencer_conditioning.length)) && 'center'] }, c.cell(r)))))
       : [h('tr', null, h('td', { colspan: String(COLUMNS.length) }, muted('No run matches these filters.')))]));
     pager.replaceChildren(
       h('button', { type: 'button', class: 'btn btn-small', disabled: state.page === 0, onclick: () => { state.page--; draw(); } }, '← previous'),
@@ -332,15 +337,16 @@ export async function viewIndex(q) {
   }
   draw();
 
-  // The collections and the index's build, behind one small control.
+  // The collections and the index's build, behind one small control: what a collection holds is its name's tooltip.
   const about = h('details', { class: 'idx-about' },
     h('summary', { class: 'btn btn-small' }, 'Collections'),
     h('div', { class: 'idx-about-box' }, h('table', { class: 'data compact' },
-      h('thead', null, h('tr', null, ['Collection', 'Folder', 'Valid runs', 'Holds'].map(t => h('th', { scope: 'col' }, t)))),
-      h('tbody', null, COLLECTION_ORDER.map(c => h('tr', null, h('td', null, h('b', null, collectionOf(c).label)),
-        h('td', { class: 'mono small' }, `runs/${c}`), h('td', { class: 'num' }, fmtInt(collectionOf(c).runs)),
-        h('td', { class: 'small' }, collectionOf(c).about))))),
-    h('p', { class: 'small muted' }, `Index ${idx.built_at} · ${fmtInt(idx.measured)} measured in ${idx.build_seconds} s`,
+      h('thead', null, h('tr', null, h('th', { scope: 'col' }, 'Collection'), h('th', { scope: 'col' }, 'Folder'),
+        h('th', { scope: 'col', class: 'center' }, 'Valid runs'))),
+      h('tbody', null, COLLECTION_ORDER.map(c => h('tr', null,
+        h('td', { class: 'nowrap', title: collectionOf(c).about || null }, h('b', null, collectionOf(c).label)),
+        h('td', { class: 'mono small' }, `runs/${c}`), h('td', { class: 'center' }, fmtInt(collectionOf(c).runs)))))),
+    h('p', { class: 'small muted', title: `${fmtInt(idx.measured)} measured in ${idx.build_seconds} s` }, `Index ${idx.built_at}`,
       idx.errors.length ? ` · ${plural(idx.errors.length, 'run')} unreadable` : '')));
 
   return h('div', { class: 'page wide' },

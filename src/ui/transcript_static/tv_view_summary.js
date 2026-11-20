@@ -70,27 +70,26 @@ function lineShare(key, lad, counts, n) {
 function cellView(c, d, detailed) {
   if (!c) return h('td', { class: 'sum-cell sum-empty' }, muted('–'));
   const n = plural(c.n, 'run');
-  return h('td', { class: 'sum-cell' }, h('div', { class: 'sum-stack' },
-    detailed ? d.order.map(L => ladderChips(L, d.ladders[L], c.levels[L]))
+  return h('td', { class: 'sum-cell' }, h('div', { class: ['sum-stack', detailed && 'is-detailed'] },
+    detailed ? h('div', { class: 'sum-lads' }, d.order.map(L => ladderChips(L, d.ladders[L], c.levels[L])))
       : d.order.map(L => lineShare(L, d.ladders[L], c.levels[L], c.n)),
     c.filters ? h('a', { class: 'sum-n', href: runsHref(c.filters), title: 'Open these runs' }, n)
       : h('span', { class: 'sum-n', title: 'No runs-page filter keeps exactly these' }, n)));
 }
 
-/** A column's header: its label, or for influencers three short lines: role chips, level chips, models. */
+/** A column's header: its label, or for influencers three short lines: the role chip, the level chip, the model; with
+ * two influencers, one such block per influencer side by side, each centred over its own lines. */
 function colLabel(c) {
   const xs = c.influencers;
   if (!xs.length) return c.label;
   const role = x => (x.n === 1 ? x.role : `${x.n} ${x.role}s`);
-  const set = c.influencer === 'both' ? 'both' : role(xs[0]);
+  const block = x => [
+    h('div', { class: 'sum-col-line' }, h('span', { class: ['role-chip', `role-chip-${x.role}`] }, role(x))),
+    h('div', { class: 'sum-col-line' }, h('span', { class: ['level-chip', `level-chip-${x.role}`] }, x.level || 'no level')),
+    h('div', { class: 'sum-col-line sum-col-model' }, modelLabel({ model: x.model }))];
   return [
     c.group === 'other' ? h('div', { class: 'sum-col-line' }, c.worker[0].toUpperCase() + c.worker.slice(1)) : null,
-    h('div', { class: 'sum-col-line' }, '+ ', c.influencer === 'both'
-      ? xs.map((x, i) => [i ? ' ' : null, h('span', { class: ['role-chip', `role-chip-${x.role}`] }, role(x))])
-      : h('span', { class: ['role-chip', `role-chip-${xs[0].role}`] }, set)),
-    h('div', { class: 'sum-col-line' }, xs.map((x, i) => [i ? ' ' : null,
-      h('span', { class: ['level-chip', `level-chip-${x.role}`] }, x.level || 'no level')])),
-    h('div', { class: 'sum-col-line sum-col-model' }, xs.map(x => modelLabel({ model: x.model })).join(', ')),
+    xs.length > 1 ? h('div', { class: 'sum-col-pair' }, xs.map(x => h('div', { class: 'sum-col-one' }, block(x)))) : block(xs[0]),
   ];
 }
 
@@ -134,8 +133,13 @@ export async function viewSummary(q) {
   const task = q.get('task') || '';
   const imodel = q.get('imodel') || '';
   const rows = s.rows.filter(r => (!wmodel || r.model === wmodel) && (!task || r.task === task));
-  const C = s.columns.filter(c => !hidden.has(c.group)
-    && (!imodel || !c.influencers.length || c.influencers.some(x => x.model === imodel)));
+  // The columns shown: not hidden, holding the influencer model chosen, and holding a cell in some row shown. A
+  // control hides with the influencers it is weighed against: the negative controls with the regulators, the positive
+  // control with the disregulators.
+  const PARTNER = { negative: 'regulator', positive: 'disregulator' };
+  const C = s.columns.filter(c => !hidden.has(c.group) && !hidden.has(PARTNER[c.group])
+    && (!imodel || !c.influencers.length || c.influencers.some(x => x.model === imodel))
+    && rows.some(r => r.cells[c.key]));
   const counted = s.rows.reduce((t, r) => t + s.columns.reduce((u, c) => u + (r.cells[c.key] ? r.cells[c.key].n : 0), 0), 0);
   const nav = (over = {}) => {
     const p = new URLSearchParams({ col, hide: [...hidden].join(','), task, wmodel, imodel, detail: detailed ? '1' : '', ...over });
@@ -145,7 +149,8 @@ export async function viewSummary(q) {
   const toggles = h('span', { class: 'rp-togs' }, h('button', {
     type: 'button', class: 'rp-tog', 'aria-pressed': String(detailed), title: 'each ladder\'s levels instead of its rate at the line',
     onclick: () => nav({ detail: detailed ? '' : '1' }) }, 'Detailed'), BANDS.map(([g, label]) => h('button', {
-    type: 'button', class: 'rp-tog', 'aria-pressed': String(!hidden.has(g)), title: `show or hide the ${label.toLowerCase()} columns`,
+    type: 'button', class: 'rp-tog', 'aria-pressed': String(!hidden.has(g)), title: { regulator: 'regulators and the negative controls', disregulator: 'disregulators and the positive control',
+      both: 'regulator and disregulator together' }[g],
     onclick: () => { const next = new Set(hidden); if (next.has(g)) next.delete(g); else next.add(g); nav({ hide: [...next].join(',') }); } },
     label)));
   const uniqueModels = list => [...new Set(list)].sort((a, b) => modelLabel({ model: a }).localeCompare(modelLabel({ model: b })));
@@ -162,7 +167,10 @@ export async function viewSummary(q) {
   const starts = new Set(C.filter((c, i) => i === 0 || C[i - 1].group !== c.group).map(c => c.key));
   const colHead = (c, more = {}) => h('th', { scope: 'col', class: ['sum-col', starts.has(c.key) && 'sum-group-start'],
     title: colTitle(c), ...more }, colLabel(c));
-  const band = [h('th', { colspan: String(lead), class: 'sum-band-none' }, '')];
+  // The lead columns' headers stand over both header rows, on the condition headers' baseline, and stick at the left.
+  const band = [h('th', { scope: 'col', rowspan: '2', class: 'sum-lead sum-model' }, 'Workers\' model'),
+    h('th', { scope: 'col', rowspan: '2', class: 'sum-lead sum-task' }, 'Task'),
+    s.by_workers ? h('th', { scope: 'col', rowspan: '2', class: 'sum-lead sum-workers', title: 'Workers per team' }, 'Workers') : null];
   const spanned = new Set();
   for (let i = 0; i < C.length;) {
     let j = i;
@@ -176,9 +184,7 @@ export async function viewSummary(q) {
     }
     i = j;
   }
-  const head = h('tr', null, h('th', { scope: 'col' }, 'Workers\' model'), h('th', { scope: 'col' }, 'Task'),
-    s.by_workers ? h('th', { scope: 'col', title: 'Workers per team' }, 'Workers') : null,
-    C.filter(c => !spanned.has(c.key)).map(c => colHead(c)));
+  const head = h('tr', null, C.filter(c => !spanned.has(c.key)).map(c => colHead(c)));
   const cells = cs => C.map(c => {
     const td = cellView(cs[c.key], ladders, detailed);
     if (starts.has(c.key)) td.classList.add('sum-group-start');
@@ -186,15 +192,26 @@ export async function viewSummary(q) {
   });
   const body = rows.map(r => h('tr', null,
     h('th', { scope: 'row', class: 'sum-model' }, modelLabel({ model: r.model })),
-    h('td', { class: 'sum-task' }, r.task), s.by_workers ? h('td', { class: 'num' }, String(r.workers)) : null,
+    h('td', { class: 'sum-task' }, r.task), s.by_workers ? h('td', { class: 'num sum-workers' }, String(r.workers)) : null,
     cells(r.cells)));
-  const total = h('tr', { class: 'sum-total' }, h('th', { scope: 'row', colspan: String(lead) }, 'All'),
+  const total = h('tr', { class: 'sum-total' }, h('th', { scope: 'row', colspan: String(lead), class: 'sum-model' }, 'All'),
     cells(wmodel || task ? summed(rows, s.columns, ladders) : s.totals));
 
   const picker = select(cols.map(c => [c, collectionOf(c).label]), col, v => nav({ col: v }), { 'aria-label': 'Collection' });
+  const table = h('table', { class: ['data', 'sum-table', detailed && 'is-detailed'] },
+    h('thead', null, h('tr', { class: 'sum-band-row' }, band), head), h('tbody', null, body, total));
+  // The lead columns stick at the left as the table scrolls: each at the summed width of the lead columns before it.
+  requestAnimationFrame(() => {
+    if (!table.isConnected) return;
+    const lefts = [0];
+    for (const th of [...band].filter(Boolean).slice(0, lead - 1)) lefts.push(lefts[lefts.length - 1] + th.getBoundingClientRect().width);
+    for (const tr of table.querySelectorAll('tr')) {
+      [...tr.children].filter(x => x.matches('.sum-model, .sum-task, .sum-workers'))
+        .forEach((x, i) => { x.classList.add('sum-stick'); x.style.left = `${lefts[i]}px`; });
+    }
+  });
   return h('div', { class: 'page wide' },
     h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, h('h1', null, `Summary: ${fmtInt(s.total)} runs`), picker, tPick, wPick, iPick,
       counted !== s.total ? badge(`cells hold ${counted}`, 'bad', 'Cells and the collection disagree') : null), toggles),
-    h('div', { class: 'table-wrap sum-wrap' }, h('table', { class: 'data sum-table' },
-      h('thead', null, h('tr', { class: 'sum-band-row' }, band), head), h('tbody', null, body, total))));
+    h('div', { class: 'table-wrap sum-wrap' }, table));
 }

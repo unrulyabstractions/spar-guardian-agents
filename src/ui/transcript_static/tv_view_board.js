@@ -41,7 +41,7 @@ const LANE_H = 44;
 const BOARD_H = 104;
 const TOP = 8;
 const POST_H = 15;
-const POST_GAP = 3;
+const POST_GAP = 4;
 const RECENT = 3;             // the posts before the one at the position that keep their arrows
 const PLAY_SECONDS = 90;      // a whole run plays in this long on the time clock
 const STEP_MS = 220;          // one step at a time in step mode
@@ -57,6 +57,9 @@ const REACH_ROW_H = 11;       // one row's height
 const REACH_PAD = 3;          // between a reach line and its label
 const REACH_GAP = 4;          // the least space between two labels of one row
 const REACH_FONT = '600 9.5px';   // tv_board.css .bd-reach-text
+
+// A time of the position readout: fmtSecs, with the start as 0s.
+const fmtAt = s => (s < 0.005 ? '0s' : fmtSecs(s));
 
 // At most HOVER_LINES of a list, then how many more.
 const fewOf = list => [...list.slice(0, HOVER_LINES), list.length > HOVER_LINES ? `+${list.length - HOVER_LINES} more`
@@ -192,10 +195,10 @@ export function renderBoard(el, d, opts) {
   const agentOption = a => h('option', { value: a.agent },
     `${a.agent} (${ROLE_LABEL[a.role] || a.role}, ${plural(a.calls.length, 'call')})`);
   const agentSelect = (side, label) => h('select', { class: ['bd-sel', `bd-sel-${side}`], 'aria-label': label,
-    title: d.pair_why, onchange: e => choose(side, e.target.value) }, d.agents.map(agentOption));
+    title: d.pair_why.split(', ')[0], onchange: e => choose(side, e.target.value) }, d.agents.map(agentOption));
   const selA = agentSelect('a', 'first agent');
   const selB = agentSelect('b', 'second agent');
-  const modeSel = h('select', { 'aria-label': 'clock', title: `clock: ${d.clock_about}`,
+  const modeSel = h('select', { class: 'bd-mode', 'aria-label': 'clock', title: `clock: ${d.clock_about}`,
     onchange: e => { const t = timeNow(); state.mode = e.target.value; build(t); } },
   h('option', { value: 'time', disabled: !timed }, 'time'),
   h('option', { value: 'step' }, 'steps'));
@@ -213,9 +216,9 @@ export function renderBoard(el, d, opts) {
   const fwd = button('step ▶', 'step forward (right arrow)', () => step(1));
   const slider = h('input', { type: 'range', class: 'bd-slider', 'aria-label': 'position',
     oninput: e => { pause(); moveTo(Number(e.target.value)); } });
+  // The position's readout stands at the controls' right end; the slider has its row to itself.
   const posText = h('span', { class: 'bd-pos' });
-  const scrub = h('div', { class: 'bd-scrub' }, h('span', { class: 'bd-scrub-name small muted' }, 'position'),
-    slider, posText);
+  const scrub = h('div', { class: 'bd-scrub' }, h('span', { class: 'bd-scrub-name small muted' }, 'position'), slider);
   const cards = { a: agentCard('a'), b: agentCard('b') };
   const cardRow = h('div', { class: 'bd-cards' }, cards.a.el, cards.b.el);
   const svgHost = h('div', { class: 'bd-svg-host' });
@@ -352,7 +355,6 @@ export function renderBoard(el, d, opts) {
     scrub.style.width = `${width}px`;
     slider.style.left = `${x0 - THUMB / 2}px`;
     slider.style.width = `${x1 - x0 + THUMB}px`;
-    posText.style.right = `${width - x1}px`;
 
     // lanes: the two agents and the board between them
     const laneY = { a: yA, b: yB };
@@ -367,8 +369,8 @@ export function renderBoard(el, d, opts) {
           `${ROLE_LABEL[ag.role] || ag.role}, ${plural(ag.calls.length, 'call')}`));
     }
     lanes.append(svgEl('rect', { class: 'bd-lane bd-lane-board', x: x0, y: yBoard, width: x1 - x0, height: BOARD_H }),
-      svgEl('text', { x: 18, y: yBoard + 20, class: 'bd-name' }, 'board'),
-      svgEl('text', { x: 18, y: yBoard + 34, class: 'bd-role' }, plural(d.posts.length, 'post')));
+      svgEl('text', { x: 18, y: yBoard + BOARD_H / 2 - 2, class: 'bd-name' }, 'board'),
+      svgEl('text', { x: 18, y: yBoard + BOARD_H / 2 + 12, class: 'bd-role' }, plural(d.posts.length, 'post')));
     svg.appendChild(lanes);
 
     // axis
@@ -446,10 +448,14 @@ export function renderBoard(el, d, opts) {
     const family = getComputedStyle(svgHost).getPropertyValue('--sans').trim();
     const reachText = svgEl('g', { class: 'bd-reach-labels' });
     for (const side of SIDES) {
-      const at = placeReaches(reaches[side].map(r => ({ x: r.x, w: textWidth(r.text, family) })), x1);
+      const widths = reaches[side].map(r => textWidth(r.text, family));
+      const at = placeReaches(reaches[side].map((r, i) => ({ x: r.x, w: widths[i] })), x1);
       reaches[side].forEach((r, i) => {
         const { row, tx, anchor, lead } = at[i];
         const y = laneY[side] + 9 + row * REACH_ROW_H;
+        // a ground under each label, so no other reach's line strikes through it
+        reachText.append(svgEl('rect', { class: 'bd-reach-ground', x: (anchor === 'end' ? tx - widths[i] : tx) - 1.5,
+          y: y - 8, width: widths[i] + 3, height: 10.5, rx: 2 }));
         reachG.append(svgEl('line', { class: ['bd-reach', r.crosses && 'bd-reach-line'], x1: r.x, x2: r.x,
           y1: laneY[side], y2: laneY[side] + LANE_H }),
         ...(lead == null ? [] : [svgEl('line', { class: 'bd-reach-lead', x1: r.x, x2: lead - 1, y1: y - 3,
@@ -500,8 +506,9 @@ export function renderBoard(el, d, opts) {
         svgEl('rect', { x: from, y, width: boxW, height: POST_H, rx: 3, style: fill ? `fill:${fill}` : null }),
         boxW >= 20 ? svgEl('text', { x: from + boxW / 2, y: y + POST_H - 4, 'text-anchor': 'middle',
           style: fill ? `fill:${inkOn(fill)}` : null }, p.label) : null,
-        top != null ? svgEl('circle', { class: 'bd-judged-dot', cx: from + boxW, cy: y + POST_H / 2, r: 5,
-          fill: scoreColour(top) }) : null);
+        // the judge's dot inside the box's top right corner; under Judge labels the box's fill says it already
+        top != null && state.lens !== 'judge' ? svgEl('circle', { class: 'bd-judged-dot', cx: from + boxW - 3.5,
+          cy: y + 3.5, r: 2.5, fill: scoreColour(top) }) : null);
       postsG.appendChild(g);
       const arrows = svgEl('g', { visibility: 'hidden' });
       arrowsG.appendChild(arrows);
@@ -538,7 +545,8 @@ export function renderBoard(el, d, opts) {
     const outlineAt = y => svgEl('rect', { class: 'bd-current', x: 0, y: y - 1, width: 0, height: LANE_H + 2,
       visibility: 'hidden' });
     const outline = { a: outlineAt(yA), b: outlineAt(yB) };
-    const latestBox = svgEl('rect', { class: 'bd-latest-box', x: 0, y: 0, width: 0, height: POST_H + 4, rx: 4,
+    // drawn inside the post's box, so it never touches the box above or below
+    const latestBox = svgEl('rect', { class: 'bd-latest-box', x: 0, y: 0, width: 0, height: POST_H - 2, rx: 2,
       visibility: 'hidden' });
     // the shade covers the calls and arrows still to come; a post still to come is faded by its class, so a post
     // the position has reached shows whole even where its box reaches past the cursor
@@ -618,7 +626,8 @@ export function renderBoard(el, d, opts) {
     for (const { li } of items) li.hidden = true;   // the new SVG's post boxes start faded (bd-ahead)
     lensKeyRow.replaceChildren();
     appendAll(lensKeyRow, lensKey(marked));
-    lensKeyRow.hidden = state.lens === 'all';
+    // under All the row stays, empty and unseen, so the lanes keep their place when the lens changes
+    lensKeyRow.classList.toggle('bd-key-off', state.lens === 'all');
     const at = time == null ? state.pos : state.mode === 'time' ? time : lastAtOrBefore(stops.map(u => u.t), time);
     moveTo(at != null && Number.isFinite(at) ? Math.max(0, at) : 0);
   }
@@ -635,8 +644,8 @@ export function renderBoard(el, d, opts) {
     L.shade.setAttribute('width', Math.max(0, L.x1 - x));
     slider.value = String(P);
     posText.textContent = state.mode === 'time'
-      ? `${timed ? fmtSecs(P) : `call ${Math.floor(P) + 1}`} of ${timed ? fmtSecs(L.span) : plural(L.span, 'call')}`
-      : `step ${P + 1} of ${L.n}${timed ? ` (${fmtSecs(L.stops[P].t)} of ${fmtSecs(d.total)})` : ''}`;
+      ? `${timed ? fmtAt(P) : `call ${Math.floor(P) + 1}`} of ${timed ? fmtAt(L.span) : plural(L.span, 'call')}`
+      : `step ${P + 1} of ${L.n}${timed ? ` (${fmtAt(L.stops[P].t)} of ${fmtAt(d.total)})` : ''}`;
     for (const side of SIDES) {
       const i = lastAtOrBefore(L.keys[side], P);
       const c = i >= 0 ? L.calls[side][i] : null;
@@ -666,9 +675,9 @@ export function renderBoard(el, d, opts) {
         const li = items[now].li;
         li.classList.add('bd-latest');
         const box = L.postBox.get(now);
-        L.latestBox.setAttribute('x', box.from - 2);
-        L.latestBox.setAttribute('y', box.y - 2);
-        L.latestBox.setAttribute('width', box.w + 4);
+        L.latestBox.setAttribute('x', box.from + 1);
+        L.latestBox.setAttribute('y', box.y + 1);
+        L.latestBox.setAttribute('width', Math.max(1, box.w - 2));
         L.latestBox.setAttribute('visibility', 'visible');
         const top = li.offsetTop;
         if (top < boardBox.scrollTop || top + li.offsetHeight > boardBox.scrollTop + boardBox.clientHeight) {
@@ -700,21 +709,22 @@ export function renderBoard(el, d, opts) {
   const factLine = ([name, v]) => (Array.isArray(v)
     ? `${name} · ${firstLine(v[0], CLIP)}${v.length > 1 ? ` (+${v.length - 1})` : ''}`
     : `${name} · ${firstLine(v, CLIP)}`);
-  // A judge label's score in a card: the label's name, its chip, its kind; the chip opens the excerpt where code
-  // located it: a post here, on this tab; a model call's reasoning in the agent's tab.
+  // A judge label's score in a card, as a row of the card's grid: the label's name in the ladders' column, nothing
+  // under "now", its chip under "end", its kind last; the chip opens the excerpt where code located it: a post here,
+  // on this tab; a model call's reasoning in the agent's tab.
   function cardScore(agent, key, e) {
-    const name = d.label_names[key];
-    if (!e) return h('span', { class: 'bd-score' }, muted(name, 'small'), muted('–', 'small'));
+    const name = h('span', { class: 'bd-ladder' }, d.label_names[key]);
+    if (!e) return [name, h('span'), h('span', { class: 'bd-end muted' }, '–'), h('span')];
     const kind = e.kind && e.kind !== 'none' ? e.kind : null;
     const at = e.located;
-    const chip = scoreChip(e.score, `${name}: ${e.score} of 100`);
+    const chip = scoreChip(e.score, `${d.label_names[key]}: ${e.score} of 100`);
     const toPost = ev => { ev.preventDefault(); showPost(at.post); };
     const inTab = `${opts.base}?agent=${enc(agent)}&label=${enc(key)}`;
     const open = !at ? chip
       : at.where === 'post' ? h('a', { href: '#', title: `open ${at.post}`, onclick: toPost }, chip)
         : h('a', { href: inTab, title: `open model call ${at.call}` }, chip);
-    return h('span', { class: 'bd-score' }, muted(name, 'small'), open, kind ? h('span', { class: 'bd-kind' }, kind)
-      : null, kind === 'mislead' ? misleadMark(kind) : null);
+    return [name, h('span'), h('span', { class: 'bd-score' }, open),
+      h('span', { class: 'bd-kind' }, kind, kind === 'mislead' ? [' ', misleadMark(kind)] : null)];
   }
 
   // An agent's card in its lane's colour (BOARD_CARD): fill(agent) once per pair, at(call, reached) at each move. A
@@ -726,15 +736,14 @@ export function renderBoard(el, d, opts) {
   function agentCard(side) {
     const head = h('div', { class: 'bd-card-head' });
     const grid = h('div', { class: 'bd-card-grid' });
-    const labels = h('div', { class: 'bd-card-labels' });
-    const el = h('div', { class: ['bd-card', `bd-card-${side}`] }, head, grid, labels);
+    const el = h('div', { class: ['bd-card', `bd-card-${side}`] }, head, grid);
     const cells = new Map();
     let ag = null;
     function fill(a) {
       ag = a;
       cells.clear();
       grid.replaceChildren(h('span'), h('span', { class: 'bd-col', title: 'at the position' }, 'now'),
-        h('span', { class: 'bd-col', title: 'at the end of the run' }, 'end'));
+        h('span', { class: 'bd-col', title: 'at the end of the run' }, 'end'), h('span'));
       for (const [key, lad] of Object.entries(d.ladders)) {
         const f = ag.final[key] || { level: null, facts: [] };
         const chip = cardChip(key, lad, f.level);
@@ -743,11 +752,12 @@ export function renderBoard(el, d, opts) {
           () => [`${lad.name}: ${f.level || 'no level'}`, ...fewOf(f.facts.map(factLine))]);
         const now = h('span', { class: 'bd-now' });
         cells.set(key, { now, end, final: f.level });
-        grid.append(h('span', { class: 'bd-ladder' }, lad.name), now, end);
+        grid.append(h('span', { class: 'bd-ladder' }, lad.name), now, end, h('span'));
       }
+      // the judge labels' scores: rows of the same grid, each chip under "end"
       const row = (opts.judged || {})[ag.agent];
-      labels.replaceChildren(...(row ? Object.keys(d.label_names).map(key => cardScore(ag.agent, key, row[key]))
-        : [muted('not judged', 'small')]));
+      grid.append(...(row ? Object.keys(d.label_names).flatMap(key => cardScore(ag.agent, key, row[key]))
+        : [h('span', { class: 'bd-ladder' }, 'Judge labels'), h('span'), h('span', { class: 'bd-end muted small' }, 'not judged'), h('span')]));
     }
     function at(c, top) {
       head.replaceChildren(h('b', { class: `bd-key-${side}` }, ag.agent),
@@ -889,10 +899,11 @@ export function renderBoard(el, d, opts) {
         chip('coordination', coord, lv)]),
         item('a post that took up a teammate\'s new post', sw(RAMP.coordination[ramp.board.post], 'bd-sw-tall'),
           'took up'), tick(null, 'level held')],
+      // the rungs in one run, then the planted piece's sample and the rung's tick
       collusion: [chip('collusion', coll, coll.levels[1]),
+        rungsMarked ? coll.levels.slice(2).map(lv => [lv === coll.line ? lineMark(coll) : null, chip('collusion', coll, lv)]) : null,
         item('a take of a planted piece', sw(RAMP.collusion[ramp.collLine], 'bd-sw-tall'), 'planted piece'),
-        rungsMarked ? [coll.levels.slice(2).map(lv => [lv === coll.line ? lineMark(coll) : null,
-          chip('collusion', coll, lv)]), tick(null, 'rung reached')] : null],
+        rungsMarked ? tick(null, 'rung reached') : null],
       judge: [0, 25, 50, 75, 100].map(s => scoreChip(s, `score ${s}`)),
     };
     const n = [...missed.values()].reduce((x, y) => x + y, 0);
@@ -908,7 +919,7 @@ export function renderBoard(el, d, opts) {
     h('label', { class: 'bd-pick' }, sw(null, 'bd-sw-b'), selB),
     modeSel, back, playBtn, fwd, lensBar,
     notes.length ? h('span', { class: 'bd-count', title: fewOf(notes).filter(Boolean).join('\n') },
-      plural(notes.length, 'note')) : null);
+      plural(notes.length, 'note')) : null, posText);
   el.replaceChildren(h('div', { class: 'bd-tab' },
     h('section', { class: 'card bd-timeline' }, controls, lensKeyRow, svgHost, scrub, cardRow, legend),
     h('section', { class: 'card bd-board' }, boardHead, boardBox)));

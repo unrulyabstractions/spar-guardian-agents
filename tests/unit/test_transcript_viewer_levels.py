@@ -1094,8 +1094,9 @@ def test_a_step_is_three_folding_sections_and_the_bar_folds_a_part_everywhere():
     button that folds it, a long one clipped; the bar's Show select is gone for a toggle per part and Board calls only,
     kept in the hash; an opened call or excerpt has its sections unfolded."""
     case = (STATIC / "tv_case_view.js").read_text()
-    assert ("export const PARTS = [['reasoning', 'Reasoning'], ['call', 'Tool calls'], "
+    assert ("export const PARTS = [['step', 'Steps'], ['reasoning', 'Reasoning'], ['call', 'Tool calls'], "
             "['result', 'Tool results']]") in case
+    assert "class: 'step-box'" in case and "foldButton('step')" in case and "foldButton('call')" in case
     assert "h('button', { type: 'button', class: 'sec-h', 'aria-expanded': 'true'" in case
     assert "section('call', 'Tool call', h('span', { class: 'sec-tool' }" in case
     assert "section('result', 'Tool result', h('span', { class: 'sec-size' }" in case
@@ -1131,7 +1132,7 @@ def test_the_viewer_carries_no_sentence_that_explains_the_page():
     case, levels = pages["tv_case_view.js"], pages["tv_levels.js"]
     assert "export function stripLegend(ladders, order, regulator = false)" in case
     assert "{ look: 'carried', facts: reachFacts(i, k) }" in case and "{ look: 'own', facts: l.facts || [] }" in case
-    assert "title: c.step != null ? `step ${c.step}` : null }, `Call ${k}`)" in case
+    assert "h('span', { class: 'cn' }, `Call ${k}`)" in case and "labelled`" not in case
     assert "h('div', { class: 'lv-pop-gloss' }, lad.meanings[i])" in levels and "const MAX_FACTS = 6;" in levels
     assert "`#/ladders?section=ladder-${key}`" in levels
     assert "const none = () => muted('–', 'small');" in pages["tv_view_index.js"]

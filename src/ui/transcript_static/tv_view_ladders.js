@@ -19,6 +19,12 @@ const table = (cls, cols, rows) => h('div', { class: 'table-wrap' }, h('table', 
   cols ? h('thead', null, h('tr', null, cols.map(headCell))) : null,
   h('tbody', null, rows)));
 
+/** A rule's text with each `span` in backticks as code and each date kept on one line. */
+const prose = s => String(s == null ? '' : s).split(/(`[^`]+`|\d{4}-\d{2}-\d{2})/).map((part, i) => (i % 2 === 0 ? part
+  : part.startsWith('`') ? h('code', null, part.slice(1, -1)) : h('span', { class: 'nowrap' }, part)));
+/** A task's id in words: knowledge_work is "Knowledge work". */
+const taskWords = id => { const s = String(id).replace(/_/g, ' '); return s[0].toUpperCase() + s.slice(1); };
+
 /** The row a ladder's table puts before the first level above the line, spanning `span` columns. */
 const lineRow = (L, span) => h('tr', { class: 'lv-line-row' }, h('td', { colspan: String(span) }, lineMark(L), ' ', L.line_words));
 
@@ -29,14 +35,13 @@ function byTask(d, key, rows, notes, hl) {
   return h('section', { class: 'card', id: `ladder-${key}` },
     h('h2', null, `${L.name} level by task`),
     h('p', { class: 'small lv-about' }, L.rule),
-    table(null, null, [
-      h('tr', null, h('th', null, 'level'),
-        d.domains.map((dom, j) => h('th', { class: j === hl && 'lv-hl' }, dom, h('div', { class: 'small muted' }, notes[j])))),
-      rows.map(([level, gloss, cells]) => [
-        level === L.line ? lineRow(L, d.domains.length + 1) : null,
-        h('tr', null,
-          h('td', null, levelChip(key, L, level), h('div', { class: 'small muted' }, gloss)),
-          cells.map((c, j) => h('td', { class: j === hl && 'lv-hl' }, c)))])]));
+    table(null, [h('th', null, 'Level'),
+      ...d.domains.map((dom, j) => h('th', { class: j === hl && 'lv-hl' }, dom, h('div', { class: 'small muted' }, notes[j])))],
+    rows.map(([level, gloss, cells]) => [
+      level === L.line ? lineRow(L, d.domains.length + 1) : null,
+      h('tr', null,
+        h('td', { class: 'mid' }, levelChip(key, L, level), h('div', { class: 'small muted' }, gloss)),
+        cells.map((c, j) => h('td', { class: j === hl && 'lv-hl' }, prose(c))))])));
 }
 
 /** The page's terms, each a definition. */
@@ -59,10 +64,10 @@ function levelTable(L, key) {
   return h('section', { class: 'card', id: `ladder-${key}` },
     h('h2', null, `${L.name} levels`),
     h('p', { class: 'small lv-about' }, L.rule),
-    L.note ? h('p', { class: 'small muted' }, L.note) : null,
-    table('lv-level-table', ['level', 'what puts an agent on it'], L.levels.map((level, rank) => [
+    L.note ? h('p', { class: 'small muted lv-about' }, L.note) : null,
+    table('lv-level-table', ['Level', 'What puts an agent on it'], L.levels.map((level, rank) => [
       level === L.line ? lineRow(L, 2) : null,
-      h('tr', null, h('td', null, levelChip(key, L, level)), h('td', null, (L.glosses || [])[rank] || ''))])));
+      h('tr', null, h('td', { class: 'chip' }, levelChip(key, L, level)), h('td', null, prose((L.glosses || [])[rank] || '')))])));
 }
 
 /** The judge labels beside the ladders: what each score measures, who scores it and the anchors of the score.
@@ -71,11 +76,11 @@ function labelTable(d) {
   const about = d.judge_labels;
   return h('section', { class: 'card', id: 'judge-labels' },
     h('h2', null, 'Judge labels'),
-    table('lv-level-table', ['label', 'what the score measures'], [
+    table('lv-level-table', ['Label', 'What the score measures'], [
       Object.values(about.labels).map(x => h('tr', null, h('td', null, h('b', null, x.name)), h('td', null, x.scored))),
       h('tr', null, h('td', null, h('b', null, 'Scored by')), h('td', null, about.scored_by))]),
-    table('lv-level-table', ['score', 'means'], about.anchors.map(([score, words]) =>
-      h('tr', null, h('td', null, scoreChip(score)), h('td', null, words)))));
+    table('lv-level-table', [h('th', { class: 'center' }, 'Score'), 'Means'], about.anchors.map(([score, words]) =>
+      h('tr', null, h('td', { class: 'chip' }, scoreChip(score)), h('td', null, words)))));
 }
 
 const count = v => (v == null ? '–' : String(v));
@@ -100,22 +105,24 @@ function reliability(d) {
   const older = r => r.retired || (!current(r) && R.rows.some(o => o.measure === r.measure && current(o)));
   return h('section', { class: 'card', id: 'reliability' },
     h('h2', null, 'How reliable'),
-    table(null, ['pass', 'what was read', 'read on'], Object.values(R.passes).map(p =>
-      h('tr', null, h('td', null, p.label), h('td', null, p.what), h('td', { class: 'nowrap' }, p.read_on)))),
-    table('lv-reliability', ['ladder or label', 'pass', 'level or verdict', 'what was read', 'read',
-      ['held', 'The reading agrees; a score: the same or an adjacent anchor'], 'wrong',
-      ['unclear', 'The evidence allows both'], 'note'],
+    table(null, ['Pass', 'What was read', h('th', { class: 'center' }, 'Read on')], Object.values(R.passes).map(p =>
+      h('tr', null, h('td', null, p.label), h('td', null, prose(p.what)), h('td', { class: 'nowrap center' }, p.read_on)))),
+    table('lv-reliability', ['Ladder or label', 'Pass', 'Level or verdict', 'What was read', h('th', { class: 'center' }, 'Read'),
+      h('th', { class: 'center', title: 'The reading agrees; a score: the same or an adjacent anchor' }, 'Held'),
+      h('th', { class: 'center' }, 'Wrong'), h('th', { class: 'center', title: 'The evidence allows both' }, 'Unclear'), 'Note'],
     R.rows.map((r, i) => {
       const first = i === 0 || R.rows[i - 1].measure !== r.measure || R.rows[i - 1].retired !== r.retired;
       const firstRetired = r.retired && (i === 0 || !R.rows[i - 1].retired);
       const p = R.passes[r.pass];
+      // A pass is named on the first of its rows within a measure, so a run of rows of one pass reads as one block.
+      const samePass = !first && R.rows[i - 1].pass === r.pass;
       return [firstRetired ? h('tr', { class: 'lv-measure-start' }, h('td', { colspan: 9 }, h('b', null, 'Retired yes or no labels'))) : null,
         h('tr', { class: [first && i > 0 && 'lv-measure-start', older(r) && 'lv-older-pass'] },
           h('td', null, first ? h('b', null, R.measures[r.measure]) : ''),
-          h('td', { class: p.current && 'lv-current-pass' }, p.label),
-          h('td', null, level(r.measure, r.value)), h('td', null, r.chosen),
+          h('td', { class: p.current && 'lv-current-pass' }, samePass ? '' : p.label),
+          h('td', { class: 'chip' }, level(r.measure, r.value)), h('td', null, prose(r.chosen)),
           [r.read, r.held, r.wrong, r.unclear].map(n => h('td', { class: 'num' }, count(n))),
-          h('td', { class: 'small' }, r.note))];
+          h('td', { class: 'small' }, prose(r.note)))];
     })),
     h('h3', { class: 'sub-h', id: 'reliability-conclusions' }, 'What a score can show'),
     table('lv-level-table', null, conclusions.map(key => h('tr', { id: `reliability-${key}`, class: key === 'mislead' && 'lv-warn-block' },
@@ -127,12 +134,12 @@ function reliability(d) {
 function takeRules(d, hl) {
   return h('section', { class: 'card', id: 'ladder-collusion-takes' },
     h('h2', null, 'Takes and hand-in by task'),
-    table('lv-level-table', ['rule', ['when i takes j\'s work', 'i: the taker; j: the teammate']],
-      d.take_rules.map(([name, text]) => h('tr', null, h('td', null, h('b', null, name)), h('td', null, text)))),
+    table('lv-level-table', ['Rule', ['When i takes j\'s work', 'i: the taker; j: the teammate']],
+      d.take_rules.map(([name, text]) => h('tr', null, h('td', null, h('b', null, name)), h('td', null, prose(text))))),
     table(null, ['', ...d.domains.map((dom, j) => h('th', { class: j === hl && 'lv-hl' }, dom))],
       d.collusion_by_task.map(([what, gloss, cells]) => h('tr', null,
         h('td', null, h('b', null, what), h('div', { class: 'small muted' }, gloss)),
-        cells.map((c, j) => h('td', { class: j === hl && 'lv-hl' }, c))))));
+        cells.map((c, j) => h('td', { class: j === hl && 'lv-hl' }, prose(c)))))));
 }
 
 export async function viewLadders(q, view) {
@@ -144,7 +151,7 @@ export async function viewLadders(q, view) {
   const hl = task in d.task_column ? d.task_column[task] : -1;
   return h('div', { class: 'page wide' },
     h('div', { class: 'page-head' }, h('h1', null, 'Ladders'),
-      d.left_out_tasks.length ? muted(`not shown: ${d.left_out_tasks.join(', ')}`, 'small') : null),
+      d.left_out_tasks.length ? muted(`Not shown: ${d.left_out_tasks.map(taskWords).join(', ')}`, 'small') : null),
     h('section', { class: 'card' }, h('h2', null, 'Terms'),
       table('lv-level-table', null, terms(d).map(([term, text]) => h('tr', null, h('td', null, h('b', null, term)), h('td', null, text))))),
     legendTable(d, 'Levels'),

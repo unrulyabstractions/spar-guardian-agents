@@ -38,9 +38,14 @@ export function inkOn(hex) {
   return contrast(INKS[0]) >= contrast(INKS[1]) ? INKS[0] : INKS[1];
 }
 const SHORT = { cheating: 'H', coordination: 'C', collusion: 'K' };
+// The strip pane's height besides the strip's rows: its padding, heading, chips and legend, the strip's own head and
+// end band, and the pane's bottom gap (tv_style.css .rp-stage .case .left).
+const STRIP_CHROME = 260;
 /** A ladder's own colour: its first level above the line. lad: its /api/ladders entry. */
 const inkOf = (L, lad) => RAMP[L][lad.levels.indexOf(lad.line)];
 const clip = (s, n) => (s && s.length > n ? `${s.slice(0, n - 1)}…` : s);
+/** A tooltip of at most n words. */
+const clipWords = (s, n = 12) => { const w = String(s || '').split(/\s+/).filter(Boolean); return w.length > n ? `${w.slice(0, n).join(' ')}…` : w.join(' '); };
 // Milestone wording: what the strip writes beside the call that first reached a level.
 const WORDS = {
   cheating: { looked: 'looked', tempted: 'tempted', attempted: 'attempted', hacked: 'hacked' },
@@ -64,7 +69,9 @@ export function readableReasoning(raw) {
   if (raw == null || raw === '') return null;
   const s = typeof raw === 'string' ? raw : JSON.stringify(raw);
   const t = s.trim();
-  if (t === '[redacted reasoning]') return { hidden: 'reasoning hidden by the provider (redacted)' };
+  if (t === '[redacted reasoning]') return { hidden: 'redacted' };
+  // An encrypted reasoning token (gAAAAA..., URL-safe base64 parts joined by dots): unreadable, so not shown.
+  if (/^gAAAAA[\w.=-]{80,}$/.test(t.replace(/\s+/g, ''))) return { hidden: 'encrypted' };
   if (t.startsWith('[{')) {
     try {
       const blocks = JSON.parse(t);
@@ -84,21 +91,26 @@ export function readableReasoning(raw) {
   return { text: s };
 }
 
-/** The strip's legend: one row per ladder, its lane code and name, then every level above none as a swatch in aligned
- * cells, a rule at the ladder's line; a row for the regulator's tick when the strip draws one. */
+/** The strip's legend: one row per ladder, its lane code and name, then every level above none as a swatch in a grid of
+ * equal columns, a rule at the ladder's line; a ladder with half the levels or fewer takes two columns a level; a row
+ * for the regulator's tick when the strip draws one. */
 export function stripLegend(ladders, order, regulator = false) {
   const cols = Math.max(...order.map(L => ladders[L].levels.length)) - 1;
   const row = L => {
     const lad = ladders[L];
     const line = lad.levels.indexOf(lad.line);
-    const cells = lad.levels.slice(1).map((v, j) => h('td', { class: ['csl-level', j + 1 === line && 'csl-line'], title: lad.meanings[j + 1] },
-      h('i', { style: `background:${RAMP[L][j + 1]}` }), v));
+    const span = (lad.levels.length - 1) * 2 <= cols ? 2 : 1;
+    const cells = lad.levels.slice(1).map((v, j) => h('td', { class: ['csl-level', j + 1 === line && 'csl-line'],
+      colspan: span > 1 ? String(span) : null, title: clipWords(`${v}: ${lad.meanings[j + 1]}`) },
+    h('i', { style: `background:${RAMP[L][j + 1]}` }), v));
     return h('tr', null, h('th', { scope: 'row' }, h('span', { class: 'csl-mark', style: `color:${inkOf(L, lad)}` }, SHORT[L]), lad.name),
-      cells, cells.length < cols ? h('td', { colspan: String(cols - cells.length) }) : null);
+      cells);
   };
-  return h('table', { class: 'cs-legend' }, h('tbody', null, order.map(row),
-    regulator ? h('tr', null, h('th', { scope: 'row' }, h('span', { class: 'csl-mark csl-reg' }), 'Regulator'),
-      h('td', { class: 'csl-level', colspan: String(cols) }, 'met on the board')) : null));
+  return h('table', { class: 'cs-legend' },
+    h('colgroup', null, h('col', { class: 'csl-name-col' }), Array.from({ length: cols }, () => h('col'))),
+    h('tbody', null, order.map(row),
+      regulator ? h('tr', null, h('th', { scope: 'row' }, h('span', { class: 'csl-mark csl-reg' }), 'Regulator'),
+        h('td', { class: 'csl-level csl-reg-cell', colspan: String(cols) }, h('i', { class: 'csl-reg-swatch' }), 'met on the board')) : null));
 }
 
 function asStr(v) {
@@ -129,7 +141,7 @@ function promptBlock(label, text) {
 }
 
 // The parts of a step, each a section with a header strip that folds it: the run page's bar folds a part everywhere.
-export const PARTS = [['reasoning', 'Reasoning'], ['call', 'Tool calls'], ['result', 'Tool results']];
+export const PARTS = [['step', 'Steps'], ['reasoning', 'Reasoning'], ['call', 'Tool calls'], ['result', 'Tool results']];
 // A section longer than this starts clipped to its first lines.
 const CLIP_LINES = 12;
 /** Fold (on) or unfold one section; its header strip stays. */
@@ -154,6 +166,16 @@ function section(part, name, tag, text, mark) {
 }
 const reasoningSection = (text, mark) => section('reasoning', 'Reasoning', null, text, mark);
 const textSection = text => section('reasoning', 'Text', null, text, null);
+/** A chevron that folds its step box or call box to its header. */
+function foldButton(kind) {
+  return h('button', { type: 'button', class: 'box-fold', 'aria-expanded': 'true', title: `fold or unfold this ${kind}`,
+    onclick: e => {
+      const box = e.currentTarget.closest(kind === 'step' ? '.step-box' : '.call');
+      const on = !box.classList.contains('folded');
+      box.classList.toggle('folded', on);
+      e.currentTarget.setAttribute('aria-expanded', String(!on));
+    } }, h('span', { class: 'sec-chev', 'aria-hidden': 'true' }));
+}
 /** Every section of a step box unfolded and unclipped. */
 function openSections(box) {
   for (const s of box.querySelectorAll('.sec')) { foldSection(s, false); s.classList.remove('clipped'); }
@@ -262,7 +284,6 @@ export function renderCase(t, ctx) {
   }
   for (const ls of own.values()) ls.sort((a, b) => order.indexOf(a.ladder) - order.indexOf(b.ladder) || b.index - a.index);
   const labelled = k => own.has(k) || regAt.has(k);
-  const nLabelled = calls.filter(c => labelled(c.k)).length;
 
   // 4. right: one block per step. Its head line holds the call's levels as chips, in the ladders' order: the level
   // reached before as an outline, a label the call carries itself as a marked chip.
@@ -303,18 +324,20 @@ export function renderCase(t, ctx) {
     if (x.model != null) looseEls.set(x.model, box);
     return box;
   };
-  const looseCard = x => h('div', { class: 'call msg' },
+  const looseCard = x => h('div', { class: 'call cs-msg' },
     h('div', { class: 'ch' }, h('span', { class: 'cn', title: x.step != null ? `step ${x.step}` : null },
       x.src === 'agent' ? 'Message' : x.src === 'user' ? 'User' : 'System'), lv ? headChips(x.before - 1, false) : null),
     h('div', { class: 'cb' }, judgedLines(x.model), x.reasoning ? reasoningSection(x.reasoning, markOf(x.model)) : null,
       x.text ? (x.src === 'agent' ? textSection(x.text) : promptBlock('Prompt', x.text)) : null));
+  // A step encloses the calls of one model turn; a step and a call each fold to their header.
+  let stepBox = null;
   for (const c of calls) {
-    while (li < loose.length && loose[li].before <= c.k) right.appendChild(looseBlock(loose[li++]));
+    while (li < loose.length && loose[li].before <= c.k) { right.appendChild(looseBlock(loose[li++])); stepBox = null; }
     const k = c.k;
     const labs = own.get(k) || [];
     const el = h('div', { class: ['call', labelled(k) && 'has-label', labs.some(l => l.ladder === 'coordination') && 'has-board'], id: `a-${ctx.agent}-call-${k}`,
       dataset: { call: String(k) }, style: labs.length ? `--step:${RAMP[labs[0].ladder][labs[0].index]}` : null },
-      h('div', { class: 'ch' }, h('span', { class: 'cn', title: c.step != null ? `step ${c.step}` : null }, `Call ${k}`),
+      h('div', { class: 'ch' }, foldButton('call'), h('span', { class: 'cn' }, `Call ${k}`),
         lv ? headChips(k, true) : null, h('span', { class: 'mz' }, c.tc.function_name || '')),
       h('div', { class: 'cb' }, c.model != null ? judgedLines(c.model) : null,
         c.reasoning ? reasoningSection(c.reasoning, c.model != null ? markOf(c.model) : null) : null,
@@ -325,7 +348,14 @@ export function renderCase(t, ctx) {
           return section('result', 'Tool result', h('span', { class: 'sec-size' }, plural(out.split('\n').length, 'line')), out, null);
         })));
     blocks.push(el);
-    right.appendChild(el);
+    const sid = c.step != null ? c.step : `k${k}`;
+    if (!stepBox || stepBox.dataset.step !== String(sid)) {
+      stepBox = h('div', { class: 'step-box', dataset: { step: String(sid) } },
+        h('div', { class: 'step-h' }, foldButton('step'), h('span', { class: 'step-n' }, c.step != null ? `Step ${c.step}` : `Call ${k}`)),
+        h('div', { class: 'step-b' }));
+      right.appendChild(stepBox);
+    }
+    stepBox.querySelector('.step-b').appendChild(el);
   }
   while (li < loose.length) right.appendChild(looseBlock(loose[li++]));
 
@@ -335,12 +365,16 @@ export function renderCase(t, ctx) {
   const NS = 'http://www.w3.org/2000/svg';
   const LB = 160, LW = 14, GAP = 5, SEP = 16, TOP = 30;
   const lanesW = order.length * (LW + GAP) - GAP;
-  const RX = LB + lanesW + SEP, RW = lanesW, W = RX + RW + 30;
+  // RX + RW + 3 to + 7: the regulator's ticks; from + 11: the call numbers, clear of them.
+  const RX = LB + lanesW + SEP, RW = lanesW, W = RX + RW + 38;
   // A milestone label wider than the margin breaks before its call or "end" onto a second line.
   const measure = document.createElement('canvas').getContext('2d');
   measure.font = '600 10px "IBM Plex Sans", system-ui, sans-serif';
   const fits = t => measure.measureText(t).width <= LB - 14;
-  const maxH = Math.max(320, Math.min(window.innerHeight - 220, 900));
+  // The strip fits the pane under the run page's bar with its heading, its chips and its legend (STRIP_CHROME).
+  const bar = document.querySelector('.rp-bar');
+  const underBar = bar ? bar.getBoundingClientRect().bottom + 8 : 120;
+  const maxH = Math.max(200, Math.min(window.innerHeight - underBar - STRIP_CHROME, 900));
   const rh = Math.max(2, Math.min(9, maxH / Math.max(n, 1)));
   const H = Math.ceil(n * rh) + TOP + 6 + 14;
   const svg = document.createElementNS(NS, 'svg');
@@ -391,6 +425,7 @@ export function renderCase(t, ctx) {
     }
   }
   let last = -99;
+  let lastAt = null;
   const placed = [];
   for (const m of miles) {
     const y0 = m.end ? TOP + n * rh + 8 : TOP + m.k * rh + rh / 2;
@@ -399,7 +434,8 @@ export function renderCase(t, ctx) {
     last = two ? ty + 11 : ty;
     placed.push(ty);
     if (two) placed.push(ty + 11);
-    const col = m.ladder === 'reg' ? 'var(--bad)' : m.ladder === 'cheating' ? 'var(--accent)' : 'var(--ink-2)';
+    // Each milestone in its ladder's colour, as the lanes' heads; the regulator's in the regulator's.
+    const col = m.ladder === 'reg' ? 'var(--bad)' : lv && lv.ladders[m.ladder] ? inkOf(m.ladder, lv.ladders[m.ladder]) : 'var(--ink-2)';
     const tx = mk('text', { x: LB - 10, y: ty, 'text-anchor': 'end', class: 'cs-mile', fill: col, 'data-call': m.end ? '' : m.k });
     if (two) {
       for (const [i, part] of [m.head, m.tail].entries()) {
@@ -408,26 +444,30 @@ export function renderCase(t, ctx) {
         tx.appendChild(ts);
       }
     } else tx.textContent = m.t;
-    const tt = document.createElementNS(NS, 'title'); tt.textContent = clip(m.tip, 80) || m.t; tx.appendChild(tt);
+    const tt = document.createElementNS(NS, 'title'); tt.textContent = clipWords(m.tip) || m.t; tx.appendChild(tt);
     svg.appendChild(tx);
-    svg.appendChild(mk('line', { x1: LB - 7, y1: ty - 3, x2: LB - 2, y2: y0, stroke: col, 'stroke-width': 1 }));
+    // One leader per call: milestones stacked on one call share the first one's.
+    const at = m.end ? 'end' : m.k;
+    if (at !== lastAt) svg.appendChild(mk('line', { x1: LB - 7, y1: ty - 3, x2: LB - 2, y2: y0, stroke: col, 'stroke-width': 1 }));
+    lastAt = at;
   }
   if (last + 8 > H) svg.setAttribute('height', Math.ceil(last + 8));
   // A faint grid across the lanes, a line every `step` calls, its call number at the right.
   const step = [5, 10, 20, 25, 50, 100, 200, 500].find(s => s * rh >= 28) || 1000;
   for (let k = 0; k <= n; k += step) {
     const y = TOP + k * rh;
-    svg.appendChild(mk('line', { x1: LB - 3, y1: y, x2: RX + RW + 2, y2: y, class: 'cs-grid' }));
-    const tx = mk('text', { x: RX + RW + 5, y: y + 3, class: 'cs-tick', 'data-call': Math.min(k, n - 1) });
+    svg.appendChild(mk('line', { x1: LB - 3, y1: y, x2: RX + RW + 9, y2: y, class: 'cs-grid' }));
+    const tx = mk('text', { x: RX + RW + 11, y: y + 3, class: 'cs-tick', 'data-call': Math.min(k, n - 1) });
     tx.textContent = String(k);
     svg.appendChild(tx);
   }
   // The agent's level on each ladder at the end of the run, as chips with their evidence on hover.
   const mine = lv && lv.agents[ctx.agent];
   const ladderLine = mine ? h('div', { class: 'cs-ladders' }, order.filter(L => !mine[L].na).map(L =>
-    levelChip(L, lv.ladders[L], mine[L].level, false, { facts: mine[L].facts }))) : null;
+    h('span', { class: 'cs-ladder', title: lv.ladders[L].name },
+      h('span', { class: 'cs-ladder-mark', style: `color:${inkOf(L, lv.ladders[L])}` }, SHORT[L]),
+      levelChip(L, lv.ladders[L], mine[L].level, false, { facts: mine[L].facts })))) : null;
   const left = h('div', { class: 'left' },
-    h('h2', null, 'Episode ', h('span', { class: 'sub' }, `${plural(n, 'call')} · ${nLabelled} labelled`)),
     ladderLine,
     svg,
     lv ? stripLegend(lv.ladders, single ? ['cheating'] : order, regAt.size > 0) : null,
@@ -456,6 +496,7 @@ export function renderCase(t, ctx) {
     if (!el) return null;
     for (const b of right.querySelectorAll('.call.here')) b.classList.remove('here');
     el.classList.add('here');
+    for (const box of [el, el.closest('.step-box')]) if (box) box.classList.remove('folded');
     openSections(el);
     opened = k;
     el.scrollIntoView({ block: 'start', behavior });
@@ -520,6 +561,7 @@ export function renderCase(t, ctx) {
       if (key === foldedParts) return;
       foldedParts = key;
       for (const s of right.querySelectorAll('.sec')) foldSection(s, off.has(s.dataset.part));
+      for (const b of right.querySelectorAll('.step-box')) b.classList.toggle('folded', off.has('step'));
     },
     findCall: k => show(k),
     findToolCall: id => (idOf.has(id) ? show(idOf.get(id)) : null),

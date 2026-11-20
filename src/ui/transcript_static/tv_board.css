@@ -12,17 +12,23 @@
   color: var(--text); }
 .bd-sel-a { border-color: var(--bd-a); }
 .bd-sel-b { border-color: var(--bd-b); }
-.bd-play { min-width: 78px; }
-.bd-lens-key { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-height: 20px; margin: 0 0 6px;
+.bd-play { min-width: 78px; justify-content: center; }
+/* every control of the row one height and one font: the selects, the buttons and the lens segment */
+.bd-mode { font-size: 12.5px; padding: 2px 6px; border: 1px solid var(--border); border-radius: 5px; background: var(--panel);
+  color: var(--text); }
+.bd-controls select, .bd-controls .btn-small, .bd-controls .seg { height: 26px; min-height: 26px; box-sizing: border-box; }
+.bd-controls .seg-btn { height: 100%; }
+.bd-lens-key { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-height: 22px; margin: 0 0 6px;
   color: var(--muted); }
-.bd-lens-key[hidden] { display: none; }
+/* under All the key row keeps its height, so the lanes never move when the lens changes */
+.bd-lens-key.bd-key-off { visibility: hidden; }
 .bd-count { padding: 0 6px; border: 1px solid var(--border-strong); border-radius: 9px; font-size: 11.5px;
   color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .bd-missed { cursor: help; }
 
 /* the slider under the time axis: its handle's width is tv_view_board.js THUMB, so the handle's middle sits on the
    axis at the moment it shows */
-.bd-scrub { position: relative; height: 40px; overflow: hidden; }
+.bd-scrub { position: relative; height: 22px; overflow: hidden; }
 .bd-scrub-name { position: absolute; left: 18px; top: 1px; }
 .bd-slider { position: absolute; top: 0; height: 18px; margin: 0; padding: 0; background: none; cursor: pointer;
   -webkit-appearance: none; appearance: none; }
@@ -33,12 +39,11 @@
   box-sizing: border-box; }
 .bd-slider::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--text);
   border: 2px solid var(--panel); box-sizing: border-box; }
-.bd-pos { position: absolute; top: 19px; font-variant-numeric: tabular-nums; font-size: 12.5px; color: var(--text);
-  white-space: nowrap; }
+.bd-pos { margin-left: auto; font-variant-numeric: tabular-nums; font-size: 12.5px; color: var(--text); white-space: nowrap; }
 
 /* the two agents' cards, side by side and the same height: a head line, a grid of now and end per ladder, the
    judge labels' scores */
-.bd-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 2px 0 8px; }
+.bd-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 640px)); justify-content: start; gap: 8px; margin: 2px 0 8px; }
 .bd-card { min-width: 0; padding: 5px 10px; border-left: 4px solid; border-radius: 4px; font-size: 12.5px;
   display: flex; flex-direction: column; gap: 4px; }
 .bd-card[hidden] { display: none; }
@@ -46,13 +51,15 @@
 .bd-card-b { border-color: var(--bd-b); background: var(--bd-b-bg); }
 .bd-card-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; white-space: nowrap; }
 .bd-sum { font-family: var(--mono); font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.bd-card-grid { display: grid; grid-template-columns: max-content max-content max-content; align-items: center;
-  gap: 2px 14px; font-size: 12px; }
+/* a row per ladder and per judge label: the name, now and end in columns of one width, each chip on its column's
+   middle, then a judge label's kind */
+.bd-card-grid { display: grid; grid-template-columns: max-content minmax(96px, max-content) minmax(96px, max-content) max-content;
+  align-items: center; gap: 2px 14px; font-size: 12px; }
+.bd-card-grid > .bd-col, .bd-card-grid > .bd-now, .bd-card-grid > .bd-end, .bd-card-grid > .bd-score { justify-self: center; text-align: center; }
 .bd-col { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .bd-ladder { color: var(--muted); }
 .bd-end { cursor: help; }
 .bd-end.bd-same { opacity: .4; }
-.bd-card-labels { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 14px; }
 .bd-score { display: inline-flex; align-items: center; gap: 5px; }
 .bd-score a { text-decoration: none; }
 .bd-kind { font-size: 11px; color: var(--muted); }
@@ -88,6 +95,7 @@
 .bd-reach-text { font-size: 9.5px; font-weight: 600; fill: var(--text); paint-order: stroke; stroke: var(--panel);
   stroke-width: 3px; stroke-linejoin: round; cursor: pointer; }
 .bd-reach-text:hover { text-decoration: underline; }
+.bd-reach-ground { fill: var(--panel); opacity: .85; pointer-events: none; }
 .bd-reach-lead { stroke: var(--text); stroke-width: 1; stroke-dasharray: 1 2; pointer-events: none; }
 .bd-pbox { cursor: pointer; }
 .bd-pbox.bd-ahead { opacity: .28; }
@@ -117,7 +125,7 @@
 .bd-future { fill: var(--panel); opacity: .72; pointer-events: none; }
 .bd-cursor { stroke: var(--text); stroke-width: 1.6; pointer-events: none; }
 .bd-current { fill: none; stroke: var(--text); stroke-width: 2; rx: 2; pointer-events: none; }
-.bd-latest-box { fill: none; stroke: var(--text); stroke-width: 2.4; pointer-events: none; }
+.bd-latest-box { fill: none; stroke: var(--text); stroke-width: 2; pointer-events: none; }
 
 /* the legend, folded into its summary line */
 .bd-legend { margin-top: 2px; font-size: 12px; }
@@ -153,7 +161,10 @@
 .bd-post.bd-mine-b { border-left-color: var(--bd-b); background: var(--bd-b-bg); }
 .bd-post.bd-mine-a .bd-writer { color: var(--bd-a); }
 .bd-post.bd-mine-b .bd-writer { color: var(--bd-b); }
-.bd-post.bd-latest { outline: 2.4px solid var(--text); outline-offset: 1px; }
+/* the latest post's frame inside its box, so the scrolling list never clips it */
+.bd-post.bd-latest { box-shadow: inset 0 0 0 2px var(--text); }
+/* a harness notice's word on the notice's own ground: no padding of its own, so the head keeps one gap */
+.bd-post-head .badge.b-notice { padding: 0; border: 0; background: none; }
 .bd-post.bd-has-label { border-right: 4px solid #5b73ad; }
 .bd-readers { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
 .bd-reader { font-family: var(--mono); }

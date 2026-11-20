@@ -462,8 +462,8 @@ def test_the_board_tab_has_a_lens_per_ladder_in_the_url_and_never_one_agent_twic
 
 def test_the_board_tab_carries_no_sentence_and_its_cards_have_now_and_end():
     """The user's order (UI_TEXT_DIET, BOARD_CARD): no sentence explains the tab; the board's heading is a noun phrase
-    with a count; the legend and the lens key are chips with a word or two; each card is a head line, a grid of now and
-    end per ladder, and one line of judge label scores."""
+    with a count; the legend and the lens key are chips with a word or two; each card is a head line and a grid of now
+    and end per ladder, with a row per judge label whose score stands under end."""
     board = (Path(tb.__file__).parent / "transcript_static" / "tv_view_board.js").read_text()
     code = re.sub(r"/\*.*?\*/|^\s*//.*$", "", board, flags=re.S | re.M)   # what the page shows, not its comments
     for gone in ("The message board", "shown as the position reaches them", "reached so far", "at no cited call",
@@ -478,7 +478,10 @@ def test_the_board_tab_carries_no_sentence_and_its_cards_have_now_and_end():
     assert "Object.assign(top, c.after);" in board     # now: the rung a timeline holds after the call
     assert "arrowKey(READ_CLASS.latest, 'latest read')" in board and "arrowKey(READ_CLASS.from, 'from read')" in board
     css = (Path(tb.__file__).parent / "transcript_static" / "tv_board.css").read_text()
-    assert ".bd-cards { display: grid; grid-template-columns: 1fr 1fr;" in css and ".bd-end.bd-same" in css
+    # the two cards side by side, each at most 640 px wide, so a wide window leaves no empty panel in a card
+    assert ".bd-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 640px));" in css and ".bd-end.bd-same" in css
+    # the judge labels' scores are rows of the card's grid, each chip under "end"
+    assert "grid.append(...(row ? Object.keys(d.label_names).flatMap(key => cardScore(ag.agent, key, row[key]))" in board
 
 
 def place_reaches(items: list[dict], x1: float) -> list[dict]:

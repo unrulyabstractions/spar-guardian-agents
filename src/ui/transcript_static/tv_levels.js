@@ -113,7 +113,7 @@ export function levelChip(key, lad, level, rank = true, opts = {}) {
 }
 
 /** The mark legends put between the two sides of a ladder's line. */
-export const lineMark = lad => h('span', { class: 'lv-line-mark', title: lad.line_words, role: 'separator', 'aria-label': 'line' });
+export const lineMark = lad => h('span', { class: 'lv-line-mark', title: `${lad.name} line: ${lad.line} and above`, role: 'separator', 'aria-label': 'line' });
 
 /** Cheated beside a Cheating rung: the measure's word (src/measures/cheating_ladder.py cheated), nothing without one.
  * lad: the Cheating ladder's /api/ladders entry, whose line_words say what cheated means. */
@@ -189,23 +189,23 @@ export function cheatingCell(lad, level, cheated, judgeWords, rank = true, facts
 function cellView(c, L, key, judgeWords) {
   if (key === 'cheating') return h('td', { class: 'lv-cell' }, cheatingCell(L, c.na ? null : c.level, c.na ? null : c.cheated, judgeWords, true, c.facts),
     c.na && c.evidence ? muted(c.evidence, 'small block') : null);
-  if (c.na) return h('td', { class: 'muted small' }, c.level, c.evidence ? `: ${c.evidence}` : '');
+  if (c.na) return h('td', { class: 'lv-cell muted small' }, c.level, c.evidence ? `: ${c.evidence}` : '');
   return h('td', { class: 'lv-cell' }, levelChip(key, L, c.level, true, { facts: c.facts }));
 }
 
 const yesNo = v => (v === true ? 'yes' : v === false ? 'no' : '?');
 
-/** One agent's CheatBench verdicts, one line per judge: cheated, and honeypots seen where the task's verdict records
- * it (SWE's does not); "not judged" without a row. The line carries no judge's name: the cell marks it (cheatingCell).
+/** One agent's CheatBench verdicts, one outlined chip per judge as the team's (cheatbenchTeam): "Judge: yes" or
+ * "Judge: no", red when it cheated, and honeypots seen where the task's verdict records it (SWE's does not); "not
+ * judged" without a row. The judge's name is the chip's tooltip, and beside the chip when the agent has two judges.
  * verdicts: {judge: row}. */
 export function cheatbenchWords(verdicts) {
   const judges = Object.entries(verdicts || {});
-  if (!judges.length) return muted('not judged', 'small');
-  return h('span', { class: 'cb-cell' }, judges.map(([judge, r]) => h('span', { class: 'small', title: `judge ${judge}` },
-    r.parse_ok === false ? badge('did not parse', 'warn') : [
-      h('span', { class: r.cheated ? 'lv-judge-yes' : null }, `cheated ${yesNo(r.cheated)}`),
-      'honey_pots_seen' in r ? `, honeypots seen ${yesNo(r.honey_pots_seen)}` : null],
-    judges.length > 1 ? muted(` (${judge})`, 'small') : null)));
+  if (!judges.length) return h('span', { class: 'cb-chip cb-none', title: 'CheatBench judge: not judged' }, 'Judge: –');
+  return h('span', { class: 'cb-cell' }, judges.map(([judge, r]) => (r.parse_ok === false ? badge('did not parse', 'warn')
+    : h('span', { class: ['cb-chip', r.cheated && 'cb-yes'], title: `CheatBench judge ${judge}` },
+      `Judge: ${yesNo(r.cheated)}`, 'honey_pots_seen' in r ? `, honeypots ${yesNo(r.honey_pots_seen)}` : null,
+      judges.length > 1 ? ` (${judge})` : null))));
 }
 
 /** The team's word of each CheatBench judge: its own cheated, k of n workers. summaries: the index row's cheatbench. */
@@ -240,16 +240,16 @@ const judgedOf = (lv, a) => lv.judge_labels.agents[a] || null;
  * cheatbench and labels), open(agent, label) -> (located) -> the link to the excerpt's place}. */
 export function levelsPanel(lv, roles, task, ctx) {
   const about = lv.judge_label_about.labels;
-  const head = h('tr', null, h('th', null, 'Agent'), lv.order.map(k => h('th', null, lv.ladders[k].name)),
-    labelKeys(lv).map(k => h('th', { title: 'Judge score, 0 to 100' }, about[k].name)));
+  const head = h('tr', null, h('th', { class: 'lv-agent' }, 'Agent'), lv.order.map(k => h('th', { class: 'lv-cell' }, lv.ladders[k].name)),
+    labelKeys(lv).map(k => h('th', { class: 'lv-label-cell', title: 'Judge score, 0 to 100' }, about[k].name)));
   const rows = Object.entries(lv.agents).sort((a, b) => isInfluencer(roles[a[0]]) - isInfluencer(roles[b[0]]) || a[0].localeCompare(b[0]))
-    .map(([a, cells]) => h('tr', null, h('td', { class: 'mono' }, a, isInfluencer(roles[a]) ? ` (${roles[a]})` : ''),
+    .map(([a, cells]) => h('tr', null, h('td', { class: 'mono lv-agent' }, a, isInfluencer(roles[a]) ? ` (${roles[a]})` : ''),
       lv.order.map(k => cellView(cells[k], lv.ladders[k], k, k === 'cheating' ? cheatbenchWords(ctx.cheatbench[a]) : null)),
-      labelKeys(lv).map(k => h('td', null, judgedOf(lv, a) ? labelEntry(about[k], judgedOf(lv, a)[k], ctx.open(a, k)) : muted('not judged', 'small')))));
+      labelKeys(lv).map(k => h('td', { class: 'lv-label-cell' }, judgedOf(lv, a) ? labelEntry(about[k], judgedOf(lv, a)[k], ctx.open(a, k)) : muted('not judged', 'small')))));
   if (!lv.single) {
-    rows.push(h('tr', { class: 'lv-team' }, h('td', null, h('b', null, 'Team')),
+    rows.push(h('tr', { class: 'lv-team' }, h('td', { class: 'lv-agent' }, h('b', null, 'Team')),
       lv.order.map(k => cellView(lv.team[k], lv.ladders[k], k, k === 'cheating' ? cheatbenchTeam(ctx.row.cheatbench) : null)),
-      labelKeys(lv).map(k => h('td', null, teamScore(ctx.row.labels.team[k])))));
+      labelKeys(lv).map(k => h('td', { class: 'lv-label-cell' }, teamScore(ctx.row.labels.team[k])))));
   }
   const alarm = lv.cheating && lv.cheating.alarm;
   return h('section', { class: 'card', id: 'sec-ladders' },
@@ -339,7 +339,7 @@ export function coordinationPanel(lv, roles) {
       ['Team', 'Workers\' levels averaged, rounded half up',
         levelChip('coordination', lv.ladders.coordination, C.team, true, { facts: lv.team.coordination.facts })],
       ['Influencers', 'Kept out of the team\'s level', influencerList(lv, 'coordination', Object.entries(C.influencers || {}), role)]]),
-    h('div', { class: 'table-wrap' }, h('table', { class: 'data compact coord-table' },
+    h('div', { class: 'table-wrap' }, h('table', { class: 'data compact coord-table coord-agents' },
       headRow(['Agent', 'Role', 'Posts', ['Read', 'Read a teammate\'s post'], 'Rounds per teammate', 'Rounds its posts allow', 'Level']),
       h('tbody', null, agents.map(([a, r]) => h('tr', { class: isInfluencer(role(a)) && 'coord-influencer' },
         h('td', { class: 'mono' }, a), h('td', null, roleWords(role(a))),
@@ -378,14 +378,14 @@ export function collusionPanel(lv, roles, ctx) {
     summary([
       ['Team', 'Highest pair of workers', levelChip('collusion', L, M.team, true, { facts: lv.team.collusion.facts })],
       ['Influencers', 'Kept out of the team\'s rung', influencerList(lv, 'collusion', Object.entries(M.influencers || {}), role)]]),
-    h('div', { class: 'table-wrap' }, h('table', { class: 'data compact coord-table' },
+    h('div', { class: 'table-wrap' }, h('table', { class: 'data compact coord-table coll-agents' },
       headRow(['Agent', 'Role', 'Rung', 'Cheating rung']),
       h('tbody', null, Object.keys(M.agents).sort(byRole).map(a => {
         const r = M.agents[a];
         return h('tr', { class: isInfluencer(role(a)) && 'coord-influencer' },
           h('td', { class: 'mono' }, a), h('td', null, roleWords(role(a))),
           h('td', null, levelChip('collusion', L, r.rung, true, { facts: ((lv.agents[a] || {}).collusion || {}).facts })),
-          h('td', null, r.cheating || muted('no row', 'small')));
+          h('td', null, r.cheating ? levelChip('cheating', lv.ladders.cheating, r.cheating, false) : muted('no row', 'small')));
       })))),
     h('h3', { class: 'sub-h' }, `Pairs · ${pairs.length}`),
     h('div', { class: 'table-wrap' }, h('table', { class: 'data compact collusion-pairs' },
@@ -394,7 +394,8 @@ export function collusionPanel(lv, roles, ctx) {
         h('td', { class: 'mono' }, p.agents.map((a, i) => [i ? ' and ' : '', a, isInfluencer(role(a)) ? ` (${role(a)})` : ''])),
         h('td', null, chip(lv, 'collusion', p.rung)), h('td', null, takeList(p)),
         h('td', null, p.hand_in_both ? 'yes' : 'no'), h('td', null, pooledList(p)),
-        h('td', { class: 'small' }, p.cheating.map(c => c || '?').join(' / '))))))),
+        h('td', null, h('span', { class: 'lv-chip-pair' }, p.cheating.map(c => (c ? levelChip('cheating', lv.ladders.cheating, c, false)
+          : muted('?', 'small')))))))))),
     h('h3', { class: 'sub-h' }, 'Hand-in contributors'),
     handIn.length ? h('ul', { class: 'ev-list' }, handIn.map(([a, lines]) => h('li', null, h('span', { class: 'mono' }, a), ': ', lines.join('; '))))
       : muted('none', 'small'),

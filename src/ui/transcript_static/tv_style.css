@@ -10,6 +10,8 @@
 .idx-about-box { position: absolute; z-index: 6; top: 34px; left: 0; width: max-content; max-width: 760px; padding: 8px 10px;
   background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0, 0, 0, .18); }
 .idx-about-box p { margin: 6px 0 0; }
+.idx-about-box table.data td, .idx-about-box table.data th { vertical-align: middle; }
+.idx-about-box th.center, .idx-about-box td.center { text-align: center; }
 /* The runs page's head (tv_view_index.js): the heading with its count and the pager on one line, then the filters in
    three labelled groups, each group's fields on one grid of equal columns, so the groups' fields line up; a label
    above its control, every control the same height, a set filter's control outlined in the accent colour. */
@@ -18,13 +20,18 @@
 .pager { display: flex; align-items: center; gap: 8px; }
 .pager select { height: 28px; min-height: 28px; padding: 3px 6px; font-size: 12.5px; }
 .pager .btn[disabled] { opacity: .45; cursor: default; }
+.pager .btn { height: 28px; min-height: 28px; box-sizing: border-box; display: inline-flex; align-items: center; }
 .idx-filters { display: flex; flex-direction: column; gap: 6px; margin: 0 0 10px; padding: 8px 10px; border: 1px solid var(--border);
-  border-radius: 8px; background: var(--panel); }
+  border-radius: 8px; background: var(--panel); width: fit-content; max-width: 100%; box-sizing: border-box; }
 .idx-fgroup { display: flex; gap: 10px; }
 .idx-fgroup + .idx-fgroup { border-top: 1px solid var(--border); padding-top: 6px; }
 .idx-fgroup-name { flex: none; width: 6.5em; padding-top: 2px; font-size: 11px; font-weight: 700; letter-spacing: .06em;
   text-transform: uppercase; color: var(--muted); }
 .idx-fgroup-fields { flex: 1; display: grid; grid-template-columns: repeat(auto-fill, 158px); gap: 6px 10px; align-items: end; }
+/* The panel hugs its fields: each group's fields in a row of equal 158 px fields that wraps at one pitch, so the
+   groups' fields still line up. */
+.idx-filters .idx-fgroup-fields { display: flex; flex-wrap: wrap; align-items: flex-end; }
+.idx-filters .idx-fgroup-fields > * { flex: none; width: 158px; box-sizing: border-box; }
 .idx-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .idx-field .field-label { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .idx-field select, .idx-field input { box-sizing: border-box; width: 100%; height: 28px; min-height: 28px; padding: 3px 6px;
@@ -33,9 +40,14 @@
 .idx-field.is-set select, .idx-field.is-set input { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .idx-reset { height: 28px; justify-content: center; }
 .idx-wrap { overflow: auto; max-height: calc(100vh - var(--header-h) - 120px); }
-table.idx-table { font-size: 12.5px; }
+/* separate borders, as table.sum-table: the sticky header then carries its own rules and nothing shows between them */
+table.idx-table { font-size: 12.5px; border-collapse: separate; border-spacing: 0; }
 table.idx-table thead { position: sticky; top: 0; z-index: 2; }
-table.idx-table th, table.idx-table td { padding: 5px 4px; }
+table.idx-table th, table.idx-table td { padding: 5px 8px; }
+table.idx-table thead th { background: var(--panel-2); }
+table.idx-table th.center { min-width: 72px; }
+/* the six ladder columns of the two bands one width, so the bands mirror each other */
+table.idx-table th.lv { width: 118px; min-width: 118px; }
 table.idx-table th { white-space: normal; vertical-align: bottom; min-width: 50px; }
 table.idx-table td { white-space: nowrap; vertical-align: middle; }
 table.idx-table td.wrap { white-space: normal; min-width: 8ch; max-width: 18ch; }
@@ -44,7 +56,7 @@ table.idx-table td.lv { white-space: normal; }
 table.idx-table .cheat-says .lv-cheated { display: block; }
 /* The band over the runs table's columns (tv_view_index.js GROUPS) and a rule at the left of each group. */
 table.idx-table tr.idx-band th { text-align: center; font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase;
-  color: var(--muted); border-bottom: 2px solid var(--border); padding: 3px 6px; }
+  color: var(--muted); border-bottom: 0; box-shadow: inset 0 -2px 0 var(--border); padding: 3px 6px; }
 table.idx-table tr.idx-band th.idx-band-team { background: var(--panel-2); }
 table.idx-table tr.idx-band th.idx-band-influencers { background: var(--panel-2); }
 table.idx-table .idx-group-start { border-left: 2px solid var(--border); }
@@ -56,7 +68,10 @@ table.idx-table .idx-group-start { border-left: 2px solid var(--border); }
 .idx-who { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
 .idx-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 4px; white-space: nowrap; }
 .idx-model { font-weight: 600; white-space: nowrap; }
-.idx-influencer { display: flex; flex-direction: column; gap: 1px; }
+/* With two influencers, each one's block is three lines high (its chips may wrap under its model), as each of its
+   levels' rows in the Influencers band (.lv-influencers.is-pair), so a level stands level with its influencer. */
+.idx-influencer { display: flex; flex-direction: column; justify-content: center; gap: 1px; }
+.idx-who.is-pair .idx-influencer { height: 57px; }
 .idx-influencer .idx-model { font-weight: 400; font-size: 12px; }
 .cond-chip, .level-chip { display: inline-block; padding: 0 6px; border-radius: 3px; border: 1px solid; font-size: 11px;
   line-height: 1.55; white-space: nowrap; }
@@ -73,9 +88,9 @@ table.idx-table .idx-group-start { border-left: 2px solid var(--border); }
 .level-chip-disregulator { border-color: var(--role-disregulator); }
 table.idx-table td.lv .lv-glyph, table.idx-table td.lv .lv-rank { flex: none; white-space: nowrap; }
 table.idx-table tbody tr:hover td { background: var(--hover); }
-.idx-legend { margin-top: 16px; }
+.idx-legend { margin-top: 16px; width: fit-content; max-width: 100%; }
 table.idx-legend-table { font-size: 12.5px; border-collapse: collapse; }
-table.idx-legend-table th { text-align: left; padding: 4px 12px 4px 0; white-space: nowrap; font-weight: 600; }
+table.idx-legend-table th { text-align: left; padding: 4px 12px 4px 0; white-space: nowrap; font-weight: 600; width: 7em; }
 .idx-legend-levels { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px 0; }
 table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
 .labels-table td:first-child { white-space: nowrap; }
@@ -94,7 +109,11 @@ table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--ba
 /* the ladders: colours from the theme tokens, so light and dark both read */
 .lv-table { border-collapse: collapse; width: 100%; font-size: 13px; }
 .lv-table th { font-size: 12px; color: var(--muted); font-weight: 600; }
-.lv-table th, .lv-table td { border-bottom: 1px solid var(--border); padding: 5px 8px; text-align: left; vertical-align: top; }
+.lv-table th, .lv-table td { border-bottom: 1px solid var(--border); padding: 5px 8px; text-align: left; vertical-align: middle; }
+/* the ladder columns' chips on their column's middle; the agent column as narrow as its ids; the labels' excerpts left */
+.lv-table th.lv-cell, .lv-table td.lv-cell { text-align: center; }
+.lv-table .lv-agent { width: 1%; white-space: nowrap; }
+.lv-table td.lv-cell .cheat-cell { display: inline-flex; flex-direction: column; align-items: center; }
 .lv-team td { background: var(--panel-2); }
 /* A level chip (tv_levels.js levelChip): the ladder's colour at the level, the text colour that reads on it, and bars
    in that text colour, filled up to the level, with a gap at the ladder's line. */
@@ -139,7 +158,7 @@ table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--ba
 .jl-list li { white-space: normal; }
 .jl-agree { color: var(--good); font-size: 12px; }
 .lv-judge-yes { color: var(--bad); font-weight: 600; }
-.lv-reliability td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.lv-reliability td.num { text-align: center; vertical-align: middle; font-variant-numeric: tabular-nums; }
 .lv-reliability tr.lv-measure-start td { border-top: 2px solid var(--border-strong); }
 .lv-reliability tr.lv-older-pass td { color: var(--muted); }
 .lv-reliability td.lv-current-pass { font-weight: 600; }
@@ -167,6 +186,10 @@ mark.xl-mark.flash { animation: flash 1.6s ease-out; }
 .table-wrap:has(> .lv-ladder-table) { width: fit-content; }
 .lv-ladder-table { border-collapse: collapse; font-size: 12px; }
 .lv-ladder-table th, .lv-ladder-table td { border: 1px solid var(--border); padding: 4px 6px; vertical-align: top; max-width: 260px; }
+/* a chip column: the chip on its cell's middle both ways; a level column with a gloss, on its row's middle */
+.lv-ladder-table td.chip { vertical-align: middle; text-align: center; }
+.lv-ladder-table td.mid { vertical-align: middle; }
+.lv-ladder-table th.center, .lv-ladder-table td.center { text-align: center; vertical-align: middle; }
 .lv-ladder-table .lv-hl { background: var(--warn-bg); }
 .lv-level-table td:last-child { max-width: 90ch; }
 .card > .table-wrap + .table-wrap { margin-top: 10px; }
@@ -190,7 +213,7 @@ mark.xl-mark.flash { animation: flash 1.6s ease-out; }
 .case .right{display:flex;flex-direction:column;gap:20px;min-width:0}
 .case .call{--step:var(--line-2);background:var(--surface);border:1px solid var(--line-2);box-shadow:inset 5px 0 0 var(--step);border-radius:8px;scroll-margin-top:60px}
 .case .call.here{outline:2px solid var(--accent)}
-.case .call.msg{--step:var(--muted);background:var(--surface-2)}
+.case .call.cs-msg{--step:var(--muted);background:var(--surface-2)}
 .case .ch{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;font-size:12px;color:var(--muted);padding:7px 14px 7px 18px;
   background:var(--head);border-bottom:1px solid var(--line-2);border-radius:7px 7px 0 0;box-shadow:inset 5px 0 0 var(--step)}
 .case .ch .cn{font-size:14px;font-weight:700;color:var(--ink)}
@@ -234,11 +257,14 @@ mark.xl-mark.flash { animation: flash 1.6s ease-out; }
 .rp-togs { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
 .rp-tog { font: 500 12px var(--sans); padding: 3px 9px; border: 1px solid var(--border); border-radius: 5px; background: var(--panel); color: var(--muted); cursor: pointer; }
 .rp-tog[aria-pressed=true] { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
-.rp-tog[aria-pressed=true]::before { content: "\2713  "; }
+/* the check mark in a fixed slot, so a toggle keeps its width when pressed */
+.rp-tog::before { content: "\2713"; display: inline-block; width: 1em; visibility: hidden; }
+.rp-tog[aria-pressed=true]::before { visibility: visible; }
+.rp-togs[hidden] { display: none; }
 .rp-tog:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .rp-stage[data-board=only] .case .right .call:not(.has-board) { display: none; }
 .case .note{font-size:11.5px;color:var(--ink-2);margin:8px 0 0}
-@media (max-width:980px){.case .main{grid-template-columns:1fr}.case .left{position:static}}
+@media (max-width:700px){.case .main{grid-template-columns:1fr}.case .left{position:static}}
 .case .cs-svg{display:block;cursor:pointer}
 .case .cs-lane-g{font-size:10px;font-weight:600;fill:var(--ink-2)}
 .case .cs-mile{font:600 10.5px var(--sans);cursor:pointer}
@@ -255,13 +281,15 @@ mark.xl-mark.flash { animation: flash 1.6s ease-out; }
 .case .cs-why{flex:1;min-width:0;color:var(--muted);font-size:12px}
 /* The strip's legend (tv_case_view.js stripLegend): a row per ladder, its levels' swatches in aligned cells, a rule at
    the line. */
-.case .cs-legend{border-collapse:collapse;margin:10px 0 0;font-size:9px;color:var(--ink-2)}
+.case .cs-legend{border-collapse:collapse;margin:10px 0 0;font-size:10px;color:var(--ink-2);table-layout:fixed;width:388px}
+.case .cs-legend col.csl-name-col{width:88px}
 .case .cs-legend th{text-align:left;font-weight:600;font-size:10.5px;white-space:nowrap;padding:3px 4px 3px 0;color:var(--ink)}
-.case .cs-legend td{padding:3px 4px;vertical-align:top;white-space:nowrap;text-align:center;line-height:1.2}
+.case .cs-legend td{padding:3px 1px;vertical-align:top;white-space:nowrap;text-align:center;line-height:1.2}
 .case .cs-legend td.csl-line{border-left:2px solid var(--ink)}
 .case .cs-legend i{display:block;width:100%;min-width:14px;height:9px;margin:0 0 2px;border-radius:2px;border:1px solid var(--line-2);box-sizing:border-box}
 .case .csl-mark{display:inline-block;width:18px;font-weight:700}
-.case .csl-mark.csl-reg{width:4px;height:10px;margin:0 16px 0 0;background:var(--bad);vertical-align:-1px}
+.case .csl-mark.csl-reg{width:4px;height:10px;margin:0 14px 0 0;background:var(--bad);vertical-align:-1px}
+.case .cs-legend i.csl-reg-swatch{width:4px;min-width:4px;background:var(--bad);border:0}
 .case .cs-legend tr:last-child td.csl-level:only-of-type{text-align:left}
 
 /* run page opened like the case-study artifact: one thin bar, then strip and transcript */
@@ -281,7 +309,7 @@ mark.xl-mark.flash { animation: flash 1.6s ease-out; }
 .rp-team .card { margin-bottom: 10px; }
 .rp-stage .case { padding: 0; background: transparent; }
 /* 384 px, not the source's 280, so the strip's label margin (tv_case_view.js LB) and its legend's level cells fit. */
-.rp-stage .case .main { grid-template-columns: 384px 1fr; gap: 12px; }
+.rp-stage .case .main { grid-template-columns: 410px 1fr; gap: 12px; }
 /* --under-bar is the bar's real bottom edge, set by tv_case_view.js: the bar wraps in a narrow window. */
 .rp-stage .case { --under: var(--under-bar, calc(var(--header-h) + 44px)); }
 .rp-stage .case .left { top: var(--under); max-height: calc(100vh - var(--under) - 12px); padding: 10px; }
@@ -301,8 +329,22 @@ mark.xl-mark.flash { animation: flash 1.6s ease-out; }
 .lv-summary th { text-align: left; padding: 3px 14px 3px 0; color: var(--muted); font-weight: 600; vertical-align: top; white-space: nowrap; }
 .lv-summary td { padding: 3px 0; vertical-align: top; }
 .coord-table tr.coord-influencer td { background: var(--surface-2, rgba(127,127,127,.06)); }
-.coord-table td.num, .coord-pairs td.num { text-align: right; font-variant-numeric: tabular-nums; }
-.coord-pairs { margin-top: 8px; max-width: 520px; }
+.coord-table td.num, .coord-pairs td.num { font-variant-numeric: tabular-nums; }
+/* The Details tables: the Agent and Role cells on their row's middle; each chip and short value centred in its
+   column; the lists (clauses, evidence, takes, labels) left and top. */
+.coord-table td:nth-child(-n+2) { vertical-align: middle; }
+.coord-agents th:nth-child(n+3), .coord-agents td:nth-child(n+3), .coll-agents th:nth-child(n+3), .coll-agents td:nth-child(n+3),
+.coord-pairs th:last-child, .coord-pairs td:last-child { text-align: center; vertical-align: middle; }
+table.coord-pairs { margin-top: 0; width: auto; min-width: 280px; max-width: 520px; }
+.table-wrap:has(> .coord-pairs) { width: fit-content; margin-top: 8px; }
+.cheat-table th:nth-child(3), table.cheat-table td:nth-child(3) { text-align: center; vertical-align: middle; }
+.cheat-table td:nth-child(3) .cheat-cell { align-items: center; }
+.collusion-pairs th:nth-child(2), .collusion-pairs th:nth-child(4), .collusion-pairs th:nth-child(6) { text-align: center; }
+table.collusion-pairs td:nth-child(1), table.collusion-pairs td:nth-child(2), table.collusion-pairs td:nth-child(4),
+table.collusion-pairs td:nth-child(6) { vertical-align: middle; }
+table.collusion-pairs td:nth-child(2), table.collusion-pairs td:nth-child(4), table.collusion-pairs td:nth-child(6) { text-align: center; }
+.lv-chip-pair { display: inline-flex; flex-wrap: wrap; justify-content: center; gap: 3px; }
+table.sc-table td:nth-child(-n+2) { vertical-align: middle; }
 .lv-level-table td:first-child { white-space: nowrap; }
 .collusion-pairs td { vertical-align: top; }
 .collusion-pairs td:nth-child(3), .collusion-pairs td:nth-child(5) { min-width: 260px; max-width: 520px; }
@@ -367,10 +409,6 @@ table.idx-table td.center .idx-other { align-items: center; }
 /* The run page's bar: who ran as chips. */
 .rp-who { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; }
 .rp-who-part { display: inline-flex; align-items: center; gap: 4px; }
-/* Each ladder's row of the strip legend sizes its own cells, so a long row never pushes past the panel. */
-.case .cs-legend tr { display: flex; align-items: flex-start; }
-.case .cs-legend th { flex: none; width: 88px; }
-.case .cs-legend td { flex: none; }
 /* The Summary's cells, centred both ways: the cheated share over its bar, each ladder's chips, the runs last. */
 table.sum-table td.sum-cell { vertical-align: middle; text-align: center; }
 .sum-stack { display: flex; flex-direction: column; align-items: center; gap: 3px; }
@@ -390,3 +428,93 @@ table.sum-table th.sum-model, table.sum-table td.sum-task { vertical-align: midd
 .sum-stack .sum-lad { display: grid; grid-template-columns: 1.2em minmax(0, auto); align-items: center; column-gap: 4px; }
 .sum-stack .sum-lad .sum-chips { justify-content: flex-start; }
 table.sum-table td.sum-cell { min-width: 130px; }
+/* ---- polish, 2026-11-19 ---- */
+/* The runs table's team score: the chip on its column's middle, a mislead mark hanging at its right out of the flow. */
+table.idx-table .sc-team { position: relative; }
+table.idx-table .sc-team .sc-mislead { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); margin-left: 3px; }
+/* The Influencers band with two influencers: each level on one line with its role's mark, as high as the influencer's
+   block in the Influencers cell (.idx-influencer), the blocks the same gap apart. */
+.lv-influencers { display: inline-flex; flex-direction: column; gap: 3px; vertical-align: middle; }
+.lv-influencers .lv-influencer-row { flex-direction: row; align-items: center; justify-content: center; gap: 4px; margin: 0; }
+.lv-influencers.is-pair .lv-influencer-row { height: 57px; }
+.role-chip.role-mark { padding: 0 4px; letter-spacing: 0; }
+/* The Run column: wide enough that a name breaks at an underscore at most once or twice; on one line in a wide window. */
+table.idx-table td.wrap:first-child { min-width: 20ch; max-width: 34ch; }
+table.idx-table td.lv, table.idx-table th.lv { padding-left: 6px; padding-right: 6px; }
+@media (min-width: 2000px) {
+  table.idx-table td.wrap:first-child, table.idx-table td.wrap { white-space: nowrap; max-width: none; }
+}
+/* The Details tab's Ladders card: the Team row's score chip has its mark beside it on the row's middle. */
+/* The run page's bar: the who chips one height and one font, centred on the line. */
+.rp-who .role-chip, .rp-who .level-chip, .rp-who .cond-chip { display: inline-flex; align-items: center; box-sizing: border-box;
+  height: 19px; padding: 0 6px; font-size: 11px; line-height: 1; letter-spacing: 0; text-transform: none; align-self: center; }
+.rp-right { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px 8px; margin-left: auto; }
+.rp-right .rp-togs { margin-left: 0; }
+/* The run record's key-value grids in columns: each label on its value's baseline, a long value across the row. */
+.rp-details .kv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 6px 24px; }
+.rp-details .kv-grid .kv-item { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.rp-details .kv-grid .kv-item > dt { flex: none; white-space: nowrap; }
+.rp-details .kv-grid .kv-item.kv-wide { grid-column: 1 / -1; }
+.rp-details .kv-grid .kv-item.kv-mid { grid-column: span 2; }
+.rp-details .kv-grid .kv-item:not(.kv-wide) > dd { white-space: nowrap; }
+/* The Team labels card: as wide as its chips, each value centred in its column. */
+.rp-details table.labels-table { width: auto; min-width: 420px; }
+.rp-details .table-wrap:has(> .labels-table) { width: fit-content; }
+.labels-table th:nth-child(2), .labels-table td:nth-child(2) { text-align: center; }
+/* An agent's record: Cheating, its judge labels and CheatBench's judge side by side where the card is wide. */
+.agent-card > .cb-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 12px 24px; align-items: start; }
+.sc-pair-row { display: flex; align-items: baseline; gap: 8px; }
+.sc-pair-row > .field-label { flex: none; min-width: 7em; }
+.jb-head h4 { margin: 0; }
+/* The Team labels card: each value's chips on one line, on the label's middle. */
+.labels-table td { vertical-align: middle; }
+.labels-table .cheat-cell { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; }
+/* The strip's end-of-run chips, each behind its lane's mark. */
+.case .cs-ladder { display: inline-flex; align-items: center; gap: 3px; }
+.case .cs-ladder-mark { font-size: 10.5px; font-weight: 700; }
+/* The Summary: the lead headers on the condition headers' baseline; All on its row's middle, left as the models; the
+   lead columns stuck at the left (tv_view_summary.js sets each one's left) on an opaque ground. */
+table.sum-table th.sum-lead, table.sum-table tr.sum-band-row th.sum-lead { vertical-align: bottom; text-align: left; font-size: 12px;
+  letter-spacing: normal; text-transform: none; border-bottom: 1px solid var(--border); padding: 5px 6px; }
+table.sum-table tr.sum-total > th { vertical-align: middle; text-align: left; }
+table.sum-table .sum-stick { position: sticky; z-index: 1; background: var(--panel); }
+table.sum-table thead .sum-stick { z-index: 3; background: var(--panel-2); }
+table.sum-table tr.sum-total > .sum-stick { background: var(--panel-2); }
+/* Two influencers in one column's header: a block each, role, level and model centred over one another. */
+.sum-col-pair { display: inline-grid; grid-auto-flow: column; gap: 6px; justify-items: center; }
+.sum-col-one { display: flex; flex-direction: column; align-items: center; }
+/* The Summary's cells tighter, so the columns fit a wide window; each rate right-aligned against its bar. */
+table.sum-table td.sum-cell, table.sum-table th.sum-col { min-width: 118px; }
+/* the table as wide as its columns, so a few columns never stretch the lead ones */
+table.sum-table { width: auto; }
+.sum-wrap { width: fit-content; max-width: 100%; }
+.sum-stack .sum-share { grid-template-columns: 1.2em 3em 48px; }
+.sum-stack .sum-share-k { text-align: right; }
+/* The detailed Summary: one block per cell, centred, as wide as its widest ladder row; the ladders' letters in one
+   column at its left and their chips from one left edge, wrapping inside the cell; every condition column one width. */
+.sum-stack.is-detailed { display: flex; flex-direction: column; align-items: stretch; gap: 3px; width: fit-content;
+  max-width: 100%; margin: 0 auto; }
+.sum-stack.is-detailed .sum-lad { display: flex; align-items: flex-start; gap: 4px; }
+.sum-stack.is-detailed .sum-lad-name { flex: none; width: 1.2em; padding-top: 2px; }
+.sum-stack.is-detailed .sum-chips { min-width: 0; justify-content: flex-start; }
+.sum-stack.is-detailed .sum-n { align-self: center; }
+table.sum-table.is-detailed td.sum-cell, table.sum-table.is-detailed th.sum-col { width: 190px; min-width: 190px; max-width: 190px; }
+/* The detailed Summary cell: the three ladders in one grid, letters in one column, chips left-aligned beside them,
+   the block centred in the cell. */
+.sum-stack .sum-lads { display: grid; grid-template-columns: auto fit-content(190px); column-gap: 6px; row-gap: 3px;
+  align-items: start; justify-content: center; }
+.sum-stack .sum-lads .sum-lad { display: contents; }
+.sum-stack .sum-lads .sum-lad-name { text-align: right; padding-top: 2px; }
+.sum-stack .sum-lads .sum-chips { justify-content: flex-start; }
+.sum-stack .sum-lads .sum-chips { flex-wrap: wrap; width: max-content; max-width: 190px; }
+/* Detailed cells are wide enough for a row of chips beside each letter. */
+table.sum-table.is-detailed td.sum-cell { min-width: 220px; }
+/* A step encloses its calls; a step and a call fold to their header with the chevron at the left. */
+.case .step-box { border-left: 2px solid var(--line-2); padding-left: 10px; margin: 0 0 12px; }
+.case .step-h { display: flex; align-items: center; gap: 6px; font: 600 12px var(--sans); color: var(--muted); margin: 0 0 6px; }
+.case .step-b { display: flex; flex-direction: column; gap: 12px; }
+.case .step-box.folded > .step-b { display: none; }
+.case .call.folded > .cb { display: none; }
+.case .box-fold { border: 0; background: none; padding: 0 2px; cursor: pointer; color: var(--muted); display: inline-flex; align-items: center; }
+.case .box-fold[aria-expanded=false] .sec-chev { transform: rotate(-45deg); }
+.case .step-box.folded > .step-h .sec-chev, .case .call.folded > .ch .sec-chev { transform: rotate(-45deg); }

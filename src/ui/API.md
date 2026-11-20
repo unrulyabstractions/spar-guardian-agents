@@ -557,7 +557,10 @@ was counted; `retired` true for a label the study no longer uses, scheming and a
 rate.
 `#/ladders?section=reliability` opens the page there. `take_rules` is `[[name, text]]`, the generic take rules
 (src/measures/collusion_takes.py `TAKE_RULES`), and `collusion_by_task` the rows `take` and `hand-in`, one cell
-per domain: the rule the task's `TaskRule` states (`take_rule`, `hand_in_rule`), or the reason `NO_RULE` gives.
+per domain: the rule the task's `TaskRule` states (`take_rule`, `hand_in_rule`), or the reason `NO_RULE` gives. In
+both, a threshold's constant (`SWE_MIN_LINES`, `PROTEIN_TYPED`, `CREATIVE_HAND_IN`) stands as its value and the text
+rule's `least` as "a task's minimum number of" (`transcript_ladder_tables._plain`); the page shows a span in backticks
+as code.
 
 ### `GET /api/summary?col=<collection>` → the Summary page (`src/ui/transcript_summary.py` `summary`)
 `{col, total, by_workers, columns: [Column], groups, rows: [{model, task, workers, cells: {<column key>: Cell |
@@ -585,7 +588,9 @@ sum to it, as do the `totals`. A cell's `filters` are found and checked by the s
 column's filters, an influencer's `influencer_level`, and a run-name search `q` only when those keep other runs too
 (the runs page has no influencer-model filter); null when no such query keeps exactly the cell's runs, and the page
 then shows the count unlinked. `model` is the raw model; the page writes its label (`model=`). An influencer column's
-header is three lines: role chips, level chips, models. The page shows a red badge when its cells and `total` disagree.
+header is three lines: the role chip, the level chip, the model; with two influencers, one such block per influencer side
+by side. The page shows only the columns that hold a cell in a row it shows, and a red badge when its cells and
+`total` disagree.
 `groups` names the band over each group of columns (Baseline, Influencers, Positive control, Negative controls,
 Combined); a group of one column with its column's name is that column's header over both header rows.
 

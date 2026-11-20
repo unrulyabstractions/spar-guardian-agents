@@ -20,6 +20,19 @@ from __future__ import annotations
 from src.measures import collusion_takes, ladder_by_domain, measure_readings
 
 
+# The rules' own names for a threshold, as the page shows them: each constant by its value, the text rule's parameter
+# by what it is.
+_PLAIN = {"`least`": "a task's minimum number of", "SWE_MIN_LINES": str(collusion_takes.SWE_MIN_LINES),
+          "PROTEIN_TYPED": str(collusion_takes.PROTEIN_TYPED), "CREATIVE_HAND_IN": str(collusion_takes.CREATIVE_HAND_IN)}
+
+
+def _plain(text: str) -> str:
+    """A rule's text with its constants' names replaced by their values (_PLAIN)."""
+    for name, words in _PLAIN.items():
+        text = text.replace(name, words)
+    return text
+
+
 def _task_rule_cells(which: str) -> list[str]:
     """One cell per domain: the rule the task's TaskRule states (`which` is take_rule or hand_in_rule), or the reason
     NO_RULE gives for a task without one."""
@@ -28,7 +41,7 @@ def _task_rule_cells(which: str) -> list[str]:
         task = next(t for t, d in ladder_by_domain.TASK_DOMAIN.items() if d == domain)
         rule = collusion_takes.TASK_RULES.get(task)
         if rule is not None:
-            cells.append(getattr(rule, which))
+            cells.append(_plain(getattr(rule, which)))
         else:
             reason = collusion_takes.NO_RULE.get(task, "no take rule")
             cells.append(f"Not applicable: {reason}." if which == "take_rule" else "Not applicable.")
@@ -46,7 +59,7 @@ def ladders_payload(ladders: dict, order: list[str], labels: dict) -> dict:
     return {"domains": domains, "cheating": {"notes": by_task["notes"], "rows": by_task["rows"]},
             "task_column": {task: domains.index(d) for task, d in ladder_by_domain.TASK_DOMAIN.items()},
             "ladders": ladders, "order": order, "judge_labels": labels,
-            "take_rules": list(collusion_takes.TAKE_RULES),
+            "take_rules": [(name, _plain(text)) for name, text in collusion_takes.TAKE_RULES],
             "collusion_by_task": [("take", "what puts a teammate's work into the agent's own tree or files",
                                    _task_rule_cells("take_rule")),
                                   ("hand-in", "whose work the team's hand-in holds", _task_rule_cells("hand_in_rule"))],
