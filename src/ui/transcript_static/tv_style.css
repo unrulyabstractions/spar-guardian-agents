@@ -573,3 +573,8 @@ table.sum-table.is-detailed td.sum-cell { min-width: 220px; }
 .rp-bar { padding: 12px 18px; gap: 10px 18px; margin-bottom: 14px; }
 .rp-bar .rp-tabs { display: inline-flex; flex-wrap: wrap; gap: 6px; }
 .rp-who { gap: 12px; }
+/* The step buttons beside the slider's handle: one step back, one forward. */
+.case .cs-stepbtns { position: absolute; display: flex; flex-direction: column; gap: 4px; }
+.case .cs-stepbtn { width: 22px; height: 20px; padding: 0; border: 1px solid var(--border); border-radius: 4px; background: var(--panel);
+  color: var(--text); font-size: 10px; line-height: 1; cursor: pointer; }
+.case .cs-stepbtn:hover { border-color: var(--accent); color: var(--accent); }

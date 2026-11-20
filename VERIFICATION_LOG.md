@@ -2014,3 +2014,7 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 ## 2026-11-20, strip and bar spacing, step lines, the slider's offset
 - **What.** A stray "}" left by the pane removal dropped `.cs-strip { position: relative }`, so the slider sat 30 px above call 0 (the user's screenshot: the handle about four calls off): removed, braces checked balanced. Dashed lines across the strip's lanes where a step ends (no number); room around the run bar and its groups, the ladder chips, the strip and the legend's rows.
 - **How verified.** On 8833 at 1288x900, poem_minimal_regulated_luna1: the strip computes position relative and the slider's top is the strip's top + 30 (177 -> 207), screenshot viewed (handle at call 0, step lines, spaced bar, chips and legend). Viewer, board and summary tests 106 passed.
+
+## 2026-11-20, step buttons beside the slider
+- **What.** ▲ and ▼ beside the slider's handle, moving with it: the previous step's first call and the next step's.
+- **How verified.** On 8833, poem_minimal_regulated_luna1 a01: ▼ three times took the top to Step 4, 5, 7 (calls 1, 2, 3; Step 6 holds no call), ▲ back to Step 5 (call 2); the buttons' top follows the handle (thumb 223 -> 241, buttons 207 -> 225); screenshot viewed. Viewer, board and summary tests 106 passed.
