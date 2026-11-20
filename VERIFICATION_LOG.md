@@ -1957,3 +1957,7 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **What.** `make hf-upload STUDY=study_exploration_1` to unrulyabstractions/spar-swarm (public): 8,437 files, 1.18 GB, smoke folders skipped; the dry run's leak check found no key, token or git email.
 - **How verified.** The script's own check: "8437 of 8437 files on the Hub with the same bytes". Then, from the Hub's file list: 8,438 files under study_exploration_1/ (one older file the upload never deletes), 146 steps.jsonl, 146 replay.json, 294 judge files; downloaded signals.jsonl and steps.jsonl of flipt_minimal_cheat_luna_fixed1 and poem_minimal_cheat_luna1 and compared sha256 with the local files: all equal.
 - **Result.** VERIFIED.
+
+## 2026-11-19, ladder letters H, C, K
+- **What.** The short marks of the three ladders (summary cells, the run page's strip) are H (Cheating), C (Coordination), K (Collusion), in tv_view_summary.js and tv_case_view.js.
+- **How verified.** Viewer, summary and board tests 105 passed; on 8833 screenshots of #/summary (H, C, K before each chip row) and of flipt_minimal_cheat_dsflash_fixed3's run page (strip headers H C K, so far and this step) viewed. VERIFIED.

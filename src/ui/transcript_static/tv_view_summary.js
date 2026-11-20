@@ -40,7 +40,7 @@ const share = (label, k, n, colour) => h('div', { class: 'sum-share', title: `${
   h('span', { class: ['sum-share-k', k > 0 && 'is-some'] }, `${k}/${n}`),
   h('span', { class: 'sum-bar' }, h('span', { style: `width:${n ? Math.round((100 * k) / n) : 0}%;background:${colour}` })));
 
-const SHORT = { cheating: 'Ch', coordination: 'Cd', collusion: 'Cl' };
+const SHORT = { cheating: 'H', coordination: 'C', collusion: 'K' };
 /** One ladder's level counts as chips in the ladder's colours; "n/a" where the ladder does not apply. */
 function ladderChips(key, lad, counts) {
   const chips = counts.map(([level, n]) => {

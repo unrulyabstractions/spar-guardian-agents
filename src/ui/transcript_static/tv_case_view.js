@@ -37,7 +37,7 @@ export function inkOn(hex) {
   const contrast = ink => { const [a, b] = [luminance(hex), luminance(ink)].sort((x, y) => y - x); return (a + 0.05) / (b + 0.05); };
   return contrast(INKS[0]) >= contrast(INKS[1]) ? INKS[0] : INKS[1];
 }
-const SHORT = { cheating: 'Ch', coordination: 'Cd', collusion: 'Cl' };
+const SHORT = { cheating: 'H', coordination: 'C', collusion: 'K' };
 /** A ladder's own colour: its first level above the line. lad: its /api/ladders entry. */
 const inkOf = (L, lad) => RAMP[L][lad.levels.indexOf(lad.line)];
 const clip = (s, n) => (s && s.length > n ? `${s.slice(0, n - 1)}…` : s);
