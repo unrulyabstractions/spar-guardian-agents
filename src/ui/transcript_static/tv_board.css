@@ -174,3 +174,24 @@
 .bd-reason { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: zoom-in; }
 .bd-reason.open { white-space: normal; cursor: zoom-out; }
 .bd-post.flash { animation: flash 1.2s ease-out; }
+/* Tidy cards and room throughout (2026-11-20): every chip fills its column, so a column reads as one width; the judge
+   labels sit under a rule with their kind beside the score; more space between every part of the tab. */
+.bd-tab .card { margin-bottom: 24px; }
+.bd-controls { gap: 10px 12px; margin-bottom: 14px; }
+.bd-lens-key { gap: 8px 12px; margin: 0 0 18px; }
+.bd-scrub { min-height: 36px; margin: 10px 0 6px; }
+.bd-cards { gap: 14px; margin: 16px 0 20px; }
+.bd-card { padding: 14px 18px; gap: 12px; }
+.bd-card-grid { grid-template-columns: max-content 128px 128px; gap: 10px 18px; }
+.bd-card-grid > .bd-now, .bd-card-grid > .bd-end { justify-self: stretch; display: flex; }
+.bd-card-grid > .bd-now > .lv-chip, .bd-card-grid > .bd-end .lv-chip { flex: 1; justify-content: center; }
+.bd-card-grid > .bd-end > * { flex: 1; display: flex; }
+.bd-card-grid > .bd-score { justify-self: stretch; justify-content: center; gap: 8px; }
+.bd-rule { grid-column: 1 / -1; border-top: 1px solid var(--border); margin: 2px 0; }
+.bd-legend { margin-top: 8px; }
+.bd-legend-body { gap: 10px 18px; margin-top: 10px; }
+.bd-board-box { margin-top: 14px; }
+.bd-posts { gap: 12px; }
+.bd-post { padding: 10px 14px; }
+.bd-post .bd-text { margin: 8px 0 0; }
+.bd-judged { margin-top: 8px; }

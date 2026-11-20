@@ -341,10 +341,10 @@ export function renderBoard(el, d, opts) {
     const left = c => X(state.mode === 'time' ? c.t : c.u);      // a call's left edge
     const mid = x => (state.mode === 'time' ? X(x.t) : X(x.u) + unitW / 2);   // a post's or a read's middle
     const yA = TOP;
-    const yBoard = yA + LANE_H + 8;
-    const yB = yBoard + BOARD_H + 8;
-    const yAxis = yB + LANE_H + 4;
-    const H = yAxis + 24;
+    const yBoard = yA + LANE_H + 18;
+    const yB = yBoard + BOARD_H + 18;
+    const yAxis = yB + LANE_H + 10;
+    const H = yAxis + 30;
     const svg = svgEl('svg', { class: ['bd-svg', state.lens !== 'all' && 'bd-lensed'], width, height: H,
       viewBox: `0 0 ${width} ${H}`, role: 'img',
       'aria-label': `the calls of ${state.a} and ${state.b} with the board between them` });
@@ -713,11 +713,11 @@ export function renderBoard(el, d, opts) {
     ? `${name} · ${firstLine(v[0], CLIP)}${v.length > 1 ? ` (+${v.length - 1})` : ''}`
     : `${name} · ${firstLine(v, CLIP)}`);
   // A judge label's score in a card, as a row of the card's grid: the label's name in the ladders' column, nothing
-  // under "now", its chip under "end", its kind last; the chip opens the excerpt where code located it: a post here,
+  // under "now", its chip and its kind under "end"; the chip opens the excerpt where code located it: a post here,
   // on this tab; a model call's reasoning in the agent's tab.
   function cardScore(agent, key, e) {
     const name = h('span', { class: 'bd-ladder' }, d.label_names[key]);
-    if (!e) return [name, h('span'), h('span', { class: 'bd-end muted' }, '–'), h('span')];
+    if (!e) return [name, h('span'), h('span', { class: 'bd-score muted' }, '–')];
     const kind = e.kind && e.kind !== 'none' ? e.kind : null;
     const at = e.located;
     const chip = scoreChip(e.score, `${d.label_names[key]}: ${e.score} of 100`);
@@ -726,8 +726,8 @@ export function renderBoard(el, d, opts) {
     const open = !at ? chip
       : at.where === 'post' ? h('a', { href: '#', title: `open ${at.post}`, onclick: toPost }, chip)
         : h('a', { href: inTab, title: `open model call ${at.call}` }, chip);
-    return [name, h('span'), h('span', { class: 'bd-score' }, open),
-      h('span', { class: 'bd-kind' }, kind, kind === 'mislead' ? [' ', misleadMark(kind)] : null)];
+    return [name, h('span'), h('span', { class: 'bd-score' }, open,
+      kind ? h('span', { class: 'bd-kind' }, kind, kind === 'mislead' ? [' ', misleadMark(kind)] : null) : null)];
   }
 
   // An agent's card in its lane's colour (BOARD_CARD): fill(agent) once per pair, at(call, reached) at each move. A
@@ -746,7 +746,7 @@ export function renderBoard(el, d, opts) {
       ag = a;
       cells.clear();
       grid.replaceChildren(h('span'), h('span', { class: 'bd-col', title: 'at the position' }, 'now'),
-        h('span', { class: 'bd-col', title: 'at the end of the run' }, 'end'), h('span'));
+        h('span', { class: 'bd-col', title: 'at the end of the run' }, 'end'));
       for (const [key, lad] of Object.entries(d.ladders)) {
         const f = ag.final[key] || { level: null, facts: [] };
         const chip = cardChip(key, lad, f.level);
@@ -755,12 +755,12 @@ export function renderBoard(el, d, opts) {
           () => [`${lad.name}: ${f.level || 'no level'}`, ...fewOf(f.facts.map(factLine))]);
         const now = h('span', { class: 'bd-now' });
         cells.set(key, { now, end, final: f.level });
-        grid.append(h('span', { class: 'bd-ladder' }, lad.name), now, end, h('span'));
+        grid.append(h('span', { class: 'bd-ladder' }, lad.name), now, end);
       }
-      // the judge labels' scores: rows of the same grid, each chip under "end"
+      // the judge labels' scores under a rule: rows of the same grid, each chip under "end"
       const row = (opts.judged || {})[ag.agent];
-      grid.append(...(row ? Object.keys(d.label_names).flatMap(key => cardScore(ag.agent, key, row[key]))
-        : [h('span', { class: 'bd-ladder' }, 'Judge labels'), h('span'), h('span', { class: 'bd-end muted small' }, 'not judged'), h('span')]));
+      grid.append(h('span', { class: 'bd-rule' }), ...(row ? Object.keys(d.label_names).flatMap(key => cardScore(ag.agent, key, row[key]))
+        : [h('span', { class: 'bd-ladder' }, 'Judge labels'), h('span'), h('span', { class: 'bd-score muted small' }, 'not judged')]));
     }
     function at(c, top) {
       head.replaceChildren(h('b', { class: `bd-key-${side}` }, ag.agent),

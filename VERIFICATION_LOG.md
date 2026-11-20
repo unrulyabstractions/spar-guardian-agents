@@ -2059,3 +2059,11 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **How verified.** Screenshot of poem_minimal_regulated_luna1 on 8833, bar cropped and viewed: [3 workers] GPT-6 Luna
   [baseline] [regulator] [ambiguous] GPT-6 Luna. Viewer tests passed.
 - **Result.** VERIFIED.
+
+## 2026-11-20: Board tab, tidy agent cards and more vertical room
+- **What.** The cards' chips fill their 128 px column (one width per column), the judge labels sit under a rule with
+  their kind beside the score (no fourth column), and the tab has more room: controls, key row, lanes (18 px between
+  lane, board and lane), slider, cards (14x18 padding, 10 px rows), legend and posts.
+- **How verified.** Screenshot of flipt_minimal_dsflash_fixed2's Board tab at 1400x1300 on 8833 viewed: both cards
+  aligned, scores under END with "control" beside, lanes and arrows intact. Viewer and board tests passed.
+- **Result.** VERIFIED.
