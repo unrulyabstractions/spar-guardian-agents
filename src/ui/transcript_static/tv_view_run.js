@@ -100,10 +100,12 @@ export async function viewRun(id, q, view) {
       if (!state.loaded) {
         btn.disabled = true;
         btn.textContent = 'Loading transcript…';
+        const tools = fetch(`/api/tools?id=${enc(id)}&agent=${enc(a.agent)}`).then(x => x.ok ? x.json() : null).catch(() => null);
         state.loaded = fetch(`/api/transcript?id=${enc(id)}&agent=${enc(a.agent)}`)
           .then(x => { if (!x.ok) throw new Error(`HTTP ${x.status}`); return x.json(); })
-          .then(t => {
-            state.tr = renderCase(t, { agent: a.agent, levels: d.levels, isRegulator: a.role === 'regulator', regulatorCalls: regulatorCalls(a.agent, a.role) });
+          .then(t => tools.then(tl => [t, tl]))
+          .then(([t, tl]) => {
+            state.tr = renderCase(t, { agent: a.agent, levels: d.levels, isRegulator: a.role === 'regulator', regulatorCalls: regulatorCalls(a.agent, a.role), tools: tl });
             btn.disabled = false;
             btn.textContent = `Transcript (${sizeTxt})`;
             return state.tr;

@@ -383,11 +383,24 @@ export function renderCase(t, ctx) {
   };
   // A step encloses one model turn: the messages that fed it (the System and User prompts in the first), then its calls
   // or its message. A step and each box in it fold to their header.
+  // The tool definitions every model call carried beside its messages: a box of their own at the head of the first step,
+  // one section per tool, folded to its name, with its description and its parameters' schema as sent.
+  const toolsCard = tl => h('div', { class: 'call cs-msg cs-tools' },
+    h('div', { class: 'ch' }, foldButton('call'), h('span', { class: 'cn' }, 'Tools'),
+      h('span', { class: 'mz' }, [plural(tl.tools.length, 'tool'), tl.tool_choice && tl.tool_choice !== 'auto' ? ` · ${tl.tool_choice}` : '',
+        tl.same_in_every_call ? '' : ' · first call'].join(''))),
+    h('div', { class: 'cb' }, tl.tools.map(t => {
+      const el = section('tooldef', t.name, null, `${t.description || ''}\n\n${JSON.stringify(t.parameters || {}, null, 2)}`, null);
+      foldSection(el, true);
+      return el;
+    })));
+  let toolsDue = !!(ctx.tools && ctx.tools.tools && ctx.tools.tools.length);
   const stepBody = (step, label) => {
     const box = h('div', { class: 'step-box', dataset: { step: String(step != null ? step : '') } },
       h('div', { class: 'step-h' }, foldButton('step'), h('span', { class: 'step-n' }, label)),
       h('div', { class: 'step-b' }));
     right.appendChild(box);
+    if (toolsDue) { box.lastChild.appendChild(toolsCard(ctx.tools)); toolsDue = false; }
     return box.lastChild;
   };
   let fed = [];
@@ -730,7 +743,7 @@ export function renderCase(t, ctx) {
       const key = [...off].sort().join(',');
       if (key === foldedParts) return;
       foldedParts = key;
-      for (const s of right.querySelectorAll('.sec')) foldSection(s, off.has(s.dataset.part));
+      for (const s of right.querySelectorAll('.sec:not(.sec-tooldef)')) foldSection(s, off.has(s.dataset.part));
       for (const b of right.querySelectorAll('.step-box')) b.classList.toggle('folded', off.has('step'));
     },
     findCall: k => show(k),

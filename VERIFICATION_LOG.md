@@ -2025,3 +2025,17 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **How verified.** On 8833, poem_minimal_regulated_luna1 at 1288x1000 and 1288x900: screenshots viewed, chips at top, strip filling the middle, the whole legend at the bottom with spaced rows, nothing cut. Viewer, board and summary tests 106 passed.
 - **Then.** The legend at the window's bottom was wrong on a tall window (the user's screenshot): the panel is as tall as its content, the chips, the strip and the legend each 32 px apart; the chip pairs 22 px apart. Screenshots at 1300x1650 and 1288x900 viewed (legend just under the strip in both). Tests 96 passed.
 - **Then.** Spacing raised two to four times (the user: "what is preventing you making spacing 3-4x"): run bar padding 22x24 and 28 px under it, the panel's sections 56 px apart with 28x20 padding, legend rows 14 px above and below, the chips one row (no wrap); the panel 440 px so the legend fits; STRIP_CHROME 540 so the legend fits under the strip at 900 px tall. Screenshots at 1300x1650 and 1288x900 viewed: chips on one row, the whole legend inside the panel in both. Tests 97 passed.
+
+## 2026-11-20: viewer Tools box (each agent's tool definitions from the eval log)
+
+- WHAT: `/api/tools?id=&agent=` (`transcript_viewer.agent_tools`) and the run page's Tools box at the head of each
+  agent's first step, one folded section per tool with its description and parameter schema; the bar's fold toggles
+  leave these sections alone.
+- HOW: compared one agent's last provider request (`call.request`) with its ATIF steps: same 1 system, 7 user, 42
+  assistant and 52 tool messages, so the tool list was the only part of the context window the page lacked. Scanned
+  every model event of study_exploration_0 and _1 eval logs: 0 of 2,396 agents saw their tool set change. Fetched
+  `/api/tools` for every agent of all 201 served runs on test port 8833: 702 agents, 0 failures, 0 empty, 0 varying;
+  a study 0 regulator gets `agent_actions` in place of `submit`. Screenshots of binder_minimal_luna4 k7x6z: 11 tools
+  folded, names in their own case, check_design opened shows its description and schema. New tests
+  tests/unit/test_transcript_viewer_tools.py (2) plus the viewer tests: 181 passed; ruff clean; node --check on both JS files.
+- RESULT: VERIFIED.

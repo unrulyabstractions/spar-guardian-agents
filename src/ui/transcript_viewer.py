@@ -11,7 +11,8 @@ cached measures (run_detail, board_detail) and serves the page. The server reads
 
 Routes: / (the page), /tv/<file> (src/ui/transcript_static/), /static/<path> (the results browser's assets in
 src/ui/static/, whose dom.js, charts.js, components.js and style.css the page reuses), /api/index, /api/run?id=,
-/api/board?id= (the run page's Board tab, src/ui/transcript_board.py), /api/transcript?id=&agent=, /api/ladders,
+/api/board?id= (the run page's Board tab, src/ui/transcript_board.py), /api/transcript?id=&agent=,
+/api/tools?id=&agent= (the tool definitions the agent's model calls carried, from the eval log), /api/ladders,
 /api/summary?col= (the Summary page, src/ui/transcript_summary.py). src/ui/API.md describes them.
 """
 from __future__ import annotations
@@ -21,13 +22,17 @@ import json
 import shutil
 import signal
 import sys
+import threading
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from inspect_ai.log import read_eval_log
+
 from src.configuration.settings import ROOT
+from src.export.eval_sample_view import span_owners
 from src.judging import verdict_files
 from src.measures import judge_labels
 from src.measures.run_directory import RunDir, episode_agent
@@ -93,6 +98,33 @@ def run_detail(row: dict, run_dir: Path, measured: dict) -> dict:
             "cheatbench_disclosed": judge_labels.CHEATBENCH_DISCLOSED_ACCESS.get(rf.task)}
 
 
+def agent_tools(log_path: Path) -> dict[str, dict]:
+    """Each agent's tool definitions as its model calls carried them beside the messages: {agent: {"tools": [{name,
+    description, parameters}], "tool_choice", "same_in_every_call"}}. The first call's set stands for the agent;
+    same_in_every_call says whether every later call carried the same names. A defense's own calls are left out."""
+    sample = read_eval_log(str(log_path), resolve_attachments=True).samples[0]
+    owner = span_owners(sample)
+    out: dict[str, dict] = {}
+    for e in sample.events:
+        if e.event != "model":
+            continue
+        agent, defense = owner(e.span_id)
+        if agent is None or defense is not None:
+            continue
+        names = [t.name for t in e.tools or []]
+        if agent in out:
+            out[agent]["same_in_every_call"] &= names == out[agent]["_names"]
+            continue
+        choice = e.tool_choice if isinstance(e.tool_choice, str) or e.tool_choice is None else \
+            getattr(e.tool_choice, "name", str(e.tool_choice))
+        out[agent] = {"tools": [{"name": t.name, "description": t.description,
+                                 "parameters": t.parameters.model_dump(exclude_none=True)} for t in e.tools or []],
+                      "tool_choice": choice, "same_in_every_call": True, "_names": names}
+    for v in out.values():
+        del v["_names"]
+    return out
+
+
 def board_detail(row: dict, run_dir: Path, measured: dict) -> dict:
     """The run page's Board tab (transcript_board.board_payload) from the run's files and its cached measures."""
     return transcript_board.board_payload(run_dir, RunFiles.read(run_dir).levels(measured))
@@ -126,6 +158,16 @@ class Viewer:
         self.ladders = transcript_ladder_tables.ladders_payload(transcript_levels.LADDERS, transcript_levels.ORDER,
                                                                 transcript_levels.label_about())
         self.summaries = {c["key"]: transcript_summary.summary(served["rows"], c["key"]) for c in served["collections"]}
+        self._tools: dict[str, dict] = {}
+        self._tools_lock = threading.Lock()
+
+    def tools(self, run_id: str) -> dict[str, dict]:
+        """agent_tools of the run's eval log, read once per run; {} when the run has no eval log."""
+        with self._tools_lock:
+            if run_id not in self._tools:
+                log = eval_log_of(self.dirs[run_id])
+                self._tools[run_id] = agent_tools(log) if log else {}
+            return self._tools[run_id]
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -175,6 +217,14 @@ class Handler(BaseHTTPRequestHandler):
                 if col not in self.viewer.summaries:
                     return self.fail(HTTPStatus.NOT_FOUND, f"no collection {col!r} in the index")
                 return self.send_json(self.viewer.summaries[col])
+            if url.path == "/api/tools":
+                run_id, agent = q.get("id", ""), q.get("agent", "")
+                if run_id not in self.viewer.dirs:
+                    return self.fail(HTTPStatus.NOT_FOUND, f"no run {run_id!r} in the index")
+                found = self.viewer.tools(run_id).get(agent)
+                if found is None:
+                    return self.fail(HTTPStatus.NOT_FOUND, f"no tool definitions for agent {agent!r} in {run_id}")
+                return self.send_json(found)
             if url.path == "/api/transcript":
                 return self.transcript(q.get("id", ""), q.get("agent", ""))
             return self.fail(HTTPStatus.NOT_FOUND, "no such path")

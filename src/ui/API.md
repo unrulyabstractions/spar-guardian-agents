@@ -539,6 +539,12 @@ Cheating lines by clause, takes by rule, judge labels with an excerpt code did n
 that made no tool call.
 
 ### `GET /api/transcript?id=<id>&agent=<agent>` → the agent's `transcript.json`, streamed as stored
+### `GET /api/tools?id=<id>&agent=<agent>` → the tool definitions the agent's model calls carried
+`{tools, tool_choice, same_in_every_call}` (`transcript_viewer.agent_tools`), read from the run's eval log once per run:
+`tools` is `[{name, description, parameters}]` as the agent's first model call carried them beside its messages,
+`parameters` the JSON schema; `same_in_every_call` is false when a later call carried other tool names. A defense's own
+model calls are left out. 404 when the run has no eval log or the agent no model call. The run page shows them as the
+Tools box at the head of the agent's first step, each tool folded to its name.
 ### `GET /api/ladders` → the ladders page's tables (`transcript_ladder_tables.ladders_payload`)
 `{domains, cheating, task_column, ladders, order, judge_labels, take_rules, collusion_by_task, left_out_tasks,
 readings}`.

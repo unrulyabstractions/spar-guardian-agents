@@ -81,7 +81,7 @@ Open http://127.0.0.1:8770/. The viewer runs until Ctrl-C. `make transcripts REB
 | Page or tab | What it holds |
 |---|---|
 | Runs | One row per run. Filters in three groups: Run (Search, Task, Workers, Collection), Who (Workers' model, Worker conditioning, Influencer, Influencer conditioning) and Outcome (Cheating, Cheated, Coordination, Collusion, Disclosure at least, Manipulation at least). The default order is Interest: the team's Cheating rung against its influencers, rank 1 first. A column head sorts by that column. |
-| Agent tabs | One tab per agent with its whole episode, each step with its labels. The bar's toggles fold Reasoning, Tool calls and Tool results on every step. Board calls only keeps the calls that read or post on the board. |
+| Agent tabs | One tab per agent with its whole episode, each step with its labels. The first step opens with the Tools box: the tool definitions every model call carried, from the eval log. The bar's toggles fold Reasoning, Tool calls and Tool results on every step. Board calls only keeps the calls that read or post on the board. |
 | Board | Two agents' calls on one clock, by time or by steps, with the message board below. The lenses colour the calls: All, Cheating, Coordination, Collusion, Judge labels. The slider, play and step buttons move the position, and the board fills to it. |
 | Details | The Cheating, Coordination and Collusion panels, the judge labels and a legend. |
 | Run record | The button at the bar's right: the run's settings, its labels and each agent's record. |
