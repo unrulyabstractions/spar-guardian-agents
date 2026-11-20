@@ -2053,3 +2053,9 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   viewed: Step 1, System with Text and Tools (7), reasoning above Call 0 and Call 1, "2 calls" folds both; in the page,
   0 reasoning sections inside calls and 106 at step heads. Tests 183 viewer tests plus 4 tool tests passed; ruff clean.
 - **Result.** VERIFIED. The earlier a6f0a1c entry's tool list was BROKEN (it included the withheld channel tools).
+
+## 2026-11-20: run bar, the workers' number as a chip
+- **What.** The bar's "3 × GPT-6 Luna" becomes a "3 workers" chip, the model, then the conditioning chip.
+- **How verified.** Screenshot of poem_minimal_regulated_luna1 on 8833, bar cropped and viewed: [3 workers] GPT-6 Luna
+  [baseline] [regulator] [ambiguous] GPT-6 Luna. Viewer tests passed.
+- **Result.** VERIFIED.
