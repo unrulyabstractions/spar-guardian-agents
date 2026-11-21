@@ -10,6 +10,8 @@ transcript viewer (src/ui/transcript_viewer.py, route /api/board).
     payload["posts"][0]["reads"][0]         # {agent, k, t, form ("latest" | "from" | None), asked}
     payload["pair"]                         # the two agents the tab opens with, and payload["pair_why"]
     payload["notes"]                        # load_run's notes, then the count of reads of no recorded form
+    payload["presence"]                     # each agent's entry and exit and each alert, placed on the clock
+                                            # (src/ui/transcript_presence.py on_lanes)
 
     network_payload(run_dir)                # the network log on the board's clock (src/ui/transcript_network.py),
                                             # None without network.jsonl; the viewer's /api/network
@@ -72,6 +74,7 @@ from src.measures.run_calls import Call, Run, load_run
 from src.measures.run_directory import RunDir, episode_agent, is_worker
 from src.ui.transcript_levels import CITE_RE, own_call, step_text, stepped
 from src.ui.transcript_network import network_view
+from src.ui.transcript_presence import on_lanes, presence
 
 SUMMARY_CHARS = 140
 """The longest one-line summary of a call."""
@@ -415,8 +418,8 @@ def notice_time(message: dict, events: list[dict], by_id: dict[str, Call],
 
 def board_payload(run_dir: Path, levels: dict) -> dict:
     """The Board tab's data for one run: {clock, clock_about, total, agents, posts, pair, pair_why, ladders,
-    label_names (each judge label's name), notes}. `levels` is the run page's ladders (transcript_levels.compute). The
-    network log comes on its own (network_payload)."""
+    label_names (each judge label's name), notes, presence (transcript_presence.on_lanes)}. `levels` is the run page's
+    ladders (transcript_levels.compute). The network log comes on its own (network_payload)."""
     run = load_run(run_dir, times=True)
     name, at, total = clock(run)
     by_model = model_calls(run_dir)
@@ -482,4 +485,4 @@ def board_payload(run_dir: Path, levels: dict) -> dict:
             "pair": pair, "pair_why": why,
             "ladders": {k: {key: v[key] for key in LADDER_KEYS} for k, v in levels["ladders"].items()},
             "label_names": {k: v["name"] for k, v in levels["judge_label_about"]["labels"].items()},
-            "notes": notes}
+            "notes": notes, "presence": on_lanes(presence(run.run_json), run.calls, at)}

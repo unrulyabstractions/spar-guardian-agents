@@ -392,12 +392,21 @@ tasks the study does not read, how many valid runs of them stand behind "other t
 applicable`: Coordination and Collusion on a one-agent run, Collusion on a task with no take rule, Cheating on a run
 without episodes.
 
-### `GET /api/run?id=<id>` → `{row: IndexRow, meta, agents: [Agent], boards: [Board], levels: Levels, cheatbench_disclosed}`
+### `GET /api/run?id=<id>` → `{row: IndexRow, meta, agents: [Agent], boards: [Board], levels: Levels, cheatbench_disclosed, presence: Presence}`
 `meta` holds run.json's `config`, `mode` and `code`, the rounds run (`rules.rounds`), and `eval_log` (the run's own
 `eval/*.eval`, else where `RunDir.eval_log` finds it; null when absent) beside `eval_log_recorded`.
 `cheatbench_disclosed` is the task's CheatBench field for an agent that acknowledged its access
 (`judge_labels.CHEATBENCH_DISCLOSED_ACCESS`), shown only in the CheatBench judge's block as "CheatBench: disclosed access".
+`presence` is each agent's entry and exit and each influencer's alert (`src/ui/transcript_presence.py`
+`with_alert_calls(presence(run.json))`): the bar's alert badge and the Details tab's Alerts and Entries and exits cards.
 ```
+Presence = {agents: {agent: {entered: round | null,                 # rules.entry_rounds
+                             exited: {why, round, seq, hand_in?, ends_after_round?} | null}},   # rules.exits
+            alerts: [Alert]}                                         # run.json alerts, in order
+            # why: submit | stop | alert | budget | context | delivered; agents {} and alerts [] in a run made before
+Alert = {agent, round, reason, agents (named, or null), time,
+         outcome ("true_alarm" | "false_alarm" | null), team_cheated_by_then, named_cheated_by_then: {agent: bool|null},
+         k}   # outcome from signals.team.alert_outcomes (src/measures/alert_outcomes.py); k: its alert_humans call
 Agent = {agent, role, folder (its trajectories/ folder), transcript_bytes,
          episode: {agent, model, n_turns, n_tool_calls, wall_time, limit, score, ended_by, ok, failure,
                    final_text, usage, defense, defenses},   # the keys episodes.jsonl has of these
@@ -515,7 +524,9 @@ BoardTab = {clock ("eval_log" | "call_order"), clock_about, total (seconds, or t
             label_names: {label: name},                        # the judge labels' names
             notes,                                             # load_run's, then the count of reads of no form
             network,                                           # whether the run has network.jsonl (/api/network)
-            tmp}                                               # whether the run has tmp_snapshots.json (/api/tmp)
+            tmp,                                               # whether the run has tmp_snapshots.json (/api/tmp)
+            presence: Presence + clock}                        # transcript_presence.on_lanes: each agent adds
+                                                               # entry: {k, t, start} and exit: {k, t}; each Alert t
 BoardCall = {k (the agent tab's "Call k"), m (its model call, per agent from 0), t, dur, tool, summary (one line),
              board ("post" | "read" | "status" | null),
              labels: [{ladder, level, index, evidence}],    # the run page's labels (Levels.labels) on this call
@@ -553,7 +564,16 @@ located in a post sits on the call that wrote the post. `unplaced` counts the re
 Cheating lines by clause, takes by rule, judge labels with an excerpt code did not locate, or located in a model call
 that made no tool call.
 
+`presence` places each agent's entry and exit and each alert on the clock (`transcript_presence.on_lanes`): an entry in
+the run's first round at t 0 (`start` true), a later one at the start of the agent's first call (`k`); an exit at the
+end of the agent's last call; an alert at the start of the alerting agent's i-th `alert_humans` call for its i-th alert.
+`k` and `t` are null for an agent with no call. The tab hatches each lane before its agent entered and after it exited,
+ticks the entry and the exit with its `why`, and draws each alert as a line across the timeline, flagged on the board
+and on the alerting agent's lane.
+
 ### `GET /api/transcript?id=<id>&agent=<agent>` → the agent's `transcript.json`, streamed as stored
+The agent tab shows a step with `extra.swarm_presence` as a User message whose header carries a chip: the agent,
+`entered` or `exited` with its `why`, and the round (`tv_presence.js presenceChip`).
 ### `GET /api/tools?id=<id>&agent=<agent>` → the tool definitions the agent's model calls sent the provider
 `{tools, tool_choice, same_in_every_call, from_request}` (`transcript_viewer.agent_tools`), read from the run's eval log
 once per run: `tools` is `[{name, description, parameters}]` as the agent's first model call's provider request

@@ -39,7 +39,13 @@ from src.export.eval_sample_view import span_owners
 from src.judging import verdict_files
 from src.measures import judge_labels
 from src.measures.run_directory import RunDir, episode_agent
-from src.ui import transcript_board, transcript_ladder_tables, transcript_levels, transcript_summary
+from src.ui import (
+    transcript_board,
+    transcript_ladder_tables,
+    transcript_levels,
+    transcript_presence,
+    transcript_summary,
+)
 from src.ui.transcript_index import CACHE, RunFiles, cheatbench_by_agent, folder_agents, load_or_build, served_index
 from src.utils.json_files import read_jsonl
 
@@ -74,8 +80,9 @@ def shown_verdict(row: dict) -> dict:
 def run_detail(row: dict, run_dir: Path, measured: dict) -> dict:
     """The run page's data: the row, the run's settings the page shows, each agent with its episode and each
     CheatBench judge's verdict on it, the field of that verdict that says the agent acknowledged its access
-    (judge_labels.CHEATBENCH_DISCLOSED_ACCESS, shown only in the CheatBench judge's block), the board, and the three
-    ladders with the judge labels from the cached measures."""
+    (judge_labels.CHEATBENCH_DISCLOSED_ACCESS, shown only in the CheatBench judge's block), the board, the three
+    ladders with the judge labels from the cached measures, and presence: each agent's entry and exit and each alert
+    with its outcome and its call (transcript_presence)."""
     rf = RunFiles.read(run_dir)
     rj = rf.run_json
     folders = folder_agents(run_dir, rf.episodes)
@@ -100,7 +107,8 @@ def run_detail(row: dict, run_dir: Path, measured: dict) -> dict:
             "eval_log_recorded": rj.get("eval_log")}
     boards = rf.boards()
     return {"row": row, "meta": meta, "agents": agents, "boards": boards, "levels": rf.levels(measured, boards),
-            "cheatbench_disclosed": judge_labels.CHEATBENCH_DISCLOSED_ACCESS.get(rf.task)}
+            "cheatbench_disclosed": judge_labels.CHEATBENCH_DISCLOSED_ACCESS.get(rf.task),
+            "presence": transcript_presence.with_alert_calls(transcript_presence.presence(rj), run_dir)}
 
 
 def sent_tool(t: dict) -> dict:

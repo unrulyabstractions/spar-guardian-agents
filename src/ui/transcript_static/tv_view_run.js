@@ -14,8 +14,10 @@
  * model call's reasoning, or the Board tab at that post (openExcerpt; ?agent=&label= opens it on arrival). CheatBench's
  * own field for an agent that acknowledged its access shows only in the CheatBench judge's block, as "CheatBench:
  * disclosed access". The run record keeps its headings, tables, chips and evidence; every definition is on the Ladders
- * page. A tab beside the agents' is one entry of `views` (a key, its label and a function that draws it once, answering its
- * element and, for the Board, a promise of its handle). */
+ * page. The run's alerts (alert_humans) show as a badge in the bar and a card heading Details, and each agent's entry
+ * and exit as a card after the judge labels (tv_presence.js, /api/run's presence). A tab beside the agents' is one
+ * entry of `views` (a key, its label and a function that draws it once, answering its element and, for the Board, a
+ * promise of its handle). */
 import { appendAll, enc, fmtInt, fmtUsd, h } from '/static/app/dom.js';
 import { badge, dataTable, episodeRecord, kv, lazyDetails, longText, muted } from '/static/app/components.js';
 import { ROLE_ORDER, roleIcon } from '/static/app/charts.js';
@@ -26,6 +28,7 @@ import { alarmBadge, cheatbenchTeam, cheatbenchWords, cheatingCell, cheatingPane
 import { DEFAULT_FOLDS, PARTS, centreVertically, renderCase, stripLegend } from './tv_case_view.js';
 import { renderBoard } from './tv_view_board.js';
 import { netUrl } from './tv_net_panel.js';
+import { alertsBadge, alertsCard, presenceCard } from './tv_presence.js';
 import { tmpUrl } from './tv_tmp_panel.js';
 
 // The run page fills the window under the site's bar (tv_style.css .rp-page): its top is the site bar's real bottom
@@ -299,11 +302,13 @@ export async function viewRun(id, q, view) {
   };
   const pickers = [picker('Workers', workers), influencers.length ? picker('Influencers', influencers) : null].filter(Boolean);
   const detailsView = () => ({ el: h('div', { class: 'rp-team' },
+    alertsCard(d.presence, roles, (agent, k) => gotoCall(agent, k).catch(() => {})),
     levelsPanel(d.levels, roles, row.task_name, { cheatbench, row, open: openLink }),
     cheatingPanel(d.levels, roles, { evidence: evidenceText, cheatbench, row }),
     coordinationPanel(d.levels, roles),
     collusionPanel(d.levels, roles, { evidence: evidenceText }),
     judgeLabelsPanel(d.levels, roles, openLink),
+    presenceCard(d.presence, roles),
     // the strip's legend, in the case layout its rules are scoped to
     h('section', { class: 'card' }, h('h2', null, 'Legend'), h('div', { class: 'case' }, stripLegend(d.levels.ladders, d.levels.order))),
     // the run record last: the run's labels, its settings and each agent's record
@@ -400,6 +405,8 @@ export async function viewRun(id, q, view) {
       h('a', { class: 'rp-back', href: '#/', title: 'all runs' }, '←'),
       h('b', { class: 'rp-run' }, row.run), whoChips(row),
       cheating.alarm ? alarmBadge(cheating.alarm) : null,
+      alertsBadge(d.presence && d.presence.alerts, () => selectTab('details')
+        .then(() => flash(stage.querySelector('#sec-alerts'))).catch(() => {})),
       viewTabs.length ? h('span', { class: ['rp-tabs', 'rp-view-tabs'] }, viewTabs) : null),
     h('div', { class: 'rp-row' },
       h('span', { class: 'rp-picks' }, pickers.flatMap((sel, i) => (i ? [h('span', { class: 'rp-sep' }), sel] : [sel]))),

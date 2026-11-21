@@ -14,6 +14,7 @@
 import { h, plural } from '/static/app/dom.js';
 import { excerptSpan, markedNodes } from './tv_excerpt.js';
 import { levelChip, scoreChip } from './tv_levels.js';
+import { presenceChip } from './tv_presence.js';
 
 // Colour ramps per ladder, level 0 first. Each ladder's line (/api/ladders' "line", the first level above it) parts two
 // colour families: pale and calm below it, strong above it, so a reader sees the line at a glance.
@@ -244,7 +245,8 @@ export function renderCase(t, ctx) {
       });
       seq.push({ turn: true, step: s.step_id, calls: mine });
     } else {
-      const x = { before: calls.length, src, text: msg, reasoning: reasoning && reasoning.text, step: s.step_id, model: m };
+      const x = { before: calls.length, src, text: msg, reasoning: reasoning && reasoning.text, step: s.step_id, model: m,
+        presence: src === 'user' && s.extra ? s.extra.swarm_presence : null };
       loose.push(x);
       seq.push(src === 'agent' ? { turn: true, step: s.step_id, calls: [], msg: x } : { msg: x });
     }
@@ -384,7 +386,8 @@ export function renderCase(t, ctx) {
   // A message box folds to its header as a call does; its text is a section of its own.
   const looseCard = x => h('div', { class: ['call', 'cs-msg', x.src === 'user' && 'cs-user', x.src === 'system' && 'cs-system'] },
     h('div', { class: 'ch' }, foldButton('call'), h('span', { class: 'cn', title: x.step != null ? `step ${x.step}` : null },
-      x.src === 'agent' ? 'Message' : x.src === 'user' ? 'User' : 'System'), lv ? headChips(x.before - 1, false) : null),
+      x.src === 'agent' ? 'Message' : x.src === 'user' ? 'User' : 'System'), presenceChip(x.presence),
+    lv ? headChips(x.before - 1, false) : null),
     h('div', { class: 'cb' }, judgedLines(x.model), x.reasoning ? reasoningSection(x.reasoning, markOf(x.model)) : null,
       x.text ? (x.src === 'agent' ? textSection(x.text) : promptSection(x.text)) : null, x.src === 'system' ? toolsHere() : null));
   const callCard = c => {

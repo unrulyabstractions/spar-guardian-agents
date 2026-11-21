@@ -31,7 +31,10 @@
  * Network panel (tv_net_panel.js) under it shows what listens at the position, by machine, and every connect, accept
  * and send up to it; once the log has come, each TCP or UDP call and each cross-agent call marks its agent's lane with
  * a small triangle at its time (a cross-agent connection in the bad colour, an attempt in the warning colour), whose
- * hover names it and whose click opens its call. It returns {moveTo(position), showPost(label),
+ * hover names it and whose click opens its call. Each lane hatches the stretch before its agent entered and after it
+ * exited and ticks the entry and the exit with its reason; an alert is a line across the timeline flagged on the board
+ * and on its agent's lane (tv_presence.js, the payload's presence); a tick's or a flag's click opens its call. It
+ * returns {moveTo(position), showPost(label),
  * state}: showPost moves to post P<n> (the board's own numbering) and, when the post holds a judge's excerpt, brings
  * the marked excerpt into view. */
 import { appendAll, enc, firstLine, fmtSecs, h, plural } from '/static/app/dom.js';
@@ -42,6 +45,7 @@ import { excerptSpan, markedNodes } from './tv_excerpt.js';
 import { ROLE_LABEL } from './tv_labels.js';
 import { levelChip, lineMark, misleadMark, scoreChip } from './tv_levels.js';
 import { at as netAt, callWords, marksLane, netPanel } from './tv_net_panel.js';
+import { laneMarks, presenceKeys } from './tv_presence.js';
 import { tmpPanel } from './tv_tmp_panel.js';
 
 const GUTTER = 150;
@@ -512,6 +516,19 @@ export function renderBoard(el, d, opts) {
     }
     svg.append(netG);
 
+    // entries, exits and alerts (tv_presence.js laneMarks): the stretch of a lane before its agent entered and after it
+    // exited hatched, the entry and the exit ticked; an alert a line across the timeline, flagged on the board and on
+    // its agent's lane
+    const stopTs = stops.map(u => u.t);
+    const pr = laneMarks(d.presence, { sides: SIDES, agentOf: s => (s === 'b' && state.a === state.b ? null : state[s]),
+      laneY, laneH: LANE_H, yBoard, boardH: BOARD_H, yTop: yA - 4, yBottom: yAxis, x0, x1,
+      xOfCall: (agent, k, end) => {
+        const c = byAgent.get(agent).calls.find(x => x.k === k);
+        return c ? left(c) + (end ? W(c) : 0) : null;
+      },
+      xOfTime: t => (state.mode === 'time' ? X(t) : X(Math.max(0, lastAtOrBefore(stopTs, t))) + unitW / 2) });
+    svg.append(pr.g);
+
     // posts on the board lane, packed into rows so none hides another; then each post's arrows, from its writing call
     // and to each of the two agents' first read, in a group of its own that showArrows() shows or hides
     const postsG = svgEl('g', { class: 'bd-board-posts' });
@@ -602,7 +619,7 @@ export function renderBoard(el, d, opts) {
     };
     let dragging = false;
     svg.addEventListener('pointerdown', ev => {
-      if (ev.button !== 0 || ev.target.closest('[data-k], [data-i], [data-net]')) return;
+      if (ev.button !== 0 || ev.target.closest('[data-k], [data-i], [data-net], [data-pr]')) return;
       ev.preventDefault();
       pause();
       dragging = true;
@@ -615,10 +632,12 @@ export function renderBoard(el, d, opts) {
     svg.addEventListener('pointercancel', stopDrag);
     svg.addEventListener('pointermove', ev => {
       if (dragging) { moveTo(posAt(ev)); return; }
-      const t = ev.target.closest('[data-k], [data-i], [data-net]');
+      const t = ev.target.closest('[data-k], [data-i], [data-net], [data-pr]');
       hover(t && t.hasAttribute('data-i') ? Number(t.getAttribute('data-i')) : -1);
       if (!t) { tip.hide(); return; }
-      if (t.hasAttribute('data-net')) {
+      if (t.hasAttribute('data-pr')) {
+        tip.show(ev, pr.tipOf(t));
+      } else if (t.hasAttribute('data-net')) {
         const c = netView.calls[Number(t.getAttribute('data-net'))];
         tip.show(ev, [callWords(c), [c.proto, c.prog, c.outcome || c.result].filter(Boolean).join(' · '),
           timed && c.t != null ? fmtSecs(c.t) : null, c.call ? `call ${c.call.k}` : 'no call'].filter(Boolean));
@@ -637,9 +656,12 @@ export function renderBoard(el, d, opts) {
     });
     svg.addEventListener('pointerleave', () => { tip.hide(); hover(-1); });
     svg.addEventListener('click', ev => {
-      const t = ev.target.closest('[data-k], [data-i], [data-net]');
+      const t = ev.target.closest('[data-k], [data-i], [data-net], [data-pr]');
       if (!t) return;
-      if (t.hasAttribute('data-net')) {
+      if (t.hasAttribute('data-pr')) {
+        const c = pr.callOf(t);
+        if (c) location.hash = callHref(c.agent, c.k);
+      } else if (t.hasAttribute('data-net')) {
         const c = netView.calls[Number(t.getAttribute('data-net'))];
         if (c.call) location.hash = callHref(c.call.agent, c.call.k);
         else if (state.mode === 'time' && Number.isFinite(netAt(c))) { pause(); moveTo(c.t); }
@@ -943,7 +965,8 @@ export function renderBoard(el, d, opts) {
       formless ? arrowKey(READ_CLASS.plain, 'other read') : null,
       net ? netKey(null, 'connection') : null,
       net ? netKey('bd-net-cross', 'cross-agent connection') : null,
-      net ? netKey('bd-net-try', 'cross-agent attempt') : null));
+      net ? netKey('bd-net-try', 'cross-agent attempt') : null,
+      ...presenceKeys(d.presence, item)));
 
   // The key of the lens in force, under the controls: its colours as chips and samples, how many of the two agents'
   // calls it marks, and how many of its records name no call (the payload's unplaced; the names on hover).
