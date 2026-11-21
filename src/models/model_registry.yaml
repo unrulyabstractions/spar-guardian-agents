@@ -179,6 +179,16 @@ models:
     cheatbench: []
     status: candidate
     notes: The direct gpt-6-luna through OpenRouter, so a box of study_exploration_1 holds one key.
+  gpt-5-mini-openrouter:
+    inspect: openrouter/openai/gpt-5-mini
+    provider: openrouter
+    routing: {order: [openai], allow_fallbacks: false}
+    context: 400000
+    usd_per_million: {input: 0.25, cached_input: 0.025, output: 2.00}
+    price_source: coordinator-specified 2026-11-07; OpenRouter openai/gpt-5-mini
+    cheatbench: []
+    status: candidate
+    notes: Cheap GPT-5 via OpenRouter, added 2026-11-07 for the apart_controls 5-model matrix.
   claude-sonnet-5-5-openrouter:
     inspect: openrouter/anthropic/claude-sonnet-5.5
     provider: openrouter
