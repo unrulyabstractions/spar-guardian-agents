@@ -2786,3 +2786,31 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **Result.** VERIFIED for this scenario. Finding (read in src/measures/alert_outcomes.py, not run): an alert after a
   cheat in a run without a faithful replay gets the outcome None, so such runs tell only false alarms apart. UNVERIFIED:
   concurrent rounds, a true alarm, the viewer's marks for entries, exits and alerts.
+
+## 2026-11-21: the viewer shows entries, exits and alerts (transcript chips, Board lanes, Details)
+- **What.** Commit 32bf508. src/ui/transcript_presence.py (new: presence, on_lanes, with_alert_calls), the `presence` field of
+  /api/run and /api/board (transcript_viewer.run_detail, transcript_board.board_payload), tv_presence.js and
+  tv_presence.css (new), and their use in tv_case_view.js (a chip on each presence line), tv_view_board.js (lane marks,
+  hover, click, legend) and tv_view_run.js (the bar's alert badge, the Alerts and Entries and exits cards).
+- **How.** tests/unit/test_transcript_presence.py (8 tests: synthetic run.json records, the call numbering read from a
+  transcript, the smoke run read without a write, node running the page's clipWords and exitWords) and the payload key
+  test in test_transcript_board.py: pass; the 132 viewer unit tests pass. The whole unit suite: 3381 pass, 5 fail in
+  test_network_monitor.py and test_study_readme.py, files another workflow had uncommitted at the time; none touches
+  src/ui. A test viewer on port 8833 over a scratch collection linking runs/study_smoke/smoke_openmath/
+  20261121T092022Z/presence and runs/study_exploration_1/flipt_minimal_cheat_dsflash_fixed3, headless Chrome over CDP.
+  I viewed each screenshot. Transcript of a05: eight User boxes, folded by default, each header with its chip (a01, a02,
+  a03 entered r1; a01 exited stop r1; a04 entered r2; a03 exited alert r3 in red; a04 exited budget r3; a02 exited
+  submit r5), in the steps the smoke log names. Board, a03 and a04 on the time clock: a03 ticked at the start (present
+  from round 1) and at its exit with "exited · alert" and hatched after it; a04 hatched until its round-2 entry,
+  "entered r2", and after its exit, "exited · budget"; the alert a red dashed line across the timeline at a03's call 5
+  with a flag on the board and on a03's lane. Board, a01 and a02: the alert line and board flag drawn with the alerter
+  not shown; the hover reads "alert · a03 · round 3", the reason, "names a01, a02", "false alarm". Step mode (a03 and
+  a05, a02 and a05): the same marks at the steps. Legend: entered, exited, absent, alert. Details: the Alerts card first
+  (a03, regulator, round 3, named a01 a02, false alarm, the reason in full, call 5) and its call link opened a03's call
+  5 (checked in the DOM: a03 selected, the flashed box is Call 5 alert_humans); Entries and exits lists a01 1 1 stop,
+  a02 1 5 submit run ends after round 7, a03 1 3 alert, a04 2 3 budget, a05 1 present at the end. The bar shows
+  "1 alert". The older run with no presence records draws no mark and no badge. Server and Chrome stopped.
+- **Result.** VERIFIED for these screens. A first-round entry sits at the clock's start; a later entry at the agent's
+  first call and an exit at the end of its last call (an out-of-budget exit is announced later than that). UNVERIFIED:
+  the run index's row chips (no alert column added there), a run with several alerts by one agent on screen (only the
+  unit test covers the i-th call), a true alarm on screen.
