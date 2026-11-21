@@ -2491,3 +2491,50 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   procnet fail, exit 1). shellcheck clean. No container with label network_trace_check=1 or name nt-wf5 left after.
 - **Result.** VERIFIED on Colima. UNVERIFIED: any vast.ai box (x86_64, its kernel after box_kernel.sh), the x86_64 AppImage
   (its sha256 is GitHub's digest, not run), and bpftrace 0.20.2 on x86_64.
+
+## 2026-11-21: run data regenerated with the fixed export, the stray eval logs moved, before vs after checked
+- **What.** Every run of study_exploration_0 (239), study_exploration_1 (360), study_smoke (8 top-level), study_orbit2_check
+  (1) and apart_controls (4,466) rewritten from its own eval log with the code at 1fbdd4e: run.json, episodes.jsonl,
+  access_log.jsonl, trajectories/, communication/, defense/, swe/diffs, signals.jsonl, swe_summary.json. Verdicts moved
+  first with scripts/migrate_verdict_files.py --write (225 + 147 runs; old bytes in
+  .backups/verdicts-before-migration/, 744 files). INDEX.jsonl rebuilt for both exploration studies. The 25 .eval files
+  no run names (the audit's 13 + 12 folders) moved to logs/study_exploration_1/_unpaired/<same path>/; nothing deleted.
+  The nested smoke_* suites inside the studies were not touched. No model call, no judge, no Docker. Data lives under
+  runs/ and logs/ (gitignored); before-state: .backups/runs-before-cleanup-2026-11-21.tgz.
+- **Code fixed on the way (each with a test):** 5a7d983 a re-export wrote the exporter's ORBIT/Inspect versions into
+  every run (1.0.3/0.3.263 became 2.0.0/0.3.290) and named apart runs after their folder (s23); 746b7aa RunDir found no
+  log for any apart_controls run (log in <run>/eval/); fe6601b judge_prompt absolute paths made relative by the migration;
+  5d28ef0 study_index lost the box instance of every regenerated run (matched run.json bytes; now the eval log's too);
+  867f4a9 fleet run-args refused every box-made run once eval_log was relative (test_run_args_come_from_the_registry
+  failed on the real runs/); 1fbdd4e gpt-5-mini registry entry, without which 942 apart ledgers lost cost_usd.
+- **How verified.** Backup extracted to scratchpad/wf4/before/ (55,677 files, same count as the archive). An independent
+  differ (scratchpad/wf4/cmp/compare.py, own JSON walk, own link resolution, own reasoning parse) compared every file of
+  every run before vs after and gave each difference a category; anything outside the intended list is "unexpected".
+  Per study: 0 runs lost, 0 files lost, 0 new files other than judges/ files and swe_summary.json, 0 verdicts lost,
+  0 verdict fields changed (540 + 1,044 rows kept; only unit, agent, role, transcript_path, judge_prompt may differ).
+  Links: run.json eval_log resolves in 239/239, 360/360, 8/8, 1/1, 4,466/4,466 (as written before: 0, 0, 8, 1, 0);
+  episode transcript_path resolves 575/575, 1,313/1,313, 32/32, 4/4, 4,466/4,466, 0 broken; judges transcript_path
+  540/540 (exploration_0); judge_prompt 540/540 and 2,088/2,088. Transcript headers: model and model_name equal the
+  episode's model and the role's model in run.json for every episode: exploration_0 523 worker + 52 influencer,
+  exploration_1 1,080 + 233, smoke 24 + 8, orbit2 3 + 1, apart 4,466 workers; 117 exploration_1 influencer headers
+  changed (51 at the top level, the audit's 51), no worker header changed. Reasoning: 4,238 + 12,664 steps became
+  "[redacted reasoning]", each checked to hold no readable text before (signature blocks, gAAAA blobs, one base64 UUID).
+  orbit_version, inspect_version, agent_version and run_id: unchanged in every run. Unexpected but checked: 14
+  exploration_0 mock runs gained export fields their older export lacked (ledger cache_write 0, rules.added,
+  access_log.harness_reads, protein.probe), values only added; 36 exploration_1 ledger cost_usd repriced by the long-prompt
+  tier (new cost equals billed_usd in the example, 11.095347). INDEX (scratchpad/wf4/cmp/index_check.py): 239 and 360
+  rows, one per run on disk, each row's run, task, model, model_key, regulator model, seed, commit, export_flags_ok and
+  cheating_rung equal its run.json and signals.jsonl; valid is a bool in every row; exploration_0's 180 null verdicts
+  are now 179 True and 1 False (worktime_minimal_regulated_dsflash1, failed episode token_limit); exploration_1's
+  verdicts all unchanged; instance unchanged for 359, and the one attempt that had none now has 58699037 by its eval
+  log's capture; deal_replay unchanged. The moved .eval files: 25/25 sha256 and size equal at the target, none left at
+  the source. Unit suite 3241 passed before the builder's edits landed; `paper_sources --check` agrees; the 17 results
+  tables `make results-tables` rewrote are byte-identical to the earlier ones.
+- **Result.** VERIFIED for the counts above. BROKEN, not fixed: apart_controls/luna/worktime/cheat/s12 now reads
+  cheating tempted (was attempted, shipped): the current ladder drops the copy of call 11 (`cp ... to_send/ && python`)
+  because its result starts with a Traceback, though `ls` in the same result shows the copy in to_send/
+  (src/measures/ladder_domain.py failed(), the builder's file). The old signals.jsonl is in the backup. UNVERIFIED: the
+  viewers in a browser (the user's viewer on 8770 still runs code loaded before these changes); the figures under out/
+  (regenerated with --no-plots; out/ does not exist); the nested smoke_* runs, still in the older layout; the 522
+  exploration_1 cheatbench rows whose transcript_sha256 records the transcript the judge read, which the re-export
+  changed (by design; no reader checks it).
