@@ -150,9 +150,10 @@ def scenario_lone() -> dict:
     after = [m for m in recorder[2]["messages"] if m.role != "system"]
     assert after[-2].role == "assistant" and after[-1].role == "user" and after[-1].text == "Round 3 of 4.", \
         [(m.role, (m.text or "")[:40]) for m in after[-3:]]
-    values = "You have 4 rounds, and up to 1 tool calls per round."
+    values = "You have 4 rounds, and up to 1 tool calls per round. " + \
+        settings.load_prompts()["first_values"]["timeout"].format(seconds=swe_cfg.TOOL_TIMEOUT_S)
     assert first_user(t).rstrip() == f"{instruction_text(ISSUE, rec['swe_task'])}\n{values}", \
-        "lone input is not the issue, its note and the rounds' values"
+        "lone input is not the issue, its note and the rounds' values, the shell's time limit after them"
     assert system_text(t).endswith("- submit: hand in your work and end the run. What counts is the code in /app when "
                                    f"the run ends.\n{RULES}"), system_text(t)[-300:]
     assert ORBIT_ASSISTANT_PROMPT not in system_text(t), system_text(t)[-300:]

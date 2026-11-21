@@ -43,6 +43,7 @@ from src.judging.cheatbench_judge import judge_entry
 from src.measures import cheating_ladder, collusion, coordination, judge_labels, measure_readings
 from src.measures.rungs import RUNGS
 from src.swarm.influencers import level_text, role_text
+from src.swarm.turn_rules import CHECK_ROUNDS
 from src.ui.transcript_levels import CHEAT_GLOSSES, CLAUSE_GLOSSES, COLLUSION_GLOSSES
 
 PAPER = ROOT / "paper"
@@ -187,6 +188,8 @@ def params_tex() -> str:
         "TurnBudget": STUDY_STEPS["TurnBudget"],
         "Rounds": c.rounds,
         "CallsPerRound": c.calls_per_round,
+        "CheckRounds": CHECK_ROUNDS,
+        "SubmitDelayRounds": c.submit_delay_rounds,
     }
     if settings.JUDGE_MODEL not in JUDGE_NAMES:
         raise SystemExit(f"judge {settings.JUDGE_MODEL!r} has no name in JUDGE_NAMES: add it, then check the prose")

@@ -21,13 +21,14 @@ What comes from where:
 
 The task instruction is the benchmark's, then the rule sentence of rule_level, then extra_instruction on its own
 paragraph (a control cell's text, say), then the rounds' values: "You have R rounds, and up to N tool calls per round."
-(prompt_texts.rounds_values). Every system prompt states the rounds' rules without numbers (board.round_rules). A
-regulator that oversees reads that instruction inside a first message of its own and gets a system prompt of its own
-(first_messages, system_prompts). Each agent's tools are the benchmark's, then on a board board_status, board_read and
-board_post and the oversight tools for a regulator (src/swarm/_regulator_oversight.py), then submit and stop_working as
-the agent holds them (src/swarm/submit_and_stop.py ending_tools), then end_round (src/swarm/end_round.py). They are
-bound per agent through ORBIT's tool_bindings next to the benchmark's own bindings. No agent gets ORBIT's own submit
-(AgentSpec.submit=False).
+(prompt_texts.rounds_values). No system prompt holds a number: it states the rounds' rules (board.round_rules) and
+every other parameter's rule without its value, and each agent's first message gives those values after the rounds'
+(agent_values: prompts.yaml first_values). A regulator that oversees reads that instruction inside a first message of
+its own, its values after it, and gets a system prompt of its own (first_messages, system_prompts). Each agent's tools
+are the benchmark's, then on a board board_status, board_read and board_post and the oversight tools for a regulator
+(src/swarm/_regulator_oversight.py), then submit and stop_working as the agent holds them
+(src/swarm/submit_and_stop.py ending_tools), then end_round (src/swarm/end_round.py). They are bound per agent through
+ORBIT's tool_bindings next to the benchmark's own bindings. No agent gets ORBIT's own submit (AgentSpec.submit=False).
 
 The plan's rounds, the scheduler's turn bound and Inspect's message limit follow SwarmConfig.plan_rounds, max_turns and
 sample_message_limit. The turn rules' setup gets the agents' time limit, after which a round ends at its next batch,
@@ -132,14 +133,43 @@ def system_prompts(benchmark: Benchmark, plan: Plan) -> dict[str, str]:
     return {agent: prompt(agent) for agent in plan.agents}
 
 
-def first_messages(sample: Sample, plan: Plan) -> dict[str, str] | None:
-    """Every agent's first message when a regulator oversees: the sample's (metadata["cheatbench"]["first_message"],
-    else its input), a regulator's in roles.oversight_first_message. None when no agent oversees."""
-    overseers = [a for a in plan.agents if plan.config.oversees(role_of(plan.roles, a))]
-    if not overseers:
-        return None
+def agent_values(benchmark: Benchmark, plan: Plan, agent: str) -> list[str]:
+    """The values of the parameters the agent's system prompt (system_prompts) states with no number: the benchmark's
+    (Benchmark.first_values) unless the agent is a regulator that oversees, whose prompt is its own, then its role's
+    (roles.role_values)."""
+    role = role_of(plan.roles, agent)
+    own = [] if plan.config.oversees(role) else benchmark.first_values(plan, agent)
+    return list(dict.fromkeys([*own, *roles_module.role_values(role, plan.config, benchmark.key, plan.agents)]))
+
+
+def with_values(message: str, line: str, values: list[str]) -> str:
+    """The message with the values after the rounds' values line, in its paragraph."""
+    if not values:
+        return message
+    if message.count(line) != 1:
+        raise ValueError(f"a first message holds the rounds' values {message.count(line)} times, not once")
+    return message.replace(line, " ".join([line, *values]))
+
+
+def first_messages(sample: Sample, plan: Plan, benchmark: Benchmark) -> dict[str, str] | None:
+    """Every agent's first message when one differs from the sample's own (metadata["cheatbench"]["first_message"],
+    else its input): with its values after the rounds' values (agent_values), and a regulator's that oversees in
+    roles.oversight_first_message, its values a paragraph after it. None when no agent oversees and none has a
+    value."""
     first = sample.metadata["cheatbench"].get("first_message") or dict.fromkeys(plan.agents, sample.input)
-    return {**first, **{a: roles_module.oversight_first_message(first[a]) for a in overseers}}
+    overseers = {a for a in plan.agents if plan.config.oversees(role_of(plan.roles, a))}
+    values = {a: agent_values(benchmark, plan, a) for a in plan.agents}
+    if not overseers and not any(values.values()):
+        return None
+    line = rounds_values(plan.config)
+
+    def message(agent: str) -> str:
+        if agent not in overseers:
+            return with_values(first[agent], line, values[agent])
+        wrapped = roles_module.oversight_first_message(first[agent])
+        return f"{wrapped.rstrip()}\n\n{' '.join(values[agent])}\n" if values[agent] else wrapped
+
+    return {a: message(a) for a in plan.agents}
 
 
 def deliverable(benchmark: Benchmark, plan: Plan) -> Deliverable:
@@ -292,8 +322,8 @@ def record_run(task_: Task, benchmark: Benchmark, plan: Plan, prompts: dict[str,
             cb["roles"] = roles
             cb["composition"] = roles_module.composition_label(roles)
         first = cb.get("first_message") or {}
-        if roles and cb.get("judge_prompt") and first:
-            # the judge sees each SWE agent's whole system prompt, role text included
+        if cb.get("judge_prompt") and first:
+            # the judge sees each SWE agent's whole system prompt, role text included, and its first message
             cb["judge_prompt"] = {n: f"{prompts[n]}\n\n{first[n]}" for n in config.names}
 
 
@@ -308,7 +338,7 @@ def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = 
     names = config.names
     plan = benchmark.plan(config, agent_roles(config))
     sample = benchmark.sample(plan, instruction_suffix(benchmark, config, extra_instruction))
-    first = first_messages(sample, plan)
+    first = first_messages(sample, plan, benchmark)
     if first:
         sample.metadata["cheatbench"]["first_message"] = first
     access, network = benchmark.keeps_access_log(config), keeps_network_log(benchmark, config)

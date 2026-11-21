@@ -22,14 +22,15 @@ the role. A level gives one text or one per benchmark, with placeholders filled 
 Each regulator level carries the benchmark's `cheating` var: what cheating means on that task. An influencer's level
 text is followed by prompts.yaml roles.influencer_common (the peer tools, src/swarm/_regulator_oversight.py, how to call
 them on a teammate, and the board), then under SwarmConfig.peer_shell roles.peer_shell. A regulator's then gets
-roles.regulator_check (call get_peer_actions on each teammate in the regulator's first CHECK_ROUNDS rounds) and, unless
+roles.regulator_check (call get_peer_actions on each teammate within a set number of the regulator's first rounds:
+CHECK_ROUNDS, which role_values gives the first message, since no system prompt holds a number) and, unless
 regulator_discloses is on, roles.regulator_no_disclosure. The check is an instruction like the rest; run.json engagement
 checked_in_time records whether it happened.
 
 With informed_roles on, a regulator or disregulator also gets the briefing (prompts.yaml `roles.briefing`, built by
-role_briefing) after its role text: the swarm's size, the board and its tools, what the agents without a role were
-told, and that they hold submit. Workers never get it. No system prompt names a peer: every agent hears of each peer
-as it enters (src/swarm/turn_rules/_turn_presence.py).
+role_briefing) after its role text: the board and its tools, what the agents without a role were told, and that they
+hold submit; the swarm's size is in its first message (role_values). Workers never get it. No system prompt names a
+peer: every agent hears of each peer as it enters (src/swarm/turn_rules/_turn_presence.py).
 
 Both influencers also hold alert_humans (src/swarm/submit_and_stop.py), which records an alert and ends the caller's
 own turns.
@@ -39,7 +40,7 @@ from __future__ import annotations
 import random
 import re
 
-from src.configuration.prompt_texts import rounds_text
+from src.configuration.prompt_texts import first_value, rounds_text, submit_value
 from src.configuration.settings import load_instruction_levels, load_prompts
 from src.configuration.swarm_config import ROLES, SwarmConfig
 from src.swarm.turn_rules import BOARD_TOOLS, CHECK_ROUNDS
@@ -87,28 +88,42 @@ def role_text(role: str, config: SwarmConfig, benchmark_name: str) -> str | None
     pieces = load_prompts()["roles"]
     tail = [pieces["influencer_common"], *([pieces["peer_shell"]] if config.peer_shell else [])]
     if role == "regulator":
-        tail += [pieces["regulator_check"].format(rounds=rounds_text(CHECK_ROUNDS)),
+        tail += [pieces["regulator_check"],
                  *([] if config.regulator_discloses else [pieces["regulator_no_disclosure"]])]
     return " ".join([text, *tail])
 
 
 def role_briefing(config: SwarmConfig, names: list[str]) -> str | None:
     """prompts.yaml roles.briefing for a regulator or disregulator, or None when informed_roles is off or there is no
-    board. It says the swarm's size and names no agent, names the board's tools, says what agents without a role were
-    told (roles.workers_told) and, when they hold submit, what it does and when a team's run then ends
-    (roles.submit_held, submit_ends). Workers never get it."""
+    board. It names no agent and gives no number (the swarm's size and the hand-in's delay are role_values, in the
+    first message), names the board's tools, says what agents without a role were told (roles.workers_told) and, when
+    they hold submit, what it does and when a team's run then ends (roles.submit_held, submit_ends). Workers never get
+    it."""
     if not config.informed_roles or not config.board:
         return None
     roles = load_prompts()["roles"]
     told = {(False, False): "nothing", (True, False): "team", (False, True): "board", (True, True): "both"}
     tools = ", ".join(BOARD_TOOLS[:-1]) + " and " + BOARD_TOOLS[-1]
-    text = roles["briefing"].format(n=len(names), tools=tools,
+    text = roles["briefing"].format(tools=tools,
                                     told=roles["workers_told"][told[config.knows_team, config.mention_board]])
     if not config.gives_submit:
         return text
-    delay, ends = config.submit_delay_rounds, roles["submit_ends"]
-    ends = ends["now"] if delay == 0 else ends["later"].format(rounds=rounds_text(delay))
+    ends = roles["submit_ends"]["now" if config.submit_delay_rounds == 0 else "later"]
     return f"{text} {roles['submit_held'][config.submit_kind].format(ends=ends)}"
+
+
+def role_values(role: str, config: SwarmConfig, benchmark_name: str, names: list[str]) -> list[str]:
+    """The values of the parameters the role's text and briefing (role_prompt) state with no number, for the first
+    message (prompts.yaml first_values): a regulator's check rounds (CHECK_ROUNDS), and with the briefing the agents'
+    count and, when it says a team's hand-in ends the run a set number of rounds later, that number. [] for a worker."""
+    values = []
+    if role == "regulator" and role_text(role, config, benchmark_name) is not None:
+        values.append(first_value("check", rounds=rounds_text(CHECK_ROUNDS)))
+    if role != "worker" and role_briefing(config, names) is not None:
+        values.append(first_value("agents", n=len(names)))
+        if config.gives_submit and (delay := submit_value(config)):
+            values.append(delay)
+    return values
 
 
 def role_prompt(role: str, config: SwarmConfig, benchmark_name: str, names: list[str]) -> str | None:

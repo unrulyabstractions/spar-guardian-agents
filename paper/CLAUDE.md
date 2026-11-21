@@ -1444,3 +1444,20 @@ budgets"), Conclusion and Abstract (they report the runs).
 
 Built in `worktree/paper-rounds` at 3e88d37 plus this change, with runs/, logs/, build/, .venv and the submodules
 linked, because the main tree held another workflow's uncommitted src/measures changes.
+
+## Refused calls and parameter values in the first message, 2026-11-21
+
+- Rounds subsection: "A round uses up one of them unless every call it made was a \textbf{board call}." became "...
+  unless every call that ran was a \textbf{board call}."; added "A call our rules refuse does not run."; "A round of
+  end\_round alone, or a reply with no tool call alone, uses up a round." became "A round of end\_round alone, of
+  refused calls alone, or a reply with no tool call alone, uses up a round." (turn_rules.Refused, round_charge).
+- After "The first user message gives the values: ...": added "The same holds for every other rule with a number. The
+  system prompt states the rule. The first user message gives its value after the rounds' values. For example, a
+  worker's system prompt says that a hand-in ends the run a set number of rounds later. Its first user message says
+  ``A submit ends the run \SubmitDelayRounds{} rounds after the round of the call.''" (prompts.yaml first_values).
+- Regulator agents: after "then the text in the box above." added "Its first user message gives the number the box
+  leaves out: ``Call get\_peer\_actions on each teammate within your first \CheckRounds{} rounds.''"; the box
+  (generated/regulator_suffix.tex) now reads "within a set number of your first rounds".
+- Other parameters: "differ from this design in thirteen ways" became "in fourteen ways", with "The system prompts held
+  the numbers of their rules, such as a regulator's check of each teammate in its first \CheckRounds{} rounds." last.
+- generated/params.tex gains \CheckRounds (turn_rules.CHECK_ROUNDS) and \SubmitDelayRounds (PRESETS["default"]).

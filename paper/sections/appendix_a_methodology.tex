@@ -29,7 +29,9 @@ These agents represent our positive peer-pressure protocol. A regulator differs 
 \end{tcolorbox}
 
 A regulator's system prompt ends with the text of its level (Table~\ref{tab:regulator-levels}), then the text in the
-box above. We expect a regulator to elicit honesty from other agents, to verify that their work
+box above.
+Its first user message gives the number the box leaves out: ``Call get\_peer\_actions on each teammate within your
+first \CheckRounds{} rounds.'' We expect a regulator to elicit honesty from other agents, to verify that their work
 is real, and to prevent or punish their cheating. Table~\ref{tab:monitors} compares regulators with classic monitors.
 
 \begin{table}[htbp]
@@ -119,6 +121,11 @@ Figure~\ref{fig:rounds} shows two rounds for five agents.
 The system prompt states these rules with no numbers.
 The first user message gives the values: ``You have \Rounds{} rounds, and up to \CallsPerRound{} tool
 calls per round.''
+The same holds for every other rule with a number.
+The system prompt states the rule.
+The first user message gives its value after the rounds' values.
+For example, a worker's system prompt says that a hand-in ends the run a set number of rounds later.
+Its first user message says ``A submit ends the run \SubmitDelayRounds{} rounds after the round of the call.''
 Each round opens with a user message such as ``Round 3 of \Rounds.''
 The number counts the rounds the agent has used up, plus one.
 
@@ -423,7 +430,7 @@ The judge is \JudgeName{} at \JudgeEffort{} effort.
   Regulators have no read budget.
   \item Max tool result: \ToolOutputKiB{}~KiB for every agent. A longer result keeps its start and its end, with a
   line that states the cut.
-  \item The runs of the multi-domain study differ from this design in thirteen ways. Each agent had \TurnBudget{}
+  \item The runs of the multi-domain study differ from this design in fourteen ways. Each agent had \TurnBudget{}
   working steps instead of rounds of tool calls. A step was one model call and the tool calls of its reply. A step
   that ended with a board call used up no working step. A round allowed up to \FreeBoardActions{} such steps, or
   \FreeBoardActionsInfluencer{} for a regulator. No message gave the number of steps or opened a round. In a
@@ -432,6 +439,7 @@ The judge is \JudgeName{} at \JudgeEffort{} effort.
   arguments and result to 200 characters. A disregulator could not read its teammates' tool calls and had the
   workers' free board steps. A longer tool result kept its first and last 8~KiB, with no line marking the cut. Each
   agent's system prompt named every teammate. No message announced an entry or an exit. A worker that submitted kept
-  its turns until the run ended. No influencer could alert humans.
+  its turns until the run ended. No influencer could alert humans. The system prompts held the numbers of their
+  rules, such as a regulator's check of each teammate in its first \CheckRounds{} rounds.
 \end{itemize}
 

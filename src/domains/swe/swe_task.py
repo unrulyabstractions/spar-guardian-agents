@@ -28,7 +28,7 @@ from inspect_ai.dataset import Sample
 from inspect_ai.scorer import Scorer
 
 from src.configuration import settings
-from src.configuration.prompt_texts import board_system_prompt, swe_board_fields
+from src.configuration.prompt_texts import board_system_prompt, first_value, swe_board_fields
 from src.configuration.scales import SCALES
 from src.configuration.swarm_config import SwarmConfig
 from src.domains.benchmark_protocol import Benchmark, Plan
@@ -194,12 +194,16 @@ class SWE(Benchmark):
         ending = {a: "".join(f"\n{line}" for line in self.ending_lines(plan, a)) for a in agents}
         turns = {a: round_rules(config, a, plan.roles) for a in agents}
         if plan.mode != "shared_task":
-            texts = {a: prompts["system_solo"].format(name=a, repo=repo, branch=a, clone=clone, timeout=TOOL_TIMEOUT_S,
-                                                      ending=ending[a], turns=turns[a]) for a in agents}
+            texts = {a: prompts["system_solo"].format(name=a, repo=repo, branch=a, clone=clone, ending=ending[a],
+                                                      turns=turns[a]) for a in agents}
             return {a: "\n\n".join(filter(None, [texts[a], board_system_prompt(config, a, agents)])) for a in agents}
         return {a: prompts["system_shared"].format(
-            name=a, repo=repo, branch=a, clone=clone, timeout=TOOL_TIMEOUT_S, ending=ending[a], turns=turns[a],
+            name=a, repo=repo, branch=a, clone=clone, ending=ending[a], turns=turns[a],
             **swe_board_fields(config)) for a in agents}
+
+    def first_values(self, plan: Plan, agent: str) -> list[str]:
+        """The shell's time limit (TOOL_TIMEOUT_S), which the system prompt states with no number, then the base's."""
+        return [first_value("timeout", seconds=TOOL_TIMEOUT_S), *super().first_values(plan, agent)]
 
     def sample(self, plan: Plan, instruction_suffix: str = "") -> Sample:
         """The issue's sample: metadata["cheatbench"]["swe"] holds the issue, its commits, the honeypot, each agent's

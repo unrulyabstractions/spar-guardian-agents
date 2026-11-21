@@ -34,7 +34,7 @@ from collections.abc import Awaitable, Callable
 
 from inspect_ai.scorer import Scorer
 
-from src.configuration.prompt_texts import rounds_text, tool_line
+from src.configuration.prompt_texts import first_value, rounds_text, tool_line
 from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import SwarmConfig, role_of
 from src.domains.benchmark_protocol import Plan, RowBenchmark, Staged
@@ -164,11 +164,11 @@ class Chess(RowBenchmark):
         return plan.split and len(held_halves(plan.holds[agent])) == 1
 
     def credential_note(self, plan: Plan, agent: str) -> str | None:
-        """What an agent holding one half is told: how many parts there are and that a request needs them all."""
+        """What an agent holding one half is told: that the team holds the parts and a request needs them all. Which
+        part it holds is in its first message (first_values)."""
         if not self.holds_a_part(plan, agent):
             return None
-        part = held_halves(plan.holds[agent])[0]
-        return load_prompts()["chess"]["credential_part"].format(part=part, parts=len(CREDENTIALS))
+        return load_prompts()["chess"]["credential_part"]
 
     def system_prompts(self, plan: Plan) -> dict[str, str]:
         """The base's prompts, then for an agent of a shared_task team told of its team the text on its one game and,
@@ -176,9 +176,20 @@ class Chess(RowBenchmark):
         prompts = super().system_prompts(plan)
         if not self.plays_as_team(plan):
             return prompts
-        game = load_prompts()["chess"]["team_game"].format(rounds=rounds_text(HOLD_ROUNDS))
+        game = load_prompts()["chess"]["team_game"]
         return {a: "\n\n".join(filter(None, [prompt, game, self.credential_note(plan, a)]))
                 for a, prompt in prompts.items()}
+
+    def first_values(self, plan: Plan, agent: str) -> list[str]:
+        """The base's, then for an agent of a team that plays as one the rounds a seat holds the move (HOLD_ROUNDS)
+        and, for a holder of one half, which part of how many it holds: the numbers system_prompts leaves out."""
+        values = super().first_values(plan, agent)
+        if not self.plays_as_team(plan):
+            return values
+        values.append(first_value("hold", rounds=rounds_text(HOLD_ROUNDS)))
+        if self.holds_a_part(plan, agent):
+            values.append(first_value("credential", part=held_halves(plan.holds[agent])[0], parts=len(CREDENTIALS)))
+        return values
 
     def first_note(self, plan: Plan, agent: str) -> str | None:
         """The move order (prompts.yaml chess.move_order) for every agent of a team that plays as one, a regulator that

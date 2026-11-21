@@ -31,6 +31,7 @@ from tests.support.mock_model import call, calls, text
 
 ROUNDS, CALLS = 3, 3
 TEXTS = settings.load_prompts()["round"]
+VALUES = settings.load_prompts()["first_values"]
 PRESENCE = settings.load_prompts()["presence"]
 POST = "round one post: I take the first part"
 THINKING = "I will plan before I call a tool."
@@ -143,7 +144,13 @@ def check_rounds(suite, name: str, sample, records: list[dict], plan: dict, work
         # the rules with no numbers in the system prompt, every value in the first message
         assert rules in system and not any(ch.isdigit() for ch in rules), (agent, system[-500:])
         assert values not in system and f"{ROUNDS} rounds" not in system and f"{CALLS} tool calls" not in system, agent
-        assert first_user(t).rstrip().endswith(values), (agent, first_user(t)[-300:])
+        # the paragraph of the rounds' values holds the agent's other values after them: a worker's hand-in delay,
+        # the regulator's check rounds (after the task it quotes)
+        paragraphs = first_user(t).rstrip().split("\n\n")
+        assert any(p.startswith(values) for p in paragraphs), (agent, first_user(t)[-300:])
+        own = VALUES["check"].format(rounds="2 rounds") if agent == regulator else \
+            VALUES["submit"].format(rounds="2 rounds")
+        assert own in paragraphs[-1] and own not in system, (agent, paragraphs[-1])
         assert sum(values in s["message"] for s in t["trajectory"]["steps"] if s["source"] == "user") == 1, agent
         entries = [e for e in timeline if e["agent"] == agent]
         groups = round_groups(t)

@@ -273,6 +273,15 @@ class Benchmark(ABC):
         and stop_working texts, which name teammates only for an agent that was told."""
         return plan.config.knows_team
 
+    def first_values(self, plan: Plan, agent: str) -> list[str]:
+        """The values of the parameters the agent's system prompt (system_prompts) states with no number, one sentence
+        each, for its first message after the rounds' values (src/tasks.py first_messages; prompts.yaml
+        first_values): when its submit bullet says a team's hand-in ends the run a set number of rounds later, that
+        number (prompt_texts.submit_value). A domain whose prompt states another adds its value."""
+        config = plan.config
+        delay = texts.submit_value(config) if config.holds_submit(role_of(plan.roles, agent)) else None
+        return [delay] if delay else []
+
     def ending_lines(self, plan: Plan, agent: str) -> list[str]:
         """The agent's bullets for the tools that end its work: submit (submit_line) for a neutral agent of a config
         that gives it, stop_working for an agent that holds it (prompt_texts.ending_lines)."""

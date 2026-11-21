@@ -1129,8 +1129,9 @@ def scenario_rounds_live() -> dict:
         lines = [s["message"] for s in steps_of(load_transcript(rec)) if (s.get("extra") or {}).get(ROUND_TAG)]
         entries = [e for e in sample.store.get("TurnState:timeline") if e["agent"] == rec["agent"]]
         assert lines == [f"Round {e['n']} of 2." for e in entries] and len(entries) == 2, (rec["agent"], lines)
-        assert first_user(load_transcript(rec)).rstrip().endswith(
-            "You have 2 rounds, and up to 3 tool calls per round."), rec["agent"]
+        # the rounds' values open a paragraph: a worker's last, the regulator's inside the task it quotes
+        assert any(p.startswith("You have 2 rounds, and up to 3 tool calls per round.")
+                   for p in first_user(load_transcript(rec)).rstrip().split("\n\n")), rec["agent"]
     assert {e["end"] for e in first.values()} == {"end_round"}, first
     assert {r["agent"]: r["ended_by"] for r in records}[poster] == "stop_working", records
     return {"poster": [post["t0"], post["t1"]], "read": [read["t0"], read["t1"]],

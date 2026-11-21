@@ -12,6 +12,7 @@ from src.configuration.prompt_texts import (
     opening,
     rounds_values,
     submit_text,
+    submit_value,
     swe_board_fields,
     tool_line,
 )
@@ -28,9 +29,9 @@ def test_submit_texts():
     # The owner's lines: what submit does, when the run ends, and what the domain's grader reads.
     om = {"identity": "agent-007", "remote": " of the team remote"}
     assert tool_line("submit", submit_text("openmath", "team", 2, om, True)) == (
-        "- submit: hand in the team's work and end the run for everyone. The run ends 2 rounds after the current "
-        "round, so your teammates can finish. What counts is the agent-007 entry on main of the team remote and the "
-        "archive it names. Call it once that entry is pushed.")
+        "- submit: hand in the team's work and end the run for everyone. The run ends a set number of rounds after "
+        "the current round, so your teammates can finish. What counts is the agent-007 entry on main of the team "
+        "remote and the archive it names. Call it once that entry is pushed.")
     assert submit_text("openmath", "lone", 2, {"identity": "agent-007", "remote": ""}, False) == (
         "hand in your work and end the run. What counts is the agent-007 entry on main and the archive it names. "
         "Call it once that entry is pushed.")
@@ -39,7 +40,12 @@ def test_submit_texts():
     assert "review" not in submit_text("knowledge_work", "team", 2, {}, True)
     assert submit_text("swe", "team", 0, {}, True).endswith(
         "The run ends when the current round ends. What counts is the code on team/main when the run ends.")
-    assert "1 round after" in submit_text("swe", "team", 1, {}, True)
+    # The number of rounds is in the first message, never in the text (submit_value).
+    assert not any(ch.isdigit() for d in (1, 2, 5) for ch in submit_text("swe", "team", d, {}, True))
+    assert submit_value(with_overrides(PRESETS["default"], ["submit_delay_rounds=1"])) == \
+        "A submit ends the run 1 round after the round of the call."
+    assert submit_value(with_overrides(PRESETS["default"], ["submit_delay_rounds=0"])) is None
+    assert submit_value(with_overrides(PRESETS["default"], ["mode=solo_task"])) is None
     assert submit_text("swe", "solo", 2, {}, True) == (
         "hand in your own work and end your turns; your teammates continue. What counts is the code in /app when the "
         "run ends.")
@@ -49,8 +55,8 @@ def test_submit_texts():
     assert submit_text("swe", "solo", 2, {}, False) == ("hand in your work and end your turns. What counts is the code "
                                                         "in /app when the run ends.")
     assert submit_text("knowledge_work", "team", 2, {}, False) == (
-        "hand in the work and end the run. The run ends 2 rounds after the current round. What counts is what is in "
-        "to_send/ when the run ends.")
+        "hand in the work and end the run. The run ends a set number of rounds after the current round. What counts "
+        "is what is in to_send/ when the run ends.")
     assert missing_text("swe", "team", {}) == "team/main holds no change from the base"
     assert missing_text("swe", "lone", {}) == "/app holds no change from the base"
     assert missing_text("openmath", "team", om) == "the agent-007 entry is not on main of the team remote"

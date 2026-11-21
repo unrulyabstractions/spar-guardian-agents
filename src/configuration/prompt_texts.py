@@ -1,11 +1,11 @@
 """The system prompt texts that depend on a setting.
 
 These helpers build the openmath board system prompt, the SWE board fields, what submit says and what it says is
-missing, the bullets of the tools that end an agent's work and the rounds' values for the first message
-(rounds_values). The rounds' rules in the system prompt name the agent's board calls, so they live with the board
-(src/swarm/board.py round_rules). Each one reads its text from
-prompts.yaml and chooses by the run's SwarmConfig and by whether the agent's system prompt tells it of its team
-(`told`, Benchmark.tells_team): an agent not told never reads of a teammate.
+missing, the bullets of the tools that end an agent's work, the rounds' values for the first message (rounds_values)
+and the values of the other parameters a system prompt states with no number (first_value, submit_value). The
+rounds' rules in the system prompt name the agent's board calls, so they live with the board (src/swarm/board.py
+round_rules). Each one reads its text from prompts.yaml and chooses by the run's SwarmConfig and by whether the
+agent's system prompt tells it of its team (`told`, Benchmark.tells_team): an agent not told never reads of a teammate.
 
     prompt = board_system_prompt(config, "k7q2m", config.names)
     text = submit_text("swe", config.submit_kind, config.submit_delay_rounds, {}, told=True)
@@ -63,11 +63,10 @@ def rounds_text(delay: int) -> str:
 def submit_text(domain: str, kind: str, delay: int, values: dict[str, str], told: bool) -> str:
     """What submit does for an agent of this kind (SwarmConfig.submit_kind) and what counts in the domain (its
     Benchmark.key), from prompts.yaml submit; values fill the domain's placeholders. A team's text says when the run
-    ends: when the current round ends for delay 0, else delay rounds after it. An agent not told of its team gets
-    the `untold` texts."""
+    ends: when the current round ends for delay 0, else a set number of rounds after it, with no number (the number is
+    submit_value, in the first message). An agent not told of its team gets the `untold` texts."""
     texts = settings.load_prompts()["submit"]
-    ends = texts["ends"]["now"] if delay == 0 else \
-        texts["ends"]["later" if told else "later_untold"].format(rounds=rounds_text(delay))
+    ends = texts["ends"]["now"] if delay == 0 else texts["ends"]["later" if told else "later_untold"]
     text = texts[kind] if told or kind == "lone" else texts["untold"][kind]
     return text.format(ends=ends, counts=_pick(texts["counts"][domain], kind).format(**values),
                        ready=texts["ready"].get(domain, "").format(**values))
@@ -101,6 +100,20 @@ def ending_lines(config: SwarmConfig, role: str, submit_line: str, told: bool) -
     if config.holds_stop_working(role):
         lines.append(tool_line("stop_working", stop_text(told)))
     return lines
+
+
+def first_value(name: str, **values) -> str:
+    """One parameter's value for the first message (prompts.yaml first_values), the number a system prompt leaves
+    out."""
+    return settings.load_prompts()["first_values"][name].format(**values)
+
+
+def submit_value(config: SwarmConfig) -> str | None:
+    """When a team's hand-in ends the run, for an agent whose system prompt says a set number of rounds after it: the
+    number (first_values.submit). None when a submit hands in no team's work or ends the run with its round."""
+    if config.submit_kind != "team" or config.submit_delay_rounds == 0:
+        return None
+    return first_value("submit", rounds=rounds_text(config.submit_delay_rounds))
 
 
 def rounds_values(config: SwarmConfig) -> str:
