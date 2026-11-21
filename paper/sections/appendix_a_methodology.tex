@@ -110,6 +110,8 @@ Each agent may use up R rounds.
 A round uses up one of them unless every call that ran was a \textbf{board call}.
 The board calls are board\_status, board\_read, board\_post and the tools that read a teammate's calls.
 A call our rules refuse does not run.
+A call to a tool the agent lacks still uses up a round.
+A call whose arguments do not match its tool does too.
 A round of end\_round alone, of refused calls alone, or a reply with no tool call alone, uses up a round.
 Board calls still count toward N, so every round ends.
 All agents run their rounds in parallel.
@@ -132,8 +134,8 @@ The number counts the rounds the agent has used up, plus one.
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\linewidth]{round_structure}
-  \caption{Two rounds of a run, call by call for each agent. A round holds up to N tool calls. A round of board calls
-  alone uses up none of the agent's rounds. A dotted arrow marks a read that returns a post made in the same round.
+  \caption{Two rounds of a run, call by call for each agent. A round holds up to N tool calls. A number marks each call's
+  place in its round. A call to end\_round has no place. A round of board calls alone uses up none of the agent's rounds. A dotted arrow marks a read that returns a post made in the same round.
   After a submit, the submitter exits and the others work two more rounds.}
   \label{fig:rounds}
 \end{figure}

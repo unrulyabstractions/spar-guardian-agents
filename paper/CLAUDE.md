@@ -1461,3 +1461,14 @@ linked, because the main tree held another workflow's uncommitted src/measures c
 - Other parameters: "differ from this design in thirteen ways" became "in fourteen ways", with "The system prompts held
   the numbers of their rules, such as a regulator's check of each teammate in its first \CheckRounds{} rounds." last.
 - generated/params.tex gains \CheckRounds (turn_rules.CHECK_ROUNDS) and \SubmitDelayRounds (PRESETS["default"]).
+- Rounds subsection, after "A call our rules refuse does not run.": added "A call to a tool the agent lacks still uses
+  up a round. A call whose arguments do not match its tool does too." Inspect, not our rules, refuses such a call, so
+  round_charge counts it as work (probed on the mock harness at a38911c: [board_status, no_such_tool, end_round] and
+  [board_status, work with a wrong argument, end_round] each charge work). Whether such a call should charge is open
+  for the user; the sentence follows the code.
+- Figure 7 (`figures.py` fig_round_structure): the column numbers above each round are gone; each call carries its
+  place in its round in its corner, end_round and a reply with no tool call none (transcript_rounds.places, 0720654).
+  Caption: after "A round holds up to N tool calls." added "A number marks each call's place in its round. A call to
+  end\_round has no place."
+- The ORBIT fork's rebase on upstream 2.2.0 is not landed (the pin stays at fbd2b27), and the paper names no ORBIT or
+  Inspect version, so nothing changed for it.

@@ -240,7 +240,7 @@ def fig_round_structure():
     fig = plt.figure(figsize=(FULL, 3.05))
     ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
     ax.set_xlim(0, 17.0)
-    ax.set_ylim(0.55, 8.0)
+    ax.set_ylim(0.55, 7.8)
     ax.axis("off")
     names = list(ROLES5)
     lane_h, top = 0.88, 6.1
@@ -254,8 +254,14 @@ def fig_round_structure():
     for x0, calls in zip(starts, ROUND_CALLS):
         for j, n in enumerate(names):
             y = top - j * lane_h
+            place = 0
             for k, a in enumerate(calls[n]):
                 step(ax, a, x0 + k * pitch, y - lane_h / 2 + 0.04, w, lane_h - 0.08)
+                if a in ("end_round", "no call"):    # end_round has no place in its round (transcript_rounds.places)
+                    continue
+                place += 1
+                ax.text(x0 + k * pitch + w - 0.13, y + lane_h / 2 - 0.13, str(place) if place < SHOWN_N else "N",
+                        ha="right", va="top", fontsize=6.9, color=MUTED, zorder=5)
             dot_x = x0 + SHOWN_N * pitch + 0.12
             used = uses_up_round(calls[n])
             ax.add_patch(Circle((dot_x, y), 0.13, fc=INK_SECONDARY if used else SURFACE, ec=INK_SECONDARY, lw=0.9,
@@ -270,15 +276,12 @@ def fig_round_structure():
             fontsize=7, color=INK_SECONDARY, zorder=4, bbox=dict(fc=SURFACE, ec="none", pad=1.5))
     ax.text((hx + 16.8) / 2, top - 4 * lane_h, "exited", ha="center", va="center", fontsize=7, color=INK_SECONDARY,
             zorder=4)
-    # each round's place numbers, the last one N, under the round's bracket
-    hy = top + lane_h / 2 + 0.42
+    # each round under its bracket; each call carries its place in the round, the last one N
+    hy = top + lane_h / 2 + 0.22
     for label, x0 in zip(("round r", "round r + 1"), starts):
         x1 = x0 + SHOWN_N * pitch + 0.25
         ax.text((x0 + x1) / 2, hy + 0.28, label, ha="center", va="bottom", fontsize=8, weight="bold")
         ax.plot([x0, x0, x1, x1], [hy + 0.02, hy + 0.2, hy + 0.2, hy + 0.02], color=INK_SECONDARY, lw=0.7)
-        for k in range(SHOWN_N):
-            ax.text(x0 + k * pitch + w / 2, top + lane_h / 2 + 0.17, str(k + 1) if k < SHOWN_N - 1 else "N",
-                    ha="center", va="center", fontsize=7, color=MUTED)
     by = top - 4 * lane_h - lane_h / 2
     rows = ([("box", "work", "work call"), ("box", "read", "board call"),
              ("box", "no call", "reply with no tool call")],
