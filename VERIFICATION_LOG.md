@@ -3007,3 +3007,33 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   - Paper: BROKEN by CLAUDE.md §6. paper/sections say nothing of the presence lines or alert_humans, and paper/ has
     no commit since 01f144e (2026-11-20). paper/generated is not stale (the role text did not change).
   - Minor: run.json ended_by says "end" for a04 while rules.exits says budget.
+
+## 2026-11-21: make paper in full on the regenerated run data (cleanup item i)
+
+- **Output.** `make paper` at HEAD 5c88baf, built in worktree/paper-regen (runs/, logs/, build/ and the four
+  submodules linked from the main tree, the main tree's .venv as PY), since the main tree holds another workflow's
+  uncommitted src/measures/ladder_domain.py and command_errors.py. The worktree and its branch are removed.
+- **How verified.** Before regenerating, I built HEAD's committed paper/ sources unchanged in the same worktree as the
+  previous build (42 pages). `make paper` then ran every target (rc 0; no Traceback or refusal in its log). Every file
+  under paper/figures/ (27) and paper/generated/ (11) is byte-identical to HEAD; every PNG under tmp/ it drew is
+  byte-identical to the main tree's tmp/. A forced latexmk rebuild gave 42 pages with 0 LaTeX warnings; pdftotext of
+  the old and new PDF is identical; all 42 pages rendered at 40 dpi are pixel-identical. `make paper-check` printed
+  "paper/ agrees with its sources"; tests/unit/test_paper_sources.py 48 passed. I viewed pages 7 (Figure 4) and 42
+  (Figure 26) at 80 dpi, and re-read Appendix C's sentences against Figure 26: they hold. runs/ and logs/ have no file
+  newer than the worktree.
+- **Why nothing moved.** The paper recomputes every rung from the transcripts with the code (study_ladders.record);
+  it reads no stored rung, no INDEX validity of study_exploration_0 (baseline_tables reads its October runs by name
+  whatever their validity) and no price, so the cleanup's validity verdicts and the Haiku regulators' repricing do
+  not reach it. \StudyRuns stays 147. apart_controls luna/worktime/cheat/s12 reads looked on the pre-cleanup backup
+  and tempted now, at HEAD's code: not cheated either way, so Figure 26 shows 6/49 both times.
+- **Pending.** With the main tree's uncommitted ladder_domain.py fix (sha1 d882724b), s12 reads attempted. Over all
+  90 cells of Figure 26, only GPT-6 Luna, knowledge work, told moves: 6/49 (12%) to 7/49 (14%). In the preview, only
+  solo_vs_solo_told.png changed among the method, results and paper figures. No sentence depends on that cell. When
+  that fix is committed, `make paper` must run again and paper/figures/solo_vs_solo_told.png be committed with it.
+- **Not regenerated, by design.** tmp/tables/results/table_awareness_by_task.png, table_scheming_by_task.png and
+  table_disclosure_by_task.png (dated 2026-11-19) are outputs of tables retired that day; no script draws them, the
+  paper does not include them, and test_paper_sources forbids two of the names. They are stale files in gitignored
+  tmp/, left in place.
+- **Result.** VERIFIED: the paper at HEAD agrees with the regenerated data, with no change to any number, table,
+  figure or sentence. UNVERIFIED: the global verifier agent was not run (this task runs as a subagent with no agent
+  tool); the Hub dataset behind the Reproducibility link is still in the old layout.
