@@ -201,8 +201,9 @@ export function renderBoard(el, d, opts) {
   // the two selectors never hold one agent, unless the run has one
   if (state.a === state.b) state.b = (d.agents.find(x => x.agent !== state.a) || { agent: state.a }).agent;
   const callHref = (agent, k) => `${opts.base}?agent=${enc(agent)}&call=${k}`;
-  // A call's round and place in it, "round 3 · 2/10"; null in a run before rounds of calls.
-  const roundPlace = c => (c.round == null ? null
+  // A call's round and place in it, "round 3 · 2/10"; "round 3" for end_round, which has no place; null in a run
+  // before rounds of calls.
+  const roundPlace = c => (c.round == null ? null : c.pos == null ? `round ${c.round}`
     : `round ${c.round} · ${d.calls_per_round != null ? `${c.pos}/${d.calls_per_round}` : c.pos}`);
   const callLink = (agent, k) => h('a', { class: 'bd-call-link', href: callHref(agent, k),
     title: `open call ${k} in ${agent}'s tab` }, `call ${k}`);

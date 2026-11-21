@@ -412,7 +412,7 @@ step per round plus free follow-ups): the agent tab then draws its steps as befo
 ```
 Rounds = {rounds (R, rules.round_budget), calls_per_round (N), agents: {agent: [Round]}}   # timeline order
 Round = {turn, round (the schedule's), n (the agent's own count: "Round n of R."), end, charge, charged, used, ended,
-         t0, t1, calls: [{id, tool, pos (its place in the round, from 1), free, refused, error, t0, t1}]}
+         t0, t1, calls: [{id, tool, pos (its place in the round, from 1; null for end_round), free, refused, error, t0, t1}]}
          # end: end_round | calls (N reached) | ending | time | no_tool_call | context | null;
          # charge: work | board | idle | stop | submit | alert (board uses up no round); times in UTC seconds
 Presence = {agents: {agent: {entered: round | null,                 # rules.entry_rounds

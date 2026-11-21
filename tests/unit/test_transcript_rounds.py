@@ -55,6 +55,10 @@ def test_rounds_keep_each_entrys_round_count_end_and_charge_and_each_calls_place
         ("p", "board_post", 1, False), ("s", "shell", 2, False), ("x", "shell", 3, True)]
     assert set(first["calls"][0]) == {*tr.CALL_KEYS, "pos"}
     assert (second["end"], second["charge"], second["charged"]) == ("end_round", "board", False)
+    # end_round never counts toward N, so it has no place in its round
+    assert [(c["tool"], c["pos"]) for c in second["calls"]] == [("board_read", 1), ("end_round", None)]
+    assert tr.places([{"tool": "end_round"}, {"tool": "shell"}, {"tool": "end_round"}, {"tool": "shell"}]) == [
+        None, 1, None, 2]
     assert r["agents"]["a02"] == [{**{k: TIMELINE[1][k] for k in tr.ROUND_KEYS}, "calls": []}]
 
 
@@ -84,7 +88,7 @@ def test_on_the_eval_logs_clock_a_round_spans_its_own_times_from_the_first_calls
     assert lanes["a02"][0]["t"] == pytest.approx(1.0) and lanes["a02"][0]["calls"] == 0
     assert where == {("a01", 0): {"round": 1, "pos": 1}, ("a01", 1): {"round": 1, "pos": 2},
                      ("a01", 2): {"round": 1, "pos": 3}, ("a01", 3): {"round": 2, "pos": 1},
-                     ("a01", 4): {"round": 2, "pos": 2}}
+                     ("a01", 4): {"round": 2, "pos": None}}     # end_round never counts toward N: no place
 
 
 def test_on_the_call_order_clock_a_round_spans_its_calls_and_an_empty_one_sits_after_the_last():

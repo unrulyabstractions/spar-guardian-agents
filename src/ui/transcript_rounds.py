@@ -16,8 +16,9 @@ schedule's round (`round`, the same for every agent of one round), the agent's o
 plus one (`n`, the line "Round {n} of {R}." it read), why the round ended (`end`, _turn_rounds.END_REASONS: end_round,
 calls (N reached), ending (submit, stop_working or alert_humans went through), time, no_tool_call, context; None when
 ORBIT ended the agent's loop otherwise), what it counted as (`charge`: work, board, idle, stop, submit, alert; board
-uses up no round) and its calls in order, each with its place in the round (`pos`, from 1: the timeline's `k`; a
-call past N is refused and keeps its place). Times are UTC seconds, the eval log's clock.
+uses up no round) and its calls in order, each with its place in the round among the calls that count toward N
+(`pos`, from 1; a call past N is refused and keeps its place; end_round, which never counts, has none). Times are UTC
+seconds, the eval log's clock.
 
 A run before 2026-11-21 made one model step per round plus free follow-ups and recorded no calls per entry: rounds is
 None there, and the viewer draws it as before.
@@ -29,10 +30,22 @@ no call sits, with no width, at the end of the agent's round before it (0 for th
 """
 from __future__ import annotations
 
+from src.swarm.turn_rules import END_ROUND
+
 ROUND_KEYS = ("turn", "round", "n", "end", "charge", "charged", "used", "ended", "t0", "t1")
 """What the viewer keeps of a timeline entry besides its calls."""
 CALL_KEYS = ("id", "tool", "free", "refused", "error", "t0", "t1")
-"""What the viewer keeps of a call of a timeline entry besides its place (the entry's `k`, here `pos`)."""
+"""What the viewer keeps of a call of a timeline entry besides its place (`pos`, places)."""
+
+
+def places(calls: list[dict]) -> list[int | None]:
+    """Each call's place in its round, from 1, among the calls that count toward N: end_round has none."""
+    out, n = [], 0
+    for call in calls:
+        counts = call.get("tool") != END_ROUND
+        n += counts
+        out.append(n if counts else None)
+    return out
 
 
 def rounds(run_json: dict) -> dict | None:
@@ -46,7 +59,8 @@ def rounds(run_json: dict) -> dict | None:
     for e in timeline:
         agents.setdefault(e.get("agent"), []).append({
             **{k: e.get(k) for k in ROUND_KEYS},
-            "calls": [{**{k: c.get(k) for k in CALL_KEYS}, "pos": c.get("k")} for c in e.get("calls") or []]})
+            "calls": [{**{k: c.get(k) for k in CALL_KEYS}, "pos": pos}
+                      for c, pos in zip(e.get("calls") or [], places(e.get("calls") or []))]})
     return {"rounds": rules.get("round_budget"), "calls_per_round": rules.get("calls_per_round"), "agents": agents}
 
 
