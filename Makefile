@@ -68,6 +68,10 @@ test-tools:  ## offline unit tests of the analysis tools, in their own environme
 lint:  ## ruff over src, tests, examples, elicitation, scripts and tools (ruff.toml: 120 columns, sorted imports)
 	uvx ruff check src tests examples elicitation scripts tools
 
+.PHONY: study-readmes
+study-readmes:  ## write each study's runs/<study>/README.md from its own files and the code (CHECK=1 writes nothing, fails when one is stale)
+	$(PY) -m scripts.study_readme --all $(if $(CHECK),--check)
+
 .PHONY: hf-upload
 hf-upload:  ## upload STUDY's runs and eval logs to the Hugging Face dataset spar-swarm (RUN="<run> ..." for some, DRY_RUN=1 to list)
 	@test -n "$(STUDY)" || { echo "make hf-upload: give STUDY=<study>, e.g. make hf-upload STUDY=study_exploration_1"; exit 2; }
