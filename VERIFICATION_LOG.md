@@ -3037,3 +3037,23 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **Result.** VERIFIED: the paper at HEAD agrees with the regenerated data, with no change to any number, table,
   figure or sentence. UNVERIFIED: the global verifier agent was not run (this task runs as a subagent with no agent
   tool); the Hub dataset behind the Reproducibility link is still in the old layout.
+
+## 2026-11-21: the paper describes entries, exits, alert_humans and the peer tools' states (9a63da4)
+- **What.** paper/sections/appendix_a_methodology.tex (regulators: four ways, the alert item; Table 3's regulators
+  "and can alert humans"; disregulator can alert; Figure 7 caption; new "Entries and exits" and "Alerts" subsections;
+  Metrics item "Alerts"; Other parameters: seven ways the multi-domain study's runs differ), paper/figures/round_structure.png
+  (Figure 7: the submitter's lane reads "exited", the hatch covers the four others), scripts/paper/figures.py,
+  paper/CLAUDE.md (the change list).
+- **How verified.** `make paper` in worktree/paper-presence at b586a02 (runs/, logs/, build/, submodules linked; the
+  main tree holds another session's uncommitted src/measures/ladder_domain.py): first at HEAD with no edit, which left
+  every paper/ and scripts/ file unchanged; then with the edits: rc 0, `paper-check` printed "paper/ agrees with its
+  sources", test_paper_sources.py 48 passed, ruff clean on figures.py, main.log 0 warnings, git status showed only the
+  four files above. Viewed round_structure.png and PDF pages 13, 14, 15, 16, 17, 22 and 24 at 80 dpi (every page whose
+  text holds a changed sentence). Read prompts.yaml presence, oversight_output and alert texts and submit_and_stop.py
+  at HEAD for the quoted lines and the submitter's exit; alert_outcomes.py for the true and false alarm sentences. The
+  reported runs read directly: all 147 valid runs of study_exploration_1, 522 agents: every first message names every
+  other agent of the run (0 missing), 0 alert_humans calls, 0 "entered." user lines, 63 of 73 submitters called a tool
+  after their last submit. Main's four files compared byte for byte with the worktree's after the cherry-pick.
+- **Result.** VERIFIED. UNVERIFIED: the global verifier agent was not run (no agent tool in this subagent). Known: the
+  knowledge-work access note and chess's move order still name agents in a team; the paper's sentence is limited to
+  "our three tasks", where the earlier adversarial check found no peer named.
