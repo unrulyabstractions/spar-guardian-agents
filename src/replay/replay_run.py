@@ -60,8 +60,9 @@ RECORDED = "recorded"
 
 
 class OutputCut(NamedTuple):
-    """How a run cut a long tool result: its cap in bytes, and whether in the middle (tool_output_caps.middle_cut,
-    runs whose config records tool_output_cut) or at the start with Inspect's note (runs before 2026-11-20)."""
+    """How a run cut a long tool result: its cap in bytes, and whether in the middle with the cut stated
+    (tool_output_caps.middle_cut, runs whose config records tool_output_cut) or by Inspect's own truncate_tool_output,
+    its first and last halves under its note (runs before 2026-11-20)."""
     bytes: int
     middle: bool
 

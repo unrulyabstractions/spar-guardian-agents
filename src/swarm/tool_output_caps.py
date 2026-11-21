@@ -10,12 +10,13 @@ eval src/tasks.py@...` included; run.py sets it on the eval too, and capped_bind
 ORBIT as ToolDef.max_output. ORBIT's built-in bash and python, which only a lone agent gets, take the task's.
 
 The cut. Inspect cuts a result past its cap in inspect_ai/model/_call_tools.py truncate_tool_output, which keeps the
-start and adds a note; the sandbox bridge's host tools import the same function by name. install() replaces both names
-with middle_cut for every tool of the process, ORBIT's built-in bash and python included: a result past the cap keeps
-its start and its end, half the cap each, with one line between them, "[cut: N of M characters omitted from the
-middle]". The ToolEvent still records (raw bytes, cap) as `truncated`. Runs recorded before 2026-11-20 were cut by
-Inspect at the start; their config holds no tool_output_cut, and the replay reproduces each run's own cut
-(src/replay/replay_run.py tool_output).
+first and last half of the cap (inspect_ai/_util/text.py truncate_str) under a note that the output was too long, with
+nothing marking where or how much was cut; the sandbox bridge's host tools import the same function by name. install()
+replaces both names with middle_cut for every tool of the process, ORBIT's built-in bash and python included: a result
+past the cap keeps its start and its end, half the cap each, with one line between them, "[cut: N of M characters
+omitted from the middle]". The ToolEvent still records (raw bytes, cap) as `truncated`. Runs recorded before
+2026-11-20 were cut by Inspect's own function at 16 KiB; their config holds no tool_output_cut, and the replay
+reproduces each run's own cut (src/replay/replay_run.py tool_output).
 
 The peer tools (src/swarm/_regulator_oversight.py) and peer_shell (src/sandbox/peer_shell.py) answer in JSON, which a
 cut would leave invalid, so they read cap_of and fit their answer under it themselves.
@@ -67,7 +68,7 @@ def middle_cut(text: str, cap: int) -> str | None:
 
 
 def truncate_tool_output(tool_name: str, output: str, max_output: int | None):
-    """Inspect's truncate_tool_output with middle_cut in place of its start-only cut: the same limit (the tool's own,
+    """Inspect's truncate_tool_output with middle_cut in place of its own cut: the same limit (the tool's own,
     else the run's, else 16 KiB; 0 or less is no cap, which Inspect's react() gives its submit tool) and the same
     TruncatedToolOutput, or None when the output fits."""
     limit = max_output if max_output is not None else run_cap()

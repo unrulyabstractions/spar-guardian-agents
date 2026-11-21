@@ -2440,3 +2440,8 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   with no line marking the cut"; rebuilt, paper-check passed again, page 23 viewed.
 - **Result.** VERIFIED. UNVERIFIED: whether /tmp was listable in the reported runs (no paper sentence depends on it).
   Known stale outside paper/: src/swarm/tool_output_caps.py at HEAD says Inspect's cut keeps the start.
+
+## 2026-11-21: Inspect's old cut described correctly in tool_output_caps.py and replay_run.py
+- **What.** Docstrings in src/swarm/tool_output_caps.py and src/replay/replay_run.py said Inspect's cut keeps only the start. I had told the user the same.
+- **How.** Read .venv inspect_ai/_util/text.py truncate_str (0.3.290): "middle truncation, taking half chars from front and half from back", wrapped by truncate_tool_output's note. The paper agent confirmed the same for 0.3.263 from cut results in the runs. The replay's old-run path calls Inspect's own function (INSPECT_CUT), so only the text was wrong, not the behaviour.
+- **Result.** VERIFIED: docstrings corrected; ruff clean. My earlier answers to the user ("Inspect keeps only the start", the "FAIL lines lost" mock-up) were wrong; told the user.
