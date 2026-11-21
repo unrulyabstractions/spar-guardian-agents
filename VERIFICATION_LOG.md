@@ -2250,3 +2250,23 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   readable). tests/support/peer_shell_layouts.py with agent_users at listable /tmp: every layout passed. ruff clean,
   make paper-check agrees (the paper's "a shared /tmp" stays true).
 - **Result.** VERIFIED.
+
+## 2026-11-20: prompt caching per model family, no code fix needed
+- **What.** Whether our OpenRouter runs pay the cached-token rate, per family, from three free investigations (provider
+  docs read 2026-11-20, our code, every eval log of study_exploration_0/1 plus the killed-run sample buffers) and my own
+  checks. DeepSeek V4.1 Flash (Together), GPT-6 Luna (OpenAI) and Gemini 4 Argon (Vertex) cache automatically on a stable
+  prefix and need nothing from us. Claude needs the top-level cache_control that src/models/openrouter_anthropic_cache.py
+  adds (installed at src/run.py:230); it works since f627ac9 (2026-11-02). Only change: that module's docstring now says
+  Inspect 0.3.290 keeps the same marker gap, so the wrapper stays.
+- **How verified.** Read .venv inspect_ai/model/_providers/openrouter.py (0.3.290.dev43): `_add_anthropic_cache_markers`
+  marks system, last tool and a list-content block only; no top-level cache_control. Read the eval headers of
+  flipt_minimal_regulated_dsflash_sonnet_ambiguous_fill1 (2026-11-02T17:34: Sonnet 0.985 of 27.6M input read from cache,
+  DeepSeek 0.956) and binder_minimal_regulated_luna_sonnet_ambiguous1 (2026-11-01T05:08, before the fix: Sonnet 0.055,
+  Luna 0.948). The investigations' totals: 92.0% of 4,284M input read from cache, $468.18 billed against $1,723.15 at
+  full price; registry prices match OpenRouter's usage.cost within 0.04%. tests/unit/test_openrouter_anthropic_cache.py
+  (7 tests, already pins the request body down to the bytes) passed; model-layer tests 35 passed; ruff clean. Full unit
+  suite: 8 failed, then 4 failed on rerun, all in test_tool_output_caps.py and test_replay_read_order.py, which another
+  agent is editing uncommitted; a docstring cannot cause them. No paid call made.
+- **Result.** VERIFIED for the shares and the request shape. UNVERIFIED: an actual cache read for Claude on Inspect
+  0.3.290 (every Claude log ran on 0.3.263; proof is `uv run python -m scripts.check_anthropic_cache --model claude-haiku-5-5-openrouter --yes`, about $0.001,
+  not run); Opus 5.5 caching after the fix (no runs, no caching_verified, still refused).

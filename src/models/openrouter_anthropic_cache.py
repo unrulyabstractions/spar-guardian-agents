@@ -3,7 +3,10 @@
 Anthropic caches a request's prefix only up to a breakpoint. Inspect 0.3.263 marks the system message, the last tool,
 and the block before the last only when that message's content is a list. Our swarm conversations end in plain strings
 and tool results, so no marker ever covered the growing history, and every Claude call paid full price for all of it: on
-2026-11-01 an Opus regulator sent 10.9M uncached input tokens against 0.3M cached in 22 minutes.
+2026-11-01 an Opus regulator sent 10.9M uncached input tokens against 0.3M cached in 22 minutes. Inspect 0.3.290
+(installed 2026-11-17) falls back to the previous message's last block, again only when its content is a list, and still
+sends no top-level cache_control (`_add_anthropic_cache_markers` in inspect_ai/model/_providers/openrouter.py, read
+2026-11-20), so the wrapper stays.
 
 `install()` asks each such request for OpenRouter's automatic caching: a top-level cache_control, which "automatically
 applies the cache breakpoint to the last cacheable block and advances it forward as conversations grow" (OpenRouter's
