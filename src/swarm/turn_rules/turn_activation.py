@@ -7,11 +7,12 @@ after a call that ended its turns, once the time limit has passed, or at a reply
 tools.
 
 after_activation (ScheduleConfig.after_activation) charges the round by what it did, writes its timeline entry and
-marks why an agent stopped. A round uses up one of the agent's rounds unless every call it made was a board call
-(FREE_TOOLS), end_round left out; a round of end_round alone or of a reply with no tool call uses one up. An agent that
-has used up its rounds (TurnState.round_budget) ends "rounds". It then amends the pending plan: the ended agents'
-steps removed, every step after the team's hand-in dropped, and every step after the round under way dropped once no
-worker is left (workers_gone), so no regulator holds a run open. An agent that stops simply exits: its rounds go to
+marks why an agent stopped. A round uses up one of the agent's rounds unless every call that ran was a board call
+(FREE_TOOLS), end_round and refused calls left out (a call our rules refused never ran: Refused); a round of end_round
+alone, of refused calls alone or of a reply with no tool call uses one up. An agent that has used up its rounds
+(TurnState.round_budget) ends "rounds". It then amends the pending plan: the ended agents' steps removed, every step
+after the team's hand-in dropped, and every step after the round under way dropped once no worker is left
+(workers_gone), so no regulator holds a run open. An agent that stops simply exits: its rounds go to
 nobody. Under stop_after_delivery it hands the amended plan to the rule in _turn_delivery first. Last it records the
 exits the plan now shows (_turn_presence): an ending a rule wrote (rounds, context, delivered) and an agent out of
 steps (out_of_steps), so its peers hear of it before their next round.
@@ -88,7 +89,7 @@ def _ms(value: float | None) -> float | None:
 
 def round_calls(messages: list, times: dict | None = None) -> list[dict]:
     """The round's tool calls in order, from the messages its activation added: each {id, tool, k (its place in the
-    round from 1), free (a board call), error (its result is an error), refused (the round's gate refused it),
+    round from 1), free (a board call), error (its result is an error), refused (our rules refused it: Refused),
     t0, t1 (UTC seconds, from the round record's times; None without one)}."""
     results = {m.tool_call_id: m for m in messages if isinstance(m, ChatMessageTool) and m.tool_call_id}
     out = []
@@ -106,12 +107,13 @@ def round_calls(messages: list, times: dict | None = None) -> list[dict]:
 
 def round_charge(calls: list[dict], ending: str | None) -> str:
     """What a completed round counts as. "submit", "stop" or "alert" when the agent's ending tool went through in it
-    (ending, from ending_of), whatever else it called. Otherwise by its calls, end_round left out: "work" when one is
-    not a board call (FREE_TOOLS), "board" when every one is, "idle" when there is none. work and idle use up one of
-    the agent's rounds (CHARGED); board uses up none."""
+    (ending, from ending_of), whatever else it called. Otherwise by the calls that ran, end_round and the refused
+    calls left out (a refused call never ran: Refused): "work" when one is not a board call (FREE_TOOLS), "board" when
+    every one is, "idle" when there is none. work and idle use up one of the agent's rounds (CHARGED); board uses up
+    none."""
     if ending is not None:
         return ending
-    made = [c["tool"] for c in calls if c["tool"] != END_ROUND]
+    made = [c["tool"] for c in calls if c["tool"] != END_ROUND and not c.get("refused")]
     if any(tool not in FREE_TOOLS for tool in made):
         return "work"
     return "board" if made else "idle"

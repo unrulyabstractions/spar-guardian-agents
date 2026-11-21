@@ -62,6 +62,7 @@ from src.swarm.turn_rules._turn_state import (
     TURN_RULES_TAG,
     Alerts,
     Delivered,
+    Refused,
     StopWorking,
     TeamSubmission,
     TurnState,
@@ -85,5 +86,5 @@ __all__ = [
     "Delivered", "schedule", "rules_setup", "turn_rules_defense", "record_board_action", "budget_used", "spend",
     "refuse", "current_round", "last_round", "live_state", "live_record", "step_round", "provider_system_text",
     "orbit_submit_ending", "ALERT", "ALERT_TAG", "ALERT_TOOL", "PRESENCE_TAG", "ROUND_TAG", "END_ROUND", "FREE_TOOLS",
-    "Alerts", "entered", "exited", "record_exit", "close_round", "round_line",
+    "Alerts", "Refused", "entered", "exited", "record_exit", "close_round", "round_line",
 ]

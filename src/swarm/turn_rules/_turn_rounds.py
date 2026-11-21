@@ -13,8 +13,9 @@ end reason its timeline entry keeps:
     context       a reply cut at the context limit
 
 ends decides at each boundary of the activation (ORBIT ScheduleConfig.end_activation, turn_activation.ends_round).
-counted, a tool wrapper on every agent's tools, refuses with a ToolError (prompts.yaml `round`) a call past N, a call
-after end_round in the same batch and a call after the agent's turns ended, and times every call.
+counted, a tool wrapper on every agent's tools, refuses (Refused, prompts.yaml `round`) a call past N, a call after
+end_round in the same batch and a call after the agent's turns ended, marks refused a call its tool refuses by our
+rules, and times every call.
 
 The round under way lives in memory (TurnState's Live.rounds), never in the store: after_activation turns it into the
 round's timeline entry. open_round starts it before the round's first model call and appends the durable line
@@ -30,11 +31,19 @@ import time
 from inspect_ai.agent import AgentState
 from inspect_ai.log import transcript
 from inspect_ai.model import ChatMessageAssistant, ChatMessageUser
-from inspect_ai.tool import ToolDef, ToolError
+from inspect_ai.tool import ToolDef
 from inspect_ai.util import store_as
 
 from src.configuration.settings import load_prompts
-from src.swarm.turn_rules._turn_state import END_ROUND, ROUND_TAG, TeamSubmission, TurnState, current_round, live_record
+from src.swarm.turn_rules._turn_state import (
+    END_ROUND,
+    ROUND_TAG,
+    Refused,
+    TeamSubmission,
+    TurnState,
+    current_round,
+    live_record,
+)
 
 END_REASONS = ("end_round", "calls", "ending", "time", "no_tool_call", "context")
 
@@ -104,7 +113,7 @@ def turns_over(st: TurnState, agent: str) -> bool:
 
 
 def _begin(agent: str, tool: str) -> dict:
-    """Start one call of the agent's round: its run record, or a ToolError when the call is refused (prompts.yaml
+    """Start one call of the agent's round: its run record, or Refused when the call is refused (prompts.yaml
     `round`): past N, after end_round in the batch, or after the agent's turns ended."""
     record = round_record(agent)
     run = {"tool": tool, "t0": now(), "t1": None, "refused": None}
@@ -123,11 +132,12 @@ def _begin(agent: str, tool: str) -> dict:
         record["made"] += 1
         return run
     run["refused"], run["t1"] = refused, run["t0"]
-    raise ToolError(refused)
+    raise Refused(refused)
 
 
 def counted(agent: str):
-    """A tool wrapper for the agent's tools: each call goes through _begin, and its end time is kept."""
+    """A tool wrapper for the agent's tools: each call goes through _begin, and its end time is kept. A call the
+    tool itself refuses by our rules (Refused) is marked refused, as the gate's are."""
 
     def wrap(tool):
         definition = tool if isinstance(tool, ToolDef) else ToolDef(tool)
@@ -136,6 +146,9 @@ def counted(agent: str):
             run = _begin(agent, definition.name)
             try:
                 return await definition.tool(**kwargs)
+            except Refused as refusal:
+                run["refused"] = refusal.message
+                raise
             finally:
                 run["t1"] = now()
 

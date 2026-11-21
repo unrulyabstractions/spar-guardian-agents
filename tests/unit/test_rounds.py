@@ -12,6 +12,7 @@ from src.domains.openmath import OpenMath
 from src.swarm import turn_rules as rules
 from src.swarm.board import round_rules
 from src.swarm.turn_rules import _turn_rounds as rounds_clock
+from src.swarm.turn_rules import turn_activation
 from src.tasks import instruction_suffix, system_prompts
 from tests.support.mock_model import calls, tagged_infos, text
 from tests.support.turn_rules_harness import (
@@ -111,6 +112,37 @@ def test_board_calls_use_up_no_round_but_count_toward_n(tmp_path):
     # A board call and a work call in one round: the round uses one up.
     mixed, _ = run(config, {"a01": [read(), do("A")], "a02": [do("B")]}, tmp_path / "mixed")
     assert [e["charge"] for e in entries(mixed, "a01")] == ["work", "work"]
+
+
+def test_a_refused_call_never_ran_so_it_uses_up_no_round(tmp_path):
+    """A call our rules refused did nothing: a round of board calls whose work call the gate refused past N, or after
+    end_round, uses up none of the agent's rounds; so does a refused submit beside board calls. The calls keep their
+    places and their refusals."""
+    config = sequential(n_agents=2, rounds=2, calls_per_round=2)
+    past_n = calls(("board_read", {}), ("board_status", {}), ("work", {"item": "late"}))
+    sample, _ = run(config, {"a01": [past_n, do("A")], "a02": [do("B")]}, tmp_path)
+    first = entries(sample, "a01")[0]
+    assert [(c["tool"], c["refused"]) for c in first["calls"]] == [("board_read", False), ("board_status", False),
+                                                                   ("work", True)]
+    assert (first["charge"], first["charged"], first["end"]) == ("board", False, "calls")
+    assert "late" not in executed(sample, "a01") and store(sample, "board_rounds")["a01"] == 1
+    closed = calls(("board_read", {}), ("end_round", {}), ("work", {"item": "late"}))
+    sample, _ = run(config, {"a01": [closed, do("A")], "a02": [do("B")]}, tmp_path / "closed")
+    first = entries(sample, "a01")[0]
+    assert [c["refused"] for c in first["calls"]] == [False, False, True]
+    assert (first["charge"], first["end"]) == ("board", "end_round")
+
+    async def missing(agent: str) -> str | None:
+        return "nothing is shipped"
+
+    early = calls(("board_read", {}), ("submit", {"answer": "early"}))
+    sample, _ = run(config.replace(submit_delay_rounds=0), {"a01": [early, do("A")], "a02": [do("B")]},
+                    tmp_path / "submit", missing=missing)
+    first = entries(sample, "a01")[0]
+    assert [(c["tool"], c["refused"]) for c in first["calls"]] == [("board_read", False), ("submit", True)]
+    assert first["charge"] == "board" and sample.store.get("TeamSubmission:refused")[0]["agent"] == "a01"
+    # A round whose only call was refused holds no call that ran: idle, which uses one up.
+    assert turn_activation.round_charge([{"tool": "work", "refused": True}], None) == "idle"
 
 
 def test_peer_shell_is_no_board_call():

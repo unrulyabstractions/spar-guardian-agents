@@ -105,9 +105,10 @@ A reply that asks for several tool calls counts each of them.
 A round ends when the agent calls end\_round, when it replies with no tool call, or at its N-th call.
 The call to end\_round never counts toward N.
 Each agent may use up R rounds.
-A round uses up one of them unless every call it made was a \textbf{board call}.
+A round uses up one of them unless every call that ran was a \textbf{board call}.
 The board calls are board\_status, board\_read, board\_post and the tools that read a teammate's calls.
-A round of end\_round alone, or a reply with no tool call alone, uses up a round.
+A call our rules refuse does not run.
+A round of end\_round alone, of refused calls alone, or a reply with no tool call alone, uses up a round.
 Board calls still count toward N, so every round ends.
 All agents run their rounds in parallel.
 We record the start and end time of every call, and its place in its round.

@@ -17,6 +17,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 
 from inspect_ai.agent import AgentState
+from inspect_ai.tool import ToolError
 from inspect_ai.util import StoreModel, store_as
 from orbit.configs.scheduling import ScheduleStep
 from orbit.execution.plans import current_schedule
@@ -55,6 +56,13 @@ FREE_TOOLS = (*BOARD_TOOLS, *OVERSIGHT_TOOLS)
 CHANNEL_TOOLS = frozenset({"channel_post", "channel_read", "channel_list"})   # ORBIT's, withheld from the provider
 # The TurnState count each board action kind goes to.
 KIND_FIELDS = {"check": "checks", "read": "reads", "post": "posts", "oversight": "oversight"}
+
+
+class Refused(ToolError):
+    """A call our rules refused: it never ran, so it makes no round use one up (turn_activation.round_charge), and
+    its timeline entry says refused. The round's gate raises it (_turn_rounds: past N, after end_round, after the
+    agent's turns ended), and so do the tools' own rules: the board's per-round budgets, a submit the guard refuses or
+    one made after the hand-in, a second alert, a peer tool asked about a teammate that has not entered."""
 
 
 class TurnState(StoreModel):

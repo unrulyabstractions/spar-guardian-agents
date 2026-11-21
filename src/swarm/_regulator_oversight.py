@@ -62,6 +62,7 @@ from src.export.eval_sample_view import SampleView, agent_messages
 from src.swarm.turn_rules import (
     ACTIONS_TOOL,
     OBSERVATIONS_TOOL,
+    Refused,
     TurnState,
     current_round,
     entered,
@@ -265,7 +266,7 @@ def checked_peer(allowed: set[str], agent: str) -> bool:
         raise ToolError(texts["no_such_agent"])
     st = store_as(TurnState)
     if st.entry_rounds and not entered(st, agent, current_round()):
-        raise ToolError(texts["not_entered"].format(agent=agent))
+        raise Refused(texts["not_entered"].format(agent=agent))
     return exited(st, agent)
 
 

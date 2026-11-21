@@ -29,9 +29,9 @@ a submit that hands in the team's work posts a notice as the system (system_post
 
 Budgets per round (SwarmConfig.reads_per_turn, posts_per_turn; turn_rules.spend). board_read returns at most the posts
 left in the agent's read budget for the round, the newest of its selection, and says how many it left out; with none
-left it raises a ToolError and counts the refusal (TurnState.reads_refused). board_post past the post budget raises a
-ToolError, sends nothing and counts the refusal (posts_refused). The counts reset at each round. Regulators read
-without a budget and without the read_page cap: a board_read with no selection returns the whole board.
+left it refuses the call (turn_rules.Refused) and counts the refusal (TurnState.reads_refused). board_post past the
+post budget refuses the call, sends nothing and counts the refusal (posts_refused). The counts reset at each round.
+Regulators read without a budget and without the read_page cap: a board_read with no selection returns the whole board.
 
 Each tool also counts the action in turn_rules.TurnState (checks, reads, posts, read_senders, discovery_round). The
 board tools and the peer tools are the board calls (turn_rules.FREE_TOOLS): they count toward a round's calls and use
@@ -68,6 +68,7 @@ from src.swarm.turn_rules import (
     OBSERVATIONS_TOOL,
     OVERSIGHT_TOOLS,
     SYSTEM_SENDER,
+    Refused,
     budget_used,
     record_board_action,
     refuse,
@@ -174,7 +175,7 @@ def board_read(agent: str, read_page: int | None, board: str = BOARD_ID, reads_p
             left = reads_per_turn - used
             if left <= 0:
                 refuse(agent, "read")
-                raise ToolError(budget["read_refused"].format(used=used))
+                raise Refused(budget["read_refused"].format(used=used))
         posts = _board(agent, board)
         chosen: dict[str, object] = {}
         if latest is None and from_agent is None:
@@ -216,7 +217,7 @@ def board_post(agent: str, board: str = BOARD_ID, posts_per_turn: int | None = N
             used = budget_used(agent, "post")
             if used >= posts_per_turn:
                 refuse(agent, "post")
-                raise ToolError(prompts["budget"]["post_refused"].format(used=used))
+                raise Refused(prompts["budget"]["post_refused"].format(used=used))
         try:
             sent = await async_send_message(board, agent_id=agent, content=message)
         except (ChannelCapacityError, PermissionError) as error:

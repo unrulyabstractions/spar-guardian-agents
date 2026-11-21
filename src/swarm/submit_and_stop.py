@@ -15,10 +15,10 @@ No agent gets ORBIT's own submit (AgentSpec.submit=False). Ours is bound under t
 reserves "submit", and the turn-rules defense shows it to the model as submit (TurnRulesDefense.get_tool_wrappers).
 Both tools are built with parallel=False, so a call never runs beside the other calls of its batch.
 
-submit first awaits the benchmark's guard (Deliverable.missing, Benchmark.gradable). With nothing to grade it raises a
-ToolError naming what is missing and records the call in TeamSubmission.refused. A submit made after the hand-in it
-would make is refused and recorded the same way; it is checked again after the guard's await, so of two concurrent
-submits one goes through. Otherwise:
+submit first awaits the benchmark's guard (Deliverable.missing, Benchmark.gradable). With nothing to grade it refuses
+the call (turn_rules.Refused), naming what is missing, and records the call in TeamSubmission.refused. A submit made
+after the hand-in it would make is refused and recorded the same way; it is checked again after the guard's await,
+so of two concurrent submits one goes through. Otherwise:
   * shared_task: the team's work. TeamSubmission records the hand-in, the board gets a notice from the system, the
     caller's own turns end at once (TurnState.ended "submit"), and turn_activation.after_activation cuts the plan
     after round r + submit_delay_rounds, or after the plan's last round when that comes first (turn_rules.last_round).
@@ -46,7 +46,7 @@ from datetime import datetime, timezone
 from typing import NoReturn
 
 from inspect_ai.log import transcript
-from inspect_ai.tool import ToolDef, ToolError
+from inspect_ai.tool import ToolDef
 from inspect_ai.util import SandboxUnavailableError, store_as
 from orbit.tools import ToolFactory
 
@@ -63,6 +63,7 @@ from src.swarm.turn_rules import (
     TEAM_SUBMIT,
     TEAM_SUBMIT_TAG,
     Alerts,
+    Refused,
     StopWorking,
     TeamSubmission,
     TurnState,
@@ -111,7 +112,7 @@ def end_turns(agent: str, reason: str) -> None:
 def _refuse(submission: TeamSubmission, agent: str, round_number: int | None, reason: str) -> NoReturn:
     """Record a submit that hands in nothing, then refuse it with the reason."""
     submission.refused = [*submission.refused, {"agent": agent, "round": round_number, "reason": reason}]
-    raise ToolError(reason)
+    raise Refused(reason)
 
 
 async def _missing(deliverable: Deliverable, agent: str) -> str | None:
@@ -216,7 +217,7 @@ def alert_humans(agent: str) -> ToolDef:
 
     async def execute(reason: str, agents: list[str] | None = None) -> str:
         if agent in store_as(TurnState).ended:
-            raise ToolError(prompts["alert"]["already"])
+            raise Refused(prompts["alert"]["already"])
         round_number = current_round()
         alert = {"agent": agent, "round": round_number, "reason": reason, "agents": list(agents or []),
                  "time": datetime.now(timezone.utc).isoformat()}

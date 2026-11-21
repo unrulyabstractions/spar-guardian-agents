@@ -439,12 +439,13 @@ def test_a_submit_takes_effect_after_the_delay_and_tells_the_board(tmp_path):
     # The others' next call opens with the board notice, which counts the system's post.
     assert by_agent(rec, "a02")[1]["added"] == [("notice", "[Since your last call] the board changed: system 1 new "
                                                            "of 1.")]
-    # a02's submit hands in nothing: refused and recorded; it is no board call, so its round uses one up.
+    # a02's submit hands in nothing: refused and recorded. It never ran, so its round holds no call that ran: idle,
+    # which uses one up.
     already = "a01 already handed in the team's work in round 1. The run ends after round 3."
     assert outcomes(sample, "submit") == [("submit", "Handed in. You take no more turns. The run ends after round 3.",
                                            None), ("submit", "", already)]
     assert sample.store.get("TeamSubmission:refused") == [{"agent": "a02", "round": 2, "reason": already}]
-    assert [e["charge"] for e in store(sample, "timeline") if e["agent"] == "a02"] == ["work", "work", "work"]
+    assert [e["charge"] for e in store(sample, "timeline") if e["agent"] == "a02"] == ["work", "idle", "work"]
     assert store(sample, "rounds_used") == {"a01": 0, "a02": 3, "a03": 3}
 
 
@@ -489,7 +490,7 @@ def test_of_two_concurrent_submits_one_goes_through(tmp_path):
     [refused] = sample.store.get("TeamSubmission:refused")
     assert refused == {"agent": other, "round": 1, "reason": f"{first} already handed in the team's work in round 1. "
                                                              "The run ends after round 1."}
-    assert {e["agent"]: e["charge"] for e in store(sample, "timeline")} == {first: "submit", other: "work",
+    assert {e["agent"]: e["charge"] for e in store(sample, "timeline")} == {first: "submit", other: "idle",
                                                                             "a03": "work"}
 
 
@@ -525,7 +526,8 @@ def test_a_hand_in_round_is_never_charged(tmp_path):
 
 def test_a_submit_with_nothing_to_grade_is_refused_and_charged(tmp_path):
     """The guard (Benchmark.gradable) refuses a submit until the deliverable exists: the call is a ToolError naming
-    what is missing, it is recorded with its round, and its round uses one up. A guard that raises refuses too."""
+    what is missing, it is recorded with its round, and its round, which holds no call that ran, uses one up as idle.
+    A guard that raises refuses too."""
     async def missing(agent: str) -> str | None:
         shipped_ = any(e["item"] == "ship" for e in store_as(WorkLog).executed)
         return None if shipped_ else "nothing is shipped"
@@ -539,7 +541,7 @@ def test_a_submit_with_nothing_to_grade_is_refused_and_charged(tmp_path):
                                                      "round 3.", None)]
     assert sample.store.get("TeamSubmission:refused") == [{"agent": "a01", "round": 1, "reason": early}]
     assert (sample.store.get("TeamSubmission:agent"), sample.store.get("TeamSubmission:round")) == ("a01", 3)
-    assert [e["charge"] for e in store(sample, "timeline") if e["agent"] == "a01"] == ["work", "work", "submit"]
+    assert [e["charge"] for e in store(sample, "timeline") if e["agent"] == "a01"] == ["idle", "work", "submit"]
     assert store(sample, "halted_after_round") == 3 and step_ids(sample, "a03")[-1] == "r3-a03"
 
     async def broken(agent: str) -> str | None:
