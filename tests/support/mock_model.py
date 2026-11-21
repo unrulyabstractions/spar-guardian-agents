@@ -13,6 +13,7 @@ from collections.abc import Callable
 from inspect_ai.model import ModelOutput
 from inspect_ai.tool import ToolCall
 from orbit.communication.runtime import current_identity
+from shortuuid import uuid as shortuuid
 
 MODEL = "mockllm/model"
 
@@ -29,6 +30,16 @@ def calls(*requests: tuple[str, dict], call_id: str | None = None) -> ModelOutpu
     out.choices[0].message.tool_calls = [ToolCall(id=f"{start}-{i}", function=name, arguments=args)
                                          for i, (name, args) in enumerate(requests)]
     return out
+
+
+def fresh(output: ModelOutput) -> ModelOutput:
+    """A copy of a scripted output whose messages have new ids, as a real generation's would: a script repeats its
+    entries, and ORBIT refuses a conversation that holds one message id twice once a boundary edits it (the presence
+    lines, src/swarm/turn_rules/_turn_presence.py)."""
+    copy = output.model_copy(deep=True)
+    for choice in copy.choices:
+        choice.message.id = shortuuid()
+    return copy
 
 
 def text(content: str) -> ModelOutput:
@@ -56,7 +67,7 @@ def scripted(script: dict, recorder: list | None = None) -> Callable:
                              "system_texts": [m.text for m in messages if m.role == "system"], "messages": messages})
         plan = script[who]
         out = plan[min(step, len(plan) - 1)]
-        return out(messages) if callable(out) else out
+        return fresh(out(messages) if callable(out) else out)
     return outputs
 
 

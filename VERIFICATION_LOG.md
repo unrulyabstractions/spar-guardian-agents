@@ -2707,3 +2707,8 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   | 4.12s | call 1". In steps the detached accept sits at the step its time falls in. The only console error is a
   missing /favicon.ico, as before. UNVERIFIED: openmath_workers (its task is left out of the viewer's index), a run with
   the panel's 2000-call cap, the light theme.
+
+## 2026-11-21: the smoke suites' scripted model gives each output fresh message ids; knowledge-work smoke passes
+- **What.** tests/support/mock_model.py `fresh`: every scripted output is a copy with new message ids, as a real generation's is (a script repeats entries, and ORBIT refuses a conversation with one id twice once a boundary edits it). The turn-rules harness uses the same helper. tests/smoke/knowledge.py roles expects the submitter ended "submit".
+- **How.** `python -m tests.smoke.knowledge` (mock model, Docker, one suite alone, 25 GB free): first run 10 of 11 passed, roles failed on the duplicate id; after the fix `--only roles,shared` passed. I opened the exported run runs/study_smoke/smoke_kw/20261121T073609Z/roles: each trajectory's user steps hold "aXX entered." for both peers with the swarm_presence tag, a02 and a03 hold "a01 handed in the team's work (submit). The run ends in 1 round.\na01 exited." (concurrent round, heard in round 4 of a hand-in in round 3 with delay 2), run.json rules.exits {a01: submit, round 3, ends_after_round 5}, rules.entry_rounds all 1, and both new deviation labels.
+- **Result.** VERIFIED: knowledge-work smoke, all 11 scenarios across the two runs; unit tests touched pass. UNVERIFIED: the openmath, protein, interview and creative smokes.

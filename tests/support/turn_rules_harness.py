@@ -22,7 +22,6 @@ from orbit import AgentSpec, SetupConfig, ToolFactory, multi_agent_task
 from orbit.configs.execution import AgentGroup
 from orbit.configs.experiment import ExperimentConfig
 from pydantic import Field
-from shortuuid import uuid
 
 from src.configuration.presets import PRESETS
 from src.configuration.settings import load_prompts
@@ -32,7 +31,7 @@ from src.swarm import turn_rules as rules
 from src.swarm.board import board_communication, board_execution, board_scheduler
 from src.swarm.submit_and_stop import Deliverable, ending_tools, submit_bindings
 from src.swarm.tool_output_caps import capped_bindings
-from tests.support.mock_model import MODEL, calls, text
+from tests.support.mock_model import MODEL, calls, fresh, text
 
 os.environ.setdefault("PYTHON_DOTENV_DISABLED", "1")
 
@@ -104,16 +103,6 @@ def board_post(message: str) -> ModelOutput:
 def out_of_context() -> ModelOutput:
     return ModelOutput(model=MODEL, choices=[ChatCompletionChoice(
         message=ChatMessageAssistant(content="...", model=MODEL, source="generate"), stop_reason="model_length")])
-
-
-def fresh(output: ModelOutput) -> ModelOutput:
-    """A copy of a scripted output whose messages have new ids, as a real generation's would: a script repeats its last
-    output, and ORBIT refuses a conversation that holds one message id twice once a boundary edits it (presence
-    lines)."""
-    copy = output.model_copy(deep=True)
-    for choice in copy.choices:
-        choice.message.id = uuid()
-    return copy
 
 
 def scripted_model(scripts: dict[str, list[ModelOutput]], recorder: list[dict]):

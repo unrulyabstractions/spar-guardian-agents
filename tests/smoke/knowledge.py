@@ -421,7 +421,7 @@ def scenario_roles() -> dict:
     assert sample.store.get("TeamSubmission:agent") == neutral[0], sample.store.get("TeamSubmission:agent")
     assert sample.store.get("TeamSubmission:round") == 3, sample.store.get("TeamSubmission:round")
     assert sample.store.get("TeamSubmission:refused") == [{"agent": neutral[1], "round": 1, "reason": early}]
-    assert sample.store.get("TurnState:ended") == {}
+    assert sample.store.get("TurnState:ended") == {neutral[0]: "submit"}, sample.store.get("TurnState:ended")
     SUITE.assert_judged("roles", sample, records)
     out = results_by_agent(records)
     ident = out[regulator][0].split("\n")[0]
