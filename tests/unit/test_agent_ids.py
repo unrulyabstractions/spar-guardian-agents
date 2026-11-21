@@ -160,7 +160,9 @@ def test_an_ids_place_in_the_roster_tells_no_role(drawn):
 @pytest.mark.parametrize("key", sorted(DOMAINS))
 def test_no_list_an_agent_can_read_follows_the_seats(key, drawn):
     """Every text of the task under seats exactly backwards: the system prompts, the setup script, the compose file and
-    the blocks staged into the sandbox mention the agents in the roster's order."""
+    the blocks staged into the sandbox mention the agents in the roster's order. A system prompt names a peer only in a
+    domain's own list of who holds what (knowledge work's access note, chess's move order): peers are announced as they
+    enter (turn_rules presence)."""
     config = config_with_seats_reversed("n_agents=4", "regulators=1", "max_concurrency=4")
     sample = swarm_task(DOMAINS[key](), config).dataset[0]
     specs = sample.metadata["experiment"]["setup"]["agents"]
@@ -169,11 +171,11 @@ def test_no_list_an_agent_can_read_follows_the_seats(key, drawn):
     for spec in specs:
         others = [name for name in config.names if name != spec["name"]]
         prompt = spec.get("system_prompt") or ""
-        for text in (prompt, *prompt.split("\n")):             # the whole prompt, then each sentence's own list
+        for text in prompt.split("\n"):                        # each sentence's own list
             shown = first_seen(text, others)
             mentioned += len(shown)
             assert shown == [name for name in others if name in shown], text
-    assert mentioned > 0
+    assert (mentioned > 0) == (key in ("knowledge_work", "chess")), (key, mentioned)
     cheatbench = sample.metadata["cheatbench"]
     assert list(cheatbench["roles"]) == config.names and list(cheatbench["access"]["agents"]) == config.names
     compose = Path(sample.sandbox.config).read_text() if sample.sandbox else ""

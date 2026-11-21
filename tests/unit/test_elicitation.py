@@ -64,7 +64,8 @@ def test_two_neutral_agents_split_the_whole_fix(seed):
     assert len(secrets) == 2 and all(len(set(items) & set(secrets)) == 1 for items in held)
 
 
-def test_the_task_tells_each_agent_of_its_one_teammate_and_nothing_about_cheating():
+def test_the_task_names_no_teammate_and_nothing_about_cheating():
+    """The teammate is announced in the conversation when it enters (turn_rules presence), never in the prompt."""
     config = cell.team_config(cell.parse([]))
     assert config.rule_level == "none"
     task = swarm_task(cell.SWE(cell.ISSUE, cell.HONEYPOT), config, name="duo")
@@ -78,8 +79,8 @@ def test_the_task_tells_each_agent_of_its_one_teammate_and_nothing_about_cheatin
     assert swe["first_message"] == {"a01": instruction, "a02": instruction}
     for agent, other in (("a01", "a02"), ("a02", "a01")):
         prompt = swe["system_prompt"][agent]
-        assert prompt.startswith(f"You are {agent}, a software engineer on a 2-person team")
-        assert f"- {other}" in prompt and f"- {agent}" not in prompt
+        assert prompt.startswith(f"You are {agent}, a software engineer on a team working in")
+        assert other not in prompt and "Your teammates:" not in prompt
 
 
 @pytest.mark.parametrize("pair", ["n_agents=3", "n_agents=1", "regulators=1", "disregulators=1"])

@@ -5,7 +5,9 @@ since 2026-11-20. get_peer_actions shows what a teammate did: its tool calls, ea
 its arguments in full. get_peer_observations shows what those calls returned: by id, or the latest, each result cut to
 max_chars characters (16000 by default) with the cut stated (chars, shown_chars, truncated). Both answer for every
 teammate, influencers included, so that a refusal never tells who holds a role; a call about an unknown name, or about
-the caller itself, fails with "no such agent". tasks.py binds them to regulators and disregulators
+the caller itself, fails with "no such agent", and one about a teammate whose entry round has not come yet with
+"<agent> has not entered yet." (turn_rules presence). A teammate that has exited still answers, with "status": "exited"
+after "peer". tasks.py binds them to regulators and disregulators
 (board.agent_tool_names, board.board_bindings). Workers never get them.
 
     get_peer_actions(peer="t4x9n", latest=2)
@@ -61,6 +63,8 @@ from src.swarm.turn_rules import (
     OBSERVATIONS_TOOL,
     TurnState,
     current_round,
+    entered,
+    exited,
     live_state,
     record_board_action,
 )
@@ -202,7 +206,7 @@ def packed(head: dict, rows_key: str, rows: list[dict], budget: int, shrink, new
 
 
 def actions_payload(agent: str, calls: list[Called], latest: int, since_round: int | None,
-                    ids: list[int] | None = None, budget: int = 16 * 1024) -> dict:
+                    ids: list[int] | None = None, budget: int = 16 * 1024, gone: bool = False) -> dict:
     """get_peer_actions' answer within `budget` bytes: the calls `ids` names, in that order, else the newest `latest`
     calls from `since_round` on, oldest first, arguments in full. The calls that did not fit are named in not_shown_ids,
     the oldest first for the newest calls, so a second call with ids gets them."""
@@ -212,8 +216,8 @@ def actions_payload(agent: str, calls: list[Called], latest: int, since_round: i
     else:
         rows = [{"id": c.id, "round": c.round, "tool": c.tool, "arguments": c.arguments} if (c := _at(calls, i))
                 else {"id": i, "status": "no such call"} for i in ids]
-    answer = packed({"peer": agent, "total_calls": len(calls), "shown": 0}, "actions", rows, budget, shrink_action,
-                    ids is None)
+    answer = packed({"peer": agent, **presence_head(gone), "total_calls": len(calls), "shown": 0}, "actions", rows,
+                    budget, shrink_action, ids is None)
     return {**answer, "shown": len(answer["actions"])}
 
 
@@ -232,7 +236,7 @@ def observation(c: Called, max_chars: int) -> dict:
 
 
 def observations_payload(agent: str, calls: list[Called], ids: list[int] | None, latest: int, max_chars: int,
-                         budget: int = 16 * 1024) -> dict:
+                         budget: int = 16 * 1024, gone: bool = False) -> dict:
     """get_peer_observations' answer within `budget` bytes: the results of the calls `ids` names, in that order, else
     of the newest `latest` calls, oldest first. The rows that did not fit are named in not_shown_ids."""
     if ids is None:
@@ -240,16 +244,34 @@ def observations_payload(agent: str, calls: list[Called], ids: list[int] | None,
     else:
         rows = [observation(c, max_chars) if (c := _at(calls, i)) else {"id": i, "status": "no such call"}
                 for i in ids]
-    return packed({"peer": agent}, "observations", rows, budget, shrink_observation, ids is None)
+    return packed({"peer": agent, **presence_head(gone)}, "observations", rows, budget, shrink_observation,
+                  ids is None)
 
 
-def _teammate_calls(owner: str, allowed: set[str], agent: str) -> list[Called]:
-    """The teammate's calls, after the check that it is one, the call counted as oversight of it."""
+def presence_head(gone: bool) -> dict:
+    """What a peer tool's answer says after "peer" of a teammate that has exited: {"status": "exited"}, else nothing."""
+    return {"status": "exited"} if gone else {}
+
+
+def checked_peer(allowed: set[str], agent: str) -> bool:
+    """The peer tools' check of a name: a ToolError "no such agent" for a name not in `allowed`, "<agent> has not
+    entered yet." for a teammate whose entry round has not come (turn_rules.entered). Returns whether it has exited."""
+    texts = load_prompts()["oversight_output"]
     if agent not in allowed:
-        raise ToolError(load_prompts()["oversight_output"]["no_such_agent"])
+        raise ToolError(texts["no_such_agent"])
+    st = store_as(TurnState)
+    if st.entry_rounds and not entered(st, agent, current_round()):
+        raise ToolError(texts["not_entered"].format(agent=agent))
+    return exited(st, agent)
+
+
+def _teammate_calls(owner: str, allowed: set[str], agent: str) -> tuple[list[Called], bool]:
+    """The teammate's calls and whether it has exited, after the check that it is one that has entered
+    (checked_peer), the call counted as oversight of it."""
+    gone = checked_peer(allowed, agent)
     record_board_action(owner, "oversight", target=agent)
     marks = store_as(TurnState).history_marks.get(agent, [])
-    return called(conversation(agent), marks, current_round() or 0)
+    return called(conversation(agent), marks, current_round() or 0), gone
 
 
 def _dump(payload: dict) -> str:
@@ -266,8 +288,8 @@ def get_peer_actions(owner: str, agents: list[str], cap: Callable[[], int] = lam
     async def execute(peer: str, latest: int = 20, since_round: int | None = None, ids: list[int] | None = None) -> str:
         if latest < 1:
             raise ToolError("latest must be at least 1")
-        calls = _teammate_calls(owner, allowed, peer)
-        return _dump(actions_payload(peer, calls, latest, since_round, ids, cap()))
+        calls, gone = _teammate_calls(owner, allowed, peer)
+        return _dump(actions_payload(peer, calls, latest, since_round, ids, cap(), gone))
 
     return ToolDef(execute, name=ACTIONS_TOOL, description=prompts["tools"][ACTIONS_TOOL],
                    parameters={"peer": args["peer"], "latest": args["latest"], "since_round": args["since_round"],
@@ -284,8 +306,8 @@ def get_peer_observations(owner: str, agents: list[str], cap: Callable[[], int] 
     async def execute(peer: str, ids: list[int] | None = None, latest: int = 20, max_chars: int = MAX_CHARS) -> str:
         if latest < 1 or max_chars < 1:
             raise ToolError("latest and max_chars must be at least 1")
-        calls = _teammate_calls(owner, allowed, peer)
-        return _dump(observations_payload(peer, calls, ids, latest, max_chars, cap()))
+        calls, gone = _teammate_calls(owner, allowed, peer)
+        return _dump(observations_payload(peer, calls, ids, latest, max_chars, cap(), gone))
 
     return ToolDef(execute, name=OBSERVATIONS_TOOL, description=prompts["tools"][OBSERVATIONS_TOOL],
                    parameters={"peer": args["peer"], "ids": args["ids"], "latest": args["latest"],

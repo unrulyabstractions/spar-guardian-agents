@@ -1,7 +1,8 @@
 """The turn rules' store, their tags and names, the live run's lookups and the counters the board tools keep.
 
-TurnState holds the per-sample turn bookkeeping. TeamSubmission holds the team's hand-in and the refused submits,
-StopWorking the round of each stop_working call, and Delivered the stop-after-delivery record. The board tools count
+TurnState holds the per-sample turn bookkeeping, the agents' entry rounds and exits among it (_turn_presence).
+TeamSubmission holds the team's hand-in and the refused submits, StopWorking the round of each stop_working call, Alerts
+each alert_humans call, and Delivered the stop-after-delivery record. The board tools count
 their actions and spend the per-round budgets here. current_round reads the round of the step under way from ORBIT's
 live plan, and live_state an agent's live AgentState.
 
@@ -33,7 +34,11 @@ BOARD_TOOLS = ("board_status", "board_read", "board_post")   # the board's tools
 TEAM_SUBMIT = "team_submit"           # submit's binding key: ORBIT reserves "submit" for its own tool
 SUBMIT = "submit"                     # the name the model sees (_turn_rules_filter.TurnRulesDefense.get_tool_wrappers)
 STOP_WORKING = "stop_working"
-ENDING_TOOLS = (SUBMIT, STOP_WORKING)     # a step ending in one that went through is neither charged nor free
+ALERT_TOOL = "alert_humans"           # the influencers' alert (src/swarm/submit_and_stop.py)
+ALERT = "alert"                       # the TurnState.ended reason of alert_humans
+ALERT_TAG = "swarm_alert"             # info event of an alert
+PRESENCE_TAG = "swarm_presence"       # a presence line's metadata key, and the info events of entries and exits
+ENDING_TOOLS = (SUBMIT, STOP_WORKING, ALERT_TOOL)   # a step ending in one that went through is neither charged nor free
 SYSTEM_SENDER = "system"                  # the sender of the board's notice of the team's hand-in
 ORBIT_SUBMITTED = "submitted"   # TurnState.ended of ORBIT's own submit, in logs made before submit and stop_working
 ACTIONS_TOOL = "get_peer_actions"                       # the influencers' tools (src/swarm/_regulator_oversight.py)
@@ -89,7 +94,9 @@ class TurnState(StoreModel):
     halted_after_round: int | None = None                   # the round after which the plan was cut
     notice_seen: dict[str, int] = Field(default_factory=dict)   # highest board sequence of others at the last call
     added: dict[str, list[dict]] = Field(default_factory=dict)  # what the filter added: {after, kind, activation, text}
-    ended: dict[str, str] = Field(default_factory=dict)     # stop_working | submit | cap | context | delivered
+    ended: dict[str, str] = Field(default_factory=dict)     # stop_working | submit | alert | cap | context | delivered
+    entry_rounds: dict[str, int] = Field(default_factory=dict)  # the first round of a plan step holding the agent
+    exits: dict[str, dict] = Field(default_factory=dict)    # agent -> {why, round, seq, ...} (_turn_presence)
     timeline: list[dict] = Field(default_factory=list)          # one entry per activation
 
 
@@ -113,6 +120,13 @@ class StopWorking(StoreModel):
     """The stop_working calls that went through (src/swarm/submit_and_stop.py): each agent's round of its call."""
 
     rounds: dict[str, int] = Field(default_factory=dict)
+
+
+class Alerts(StoreModel):
+    """The alert_humans calls that went through (src/swarm/submit_and_stop.py), in order: each {agent, round, reason,
+    agents, time}. agents holds the names the caller gave, as given."""
+
+    alerts: list[dict] = Field(default_factory=list)
 
 
 class Delivered(StoreModel):

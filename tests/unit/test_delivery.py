@@ -361,5 +361,5 @@ def test_a_submit_ends_the_run_and_the_rule_stays_out(tmp_path):
     config = pull(steps_per_agent=4, mode="shared_task", stop_after_delivery=0)
     scripts = {"a01": [submit("done"), do("a")], "a02": [do("ship")], "a03": [do("c")]}
     sample, _ = run(config, scripts, tmp_path, delivered=shipped(config.names))
-    assert store(sample, "halted_after_round") == 3 and store(sample, "ended") == {}
+    assert store(sample, "halted_after_round") == 3 and store(sample, "ended") == {"a01": "submit"}
     assert delivery(sample, "seen") == {} and delivery(sample, "checks") == 0

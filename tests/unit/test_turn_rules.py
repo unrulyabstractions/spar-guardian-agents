@@ -433,9 +433,10 @@ def test_orbit_gives_a_regulator_its_own_first_message(tmp_path):
         **first, "a02": oversight_first_message("Fix the issue together.")}}})
     _, rec = run(config, {a: [do(a)] for a in config.names}, tmp_path, roles=WITH_REGULATOR,
                  groups=first_message_groups(sample, config.names))
-    assert by_agent(rec, "a02")[0]["last"].startswith("Your teammates received the task below. You do not do it.")
-    assert by_agent(rec, "a02")[0]["last"].endswith("\n\nFix the issue together.")
-    assert by_agent(rec, "a01")[0]["last"] == by_agent(rec, "a03")[0]["last"] == "Fix the issue together."
+    first = {a: by_agent(rec, a)[0]["texts"][0] for a in config.names}     # the presence lines follow it
+    assert first["a02"].startswith("Your teammates received the task below. You do not do it.")
+    assert first["a02"].endswith("\n\nFix the issue together.")
+    assert first["a01"] == first["a03"] == "Fix the issue together."
 
 
 def test_a_regulator_never_holds_a_run_open(tmp_path):

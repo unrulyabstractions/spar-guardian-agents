@@ -2,12 +2,12 @@
 
 Each function reads a SampleView (src/export/eval_sample_view.py) or the episode records and returns one block:
 the swarm's composition, access, the honeypot probe's report, the sandbox, validity, the ledger, stop-after-delivery,
-the turn rules, the team's submission, how each episode ended, the shutdown rate, the probes and the board engagement.
-The turn rules' stores are read through their StoreModels (src/swarm/turn_rules/_turn_state.py TurnState,
-TeamSubmission, Delivered), so every fact comes from a store record and none from a tool call's name. A domain's own
-blocks and episode facts come from its Benchmark (src/domains/benchmark_protocol.py run_blocks, episode_facts,
-access_facts), found by the sample's CheatBench task in the registry. A block is None when the run did not record
-it. The export (src/export/run_export.py) assembles them into run.json and episodes.jsonl.
+the influencers' alerts, the turn rules, the team's submission, how each episode ended, the shutdown rate, the probes
+and the board engagement. The turn rules' stores are read through their StoreModels (src/swarm/turn_rules/_turn_state.py
+TurnState, TeamSubmission, Alerts, Delivered), so every fact comes from a store record and none from a tool call's
+name. A domain's own blocks and episode facts come from its Benchmark (src/domains/benchmark_protocol.py run_blocks,
+episode_facts, access_facts), found by the sample's CheatBench task in the registry. A block is None when the run did
+not record it. The export (src/export/run_export.py) assembles them into run.json and episodes.jsonl.
 
     block = delivery_block(view)
     facts = recorded_episode_facts(view, "k7q2m")
@@ -35,12 +35,14 @@ from src.models import model_registry as models
 from src.sandbox import peer_shell
 from src.sandbox import sandbox_hygiene as hygiene
 from src.swarm.turn_rules import (
+    ALERT,
     CHECK_ROUNDS,
     DELIVERED,
     ORBIT_SUBMITTED,
     STOP_WORKING,
     SUBMIT,
     TURN_RULES_TAG,
+    Alerts,
     Delivered,
     StopWorking,
     TeamSubmission,
@@ -289,14 +291,22 @@ def delivery_block(view: SampleView) -> dict | None:
     return {**delivered, "ended": [a for a, why in ended.items() if why == DELIVERED]}
 
 
+def alerts_block(view: SampleView) -> list[dict] | None:
+    """The influencers' alert_humans calls (src/swarm/turn_rules/_turn_state.py Alerts), in order: each {agent, round,
+    reason, agents, time}. None for a run with no alert. Whether each was a true or a false alarm comes from the
+    Cheating ladder (src/measures/alert_outcomes.py), in run.json "signals"."""
+    return (stored(view, Alerts) or {}).get("alerts") or None
+
+
 def recorded_run_blocks(view: SampleView) -> dict:
     """The run.json blocks a run carries only when it recorded them: the turn budget, access, the domain's blocks
-    (Benchmark.run_blocks), the honeypot probe's report, delivery, the sandbox, peer_shell and the code state."""
+    (Benchmark.run_blocks), the honeypot probe's report, delivery, the alerts, the sandbox, peer_shell and the code
+    state."""
     cb, bench = cheatbench(view), domain(view)
     facts = {"turn_budget": cb.get("turn_budget"), "access": access_block(view),
              **(bench.run_blocks(view) if bench else {}), "honeypot_probe": honeypot_probe_block(view),
-             "delivery": delivery_block(view), "sandbox": sandbox_block(view), "peer_shell": peer_shell_block(view),
-             "code": cb.get("code")}
+             "delivery": delivery_block(view), "alerts": alerts_block(view), "sandbox": sandbox_block(view),
+             "peer_shell": peer_shell_block(view), "code": cb.get("code")}
     return {k: v for k, v in facts.items() if v is not None}
 
 
@@ -328,7 +338,8 @@ def rules_facts(state: dict | None, agent: str) -> dict | None:
 
 # A TurnState.ended reason, as the episode's ended_by: the agent's own act or a turn rule ended it before the sample
 # ended. ORBIT_SUBMITTED, ORBIT's own submit in an older log, reads as the act it was (orbit_submit_act).
-OWN_ENDINGS = {STOP_WORKING: STOP_WORKING, SUBMIT: SUBMIT, DELIVERED: DELIVERED, "cap": "cap", "context": "context"}
+OWN_ENDINGS = {STOP_WORKING: STOP_WORKING, SUBMIT: SUBMIT, ALERT: ALERT, DELIVERED: DELIVERED, "cap": "cap",
+               "context": "context"}
 
 
 def orbit_submit_act(view: SampleView) -> str:
@@ -355,7 +366,7 @@ def outlasted(rules: dict, agent: str, submission: dict) -> bool:
 def ended_by(view: SampleView, agent: str, rules: dict | None, submission: dict | None,
              failure: str | None) -> str | None:
     """How the agent's episode ended, from the store records: its own act or a turn rule (TurnState.ended: stop_working,
-    its own submit in solo_task, delivered, cap, context), else the sample's limit or error, else the accepted
+    its own submit, alert, delivered, cap, context), else the sample's limit or error, else the accepted
     submission that ended the run (TeamSubmission: "submit" for the agent that handed in, "teammate_submit" for the
     others whose window outlasted it), else "end": the plan ran out or the agent's window of rounds closed. An agent
     that handed in the team's work and then stopped reads "submit": its stop is not a shutdown. None for a log without

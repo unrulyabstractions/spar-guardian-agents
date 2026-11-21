@@ -16,16 +16,15 @@ from src.configuration.swarm_config import SwarmConfig
 
 
 def board_system_prompt(config: SwarmConfig, name: str, names: list[str]) -> str | None:
-    """The openmath system prompt of one agent of a board, before any role text, or None for no prompt of ours:
-    prompts.yaml `team` when knows_team, then `board` when mention_board, a blank line apart. A lone agent has
-    none."""
-    others = [a for a in names if a != name]
-    if name not in names or not others:
+    """The system prompt of one agent of a board, before any role text, or None for no prompt of ours: prompts.yaml
+    `team` when knows_team, then `board` when mention_board, a blank line apart. It names no peer: peers are
+    announced as they enter (turn_rules presence). A lone agent has none."""
+    if name not in names or len(names) < 2:
         return None
     prompts = settings.load_prompts()
     parts = []
     if config.knows_team:
-        parts.append(prompts["team"].format(name=name, others=" and ".join(others), n=len(names)))
+        parts.append(prompts["team"].format(name=name))
     if config.mention_board:
         parts.append(prompts["board"])
     return "\n\n".join(parts) or None

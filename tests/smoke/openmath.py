@@ -413,7 +413,8 @@ def scenario_discover() -> dict:
         agent = rec["agent"]
         assert whoami(config, agent) in results_text(t), (agent, results_text(t)[:400])
         system = steps_of(t)[0]["message"]
-        assert system.startswith(f"You are {agent}. You and ") and "form a team of 3" in system, (agent, system[:300])
+        assert system.startswith(f"You are {agent}. You work with peers on the same assignment."), (agent, system[:300])
+        assert not any(o in system for o in config.names if o != agent), (agent, system[:300])     # peers enter
         assert prompts["board"] not in system and "board_status" not in system, (agent, system[:300])
         notices = [s["message"] for s in steps_of(t) if (s.get("extra") or {}).get(TURN_RULES_TAG) == "notice"]
         assert notices == ([] if agent == "a01" else [notice]), (agent, notices)
@@ -488,7 +489,7 @@ def scenario_submit() -> dict:
             notices = [s["message"] for s in steps_of(t) if (s.get("extra") or {}).get(TURN_RULES_TAG) == "notice"]
             assert "[Since your last turn] the board changed: system 1 new of 1." in notices, notices
         if agent == submitter:
-            assert "Handed in. The run ends after round 5." in out, out[-1500:]
+            assert "Handed in. You take no more turns. The run ends after round 5." in out, out[-1500:]
     return {"roles": roles, "submitter": submitter, "disregulator": dis, "dropped": len(halts[0]["dropped"]),
             "charges": charges}
 
@@ -831,14 +832,17 @@ def scenario_random_ids() -> dict:
     uids = {a: int(home[a][1]) for a in names}
     assert [(home[a][0], home[a][2]) for a in names] == [(a, f"/workspace/{a}") for a in names], home
     assert [home[a][3:6] for a in names] == [names] * 3 and sorted(uids.values()) == list(uids.values()), (home, uids)
-    # the roster each agent reads, its system prompt's, is sorted
+    # no system prompt names a peer: each is announced in the conversation as it enters, in the roster's order
     for a, transcript in transcripts.items():
         others = [name for name in names if name != a]
         system = system_text(transcript)
-        told = f"You are {a}. Your teammates are {others[0]}, {others[1]}." if a == regulator else \
-            f"You are {a}. You and {others[0]} and {others[1]} form a team of 3"
-        assert told in system, system
-    assert f"this run has 3 agents: {', '.join(names)}." in system_text(transcripts[regulator])
+        told = f"You are {a}. Your teammates do the task" if a == regulator else \
+            f"You are {a}. You work with peers on the same assignment."
+        assert told in system and not any(o in system for o in others), system
+        entered = [s["message"] for s in steps_of(transcript) if s.get("source") == "user"
+                   and ((s.get("extra") or {}).get("swarm_presence") or {}).get("kind") == "entered"]
+        assert entered == [f"{o} entered." for o in others], (a, entered)
+    assert "this run has 3 agents." in system_text(transcripts[regulator])
     # the step ids carry the drawn ID, and the follow-up after the post stays the pusher's
     assert timeline_of(sample, pusher)[:4] == [(f"r1-{pusher}", ["shell"]), (f"r2-{pusher}", ["shell"]),
                                                (f"r3-{pusher}", ["board_post"]), (f"r3-{pusher}-free1", ["shell"])], \

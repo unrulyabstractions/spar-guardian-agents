@@ -18,6 +18,7 @@ from orbit.configs.scheduling import ScheduleConfig
 
 from src.configuration.swarm_config import INFLUENCERS, SwarmConfig, Window, role_of
 from src.swarm.turn_rules import turn_activation
+from src.swarm.turn_rules._turn_presence import entry_rounds
 from src.swarm.turn_rules._turn_state import PREDICATE, Delivered, TurnState
 from src.swarm.turn_rules._turn_steps import concurrent_step, round_order, single_step, step_id
 
@@ -41,9 +42,9 @@ def free_caps(config: SwarmConfig, agents: list[str], roles: dict[str, str] | No
             for a in agents}
 
 
-def schedule(config: SwarmConfig, agents: list[str], roles: dict[str, str] | None = None) -> ScheduleConfig:
-    """config.working_steps rounds over the agents whose window holds the round: the turn budget per agent, or
-    steps_per_agent without a budget.
+def plan_steps(config: SwarmConfig, agents: list[str], roles: dict[str, str] | None = None) -> list[dict[str, Any]]:
+    """The written plan's steps: config.working_steps rounds over the agents whose window holds the round, the turn
+    budget per agent, or steps_per_agent without a budget.
 
     A round is one concurrent step `r<r>` (concurrent_rounds) or one single-agent step `r<r>-<agent>` per agent.
     Follow-up steps are not written here: after_activation inserts them."""
@@ -57,11 +58,18 @@ def schedule(config: SwarmConfig, agents: list[str], roles: dict[str, str] | Non
             steps += [concurrent_step(step_id(round_number), eligible, config.max_concurrency)] if eligible else []
         else:
             steps += [single_step(step_id(round_number, agent), agent) for agent in eligible]
-    return ScheduleConfig(steps=steps, after_activation=f"{turn_activation.__name__}.after_activation")
+    return steps
+
+
+def schedule(config: SwarmConfig, agents: list[str], roles: dict[str, str] | None = None) -> ScheduleConfig:
+    """The written plan (plan_steps) with after_activation as ORBIT's callback."""
+    return ScheduleConfig(steps=plan_steps(config, agents, roles),
+                          after_activation=f"{turn_activation.__name__}.after_activation")
 
 
 def initial_state(config: SwarmConfig, agents: list[str], roles: dict[str, str] | None = None) -> dict:
-    """The TurnState fields a sample starts with. cap and rounds are config.working_steps."""
+    """The TurnState fields a sample starts with. cap and rounds are config.working_steps; entry_rounds come from the
+    written plan (_turn_presence.entry_rounds)."""
     return {"agents": list(agents), "workers": [a for a in agents if role_of(roles, a) == "worker"],
             "cap": config.working_steps,
             "pooled": config.pooled_steps, "turn_order": config.turn_order, "seed": config.seed,
@@ -70,7 +78,8 @@ def initial_state(config: SwarmConfig, agents: list[str], roles: dict[str, str] 
             "reads_per_turn": config.reads_per_turn, "posts_per_turn": config.posts_per_turn,
             "turn_budget": config.turn_budget,
             "rounds": config.working_steps,
-            "windows": {a: [w.start, w.end] for a, w in windows(config, agents, roles).items()}}
+            "windows": {a: [w.start, w.end] for a, w in windows(config, agents, roles).items()},
+            "entry_rounds": entry_rounds(plan_steps(config, agents, roles))}
 
 
 def team_delivery(config: SwarmConfig, agents: list[str]) -> bool:

@@ -32,7 +32,9 @@ ladders and cheating_rungs (src/measures/cheating_ladder.py) are the readers of 
 record is refused, never computed, since every run's record holds them. What a rung rests on (the clauses, the pairs,
 the scores) is computed in memory from the run's files by each ladder's own run_<ladder>, which the viewer and the
 paper call. In a run with an access log the team row's `access_log` key holds where the log and the parser disagree,
-and cheating_rung_without_log, the team's Cheating rung with no log.
+and cheating_rung_without_log, the team's Cheating rung with no log. In a run whose influencers called alert_humans
+the team row holds alert_outcomes (each alert, true or false alarm, src/measures/alert_outcomes.py) and the counts
+alerts, true_alarms and false_alarms.
 
 signals_table counts the agents' Cheating rungs per run, those that cheated (cheating_ladder.cheated) and, where
 CheatBench's judge ran (src/judging/verdict_files.py episode_verdicts), the parsed verdicts and the judge's own
@@ -48,6 +50,7 @@ from pathlib import Path
 
 from src.judging import verdict_files
 from src.measures import coordination
+from src.measures.alert_outcomes import alert_counts, alert_outcomes
 from src.measures.cheating_ladder import cheated, cheating, cheating_rungs, scanned_run, team_without_log
 from src.measures.cheating_ladder import record_fields as cheating_fields
 from src.measures.collusion import AGENT_FIELDS as COLLUSION_FIELDS
@@ -86,6 +89,9 @@ def signal_rows(run_dir: Path) -> tuple[RunDir, list[dict], dict | None]:
         team.update(**team_cheating, **team_coordination, **team_collusion)
         if log is not None:
             rung_alone(team, run, domain)
+        outcomes = alert_outcomes(run, result)
+        if outcomes:
+            team.update(alert_outcomes=outcomes, **alert_counts(outcomes))
     return run, rows, team
 
 

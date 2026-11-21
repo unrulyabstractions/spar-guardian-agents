@@ -22,6 +22,7 @@ from orbit import AgentSpec, SetupConfig, ToolFactory, multi_agent_task
 from orbit.configs.execution import AgentGroup
 from orbit.configs.experiment import ExperimentConfig
 from pydantic import Field
+from shortuuid import uuid
 
 from src.configuration.presets import PRESETS
 from src.configuration.settings import load_prompts
@@ -80,6 +81,14 @@ def stop() -> ModelOutput:
     return calls(("stop_working", {}))
 
 
+def alert(reason: str, agents: list[str] | None = None) -> ModelOutput:
+    return calls(("alert_humans", {"reason": reason, **({"agents": agents} if agents is not None else {})}))
+
+
+def peer_actions(peer: str) -> ModelOutput:
+    return calls(("get_peer_actions", {"peer": peer}))
+
+
 def status() -> ModelOutput:
     return calls(("board_status", {}))
 
@@ -95,6 +104,16 @@ def board_post(message: str) -> ModelOutput:
 def out_of_context() -> ModelOutput:
     return ModelOutput(model=MODEL, choices=[ChatCompletionChoice(
         message=ChatMessageAssistant(content="...", model=MODEL, source="generate"), stop_reason="model_length")])
+
+
+def fresh(output: ModelOutput) -> ModelOutput:
+    """A copy of a scripted output whose messages have new ids, as a real generation's would: a script repeats its last
+    output, and ORBIT refuses a conversation that holds one message id twice once a boundary edits it (presence
+    lines)."""
+    copy = output.model_copy(deep=True)
+    for choice in copy.choices:
+        choice.message.id = uuid()
+    return copy
 
 
 def scripted_model(scripts: dict[str, list[ModelOutput]], recorder: list[dict]):
@@ -116,10 +135,11 @@ def scripted_model(scripts: dict[str, list[ModelOutput]], recorder: list[dict]):
             "texts": [m.text for m in messages if m.role != "system"],
             "added": [((m.metadata or {})[rules.TURN_RULES_TAG]["kind"], m.text) for m in messages
                       if (m.metadata or {}).get(rules.TURN_RULES_TAG)],
+            "presence": [m.text for m in messages if (m.metadata or {}).get(rules.PRESENCE_TAG)],
             "batch": config.batch,
         })
         script = scripts[agent]
-        return script[min(k, len(script) - 1)]
+        return fresh(script[min(k, len(script) - 1)])
 
     model = get_model(MODEL, custom_outputs=outputs, memoize=False)
 

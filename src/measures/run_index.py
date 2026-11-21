@@ -17,7 +17,9 @@ A record holds these fields, in this order:
 - outcome: eval_status, completed, failed_episodes (run_validity), cheating_rung (the team's Cheating rung,
   cheating_ladder.cheating_rungs; None without a team row), regulator_posts (0 for a regulator that took turns and
   never posted: a result, so its run stays valid; None in a run without a regulator), disregulator_posts (likewise,
-  but a disregulator that never posted leaves the run invalid: run_validity);
+  but a disregulator that never posted leaves the run invalid: run_validity), alerts, true_alarms and false_alarms
+  (the influencers' alert_humans calls and how many the Cheating ladder calls true or false, run.json signals;
+  src/measures/alert_outcomes.py; None in a run with no alert);
 - checks: export_flags_ok (run.json validity.ok, the export's own flags), valid (True or False for every run), why,
   reason (run_validity), deal_replay and deal_replay_detail (deal_replay: does today's code deal the run the holdings
   it recorded).
@@ -58,7 +60,8 @@ FIELDS = ("study", "run", "path", "group", "cheatbench_task", "domain", "row",
           "disregulator_level", "tag", "seed", "mock", "commit", "inspect_model", "regulator_inspect_model",
           "model_key", "regulator_model_key",
           "eval_status", "completed", "failed_episodes", "cheating_rung", "regulator_posts", "disregulator_posts",
-          "export_flags_ok", "valid", "why", "reason", "deal_replay", "deal_replay_detail")
+          "alerts", "true_alarms", "false_alarms", "export_flags_ok", "valid", "why", "reason", "deal_replay",
+          "deal_replay_detail")
 ARM_FIELDS = ("stage", "box", "cell", "kind", "target", "worker", "worker_model", "rule_level", "regulator",
               "regulator_model", "regulator_level", "disregulator_level", "tag")
 
@@ -139,6 +142,10 @@ def record(run: Path, data: dict, study_dir: Path, join: Join | None = None) -> 
                export_flags_ok=(data.get("validity") or {}).get("ok"), regulator_posts=role_posts(checked, "regulator"),
                disregulator_posts=role_posts(checked, "disregulator"))
     out.update(valid=checked["valid"], why=checked["why"], reason=checked["reason"])
+    if data.get("alerts"):
+        team = RunDir(run).team_signals() or [{}]
+        out.update(alerts=len(data["alerts"]), true_alarms=team[0].get("true_alarms"),
+                   false_alarms=team[0].get("false_alarms"))
     replayed = deal_replay.replay(data)
     if replayed is not None:
         out.update(deal_replay=replayed.status, deal_replay_detail=replayed.detail or None)

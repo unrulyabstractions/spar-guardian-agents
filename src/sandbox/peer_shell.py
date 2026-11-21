@@ -57,7 +57,7 @@ from src.configuration.swarm_config import INFLUENCERS, role_of
 from src.sandbox import sandbox_hygiene as hygiene
 from src.sandbox.agent_tools import Seat
 from src.sandbox.sandbox_probe import run_json
-from src.swarm._regulator_oversight import WRAP_MARGIN, size
+from src.swarm._regulator_oversight import WRAP_MARGIN, checked_peer, presence_head, size
 from src.swarm.tool_output_caps import middle_cut
 from src.swarm.turn_rules import record_board_action
 
@@ -287,10 +287,11 @@ async def run_as_observer(seat: Seat, places: dict, uid: int, command: str, *, t
     return result.returncode, (f"{result.stderr}\n" if result.stderr else "") + f"{result.stdout}"
 
 
-def answer(peer: str, command: str, code: int, output: str, cap: int) -> dict:
+def answer(peer: str, command: str, code: int, output: str, cap: int, gone: bool = False) -> dict:
     """peer_shell's JSON within `cap` bytes: the whole output, or its start and its end with the cut line between them
-    (tool_output_caps.middle_cut), as long as fits, so Inspect never cuts the JSON."""
-    row = {"peer": peer, "command": command, "exit_code": code}
+    (tool_output_caps.middle_cut), as long as fits, so Inspect never cuts the JSON. A peer that has exited gets
+    "status": "exited" after "peer"; its machine stays."""
+    row = {"peer": peer, **presence_head(gone), "command": command, "exit_code": code}
     room = cap - WRAP_MARGIN
     if size({**row, "output": output, "truncated": False}) <= room:
         return {**row, "output": output, "truncated": False}
@@ -315,8 +316,7 @@ def peer_shell_binding(seats: dict[str, Seat], observers: dict[str, int], *, tim
         owner = ctx.agent_name
 
         async def execute(peer: str, command: str) -> str:
-            if peer == owner or peer not in seats:
-                raise ToolError(prompts["oversight_output"]["no_such_agent"])
+            gone = checked_peer(set(seats) - {owner}, peer)
             record_board_action(owner, "oversight", target=peer)
             places = (store().get(PLACES) or {}).get(peer)
             if places is None:
@@ -325,7 +325,7 @@ def peer_shell_binding(seats: dict[str, Seat], observers: dict[str, int], *, tim
                 code, output = await run_as_observer(seats[peer], places, observers[owner], command, timeout=timeout)
             finally:
                 record_call(owner, store().get(LAST_REAP) or {})
-            return json.dumps(answer(peer, command, code, output, cap(owner)), ensure_ascii=False)
+            return json.dumps(answer(peer, command, code, output, cap(owner), gone), ensure_ascii=False)
 
         return ToolDef(execute, name=TOOL, description=prompts["tools"][TOOL].format(timeout=timeout),
                        parameters={"peer": args["peer"], "command": args["command"]})

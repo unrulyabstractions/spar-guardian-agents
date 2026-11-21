@@ -15,7 +15,8 @@ DOMAINS = sorted(REGISTRY)      # instruction_levels.yaml's benchmark keys are t
 def test_role_briefing():
     c = with_overrides(PRESETS["default"], ["regulators=1"])
     text = role_briefing(c, c.names)
-    assert "3 agents: a01, a02, a03" in text and "board_status, board_read and board_post" in text
+    assert "this run has 3 agents. They share" in text and "board_status, board_read and board_post" in text
+    assert not any(name in text for name in c.names)            # no roster: peers are announced as they enter
     assert text.endswith("told about the team and nothing about the board. Agents without a role hold submit, which "
                          "hands in the team's work and ends the run 2 rounds after the round of the call.")
     assert role_briefing(with_overrides(c, ["submit_delay_rounds=0"]), c.names).endswith(

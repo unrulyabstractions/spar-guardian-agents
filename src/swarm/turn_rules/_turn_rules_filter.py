@@ -5,8 +5,10 @@ paragraph from the system message (provider_system_text), withholds ORBIT's chan
 notice when the board changed, and appends the continue prompt when the input would end with a model turn. Everything
 it adds stays in place on every later call (TurnState.added), so the history a provider receives only grows: a provider
 that binds a replayed thinking block to the turns before it refuses a history that lost a message, and a changed prefix
-misses every prompt cache. The defense that carries it also shows team_submit to the model as submit (shown_as_submit).
-turn_rules_defense builds the DefenseConfig that installs both on every agent.
+misses every prompt cache. The defense that carries it also shows team_submit to the model as submit (shown_as_submit)
+and is the one part of the turn rules that writes the durable conversation: before each activation it appends the
+presence lines due to the activated member (apply_pre_turn, _turn_presence.deliver). turn_rules_defense builds the
+DefenseConfig that installs all of it on every agent.
 
 Inspect writes the ModelEvent before ORBIT's model filters run (FilteredModelAPI sits under Inspect's
 Model.generate), so ModelEvent.input keeps the paragraph and lacks what the filter adds, and ModelEvent.tools
@@ -31,6 +33,7 @@ from orbit.defenses.registry import register_defense
 
 from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import SwarmConfig
+from src.swarm.turn_rules._turn_presence import deliver
 from src.swarm.turn_rules._turn_state import BOARD_ID, CHANNEL_TOOLS, SUBMIT, TEAM_SUBMIT, TURN_RULES_TAG, TurnState
 
 TURN_RULES_TYPE = "swarm.turn_rules.v1"
@@ -189,7 +192,8 @@ class TurnRulesFilter(ModelFilter):
 
 
 class TurnRulesDefense(DefenseBase):
-    """Passive defense that carries TurnRulesFilter. It allows every message and tool call."""
+    """Passive defense that carries TurnRulesFilter and delivers the presence lines. It allows every message and tool
+    call."""
 
     def __init__(self, config: DefenseConfig) -> None:
         super().__init__(config)
@@ -204,6 +208,17 @@ class TurnRulesDefense(DefenseBase):
         return dict.fromkeys(agent_names, shown_as_submit)
 
     async def apply_pre_deployment(self, agents, state) -> None:
+        return None
+
+    async def apply_pre_turn(self, state, turn, agent_states=None) -> None:
+        """The presence lines due to the activated member, appended to its editable state (_turn_presence.deliver).
+        ORBIT's swarm executor calls this once per activation, at the member's defense boundary, with that member
+        alone, and commits the edit into its conversation. A call with any other number of states (another executor)
+        changes nothing."""
+        if agent_states is None or len(agent_states) != 1:
+            return None
+        [(name, conversation)] = agent_states.items()
+        deliver(name, conversation)
         return None
 
     async def monitor_message(self, message, agent_name, turn) -> DefenseVerdict:

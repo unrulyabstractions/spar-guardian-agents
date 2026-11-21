@@ -27,8 +27,12 @@ regulator_discloses is on, roles.regulator_no_disclosure. The check is an instru
 checked_in_time records whether it happened.
 
 With informed_roles on, a regulator or disregulator also gets the briefing (prompts.yaml `roles.briefing`, built by
-role_briefing) after its role text: the swarm's size and roster, the board and its tools, what the agents without a
-role were told, and that they hold submit. Workers never get it.
+role_briefing) after its role text: the swarm's size, the board and its tools, what the agents without a role were
+told, and that they hold submit. Workers never get it. No system prompt names a peer: every agent hears of each peer
+as it enters (src/swarm/turn_rules/_turn_presence.py).
+
+Both influencers also hold alert_humans (src/swarm/submit_and_stop.py), which records an alert and ends the caller's
+own turns.
 """
 from __future__ import annotations
 
@@ -90,15 +94,15 @@ def role_text(role: str, config: SwarmConfig, benchmark_name: str) -> str | None
 
 def role_briefing(config: SwarmConfig, names: list[str]) -> str | None:
     """prompts.yaml roles.briefing for a regulator or disregulator, or None when informed_roles is off or there is no
-    board. It says the swarm's size and roster, names the board's tools, says what agents without a role were told
-    (roles.workers_told) and, when they hold submit, what it does and when a team's run then ends (roles.submit_held,
-    submit_ends). Workers never get it."""
+    board. It says the swarm's size and names no agent, names the board's tools, says what agents without a role were
+    told (roles.workers_told) and, when they hold submit, what it does and when a team's run then ends
+    (roles.submit_held, submit_ends). Workers never get it."""
     if not config.informed_roles or not config.board:
         return None
     roles = load_prompts()["roles"]
     told = {(False, False): "nothing", (True, False): "team", (False, True): "board", (True, True): "both"}
     tools = ", ".join(BOARD_TOOLS[:-1]) + " and " + BOARD_TOOLS[-1]
-    text = roles["briefing"].format(n=len(names), roster=", ".join(names), tools=tools,
+    text = roles["briefing"].format(n=len(names), tools=tools,
                                     told=roles["workers_told"][told[config.knows_team, config.mention_board]])
     if not config.gives_submit:
         return text
@@ -117,11 +121,11 @@ def role_prompt(role: str, config: SwarmConfig, benchmark_name: str, names: list
 
 
 def oversight_prompt(name: str, names: list[str], added: str | None, note: str | None = None) -> str:
-    """A regulator's whole system prompt, a blank line apart: prompts.yaml roles.regulator_opening, the domain's note on
-    who holds what (Benchmark.access_note), what its role adds (role_prompt) and what a round is (rounds.told)."""
+    """A regulator's whole system prompt, a blank line apart: prompts.yaml roles.regulator_opening, which names no peer,
+    the domain's note on who holds what (Benchmark.access_note), what its role adds (role_prompt) and what a round is
+    (rounds.told)."""
     prompts = load_prompts()
-    others = ", ".join(a for a in names if a != name)
-    opening = prompts["roles"]["regulator_opening"].format(name=name, others=others)
+    opening = prompts["roles"]["regulator_opening"].format(name=name)
     return "\n\n".join(filter(None, [opening, note, added, prompts["rounds"]["told"]]))
 
 
