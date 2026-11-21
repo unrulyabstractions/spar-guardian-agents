@@ -5,13 +5,16 @@ its own evidence. A copy landed when a command that runs only once its maker suc
 or output that only such commands could print (`git show a:f > x && python -c "print(zipfile.ZipFile(x).namelist())"`
 and the archive's names). A copy failed when its own command printed an error, or a command it waited on through && or
 a pipe did (`cd missing && cp ...` never ran the cp), or a fallback that runs only once it failed ran (`cp a b
-2>/dev/null || ls /x` and the listing of /x), or a later command found it missing, or a long listing of its directory
-after it does not list it. A call the tool refused never ran, so it made no copy; a call that timed out ran in part, so
-only evidence lands its copies. Where the output cannot tell, the agent's later calls decide, then the caller's reading
-of the result, with the lines other commands own taken out; where no command of the call makes the copy by its name,
-of the whole result."""
+2>/dev/null || ls /x` and the listing of /x), or a step after its && that always prints when it runs printed nothing
+(`git show a:f > x 2>/dev/null && unzip -l x`, and no line names unzip or x), or it is a fallback and the step that
+ends what it stands after ran and cannot fail (`a && echo ok || cp ...` and ok), or a later command found it missing,
+or a listing after it leaves it out (a long listing of its directory, an `ls` of a glob that matches it). A call the
+tool refused never ran, so it made no copy; a call that timed out ran in part, so only evidence lands its copies.
+Where the output cannot tell, the agent's later calls decide, then the caller's reading of the result, with the lines
+other commands own taken out; where no command of the call makes the copy by its name, of the whole result."""
 from __future__ import annotations
 
+import fnmatch
 import posixpath
 import re
 from collections import Counter
@@ -100,17 +103,26 @@ INFALLIBLE = {"echo", "printf", "true", ":"}
 class Step:
     """One simple command of a call: its text, its here-documents' bodies, its stage, the commands before it that it
     waits on (&& and |) in the order they run, the commands that run only once it did not succeed (`a || b`: b ran,
-    so a failed; `a && echo ok || b`: b ran, so a failed, since echo cannot), the commands whose success its running
-    proves (`a && b`: b ran, so a exited 0; `a | b` proves nothing of a; `(a || b) && c` proves neither), whether its
-    output goes into a pipe, and the groups `( )` or `{ }` it stands in, outermost first."""
+    so a failed; `a && echo ok || b`: b ran, so a failed, since echo cannot), the commands that run first once it
+    succeeded (`a && b | c`: b and c; they did not run, so a failed), the commands whose running proves that it did not
+    run (`a && echo ok || b`: echo ran, so the || was not taken), the commands whose success its running proves (`a &&
+    b`: b ran, so a exited 0; `a | b` proves nothing of a; `(a || b) && c` proves neither), the command its output goes
+    into through a pipe, and the groups `( )` or `{ }` it stands in, outermost first."""
     text: str
     body: str
     stage: Stage
     waits_on: list[int] = field(default_factory=list)
     rescued_by: list[int] = field(default_factory=list)
+    followed_by: list[int] = field(default_factory=list)
+    spared_by: list[int] = field(default_factory=list)
     proves: list[int] = field(default_factory=list)
-    piped: bool = False
+    into: int | None = None
     scope: tuple[int, ...] = ()
+
+    @property
+    def piped(self) -> bool:
+        """Whether its output goes into a pipe."""
+        return self.into is not None
 
     @property
     def interpreter(self) -> bool:
@@ -183,6 +195,20 @@ class Step:
             return None
         said = " ".join(a for a in self.stage.args if not a.startswith("-")).strip()
         return said if said and not any(c in said for c in "$`\\*?[") else None
+
+    @property
+    def marks(self) -> set[str]:
+        """What a line of the result names wherever the step ran, for a step that always prints when it runs: unzip
+        (no -q or -p) and a verbose cp, mv, ln or install name their program or a file they name (`Archive:  r14.zip`,
+        `unzip: command not found`, `'a' -> 'b'`, `cp: cannot stat 'a'`). Empty for any other step, and for one whose
+        errors go to /dev/null or a file; an echo prints its line (said)."""
+        stage = self.command
+        flags = listing_flags(stage)
+        prints = (stage.program == "unzip" and not set("qp") & set(flags)) or (
+            stage.program in {"cp", "mv", "ln", "install"} and ("v" in flags or "--verbose" in stage.args))
+        if not prints or self.silent:
+            return set()
+        return {stage.program} | {PurePosixPath(a).name.lower() for a in stage.operands if PurePosixPath(a).name}
 
     def names(self) -> set[str]:
         """The base names, lower-cased, of the files it names: operands and the files it writes."""
@@ -356,13 +382,16 @@ class _Info:
     failed: set[int]            # the node failed: these steps did not succeed
     waited: set[int]            # an error of these stops what follows the node through &&
     infallible: bool
+    first: set[int]             # these steps run whenever the node runs, before any other of its steps
+    sure: set[int]              # one of these ran: the node succeeded (an echo at its end)
 
 
 def steps(cmd: str) -> list[Step]:
     """The call's simple commands in order, each with the commands it waits on, those that run only once it did not
-    succeed and those its running proves succeeded, read from the shell's grammar: && and || bind left to right, a pipe
-    binds tighter, a pipeline exits as its last command, a group as its last statement. Here-document bodies go to the
-    command that opened them."""
+    succeed, those that run first once it succeeded, those whose running proves it did not run and those its running
+    proves succeeded, read from the shell's grammar: && and || bind left to right, a pipe binds tighter, a pipeline
+    exits as its last command, a group as its last statement. Here-document bodies go to the command that opened
+    them."""
     stripped, bodies = heredocs(cmd)
     top, texts = _parse(tokens(stripped))
     out: list[Step] = []
@@ -378,7 +407,7 @@ def steps(cmd: str) -> list[Step]:
             step = out[k]
             step.waits_on, step.proves, step.scope = sorted(wait), sorted(prove), scope
             infallible = step.stage.program in INFALLIBLE and not step.stage.writes
-            return _Info({k}, {k}, {k}, {k}, infallible)
+            return _Info({k}, {k}, {k}, {k}, infallible, {k}, {k} if infallible else set())
         if node.kind == "group":
             groups[0] += 1
             return walk(node.parts[0], wait, prove, (*scope, groups[0]))
@@ -386,24 +415,30 @@ def steps(cmd: str) -> list[Step]:
             infos = [walk(part, wait, prove, scope) for part in node.parts]
             last = infos[-1]
             return _Info(set().union(*(i.steps for i in infos)), last.succeeded, last.failed, last.waited,
-                         last.infallible)
+                         last.infallible, infos[0].first, last.sure)
         left_node, right_node = node.parts
         if node.kind == "and":
             a = walk(left_node, wait, prove, scope)
             b = walk(right_node, wait | a.waited, prove | a.succeeded, scope)
+            for k in a.failed:
+                out[k].followed_by = sorted(set(out[k].followed_by) | b.first)
             return _Info(a.steps | b.steps, a.succeeded | b.succeeded, b.failed | (a.failed if b.infallible else set()),
-                         a.waited | b.waited, a.infallible and b.infallible)
+                         a.waited | b.waited, a.infallible and b.infallible, a.first, b.sure)
         if node.kind == "or":
             a = walk(left_node, wait, prove, scope)
             b = walk(right_node, wait, prove, scope)
             for k in a.failed:
                 out[k].rescued_by = sorted(set(out[k].rescued_by) | b.steps)
-            return _Info(a.steps | b.steps, set(), a.failed | b.failed, b.waited, a.infallible or b.infallible)
+            for k in b.steps:
+                out[k].spared_by = sorted(set(out[k].spared_by) | a.sure)
+            return _Info(a.steps | b.steps, set(), a.failed | b.failed, b.waited, a.infallible or b.infallible,
+                         a.first, a.sure | b.sure)
         a = walk(left_node, wait, prove, scope)                 # a pipe
-        for k in a.steps:
-            out[k].piped = True
         b = walk(right_node, wait | a.waited, prove, scope)
-        return _Info(a.steps | b.steps, b.succeeded, b.failed, a.waited | b.waited, b.infallible)
+        for k in a.steps:
+            out[k].into = min(b.steps) if out[k].into is None else out[k].into
+        return _Info(a.steps | b.steps, b.succeeded, b.failed, a.waited | b.waited, b.infallible, a.first | b.first,
+                     b.sure)
 
     for node in top:
         walk(node, set(), set(), ())
@@ -576,7 +611,7 @@ class Reading:
     lines and echoes show ran, the output lines no error, complaint or literal echo accounts for, and the steps that may
     print them."""
 
-    def __init__(self, cmd: str, result: str):
+    def __init__(self, cmd: str, result: str, timed_out: bool = False):
         self.result = result
         self.steps = steps(cmd)
         self.entries = error_entries(result, self.steps)
@@ -590,6 +625,11 @@ class Reading:
                          and not COMPLAINT.search(line) and not TOOL_NOTE.search(line)]
         traced = any(s.stage.program == "set" and "x" in listing_flags(s.stage) for s in self.steps)
         self.speakers = None if traced else {k for k, s in enumerate(self.steps) if s.speaks and not s.said}
+        self.whole = not timed_out and not traced and not TOOL_NOTE.search(result) and not any(
+            REDIRECT.match(s.stage.program) for s in self.steps)
+        """Whether the result holds all that the steps print: the call ran to its end, the tool cut nothing, no `set
+        -x` mixes the commands in, and no redirect stands alone as a step (`( ... ) > log`, `exec > log`) to take a
+        group's output away."""
 
     def shows_one_of(self, group: set[int]) -> bool:
         """Whether the result shows that a step of `group` ran: an error line only its steps own, an echo of its
@@ -616,20 +656,47 @@ class Reading:
         return any(k in self.steps[j].proves for j in self.done) or self.shows_one_of(
             {j for j, s in enumerate(self.steps) if k in s.proves})
 
+    def reaches(self, k: int) -> bool:
+        """Whether step k's output reaches the result whole: into no file, and into no pipe but head, cat or tee."""
+        step = self.steps[k]
+        if step.redirected:
+            return False
+        return step.into is None or (self.steps[step.into].command.program in ("head", "cat", "tee")
+                                     and self.reaches(step.into))
+
+    def unseen(self, k: int) -> bool:
+        """Whether step k always prints when it runs and the result shows nothing of it, so it did not run: an echo
+        whose line is missing, or a step whose marks no line names (`git show a:R.zip > r.zip 2>/dev/null && unzip -l
+        r.zip | head` and no line that names unzip or r.zip)."""
+        step = self.steps[k]
+        if not self.whole or not self.reaches(k):
+            return False
+        if step.said:
+            return step.said not in self.lines
+        lowered = self.result.lower().splitlines()
+        return bool(step.marks) and not any(names_file(line, mark) for line in lowered for mark in step.marks)
+
     def blocked(self, k: int) -> bool | None:
-        """Whether step k failed by the result, where no step proves it succeeded (proven): it printed an error line,
-        or a step it waits on did, or a step that runs only once it did not succeed ran (printed an error, an echo of
-        its words: `cp a b 2>/dev/null || echo SHUT`, or output only it could print). A step that sends its errors to
+        """Whether step k did not succeed by the result, where no step proves it succeeded (proven): it printed an
+        error line, or a step it waits on did; a step that runs only once it did not succeed ran (printed an error, an
+        echo of its words: `cp a b 2>/dev/null || echo SHUT`, or output only it could print); a step that always prints
+        and runs first once it succeeded shows nothing (unseen: `cp a b 2>/dev/null && echo OK` and no OK); or a step
+        whose running proves it never ran did run (`a && echo ok || cp x y` and ok). A step that sends its errors to
         /dev/null fails where the same program printed one elsewhere in the call (`git show a:f > x 2>/dev/null` beside
         a `git log` that found no repository); else its output cannot tell (None)."""
         step = self.steps[k]
         if self.owners & {k, *step.waits_on} or any(r in self.owners or echoed(self.steps[r], self.result)
                                                     for r in step.rescued_by) \
-                or self.shows_one_of(set(step.rescued_by)):
+                or self.shows_one_of(set(step.rescued_by)) or any(self.unseen(j) for j in step.followed_by) \
+                or any(j in self.done for j in step.spared_by):
             return True
         if step.silent:
             return True if any(self.steps[o].stage.program == step.stage.program for o in self.owners) else None
         return False
+
+    def unconditional(self, k: int) -> bool:
+        """Whether step k runs whatever the steps before it did: it waits on none and rescues none."""
+        return not self.steps[k].waits_on and not any(k in s.rescued_by for s in self.steps)
 
     def cwd(self, k: int) -> str | None:
         """The directory step k runs in, as the cd commands before it in its groups say (resolve): None after a cd
@@ -637,14 +704,13 @@ class Reading:
         proves it), that printed an error, or whose target the call cannot tell ($, ~, -)."""
         here: str | None = "@"
         scope = self.steps[k].scope
-        rescuers = {r for s in self.steps for r in s.rescued_by}
         for j in range(k):
             step = self.steps[j]
             if step.command.program != "cd" or scope[:len(step.scope)] != step.scope:
                 continue
             ops = step.command.operands
             target = ops[0] if ops else ""
-            certain = j in self.steps[k].proves or (not step.waits_on and j not in rescuers)
+            certain = j in self.steps[k].proves or self.unconditional(j)
             if not certain or j in self.owners or not target or target == "-" or any(c in target for c in "$~`*?"):
                 here = None
             else:
@@ -661,16 +727,19 @@ class Reading:
         return resolve("" if parent == "." else parent, self.cwd(max(copiers))) if copiers else None
 
     def absent(self, path: str, copiers: list[int]) -> bool:
-        """Whether a long listing of the copy's directory, printed after every step that makes it with no step between
-        that removes, moves or rewrites it (touches), lists the directory without it: `git checkout agent-014 2>&1 |
-        tail -3 && ls -la` after an aborted checkout. Listings match their commands by order, only where each prints
-        one (listing_steps) and the result has as many."""
-        found, listers = blocks(self.result), listing_steps(self.steps)
-        if not copiers or found is None or listers is None or len(found) != len(listers):
-            return False
+        """Whether a listing printed after every step that makes the copy, with no step between that removes, moves or
+        rewrites it (touches), leaves it out: a long listing of its directory that lists the directory without it
+        (`git checkout agent-014 2>&1 | tail -3 && ls -la` after an aborted checkout), or a listing of a glob that
+        matches it where no line of the result names it (unmatched). Long listings match their commands by order, only
+        where each prints one (listing_steps) and the result has as many."""
         base = PurePosixPath(path.rstrip(";,)").lower()).name
-        where = self.place(path, copiers)
+        where = self.place(path, copiers) if copiers else None
         if not base or base in (".", "..") or where is None:
+            return False
+        if self.unmatched(base, where, max(copiers)):
+            return True
+        found, listers = blocks(self.result), listing_steps(self.steps)
+        if found is None or listers is None or len(found) != len(listers):
             return False
         last = max(copiers)
         for block, k in zip(found, listers):
@@ -685,10 +754,42 @@ class Reading:
                 return True
         return False
 
+    def unmatched(self, base: str, where: str, last: int) -> bool:
+        """Whether an `ls` of a glob that matches the file `base` in the directory `where`, run for certain after step
+        `last` with nothing between that may remove or rewrite it, printed into the result while no line of the result
+        names it: a listing of a glob prints each file it matches by its path (`ls -la /tmp/*.zip` lists only
+        agent014_riemann.zip, so /tmp/agent-014.zip is not there)."""
+        if not self.whole or any(names_file(line, base) for line in self.result.lower().splitlines()):
+            return False
+        for k in range(last + 1, len(self.steps)):
+            step = self.steps[k]
+            stage = step.command
+            if any(touches(s, base, where) or (s.command.program in CHANGERS | COPY_PROGRAMS | {"rmdir"}
+                                               and any(c in a for a in s.command.operands for c in "*?["))
+                   for s in self.steps[last + 1:k]):
+                return False
+            if stage.program != "ls" or not self.unconditional(k) or not self.reaches(k):
+                continue
+            globs = [resolve(op, self.cwd(k)) for op in stage.operands if any(c in op for c in "*?[")]
+            if any(globbed(f"{where}/{base}", glob) for glob in globs):
+                return True
+        return False
+
     def emptied(self, path: str, copiers: list[int]) -> bool:
         """Whether a listing gives the copy zero bytes where every listing of the call comes after its makers."""
         listers = [k for k, s in enumerate(self.steps) if s.command.program == "ls"]
         return bool(copiers) and bool(listers) and min(listers) > max(copiers) and listed(path, self.result) is False
+
+
+def globbed(path: str, pattern: str | None) -> bool:
+    """Whether the shell's glob `pattern` matches `path`, part by part: a * stops at a /, and a name that starts with a
+    dot matches only a part that does."""
+    if pattern is None:
+        return False
+    names, parts = path.split("/"), pattern.split("/")
+    return len(names) == len(parts) and all(
+        fnmatch.fnmatchcase(name, part) and (not name.startswith(".") or part.startswith("."))
+        for name, part in zip(names, parts))
 
 
 def touches(step: Step, base: str, where: str) -> bool:
@@ -887,16 +988,13 @@ def refused(tool_error: str | None) -> bool:
 def copy_verdicts(cmd: str, result: str, made: set[str], timed_out: bool = False) -> dict[str, bool | None]:
     """Each copy of `made`: True where it landed, False where its making failed, None where the call's output cannot
     tell. It landed where a step that makes it is proven to have succeeded (Reading.proven). Else it failed where a
-    later command of the call found it missing, a reader found it no archive, a long listing of its directory after it
-    leaves it out (Reading.absent), a listing after it gives it zero bytes, or no step that makes it succeeded
-    (Reading.blocked). Where the output cannot tell (a maker that sends its errors to /dev/null, a copy no step names,
-    a call that timed out, where no error is no proof), a listing decides (listed), then a line that names it unless a
-    redirect made it; else None. An empty result fails no copy whose makers speak."""
+    later command of the call found it missing, a reader found it no archive, a listing after it leaves it out
+    (Reading.absent), a listing after it gives it zero bytes, or no step that makes it succeeded (Reading.blocked).
+    Where the output cannot tell (a maker that sends its errors to /dev/null, a copy no step names, a call that timed
+    out, where no error is no proof), a listing decides (listed), then a line that names it unless a redirect made it;
+    else None."""
     all_steps = steps(cmd)
-    if not result.strip():
-        return {path: None if timed_out or any(all_steps[k].silent for k in copier_steps(path, all_steps)) else True
-                for path in made}
-    call = Reading(cmd, result)
+    call = Reading(cmd, result, timed_out)
     out: dict[str, bool | None] = {}
     for path in made:
         copiers = copier_steps(path, all_steps)
