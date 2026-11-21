@@ -182,3 +182,83 @@ def test_a_call_missing_from_the_clock_keeps_the_time_of_the_step_before():
                     ": times[`${agent}:${k}`]));"
                     "console.log(JSON.stringify(t2.steps.map(s => s.t)));")
     assert got == [1, 2, 2, 5]
+
+
+@node
+def test_a_path_removed_earlier_stays_gone_with_the_call_that_removed_it():
+    got = run_state("console.log(JSON.stringify([2, 3, 4].map(c => Object.fromEntries(Object.entries("
+                    "S.goneAt(tl, c).default || {}).map(([p, g]) => [p, [g.by, g.entry.text ?? g.entry.type]])))));")
+    assert got[0] == {}
+    assert got[1] == {"/tmp/ref": [None, "ref"]}                      # removed between calls
+    assert got[2] == {"/tmp/ref": [None, "ref"], "/tmp/draft.md": [{"n": 6, "agent": "a1", "k": 3}, "v2"]}
+    rows = run_state("console.log(JSON.stringify(S.treeRows(tl.dirs, S.stateAt(tl, 4).default, {}, "
+                     "S.stateAt(tl, 4).default, S.goneAt(tl, 4).default).map(r => [r.path, r.gone])));")
+    assert ["/tmp/draft.md", {"by": {"n": 6, "agent": "a1", "k": 3}}] in rows
+    assert ["/tmp/ref", {"by": None}] in rows and ["/tmp/sub", None] in rows
+
+
+def entry_js(mode: str, owner: str, uid: int, group: str, gid: int, acl: list[str] | None = None,
+             kind: str = "file") -> dict:
+    return {"type": kind, "mode": mode, "owner": owner, "uid": uid, "group": group, "gid": gid,
+            **({"acl": acl} if acl else {})}
+
+
+USERS = {"s7m7z": {"uid": 1005, "gid": 1005, "groups": ["s7m7z", "team"]},
+         "s3x2j": {"uid": 1004, "gid": 1004, "groups": ["s3x2j", "team"]},
+         "m9x5t": {"uid": 1001, "gid": 1001, "groups": ["m9x5t", "team"]}}
+ACL_STATE = {
+    "/tmp": entry_js("drwxrwxrwt", "root", 0, "root", 0, kind="dir"),
+    "/tmp/ref": entry_js("drwxr-xr-x", "root", 0, "root", 0, kind="dir"),
+    # creative_setup.grant: root's rw-r-----, one reader by ACL
+    "/tmp/ref/part1": entry_js("-rw-r-----", "root", 0, "root", 0,
+                               ["user::rw-", "user:s7m7z:r--", "group::---", "mask::r--", "other::---"]),
+    "/tmp/ref/whole": entry_js("-rw-r-----", "root", 0, "root", 0),
+    # a named reader under a mask that withholds read
+    "/tmp/ref/masked": entry_js("-rw-------", "root", 0, "root", 0,
+                                ["user::rw-", "user:s3x2j:r--", "group::---", "mask::---", "other::---"]),
+    "/tmp/team.md": entry_js("-rw-r-----", "s7m7z", 1005, "team", 1000),
+    "/tmp/mine.md": entry_js("-rw-------", "s3x2j", 1004, "s3x2j", 1004),
+    "/tmp/open.md": entry_js("-rw-rw-r--", "s7m7z", 1005, "s7m7z", 1005),
+    "/tmp/shut": entry_js("drwx------", "s3x2j", 1004, "s3x2j", 1004, kind="dir"),
+    "/tmp/shut/in.md": entry_js("-rw-r--r--", "s3x2j", 1004, "s3x2j", 1004),
+    "/tmp/old": {"type": "file", "mode": "-rw-r--r--", "owner": "root", "uid": 0},   # schema 1: no gid
+}
+
+
+@node
+def test_readers_follow_the_owner_the_acl_under_its_mask_the_group_and_every_directory_above():
+    got = run_state(f"const st = {json.dumps(ACL_STATE)}; const users = {json.dumps(USERS)};"
+                    "console.log(JSON.stringify(Object.fromEntries(Object.keys(st).map(p => "
+                    "[p, S.readersOf(st, p, users)]))));")
+    assert got["/tmp/ref/part1"] == ["s7m7z"]
+    assert got["/tmp/ref/whole"] == []
+    assert got["/tmp/ref/masked"] == []
+    assert got["/tmp/team.md"] == ["m9x5t", "s3x2j", "s7m7z"]
+    assert got["/tmp/mine.md"] == ["s3x2j"]
+    assert got["/tmp/open.md"] == ["m9x5t", "s3x2j", "s7m7z"]
+    assert got["/tmp/shut/in.md"] == ["s3x2j"]          # 644, but under a 700 directory
+    assert got["/tmp/old"] == []
+    assert run_state("console.log(JSON.stringify(S.readersOf({}, '/tmp/x', {})));") == []
+
+
+@node
+def test_the_readers_are_the_machines_agents_and_an_equal_acl_is_no_change():
+    doc = {**DOC, "machines": {"default": ["a1"]},
+           "users": {"default": {"a1": {"uid": 1001, "gid": 1001, "groups": ["a1"]},
+                                 "user": {"uid": 1000, "gid": 1000, "groups": ["user"]}}}}
+    got = run_state(f"const t3 = S.tmpTimeline({json.dumps(doc)}, () => 0);"
+                    "const acl = ['user::rw-', 'mask::r--'];"
+                    "console.log(JSON.stringify([Object.keys(S.agentUsers(t3, 'default')), "
+                    "Object.keys(S.agentUsers({users: t3.users, agents: {}}, 'default')).sort(), "
+                    "S.sameEntry({type: 'file', acl}, {type: 'file', acl: [...acl]}), "
+                    "S.sameEntry({type: 'file', acl}, {type: 'file', acl: ['user::rw-']})]));")
+    assert got == [["a1"], ["a1", "user"], True, False]
+
+
+def test_the_panel_shows_readers_and_marks_an_acl_and_names_the_machine_apart_from_agents():
+    panel = (STATIC / "tv_tmp_panel.js").read_text()
+    assert "readersChip(readersOf(now, r.path, users), people)" in panel
+    assert "const modeText = e => (e.mode ? `${e.mode}${e.acl ? '+' : ''}` : '');" in panel
+    assert "'Temp dirs'" in panel and "'/tmp')" not in panel
+    assert "at this step" not in panel
+    assert "h('span', { class: 'tmp-machine-name' }, m)" in panel

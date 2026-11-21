@@ -2365,3 +2365,38 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   (the Task's config). openmath peer_shell smoke PASS; its run.json peer_shell block has observers, calls (the
   disregulator's reap killed 1) and acl_noticed {}. ruff clean, make paper-check agrees.
 - **Result.** VERIFIED.
+
+## 2026-11-20: tmp_snapshots.json records group, gid, ACL and users; the Temp dirs panel shows who can read each entry
+- **What.** src/replay/tmp_snapshots.py, schema 2: each entry adds `group`, `gid`, and `acl` / `default_acl` as getfacl
+  lines (decoded from the system.posix_acl_* xattrs, since the images have no getfacl), present only when set; `users`
+  holds each machine's login users (uid 1000 to nobody) with their groups, read as root before the machine's first
+  call. Viewer: tv_tmp_state.js gains readersOf/allows (acl(5)'s check, mask applied, search on every directory
+  above), agentUsers, goneAt (paths removed earlier), an array-safe sameEntry; tv_tmp_panel.js a readers column (chip:
+  `all`, `—`, or up to two names in the lanes' colours, then +n), `+` after a mode with an ACL, the ACL as the mode
+  chip's tooltip, a group chip and "read by" in the file head. The check's three smaller problems: removed paths stay
+  as faint `×` rows with the call that removed them (an `n removed` chip hides them); the tooltips say "since the
+  previous stop"; the title is "Temp dirs" and the machine reads `machine default`, not in the agent style.
+  DATA_AND_VIEWER.md and src/ui/API.md say so. Regenerated runs/study_exploration_1/
+  poem_minimal_regulated_disregulated_luna_haiku_enforce_persuade2/tmp_snapshots.json (32,403 bytes, sha256
+  ae3b7bfd...; the schema-1 file, e73d1d33..., kept in the scratchpad at wf4/acl/backup/).
+- **How verified.** Unit tests: test_tmp_snapshots.py 15 passed (group and gid on a local file; acl_lines decodes the
+  exact bytes creative_setup.grant writes into getfacl's five lines; an unknown id by number, a named group by name;
+  entry() reads both xattrs without following links; the USERS script on this Mac; the recorder lists users once per
+  machine before its first call). test_transcript_viewer_tmp.py 14 passed in node (readers: grant's ACL, no ACL, a mask
+  that withholds read, group, owner-only, world, a 644 file under a 700 directory, schema 1; goneAt with and without a
+  call; agentUsers; an equal ACL array is no change). 127 passed across the board and viewer tests; ruff clean. One
+  Docker replay (`--force`, 91% free memory; another workflow's tcase_case00 was up): faithful, end state equal, 122
+  calls, 39 in a machine; match exact 25, masked 9, differs 5 against the stored 25/8/6: only n122 (p6n8j's grading
+  call, the random log name noted 2026-11-20) moved from differs to masked. I decoded both files: with mtime and the new
+  keys left out, all 39 steps' before and after are equal to the schema-1 file, and n, agent, k and call_id are equal on
+  all 122 steps. Only tmp_snapshots.json changed in the run folder (shasum -c on the other 23 files). The end state's
+  ACLs: part1of3 `user:s7m7z:r--`, part2of3 `user:s3x2j:r--`, part3of3 `user:p7z5j:r--`, each with mask r-- and
+  group/other ---; candidate_8f45914f.md has none. readersOf on that state gives s7m7z, s3x2j and p7z5j, equal to
+  run.json creative.planted, and no agent for the whole reference. Viewer on port 8833 over a scratch runs folder
+  linking only this run; /api/tmp's sha256 equals the new file's. Headless Chrome (CDP 9352), a=s7m7z b=s3x2j, time
+  clock; I viewed the PNGs: pos 200 (part1 opened: `-rw-r-----+`, read by s7m7z in teal; part2 s3x2j in orange; part3
+  p7z5j plain; the whole piece `—`; s7draft.md `~` by s7m7z call 10, readers `all`); pos 470 (s7draft.md as a faint `×`
+  row by s7m7z call 19, `1 removed` chip, its last 879-byte text opens with a `removed` chip). No page exceptions.
+  Server and Chrome stopped; port 8770 untouched.
+- **Result.** VERIFIED for this run. UNVERIFIED: runs with several machines (SWE, protein) and the light scheme with
+  the new column; the other runs have no tmp_snapshots.json.

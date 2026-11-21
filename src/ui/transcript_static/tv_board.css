@@ -196,22 +196,30 @@
 .bd-post .bd-text { margin: 8px 0 0; }
 .bd-judged { margin-top: 8px; }
 
-/* the /tmp panel (tv_tmp_panel.js): each machine's tree beside the selected file's text; an entry changed at the
-   position's step takes the change's colour and mark */
+/* the temp dirs panel (tv_tmp_panel.js): each machine's tree beside the selected file's text; an entry changed since
+   the previous stop takes the change's colour and mark, a path removed earlier is faint; a readers column when the
+   file names the machine's users */
 .bd-tmp .tmp-head { display: flex; align-items: center; gap: 10px; }
 .tmp-counts { display: inline-flex; gap: 6px; }
 .bd-count.tmp-c-added { color: var(--good); border-color: var(--good); background: var(--good-bg); }
 .bd-count.tmp-c-changed { color: var(--warn); border-color: var(--warn); background: var(--warn-bg); }
 .bd-count.tmp-c-removed { color: var(--bad); border-color: var(--bad); background: var(--bad-bg); }
 .tmp-body { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 14px; margin-top: 14px; }
-.tmp-trees { flex: 0 1 640px; min-width: 360px; display: flex; flex-direction: column; gap: 12px; }
+.tmp-trees { flex: 0 1 760px; min-width: 360px; display: flex; flex-direction: column; gap: 12px; }
 .tmp-machine-box { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .tmp-mhead { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--panel-2);
   border-bottom: 1px solid var(--border); font-size: 12.5px; }
 .tmp-machine { font-family: var(--mono); }
+.tmp-machine-name { color: var(--text); font-weight: 600; }
+.tmp-gone-chip { cursor: pointer; font-family: inherit; line-height: inherit; background: none; }
+.tmp-gone-chip.tmp-off { opacity: 0.55; text-decoration: line-through; }
 .tmp-rows { max-height: 420px; overflow: auto; padding: 4px 0; font-size: 12px; }
 .tmp-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) 64px 72px 128px; align-items: center; gap: 0 8px;
   padding: 1px 10px 1px 6px; cursor: pointer; border-left: 3px solid transparent; }
+.tmp-has-readers .tmp-row { grid-template-columns: 16px minmax(0, 1fr) 64px 80px 72px 128px; }
+.tmp-readers { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tmp-readers .bd-count { font-size: 11px; }
+.tmp-readers-label { display: inline-flex; align-items: center; gap: 2px; }
 .tmp-row:hover { background: var(--hover); }
 .tmp-row.tmp-sel { box-shadow: inset 0 0 0 1.5px var(--text); }
 .tmp-mark { font-family: var(--mono); font-weight: 700; text-align: center; }
@@ -230,6 +238,9 @@
 .tmp-row.tmp-removed { background: var(--bad-bg); border-left-color: var(--bad); }
 .tmp-row.tmp-removed .tmp-mark { color: var(--bad); }
 .tmp-row.tmp-removed .tmp-name { text-decoration: line-through; color: var(--muted); }
+.tmp-row.tmp-gone { opacity: 0.55; }
+.tmp-row.tmp-gone .tmp-mark { color: var(--muted); }
+.tmp-row.tmp-gone .tmp-name { text-decoration: line-through; color: var(--muted); }
 .tmp-file { flex: 1 1 420px; min-width: 320px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .tmp-file[hidden] { display: none; }
 .tmp-fhead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 10px;

@@ -552,13 +552,17 @@ tool folded to its name.
 ### `GET /api/tmp?id=<id>` → the run's `tmp_snapshots.json`, streamed as stored
 The temporary directories (/tmp, /var/tmp, /dev/shm) of every machine of the run before and after every recorded
 call, as `src/replay/tmp_snapshots.py` wrote them by replay (its docstring and DATA_AND_VIEWER.md give the schema).
-404 when the run is not in the index or has no such file; `BoardTab.tmp` says which. The Board tab's /tmp panel
+404 when the run is not in the index or has no such file; `BoardTab.tmp` says which. The Board tab's Temp dirs panel
 (`tv_tmp_panel.js`, its state from `tv_tmp_state.js`) reads it only when `tmp` is true, and shows each machine's tree
 at the position: a step that ran is placed at its call's `t` on the board's clock (by `agent` and `k`), never before
 the step before it; a machine's state before its first call is that call's `before`. The entries a step added,
 changed or removed since the stop before the position are marked `+`, `~`, `−` with the call that changed them (a
-change between calls names none); a directory whose mtime or size alone changed is not marked. Each row gives the
-owner and a file's size; a directory folds on a click, and a file opens its text when the snapshot captured it.
+change between calls names none); a directory whose mtime or size alone changed is not marked. A path removed before
+that stays as a faint `×` row with the call that removed it, until it comes back; the machine's `n removed` chip hides
+those rows. Each row gives the owner, the agents who can read the entry and a file's size. The readers follow the
+entry's mode, group and POSIX ACL and need search on every directory above it (`readersOf`; schema 2 files only:
+`users` with `group`, `gid` and `acl`); `+` after a mode marks an ACL. A directory folds on a click, and a file opens
+its text when the snapshot captured it.
 ### `GET /api/ladders` → the ladders page's tables (`transcript_ladder_tables.ladders_payload`)
 `{domains, cheating, task_column, ladders, order, judge_labels, take_rules, collusion_by_task, left_out_tasks,
 readings}`.
