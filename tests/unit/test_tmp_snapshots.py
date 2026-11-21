@@ -2,12 +2,16 @@
 replayer, and the per-machine delta encoding with its decoding at any step."""
 from __future__ import annotations
 
+import grp
 import hashlib
 import json
 import os
+import pwd
+import struct
 import subprocess
 import sys
 
+from src.domains.creative.sandbox import creative_setup
 from src.replay import tmp_snapshots as ts
 from src.replay.recorded_calls import RecordedCall
 from src.replay.replay_sandbox import Exec
@@ -50,6 +54,72 @@ def test_the_listing_reads_every_entry_with_its_kind_mode_owner_hash_and_small_t
     assert "text" not in found[f"{root}/big.txt"] and "sha256" in found[f"{root}/big.txt"]
     assert "sha256" not in found[f"{root}/huge"] and found[f"{root}/huge"]["size"] == ts.HASH_MAX_BYTES + 1
     assert (found[f"{root}/ln"]["type"], found[f"{root}/ln"]["target"]) == ("link", "d/note.md")
+
+
+def test_the_listing_records_the_group_and_gid(tmp_path):
+    (tmp_path / "f").write_text("x")
+    got = run_listing(tmp_path)[f"{tmp_path}/f"]
+    gid = os.lstat(tmp_path / "f").st_gid
+    assert (got["gid"], got["group"]) == (gid, grp.getgrgid(gid).gr_name)
+    assert "acl" not in got and "default_acl" not in got
+
+
+def listing_lib() -> dict:
+    """The listing's functions, exec'd here (LISTING_LIB has no top-level effect)."""
+    space: dict = {}
+    exec(ts.LISTING_LIB, space)
+    return space
+
+
+def granted_acl(monkeypatch, uids) -> bytes:
+    """The xattr bytes creative_setup.grant writes for these readers."""
+    written = {}
+    monkeypatch.setattr(creative_setup.os, "setxattr", lambda path, name, value: written.update({name: value}),
+                        raising=False)
+    creative_setup.grant("/nowhere", uids)
+    return written[creative_setup.ACL_XATTR]
+
+
+def test_the_acl_reads_as_getfacl_prints_the_grant_creative_writing_gives(monkeypatch):
+    me = os.getuid()
+    lines = listing_lib()["acl_lines"](granted_acl(monkeypatch, [me]))
+    assert lines == ["user::rw-", f"user:{pwd.getpwuid(me).pw_name}:r--", "group::---", "mask::r--", "other::---"]
+
+
+def test_an_acl_names_an_unknown_id_by_number_and_a_named_group_by_name():
+    raw = b"\x02\x00\x00\x00" + b"".join(
+        struct.pack("<HHI", *e) for e in [(0x02, 7, 4242424), (0x08, 5, os.getgid()), (0x20, 1, 0)])
+    lines = listing_lib()["acl_lines"](raw)
+    assert lines == ["user:4242424:rwx", f"group:{grp.getgrgid(os.getgid()).gr_name}:r-x", "other::--x"]
+
+
+def test_the_listing_keeps_an_entrys_access_and_default_acl(tmp_path, monkeypatch):
+    raw = granted_acl(monkeypatch, [os.getuid()])
+    (tmp_path / "f").write_text("x")
+    lib = listing_lib()
+    seen = []
+
+    def getxattr(path, name, *, follow_symlinks=True):
+        seen.append((str(path), name, follow_symlinks))
+        if name == "system.posix_acl_access":
+            return raw
+        raise OSError(61, "No data available")
+    monkeypatch.setattr(os, "getxattr", getxattr, raising=False)
+    got = lib["entry"](str(tmp_path / "f"), ts.listing_spec())
+    assert got["acl"][1] == f"user:{pwd.getpwuid(os.getuid()).pw_name}:r--" and "default_acl" not in got
+    assert seen == [(str(tmp_path / "f"), "system.posix_acl_access", False),
+                    (str(tmp_path / "f"), "system.posix_acl_default", False)]
+
+
+def test_the_users_script_lists_login_users_with_their_groups():
+    me = os.getuid()
+    done = subprocess.run([sys.executable, "-I", "-c", ts.USERS], capture_output=True, text=True, check=True,
+                          input=json.dumps({"min_uid": me, "nobody_uid": me + 1}))
+    got = json.loads(done.stdout.strip().splitlines()[-1])
+    user = pwd.getpwuid(me)
+    assert list(got) == [user.pw_name]
+    assert got[user.pw_name]["uid"] == me and got[user.pw_name]["gid"] == user.pw_gid
+    assert grp.getgrgid(user.pw_gid).gr_name in got[user.pw_name]["groups"]
 
 
 def test_the_listing_skips_a_missing_root(tmp_path):
@@ -139,6 +209,9 @@ class FakeBox:
         self.inner, self.runs = inner, []
 
     def run(self, service, argv, *, stdin=None, timeout=None, user=None, workdir=None):
+        if argv[-1] == ts.USERS:
+            self.runs.append((service, user, "users"))
+            return Exec(0, json.dumps({"a": {"uid": 1001, "gid": 1001, "groups": ["a"]}}).encode(), b"", 0.1)
         self.runs.append((service, user, len(self.inner.log)))
         return Exec(0, json.dumps({"/tmp": entry(str(len(self.runs)))}).encode(), b"", 0.1)
 
@@ -149,8 +222,11 @@ def test_the_recorder_lists_the_calls_machine_around_the_call_as_root():
     box = FakeBox(inner)
     assert recorder.execute(box, CALLS[1]) == ("out", False)
     assert recorder.after(box, CALLS[1], "out")[0] == "out"
-    assert box.runs == [("default", "root", 0), ("default", "root", 2)]
-    assert recorder.taken[2] == {"machine": "default", "before": {"/tmp": entry("1")}, "after": {"/tmp": entry("2")}}
+    assert box.runs == [("default", "root", "users"), ("default", "root", 0), ("default", "root", 2)]
+    assert recorder.taken[2] == {"machine": "default", "before": {"/tmp": entry("2")}, "after": {"/tmp": entry("3")}}
+    assert recorder.users == {"default": {"a": {"uid": 1001, "gid": 1001, "groups": ["a"]}}}
+    recorder.execute(box, CALLS[2])
+    assert [r[2] for r in box.runs].count("users") == 1   # once per machine, before its first call
     assert recorder.services() == {"default": {"mem_limit": ts.MEMORY_LIMIT, "image": "x"},
                                    "review": {"mem_limit": ts.MEMORY_LIMIT, "image": "x"}}
     assert recorder.task == "fake" and recorder.in_sandbox(CALLS[1])

@@ -78,13 +78,14 @@ Without judge scores, the viewer shows "not judged" in the Judge labels columns.
 |---|---|
 | `dirs`, `hash_max_bytes`, `text_max_bytes` | the directories read, and the caps: sha256 for files up to 1 MiB, text for UTF-8 files up to 8 KiB with no NUL |
 | `machines` | each machine and its agents: one per agent in SWE and protein design, `default` for every agent in creative writing |
+| `users` | each machine's login users (uid 1000 up to nobody): `uid`, `gid` and `groups` by name, read before the machine's first call (schema 2) |
 | `replay` | the replay's verdict and match counts |
 | `steps` | every call in global order: `n`, `agent`, `k`, `call_id` (as in `steps.jsonl` and the viewer), `tool`, `match`, `machine`, `ran` |
 | `steps[].before`, `steps[].after` | on a call that ran in a machine: `before` against the state the machine was last left in (the whole state on its first call), `after` against `before`; a changed entry whole, a removed path as `null` |
 
-An entry is `{type, size, mode, owner, uid, mtime, sha256, text, target}`: type is file, dir, link, fifo, socket or other, mode as `ls` prints it, target for a link. A call with `"ran": false` changed nothing. The full state at a call is every `before` and `after` applied in order up to it, per machine (`decode` and `state_at` in `src/replay/tmp_snapshots.py`). Times are the replay's clock, not the run's.
+An entry is `{type, size, mode, owner, uid, group, gid, mtime, acl, default_acl, sha256, text, target}`: type is file, dir, link, fifo, socket or other, mode as `ls` prints it, target for a link. `acl` and `default_acl` are the POSIX ACL lines as `getfacl` prints them (`user:s7m7z:r--`), present only when the entry has one. In creative writing each reference piece is root's `-rw-r-----` and its holder reads it through `acl`. Schema 1 files have no `group`, `gid`, `acl` or `users`. A call with `"ran": false` changed nothing. The full state at a call is every `before` and `after` applied in order up to it, per machine (`decode` and `state_at` in `src/replay/tmp_snapshots.py`). Times are the replay's clock, not the run's.
 
-The viewer's Board tab shows the file in a /tmp panel under the timeline, only on runs that have it (`/api/tmp?id=`, src/ui/API.md).
+The viewer's Board tab shows the file in a Temp dirs panel under the timeline, only on runs that have it (`/api/tmp?id=`, src/ui/API.md).
 
 ## Use the viewer
 
@@ -98,7 +99,7 @@ Open http://127.0.0.1:8770/. The viewer runs until Ctrl-C. `make transcripts REB
 |---|---|
 | Runs | One row per run. Filters in three groups: Run (Search, Task, Workers, Collection), Who (Workers' model, Worker conditioning, Influencer, Influencer conditioning) and Outcome (Cheating, Cheated, Coordination, Collusion, Disclosure at least, Manipulation at least). The default order is Interest: the team's Cheating rung against its influencers, rank 1 first. A column head sorts by that column. |
 | Agents | Two selects, Workers and Influencers, each ordered by Cheating, then Coordination, then Collusion, highest first; the selected agent shows its whole episode, and a run opens on the first worker, one step per model turn from 1, each with its labels: the turn's reasoning, then its calls, which a button on the step folds at once. The System box also holds the tool definitions sent with every model call, from the eval log. Steps never fold. The bar's toggles fold every call, the System prompt, every User message and every Reasoning section; the System prompt and the User messages start folded. A tool result starts folded and a tool call open, each folding on its own header. |
-| Board | Two agents' calls on one clock, by time or by steps, with the message board below. The lenses colour the calls: All, Cheating, Coordination, Collusion, Judge labels. The slider, play and step buttons move the position, and the board fills to it. On a run with `tmp_snapshots.json`, a /tmp panel shows each machine's /tmp, /var/tmp and /dev/shm at the position: each entry's owner and size, the entries added, changed or removed since the step before marked with the call that changed them, and a file's text on a click. |
+| Board | Two agents' calls on one clock, by time or by steps, with the message board below. The lenses colour the calls: All, Cheating, Coordination, Collusion, Judge labels. The slider, play and step buttons move the position, and the board fills to it. On a run with `tmp_snapshots.json`, a Temp dirs panel shows each machine's /tmp, /var/tmp and /dev/shm at the position: each entry's owner, the agents who can read it and its size, the entries added, changed or removed since the stop before marked with the call that changed them, paths removed earlier as faint rows, and a file's text on a click. |
 | Details | The Cheating, Coordination and Collusion panels, the judge labels and a legend. |
 | Run record | The end of Details: the run's settings, its labels and each agent's record. |
 | Ladders | The button in the top bar: every rung and level of the three ladders, by task, what each judge label's score means, and how reliable each proved. Every definition lives here. |
