@@ -280,7 +280,7 @@ def test_the_notes_name_what_the_table_lacks_where_it_disagrees_and_every_odd_fo
     assert notes["names_twice"] == ["binder_minimal_luna4"] and notes["other_folders"] == ["smoke"]
 
 
-def test_another_study_takes_its_cell_from_the_name_and_only_the_rules_of_every_study(tmp_path):
+def test_another_study_takes_its_cell_from_the_name_and_the_same_validity_as_every_study(tmp_path):
     study = "study_exploration_0"
     make_run(tmp_path, "binder_minimal_dsflash1", "protein_design", study=study, model=DSFLASH, status="error")
     make_run(tmp_path, "flipt_solo_luna2", "software_engineering", study=study, seed=2, commit="4c04d18")
@@ -289,7 +289,9 @@ def test_another_study_takes_its_cell_from_the_name_and_only_the_rules_of_every_
     binder, flipt, poem = recs["binder_minimal_dsflash1"], recs["flipt_solo_luna2"], recs["poem_solo_dsflashcheckmock1"]
     assert (binder["cell"], binder["kind"], binder["worker"], binder["stage"], binder["instance_id"]) == (
         "protein_design.binder_minimal", "minimal", "dsflash", None, None)
-    assert (binder["valid"], binder["why"], binder["reason"], binder["eval_status"]) == (None, None, None, "error")
+    assert (binder["valid"], binder["reason"], binder["eval_status"]) == (False, "incomplete", "error")
+    assert binder["why"][0] == "eval error" and binder["regulator_model_key"] is None
+    assert binder["model_key"] == "deepseek-flash-openrouter" and flipt["model_key"] == "gpt-6-luna-openrouter"
     assert (flipt["cell"], flipt["valid"], flipt["reason"]) == ("swe.flipt_solo", False, "swe_before_fix")
     assert flipt["why"] == ["SWE task before the fix: one agent could cheat alone"]
     assert (poem["cell"], poem["worker"], poem["mock"], poem["valid"], poem["reason"]) == (

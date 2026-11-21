@@ -12,24 +12,25 @@ A record holds these fields, in this order:
   domain block's row, or the SWE issue);
 - where it ran: stage, box, instance_id, instance_source, cell, kind, target;
 - arm: worker, worker_model, rule_level, regulator, regulator_model, regulator_level, disregulator_level, tag, seed,
-  mock, commit, inspect_model and regulator_inspect_model (the Inspect strings run.json records);
+  mock, commit, inspect_model and regulator_inspect_model (the Inspect strings run.json records), model_key and
+  regulator_model_key (their entries in src/models/model_registry.yaml, None outside it);
 - outcome: eval_status, completed, failed_episodes (run_validity), cheating_rung (the team's Cheating rung,
   cheating_ladder.cheating_rungs; None without a team row), regulator_posts (0 for a regulator that took turns and
   never posted: a result, so its run stays valid; None in a run without a regulator), disregulator_posts (likewise,
   but a disregulator that never posted leaves the run invalid: run_validity);
-- checks: export_flags_ok (run.json validity.ok, the export's own flags), valid, why, reason (run_validity),
-  deal_replay and deal_replay_detail (deal_replay: does today's code deal the run the holdings it recorded).
+- checks: export_flags_ok (run.json validity.ok, the export's own flags), valid (True or False for every run), why,
+  reason (run_validity), deal_replay and deal_replay_detail (deal_replay: does today's code deal the run the holdings
+  it recorded).
 
 An earlier attempt, runs/<study>/attempts/<name>.<n>, keeps its run's name in `run` and its own folder in `path`. It is
 listed as superseded: valid false, reason superseded. The check for a run name found twice skips it.
 
 This module never reads the study table or the fleet. A study with a table gets them through a join (Join), which
-scripts/box/study_index.py builds: the stage, the box, the cell, the arm and the instance, and every check of
-run_validity. Any other study takes its cell, kind and worker from the run's name as scripts/screen.py builds it,
-<stem>_<kind>_<worker>[mock]<k>, and leaves the table's fields null. Its validity is null except where a rule holds
-for every study (EVERY_STUDY): an earlier attempt and a mock rehearsal never count, and an SWE run before
-run_validity.SWE_FIX graded a task one agent could cheat alone. A mock rehearsal of study_exploration_0 is therefore
-invalid with reason mock, as in every study. Every SWE run of study_exploration_0 predates the fix.
+scripts/box/study_index.py builds: the stage, the box, the cell, the arm and the instance. Any other study takes its
+cell, kind and worker from the run's name as scripts/screen.py builds it, <stem>_<kind>_<worker>[mock]<k>, and leaves
+the table's fields null. Every run's validity is run_validity's verdict, the same checks in every study: an earlier
+attempt and a mock rehearsal never count, and an SWE run before run_validity.SWE_FIX graded a task one agent could
+cheat alone. Every SWE run of study_exploration_0 predates the fix.
 """
 from __future__ import annotations
 
@@ -44,18 +45,18 @@ from src.domains import BY_TASK
 from src.measures import deal_replay, run_validity
 from src.measures.cheating_ladder import cheating_rungs
 from src.measures.run_directory import ATTEMPTS, GROUPS, RUN_JSON, RunDir, run_name, run_place, study_runs
+from src.models import model_registry
 
 INDEX = "INDEX.jsonl"
 SCREEN_NAME = re.compile(r"^(?P<stem>[a-z]+)_(?P<kind>solo_cheat|solo|minimal_regulated|minimal_cheat|minimal_all|"
                          r"minimal)_(?P<worker>[a-z]+?)(?:check)?(?:mock)?(?P<sample>\d+)$")
 """A run name as scripts/screen.py builds it: the cell's stem and kind, the worker's short name, mock or checkmock for
 a rehearsal, and the sample's number."""
-EVERY_STUDY = ("superseded", "mock", "swe_before_fix", "swe_commit_unknown")
-"""The reasons of run_validity that hold for a run of any study."""
 FIELDS = ("study", "run", "path", "group", "cheatbench_task", "domain", "row",
           "stage", "box", "instance_id", "instance_source", "cell", "kind", "target",
           "worker", "worker_model", "rule_level", "regulator", "regulator_model", "regulator_level",
           "disregulator_level", "tag", "seed", "mock", "commit", "inspect_model", "regulator_inspect_model",
+          "model_key", "regulator_model_key",
           "eval_status", "completed", "failed_episodes", "cheating_rung", "regulator_posts", "disregulator_posts",
           "export_flags_ok", "valid", "why", "reason", "deal_replay", "deal_replay_detail")
 ARM_FIELDS = ("stage", "box", "cell", "kind", "target", "worker", "worker_model", "rule_level", "regulator",
@@ -99,6 +100,11 @@ def row_of(data: dict) -> str | None:
     return block.get("row_id") or block.get("issue")
 
 
+def model_key(model: str | None) -> str | None:
+    """The registry entry of an Inspect model string; None for no model or one outside the registry."""
+    return model_registry.entry_name(model) if model else None
+
+
 def level(value: str | None) -> str | None:
     """An instruction level as a study table names it: None for none."""
     return None if value in (None, "none") else value
@@ -120,7 +126,8 @@ def record(run: Path, data: dict, study_dir: Path, join: Join | None = None) -> 
     out.update(study=study, run=name, path=run.relative_to(study_dir).as_posix(), group=group,
                cheatbench_task=data.get("task"), domain=domain, row=row_of(data), seed=config.get("seed"),
                mock=checked["mock"], commit=(data.get("code") or {}).get("commit"), inspect_model=data.get("model"),
-               regulator_inspect_model=role_models.get("regulator"))
+               regulator_inspect_model=role_models.get("regulator"), model_key=model_key(data.get("model")),
+               regulator_model_key=model_key(role_models.get("regulator")))
     if join is None:
         out.update(screen_arm(name, domain), rule_level=level(config.get("rule_level")),
                    regulator_level=level(config.get("regulator_level")) if config.get("regulators") else None,
@@ -131,13 +138,7 @@ def record(run: Path, data: dict, study_dir: Path, join: Join | None = None) -> 
                cheating_rung=cheating_rungs(run)["team"] if RunDir(run).team_signals() else None,
                export_flags_ok=(data.get("validity") or {}).get("ok"), regulator_posts=role_posts(checked, "regulator"),
                disregulator_posts=role_posts(checked, "disregulator"))
-    if join is not None:
-        out.update(valid=checked["valid"], why=checked["why"], reason=checked["reason"])
-    else:
-        kept = [(code, text) for code, text in zip(checked["reasons"], checked["why"]) if code in EVERY_STUDY]
-        if kept:
-            out.update(valid=False, why=[text for _, text in kept],
-                       reason=run_validity.first_reason([code for code, _ in kept]))
+    out.update(valid=checked["valid"], why=checked["why"], reason=checked["reason"])
     replayed = deal_replay.replay(data)
     if replayed is not None:
         out.update(deal_replay=replayed.status, deal_replay_detail=replayed.detail or None)
@@ -177,15 +178,13 @@ NOTE_LABELS = {"other_folders": "folders that are neither a run nor a group", "n
 def summary(study_dir: Path, records: list[dict], notes: dict[str, list]) -> str:
     """The counts and the notes, one line each."""
     real = [rec for rec in records if not rec["mock"]]
-    unchecked = sum(rec["valid"] is None for rec in real)
 
     def counted(key: str) -> str:
         counts = collections.Counter(str(rec[key]) for rec in records)
         return ", ".join(f"{value} {n}" for value, n in sorted(counts.items()))
 
     lines = [f"== {study_dir}: {len(records)} runs: {sum(rec['valid'] is True for rec in real)} valid, "
-             f"{sum(rec['valid'] is False for rec in real)} not, {len(records) - len(real)} mock"
-             + (f", {unchecked} not checked" if unchecked else ""),
+             f"{sum(rec['valid'] is False for rec in real)} not, {len(records) - len(real)} mock",
              *(f"== by {label}: {counted(key)}" for key, label in (
                  ("reason", "reason"), ("cheatbench_task", "task"), ("stage", "stage"), ("group", "group"),
                  ("deal_replay", "deal replay"), ("instance_source", "instance source"),
