@@ -10,7 +10,9 @@ transcript viewer (src/ui/transcript_viewer.py, route /api/board).
     payload["posts"][0]["reads"][0]         # {agent, k, t, form ("latest" | "from" | None), asked}
     payload["pair"]                         # the two agents the tab opens with, and payload["pair_why"]
     payload["notes"]                        # load_run's notes, then the count of reads of no recorded form
-    payload["network"]                      # the network log on the board's clock (src/ui/transcript_network.py)
+
+    network_payload(run_dir)                # the network log on the board's clock (src/ui/transcript_network.py),
+                                            # None without network.jsonl; the viewer's /api/network
 
 The calls are run_calls.load_run's, numbered as the transcript scan numbers them (the agent tab's "Call k").
 The clock is the eval log's tool events where the run's log holds every call (load_run's times, the source the
@@ -61,6 +63,7 @@ from __future__ import annotations
 from collections import Counter
 from pathlib import Path
 
+from src.export._export_network_log import NETWORK_LOG
 from src.judging.judge_records import model_calls as judged_model_calls
 from src.judging.judge_records import posts as labelled_posts
 from src.measures import cheating_ladder, collusion, coordination, judge_labels
@@ -119,6 +122,22 @@ def clock(run: Run) -> tuple[str, dict[tuple[str, int], tuple[float, float]], fl
         return "eval_log", at, max((t + d for t, d in at.values()), default=0.0)
     at = {(c.agent, c.k): (float(i), 1.0) for i, c in enumerate(run.ordered())}
     return "call_order", at, float(len(at))
+
+
+def board_network(run_dir: Path, run: Run) -> dict | None:
+    """The run's network log on the board's clock (transcript_network.network_view), None without network.jsonl."""
+    name, at, _ = clock(run)
+    by_id = {c.id: c for rows in run.calls.values() for c in rows}
+    start = min(c.start for c in by_id.values()) if name == "eval_log" and by_id else None
+    return network_view(run_dir, {c.id: (c.agent, c.k) for c in by_id.values()}, at, start)
+
+
+def network_payload(run_dir: Path) -> dict | None:
+    """The Board tab's Network panel (/api/network): board_network of the run's calls, None without network.jsonl,
+    which it checks before it reads the run."""
+    if not (Path(run_dir) / NETWORK_LOG).is_file():
+        return None
+    return board_network(run_dir, load_run(run_dir, times=True))
 
 
 def one_line(text: str) -> str:
@@ -396,8 +415,8 @@ def notice_time(message: dict, events: list[dict], by_id: dict[str, Call],
 
 def board_payload(run_dir: Path, levels: dict) -> dict:
     """The Board tab's data for one run: {clock, clock_about, total, agents, posts, pair, pair_why, ladders,
-    label_names (each judge label's name), notes, network (transcript_network.network_view: None without
-    network.jsonl)}. `levels` is the run page's ladders (transcript_levels.compute)."""
+    label_names (each judge label's name), notes}. `levels` is the run page's ladders (transcript_levels.compute). The
+    network log comes on its own (network_payload)."""
     run = load_run(run_dir, times=True)
     name, at, total = clock(run)
     by_model = model_calls(run_dir)
@@ -459,10 +478,8 @@ def board_payload(run_dir: Path, levels: dict) -> dict:
     pair, why = default_pair(levels, run.roles, posts_by)
     formless = sum(r["form"] is None for p in posts for r in p["reads"])
     notes = run.notes + ([f"{formless} reads of no recorded form"] if formless else [])
-    start = min(c.start for c in by_id.values()) if name == "eval_log" and by_id else None
-    network = network_view(run_dir, {c.id: (c.agent, c.k) for c in by_id.values()}, at, start)
     return {"clock": name, "clock_about": CLOCKS[name], "total": total, "agents": agents, "posts": posts,
             "pair": pair, "pair_why": why,
             "ladders": {k: {key: v[key] for key in LADDER_KEYS} for k, v in levels["ladders"].items()},
             "label_names": {k: v["name"] for k, v in levels["judge_label_about"]["labels"].items()},
-            "notes": notes, "network": network}
+            "notes": notes}

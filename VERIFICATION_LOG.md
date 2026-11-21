@@ -2685,3 +2685,25 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
      while the data has `board` for a team without influencers (exploration_0 90, exploration_1 135) and `swarm`
      only with influencers (src/export/eval_sample_view.py topology()).
   6. VERIFIED. UNVERIFIED: runs with several machines (none has a snapshot file).
+
+## 2026-11-21: Board tab Network panel served by /api/network, lane marks for connections
+- **What.** src/ui/transcript_viewer.py `/api/network?id=` (transcript_board.network_payload, read once per run; 404
+  without the run or network.jsonl; the board payload's `network` is now a flag); src/ui/transcript_network.py rows
+  carry the process (prog, exe, cmd, pid, uid) and laddr/lport; tv_net_panel.js fetches the route, lists listeners by
+  machine (port, program, agent, call) and calls newest first (cross-agent in the bad colour as `a01 → a02:8180`, each
+  with its call link); tv_view_board.js marks each TCP/UDP call and each cross-agent call on its agent's lane (a
+  triangle, red when cross-agent; hover names it, click opens its call), legend entries; tests in
+  tests/unit/test_transcript_viewer_network.py; API.md and DATA_AND_VIEWER.md.
+- **How.** Test server on 8833 over runs/study_smoke/smoke_network/20261121T070957Z (scratch index cache); curl of
+  /api/board (network true), /api/network (the block and rows), /api/network?id=nope (404). Headless Chrome over CDP,
+  swe_http with the pair a02 (worker) and a01 (regulator), screenshots viewed at 0.05 s (before the server), 1.0 s
+  (after the listen at 0.21 s) and 4.3 s (after the observer's connect at 4.12 s); also steps mode at step 7 and
+  observer_protein at its end. DOM read for the hover tip and the call links. The 6 route/payload tests, the viewer
+  and board tests (128) and the full unit suite (3343 passed, 6 xfailed); ruff clean. Server and Chrome stopped.
+- **Result.** VERIFIED. 0.05 s: 0 listeners, 0 calls, both lane marks under the shade. 1.0 s: a02's `:8180 127.0.0.1
+  tcp python3 a02 call 0` under machine a02, marked new. 4.3 s: `connect tcp a01 → a02:8180 curl 127.0.0.1:8180
+  EINPROGRESS call 1` in red (link to a01 call 1, the peer_shell call), `accept a02 ← a01 python3 ok no call`, a red
+  triangle on a01's lane and a white one on a02's at 4.12 s; tip "a01 connect → a02:8180 | tcp · curl · EINPROGRESS
+  | 4.12s | call 1". In steps the detached accept sits at the step its time falls in. The only console error is a
+  missing /favicon.ico, as before. UNVERIFIED: openmath_workers (its task is left out of the viewer's index), a run with
+  the panel's 2000-call cap, the light theme.

@@ -1,11 +1,15 @@
 """The Board tab's Network panel: the run's network log (network.jsonl and run.json "network",
-src/export/_export_network_log.py) on the board's clock, for the transcript viewer (transcript_board.board_payload).
+src/export/_export_network_log.py) on the board's clock, for the transcript viewer's /api/network
+(transcript_board.network_payload).
 
     view = network_view(run_dir, calls, at)     # None for a run with no network.jsonl
     view["block"]                               # run.json "network" as written
-    view["listeners"][0]   # {t, until, machine, agent, proto, laddr, lport, call: {agent, k} | None, origin}
-    view["calls"][0]       # {t, op, proto, machine, agent, peer_agent, raddr, rport, result, cross, origin,
-                           #  call: {agent, k} | None}
+    view["listeners"][0]   # {t, until, machine, agent, proto, laddr, lport, call: {agent, k} | None, origin,
+                           #  at_start, **who}
+    view["calls"][0]       # {t, op, proto, machine, agent, peer_agent, laddr, lport, raddr, rport, result, cross,
+                           #  origin, call: {agent, k} | None, **who}
+
+who is the process: {prog (its comm, else its exe's name), exe, cmd, pid, uid}.
 
 A row's t is on the board's clock: on an eval-log clock its own time less the board's start (the first call's start,
 transcript_board.clock); on a call-order clock its call's place when the row names a tool call the board knows, else
@@ -35,6 +39,13 @@ def board_time(row: dict, place: dict, start: float | None) -> float | None:
     return found[1] if found is not None else None
 
 
+def who(row: dict) -> dict:
+    """The process of a row: {prog, exe, cmd, pid, uid}; prog is its comm, else its exe's last part."""
+    exe = row.get("exe")
+    return {"prog": row.get("comm") or (exe.rsplit("/", 1)[-1] if exe else None), "exe": exe, "cmd": row.get("cmd"),
+            "pid": row.get("pid"), "uid": row.get("uid")}
+
+
 def socket_key(row: dict) -> tuple:
     return row.get("netns"), row.get("pid"), row.get("proto"), row.get("lport"), row.get("laddr")
 
@@ -56,7 +67,7 @@ def listeners(rows: list[dict], timed: list[float | None]) -> list[dict]:
         out.append({"t": t, "until": min(ends) if ends else None, "machine": row.get("machine"),
                     "agent": row.get("agent"), "proto": row.get("proto"), "laddr": row.get("laddr"),
                     "lport": row.get("lport"), "origin": row.get("origin"), "at_start": row.get("at_start", False),
-                    "call": row.get("_call")})
+                    "call": row.get("_call"), **who(row)})
     return out
 
 
@@ -75,10 +86,11 @@ def network_view(run_dir: Path, calls: dict[str, tuple[str, int]], at: dict[tupl
         row["_call"] = {"agent": found[0][0], "k": found[0][1]} if found else None
     timed = [board_time(row, place, start) for row in rows]
     listed = [{"t": t, "op": row["op"], "proto": row.get("proto"), "machine": row.get("machine"),
-               "agent": row.get("agent"), "peer_agent": row.get("peer_agent"), "raddr": row.get("raddr"),
-               "rport": row.get("rport"), "result": row.get("result"), "origin": row.get("origin"),
+               "agent": row.get("agent"), "peer_agent": row.get("peer_agent"), "laddr": row.get("laddr"),
+               "lport": row.get("lport"), "raddr": row.get("raddr"), "rport": row.get("rport"),
+               "result": row.get("result"), "origin": row.get("origin"),
                "cross": row["op"] in ("connect", "send") and bool(row.get("agent")) and bool(row.get("peer_agent"))
-               and row.get("agent") != row.get("peer_agent"), "call": row["_call"]}
+               and row.get("agent") != row.get("peer_agent"), "call": row["_call"], **who(row)}
               for row, t in zip(rows, timed) if row["op"] in CALL_OPS]
     listed.sort(key=lambda c: (c["t"] is None, c["t"] or 0.0))
     return {"block": block, "listeners": listeners(rows, timed), "calls": listed[:MAX_CALLS],

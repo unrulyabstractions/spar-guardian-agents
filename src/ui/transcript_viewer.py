@@ -13,7 +13,8 @@ Routes: / (the page), /tv/<file> (src/ui/transcript_static/), /static/<path> (th
 src/ui/static/, whose dom.js, charts.js, components.js and style.css the page reuses), /api/index, /api/run?id=,
 /api/board?id= (the run page's Board tab, src/ui/transcript_board.py), /api/transcript?id=&agent=,
 /api/tools?id=&agent= (the tool definitions the agent's model calls carried, from the eval log), /api/tmp?id= (the
-run's tmp_snapshots.json, src/replay/tmp_snapshots.py, for the Board tab's /tmp panel), /api/ladders,
+run's tmp_snapshots.json, src/replay/tmp_snapshots.py, for the Board tab's /tmp panel), /api/network?id= (the run's
+network log on the board's clock, transcript_board.network_payload, for the Board tab's Network panel), /api/ladders,
 /api/summary?col= (the Summary page, src/ui/transcript_summary.py). src/ui/API.md describes them.
 """
 from __future__ import annotations
@@ -33,6 +34,7 @@ from urllib.parse import parse_qs, urlparse
 from inspect_ai.log import read_eval_log
 
 from src.configuration.settings import ROOT
+from src.export._export_network_log import NETWORK_LOG
 from src.export.eval_sample_view import span_owners
 from src.judging import verdict_files
 from src.measures import judge_labels
@@ -157,11 +159,18 @@ def tmp_snapshots(run_dir: Path) -> Path | None:
     return path if path.is_file() else None
 
 
+def network_file(run_dir: Path) -> Path | None:
+    """The run's network.jsonl, or None when the run has none."""
+    path = run_dir / NETWORK_LOG
+    return path if path.is_file() else None
+
+
 def board_detail(row: dict, run_dir: Path, measured: dict) -> dict:
     """The run page's Board tab (transcript_board.board_payload) from the run's files and its cached measures, with
-    tmp: whether the run has /tmp snapshots (/api/tmp), so the tab shows its /tmp panel only then."""
+    tmp: whether the run has /tmp snapshots (/api/tmp), and network: whether it has a network log (/api/network), so
+    the tab shows each panel only then."""
     payload = transcript_board.board_payload(run_dir, RunFiles.read(run_dir).levels(measured))
-    return {**payload, "tmp": tmp_snapshots(run_dir) is not None}
+    return {**payload, "tmp": tmp_snapshots(run_dir) is not None, "network": network_file(run_dir) is not None}
 
 
 # ---------------------------------------------------------------------------------------------------------- server
@@ -194,6 +203,8 @@ class Viewer:
         self.summaries = {c["key"]: transcript_summary.summary(served["rows"], c["key"]) for c in served["collections"]}
         self._tools: dict[str, dict] = {}
         self._tools_lock = threading.Lock()
+        self._network: dict[str, dict | None] = {}
+        self._network_lock = threading.Lock()
 
     def tools(self, run_id: str) -> dict[str, dict]:
         """agent_tools of the run's eval log, read once per run; {} when the run has no eval log."""
@@ -202,6 +213,13 @@ class Viewer:
                 log = eval_log_of(self.dirs[run_id])
                 self._tools[run_id] = agent_tools(log) if log else {}
             return self._tools[run_id]
+
+    def network(self, run_id: str) -> dict | None:
+        """transcript_board.network_payload of the run, read once per run; None when the run has no network.jsonl."""
+        with self._network_lock:
+            if run_id not in self._network:
+                self._network[run_id] = transcript_board.network_payload(self.dirs[run_id])
+            return self._network[run_id]
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -269,6 +287,13 @@ class Handler(BaseHTTPRequestHandler):
                 if path is None:
                     return self.fail(HTTPStatus.NOT_FOUND, f"no {TMP_FILE} in {run_id}")
                 return self.send_file(path)
+            if url.path == "/api/network":
+                run_id = q.get("id", "")
+                if run_id not in self.viewer.dirs:
+                    return self.fail(HTTPStatus.NOT_FOUND, f"no run {run_id!r} in the index")
+                if network_file(self.viewer.dirs[run_id]) is None:
+                    return self.fail(HTTPStatus.NOT_FOUND, f"no {NETWORK_LOG} in {run_id}")
+                return self.send_json(self.viewer.network(run_id))
             return self.fail(HTTPStatus.NOT_FOUND, "no such path")
         except (BrokenPipeError, ConnectionResetError):
             return None

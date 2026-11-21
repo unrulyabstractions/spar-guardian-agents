@@ -512,7 +512,7 @@ BoardTab = {clock ("eval_log" | "call_order"), clock_about, total (seconds, or t
             ladders: {ladder: {name, levels, line, line_words}},
             label_names: {label: name},                        # the judge labels' names
             notes,                                             # load_run's, then the count of reads of no form
-            network,                                           # null, or the run's network log: BoardNetwork
+            network,                                           # whether the run has network.jsonl (/api/network)
             tmp}                                               # whether the run has tmp_snapshots.json (/api/tmp)
 BoardCall = {k (the agent tab's "Call k"), m (its model call, per agent from 0), t, dur, tool, summary (one line),
              board ("post" | "read" | "status" | null),
@@ -525,20 +525,7 @@ BoardPost = {label ("P1", "P2", ... in board order, system notices included: the
              kind ("post" | "system"), t, call (the writer's call k, null for a notice), text,
              reads: [{agent, k, t, form, asked}] (every read by another agent),
              labels: [{agent, label, score, excerpt, reason, start, end}]}   # judge labels located in the post
-BoardNetwork = {block (run.json "network"),
-                listeners: [{t, until, machine, agent, proto, laddr, lport, origin, at_start, call}],
-                calls: [{t, op ("connect" | "accept" | "send"), proto, machine, agent, peer_agent, raddr, rport,
-                         result, origin, cross, call}],     # in time order, at most MAX_CALLS
-                cut}                                        # the calls past MAX_CALLS
 ```
-`network` is null for a run with no `network.jsonl`, else `src/ui/transcript_network.py` `network_view`: the network
-log's rows on the board's clock, the control's rows left out. On an eval-log clock a row's `t` is its own time less the
-first call's start; on a call-order clock it is its call's `t`, or null for a row of no call. `call` is `{agent, k}` of
-the tool call the row sits in, or null. A listener is a listen, or a bind no listen followed on the same process and
-port; `until` is the `t` of its socket's close, null while it stays open. `cross` marks a connect or a send from one
-named agent to another. The Board tab's Network panel (`tv_net_panel.js`) shows, at the position, the listeners open
-then and the calls up to it, newest first, a call since the stop before marked `+`, with filters for named agents,
-cross-agent calls and TCP or UDP.
 The clock is the eval log's tool events where the log times every call (`run_calls.load_run(times=True)`, the
 source the results browser's timeline reads): `t` and `dur` in seconds from the first call's start. Without them it is
 call order: `t` is the call's place in `Run.ordered` and `dur` is 1. A post sits at the start of the call that wrote it;
@@ -587,6 +574,28 @@ those rows. Each row gives the owner, the agents who can read the entry and a fi
 entry's mode, group and POSIX ACL and need search on every directory above it (`readersOf`; schema 2 files only:
 `users` with `group`, `gid` and `acl`); `+` after a mode marks an ACL. A directory folds on a click, and a file opens
 its text when the snapshot captured it.
+### `GET /api/network?id=<id>` → `BoardNetwork` (`src/ui/transcript_board.py` `network_payload`)
+```
+BoardNetwork = {block (run.json "network"),
+                listeners: [{t, until, machine, agent, proto, laddr, lport, origin, at_start, call, ...Proc}],
+                calls: [{t, op ("connect" | "accept" | "send"), proto, machine, agent, peer_agent, laddr, lport,
+                         raddr, rport, result, origin, cross, call, ...Proc}],   # in time order, at most MAX_CALLS
+                cut}                                        # the calls past MAX_CALLS
+Proc = {prog (the process's comm, else its exe's last part), exe, cmd, pid, uid}
+```
+The run's network log on the Board tab's clock: `src/ui/transcript_network.py` `network_view` of the run's calls, read
+once per run and kept. 404 when the run is not in the index or has no `network.jsonl`; `BoardTab.network` says which.
+The control's rows are left out. On an eval-log clock a row's `t` is its own time less the first call's start; on a
+call-order clock it is its call's `t`, or null for a row of no call. `call` is `{agent, k}` of the tool call the row
+sits in, or null. A listener is a listen, or a bind no listen followed on the same process and port; `until` is the `t`
+of its socket's close, null while it stays open. `cross` marks a connect or a send from one named agent to another.
+The Board tab's Network panel (`tv_net_panel.js`) reads it only when `network` is true, and shows at the position the
+listeners open then, by machine, with port, program, agent and call, and the calls up to it, newest first: a call
+since the stop before marked `+`, a cross-agent call in the bad colour with its two agents and the port it reached,
+each linked to its call, with filters for named agents, cross-agent calls and TCP or UDP. Once the log has come, each
+TCP or UDP call and each cross-agent call marks the lane of the agent whose call made it with a triangle at the foot
+of the lane, at the row's time (in steps, at its call's step, or the step its time falls in); a cross-agent one is in
+the bad colour, its hover names the call and a click opens it.
 ### `GET /api/ladders` → the ladders page's tables (`transcript_ladder_tables.ladders_payload`)
 `{domains, cheating, task_column, ladders, order, judge_labels, take_rules, collusion_by_task, left_out_tasks,
 readings}`.

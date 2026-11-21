@@ -90,10 +90,10 @@ def test_the_board_payload_says_whether_the_run_has_snapshots(tmp_path, monkeypa
     monkeypatch.setattr(transcript_board, "board_payload", lambda run_dir, levels: {"posts": []})
     monkeypatch.setattr(transcript_viewer.RunFiles, "read",
                         staticmethod(lambda run_dir: SimpleNamespace(levels=lambda measured: {})))
-    assert board_detail({}, tmp_path, {}) == {"posts": [], "tmp": False}
+    assert board_detail({}, tmp_path, {}) == {"posts": [], "tmp": False, "network": False}
     assert tmp_snapshots(tmp_path) is None
     (tmp_path / TMP_FILE).write_text("{}")
-    assert board_detail({}, tmp_path, {}) == {"posts": [], "tmp": True}
+    assert board_detail({}, tmp_path, {}) == {"posts": [], "tmp": True, "network": False}
     assert tmp_snapshots(tmp_path) == tmp_path / TMP_FILE
 
 
