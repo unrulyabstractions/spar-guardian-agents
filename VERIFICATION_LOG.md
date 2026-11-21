@@ -2814,3 +2814,72 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   first call and an exit at the end of its last call (an out-of-budget exit is announced later than that). UNVERIFIED:
   the run index's row chips (no alert column added there), a run with several alerts by one agent on screen (only the
   unit test covers the i-th call), a true alarm on screen.
+
+## 2026-11-21: the smoke suites in the runs' layout, chess's engine path, verdict links, study_smoke's index, no legacy readers (c90a769 to e5ab566)
+- **What.** (1) Backups `.backups/data-layout-before-wf7-2026-11-21.tgz` (runs/study_smoke whole, the nested smoke_*
+  suites of both exploration studies, the 47 chess runs of exploration_0 with a box path, every judges/ folder of
+  exploration_1) and `.backups/apart-chess-before-stockfish-2026-11-21.tgz` (the 420 apart_controls chess runs, their
+  eval/ logs included). (2) The 459 nested smoke runs' judge.jsonl (1,367 rows) moved into
+  judges/cheatbench.gpt-6-luna.jsonl by the migration script's own per-run steps (study_runs never lists nested runs);
+  old bytes in .backups/verdicts-before-migration/<study>/smoke*/ (918 files). (3) The 611 nested smoke runs in the
+  older layout regenerated from their eval logs (export and code record, no plots). (4) Chess: run.json names the
+  engine from the checkout (ab2a08b); the 47 exploration_0 runs and the 420 apart chess runs re-exported. (5) The judge
+  pass's CheatBench rows name their transcript (634d23f); exploration_1's 522 rows in 147 files gain transcript_path and
+  model_key. (6) runs/study_smoke/INDEX.jsonl (8 rows). (7) scripts/migrate_verdict_files.py and its test deleted, with
+  run_listing's branch for an INDEX row without valid, the README generator's judge.jsonl table, two older-export test
+  skips (8e59c46) and API.md's wording (8bfe215). (8) run_reader reads the eval log through RunDir.eval_log
+  (c90a769). (9) topology's meaning, the README generator's suite line and composition, INDEX alert fields (e5ab566);
+  every study README written. (10) `make study-readmes [CHECK=1]` and the pointer in README.md (aa43ba4). No model
+  call, no judge, no Docker, no rental, nothing uploaded.
+- **How verified.**
+  1. Backups by my own script (scratchpad wf7/layout/prove_backup.py): every source file by os.walk, size and sha256,
+     against every member read through tarfile. First tar: 9,815 files, 204,874,605 B, 0 only on one side, 0
+     mismatches, with one folder left out: smoke_openmath/20261121T092159Z, which another workflow's smoke run wrote
+     while the tar ran (not in my run set). Apart tar: 3,360 files, 261,570,299 B, 0 only on one side, 0 mismatches.
+  2. Verdicts (check_verdicts.py), each backup judge.jsonl row against judges/ now: 1,367 of 1,367 rows present by
+     episode, every old field equal except unit, agent, role, transcript_path and judge_prompt; every transcript_path
+     resolves; every judge_prompt relative and present in the checkout; agent equals the episode's suffix.
+  3. Regeneration (compare.py, own JSON walk and link resolution, backup vs disk): 611 of 611 rc 0; 611 runs, 1,618
+     episodes with the same ids; agent equals the old orbit_agent in 1,618; transcript_path relative and present 1,596;
+     1,596 transcripts with 16,616 steps, every step equal; run.json loses only task_root, variant, agent, source and
+     gains model_key (611), signals (18) and peer_shell (2); run_id, eval_id, ORBIT and Inspect versions, task and
+     topology unchanged in 611; eval_log relative and resolving in 611; 459 judges/ files byte-equal to their state
+     before. The code record gains cheating_timeline, collusion_timeline and ladder_steps; with bare agent IDs the
+     access log now matches agents (32 agent rows, 6 team rows), raising tried in 20 rows and one rung,
+     smoke_openmath/20261118T003212Z/split_access riemann#1@a01 none to looked on an access-log `git cat-file` of part1;
+     16 runs whose old record had no agent rows have them now. The working tree held another workflow's uncommitted
+     src/measures/ladder_domain.py, so I recomputed all 1,596 agent rows in memory with HEAD's ladder_domain.py
+     (signals_with_head_ladder.py; probe: every domain's Domain class was HEAD's): 0 rows differ from disk.
+  4. Chess: deep diff of run.json against the backups: `.chess.stockfish` is the only changed path, in 47 of 47 and
+     420 of 420 runs, now `build/chess/stockfish/sf_19/stockfish`; agent rows, team rows and run.json signals equal in
+     all 467; 45 judges/ files byte-equal. test_chess's new test covers this Mac's path, a box's and another binary.
+  5. Backfill (check_backfill.py): 522 rows in 147 files keep their units, order and every old value; only model_key
+     and transcript_path added; transcript_path resolves 522 of 522; model_key equals the episode's in 522.
+  6. INDEX: 8 rows, one per top-level run; run equals run_id, cheatbench_task equals run.json task, cheating_rung
+     equals the signals team row, commit equals run.json code.commit, valid a bool in each (False, reason mock).
+  7. Sweeps over all of runs/: 1,040 verdict files, 3,167 rows: no judge.jsonl, every unit an episode of its run, no
+     absolute judge_prompt or transcript_path, no agent with a slash. 5,784 run.json (study_smoke 8 plus 540 nested,
+     exploration_1 360 plus 61, exploration_0 239 plus 109, orbit2 1, apart 4,466), 8,320 episodes: eval_log relative
+     and found in every run, every transcript_path present, no orbit_agent, no absolute stockfish. `git grep` finds no
+     reader of judge.jsonl, orbit_agent or a valid-less INDEX row; the names left are file names in capture tests, negative
+     assertions, and CheatBench's own file name in cheatbench_judge.py.
+  8. run_reader: the new test fails on HEAD's run_reader (it returned this repository's file of the same path) and
+     passes now; `make test-tools` 92 passed.
+  9. READMEs: test_study_readme 10 passed; `make study-readmes CHECK=1` current for all five; each README diffed against
+     its earlier copy: topology rows, the suite lines, exploration_1's verdict model_key, transcript_path and its link
+     line (522 of 522), study_smoke's INDEX section and table of runs, apart's `shipped` row (s12 now attempted on disk,
+     written 2026-11-20 23:49 by another workflow).
+  10. `uv run python -m pytest tests/unit`: 3397, then 3398 passed, 1 skipped, 6 xfailed (with the other workflows'
+     uncommitted edits in the tree; the skip is test_transcript_summary's index cache of another version); `make lint`
+     clean.
+  11. Hub, read only (hub_report.py lists the tree; scripts/upload_runs_to_hf.py --dry-run per study): an upload now
+     would send exploration_0 3,527 files (1,646 new, 972 changed, 909 unchanged), exploration_1 8,652 (246 new, 2,541
+     changed, 5,865 unchanged), study_smoke 162 and study_orbit2_check 16 (neither is on the Hub). It deletes nothing,
+     so 1,456 exploration_0 files would stay stale on the Hub (234 judge.jsonl, 225 ladder.jsonl, the 45 SWE runs at
+     their old top-level paths, 54 .eval, a figures/ folder) and 32 of exploration_1 (31 stray .eval at their old
+     paths, an old README.md). apart_controls is refused by the script; on the Hub 17,865 of its files differ from
+     local (every run's run.json, episodes, signals and transcript), 19,502 equal, 818 local files absent.
+- **Result.** VERIFIED for the items above. UNVERIFIED: the viewers in a browser; `make paper`. NOT DONE: the ten
+  set-aside run copies under logs/study_exploration_0/set_aside_regulator_log/runs/ and set_aside_8M_guard/ keep the
+  older layout (nine judge.jsonl); exploration_0's upload would send those nine judge.jsonl. No upload was made, so the
+  Hub stays in the older layout.
