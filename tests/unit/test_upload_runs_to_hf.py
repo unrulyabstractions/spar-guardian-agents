@@ -31,7 +31,7 @@ def root(tmp_path):
     for folder in (runs / "run_a" / "trajectories" / "t#1@k7q2m", runs / "mock" / "run_m", runs / "smoke" / "s1",
                    runs / "run_b", logs / "run_a", logs / "screen", logs / "only_log"):
         folder.mkdir(parents=True)
-    (runs / "run_a" / "run.json").write_text('{"ok": true}')
+    (runs / "run_a" / "run.json").write_text('{"eval_log": "logs/study_x/run_a/a.eval"}')
     (runs / "run_a" / "trajectories" / "t#1@k7q2m" / "transcript.json").write_text("[]")
     (runs / "run_a" / ".DS_Store").write_bytes(b"\0")
     (runs / "run_a" / "._run.json").write_bytes(b"\0")
@@ -43,7 +43,8 @@ def root(tmp_path):
     with zipfile.ZipFile(logs / "run_a" / "a.eval", "w") as archive:
         archive.writestr("samples/1.json", '{"text": "clean"}')
     (logs / "screen" / "run_a.log").write_text("ran\n")
-    (logs / "only_log" / "b.eval").write_bytes(b"x")
+    (logs / "only_log" / "b.eval").write_bytes(b"x")                # an aborted start: no run names it
+    (logs / "run_a" / "0_journal.eval").write_bytes(b"j")         # an aborted start beside the run's own log
     return tmp_path
 
 
@@ -120,7 +121,8 @@ def test_a_library_error_that_quotes_the_token_is_shown_without_it(root, monkeyp
 
 
 def test_a_file_that_holds_the_token_or_a_key_is_refused_and_named_without_the_value(root, api, capsys):
-    (root / "runs" / "study_x" / "run_a" / "run.json").write_text(f'{{"leak": "{FAKE}"}}')
+    (root / "runs" / "study_x" / "run_a" / "run.json").write_text(
+        f'{{"leak": "{FAKE}", "eval_log": "logs/study_x/run_a/a.eval"}}')
     with zipfile.ZipFile(root / "logs" / "study_x" / "run_a" / "a.eval", "a") as archive:
         archive.writestr("samples/2.json", '{"k": "sk-or-v1-fakefakefakefake0000"}')
     with pytest.raises(SystemExit):
@@ -134,7 +136,7 @@ def test_a_file_that_holds_the_token_or_a_key_is_refused_and_named_without_the_v
 
 def test_one_run_takes_its_folder_its_eval_logs_and_its_screen_log_and_leaves_the_mac_files(root):
     items, skipped = upload.select("study_x", ["run_a"], root)
-    assert list(items) == ["run_a"] and skipped == []
+    assert list(items) == ["run_a"] and skipped == ["run_a/0_journal.eval"]
     assert [remote for remote, _ in items["run_a"]] == [
         "study_x/runs/run_a/run.json",
         "study_x/runs/run_a/trajectories/t#1@k7q2m/transcript.json",
@@ -146,12 +148,13 @@ def test_one_run_takes_its_folder_its_eval_logs_and_its_screen_log_and_leaves_th
         "study_x/runs/mock/run_m/run.json", "study_x/runs/run_b/run.json"]
 
 
-def test_the_whole_study_takes_every_entry_but_smoke_folders_and_mac_files(root):
+def test_the_whole_study_takes_every_entry_but_smoke_folders_mac_files_and_eval_logs_no_run_names(root):
     items, skipped = upload.select("study_x", [], root)
-    assert sorted(items) == ["INDEX.jsonl", "mock", "only_log", "run_a", "run_b", "screen"]
-    assert skipped == [".DS_Store", "smoke"]
+    assert sorted(items) == ["INDEX.jsonl", "mock", "run_a", "run_b", "screen"]
+    assert skipped == [".DS_Store", "only_log/b.eval", "run_a/0_journal.eval", "smoke"]
     every = [remote for files in items.values() for remote, _ in files]
-    assert "study_x/runs/INDEX.jsonl" in every and "study_x/logs/only_log/b.eval" in every
+    assert "study_x/runs/INDEX.jsonl" in every and "study_x/logs/run_a/a.eval" in every
+    assert not any(r.endswith(("b.eval", "0_journal.eval")) for r in every)
     assert not any("smoke" in r or ".DS_Store" in r or "/._" in r for r in every)
 
 

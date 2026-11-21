@@ -7,6 +7,7 @@ Give a token once: run `hf auth login`, or `export HF_TOKEN=<token>`. Then uploa
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import zipfile
@@ -26,8 +27,10 @@ NO_TOKEN = "no Hugging Face token: run `hf auth login`, or `export HF_TOKEN=<tok
 EPILOG = """\
 runs/<study>/<run>/ goes to <study>/runs/<run>/ in the dataset, and logs/<study>/<run>/ to <study>/logs/<run>/,
 beside what the dataset holds. Without --run the whole study goes, except its smoke* folders (mock smoke tests). macOS
-files (.DS_Store, ._*) never go. Files already there unchanged are skipped, so a rerun resumes. Nothing on the Hub is
-deleted. It refuses to upload a file that holds a key from this shell, the token or the git email.
+files (.DS_Store, ._*) never go. Of the .eval files under logs/<study>/, only a run's own log goes: the one the run.json
+at the same path under runs/<study>/ names. An aborted start's journal beside it, or a log folder with no run, stays
+here and is listed. Files already there unchanged are skipped, so a rerun resumes. Nothing on the Hub is deleted. It
+refuses to upload a file that holds a key from this shell, the token or the git email.
 """
 
 
@@ -60,8 +63,30 @@ def files_in(local: Path, remote: str) -> list[tuple[str, Path]]:
             if path.is_file() and not any(junk(Path(part)) for part in path.relative_to(local).parts)]
 
 
+def named_log(log: Path, runs_dir: Path, logs_dir: Path) -> bool:
+    """Whether an .eval file under logs/<study>/ is a run's own log: the run.json at its folder's path under
+    runs/<study>/ names a log of its file name (run_directory.RunDir.eval_log finds a log by that name there)."""
+    run_json = runs_dir / log.parent.relative_to(logs_dir) / "run.json"
+    if not run_json.is_file():
+        return False
+    recorded = (json.loads(run_json.read_text()) or {}).get("eval_log")
+    return bool(recorded) and Path(recorded).name == log.name
+
+
+def logs_in(logs_dir: Path, runs_dir: Path, rel: str, remote: str) -> tuple[list[tuple[str, Path]], list[Path]]:
+    """files_in for logs/<study>/<rel>, without the .eval files no run names (named_log); and those left out."""
+    files, stray = [], []
+    for name, path in files_in(logs_dir / rel, remote):
+        if path.suffix == ".eval" and not named_log(path, runs_dir, logs_dir):
+            stray.append(path)
+        else:
+            files.append((name, path))
+    return files, stray
+
+
 def select(study: str, runs: list[str], root: Path = ROOT) -> tuple[dict[str, list[tuple[str, Path]]], list[str]]:
-    """The files to upload by run (or by top-level entry of the study), and what was skipped."""
+    """The files to upload by run (or by top-level entry of the study), and what was skipped: the smoke folders and
+    macOS files by name, and each .eval no run names by its path under logs/<study>/."""
     runs_dir, logs_dir = root / "runs" / study, root / "logs" / study
     if study == "apart_controls":
         refuse("the apart controls sit at apart_controls/<model>/... on the dataset; this script uploads studies only")
@@ -74,17 +99,19 @@ def select(study: str, runs: list[str], root: Path = ROOT) -> tuple[dict[str, li
             run = run.strip("/").removeprefix(f"runs/{study}/")
             if not run or Path(run).is_absolute() or ".." in Path(run).parts or not (runs_dir / run).is_dir():
                 refuse(f"no run runs/{study}/{run}/")
-            items[run] = (files_in(runs_dir / run, f"{study}/runs/{run}")
-                          + files_in(logs_dir / run, f"{study}/logs/{run}")
+            logs, stray = logs_in(logs_dir, runs_dir, run, f"{study}/logs/{run}")
+            items[run] = (files_in(runs_dir / run, f"{study}/runs/{run}") + logs
                           + files_in(logs_dir / "screen" / f"{run}.log", f"{study}/logs/screen/{run}.log"))
+            skipped += [path.relative_to(logs_dir).as_posix() for path in stray]
     else:
         names = sorted({p.name for folder in (runs_dir, logs_dir) if folder.is_dir() for p in folder.iterdir()})
         for name in names:
             if name.startswith("smoke") or junk(Path(name)):
                 skipped.append(name)
                 continue
-            items[name] = files_in(runs_dir / name, f"{study}/runs/{name}") + files_in(logs_dir / name,
-                                                                                      f"{study}/logs/{name}")
+            logs, stray = logs_in(logs_dir, runs_dir, name, f"{study}/logs/{name}")
+            items[name] = files_in(runs_dir / name, f"{study}/runs/{name}") + logs
+            skipped += [path.relative_to(logs_dir).as_posix() for path in stray]
     return {name: files for name, files in items.items() if files}, skipped
 
 

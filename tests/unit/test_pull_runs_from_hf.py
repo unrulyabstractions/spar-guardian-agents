@@ -105,18 +105,18 @@ def test_the_mapping_is_the_uploads_reversed(tmp_path):
                    logs / "screen", logs / "only_log"):
         folder.mkdir(parents=True)
     (runs / "INDEX.jsonl").write_text("{}\n")
-    (runs / "run_a" / "run.json").write_text("{}")
+    (runs / "run_a" / "run.json").write_text('{"eval_log": "logs/study_x/run_a/a.eval"}')
     (runs / "run_a" / "trajectories" / "t#1@k7q2m" / "transcript.json").write_text("[]")
     (runs / "mock" / "run_m" / "run.json").write_text("{}")
     with zipfile.ZipFile(logs / "run_a" / "a.eval", "w") as archive:
         archive.writestr("samples/1.json", "{}")
     (logs / "screen" / "run_a.log").write_text("ran\n")
-    (logs / "only_log" / "b.eval").write_bytes(b"x")
+    (logs / "only_log" / "b.eval").write_bytes(b"x")              # no run names it: it never goes up
     pairs = [pair for selection in (upload.select("study_x", ["run_a"], root)[0],
                                     upload.select("study_x", ["mock/run_m"], root)[0],
                                     upload.select("study_x", [], root)[0])
              for files in selection.values() for pair in files]
-    assert len(pairs) == 12
+    assert len(pairs) == 11 and not any(remote.endswith("b.eval") for remote, _ in pairs)
     for remote, local in pairs:
         assert pull.local_path(remote, root) == local
     one_run = [remote for remote, _ in upload.select("study_x", ["run_a"], root)[0]["run_a"]]
