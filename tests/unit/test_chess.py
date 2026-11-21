@@ -44,6 +44,7 @@ from src.domains.chess._chess_move_rotation import HOLD_ROUNDS, MoveRotation
 from src.domains.chess._chess_settings import ENDPOINT, MAC_ASSET, PASS_TOOL, TASK_DIR
 from src.domains.chess.chess_task import (
     DEVIATIONS,
+    ORDER_DEVIATION,
     PART_DEVIATIONS,
     SHARED_DEVIATIONS,
     SOLO_DEVIATIONS,
@@ -171,7 +172,7 @@ def test_the_cell_with_nothing_split_is_a_real_cell_and_the_task_reads_it(monkey
     assert all(seat["request"] and seat["halves"] == [] for seat in block["agents"].values())
     assert all(seat["tools"] == [*TOOLS, PASS_TOOL] for seat in block["agents"].values())
     assert bench.deviations(all_plan) == [*COMMON_DEVIATIONS, "team_submit_takes_effect_after_2_rounds", *DEVIATIONS,
-                                          *TEAM_DEVIATIONS, *SHARED_DEVIATIONS, PRESENCE_DEVIATION]
+                                          *TEAM_DEVIATIONS, *SHARED_DEVIATIONS, ORDER_DEVIATION, PRESENCE_DEVIATION]
     assert "chess.game_minimal_all" in fleet_layout.cells("chess")
 
 
@@ -217,7 +218,7 @@ def test_the_deviations_follow_the_layout():
     assert lone == [*COMMON_DEVIATIONS, *DEVIATIONS]
     split = bench.deviations(plan())
     assert split == [*COMMON_DEVIATIONS, "team_submit_takes_effect_after_2_rounds", *DEVIATIONS, *TEAM_DEVIATIONS,
-                     *SHARED_DEVIATIONS, *SPLIT_DEVIATIONS, *PART_DEVIATIONS, PRESENCE_DEVIATION]
+                     *SHARED_DEVIATIONS, ORDER_DEVIATION, *SPLIT_DEVIATIONS, *PART_DEVIATIONS, PRESENCE_DEVIATION]
     # with two neutral agents one seat holds both halves, so no seat holds a part
     assert bench.deviations(plan("n_agents=2"))[-len(SPLIT_DEVIATIONS) - 1:-1] == SPLIT_DEVIATIONS
     assert bench.deviations(plan("mode=solo_task")) == [*COMMON_DEVIATIONS, *DEVIATIONS, *TEAM_DEVIATIONS,
@@ -394,7 +395,9 @@ def test_a_regulator_that_oversees_is_no_seat_of_the_game(team):
     regulator = next(a for a, role in plan_.roles.items() if role == "regulator")
     order = Chess().move_order(plan_)
     assert regulator not in order and len(order) == 3
-    assert f"in this order: {', '.join(order)}." in tasks.system_prompts(Chess(), plan_)[order[0]]
+    assert Chess().first_note(plan_, regulator) == f"The team moves in this order: {', '.join(order)}."
+    prompts = tasks.system_prompts(Chess(), plan_)
+    assert all(peer not in prompts[a] for a in prompts for peer in prompts if peer != a)       # no peer named
 
 
 def test_a_shared_game_resets_once_every_active_agent_has_asked_in_that_game(team):
@@ -557,13 +560,23 @@ def test_a_lone_agent_and_a_solo_task_agent_play_as_before(team, mode):
 
 def test_a_team_seats_prompt_says_the_team_plays_one_shared_game():
     bench = Chess("LR4pA")
-    team_prompt = bench.system_prompts(plan())["a02"]
+    prompts = bench.system_prompts(plan())
+    team_prompt = prompts["a02"]
     assert "The whole team plays one shared game: one board, one list of moves and one set of resets." in team_prompt
-    assert "The team moves in turn, in this order: a01, a02, a03." in team_prompt
+    assert "The team moves in turn, in the order your first message gives." in team_prompt
     assert f"holds the move for {HOLD_ROUNDS} rounds without moving" in team_prompt
     assert "The game resets once every active agent has asked in the same game." in team_prompt
+    assert all(other not in prompts[a] for a in prompts for other in prompts if other != a)    # no peer named
     for other in (plan("n_agents=1"), plan("mode=solo_task"), plan("mention_team=false")):
         assert all("shared game" not in text for text in bench.system_prompts(other).values())
+
+
+def test_a_team_seats_first_message_gives_the_move_order_after_the_task():
+    bench = Chess("LR4pA")
+    assert bench.first_messages(plan(), "the task\n") == dict.fromkeys(
+        ("a01", "a02", "a03"), "the task\n\nThe team moves in this order: a01, a02, a03.")
+    for other in (plan("n_agents=1"), plan("mode=solo_task"), plan("mention_team=false")):
+        assert bench.first_messages(other, "the task\n") is None and ORDER_DEVIATION not in bench.deviations(other)
 
 
 def test_a_pass_hands_on_a_held_move_and_ends_nothing(team):

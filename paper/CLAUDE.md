@@ -1352,3 +1352,10 @@ are not told which teammates are influencers." hold for the runs and the code), 
 
 Built in `worktree/paper-presence` at b586a02 plus this change, with runs/, logs/, build/ and the submodules linked,
 because the main tree held other sessions' uncommitted src/measures changes.
+
+## Knowledge work's holders and chess's move order leave the system prompt, 2026-11-21
+
+No system prompt in any domain names a peer now. Knowledge work's holders of the review tool and the read, and chess's
+move order, follow the task in each agent's first message; the system prompt keeps a sentence that names no agent and
+says the first message holds them. The paper describes neither domain in a team (Appendix C runs them alone), so no
+sentence, table or figure changed: "No system prompt on our three tasks names a peer." stays true.

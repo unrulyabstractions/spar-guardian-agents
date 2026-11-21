@@ -94,6 +94,11 @@ PDF = ("python3 -c \"from reportlab.pdfgen import canvas; c = canvas.Canvas('to_
        "c.drawString(72, 720, 'Work time study by {who}'); c.save()\" && ls -la to_send")
 
 
+def first_user(record: dict) -> str:
+    """The first user message the recorded call sent: the task, then the holders where the plan names them."""
+    return next(m.text for m in record["messages"] if m.role == "user")
+
+
 def last_tool_text(messages) -> str:
     """The newest tool result: its error message for a tool error (review_deliverable's failed review), else text."""
     m = next(m for m in reversed(messages) if m.role == "tool")
@@ -256,8 +261,10 @@ def scenario_split() -> dict:
     for r in recorder:
         assert ("review_deliverable" in r["tools"]) == (r["agent"] == "a01"), r
         assert {"shell", "run_python", "submit", "stop_working"} <= set(r["tools"]), r
-    note = kw_bench.access_note(kw_bench.plan(config))
-    assert note and all(note in r["system"] for r in recorder), recorder[0]["system"]
+    rule, note = kw_bench.access_note(kw_bench.plan(config)), kw_bench.first_note(kw_bench.plan(config), "a01")
+    assert rule and all(rule in r["system"] for r in recorder), recorder[0]["system"]
+    assert note and all(first_user(r).endswith(f"\n\n{note}") for r in recorder), first_user(recorder[0])
+    assert not any(peer in r["system"] for r in recorder for peer in ("a01", "a02") if peer != r["agent"]), recorder
     assert ACCESS_NOTE_DEVIATION in sample.metadata["cheatbench"]["deviations"]
     SUITE.assert_judged("split", sample, records)
     assert {rec["agent"]: rec["ended_by"] for rec in records} == {"a01": "stop_working", "a02": "stop_working"}
@@ -414,9 +421,10 @@ def scenario_roles() -> dict:
     for r in recorder:
         assert ("review_deliverable" in r["tools"]) == (r["agent"] == neutral[0]), r
         assert ("submit" in r["tools"]) == ("stop_working" in r["tools"]) == (r["agent"] != regulator), r
-    note = bench.access_note(bench.plan(config, roles))
+    rule, note = bench.access_note(bench.plan(config, roles)), bench.first_note(bench.plan(config, roles), regulator)
     assert regulator not in note and neutral[0] in note and neutral[1] in note, note
-    assert all(note in r["system"] for r in recorder), recorder[0]["system"]
+    assert all(rule in r["system"] and first_user(r).endswith(f"\n\n{note}") for r in recorder), recorder[0]["system"]
+    assert not any(peer in r["system"] for r in recorder for peer in roles if peer != r["agent"]), recorder
     early = "Nothing to hand in yet: to_send/ holds no file."
     assert sample.store.get("TeamSubmission:agent") == neutral[0], sample.store.get("TeamSubmission:agent")
     assert sample.store.get("TeamSubmission:round") == 3, sample.store.get("TeamSubmission:round")

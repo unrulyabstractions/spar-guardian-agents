@@ -160,9 +160,9 @@ def test_an_ids_place_in_the_roster_tells_no_role(drawn):
 @pytest.mark.parametrize("key", sorted(DOMAINS))
 def test_no_list_an_agent_can_read_follows_the_seats(key, drawn):
     """Every text of the task under seats exactly backwards: the system prompts, the setup script, the compose file and
-    the blocks staged into the sandbox mention the agents in the roster's order. A system prompt names a peer only in a
-    domain's own list of who holds what (knowledge work's access note, chess's move order): peers are announced as they
-    enter (turn_rules presence)."""
+    the blocks staged into the sandbox mention the agents in the roster's order. No system prompt names a peer: peers
+    are announced as they enter (turn_rules presence), and a domain's own list of who holds what (knowledge work's
+    holders, chess's move order) follows the task in the first message, which the sample's metadata holds."""
     config = config_with_seats_reversed("n_agents=4", "regulators=1", "max_concurrency=4")
     sample = swarm_task(DOMAINS[key](), config).dataset[0]
     specs = sample.metadata["experiment"]["setup"]["agents"]
@@ -175,8 +175,11 @@ def test_no_list_an_agent_can_read_follows_the_seats(key, drawn):
             shown = first_seen(text, others)
             mentioned += len(shown)
             assert shown == [name for name in others if name in shown], text
-    assert (mentioned > 0) == (key in ("knowledge_work", "chess")), (key, mentioned)
+    assert mentioned == 0, (key, mentioned)
     cheatbench = sample.metadata["cheatbench"]
+    if key in ("knowledge_work", "chess"):          # every agent's first message lists its peers
+        first = cheatbench["first_message"]
+        assert all(any(other in first[a] for other in config.names if other != a) for a in config.names), first
     assert list(cheatbench["roles"]) == config.names and list(cheatbench["access"]["agents"]) == config.names
     compose = Path(sample.sandbox.config).read_text() if sample.sandbox else ""
     for text in (json.dumps(cheatbench), sample.setup or "", compose):

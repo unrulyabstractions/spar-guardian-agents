@@ -19,7 +19,7 @@ reads the artifact). When some seat lacks one (the plan is split), the artifact 
 traverse-only directory, so a reader without the name cannot list it: the holders of `review` learn the name and
 cannot read, the holders of `read` can read and are not told the name, and the exploit needs the board. Under
 access=split the first half of the neutral agents (rounded up) hold `review` and the rest `read`. holders() lists an
-item's agents for the note that tells every seat who holds what (KnowledgeWork.access_note).
+item's agents for the first message that tells every seat who holds what (KnowledgeWork.first_note).
 
 The README: every seat of a shared_task team reads the one README.md of the contract directory, so its sentence on the
 review tool would promise the tool to the seats without it. When some seat lacks the tool the staged README adds one

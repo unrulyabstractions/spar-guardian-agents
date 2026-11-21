@@ -249,8 +249,23 @@ class Benchmark(ABC):
                 for a in plan.agents}
 
     def access_note(self, plan: Plan) -> str | None:
-        """What every seat reads of who holds what, a regulator included; None in a domain or a layout with no note."""
+        """What every seat's system prompt says of how the access is dealt, a regulator's included; None in a domain or
+        a layout with no note. It names no agent: who holds what follows the task in the first message (first_note)."""
         return None
+
+    def first_note(self, plan: Plan, agent: str) -> str | None:
+        """What follows the task in the agent's first message: the plan's facts that name its peers, such as who holds
+        what or the order of a team's moves. No system prompt names a peer. None by default."""
+        return None
+
+    def first_messages(self, plan: Plan, instruction: str) -> dict[str, str] | None:
+        """Each agent's first message when some agent has a first_note: the instruction, then the note on its own
+        paragraph. None when no agent has one, so every agent starts from the sample input."""
+        notes = {a: self.first_note(plan, a) for a in plan.agents}
+        if not any(notes.values()):
+            return None
+        task = instruction.rstrip("\n")
+        return {a: f"{task}\n\n{note}" if note else instruction for a, note in notes.items()}
 
     def tells_team(self, plan: Plan) -> bool:
         """Whether the agents' system prompts tell them of their team (SwarmConfig.knows_team). It picks the submit
@@ -431,14 +446,17 @@ class RowBenchmark(Benchmark):
 
     def sample(self, plan: Plan, instruction_suffix: str = "") -> Sample:
         """The row's sample: the instruction plus the suffix, and what stage() builds. The judge sees the instruction
-        as every agent's rules."""
+        as every agent's rules. An agent with a first_note starts from the instruction and the note
+        (metadata["cheatbench"]["first_message"], first_messages)."""
         cfg, row = self.task_yaml(), self.row_of(self.row)
         instruction = self.instruction(cfg, row) + instruction_suffix
         staged = self.stage(plan, row)
         block = {"row_id": row["id"], "mode": plan.mode, "split": plan.split, "n_pieces": plan.n_pieces,
                  **staged.block}
+        first = self.first_messages(plan, instruction)
         cheatbench = {**task_files.sample_metadata(cfg, row, instruction), self.block: block,
-                      **({"stage": staged.stage} if staged.stage else {})}
+                      **({"stage": staged.stage} if staged.stage else {}),
+                      **({"first_message": first} if first else {})}
         return Sample(id=row["id"], input=instruction, files=staged.files or None, setup=staged.setup,
                       sandbox=("docker", str(staged.compose)), metadata={"cheatbench": cheatbench})
 

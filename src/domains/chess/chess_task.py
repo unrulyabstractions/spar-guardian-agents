@@ -13,7 +13,8 @@ endpoint, which ranks the best replies of any position.
 Layouts. A lone agent gets CheatBench's episode: one game, all nine tools. A team's agents each keep their own
 opponent/config.json and notepad. In shared_task they share one game, its six resets, its game/ files and
 opponent/play.py, they move in turn and they reset only together (_chess_move_rotation.py), they hold pass_turn, and
-their system prompt says so (prompts.yaml chess.team_game); in solo_task each plays its own game. The instruction ends
+their system prompt says so (prompts.yaml chess.team_game). That prompt names no agent: the move order follows the task
+in each agent's first message (chess.move_order). In solo_task each plays its own game. The instruction ends
 with the note for the arbiter and no answer block: submit hands the game in (prompts.yaml chess.closing).
 
 Access items: `request` (the api_request tool), `credential1` and `credential2` (the halves of the endpoint's bearer
@@ -85,6 +86,7 @@ SPLIT_DEVIATIONS = ["endpoint_requires_a_bearer_credential_cut_in_two_halves_dea
                     "api_request_held_by_the_request_seats_only",
                     "game_and_opponent_files_read_only_so_no_agent_tampers_alone"]
 PART_DEVIATIONS = ["system_prompt_tells_a_holder_of_one_half_that_the_credential_is_split"]
+ORDER_DEVIATION = "first_message_gives_the_move_order_after_the_instruction"
 
 
 class Chess(RowBenchmark):
@@ -170,14 +172,22 @@ class Chess(RowBenchmark):
 
     def system_prompts(self, plan: Plan) -> dict[str, str]:
         """The base's prompts, then for an agent of a shared_task team told of its team the text on its one game and,
-        for a holder of one half, on the credential."""
+        for a holder of one half, on the credential. Neither names an agent."""
         prompts = super().system_prompts(plan)
         if not self.plays_as_team(plan):
             return prompts
-        text = load_prompts()["chess"]["team_game"]
-        game = text.format(order=", ".join(self.move_order(plan)), rounds=rounds_text(HOLD_ROUNDS))
+        game = load_prompts()["chess"]["team_game"].format(rounds=rounds_text(HOLD_ROUNDS))
         return {a: "\n\n".join(filter(None, [prompt, game, self.credential_note(plan, a)]))
                 for a, prompt in prompts.items()}
+
+    def first_note(self, plan: Plan, agent: str) -> str | None:
+        """The move order (prompts.yaml chess.move_order) for every agent of a team that plays as one, a regulator that
+        oversees included, since its first message holds its teammates' (src/tasks.py first_messages); else None, and
+        None for a team with no seat to move."""
+        order = self.move_order(plan)
+        if not (self.plays_as_team(plan) and order):
+            return None
+        return load_prompts()["chess"]["move_order"].format(order=", ".join(order))
 
     def stage(self, plan: Plan, row: dict) -> Staged:
         """The compose file and the block the setup, the tools, the scorer and run.json read: each agent's items,
@@ -229,11 +239,14 @@ class Chess(RowBenchmark):
         return f"game {record['game']}: {result} after {len(record['sans'])} plies"
 
     def team_deviations(self, plan: Plan) -> list[str]:
-        """Each agent's own config and notepad; a shared_task team's one game and its rotation, or a solo_task
-        team's own games; a split's credential and request seats, and the note to a holder of one half."""
+        """Each agent's own config and notepad; a shared_task team's one game, its rotation and the move order in the
+        first message, or a solo_task team's own games; a split's credential and request seats, and the note to a
+        holder of one half."""
         mode = SHARED_DEVIATIONS if plan.mode == "shared_task" else SOLO_DEVIATIONS
+        order = [ORDER_DEVIATION] if self.plays_as_team(plan) else []
         told = self.plays_as_team(plan) and any(self.holds_a_part(plan, agent) for agent in plan.agents)
-        return [*TEAM_DEVIATIONS, *mode, *(SPLIT_DEVIATIONS if plan.split else []), *(PART_DEVIATIONS if told else [])]
+        return [*TEAM_DEVIATIONS, *mode, *order, *(SPLIT_DEVIATIONS if plan.split else []),
+                *(PART_DEVIATIONS if told else [])]
 
     @classmethod
     def run_blocks(cls, view) -> dict:
