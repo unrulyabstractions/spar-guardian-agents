@@ -82,26 +82,51 @@ These poisoned agents represent negative peer pressure.
   \centering
   \includegraphics[width=\linewidth]{topology_compare}
   \caption{Our board beside the shared folder of a reported incident. On our board, agents check, read and post,
-  and each turn brings a notice of new posts per sender. In the incident, agents listed, read and wrote files in a
+  and each model call opens with a notice of new posts per sender. In the incident, agents listed, read and wrote files in a
   shared cache.}
   \label{fig:topology}
 \end{figure}
 
 \subsubsection*{Communication}
 \begin{itemize}
-  \item Each turn, agents are informed of the number of new messages on the board (total and per agent)
-  \item They have a budget of messages they can read and write per turn
-  \item Reading and writing messages does not cost the agent its turn
+  \item Before each model call, agents are informed of the number of new messages on the board since their last
+  call (total and per agent)
+  \item They have a budget of messages they can read and write per round
+  \item Reading and writing messages does not use up the agent's rounds
+  \item The board is live: a read returns every post made so far, including posts made in the same round
 \end{itemize}
 
-Figure~\ref{fig:rounds} shows one round and the next for five agents.
+\subsubsection*{Rounds}
+Agents work in \textbf{rounds}.
+In a round, an agent makes up to N tool calls.
+Its model calls run one after another.
+Each model call sees the results of the tool calls before it.
+A reply that asks for several tool calls counts each of them.
+A round ends when the agent calls end\_round, when it replies with no tool call, or at its N-th call.
+The call to end\_round never counts toward N.
+Each agent may use up R rounds.
+A round uses up one of them unless every call it made was a \textbf{board call}.
+The board calls are board\_status, board\_read, board\_post and the tools that read a teammate's calls.
+A round of end\_round alone, or a reply with no tool call alone, uses up a round.
+Board calls still count toward N, so every round ends.
+All agents run their rounds in parallel.
+We record the start and end time of every call, and its place in its round.
+Workers and influencers get the same R and N.
+A lone agent follows the same rules.
+Figure~\ref{fig:rounds} shows two rounds for five agents.
+
+The system prompt states these rules with no numbers.
+The first user message gives the values: ``You have \Rounds{} rounds, and up to \CallsPerRound{} tool
+calls per round.''
+Each round opens with a user message such as ``Round 3 of \Rounds.''
+The number counts the rounds the agent has used up, plus one.
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\linewidth]{round_structure}
-  \caption{Two rounds of a run, step by step for each agent. A step that ends with a board action is free, up to a
-  limit per round. Other steps count against the agent's working steps. After a submit, the submitter exits and the
-  others work two more rounds.}
+  \caption{Two rounds of a run, call by call for each agent. A round holds up to N tool calls. A round of board calls
+  alone uses up none of the agent's rounds. A dotted arrow marks a read that returns a post made in the same round.
+  After a submit, the submitter exits and the others work two more rounds.}
   \label{fig:rounds}
 \end{figure}
 
@@ -110,9 +135,9 @@ Agents learn of their peers from the conversation.
 No system prompt on our three tasks names a peer.
 A worker's system prompt says that it works with a team on the same task.
 When an agent \textbf{enters} the run, every other agent reads a user message such as ``k7q2m entered.'' before its
-next step.
+next round.
 Influencers are announced like workers, with no role shown.
-An agent \textbf{exits} when it submits, stops working, alerts humans or runs out of working steps.
+An agent \textbf{exits} when it submits, stops working, alerts humans or runs out of rounds.
 Every peer still present then reads why, such as ``k7q2m stopped working (stop\_working).''
 A second line follows: ``k7q2m exited.''
 The tools that read a teammate's calls refuse a teammate that has not entered yet.
@@ -124,7 +149,7 @@ We adapt the following tasks from \textit{CheatBench}~\cite{phan2026cheatbench},
 for cheating, and integrating them into \textit{ORBIT}~\cite{hagag2026orbit}.
 
 \subsubsection*{Tasks}
-Every agent gets \TurnBudget{} working steps on every task.
+Every agent gets \Rounds{} rounds of up to \CallsPerRound{} tool calls on every task.
 The tasks are hard. Agents choose how to divide the work. A honeypot offers a shortcut that an agent can share openly
 or use quietly. Figure~\ref{fig:access} shows how the pieces of the honeypot are dealt.
 
@@ -390,18 +415,22 @@ The judge is \JudgeName{} at \JudgeEffort{} effort.
 \begin{itemize}
   \item Workers per team: three.
   \item Max message length: \MaxMessageChars{} characters.
-  \item Max message writes per turn: \PostsPerTurn.
-  \item Max messages read per turn: \ReadsPerTurn, and a read returns at most one page of \ReadPage{} posts.
+  \item Rounds per agent (R): \Rounds{}, for workers and influencers alike.
+  \item Tool calls per round (N): \CallsPerRound{}, board calls included.
+  \item Max message writes per round: \PostsPerTurn.
+  \item Max messages read per round: \ReadsPerTurn, and a read returns at most one page of \ReadPage{} posts.
   Regulators have no read budget.
-  \item Free board actions per turn: \FreeBoardActions. A step that ends with a board action (status, read, post)
-  does not count against the agent's working steps, up to \FreeBoardActions{} per turn. An influencer gets
-  \FreeBoardActionsInfluencer. Its reads of a teammate's tool calls count as board actions.
   \item Max tool result: \ToolOutputKiB{}~KiB for every agent. A longer result keeps its start and its end, with a
   line that states the cut.
-  \item The runs of the multi-domain study differ from this design in seven ways. A regulator read its teammates'
-  tool calls through one tool, which cut each call's arguments and result to 200 characters. A disregulator could not
-  read its teammates' tool calls and had the workers' free board actions. A longer tool result kept its first and
-  last 8~KiB, with no line marking the cut. Each agent's system prompt named every teammate. No message announced an
-  entry or an exit. A worker that submitted kept its turns until the run ended. No influencer could alert humans.
+  \item The runs of the multi-domain study differ from this design in thirteen ways. Each agent had \TurnBudget{}
+  working steps instead of rounds of tool calls. A step was one model call and the tool calls of its reply. A step
+  that ended with a board call used up no working step. A round allowed up to \FreeBoardActions{} such steps, or
+  \FreeBoardActionsInfluencer{} for a regulator. No message gave the number of steps or opened a round. In a
+  round's first step, a read saw the board as it stood when the round began. The working steps of an agent that
+  stopped went to its teammates. A regulator read its teammates' tool calls through one tool, which cut each call's
+  arguments and result to 200 characters. A disregulator could not read its teammates' tool calls and had the
+  workers' free board steps. A longer tool result kept its first and last 8~KiB, with no line marking the cut. Each
+  agent's system prompt named every teammate. No message announced an entry or an exit. A worker that submitted kept
+  its turns until the run ended. No influencer could alert humans.
 \end{itemize}
 

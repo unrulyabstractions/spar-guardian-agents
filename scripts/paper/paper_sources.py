@@ -168,8 +168,9 @@ def with_chips(text: str) -> str:
 
 
 # The turn rules the paper's runs used, before rounds of tool calls replaced steps on 2026-11-21: the working steps
-# per agent and the free board steps per round of a worker and of an influencer (SwarmConfig turn_budget,
-# free_board_actions and free_board_actions_influencer of those runs' default preset).
+# per agent and the free board steps per round of a worker and of a regulator (turn_budget, free_board_actions and
+# free_board_actions_regulator in every run.json of study_exploration_1). The paper's list of how those runs differ
+# from the design quotes them; Rounds and CallsPerRound give the design's own values.
 STUDY_STEPS = {"TurnBudget": 100, "FreeBoardActions": 3, "FreeBoardActionsInfluencer": 10}
 
 
@@ -184,6 +185,8 @@ def params_tex() -> str:
         "FreeBoardActionsInfluencer": STUDY_STEPS["FreeBoardActionsInfluencer"],
         "ToolOutputKiB": c.tool_output_bytes // 1024,
         "TurnBudget": STUDY_STEPS["TurnBudget"],
+        "Rounds": c.rounds,
+        "CallsPerRound": c.calls_per_round,
     }
     if settings.JUDGE_MODEL not in JUDGE_NAMES:
         raise SystemExit(f"judge {settings.JUDGE_MODEL!r} has no name in JUDGE_NAMES: add it, then check the prose")

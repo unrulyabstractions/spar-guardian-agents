@@ -207,54 +207,100 @@ def fig_topology_compare():
 
 
 # ---------------------------------------------------------------- the round structure
+# Two rounds of five agents, drawn with N = 4 calls per round. Each lane is one agent's round: its calls in order, then
+# a dot for whether the round used up one of the agent's rounds. A round of board calls alone uses up none
+# (src/swarm/turn_rules turn_activation; SwarmConfig.rounds and calls_per_round).
+ROUND_CALLS = (
+    {"k7q2m": ["post", "work", "work", "work"], "t4x9n": ["status", "read", "post", "end_round"],
+     "p8s3z": ["read", "work", "no call"], "n5j6q": ["read", "post", "work", "end_round"],
+     "x2m7s": ["status", "work", "work", "work"]},
+    {"k7q2m": ["read", "work", "end_round"], "t4x9n": ["status", "read", "end_round"],
+     "p8s3z": ["work", "work", "post", "work"], "n5j6q": ["post", "end_round"], "x2m7s": ["work", "submit"]},
+)
+SHOWN_N = 4
+
+
+def uses_up_round(calls: list[str]) -> bool:
+    """Whether a round uses up one of the agent's rounds: unless every call, end_round left out, was a board call."""
+    made = [c for c in calls if c not in ("end_round", "no call")]
+    return not made or any(c not in BOARD_ACTIONS for c in made)
+
+
+def live_arrow(ax, a, b):
+    """A dotted line from a to b with a solid head: a read that sees a post of the same round."""
+    k = 1 - 0.18 / math.hypot(b[0] - a[0], b[1] - a[1])
+    mid = (a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k)
+    ax.plot([a[0], mid[0]], [a[1], mid[1]], color=INK, lw=0.9, ls=DOT, zorder=6)
+    arrow(ax, mid, b, color=INK, lw=0.9, z=6)
+
+
 def fig_round_structure():
-    """One round, its follow-up steps and the next round, step by step per agent."""
-    fig = plt.figure(figsize=(FULL, 2.78))
+    """Two rounds, call by call per agent: up to N calls a round, end_round, a reply with no tool call, the round each
+    one uses up, a read of a post made in the same round, and the submitter's exit."""
+    fig = plt.figure(figsize=(FULL, 3.05))
     ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
     ax.set_xlim(0, 17.0)
-    ax.set_ylim(0.6, 7.6)
+    ax.set_ylim(0.55, 8.0)
     ax.axis("off")
     names = list(ROLES5)
     lane_h, top = 0.88, 6.1
-    cols = [("r", 1.2, 3.6), ("f1", 5.0, 1.45), ("f2", 6.55, 1.45), ("f3", 8.1, 1.45), ("r1", 9.85, 3.6)]
-    acts = {
-        "r": {"k7q2m": "post", "t4x9n": "work", "p8s3z": "status", "n5j6q": "work", "x2m7s": "read"},
-        "f1": {"k7q2m": "work", "p8s3z": "read", "x2m7s": "post"},
-        "f2": {"p8s3z": "post", "x2m7s": "work"},
-        "f3": {"p8s3z": "read"},
-        "r1": {"k7q2m": "work", "t4x9n": "get_peer_actions", "p8s3z": "work", "n5j6q": "read", "x2m7s": "submit"},
-    }
+    pitch, w = 1.5, 1.42
+    starts = (1.2, 7.95)
     for j, n in enumerate(names):
         y = top - j * lane_h
         agent(ax, 0.55, y, n, ROLES5[n], r=0.44, fs=7.2)
-        ax.plot([1.0, 15.8], [y - lane_h / 2, y - lane_h / 2], color=GRID, lw=0.5, zorder=0)
-    ax.plot([1.0, 15.8], [top + lane_h / 2, top + lane_h / 2], color=GRID, lw=0.5, zorder=0)
-    for key, x, w in cols:
+        ax.plot([1.0, 16.8], [y - lane_h / 2, y - lane_h / 2], color=GRID, lw=0.5, zorder=0)
+    ax.plot([1.0, 16.8], [top + lane_h / 2, top + lane_h / 2], color=GRID, lw=0.5, zorder=0)
+    for x0, calls in zip(starts, ROUND_CALLS):
         for j, n in enumerate(names):
             y = top - j * lane_h
-            a = acts[key].get(n)
-            if a is None:
-                continue
-            step(ax, a, x, y - lane_h / 2 + 0.04, w, lane_h - 0.08)
+            for k, a in enumerate(calls[n]):
+                step(ax, a, x0 + k * pitch, y - lane_h / 2 + 0.04, w, lane_h - 0.08)
+            dot_x = x0 + SHOWN_N * pitch + 0.12
+            used = uses_up_round(calls[n])
+            ax.add_patch(Circle((dot_x, y), 0.13, fc=INK_SECONDARY if used else SURFACE, ec=INK_SECONDARY, lw=0.9,
+                                zorder=4))
+    # the board is live: t4x9n's read sees k7q2m's post of the same round
+    live_arrow(ax, (starts[0] + 0.72 * w, top - 0.2), (starts[0] + pitch + 0.2 * w, top - lane_h + 0.2))
     # the submitter (bottom lane) exits at its submit; the others work two more rounds
-    ax.add_patch(Rectangle((13.6, top - 3 * lane_h - lane_h / 2 + 0.04), 2.2, 4 * lane_h - 0.08, fc="none",
+    hx = starts[1] + SHOWN_N * pitch + 0.45
+    ax.add_patch(Rectangle((hx, top - 3 * lane_h - lane_h / 2 + 0.04), 16.8 - hx, 4 * lane_h - 0.08, fc="none",
                            ec=AXIS, hatch="////", lw=0, zorder=1))
-    ax.text(14.7, top - 1.5 * lane_h, "two more rounds,\nthen the run ends", ha="center", va="center", fontsize=7,
-            color=INK_SECONDARY, zorder=4, bbox=dict(fc=SURFACE, ec="none", pad=1.5))
-    ax.text(14.7, top - 4 * lane_h, "exited", ha="center", va="center", fontsize=7, color=INK_SECONDARY, zorder=4)
-    # a round is each agent's step and, for an agent whose step ended with a board action, its free follow-up steps
-    hy = top + lane_h / 2 + 0.12
-    for label, x0, x1 in (("round r", 1.2, 9.55), ("round r + 1", 9.85, 13.45)):
+    ax.text((hx + 16.8) / 2, top - 1.5 * lane_h, "two more rounds,\nthen the run ends", ha="center", va="center",
+            fontsize=7, color=INK_SECONDARY, zorder=4, bbox=dict(fc=SURFACE, ec="none", pad=1.5))
+    ax.text((hx + 16.8) / 2, top - 4 * lane_h, "exited", ha="center", va="center", fontsize=7, color=INK_SECONDARY,
+            zorder=4)
+    # each round's place numbers, the last one N, under the round's bracket
+    hy = top + lane_h / 2 + 0.42
+    for label, x0 in zip(("round r", "round r + 1"), starts):
+        x1 = x0 + SHOWN_N * pitch + 0.25
         ax.text((x0 + x1) / 2, hy + 0.28, label, ha="center", va="bottom", fontsize=8, weight="bold")
         ax.plot([x0, x0, x1, x1], [hy + 0.02, hy + 0.2, hy + 0.2, hy + 0.02], color=INK_SECONDARY, lw=0.7)
-    by = top - 4 * lane_h - lane_h / 2 - 0.15
-    ky, kx = by - 0.35, 1.2
-    for a, label in [("work", "charged step"), ("read", "free step")]:
-        step(ax, a, kx, ky - 0.2, 0.8, 0.4, text=False)
-        ax.text(kx + 0.95, ky, label, va="center", fontsize=7, color=INK_SECONDARY)
-        kx += 0.95 + len(label) * 0.128 + 0.45
-    arrow(ax, (1.2, 0.8), (15.8, 0.8), color=MUTED, lw=0.7)
-    ax.text(15.8, 0.95, "time", ha="right", va="bottom", fontsize=7, color=MUTED)
+        for k in range(SHOWN_N):
+            ax.text(x0 + k * pitch + w / 2, top + lane_h / 2 + 0.17, str(k + 1) if k < SHOWN_N - 1 else "N",
+                    ha="center", va="center", fontsize=7, color=MUTED)
+    by = top - 4 * lane_h - lane_h / 2
+    rows = ([("box", "work", "work call"), ("box", "read", "board call"),
+             ("box", "no call", "reply with no tool call")],
+            [("dot", True, "uses up a round"), ("dot", False, "uses up no round"),
+             ("arrow", None, "read of a post of the same round")])
+    for r, row in enumerate(rows):
+        ky, kx = by - 0.38 - r * 0.5, 1.2
+        for kind, a, label in row:
+            if kind == "box":
+                step(ax, a, kx, ky - 0.18, 0.8, 0.36, text=False)
+                lx = kx + 0.95
+            elif kind == "dot":
+                ax.add_patch(Circle((kx + 0.4, ky), 0.13, fc=INK_SECONDARY if a else SURFACE, ec=INK_SECONDARY,
+                                    lw=0.9, zorder=4))
+                lx = kx + 0.95
+            else:
+                live_arrow(ax, (kx, ky), (kx + 0.8, ky))
+                lx = kx + 0.95
+            ax.text(lx, ky, label, va="center", fontsize=7, color=INK_SECONDARY)
+            kx = lx + len(label) * 0.128 + 0.6
+    arrow(ax, (1.2, 0.75), (16.8, 0.75), color=MUTED, lw=0.7)
+    ax.text(16.8, 0.9, "time", ha="right", va="bottom", fontsize=7, color=MUTED)
     save(fig, "round_structure", printed_in=TEXT_WIDTH_IN)
 
 
@@ -262,11 +308,14 @@ BOARD_ACTIONS = {"status", "read", "post", "get_peer_actions", "get_peer_observa
 
 
 def step(ax, a, x, y, w, h, text=True):
-    """One step of the round diagram: dashed if it ends with a board action (free), solid grey if charged."""
+    """One call of the round diagram: dashed for a board call, solid grey for a work call, white for submit and
+    end_round, dotted for a reply with no tool call."""
     if a in BOARD_ACTIONS:
         style = dict(fc=PLANE, ec=MUTED, ls=DASH, color=INK)
-    elif a == "submit":
+    elif a in ("submit", "end_round"):
         style = dict(fc=WHITE, ec=INK_SECONDARY, ls="-", color=INK)
+    elif a == "no call":
+        style = dict(fc=SURFACE, ec=MUTED, ls=DOT, color=MUTED)
     else:
         style = dict(fc=TOOL, ec=INK_SECONDARY, ls="-", color=INK_SECONDARY)
     box(ax, x, y, w, h, a if text else None, fc=style["fc"], ec=style["ec"], ls=style["ls"], fs=7.2,
