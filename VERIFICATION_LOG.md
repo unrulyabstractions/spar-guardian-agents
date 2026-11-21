@@ -2445,3 +2445,28 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **What.** Docstrings in src/swarm/tool_output_caps.py and src/replay/replay_run.py said Inspect's cut keeps only the start. I had told the user the same.
 - **How.** Read .venv inspect_ai/_util/text.py truncate_str (0.3.290): "middle truncation, taking half chars from front and half from back", wrapped by truncate_tool_output's note. The paper agent confirmed the same for 0.3.263 from cut results in the runs. The replay's old-run path calls Inspect's own function (INSPECT_CUT), so only the text was wrong, not the behaviour.
 - **Result.** VERIFIED: docstrings corrected; ruff clean. My earlier answers to the user ("Inspect keeps only the start", the "FAIL lines lost" mock-up) were wrong; told the user.
+
+## 2026-11-21: run-data export fixed for the audit (a041eb0, e2ef480, f341f53, b65edfe); no data regenerated
+- **What.** The code behind the run-data audit: relative eval_log and transcript_path links and a two-place log
+  resolver; the transcript header's model (the agent's own, src/export/atif_transcripts.py) and bare agent IDs in
+  transcripts, episodes, verdicts; model_key in run.json, episodes, transcripts and INDEX.jsonl; every verdict in
+  judges/<pass>.<judge>.jsonl keyed by episode (judge.jsonl no longer written or read; labels units are episodes);
+  run.json without task_root, variant, agent, source; signature-only reasoning written as redacted; INDEX.jsonl valid
+  set for every run; the upload sends only the .eval a run.json names; scripts/migrate_verdict_files.py (not run).
+- **How verified.** `make lint` clean. `uv run python -m pytest tests/unit`: 3236 passed, 2 skipped, 6 xfailed; the
+  two skips are tests on real runs of the older export (test_transcript_board real run, test_ladders_over_time pilot),
+  and both passed when pointed at a scratch re-export of flipt_minimal_cheat_dsflash_fixed3. `make test-tools`: 91
+  passed. New tests: test_role_models (influencer header model), test_run (relative links, dead fields, verdicts never
+  undo a pass), test_run_directory (two places only, log_link), test_run_export (signature reasoning),
+  test_upload_runs_to_hf (stray .eval left out), test_run_index (valid and model keys), test_migrate_verdict_files.
+  Re-exported scratch copies (run and log copied to scratchpad/wf4/regen_check; runs/ untouched) of the audit's example
+  flipt_minimal_regulated_dsflash_haiku_enforce_fixed2: regulator x2m4z's header now names
+  openrouter/anthropic/claude-haiku-5.5 (was deepseek), equal to its steps and episode; its 73 signature blobs are now
+  "[redacted reasoning]"; eval_log reads logs/study_exploration_1/<run>/<file>.eval and resolves; transcript_path
+  relative; the 4 judges/cheatbench.gpt-6-luna rows unchanged by the re-export; no judge.jsonl. The migration's plan
+  (no --write) on both studies: 225 runs of study_exploration_0 to move judge.jsonl, 147 of study_exploration_1 to
+  re-key labels; study_smoke, study_orbit2_check and apart_controls: 0. Every recorded log resolves by the mirror alone
+  (599 + 8 + 1 runs checked before the resolver shrank).
+- **Result.** VERIFIED for the code and the tests above. UNVERIFIED: the smoke suites (tests/smoke, need Docker) were
+  edited but not run; the viewers were not opened in a browser; `make paper` was not run. Until runs/ is regenerated,
+  readers see the older episodes ("orbit/<id>"), so the viewer and `make paper` read the current runs wrongly.
