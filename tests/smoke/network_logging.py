@@ -105,7 +105,7 @@ def network_run(name: str, config: SwarmConfig, script: dict, *, damaged: bool =
 def team_config(*pairs: str) -> SwarmConfig:
     """Two workers and a regulator with peer_shell, rounds at once, so a worker's call and the regulator's run
     together."""
-    return small("n_agents=3", "regulators=1", "peer_shell=true", "judge=none", "steps_per_agent=3", *pairs)
+    return small("n_agents=3", "regulators=1", "peer_shell=true", "judge=none", "rounds=3", *pairs)
 
 
 def observer_script(config: SwarmConfig) -> tuple[dict, str, str]:
@@ -239,7 +239,7 @@ def scenario_swe_http() -> dict:
 
 def scenario_openmath_workers() -> dict:
     """Two workers in openmath's one container: one serves, the other's curl is refused by the loopback guard."""
-    config = small("n_agents=2", "judge=none", "steps_per_agent=3")
+    config = small("n_agents=2", "judge=none", "rounds=3")
     server, client = config.names
     script = {server: [call("shell", {"command": HTTP_HOLD}, "serve"), call("stop_working", {}, "s-stop")],
               client: [call("shell", {"command": CURL}, "reach"), call("stop_working", {}, "c-stop")]}
@@ -298,7 +298,7 @@ async def kill_monitor(then: ModelOutput) -> ModelOutput:
 
 
 def scenario_monitor_killed() -> dict:
-    config = small("n_agents=2", "judge=none", "steps_per_agent=4", "concurrent_rounds=false")
+    config = small("n_agents=2", "judge=none", "rounds=4", "concurrent_rounds=false")
     first, second = config.names
     after = call("shell", {"command": "echo after"}, "k2")
     script = {first: [call("shell", {"command": LISTEN}, "k1"), lambda messages: kill_monitor(after),
@@ -314,7 +314,7 @@ def scenario_monitor_killed() -> dict:
 
 
 def scenario_network_off() -> dict:
-    config = small("n_agents=2", "judge=none", "steps_per_agent=2", "network_log=false")
+    config = small("n_agents=2", "judge=none", "rounds=2", "network_log=false")
     script = {name: [call("stop_working", {}, f"{name}-stop")] for name in config.names}
     run = network_run("network_off", config, script)
     assert run.block == {"status": "off"} and run.rows is None, run.block

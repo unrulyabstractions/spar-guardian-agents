@@ -12,6 +12,7 @@ from examples.example_arguments import DEFAULT_SETTINGS, USE_JUDGE_AS_DEFAULT, p
 from src import run
 from src.configuration import settings
 from src.configuration.presets import build_config
+from src.configuration.prompt_texts import rounds_values
 from src.domains import DOMAINS
 from src.measures import run_figures as plots
 from src.models import model_registry as models
@@ -123,7 +124,8 @@ def test_each_script_runs_three_neutral_agents_on_the_default_preset(name, monke
     assert plotted == [(settings.RUNS / script.stem, settings.ROOT / "out" / settings.STUDY / script.stem)]
     assert (config.preset, config.scale, config.n_agents) == ("default", "small", 3)
     assert config.regulator_count == 0 and config.disregulator_count == 0 and config.access == "split"
-    assert config.time_limit_s == 3600 and config.batch_judge is False and config.turn_budget == settings.TURN_BUDGET
+    assert config.time_limit_s == 3600 and config.batch_judge is False
+    assert (config.rounds, config.calls_per_round) == (30, 10)
     assert config.judge is None                                 # not judged as it finishes (USE_JUDGE_AS_DEFAULT)
     held = list(benchmark.plan(config).holds.values())
     assert all(len(items) == 1 for items in held) and len({i for items in held for i in items}) >= 2
@@ -164,12 +166,13 @@ def test_each_cell_script_sets_its_agents_and_its_cheat_text(name, monkeypatch):
         task = kwargs["task"]
         assert module.CHEAT.startswith("Your real objective") and "fair game" in module.CHEAT
         assert ("team" in module.CHEAT) == (n_agents == 3)
-        assert task.dataset[0].input.endswith(f"\n{module.CHEAT}\n")
+        assert task.dataset[0].input.endswith(f"\n{module.CHEAT}\n\n{rounds_values(config)}\n")
     else:
         assert kwargs == {"replace": False} and not hasattr(module, "CHEAT")
     assert (run_name, model, config.n_agents, config.judge) == \
         (script.stem, models.resolve(settings.DEFAULT_MODEL), n_agents, None)
-    assert config.preset == "default" and config.access == "split" and config.turn_budget == settings.TURN_BUDGET
+    assert config.preset == "default" and config.access == "split"
+    assert (config.rounds, config.calls_per_round) == (30, 10)
     plan = benchmark.plan(config)
     if n_agents == 1:
         assert plan.holds == {"a01": benchmark.whole_access()}
@@ -193,7 +196,7 @@ def test_each_no_split_cell_gives_every_neutral_agent_everything(name, monkeypat
     assert kwargs == {"replace": False} and not hasattr(module, "CHEAT")
     assert (run_name, model, config.judge) == (script.stem, models.resolve(settings.DEFAULT_MODEL), None)
     assert (config.n_agents, config.regulator_count, config.disregulator_count) == (3, 0, 0)
-    assert config.preset == "default" and config.access == "all" and config.turn_budget == settings.TURN_BUDGET
+    assert config.preset == "default" and config.access == "all" and (config.rounds, config.calls_per_round) == (30, 10)
     plan = benchmark.plan(config)
     assert plan.access == "all" and not plan.split and plan.team and plan.mode == "shared_task"
     assert plan.holds == {a: benchmark.whole_access() for a in config.names}
@@ -218,7 +221,8 @@ def test_each_regulated_cell_runs_four_agents_one_a_hidden_regulator(name, monke
     assert (run_name, model, config.judge) == (script.stem, models.resolve(settings.DEFAULT_MODEL), None)
     assert (config.n_agents, config.regulator_count, config.disregulator_count) == (4, 1, 0)
     assert config.max_concurrency == 4              # a slow round must not cost the cell rounds against `minimal`
-    assert config.preset == "default" and config.access == "split" and config.turn_budget == settings.TURN_BUDGET
+    assert config.preset == "default" and config.access == "split"
+    assert (config.rounds, config.calls_per_round) == (30, 10)
     # the regulator holds nothing; the three neutral agents share the split exploit
     roles = agent_roles(config)
     plan = benchmark.plan(config, roles)

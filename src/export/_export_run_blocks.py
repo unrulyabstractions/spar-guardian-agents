@@ -306,7 +306,8 @@ def alerts_block(view: SampleView) -> list[dict] | None:
 
 
 def recorded_run_blocks(view: SampleView) -> dict:
-    """The run.json blocks a run carries only when it recorded them: the turn budget, access, the domain's blocks
+    """The run.json blocks a run carries only when it recorded them: the turn budget (a run before 2026-11-21), access,
+    the domain's blocks
     (Benchmark.run_blocks), the honeypot probe's report, delivery, the alerts, the sandbox, peer_shell and the code
     state."""
     cb, bench = cheatbench(view), domain(view)
@@ -319,8 +320,8 @@ def recorded_run_blocks(view: SampleView) -> dict:
 
 def recorded_episode_facts(view: SampleView, agent: str) -> dict:
     """An episode's access (what it held), the domain's facts (Benchmark.episode_facts: its review on knowledge work,
-    its task_tool on a machines domain, its SWE keys) and delivery (the round and working step at which its
-    deliverable was first seen), when the run recorded them."""
+    its task_tool on a machines domain, its SWE keys) and delivery (the round at which its deliverable was first seen,
+    and its rounds used up by then, or its working steps in a run before 2026-11-21), when the run recorded them."""
     bench = domain(view)
     facts = {"access": ((access_block(view) or {}).get("agents") or {}).get(agent),
              **(bench.episode_facts(view, agent) if bench else {}),
@@ -337,16 +338,19 @@ def rules_state(view: SampleView) -> dict | None:
 
 
 def rules_facts(state: dict | None, agent: str) -> dict | None:
-    """One agent's activations, working steps, how it ended and its window of rounds."""
+    """One agent's activations (its rounds), the rounds it used up and its rounds of board calls alone, how it ended
+    and its window of rounds. A run before 2026-11-21 gives its working steps (work_steps) in place of the rounds."""
     if state is None:
         return None
-    return {k: (state.get(k) or {}).get(agent) for k in ("activations", "work_steps", "ended", "windows")}
+    counts = ("rounds_used", "board_rounds") if "rounds_used" in state else ("work_steps",)
+    return {k: (state.get(k) or {}).get(agent) for k in ("activations", *counts, "ended", "windows")}
 
 
 # A TurnState.ended reason, as the episode's ended_by: the agent's own act or a turn rule ended it before the sample
-# ended. ORBIT_SUBMITTED, ORBIT's own submit in an older log, reads as the act it was (orbit_submit_act).
-OWN_ENDINGS = {STOP_WORKING: STOP_WORKING, SUBMIT: SUBMIT, ALERT: ALERT, DELIVERED: DELIVERED, "cap": "cap",
-               "context": "context"}
+# ended. ORBIT_SUBMITTED, ORBIT's own submit in an older log, reads as the act it was (orbit_submit_act). "cap" is the
+# step cap of a run before 2026-11-21, "rounds" an agent that used up its rounds.
+OWN_ENDINGS = {STOP_WORKING: STOP_WORKING, SUBMIT: SUBMIT, ALERT: ALERT, DELIVERED: DELIVERED, "rounds": "rounds",
+               "cap": "cap", "context": "context"}
 
 
 def orbit_submit_act(view: SampleView) -> str:
@@ -480,7 +484,8 @@ def engagement_record(view: SampleView, agent: str, rules: dict | None, submissi
 
     discovery_round is the round of its first board_status or board_read; checks, reads and posts count the board
     tool calls (posts that went through); read_senders holds the senders of the posts board_read returned, the agent
-    itself left out; free_steps and work_steps are its steps by charge; oversight and oversight_targets count a
+    itself left out; rounds_used and board_rounds its rounds by charge (free_steps and work_steps, its steps, in a run
+    before 2026-11-21); oversight and oversight_targets count a
     regulator's oversight calls, oversight_first gives the round of its first call about each target and
     checked_in_time whether that met its first rounds; reads_refused and posts_refused the calls the per-round budgets
     refused;
@@ -499,8 +504,9 @@ def engagement_record(view: SampleView, agent: str, rules: dict | None, submissi
         "discovery_round": recorded("discovery_round"),
         "checks": recorded("checks", 0), "reads": recorded("reads", 0), "posts": recorded("posts", 0),
         "read_senders": recorded("read_senders", {}),
-        "free_steps": recorded("free_steps", 0),
-        "work_steps": recorded("work_steps", 0),
+        **({"rounds_used": recorded("rounds_used", 0), "board_rounds": recorded("board_rounds", 0)}
+           if "rounds_used" in state else
+           {"free_steps": recorded("free_steps", 0), "work_steps": recorded("work_steps", 0)}),
         "called_submit": agent in hand_ins(submission) or agent in refused,
         "notices": notices.get(agent, 0),
         "oversight": recorded("oversight", 0), "oversight_targets": recorded("oversight_targets", {}),

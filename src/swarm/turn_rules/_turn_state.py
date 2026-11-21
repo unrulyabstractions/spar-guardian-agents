@@ -4,7 +4,8 @@ TurnState holds the per-sample turn bookkeeping, the agents' entry rounds and ex
 TeamSubmission holds the team's hand-in and the refused submits, StopWorking the round of each stop_working call, Alerts
 each alert_humans call, and Delivered the stop-after-delivery record. The board tools count
 their actions and spend the per-round budgets here. current_round reads the round of the step under way from ORBIT's
-live plan, and live_state an agent's live AgentState.
+live plan, and live_state an agent's live AgentState. Live holds what a sample keeps in memory only: each agent's
+round under way (_turn_rounds) and its conversation at its last boundary, which the peer tools read mid-round.
 
     record_board_action("k7q2m", "read", senders=["t4x9n"])
     if budget_used("k7q2m", "post") < limit: spend("k7q2m", "post", 1)
@@ -13,6 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
+from dataclasses import dataclass, field
 
 from inspect_ai.agent import AgentState
 from inspect_ai.util import StoreModel, store_as
@@ -38,7 +40,8 @@ ALERT_TOOL = "alert_humans"           # the influencers' alert (src/swarm/submit
 ALERT = "alert"                       # the TurnState.ended reason of alert_humans
 ALERT_TAG = "swarm_alert"             # info event of an alert
 PRESENCE_TAG = "swarm_presence"       # a presence line's metadata key, and the info events of entries and exits
-ENDING_TOOLS = (SUBMIT, STOP_WORKING, ALERT_TOOL)   # a step ending in one that went through is neither charged nor free
+ROUND_TAG = "swarm_round"             # a round line's metadata key ("Round 3 of 30."), and its info event
+END_ROUND = "end_round"               # ends the caller's round; never counts (src/swarm/end_round.py)
 SYSTEM_SENDER = "system"                  # the sender of the board's notice of the team's hand-in
 ORBIT_SUBMITTED = "submitted"   # TurnState.ended of ORBIT's own submit, in logs made before submit and stop_working
 ACTIONS_TOOL = "get_peer_actions"                       # the influencers' tools (src/swarm/_regulator_oversight.py)
@@ -46,7 +49,9 @@ OBSERVATIONS_TOOL = "get_peer_observations"
 OVERSIGHT_TOOLS = (ACTIONS_TOOL, OBSERVATIONS_TOOL)
 PEER_SHELL_TOOL = "peer_shell"                           # theirs under SwarmConfig.peer_shell (src/sandbox/)
 CHECK_ROUNDS = 2                                         # a regulator's first rounds, for its check of each teammate
-BOARD_ACTIONS = (*BOARD_TOOLS, *OVERSIGHT_TOOLS, PEER_SHELL_TOOL)   # a step whose last call is one of these is free
+# The board calls: they count toward a round's calls and use up none of the agent's rounds. peer_shell runs commands,
+# so it counts like shell.
+FREE_TOOLS = (*BOARD_TOOLS, *OVERSIGHT_TOOLS)
 CHANNEL_TOOLS = frozenset({"channel_post", "channel_read", "channel_list"})   # ORBIT's, withheld from the provider
 # The TurnState count each board action kind goes to.
 KIND_FIELDS = {"check": "checks", "read": "reads", "post": "posts", "oversight": "oversight"}
@@ -55,29 +60,33 @@ KIND_FIELDS = {"check": "checks", "read": "reads", "post": "posts", "oversight":
 class TurnState(StoreModel):
     """Per-sample turn bookkeeping, saved in the eval log. Dicts are keyed by agent name.
 
-    A completed step is charged (work_steps), free (free_steps) or neither (it ended with a submit or a stop_working
-    that went through). It is free when its last tool call is a board action (BOARD_ACTIONS) that succeeded and the
-    agent's K (free_caps) is above 0; it is charged otherwise, and a failed board action, submit or stop_working is
-    charged with the timeline charge "refused". checks, reads and posts count the board tools; oversight counts a
-    regulator's oversight calls about a teammate."""
+    An agent's round is one activation of up to calls_per_round tool calls. A completed round uses up one of the
+    agent's round_budget (rounds_used, charge "work" or "idle"), none (board_rounds, charge "board": every call it made
+    was a board call, FREE_TOOLS) or ends the agent (charge "submit", "stop" or "alert": its ending tool went
+    through). timeline holds one entry per round: its calls in order, each with its time, and why the round ended.
+    checks, reads and posts count the board tools; oversight counts an influencer's peer-tool calls about a teammate.
+
+    A log made before 2026-11-21 holds the steps of the old rules in place of rounds: cap, pooled, free_caps,
+    turn_budget, work_steps and free_steps, with one timeline entry per step; the readers keep reading them."""
 
     agents: list[str] = Field(default_factory=list)
     workers: list[str] = Field(default_factory=list)        # the agents of role worker, every agent without roles
-    cap: int = 0
-    pooled: bool = True
+    round_budget: int = 0                                   # R: the rounds each agent may use up
+    calls_per_round: int = 0                                # N: the tool calls of one round
     turn_order: str = "round_robin"
     seed: int = 0
     concurrent: bool = False                                # rounds are concurrent steps
     max_concurrency: int = 1
-    free_caps: dict[str, int] = Field(default_factory=dict)     # each agent's K: follow-up steps per round
     reads_per_turn: int | None = None                       # posts board_read may return per agent per round
     posts_per_turn: int | None = None                       # board_post calls per agent per round
-    turn_budget: int | None = None                          # the turn budget, None when it is off
-    rounds: int = 0                                         # rounds written so far, pooled rounds included
+    rounds: int = 0                                         # the plan's rounds (SwarmConfig.plan_rounds)
+    time_limit_s: int | None = None                         # the agents' time limit; a round ends once it passes
+    started_at: float | None = None                         # UTC seconds of the first round's start
     windows: dict[str, list] = Field(default_factory=dict)      # [start, end] rounds per agent; end None is open
-    activations: dict[str, int] = Field(default_factory=dict)   # completed activations, free included
-    work_steps: dict[str, int] = Field(default_factory=dict)    # charged steps, against the working steps
-    free_steps: dict[str, int] = Field(default_factory=dict)    # steps that ended with a board action
+    activations: dict[str, int] = Field(default_factory=dict)   # completed rounds, board rounds included
+    rounds_used: dict[str, int] = Field(default_factory=dict)   # rounds used up, against round_budget
+    board_rounds: dict[str, int] = Field(default_factory=dict)  # rounds of board calls alone, which use up none
+    model_calls: dict[str, int] = Field(default_factory=dict)   # the agent's model calls so far
     checks: dict[str, int] = Field(default_factory=dict)        # board_status calls
     reads: dict[str, int] = Field(default_factory=dict)         # board_read calls
     posts: dict[str, int] = Field(default_factory=dict)         # board_post calls that posted
@@ -94,10 +103,11 @@ class TurnState(StoreModel):
     halted_after_round: int | None = None                   # the round after which the plan was cut
     notice_seen: dict[str, int] = Field(default_factory=dict)   # highest board sequence of others at the last call
     added: dict[str, list[dict]] = Field(default_factory=dict)  # what the filter added: {after, kind, activation, text}
-    ended: dict[str, str] = Field(default_factory=dict)     # stop_working | submit | alert | cap | context | delivered
+    ended: dict[str, str] = Field(default_factory=dict)     # stop_working submit alert rounds context delivered
+    ended_round: dict[str, int] = Field(default_factory=dict)  # the round of a limit's ending (rounds, context)
     entry_rounds: dict[str, int] = Field(default_factory=dict)  # the first round of a plan step holding the agent
     exits: dict[str, dict] = Field(default_factory=dict)    # agent -> {why, round, seq, ...} (_turn_presence)
-    timeline: list[dict] = Field(default_factory=list)          # one entry per activation
+    timeline: list[dict] = Field(default_factory=list)          # one entry per round (turn_activation)
 
 
 class TeamSubmission(StoreModel):
@@ -132,9 +142,9 @@ class Alerts(StoreModel):
 class Delivered(StoreModel):
     """The stop-after-delivery record (SwarmConfig.stop_after_delivery), written only when the rule is on.
 
-    seen gives each agent's first sighting of its deliverable: the round whose end showed it and the agent's working
-    steps by then. A team's deliverable counts for every agent of the roster, and halt_round is the last round that
-    runs. A predicate that raises counts as nothing delivered; errors keeps what it raised."""
+    seen gives each agent's first sighting of its deliverable: the round whose end showed it and the rounds the agent
+    had used up by then ("turn"). A team's deliverable counts for every agent of the roster, and halt_round is the
+    last round that runs. A predicate that raises counts as nothing delivered; errors keeps what it raised."""
 
     after: int = 0                                          # N
     team: bool = False                                      # the team's deliverable ends every agent, N rounds on
@@ -147,6 +157,25 @@ class Delivered(StoreModel):
 
 # The sample's delivery predicate (Benchmark.delivered), set by rules_setup; None when stop_after_delivery is off.
 PREDICATE: ContextVar[Callable[[], Awaitable[set[str]]] | None] = ContextVar("swarm_delivered", default=None)
+
+
+@dataclass
+class Live:
+    """What a sample keeps in memory only, set by rules_setup and shared by every member's task: each agent's round
+    under way (_turn_rounds.round_record) and its conversation at its last boundary (turn_activation.ends_round),
+    which the peer tools read while the agent's round runs. ORBIT's session registry holds an agent's state only as
+    of its last completed activation."""
+
+    rounds: dict[str, dict] = field(default_factory=dict)
+    messages: dict[str, list] = field(default_factory=dict)
+
+
+LIVE: ContextVar[Live | None] = ContextVar("swarm_live", default=None)
+
+
+def live_record() -> Live:
+    """The sample's Live, or an empty one outside a run set up by rules_setup (a unit test's direct call)."""
+    return LIVE.get() or Live()
 
 
 # ------------------------------------------------------------------------------------------------ the live plan

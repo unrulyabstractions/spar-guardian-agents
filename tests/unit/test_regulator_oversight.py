@@ -13,7 +13,6 @@ from orbit.execution.sessions import current_session_registry
 from src.export.eval_sample_view import ATTRIBUTION_KEY
 from src.swarm import _regulator_oversight as oversight
 from src.swarm import turn_rules as rules
-from src.swarm.turn_rules._turn_state import BOARD_ACTIONS
 from tests.support.mock_model import calls
 from tests.support.turn_rules_harness import (
     board_post,
@@ -21,7 +20,6 @@ from tests.support.turn_rules_harness import (
     outcomes,
     pull,
     run,
-    step_ids,
     store,
 )
 
@@ -45,16 +43,13 @@ LONG = "A1" * 150      # a 300-character item: arguments come back whole, a resu
 def test_get_peer_actions_shows_an_influencer_its_teammates_calls(tmp_path):
     """The peer tools are bound to both influencers, never to a worker. get_peer_actions returns any teammate's calls
     oldest first as JSON, each with its id, round, tool and whole arguments (an influencer's too, so a refusal never
-    tells roles apart), and fails with "no such agent" about the caller itself or an unknown name. A call counts as a
-    free board action of kind "oversight" within the caller's K, the same K for the regulator and the disregulator,
-    and records its target. A call that fails is no free step: "no such agent" is charged as work, with the timeline
-    charge "refused"."""
-    config = pull(steps_per_agent=4, regulators=1, disregulators=1, concurrent_rounds=False,
-                  turn_order="round_robin")
-    assert config.free_board_actions_influencer == 10 and config.free_board_actions == 3
+    tells roles apart), and fails with "no such agent" about the caller itself or an unknown name. A call counts as
+    oversight and records its target; it is a board call, so a round of peer calls alone uses up none of the caller's
+    rounds, the failed ones included."""
+    config = pull(rounds=5, regulators=1, disregulators=1, concurrent_rounds=False, turn_order="round_robin")
     scripts = {
-        "a01": [do(LONG), do("A2"), do("A3"), do("A4")],
-        "a02": [actions("a01"), actions("a03"), actions("a02"), actions("zz"), actions("a01", latest=1), do("R2")],
+        "a01": [do(LONG), do("A2"), do("A3"), do("A4"), do("A5")],
+        "a02": [actions("a03"), actions("a01"), actions("a02"), actions("zz"), actions("a01", latest=1), do("R")],
         "a03": [actions("a01"), do("C2"), do("C3"), do("C4")],
     }
     sample, rec = run(config, scripts, tmp_path, roles=ROLES_RD)
@@ -66,49 +61,43 @@ def test_get_peer_actions_shows_an_influencer_its_teammates_calls(tmp_path):
     calls_ = outcomes(sample, ACTIONS)
     answers = [json.loads(r) for _, r, error in calls_ if error is None]
     assert answers == [
-        # round 1: a01 has acted once (sequential rounds, a01 first); its 300-character argument comes back whole
-        {"peer": "a01", "total_calls": 1, "shown": 1,
-         "actions": [{"id": 0, "round": 1, "tool": "work", "arguments": {"item": LONG}}],
-         "not_shown": 0, "not_shown_ids": []},
-        # the disregulator, before its first step of round 1
+        # round 1: the regulator asks of the disregulator, which has not acted yet (sequential rounds, a02 before a03)
         {"peer": "a03", "total_calls": 0, "shown": 0, "actions": [], "not_shown": 0, "not_shown_ids": []},
-        # the disregulator's own query of a01, after the regulator's turn of round 1
+        # the disregulator's query of a01, which has acted once; its 300-character argument comes back whole
         {"peer": "a01", "total_calls": 1, "shown": 1,
          "actions": [{"id": 0, "round": 1, "tool": "work", "arguments": {"item": LONG}}],
          "not_shown": 0, "not_shown_ids": []},
-        # latest=1 in round 3: a01's newest call only
-        {"peer": "a01", "total_calls": 3, "shown": 1,
-         "actions": [{"id": 2, "round": 3, "tool": "work", "arguments": {"item": "A3"}}],
+        # round 2: a01's two calls, oldest first
+        {"peer": "a01", "total_calls": 2, "shown": 2,
+         "actions": [{"id": 0, "round": 1, "tool": "work", "arguments": {"item": LONG}},
+                     {"id": 1, "round": 2, "tool": "work", "arguments": {"item": "A2"}}],
+         "not_shown": 0, "not_shown_ids": []},
+        # latest=1 in round 5: a01's newest call only; a01 used up its last round just before
+        {"peer": "a01", "status": "exited", "total_calls": 5, "shown": 1,
+         "actions": [{"id": 4, "round": 5, "tool": "work", "arguments": {"item": "A5"}}],
          "not_shown": 0, "not_shown_ids": []},
     ]
     errors = [e for _, _, e in calls_ if e is not None]
     assert errors == ["no such agent", "no such agent"]          # the regulator itself, an unknown name
     # Each call about a teammate counts, the disregulator's too; a refused call does not.
     assert store(sample, "oversight") == {"a02": 3, "a03": 1}
-    assert store(sample, "oversight_targets") == {"a02": {"a01": 2, "a03": 1}, "a03": {"a01": 1}}
+    assert store(sample, "oversight_targets") == {"a02": {"a03": 1, "a01": 2}, "a03": {"a01": 1}}
     # the round of the first call about each teammate, however many follow
-    assert store(sample, "oversight_first") == {"a02": {"a01": 1, "a03": 1}, "a03": {"a01": 1}}
-    assert ACTIONS in BOARD_ACTIONS and OBSERVATIONS in BOARD_ACTIONS
-    # Only the successful calls are free: "no such agent" is charged, and ends the regulator's round.
-    assert step_ids(sample, "a02") == ["r1-a02", "r1-a02-free1", "r1-a02-free2", "r2-a02", "r3-a02", "r3-a02-free1",
-                                       "r4-a02"]
+    assert store(sample, "oversight_first") == {"a02": {"a03": 1, "a01": 2}, "a03": {"a01": 1}}
+    assert ACTIONS in rules.FREE_TOOLS and OBSERVATIONS in rules.FREE_TOOLS
     charges = {a: [e["charge"] for e in store(sample, "timeline") if e["agent"] == a] for a in ("a02", "a03")}
-    assert charges["a02"] == ["free", "free", "refused", "refused", "free", "work", "work"]
-    # The disregulator's query is free and its follow-up step comes in the same round, within its K of 10.
-    assert charges["a03"] == ["free", "work", "work", "work", "work"]
-    assert step_ids(sample, "a03") == ["r1-a03", "r1-a03-free1", "r2-a03", "r3-a03", "r4-a03"]
-    assert store(sample, "free_caps") == {"a01": 3, "a02": 10, "a03": 10}
-    assert store(sample, "work_steps") == {"a01": 4, "a02": 4, "a03": 4}
-    assert store(sample, "free_steps") == {"a02": 3, "a03": 1}
-    # history_marks give each activation's end and round, which the oversight tools read.
-    assert [mark[1] for mark in store(sample, "history_marks")["a01"]] == [1, 2, 3, 4]
+    assert charges == {"a02": ["board"] * 5, "a03": ["board", "work", "work", "work", "work"]}
+    assert store(sample, "rounds_used") == {"a01": 5, "a02": 0, "a03": 4}
+    assert store(sample, "board_rounds") == {"a02": 5, "a03": 1}
+    # history_marks give each round's end and round, which the oversight tools read.
+    assert [mark[1] for mark in store(sample, "history_marks")["a01"]] == [1, 2, 3, 4, 5]
 
 
 def test_get_peer_observations_returns_results_by_id_cut_with_the_cut_stated(tmp_path):
     """get_peer_observations returns what a teammate's calls returned: by id in the order asked, else the newest,
     each cut to max_chars with chars, shown_chars and truncated; an id past the teammate's calls is "no such call". A
-    call counts as oversight and is a free step."""
-    config = pull(steps_per_agent=2, regulators=1, concurrent_rounds=False, turn_order="round_robin")
+    call counts as oversight, and a round of it alone uses up no round."""
+    config = pull(rounds=2, regulators=1, concurrent_rounds=False, turn_order="round_robin")
     roles = {"a01": "worker", "a02": "regulator", "a03": "worker"}
     scripts = {"a01": [do(LONG), do("A2")],
                "a02": [observations("a01", ids=[0, 7], max_chars=20), observations("a01", latest=1), do("R1"),
@@ -121,11 +110,12 @@ def test_get_peer_observations_returns_results_by_id_cut_with_the_cut_stated(tmp
         {"id": 0, "round": 1, "tool": "work", "status": "ok", "result": full[:20], "chars": len(full),
          "shown_chars": 20, "truncated": True},
         {"id": 7, "status": "no such call"}], "not_shown": 0, "not_shown_ids": []}
-    assert answers[1] == {"peer": "a01", "observations": [
-        {"id": 0, "round": 1, "tool": "work", "status": "ok", "result": full, "chars": len(full),
-         "shown_chars": len(full), "truncated": False}], "not_shown": 0, "not_shown_ids": []}
+    second = "a01 worked on A2"          # round 2: a01's newest call; a01 used up its last round just before
+    assert answers[1] == {"peer": "a01", "status": "exited", "observations": [
+        {"id": 1, "round": 2, "tool": "work", "status": "ok", "result": second, "chars": len(second),
+         "shown_chars": len(second), "truncated": False}], "not_shown": 0, "not_shown_ids": []}
     assert store(sample, "oversight") == {"a02": 2}
-    assert [e["charge"] for e in store(sample, "timeline") if e["agent"] == "a02"][:2] == ["free", "free"]
+    assert [e["charge"] for e in store(sample, "timeline") if e["agent"] == "a02"][:2] == ["board", "board"]
 
 
 def test_the_payloads_state_status_and_cuts():
@@ -169,7 +159,7 @@ def actions_after_the_run():
 def test_the_oversight_reader_reads_the_attribution_store_after_the_run(tmp_path):
     """The fallback path: once the run has ended, the oversight tools' reader finds a neutral agent's calls, with their
     rounds, in ORBIT's EnvironmentState:message_attribution store, as written to the finished log."""
-    config = pull(steps_per_agent=2, regulators=1, concurrent_rounds=False, turn_order="round_robin")
+    config = pull(rounds=2, regulators=1, concurrent_rounds=False, turn_order="round_robin")
     roles = {"a01": "worker", "a02": "regulator", "a03": "worker"}
     scripts = {"a01": [do("A1"), do("A2")], "a02": [do("R1"), do("R2")], "a03": [do("C1"), do("C2")]}
     sample, _ = run(config, scripts, tmp_path, roles=roles, scorer_=actions_after_the_run())
@@ -183,8 +173,8 @@ def test_the_oversight_reader_reads_the_attribution_store_after_the_run(tmp_path
 
 def test_get_peer_actions_mid_round(tmp_path):
     """Under concurrent rounds the regulator reads a neutral agent's live conversation: calls the target made in
-    earlier rounds carry those rounds."""
-    config = pull(steps_per_agent=3, regulators=1)
+    earlier rounds carry those rounds. test_rounds.py reads a teammate's calls of the round under way."""
+    config = pull(rounds=3, regulators=1)
     roles = {"a01": "worker", "a02": "regulator", "a03": "worker"}
     scripts = {"a01": [do("A1"), board_post("hi"), do("A2"), do("A3")], "a02": [do("R1"), do("R2"), actions("a01"),
                                                                               do("R3")],
@@ -192,8 +182,7 @@ def test_get_peer_actions_mid_round(tmp_path):
     sample, _ = run(config, scripts, tmp_path, roles=roles)
     [result] = [r for _, r, _ in outcomes(sample, ACTIONS)]
     got = json.loads(result)["actions"]
-    # Round 3 runs on a snapshot; a01's calls of rounds 1 and 2 are there, oldest first.
-    assert got[:3] == [{"id": 0, "round": 1, "tool": "work", "arguments": {"item": "A1"}},
-                       {"id": 1, "round": 2, "tool": "board_post", "arguments": {"message": "hi"}},
-                       {"id": 2, "round": 2, "tool": "work", "arguments": {"item": "A2"}}], got
+    # a01's calls of rounds 1 and 2 are there, oldest first.
+    assert got[:2] == [{"id": 0, "round": 1, "tool": "work", "arguments": {"item": "A1"}},
+                       {"id": 1, "round": 2, "tool": "board_post", "arguments": {"message": "hi"}}], got
     assert all(c["round"] in (1, 2, 3) for c in got)

@@ -1,10 +1,11 @@
 """Who is present: each agent's entry and exit, announced to its peers as user messages in their conversations.
 
 No system prompt names a peer. Each agent of a board hears of every other agent as a durable user message (prompts.yaml
-`presence`), delivered before its next step: "<agent> entered." once the peer's entry round has come (TurnState
+`presence`), delivered before its next round: "<agent> entered." once the peer's entry round has come (TurnState
 entry_rounds: the first round of a plan step that holds it), and when the peer leaves the line of its exit, then
-"<agent> exited.". The entries of the run's first round arrive before every agent's first step, after its task
-message; an agent whose window starts later is announced in that round, not before.
+"<agent> exited.". The entries of the run's first round arrive before every agent's first model call, after its task
+message and its round's line (_turn_rounds.open_round); an agent whose window starts later is announced in that round,
+not before.
 
 An exit's `why`, recorded once per agent in TurnState.exits by record_exit:
 
@@ -12,7 +13,8 @@ An exit's `why`, recorded once per agent in TurnState.exits by record_exit:
                hand_in "solo", its own work
     stop       stop_working
     alert      alert_humans (an influencer)
-    budget     no plan step left and none that pooling could still give it (turn_activation.out_of_steps), or the cap
+    rounds     it used up its rounds (TurnState.ended "rounds"), or no plan step is left for it
+               (turn_activation.out_of_steps): "<agent> ran out of rounds."
     context    its last generation stopped at the context limit: "exited." alone
     delivered  stop_after_delivery ended it: "exited." alone
 
@@ -20,8 +22,8 @@ Delivery is a pull. TurnRulesDefense.apply_pre_turn calls deliver on the activat
 ORBIT's defense boundary, which commits what it appends into that member's conversation, so the lines are saved in the
 transcript. deliver appends every due line the conversation lacks, found by the event id in the message's metadata
 (PRESENCE_TAG), so a boundary edit that ORBIT rejects loses nothing: the next boundary delivers it again. Messages are
-only appended at the end, so a provider's cached prefix holds. A peer whose step is under way when another agent exits
-hears of it at its next step.
+only appended at the end, so a provider's cached prefix holds. A peer whose round is under way when another agent exits
+hears of it at its next round.
 
 A recipient hears only of what happened while it was present: an exit in a round before its own entry round is not
 delivered, and neither is the entry of a peer that left then. The peer tools still answer for that peer, with status
@@ -42,9 +44,9 @@ from src.configuration.settings import load_prompts
 from src.swarm.turn_rules._turn_state import PRESENCE_TAG, TurnState, current_round
 from src.swarm.turn_rules._turn_steps import step_round
 
-EXIT_WHY = ("submit", "stop", "alert", "budget", "context", "delivered")
+EXIT_WHY = ("submit", "stop", "alert", "rounds", "context", "delivered")
 # The TurnState.ended reasons and the exit each one is.
-ENDED_WHY = {"submit": "submit", "stop_working": "stop", "alert": "alert", "cap": "budget", "context": "context",
+ENDED_WHY = {"submit": "submit", "stop_working": "stop", "alert": "alert", "rounds": "rounds", "context": "context",
              "delivered": "delivered"}
 
 
@@ -56,14 +58,6 @@ def entry_rounds(steps: list[dict]) -> dict[str, int]:
         for agent in s["agents"]:
             first[agent] = min(first.get(agent, r), r)
     return first
-
-
-def enter_late(st: TurnState, steps: list[dict]) -> None:
-    """Give an entry round to every agent a step of the amended plan holds for the first time (a pooled step for an
-    agent the written plan held nowhere)."""
-    late = {a: r for a, r in entry_rounds(steps).items() if a not in st.entry_rounds}
-    if late:
-        st.entry_rounds = {**st.entry_rounds, **late}
 
 
 def entered(st: TurnState, agent: str, round_number: int | None) -> bool:
@@ -100,7 +94,7 @@ def exit_text(agent: str, event: dict, round_number: int) -> str:
                      else texts["submit_team_now"].format(agent=agent))
     elif why == "submit":
         lines.append(texts["submit_solo"].format(agent=agent))
-    elif why in ("stop", "budget", "alert"):
+    elif why in ("stop", "rounds", "alert"):
         lines.append(texts[why].format(agent=agent))
     lines.append(texts["exited"].format(agent=agent))
     return "\n".join(lines)

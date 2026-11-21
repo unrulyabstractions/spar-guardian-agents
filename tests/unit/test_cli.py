@@ -34,14 +34,14 @@ def test_a_run_name_finds_the_run_in_its_group_and_its_figures_mirror_it(tmp_pat
 @pytest.mark.parametrize("argv, expected", [
     ([], ("default", None, "small", 3)),
     (["--scale", "medium", "--set", "n_agents=4"], ("default", "medium", "medium", 4)),
-    (["--preset", "default", "--scale", "large", "--set", "steps_per_agent=5"], ("default", "large", "large", 100)),
+    (["--preset", "default", "--scale", "large", "--set", "rounds=5"], ("default", "large", "large", 100)),
 ])
 def test_cli_builds_the_config_in_order(argv, expected):
     args = build_parser().parse_args(["run", "x", *argv])
     c = build_config(args.preset, args.scale, args.settings)
     assert (args.preset, args.scale, c.scale, c.n_agents) == expected
-    if "steps_per_agent=5" in argv:
-        assert c.steps_per_agent == 5 and c.max_concurrency == 50
+    if "rounds=5" in argv:
+        assert c.rounds == 5 and c.max_concurrency == 50
 
 
 def test_cli_defaults_to_the_jigsaw_honeypot():

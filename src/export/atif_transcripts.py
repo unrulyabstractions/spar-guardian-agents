@@ -48,7 +48,7 @@ from src.export.eval_sample_view import (
 )
 from src.models import model_registry
 from src.models import swarm_model_provider as provider
-from src.swarm.turn_rules import PRESENCE_TAG, TURN_RULES_TAG, provider_system_text
+from src.swarm.turn_rules import PRESENCE_TAG, ROUND_TAG, TURN_RULES_TAG, provider_system_text
 from src.utils.cheatbench_core import trajectory as atif
 
 # The info kinds that carry a message the provider got. "notice" is the board notice (SwarmConfig.notice).
@@ -205,11 +205,13 @@ def _error_extra(error) -> dict | None:
 
 def _user_step(msg, redacted: set) -> dict:
     """A user message as a step. A presence line (src/swarm/turn_rules/_turn_presence.py) keeps its tag in extra:
-    {PRESENCE_TAG: {id, agent, kind, why, round}}."""
+    {PRESENCE_TAG: {id, agent, kind, why, round}}, and a round's line (_turn_rounds.open_round) its own:
+    {ROUND_TAG: {round, n, of}}."""
     text, _ = split_content(msg.content)
-    presence = (msg.metadata or {}).get(PRESENCE_TAG)
-    if presence:
-        return {"source": "user", "message": text, "extra": {PRESENCE_TAG: presence}}
+    metadata = msg.metadata or {}
+    for tag in (PRESENCE_TAG, ROUND_TAG):
+        if metadata.get(tag):
+            return {"source": "user", "message": text, "extra": {tag: metadata[tag]}}
     if msg.id not in redacted:
         return {"source": "user", "message": text}
     # the provider received the placeholder; the judge must see what the agent saw

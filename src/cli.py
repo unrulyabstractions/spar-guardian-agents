@@ -28,8 +28,8 @@ A run is a run directory, or a run name of the study: runs/<study>/<name>/, or t
 then every `--set` (src/configuration/presets.py). The default preset is the midterm report's configuration at the
 small scale; `--scale` replaces its size (src/configuration/scales.py). `--set` takes any SwarmConfig field
 (src/configuration/swarm_config.py) and overrides any value the scale gave, for example `--set regulators=3 --set
-disregulators=3` for a swarm, `--set shutdown=false` for a team without stop_working, `--set turn_budget=70` for
-another turn budget, or `--set turn_budget=none` to use the scale's steps_per_agent. A run writes its Inspect log under
+disregulators=3` for a swarm, `--set shutdown=false` for a team without stop_working, or `--set rounds=20 --set
+calls_per_round=5` for other rounds of tool calls. A run writes its Inspect log under
 logs/<study>/<name>/, exports it to runs/<study>/<name>/ and prints one line per episode; the judge runs inside the
 eval. A run refuses a name whose folder already holds a run, and `judge` a folder that holds another eval's run, before
 anything is spent; `--replace` sets that earlier run aside into runs/<study>/attempts/<name>.<n>/ first, with its eval

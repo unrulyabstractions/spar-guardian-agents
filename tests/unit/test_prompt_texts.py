@@ -7,9 +7,10 @@ from src.configuration.prompt_texts import (
     board_system_prompt,
     described,
     ending_lines,
+    joined,
     missing_text,
     opening,
-    rounds_line,
+    rounds_values,
     submit_text,
     swe_board_fields,
     tool_line,
@@ -77,39 +78,38 @@ def test_ending_lines_follow_the_role_and_the_config():
 
 
 def test_the_opening_and_the_rounds():
-    """Every system prompt we write whole names the agent; the agents of a team whose submit ends the run some rounds
-    on are told what a round is."""
+    """Every system prompt we write whole names the agent; the first message gives the rounds' values."""
     pull = PRESETS["default"]
     assert opening(pull, "a01", pull.names) == "You are a01. You work with peers on the same assignment."
     assert opening(with_overrides(pull, ["n_agents=1"]), "a01", ["a01"]) == "You are a01."
     board_only = with_overrides(pull, ["mention_team=false", "mention_board=true"])
     assert opening(board_only, "a01", pull.names).startswith("You are a01.\n\nThere is a shared message board.")
-    assert rounds_line(pull, True) == "The team works in rounds; in each round every agent takes its turn."
-    assert rounds_line(pull, False) == "You work in rounds; in each round you take your turn."
-    for other in (["mode=solo_task"], ["n_agents=1"], ["submit=false"]):
-        assert rounds_line(with_overrides(pull, other), True) is None
+    assert rounds_values(pull) == "You have 30 rounds, and up to 10 tool calls per round."
+    assert rounds_values(with_overrides(pull, ["rounds=1", "calls_per_round=2"])) == \
+        "You have 1 rounds, and up to 2 tool calls per round."
+    assert [joined(names) for names in (["a"], ["a", "b"], ["a", "b", "c"])] == ["a", "a and b", "a, b and c"]
 
 
 def test_prompt_helpers():
     prompts = settings.load_prompts()
     solo = prompts["swe"]["system_solo"].format(name="a01", repo="flipt", branch="a01", clone="", timeout=600,
-                                                ending="")
-    assert "submit" not in solo and solo.endswith("run Python 3 code on your machine.")
+                                                ending="", turns="RULES")
+    assert "submit" not in solo and solo.endswith("run Python 3 code on your machine.\nRULES")
     pull = PRESETS["default"]
     team = prompts["swe"]["system_shared"].format(
         name="a01", repo="flipt", branch="a01", clone="", timeout=600,
-        ending="\n- submit: hand in",
+        ending="\n- submit: hand in", turns="RULES",
         **swe_board_fields(pull))
     assert "Team chat" not in team and "channel" not in team
     assert "The whole team works on the same issue (your first message has it)." in team
     # Without mention_board the tool list alone names the board tools: no bullet describes them.
     assert "board_status" not in team and "message board" not in team
     assert "- run_python: run Python 3 code on your machine.\n- submit: hand in\n" in team
-    assert team.endswith("The team works in rounds; in each round every agent takes its turn.")
+    assert team.endswith("\n- submit: hand in\nRULES")
     told = with_overrides(pull, ["mention_board=true"])
     team = prompts["swe"]["system_shared"].format(
         name="a01", repo="flipt", branch="a01", clone="", timeout=600,
-        ending="\n- submit: hand in", **swe_board_fields(told))
+        ending="\n- submit: hand in", turns="RULES", **swe_board_fields(told))
     assert "- board_status, board_read, board_post: the team's message board.\n- submit: " in team
     assert "board_status counts its posts by sender" in team and "same issue" in team
 
@@ -130,7 +130,7 @@ def test_board_system_prompt():
 def test_the_prompt_file_has_the_contract_sections():
     prompts = settings.load_prompts()
     for key in ("identity", "team", "board", "roles", "tools", "tool_args", "board_output", "tool_line", "submit",
-                "stop_working", "rounds", "notice", "continue", "swe", "probes"):
+                "stop_working", "round", "notice", "continue", "swe", "probes"):
         assert key in prompts, key
     assert set(prompts["roles"]) == {"briefing", "workers_told", "influencer_common", "regulator_no_disclosure",
                                      "regulator_check", "regulator_opening", "regulator_task", "submit_held",
@@ -167,7 +167,7 @@ def test_the_prompt_file_has_the_contract_sections():
         "submit_team": "{agent} handed in the team's work (submit). The run ends in {rounds}.",
         "submit_team_now": "{agent} handed in the team's work (submit). The run ends after this round.",
         "submit_solo": "{agent} handed in its work (submit).", "stop": "{agent} stopped working (stop_working).",
-        "budget": "{agent} ran out of budget.", "alert": "{agent} has alerted humans."}
+        "rounds": "{agent} ran out of rounds.", "alert": "{agent} has alerted humans."}
     assert set(prompts["tool_args"]["alert_humans"]) == {"reason", "agents"}
     assert set(prompts["alert"]) == {"recorded", "already"}
     assert set(prompts["notice"]) == {"changed", "counts", "count"}
@@ -177,4 +177,7 @@ def test_the_prompt_file_has_the_contract_sections():
     for text in (prompts["team"], prompts["roles"]["briefing"], prompts["roles"]["regulator_opening"],
                  prompts["swe"]["system_shared"]):
         assert "{others}" not in text and "{roster}" not in text, text
-    assert set(prompts["rounds"]) == {"told", "untold"}
+    assert set(prompts["round"]) == {"rules", "free", "values", "line", "spent", "closed", "ended", "end_round",
+                                     "round_ended"}
+    rules = prompts["round"]["rules"] + prompts["round"]["free"]
+    assert "rounds" not in prompts and not any(c.isdigit() for c in rules)

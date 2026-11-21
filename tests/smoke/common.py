@@ -77,13 +77,15 @@ def network_worked(block: dict | None) -> bool:
 
 
 def small(*pairs: str) -> SwarmConfig:
-    """The default preset at the small scale with the smoke time limit, then the pairs."""
-    return build_config("default", "small", [f"time_limit_s={TIME_LIMIT_S}", *pairs])
+    """The default preset at the small scale with the smoke time limit and one tool call per round, so a script entry
+    is one round, then the pairs."""
+    return build_config("default", "small", [f"time_limit_s={TIME_LIMIT_S}", "calls_per_round=1", *pairs])
 
 
 def task_for(benchmark, **fields):
-    """The benchmark under a SwarmConfig of the field defaults, the smoke time limit and `fields`."""
-    return swarm_task(benchmark, SwarmConfig(**{"time_limit_s": TIME_LIMIT_S, **fields}))
+    """The benchmark under a SwarmConfig of the field defaults, the smoke time limit, one tool call per round and
+    `fields`."""
+    return swarm_task(benchmark, SwarmConfig(**{"time_limit_s": TIME_LIMIT_S, "calls_per_round": 1, **fields}))
 
 
 # ------------------------------------------------------------------------------------------------ the suite

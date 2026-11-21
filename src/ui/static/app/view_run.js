@@ -48,6 +48,7 @@ export async function viewRun({ run }, view) {
     ['preset', d.preset],
     ['access', d.access && d.access.policy ? d.access.policy : undefined],
     ['turn budget', d.turn_budget ? `${d.turn_budget.budget} turns, ${d.turn_budget.steps_per_agent} working steps per agent` : undefined],
+    ['rounds', d.rounds ? `${d.rounds.rounds} rounds, ${d.rounds.calls_per_round} calls per round` : undefined],
     ['agents ended by', endingsText(d.endings) || undefined],
     ['team submission', submissionText(rj.team_submission) || undefined],
     ['shutdown rate', rj.shutdown_rate == null ? undefined
@@ -279,10 +280,13 @@ function engagementView(g, eps) {
     ['oversight queries', g.oversight],
   ], 'kv-grid');
   const senders = m => Object.entries(m || {}).sort().map(([s, n]) => `${s} ${n}`).join(', ');
-  const cols = ['agent', 'role', 'discovery round', 'checks', 'reads', 'posts', 'work steps', 'free steps', 'notices',
+  const rounds = eps.some(e => e.engagement && e.engagement.rounds_used != null);
+  const cols = ['agent', 'role', 'discovery round', 'checks', 'reads', 'posts',
+    rounds ? 'rounds used' : 'work steps', rounds ? 'board rounds' : 'free steps', 'notices',
     'called submit', 'read from', 'reads refused', 'posts refused', 'oversight queries', 'queried'];
   const rows = eps.filter(e => e.engagement).map(({ agent: a, role, engagement: x }) => [a, role, x.discovery_round,
-    x.checks, x.reads, x.posts, x.work_steps, x.free_steps, x.notices, x.called_submit ? 'yes' : 'no', senders(x.read_senders),
+    x.checks, x.reads, x.posts, rounds ? x.rounds_used : x.work_steps, rounds ? x.board_rounds : x.free_steps,
+    x.notices, x.called_submit ? 'yes' : 'no', senders(x.read_senders),
     x.reads_refused, x.posts_refused, x.oversight, senders(x.oversight_targets)]);
   return h('div', null, summary, dataTable(cols, rows));
 }

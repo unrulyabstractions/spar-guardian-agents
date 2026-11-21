@@ -6,19 +6,18 @@ import pytest
 from pydantic import ValidationError
 
 from src.cli import build_parser
-from src.configuration import settings
 from src.configuration.presets import PRESETS, build_config, preset, with_overrides
 from src.configuration.swarm_config import SwarmConfig, Window
 
 
 def test_presets():
     assert sorted(PRESETS) == ["default"]
-    assert PRESETS["default"] == SwarmConfig(preset="default", turn_budget=settings.TURN_BUDGET).at_scale("small")
+    assert PRESETS["default"] == SwarmConfig(preset="default").at_scale("small")
     # The default preset is the midterm report: the ambiguous regulator, not disclosing, split access, budgets.
     default = PRESETS["default"]
     assert (default.regulator_level, default.regulator_discloses, default.access) == ("ambiguous", False, "split")
-    assert (default.reads_per_turn, default.posts_per_turn, default.free_board_actions_influencer) == (10, 2, 10)
-    assert default.turn_budget == settings.TURN_BUDGET == 100 and default.working_steps == 100
+    assert (default.reads_per_turn, default.posts_per_turn) == (10, 2)
+    assert (default.rounds, default.calls_per_round, default.plan_rounds) == (30, 10, 60)
     assert (default.notice, default.concurrent_rounds) == ("counts", True)
     # The preset records its name, and build_config keeps it through the scale and every --set.
     assert default.preset == "default" and build_config("default", "medium", ["n_agents=4"]).preset == "default"
@@ -41,8 +40,8 @@ def test_stop_after_delivery_is_off_by_default_and_set_with_set():
 def test_with_overrides_types_values():
     base = SwarmConfig()
     c = with_overrides(base, ["n_agents=10", "regulators=3", "disregulators=3", "shutdown=false", "notice=none",
-                              "rule_level=precise", "regulator_window=3:5", "disregulators=0.25", "turn_budget=70"])
-    assert (c.n_agents, c.regulators, c.disregulators, c.turn_budget) == (10, 3, 0.25, 70)
+                              "rule_level=precise", "regulator_window=3:5", "disregulators=0.25", "rounds=70"])
+    assert (c.n_agents, c.regulators, c.disregulators, c.rounds) == (10, 3, 0.25, 70)
     assert (c.regulator_count, c.disregulator_count) == (3, 3)
     assert c.shutdown is False and c.notice == "none" and c.rule_level == "precise"
     assert c.regulator_window == Window(start=3, end=5) and c.disregulator_window == Window()
@@ -56,7 +55,8 @@ def test_with_overrides_types_values():
 
 
 @pytest.mark.parametrize("pairs", [["n_agents"], ["=3"], ["nope=1"], ["n_agents=many"], ["shutdown=maybe"],
-                                   ["scale=huge"], ["mode=pairs"], ["mode=none"], ["turn_budget=swe:120"],
+                                   ["scale=huge"], ["mode=pairs"], ["mode=none"], ["rounds=swe:120"],
+                                   ["turn_budget=100"], ["steps_per_agent=8"], ["free_board_actions=3"],
                                    ["access=openmath:all"]])
 def test_with_overrides_rejects(pairs):
     with pytest.raises((ValueError, ValidationError)):
@@ -65,7 +65,7 @@ def test_with_overrides_rejects(pairs):
 
 def test_order_preset_then_scale_then_set():
     c = build_config("default", "medium", ["n_agents=4", "max_concurrency=2"])
-    assert (c.n_agents, c.max_concurrency, c.steps_per_agent, c.scale) == (4, 2, 60, "medium")
+    assert (c.n_agents, c.max_concurrency, c.time_limit_s, c.scale) == (4, 2, 7200, "medium")
     # a scale given among the pairs applies before them, whatever its position
     assert build_config("default", None, ["n_agents=4", "scale=medium"]) == with_overrides(c, ["max_concurrency=10"])
     assert build_config("default").scale == "small" and build_config("default") == PRESETS["default"]

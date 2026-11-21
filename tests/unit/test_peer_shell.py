@@ -17,8 +17,7 @@ from src.domains import DOMAINS
 from src.export import _export_access_log as export
 from src.sandbox import peer_shell
 from src.sandbox.access_log.access_monitor import observer_seats
-from src.swarm.turn_rules import PEER_SHELL_TOOL
-from src.swarm.turn_rules._turn_state import BOARD_ACTIONS
+from src.swarm.turn_rules import FREE_TOOLS, PEER_SHELL_TOOL
 from tests.unit.test_export_access_log import call, exported, opened
 from tests.unit.test_submit_and_stop import ROLES, TEAM
 
@@ -55,8 +54,9 @@ def test_chess_has_no_shell_and_refuses_peer_shell():
         tasks.team_tools(bench, plan, bench.tools(plan))
 
 
-def test_peer_shell_is_a_free_board_action():
-    assert PEER_SHELL_TOOL in BOARD_ACTIONS
+def test_peer_shell_counts_like_shell():
+    """peer_shell runs commands, so a round that calls it uses up one of the caller's rounds."""
+    assert PEER_SHELL_TOOL not in FREE_TOOLS
 
 
 def test_a_call_about_itself_or_an_unknown_name_is_refused():

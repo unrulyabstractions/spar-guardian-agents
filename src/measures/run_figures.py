@@ -1,6 +1,6 @@
-"""Static figures of one run, for the examples and `python -m src plots`: every agent's steps round by round, the
-board's actions per round, and the judge's verdicts. Each figure is a PNG with a CSV twin of its data, written under
-out/<run name>/ by default (gitignored).
+"""Static figures of one run, for the examples and `python -m src plots`: every agent's rounds (its steps in a run
+before 2026-11-21) round by round, the board's actions per round, and the judge's verdicts. Each figure is a PNG with a
+CSV twin of its data, written under out/<run name>/ by default (gitignored).
 
     plot_run(Path("runs/kw_small"), Path("out/kw_small"))      # -> [timeline.png, board.png, verdicts.png]
 
@@ -13,6 +13,7 @@ verdicts; the judge's flags per task are src/measures/verdict_fields.py's.
 from __future__ import annotations
 
 import csv
+import re
 from pathlib import Path
 
 from matplotlib.figure import Figure
@@ -40,12 +41,13 @@ from src.utils.figure_style import (
 )
 from src.utils.json_files import read_json, read_jsonl
 
-KINDS = {"work": ("work step", CATEGORICAL[0]), "board": ("board action", CATEGORICAL[1]),
+KINDS = {"work": ("work", CATEGORICAL[0]), "board": ("board calls", CATEGORICAL[1]),
          "submit": ("submit", CATEGORICAL[2]), "stop": ("stop_working", CATEGORICAL[3])}
 BOARD_ACTIONS = {"board_status": "status", "board_read": "read", "board_post": "post"}
 ACTIONS = ("status", "read", "post")
 DARK_INK_FILLS = {WARNING}                           # a status fill light enough for ink text
 LEGEND = legend_below(-0.22)                         # below the plot, where no title or lane can collide with it
+FREE_ID = re.compile(r"-free(\d+)$")                  # a follow-up step's id in a run before 2026-11-21: r3-free1
 
 
 def load_run(run_dir: Path) -> dict:
@@ -63,11 +65,12 @@ def load_run(run_dir: Path) -> dict:
 
 
 def kind_of(entry: dict, submission: dict | None = None, submitted: str = rules.STOP_WORKING) -> str:
-    """A step's kind from the turn rules' records. stop: the step that ended the agent with stop_working (its
-    charge, or TurnState.ended). submit: a step that handed in (its charge, an own submit in solo_task, or, where
-    every step is charged, the charged step of the submission's agent in the submission's round). An older log's
-    TurnState.ended "submitted", ORBIT's own submit, is the act `submitted` names (turn_rules.orbit_submit_ending).
-    board: a free step or one whose tools were board actions. work otherwise (capped steps included)."""
+    """A round's kind from the turn rules' records (a step's in a run before 2026-11-21). stop: the round that ended
+    the agent with stop_working (its charge, or TurnState.ended). submit: a round that handed in (its charge, an own
+    submit in solo_task, or, where every step is charged, the charged step of the submission's agent in the
+    submission's round). An older log's TurnState.ended "submitted", ORBIT's own submit, is the act `submitted` names
+    (turn_rules.orbit_submit_ending). board: a round of board calls alone (charge "board"), an old free step, or one
+    whose tools were board actions. work otherwise (idle rounds and capped steps included)."""
     tools = entry.get("tools") or []
     charge, sub = entry.get("charge"), submission or {}
     ended = submitted if entry.get("ended") == rules.ORBIT_SUBMITTED else entry.get("ended")
@@ -77,16 +80,19 @@ def kind_of(entry: dict, submission: dict | None = None, submitted: str = rules.
         and int(position_of(entry)) == sub.get("round")
     if charge == "submit" or ended == rules.SUBMIT or handed_in:
         return "submit"
-    if charge == "free" or any(t in BOARD_ACTIONS for t in tools):
-        return "board"
-    return "work"
+    if "round" in entry:            # a round: board when its calls were board calls alone
+        return "board" if charge == "board" else "work"
+    return "board" if charge == "free" or any(t in BOARD_ACTIONS for t in tools) else "work"
 
 
 def position_of(entry: dict) -> float:
-    """The step's place on the round axis, read with the turn rules' own parsers of a step id (r3, r3-k7q2m,
-    r9-k7q2m-v4, r3-free1): round k at k, its free follow-ups at k + 0.2, k + 0.4, ..."""
+    """The entry's place on the round axis: its round. A step of a run before 2026-11-21 has none, so its id is read
+    (r3, r3-k7q2m, r9-k7q2m-v4, r3-free1): round k at k, its free follow-ups at k + 0.2, k + 0.4, ..."""
+    if entry.get("round") is not None:
+        return entry["round"]
     step = entry.get("step") or ""
-    return rules.step_round(step) + 0.2 * rules.free_index(step)
+    free = FREE_ID.search(step)
+    return rules.step_round(step) + 0.2 * (int(free.group(1)) if free else 0)
 
 
 def subtitle(data: dict) -> str:
@@ -113,7 +119,7 @@ def plot_timeline(data: dict, out: Path) -> Path | None:
         return None
     agents = data["agents"]
     rounds = max(position_of(e) for e in timeline)
-    fig, ax = new_axes(min(16, 7 + 0.25 * rounds), 1.6 + 0.55 * len(agents), "each agent's steps, round by round", data)
+    fig, ax = new_axes(min(16, 7 + 0.25 * rounds), 1.6 + 0.55 * len(agents), "each agent's rounds", data)
     lanes = {a: len(agents) - i for i, a in enumerate(agents)}
     for r in range(1, int(rounds) + 1):
         ax.axvline(r, color=GRID, linewidth=1, zorder=0)

@@ -30,7 +30,7 @@ from src.measures import team_ladder as team
 from src.measures.run_directory import RunDir
 from src.run import access_line
 from src.swarm.influencers import assign_roles
-from src.swarm.turn_rules._turn_steps import follow_up_id, free_index, is_round_step, step_id, step_round
+from src.swarm.turn_rules._turn_steps import step_id, step_round
 from src.tasks import agent_roles, swarm_task
 from tests.support.ordered_ids import DRAWN, drawn_ids, ordered_ids
 from tests.support.stub_ladder import OPENS, SHARDS, make_run
@@ -238,9 +238,8 @@ def test_a_map_written_with_ids_is_refused(drawn):
 def test_step_ids_carry_a_drawn_id():
     for name in DRAWN(100, 1):
         assert step_id(3, name) == f"r3-{name}" and step_round(step_id(12, name)) == 12
-        assert is_round_step(step_id(3, name)) and is_round_step(step_id(9, name, revision=4))
-        follow_up = follow_up_id(step_id(9, name, revision=4), 2)
-        assert (step_round(follow_up), free_index(follow_up), is_round_step(follow_up)) == (9, 2, False)
+        # a run before 2026-11-21 holds follow-up and pooled ids, which still give their round
+        assert step_round(f"r9-{name}-v4-free2") == 9 and step_round(f"r9-{name}-v4") == 9
 
 
 def test_the_ladders_roster_matching_reads_a_drawn_id():

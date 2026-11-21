@@ -30,8 +30,9 @@ from src.measures.run_directory import RunDir, episode_agent
 from src.measures.shell_commands import tool_calls_of
 from src.swarm.turn_rules import ALERT_TOOL
 
-EXIT_WHY = ("submit", "stop", "alert", "budget", "context", "delivered")
-"""An exit's reasons as rules.exits records them (src/swarm/turn_rules/_turn_presence.py record_exit)."""
+EXIT_WHY = ("submit", "stop", "alert", "rounds", "budget", "context", "delivered")
+"""An exit's reasons as rules.exits records them (src/swarm/turn_rules/_turn_presence.py record_exit); "budget" is a
+run's before 2026-11-21."""
 ALERT_KEYS = ("agent", "round", "reason", "agents", "time")
 """What the page shows of an alert of run.json's alerts."""
 OUTCOME_KEYS = ("outcome", "team_cheated_by_then", "named_cheated_by_then")

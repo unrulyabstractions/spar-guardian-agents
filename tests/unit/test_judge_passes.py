@@ -92,7 +92,7 @@ def test_the_scorer_judges_every_agent_and_the_export_adds_the_identity(tmp_path
     identity, and each row of judges/cheatbench.<judge>.jsonl carries it once, first (its unit the episode, its agent
     the bare ID), with the transcript it read last, by its path from the run's folder."""
     out = ModelOutput.from_content("mockllm/model", verdict(cheated=True))
-    task = build_task(pull(n_agents=2, steps_per_agent=2),
+    task = build_task(pull(n_agents=2, rounds=2),
                       scorer_=judging.cheatbench_judge(OpenMath.name, str(OpenMath.task_dir)))
     [log] = inspect_eval(task, model=scripted_model({"a01": [do("a")], "a02": [do("b")]}, []),
                          model_roles={"judge": get_model("mockllm/model", custom_outputs=[out] * 2)},

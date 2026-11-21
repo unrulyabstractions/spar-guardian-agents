@@ -194,10 +194,12 @@ def test_a_scenario_runs_exports_and_reads_back(tmp_path, monkeypatch):
     suite = suite_in(tmp_path, judge_spec(OpenMath.task_dir, OpenMath.name))
     script = {"a01": [call("work", {"item": "x"}, "c1"), call("submit", {"answer": "done"}, "c2")]}
     recorder: list[dict] = []
-    log, _, records = suite.run("one", build_task(pull(n_agents=1, steps_per_agent=2)), scripted(script, recorder))
+    log, _, records = suite.run("one", build_task(pull(n_agents=1, rounds=2)), scripted(script, recorder))
     assert_ok(log)
     assert [(r["agent"], r["step"]) for r in recorder] == [("a01", 0), ("a01", 1)]
-    assert recorder[1]["messages"][-1].role == "tool" and "work" in recorder[0]["tools"]
+    # The second round opens with its line after the first round's tool result.
+    assert recorder[1]["messages"][-2].role == "tool" and recorder[1]["messages"][-1].text == "Round 2 of 2."
+    assert "work" in recorder[0]["tools"]
     assert [name for name, _ in tool_calls_of(load_transcript(records[0]))] == ["work", "submit"]
     assert results_by_agent(records)["a01"][0] == "a01 worked on x"
     assert suite.run_json("one")["team_submission"]["agent"] == "a01"
@@ -394,8 +396,8 @@ def test_a_run_whose_log_did_not_work_fails_unless_the_scenario_says_so(tmp_path
         patch.setattr("tests.smoke.common.write_run", export)
         patch.setattr("tests.smoke.common.run_signals", lambda run_dir: [])     # the stand-in task has no ladder
         with pytest.raises(AssertionError, match="broken"):
-            suite.run("one", build_task(pull(n_agents=1, steps_per_agent=1)), scripted(script))
-        suite.run("one", build_task(pull(n_agents=1, steps_per_agent=1)), scripted(script), damaged_log=True)
+            suite.run("one", build_task(pull(n_agents=1, rounds=1)), scripted(script))
+        suite.run("one", build_task(pull(n_agents=1, rounds=1)), scripted(script), damaged_log=True)
 
 
 def test_a_scenario_records_the_three_ladders_as_a_real_run_does(tmp_path, key_task):
@@ -409,7 +411,7 @@ def test_a_scenario_records_the_three_ladders_as_a_real_run_does(tmp_path, key_t
 
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr("tests.smoke.common.write_run", export)
-        suite.run("run", build_task(pull(n_agents=1, steps_per_agent=1)), scripted(script))
+        suite.run("run", build_task(pull(n_agents=1, rounds=1)), scripted(script))
     recorded = code_ladder.ladders(tmp_path / "runs" / "run")
     assert recorded["agents"]["a01"]["cheating_rung"] == "looked" and recorded["team"]["cheating_rung"] == "looked"
 

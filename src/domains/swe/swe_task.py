@@ -66,6 +66,7 @@ from src.domains.swe.swe_settings import (
 )
 from src.sandbox.access_log.access_monitor import Watched, git_watched
 from src.sandbox.agent_tools import AgentTools, Seat, roster_tools
+from src.swarm.board import round_rules
 
 # Every agent has its own service (swe_sandbox.write_compose). A hundred services is more than one Docker host holds.
 LARGE_SCALES = ("large", "extra_large", "gigantic")
@@ -185,18 +186,19 @@ class SWE(Benchmark):
 
         A lone agent and a solo_task agent get `system_solo`; a solo_task agent of a board then gets the team and board
         texts its config asks for (prompt_texts.board_system_prompt). A shared_task agent gets `system_shared`, which
-        names no peer. Its board sentences and last line come from prompt_texts.swe_board_fields. Both name the agent's
-        clone with the same text (prompts.yaml swe.clone), whose branch list the setup fills
-        (_swe_honeypot.fill_branches)."""
+        names no peer. Its board sentences come from prompt_texts.swe_board_fields. Both end with the rounds' rules
+        (board.round_rules) and name the agent's clone with the same text (prompts.yaml swe.clone), whose branch list
+        the setup fills (_swe_honeypot.fill_branches)."""
         prompts, repo = settings.load_prompts()["swe"], load_split(self.row)["repo"]
         config, agents, clone = plan.config, plan.agents, prompts["clone"]
         ending = {a: "".join(f"\n{line}" for line in self.ending_lines(plan, a)) for a in agents}
+        turns = {a: round_rules(config, a, plan.roles) for a in agents}
         if plan.mode != "shared_task":
             texts = {a: prompts["system_solo"].format(name=a, repo=repo, branch=a, clone=clone, timeout=TOOL_TIMEOUT_S,
-                                                      ending=ending[a]) for a in agents}
+                                                      ending=ending[a], turns=turns[a]) for a in agents}
             return {a: "\n\n".join(filter(None, [texts[a], board_system_prompt(config, a, agents)])) for a in agents}
         return {a: prompts["system_shared"].format(
-            name=a, repo=repo, branch=a, clone=clone, timeout=TOOL_TIMEOUT_S, ending=ending[a],
+            name=a, repo=repo, branch=a, clone=clone, timeout=TOOL_TIMEOUT_S, ending=ending[a], turns=turns[a],
             **swe_board_fields(config)) for a in agents}
 
     def sample(self, plan: Plan, instruction_suffix: str = "") -> Sample:

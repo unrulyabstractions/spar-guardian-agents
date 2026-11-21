@@ -12,6 +12,7 @@ from elicitation import swe as cell
 from examples.example_arguments import DEFAULT_SETTINGS
 from src import run
 from src.configuration import settings
+from src.configuration.prompt_texts import rounds_values
 from src.domains.swe.swe_inputs import instruction_text
 from src.domains.swe.swe_settings import SECRETS
 from src.measures import run_figures as plots
@@ -52,7 +53,7 @@ def test_two_neutral_agents_split_the_whole_fix(seed):
     config = cell.team_config(cell.parse(["--set", f"seed={seed}"]))
     assert (config.preset, config.scale, config.n_agents) == ("default", "small", 2)
     assert (config.regulator_count, config.disregulator_count) == (0, 0) and agent_roles(config) is None
-    assert config.access == "split" and config.turn_budget == settings.TURN_BUDGET and config.judge is None
+    assert config.access == "split" and (config.rounds, config.calls_per_round) == (30, 10) and config.judge is None
     plan = cell.SWE(cell.ISSUE, cell.HONEYPOT).plan(config, agent_roles(config))
     assert plan.mode == "shared_task" and plan.team and plan.split
     held = [plan.holds[a] for a in config.seats]
@@ -73,8 +74,9 @@ def test_the_task_names_no_teammate_and_nothing_about_cheating():
     swe = task.dataset[0].metadata["cheatbench"]["swe"]
     assert swe["issue"] == "flipt-02e2" and swe["honeypot"] == "jigsaw" and swe["n_agents"] == 2
     assert swe["pieces"] == {"a01": ["B", "A"], "a02": ["C"]}
-    # the first message is CheatBench's instruction with the issue's note, and no sentence about cheating
-    instruction = instruction_text(cell.ISSUE, swe["instance"])
+    # the first message is CheatBench's instruction with the issue's note and the rounds' values, and no sentence about
+    # cheating
+    instruction = instruction_text(cell.ISSUE, swe["instance"]) + f"\n{rounds_values(config)}\n"
     assert task.dataset[0].input == swe["instruction"] == instruction
     assert swe["first_message"] == {"a01": instruction, "a02": instruction}
     for agent, other in (("a01", "a02"), ("a02", "a01")):
@@ -136,8 +138,8 @@ def test_the_screen_goes_round_robin_and_names_runs_as_the_cell_does():
                        (GLIMMER, 2, f"flipt_duo_{GLIMMER}_s2"), (QWEN, 2, f"flipt_duo_{QWEN}_s2")]
     for entry, sample, name in planned:
         assert cell.parse(["--model", entry, "--set", f"seed={sample}"]).name == name
-    assert screen.command(QWEN, 3, ["turn_budget=60"]) == \
-        [sys.executable, "-m", "elicitation.swe", "--model", QWEN, "--set", "turn_budget=60", "--set", "seed=3"]
+    assert screen.command(QWEN, 3, ["rounds=60"]) == \
+        [sys.executable, "-m", "elicitation.swe", "--model", QWEN, "--set", "rounds=60", "--set", "seed=3"]
 
 
 @pytest.mark.parametrize("argv", [["--models", "nope"], ["--models", GLIMMER, "--set", "seed=1"],
@@ -215,7 +217,7 @@ def test_a_condition_refuses_an_unknown_name_and_a_rule_level_of_its_own():
 def test_the_screen_passes_the_condition_to_every_run():
     [(entry, k, name)] = screen.jobs([FLASH], 1, "cheat_ambiguous")
     assert name == f"flipt_duo_{FLASH}_cheat_ambiguous_s1"
-    argv = screen.command(entry, k, ["turn_budget=10"], "cheat_ambiguous")
+    argv = screen.command(entry, k, ["rounds=10"], "cheat_ambiguous")
     assert argv[argv.index("--condition") + 1] == "cheat_ambiguous" and argv[-1] == "seed=1"
     assert screen.jobs([FLASH], 1)[0][2] == f"flipt_duo_{FLASH}_s1"
     assert "--condition" not in screen.command(entry, k, [])

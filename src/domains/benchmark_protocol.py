@@ -66,6 +66,7 @@ from src.sandbox.access_log.access_monitor import MONITOR_DEVIATION, Watched
 from src.sandbox.agent_tools import AgentTools, Seat
 from src.sandbox.network_log.network_monitor import NETWORK_DEVIATION
 from src.sandbox.sandbox_probe import environment_probe
+from src.swarm.board import round_rules
 
 TEAM = "team"                       # the owner of a shared_task team's deliverable and tool state
 # The agent is Inspect's react() loop, which ORBIT 2.0 holds between its steps. Runs made on ORBIT 1.x, whose agent was
@@ -240,12 +241,12 @@ class Benchmark(ABC):
     def system_prompts(self, plan: Plan) -> dict[str, str]:
         """Each agent's system prompt before its role's text, a blank line apart: who it is (prompt_texts.opening:
         the team sentence when it knows its team, else its name, then the board sentence when mention_board), the
-        bullets of submit and stop_working as it holds them (ending_lines), and what a round is when a team's submit
-        counts rounds (prompt_texts.rounds_line). src/tasks.py system_prompts gives a regulator that oversees a prompt
-        of its own in place of this one."""
-        config, rounds = plan.config, texts.rounds_line(plan.config, self.tells_team(plan))
+        bullets of submit and stop_working as it holds them (ending_lines), and the rounds' rules (board.round_rules).
+        src/tasks.py system_prompts gives a regulator that oversees a prompt of its own in place of this one."""
+        config = plan.config
         return {a: "\n\n".join(filter(None, [texts.opening(config, a, plan.agents),
-                                              "\n".join(self.ending_lines(plan, a)), rounds]))
+                                              "\n".join(self.ending_lines(plan, a)),
+                                              round_rules(config, a, plan.roles)]))
                 for a in plan.agents}
 
     def access_note(self, plan: Plan) -> str | None:

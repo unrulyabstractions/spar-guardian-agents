@@ -34,16 +34,17 @@ not reached is "no such call". Until 2026-11-20 one tool, agent_actions, gave bo
 arguments and the result each cut to 200 characters, a cut its description did not state; runs before then hold it,
 and the readers (ladder_domain.OVERSIGHT) accept every name.
 
-The calls come from the agent's own conversation. During the run that is its live state in ORBIT's session registry
-(turn_rules.live_state), the same source turn_activation.after_activation reads. ORBIT writes the attributed
-conversation (eval_sample_view.agent_messages) only when the run ends (AgentScheduler.sync_to_task_state), so it is
-the fallback outside a live run. The round of each call comes from TurnState.history_marks, which after_activation
-writes; a call after the last mark belongs to the step under way.
+The calls come from the agent's own conversation. During the run that is the longer of its live state in ORBIT's
+session registry (turn_rules.live_state), which ORBIT updates when the agent's round ends, and its conversation at its
+last boundary (turn_rules.live_record().messages, kept by turn_activation.ends_round), so a teammate's calls of the
+round under way show too. ORBIT writes the attributed conversation (eval_sample_view.agent_messages) only when the run
+ends (AgentScheduler.sync_to_task_state), so it is the fallback outside a live run. The round of each call comes from
+TurnState.history_marks, which after_activation writes; a call after the last mark belongs to the round under way.
 
 Each call counts as a board action of kind "oversight" (turn_rules.record_board_action): TurnState.oversight per
 influencer, oversight_targets per influencer and target, and oversight_first with the round of the first call about
-each target. A step that ends with either tool is a free step, within the caller's K
-(free_board_actions_influencer, the same for both influencers).
+each target. Both tools are board calls (turn_rules.FREE_TOOLS): they count toward a round's calls and use up none of
+the caller's rounds.
 """
 from __future__ import annotations
 
@@ -65,6 +66,7 @@ from src.swarm.turn_rules import (
     current_round,
     entered,
     exited,
+    live_record,
     live_state,
     record_board_action,
 )
@@ -85,10 +87,12 @@ class Called:
 
 
 def conversation(agent: str) -> list:
-    """The agent's conversation: its live state, else the sample's attributed conversation."""
-    live = live_state(agent)
-    if live is not None:
-        return list(live.messages)
+    """The agent's conversation: the longer of its live state and its conversation at its last boundary, else the
+    sample's attributed conversation."""
+    live, boundary = live_state(agent), live_record().messages.get(agent)
+    if live is not None or boundary is not None:
+        held = list(live.messages) if live is not None else []
+        return list(boundary) if boundary is not None and len(boundary) > len(held) else held
     state = sample_state()
     return agent_messages(SampleView.from_state(state, []), agent) if state is not None else []
 

@@ -73,7 +73,8 @@ RunRow = {
   swe: null | Swe,
   mode, scale, preset,             # run.json's, null when absent
   engagement: null | RunEngagement,
-  turn_budget: null | {budget, steps_per_agent},
+  turn_budget: null | {budget, steps_per_agent},      # a run before 2026-11-21
+  rounds: null | {rounds, calls_per_round},
   access: null | Access,
   knowledge: null | Knowledge,
   tools: [str],                    # the analysis tools that wrote runs/<study>/<run>/tools/<tool>/summary.json, sorted

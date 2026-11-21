@@ -27,24 +27,25 @@ run an `engagement` block: who looked at the board, read it, posted and called s
 
 An episode's ended_by comes from the store records (_export_run_blocks.ended_by): "submit" (it handed in),
 "teammate_submit" (a teammate's submit ended the run while the agent's window was open), "stop_working" (it stopped),
-"delivered" (stop_after_delivery), "cap", "context", "limit", "error" or "end" (the plan ran out or its window
-closed). In an older log ORBIT's own submit reads as the act it was: a stop in a team, a hand-in for a lone agent and
-in solo_task. A log without the turn rules' store has none (None).
+"delivered" (stop_after_delivery), "rounds" (it used up its rounds), "cap" (the step cap of a run before 2026-11-21),
+"context", "limit", "error" or "end" (the plan ran out or its window closed). In an older log ORBIT's own submit reads
+as the act it was: a stop in a team, a hand-in for a lone agent and in solo_task. A log without the turn rules' store
+has none (None).
 
 An episode's "model" is the agent's own model: its role's model when the run gave the role one, else the eval's model.
 The eval log names a role model "swarm/<model>" (src/models/swarm_model_provider.py) and the export drops the
 prefix. A run that recorded role models gets run.json "role_models" ({role: Inspect string or None}) next to "model".
 
-Blocks written when the run has them: run.json "turn_budget" ({budget, steps_per_agent}), "access" (the access policy
-and what each agent held: its items and numbered pieces, and on openmath's split layout the team remote, the honeypot
-branches and the archive), the domain's own blocks (Benchmark.run_blocks: "openmath" and "deliverables", "swe",
-"knowledge", "interview", "protein", "creative", "chess"), "honeypot_probe" (the honeypot probe's report by owner:
-agents, remote, shared), "delivery" (the stop-after-delivery record), "access_log" (the access log's status, for a run
-that recorded the switch: src/export/_export_access_log.py), "network" (the network log's status, its counts by agent
-and op and the cross-agent connections, for a run that recorded the switch: src/export/_export_network_log.py); and an
-episode's "access", the domain's facts (Benchmark.episode_facts) and "delivery" (the round and working step at which its
-deliverable was first seen). The export never writes run.json "signals": the code record (src/measures/code_ladder.py)
-adds it after the export.
+Blocks written when the run has them: run.json "turn_budget" ({budget, steps_per_agent}, a run before 2026-11-21),
+"access" (the access policy and what each agent held: its items and numbered pieces, and on openmath's split layout the
+team remote, the honeypot branches and the archive), the domain's own blocks (Benchmark.run_blocks: "openmath" and
+"deliverables", "swe", "knowledge", "interview", "protein", "creative", "chess"), "honeypot_probe" (the honeypot probe's
+report by owner: agents, remote, shared), "delivery" (the stop-after-delivery record), "access_log" (the access log's
+status, for a run that recorded the switch: src/export/_export_access_log.py), "network" (the network log's status, its
+counts by agent and op and the cross-agent connections, for a run that recorded the switch:
+src/export/_export_network_log.py); and an episode's "access", the domain's facts (Benchmark.episode_facts) and
+"delivery" (the round at which its deliverable was first seen, and its rounds used up by then). The export never writes
+run.json "signals": the code record (src/measures/code_ladder.py) adds it after the export.
 
 Paths are relative, so a run reads the same in any checkout and in the dataset: run.json "eval_log" is the log's path
 from the checkout (logs/<study>/[<group>/]<run>/<file>.eval, run_directory.log_link), and an episode's or a verdict's

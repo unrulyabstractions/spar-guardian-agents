@@ -19,8 +19,8 @@ import { badge, dataTable, muted } from '/static/app/components.js';
 import { svgEl } from '/static/app/charts.js';
 import { ROLE_LABEL } from './tv_labels.js';
 
-export const WHY_WORDS = { submit: 'submit', stop: 'stop', budget: 'budget', alert: 'alert', context: 'context limit',
-  delivered: 'delivered' };
+export const WHY_WORDS = { submit: 'submit', stop: 'stop', rounds: 'out of rounds', budget: 'budget', alert: 'alert',
+  context: 'context limit', delivered: 'delivered' };
 export const OUTCOME = { true_alarm: ['true alarm', 'good'], false_alarm: ['false alarm', 'warn'] };
 const REASON_WORDS = 12;
 const LABEL_FONT = '600 10px';

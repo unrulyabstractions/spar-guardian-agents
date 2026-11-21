@@ -20,15 +20,16 @@ def test_defaults_and_properties():
     assert (c.informed_roles, c.submit, c.batch_judge, c.mode, c.scale) == (True, None, True, "shared_task", None)
     assert c.submit_delay_rounds == 2
     assert (c.rule_level, c.regulator_level, c.disregulator_level) == ("none", "ambiguous", "persuade")
-    assert (c.regulator_discloses, c.access, c.free_board_actions_influencer) == (False, "split", 10)
-    assert (c.reads_per_turn, c.posts_per_turn, c.turn_budget) == (None, None, None)
-    assert (c.max_message_chars, c.message_limit, c.working_steps) == (4000, None, 60)
-    assert not c.board and c.names == ["a01"] and c.max_turns == 60 * 4
-    c = SwarmConfig(n_agents=10, regulators=3, disregulators=2, steps_per_agent=5, free_board_actions=0)
-    # Five workers take one step a round; the three regulators and the two disregulators also take up to ten
-    # follow-ups (the influencers' K).
-    assert c.board and c.names[-1] == "a10" and c.max_turns == 5 * (5 * 1 + 5 * 11)
-    assert with_overrides(c, ["free_board_actions_influencer=0"]).max_turns == 50   # K 0 for every agent
+    assert (c.regulator_discloses, c.access) == (False, "split")
+    assert (c.reads_per_turn, c.posts_per_turn, c.rounds, c.calls_per_round) == (None, None, 30, 10)
+    # A lone agent has no board, so its plan holds its R rounds alone: one step each.
+    assert (c.max_message_chars, c.message_limit, c.plan_rounds) == (4000, None, 30)
+    assert not c.board and c.names == ["a01"] and c.max_turns == 30
+    assert c.sample_message_limit == 30 * (3 * 10 + 2) + 20
+    c = SwarmConfig(n_agents=10, regulators=3, disregulators=2, rounds=5, calls_per_round=4)
+    # On a board the plan holds 2R rounds, influencers' as workers', one step per agent each.
+    assert c.board and c.names[-1] == "a10" and (c.plan_rounds, c.max_turns) == (10, 100)
+    assert c.sample_message_limit == 100 * (3 * 4 + 2) + 20 + 2 * 10 * 9
     assert c.judge == settings.JUDGE_MODEL
 
 
@@ -36,7 +37,11 @@ def test_defaults_and_properties():
     {"n_agents": 0},
     {"n_agents": 2, "regulators": 2, "disregulators": 1},
     {"regulators": -1},
-    {"steps_per_agent": 0},
+    {"rounds": 0},
+    {"calls_per_round": 0},
+    {"steps_per_agent": 8},
+    {"free_board_actions": 3},
+    {"pooled_steps": True},
     {"rule_level": "loud"},
     {"regulator_level": "precise"},
     {"disregulator_level": "role"},
@@ -45,8 +50,8 @@ def test_defaults_and_properties():
     {"n_agents": 4, "disregulators": 1.0},
     {"n_agents": 2, "regulators": 0.5, "disregulators": 0.9},
     {"regulator_window": {"start": 0}},
-    {"steps_per_agent": 5, "regulator_window": {"start": 4, "end": 3}},
-    {"steps_per_agent": 5, "disregulator_window": {"start": 1, "end": 6}},
+    {"rounds": 5, "regulator_window": {"start": 4, "end": 3}},
+    {"rounds": 5, "disregulator_window": {"start": 1, "end": 6}},
     {"turn_order": "alphabetical"},
     {"unknown_field": 1},
     {"mode": "pairs"},
@@ -56,13 +61,11 @@ def test_defaults_and_properties():
     {"notice": "loud"},
     {"read_page": 0},
     {"max_concurrency": 0},
-    {"free_board_actions": -1},
-    {"free_board_actions_influencer": -1},
     {"reads_per_turn": 0},
     {"posts_per_turn": 0},
-    {"turn_budget": 0},
-    {"turn_budget": {"openmath": 70}},
-    {"turn_budget": "knowledge_work:70"},
+    {"turn_budget": 100},
+    {"rounds": {"openmath": 70}},
+    {"rounds": "knowledge_work:70"},
     {"message_limit": 0},
     {"regulator_level": "loud"},
     {"submit_delay_rounds": -1},
@@ -101,22 +104,21 @@ def test_windows():
     assert Window.model_validate("3:") == Window(start=3) == Window.model_validate("3")
     w = Window(start=2, end=3)
     assert [r for r in range(1, 6) if w.contains(r)] == [2, 3]
-    c = SwarmConfig(n_agents=3, regulators=1, steps_per_agent=5, regulator_window=Window(start=2, end=5))
+    c = SwarmConfig(n_agents=3, regulators=1, rounds=5, regulator_window=Window(start=2, end=5))
     assert c.window("regulator") == Window(start=2, end=5)
     assert c.window("worker") == c.window("disregulator") == Window()
 
 
-def test_windows_are_checked_against_the_rounds_the_budget_gives():
-    # Ninety rounds fit the budget's 100.
-    late = build_config("default", "small", ["regulators=1", "regulator_window=1:90"])
-    assert late.regulator_window.end == 90
-    with pytest.raises(ValidationError, match="the rounds"):
-        build_config("default", "small", ["regulators=1", "regulator_window=160:"])
-    with pytest.raises(ValidationError, match="the rounds"):
-        build_config("default", "small", ["regulators=1", "turn_budget=20", "regulator_window=25:"])
-    # Without a budget the rounds are steps_per_agent.
-    with pytest.raises(ValidationError, match="the rounds"):
-        SwarmConfig(n_agents=3, regulators=1, steps_per_agent=5, regulator_window="1:6")
+def test_windows_are_checked_against_the_plans_rounds():
+    # A board's plan holds 2R rounds: fifty fit the default's sixty.
+    late = build_config("default", "small", ["regulators=1", "regulator_window=1:50"])
+    assert late.regulator_window.end == 50
+    with pytest.raises(ValidationError, match="the plan's rounds"):
+        build_config("default", "small", ["regulators=1", "regulator_window=61:"])
+    with pytest.raises(ValidationError, match="the plan's rounds"):
+        build_config("default", "small", ["regulators=1", "rounds=10", "regulator_window=25:"])
+    with pytest.raises(ValidationError, match="the plan's rounds"):
+        SwarmConfig(n_agents=3, regulators=1, rounds=5, regulator_window="1:11")
 
 
 def test_the_mode_sets_what_the_team_is_told_and_who_ends_how():

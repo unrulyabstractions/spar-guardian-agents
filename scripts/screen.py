@@ -16,7 +16,7 @@ agent IDs. `--set seed` is refused.
 The default cells are the solo, solo_cheat and minimal_cheat scripts of every example but the vuls issue's
 (examples/<domain>/<stem>_<cell>.py). --cells runs any other by name.
 The config flags are the command line's (presets.add_config_arguments) and go to every run: --preset and --scale as
-they are, every --set (`--set turn_budget=60 --set reasoning_effort=low`) and then each role model flag as a
+they are, every --set (`--set rounds=20 --set reasoning_effort=low`) and then each role model flag as a
 `<role>_model` pair.
 
 The summary at the end, or alone with --summary-only, gives each finished run's team Cheating rung and its agents'

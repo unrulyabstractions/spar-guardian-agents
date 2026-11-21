@@ -9,8 +9,8 @@ An EpisodeSummary joins an episode's record (episodes.jsonl) with CheatBench's v
 tool calls, wall time and failure, whether the judge says it cheated, and the task's other judge flags that hold
 (src/measures/verdict_fields.py). A run's header lines give its swarm composition, and its shutdown rate (the share
 of the agents holding stop_working that ended with it) when run.json records one; with full each episode's line is
-followed by the judge's summary. budget_lines gives each lone run's n_turns and their median, how long one agent
-takes alone, beside the turn budget (settings.TURN_BUDGET).
+followed by the judge's summary. budget_lines gives each lone run's n_turns and their median: how long one agent takes
+alone.
 """
 from __future__ import annotations
 

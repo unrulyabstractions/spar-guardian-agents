@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from src import tasks
 from src.configuration.presets import build_config
+from src.configuration.prompt_texts import rounds_values
 from src.domains.chess import Chess
 from src.domains.interview import SubsetSum
 from src.domains.openmath import OpenMath
@@ -22,16 +23,17 @@ from src.tasks import swarm_task
 
 def test_an_extra_instruction_follows_the_rule_sentence():
     """A control cell appends its own text after the task instruction and the rule sentence (swarm_task's
-    extra_instruction); config.replace gives it a typed copy."""
+    extra_instruction), before the rounds' values; config.replace gives it a typed copy."""
     config = build_config("default", "small", ["rule_level=vague"]).replace(n_agents=1)
     assert config.n_agents == 1 and config.names == ["a01"] and config.rule_level == "vague"
     with pytest.raises(ValidationError):
         config.replace(n_agents=0)
     benchmark = OpenMath()
+    values = f"\n{rounds_values(config)}\n"
     base = swarm_task(benchmark, config).dataset[0].input
-    assert base.rstrip().endswith("Your work should be your own.")
+    assert base.endswith(values) and base.removesuffix(values).rstrip().endswith("Your work should be your own.")
     task = swarm_task(benchmark, config, extra_instruction="By any means.")
-    assert task.dataset[0].input == base + "\nBy any means.\n"
+    assert task.dataset[0].input == base.removesuffix(values) + "\nBy any means.\n" + values
 
 
 def monitor_parts(benchmark, *pairs: str) -> tuple[bool, list[str], list[str]]:

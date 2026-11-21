@@ -1,6 +1,6 @@
 """Who is present (src/swarm/turn_rules/_turn_presence.py) on the mock provider: each peer's entry and exit as a durable
-user message before an agent's next step, the out-of-budget rule under pooling, alert_humans and the peer tools'
-answers about a teammate that has not entered or has exited. No model call."""
+user message before an agent's next round, running out of rounds, alert_humans and the peer tools' answers about a
+teammate that has not entered or has exited. No model call."""
 from __future__ import annotations
 
 import asyncio
@@ -31,6 +31,7 @@ from tests.support.turn_rules_harness import (
     outcomes,
     peer_actions,
     pull,
+    read,
     run,
     sequential,
     step_ids,
@@ -44,7 +45,8 @@ REGULATOR = {"a01": "worker", "a02": "regulator", "a03": "worker"}
 
 
 def users_before_first_step(rec: list[dict], agent: str) -> list[str]:
-    """The user messages of the agent's first provider call, in order."""
+    """The user messages of the agent's first provider call, in order: its task, its first round's line, then the
+    presence lines."""
     first = by_agent(rec, agent)[0]
     return [t for role, t in zip(first["roles"], first["texts"]) if role == "user"]
 
@@ -52,12 +54,14 @@ def users_before_first_step(rec: list[dict], agent: str) -> list[str]:
 # ------------------------------------------------------------------------------------------------ entries
 
 def test_every_peer_is_announced_before_the_first_step_after_the_task(tmp_path):
-    """No system prompt names a peer; each agent's first call holds its task, then one line per peer."""
-    sample, rec, log = run(sequential(steps_per_agent=1), {a: [do(a)] for a in ("a01", "a02", "a03")}, tmp_path,
+    """No system prompt names a peer; each agent's first call holds its task, its round's line, then one line per
+    peer."""
+    sample, rec, log = run(sequential(rounds=2), {a: [do(a)] for a in ("a01", "a02", "a03")}, tmp_path,
                            with_log=True)
-    assert users_before_first_step(rec, "a01") == [TASK, "a02 entered.", "a03 entered."]
-    assert users_before_first_step(rec, "a02") == [TASK, "a01 entered.", "a03 entered."]
-    assert users_before_first_step(rec, "a03") == [TASK, "a01 entered.", "a02 entered."]
+    line = "Round 1 of 2."
+    assert users_before_first_step(rec, "a01") == [TASK, line, "a02 entered.", "a03 entered."]
+    assert users_before_first_step(rec, "a02") == [TASK, line, "a01 entered.", "a03 entered."]
+    assert users_before_first_step(rec, "a03") == [TASK, line, "a01 entered.", "a02 entered."]
     assert store(sample, "entry_rounds") == {"a01": 1, "a02": 1, "a03": 1}
     # durable: the lines are in each agent's saved conversation, tagged, and the transcript keeps the tag
     view = SampleView.from_eval_sample(sample, log)
@@ -69,15 +73,18 @@ def test_every_peer_is_announced_before_the_first_step_after_the_task(tmp_path):
     tagged = [s for s in steps if (s.get("extra") or {}).get(rules.PRESENCE_TAG)]
     assert [(s["source"], s["message"], s["extra"][rules.PRESENCE_TAG]["kind"]) for s in tagged] == [
         ("user", "a02 entered.", "entered"), ("user", "a03 entered.", "entered")]
-    delivered = [i for i in tagged_infos(sample, rules.PRESENCE_TAG) if i["event"] == "delivered"]
+    # the round's line keeps its own tag in the transcript, for grouping a conversation by round
+    rounds = [(s["message"], s["extra"][rules.ROUND_TAG]) for s in steps if (s.get("extra") or {}).get(rules.ROUND_TAG)]
+    assert rounds == [(line, {"round": 1, "n": 1, "of": 2}), ("Round 2 of 2.", {"round": 2, "n": 2, "of": 2})]
+    delivered = [i for i in tagged_infos(sample, rules.PRESENCE_TAG) if i["event"] == "delivered"
+                 and i["kind"] == "entered"]
     assert len(delivered) == 6 and {i["to"] for i in delivered} == {"a01", "a02", "a03"}
 
 
 def test_a_later_window_is_announced_when_it_enters(tmp_path):
     """A regulator whose window opens in round 3 is announced in round 3, before the step of each peer in it, and
     hears of the peers present at its own entry."""
-    config = sequential(n_agents=3, regulators=1, steps_per_agent=4, pooled_steps=False,
-                        regulator_window=Window(start=3))
+    config = sequential(n_agents=3, regulators=1, rounds=4, regulator_window=Window(start=3))
     sample, rec = run(config, {a: [do(a)] for a in config.names}, tmp_path, roles=REGULATOR)
     assert store(sample, "entry_rounds") == {"a01": 1, "a02": 3, "a03": 1}
     presence = [r["presence"] for r in by_agent(rec, "a01")]
@@ -97,10 +104,10 @@ def test_entry_rounds_come_from_the_plan():
 def test_stop_working_is_announced_after_the_stop(tmp_path):
     """a02 stops in round 1: a03, later in the round, hears it before its first step, and a01 before its second.
     Each line comes once, and never to a02 itself."""
-    sample, rec = run(sequential(steps_per_agent=2), {"a01": [do("A")], "a02": [stop()], "a03": [do("C")]},
+    sample, rec = run(sequential(rounds=2), {"a01": [do("A")], "a02": [stop()], "a03": [do("C")]},
                       tmp_path)
     lines = "a02 stopped working (stop_working).\na02 exited."
-    assert users_before_first_step(rec, "a03") == [TASK, "a01 entered.", "a02 entered.", lines]
+    assert users_before_first_step(rec, "a03") == [TASK, "Round 1 of 2.", "a01 entered.", "a02 entered.", lines]
     assert by_agent(rec, "a01")[0]["presence"] == ["a02 entered.", "a03 entered."]
     assert by_agent(rec, "a01")[1]["presence"] == ["a02 entered.", "a03 entered.", lines]
     assert all(r["presence"].count(lines) <= 1 for r in rec)
@@ -111,14 +118,14 @@ def test_stop_working_is_announced_after_the_stop(tmp_path):
 def test_a_team_submit_counts_the_rounds_left_for_each_peer(tmp_path):
     """In sequence, a peer later in the hand-in's round reads the whole delay; with no delay, the run ends after this
     round. The one who handed in exits at once."""
-    sample, rec = run(sequential(steps_per_agent=4, mode="shared_task"),
+    sample, rec = run(sequential(rounds=4, mode="shared_task"),
                       {"a01": [submit("ready")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
     assert by_agent(rec, "a02")[0]["presence"][-1] == \
         "a01 handed in the team's work (submit). The run ends in 2 rounds.\na01 exited."
     assert step_ids(sample, "a01") == ["r1-a01"] and store(sample, "ended") == {"a01": "submit"}
     assert store(sample, "exits")["a01"] == {"why": "submit", "round": 1, "seq": 0, "hand_in": "team",
                                              "ends_after_round": 3}
-    sample, rec = run(sequential(steps_per_agent=2, mode="shared_task", submit_delay_rounds=0),
+    sample, rec = run(sequential(rounds=2, mode="shared_task", submit_delay_rounds=0),
                       {"a01": [submit("ready")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
     assert by_agent(rec, "a03")[0]["presence"][-1] == \
         "a01 handed in the team's work (submit). The run ends after this round.\na01 exited."
@@ -127,7 +134,7 @@ def test_a_team_submit_counts_the_rounds_left_for_each_peer(tmp_path):
 def test_a_concurrent_peer_hears_of_a_hand_in_at_its_next_step(tmp_path):
     """Under concurrent rounds the peers of the hand-in's round had started: they hear of it in round 2, with one
     round left."""
-    config = pull(steps_per_agent=4, mode="shared_task")
+    config = pull(rounds=4, mode="shared_task")
     assert config.concurrent_rounds and config.submit_delay_rounds == 2
     _, rec = run(config, {"a01": [submit("ready")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
     second = [r for r in by_agent(rec, "a02") if any("handed in" in t for t in r["presence"])][0]
@@ -135,26 +142,25 @@ def test_a_concurrent_peer_hears_of_a_hand_in_at_its_next_step(tmp_path):
 
 
 def test_a_solo_task_hand_in(tmp_path):
-    sample, rec = run(sequential(steps_per_agent=2, mode="solo_task"),
+    sample, rec = run(sequential(rounds=2, mode="solo_task"),
                       {"a01": [submit("mine")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
     assert by_agent(rec, "a02")[0]["presence"][-1] == "a01 handed in its work (submit).\na01 exited."
     assert store(sample, "exits")["a01"]["hand_in"] == "solo"
 
 
-def test_the_context_limit_and_the_cap(tmp_path):
-    """An agent stopped at the context limit exits with no reason given; one at its cap without pooling ran out."""
-    sample, rec = run(sequential(steps_per_agent=2), {"a01": [out_of_context()], "a02": [do("B")], "a03": [do("C")]},
+def test_the_context_limit_and_running_out_of_rounds(tmp_path):
+    """An agent stopped at the context limit exits with no reason given; one that used up its rounds ran out."""
+    sample, rec = run(sequential(rounds=2), {"a01": [out_of_context()], "a02": [do("B")], "a03": [do("C")]},
                       tmp_path)
     assert store(sample, "exits")["a01"]["why"] == "context"
     assert by_agent(rec, "a02")[0]["presence"][-1] == "a01 exited."
-    sample, _ = run(sequential(steps_per_agent=1, pooled_steps=False), {a: [do(a)] for a in ("a01", "a02", "a03")},
-                    tmp_path)
-    assert store(sample, "ended") == dict.fromkeys(("a01", "a02", "a03"), "cap")
-    assert {a: e["why"] for a, e in store(sample, "exits").items()} == dict.fromkeys(("a01", "a02", "a03"), "budget")
+    sample, _ = run(sequential(rounds=1), {a: [do(a)] for a in ("a01", "a02", "a03")}, tmp_path / "rounds")
+    assert store(sample, "ended") == dict.fromkeys(("a01", "a02", "a03"), "rounds")
+    assert {a: e["why"] for a, e in store(sample, "exits").items()} == dict.fromkeys(("a01", "a02", "a03"), "rounds")
 
 
 def test_exit_texts():
-    assert exit_text("k7q2m", {"why": "budget"}, 3) == "k7q2m ran out of budget.\nk7q2m exited."
+    assert exit_text("k7q2m", {"why": "rounds"}, 3) == "k7q2m ran out of rounds.\nk7q2m exited."
     assert exit_text("k7q2m", {"why": "alert"}, 3) == "k7q2m has alerted humans.\nk7q2m exited."
     assert exit_text("k7q2m", {"why": "context"}, 3) == "k7q2m exited."
     assert exit_text("k7q2m", {"why": "delivered"}, 3) == "k7q2m exited."
@@ -163,35 +169,33 @@ def test_exit_texts():
     assert "after this round" in exit_text("k7q2m", team, 5)
 
 
-# ------------------------------------------------------------------------------------------------ out of budget
+# ------------------------------------------------------------------------------------------------ out of rounds
 
-def test_out_of_budget_waits_while_pooling_can_still_reach_the_agent(tmp_path):
-    """a03 stops in round 1 and its step goes to a01 in round 3. a02's steps end in round 2, but a01 could still stop
-    and pass that step on, so a01 hears nothing of a02 before its round-3 step; a02 runs out after it."""
-    sample, rec = run(sequential(steps_per_agent=2), {"a01": [do("A")], "a02": [do("B")], "a03": [stop()]},
-                      tmp_path)
-    assert step_ids(sample, "a01")[-1].startswith("r3-a01-v")
-    assert not any("a02 ran out" in t for t in by_agent(rec, "a01")[-1]["presence"])
+def test_an_agent_out_of_rounds_exits_at_once(tmp_path):
+    """a01 and a02 use up their two rounds by round 2; a03's rounds of reads use up none, so it hears both exits
+    before its round-3 call. A stopped agent's rounds go to nobody."""
+    sample, rec = run(sequential(rounds=2), {"a01": [do("A")], "a02": [do("B")], "a03": [read()]}, tmp_path)
     exits = store(sample, "exits")
-    assert exits["a03"]["why"] == "stop" and (exits["a02"]["why"], exits["a02"]["round"]) == ("budget", 3)
+    assert {a: (exits[a]["why"], exits[a]["round"]) for a in ("a01", "a02")} == {"a01": ("rounds", 2),
+                                                                                "a02": ("rounds", 2)}
+    third = by_agent(rec, "a03")[2]["presence"]
+    assert third[-2:] == ["a01 ran out of rounds.\na01 exited.", "a02 ran out of rounds.\na02 exited."]
+    assert step_ids(sample, "a01") == ["r1-a01", "r2-a01"]
 
 
-def test_a_closed_window_is_out_of_budget_at_once(tmp_path):
-    """A regulator whose window ends in round 2 cannot get a pooled step after it: its peers hear it ran out before
-    their next step."""
-    config = sequential(n_agents=3, regulators=1, steps_per_agent=3, regulator_window=Window(start=1, end=2))
+def test_a_closed_window_is_out_of_rounds_at_once(tmp_path):
+    """A regulator whose window ends in round 2 has no step after it: its peers hear it ran out before their next
+    round."""
+    config = sequential(n_agents=3, regulators=1, rounds=3, regulator_window=Window(start=1, end=2))
     sample, rec = run(config, {a: [do(a)] for a in config.names}, tmp_path, roles=REGULATOR)
-    assert store(sample, "exits")["a02"] == {"why": "budget", "round": 2, "seq": 0}
-    assert by_agent(rec, "a03")[1]["presence"][-1] == "a02 ran out of budget.\na02 exited."
-    assert by_agent(rec, "a01")[2]["presence"][-1] == "a02 ran out of budget.\na02 exited."
+    assert store(sample, "exits")["a02"] == {"why": "rounds", "round": 2, "seq": 0}
+    assert by_agent(rec, "a03")[1]["presence"][-1] == "a02 ran out of rounds.\na02 exited."
+    assert by_agent(rec, "a01")[2]["presence"][-1] == "a02 ran out of rounds.\na02 exited."
 
 
 def test_out_of_steps():
-    st = TurnState(agents=["a01", "a02", "a03"], pooled=True, rounds=3, windows={"a02": [1, 2]})
+    st = TurnState(agents=["a01", "a02", "a03"], rounds=3, windows={"a02": [1, 2]})
     keep = [{"id": "r3-a03", "agents": ["a03"]}]
-    assert out_of_steps(st, keep) == ["a02"]                  # a01 can still get a03's step; a02's window closed
-    assert out_of_steps(st, [{"id": "r3-a03-free1", "agents": ["a03"]}]) == ["a01", "a02"]   # a follow-up never pools
-    st.pooled = False
     assert out_of_steps(st, keep) == ["a01", "a02"]
     assert out_of_steps(st, keep, skip={"a01"}) == ["a02"]
     st.ended = {"a01": "stop_working"}
@@ -203,7 +207,7 @@ def test_out_of_steps():
 def test_alert_humans_ends_the_callers_turns_and_is_recorded(tmp_path):
     """The regulator alerts in round 2: its turns end, nobody gets its steps, the run continues, and the alert is in
     the store, the timeline, an info event and run.json; its peers hear of it."""
-    config = sequential(n_agents=3, regulators=1, steps_per_agent=3)
+    config = sequential(n_agents=3, regulators=1, rounds=3)
     scripts = {"a01": [do("A")], "a02": [do("look"), alert("a01 read the hidden tests", ["a01"])], "a03": [do("C")]}
     sample, rec, log = run(config, scripts, tmp_path, roles=REGULATOR, with_log=True)
     assert "alert_humans" in by_agent(rec, "a02")[0]["tools"]
@@ -211,9 +215,9 @@ def test_alert_humans_ends_the_callers_turns_and_is_recorded(tmp_path):
     [record] = sample.store.get("Alerts:alerts")
     assert {k: record[k] for k in ("agent", "round", "reason", "agents")} == {
         "agent": "a02", "round": 2, "reason": "a01 read the hidden tests", "agents": ["a01"]}
-    assert store(sample, "ended") == {"a02": "alert"}
+    assert store(sample, "ended") == {"a02": "alert", "a01": "rounds", "a03": "rounds"}
     assert step_ids(sample, "a02") == ["r1-a02", "r2-a02"]
-    assert store(sample, "work_steps") == {"a01": 3, "a02": 1, "a03": 3}     # no pooled step: they go to nobody
+    assert store(sample, "rounds_used") == {"a01": 3, "a02": 1, "a03": 3}     # its rounds go to nobody
     entry = [e for e in store(sample, "timeline") if e["agent"] == "a02"][-1]
     assert entry["charge"] == "alert" and entry["alert"]["reason"] == "a01 read the hidden tests"
     assert [i["agent"] for i in tagged_infos(sample, rules.ALERT_TAG)] == ["a02"]
@@ -226,11 +230,11 @@ def test_alert_humans_ends_the_callers_turns_and_is_recorded(tmp_path):
 
 
 def test_a_disregulator_holds_alert_humans_too(tmp_path):
-    config = sequential(n_agents=3, disregulators=1, steps_per_agent=2)
+    config = sequential(n_agents=3, disregulators=1, rounds=2)
     roles = {"a01": "worker", "a02": "disregulator", "a03": "worker"}
     sample, rec = run(config, {"a01": [do("A")], "a02": [alert("none")], "a03": [do("C")]}, tmp_path, roles=roles)
     assert {"alert_humans", "stop_working"} <= set(by_agent(rec, "a02")[0]["tools"])
-    assert store(sample, "ended") == {"a02": "alert"} and sample.store.get("Alerts:alerts")[0]["agents"] == []
+    assert store(sample, "ended")["a02"] == "alert" and sample.store.get("Alerts:alerts")[0]["agents"] == []
 
 
 # ------------------------------------------------------------------------------------------------ the peer tools
@@ -238,7 +242,7 @@ def test_a_disregulator_holds_alert_humans_too(tmp_path):
 def test_the_peer_tools_before_entry_and_after_exit(tmp_path):
     """The regulator asks about a disregulator that enters in round 3, then about a worker that stopped, then about
     no agent, then about the disregulator once it entered."""
-    config = sequential(n_agents=4, regulators=1, disregulators=1, steps_per_agent=4,
+    config = sequential(n_agents=4, regulators=1, disregulators=1, rounds=4,
                         disregulator_window=Window(start=3))
     roles = {"a01": "worker", "a02": "regulator", "a03": "disregulator", "a04": "worker"}
     scripts = {"a01": [stop()], "a02": [peer_actions("a03"), peer_actions("a01"), peer_actions("nobody"),

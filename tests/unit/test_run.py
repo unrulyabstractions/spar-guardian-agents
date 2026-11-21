@@ -37,11 +37,11 @@ VERDICTS = verdict_files.path(Path(), "cheatbench", "gpt-6-luna")
 
 def test_batch_reaches_the_agents_model(tmp_path):
     """run.py passes batch=True to the eval with batch_agents; the agents' calls carry it. The mock ignores it."""
-    config = pull(steps_per_agent=1, batch_agents=True)
+    config = pull(rounds=1, batch_agents=True)
     scripts = {a: [do(a)] for a in config.names}
     _, rec = run(config, scripts, tmp_path, **run_module.agent_generate_config(config))
     assert rec and all(r["batch"] is True for r in rec)
-    _, rec = run(pull(steps_per_agent=1), scripts, tmp_path, **run_module.agent_generate_config(pull()))
+    _, rec = run(pull(rounds=1), scripts, tmp_path, **run_module.agent_generate_config(pull()))
     assert rec and all(not r["batch"] for r in rec)
 
 
@@ -251,7 +251,7 @@ def test_judge_refuses_a_folder_that_holds_another_evals_run_before_judging(tmp_
 
 def harness_log(folder: Path, item: str) -> Path:
     """A finished eval log of two agents on the mock provider (the turn rules' harness), written in folder."""
-    config = pull(n_agents=2, steps_per_agent=1)
+    config = pull(n_agents=2, rounds=1)
     _, _, log = run(config, {agent: [do(item)] for agent in config.names}, folder, with_log=True)
     return Path(log.location)
 

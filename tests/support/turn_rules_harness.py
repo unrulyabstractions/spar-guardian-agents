@@ -1,8 +1,9 @@
 """The turn rules on Inspect's mock provider: a small ORBIT task (agents a01..a0n on one board, each with a private
 `work` tool) run under a SwarmConfig with the turn-rules defense, and readers of what the provider received (the mock
-sees the input after every model filter) and what the store recorded. No Docker, no credentials, no paid calls.
+sees the input after every model filter) and what the store recorded. No Docker, no credentials, no paid calls. Each
+script entry is one model call; the last repeats.
 
-    sample, recorded = run(pull(steps_per_agent=2), {"a01": [do("A")], "a02": [stop()], "a03": [do("C")]}, tmp_path)
+    sample, recorded = run(pull(rounds=2), {"a01": [do("A")], "a02": [stop()], "a03": [do("C")]}, tmp_path)
     store(sample, "ended")                                  # {"a02": "stop_working"}
     by_agent(recorded, "a01")[0]["tools"]                   # what the provider was offered
 """
@@ -29,6 +30,7 @@ from src.configuration.swarm_config import SwarmConfig, role_of
 from src.swarm import board
 from src.swarm import turn_rules as rules
 from src.swarm.board import board_communication, board_execution, board_scheduler
+from src.swarm.end_round import end_round_bindings
 from src.swarm.submit_and_stop import Deliverable, ending_tools, submit_bindings
 from src.swarm.tool_output_caps import capped_bindings
 from tests.support.mock_model import MODEL, calls, fresh, text
@@ -100,6 +102,10 @@ def board_post(message: str) -> ModelOutput:
     return calls(("board_post", {"message": message}))
 
 
+def end_round() -> ModelOutput:
+    return calls(("end_round", {}))
+
+
 def out_of_context() -> ModelOutput:
     return ModelOutput(model=MODEL, choices=[ChatCompletionChoice(
         message=ChatMessageAssistant(content="...", model=MODEL, source="generate"), stop_reason="model_length")])
@@ -128,7 +134,7 @@ def scripted_model(scripts: dict[str, list[ModelOutput]], recorder: list[dict]):
             "batch": config.batch,
         })
         script = scripts[agent]
-        return fresh(script[min(k, len(script) - 1)])
+        return renewed(script[min(k, len(script) - 1)], k)
 
     model = get_model(MODEL, custom_outputs=outputs, memoize=False)
 
@@ -139,6 +145,16 @@ def scripted_model(scripts: dict[str, list[ModelOutput]], recorder: list[dict]):
     return model
 
 
+def renewed(output: ModelOutput, k: int) -> ModelOutput:
+    """A scripted output with new message and tool-call ids, as a real generation's would: the same entry may run
+    twice in one round, and a round's calls are told apart by id."""
+    copy = fresh(output)
+    for choice in copy.choices:
+        for call in choice.message.tool_calls or []:
+            call.id = f"{call.id}.{k}"
+    return copy
+
+
 # ------------------------------------------------------------------------------------------------ the task
 
 async def nothing_missing(agent: str) -> None:
@@ -146,14 +162,17 @@ async def nothing_missing(agent: str) -> None:
 
 
 def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | None = None, delivered=None,
-               missing=nothing_missing, groups: list[AgentGroup] | None = None) -> Task:
+               missing=nothing_missing, groups: list[AgentGroup] | None = None,
+               time_limit_s: int | None = None) -> Task:
     """The test task; on a pull board each agent also gets the board tools, and every agent submit and stop_working as
-    it holds them, bound as src/tasks.py binds them, each with the run's cap (tool_output_caps.capped_bindings).
+    it holds them and end_round, bound as src/tasks.py binds them, each with the run's cap
+    (tool_output_caps.capped_bindings).
     `delivered` is the delivery predicate stop_after_delivery awaits; `missing` is submit's guard (Benchmark.gradable);
-    `groups` are ORBIT's agent groups (first messages)."""
+    `groups` are ORBIT's agent groups (first messages); time_limit_s is the turn rules' time limit."""
     names = config.names
     extra = board.agent_tool_names(config, roles)
-    agents = [AgentSpec(name=n, role="engineer", tools=["work", *extra[n], *ending_tools(config, role_of(roles, n))],
+    agents = [AgentSpec(name=n, role="engineer",
+                        tools=["work", *extra[n], *ending_tools(config, role_of(roles, n)), rules.END_ROUND],
                         max_messages=10_000, submit=False,
                         system_prompt=f"You are {n}, an engineer. Call work to make progress.") for n in names]
     task = multi_agent_task(
@@ -162,7 +181,8 @@ def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | Non
         tool_bindings=capped_bindings({"work": ToolFactory(lambda ctx: work(ctx.agent_name)),
                                        **board.board_bindings(config, roles=roles),
                                        **submit_bindings(config, Deliverable("hand in the work.", missing,
-                                                                             nothing_missing, True))},
+                                                                             nothing_missing, True)),
+                                       **end_round_bindings()},
                                       config),
         communication=board_communication(names, max_message_chars=config.max_message_chars) if config.board else None,
         execution=board_execution(plan=rules.schedule(config, names, roles), agent_groups=groups,
@@ -170,7 +190,8 @@ def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | Non
         scheduler=board_scheduler(max_turns=config.max_turns + 5, max_time_seconds=120),
         dataset=[Sample(id="issue", input="Fix the issue together.")],
         scorer=scorer_ or nothing(),
-        task_setup=[rules.rules_setup(config, names, roles, **({"delivered": delivered} if delivered else {}))],
+        task_setup=[rules.rules_setup(config, names, roles, **({"delivered": delivered} if delivered else {}),
+                                      time_limit_s=time_limit_s)],
         token_limit=1_000_000,
     )
     for sample in task.dataset:
@@ -182,11 +203,11 @@ def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | Non
 
 
 def run(config: SwarmConfig, scripts: dict, tmp_path, *, scorer_=None, roles=None, with_log=False, delivered=None,
-        missing=nothing_missing, groups=None, **generate):
+        missing=nothing_missing, groups=None, time_limit_s=None, **generate):
     """Run the test task on the scripts: (the sample, the provider calls recorded), and the log with_log."""
     recorder: list[dict] = []
     [log] = inspect_eval(build_task(config, scorer_=scorer_, roles=roles, delivered=delivered, missing=missing,
-                                    groups=groups),
+                                    groups=groups, time_limit_s=time_limit_s),
                          model=scripted_model(scripts, recorder),
                          log_dir=str(tmp_path), display="none", log_realtime=False, max_retries=0, **generate)
     assert log.status == "success", log.error
@@ -197,15 +218,15 @@ def run(config: SwarmConfig, scripts: dict, tmp_path, *, scorer_=None, roles=Non
 
 
 def pull(**fields) -> SwarmConfig:
-    """The default preset (the pull board at the small scale) with fields changed. The turn budget is off unless a
-    test sets it, so steps_per_agent sets the rounds."""
-    return SwarmConfig.model_validate({**PRESETS["default"].model_dump(), "turn_budget": None, **fields})
+    """The default preset (the pull board at the small scale) with fields changed. A round holds one tool call unless
+    a test sets calls_per_round, so a script entry is one round."""
+    return SwarmConfig.model_validate({**PRESETS["default"].model_dump(), "calls_per_round": 1, **fields})
 
 
 def sequential(**fields) -> SwarmConfig:
-    """The default preset with sequential single-agent rounds in declaration order and no free board actions, so a
-    plan reads as one step per agent per round; the turn budget is off, so steps_per_agent sets the rounds."""
-    return pull(**{"concurrent_rounds": False, "turn_order": "round_robin", "free_board_actions": 0, **fields})
+    """The default preset with sequential single-agent rounds in declaration order, so a plan reads as one step per
+    agent per round; a round holds one tool call unless a test sets calls_per_round."""
+    return pull(**{"concurrent_rounds": False, "turn_order": "round_robin", **fields})
 
 
 # ------------------------------------------------------------------------------------------------ reading a run back

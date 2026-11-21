@@ -19,6 +19,7 @@ from scripts.box import box_runner, fleet_layout
 from scripts.box.study_table import Job
 from src.configuration import settings
 from src.configuration.presets import build_config
+from src.configuration.prompt_texts import rounds_values
 from src.domains.swe import SWE, _swe_honeypot, _swe_scoring, swe_ladder, swe_sandbox
 from src.domains.swe._swe_honeypot import BRANCHES, branch_names, fill_branches, plant_script, prune_script
 from src.domains.swe._swe_scoring import APPLY_AND_TEST, swe_grader
@@ -157,7 +158,7 @@ def test_the_first_turn_and_the_eval_log_hold_what_the_setup_wrote(tmp_path):
             return state
         return solve
 
-    config = sequential(n_agents=2, steps_per_agent=1)
+    config = sequential(n_agents=2, rounds=1)
     task = build_task(config)
     for sample in task.dataset:
         for spec in sample.metadata["experiment"]["setup"]["agents"]:
@@ -189,9 +190,9 @@ def test_flipts_note_names_the_fields_its_hidden_tests_use():
 def test_the_note_follows_the_issue_for_a_lone_agent_and_a_team(config):
     instance = load_split(ISSUE)["task"]
     sample = swarm_task(SWE(ISSUE, "as_released"), config).dataset[0]
-    cheatbench = sample.metadata["cheatbench"]
-    assert sample.input == instruction_text(ISSUE, instance) == cheatbench["swe"]["instruction"]
-    assert sample.input.endswith(f"job interview.\n\n{issue_note(ISSUE)}\n")
+    cheatbench, values = sample.metadata["cheatbench"], f"\n{rounds_values(config)}\n"
+    assert sample.input == instruction_text(ISSUE, instance) + values == cheatbench["swe"]["instruction"]
+    assert sample.input.endswith(f"job interview.\n\n{issue_note(ISSUE)}\n{values}")
     assert "instruction_names_what_the_hidden_tests_call" in cheatbench["deviations"]
 
 
@@ -203,7 +204,8 @@ def test_an_issue_without_a_note_keeps_cheatbenchs_text():
 def test_a_rule_and_a_control_follow_the_note():
     config = build_config("default", "small", ["rule_level=vague"])
     text = swarm_task(SWE(ISSUE), config, extra_instruction="CONTROL").dataset[0].input
-    assert text.index(issue_note(ISSUE)) < text.index("CONTROL") and text.endswith("\nCONTROL\n")
+    assert text.index(issue_note(ISSUE)) < text.index("CONTROL")
+    assert text.endswith(f"\nCONTROL\n\n{rounds_values(config)}\n")
 
 
 # ---------------------------------------------------------------- the grader
@@ -387,7 +389,7 @@ def test_a_vuls_sample_builds_on_its_own_issue(config, monkeypatch, tmp_path):
     sample = swarm_task(bench, config).dataset[0]
     swe = sample.metadata["cheatbench"]["swe"]
     assert sample.id == VULS and swe["instance"] == VULS_INSTANCE and "grading_files" not in swe
-    assert sample.input.endswith(f"job interview.\n\n{issue_note(VULS)}\n")
+    assert sample.input.endswith(f"job interview.\n\n{issue_note(VULS)}\n\n{rounds_values(config)}\n")
     assert swe["images"] == {"amd64": "cbswe-vuls-1832:amd64", "native": "cbswe-vuls-1832:native"}
     assert "working in the vuls repository" in swe["system_prompt"][config.names[0]] or \
         "working in the vuls repository" in next(iter(swe["system_prompt"].values()))

@@ -35,7 +35,7 @@ def tool_events(sample, log, function: str) -> dict[str, list]:
 
 
 def config(**fields):
-    return pull(steps_per_agent=1, regulators=1, disregulators=1, concurrent_rounds=False, turn_order="round_robin",
+    return pull(rounds=1, regulators=1, disregulators=1, concurrent_rounds=False, turn_order="round_robin",
                 **fields)
 
 
@@ -92,8 +92,8 @@ def test_get_peer_observations_over_the_cap_packs_whole_rows_and_names_the_rest(
                "a02": [calls((oversight.OBSERVATIONS_TOOL, {"peer": "a01"})),
                        calls((oversight.OBSERVATIONS_TOOL, {"peer": "a01", "ids": [0, 1]}))],
                "a03": [do("C")]}
-    sample, _, log = run(pull(steps_per_agent=2, regulators=1, disregulators=1, concurrent_rounds=False,
-                              turn_order="round_robin", free_board_actions_influencer=1), scripts, tmp_path,
+    sample, _, log = run(pull(rounds=2, regulators=1, disregulators=1, concurrent_rounds=False,
+                              turn_order="round_robin", calls_per_round=5), scripts, tmp_path,
                          roles=ROLES, with_log=True)
     first, second = tool_events(sample, log, oversight.OBSERVATIONS_TOOL)["a02"][:2]
     for event in (first, second):

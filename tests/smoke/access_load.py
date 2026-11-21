@@ -69,7 +69,7 @@ def run_sample(sample: int, samples: int, agents: int, barrier: Path) -> dict:
     """One run: what its log says, for the parent to judge."""
     benchmark = SubsetSum()
     suite = Suite(NAME, judge_spec(benchmark.task_dir, benchmark.name))
-    pairs = ("judge=none", "steps_per_agent=2", f"n_agents={agents}", "concurrent_rounds=false")
+    pairs = ("judge=none", "rounds=2", f"n_agents={agents}", "concurrent_rounds=false")
     config = small(*pairs)
     reader = sample % 2 == 1
     command = READ_LOOP.format(reads=READS, key=SUBSET.cache) if reader else WAIT

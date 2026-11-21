@@ -121,7 +121,7 @@ def verdict_of(result: str) -> str:
 
 # --------------------------------------------------------------------------
 def scenario_lone() -> dict:
-    config = small("n_agents=1", "steps_per_agent=16")
+    config = small("n_agents=1", "rounds=16")
     task = tasks.swarm_task(CreativeWriting("museum_poem"), config)
     block = task.dataset[0].metadata["cheatbench"]["creative"]
     reference = block["references"]["/workspace"]
@@ -210,7 +210,7 @@ def scenario_lone() -> dict:
 
 
 def scenario_team() -> dict:
-    config = small("n_agents=3", "access=all", "steps_per_agent=10")
+    config = small("n_agents=3", "access=all", "rounds=10")
     task = tasks.swarm_task(CreativeWriting("museum_poem"), config)
     block = task.dataset[0].metadata["cheatbench"]["creative"]
     reference = block["references"]["/workspace"]
@@ -297,7 +297,7 @@ def assembled(own: int, call_id: str):
 
 
 def scenario_split() -> dict:
-    config = small("steps_per_agent=12")
+    config = small("rounds=12")
     assert config.n_agents == 3 and config.access == "split" and config.mode == "shared_task", config
     task = tasks.swarm_task(CreativeWriting("museum_poem"), config)
     block = task.dataset[0].metadata["cheatbench"]["creative"]
@@ -398,7 +398,7 @@ def scenario_split() -> dict:
 
 
 def scenario_solo() -> dict:
-    config = small("n_agents=2", "mode=solo_task", "steps_per_agent=8")
+    config = small("n_agents=2", "mode=solo_task", "rounds=8")
     task = tasks.swarm_task(CreativeWriting("museum_poem"), config)
     block = task.dataset[0].metadata["cheatbench"]["creative"]
     refs = block["references"]

@@ -173,8 +173,9 @@ def travel_evidence(rows: list[dict], posts: list[dict], domain: Domain, split: 
 # outcomes
 # --------------------------------------------------------------------------
 def ending_at_cap(episode: dict, rules: dict) -> str | None:
-    """The episode's ending, "cap" when the plan ran out with the agent at the step cap (run.json rules). The turn
-    rules record a cap only without pooling, so a pooled agent at its cap reads "end"."""
+    """The episode's ending, "cap" when the plan ran out with the agent at the step cap of a run before 2026-11-21
+    (run.json rules). Those rules recorded a cap only without pooling, so a pooled agent at its cap reads "end". A
+    later run records "rounds" itself, for an agent that used up its rounds."""
     ended = episode.get("ended_by")
     at_cap = rules.get("cap") and (rules.get("work_steps") or {}).get(episode.get("agent"), 0) >= rules["cap"]
     return "cap" if ended == "end" and at_cap else ended
@@ -185,9 +186,10 @@ def ended_by(run_json: dict, episodes: list[dict]) -> str | None:
     or an episode ended by submit outside solo_task) or every neutral solo_task agent handed in its own;
     "stop_working" when every neutral agent stopped; the sample's limit (LIMITS, any other type as written) or the
     limit ORBIT's scheduler applied (FAILURES); "steps" or "tokens" when every neutral agent that did not stop ran out
-    of its steps (ending_at_cap) or its context; "delivered" when every neutral agent's deliverable ended its turns;
-    "error" when an episode ended by error; else "end". A regulator's window closes on its own, so roles do not
-    decide. None when no episode records its ending (a log without the turn rules)."""
+    of its rounds, or of its steps in a run before 2026-11-21 (ending_at_cap), or of its context; "delivered" when
+    every neutral agent's deliverable ended its turns; "error" when an episode ended by error; else "end". A
+    regulator's window closes on its own, so roles do not decide. None when no episode records its ending (a log
+    without the turn rules)."""
     endings = [ep.get("ended_by") for ep in episodes]
     if not any(endings):
         return None
@@ -206,7 +208,7 @@ def ended_by(run_json: dict, episodes: list[dict]) -> str | None:
     failure = next((FAILURES[ep["failure"]] for ep in episodes if ep.get("failure") in FAILURES), None)
     if failure:
         return failure
-    if decisive - {"stop_working"} <= {"cap", "context"}:
+    if decisive - {"stop_working"} <= {"rounds", "cap", "context"}:
         return "tokens" if "context" in decisive else "steps"
     if decisive == {"delivered"}:
         return "delivered"

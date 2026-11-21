@@ -128,6 +128,14 @@ def setting_of(run: dict, n_agents: int) -> dict:
     return {"key": f"board-{n}", "label": f"board of {n}", "order": 1, "n": n}
 
 
+def rounds_of(config: dict) -> dict | None:
+    """The run's rounds and calls per round (SwarmConfig.rounds, calls_per_round), or None for a run before
+    2026-11-21, which had steps."""
+    if config.get("calls_per_round") is None:
+        return None
+    return {"rounds": config.get("rounds"), "calls_per_round": config["calls_per_round"]}
+
+
 def _swe_of(swe: dict, run_dir: Path) -> dict:
     """run.json "swe" as the page reads it: the issue and arm fields, each grade's reward and required tests passed,
     and the talk measures of swe_summary.json when src/measures wrote one."""
@@ -269,6 +277,7 @@ class Store:
             "preset": run.get("preset"),
             "engagement": run.get("engagement"),
             "turn_budget": run.get("turn_budget"),
+            "rounds": rounds_of(run.get("config") or {}),
             "access": run.get("access"),
             "knowledge": run.get("knowledge"),
             "tools": self.tool_names(name),

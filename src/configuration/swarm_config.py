@@ -1,7 +1,7 @@
 """SwarmConfig: every knob of one swarm run.
 
-    config = SwarmConfig(n_agents=3, regulators=1, turn_budget=None, steps_per_agent=8)
-    config.working_steps, config.max_turns, config.sample_message_limit
+    config = SwarmConfig(n_agents=3, regulators=1, rounds=20, calls_per_round=5)
+    config.plan_rounds, config.max_turns, config.sample_message_limit
 
 One frozen pydantic model holds the team, the board, the turn rules, the instruction levels, the limits, the model
 calls and the judge. src/tasks.py turns it into an ORBIT task; src/swarm/turn_rules/ reads it inside the run. The
@@ -34,10 +34,15 @@ INFLUENCERS = ("regulator", "disregulator")        # the roles that hold the pee
 TOOL_OUTPUT_BYTES = 65536                           # the cap on one tool result, every agent's (tool_output_bytes)
 Mode = Literal["solo_task", "shared_task"]
 NONE_TEXT = ("none", "null")
-# Messages one agent's step adds at most, for the derived message limit: the model's reply, its tool results and the
-# notices; MESSAGE_MARGIN covers the sample's own messages.
-MESSAGES_PER_STEP = 6
+# Messages one agent's round adds per call of its N at most, for the derived message limit: the model's reply and a
+# tool result, with room for the results of calls refused past N; ROUND_MESSAGES covers the round's line and the
+# presence lines, and MESSAGE_MARGIN the sample's own messages.
+MESSAGES_PER_CALL = 3
+ROUND_MESSAGES = 2
 MESSAGE_MARGIN = 20
+# The plan's rounds per round of the budget on a board: a round of board calls alone uses up none of an agent's rounds
+# (turn_rules.turn_activation), so the plan holds twice the rounds an agent may use up. A lone agent has no board.
+PLAN_ROUND_FACTOR = 2
 # Presence lines one agent receives about one peer at most: its entry and its exit
 # (src/swarm/turn_rules/_turn_presence.py).
 PRESENCE_MESSAGES = 2
@@ -164,20 +169,15 @@ class SwarmConfig(BaseModel):
     # ---------------------------------------------------------------- the board
     mention_board: bool = False
     """Whether the system prompt names the board and its tools (prompts.yaml `board`; SWE: swe.board_paragraph and
-    swe.board_tool_line). False: the tool list is the agents' only hint that a board exists."""
+    swe.board_tool_line). False: no sentence describes the board; the tool list and the rounds' rules, which name the
+    board calls that use up no round (board.round_rules), are the agents' only hints of it."""
     notice: Literal["none", "changed", "counts"] = "counts"
     """A provider-only line at the start of a call when the board changed since the agent's last call (prompts.yaml
-    `notice`). counts, the default: "[Since your last turn] the board changed: ..." with each sender's new and total
+    `notice`). counts, the default: "[Since your last call] the board changed: ..." with each sender's new and total
     posts. changed: the same line without the counts. none: no line. The turn rules record each one as an info
     event, which the transcript builder recovers. It never enters the durable conversation."""
     read_page: int = 5
     """The most posts one board_read returns (from the scale)."""
-    free_board_actions: int = 3
-    """K, from the scale: follow-up steps per round after a step that ended with a board action (board_status,
-    board_read or board_post as its last tool call). They do not count against the working steps. 0 turns them off."""
-    free_board_actions_influencer: int = 10
-    """K for the influencers, regulators and disregulators (since 2026-11-20; a regulator's alone before): their
-    follow-up steps per round after a board action, the peer tools included."""
     reads_per_turn: int | None = None
     """Posts an agent may receive through board_read in one round, across its calls (10 from the scale). A read
     that would pass it returns only the newest posts left in the budget; a read with none left is refused with a
@@ -193,29 +193,28 @@ class SwarmConfig(BaseModel):
     """Who is eligible in each round, in which order (turn_rules.schedule). round_robin takes the agents in the order
     of `names`. random draws a new permutation per round from random.Random(f"{seed}/{round}"). Inside a concurrent
     round the order is ORBIT's."""
-    steps_per_agent: int = 60
-    """Working steps per agent, as rounds of the written plan, when turn_budget is None. Free board steps do not
-    count. Read the steps a run gets through working_steps."""
-    turn_budget: int | None = None
-    """The turn budget per agent: the working steps every agent of the swarm gets, at every scale, in place of
-    steps_per_agent. The default preset sets settings.TURN_BUDGET (100: two thirds of CheatBench's 150-turn bound).
-    None turns the budget off, so steps_per_agent applies (`--set turn_budget=none`)."""
+    rounds: int = 30
+    """R: the rounds every agent may use up, workers, influencers and a lone agent alike. In a round an agent makes up
+    to calls_per_round tool calls (an inner loop of model calls, each seeing the results before it). A round uses up
+    one of the R unless every call it made was a board call (board_status, board_read, board_post, get_peer_actions,
+    get_peer_observations) other than end_round; a round of end_round alone, or a reply with no tool call, uses one
+    up. An agent that has used up R ends "rounds" (turn_rules.turn_activation). The agent's first message gives R
+    and N; its system prompt states the rules without numbers."""
+    calls_per_round: int = 10
+    """N: the tool calls an agent may make in one round. Every call counts, board calls included, so a round always
+    ends; end_round never counts. A reply asking for several calls counts each. A call past N is refused with a
+    ToolError, and the round ends after N calls (turn_rules.turn_activation.ends_round)."""
     concurrent_rounds: bool = True
     """True: each round is one concurrent ORBIT ScheduleStep holding every eligible agent, at most max_concurrency at
-    once, on a snapshot of the board as of the round's start, followed by up to free_board_actions follow-up steps for
-    the agents whose step ended with a board action. False: one single-agent step per agent per round, in
-    sequence, and a board action inserts the agent's follow-up step right after its own."""
+    once, on the live board: a read sees every post made so far, this round's included. False: one single-agent step
+    per agent per round, in sequence. Either way an agent's round is one ORBIT activation of up to calls_per_round
+    tool calls."""
     max_concurrency: int = 3
     """Most agents running at once in a concurrent step (ORBIT ScheduleStep.max_concurrency), from the scale."""
-    pooled_steps: bool = True
-    """Whether an agent that stops leaves its remaining turns to the team. True: turn_activation.after_activation
-    reassigns the stopped agent's steps to the active agents whose window holds the round; an agent whose own work
-    is done (ended "delivered", or by its own submit in solo_task) leaves its steps to nobody. False: each agent is
-    capped at its working steps."""
     shutdown: bool = True
     """Whether the neutral agents and the disregulators of a shared_task team get stop_working (holds_stop_working;
     src/swarm/submit_and_stop.py). A regulator never does. A call ends the caller's turns at once (TurnState.ended
-    "stop_working", store StopWorking) and hands in nothing; under pooled_steps its steps go to the team. False: no
+    "stop_working", store StopWorking) and hands in nothing; its rounds go to nobody. False: no
     stop tool and no sentence about stopping in any prompt. The shutdown rate is the share of the agents holding the
     tool that stopped this way."""
     submit: bool | None = None
@@ -231,14 +230,14 @@ class SwarmConfig(BaseModel):
     agent's and a solo_task agent's submit take effect at once."""
     stop_after_delivery: int | None = None
     """Ends an episode soon after its deliverable exists, so an agent that keeps working after it registered, sent
-    its work for review or merged does not run to its turn budget. None turns the rule off. At the end of every round
+    its work for review or merged does not run to its last round. None turns the rule off. At the end of every round
     turn_activation.after_activation awaits the benchmark's delivery predicate (Benchmark.delivered) while some
-    deliverable is unseen. N for a lone agent and in solo_task: an agent's episode ends after N more of its working
-    steps once its own deliverable is first seen. N in shared_task: every agent's episode ends N rounds after the
+    deliverable is unseen. N for a lone agent and in solo_task: an agent's episode ends after N more of its rounds
+    used up once its own deliverable is first seen. N in shared_task: every agent's episode ends N rounds after the
     round that first shows the team's deliverable, as the team's submit ends the run after a set round; 0 ends it
     after that round. An episode the rule ends is ended "delivered" (TurnState.ended, an episode's ended_by) and its
-    steps go to nobody. The store Delivered, and run.json "delivery", hold the round and working step at which each
-    deliverable was first seen."""
+    rounds go to nobody. The store Delivered, and run.json "delivery", hold the round and the rounds used up at which
+    each deliverable was first seen."""
     regulator_window: Window = Window()
     """The rounds in which regulators hold steps. A regulator enters the swarm at its start round: ORBIT inserts its
     system prompt at its first activation. It leaves after its end round. Workers always hold every round."""
@@ -267,8 +266,8 @@ class SwarmConfig(BaseModel):
     # ---------------------------------------------------------------- limits
     message_limit: int | None = None
     """Messages per sample (Inspect message_limit); each agent's conversation is capped at it plus ten
-    (AgentSpec.max_messages). None derives it from the plan: six messages per step of max_turns, plus twenty
-    (sample_message_limit)."""
+    (AgentSpec.max_messages). None derives it from the plan: per agent and round of plan_rounds, three messages per
+    call of calls_per_round and two more, plus twenty (sample_message_limit)."""
     token_limit: int = 0
     """Tokens per sample (Inspect token_limit). 0 means the runaway guard: 64M tokens per agent."""
     cost_limit_usd: float = 5.0
@@ -364,15 +363,9 @@ class SwarmConfig(BaseModel):
         if self.regulator_count + self.disregulator_count > self.n_agents:
             raise ValueError("regulators + disregulators cannot exceed n_agents")
         access_policy.check_seats(self.access, self.n_agents)
-        if self.steps_per_agent < 1:
-            raise ValueError("steps_per_agent must be at least 1")
-        if self.turn_budget is not None and self.turn_budget < 1:
-            raise ValueError("turn_budget must be at least 1; turn_budget=none turns the budget off")
-        for name in ("read_page", "max_concurrency"):
+        for name in ("rounds", "calls_per_round", "read_page", "max_concurrency"):
             if getattr(self, name) < 1:
                 raise ValueError(f"{name} must be at least 1")
-        if self.free_board_actions < 0 or self.free_board_actions_influencer < 0:
-            raise ValueError("free_board_actions and free_board_actions_influencer cannot be negative")
         if self.tool_output_bytes is not None and self.tool_output_bytes < 1024:
             raise ValueError("tool_output_bytes must be at least 1024")
         for name in ("reads_per_turn", "posts_per_turn", "message_limit"):
@@ -382,12 +375,12 @@ class SwarmConfig(BaseModel):
             raise ValueError("stop_after_delivery cannot be negative; stop_after_delivery=none turns the rule off")
         if self.submit_delay_rounds < 0:
             raise ValueError("submit_delay_rounds cannot be negative; 0 ends the run after the round of the submit")
-        rounds = self.working_steps
+        rounds = self.plan_rounds
         for name in ("regulator_window", "disregulator_window"):
             window = getattr(self, name)
             if not 1 <= window.start <= rounds or (window.end is not None and not window.start <= window.end <= rounds):
-                raise ValueError(f"{name} needs 1 <= start <= end <= the rounds ({rounds}: the turn budget, else "
-                                 f"steps_per_agent), got {window.start}:{window.end}")
+                raise ValueError(f"{name} needs 1 <= start <= end <= the plan's rounds ({rounds}: plan_rounds), got "
+                                 f"{window.start}:{window.end}")
         levels = settings.load_instruction_levels()
         for ladder in LADDERS:
             level = getattr(self, f"{ladder}_level")
@@ -420,27 +413,26 @@ class SwarmConfig(BaseModel):
         return sorted(self.seats)
 
     @property
-    def working_steps(self) -> int:
-        """Working steps per agent: the turn budget, else steps_per_agent. turn_rules.schedule writes this many
-        rounds."""
-        return self.steps_per_agent if self.turn_budget is None else self.turn_budget
+    def plan_rounds(self) -> int:
+        """The rounds turn_rules.schedule writes: rounds, times PLAN_ROUND_FACTOR on a board, where a round of board
+        calls alone uses up none of an agent's rounds."""
+        return self.rounds * (PLAN_ROUND_FACTOR if self.board else 1)
 
     @property
     def max_turns(self) -> int:
-        """Plan steps at most: per round one step per agent and up to its K follow-up steps (free_board_actions, or
-        free_board_actions_influencer for an influencer), over working_steps rounds. A bound for both sequential and
-        concurrent rounds."""
-        influencers = self.regulator_count + self.disregulator_count
-        return self.working_steps * ((self.n_agents - influencers) * (1 + self.free_board_actions)
-                                     + influencers * (1 + self.free_board_actions_influencer))
+        """Plan steps at most: one step per agent per round of plan_rounds, a bound for both sequential and concurrent
+        rounds."""
+        return self.plan_rounds * self.n_agents
 
     @property
     def sample_message_limit(self) -> int:
-        """Inspect's message limit: message_limit, else six messages per step of max_turns plus twenty, plus two
-        presence lines per agent per peer, so the limit never cuts a run the plan allows."""
+        """Inspect's message limit: message_limit, else per agent and round of plan_rounds MESSAGES_PER_CALL messages
+        per call of calls_per_round and ROUND_MESSAGES more, plus twenty, plus two presence lines per agent per peer,
+        so the limit never cuts a run the plan allows."""
         if self.message_limit is not None:
             return self.message_limit
-        return (self.max_turns * MESSAGES_PER_STEP + MESSAGE_MARGIN
+        per_round = MESSAGES_PER_CALL * self.calls_per_round + ROUND_MESSAGES
+        return (self.max_turns * per_round + MESSAGE_MARGIN
                 + PRESENCE_MESSAGES * self.n_agents * (self.n_agents - 1))
 
     @property

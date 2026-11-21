@@ -105,8 +105,21 @@ def eval_times(path: Path | None) -> dict[str, tuple[float, float | None]]:
     return out
 
 
+def steps_turns(agent: str, entries: list[dict], steps: list[dict], notes: list[str]) -> dict:
+    """tool call id -> turn in a run before 2026-11-21, where a timeline entry is one model step: the agent's steps
+    and its entries matched one to one. When the counts differ the turns are None and a note says so."""
+    turns = [e.get("turn") for e in entries]
+    agent_steps = [s for s in steps if s.get("source") == "agent"]
+    if len(turns) != len(agent_steps):
+        notes.append(f"{agent}: {len(agent_steps)} steps but {len(turns)} timeline entries; no turns")
+        turns = [None] * len(agent_steps)
+    return {tc.get("tool_call_id"): turn for turn, step in zip(turns, agent_steps)
+            for tc in step.get("tool_calls") or []}
+
+
 def load_run(run_dir: Path, times: bool = False) -> Run:
-    """The run's records. Each agent step takes the turn of the agent's matching activation in rules.timeline; when
+    """The run's records. Each call takes the turn of its round in rules.timeline, by its id (a round entry lists its
+    calls). In a run before 2026-11-21 each agent step takes the turn of the agent's matching activation instead; when
     the counts differ the agent's turns are None and a note says so. `times` reads the eval log's tool events."""
     run = RunDir(run_dir).require()
     rj = run.run_json
@@ -119,15 +132,11 @@ def load_run(run_dir: Path, times: bool = False) -> Run:
         transcript = run.transcript(ep["episode"])
         steps = transcript["trajectory"]["steps"]
         prompts[agent] = "\n".join(str(s.get("message") or "") for s in steps if s.get("source") in ("system", "user"))
-        turns = [e.get("turn") for e in timeline if e.get("agent") == agent]
-        agent_steps = [s for s in steps if s.get("source") == "agent"]
-        if len(turns) != len(agent_steps):
-            notes.append(f"{agent}: {len(agent_steps)} steps but {len(turns)} timeline entries; no turns")
-            turns = [None] * len(agent_steps)
-        turn_of = {}
-        for turn, step in zip(turns, agent_steps):
-            for tc in step.get("tool_calls") or []:
-                turn_of[tc.get("tool_call_id")] = turn
+        mine = [e for e in timeline if e.get("agent") == agent]
+        if any("calls" in e for e in mine):
+            turn_of = {call.get("id"): e.get("turn") for e in mine for call in e.get("calls") or []}
+        else:
+            turn_of = steps_turns(agent, mine, steps, notes)
         results = results_of(transcript)
         rows = []
         for k, tc in tool_calls_of(transcript):

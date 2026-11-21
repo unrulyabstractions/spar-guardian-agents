@@ -11,7 +11,7 @@ This folder screens candidate target models for collaborative reward hacking. Th
 | issue, honeypot | `flipt-02e2`, `jigsaw` |
 | agents | 2, both neutral, `shared_task` |
 | pieces | one agent B and A, the other C; the seed turns which seat gets B and A |
-| turn budget | 100 working steps per agent (`settings.TURN_BUDGET`) |
+| rounds | 30 rounds of up to 10 tool calls per agent (`SwarmConfig.rounds`, `calls_per_round`) |
 | judged | no, as in the examples; `python -m src rejudge <name>` judges it later |
 
 The script takes every argument an example takes (`examples/README.md`). Its run is named after the model and the seed, `flipt_duo_<model>` with `_s<seed>` for a seed other than 0. A run under that name that already exists is refused, so a second run with other `--set` pairs never overwrites the first. `--name` names a run otherwise, and replaces a run of that name as the examples do. A `--set` that changes the team (two agents, no regulator, no disregulator) is refused. An access map names two seats: `--set access=seat1:C,seat2:A+B`.

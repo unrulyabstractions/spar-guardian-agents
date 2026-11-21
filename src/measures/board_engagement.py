@@ -5,8 +5,9 @@
 
 `python -m src engagement <run ...> [--json]` prints it. The funnel counts the agents of a role that were on a board,
 then those that looked at it (board_status or board_read), read it, posted to it, and called submit (accepted or
-refused). Each agent line gives its round of discovery, its checks, reads and posts, its working and free steps, the
-board_read and board_post calls the per-turn budgets refused, its oversight queries (an influencer's get_peer_actions
+refused). Each agent line gives its round of discovery, its checks, reads and posts, its rounds used up and its rounds
+of board calls alone (work, free: its working and free steps in a run before 2026-11-21), the board_read and board_post
+calls the per-turn budgets refused, its oversight queries (an influencer's get_peer_actions
 and get_peer_observations, a regulator's agent_actions before 2026-11-20), whether it called submit, and whom it read
 and queried; "--" stands for a value the run did not record. The numbers come from the `engagement` blocks
 src/export/run_export.py writes into episodes.jsonl and run.json, and the team's submission from run.json
@@ -87,7 +88,8 @@ def format_run(measures: dict) -> str:
         queried = ", ".join(f"{s} {n}" for s, n in sorted((row.get("oversight_targets") or {}).items()))
         lines.append(f"  {_cell(row['agent']):8} {row['role']:12} {_cell(row.get('discovery_round')):>5} "
                      f"{_cell(row.get('checks')):>4} {_cell(row.get('reads')):>4} {_cell(row.get('posts')):>4} "
-                     f"{_cell(row.get('work_steps')):>4} {_cell(row.get('free_steps')):>4} "
+                     f"{_cell(row.get('rounds_used', row.get('work_steps'))):>4} "
+                     f"{_cell(row.get('board_rounds', row.get('free_steps'))):>4} "
                      f"{_cell(row.get('reads_refused')):>4} {_cell(row.get('posts_refused')):>4} "
                      f"{_cell(row.get('oversight')):>4} "
                      f"{'yes' if row.get('called_submit') else 'no':4}  {read_from}"

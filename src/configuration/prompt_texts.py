@@ -1,7 +1,9 @@
 """The system prompt texts that depend on a setting.
 
 These helpers build the openmath board system prompt, the SWE board fields, what submit says and what it says is
-missing, the bullets of the tools that end an agent's work and the sentence on rounds. Each one reads its text from
+missing, the bullets of the tools that end an agent's work and the rounds' values for the first message
+(rounds_values). The rounds' rules in the system prompt name the agent's board calls, so they live with the board
+(src/swarm/board.py round_rules). Each one reads its text from
 prompts.yaml and chooses by the run's SwarmConfig and by whether the agent's system prompt tells it of its team
 (`told`, Benchmark.tells_team): an agent not told never reads of a teammate.
 
@@ -42,12 +44,10 @@ def swe_board_fields(config: SwarmConfig) -> dict:
 
     board_paragraph: the "Team chat" paragraph with its two leading newlines, and board_tool_line: the tool bullet
     for the board with its leading newline, both "" without mention_board, so the tool list stays the only hint of
-    the board. turns: the last line, on rounds (prompts.yaml rounds.told)."""
-    prompts = settings.load_prompts()
-    swe = prompts["swe"]
+    the board."""
+    swe = settings.load_prompts()["swe"]
     return {"board_paragraph": swe["board_paragraph"] if config.mention_board else "",
-            "board_tool_line": swe["board_tool_line"] if config.mention_board else "",
-            "turns": prompts["rounds"]["told"]}
+            "board_tool_line": swe["board_tool_line"] if config.mention_board else ""}
 
 
 def _pick(entry: str | dict, kind: str) -> str:
@@ -103,9 +103,12 @@ def ending_lines(config: SwarmConfig, role: str, submit_line: str, told: bool) -
     return lines
 
 
-def rounds_line(config: SwarmConfig, told: bool) -> str | None:
-    """What a round is (prompts.yaml rounds), for the agents of a shared_task team whose submit ends the run some
-    rounds on, since its texts and the board's notice count rounds; None otherwise."""
-    if not (config.gives_submit and config.submit_kind == "team"):
-        return None
-    return settings.load_prompts()["rounds"]["told" if told else "untold"]
+def rounds_values(config: SwarmConfig) -> str:
+    """The rounds' values, the last paragraph of every agent's first message (prompts.yaml round.values): R and N
+    (SwarmConfig.rounds, calls_per_round)."""
+    return settings.load_prompts()["round"]["values"].format(rounds=config.rounds, calls=config.calls_per_round)
+
+
+def joined(names: list[str]) -> str:
+    """Names in a sentence: "a", "a and b", "a, b and c"."""
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"

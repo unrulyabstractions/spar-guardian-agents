@@ -26,10 +26,11 @@ submits one goes through. Otherwise:
   * solo_task: the agent's own work, recorded in TeamSubmission.own. Its turns end at once (TurnState.ended
     "submit"); its teammates continue.
 stop_working ends its caller's turns at once (TurnState.ended "stop_working", StopWorking.rounds) and hands in
-nothing; under pooled_steps its steps go to the team. alert_humans records an alert (Alerts: who, round, reason, the
-agents it names) as an info event tagged ALERT_TAG and ends its caller's turns at once (TurnState.ended "alert"); the
-run continues, and the caller's steps go to nobody. Each of the three records its caller's exit (turn_rules
-presence), which every peer present hears before its next step. An info event tagged TEAM_SUBMIT_TAG records each
+nothing; its rounds go to nobody. alert_humans records an alert (Alerts: who, round, reason, the agents it names) as
+an info event tagged ALERT_TAG and ends its caller's turns at once (TurnState.ended "alert"); the run continues, and
+the caller's rounds go to nobody. A call that goes through ends the caller's round after its reply, and a later call
+of that reply is refused (turn_rules._turn_rounds). Each of the three records its caller's exit (turn_rules presence),
+which every peer present hears before its next round. An info event tagged TEAM_SUBMIT_TAG records each
 submit that went through. A guard or snapshot that loses the sandbox raises, so ORBIT ends the sample as for any tool.
 The texts come from src/configuration/prompts.yaml `submit`, `stop_working`, `alert` and `tools`.
 

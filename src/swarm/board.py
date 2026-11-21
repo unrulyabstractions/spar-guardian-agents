@@ -2,8 +2,8 @@
 
 A board is one shared channel that every agent on the roster can read and write. There are no invocation edges: no
 agent calls, hands off to, or waits on another. Nothing is pushed: ORBIT's delivery is "poll", and posts are visible
-as soon as they are sent ("live"); a concurrent round runs on a snapshot of the board as of its start
-(turn_rules.schedule). Turns follow a written plan, so ORBIT's scheduling_mode does not apply.
+as soon as they are sent ("live"), within a concurrent round too: a read sees every post made so far, this round's
+included. Rounds follow a written plan (turn_rules.schedule), so ORBIT's scheduling_mode does not apply.
 
     comm    = board_communication(names, max_message_chars=2000)
     execute = board_execution(plan=turn_rules.schedule(config, names))
@@ -21,8 +21,7 @@ The tools keep no store of their own. They read and write ORBIT's communication 
                   delivery.acknowledge_read and advances the agent's read cursor to the newest post returned
     board_status  read_messages for the counts and delivery.unread_messages for "new": posts by others above the
                   agent's read cursor
-read_messages honours a concurrent round's snapshot, so an agent sees the board as of its step's start. A post's
-number (#17) is its position on the board, oldest first; it does not change when later posts arrive.
+A post's number (#17) is its position on the board, oldest first; it does not change when later posts arrive.
 
 get_peer_actions and get_peer_observations (src/swarm/_regulator_oversight.py) are bound to the influencers, regulators
 and disregulators, over every teammate. submit and stop_working are not board tools (src/swarm/submit_and_stop.py);
@@ -34,7 +33,9 @@ left it raises a ToolError and counts the refusal (TurnState.reads_refused). boa
 ToolError, sends nothing and counts the refusal (posts_refused). The counts reset at each round. Regulators read
 without a budget and without the read_page cap: a board_read with no selection returns the whole board.
 
-Each tool also counts the action in turn_rules.TurnState (checks, reads, posts, read_senders, discovery_round).
+Each tool also counts the action in turn_rules.TurnState (checks, reads, posts, read_senders, discovery_round). The
+board tools and the peer tools are the board calls (turn_rules.FREE_TOOLS): they count toward a round's calls and use
+up none of the agent's rounds, and round_rules names them in the agent's system prompt.
 Descriptions come from src/configuration/prompts.yaml `tools`, argument descriptions from `tool_args`, the result
 lines from `board_output` and the budget texts from `budget`.
 """
@@ -54,6 +55,7 @@ from orbit.configs.scheduler import SchedulerConfig
 from orbit.configs.scheduling import ScheduleConfig
 from orbit.tools import ToolFactory
 
+from src.configuration.prompt_texts import joined
 from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import INFLUENCERS, SwarmConfig, role_of
 from src.swarm._regulator_oversight import get_peer_actions, get_peer_observations
@@ -62,6 +64,7 @@ from src.swarm.turn_rules import (
     ACTIONS_TOOL,
     BOARD_ID,
     BOARD_TOOLS,
+    FREE_TOOLS,
     OBSERVATIONS_TOOL,
     OVERSIGHT_TOOLS,
     SYSTEM_SENDER,
@@ -88,13 +91,14 @@ def board_communication(agents: list[str], *, max_message_chars: int) -> Communi
 
 def board_execution(*, plan: ScheduleConfig | None = None, agent_groups: list[AgentGroup] | None = None,
                     initial_context: str = "auto") -> ExecutionConfig:
-    """ORBIT 2.0's execution (executor "swarm": each agent is Inspect's react(), held between its steps) under a
-    written plan, one generation and every call in it per step (quantum model_step).
+    """ORBIT 2.0's execution (executor "swarm": each agent is Inspect's react(), held between its rounds) under a
+    written plan. An agent's round is one activation under quantum completion: model calls one after another until
+    the plan's end_activation callback ends it (turn_rules.turn_activation.ends_round) or a reply calls no tool.
 
     history_projection="all" projects every agent's conversation into the sample with
     EnvironmentState:message_attribution, even after a hit limit.
     """
-    return ExecutionConfig(executor="swarm", quantum="model_step", plan=plan, history_projection="all",
+    return ExecutionConfig(executor="swarm", quantum="completion", plan=plan, history_projection="all",
                            agent_groups=list(agent_groups or []), initial_context=initial_context)
 
 
@@ -106,7 +110,7 @@ def board_scheduler(*, max_turns: int, max_time_seconds: int) -> SchedulerConfig
 # ------------------------------------------------------------------------------------------------ the tools
 
 def _board(agent: str, board: str) -> list:
-    """Every post on the board the agent may see, oldest first (ORBIT read_messages, snapshot included)."""
+    """Every post on the board the agent may see, oldest first (ORBIT read_messages)."""
     try:
         return read_messages(board, agent_id=agent)
     except PermissionError as error:
@@ -271,3 +275,12 @@ def agent_tool_names(config: SwarmConfig, roles: dict[str, str] | None = None) -
     if not config.board:
         return {n: [] for n in config.names}
     return {n: [*BOARD_TOOLS, *(OVERSIGHT_TOOLS if role_of(roles, n) in INFLUENCERS else ())] for n in config.names}
+
+
+def round_rules(config: SwarmConfig, agent: str, roles: dict[str, str] | None = None) -> str:
+    """The rounds' rules in the agent's system prompt, with no number (prompts.yaml round.rules; the first message
+    gives the values, prompt_texts.rounds_values), then for an agent that holds board calls the sentence that names
+    them (round.free): the board tools, and the peer tools of an influencer (turn_rules.FREE_TOOLS)."""
+    texts = load_prompts()["round"]
+    free = [tool for tool in agent_tool_names(config, roles).get(agent, []) if tool in FREE_TOOLS]
+    return " ".join([texts["rules"], *([texts["free"].format(tools=joined(free))] if free else [])])
