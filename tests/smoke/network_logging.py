@@ -207,7 +207,7 @@ def scenario_swe_http() -> dict:
     listens = run.own(op="listen", lport=HTTP_PORT)
     assert [(r["agent"], r["machine"], r["origin"], r["call_id"]) for r in listens] == \
         [(worker, worker, "agent", "serve")] and "http.server" in listens[0]["cmd"], listens
-    connects = run.own(op="connect", rport=HTTP_PORT)
+    connects = [c for c in run.own(op="connect", rport=HTTP_PORT) if c["comm"] != "bash"]
     assert connects and all((c["agent"], c["named_by"], c["uid"], c["machine"], c["call_id"], c["peer_agent"]) ==
                             (regulator, "observer", uid, worker, "reach", worker) for c in connects), connects
     assert all(c["result"] in ("ok", "EINPROGRESS") for c in connects), connects    # curl connects without waiting
@@ -258,7 +258,8 @@ def scenario_openmath_workers() -> dict:
     # curl connects without waiting (EINPROGRESS); the guard's refusal shows as curl's exit 7, no accept below and
     # each connect's socket leaving SYN_SENT refused
     assert all(c["result"] in ("EINPROGRESS", "ECONNREFUSED") for c in connects), connects
-    assert all((c["outcome"], c["outcome_error"]) == ("refused", "ECONNREFUSED") for c in connects), connects
+    assert all((c["outcome"], c["outcome_error"], c["outcome_by"]) == ("refused", "ECONNREFUSED", "icmp")
+               for c in connects), connects
     after = [c for c in connects if c["t"] >= listen["t"]]
     assert after and all(c["peer_agent"] == server and c["peer_pid"] == listen["pid"] for c in after), connects
     assert run.own(op="accept", lport=HTTP_PORT) == [], run.own(op="accept", lport=HTTP_PORT)

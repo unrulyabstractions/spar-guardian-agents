@@ -14,8 +14,9 @@ Two methods, named in the ready row:
            calls: inet_bind, inet6_bind, inet_listen, inet_stream_connect, inet_dgram_connect, inet_csk_accept,
            udp_sendmsg with an address (the first send per process and destination), inet_release, unix_bind,
            unix_listen, unix_stream_connect, unix_dgram_connect, unix_accept, fentry on security_bprm_check for
-           the exe of a process gone before /proc is read, and the tracepoint sock:inet_sock_set_state for a TCP
-           connect leaving SYN_SENT (how a connect that did not wait ended). The script is filtered to the machines'
+           the exe of a process gone before /proc is read, the tracepoint sock:inet_sock_set_state for a TCP
+           connect leaving SYN_SENT and fentry on ip_icmp_error and ipv6_icmp_error for an ICMP error reaching one
+           (how a connect that did not wait ended). The script is filtered to the machines'
            network namespaces: the trace sees every container on the host. The kernel does not wait for the row, so a
            process may be gone before /proc is read; its row keeps the kernel's pid, uid and comm and is named through
            its parent or grandparent when one is still there (via), else reads gone.
@@ -34,11 +35,13 @@ The rows, each a JSON object on one line with seq, t and row:
                lport, raddr, rport (a unix socket's path in laddr, or raddr for a connect, with "@" before an abstract
                name), result ("ok" or the errno's name), source (ebpf or procnet), at_start, and who as the access
                log names an opener (uid, exe, cwd, cmd, chain, root, and control for the harness's control with a
-               nonce in its argv), or the chain and root of an ancestor with via its pid, or gone, with the exec's exe
-               when it was seen; sk the socket's kernel address for ebpf
+               nonce in its argv), or the chain and root of an ancestor with via its pid (and via_from earlier when
+               that walk came before the row: the process's own at its exec, or a gone ancestor's), or gone, with the
+               exec's exe when it was seen; sk the socket's kernel address for ebpf
   tcp_state    a TCP connect left SYN_SENT: netns, machine, sk (ebpf) or socket (the inode, procnet), lport, rport,
                old, new (ESTABLISHED, or CLOSE for a connect that failed) and error (the errno's name the kernel set,
                None for none or unknown)
+  tcp_error    an ICMP error reached a TCP connect in SYN_SENT: netns, machine, sk, lport, rport and error (ebpf)
   lost         the tracer lost n events
   restart, machine_down  the poll found a machine under a new init, which the trace's filter no longer covers, or
                nowhere
@@ -82,6 +85,7 @@ else:                          # imported from the checkout (the unit tests)
     )
 
 TRACER_GLOB = "/nix/store/*-bpftrace/bin/bpftrace"
+WALKED_MAX = 50_000                   # the walks Monitor.walked keeps, oldest dropped first
 ATTACH_S = 60
 STOP_S = 15
 FAMILIES = {1: "unix", 2: "inet", 10: "inet6"}
@@ -107,6 +111,11 @@ UNIX_CONNECTED = "03"                 # SS_CONNECTED
 # A state print is a TCP socket leaving SYN_SENT: (state, nsecs, 0, 0, 0, netns, old, new, "", sport, "", dport,
 # sk_err, "", sk, 0, 0). It fires in whatever context the kernel changes the state (a softirq for a handshake), so its
 # netns is the socket's own. The kernel sets sk_err before it closes a refused or timed-out connect.
+#
+# An error print is an ICMP error reaching a TCP socket in SYN_SENT: (error, nsecs, 0, 0, 0, netns, 2, 0, "", sport,
+# "", dport, errno, "", sk, 0, 0). When it lands while the connecting call still holds the socket (a loopback REJECT,
+# as the loopback guard's), the kernel queues the error and leaves the socket in SYN_SENT; the program reads the error
+# and closes the socket, whose state change then carries none. ICMPFILTER is the namespaces' test on that socket.
 TRACE = r"""
 fexit:vmlinux:inet_bind, fexit:vmlinux:inet6_bind /FILTER/ {
   $a = (struct sockaddr_in *)args.uaddr; $ip = ntop(2, $a->sin_addr.s_addr);
@@ -208,6 +217,11 @@ fentry:vmlinux:security_bprm_check /FILTER/ {
   print(("exec", nsecs, pid, tid, uid, curtask->nsproxy->net_ns->ns.inum, 0, 0, str(args.bprm->filename), 0, "", 0,
          0, comm, (uint64)0, PARENTS));
 }
+fentry:vmlinux:ip_icmp_error, fentry:vmlinux:ipv6_icmp_error
+    /args.sk->sk_protocol == 6 && args.sk->__sk_common.skc_state == 2 && ICMPFILTER/ {
+  print(("error", nsecs, 0, 0, 0, args.sk->__sk_common.skc_net.net->ns.inum, 2, 0, "", args.sk->__sk_common.skc_num,
+         "", bswap(args.sk->__sk_common.skc_dport), args.err, "", (uint64)args.sk, 0, 0));
+}
 tracepoint:sock:inet_sock_set_state /args.protocol == 6 && args.oldstate == 2 && SKFILTER/ {
   $sk = (struct sock *)args.skaddr;
   print(("state", nsecs, 0, 0, 0, $sk->__sk_common.skc_net.net->ns.inum, args.oldstate, args.newstate, "", args.sport,
@@ -219,25 +233,27 @@ END { clear(@sent); clear(@sent6); }
 
 PARENTS = "curtask->real_parent->tgid, curtask->real_parent->real_parent->tgid"
 SOCKET_NETNS = "((struct sock *)args.skaddr)->__sk_common.skc_net.net->ns.inum"
+ICMP_NETNS = "args.sk->__sk_common.skc_net.net->ns.inum"
 
 
 def trace_script(namespaces: list[int]) -> str:
-    """TRACE filtered to these network namespaces' inodes, on the caller (FILTER) and on the socket (SKFILTER)."""
+    """TRACE filtered to these network namespaces' inodes, on the caller (FILTER) and on the socket (SKFILTER for the
+    state tracepoint, ICMPFILTER for the ICMP errors)."""
     def test(of: str) -> str:
         return "(" + " || ".join(f"{of} == {inode}" for inode in sorted(namespaces)) + ")"
-    return (TRACE.replace("SKFILTER", test(SOCKET_NETNS)).replace("FILTER", test("curtask->nsproxy->net_ns->ns.inum"))
-            .replace("PARENTS", PARENTS))
+    return (TRACE.replace("SKFILTER", test(SOCKET_NETNS)).replace("ICMPFILTER", test(ICMP_NETNS))
+            .replace("FILTER", test("curtask->nsproxy->net_ns->ns.inum")).replace("PARENTS", PARENTS))
 
 
 # --------------------------------------------------------------------------
 # the log
 # --------------------------------------------------------------------------
-CAPPED = ("net", "tcp_state")
+CAPPED = ("net", "tcp_state", "tcp_error")
 
 
 class RowLog:
-    """The rows on a line-buffered text stream. Past max_rows an ordinary net or tcp_state row is counted and dropped;
-    a control's row and every other row always pass."""
+    """The rows on a line-buffered text stream. Past max_rows an ordinary net, tcp_state or tcp_error row is counted
+    and dropped; a control's row and every other row always pass."""
 
     def __init__(self, stream, max_rows: int) -> None:
         self.stream, self.max_rows = stream, max_rows
@@ -277,7 +293,7 @@ def kernel_event(data: list) -> dict | None:
     those). The kernel's own uid stays as kernel_uid: who's uid is read from /proc. parents holds the caller's parent
     and grandparent."""
     name, nsecs, pid, tid, uid, netns, kind, family, a, port_a, b, port_b, ret, comm, sk, ppid, gppid = data
-    if name in ("exec", "state"):
+    if name in ("exec", "state", "error"):
         return None
     op = EVENTS[name]
     kind &= 0xF                                 # sock->type holds SOCK_NONBLOCK and SOCK_CLOEXEC above the type
@@ -304,6 +320,13 @@ def state_event(data: list) -> dict:
     return {"netns": netns, "sk": int(sk), "lport": sport, "rport": dport, "old": TCP_STATES.get(old, str(old)),
             "new": TCP_STATES.get(new, str(new)), "error": errno.errorcode.get(err, str(err)) if err else None,
             "nsecs": nsecs}
+
+
+def error_event(data: list) -> dict:
+    """An error print of TRACE as a tcp_error row's fields: the socket, its ports and the errno's name."""
+    _, nsecs, _, _, _, netns, _, _, _, sport, _, dport, err, _, sk, _, _ = data
+    return {"netns": netns, "sk": int(sk), "lport": sport, "rport": dport,
+            "error": errno.errorcode.get(err, str(err)), "nsecs": nsecs}
 
 
 # --------------------------------------------------------------------------
@@ -417,6 +440,7 @@ class Monitor:
             machine["netns"] = inode
             self.netns.setdefault(inode, []).append(name)
         self.execs: dict[int, str] = {}        # pid -> the file its last exec ran, from the trace
+        self.walked: dict[int, tuple[list[str], dict]] = {}   # pid -> (chain, root) of its last walk (Monitor.walk)
         self.acked: set[int] = set()
         self.known: dict[tuple[int, int], dict] = {}   # procnet: (netns, socket inode) -> its last row's fields
 
@@ -435,13 +459,20 @@ class Monitor:
         services = self.netns.get(netns or -1) or []
         return services[0] if len(services) == 1 else None
 
-    @staticmethod
-    def walk(pid: int) -> tuple[dict, list[str], dict] | None:
-        """(status, chain, root) of a process still there, else None."""
+    def walk(self, pid: int) -> tuple[dict, list[str], dict] | None:
+        """(status, chain, root) of a process still there, else None. Each walk is kept in walked, so a process that
+        leaves later is still known by it. A zombie (exited, not yet reaped) keeps its status but no argv, so a walk
+        whose process or root shows no argv is no walk: it would name a root by nothing."""
         for _ in range(WALKS):
             found = status(pid)
             walked = found and ancestry(pid, found)
+            if walked and not (argv(pid) and walked[1]["cmd"]):
+                return None
             if walked:
+                self.walked.pop(pid, None)
+                self.walked[pid] = walked
+                if len(self.walked) > WALKED_MAX:
+                    del self.walked[next(iter(self.walked))]
                 return found, *walked
         return None
 
@@ -449,7 +480,9 @@ class Monitor:
         """The process as the access log names an opener, read from /proc now. A row of the control names it, and the
         control gets its SIGUSR1. A process that left first is named through the nearest of `parents` (the kernel's
         parent and grandparent) still there: that ancestor's chain and root, with via its pid and the process's own
-        uid, cmd and cwd unknown. With no ancestor left it is gone."""
+        uid, cmd and cwd unknown; an ancestor gone too stands by its last walk (walked, from an earlier row or exec of
+        it), as does the process's own walk at its exec. A tool call's shell and its timeout leave as soon as the
+        command ends, often before the row is read. With none of these it is gone."""
         walked = self.walk(pid) if pid else None
         if walked:
             found, chain, root = walked
@@ -470,6 +503,11 @@ class Monitor:
             if walked:
                 _, chain, root = walked
                 return {"exe": None, "cwd": None, "cmd": None, **exe, "chain": chain, "root": root, "via": parent}
+        for known in (pid, *parents):
+            if known and known > 1 and known in self.walked:
+                chain, root = self.walked[known]
+                return {"exe": None, "cwd": None, "cmd": None, **exe, "chain": chain, "root": root, "via": known,
+                        "via_from": "earlier"}
         return {"gone": True, **exe}
 
     def write_net(self, fields: dict, pid: int | None) -> dict:
@@ -582,13 +620,15 @@ class Monitor:
         data = message["data"]
         if data[0] == "exec":
             self.execs[data[2]] = data[8]
+            self.walk(data[2])                  # its chain and root while it is there, for a row after it left
             return
-        if data[0] == "state":
-            fields = state_event(data)
+        if data[0] in ("state", "error"):
+            fields = (state_event if data[0] == "state" else error_event)(data)
             nsecs = fields.pop("nsecs")
             services = self.netns.get(fields["netns"]) or []
-            self.log.write("tcp_state", **fields, machine=services[0] if len(services) == 1 else None,
-                           source="ebpf", t_kernel=round(nsecs / 1e9 + clock, 6))
+            self.log.write("tcp_state" if data[0] == "state" else "tcp_error", **fields,
+                           machine=services[0] if len(services) == 1 else None, source="ebpf",
+                           t_kernel=round(nsecs / 1e9 + clock, 6))
             return
         fields = kernel_event(data)
         nsecs = fields.pop("nsecs")

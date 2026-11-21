@@ -70,8 +70,10 @@ def log_worked(block: dict | None) -> bool:
 
 
 def network_worked(block: dict | None) -> bool:
-    """Whether a run's network log saw all it could: valid, or switched off. A run before the switch has no block."""
-    return block is None or block["status"] in ("valid", "off")
+    """Whether a run's network log saw all it could: valid, switched off, or partial for procnet alone (a host with no
+    tracer gives the socket tables only). A run before the switch has no block."""
+    return block is None or block["status"] in ("valid", "off") or \
+        (block["status"] == "partial" and block.get("partial_reasons") == ["procnet"])
 
 
 def small(*pairs: str) -> SwarmConfig:

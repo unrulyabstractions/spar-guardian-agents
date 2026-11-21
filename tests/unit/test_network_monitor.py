@@ -46,7 +46,7 @@ def fake_monitor(**fields) -> tuple[daemon.Monitor, Lines]:
     m = daemon.Monitor.__new__(daemon.Monitor)
     m.log, m.poll_s, m.nonces = daemon.RowLog(lines, 100), 0.25, {"start": b"n0nce"}
     m.machines = {"k7q2m": {"container": "c1", "pid": 10, "down": False, "netns": NS}}
-    m.netns, m.execs, m.acked, m.known = {NS: ["k7q2m"]}, {}, set(), {}
+    m.netns, m.execs, m.acked, m.known, m.walked = {NS: ["k7q2m"]}, {}, set(), {}, {}
     who = fields.get("who", {"uid": 1001, "exe": "/usr/bin/python3", "cmd": "python3 -c x", "chain": [], "root": {}})
     m.who = lambda pid, parents=(): dict(who) if pid not in m.execs else {"gone": True, "exe": m.execs[pid],
                                                                          "exe_from": "exec"}
@@ -68,15 +68,18 @@ def test_the_script_filters_to_the_machines_namespaces():
     script = daemon.trace_script([4026532511, NS])
     test = "(curtask->nsproxy->net_ns->ns.inum == 4026532448 || curtask->nsproxy->net_ns->ns.inum == 4026532511)"
     sk = f"({daemon.SOCKET_NETNS} == 4026532448 || {daemon.SOCKET_NETNS} == 4026532511)"
+    icmp = f"({daemon.ICMP_NETNS} == 4026532448 || {daemon.ICMP_NETNS} == 4026532511)"
     assert "FILTER" not in script and "PARENTS" not in script
-    assert daemon.TRACE.count("SKFILTER") == 1 and script.count(sk) == 1
-    assert script.count(test) == daemon.TRACE.count("FILTER") - daemon.TRACE.count("SKFILTER") == 13
+    assert daemon.TRACE.count("SKFILTER") == daemon.TRACE.count("ICMPFILTER") == 1
+    assert script.count(sk) == script.count(icmp) == 1
+    assert script.count(test) == daemon.TRACE.count("FILTER") - 2 == 13
     assert script.count(daemon.PARENTS) == daemon.TRACE.count("PARENTS") == 13
     probes = re.findall(r"^(f(?:exit|entry):vmlinux:\w+|tracepoint:\S+)", script, re.M)
     assert {p.split(":")[-1] for p in probes} >= {"inet_bind", "inet_listen", "inet_stream_connect", "inet_csk_accept",
                                                   "udp_sendmsg", "inet_release", "unix_bind", "unix_listen",
                                                   "unix_stream_connect", "unix_accept", "security_bprm_check",
-                                                  "inet_sock_set_state"}
+                                                  "inet_sock_set_state", "ip_icmp_error"}
+    assert "fentry:vmlinux:ip_icmp_error, fentry:vmlinux:ipv6_icmp_error" in script
     assert "tracepoint:sock:inet_sock_set_state /args.protocol == 6 && args.oldstate == 2 && " in script
 
 
@@ -189,6 +192,18 @@ def test_a_socket_leaving_syn_sent_is_a_tcp_state_row_on_the_sockets_machine():
     assert (established["new"], established["error"]) == ("ESTABLISHED", None)
 
 
+def test_an_icmp_error_on_a_connecting_socket_is_a_tcp_error_row():
+    """The loopback guard's REJECT reaches the socket while the call holds it: the errno comes from the ICMP probe."""
+    m, lines = fake_monitor()
+    m.event(event("error", 4_000_000_000, 0, 0, 0, NS, 2, 0, "", 59074, "", 8180, errno.ECONNREFUSED, "", SK, 0, 0),
+            clock=1000.0)
+    [row] = lines.rows()
+    assert {k: row[k] for k in ("row", "machine", "sk", "lport", "rport", "error", "source", "t_kernel")} == \
+        {"row": "tcp_error", "machine": "k7q2m", "sk": int(SK), "lport": 59074, "rport": 8180,
+         "error": "ECONNREFUSED", "source": "ebpf", "t_kernel": 1004.0}
+    assert "tcp_error" in daemon.CAPPED
+
+
 def test_a_process_gone_first_is_named_through_its_nearest_ancestor_still_there(monkeypatch):
     """bash's /dev/tcp child exits before /proc is read: its row takes its parent's chain and root, with via, so its
     origin and call follow; with every ancestor gone it reads gone."""
@@ -197,6 +212,7 @@ def test_a_process_gone_first_is_named_through_its_nearest_ancestor_still_there(
     alive = {60: {"uid": 1001, "ppid": 50, "ns_pid": 7}, 50: {"uid": 1001, "ppid": 1, "ns_pid": 2}}
     monkeypatch.setattr(daemon, "status", lambda pid: alive.get(int(pid)))
     monkeypatch.setattr(daemon, "ancestry", lambda pid, found: ([f"argv of {pid}"], {"pid": 50, "cmd": "bash -c x"}))
+    monkeypatch.setattr(daemon, "argv", lambda pid: [b"bash"] if int(pid) in alive else [])
     m.execs[77] = "/usr/bin/bash"
     named = m.who(77, [60, 50])
     assert named == {"exe": "/usr/bin/bash", "exe_from": "exec", "cwd": None, "cmd": None,
@@ -204,6 +220,42 @@ def test_a_process_gone_first_is_named_through_its_nearest_ancestor_still_there(
     assert m.who(77, [99, 50])["via"] == 50
     assert m.who(77, [99, 98]) == {"gone": True, "exe": "/usr/bin/bash", "exe_from": "exec"}
     assert m.who(77, [1, 0]) == {"gone": True, "exe": "/usr/bin/bash", "exe_from": "exec"}
+
+
+def test_a_call_whose_shell_and_timeout_left_too_is_named_by_their_earlier_walk(monkeypatch):
+    """A tool call's shell and timeout leave as soon as its command ends: the child's row reads their walk from an
+    earlier row or exec (via_from earlier). A zombie keeps its status but no argv: its walk names nothing, so the
+    earlier one stands."""
+    m, _ = fake_monitor()
+    del m.who
+    alive = {60: {"uid": 0, "ppid": 50, "ns_pid": 7}, 50: {"uid": 0, "ppid": 1, "ns_pid": 2}}
+    args = {60: [b"bash", b"--login", b"-c", b"x"], 50: [b"timeout", b"-k", b"5s", b"300s", b"bash"]}
+    root = {"pid": 50, "cmd": "timeout -k 5s 300s bash --login -c x"}
+    monkeypatch.setattr(daemon, "status", lambda pid: alive.get(int(pid)))
+    monkeypatch.setattr(daemon, "ancestry", lambda pid, found: ([f"argv of {pid}"], root if args.get(50) else
+                                                                {**root, "cmd": ""}))
+    monkeypatch.setattr(daemon, "argv", lambda pid: args.get(int(pid), []))
+    monkeypatch.setattr(daemon, "link", lambda path: None)
+    m.event(event("exec", 1, 60, 60, 0, NS, 0, 0, "/usr/bin/bash", 0, "", 0, 0, "bash", "0", 50, 1), clock=0.0)
+    assert m.walked[60] == (["argv of 60"], root)
+    alive.clear()
+    assert m.who(77, [60, 50]) == {"exe": None, "cwd": None, "cmd": None, "chain": ["argv of 60"], "root": root,
+                                   "via": 60, "via_from": "earlier"}
+    alive.update({60: {"uid": 0, "ppid": 50, "ns_pid": 7}})
+    args.clear()                                # a zombie: status, no argv, its root's argv gone too
+    assert m.walk(60) is None and m.walked[60] == (["argv of 60"], root)
+    assert m.who(77, [60, 50])["via_from"] == "earlier"
+
+
+def test_the_walks_kept_are_bounded(monkeypatch):
+    m, _ = fake_monitor()
+    monkeypatch.setattr(daemon, "WALKED_MAX", 2)
+    monkeypatch.setattr(daemon, "status", lambda pid: {"uid": 0, "ppid": 1, "ns_pid": 2})
+    monkeypatch.setattr(daemon, "ancestry", lambda pid, found: (["x"], {"pid": pid, "cmd": "x"}))
+    monkeypatch.setattr(daemon, "argv", lambda pid: [b"x"])
+    for pid in (5, 6, 7):
+        m.walk(pid)
+    assert list(m.walked) == [6, 7]
 
 
 def test_past_the_cap_ordinary_rows_are_counted_and_a_controls_rows_still_pass():
@@ -348,6 +400,18 @@ def test_without_a_tracer_the_sidecar_has_no_mounts(tmp_path):
     assert "volumes" not in written["services"][NETWORK_SIDECAR] and "volumes" not in written
 
 
+def test_a_traced_compose_and_an_untraced_one_never_share_a_file(tmp_path, monkeypatch):
+    """The build folder is shared: a process with no tracer (the unit tests' stand-in) writing at once must not
+    overwrite the compose a traced run starts from."""
+    compose = tmp_path / "compose-x.yaml"
+    compose.write_text(yaml.safe_dump({"services": {"default": {"image": IMAGE}}}))
+    plain = monitor.with_network_monitor(compose)
+    monkeypatch.setattr(monitor, "ensure_tracer", lambda image: "network-trace-bpftrace:x")
+    traced = monitor.with_network_monitor(compose)
+    assert (plain.name, traced.name) == ("compose-x-networked.yaml", "compose-x-networked-traced.yaml")
+    assert "/nix" in traced.read_text() and "/nix" not in plain.read_text()
+
+
 @pytest.mark.parametrize(("info", "allowed"), [
     ({"ServerVersion": "29.5.2", "KernelVersion": "6.8.0-117-generic", "DefaultRuntime": "runc",
       "Runtimes": {"runc": {"status": {"org.opencontainers.runtime-spec.features": '{"mountOptions": ["rro"]}'}}}},
@@ -403,3 +467,16 @@ def test_the_package_ships_both_files_the_sidecar_needs():
     here = Path(monitor.__file__).parent
     assert (here / "network_monitor_daemon.py").read_text() == monitor.DAEMON
     assert monitor.HELPER_PATH.rsplit("/", 1)[0] == monitor.DAEMON_PATH.rsplit("/", 1)[0] == monitor.MONITOR_DIR
+
+
+# --------------------------------------------------------------------------
+# the smoke suites' reading of a log
+# --------------------------------------------------------------------------
+@pytest.mark.parametrize(("block", "worked"), [
+    (None, True), ({"status": "off"}, True), ({"status": "valid", "partial_reasons": []}, True),
+    ({"status": "partial", "partial_reasons": ["procnet"]}, True),
+    ({"status": "partial", "partial_reasons": ["procnet", "gap"]}, False), ({"status": "broken"}, False),
+])
+def test_a_smoke_reads_a_procnet_log_as_all_the_host_gives(block, worked):
+    from tests.smoke.common import network_worked
+    assert network_worked(block) is worked

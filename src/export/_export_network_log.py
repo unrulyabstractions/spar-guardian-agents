@@ -20,8 +20,10 @@ agent stood at the other end. Each row of network.jsonl is one socket call:
   refused, timed_out, failed (outcome_error names the errno, null for a socket closed before it connected) or
   in_progress (nothing says how it ended). outcome_by says what settled it: syscall (the call's own result), state
   (the socket left SYN_SENT: a tcp_state row of the same socket, the first at or after the call, less STATE_SLACK_S
-  since on loopback the kernel settles the handshake before the call returns), accept (the accept with the mirrored
-  ports) or table (procnet read the socket past SYN_SENT).
+  since on loopback the kernel settles the handshake before the call returns), icmp (a tcp_error row, matched alike:
+  an ICMP error that reached the socket while the call held it, as the loopback guard's REJECT does; the socket then
+  stays in SYN_SENT until the program closes it, and that state change carries no error), accept (the accept with the
+  mirrored ports) or table (procnet read the socket past SYN_SENT).
 - t: the kernel's time of the call for source ebpf, the read of the tables for procnet. at_start: the socket was
   there when the log began (the harness's own servers, say).
 - origin as the access log's: agent, detached, harness, control (the harness's own loopback control with the run's
@@ -182,12 +184,14 @@ def failure(error: str | None) -> dict:
     return {"outcome": FAILURES.get(error, "failed"), "outcome_error": error}
 
 
-def settled(connect: dict, state: dict | None, accepted: bool) -> dict:
+def settled(connect: dict, state: dict | None, error: dict | None, accepted: bool) -> dict:
     """One TCP or unix connect's outcome, outcome_error and outcome_by (the module's docstring)."""
     if connect["proto"] == "unix" or (connect["source"] == "ebpf" and connect["result"] not in PENDING):
         ok = connect["result"] == "ok"
         return {**({"outcome": "established", "outcome_error": None} if ok else failure(connect["result"])),
                 "outcome_by": "syscall"}
+    if error is not None and (state is None or state["new"] != "ESTABLISHED"):
+        return {**failure(error["error"]), "outcome_by": "icmp"}
     if state is not None:
         ok = state["new"] == "ESTABLISHED"
         return {**({"outcome": "established", "outcome_error": None} if ok else failure(state.get("error"))),
@@ -201,33 +205,39 @@ def settled(connect: dict, state: dict | None, accepted: bool) -> dict:
 
 def outcomes(raw: list[dict]) -> dict[int, dict]:
     """seq -> outcome fields of each TCP and unix connect among the raw rows. A connect takes the first tcp_state row
-    of its socket and remote port, at or after its call less STATE_SLACK_S, that no earlier connect took, with its
-    local port where the call still held one (a refused loopback connect returns with none, its socket already
-    closed). A socket's kernel address is used again once it is freed, which the times and ports tell apart."""
+    and the first tcp_error row of its socket and remote port, at or after its call less STATE_SLACK_S, that no
+    earlier connect took, with its local port where the call still held one (a refused loopback connect returns with
+    none, its socket already closed). A socket's kernel address is used again once it is freed, which the times and
+    ports tell apart."""
     states: dict[tuple, list[dict]] = defaultdict(list)
+    errors: dict[tuple, list[dict]] = defaultdict(list)
     accepts = set()
     for row in raw:
         if row["row"] == "tcp_state":
             states[socket_of(row)].append(row)
+        elif row["row"] == "tcp_error":
+            errors[socket_of(row)].append(row)
         elif row["row"] == "net" and row.get("op") == "accept" and row.get("proto") == "tcp":
             accepts.add((row.get("netns"), row.get("rport"), row.get("lport")))
-    for found in states.values():
+    for found in (*states.values(), *errors.values()):
         found.sort(key=kernel_t)
     taken: set[int] = set()
+
+    def first(rows: dict[tuple, list[dict]], connect: dict) -> dict | None:
+        found = next((s for s in rows.get(socket_of(connect), []) if s["seq"] not in taken
+                      and s.get("rport") == connect.get("rport")
+                      and (not connect.get("lport") or s.get("lport") == connect.get("lport"))
+                      and kernel_t(s) >= kernel_t(connect) - STATE_SLACK_S), None)
+        if found is not None:
+            taken.add(found["seq"])
+        return found
     out = {}
     connects = [row for row in raw if row["row"] == "net" and row.get("op") == "connect"
                 and row.get("proto") in ("tcp", "unix")]
     for row in sorted(connects, key=kernel_t):
-        state = None
-        if row["proto"] == "tcp":
-            state = next((s for s in states.get(socket_of(row), []) if s["seq"] not in taken
-                          and s.get("rport") == row.get("rport") and (not row.get("lport") or s.get("lport") ==
-                                                                      row.get("lport"))
-                          and kernel_t(s) >= kernel_t(row) - STATE_SLACK_S), None)
-            if state is not None:
-                taken.add(state["seq"])
+        state, error = (first(states, row), first(errors, row)) if row["proto"] == "tcp" else (None, None)
         accepted = bool(row.get("lport")) and (row.get("netns"), row.get("lport"), row.get("rport")) in accepts
-        out[row["seq"]] = settled(row, state, accepted)
+        out[row["seq"]] = settled(row, state, error, accepted)
     return out
 
 

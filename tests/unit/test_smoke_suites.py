@@ -486,3 +486,22 @@ def test_main_runs_each_scenario_once_per_task(tmp_path, capsys):
     assert main(suite, scenarios, "doc", tasks={"t1": 1, "t2": 2}, argv=[]) == 0
     results = json.loads((suite.runs / "smoke_results.json").read_text())
     assert [(name, result["task"]) for name, result in results.items()] == [("t1_lone", 1), ("t2_lone", 2)]
+
+
+def test_a_scripted_entry_may_be_async_and_its_output_still_gets_fresh_ids():
+    """network_logging's monitor_killed kills the daemon from an async entry before its turn: the mock awaits the
+    entry's output, then gives its message a new id, as it does a plain entry's."""
+    import asyncio
+
+    from inspect_ai.model import ChatMessageSystem
+
+    from tests.support.mock_model import scripted, text
+    shown = text("after")
+
+    async def act():
+        return shown
+    out = scripted({"a01": [lambda messages: act()]})
+    made = out([ChatMessageSystem(content="You are a01.")], [], None, None)
+    assert inspect.isawaitable(made)
+    done = asyncio.run(made)
+    assert done.choices[0].message.text == "after" and done.choices[0].message.id != shown.choices[0].message.id

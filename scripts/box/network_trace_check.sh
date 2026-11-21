@@ -17,9 +17,10 @@
 #           /sys/kernel/tracing bound read-only; without a tracer image, the same with no mounts (the run's procnet)
 # and tests in order:
 #   ebpf      bpftrace (fexit on inet_listen, inet_stream_connect, inet_csk_accept, and the tracepoint
-#             sock:inet_sock_set_state) in the helper, filtered to the target's network namespace: works when it names
-#             the listen by 1001, the connect by 3001, the accept by 1001 with the client's port and the client's
-#             socket leaving SYN_SENT for ESTABLISHED
+#             sock:inet_sock_set_state, and fentry on ip_icmp_error and ipv6_icmp_error, attached only) in the
+#             helper, filtered to the target's network namespace: works when every probe attaches and it names the
+#             listen by 1001, the connect by 3001, the accept by 1001 with the client's port and the client's socket
+#             leaving SYN_SENT for ESTABLISHED
 #   kprobe    the same kernel functions by kprobe, attach only: the fallback when fexit is refused
 #   procnet   the target's /proc/<pid>/net/{tcp,tcp6,udp,udp6,unix} and its processes' fds, standard library only:
 #             works when it names the listener's and the client's pid and uid
@@ -218,6 +219,10 @@ fexit:vmlinux:inet_stream_connect /curtask->nsproxy->net_ns->ns.inum == $netns/ 
 fexit:vmlinux:inet_csk_accept /retval != 0 && curtask->nsproxy->net_ns->ns.inum == $netns/ {
   printf("accept %d %d %u %d %d\n", pid, uid, curtask->nsproxy->net_ns->ns.inum,
          retval->__sk_common.skc_num, bswap(retval->__sk_common.skc_dport));
+}
+fentry:vmlinux:ip_icmp_error, fentry:vmlinux:ipv6_icmp_error
+    /args.sk->sk_protocol == 6 && args.sk->__sk_common.skc_net.net->ns.inum == $netns/ {
+  printf("icmp 0 0 %u %d\n", args.sk->__sk_common.skc_net.net->ns.inum, args.err);
 }
 tracepoint:sock:inet_sock_set_state /args.protocol == 6 && args.oldstate == 2 &&
     ((struct sock *)args.skaddr)->__sk_common.skc_net.net->ns.inum == $netns/ {

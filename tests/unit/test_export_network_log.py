@@ -290,6 +290,29 @@ def test_a_connect_that_did_not_wait_takes_its_sockets_state_change_and_splits_c
     assert block["rows"] == len(out) + 6 and all(row["op"] != "tcp_state" for row in out)
 
 
+def error(seq: int, t: float, *, lport: int, rport: int, errno_name: str, sk: int = SK) -> dict:
+    """A raw tcp_error row: an ICMP error reaching the socket at `sk` in SYN_SENT."""
+    return {"seq": seq, "t": t + 0.01, "t_kernel": t, "row": "tcp_error", "netns": NS, "sk": sk, "lport": lport,
+            "rport": rport, "error": errno_name, "machine": WORKER, "source": "ebpf"}
+
+
+def test_the_loopback_guards_refusal_reads_from_the_icmp_error_not_the_close():
+    """The guard's REJECT reaches curl's socket as an ICMP error while its call holds it; the socket closes later with
+    no error. The connect reads refused by icmp; an ICMP error on a socket that then connected changes nothing."""
+    rows = (SERVER,
+            error(30, START + 20.0, lport=40001, rport=8123, errno_name="ECONNREFUSED"),
+            connecting(31, START + 20.00003, lport=40001, result="EINPROGRESS"),
+            state(32, START + 20.4, lport=40001, rport=8123, new="CLOSE"),
+            error(33, START + 21.0, lport=40002, rport=8123, errno_name="EHOSTUNREACH", sk=SK + 2),
+            state(34, START + 21.1, lport=40002, rport=8123, new="ESTABLISHED", sk=SK + 2),
+            connecting(35, START + 21.00003, lport=40002, result="EINPROGRESS", sk=SK + 2))
+    block, out = exported(*rows)
+    assert (by_seq(out)[31]["outcome"], by_seq(out)[31]["outcome_error"], by_seq(out)[31]["outcome_by"]) == \
+        ("refused", "ECONNREFUSED", "icmp")
+    assert (by_seq(out)[35]["outcome"], by_seq(out)[35]["outcome_by"]) == ("established", "state")
+    assert [c["outcome"] for c in block["cross_agent"]["attempted"]] == ["refused"]
+
+
 def test_a_state_change_after_a_call_that_did_not_wait_settles_it():
     """A remote server answers after the call returned: the state change comes later and still settles it."""
     _, out = exported(SERVER, connecting(31, START + 20, lport=40001, result="EINPROGRESS"),

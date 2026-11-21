@@ -240,14 +240,17 @@ def ensure_tracer(base: str) -> str | None:
 # --------------------------------------------------------------------------
 def with_network_monitor(compose: Path) -> Path:
     """A compose file beside `compose` that adds the network log's sidecar, with the tracer's mounts where
-    ensure_tracer gives an image, and leaves every service as it was."""
+    ensure_tracer gives an image, and leaves every service as it was. Its name says which: -networked-traced.yaml
+    with the tracer, -networked.yaml without. The build folder is shared, and a process with no tracer (the unit
+    tests' stand-in, a host without one) must never overwrite the file a traced run is about to start from."""
     document = yaml.safe_load(compose.read_text())
     services = document["services"]
     base = sidecar_image(services)
     tracer = ensure_tracer(base)
     sidecar = staging.compose_service(working_dir="/", image=base, pid="host", cap_add=NETWORK_CAPS,
                                       **({"volumes": tracer_mounts(tracer)} if tracer else {}))
-    return staging.write_yaml(compose.with_name(f"{compose.stem}-networked.yaml"),
+    name = f"{compose.stem}-networked{'-traced' if tracer else ''}.yaml"
+    return staging.write_yaml(compose.with_name(name),
                               {**document, "services": {**services, NETWORK_SIDECAR: sidecar}})
 
 
