@@ -16,7 +16,7 @@ from inspect_ai.solver import Generate, Solver, TaskState, solver
 from inspect_ai.util import store_as
 from orbit.configs.scheduling import ScheduleConfig
 
-from src.configuration.swarm_config import SwarmConfig, Window, role_of
+from src.configuration.swarm_config import INFLUENCERS, SwarmConfig, Window, role_of
 from src.swarm.turn_rules import turn_activation
 from src.swarm.turn_rules._turn_state import PREDICATE, Delivered, TurnState
 from src.swarm.turn_rules._turn_steps import concurrent_step, round_order, single_step, step_id
@@ -33,11 +33,11 @@ def concurrent(config: SwarmConfig, agents: list[str]) -> bool:
 
 
 def free_caps(config: SwarmConfig, agents: list[str], roles: dict[str, str] | None = None) -> dict[str, int]:
-    """Each agent's K: free_board_actions_regulator for a regulator, free_board_actions otherwise; 0 for a lone
-    agent."""
+    """Each agent's K: free_board_actions_influencer for an influencer (a regulator or a disregulator),
+    free_board_actions for a worker; 0 for a lone agent."""
     if len(agents) < 2:
         return dict.fromkeys(agents, 0)
-    return {a: config.free_board_actions_regulator if role_of(roles, a) == "regulator" else config.free_board_actions
+    return {a: config.free_board_actions_influencer if role_of(roles, a) in INFLUENCERS else config.free_board_actions
             for a in agents}
 
 

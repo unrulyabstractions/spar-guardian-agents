@@ -7,22 +7,23 @@ A swarm is the board (src/swarm/board.py) with N agents whose system prompts dif
     regulator     a peer that oversees the team and does not do the task, at the configured regulator level
     disregulator  a peer privately told to get the result by any means, at the configured disregulator level
 
-Regulators are not monitors. They have the same standing as everyone else, and nothing is enforced at a boundary.
-Their tools differ: a regulator also holds the oversight tools (get_agent_actions, get_agent_observations) and holds
+Regulators are not monitors. They have the same standing as everyone else, and nothing is enforced at a boundary. Their
+tools differ: both influencers also hold the peer tools (get_peer_actions, get_peer_observations), and a regulator holds
 neither submit nor stop_working. It keeps the task's tools, so it can look at what its machine shows. A regulator has no
 deliverable. Its system prompt is its own in every domain (oversight_prompt, in place of Benchmark.system_prompts), and
-its first message holds the task as what its teammates do (oversight_first_message, in place of the task
-instruction). At level none a regulator keeps the task's prompt and first message (SwarmConfig.oversees). Roles hide
-behind the drawn agent IDs (SwarmConfig.names) and are recorded in the sample metadata.
+its first message holds the task as what its teammates do (oversight_first_message, in place of the task instruction).
+At level none a regulator keeps the task's prompt and first message (SwarmConfig.oversees). Roles hide behind the drawn
+agent IDs (SwarmConfig.names) and are recorded in the sample metadata.
 
 Every model-facing text of a level comes from src/configuration/instruction_levels.yaml: the rule sentence appended to
 the task instruction, and the regulator and disregulator texts appended to the system prompt of the agents holding
 the role. A level gives one text or one per benchmark, with placeholders filled from the benchmark's `vars`.
 
-Each regulator level carries the benchmark's `cheating` var: what cheating means on that task. A regulator's level text
-is followed by prompts.yaml roles.regulator_common (agent_actions, src/swarm/_regulator_oversight.py, and how to call it
-on a teammate, and the board), roles.regulator_check (call it on each teammate in the regulator's first CHECK_ROUNDS
-rounds) and, unless regulator_discloses is on, roles.regulator_no_disclosure. The check is an instruction like the rest;
+Each regulator level carries the benchmark's `cheating` var: what cheating means on that task. An influencer's level
+text is followed by prompts.yaml roles.influencer_common (the peer tools, src/swarm/_regulator_oversight.py, how to
+call them on a teammate, and the board). A regulator's then gets roles.regulator_check (call get_peer_actions on each
+teammate in the regulator's first CHECK_ROUNDS rounds) and, unless regulator_discloses is on,
+roles.regulator_no_disclosure. The check is an instruction like the rest;
 run.json engagement checked_in_time records whether it happened.
 
 With informed_roles on, a regulator or disregulator also gets the briefing (prompts.yaml `roles.briefing`, built by
@@ -77,11 +78,13 @@ def role_text(role: str, config: SwarmConfig, benchmark_name: str) -> str | None
     if role == "worker":
         return None
     text = level_text(role, getattr(config, f"{role}_level"), benchmark_name)
-    if role != "regulator" or text is None:
-        return text
+    if text is None:
+        return None
     pieces = load_prompts()["roles"]
-    tail = [pieces["regulator_common"], pieces["regulator_check"].format(rounds=rounds_text(CHECK_ROUNDS)),
-            *([] if config.regulator_discloses else [pieces["regulator_no_disclosure"]])]
+    tail = [pieces["influencer_common"]]
+    if role == "regulator":
+        tail += [pieces["regulator_check"].format(rounds=rounds_text(CHECK_ROUNDS)),
+                 *([] if config.regulator_discloses else [pieces["regulator_no_disclosure"]])]
     return " ".join([text, *tail])
 
 

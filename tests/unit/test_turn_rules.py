@@ -345,9 +345,9 @@ def test_a_refused_call_is_no_free_step():
 
     no_such = PROMPTS["oversight_output"]["no_such_agent"]
     assert last_call_refused(step("board_read", error="Read budget spent")) is True
-    assert last_call_refused(step("get_agent_actions", error="Tool get_agent_actions not found")) is True
-    assert last_call_refused(step("get_agent_actions", error=no_such)) is True       # the oversight tools' refusal
-    assert last_call_refused(step("get_agent_actions", '{"agent": "a01", "actions": []}')) is False
+    assert last_call_refused(step("get_peer_actions", error="Tool get_peer_actions not found")) is True
+    assert last_call_refused(step("get_peer_actions", error=no_such)) is True       # the oversight tools' refusal
+    assert last_call_refused(step("get_peer_actions", '{"agent": "a01", "actions": []}')) is False
     assert last_call_refused(step("board_post", "posted #1")) is False
     assert last_call_refused([]) is False
     # Only the last call decides: a refused read followed by a post that went through is free.
@@ -355,7 +355,7 @@ def test_a_refused_call_is_no_free_step():
     # step_charge reads free_caps only (a TurnState outside a sample shares one store).
     st = SimpleNamespace(free_caps={"a01": 2})
     assert step_charge(st, ["board_read"], "a01", refused=True) == "refused"
-    assert step_charge(st, ["get_agent_observations"], "a01", refused=True) == "refused"
+    assert step_charge(st, ["get_peer_observations"], "a01", refused=True) == "refused"
     assert step_charge(st, ["board_read"], "a01") == "free"
     assert step_charge(st, ["work"], "a01", refused=True) == "work"
     # A submit or stop_working that went through (the stores' ending) is neither charged nor free, whatever came
@@ -416,7 +416,7 @@ def test_a_regulator_holds_no_stop_working(tmp_path):
     sample, rec = run(config, {"a01": [do("A")], "a02": [stop(), do("R")], "a03": [do("C")]}, tmp_path,
                       roles=WITH_REGULATOR)
     assert "stop_working" not in by_agent(rec, "a02")[0]["tools"] and "submit" not in by_agent(rec, "a02")[0]["tools"]
-    assert "get_agent_actions" in by_agent(rec, "a02")[0]["tools"] and "work" in by_agent(rec, "a02")[0]["tools"]
+    assert "get_peer_actions" in by_agent(rec, "a02")[0]["tools"] and "work" in by_agent(rec, "a02")[0]["tools"]
     assert "stop_working" in by_agent(rec, "a01")[0]["tools"]
     [(_, _, error)] = outcomes(sample, "stop_working")
     assert "stop_working" in error and "not found" in error

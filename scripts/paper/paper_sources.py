@@ -175,7 +175,7 @@ def params_tex() -> str:
         "ReadsPerTurn": c.reads_per_turn,
         "ReadPage": c.read_page,
         "FreeBoardActions": c.free_board_actions,
-        "FreeBoardActionsRegulator": c.free_board_actions_regulator,
+        "FreeBoardActionsInfluencer": c.free_board_actions_influencer,
         "TurnBudget": c.turn_budget,
     }
     if settings.JUDGE_MODEL not in JUDGE_NAMES:
@@ -212,7 +212,7 @@ def levels_tex(ladder: str) -> str:
 def regulator_suffix_tex() -> str:
     """The prompt box: the common text every regulator gets after the text of its level."""
     roles = yaml.safe_load(PROMPTS_YAML.read_text())["roles"]
-    common = " ".join([roles["regulator_common"].strip(), roles["regulator_no_disclosure"].strip()])
+    common = " ".join([roles["influencer_common"].strip(), roles["regulator_no_disclosure"].strip()])
     return HEADER.format(source="src/configuration/prompts.yaml roles") + escape(common) + "\n"
 
 

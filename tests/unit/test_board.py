@@ -21,14 +21,13 @@ from tests.support.turn_rules_harness import (
 def test_tools_by_mode_and_role():
     roles = {"a01": "worker", "a02": "regulator", "a03": "disregulator"}
     solo = board.agent_tool_names(pull(mode="solo_task"), roles)
-    assert {n: solo[n] for n in ("a01", "a03")} == {n: ["board_status", "board_read", "board_post"]
-                                                     for n in ("a01", "a03")}
     shared = board.agent_tool_names(pull(mode="shared_task"), roles)
-    # the oversight tools go to the regulator only, never to a worker or a disregulator.
-    assert shared["a01"] == shared["a03"] == ["board_status", "board_read", "board_post"]
-    assert shared["a02"] == solo["a02"] == ["board_status", "board_read", "board_post", "get_agent_actions",
-                                            "get_agent_observations"]
-    assert {"get_agent_actions", "get_agent_observations"} <= set(board.board_bindings(pull(), roles=roles))
+    # the peer tools go to both influencers, never to a worker.
+    assert shared["a01"] == solo["a01"] == ["board_status", "board_read", "board_post"]
+    for influencer in ("a02", "a03"):
+        assert shared[influencer] == solo[influencer] == ["board_status", "board_read", "board_post",
+                                                          "get_peer_actions", "get_peer_observations"]
+    assert {"get_peer_actions", "get_peer_observations"} <= set(board.board_bindings(pull(), roles=roles))
     assert "team_submit" not in board.board_bindings(pull(), roles=roles)
     # A lone agent gets no board tools.
     assert board.agent_tool_names(pull(n_agents=1), None) == {"a01": []}

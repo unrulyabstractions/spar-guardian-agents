@@ -17,7 +17,7 @@ def test_presets():
     # The default preset is the midterm report: the ambiguous regulator, not disclosing, split access, budgets.
     default = PRESETS["default"]
     assert (default.regulator_level, default.regulator_discloses, default.access) == ("ambiguous", False, "split")
-    assert (default.reads_per_turn, default.posts_per_turn, default.free_board_actions_regulator) == (10, 2, 10)
+    assert (default.reads_per_turn, default.posts_per_turn, default.free_board_actions_influencer) == (10, 2, 10)
     assert default.turn_budget == settings.TURN_BUDGET == 100 and default.working_steps == 100
     assert (default.notice, default.concurrent_rounds) == ("counts", True)
     # The preset records its name, and build_config keeps it through the scale and every --set.

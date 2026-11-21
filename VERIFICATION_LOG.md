@@ -2201,3 +2201,17 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   messages (42 and 48) and posts. Luna fill3: all 43 readable reasoning steps and posts. Luna fill2: all readable
   reasoning, posts and shell calls (107 of its calls are `sleep`). Sonnet: all 30 readable reasoning steps.
 - **Result.** VERIFIED for the quotes reported to the user.
+
+## 2026-11-20: peer tools renamed, held by both influencers, one K for both
+- **What.** get_agent_actions/get_agent_observations became get_peer_actions/get_peer_observations with the argument
+  `peer` and payload key "peer"; disregulators hold them too (board.agent_tool_names, INFLUENCERS); prompts.yaml
+  roles.regulator_common became roles.influencer_common, appended to both influencers' level texts (regulator_check and
+  regulator_no_disclosure stay a regulator's); free_board_actions_regulator became free_board_actions_influencer, the K
+  of both influencers (turn_rules free_caps, SwarmConfig.max_turns), paper macro \FreeBoardActionsInfluencer.
+- **How verified.** `uv run pytest tests/unit -q`: 3178 passed, 6 xfailed. test_regulator_oversight pins a
+  disregulator's successful get_peer_actions, its oversight counts, its K of 10 (free_caps a03 10) and its free
+  follow-up step r1-a03-free1; test_board pins both influencers' tool lists; test_submit_and_stop pins that a
+  disregulator's prompt holds influencer_common and not the cheating var or regulator_check; test_swarm_config pins
+  max_turns with five influencers. ruff on every changed file: clean. `make paper-sources`, `make paper-check`: agrees;
+  latexmk built paper/build/main.pdf and its text shows the prompt box with get_peer_* and "a regulator gets 10".
+- **Result.** VERIFIED. Paper prose describing past runs (disregulators could not query; a regulator's K) left as is.

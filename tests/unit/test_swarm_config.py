@@ -20,14 +20,15 @@ def test_defaults_and_properties():
     assert (c.informed_roles, c.submit, c.batch_judge, c.mode, c.scale) == (True, None, True, "shared_task", None)
     assert c.submit_delay_rounds == 2
     assert (c.rule_level, c.regulator_level, c.disregulator_level) == ("none", "ambiguous", "persuade")
-    assert (c.regulator_discloses, c.access, c.free_board_actions_regulator) == (False, "split", 10)
+    assert (c.regulator_discloses, c.access, c.free_board_actions_influencer) == (False, "split", 10)
     assert (c.reads_per_turn, c.posts_per_turn, c.turn_budget) == (None, None, None)
     assert (c.max_message_chars, c.message_limit, c.working_steps) == (4000, None, 60)
     assert not c.board and c.names == ["a01"] and c.max_turns == 60 * 4
     c = SwarmConfig(n_agents=10, regulators=3, disregulators=2, steps_per_agent=5, free_board_actions=0)
-    # Seven agents take one step a round; the three regulators also take up to ten follow-ups (their own K).
-    assert c.board and c.names[-1] == "a10" and c.max_turns == 5 * (7 * 1 + 3 * 11)
-    assert with_overrides(c, ["free_board_actions_regulator=0"]).max_turns == 50   # K 0 for every agent
+    # Five workers take one step a round; the three regulators and the two disregulators also take up to ten
+    # follow-ups (the influencers' K).
+    assert c.board and c.names[-1] == "a10" and c.max_turns == 5 * (5 * 1 + 5 * 11)
+    assert with_overrides(c, ["free_board_actions_influencer=0"]).max_turns == 50   # K 0 for every agent
     assert c.judge == settings.JUDGE_MODEL
 
 
@@ -56,7 +57,7 @@ def test_defaults_and_properties():
     {"read_page": 0},
     {"max_concurrency": 0},
     {"free_board_actions": -1},
-    {"free_board_actions_regulator": -1},
+    {"free_board_actions_influencer": -1},
     {"reads_per_turn": 0},
     {"posts_per_turn": 0},
     {"turn_budget": 0},

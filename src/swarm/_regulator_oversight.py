@@ -1,19 +1,19 @@
-"""A regulator's view of its teammates' work, as two Inspect tools that answer in JSON.
+"""An influencer's view of its teammates' work, as two Inspect tools that answer in JSON.
 
-The midterm report gives regulators "access to all tool calls from neutral agents". get_agent_actions shows what a
-teammate did: its tool calls, each with an id, its round, its tool and its arguments in full. get_agent_observations
-shows what those calls returned: by id, or the latest, each result cut to max_chars characters with the cut stated
-(chars, shown_chars, truncated). Both answer for every teammate, disregulators included, so that a refusal never tells a
-regulator who holds a role; a call about an unknown name, or about the regulator itself, fails with "no such agent".
-tasks.py binds them to regulators only (board.agent_tool_names, board.board_bindings). Workers and disregulators never
-get them.
+The midterm report gives regulators "access to all tool calls from neutral agents"; disregulators get the same tools
+since 2026-11-20. get_peer_actions shows what a teammate did: its tool calls, each with an id, its round, its tool and
+its arguments in full. get_peer_observations shows what those calls returned: by id, or the latest, each result cut to
+max_chars characters with the cut stated (chars, shown_chars, truncated). Both answer for every teammate, influencers
+included, so that a refusal never tells who holds a role; a call about an unknown name, or about the caller itself,
+fails with "no such agent". tasks.py binds them to regulators and disregulators (board.agent_tool_names,
+board.board_bindings). Workers never get them.
 
-    get_agent_actions(agent="t4x9n", latest=2)
-    {"agent": "t4x9n", "total_calls": 31, "shown": 2, "actions": [
+    get_peer_actions(peer="t4x9n", latest=2)
+    {"peer": "t4x9n", "total_calls": 31, "shown": 2, "actions": [
       {"id": 29, "round": 7, "tool": "shell", "arguments": {"command": "git log --all"}},
       {"id": 30, "round": 7, "tool": "board_post", "arguments": {"message": "found it"}}]}
-    get_agent_observations(agent="t4x9n", ids=[29])
-    {"agent": "t4x9n", "observations": [
+    get_peer_observations(peer="t4x9n", ids=[29])
+    {"peer": "t4x9n", "observations": [
       {"id": 29, "round": 7, "tool": "shell", "status": "ok", "result": "commit 3f2a...", "chars": 5420,
        "shown_chars": 4000, "truncated": true}]}
 
@@ -30,8 +30,9 @@ the fallback outside a live run. The round of each call comes from TurnState.his
 writes; a call after the last mark belongs to the step under way.
 
 Each call counts as a board action of kind "oversight" (turn_rules.record_board_action): TurnState.oversight per
-regulator, oversight_targets per regulator and target, and oversight_first with the round of the first call about each
-target. A step that ends with either tool is a free step, within the regulator's K (free_board_actions_regulator).
+influencer, oversight_targets per influencer and target, and oversight_first with the round of the first call about
+each target. A step that ends with either tool is a free step, within the caller's K
+(free_board_actions_influencer, the same for both influencers).
 """
 from __future__ import annotations
 
@@ -54,7 +55,7 @@ from src.swarm.turn_rules import (
     record_board_action,
 )
 
-MAX_CHARS = 4000     # the default cut of each result get_agent_observations returns
+MAX_CHARS = 4000     # the default cut of each result get_peer_observations returns
 
 
 @dataclass(frozen=True)
@@ -107,14 +108,14 @@ def called(messages: list, marks: list[list[int]], running: int) -> list[Called]
 
 
 def actions_payload(agent: str, calls: list[Called], latest: int, since_round: int | None) -> dict:
-    """get_agent_actions' answer: the newest `latest` calls from `since_round` on, oldest first, arguments in full."""
+    """get_peer_actions' answer: the newest `latest` calls from `since_round` on, oldest first, arguments in full."""
     chosen = [c for c in calls if since_round is None or c.round >= since_round][-latest:]
-    return {"agent": agent, "total_calls": len(calls), "shown": len(chosen),
+    return {"peer": agent, "total_calls": len(calls), "shown": len(chosen),
             "actions": [{"id": c.id, "round": c.round, "tool": c.tool, "arguments": c.arguments} for c in chosen]}
 
 
 def observation(c: Called, max_chars: int) -> dict:
-    """One call's result as get_agent_observations returns it, cut to max_chars with the cut stated."""
+    """One call's result as get_peer_observations returns it, cut to max_chars with the cut stated."""
     text = c.result
     row = {"id": c.id, "round": c.round, "tool": c.tool, "status": c.status, "result": None if text is None
            else text[:max_chars]}
@@ -124,14 +125,14 @@ def observation(c: Called, max_chars: int) -> dict:
 
 
 def observations_payload(agent: str, calls: list[Called], ids: list[int] | None, latest: int, max_chars: int) -> dict:
-    """get_agent_observations' answer: the results of the calls `ids` names, in that order, else of the newest
+    """get_peer_observations' answer: the results of the calls `ids` names, in that order, else of the newest
     `latest` calls, oldest first."""
     if ids is None:
         rows = [observation(c, max_chars) for c in calls[-latest:]]
     else:
         rows = [observation(calls[i], max_chars) if 0 <= i < len(calls) else {"id": i, "status": "no such call"}
                 for i in ids]
-    return {"agent": agent, "observations": rows}
+    return {"peer": agent, "observations": rows}
 
 
 def _teammate_calls(owner: str, allowed: set[str], agent: str) -> list[Called]:
@@ -147,33 +148,33 @@ def _dump(payload: dict) -> str:
     return json.dumps(payload, ensure_ascii=False, default=str)
 
 
-def get_agent_actions(owner: str, agents: list[str]) -> ToolDef:
-    """The tool bound to the regulator `owner`: any teammate's latest tool calls on the roster `agents`."""
+def get_peer_actions(owner: str, agents: list[str]) -> ToolDef:
+    """The tool bound to the influencer `owner`: any teammate's latest tool calls on the roster `agents`."""
     prompts = load_prompts()
     args = prompts["tool_args"][ACTIONS_TOOL]
     allowed = set(agents) - {owner}
 
-    async def execute(agent: str, latest: int = 20, since_round: int | None = None) -> str:
+    async def execute(peer: str, latest: int = 20, since_round: int | None = None) -> str:
         if latest < 1:
             raise ToolError("latest must be at least 1")
-        return _dump(actions_payload(agent, _teammate_calls(owner, allowed, agent), latest, since_round))
+        return _dump(actions_payload(peer, _teammate_calls(owner, allowed, peer), latest, since_round))
 
     return ToolDef(execute, name=ACTIONS_TOOL, description=prompts["tools"][ACTIONS_TOOL],
-                   parameters={"agent": args["agent"], "latest": args["latest"], "since_round": args["since_round"]})
+                   parameters={"peer": args["peer"], "latest": args["latest"], "since_round": args["since_round"]})
 
 
-def get_agent_observations(owner: str, agents: list[str]) -> ToolDef:
-    """The tool bound to the regulator `owner`: what any teammate's tool calls returned, by id or the latest."""
+def get_peer_observations(owner: str, agents: list[str]) -> ToolDef:
+    """The tool bound to the influencer `owner`: what any teammate's tool calls returned, by id or the latest."""
     prompts = load_prompts()
     args = prompts["tool_args"][OBSERVATIONS_TOOL]
     allowed = set(agents) - {owner}
 
-    async def execute(agent: str, ids: list[int] | None = None, latest: int = 20, max_chars: int = MAX_CHARS) -> str:
+    async def execute(peer: str, ids: list[int] | None = None, latest: int = 20, max_chars: int = MAX_CHARS) -> str:
         if latest < 1 or max_chars < 1:
             raise ToolError("latest and max_chars must be at least 1")
-        calls = _teammate_calls(owner, allowed, agent)
-        return _dump(observations_payload(agent, calls, ids, latest, max_chars))
+        calls = _teammate_calls(owner, allowed, peer)
+        return _dump(observations_payload(peer, calls, ids, latest, max_chars))
 
     return ToolDef(execute, name=OBSERVATIONS_TOOL, description=prompts["tools"][OBSERVATIONS_TOOL],
-                   parameters={"agent": args["agent"], "ids": args["ids"], "latest": args["latest"],
+                   parameters={"peer": args["peer"], "ids": args["ids"], "latest": args["latest"],
                                "max_chars": args["max_chars"]})
