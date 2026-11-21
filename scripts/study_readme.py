@@ -14,8 +14,8 @@ The fields and their types are read from the study's runs (run_directory.study_r
 apart controls), so a README names only what its study holds. Each field's meaning comes from the YAML file, and a
 CheatBench verdict field's from its task's judge schema (submodules/cheatbench/tasks/<task>/judge_schema.py, the
 first sentence of the field's description). render refuses a field without a meaning and a run file no spec covers
-(Undescribed), so a README never leaves a field or a file out. The smoke suites inside a study keep an older layout
-and are listed in the tree, not described.
+(Undescribed), so a README never leaves a field or a file out. The smoke suites inside a study are in the runs' layout
+and are listed in the tree, uncounted (each smoke run adds runs), not described.
 
 Reads only: no model call, no Docker. tests/unit/test_study_readme.py checks that every README here is current.
 """
@@ -48,7 +48,7 @@ MANIFEST_STUDY = "apart_controls"
 """The collection whose runs sit at <model>/<task>/<cell>/s<seed>/ with a manifest.jsonl, not in groups."""
 CHEATBENCH_TASKS = ROOT / "submodules" / "cheatbench" / "tasks"
 IGNORED = {".DS_Store"}
-SUITE = "a smoke-test suite, runs nested by stamp or case, not regenerated, not described"
+SUITE = "a smoke-test suite, runs nested by stamp or case, not described"
 """The line of a folder of a study that is neither a run nor a group."""
 JSON_TYPES = {dict: "object", list: "array", str: "string", bool: "bool", int: "int", float: "float",
               type(None): "null"}
@@ -84,7 +84,6 @@ SPECS = (
     Spec("signals_team", "signals.jsonl", "signals.jsonl, the team row (`\"row\": \"team\"`)", where="team"),
     Spec("cheatbench", "judges/cheatbench.*.jsonl", "judges/cheatbench.<judge>.jsonl", by_task=True),
     Spec("labels", "judges/labels.*.jsonl", "judges/labels.<judge>.jsonl"),
-    Spec("judge_legacy", "judge.jsonl", "judge.jsonl", by_task=True),
     Spec("access_log", "access_log.jsonl", "access_log.jsonl"),
     Spec("network", "network.jsonl", "network.jsonl"),
     Spec("communication", "communication/*.json", "communication/<sample>.json"),
@@ -381,7 +380,7 @@ def link_rows(study: Path, runs: list[Path]) -> list[tuple[str, str]]:
         names = {ep["episode"] for ep in episodes}
         keys = {f"{ep['id']}#{ep['replicate']}" for ep in episodes}
         transcripts += [(run, ep["transcript_path"]) for ep in episodes if ep.get("transcript_path")]
-        for path in sorted(run.glob("judges/*.jsonl")) + sorted(run.glob("judge.jsonl")):
+        for path in sorted(run.glob("judges/*.jsonl")):
             for row in rows_of(path):
                 if row.get("transcript_path"):
                     verdict_paths.append((run, row["transcript_path"]))
@@ -441,21 +440,19 @@ def markdown_table(head: list[str], rows: list[list]) -> list[str]:
 
 def composition(study: Path, runs: list[Path]) -> list[str]:
     """What the study holds: from INDEX.jsonl, each task's arms (valid of all), the models by short name and the
-    commits; without an index, one line per run."""
+    commits; one line per run for a study without an index or whose index names no arm."""
     index = study / "INDEX.jsonl"
     if not index.is_file():
-        rows = []
-        for run in runs:
-            meta = json.loads((run / RUN_JSON).read_text())
-            rows.append([f"`{run.relative_to(study).as_posix()}`", meta.get("task"), meta.get("model"),
-                         len(meta.get("agents") or []), meta.get("orbit_version"), meta.get("inspect_version")])
-        return markdown_table(["run", "task", "model", "agents", "ORBIT", "Inspect"], rows)
+        return run_table(study, runs)
     rows = rows_of(index)
-    kinds = list(dict.fromkeys(r["kind"] for r in sorted(rows, key=lambda r: KIND_ORDER.get(r["kind"], 99))))
-    tasks = sorted({r["cheatbench_task"] for r in rows})
-    grid = [[f"`{task}`", *(cell_count(rows, task, kind) for kind in kinds)] for task in tasks]
-    out = ["Runs by task and arm, valid of all (INDEX.jsonl `valid`):", "",
-           *markdown_table(["task", *(f"`{k}`" for k in kinds)], grid), ""]
+    if any(r["kind"] for r in rows):
+        kinds = list(dict.fromkeys(r["kind"] for r in sorted(rows, key=lambda r: KIND_ORDER.get(r["kind"], 99))))
+        tasks = sorted({r["cheatbench_task"] for r in rows})
+        grid = [[f"`{task}`", *(cell_count(rows, task, kind) for kind in kinds)] for task in tasks]
+        out = ["Runs by task and arm, valid of all (INDEX.jsonl `valid`):", "",
+               *markdown_table(["task", *(f"`{k}`" for k in kinds)], grid), ""]
+    else:
+        out = [*run_table(study, runs), ""]
     models: dict[str, set] = defaultdict(set)
     roles: dict[str, set] = defaultdict(set)
     for r in rows:
@@ -466,17 +463,28 @@ def composition(study: Path, runs: list[Path]) -> list[str]:
             if short and model:
                 models[short].add(model)
                 roles[short].add(role)
-    out += ["Models by the short names that run names and INDEX.jsonl use (mock runs left out):", "",
-            *markdown_table(["short name", "role", "model"],
-                            [[f"`{s}`", ", ".join(sorted(roles[s])), ", ".join(f"`{m}`" for m in sorted(models[s]))]
-                             for s in sorted(models)]), ""]
+    if models:
+        out += ["Models by the short names that run names and INDEX.jsonl use (mock runs left out):", "",
+                *markdown_table(["short name", "role", "model"],
+                                [[f"`{s}`", ", ".join(sorted(roles[s])), ", ".join(f"`{m}`" for m in sorted(models[s]))]
+                                 for s in sorted(models)]), ""]
     reasons = Counter(r["reason"] for r in rows)
     days = sorted(d for d in (commit_day(c) for c in {r["commit"] for r in rows}) if d)
     out.append(f"{sum(r['valid'] for r in rows):,} of {len(rows):,} runs are valid. Reasons: "
                + ", ".join(f"`{k}` {v:,}" for k, v in reasons.most_common()) + "."
-               + (f" The runs ran at {len({r['commit'] for r in rows})} commits dated {days[0]} to {days[-1]}."
-                  if days else ""))
+               + (f" The runs ran at {count(len({r['commit'] for r in rows}), 'commit')} dated {days[0]} to "
+                  f"{days[-1]}." if days else ""))
     return out
+
+
+def run_table(study: Path, runs: list[Path]) -> list[str]:
+    """One line per run: its folder, task, model, agents and the ORBIT and Inspect versions that ran it."""
+    rows = []
+    for run in runs:
+        meta = json.loads((run / RUN_JSON).read_text())
+        rows.append([f"`{run.relative_to(study).as_posix()}`", meta.get("task"), meta.get("model"),
+                     len(meta.get("agents") or []), meta.get("orbit_version"), meta.get("inspect_version")])
+    return markdown_table(["run", "task", "model", "agents", "ORBIT", "Inspect"], rows)
 
 
 KIND_ORDER = {kind: i for i, kind in enumerate(("solo", "solo_cheat", "minimal", "minimal_cheat", "minimal_all",
