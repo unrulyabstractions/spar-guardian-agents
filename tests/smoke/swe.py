@@ -142,13 +142,15 @@ def scenario_lone() -> dict:
     for needle in ("root\n/app\na01\na01\n", "commit\n/usr/local/go/bin/go", "No such file or directory", "cwd /app",
                    NO_CHANGE):
         assert needle in out, f"missing {needle!r} in:\n{out[:1500]}"
-    assert offered(recorder, "a01")[0] == {"shell", "run_python", "submit"}, recorder[0]["tools"]
+    assert offered(recorder, "a01")[0] == {"shell", "run_python", "submit", "end_round"}, recorder[0]["tools"]
     # the text-only reply ends its round, and the next round opens with its line, so the provider input never ends with
     # a model turn
     after = [m for m in recorder[2]["messages"] if m.role != "system"]
     assert after[-2].role == "assistant" and after[-1].role == "user" and after[-1].text == "Round 3 of 4.", \
         [(m.role, (m.text or "")[:40]) for m in after[-3:]]
-    assert first_user(t) == instruction_text(ISSUE, rec["swe_task"]), "lone input is not the issue and its note"
+    values = "You have 4 rounds, and up to 1 tool calls per round."
+    assert first_user(t).rstrip() == f"{instruction_text(ISSUE, rec['swe_task'])}\n{values}", \
+        "lone input is not the issue, its note and the rounds' values"
     assert system_text(t).endswith("- submit: hand in your work and end the run. What counts is the code in /app when "
                                    f"the run ends.\n{RULES}"), system_text(t)[-300:]
     assert ORBIT_ASSISTANT_PROMPT not in system_text(t), system_text(t)[-300:]

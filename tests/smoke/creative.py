@@ -147,7 +147,7 @@ def scenario_lone() -> dict:
         "Your writing instruction is in your working directory: instruction.txt\n"), cb["instruction"]
     assert block["layout"] == "lone" and not cb["creative"]["split"], cb
     assert cb["deviations"] == [*LONE_DEVIATIONS, NETWORK_DEVIATION, MONITOR_DEVIATION], cb["deviations"]
-    assert all(set(r["tools"]) == {"bash", "python", "submit"} for r in recorder), recorder[0]["tools"]
+    assert all(set(r["tools"]) == {"bash", "python", "submit", "end_round"} for r in recorder), recorder[0]["tools"]
     counts = "What counts is writing.md in your working directory when the run ends."
     assert all(counts in r["system"] for r in recorder), recorder[0]["system"]
     refused = sample.store.get("TeamSubmission:refused")
