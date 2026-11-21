@@ -14,7 +14,7 @@ it, which a reader rewrote as a conjecture.
 | `main.tex` | preamble and the order of the sections | by hand |
 | `sections/*.tex` | one file per section, body then appendices | by hand |
 | `sections/references.tex` | the PDF's 49 references in its order, so [1] to [49] match | by hand |
-| `generated/params.tex` | macros: the board's budgets, `\ToolOutputKiB` (tool_output_bytes) and `\TurnBudget` from `PRESETS["default"]`; `\JudgeName`, `\JudgeEffort` from `settings.JUDGE_MODEL` and `src/judging/judge_models.yaml`; `\CheatingAlarm` and `\CheatedFrom` from `src/measures/cheating_ladder.py` ALARM and CHEATED_FROM; `\AccessedFrom` from `scripts/paper/study_ladders.py` ACCESSED_FROM | `make paper-sources` |
+| `generated/params.tex` | macros: the board's budgets, `\ToolOutputKiB` (tool_output_bytes), `\Rounds` and `\CallsPerRound` from `PRESETS["default"]`; `\TurnBudget`, `\FreeBoardActions` and `\FreeBoardActionsInfluencer` from `scripts/paper/paper_sources.py` STUDY_STEPS (the reported runs' turn rules); `\JudgeName`, `\JudgeEffort` from `settings.JUDGE_MODEL` and `src/judging/judge_models.yaml`; `\CheatingAlarm` and `\CheatedFrom` from `src/measures/cheating_ladder.py` ALARM and CHEATED_FROM; `\AccessedFrom` from `scripts/paper/study_ladders.py` ACCESSED_FROM | `make paper-sources` |
 | `generated/scales.tex` | the scales table, from `src/configuration/scales.py` | `make paper-sources` |
 | `generated/regulator_suffix.tex` | the regulator prompt box: what `src/swarm/influencers.py` role_text appends after a regulator's level under `PRESETS["default"]` (`prompts.yaml` roles.influencer_common, regulator_check, regulator_no_disclosure) | `make paper-sources` |
 | `generated/regulator_levels.tex`, `disregulator_levels.tex` | the level texts, from `src/configuration/instruction_levels.yaml` | `make paper-sources` |
@@ -1390,3 +1390,57 @@ Cheating timelines changed, and one rung moved: apart_controls/extra_duplicate_s
 fell from looked to none, agent and team, since it printed its own design into its own binder_candidates.fasta. No
 run's cheated moved, and no paper script reads the timelines or the looked rung, so no sentence, table or figure changed
 (`make paper-check` agrees).
+
+## Rounds of tool calls, 2026-11-21
+
+The code changed under the reported runs (8892dee): an agent's round is up to N tool calls (`calls_per_round`, 10), one
+model call after another; end_round, a reply with no tool call or the N-th call ends it; each agent may use up R rounds
+(`rounds`, 30), and a round of board calls alone (FREE_TOOLS: the board tools and the peer tools) uses up none; the
+board is live; the first message gives R and N, and each round opens with "Round n of R.". turn_budget, the free
+follow-up steps and pooled steps are gone. Every valid run of study_exploration_1 recorded turn_budget 100,
+free_board_actions 3, free_board_actions_regulator 10, pooled_steps true and concurrent_rounds true, built each round's
+concurrent step on a board snapshot as of its start, and told no agent a step count or a round number (none of its 522
+transcripts holds one). `paper_sources.STUDY_STEPS` keeps those values for the differ list; `\Rounds` and
+`\CallsPerRound` come from `PRESETS["default"]`.
+
+Redrawn: Figure 7 (`figures.py` fig_round_structure): two rounds call by call, N drawn as four, a dot per lane for
+whether the round used up a round (turn_activation.round_charge), a dotted arrow for a read of a post of the same round,
+the submitter's exit. Every other figure and table is byte-identical.
+
+Sentences changed (old, then new):
+- Methods: "running in turns, with a read-and-write budget per turn." became "running in rounds of tool calls, with a
+  read-and-write budget per round."
+- Appendix A, topology caption: "each turn brings a notice of new posts per sender" became "each model call opens with a
+  notice of new posts per sender".
+- Communication: "Each turn, agents are informed of the number of new messages on the board (total and per agent)"
+  became "Before each model call, agents are informed of the number of new messages on the board since their last call
+  (total and per agent)"; "per turn" became "per round"; "Reading and writing messages does not cost the agent its turn"
+  became "Reading and writing messages does not use up the agent's rounds"; added "The board is live: a read returns
+  every post made so far, including posts made in the same round".
+- New subsection "Rounds" in place of "Figure~\ref{fig:rounds} shows one round and the next for five agents.": the round
+  of up to N calls, a reply that asks for several calls, the three ends of a round, end_round never counting, R, board
+  calls, a round of end_round or no call alone, parallel rounds, the recorded times and places, the same R and N for
+  influencers and a lone agent, then "The system prompt states these rules with no numbers.", the first message's values
+  line and "Round 3 of \Rounds.", which counts the rounds used up plus one.
+- Figure 7 caption: "Two rounds of a run, step by step for each agent. A step that ends with a board action is free, up
+  to a limit per round. Other steps count against the agent's working steps. ..." became "Two rounds of a run, call by
+  call for each agent. A round holds up to N tool calls. A round of board calls alone uses up none of the agent's
+  rounds. A dotted arrow marks a read that returns a post made in the same round. ..."
+- Entries and exits: "before its next step" became "before its next round"; "runs out of working steps" became "runs out
+  of rounds".
+- Tasks: "Every agent gets \TurnBudget{} working steps on every task." became "Every agent gets \Rounds{} rounds of up to
+  \CallsPerRound{} tool calls on every task."
+- Other parameters: the free board actions item became "Rounds per agent (R): \Rounds{}, for workers and influencers
+  alike." and "Tool calls per round (N): \CallsPerRound{}, board calls included."; message writes and reads are per
+  round; "differ from this design in seven ways" became "in thirteen ways", with six sentences first: "Each agent had
+  \TurnBudget{} working steps instead of rounds of tool calls. A step was one model call and the tool calls of its reply.
+  A step that ended with a board call used up no working step. A round allowed up to \FreeBoardActions{} such steps, or
+  \FreeBoardActionsInfluencer{} for a regulator. No message gave the number of steps or opened a round. In a round's
+  first step, a read saw the board as it stood when the round began. The working steps of an agent that stopped went to
+  its teammates."; "had the workers' free board actions" became "had the workers' free board steps".
+
+Checked and unchanged: the regulator prompt box ("first 2 rounds"), Results, Discussion ("explicit read and write
+budgets"), Conclusion and Abstract (they report the runs).
+
+Built in `worktree/paper-rounds` at 3e88d37 plus this change, with runs/, logs/, build/, .venv and the submodules
+linked, because the main tree held another workflow's uncommitted src/measures changes.
