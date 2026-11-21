@@ -2571,3 +2571,32 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   8770 (not restarted); smoke-load with many netlog sidecars at once (about 230 MB each with bpftrace); the paper
   (it names the access log only as a ladder input; nothing it says changed). The UDP send row covers the first send per
   process and destination only; a unix client is not seen by procnet.
+
+## 2026-11-20: each study's README.md, generated (61a4bf9, c044f9d, eab474e), no model call, no Docker
+- **What.** scripts/study_readme.py writes runs/<study>/README.md for study_exploration_0, study_exploration_1,
+  study_smoke, study_orbit2_check and apart_controls: what the study is, its runs by task and arm (from INDEX.jsonl),
+  its layout as a tree with counts, every run file's fields with their JSON types, few-valued strings' values and one
+  line of meaning (scripts/study_readme_fields.yaml; CheatBench verdict fields from each task's judge schema), the
+  links with how many resolve, the three ladders (src/ui/transcript_levels.py LADDERS) and five lines that load the
+  study. A field or file without a meaning stops it. apart_controls keeps its build's prose
+  (scripts/study_readme_apart_controls.md) with its Labels section rewritten (the manifest's `rung` is the old
+  evidence word; today's `cheating_rung` is in signals.jsonl) and its tables generated from manifest.jsonl. The old
+  apart_controls README is kept byte for byte in .backups/study-readmes-2026-11-20/ (sha256 af6afe5e...). Docs:
+  DATA_AND_VIEWER.md, src/ui/API.md, src/README.md, examples/README.md (judge.jsonl became judges/).
+- **How verified.** An independent checker (scratchpad wf4/readme/verify/check.py, no generator code) re-read each
+  study's run files and compared with the README: every key of run.json, episodes, both signals rows, access_log,
+  transcripts and their steps, both judge files, board events, steps, replay and swe_summary has a table row and every
+  table row names a key in the data; file and row counts, INDEX fields, the valid count and the top-level run count
+  match. All five OK. I ran each README's five-line loader with `python3 -I` (stdlib only): all five load a run and
+  its team row. The link counts equal those the regeneration recorded (e.g. exploration_1 eval_log 360/360,
+  judge_prompt 2,088/2,088). I read the rendered READMEs of exploration_1 in full and the others by section, and
+  checked the prose against the data: exploration_0's SWE runs are all in invalid/ or mock/ (45 + 4), 504 of its real
+  episodes use a01..a04 and the 9 protein minimal_regulated reruns at aa3a1cb use random IDs, every real run has
+  CheatBench verdicts; exploration_1's 147 valid runs all hold both judge files; orbit2's 4 agents are DeepSeek V4.1
+  Flash (3 workers, 1 regulator). apart_controls: the kept sections equal the old README's but one cell, qwen's billed
+  USD, now 48.72: the exact sum of its 756 canonical rows is 48.724988 (the old 48.73 rounded the build's 48.725).
+  `--check` reports all five current; tests/unit/test_study_readme.py 10 passed; ruff clean.
+- **Result.** VERIFIED for the five READMEs as of 23:10 local. UNVERIFIED: the full unit suite after these commits
+  (only test_study_readme.py run); the meanings taken from docstrings and the CheatBench schemas' first sentences were
+  read against the code, not against every row; study_smoke's README changes whenever a new smoke suite folder appears
+  (its log counts are left out for that reason); nothing was uploaded, so the Hub's copies have no README.
