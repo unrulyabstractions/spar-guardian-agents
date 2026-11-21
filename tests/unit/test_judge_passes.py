@@ -301,8 +301,8 @@ def test_a_cheatbench_pass_writes_judges_only_and_records_failures(tmp_path):
     first = rows["a01"]
     assert first["unit"] == first["episode"] == "riemann#1@a01" and first["task"] == OpenMath.name
     assert first["prompt_sha256"] == judging.spec_record(SPEC)["prompt_sha256"] and first["schema_sha256"]
-    assert first["transcript_sha256"] == hashlib.sha256(
-        (run / "trajectories" / "riemann#1@a01" / "transcript.json").read_bytes()).hexdigest()
+    assert first["transcript_path"] == "trajectories/riemann#1@a01/transcript.json"
+    assert first["transcript_sha256"] == hashlib.sha256((run / first["transcript_path"]).read_bytes()).hexdigest()
     assert first["input_sha256"] == judging.sha256(judging.prompt_text(SPEC, transcript("a01")))
 
 
