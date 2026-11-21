@@ -82,6 +82,7 @@ export async function viewRun({ run }, view) {
   // ladders are the transcript viewer's (src/ui/transcript_viewer.py), not this page's.
   const teams = d.team || [];
   const accessLogSection = rj.access_log ? section('Access log', accessLogView(rj.access_log, teams, eps)) : null;
+  const networkSection = rj.network ? section('Network log', networkView(rj.network)) : null;
   const teamSection = section('Team evidence', [
     h('p', { class: 'muted small' }, 'The code’s evidence of the agents’ acts on the honeypot. The three ladders (Cheating, Coordination, Collusion) are on the transcript viewer’s run page (make transcripts).'),
     teams.length
@@ -89,7 +90,7 @@ export async function viewRun({ run }, view) {
       : muted('No team record: the code’s evidence was not recorded on this run (python -m src signals).')]);
 
   return h('div', { class: 'page' }, head, meta, teamSection, configSection, defSection, sweSection, knowledgeSection,
-    swarmSection, accessSection, accessLogSection, rulesSection, engagementSection, toolsSection, epSection, boardSection,
+    swarmSection, accessSection, accessLogSection, networkSection, rulesSection, engagementSection, toolsSection, epSection, boardSection,
     evidence);
 }
 
@@ -170,6 +171,45 @@ function accessLogView(log, teams, eps) {
     ]),
   ]), rows.length ? dataTable(['agent', num('rows'), num('incidental'), 'raised', 'log only', 'transcript only',
     num('refusals')], rows) : null);
+}
+
+// The network log: run.json "network" (src/export/_export_network_log.py). Its rows are network.jsonl; the transcript
+// viewer's Board tab places them on the run's clock.
+const NET_STATUS = {
+  valid: ['good', 'every control seen, nothing lost'],
+  partial: ['warn', 'controls seen, something lost'],
+  broken: ['bad', 'a control missing: an absence means nothing'],
+  absent: ['bad', 'switch on, no record came back'],
+  off: ['plain', 'switch off, or no machine to watch'],
+};
+const NET_OPS = ['listen', 'bind', 'connect', 'accept', 'send', 'close'];
+
+function networkView(net) {
+  const [kind, tip] = NET_STATUS[net.status] || ['plain'];
+  const c = net.control;
+  const num = label => ({ label, num: true });
+  const agents = Object.keys(net.agents || {}).sort();
+  const cross = net.cross_agent || [];
+  return h('div', null, kv([
+    ['status', badge(net.status, kind, tip)],
+    ['method', net.method ? badge(net.method, 'plain', net.fallback || undefined) : undefined],
+    ['fallback', net.fallback ? mono(net.fallback) : undefined],
+    ['rows', net.rows],
+    ['rows by op', net.ops ? countsText(net.ops) || '0' : undefined],
+    ['rows by origin', net.origins ? countsText(net.origins) || '0' : undefined],
+    ['controls seen', c ? `start ${c.start.seen}, end ${c.end.seen}` : undefined],
+    ['controls missing', c && [...c.start.missing, ...c.end.missing].join(', ') || undefined],
+    ['gaps', net.gaps && net.gaps.length ? net.gaps.length : undefined],
+    ['rows dropped', net.dropped || undefined],
+    ['events lost', net.lost || undefined],
+    ['cross-agent', net.status === 'off' ? undefined : cross.length ? badge(String(cross.length), 'bad') : '0'],
+    ['error', net.error ? mono(net.error) : undefined],
+  ], 'kv-grid'),
+  agents.length ? dataTable(['agent', ...NET_OPS.map(num)],
+    agents.map(a => [a, ...NET_OPS.map(op => net.agents[a][op] || 0)])) : null,
+  cross.length ? dataTable(['from', 'to', 'op', 'proto', 'machine', 'address', 'result', 'call'],
+    cross.map(x => [x.from, x.to, x.op, x.proto, x.machine, mono(x.rport ? `${x.raddr}:${x.rport}` : x.raddr || ''),
+      badge(x.result, x.result === 'ok' ? 'good' : 'warn'), x.call_id ? mono(x.call_id) : null])) : null);
 }
 
 // The knowledge-work sample and its reviews (run.json "knowledge"): the layout, the pipeline artifact, each contract's

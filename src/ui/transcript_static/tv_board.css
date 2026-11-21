@@ -251,3 +251,17 @@
 .tmp-file .tmp-text { margin: 0; max-height: 420px; overflow: auto; font-size: 12px; white-space: pre-wrap;
   border: 0; border-radius: 0; }
 .tmp-file > .muted.block { padding: 8px 10px; }
+
+/* the network panel (tv_net_panel.js): what listens at the position beside every connect, accept and send up to it;
+   a call since the previous stop takes the added colour, a cross-agent call the bad colour's edge */
+.bd-net .net-box { flex: 1 1 420px; min-width: 340px; }
+.bd-net .net-calls { flex: 2 1 560px; }
+.net-toggle { cursor: pointer; font-family: inherit; line-height: inherit; background: none; }
+.net-toggle.net-on { color: var(--text); border-color: var(--text); font-weight: 600; }
+.net-lrow { grid-template-columns: 16px minmax(0, 1fr) 48px 72px 72px 72px; }
+.net-crow { grid-template-columns: 16px 64px 48px minmax(120px, 1fr) minmax(0, 1fr) 96px 72px; }
+.net-crow.net-cross { border-left: 3px solid var(--bad); }
+.net-who { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+.net-none { padding: 8px 10px; }
+.net-lrow, .net-crow { cursor: default; }
+.net-lrow .bd-count, .net-crow .bd-count { justify-self: start; }

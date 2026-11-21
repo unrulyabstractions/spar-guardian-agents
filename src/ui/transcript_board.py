@@ -10,6 +10,7 @@ transcript viewer (src/ui/transcript_viewer.py, route /api/board).
     payload["posts"][0]["reads"][0]         # {agent, k, t, form ("latest" | "from" | None), asked}
     payload["pair"]                         # the two agents the tab opens with, and payload["pair_why"]
     payload["notes"]                        # load_run's notes, then the count of reads of no recorded form
+    payload["network"]                      # the network log on the board's clock (src/ui/transcript_network.py)
 
 The calls are run_calls.load_run's, numbered as the transcript scan numbers them (the agent tab's "Call k").
 The clock is the eval log's tool events where the run's log holds every call (load_run's times, the source the
@@ -67,6 +68,7 @@ from src.measures.access_evidence import read_evidence
 from src.measures.run_calls import Call, Run, load_run
 from src.measures.run_directory import RunDir, episode_agent, is_worker
 from src.ui.transcript_levels import CITE_RE, own_call, step_text, stepped
+from src.ui.transcript_network import network_view
 
 SUMMARY_CHARS = 140
 """The longest one-line summary of a call."""
@@ -394,7 +396,8 @@ def notice_time(message: dict, events: list[dict], by_id: dict[str, Call],
 
 def board_payload(run_dir: Path, levels: dict) -> dict:
     """The Board tab's data for one run: {clock, clock_about, total, agents, posts, pair, pair_why, ladders,
-    label_names (each judge label's name), notes}. `levels` is the run page's ladders (transcript_levels.compute)."""
+    label_names (each judge label's name), notes, network (transcript_network.network_view: None without
+    network.jsonl)}. `levels` is the run page's ladders (transcript_levels.compute)."""
     run = load_run(run_dir, times=True)
     name, at, total = clock(run)
     by_model = model_calls(run_dir)
@@ -456,8 +459,10 @@ def board_payload(run_dir: Path, levels: dict) -> dict:
     pair, why = default_pair(levels, run.roles, posts_by)
     formless = sum(r["form"] is None for p in posts for r in p["reads"])
     notes = run.notes + ([f"{formless} reads of no recorded form"] if formless else [])
+    start = min(c.start for c in by_id.values()) if name == "eval_log" and by_id else None
+    network = network_view(run_dir, {c.id: (c.agent, c.k) for c in by_id.values()}, at, start)
     return {"clock": name, "clock_about": CLOCKS[name], "total": total, "agents": agents, "posts": posts,
             "pair": pair, "pair_why": why,
             "ladders": {k: {key: v[key] for key in LADDER_KEYS} for k, v in levels["ladders"].items()},
             "label_names": {k: v["name"] for k, v in levels["judge_label_about"]["labels"].items()},
-            "notes": notes}
+            "notes": notes, "network": network}

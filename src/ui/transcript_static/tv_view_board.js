@@ -27,7 +27,9 @@
  * line (a click shows it whole), and its text in full with the excerpt marked. Every string goes in through h() and
  * svgEl() text nodes. When the payload says the run has /tmp snapshots (d.tmp) and opts.tmpUrl is given, a /tmp panel
  * (tv_tmp_panel.js) between the timeline and the board shows each machine's /tmp at the position, and what changed
- * since the stop before it. It returns {moveTo(position), showPost(label),
+ * since the stop before it. When the payload holds the run's network log (d.network), a Network panel
+ * (tv_net_panel.js) under it shows what listens at the position and every connect, accept and send up to it. It
+ * returns {moveTo(position), showPost(label),
  * state}: showPost moves to post P<n> (the board's own numbering) and, when the post holds a judge's excerpt, brings
  * the marked excerpt into view. */
 import { appendAll, enc, firstLine, fmtSecs, h, plural } from '/static/app/dom.js';
@@ -37,6 +39,7 @@ import { RAMP, centreVertically, inkOn, scoreColour } from './tv_case_view.js';
 import { excerptSpan, markedNodes } from './tv_excerpt.js';
 import { ROLE_LABEL } from './tv_labels.js';
 import { levelChip, lineMark, misleadMark, scoreChip } from './tv_levels.js';
+import { netPanel } from './tv_net_panel.js';
 import { tmpPanel } from './tv_tmp_panel.js';
 
 const GUTTER = 150;
@@ -234,6 +237,8 @@ export function renderBoard(el, d, opts) {
   const callTime = new Map(d.agents.flatMap(a => a.calls.map(c => [`${a.agent}:${c.k}`, c.t])));
   const tmp = d.tmp && opts.tmpUrl ? tmpPanel(opts.tmpUrl, { timeOf: (agent, k) => callTime.get(`${agent}:${k}`),
     callHref }) : null;
+  // the network panel, when the run has a network log
+  const net = d.network ? netPanel(d.network, { callHref }) : null;
 
   // ---- the posts as the board shows them, built once; a change of the pair changes their classes only
   const items = d.posts.map((p, i) => {
@@ -333,6 +338,7 @@ export function renderBoard(el, d, opts) {
     selB.value = state.b;
     modeSel.value = state.mode;
     if (tmp) tmp.pair(state.a, state.b);
+    if (net) net.pair(state.a, state.b);
     for (const [k, b] of lensButtons) {
       b.classList.toggle('active', k === state.lens);
       b.setAttribute('aria-pressed', String(k === state.lens));
@@ -697,9 +703,12 @@ export function renderBoard(el, d, opts) {
       } else L.latestBox.setAttribute('visibility', 'hidden');
     }
     // the /tmp panel: the state at the position, and what changed since the stop before it
-    if (tmp) {
+    if (tmp || net) {
       const at = state.mode === 'time' ? lastAtOrBefore(L.stopKeys, P) : P;
-      tmp.at(state.mode === 'time' ? P : (L.stops[P] || { t: 0 }).t, at > 0 ? L.stops[at - 1].t : -Infinity);
+      const t = state.mode === 'time' ? P : (L.stops[P] || { t: 0 }).t;
+      const tPrev = at > 0 ? L.stops[at - 1].t : -Infinity;
+      if (tmp) tmp.at(t, tPrev);
+      if (net) net.at(t, tPrev);
     }
     remember();
   }
@@ -939,6 +948,7 @@ export function renderBoard(el, d, opts) {
   el.replaceChildren(h('div', { class: 'bd-tab' },
     h('section', { class: 'card bd-timeline' }, controls, lensKeyRow, svgHost, scrub, cardRow, legend),
     tmp ? tmp.el : null,
+    net ? net.el : null,
     h('section', { class: 'card bd-board' }, boardHead, boardBox)));
 
   let resizeTimer = 0;
