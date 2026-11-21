@@ -65,7 +65,7 @@ make hf-upload STUDY=study_exploration_1 RUN=<run> DRY_RUN=1
 make hf-upload STUDY=study_exploration_1 RUN=<run>
 ```
 
-The upload refuses any file that holds a key, the token or the git email. Without `RUN` it uploads the whole study except its smoke folders. It skips files the Hub already holds unchanged and deletes nothing there. It uploads studies only, not the apart controls. The dataset is public, so anyone can read everything you upload.
+The upload refuses any file that holds a key, the token or the git email. Without `RUN` it uploads the whole study except its smoke folders and the old-layout copies in `logs/<study>/set_aside_*/`. `STUDY=apart_controls` uploads `runs/apart_controls/` to `apart_controls/`, whole or one run such as `RUN=ds/binder/cheat/s1`. It skips files the Hub already holds unchanged. It deletes nothing there unless you give `DELETE_STALE=1`: then the same commit deletes each Hub file under the study's `runs/` and `logs/` (or under `apart_controls/`) whose local file is gone. A study's own README, figures and tables on the Hub are never touched. `LISTING=<file>` writes every path with what the upload does to it. The dataset is public, so anyone can read everything you upload.
 
 ## Before you upload new runs
 
