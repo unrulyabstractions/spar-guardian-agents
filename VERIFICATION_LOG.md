@@ -2712,3 +2712,48 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **What.** tests/support/mock_model.py `fresh`: every scripted output is a copy with new message ids, as a real generation's is (a script repeats entries, and ORBIT refuses a conversation with one id twice once a boundary edits it). The turn-rules harness uses the same helper. tests/smoke/knowledge.py roles expects the submitter ended "submit".
 - **How.** `python -m tests.smoke.knowledge` (mock model, Docker, one suite alone, 25 GB free): first run 10 of 11 passed, roles failed on the duplicate id; after the fix `--only roles,shared` passed. I opened the exported run runs/study_smoke/smoke_kw/20261121T073609Z/roles: each trajectory's user steps hold "aXX entered." for both peers with the swarm_presence tag, a02 and a03 hold "a01 handed in the team's work (submit). The run ends in 1 round.\na01 exited." (concurrent round, heard in round 4 of a hand-in in round 3 with delay 2), run.json rules.exits {a01: submit, round 3, ends_after_round 5}, rules.entry_rounds all 1, and both new deviation labels.
 - **Result.** VERIFIED: knowledge-work smoke, all 11 scenarios across the two runs; unit tests touched pass. UNVERIFIED: the openmath, protein, interview and creative smokes.
+
+## 2026-11-21: adversarial check of the network log (preflight, smoke data, tracer misses, unit tests, Network panel)
+- **What.** The claims of the network-log workflow (commits e5b2221, fabeadf, 2852317, 26187bf, 0452da1, 3303cda),
+  checked on Colima at HEAD 3303cda..ea20e78 with other workstreams' uncommitted files in the tree. No model call, no
+  rental. Scratch: /private/tmp/claude-501/-Users-unrulyabstractions-work-spar-guardian-agents/e4b864ae-ace7-4e72-b7da-41e9dd1a6c42/scratchpad/wf5/verify/.
+- **1. Preflight.** I ran scripts/box/network_trace_check.sh with an empty scratch cache, so it downloaded the aarch64
+  AppImage (196142152 bytes; shasum ad159222...5672 equals the pin). cbtask:python311: ebpf works (fexit, listen and
+  accept by uid 1001, connect by uid 3001), kprobe works, procnet works (5 ms), ss and conntrack not tested (not in
+  the image), method ebpf, exit 0, the JSON report matches. cbcw:agent: the same. A 4-byte junk file as --bpftrace:
+  ebpf "not tested" with the wrong sha256 named, method procnet. No check container left. VERIFIED on Colima; the
+  script tests a SYS_ADMIN helper, not netlog's own shape (as the build said). UNVERIFIED: x86_64 and any vast.ai box.
+- **2. Smoke data.** I read runs/study_smoke/smoke_network/20261121T070957Z/swe_http network.jsonl (74 rows), run.json
+  `network` and all three transcripts. Roles: a01 regulator (peer_shell observer uid 3001), a02 and a03 workers. Every
+  agent shell call (r0 to r3, serve, w0, w1, o0 to o2, reach) has its rows (two nscd unix connects ENOENT per bash).
+  a02's `serve` gives bind and listen 127.0.0.1:8180 by python3 http.server, call serve. The `reach` peer_shell call
+  gives curl's connect on machine a02, uid 3001, agent a01, named_by observer, EINPROGRESS, peer a02 and the server's
+  pid 219453; the server's accept (origin detached, no call) names a01 at the other end; the transcript says
+  "200 exit=0". The curl close reads origin unknown, cmd null (curl gone), still named a01 by its uid. Controls:
+  bind, listen, connect, accept on a01, a02 and a03 for start and end (`seen` 6 = connect+accept on 3 machines), none
+  missing; status valid, ebpf, lost 0, dropped 0, one cross-agent entry. openmath_workers: a01 (uid 1001) listens on
+  8180 in call serve; all 9 connects are a02's curl (uid 1002, call reach, EINPROGRESS); the transcript says
+  "000 exit=7"; no accept; 8 connects after the listen are listed in run.json `cross_agent`. VERIFIED. Finding:
+  `cross_agent` counts attempts, not connections: in openmath_workers all 8 entries were refused by the loopback guard.
+- **3. Tracer misses.** My own mock-model run (scratch adversarial_network.py; subset_sum, two workers and a regulator
+  with peer_shell; one call per case), with ebpf and again with procnet. ebpf (status valid, 155 rows) caught: a
+  listen+connect+accept+close in one process within ms (t_short); UDP sendto without connect, first send per
+  destination only (8202 once of three sends, 8203), and a connected UDP socket's connect (its send is not a `send`
+  row); a python client that connects and exits at once, with its call (t_exit); a UDP send from a process that exits
+  at once (t_udp_exit); bash /dev/tcp connects, one that went through and one ECONNREFUSED on port 1; a unix
+  bind/listen/connect/accept (no unix close rows); IPv6 ::1 bind/listen/connect/accept/close; the observer's own pair
+  inside a02's machine, named a01 by observer uid. Miss: the two bash /dev/tcp processes lose their call (call_id
+  null, origin unknown); their agent is still right by uid. procnet (status valid, fallback "no tracer mounted", 37
+  rows) caught only the two background listeners held 0.5 s; it missed every short connect, accept, UDP send, the
+  unix pair, the IPv6 pair and the observer's pair, and still reads status valid. VERIFIED for these cases.
+- **4. Unit tests.** The four network test files: 60 passed. Full `uv run pytest tests/unit -q`: 3343 passed,
+  6 xfailed in 502 s, rc 0. VERIFIED.
+- **5. Panel.** Test viewer on 8833 (scratch --runs with swe_http, scratch --cache; 8770 untouched), headless Chrome.
+  /api/network returns 1 listener and 28 calls; an unknown id gives 404. Screenshots viewed: 1.0 s shows the listener
+  `:8180 127.0.0.1 tcp python3 a02 call 0` and 6 calls; 4.3 s shows the red `connect tcp a01 → a02:8180 curl
+  EINPROGRESS call 1` row, `accept a02 ← a01 python3 ok no call` and the chip "1 cross-agent" in red. Labels, chips
+  and short tooltips only, no prose. Server and Chrome stopped. VERIFIED. Finding: the nscd ENOENT unix connects
+  (two per shell call) fill most of the Calls list until the `inet` filter is set. UNVERIFIED: the lane triangle on
+  a01's lane (a01's lane was not shown), the light theme. The adversarial run is subset_sum, which the viewer leaves out.
+- **Result.** Items 1 to 5 VERIFIED on Colima, with the findings above. UNVERIFIED: x86_64 and vast.ai, overhead and
+  memory figures (not re-measured), many netlog sidecars at once.
