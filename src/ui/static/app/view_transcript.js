@@ -7,7 +7,8 @@
 import { asText, debounce, firstLine, fmtInt, h, plural } from './dom.js';
 import { P, R, api, setHashQuietly } from './api.js';
 import { badge, episodeRecord, extraBadges, isBlockedResult, kv, lazyDetails, link, logLink, longText, mono, muted,
-  reasoningView, roleBadge, scrollIntoList, select, splitSignature, toolCallView, urlNotes, verdictBlock } from './components.js';
+  REDACTED_REASONING, reasoningView, roleBadge, scrollIntoList, select, splitSignature, toolCallView, urlNotes,
+  verdictBlock } from './components.js';
 
 const STEP_KINDS = [
   ['', 'all steps'],
@@ -42,6 +43,7 @@ function stepPreview(s, msg) {
   }
   if (s.reasoning_content) {
     const r = splitSignature(s.reasoning_content).text;
+    if (r.trim() === REDACTED_REASONING) return '(reasoning redacted)';
     return r ? '(reasoning) ' + firstLine(r.replace(/\*\*/g, ''), 90) : '(reasoning signature only)';
   }
   return '(empty)';

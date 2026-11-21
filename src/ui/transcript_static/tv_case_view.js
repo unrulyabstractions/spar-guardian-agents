@@ -103,7 +103,7 @@ export function readableReasoning(raw) {
           return '';
         };
         const text = blocks.map(part).filter(Boolean).join('\n\n');
-        return text ? { text } : { hidden: `reasoning hidden by the provider (${plural(blocks.length, 'encrypted block')})` };
+        return text ? { text } : { hidden: 'encrypted' };
       }
     } catch (e) { /* not JSON: show as text */ }
   }
@@ -233,6 +233,7 @@ export function renderCase(t, ctx) {
     const src = s.source || 'unknown';
     const rs = (s.observation && s.observation.results) || [];
     const reasoning = readableReasoning(s.reasoning_content);
+    const hidden = (reasoning && reasoning.hidden) || null;
     const msg = asStr(s.message);
     const m = src === 'agent' ? ++model : null;
     if (src === 'agent' && (s.tool_calls || []).length) {
@@ -243,12 +244,12 @@ export function renderCase(t, ctx) {
         calls.push(c);
         return c;
       });
-      seq.push({ turn: true, step: s.step_id, calls: mine });
+      seq.push({ turn: true, step: s.step_id, calls: mine, hidden });
     } else {
       const x = { before: calls.length, src, text: msg, reasoning: reasoning && reasoning.text, step: s.step_id, model: m,
         presence: src === 'user' && s.extra ? s.extra.swarm_presence : null };
       loose.push(x);
-      seq.push(src === 'agent' ? { turn: true, step: s.step_id, calls: [], msg: x } : { msg: x });
+      seq.push(src === 'agent' ? { turn: true, step: s.step_id, calls: [], msg: x, hidden } : { msg: x });
     }
   }
   // The judge labels whose excerpt code located in a model call's reasoning, by model call: [{key, name, score,
@@ -425,9 +426,13 @@ export function renderCase(t, ctx) {
   // The model turn's own reasoning, text and the judge labels located in it: above its calls, outside any one call.
   const turnHead = c => h('div', { class: 'step-think' }, judgedLines(c.model),
     c.reasoning ? reasoningSection(c.reasoning, markOf(c.model)) : null, c.text && c.text.trim() ? textSection(c.text) : null);
-  const stepBody = (step, label, nCalls) => {
+  // A step whose reasoning the provider withheld ([redacted reasoning]) or sent encrypted: a chip on its header.
+  const hiddenChip = why => (why ? h('span', { class: 'step-hidden', dataset: { hidden: why },
+    title: why === 'redacted' ? 'The provider withheld this step\'s reasoning' : 'The provider sent this step\'s reasoning encrypted' },
+  `reasoning ${why}`) : null);
+  const stepBody = (step, label, nCalls, hidden) => {
     const box = h('div', { class: 'step-box', dataset: { step: String(step != null ? step : '') } },
-      h('div', { class: 'step-h' }, h('span', { class: 'step-n' }, label), nCalls ? foldCalls(nCalls) : null),
+      h('div', { class: 'step-h' }, h('span', { class: 'step-n' }, label), hiddenChip(hidden), nCalls ? foldCalls(nCalls) : null),
       h('div', { class: 'step-b' }));
     right.appendChild(box);
     return box.lastChild;
@@ -436,7 +441,7 @@ export function renderCase(t, ctx) {
   let fed = [], turnNo = 0;
   for (const it of seq) {
     if (!it.turn) { fed.push(it.msg); continue; }
-    const body = stepBody(it.step, `Step ${++turnNo}`, it.calls.length);
+    const body = stepBody(it.step, `Step ${++turnNo}`, it.calls.length, it.hidden);
     for (const x of fed) body.appendChild(looseBlock(x));
     // No System message in the first step: the tools head it in a box of their own.
     if (toolsDue) body.prepend(h('div', { class: 'call cs-msg' }, h('div', { class: 'ch' }, foldButton('call'), h('span', { class: 'cn' }, 'Tools')),

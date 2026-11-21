@@ -2926,3 +2926,32 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   (non-loopback) connect that times out (ETIMEDOUT path is unit tested only); the light theme; pid reuse within a run
   for the walk cache (pid_max 4194304 on Colima); runs of chess and knowledge_work opened in the real viewer (measured
   in a read-only test, not browsed).
+
+## 2026-11-21: redacted reasoning marked in both viewers, and both viewers read the regenerated runs/
+
+- **What.** A "reasoning redacted" chip (dashed, muted; tooltip "The provider withheld this step's reasoning") on a
+  step's header in the transcript viewer (src/ui/transcript_static/tv_case_view.js, tv_style.css .step-hidden) when
+  the step's reasoning_content is "[redacted reasoning]"; "reasoning encrypted" for an encrypted token or encrypted
+  blocks. In the results browser (src/ui/static/app/components.js reasoningView, view_transcript.js stepPreview) a
+  "reasoning redacted" badge replaces the "reasoning (20 chars)" fold. No data written.
+- **How.** Transcript viewer on 8833 over the real runs/ (scratch --cache; 326 runs measured, 254 listed, 0
+  unreadable); results browser `python -m src.ui --port 8834` (default study_exploration_1, 360 runs, 0 eval logs
+  missing); headless Chrome over CDP; each screenshot read with image tokens. Counts checked against the transcript
+  files: flipt_minimal_regulated_luna_haiku_enforce_fixed1, regulator q4p9n (Haiku): 85 agent steps, 35 redacted in
+  transcript.json, 35 chips in the viewer and 35 badges in the results browser; worker q5q5x: 26 redacted, 26 chips,
+  21 steps with readable reasoning shown. Index (147 + 54 runs, no `orbit/` name in any row, every row with its
+  CheatBench verdict; the 107 study_exploration_0 rows without judge labels hold no labels file on disk), Summary of
+  Exploration 1, the SWE run's Board tab (no /tmp panel: the run has no tmp_snapshots.json, /api/tmp 404 as
+  documented), poem_minimal_regulated_disregulated_luna_haiku_enforce_persuade2's Board with its Temp dirs panel (the
+  one run with snapshots), chess game_minimal_regulated_haiku2 Details (four agents, verdicts, no box path) and its
+  regulator's transcript (200). apart_controls is in transcript_index.SKIP and single-agent runs are left out by
+  design, and the results browser reads one study folder, so neither lists it; I served
+  apart_controls/{luna/worktime/cheat/s12, haiku/flipt/cheat/s1, haiku/game/cheat/s1} through the viewer's own
+  Handler and Viewer from a scratch harness: all three measured and served (s12 now attempted, flipt hacked, game
+  none; no CheatBench verdicts, none on disk), s12's page shows readable reasoning and the redacted chip. Results
+  browser: runs list, the SWE run page (eval log present, judge verdict from judges/). `pytest tests/unit -k
+  "transcript or ui or viewer or browser"` 321 passed, 1 skipped. All test servers and Chrome stopped; 8770 untouched.
+- **Result.** VERIFIED as above. UNVERIFIED: the "reasoning encrypted" chip (no run browsed that has one); the light
+  theme. Not a code fault: `?agent=<id>` without `&call=` opens the first worker, as documented. The user's viewer on
+  8770 (started 2026-11-20 19:49, index cached 19:50) predates the export (a041eb0, 21:43) and every reader change
+  since; it holds the old index and code in memory and must be restarted.

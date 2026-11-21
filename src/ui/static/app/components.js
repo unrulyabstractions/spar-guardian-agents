@@ -98,8 +98,14 @@ export function splitSignature(raw) {
   return { text: s.slice(0, m.index).replace(/\s+$/, ''), sig: m[1] };
 }
 
+/** The provider's placeholder for reasoning it withheld. */
+export const REDACTED_REASONING = '[redacted reasoning]';
+
 export function reasoningView(raw, lines) {
   const { text, sig } = splitSignature(raw);
+  if (!sig && text.trim() === REDACTED_REASONING) {
+    return badge('reasoning redacted', 'plain', 'The provider withheld this step\'s reasoning');
+  }
   const label = text
     ? `reasoning (${fmtInt(text.length)} chars${sig ? `; ${fmtInt(sig.length)}-char opaque signature hidden` : ''})`
     : `reasoning: opaque provider signature only (${fmtInt(sig.length)} chars, no readable text)`;

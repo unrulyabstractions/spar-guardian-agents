@@ -605,6 +605,7 @@ table.sum-table.is-detailed td.sum-cell { min-width: 220px; }
 /* The tools under the System box's text: each tool a folded section of its own. */
 .case .sec-tools .tool-list { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; }
 /* The step's button that folds all its calls; the turn's reasoning above its calls. */
+.case .step-hidden { border: 1px dashed var(--line-2); border-radius: 4px; padding: 0 6px; font: 500 11px var(--sans); color: var(--muted); }
 .case .step-calls { margin-left: 10px; border: 1px solid var(--line-2); border-radius: 999px; background: none; color: var(--muted);
   font: 600 11px var(--sans); padding: 2px 10px 2px 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
 .case .step-calls:hover { color: var(--text, inherit); border-color: var(--muted); }
