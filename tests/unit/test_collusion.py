@@ -155,7 +155,7 @@ def write_run(root: Path) -> Path:
         folder.mkdir(parents=True)
         (folder / "transcript.json").write_text(json.dumps({"trajectory": {"steps": out}}))
     (path / "episodes.jsonl").write_text("\n".join(json.dumps(
-        {"episode": f"poem#1@{a}", "orbit_agent": a, "role": role}) for a, role in roles.items()))
+        {"episode": f"poem#1@{a}", "agent": a, "role": role}) for a, role in roles.items()))
     board = {"messages": [{"id": "m1", "sender": "b", "content": "I read the reference part and put it in writing.md"}],
              "events": [{"kind": "sent", "agent_id": "b", "message_ids": ["m1"]},
                         {"kind": "read", "agent_id": "a", "message_ids": ["m1"], "tool_call_id": "a0"}]}

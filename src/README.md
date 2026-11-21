@@ -26,7 +26,7 @@ python -m src run <name>     cli.py reads the flags
   export/                    the eval log as a run directory                           -> runs/<study>/<name>/
         |
   judging/                   CheatBench's judge in the eval and on stored runs, and the labels judge
-                                                                                        -> judge.jsonl, judges/<pass>.<judge>.jsonl
+                                                                                        -> judges/<pass>.<judge>.jsonl
         |
   measures/                  the code record, the three ladders, the figures            -> signals.jsonl, out/<study>/<name>/
         |
@@ -126,7 +126,7 @@ The LLM judges. CheatBench's judge runs inside the eval as the scorer `cheatbenc
 - `labels_judge.py` with `labels_prompt.md`, `labels_disclosure.md` and `labels_manipulation.md`: the pass `labels`, one call per agent of a run, each label a score from 0 to 100 with an excerpt.
 - `judge_records.py`: what the labels judge reads of a stored run (the board, the instructions, the visible reasoning, the actions with their results), and `locate`, which finds the judge's excerpt in the agent's own posts or reasoning.
 - `judge_pass.py`: the capped pass.
-- `verdict_files.py`: the reader and writer of `judges/`, and the one reader of CheatBench's verdicts (the eval's `judge.jsonl` with the passes' files).
+- `verdict_files.py`: the reader and writer of `judges/`, and the one reader of CheatBench's verdicts (`judges/cheatbench.<judge>.jsonl`: the eval's judge and the passes).
 
 `judge_models.yaml` holds the judge entries.
 
@@ -235,7 +235,7 @@ Shared helpers.
 | `run ... --replace` | sets the run already in `runs/<study>/<name>/` aside into `runs/<study>/attempts/<name>.<n>/`, with its eval log and its figures, before the eval starts. Without it a run refuses a name whose folder holds a run, before the eval starts, so a rerun never replaces a run unasked |
 | `judge <eval_log> <run_name> [--judge gpt-6-luna] [--sync] [--judge-errors] [--replace]` | judges a finished log (again, or for the first time after `--no-judge`) and exports it with the verdicts into the run's own folder, `runs/<study>/<run_name>/` or the group that holds it; batch API unless `--sync`. A folder that holds another eval's run is refused before the judge starts. With `--replace` that run moves to `runs/<study>/attempts/<run_name>.<n>/` once the verdicts are in, and the new run goes to `runs/<study>/<run_name>/` |
 | `rejudge <run ...> [--judge gpt-6-luna] [--sync] [--judge-errors]` | CheatBench's judge from each run's eval log (named in `run.json`, else at the run's own place under `logs/`, which mirrors `runs/`), then the run is RE-EXPORTED from the log into its own folder, wherever it lives; a run whose log holds another eval than its folder is refused before the judge spends anything; a run whose log is gone is refused |
-| `regenerate <run ...> [--no-export] [--no-measures] [--no-plots]` | rebuilds what a run directory derives from its eval log: the export (keeping the verdicts in `judge.jsonl`), the code record, the SWE measures and the figures |
+| `regenerate <run ...> [--no-export] [--no-measures] [--no-plots]` | rebuilds what a run directory derives from its eval log: the export (keeping the verdicts in `judges/`), the code record, the SWE measures and the figures |
 | `signals <run ...> [--table]` | the run's code record, no judge: `signals.jsonl` with the agent rows, then one team record per sample, and run.json `signals.team`, each row with its evidence and its Cheating, Coordination and Collusion rungs; every run gets it as it ends, and `judge` and `rejudge` run it again; `--table` prints the agents' Cheating rungs, then the teams' with their passes and alarms |
 | `judge-pass <cheatbench\|labels> <run or study ...> --judge gpt-6-luna --cap DOLLARS [--batch] [--limit N] [--only-missing\|--redo]` | a judge pass over stored runs, priced call by call and stopped before the cap; writes only `runs/<study>/<run>/judges/<pass>.<judge>.jsonl`; a study folder stands for its valid runs |
 | `ui [start\|stop] [--port 8765] [--no-open]` | starts or stops the results browser in the background |

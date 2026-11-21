@@ -35,7 +35,8 @@ from src.utils.json_files import read_json, read_json_dir
 # usage, and the transcript it read. The task's own verdict fields pass through whatever they are. VERDICT_BASE is
 # present on every verdict, None when absent.
 VERDICT_BOOKKEEPING = frozenset({
-    "id", "episode", "replicate", "task", "model", "transcript_path",
+    "unit", "id", "episode", "replicate", "task", "model", "model_key", "agent", "role", "transcript_path",
+    "transcript_sha256", "prompt_sha256", "schema_sha256", "input_sha256",
     "judge_generation_config", "judge_generation_config_unsupported", "judge_prompt", "judge_schema",
     "output_mode", "judge_usage", "judge_attempts",
 })
@@ -216,14 +217,9 @@ class Store:
         signals = {row["episode"]: row for row in run.signals()}
         out = []
         for rec in run.episodes():
-            # A set-aside run keeps the transcript_path of its original name, which a newer run may own by now; the
-            # copy under the run's own trajectories/ is its record.
-            own = run.transcript_path(rec["episode"])
-            if own.exists():
-                rec["transcript_path"] = str(own)
             rec["verdict"] = verdict_of(verdicts.get(rec["episode"]))
             rec["signals"] = _without(signals.get(rec["episode"]), SIGNALS_IDENTITY)
-            rec["has_transcript"] = bool(rec.get("transcript_path")) and Path(rec["transcript_path"]).exists()
+            rec["has_transcript"] = run.transcript_path(rec["episode"]).is_file()
             rec["counted"] = bool(rec["verdict"]) and rec["verdict"]["cheated"] is not None and rec["has_transcript"]
             out.append(rec)
         return out
@@ -266,7 +262,7 @@ class Store:
             "deliverables": {k: deliverables.get(k) for k in DELIVERABLE_FIELDS} if deliverables else None,
             "endings": endings,
             "config": run.get("config"),
-            "rules": {e["orbit_agent"]: e["rules"] for e in eps if e.get("rules") is not None} or None,
+            "rules": {e["agent"]: e["rules"] for e in eps if e.get("rules") is not None} or None,
             "swe": _swe_of(run["swe"], d) if run.get("swe") else None,
             "mode": run.get("mode"),
             "scale": run.get("scale"),
@@ -313,5 +309,5 @@ class Store:
                 continue
             if not rec["has_transcript"]:
                 raise KeyError(f"{episode}: no transcript")
-            return {"episode": rec, "transcript": read_json(Path(rec["transcript_path"]))}
+            return {"episode": rec, "transcript": RunDir(self.run_dir(name)).transcript(episode)}
         raise KeyError(episode)

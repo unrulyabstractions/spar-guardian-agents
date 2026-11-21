@@ -8,7 +8,7 @@
     run.reads("k7q2m")[0].posts  # [("p8s3z", 1)]
     write_summary(run, "graphs", {"nodes": 3})  # runs/<study>/riemann_minimal/tools/graphs/summary.json
 
-A run directory holds run.json, episodes.jsonl, judge.jsonl, trajectories/<episode>/transcript.json and
+A run directory holds run.json, episodes.jsonl, judges/, trajectories/<episode>/transcript.json and
 communication/<sample>.json, read through src/measures/run_directory.py RunDir. The turn rules' timeline is run.json
 rules.timeline. The eval log named by run.json holds every board_read result as the agent saw it. They are cached in
 runs/<study>/<name>/tools/board_reads.json the first time a run is loaded, so later tools need not reopen the log. A run
@@ -125,7 +125,7 @@ class Run:
     roles: dict[str, str]  # agent -> worker, regulator or disregulator
     config: dict  # run.json config (the SwarmConfig dump)
     eval_log: Path | None  # the .eval file; None when run.json names none or it is gone
-    judge: dict[str, dict]  # agent -> judge.jsonl row
+    judge: dict[str, dict]  # agent -> CheatBench verdict row (judges/cheatbench.<judge>.jsonl)
     judge_cheated: dict[str, bool | None]  # agent -> CheatBench's judge's own cheated; None when it gave none
     episodes: dict[str, dict]  # agent -> episodes.jsonl record
     board: list[Post]  # every board post, by sample then board number
@@ -362,7 +362,7 @@ def lone_agent(agents: list[str], episode_rows: list[dict]) -> str | None:
     """The agent of a run with one agent, whose episode carries no "@agent" suffix."""
     if len(agents) != 1:
         return None
-    named = [row.get("orbit_agent") for row in episode_rows if row.get("orbit_agent")]
+    named = [row.get("agent") for row in episode_rows if row.get("agent")]
     return named[0] if named else agents[0]
 
 

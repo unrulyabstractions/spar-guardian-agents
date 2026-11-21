@@ -32,6 +32,7 @@ from src.configuration import settings
 from src.configuration.presets import build_config
 from src.configuration.swarm_config import SwarmConfig
 from src.export.run_export import write_run
+from src.judging import verdict_files
 from src.measures.code_ladder import run_signals
 from src.measures.run_directory import RunDir
 from src.measures.rungs import EVIDENCE
@@ -113,14 +114,14 @@ class Suite:
         run_signals(self.runs / name)
         block = self.run_json(name).get("access_log")
         assert damaged_log or log_worked(block), block
-        return log, summary, read_jsonl(self.runs / name / "episodes.jsonl")
+        return log, summary, resolved(self.runs / name, read_jsonl(self.runs / name / "episodes.jsonl"))
 
     def assert_judged(self, name: str, sample, records: list[dict], cheated: float = 0.0) -> None:
         """Every agent with a transcript was judged by the mock judge: the score's verdicts name them, its value is
-        `cheated`, every verdict parsed, and judge.jsonl holds one row per such episode with the task's fields and the
-        judge's name."""
+        `cheated`, every verdict parsed, and judges/cheatbench.<judge>.jsonl holds one row per such episode with the
+        task's fields and the judge's name."""
         score = sample.scores["cheatbench_judge"]
-        with_transcript = sorted(r["orbit_agent"] for r in records if r["transcript_path"])
+        with_transcript = sorted(r["agent"] for r in records if r["transcript_path"])
         assert sorted(score.metadata["verdicts"]) == with_transcript and score.value == cheated, score
         assert all(v["parse_ok"] for v in score.metadata["verdicts"].values()), score.metadata["verdicts"]
         rows = self.judge_rows(name)
@@ -129,7 +130,7 @@ class Suite:
         assert all(set(self.spec.fields) <= set(r) for r in rows), rows[0]
 
     def judge_rows(self, name: str) -> list[dict]:
-        return read_jsonl(self.runs / name / "judge.jsonl")
+        return verdict_files.rows(self.runs / name, verdict_files.CHEATBENCH_PASS, settings.JUDGE_MODEL)
 
     def run_json(self, name: str) -> dict:
         return RunDir(self.runs / name).run_json
@@ -179,6 +180,17 @@ def assert_ok(log):
 
 # ------------------------------------------------------------------------------------------------ reading a run back
 
+def resolved(run_dir: Path, records: list[dict]) -> list[dict]:
+    """The episode records, once each recorded transcript path is relative and names a file under the run's folder,
+    with that path made absolute so the helpers below read it."""
+    for record in records:
+        if record.get("transcript_path"):
+            assert not Path(record["transcript_path"]).is_absolute(), record["transcript_path"]
+            assert (run_dir / record["transcript_path"]).is_file(), record["transcript_path"]
+            record["transcript_path"] = str(run_dir / record["transcript_path"])
+    return records
+
+
 def load_transcript(record: dict) -> dict:
     """The episode's transcript, read as CheatBench's judge reads it: it must parse as ATIF and render."""
     assert record["transcript_path"], f"{record['episode']}: no transcript"
@@ -212,11 +224,11 @@ def system_text(transcript: dict) -> str:
 
 
 def by_agent(records: list[dict]) -> dict[str, dict]:
-    return {r["orbit_agent"]: r for r in records}
+    return {r["agent"]: r for r in records}
 
 
 def results_by_agent(records: list[dict]) -> dict[str, list[str]]:
-    return {r["orbit_agent"]: results_of(load_transcript(r)) for r in records}
+    return {r["agent"]: results_of(load_transcript(r)) for r in records}
 
 
 def timeline_of(sample, agent: str) -> list[tuple[str, list[str]]]:

@@ -62,6 +62,7 @@ def study(tmp_path) -> Path:
     (tmp_path / "runs" / "boxes.json").write_text(json.dumps({"boxes": [{"id": 1, "box": "b1", "destroyed": None},
                                                                         {"id": 2, "box": "b0", "destroyed": "x"}]}))
     run(tmp_path, "set_aside/riemann_minimal_luna6")                                          # held twice
+    write_status_log(tmp_path / "logs" / STUDY / "set_aside" / "riemann_minimal_luna6" / LOG, "success")
     for place in ("riemann_minimal_luna1", f"{STUDY}/riemann_minimal_lunamock1", "flipt_minimal_luna1"):
         (tmp_path / "out" / place).mkdir(parents=True)
         (tmp_path / "out" / place / "timeline.png").write_text(f"png of {place}")

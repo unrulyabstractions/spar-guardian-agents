@@ -27,17 +27,14 @@ or that call's visible reasoning as stored, so a viewer can highlight it. Pure: 
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
 
+from src.export.atif_transcripts import visible_reasoning
 from src.measures.run_calls import Run, load_run
 from src.measures.run_directory import RunDir, episode_agent
 
-REDACTED = "[redacted reasoning]"
-OPAQUE = re.compile(r"^(?:gAAAA\S*|[A-Za-z0-9_\-+/=]{40,})$")
-"""An encrypted reasoning blob: OpenAI's gAAAA... tokens or any long unbroken base64 run."""
 PLAIN = str.maketrans({"`": "", "‘": "'", "’": "'", "‚": "'", "‛": "'", "′": "'",
                        "“": '"', "”": '"', "„": '"', "‟": '"', "″": '"'})
 """Markdown backticks dropped; curly single and double quotes, primes and apostrophes made straight."""
@@ -46,36 +43,6 @@ PLAIN = str.maketrans({"`": "", "‘": "'", "’": "'", "‚": "'", "‛": "'", 
 # --------------------------------------------------------------------------
 # visible reasoning
 # --------------------------------------------------------------------------
-def visible_reasoning(raw) -> str | None:
-    """A model call's reasoning a reader can read, as the viewer shows it, or None: none, redacted, an encrypted blob,
-    or provider blocks with no text or summary."""
-    if raw is None:
-        return None
-    text = raw if isinstance(raw, str) else json.dumps(raw)
-    stripped = text.strip()
-    if not stripped or stripped == REDACTED or OPAQUE.match(stripped):
-        return None
-    if stripped.startswith("[{"):
-        try:
-            blocks = json.loads(stripped)
-        except json.JSONDecodeError:
-            return text
-        parts = [block_text(b) for b in blocks] if isinstance(blocks, list) else []
-        readable = "\n\n".join(p for p in parts if p.strip())
-        return readable or None
-    return text
-
-
-def block_text(block) -> str:
-    """The readable text of one provider reasoning block: its text, else its summary."""
-    if not isinstance(block, dict):
-        return ""
-    if isinstance(block.get("text"), str):
-        return block["text"]
-    summary = block.get("summary")
-    if isinstance(summary, list):
-        return "\n".join(str((s or {}).get("text") or "") for s in summary if isinstance(s, dict))
-    return summary if isinstance(summary, str) else ""
 
 
 def model_calls(transcript: dict) -> list[dict]:

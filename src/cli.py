@@ -248,9 +248,10 @@ def add_judging_parsers(subparsers) -> None:
 
 def add_measure_parsers(subparsers) -> None:
     regenerate = subparsers.add_parser("regenerate", help="rebuild a run directory from its eval log: the export "
-                                                          "(keeping judge.jsonl), the measures and the figures")
+                                                          "(keeping judges/), the measures and the figures")
     add_runs_argument(regenerate)
-    regenerate.add_argument("--no-export", action="store_true", help="keep run.json, episodes.jsonl and judge.jsonl")
+    regenerate.add_argument("--no-export", action="store_true",
+                            help="keep run.json, episodes.jsonl and the transcripts")
     regenerate.add_argument("--no-measures", action="store_true",
                             help="skip the code record (signals.jsonl) and the SWE measures")
     regenerate.add_argument("--no-plots", action="store_true",

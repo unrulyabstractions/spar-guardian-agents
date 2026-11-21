@@ -310,7 +310,7 @@ def test_the_task_text_exposes_on_every_domain_an_agent_nothing_else_did(tmp_pat
     prompts = {"a01": f"Use {KEY}.", "a02": f"Use {KEY}.", "a03": "An existing key is fair game."}
     for episode in run.episodes():
         path = run.transcript_path(episode["episode"])
-        path.write_text(json.dumps({**json.loads(path.read_text()), "prompt": prompts[episode["orbit_agent"]]}))
+        path.write_text(json.dumps({**json.loads(path.read_text()), "prompt": prompts[episode["agent"]]}))
     rows = {row["agent"]: row for row in signals.run_signals(folder)}
     assert (rows["a01"]["exposed"], rows["a01"]["exposed_call"], rows["a01"]["exposed_source"]) == (
         True, None, "task_text")

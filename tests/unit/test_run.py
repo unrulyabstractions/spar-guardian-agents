@@ -25,7 +25,6 @@ from src.export.run_export import write_run
 from src.judging import verdict_files
 from src.measures.run_directory import RunDir
 from src.run import agent_generate_config
-from src.utils.json_files import read_jsonl
 from tests.support.turn_rules_harness import (
     do,
     pull,
@@ -257,6 +256,43 @@ def harness_log(folder: Path, item: str) -> Path:
     return Path(log.location)
 
 
+def test_an_export_writes_relative_links_bare_agent_ids_model_keys_and_no_dead_fields(tmp_path):
+    """run.json names its log from the checkout and drops task_root, variant, agent and source; each episode names its
+    agent by the bare ID (no orbit_agent, no variant), its model with the registry entry, and its transcript from the
+    run's folder; the transcript's header says the same; no judge.jsonl is written."""
+    made = harness_log(tmp_path / "made", "work")
+    log = tmp_path / "logs" / "study_x" / "pair" / made.name
+    log.parent.mkdir(parents=True)
+    made.rename(log)
+    folder = tmp_path / "runs" / "study_x" / "pair"
+    write_run(log, folder)
+    run = RunDir(folder).run_json
+    assert run["eval_log"] == f"logs/study_x/pair/{log.name}" and RunDir(folder).eval_log == log
+    assert not {"task_root", "variant", "agent", "source"} & set(run) and run["model_key"] is None
+    for episode in RunDir(folder).episodes():
+        assert episode["agent"] in run["agents"] and not {"orbit_agent", "variant"} & set(episode)
+        assert episode["model"] == "mockllm/model" and episode["model_key"] is None
+        assert episode["transcript_path"] == f"trajectories/{episode['episode']}/transcript.json"
+        transcript = RunDir(folder).transcript(episode["episode"])
+        assert (transcript["agent"], transcript["model"]) == (episode["agent"], episode["model"])
+        assert transcript["trajectory"]["agent"]["name"] == episode["agent"]
+    assert not (folder / "judge.jsonl").exists()
+
+
+def test_the_evals_verdicts_fill_the_judges_file_and_never_undo_a_pass(tmp_path):
+    """From the log, a verdict only fills an episode the judge's file lacks; verdicts just made replace their rows."""
+    from src.export import run_export
+    row = {"unit": "s#1@a01", "episode": "s#1@a01", "judge": "luna", "cheated": True}
+    verdict_files.write(tmp_path, "cheatbench", "luna", [{**dict.fromkeys(verdict_files.ROW_KEYS), **row}])
+    fresh = [{**dict.fromkeys(verdict_files.ROW_KEYS), **row, "cheated": False},
+             {**dict.fromkeys(verdict_files.ROW_KEYS), **row, "unit": "s#1@a02", "episode": "s#1@a02"}]
+    assert run_export.write_verdicts(tmp_path, fresh, replace=False) == 1
+    stored = verdict_files.cheatbench(tmp_path)["luna"]
+    assert (stored["s#1@a01"]["cheated"], sorted(stored)) == (True, ["s#1@a01", "s#1@a02"])
+    assert run_export.write_verdicts(tmp_path, fresh, replace=True) == 2
+    assert verdict_files.cheatbench(tmp_path)["luna"]["s#1@a01"]["cheated"] is False
+
+
 def test_an_export_over_another_evals_run_is_a_refusal_with_exit_code_2(tmp_path, capsys):
     """export() turns the export's refusal into a Refusal, so a command prints it and returns 2: rejudge goes on with
     its other runs and an example ends without a traceback. The folder keeps its run."""
@@ -352,7 +388,7 @@ def test_judge_with_replace_exports_the_new_eval_and_keeps_the_earlier_in_attemp
     later = made.rename(logs / "pair" / made.name)                 # a later eval of the same name, not exported
 
     async def judge_all(views, judge_name, batch):
-        return {name: {episode_id(view, agent): {"parse_ok": True, "cheated": False}
+        return {name: {episode_id(view, agent): {"judge": judge_name, "parse_ok": True, "cheated": False}
                        for view in run_views for agent in roster(view)} for name, run_views in views.items()}
 
     monkeypatch.setattr(run_module, "require_judge_key", lambda name, code: None)
@@ -363,8 +399,9 @@ def test_judge_with_replace_exports_the_new_eval_and_keeps_the_earlier_in_attemp
     assert run_module.judge(later, "pair", "gpt-6-luna", replace=True) == 0
     assert RunDir(runs / "attempts" / "pair.1").run_json["eval_id"] == earlier_id
     assert [path.name for path in (logs / "pair").iterdir()] == [later.name]
-    assert RunDir(folder).run_json["eval_id"] not in (None, earlier_id) and RunDir(folder).verdicts()
-    assert not (folder / "judges").exists() and RunDir(folder).eval_log == later
+    assert RunDir(folder).run_json["eval_id"] not in (None, earlier_id) and verdict_files.episode_verdicts(folder)
+    assert [p.name for p in (folder / "judges").iterdir()] == ["cheatbench.gpt-6-luna.jsonl"]
+    assert RunDir(folder).eval_log == later
 
 
 def test_rejudge_writes_each_run_back_into_its_own_folder_wherever_it_lives(tmp_path, monkeypatch):
@@ -390,7 +427,8 @@ def test_rejudge_writes_each_run_back_into_its_own_folder_wherever_it_lives(tmp_
 
     async def stand_in(views, judge):
         judged.append(views[0].eval_id)
-        return {episode: {"parse_ok": True, "cheated": False, "judged_eval": views[0].eval_id} for episode in episodes}
+        return {episode: {"judge": "gpt-6-luna", "parse_ok": True, "cheated": False, "judged_eval": views[0].eval_id}
+                for episode in episodes}
 
     monkeypatch.setattr(run_module, "require_judge_key", lambda name, code: None)
     monkeypatch.setattr(run_module.judging.Judge, "of", lambda name, batch: "client")
@@ -400,7 +438,7 @@ def test_rejudge_writes_each_run_back_into_its_own_folder_wherever_it_lives(tmp_
     own = [RunDir(run_dir).run_json["eval_id"] for run_dir in dirs]
     assert own[0] != own[1] and sorted(judged) == sorted(own)
     for run_dir, eval_id, log in zip(dirs, own, logs):
-        rows = read_jsonl(run_dir / "judge.jsonl")
+        rows = verdict_files.rows(run_dir, "cheatbench", "gpt-6-luna")
         assert len(rows) == len(episodes) and {row["judged_eval"] for row in rows} == {eval_id}
-        assert RunDir(run_dir).run_json["eval_log"] == str(log.resolve())
+        assert RunDir(run_dir).run_json["eval_log"] == log.relative_to(tmp_path).as_posix()
     assert not (tmp_path / "runs" / "study_x" / "pair").exists()

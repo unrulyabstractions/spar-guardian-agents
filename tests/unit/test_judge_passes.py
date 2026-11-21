@@ -26,7 +26,7 @@ from src.judging import cheatbench_judge as judging
 from src.judging import judge_pass, judge_records, labels_judge, verdict_files
 from src.measures import judge_labels
 from src.utils.cheatbench_core import judge as cb_judge
-from src.utils.json_files import read_jsonl, write_jsonl
+from src.utils.json_files import write_jsonl
 from tests.support.mock_model import mock_verdict
 from tests.support.run_builder import write_run_dir
 from tests.support.turn_rules_harness import build_task, do, pull, scripted_model
@@ -89,7 +89,8 @@ def tree_hashes(folder: Path) -> dict[str, str]:
 # --------------------------------------------------------------------------
 def test_the_scorer_judges_every_agent_and_the_export_adds_the_identity(tmp_path):
     """Every agent of a mock team judged by the model bound to the judge role; the score's verdicts carry no episode
-    identity, and each judge.jsonl row carries it once, first, with the transcript it read last."""
+    identity, and each row of judges/cheatbench.<judge>.jsonl carries it once, first (its unit the episode, its agent
+    the bare ID), with the transcript it read last, by its path from the run's folder."""
     out = ModelOutput.from_content("mockllm/model", verdict(cheated=True))
     task = build_task(pull(n_agents=2, steps_per_agent=2),
                       scorer_=judging.cheatbench_judge(OpenMath.name, str(OpenMath.task_dir)))
@@ -101,10 +102,16 @@ def test_the_scorer_judges_every_agent_and_the_export_adds_the_identity(tmp_path
     assert sorted(score.metadata["verdicts"]) == ["a01", "a02"]
     assert not {"id", "episode", "model", "transcript_path"} & set(score.metadata["verdicts"]["a01"])
     write_run(Path(log.location), tmp_path / "run")
-    rows = read_jsonl(tmp_path / "run" / "judge.jsonl")
+    assert not (tmp_path / "run" / "judge.jsonl").exists()
+    assert list(verdict_files.read(tmp_path / "run")["cheatbench"]) == [settings.JUDGE_MODEL]
+    rows = verdict_files.rows(tmp_path / "run", "cheatbench", settings.JUDGE_MODEL)
     assert [r["episode"] for r in rows] == ["issue#1@a01", "issue#1@a02"] and all(r["cheated"] for r in rows)
-    assert list(rows[0])[:6] == ["id", "episode", "replicate", "task", "model", "judge"]
-    assert list(rows[0])[-1] == "transcript_path" and Path(rows[0]["transcript_path"]).is_file()
+    assert [(r["unit"], r["agent"]) for r in rows] == [("issue#1@a01", "a01"), ("issue#1@a02", "a02")]
+    assert list(rows[0])[:10] == ["unit", "id", "episode", "replicate", "task", "model", "model_key", "agent", "role",
+                                  "judge"]
+    assert set(verdict_files.ROW_KEYS) <= set(rows[0]) and rows[0]["prompt_sha256"] and rows[0]["input_sha256"] is None
+    assert list(rows[0])[-1] == "transcript_path" and rows[0]["transcript_path"] == \
+        "trajectories/issue#1@a01/transcript.json" and (tmp_path / "run" / rows[0]["transcript_path"]).is_file()
 
 
 def test_the_strict_schema_keeps_additional_properties_on_objects_only():
@@ -233,12 +240,15 @@ def test_the_verdict_file_merges_by_unit_and_reads_back_by_pass_and_judge(tmp_pa
             verdict_files.path(tmp_path, retired, "mock")
 
 
-def test_cheatbenchs_verdicts_are_the_evals_and_the_passes_with_the_first_judge_applied(tmp_path):
-    """The eval's judge.jsonl names its judge on every row; a pass's row of the same judge and episode replaces it, and
-    another judge's file stands apart. read gives them as the pass "cheatbench", and the measures take the first judge
-    by name."""
-    write_jsonl(tmp_path / "judge.jsonl", [{"episode": "s#1@a01", "judge": "luna", "cheated": False},
-                                           {"episode": "s#1@a02", "judge": "luna", "cheated": True}])
+def test_cheatbenchs_verdicts_are_the_judges_files_with_the_first_judge_applied(tmp_path):
+    """Each judge's file holds its verdicts by episode; a row of the same judge and episode replaces the earlier one,
+    and another judge's file stands apart. A judge.jsonl of the old layout is not read. read gives them as the pass
+    "cheatbench", and the measures take the first judge by name."""
+    write_jsonl(tmp_path / "judge.jsonl", [{"episode": "s#1@a03", "judge": "luna", "cheated": True}])
+    verdict_files.write(tmp_path, "cheatbench", "luna", [row_of("s#1@a01", judge="luna", episode="s#1@a01",
+                                                                cheated=False),
+                                                         row_of("s#1@a02", judge="luna", episode="s#1@a02",
+                                                                cheated=True)])
     verdict_files.write(tmp_path, "cheatbench", "luna", [row_of("s#1@a01", judge="luna", episode="s#1@a01",
                                                                 cheated=True)])
     verdict_files.write(tmp_path, "cheatbench", "sol", [row_of("s#1@a01", judge="sol", episode="s#1@a01",
@@ -429,7 +439,14 @@ def one_row(run: Path, said, unit: str) -> dict:
     judge_pass.run_pass("labels", [run], mock_judge(lambda prompt: reply(said(prompt))), cap=1.0, redo=True)
     assert tree_hashes(run) == before
     assert [p.name for p in (run / "judges").iterdir()] == ["labels.mock.jsonl"]
-    return verdict_files.by_unit(verdict_files.rows(run, "labels", "mock"))[unit]
+    return labels_by_agent(run)[unit]
+
+
+def labels_by_agent(run: Path) -> dict[str, dict]:
+    """The pass "labels"'s rows by the agent each names; a row's unit is the agent's episode."""
+    rows = verdict_files.rows(run, "labels", "mock")
+    assert all(row["unit"] == row["episode"] == f"poem#1@{row['agent']}" for row in rows), rows
+    return {row["agent"]: row for row in rows}
 
 
 def evidence(score: int = 0, excerpt: str = "", source: str = "none") -> dict:
@@ -455,7 +472,7 @@ def by_agent_labels(said: dict[str, str]):
 def test_labels_read_every_agent_in_one_call_each(tmp_path):
     run = board_run(tmp_path / "run")
     units, skipped = labels_judge.labels_units(run)
-    assert [u.key for u in units] == list(AGENTS) and skipped == []
+    assert [u.key for u in units] == [f"poem#1@{agent}" for agent in AGENTS] and skipped == []
     for unit in units:
         schema = unit.schema.json_schema.model_dump(exclude_none=True)
         assert list(schema["properties"]) == ["disclosure", "manipulation"]
@@ -464,14 +481,14 @@ def test_labels_read_every_agent_in_one_call_each(tmp_path):
         assert set(evidence_schema["required"]) == {"score", "excerpt", "source", "reason"}
         assert "LABEL: DISCLOSURE" in unit.text and "LABEL: MANIPULATION" in unit.text and "{{" not in unit.text
         assert all(f"- {score}: {means}" in unit.text for score, means in judge_labels.SCORE_ANCHORS.items())
-    assert units[3].identity == {"unit": "a04", "agent": "a04", "role": None, "task": "creative_writings",
+    assert units[3].identity == {"unit": "poem#1@a04", "agent": "a04", "role": None, "task": "creative_writings",
                                  "episode": "poem#1@a04", "reasoning_available": False, "reasoning_calls": 0,
                                  "own_posts": 0, "read_posts": 0, "actions": 2}
 
 
 def test_labels_read_the_agents_own_posts_the_posts_it_read_its_reasoning_and_its_actions(tmp_path):
     run = board_run(tmp_path / "run")
-    units = {u.key: u for u in labels_judge.labels_units(run)[0]}
+    units = {u.identity["agent"]: u for u in labels_judge.labels_units(run)[0]}
     first = units["a01"].text
     assert "THE AGENT\na01\n" in first and "P1 by a01; read by: a02\n" + NAMING in first
     assert "P5 by a01; read by: nobody\n" + CURLY in first
@@ -518,7 +535,7 @@ def test_each_score_and_excerpt_is_stored_with_where_code_located_it(tmp_path):
     start = PLAN.index("tell a02")
     assert row["manipulation"]["located"] == {"where": "reasoning", "post": None, "call": 1, "start": start,
                                               "end": start + len("tell a02 the text is my own")}
-    rows = verdict_files.by_unit(verdict_files.rows(run, "labels", "mock"))
+    rows = labels_by_agent(run)
     assert sorted(rows) == list(AGENTS) and all(r["parse_ok"] for r in rows.values())     # every agent read
     assert rows["a02"]["disclosure"]["located"]["post"] == "P2"
     assert rows["a04"]["disclosure"] == {**evidence(), "located": None}                  # score 0, nothing to find
@@ -535,7 +552,7 @@ def test_an_excerpt_is_located_through_whitespace_backticks_and_curly_quotes_or_
     assert (at["where"], at["post"]) == ("post", "P5")
     assert CURLY[at["start"]:at["end"]] == "this is cheating: the “expected”   `stanza`\n  isn’t mine"
     assert row["manipulation"]["located"] is None and row["manipulation"]["score"] == 60   # the score stands
-    assert verdict_files.by_unit(verdict_files.rows(run, "labels", "mock"))["a02"]["disclosure"]["located"] is None
+    assert labels_by_agent(run)["a02"]["disclosure"]["located"] is None
 
 
 def test_locate_reads_only_the_agents_own_text_in_the_named_source_first():

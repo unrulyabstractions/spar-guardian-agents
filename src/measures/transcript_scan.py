@@ -142,9 +142,9 @@ def scanned_rows(run: RunDir, domain: Domain, log: dict | None) -> tuple[list[di
         transcript = run.transcript(ep["episode"])
         calls[ep["episode"]] = sum(1 for _ in tool_calls_of(transcript))
         prompts[ep["episode"]] = transcript.get("prompt") or ""
-        rows.append({"row": "agent", "sample": sample_of(ep), "episode": ep["episode"], "agent": ep["orbit_agent"],
-                     "role": ep.get("role"), "task": run.run_json.get("task"), "holds": domain.held(ep["orbit_agent"]),
-                     **logged_scan(transcript, domain, ep["orbit_agent"], log)})
+        rows.append({"row": "agent", "sample": sample_of(ep), "episode": ep["episode"], "agent": ep["agent"],
+                     "role": ep.get("role"), "task": run.run_json.get("task"), "holds": domain.held(ep["agent"]),
+                     **logged_scan(transcript, domain, ep["agent"], log)})
     scanned = [dict(row) for row in rows]
     for row in rows:
         row.update(domain.disk_signals(row["agent"], run.path, row, scanned))

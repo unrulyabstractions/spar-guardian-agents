@@ -228,7 +228,7 @@ def test_events_of_unknown_agents_are_ignored():
 def _write_run(path, roles: dict, boards: list[dict] | None) -> None:
     path.mkdir()
     (path / "run.json").write_text(json.dumps({"swarm": {"roles": roles}}))
-    (path / "episodes.jsonl").write_text("".join(json.dumps({"orbit_agent": a}) + "\n" for a in roles))
+    (path / "episodes.jsonl").write_text("".join(json.dumps({"agent": a}) + "\n" for a in roles))
     if boards is not None:
         (path / "communication").mkdir()
         for i, board in enumerate(boards):

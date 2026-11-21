@@ -5,7 +5,6 @@ keeps its runs.
     run.run_json["task"]
     for episode in run.with_transcripts():
         transcript = run.transcript(episode["episode"])
-    verdict = run.verdicts().get("riemann#1@k7q2m")
     team = run.team_signals()[0]                    # the code record's team row of the first sample
     boards = run.boards()                           # every sample's board: {messages, events}
     log = run.access_log()                          # run.json's block with its rows, or None
@@ -41,7 +40,6 @@ from src.utils.json_files import read_json, read_jsonl
 
 RUN_JSON = "run.json"
 EPISODES = "episodes.jsonl"
-JUDGE = "judge.jsonl"
 SIGNALS = "signals.jsonl"
 ACCESS_LOG = "access_log.jsonl"
 COMMUNICATION = "communication"
@@ -68,8 +66,8 @@ def is_influencer(role: str | None) -> bool:
 
 
 def episode_agent(episode: dict) -> str | None:
-    """An episode's agent id: orbit_agent, else the last part of agent."""
-    return episode.get("orbit_agent") or (episode.get("agent") or "").split("/")[-1] or None
+    """An episode's agent id, the bare ID its record names ("k7q2m")."""
+    return episode.get("agent") or None
 
 
 def roles_of(run_json: dict, episodes: list[dict]) -> dict[str, str | None]:
@@ -122,6 +120,24 @@ def find_run(study: Path, name: str) -> Path | None:
         raise ValueError(f"{len(places)} folders hold a run named {name}: {', '.join(map(str, places))}. Set the "
                          f"earlier aside with `uv run python -m scripts.sort_study_runs {study}`")
     return places[0] if places else None
+
+
+def checkout_of(path: Path) -> Path | None:
+    """The folder that holds the runs/ folder the path sits in (the checkout, or a pulled copy of the dataset's
+    layout), None for a path under no folder named runs."""
+    path = Path(path).resolve()
+    runs = next((parent for parent in path.parents if parent.name == "runs"), None)
+    return None if runs is None else runs.parent
+
+
+def log_link(eval_log: Path, run: Path) -> str:
+    """How run.json names the run's eval log: its path from the checkout the run sits in (checkout_of), as
+    logs/<study>/[<group>/]<run>/<file>.eval; the absolute path for a log outside that checkout or a run under no
+    runs/ folder."""
+    eval_log, root = Path(eval_log).resolve(), checkout_of(run)
+    if root is not None and eval_log.is_relative_to(root):
+        return eval_log.relative_to(root).as_posix()
+    return eval_log.as_posix()
 
 
 def mirrored(path: Path, top: str) -> Path | None:
@@ -220,25 +236,19 @@ class RunDir:
 
     @property
     def eval_log(self) -> Path | None:
-        """The run's eval log, or None when none exists. The log is the file run.json names. The first of these places
-        that holds it wins:
-        - the path run.json records;
-        - the run's own path under the logs/ beside its runs/, logs/<study>/[<group>/]<run>/, at any depth. A run pulled
-          from a box or moved since keeps its log there;
-        - for a run in a group, the same at its study's top level, logs/<study>/<run>/. A log not moved with its run
-          stays there;
-        - this checkout's logs/<study>/<run>/, for the study the run's folder sits in;
-        - the current study's logs/<run>/;
-        - the run's name beside the recorded folder, for a run set aside under another name."""
+        """The run's eval log, or None when none exists. The log is the file run.json names (log_link), found at the
+        first of these places that holds it:
+        - the recorded path, from the checkout the run sits in (checkout_of; this checkout for a run under no runs/
+          folder), or as it is when absolute;
+        - the run's own path under the logs/ beside its runs/, logs/<study>/[<group>/]<run>/<file>.eval, for a run
+          moved into or out of a group with its log since it was recorded.
+        Any other .eval file in the log folder (an aborted start's journal) is not the run's log."""
         recorded = self.run_json.get("eval_log")
         if not recorded:
             return None
-        path, (study, group) = Path(recorded), run_place(self.path)
-        here = self.path.resolve()
-        mirrors = [mirrored_in_logs(here), mirrored_in_logs(here.parent.parent / self.name) if group else None]
-        candidates = [path, *(mirror / path.name for mirror in mirrors if mirror),
-                      settings.ROOT / "logs" / study / self.name / path.name, settings.LOGS / self.name / path.name,
-                      path.parent.parent / self.name / path.name]
+        path, mirror = Path(recorded), mirrored_in_logs(self.path)
+        candidates = [path if path.is_absolute() else (checkout_of(self.path) or settings.ROOT) / path,
+                      *([mirror / path.name] if mirror else [])]
         return next((candidate for candidate in candidates if candidate.is_file()), None)
 
     def episodes(self) -> list[dict]:
@@ -248,11 +258,6 @@ class RunDir:
     def roles(self) -> dict[str, str | None]:
         """The run's agents and their roles (roles_of)."""
         return roles_of(self.run_json, self.episodes())
-
-    def verdicts(self) -> dict[str, dict]:
-        """The eval's verdicts (judge.jsonl) by episode, parsed or not, which the export writes and a re-export carries.
-        A measure reads CheatBench's verdicts through src/judging/verdict_files.py episode_verdicts."""
-        return {row["episode"]: row for row in read_jsonl(self.path / JUDGE)}
 
     def write_run_json_block(self, key: str, value) -> None:
         """Set one key of run.json, keeping every other key, and read run.json again."""

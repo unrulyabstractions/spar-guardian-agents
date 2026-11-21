@@ -54,12 +54,10 @@ export async function viewRun({ run }, view) {
       : `${Math.round(rj.shutdown_rate * 100)}% of the agents holding stop_working ended with it`],
     ['eval id', rj.eval_id ? mono(rj.eval_id) : null],
     ['run id', rj.run_id],
-    ['variant', rj.variant || null],
     ['ORBIT version', rj.orbit_version],
     ['Inspect version', rj.inspect_version],
   ], 'kv-grid'), kv([
     ['eval log', h('span', null, mono(d.eval_log), ' ', d.eval_log ? (d.eval_log_exists ? badge('present', 'good') : badge('missing', 'bad')) : null)],
-    ['task root', rj.task_root ? mono(rj.task_root) : null],
     ['deviations', rj.deviations && rj.deviations.length
       ? h('ul', { class: 'plain-list' }, rj.deviations.map(x => h('li', null, mono(x)))) : null],
   ]));
@@ -139,10 +137,10 @@ function accessLogView(log, teams, eps) {
   const c = log.control;
   const agents = eps.filter(e => e.signals && e.signals.access_log);
   const named = list => (list && list.length ? h('ul', { class: 'plain-list' }, list.map(x => h('li', null, x))) : undefined);
-  const logOnly = agents.filter(e => e.signals.access_log.log_only).map(e => e.orbit_agent);
+  const logOnly = agents.filter(e => e.signals.access_log.log_only).map(e => e.agent);
   const rows = agents.map(e => {
     const a = e.signals.access_log;
-    return [e.orbit_agent, a.records, a.incidental, (a.raised || []).join(', '), a.log_only ? badge('yes', 'bad') : null,
+    return [e.agent, a.records, a.incidental, (a.raised || []).join(', '), a.log_only ? badge('yes', 'bad') : null,
       a.transcript_only ? badge('yes', 'warn') : null, a.refused_seen];
   });
   const num = label => ({ label, num: true });
@@ -231,7 +229,7 @@ function engagementView(g, eps) {
   const senders = m => Object.entries(m || {}).sort().map(([s, n]) => `${s} ${n}`).join(', ');
   const cols = ['agent', 'role', 'discovery round', 'checks', 'reads', 'posts', 'work steps', 'free steps', 'notices',
     'called submit', 'read from', 'reads refused', 'posts refused', 'oversight queries', 'queried'];
-  const rows = eps.filter(e => e.engagement).map(({ orbit_agent: a, role, engagement: x }) => [a, role, x.discovery_round,
+  const rows = eps.filter(e => e.engagement).map(({ agent: a, role, engagement: x }) => [a, role, x.discovery_round,
     x.checks, x.reads, x.posts, x.work_steps, x.free_steps, x.notices, x.called_submit ? 'yes' : 'no', senders(x.read_senders),
     x.reads_refused, x.posts_refused, x.oversight, senders(x.oversight_targets)]);
   return h('div', null, summary, dataTable(cols, rows));
@@ -255,7 +253,7 @@ function rulesTable(rules) {
 // A CheatBench SWE task: the arm, each agent's planted piece, the hidden-test rewards for the team's main and each
 // agent's working tree, the judge and the talk measures.
 function sweView(swe, run) {
-  const agents = run.episodes.map(e => e.orbit_agent).sort();
+  const agents = run.episodes.map(e => e.agent).sort();
   const reward = k => (swe.rewards[k] == null ? null
     : h('span', { title: `${swe.required_passed[k] || 0} of ${swe.required_tests} required tests passed` },
       yn(swe.rewards[k] === 1, 'good', 'plain')));
@@ -350,7 +348,7 @@ function episodeCard(run, ep, d) {
       ep.failure ? badge(ep.failure, 'bad') : null,
       h('span', { class: 'spacer' }),
       ep.has_transcript ? link(R.episode(run, ep.episode), 'transcript', 'btn btn-small') : muted('no transcript', 'small'),
-      logLink(d.eval_log_exists, d.eval_log, R.context(run, { agent: ep.orbit_agent }), `context of ${ep.orbit_agent}`, 'btn btn-small')),
+      logLink(d.eval_log_exists, d.eval_log, R.context(run, { agent: ep.agent }), `context of ${ep.agent}`, 'btn btn-small')),
     episodeRecord(ep),
     verdictBlock(ep.verdict, d.verdict_fields),
     evidenceBlock(ep.signals),

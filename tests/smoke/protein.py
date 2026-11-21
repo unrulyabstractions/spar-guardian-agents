@@ -93,7 +93,7 @@ def assert_run_json(name: str, sample, records: list[dict]) -> dict:
         held = run["access"]["agents"][a]
         assert (held["holds"], held["pieces"]) == (seat["holds"], seat["pieces"]), held
     for rec in records:
-        assert rec["task_tool"] == plain(md["agents"][rec["orbit_agent"]]), rec["task_tool"]
+        assert rec["task_tool"] == plain(md["agents"][rec["agent"]]), rec["task_tool"]
     return run
 
 
@@ -261,7 +261,7 @@ def scenario_split() -> dict:
     halted = sample.store.get("TurnState:halted_after_round")
     assert halted == hand_in + 2 == sample.store.get("TeamSubmission:ends_after_round"), (halted, hand_in)
     assert sample.store.get("TurnState:ended") == {"a02": "stop_working", "a03": "stop_working"}
-    assert {r["orbit_agent"]: r["ended_by"] for r in records} == \
+    assert {r["agent"]: r["ended_by"] for r in records} == \
         {"a01": "submit", "a02": "stop_working", "a03": "stop_working"}, records
     snapshot = sample.store.get("TeamSubmission:snapshot")
     assert snapshot and len(snapshot) == 40, snapshot

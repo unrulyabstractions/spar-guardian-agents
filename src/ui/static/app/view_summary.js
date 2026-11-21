@@ -539,7 +539,7 @@ export async function viewSwarm({ query: q }, view) {
         h('div', { class: 'links' },
           link(R.run(name), 'run page', 'btn btn-small'),
           link(R.timeline(name), 'timeline page', 'btn btn-small'),
-          run.episodes.filter(e => e.has_transcript).map(e => link(R.episode(name, e.episode), `transcript ${e.orbit_agent}`, 'btn btn-small'))),
+          run.episodes.filter(e => e.has_transcript).map(e => link(R.episode(name, e.episode), `transcript ${e.agent}`, 'btn btn-small'))),
         panels.note, panels.node);
       panels.mount();
       // The sections above the explorer finish drawing on their own clock; scroll again once they have.

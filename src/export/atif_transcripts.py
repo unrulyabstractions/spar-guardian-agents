@@ -6,6 +6,10 @@ output is the transcript dict CheatBench's judge reads: a "trajectory" key holdi
 core/agents/factory.py validates without a vendor adapter.
 
     transcript, facts = episode_transcript(view, "k7q2m")
+    model = episode_model(view, "k7q2m")      # the agent's own model, which its transcript's header names
+
+The header names the agent by its bare ID ("k7q2m") and its own model: its role's model when the run gave the role one,
+else the eval's model (episode_model), with the registry entry beside it (model_key; None outside the registry).
 
 Each ORBIT agent becomes its own episode: the sample's projected messages are split by
 EnvironmentState:message_attribution (history_projection="all"). The system message is the text the provider
@@ -24,8 +28,12 @@ output_message and the defense texts here, span_owners, blocked_message_ids and 
 """
 from __future__ import annotations
 
+import json
+import re
+
 from inspect_ai.model import ChatMessageAssistant, ChatMessageSystem, ChatMessageTool, ChatMessageUser
 
+from src.configuration.swarm_config import role_of
 from src.export.eval_sample_view import (
     SampleView,
     agent_events,
@@ -38,6 +46,8 @@ from src.export.eval_sample_view import (
     topology,
     usage_from_events,
 )
+from src.models import model_registry
+from src.models import swarm_model_provider as provider
 from src.swarm.turn_rules import TURN_RULES_TAG, provider_system_text
 from src.utils.cheatbench_core import trajectory as atif
 
@@ -46,6 +56,9 @@ TURN_RULES_PROMPTS = ("continue", "notice")
 SYSTEM_REWRITE = "system_prompt"    # the info kind of the filter's rewrite of the system message
 LAST_TEXT_KEY = "EnvironmentState:last_text_by_agent"
 REFUSAL_TEXT = "I cannot provide that response under the configured defense policy."   # orbit/defenses/boundaries.py
+REDACTED = "[redacted reasoning]"
+OPAQUE = re.compile(r"^(?:gAAAA\S*|[A-Za-z0-9_\-+/=]{40,})$")
+"""An encrypted reasoning blob: OpenAI's gAAAA... tokens or any long unbroken base64 run."""
 WITHHELD_TEXT = "[Content withheld by a configured defense.]"
 
 
@@ -57,7 +70,9 @@ def split_content(content) -> tuple[str, str | None]:
 
     A redacted reasoning part carries the provider's encrypted signature (Gemini's thought signatures), which is
     not readable reasoning, so it is never copied. Its summary, which OpenAI's Responses API sends beside the signature,
-    is readable and is kept. A step with nothing readable shows "[redacted reasoning]".
+    is readable and is kept. A reasoning part whose text is only provider blocks without text or summary (OpenRouter's
+    Anthropic signatures) or an encrypted blob counts as redacted too (visible_reasoning). A step with nothing readable
+    shows "[redacted reasoning]".
     """
     if content is None:
         return "", None
@@ -69,15 +84,48 @@ def split_content(content) -> tuple[str, str | None]:
         if kind == "text":
             texts.append(part.text)
         elif kind == "reasoning":
-            redacted = redacted or part.redacted
-            readable = part.summary if part.redacted else part.reasoning
+            given = part.summary if part.redacted else part.reasoning
+            readable = visible_reasoning(given)
+            redacted = redacted or part.redacted or (bool(given) and readable is None)
             if readable:
                 reasoning.append(readable)
         else:
             texts.append(f"[{kind} content omitted]")
     if not reasoning and redacted:
-        reasoning.append("[redacted reasoning]")
+        reasoning.append(REDACTED)
     return "\n".join(t for t in texts if t), ("\n".join(reasoning) or None)
+
+
+def visible_reasoning(raw) -> str | None:
+    """A model call's reasoning a reader can read, as the viewer shows it, or None: none, redacted, an encrypted blob,
+    or provider blocks with no text or summary."""
+    if raw is None:
+        return None
+    text = raw if isinstance(raw, str) else json.dumps(raw)
+    stripped = text.strip()
+    if not stripped or stripped == REDACTED or OPAQUE.match(stripped):
+        return None
+    if stripped.startswith("[{"):
+        try:
+            blocks = json.loads(stripped)
+        except json.JSONDecodeError:
+            return text
+        parts = [block_text(b) for b in blocks] if isinstance(blocks, list) else []
+        readable = "\n\n".join(p for p in parts if p.strip())
+        return readable or None
+    return text
+
+
+def block_text(block) -> str:
+    """The readable text of one provider reasoning block: its text, else its summary."""
+    if not isinstance(block, dict):
+        return ""
+    if isinstance(block.get("text"), str):
+        return block["text"]
+    summary = block.get("summary")
+    if isinstance(summary, list):
+        return "\n".join(str((s or {}).get("text") or "") for s in summary if isinstance(s, dict))
+    return summary if isinstance(summary, str) else ""
 
 
 def tool_result_text(result) -> str:
@@ -209,6 +257,20 @@ def _atif_steps(steps: list[dict]) -> list[atif.Step]:
     return out
 
 
+def episode_model(view: SampleView, agent: str) -> str:
+    """The agent's own model: its role's model when the run gave the role one (metadata["cheatbench"]["role_models"]),
+    else the eval's model, as an Inspect string without the swarm provider's prefix. An agent without a role is a
+    worker."""
+    cb = (view.metadata or {}).get("cheatbench", {})
+    role_model = (cb.get("role_models") or {}).get(role_of(cb.get("roles"), agent))
+    return provider.inspect_string(role_model or view.model)
+
+
+def model_key(model: str) -> str | None:
+    """The registry entry of an Inspect model string (src/models/model_registry.yaml), or None outside the registry."""
+    return model_registry.entry_name(model)
+
+
 def build_trajectory(view: SampleView, agent: str) -> tuple[atif.Trajectory, dict]:
     """The agent's ATIF trajectory, and facts about it (system prompt, recovered prompts, counts, usage)."""
     messages = agent_messages(view, agent)
@@ -265,7 +327,7 @@ def build_trajectory(view: SampleView, agent: str) -> tuple[atif.Trajectory, dic
         schema_version=atif.SCHEMA_VERSION,
         session_id=f"{view.id}#{view.epoch}",
         trajectory_id=f"{view.id}#{view.epoch}/{agent}",
-        agent=atif.Agent(name=f"orbit/{agent}", version=agent_version(), model_name=view.model),
+        agent=atif.Agent(name=agent, version=agent_version(), model_name=episode_model(view, agent)),
         steps=atif_steps,
         final_metrics=final_metrics,
         extra={"final_text": last_text or None},
@@ -281,13 +343,14 @@ def build_trajectory(view: SampleView, agent: str) -> tuple[atif.Trajectory, dic
 
 def episode_transcript(view: SampleView, agent: str) -> tuple[dict, dict]:
     """(transcript, build_trajectory's facts) for one agent. The transcript is what CheatBench's judge reads:
-    {"agent", "model", "prompt", "trajectory", "orbit"}."""
+    {"agent", "model", "model_key", "prompt", "trajectory", "orbit"}. The run's eval log is named once, in run.json."""
     traj, info = build_trajectory(view, agent)
+    model = episode_model(view, agent)
     transcript = {
-        "agent": f"orbit/{agent}", "model": view.model,
+        "agent": agent, "model": model, "model_key": model_key(model),
         "prompt": judge_prompt(view, agent),
         "trajectory": traj.to_json_dict(),
-        "orbit": {"eval_log": view.eval_log, "agent": agent, "roster": roster(view),
+        "orbit": {"roster": roster(view),
                   "topology": topology(view), "system_prompt": info["system_prompt"],
                   "turn_rules_recovered_from_events": info["turn_rules_messages"],
                   "model_calls": info["model_calls"]},

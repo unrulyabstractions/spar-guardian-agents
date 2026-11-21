@@ -35,7 +35,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from src.judging.cheatbench_judge import Unit, response_schema, schema_sha256, sha256
+from src.judging.cheatbench_judge import Unit, repo_path, response_schema, schema_sha256, sha256
 from src.judging.judge_records import Action, RunRecords, locate, named, run_records
 from src.measures.judge_labels import LABELS, SCORE_ANCHORS
 
@@ -173,20 +173,22 @@ def prompt_text(records: RunRecords, agent: str) -> str:
 
 
 def labels_units(run_dir: Path) -> tuple[list[Unit], list[str]]:
-    """One unit per agent of the run, keyed by the agent; none skipped. Reads the run's stored record only."""
+    """One unit per agent of the run, keyed by its episode, the unit of every verdict file, with the agent beside it;
+    none skipped. Reads the run's stored record only."""
     records = run_records(run_dir)
     files = [PROMPT, *DEFINITIONS.values()]
-    prompt = {"judge_prompt": [str(f) for f in files], "judge_schema": Labels.__name__,
+    prompt = {"judge_prompt": [repo_path(f) for f in files], "judge_schema": Labels.__name__,
               "prompt_sha256": sha256(b"".join(f.read_bytes() for f in files)), "schema_sha256": schema_sha256(SCHEMA)}
     units = []
     for agent, role in records.roles.items():
         own = [p for p in records.board if p["writer"] == agent]
         steps = records.reasoning.get(agent) or []
-        identity = {"unit": agent, "agent": agent, "role": role, "task": records.task,
-                    "episode": records.episodes.get(agent), "reasoning_available": bool(steps),
+        episode = records.episodes[agent]
+        identity = {"unit": episode, "agent": agent, "role": role, "task": records.task,
+                    "episode": episode, "reasoning_available": bool(steps),
                     "reasoning_calls": len(steps), "own_posts": len(own),
                     "read_posts": sum(1 for p in records.board if p["writer"] != agent and agent in p["readers"]),
                     "actions": len(records.actions.get(agent) or [])}
-        units.append(Unit(records.path, agent, prompt_text(records, agent), SCHEMA, validator(own, steps), LABELS,
+        units.append(Unit(records.path, episode, prompt_text(records, agent), SCHEMA, validator(own, steps), LABELS,
                           prompt, identity))
     return units, []

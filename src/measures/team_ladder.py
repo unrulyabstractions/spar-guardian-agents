@@ -176,7 +176,7 @@ def ending_at_cap(episode: dict, rules: dict) -> str | None:
     """The episode's ending, "cap" when the plan ran out with the agent at the step cap (run.json rules). The turn
     rules record a cap only without pooling, so a pooled agent at its cap reads "end"."""
     ended = episode.get("ended_by")
-    at_cap = rules.get("cap") and (rules.get("work_steps") or {}).get(episode.get("orbit_agent"), 0) >= rules["cap"]
+    at_cap = rules.get("cap") and (rules.get("work_steps") or {}).get(episode.get("agent"), 0) >= rules["cap"]
     return "cap" if ended == "end" and at_cap else ended
 
 

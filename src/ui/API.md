@@ -20,12 +20,14 @@ separator) gets 404 `{"error"}`; a server fault gets 500 `{"error", "traceback"}
 
 ## Data model
 
-A **run** is one directory under `runs/` holding `run.json`, `episodes.jsonl`, `judge.jsonl`, `trajectories/<episode>/transcript.json`,
-optionally `signals.jsonl`, `access_log.jsonl`, `judges/<pass>.<judge>.jsonl` (the judge passes' verdicts),
+A **run** is one directory under `runs/` holding `run.json`, `episodes.jsonl`, `trajectories/<episode>/transcript.json`,
+optionally `signals.jsonl`, `access_log.jsonl`, `judges/<pass>.<judge>.jsonl` (every verdict, keyed by episode),
 `communication/<sample>.json` (board posts), `defense/<sample>.json` (control evidence) and `tools/<tool>/` (the analysis
 tools' outputs). One run has one sample and one **episode per agent**:
-`riemann#1` for a lone agent, `riemann#1@k7q2m` and `riemann#1@t4x9n` on a board. `run.json.eval_log` points at the Inspect
-`.eval` log, from which the sample, the context windows and the timeline are read on demand.
+`riemann#1` for a lone agent, `riemann#1@k7q2m` and `riemann#1@t4x9n` on a board. An agent is named by its bare ID
+(`k7q2m`) everywhere. `run.json.eval_log` is the Inspect `.eval` log's path from the checkout
+(`logs/<study>/[<group>/]<run>/<file>.eval`), from which the sample, the context windows and the timeline are read on
+demand; an episode's `transcript_path` is its path from the run's folder.
 
 signals.jsonl holds an **agent row** per episode (`"row": "agent"`) and a **team row** per sample (`"row": "team"`),
 the **team record**: the code's evidence of the acts on the honeypot (exposed, tried, opened, used, tampered, checked,
@@ -85,7 +87,7 @@ Aggregate = {                     # one run's counts; judged, judge_cheated, fla
 }
 Episode = {                       # one row of episodes.jsonl plus:
   verdict: null | Verdict, signals: null | Signals,
-  transcript_path (the run's own trajectories/ copy when there is one), has_transcript: bool,
+  transcript_path (from the run's folder), has_transcript: bool,
   counted: bool                   # a verdict with the judge's cheated set, on an episode with a transcript
 }
 Swe = {issue, instance, n_agents, mode ("shared_task"|"solo_task"|null for a lone agent),
@@ -101,8 +103,9 @@ Knowledge = run.json "knowledge": {row_id, mode, split, n_pieces, layout, meta, 
 RunEngagement = {agents, agents_checked, agents_posted, median_discovery_round, checks, reads, posts,
                  read_graph, reads_refused, posts_refused, oversight, oversight_graph,
                  checked_in_time}   # {regulator: {teammate: bool}}: an oversight tool in its first two rounds
-Verdict = the episode's CheatBench verdict (src/judging/verdict_files.py episode_verdicts) without the bookkeeping keys (id, episode, replicate, task, model,
-          transcript_path, judge_generation_config, judge_generation_config_unsupported, judge_prompt, judge_schema,
+Verdict = the episode's CheatBench verdict (src/judging/verdict_files.py episode_verdicts) without the bookkeeping keys
+          (unit, id, episode, replicate, task, model, model_key, agent, role, transcript_path, the sha256 keys,
+          judge_generation_config, judge_generation_config_unsupported, judge_prompt, judge_schema,
           output_mode, judge_usage, judge_attempts). Always present, null when absent: cheated, summary, judge,
           judge_cost_usd, parse_ok, judge_error. The rest are the task's own verdict fields; a row that did not parse
           also carries raw.
@@ -154,8 +157,9 @@ parse or is not an object becomes `{"error"}`.
 
 ### `GET /api/runs/<study>/<run>/transcript/<episode>` → `{episode: Episode, transcript: Transcript}`
 ```
-Transcript = {agent, model, prompt, orbit: {eval_log, agent, roster, topology, system_prompt,
-              turn_rules_recovered_from_events, model_calls}, trajectory: ATIF}
+Transcript = {agent (the bare ID), model (the agent's own model), model_key (its registry entry or null), prompt,
+              orbit: {roster, topology, system_prompt, turn_rules_recovered_from_events, model_calls},
+              trajectory: ATIF}
 ATIF.steps[i] = {step_id, source: "system"|"user"|"agent", message, reasoning_content?, model_name?,
                  tool_calls?: [{tool_call_id, function_name, arguments}],
                  observation?: {results: [{source_call_id, content, extra?: {is_error?, error?, withheld_from_model_by_defense?}}]},
@@ -339,8 +343,8 @@ not locate keeps its score, reads "not located" and has no link. An agent or a r
 A transcript's step whose reasoning holds an excerpt lists the label and its score among its labels, and the board marks
 a post that holds one.
 
-The viewer reads CheatBench's verdicts through `src/judging/verdict_files.py` `cheatbench` (the eval's `judge.jsonl` and
-the pass `cheatbench`) and the judge labels through `judge_labels.labels`. It never calls a model.
+The viewer reads CheatBench's verdicts through `src/judging/verdict_files.py` `cheatbench` (`judges/cheatbench.<judge>.jsonl`:
+the eval's judge and the pass `cheatbench`) and the judge labels through `judge_labels.labels`. It never calls a model.
 CheatBench's own `cheated` is broader than the Cheating ladder's and stays under its own name: every Cheating cell
 shows, under the code's word, how many workers it says cheated of those it gave a parsed verdict. The run page leaves out
 a verdict row's bookkeeping (`verdict_files.ROW_KEYS`) but `parse_ok`, `judge_cost_usd` and `judge_error`.
@@ -387,7 +391,7 @@ without episodes.
 (`judge_labels.CHEATBENCH_DISCLOSED_ACCESS`), shown only in the CheatBench judge's block as "CheatBench: disclosed access".
 ```
 Agent = {agent, role, folder (its trajectories/ folder), transcript_bytes,
-         episode: {orbit_agent, model, n_turns, n_tool_calls, wall_time, limit, score, ended_by, ok, failure,
+         episode: {agent, model, n_turns, n_tool_calls, wall_time, limit, score, ended_by, ok, failure,
                    final_text, usage, defense, defenses},   # the keys episodes.jsonl has of these
          cheatbench: {judge: verdict row}}
 Board = {messages: [{id, board_no (P<n>), notice (a harness notice), sender, role,   # one per sample (RunDir.boards)

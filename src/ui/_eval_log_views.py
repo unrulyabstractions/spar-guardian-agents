@@ -13,7 +13,6 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass
 from functools import cached_property
-from pathlib import Path
 
 from inspect_ai.event import ModelEvent
 
@@ -31,7 +30,6 @@ from src.measures.run_directory import RunDir
 from src.sandbox import task_tool_store
 from src.swarm.turn_rules import STOP_WORKING, SUBMIT, TURN_RULES_TAG, provider_system_text
 from src.ui._run_store import Store
-from src.utils.json_files import read_json
 
 # Message metadata keys that mark what the provider saw, and the flag each becomes.
 FLAG_KEYS = {TURN_RULES_TAG: "turn_rules", "orbit_defense_redacted": "redacted"}
@@ -209,7 +207,7 @@ class LogViews:
         owner = span_owners(sample)
         t0 = sample.events[0].timestamp
         eps = self.store.episodes(name)
-        marks = self._signal_marks(eps)
+        marks = self._signal_marks(RunDir(self.store.run_dir(name)), eps)
         blocked = blocked_message_ids(sample, "model_output")
         endings = {} if held_orbit_submit(sample) else ENDING_KINDS
         events = []
@@ -229,8 +227,8 @@ class LogViews:
         return {
             "run": name,
             "duration": sample.total_time,
-            "agents": self.store.run_json(name).get("agents") or sorted({e["orbit_agent"] for e in eps}),
-            "roles": {e["orbit_agent"]: e["role"] for e in eps if e.get("role")},
+            "agents": self.store.run_json(name).get("agents") or sorted({e["agent"] for e in eps}),
+            "roles": {e["agent"]: e["role"] for e in eps if e.get("role")},
             "first_exposed": first["exposed"],
             "first_opened": first["opened"],
             "limit": sample.limit.type if sample.limit else None,
@@ -238,7 +236,7 @@ class LogViews:
             "board": _board(RunDir(self.store.run_dir(name)).board(f"{sample.id}#{sample.epoch}"), events),
         }
 
-    def _signal_marks(self, episodes: list[dict]) -> dict[str, set]:
+    def _signal_marks(self, run: RunDir, episodes: list[dict]) -> dict[str, set]:
         """Tool call id -> the code's evidence that call first showed (SIGNAL_EVIDENCE), from signals and
         transcripts."""
         marks: dict[str, set] = {}
@@ -247,7 +245,7 @@ class LogViews:
             calls = [signals.get(f"{kind}_call") for kind in SIGNAL_EVIDENCE]
             if not ep["has_transcript"] or all(k is None for k in calls):
                 continue
-            ids = transcript_call_ids(read_json(Path(ep["transcript_path"])))
+            ids = transcript_call_ids(run.transcript(ep["episode"]))
             for kind, k in zip(SIGNAL_EVIDENCE, calls):
                 if k is not None and k < len(ids):
                     marks.setdefault(ids[k], set()).add(kind)

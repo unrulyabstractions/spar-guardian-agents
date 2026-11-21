@@ -7,7 +7,8 @@ Writes
     <run_dir>/episodes.jsonl                           one record per (sample, agent)
     <run_dir>/access_log.jsonl                         one row per open of the honeypot, for a run that kept a log
                                                        (src/export/_export_access_log.py)
-    <run_dir>/judge.jsonl                              one CheatBench verdict row per judged episode
+    <run_dir>/judges/cheatbench.<judge>.jsonl          one CheatBench verdict row per judged episode, by the judge
+                                                       that ran in the eval (src/judging/verdict_files.py)
     <run_dir>/trajectories/<episode>/transcript.json   the ATIF transcript the judge read
     (src/export/atif_transcripts.py)
     <run_dir>/trajectories/<episode>/prompt.txt
@@ -41,9 +42,16 @@ that recorded the switch: src/export/_export_access_log.py); and an episode's "a
 (Benchmark.episode_facts) and "delivery" (the round and working step at which its deliverable was first seen). The
 export never writes run.json "signals": the code record (src/measures/code_ladder.py) adds it after the export.
 
+Paths are relative, so a run reads the same in any checkout and in the dataset: run.json "eval_log" is the log's path
+from the checkout (logs/<study>/[<group>/]<run>/<file>.eval, run_directory.log_link), and an episode's or a verdict's
+"transcript_path" is the transcript's path from the run's folder.
+
 Episode ids: "<sample>#<epoch>" for a single agent, "<sample>#<epoch>@<agent>" otherwise (export_episodes.episode_id).
-Verdicts come from the `verdicts` argument ({episode: verdict}, when re-judging) or from the cheatbench_judge score in
-the log; a judge.jsonl row is the episode's identity, the verdict, and the transcript the judge read.
+Verdicts come from the `verdicts` argument ({episode: verdict}, when re-judging), which replace the judge's stored rows
+of those episodes, or from the cheatbench_judge score in the log, which only fill episodes the judge's file lacks, so a
+re-export never undoes a judge pass. A verdict row is the episode's identity (unit = the episode, and its agent and
+role), the verdict, and the transcript the judge read; judges/ holds the judge passes' files too and the export never
+clears it.
 
 A run directory holds one eval's run. write_run refuses a directory whose run.json records another eval
 (RunFolderTaken), so a rerun under a name in use never replaces a run unasked. The same eval's log exports into its
@@ -62,7 +70,6 @@ import inspect_ai
 import orbit
 from inspect_ai.log import read_eval_log
 
-from src.domains import BY_TASK
 from src.export._export_access_log import access_log
 from src.export._export_run_blocks import (
     cheatbench,
@@ -79,16 +86,18 @@ from src.export._export_run_blocks import (
     team_submission,
     validity_block,
 )
+from src.export.atif_transcripts import model_key
 from src.export.eval_sample_view import SampleView, orbit_halt_reason
 from src.export.export_episodes import sample_key, sample_records
+from src.judging import verdict_files
 from src.judging.cheatbench_judge import JUDGE_SCORER
-from src.measures.run_directory import ACCESS_LOG, EPISODES, JUDGE, RUN_JSON, run_name, set_aside_attempt
+from src.measures.run_directory import ACCESS_LOG, EPISODES, RUN_JSON, log_link, run_name, set_aside_attempt
 from src.models import swarm_model_provider as provider
 from src.utils.json_files import read_json, write_jsonl
 
-# The identity a judge.jsonl row takes from its episode record, ahead of the verdict.
-VERDICT_IDENTITY = ("id", "episode", "replicate", "task", "model")
-OWNED_FILES = (RUN_JSON, EPISODES, JUDGE, ACCESS_LOG)
+# The identity a verdict row takes from its episode record, ahead of the verdict.
+VERDICT_IDENTITY = ("id", "episode", "replicate", "task", "model", "model_key", "agent", "role")
+OWNED_FILES = (RUN_JSON, EPISODES, ACCESS_LOG)
 OWNED_DIRS = ("trajectories", "communication", "defense", "swe")
 
 
@@ -98,10 +107,10 @@ def run_json(view: SampleView | None, eval_path: Path, run_dir: Path, records: l
     first = records[0] if records else {}
     task = first.get("task")
     run = {
-        "task": task, "task_root": str(BY_TASK[task].task_dir) if task else None, "variant": "",
-        "run_id": run_name(run_dir), "model": provider.inspect_string(model), "agent": "orbit", "source": "orbit",
+        "task": task, "run_id": run_name(run_dir), "model": provider.inspect_string(model),
+        "model_key": model_key(provider.inspect_string(model)),
         "topology": first.get("topology", "single"), "agents": first.get("orbit_roster", []),
-        "eval_log": str(eval_path.resolve()), "eval_id": eval_id,
+        "eval_log": log_link(eval_path, run_dir), "eval_id": eval_id,
         "orbit_version": orbit.__version__, "inspect_version": inspect_ai.__version__,
     }
     if view is None:
@@ -128,20 +137,40 @@ def run_json(view: SampleView | None, eval_path: Path, run_dir: Path, records: l
 
 
 def judge_rows(views: list[SampleView], records: list[dict], verdicts: dict[str, dict] | None) -> list[dict]:
-    """judge.jsonl rows from `verdicts` ({episode: verdict}) or from each sample's judge score ({agent: verdict}):
-    the episode's identity, the verdict, the transcript path. An episode without a transcript gets none."""
+    """The verdict rows of the judge that ran in the eval, from `verdicts` ({episode: verdict}) or from each sample's
+    judge score ({agent: verdict}): unit (the episode), the episode's identity (VERDICT_IDENTITY), the verdict, the
+    transcript the judge read (its path from the run's folder) and the keys verdict_files.ROW_KEYS asks for, None where
+    the eval recorded none (an eval's judge keeps no input hash). An episode without a transcript gets none."""
     by_sample = {sample_key(v): v for v in views}
     rows = []
     for record in records:
+        meta = score_metadata(by_sample[f"{record['id']}#{record['replicate']}"], JUDGE_SCORER) or {}
         if verdicts is not None:
             verdict = verdicts.get(record["episode"])
         else:
-            view = by_sample[f"{record['id']}#{record['replicate']}"]
-            verdict = ((score_metadata(view, JUDGE_SCORER) or {}).get("verdicts") or {}).get(record["orbit_agent"])
+            verdict = (meta.get("verdicts") or {}).get(record["agent"])
         if verdict and record["transcript_path"]:
-            rows.append({**{key: record[key] for key in VERDICT_IDENTITY}, **verdict,
-                         "transcript_path": record["transcript_path"]})
+            spec = meta.get("spec") or {}
+            row = {"unit": record["episode"], **{key: record.get(key) for key in VERDICT_IDENTITY}, **verdict}
+            row.update({key: row.get(key, spec.get(key)) for key in verdict_files.ROW_KEYS})
+            rows.append({**row, "transcript_path": record["transcript_path"]})
     return rows
+
+
+def write_verdicts(run_dir: Path, rows: list[dict], *, replace: bool) -> int:
+    """Write the eval judge's rows into judges/cheatbench.<judge>.jsonl, by judge. replace: each row replaces the stored
+    row of its episode (verdicts just made); else a row only fills an episode the file lacks (verdicts read from the
+    log, which a judge pass may have redone). Returns the rows written."""
+    written = 0
+    for judge in sorted({row["judge"] for row in rows}):
+        mine = [row for row in rows if row["judge"] == judge]
+        if not replace:
+            held = verdict_files.by_unit(verdict_files.rows(run_dir, verdict_files.CHEATBENCH_PASS, judge))
+            mine = [row for row in mine if row["unit"] not in held]
+        if mine:
+            verdict_files.write(run_dir, verdict_files.CHEATBENCH_PASS, judge, mine)
+            written += len(mine)
+    return written
 
 
 def clear_outputs(run_dir: Path) -> None:
@@ -204,11 +233,7 @@ def write_run(eval_log_path: Path, run_dir: Path, *, verdicts: dict[str, dict] |
         set_aside_attempt(run_dir, keep=eval_path)
     run_dir.mkdir(parents=True, exist_ok=True)
     clear_outputs(run_dir)
-    views = []
-    for sample in log.samples or []:
-        view = SampleView.from_eval_sample(sample, log)
-        view.eval_log = str(eval_path.resolve())
-        views.append(view)
+    views = [SampleView.from_eval_sample(sample, log) for sample in log.samples or []]
     records = [r for view in views for r in sample_records(view, run_dir)]
     for view in views:
         if (bench := domain(view)) is not None:
@@ -220,9 +245,7 @@ def write_run(eval_log_path: Path, run_dir: Path, *, verdicts: dict[str, dict] |
     if opens is not None:
         write_jsonl(run_dir / ACCESS_LOG, opens)
     rows = judge_rows(views, records, verdicts)
-    if rows:
-        write_jsonl(run_dir / JUDGE, rows)
     return {"out_dir": str(run_dir), "episodes": len(records), "topology": run["topology"],
             "with_transcript": [r["episode"] for r in records if r["transcript_path"]],
             "without_transcript": [r["episode"] for r in records if not r["transcript_path"]],
-            "judged": len(rows)}
+            "judged": write_verdicts(run_dir, rows, replace=verdicts is not None)}

@@ -24,7 +24,8 @@ role with a model of its own (worker_model, regulator_model, disregulator_model)
 provider (src/models/swarm_model_provider.py), which carries the agents' generate config to that model's calls. Each
 role model is built once before the eval, so a provider name Inspect does not know is refused before the sandbox
 starts. judge and rejudge read a finished log, judge every agent again with src/judging/cheatbench_judge.py and
-RE-EXPORT the run from the log with the current code and the new verdicts (judge.jsonl): rejudge into each run's own
+RE-EXPORT the run from the log with the current code and the new verdicts (judges/cheatbench.<judge>.jsonl, where they
+replace that judge's rows of the same episodes): rejudge into each run's own
 directory, wherever it lives, and judge into runs/<study>/<run_name>/. They are how a run made without a judge gets
 its own verdicts; a run made on older code is rewritten by them. judge_pass (src/judging/judge_pass.py) reads a run's
 stored record instead and writes only judges/<pass>.<judge>.jsonl. A refused precondition prints its reason to
@@ -53,6 +54,7 @@ from src.export.export_episodes import episode_id
 from src.export.run_export import RunFolderTaken, refuse_replacing, write_run
 from src.judging import cheatbench_judge as judging
 from src.judging import judge_pass as passes
+from src.judging import verdict_files
 from src.measures import code_ladder as signals
 from src.measures import episode_summary as summary
 from src.measures import run_figures, swe_measures
@@ -304,7 +306,9 @@ def _write_verdicts(eval_log: Path, run_dir: Path, verdicts: dict[str, dict], *,
                     remedy: str = JUDGE_REMEDY) -> None:
     """Export the log to run_dir with its verdicts and print them. Refuses when no verdict reached the file."""
     run_dir = export(eval_log, run_dir, verdicts=verdicts, replace=replace, remedy=remedy)
-    written = RunDir(run_dir).verdicts()
+    judge = next(iter(verdicts.values()), {}).get("judge")
+    stored = verdict_files.cheatbench(run_dir).get(judge) or {}
+    written = {episode: row for episode, row in stored.items() if episode in verdicts}
     if not verdicts or not written:
         raise Refusal("the judge wrote no verdicts", 4)
     print("== verdicts")
@@ -406,14 +410,15 @@ def judge_pass(pass_name: str, paths: list[Path], judge_name: str, *, cap: float
 
 @command
 def regenerate(run_dirs: list[Path], *, export_log: bool = True, measures: bool = True, plots: bool = True) -> int:
-    """Rebuild what each run directory derives from its eval log: the export, keeping the verdicts judge.jsonl holds
-    (a run whose log is gone keeps its export); the code record (signals.jsonl) and, on a SWE run, Lucy's measures
-    (swe_summary.json); the figures under out/<study>/[<group>/]<run>/ (run_directory.figures_dir). The judge passes'
-    judges/ is never touched. A run whose log holds another eval than its folder is refused (2)."""
+    """Rebuild what each run directory derives from its eval log: the export (a run whose log is gone keeps its
+    export); the code record (signals.jsonl) and, on a SWE run, Lucy's measures (swe_summary.json); the figures under
+    out/<study>/[<group>/]<run>/ (run_directory.figures_dir). The verdicts in judges/ stay: the export only adds the
+    eval judge's verdicts on episodes its file lacks. A run whose log holds another eval than its folder is refused
+    (2)."""
     for run_dir in run_dirs:
         run = RunDir(run_dir).require()
         if export_log and run.eval_log:
-            export(run.eval_log, run.path, verdicts=run.verdicts() or None, remedy=LOG_REMEDY)
+            export(run.eval_log, run.path, remedy=LOG_REMEDY)
         elif export_log:
             print(f"{run.name}: no eval log on disk, keeping the export as it is", file=sys.stderr)
         if measures:

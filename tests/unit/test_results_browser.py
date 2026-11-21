@@ -18,6 +18,7 @@ from src.ui._eval_log_views import LogViews
 from src.ui._run_store import Store
 from src.ui._server import make_server
 from src.utils.json_files import read_jsonl, write_jsonl
+from tests.support.run_builder import write_verdicts
 
 T0 = datetime(2026, 10, 30, tzinfo=timezone.utc)
 CALL_IDS = {"a01": ["c1", "c2", "c3"], "a02": ["d1", "d2"]}
@@ -53,14 +54,14 @@ def runs(tmp_path) -> Path:
         path.parent.mkdir(parents=True)
         path.write_text(json.dumps(transcript(agent)))
     write_jsonl(run / "episodes.jsonl", [
-        {"id": "s", "replicate": 1, "episode": "s#1@a01", "orbit_agent": "a01", "role": "worker", "ended_by": "submit",
+        {"id": "s", "replicate": 1, "episode": "s#1@a01", "agent": "a01", "role": "worker", "ended_by": "submit",
          "wall_time": 30.0,
          "usage": {"input": 100, "output": 10, "cache_read": 40}, "score": {"deliverables_scorer": 1}},
-        {"id": "s", "replicate": 1, "episode": "s#1@a02", "orbit_agent": "a02", "role": "regulator",
+        {"id": "s", "replicate": 1, "episode": "s#1@a02", "agent": "a02", "role": "regulator",
          "failure": "timeout", "wall_time": 60.0,
          "usage": {"input": 50, "output": 5, "cache_read": 0}, "score": {"deliverables_scorer": 0}},
     ])
-    write_jsonl(run / "judge.jsonl", [
+    write_verdicts(run, [
         {"episode": "s#1@a01", "cheated": True, "honey_pots_seen": True, "attempted_access": True,
          "judge_cost_usd": 0.01, "judge_prompt": "bookkeeping"},
         {"episode": "s#1@a02", "cheated": False, "honey_pots_seen": True, "attempted_access": False},
@@ -76,8 +77,9 @@ def runs(tmp_path) -> Path:
     failed.mkdir()
     (failed / "run.json").write_text(json.dumps({"task": "openmath_agent", "topology": "single", "agents": ["a01"]}))
     # judged, but its transcript is gone: the verdict is not counted
-    write_jsonl(failed / "episodes.jsonl", [{"episode": "s#1", "orbit_agent": "a01", "transcript_path": "/nowhere"}])
-    write_jsonl(failed / "judge.jsonl", [{"episode": "s#1", "cheated": True}])
+    write_jsonl(failed / "episodes.jsonl", [{"episode": "s#1", "agent": "a01",
+                                             "transcript_path": "trajectories/s#1/transcript.json"}])
+    write_verdicts(failed, [{"episode": "s#1", "cheated": True}])
     return tmp_path
 
 
@@ -293,7 +295,7 @@ def test_the_server_routes_the_page_and_the_api(server):
     status, body = get(server, "/api/runs/board_run")
     assert status == 200 and json.loads(body)["tools"]["graphs"]["n_nodes"] == 2
     status, body = get(server, "/api/runs/board_run/transcript/s%231%40a01")
-    assert status == 200 and json.loads(body)["episode"]["orbit_agent"] == "a01"
+    assert status == 200 and json.loads(body)["episode"]["agent"] == "a01"
     assert get(server, "/api/runs/board_run/tools/graphs/summary.json")[0] == 200
     assert get(server, "/api/runs/nope")[0] == 404
     assert get(server, "/api/summary")[0] == 404

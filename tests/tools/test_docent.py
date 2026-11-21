@@ -86,7 +86,7 @@ def test_dry_run_on_riemann(no_key, riemann_copy, run_python):
     assert summary["tool"] == "docent" and summary["dry_run"] is True
     assert summary["n_agent_runs"] == len(agent_runs) == 4
     assert [run["id"] for run in agent_runs] == [row["id"] for row in summary["agent_runs"]]
-    judge = {row["episode"].rsplit("@", 1)[1]: row for row in read_jsonl(riemann_copy / "judge.jsonl")}
+    judge = {row["agent"]: row for row in read_jsonl(riemann_copy / "judges" / "cheatbench.gpt-6-sol.jsonl")}
     for agent_run in agent_runs[:3]:
         metadata = agent_run["metadata"]
         agent = metadata["agent"]

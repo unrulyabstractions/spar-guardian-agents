@@ -61,7 +61,6 @@ class SampleView:
     error: Any
     total_time: float | None
     model_usage: dict | None = None
-    eval_log: str | None = None
     eval_id: str | None = None
 
     @classmethod
@@ -83,7 +82,7 @@ class SampleView:
         return cls(id=sample.id, epoch=sample.epoch, messages=list(sample.messages), metadata=sample.metadata or {},
                    events=list(sample.events), store_get=store.get, model=log.eval.model, input=sample.input,
                    output=sample.output, scores=sample.scores, limit=sample.limit, error=sample.error,
-                   total_time=sample.total_time, model_usage=sample.model_usage, eval_log=log.location,
+                   total_time=sample.total_time, model_usage=sample.model_usage,
                    eval_id=log.eval.eval_id)
 
 

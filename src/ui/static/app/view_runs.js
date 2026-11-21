@@ -88,7 +88,7 @@ function episodesTable(run) {
   return dataTable(cols, run.episodes.map(ep => {
     const v = ep.verdict;
     const u = ep.usage || {};
-    const name = ep.orbit_agent;
+    const name = ep.agent;
     return [
       ep.has_transcript ? link(R.episode(run.run, ep.episode), name, 'ep-link')
         : h('span', { title: 'no transcript on disk' }, name, ' ', muted('(no transcript)', 'small')),
@@ -101,7 +101,7 @@ function episodesTable(run) {
       v ? fmtUsd(v.judge_cost_usd) : null,
       h('span', { class: 'links-cell' },
         ep.has_transcript ? link(R.episode(run.run, ep.episode), 'transcript', 'small') : null, ' ',
-        link(R.context(run.run, { agent: ep.orbit_agent }), 'context', 'small')),
+        link(R.context(run.run, { agent: ep.agent }), 'context', 'small')),
     ];
   }), { cls: 'compact eps-table', bare: true });
 }
@@ -175,7 +175,7 @@ export async function viewRuns({ query: urlQ }, view) {
       toggle();
     });
     const hay = [run.run, run.control, run.setting.label, run.setting.composition, run.model, run.monitor_model, run.defenses.join(' '),
-      ...run.episodes.flatMap(ep => [ep.orbit_agent, ep.failure, ep.role, ep.verdict && ep.verdict.summary])]
+      ...run.episodes.flatMap(ep => [ep.agent, ep.failure, ep.role, ep.verdict && ep.verdict.summary])]
       .filter(Boolean).join(' \n ').toLowerCase();
     sync();
     tbody.append(tr, detail);

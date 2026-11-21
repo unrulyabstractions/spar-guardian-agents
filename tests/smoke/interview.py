@@ -150,7 +150,7 @@ def assert_run_json(name: str, spec: Spec, sample) -> dict:
         assert run["access"]["agents"][agent]["holds"] == seat["holds"], run["access"]
         assert run["access"]["agents"][agent]["pieces"] == seat["pieces"], run["access"]
     for rec in RunDir(SUITE.runs / name).episodes():
-        agent = rec["orbit_agent"]
+        agent = rec["agent"]
         assert rec["task_tool"] == md["agents"][agent] and rec["task_tool"]["owner"] == iv["owner_of"][agent], rec
     return run
 
@@ -497,7 +497,7 @@ def scenario_delivered(spec: Spec) -> dict:
     for rec in records:
         assert rec["ended_by"] == "delivered" and rec["delivery"] == {"round": 3, "turn": 3}, rec
         assert rec["rules"]["ended"] == "delivered", rec["rules"]
-        assert not any("unreached" in r for r in results_of(load_transcript(rec))), rec["orbit_agent"]
+        assert not any("unreached" in r for r in results_of(load_transcript(rec))), rec["agent"]
     run = assert_run_json(name, spec, sample)
     assert run["delivery"] == {"after": 0, "team": True, "seen": dict.fromkeys(config.names, {"round": 3, "turn": 3}),
                                "halt_round": 3, "cut": config.names, "checks": 3, "errors": [],

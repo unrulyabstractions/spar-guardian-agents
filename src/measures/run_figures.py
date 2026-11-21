@@ -53,7 +53,7 @@ def load_run(run_dir: Path) -> dict:
     (src/judging/verdict_files.py episode_verdicts)."""
     run = read_json(run_dir / "run.json")
     agents = run["agents"]
-    roles = {e["orbit_agent"]: e.get("role") for e in read_jsonl(run_dir / "episodes.jsonl")}
+    roles = {e["agent"]: e.get("role") for e in read_jsonl(run_dir / "episodes.jsonl")}
     verdicts = {}
     for episode, row in verdict_files.episode_verdicts(run_dir).items():
         verdicts[episode.split("@", 1)[1] if "@" in episode else agents[0]] = row

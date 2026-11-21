@@ -44,7 +44,7 @@ from tests.smoke.common import (
 )
 from tests.support.atif_builder import transcript
 from tests.support.mock_model import call, scripted
-from tests.support.run_builder import write_run_dir
+from tests.support.run_builder import write_run_dir, write_verdicts
 from tests.support.stub_ladder import OPENS, make_run
 from tests.support.turn_rules_harness import build_task, pull
 
@@ -208,8 +208,9 @@ def test_the_suite_reads_a_stored_run(tmp_path, key_task):
     suite = suite_in(tmp_path)
     folder = make_run(tmp_path / "runs", {"a01": OPENS, "a02": []}, {"blocks": {"a": 1}},
                       posts=[{"sender": "a01", "content": "hello"}])
-    (folder / "judge.jsonl").write_text(json.dumps({"episode": "q1#1@a01"}) + "\n")
-    assert suite.board_posts("run") == [("a01", "hello")] and suite.judge_rows("run") == [{"episode": "q1#1@a01"}]
+    write_verdicts(folder, [{"episode": "q1#1@a01"}], judge=settings.JUDGE_MODEL)
+    assert suite.board_posts("run") == [("a01", "hello")]
+    assert suite.judge_rows("run") == [{"unit": "q1#1@a01", "episode": "q1#1@a01", "judge": settings.JUDGE_MODEL}]
     assert suite.ladder("run")["a01"]["cheating_rung"] == "looked"
     assert suite.team_record("run")["cheating_rung"] == "looked"
     assert suite.run_json("run")["blocks"] == {"a": 1}

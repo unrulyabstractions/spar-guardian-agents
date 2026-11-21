@@ -115,7 +115,7 @@ def load_run(run_dir: Path, times: bool = False) -> Run:
     clock = eval_times(run.eval_log) if times else {}
     calls, prompts, notes = {}, {}, []
     for ep in run.with_transcripts():
-        agent = ep.get("orbit_agent") or (ep.get("agent") or "").split("/")[-1]
+        agent = ep.get("agent")
         transcript = run.transcript(ep["episode"])
         steps = transcript["trajectory"]["steps"]
         prompts[agent] = "\n".join(str(s.get("message") or "") for s in steps if s.get("source") in ("system", "user"))

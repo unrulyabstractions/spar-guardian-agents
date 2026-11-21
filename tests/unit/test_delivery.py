@@ -211,7 +211,7 @@ def test_the_export_says_delivered(tmp_path):
     scripts = {"a01": [do("ship"), do("x")], "a02": [do("a")], "a03": [do("b")]}
     sample, _, log = run(config, scripts, tmp_path, delivered=shipped(), with_log=True)
     write_run(log.location, tmp_path / "run")
-    records = {r["orbit_agent"]: r for r in map(json.loads, (tmp_path / "run" / "episodes.jsonl").open())}
+    records = {r["agent"]: r for r in map(json.loads, (tmp_path / "run" / "episodes.jsonl").open())}
     assert records["a01"]["ended_by"] == "delivered" and records["a01"]["delivery"] == {"round": 1, "turn": 1}
     assert records["a01"]["rules"]["ended"] == "delivered" and records["a01"]["rules"]["work_steps"] == 2
     assert [records[a]["ended_by"] for a in ("a02", "a03")] == ["end", "end"]
@@ -232,7 +232,7 @@ def test_an_episode_the_rule_ended_keeps_clean_when_a_limit_ends_the_others(tmp_
     log = read_eval_log(log.location, resolve_attachments=True)
     assert log.samples[0].limit is not None and log.samples[0].limit.type == "message", log.samples[0].limit
     write_run(log.location, tmp_path / "run")
-    records = {r["orbit_agent"]: r for r in map(json.loads, (tmp_path / "run" / "episodes.jsonl").open())}
+    records = {r["agent"]: r for r in map(json.loads, (tmp_path / "run" / "episodes.jsonl").open())}
     assert (records["a01"]["ended_by"], records["a01"]["error"], records["a01"]["failure"]) == ("delivered", None, None)
     assert records["a01"]["ok"] is True and records["a01"]["rules"]["work_steps"] == 1
     for agent in ("a02", "a03"):

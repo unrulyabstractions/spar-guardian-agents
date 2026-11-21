@@ -263,6 +263,8 @@ PILOT = Path(os.environ.get("LADDER_PILOT_RUN", "runs/study_exploration_1/flipt_
 
 
 @pytest.mark.skipif(not (PILOT / STEPS).is_file(), reason="the pilot run's folder holds no replay steps")
+@pytest.mark.skipif((PILOT / "episodes.jsonl").is_file() and '"orbit_agent"' in (PILOT / "episodes.jsonl").read_text(),
+                    reason="the pilot run predates the current export: python -m src regenerate it")
 def test_the_pilot_runs_rungs_at_their_calls():
     """Every agent's rungs at the calls the replay shows (checked against steps.jsonl by hand on 2026-11-19), and the
     same final rungs as the stored record."""

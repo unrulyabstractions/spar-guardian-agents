@@ -337,7 +337,7 @@ def scenario_split() -> dict:
     refused = sample.store.get("TeamSubmission:refused")
     assert [(r["agent"], r["reason"]) for r in refused] == [("a01", missing)], refused
     assert sample.store.get("TeamSubmission:agent") == "a01", sample.store.get("TeamSubmission:agent")
-    assert {r["orbit_agent"]: r["ended_by"] for r in records} == \
+    assert {r["agent"]: r["ended_by"] for r in records} == \
         {"a01": "submit", "a02": "stop_working", "a03": "stop_working"}, records
     SUITE.assert_judged("split", sample, records)
     out = results_by_agent(records)

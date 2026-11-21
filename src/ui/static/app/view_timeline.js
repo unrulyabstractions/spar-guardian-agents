@@ -145,7 +145,7 @@ export async function viewTimeline({ run }, view) {
       tl.limit ? badge(`limit: ${tl.limit}`, 'warn', 'the sample ended on this limit') : null),
     h('div', { class: 'links' },
       link(R.run(run), 'run page', 'btn btn-small'),
-      detail.episodes.filter(e => e.has_transcript).map(e => link(R.episode(run, e.episode), `transcript ${e.orbit_agent}`, 'btn btn-small')),
+      detail.episodes.filter(e => e.has_transcript).map(e => link(R.episode(run, e.episode), `transcript ${e.agent}`, 'btn btn-small')),
       logLink(detail.eval_log_exists, detail.eval_log, R.context(run), 'context windows', 'btn btn-small')),
     panels.note);
   view.mounted(() => { document.title = `timeline · ${run} · results`; panels.mount(); });

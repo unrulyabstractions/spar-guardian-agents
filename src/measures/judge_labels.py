@@ -269,8 +269,8 @@ def labels(run_dir: Path) -> dict:
     roles = RunDir(run_dir).roles()
     judges = verdict_files.read(run_dir).get(verdict_files.LABELS_PASS) or {}
     judge = verdict_files.applied(judges)
-    rows = verdict_files.by_unit(judges[judge]) if judge else {}
-    retired = [unit for unit, row in rows.items() if not set(LABELS) <= set(row)]
+    rows = {row["agent"]: row for row in judges[judge]} if judge else {}
+    retired = [agent for agent, row in rows.items() if not set(LABELS) <= set(row)]
     if retired:
         raise ValueError(f"{verdict_files.path(run_dir, verdict_files.LABELS_PASS, judge)} holds rows of the retired "
                          f"yes/no labels ({', '.join(retired)}): delete the file and run the pass again")

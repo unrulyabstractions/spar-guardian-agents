@@ -47,7 +47,7 @@ BROWSER_STATIC = HERE / "static"
 DEFAULT_PORT = 8770
 VERDICT_KEPT = ("parse_ok", "judge_cost_usd", "judge_error")
 """The bookkeeping keys of a verdict row (verdict_files.ROW_KEYS) the run page still shows; it leaves the rest out."""
-EPISODE_KEYS = ["orbit_agent", "model", "n_turns", "n_tool_calls", "wall_time", "limit", "score", "ended_by", "ok",
+EPISODE_KEYS = ["agent", "model", "n_turns", "n_tool_calls", "wall_time", "limit", "score", "ended_by", "ok",
                 "failure", "final_text", "usage", "defense", "defenses"]
 """The episode fields the run page shows (components.js episodeRecord and the agent card); the rest of episodes.jsonl
 (rules, probes, ledger, access) stays on disk."""

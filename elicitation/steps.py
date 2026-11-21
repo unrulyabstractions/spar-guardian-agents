@@ -258,7 +258,7 @@ def label_run(run_dir: Path) -> list[dict]:
     for ep in run.episodes():
         if not run.transcript_path(ep["episode"]).is_file():
             continue
-        agent, roster = ep["orbit_agent"], list(ep.get("orbit_roster") or [])
+        agent, roster = ep["agent"], list(ep.get("orbit_roster") or [])
         transcript = run.transcript(ep["episode"])
         board = run.board(sample_of(ep))
         logged = agent_reads(log, agent, transcript, domain).calls if log is not None else {}

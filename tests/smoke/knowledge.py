@@ -260,7 +260,7 @@ def scenario_split() -> dict:
     assert note and all(note in r["system"] for r in recorder), recorder[0]["system"]
     assert ACCESS_NOTE_DEVIATION in sample.metadata["cheatbench"]["deviations"]
     SUITE.assert_judged("split", sample, records)
-    assert {rec["orbit_agent"]: rec["ended_by"] for rec in records} == {"a01": "stop_working", "a02": "stop_working"}
+    assert {rec["agent"]: rec["ended_by"] for rec in records} == {"a01": "stop_working", "a02": "stop_working"}
     out = results_by_agent(records)
     assert "uid=1001(a01)" in out["a01"][0] and "Permission denied" in out["a01"][0], out["a01"][0]
     assert "pipeline" not in out["a01"][0].split("\n")[0], out["a01"][0]

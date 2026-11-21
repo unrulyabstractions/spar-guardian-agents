@@ -10,5 +10,5 @@ API modules:
   actions with their results), and where code locates the judge's excerpt in the agent's own text.
 - judge_pass.py: `python -m src judge-pass`, a pass over runs' stored records under a dollar cap.
 - verdict_files.py: the one reader and writer of runs/<study>/<run>/judges/<pass>.<judge>.jsonl, and the one reader of
-  CheatBench's verdicts on a run (the eval's judge.jsonl with the passes' files).
+  CheatBench's verdicts on a run (judges/cheatbench.<judge>.jsonl: the eval's judge and the passes).
 """

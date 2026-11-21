@@ -3,35 +3,30 @@
     read(run_dir)                                   # {"cheatbench": {"gpt-6-luna": [rows]}, "labels": {...}}
     rows(run_dir, LABELS_PASS, "gpt-6-luna")        # one file's rows
     write(run_dir, LABELS_PASS, "gpt-6-luna", new)  # merge rows into that file, by unit, atomically
-    write(run_dir, LABELS_PASS, "gpt-6-luna", new, keep={"k4q8z"})   # and drop the rows of other units
-    cheatbench(run_dir)                             # {judge: {episode: row}}, the eval's verdicts and the passes'
+    write(run_dir, LABELS_PASS, "gpt-6-luna", new, keep={"s#1@k4q8z"})   # and drop the rows of other units
+    cheatbench(run_dir)                             # {judge: {episode: row}}: the eval's judge and the passes'
     episode_verdicts(run_dir)                       # {episode: row} of the judge the measures take
     applied(read(run_dir)[LABELS_PASS])             # the judge whose verdicts the measures take: the first by name
 
-A pass of `python -m src judge-pass` (src/judging/judge_pass.py) writes judges/<pass>.<judge>.jsonl, one row per unit
-(an episode for the pass "cheatbench", an agent for "labels"), keyed by the row's "unit". A unit judged again replaces
-its row; every other row stays, unless the writer names the units to keep, when the rows of any other unit go (a unit
-the pass no longer gives the run). A file of a pass no longer listed (the retired "collusion" and "scheming") is not
-read. A write goes to a temporary file in judges/
-that then replaces the file in one rename, so a reader never sees half a file, and nothing outside judges/ is touched:
-the run's own record (run.json, episodes.jsonl, judge.jsonl, the transcripts) stays as the run made it.
+Every verdict on a run sits in judges/<pass>.<judge>.jsonl, one row per unit, keyed by the row's "unit". A unit is
+the episode ("<sample>#<epoch>@<agent>", or "<sample>#<epoch>" for a lone agent), and the row names its agent ("agent",
+the bare ID) and role beside it. Two writers fill the files: a judge pass (src/judging/judge_pass.py) and the export
+(src/export/run_export.py), which writes the verdicts of the judge that ran inside the eval as its scorer into the pass
+"cheatbench". A unit judged again replaces its row; every other row stays, unless the writer names the units to keep,
+when the rows of any other unit go (a unit the pass no longer gives the run). A file of a pass no longer listed (the
+retired "collusion" and "scheming") is not read. A write goes to a temporary file in judges/ that then replaces the
+file in one rename, so a reader never sees half a file, and nothing outside judges/ is touched.
 
 Every row carries what makes it reproducible and priced: the unit, the judge entry and its generation config, the
 hashes of the prompt, the schema and the exact input, parse_ok, the call's usage, its cost in dollars, the attempts and
-the error (ROW_KEYS). write refuses a row without them, and a row of another pass or judge.
-
-CheatBench's judge also runs inside the eval as its scorer, and the export writes those verdicts to the run's
-judge.jsonl (src/measures/run_directory.py RunDir.verdicts), one row per episode. cheatbench reads both: the eval's
-rows by their judge, then each pass's file, whose row replaces the eval's for the same judge and episode. read gives
-the pass "cheatbench" that way, and episode_verdicts the one judge's rows the measures take: the first by name where
-several read a run (applied). Beside this module only the export and the re-export read judge.jsonl (RunDir.verdicts).
+the error (ROW_KEYS), None where the eval's judge recorded none. write refuses a row without them, and a row of another
+judge. Where several judges read a run, the measures take the first by name (applied).
 """
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-from src.measures.run_directory import RunDir
 from src.sandbox.staging import write_atomic
 from src.utils.json_files import read_jsonl
 
@@ -39,8 +34,8 @@ FOLDER = "judges"
 CHEATBENCH_PASS = "cheatbench"
 """CheatBench's verdicts per episode (src/judging/cheatbench_judge.py)."""
 LABELS_PASS = "labels"
-"""Disclosure and manipulation per agent, each a score with an excerpt (src/judging/labels_judge.py), read by
-src/measures/judge_labels.py labels."""
+"""Disclosure and manipulation per agent (a unit is the agent's episode), each a score with an excerpt
+(src/judging/labels_judge.py), read by src/measures/judge_labels.py labels."""
 PASSES = (CHEATBENCH_PASS, LABELS_PASS)
 ROW_KEYS = ("unit", "judge", "judge_generation_config", "prompt_sha256", "schema_sha256", "input_sha256", "parse_ok",
             "judge_usage", "judge_cost_usd", "judge_attempts", "judge_error")
@@ -71,25 +66,15 @@ def pass_files(run_dir: Path) -> dict[str, dict[str, list[dict]]]:
     return out
 
 
-def cheatbench(run_dir: Path, files: dict[str, dict[str, list[dict]]] | None = None) -> dict[str, dict[str, dict]]:
-    """CheatBench's verdicts on the run's episodes, {judge: {episode: row}} by judge name: the eval's (judge.jsonl),
-    then the pass "cheatbench" (`files`, pass_files' answer, read when not given), whose row of an episode replaces the
-    eval's by the same judge."""
-    out: dict[str, dict[str, dict]] = {}
-    for row in RunDir(run_dir).verdicts().values():
-        out.setdefault(row.get("judge") or "", {})[row["episode"]] = row
-    for judge, file_rows in ((pass_files(run_dir) if files is None else files).get(CHEATBENCH_PASS) or {}).items():
-        out.setdefault(judge, {}).update((row["unit"], row) for row in file_rows)   # a cheatbench unit is an episode
-    return dict(sorted(out.items()))
+def cheatbench(run_dir: Path) -> dict[str, dict[str, dict]]:
+    """CheatBench's verdicts on the run's episodes, {judge: {episode: row}} by judge name."""
+    files = pass_files(run_dir).get(CHEATBENCH_PASS) or {}
+    return {judge: by_unit(file_rows) for judge, file_rows in sorted(files.items())}
 
 
 def read(run_dir: Path) -> dict[str, dict[str, list[dict]]]:
-    """Every verdict on the run: {pass: {judge: [rows]}}, the pass "cheatbench" with the eval's verdicts in it
-    (cheatbench); {} for a run no judge has read."""
-    files = pass_files(run_dir)
-    judged = cheatbench(run_dir, files)
-    return {**files, **({CHEATBENCH_PASS: {judge: list(rows.values()) for judge, rows in judged.items()}}
-                        if judged else {})}
+    """Every verdict on the run: {pass: {judge: [rows]}}; {} for a run no judge has read."""
+    return pass_files(run_dir)
 
 
 def applied(judges: dict[str, object]) -> str | None:

@@ -54,14 +54,14 @@ def write_run(root: Path, with_times: bool = True, arguments: dict | None = None
     arguments = arguments or {}
     run = root / "flipt_synthetic1"
     log = root / "logs" / "synthetic.eval"
-    episodes = [{"episode": f"{SAMPLE}@{a}", "orbit_agent": a, "role": r} for a, r in ROLES.items()]
+    episodes = [{"episode": f"{SAMPLE}@{a}", "agent": a, "role": r} for a, r in ROLES.items()]
     for ep in episodes:
         steps = [{"step_id": 1, "source": "system", "message": "you are on a team"}]
-        for k, (tool, args, _, _) in enumerate(CALLS[ep["orbit_agent"]]):
+        for k, (tool, args, _, _) in enumerate(CALLS[ep["agent"]]):
             steps.append({"step_id": k + 2, "source": "agent", "tool_calls": [
-                {"tool_call_id": cid(ep["orbit_agent"], k), "function_name": tool,
-                 "arguments": arguments.get((ep["orbit_agent"], k), args)}],
-                "observation": {"results": [{"source_call_id": cid(ep["orbit_agent"], k), "content": "ok"}]}})
+                {"tool_call_id": cid(ep["agent"], k), "function_name": tool,
+                 "arguments": arguments.get((ep["agent"], k), args)}],
+                "observation": {"results": [{"source_call_id": cid(ep["agent"], k), "content": "ok"}]}})
         folder = run / "trajectories" / ep["episode"]
         folder.mkdir(parents=True)
         (folder / "transcript.json").write_text(json.dumps({"trajectory": {"steps": steps}}))
@@ -554,7 +554,14 @@ def files_of(folder: Path) -> list[tuple[str, int, int]]:
     return sorted((str(p), p.stat().st_size, p.stat().st_mtime_ns) for p in folder.rglob("*") if p.is_file())
 
 
+def older_export(run: Path) -> bool:
+    """Whether the run was exported before agents were named by their bare ID (episodes.jsonl holds orbit_agent)."""
+    episodes = run / "episodes.jsonl"
+    return episodes.is_file() and '"orbit_agent"' in episodes.read_text()
+
+
 @pytest.mark.skipif(not REAL.is_dir(), reason="the real run is not in this checkout")
+@pytest.mark.skipif(older_export(REAL), reason="the real run predates the current export: python -m src regenerate it")
 def test_a_real_run_reads_its_eval_log_board_and_measures_without_writing():
     from src.measures.run_directory import RunDir
     from src.ui.transcript_index import RunFiles
@@ -568,7 +575,7 @@ def test_a_real_run_reads_its_eval_log_board_and_measures_without_writing():
     for ep in stored.with_transcripts():
         n = sum(len(s.get("tool_calls") or []) for s in stored.transcript(ep["episode"])["trajectory"]["steps"]
                 if s.get("source") == "agent")
-        assert len(next(a for a in p["agents"] if a["agent"] == ep["orbit_agent"])["calls"]) == n
+        assert len(next(a for a in p["agents"] if a["agent"] == ep["agent"])["calls"]) == n
     calls = {(a["agent"], c["k"]): c for a in p["agents"] for c in a["calls"]}
     for post in p["posts"]:
         if post["call"] is not None:

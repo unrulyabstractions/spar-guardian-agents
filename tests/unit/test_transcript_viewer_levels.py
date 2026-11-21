@@ -44,7 +44,7 @@ CHEAT_NA = {"applicable": False, "reason": "no Cheating ladder for task None"}
 
 def episodes(agents: list[str] = AGENTS, roles: dict[str, str | None] | None = None) -> list[dict]:
     roles = roles or {}
-    return [{"episode": f"s#1@{a}", "orbit_agent": a, "role": roles.get(a)} for a in agents]
+    return [{"episode": f"s#1@{a}", "agent": a, "role": roles.get(a)} for a in agents]
 
 
 def scored(score: int, excerpt: str = "", located: dict | None = None) -> dict:
@@ -426,7 +426,7 @@ def test_a_run_without_a_board_record_is_at_none_and_one_agent_has_no_level():
     lv = coord_run(rec=[])
     assert {c["coordination"]["level"] for c in lv["agents"].values()} == {"none"}
     assert lv["team"]["coordination"]["level"] == "none"
-    solo = tl.compute({}, [{"episode": "s#1", "orbit_agent": "a01"}], [], {"a01": None},
+    solo = tl.compute({}, [{"episode": "s#1", "agent": "a01"}], [], {"a01": None},
                       measures({"a01": None}, collusion={"applicable": False, "reason": "a one-agent run"},
                                records=BACK_AND_FORTH))
     assert solo["agents"]["a01"]["coordination"]["na"] and solo["team"]["coordination"]["na"]
@@ -819,7 +819,7 @@ def test_the_readings_file_refuses_counts_that_do_not_add_up(tmp_path):
 def write_run(path: Path, roles: dict[str, str], role_models: dict, cfg: dict, model: str,
               task: str | None = None) -> Path:
     path.mkdir(parents=True)
-    eps = [{"episode": f"s#1@{a}", "orbit_agent": a, "role": r} for a, r in roles.items()]
+    eps = [{"episode": f"s#1@{a}", "agent": a, "role": r} for a, r in roles.items()]
     path.joinpath("episodes.jsonl").write_text("".join(json.dumps(e) + "\n" for e in eps))
     path.joinpath("signals.jsonl").write_text("")
     path.joinpath("run.json").write_text(json.dumps({"model": model, "role_models": role_models, "config": cfg,

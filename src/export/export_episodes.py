@@ -2,10 +2,11 @@
 
 sample_records writes each agent's transcript and prompt under trajectories/<episode>/, the sample's channel
 messages under communication/ and its defense evidence under defense/, and returns one record per agent for
-episodes.jsonl. Episode ids are "<sample>#<epoch>" for a single agent and "<sample>#<epoch>@<agent>" otherwise.
+episodes.jsonl. Episode ids are "<sample>#<epoch>" for a single agent and "<sample>#<epoch>@<agent>" otherwise. A
+record names its agent by the bare ID ("k7q2m"), its model as an Inspect string with the registry entry beside it
+(model_key), and its transcript by a path from the run's folder, trajectories/<episode>/transcript.json.
 
     records = sample_records(view, run_dir)
-    model = episode_model(view, "k7q2m")
     episode = episode_id(view, "k7q2m")
 """
 from __future__ import annotations
@@ -13,7 +14,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from src.configuration.swarm_config import role_of
 from src.export._export_run_blocks import (
     cheatbench,
     ended_by,
@@ -28,7 +28,7 @@ from src.export._export_run_blocks import (
     team_submission,
     validity_record,
 )
-from src.export.atif_transcripts import episode_transcript
+from src.export.atif_transcripts import episode_model, episode_transcript, model_key
 from src.export.eval_sample_view import (
     LIMIT_FAILURES,
     SampleView,
@@ -41,7 +41,6 @@ from src.export.eval_sample_view import (
     roster,
     topology,
 )
-from src.models import swarm_model_provider as provider
 
 
 # --------------------------------------------------------------------------
@@ -79,22 +78,12 @@ def _write_defense(view: SampleView, run_dir: Path, defenses_cfg: list, evidence
 # --------------------------------------------------------------------------
 # one episode
 # --------------------------------------------------------------------------
-def episode_model(view: SampleView, agent: str) -> str:
-    """The agent's own model: its role's model when the run gave the role one (metadata["cheatbench"]["role_models"]),
-    else the eval's model, as an Inspect string without the swarm provider's prefix. An agent without a role is a
-    worker."""
-    cb = cheatbench(view)
-    role_model = (cb.get("role_models") or {}).get(role_of(cb.get("roles"), agent))
-    return provider.inspect_string(role_model or view.model)
-
-
 def _base_record(view: SampleView, agent: str, defenses_cfg: list, evidence: dict) -> dict:
-    cb = cheatbench(view)
+    cb, model = cheatbench(view), episode_model(view, agent)
     scores = {k: (v.value if hasattr(v, "value") else v) for k, v in (view.scores or {}).items()}
     return {
         "id": view.id, "episode": episode_id(view, agent), "replicate": view.epoch,
-        "task": cb.get("task"), "variant": cb.get("variant", ""),
-        "model": episode_model(view, agent), "agent": f"orbit/{agent}", "orbit_agent": agent,
+        "task": cb.get("task"), "model": model, "model_key": model_key(model), "agent": agent,
         "orbit_roster": roster(view), "topology": topology(view), "role": (cb.get("roles") or {}).get(agent),
         "defenses": [d["name"] for d in defenses_cfg],
         "defense": defense_counts(evidence, agent),
@@ -124,7 +113,7 @@ def _write_episode(view: SampleView, run_dir: Path, agent: str, error, failure, 
     fields = {
         "final_text": info["final_text"],
         "n_turns": info["n_agent_steps"], "n_tool_calls": info["n_tool_calls"],
-        "usage": info["usage"], "transcript_path": str(transcript_path),
+        "usage": info["usage"], "transcript_path": transcript_path.relative_to(run_dir).as_posix(),
         "error": ep_error, "failure": ep_failure, "ok": ep_error is None,
         "ended_by": ended_by(view, agent, rules, submission, ep_failure),
     }

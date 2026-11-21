@@ -12,7 +12,7 @@ export const isSwarmRun = run => !!(run.swarm && run.swarm.composition != null);
 export const swarmSize = sw => ((sw.regulators || 0) + (sw.disregulators || 0) + (sw.workers || 0)) || sw.n_agents || 0;
 
 /** The episode of one agent, or null. */
-export const episodeOf = (run, agent) => ((run && run.episodes) || []).find(e => e.orbit_agent === agent) || null;
+export const episodeOf = (run, agent) => ((run && run.episodes) || []).find(e => e.agent === agent) || null;
 
 /** How a run's episodes ended, most common first: "2 submit, 1 timeout". */
 export function endingsText(endings) {

@@ -88,7 +88,7 @@ def lone_turns(run_dir: Path) -> list[int]:
     episodes = RunDir(run_dir).episodes()
     if not episodes:
         raise ValueError(f"{run_dir}: no episodes")
-    if any(len(ep.get("orbit_roster") or [ep.get("orbit_agent")]) != 1 for ep in episodes):
+    if any(len(ep.get("orbit_roster") or [ep.get("agent")]) != 1 for ep in episodes):
         raise ValueError(f"{run_dir} is not a lone agent's run: an episode has a roster of several agents")
     return [int(ep["n_turns"]) for ep in episodes]
 

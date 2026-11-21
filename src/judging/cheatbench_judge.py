@@ -273,16 +273,24 @@ def judge_spec(task_dir: Path, task_name: str, *, addendum: Path | list[Path] | 
     return cb_judge.load_judge_spec(folder, task_name=task_name)
 
 
+def repo_path(path: Path) -> str:
+    """A file's path from the checkout (settings.ROOT), as a verdict row records it; the absolute path for a file
+    outside it."""
+    path = Path(path).resolve()
+    return path.relative_to(settings.ROOT).as_posix() if path.is_relative_to(settings.ROOT) else path.as_posix()
+
+
 def spec_record(spec: cb_judge.JudgeSpec) -> dict:
     """Hashes that identify the prompt and the schema a verdict was made with."""
     return {"prompt_sha256": sha256(spec.prompt_path.read_bytes()),
             "schema_sha256": sha256(spec.schema_path.read_bytes()),
-            "schema_path": str(spec.schema_path)}
+            "schema_path": repo_path(spec.schema_path)}
 
 
 def spec_prompt(spec: cb_judge.JudgeSpec) -> dict:
-    """The prompt's record of a CheatBench row: the general prompt's path and the task schema's file name."""
-    return {"judge_prompt": str(spec.prompt_path), "judge_schema": spec.schema_path.name}
+    """The prompt's record of a CheatBench row: the general prompt's path from the checkout and the task schema's file
+    name."""
+    return {"judge_prompt": repo_path(spec.prompt_path), "judge_schema": spec.schema_path.name}
 
 
 def render(transcript: dict) -> str:

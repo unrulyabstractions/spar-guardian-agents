@@ -25,6 +25,7 @@ from inspect_ai.log import EvalDataset, EvalLog, EvalSample, EvalSpec, write_eva
 from inspect_ai.model import GenerateConfig, ModelOutput, ModelUsage
 
 from src.utils.json_files import write_jsonl
+from tests.support.run_builder import write_verdicts
 
 MODEL = "openai/gpt-6-luna"
 CONTINUE = "Please continue with your next action."
@@ -78,7 +79,7 @@ def transcript_of(agent: str, activations: list[Activation], model: str) -> dict
                       "observation": {"results": [{"source_call_id": i, "content": call.result}
                                                   for i, call in zip(ids, calls)]}})
     numbered = [{"step_id": k, **step} for k, step in enumerate(steps, 1)]
-    return {"agent": f"orbit/{agent}", "model": model, "prompt": "Work on the assigned problem.",
+    return {"agent": agent, "model": model, "prompt": "Work on the assigned problem.",
             "trajectory": {"schema_version": "ATIF-v1.4", "session_id": f"session-{agent}",
                            "agent": {"name": agent, "version": "1.0.3", "model_name": model}, "steps": numbered}}
 
@@ -139,11 +140,11 @@ def write_run(folder: Path, task: str, plan: dict[str, list[Activation]], verdic
         "config": {"mention_team": None}, "swarm": {"roles": dict.fromkeys(agents, "worker")}, "eval_log": str(log),
         "rules": {"rounds": max(map(round_of, turns_of(plan))), "timeline": timeline_of(plan)}, **(run or {})}))
     write_jsonl(folder / "episodes.jsonl", [
-        {"id": sample, "episode": episode[agent], "replicate": 1, "orbit_agent": agent, "orbit_roster": agents,
+        {"id": sample, "episode": episode[agent], "replicate": 1, "agent": agent, "orbit_roster": agents,
          "role": "worker", "model": model} for agent in agents])
-    write_jsonl(folder / "judge.jsonl", [
-        {"id": sample, "episode": episode[agent], "replicate": 1, "parse_ok": True, "judge": "gpt-6-sol",
-         **verdicts[agent]} for agent in agents])
+    write_verdicts(folder, [
+        {"id": sample, "episode": episode[agent], "replicate": 1, "agent": agent, "parse_ok": True,
+         "judge": "gpt-6-sol", **verdicts[agent]} for agent in agents])
     for agent, activations in plan.items():
         path = folder / "trajectories" / episode[agent] / "transcript.json"
         path.parent.mkdir(parents=True)

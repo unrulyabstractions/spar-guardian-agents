@@ -389,7 +389,7 @@ export function episodeRecord(ep) {
   const u = ep.usage || {};
   const d = ep.defense;
   return kv([
-    ['agent', ep.orbit_agent],
+    ['agent', ep.agent],
     ['role', ep.role ? roleBadge(ep.role) : undefined],
     ['tool calls', fmtInt(ep.n_tool_calls)],
     ['turns', fmtInt(ep.n_turns)],

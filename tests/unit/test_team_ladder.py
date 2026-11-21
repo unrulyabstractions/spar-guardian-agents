@@ -305,7 +305,7 @@ def spent(steps: dict[str, int], endings_by_agent: dict[str, str], roles: dict[s
     """How a pooled run ends with these working steps, each agent's episode ending as given, at the cap of 100."""
     run = {"mode": "shared_task", "team_submission": None, "orbit_halt_reason": "schedule_exhausted",
            "rules": {"cap": 100, "pooled": True, "work_steps": steps, "ended": {}}}
-    return team.ended_by(run, [{"orbit_agent": agent, "ended_by": ending, "limit": None, "failure": None,
+    return team.ended_by(run, [{"agent": agent, "ended_by": ending, "limit": None, "failure": None,
                                 "role": (roles or {}).get(agent)} for agent, ending in endings_by_agent.items()])
 
 
@@ -326,7 +326,7 @@ def test_a_plan_that_ran_out_at_the_step_cap_reads_steps():
     assert spent({"a01": 100, "a02": 100}, {"a01": "submit", "a02": "teammate_submit"}) == "submit"
     assert spent({"a01": 100, "a02": 100}, {"a01": "stop_working", "a02": "stop_working"}) == "stop_working"
     assert team.ended_by({"rules": {"cap": 100, "work_steps": {"a01": 100}}},
-                         [{"orbit_agent": "a01", "ended_by": "end", "limit": "token"}]) == "tokens"
+                         [{"agent": "a01", "ended_by": "end", "limit": "token"}]) == "tokens"
 
 
 def test_the_outcomes_pass_the_hand_in_through():

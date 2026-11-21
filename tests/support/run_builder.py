@@ -1,6 +1,7 @@
 """A run directory as the export writes it, for the tests that read one without running anything.
 
     folder = write_run_dir(tmp_path / "run", {"task": "chess"}, {"a01": transcript(calls)}, row="LR4pA", role="worker")
+    write_verdicts(folder, [{"episode": "LR4pA#1@a01", "judge": "gpt-6-sol", "cheated": True}])   # judges/cheatbench.*
     write_status_log(tmp_path / "logs" / "study" / "run" / "x.eval", "success")     # an eval log's header alone
 """
 from __future__ import annotations
@@ -23,7 +24,7 @@ def write_run_dir(folder: Path, run: dict, transcripts: dict[str, dict], *, row:
     (folder / "run.json").write_text(json.dumps(run))
     records = []
     for agent, transcript in transcripts.items():
-        record = {"id": row, "replicate": 1, "episode": f"{row}#1@{agent}", "orbit_agent": agent, **fields,
+        record = {"id": row, "replicate": 1, "episode": f"{row}#1@{agent}", "agent": agent, **fields,
                   **(episodes or {}).get(agent, {})}
         records.append(record)
         path = folder / "trajectories" / record["episode"] / "transcript.json"
@@ -31,6 +32,19 @@ def write_run_dir(folder: Path, run: dict, transcripts: dict[str, dict], *, row:
         path.write_text(json.dumps(transcript))
     write_jsonl(folder / "episodes.jsonl", records)
     return folder
+
+
+def write_verdicts(folder: Path, rows: list[dict], judge: str = "gpt-6-luna") -> Path:
+    """CheatBench verdict rows as the export and the judge passes store them, judges/cheatbench.<judge>.jsonl, keyed
+    by unit, the episode. A row names its judge, else `judge`; each judge gets its own file."""
+    by_judge: dict[str, list[dict]] = {}
+    for row in rows:
+        named = row.get("judge") or judge
+        by_judge.setdefault(named, []).append({"unit": row["episode"], **row, "judge": named})
+    (folder / "judges").mkdir(parents=True, exist_ok=True)
+    for named, held in by_judge.items():
+        write_jsonl(folder / "judges" / f"cheatbench.{named}.jsonl", held)
+    return folder / "judges"
 
 
 def write_tool_windows(path: Path, windows: list[tuple[str, float, float | None]]) -> Path:

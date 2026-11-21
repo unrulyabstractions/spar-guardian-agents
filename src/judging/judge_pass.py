@@ -81,7 +81,6 @@ def cheatbench_units(run_dir: Path) -> tuple[list[judging.Unit], list[str]]:
             skipped.append(f"{ep['episode']}: {'no stored transcript' if not path.is_file() else 'lost episode'}")
             continue
         identity = {"unit": ep["episode"], **{key: ep.get(key) for key in VERDICT_IDENTITY},
-                    "agent": ep.get("orbit_agent"), "role": ep.get("role"),
                     "transcript_sha256": judging.sha256(path.read_bytes())}
         units.append(judging.Unit(run.path, ep["episode"], judging.prompt_text(spec, run.transcript(ep["episode"])),
                                   schema, judging.validator(spec), spec.fields, prompt, identity))

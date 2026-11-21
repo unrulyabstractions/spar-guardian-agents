@@ -166,7 +166,7 @@ def model_cost(run_dir: Path, log_dir: Path | None) -> tuple[float, list[str]]:
         usage, ledger = episode.get("usage") or {}, episode.get("ledger") or {}
         usd += usage.get("billed_usd") or 0.0
         if ledger.get("calls") is None:
-            short.append(f"agent {episode.get('orbit_agent')} {NO_LEDGER}")
+            short.append(f"agent {episode.get('agent')} {NO_LEDGER}")
             continue
         unbilled = max(0, ledger["calls"] - (usage.get("billed_calls") or 0))
         failed = min(unbilled, ledger.get("errored") or 0)

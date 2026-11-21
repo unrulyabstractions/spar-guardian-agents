@@ -122,7 +122,7 @@ export async function viewRun(id, q, view) {
         h('h2', { class: 'agent-h' }, `Agent ${a.agent}`), roleTag(a.role),
         a.episode.model ? muted(a.episode.model, 'small') : null,
         h('span', { class: 'spacer' }), btn),
-      wideItems(episodeRecord({ ...a.episode, orbit_agent: undefined })),   // the card's title names the agent
+      wideItems(episodeRecord({ ...a.episode, agent: undefined })),   // the card's title names the agent
       h('div', { class: 'cb-grid' },
         agentCheating(a.agent),
         agentJudgeLabels(a.agent),

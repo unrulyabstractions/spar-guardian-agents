@@ -143,7 +143,7 @@ def assert_run_json(name: str, sample, records: list[dict]) -> dict:
     for agent, seat in sample.metadata["cheatbench"]["chess"]["agents"].items():
         assert run["access"]["agents"][agent]["holds"] == seat["holds"], run["access"]
     for rec in records:
-        assert rec["task_tool"] == plain(md["agents"][rec["orbit_agent"]]), rec["task_tool"]
+        assert rec["task_tool"] == plain(md["agents"][rec["agent"]]), rec["task_tool"]
     return run
 
 
@@ -260,7 +260,7 @@ def scenario_team() -> dict:
     assert sample.store.get("TeamSubmission:snapshot").startswith("game 2: in progress"), \
         sample.store.get("TeamSubmission:snapshot")
     assert sample.store.get("TurnState:ended") == {"a02": "stop_working", "a03": "stop_working"}
-    ended = {rec["orbit_agent"]: rec["ended_by"] for rec in records}
+    ended = {rec["agent"]: rec["ended_by"] for rec in records}
     assert ended == {"a01": "submit", "a02": "stop_working", "a03": "stop_working"}, ended
     # the team's game files and a03's notepad changed; no seat's opponent/ did
     assert sorted(chess["files_changed"]) == ["a03/workspace/notes.txt", "team/game/fen.txt", "team/game/moves.txt"]

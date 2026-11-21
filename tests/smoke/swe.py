@@ -366,7 +366,7 @@ def scenario_no_submit() -> dict:
     log, summary, records = SUITE.run("no_submit", task, scripted(script, recorder))
     assert_ok(log)
     for rec in records:
-        a = rec["orbit_agent"]
+        a = rec["agent"]
         t = load_transcript(rec)
         system = system_text(t)
         assert "submit" not in system and "stop_working" not in system, system[-400:]

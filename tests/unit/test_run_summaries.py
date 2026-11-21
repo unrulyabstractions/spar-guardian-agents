@@ -7,17 +7,19 @@ import json
 import pytest
 
 from src.cli import main
+from src.judging import verdict_files
 from src.measures import board_engagement, code_ladder
 from src.measures.episode_summary import HEADER, EpisodeSummary, summary_lines
 from src.measures.run_directory import RunDir
 from src.utils.json_files import write_jsonl
+from tests.support.run_builder import write_verdicts
 
 ENGAGED = {"checks": 2, "reads": 1, "posts": 1, "called_submit": True, "discovery_round": 1, "work_steps": 5,
            "free_steps": 3, "read_senders": {"a02": 1}}
 EPISODES = [
-    {"episode": "s#1@a01", "orbit_agent": "a01", "task": "openmath_agent", "role": "worker", "n_tool_calls": 12,
+    {"episode": "s#1@a01", "agent": "a01", "task": "openmath_agent", "role": "worker", "n_tool_calls": 12,
      "wall_time": 61.4, "failure": None, "orbit_roster": ["a01", "a02"], "n_turns": 9, "engagement": ENGAGED},
-    {"episode": "s#1@a02", "orbit_agent": "a02", "task": "openmath_agent", "role": "regulator", "n_tool_calls": None,
+    {"episode": "s#1@a02", "agent": "a02", "task": "openmath_agent", "role": "regulator", "n_tool_calls": None,
      "wall_time": None, "failure": "timeout", "orbit_roster": ["a01", "a02"], "n_turns": 4,
      "engagement": {"checks": 0, "reads": 0, "posts": 0, "called_submit": False}},
 ]
@@ -35,7 +37,7 @@ def make_run(root, name: str = "r", *, run: dict | None = None, episodes=EPISODE
     folder.mkdir()
     (folder / "run.json").write_text(json.dumps(RUN if run is None else run))
     write_jsonl(folder / "episodes.jsonl", list(episodes))
-    write_jsonl(folder / "judge.jsonl", list(verdicts))
+    write_verdicts(folder, list(verdicts))
     if signals:
         write_jsonl(folder / "signals.jsonl", list(signals))
     return folder
@@ -48,8 +50,8 @@ def test_a_run_directory_reads_its_files(tmp_path):
     transcript.write_text(json.dumps({"prompt": "p"}))
     run = RunDir(folder)
     assert run.is_run() and run.require() is run and run.run_json["swarm"]["seed"] == 7
-    assert [e["orbit_agent"] for e in run.episodes()] == ["a01", "a02"]
-    assert set(run.verdicts()) == {"s#1@a01", "s#1@a02"} and run.signals() == []
+    assert [e["agent"] for e in run.episodes()] == ["a01", "a02"]
+    assert set(verdict_files.episode_verdicts(folder)) == {"s#1@a01", "s#1@a02"} and run.signals() == []
     assert run.transcript_path("s#1@a01") == transcript and run.transcript("s#1@a01") == {"prompt": "p"}
     assert [e["episode"] for e in run.with_transcripts()] == ["s#1@a01"]
     with pytest.raises(ValueError, match="not a run directory"):
@@ -79,7 +81,7 @@ def test_budget_command(tmp_path, capsys):
     for folder, turns in ((lone, 55), (other, 13)):
         folder.mkdir()
         write_jsonl(folder / "episodes.jsonl", [{"episode": "riemann#1", "orbit_roster": ["solver"],
-                                                 "orbit_agent": "solver", "n_turns": turns}])
+                                                 "agent": "solver", "n_turns": turns}])
     assert main(["budget", str(lone)]) == 0
     out = capsys.readouterr().out
     assert "n_turns 55" in out and "median 55 over 1 lone episode(s)" in out
@@ -99,7 +101,7 @@ def test_the_engagement_funnel(tmp_path, capsys):
                                                "called_submit": 0}
     text = board_engagement.format_run(measures)
     assert "median discovery round 1" in text and "team submission a01" in text and "a02 1" in text
-    bare = make_run(tmp_path, "bare", episodes=[{"episode": "s#1", "orbit_agent": "a01"}], verdicts=())
+    bare = make_run(tmp_path, "bare", episodes=[{"episode": "s#1", "agent": "a01"}], verdicts=())
     assert "no board engagement recorded" in board_engagement.format_run(board_engagement.run_measures(bare))
     assert main(["engagement", str(tmp_path / "r"), "--json"]) == 0
     assert json.loads(capsys.readouterr().out)[0]["funnel"]["all"]["posted"] == 1

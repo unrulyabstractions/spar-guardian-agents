@@ -103,7 +103,7 @@ def summarize(run_dir: Path) -> dict:
     grades = swe.get("grades") or {}
     agents = {}
     for ep in episodes:
-        a = ep["orbit_agent"]
+        a = ep["agent"]
         v = verdicts.get(ep["episode"])
         mine = [p for p in posts if p.get("sender") == a]
         fix_posts = [p for p in mine if about_fix(p.get("content") or "", ids)]

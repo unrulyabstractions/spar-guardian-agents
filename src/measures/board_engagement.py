@@ -38,7 +38,7 @@ def agent_rows(episodes: list[dict]) -> list[dict]:
     for ep in episodes:
         engagement = ep.get("engagement")
         if engagement:
-            rows.append({"agent": ep.get("orbit_agent"), "role": ep.get("role") or "worker", **engagement,
+            rows.append({"agent": ep.get("agent"), "role": ep.get("role") or "worker", **engagement,
                          **{f"reached_{k}": v for k, v in stage_flags(engagement).items()}})
     return rows
 
