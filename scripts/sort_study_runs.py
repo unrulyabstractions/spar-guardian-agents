@@ -8,7 +8,7 @@ table for the study the table states), which carries run_validity's verdict as t
 - mock: a mock rehearsal;
 - incomplete: its eval did not complete;
 - invalid: any other reason it is not valid;
-- a valid run, or one its study gives no verdict, stays at the top level.
+- a valid run stays at the top level.
 A run already in a group stays there, and set_aside is filled by hand alone. A hand-made earlier attempt,
 runs/<study>/failed_attempts/<name>.attempt<k>/, goes to attempts/<name>.<n>, n the first number free under runs/,
 logs/ and out/, with the eval log its run.json names.

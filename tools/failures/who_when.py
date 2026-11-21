@@ -6,7 +6,7 @@ licence, copyright 2025 Ming Yin), word for word, system messages included. One 
 ground-truth answer, so "The Answer for the problem is: <ground truth>" becomes "The failure of this run, as judged
 afterwards, is: <the judge's verdicts>". The verdicts name the agents the judge found cheating and the judge's
 summary of each; a run with no cheating says so and gives every agent's summary. An agent without a verdict is
-named as such, and a run without judge.jsonl says that no verdict exists.
+named as such, and a run no judge has read says that no verdict exists.
 
 all_at_once's history carries no step numbers, as in utils.py, so the model counts entries itself and can miscount.
 `step_agent` is the agent of the entry at the returned step; when it differs from `agent`, the two answers disagree.

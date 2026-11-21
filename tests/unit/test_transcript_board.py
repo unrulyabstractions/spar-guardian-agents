@@ -554,14 +554,7 @@ def files_of(folder: Path) -> list[tuple[str, int, int]]:
     return sorted((str(p), p.stat().st_size, p.stat().st_mtime_ns) for p in folder.rglob("*") if p.is_file())
 
 
-def older_export(run: Path) -> bool:
-    """Whether the run was exported before agents were named by their bare ID (episodes.jsonl holds orbit_agent)."""
-    episodes = run / "episodes.jsonl"
-    return episodes.is_file() and '"orbit_agent"' in episodes.read_text()
-
-
 @pytest.mark.skipif(not REAL.is_dir(), reason="the real run is not in this checkout")
-@pytest.mark.skipif(older_export(REAL), reason="the real run predates the current export: python -m src regenerate it")
 def test_a_real_run_reads_its_eval_log_board_and_measures_without_writing():
     from src.measures.run_directory import RunDir
     from src.ui.transcript_index import RunFiles

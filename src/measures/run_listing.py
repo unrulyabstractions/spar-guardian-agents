@@ -61,12 +61,9 @@ def study_listing(folder: Path) -> list[Listed]:
         meta = index.get(key)
         if index and meta is None:
             status, why = "not indexed", "no INDEX.jsonl row names this run"
-        elif meta is not None and meta.get("valid") is not None:
+        elif meta is not None:
             status = "valid" if meta["valid"] else (group_status or "invalid")
             why = "; ".join(meta.get("why") or []) or meta.get("reason") or ""
-        elif meta is not None:  # INDEX.jsonl names the run and gives no verdict: the group decides
-            status, why = ("valid", "INDEX.jsonl gives no verdict; the run sits at the study's top level") \
-                if group is None else (group_status, "; ".join(meta.get("why") or []) or f"in the study's {group}/")
         else:
             status, why = ("valid", "") if group is None else (group_status, f"in the study's {group}/ folder")
         out.append(Listed(key, path, status, why, meta or {}))
