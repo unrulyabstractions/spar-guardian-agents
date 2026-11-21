@@ -2400,3 +2400,19 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   Server and Chrome stopped; port 8770 untouched.
 - **Result.** VERIFIED for this run. UNVERIFIED: runs with several machines (SWE, protein) and the light scheme with
   the new column; the other runs have no tmp_snapshots.json.
+
+## 2026-11-20: backups of runs/ and the stray eval-log folders before the data cleanup
+- **What.** `.backups/runs-before-cleanup-2026-11-21.tgz` (1,042,504,481 B): all of runs/, 55,677 files, 2,535,393,374
+  B. `.backups/logs-stray-before-cleanup-2026-11-21.tgz` (18,773,207 B): the 25 logs/study_exploration_1 folders the
+  audit names, 38 files, 18,817,355 B: 13 run folders with two .eval (10 top level, 3 under invalid/) and 12 folders
+  with only a journal .eval and no run. Both made with bsdtar `--mac-metadata` (xattrs kept as hidden AppleDouble
+  members). .backups/ is excluded in .git/info/exclude.
+- **How verified.** A script (scratchpad wf4/scripts/prove_backup.py) listed every source file with `find -type f`,
+  its size and sha256, and every regular archive member with `tar -tvzf`, cross-checked by Python's tarfile.
+  Manifests in scratchpad wf4/backup_manifest.tsv. runs/: 55,677 paths on both sides, 0 only in source, 0 only in
+  archive, 0 size mismatches; 50 random files extracted to wf4/restore_check/runs match by sha256; then a full
+  extract compared all 55,677 sha256 values: 0 mismatches, 0 extra (the extract was deleted afterwards). No file under
+  runs/ changed after the tar began (find -newermt). The builder's openmath smoke had finished before the tar started.
+  logs: 38 = 38 paths, 0 size mismatches, all 38 sha256 equal after extraction.
+- **Result.** VERIFIED. Not recorded: com.apple.provenance and FinderInfo are kept only as AppleDouble metadata, and
+  restoring them was not tested.
