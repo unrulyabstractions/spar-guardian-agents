@@ -2271,6 +2271,35 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   0.3.290 (every Claude log ran on 0.3.263; proof is `uv run python -m scripts.check_anthropic_cache --model claude-haiku-5-5-openrouter --yes`, about $0.001,
   not run); Opus 5.5 caching after the fix (no runs, no caching_verified, still refused).
 
+## 2026-11-20: tmp_snapshots.json, /tmp at every call by replay
+- **What.** src/replay/tmp_snapshots.py: a TmpRecorder around any replayer that lists /tmp, /var/tmp and /dev/shm of the
+  call's machine as root before execute and after after (path, type, size, mode, owner, uid, mtime, sha256 up to 1 MiB,
+  text up to 8 KiB, link target); per-machine delta encoding through step_snapshots.delta; decode and state_at; the
+  command `python -m src.replay.tmp_snapshots <run> --out <dir>`, which writes beside the run only a faithful replay and
+  refuses to overwrite without --force; each replay container gets mem_limit 4g. Schema in the module docstring and in
+  DATA_AND_VIEWER.md. Written for runs/study_exploration_1/poem_minimal_regulated_disregulated_luna_haiku_enforce_persuade2
+  (31,353 bytes; runs/ is gitignored, so the file is local only).
+- **How verified.** tests/unit/test_tmp_snapshots.py, 10 passed: the listing script on a local folder (kinds, mode,
+  sha256 equal to hashlib's, the text and hash caps, a link's target, a missing root), the recorder's order and machine
+  choice, encode/decode/state_at round trips. Real replay (91% free memory; another workflow's tcase_case14 was up):
+  the first wrapped replay was not faithful at one grading log of n122; a plain `python -m src replay` of the same run
+  was faithful, and the second wrapped replay was faithful with the stored match counts (exact 25, masked 8, differs 6).
+  The run's steps.jsonl, replay.json and run.json are byte-identical before and after (shasum -c). I opened the file and
+  checked it against the recorded calls: 122 steps with n, agent, k and call_id equal to the record's, 39 ran, every
+  before equal to the machine's previous after. The initial state is the staging's /tmp/grading/ref/17f43931 (four
+  root-owned 640 files). The /tmp writes are n51, 62, 72, 79, 93, 99 and 103, all to /tmp/s7draft.md by s7m7z. Each
+  has text equal to its heredoc byte for byte, sha256 equal to hashlib's of the heredoc, and sha[:12] equal to
+  steps.jsonl's. The reads at n98 and n107 change nothing. Before n98 the snapshot gives -rw-rw-r-- s7m7z 928, which is
+  what the recorded `ls -la` printed, and the recorded head lines are in the text. Before n107 the whole 879-byte draft
+  is in the recorded `cat` output. n110's rm -f removes the path. No other call changes a file under the three
+  directories. The end state is the four root files, which agrees with run.json sandbox.end /tmp (4 files, root 4, no
+  agent paths). ruff clean.
+- **Result.** VERIFIED for this run. UNVERIFIED: SWE and protein runs (one machine per agent; no replay run). The
+  viewer does not read the file yet. A bug that was already there: creative_replay.log_names zips the log names of the
+  replayed and recorded outputs in order. A call that prints a new log's random name twice (n122's grader line, then
+  `ls | tail -3`) can map it to an existing log, so the rename fails and the replay is not faithful. It is random: by my reading of the sort, an estimated
+  one replay in five of this run fails (not measured). Not fixed.
+
 ## 2026-11-20: one cap on a tool result for every agent, cut in the middle
 - **What.** SwarmConfig.tool_output_bytes defaults to TOOL_OUTPUT_BYTES = 65536 for every agent (the per-role
   influencer_tool_output_bytes of 7c5b2a0 is gone); tool_output_cut = "middle". src/swarm/tool_output_caps.py replaces

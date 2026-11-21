@@ -51,6 +51,7 @@ API modules:
 - replay_run.py: replay(run_dir, out_dir) and replay_runs, the command's loop.
 - replay_report.py: ReplayReport, replay.json, and the faithful gate.
 - step_snapshots.py: steps.jsonl's delta encoding.
+- tmp_snapshots.py: tmp_snapshots.json, /tmp, /var/tmp and /dev/shm of every machine before and after every call.
 - recorded_calls.py: the recorded calls in global order.
 - commit_dates.py: the date that gives a commit its recorded id.
 - output_match.py: a replayed output against the recorded one.

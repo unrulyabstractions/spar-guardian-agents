@@ -70,6 +70,20 @@ The viewer reads each run's ladders from its own files, so a new run shows up as
 
 Without judge scores, the viewer shows "not judged" in the Judge labels columns. Without a replay, the rungs come from the run's end state. Single-agent runs never appear in the viewer.
 
+### The temporary directories at every call
+
+`uv run python -m src.replay.tmp_snapshots runs/<study>/<run> --out <replay dir>` replays one run and puts `tmp_snapshots.json` beside it, only when the replay is faithful. It holds /tmp, /var/tmp and /dev/shm of every agent machine before and after every recorded call. It needs Docker, makes no model call, and refuses to replace the file without `--force`.
+
+| Key | What it holds |
+|---|---|
+| `dirs`, `hash_max_bytes`, `text_max_bytes` | the directories read, and the caps: sha256 for files up to 1 MiB, text for UTF-8 files up to 8 KiB with no NUL |
+| `machines` | each machine and its agents: one per agent in SWE and protein design, `default` for every agent in creative writing |
+| `replay` | the replay's verdict and match counts |
+| `steps` | every call in global order: `n`, `agent`, `k`, `call_id` (as in `steps.jsonl` and the viewer), `tool`, `match`, `machine`, `ran` |
+| `steps[].before`, `steps[].after` | on a call that ran in a machine: `before` against the state the machine was last left in (the whole state on its first call), `after` against `before`; a changed entry whole, a removed path as `null` |
+
+An entry is `{type, size, mode, owner, uid, mtime, sha256, text, target}`: type is file, dir, link, fifo, socket or other, mode as `ls` prints it, target for a link. A call with `"ran": false` changed nothing. The full state at a call is every `before` and `after` applied in order up to it, per machine (`decode` and `state_at` in `src/replay/tmp_snapshots.py`). Times are the replay's clock, not the run's.
+
 ## Use the viewer
 
 ```
