@@ -2,7 +2,7 @@
 flipt-02e2 and vuls-1832. No model spend.
 
     uv run python -m tests.smoke.swe [--only lone,board,honeypots,honeypots_vuls,rule,no_submit,grading,no_fixtures,
-                                             team_4,submit,collaboration,collaboration_vuls]
+                                             team_4,submit,rounds,collaboration,collaboration_vuls]
 
 Every scenario starts the real sandbox (the grader and one service per agent, from the native image that
 src/domains/swe/ builds), drives ORBIT with Inspect's mockllm scripted per agent, judges with a mock judge model,
@@ -19,6 +19,7 @@ their agents end with stop_working; `honeypots` runs jigsaw under shared_task; i
 to team/main and submits it, and in `no_fixtures` the same patch without the four settings files, which fails, since
 the grader adds nothing. `team_4` and `submit` run the default preset at the small scale: four agents on the whole
 issue, and a neutral agent that pushes to team/main and submits the team's work, which ends the run two rounds later.
+`rounds` runs the rounds scenario of tests/support/round_scenario.py on three workers and a regulator.
 `collaboration` and `collaboration_vuls` run no agent: one grader container grades honest work alone, each set of
 pieces one neutral agent can hold with honest work for the rest, the fix as its authors wrote it (flipt-02e2, where the
 pieces and the hidden tests hold values of ours) and every piece together, with the grader's own function
@@ -72,6 +73,7 @@ from tests.smoke.common import (
     timeline_of,
     tool_calls_of,
 )
+from tests.support import round_scenario
 from tests.support.mock_model import call, scripted, text
 from tests.support.swe_grading import NEEDS, GraderContainer, grade_trees, trees
 
@@ -577,10 +579,30 @@ def scenario_submit() -> dict:
             "team_reward": md["targets"]["team"]["reward"]}
 
 
+def scenario_rounds() -> dict:
+    """Rounds of tool calls on the flipt-02e2 sandbox (tests/support/round_scenario.py): three workers and a regulator,
+    three rounds each of up to three calls, sequential in seat order. One worker uses all three calls of a round, then
+    asks for four in one reply and the fourth is refused; another calls end_round after two calls, takes a round of
+    board calls that uses up none, and reads the first one's post in the round it was made; the third replies with no
+    tool call; the regulator runs out of rounds and the one worker left hears it."""
+    config = small(*round_scenario.config_pairs())
+    roles = agent_roles(config)
+    workers = neutral_agents(config.seats, roles)
+    regulator = next(a for a in config.names if roles[a] == "regulator")
+    assert config.seats == [*workers, regulator], (config.seats, roles)
+    script, plan = round_scenario.rounds_script(workers, regulator)
+    recorder: list[dict] = []
+    log, summary, records = SUITE.run("rounds", swarm_task(SWE(ISSUE, "as_released", grade=False), config),
+                                      scripted(script, recorder))
+    sample = assert_ok(log)
+    return round_scenario.check_rounds(SUITE, "rounds", sample, records, plan, workers, regulator, recorder)
+
+
 SCENARIOS = {"lone": scenario_lone, "board": scenario_board, "honeypots": scenario_honeypots,
              "honeypots_vuls": scenario_honeypots_vuls, "rule": scenario_rule,
              "no_submit": scenario_no_submit, "grading": scenario_grading, "no_fixtures": scenario_no_fixtures,
-             "team_4": scenario_team_4, "submit": scenario_submit, "collaboration": scenario_collaboration,
+             "team_4": scenario_team_4, "submit": scenario_submit, "rounds": scenario_rounds,
+             "collaboration": scenario_collaboration,
              "collaboration_vuls": lambda: scenario_collaboration("vuls-1832")}
 
 
