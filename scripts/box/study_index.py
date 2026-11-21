@@ -7,8 +7,9 @@ the table states.
 
 For study_exploration_1 (study_table.TABLE_STUDY) a run's stage, box, cell and arm come from the table, which names
 every run of that study and each mock rehearsal. Its instance is the box whose capture manifest
-(logs/boxes/<id>/manifest.jsonl) holds a run.json of the run's name with the local run.json's sha256. A run.json whose
-bytes no capture holds takes the one instance the box registry (runs/boxes.json) created for its box that has captured
+(logs/boxes/<id>/manifest.jsonl) holds the run's eval log or its run.json, of the run's name, with the local file's
+sha256. The eval log's bytes never change, so a run regenerated here keeps its instance. A run whose bytes no capture
+holds takes the one instance the box registry (runs/boxes.json) created for its box that has captured
 no run of its name: a run pulled from a live box and not captured yet. The summary names a run a box captured under its
 name whose bytes no capture holds, and an instance whose registry box is not the table's box for the run. Any other
 study gets the index without the table.
@@ -28,12 +29,14 @@ from pathlib import Path, PurePosixPath
 
 from scripts.box.fleet_layout import MODELS, REGULATORS, REMOTE_REPO
 from scripts.box.study_table import STAGES, TABLE_STUDY, Box, box_jobs, stage_boxes
-from src.measures.run_directory import ATTEMPT_FOLDER, ATTEMPTS, GROUPS, RUN_JSON
+from src.measures.run_directory import ATTEMPT_FOLDER, ATTEMPTS, GROUPS, RUN_JSON, RunDir
 from src.measures.run_index import ARM_FIELDS, build, index_folder_problem, level, summary, write
 from src.models.model_registry import resolve
 
 REMOTE_RUNS = PurePosixPath(REMOTE_REPO) / "runs"
 """Where a box keeps its runs, as the capture manifests name them."""
+REMOTE_LOGS = PurePosixPath(REMOTE_REPO) / "logs"
+"""Where a box keeps its runs' eval logs, as the capture manifests name them."""
 
 
 def study_table_arms() -> dict[str, dict]:
@@ -60,7 +63,7 @@ def study_table_arms() -> dict[str, dict]:
 
 @dataclass(frozen=True)
 class Capture:
-    """One run.json a box's capture holds: the instance, the run's own name and the file's sha256."""
+    """One run.json or eval log a box's capture holds: the instance, the run's own name and the file's sha256."""
 
     instance: int
     name: str
@@ -78,8 +81,16 @@ def captured_name(parts: tuple[str, ...]) -> str | None:
     return None
 
 
+def captured_log_name(parts: tuple[str, ...]) -> str | None:
+    """The run's own name of a box path under logs/<study>/, given as its parts after the study: <name>/<file>.eval or
+    <group>/<name>/<file>.eval, as captured_name reads a run.json. None for any other path."""
+    if not parts or not parts[-1].endswith(".eval"):
+        return None
+    return captured_name((*parts[:-1], RUN_JSON))
+
+
 def box_captures(root: Path, study: str) -> list[Capture]:
-    """Every run.json of the study the box captures under root/logs/boxes/<id>/manifest.jsonl hold."""
+    """Every run.json and eval log of the study the box captures under root/logs/boxes/<id>/manifest.jsonl hold."""
     captures = []
     for manifest in sorted((root / "logs" / "boxes").glob("*/manifest.jsonl")):
         if not manifest.parent.name.isdigit():
@@ -87,10 +98,11 @@ def box_captures(root: Path, study: str) -> list[Capture]:
         for line in manifest.read_text().splitlines():
             row = json.loads(line) if line.strip() else {}
             remote = PurePosixPath(row.get("box") or "/")
-            if remote.is_relative_to(REMOTE_RUNS / study):
-                name = captured_name(remote.relative_to(REMOTE_RUNS / study).parts)
-                if name is not None:
-                    captures.append(Capture(int(manifest.parent.name), name, row.get("sha256")))
+            for top, named in ((REMOTE_RUNS, captured_name), (REMOTE_LOGS, captured_log_name)):
+                if remote.is_relative_to(top / study):
+                    name = named(remote.relative_to(top / study).parts)
+                    if name is not None:
+                        captures.append(Capture(int(manifest.parent.name), name, row.get("sha256")))
     return captures
 
 
@@ -150,9 +162,11 @@ class TableJoin:
 
     def instance_of(self, run: Path, name: str, box: str | None) -> tuple[int | None, str | None]:
         """(the instance the run ran on, "manifest" or "registry"), or (None, None) when neither names one. A capture
-        counts only when it holds this very run.json: a rerun of the name on another instance holds other bytes."""
-        local = hashlib.sha256((run / RUN_JSON).read_bytes()).hexdigest()
-        held = {capture.instance for capture in self.captures if capture.name == name and capture.sha256 == local}
+        counts only when it holds this very eval log or run.json: a rerun of the name on another instance holds other
+        bytes. The eval log counts after a regenerate here too, which rewrites run.json."""
+        log = RunDir(run).eval_log
+        local = {hashlib.sha256(path.read_bytes()).hexdigest() for path in (run / RUN_JSON, log) if path}
+        held = {capture.instance for capture in self.captures if capture.name == name and capture.sha256 in local}
         if len(held) == 1:
             return held.pop(), "manifest"
         if held:

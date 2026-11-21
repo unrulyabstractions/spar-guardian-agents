@@ -150,6 +150,28 @@ def test_an_instance_is_credited_only_for_the_bytes_its_capture_holds(tmp_path):
     assert recs["flipt_minimal_luna1"]["instance_source"] == "manifest" and notes["captured_bytes_differ"] == []
 
 
+def test_a_run_regenerated_here_keeps_the_instance_whose_capture_holds_its_eval_log(tmp_path):
+    """A regenerate rewrites run.json, so no capture holds its bytes any more; the eval log's bytes never change, and
+    the capture that holds them credits its instance. A capture of another eval log under the name does not."""
+    run = make_run(tmp_path, "flipt_minimal_luna1", "software_engineering")
+    register(tmp_path, {5001: "gate-flipt-luna-1", 5002: "gate-flipt-luna-1"})
+    capture(tmp_path, 5001, [run], stale=True)
+    log = tmp_path / "logs" / STUDY / "flipt_minimal_luna1" / LOG
+    rows = [{"box": f"/root/work/logs/{STUDY}/flipt_minimal_luna1/{LOG}", "kind": "file",
+             "sha256": hashlib.sha256(log.read_bytes()).hexdigest()},
+            {"box": f"/root/work/logs/{STUDY}/flipt_minimal_luna1/other.eval", "kind": "file", "sha256": "1" * 64}]
+    with (tmp_path / "logs" / "boxes" / "5001" / "manifest.jsonl").open("a") as out:
+        out.writelines(json.dumps(row) + "\n" for row in rows[1:])
+    rec = records_by_run(tmp_path)[0]["flipt_minimal_luna1"]            # the other box, wrongly, by the registry
+    assert (rec["instance_id"], rec["instance_source"]) == (5002, "registry")
+    with (tmp_path / "logs" / "boxes" / "5001" / "manifest.jsonl").open("a") as out:
+        out.write(json.dumps(rows[0]) + "\n")
+    rec = records_by_run(tmp_path)[0]["flipt_minimal_luna1"]
+    assert (rec["instance_id"], rec["instance_source"]) == (5001, "manifest")
+    assert study_index.captured_log_name(("invalid", "c_luna1", LOG)) == "c_luna1"
+    assert study_index.captured_log_name(("c_luna1", "notes.txt")) is None
+
+
 def test_the_summary_names_an_instance_whose_registry_box_is_not_the_tables(tmp_path, capsys):
     run = make_run(tmp_path, "binder_minimal_luna1", "protein_design")
     register(tmp_path, {3001: "gate-creative-luna-1"})
