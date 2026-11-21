@@ -11,6 +11,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import inspect_ai
+import orbit
 import pytest
 from inspect_ai.log import EvalDataset, EvalLog, EvalSample, EvalSpec, write_eval_log
 from inspect_ai.model import ChatMessageSystem, ChatMessageUser, ContentReasoning, ContentText
@@ -22,6 +24,7 @@ from src.export.atif_transcripts import build_trajectory, split_content
 from src.export.eval_sample_view import (
     ATTRIBUTION_KEY,
     SampleView,
+    agent_version,
     billed_cost,
     span_owners,
     usage_dict,
@@ -94,10 +97,11 @@ def test_a_log_of_several_samples_is_refused(tmp_path, monkeypatch):
     assert not (tmp_path / "run").exists()
 
 
-def one_sample_log(path: Path) -> str:
-    """An .eval log of one lone agent's sample, as an eval writes it; its eval_id, new for every log."""
+def one_sample_log(path: Path, packages: dict | None = None) -> str:
+    """An .eval log of one lone agent's sample, as an eval writes it; its eval_id, new for every log. packages is the
+    log's EvalSpec.packages ({"inspect_ai": version})."""
     spec = EvalSpec(created="2026-11-01T00:00:00+00:00", task="t", dataset=EvalDataset(), model="mockllm/model",
-                    config={})
+                    config={}, packages=packages or {})
     metadata = {"experiment": {"setup": {"agents": [{"name": "k7q2m"}]}}, "cheatbench": {"config": {}}}
     write_eval_log(EvalLog(eval=spec, samples=[EvalSample(id="q1", epoch=1, input="", target="", metadata=metadata)]),
                    str(path))
@@ -143,6 +147,56 @@ def test_an_export_never_replaces_another_evals_run_unasked(tmp_path):
     attempt = tmp_path / "runs" / "attempts" / "riemann_minimal.1"
     run_export.write_run(tmp_path / "logs" / "attempts" / "riemann_minimal.1" / "first.eval", attempt)
     assert json.loads((attempt / "run.json").read_text())["run_id"] == "riemann_minimal"
+
+
+def test_an_export_names_the_versions_that_ran_the_eval_and_a_re_export_keeps_them(tmp_path):
+    """run.json and every episode name the ORBIT and the Inspect that ran the eval, never the exporter's: Inspect's from
+    the log, ORBIT's (which the log does not record) from the earlier export of the same eval. A first export, made
+    right after its eval, names the running ORBIT; an export of another eval into the folder (replace) does too."""
+    logs = tmp_path / "logs" / "riemann_minimal"
+    logs.mkdir(parents=True)
+    first, second = logs / "first.eval", logs / "second.eval"
+    one_sample_log(first, {"inspect_ai": "0.3.100"})
+    one_sample_log(second, {"inspect_ai": "0.3.200"})
+    run_dir = tmp_path / "runs" / "riemann_minimal"
+    run_export.write_run(first, run_dir)
+    run = json.loads((run_dir / "run.json").read_text())
+    assert (run["orbit_version"], run["inspect_version"]) == (orbit.__version__, "0.3.100") != ("1.0.3", "0.3.100")
+    (run_dir / "run.json").write_text(json.dumps({**run, "orbit_version": "1.0.3"}))  # the run's own, from its box
+    run_export.write_run(first, run_dir)                                               # regenerate
+    run = json.loads((run_dir / "run.json").read_text())
+    episodes = [json.loads(line) for line in (run_dir / "episodes.jsonl").read_text().splitlines()]
+    assert (run["orbit_version"], run["inspect_version"]) == ("1.0.3", "0.3.100")
+    assert [ep["agent_version"] for ep in episodes] == ["orbit-1.0.3+inspect-ai-0.3.100"]
+    run_export.write_run(second, run_dir, replace=True)
+    run = json.loads((run_dir / "run.json").read_text())
+    assert (run["orbit_version"], run["inspect_version"]) == (orbit.__version__, "0.3.200")
+
+
+def test_a_re_export_keeps_the_run_name_its_first_export_recorded(tmp_path):
+    """A collection that names its folders otherwise (apart_controls' <model>/<task>/<cell>/s<seed>) keeps each run's
+    name on a re-export of the same eval; a first export names the run after its folder."""
+    run_dir = tmp_path / "runs" / "apart_controls" / "luna" / "poem" / "solo" / "s1"
+    log = run_dir / "eval" / "a.eval"
+    log.parent.mkdir(parents=True)
+    one_sample_log(log)
+    run_export.write_run(log, run_dir)
+    run = json.loads((run_dir / "run.json").read_text())
+    assert run["run_id"] == "s1"
+    (run_dir / "run.json").write_text(json.dumps({**run, "run_id": "poem_solo_luna_s1"}))
+    run_export.write_run(log, run_dir)
+    assert json.loads((run_dir / "run.json").read_text())["run_id"] == "poem_solo_luna_s1"
+    assert (log.is_file(), json.loads((run_dir / "run.json").read_text())["eval_log"]) == (
+        True, "runs/apart_controls/luna/poem/solo/s1/eval/a.eval")
+
+
+def test_the_transcript_names_the_versions_of_its_view():
+    """A transcript's agent version is its view's: the ORBIT and Inspect that ran the sample."""
+    v = SampleView(id="s", epoch=1, messages=[], metadata={}, events=[], store_get=lambda key: None, model="m",
+                   input="", output=None, scores=None, limit=None, error=None, total_time=None,
+                   orbit_version="1.0.3", inspect_version="0.3.263")
+    assert agent_version(v) == "orbit-1.0.3+inspect-ai-0.3.263"
+    assert agent_version() == f"orbit-{orbit.__version__}+inspect-ai-{inspect_ai.__version__}"
 
 
 def test_run_json_carries_the_honeypot_probe_and_never_signals():

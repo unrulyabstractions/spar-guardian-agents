@@ -46,6 +46,10 @@ Paths are relative, so a run reads the same in any checkout and in the dataset: 
 from the checkout (logs/<study>/[<group>/]<run>/<file>.eval, run_directory.log_link), and an episode's or a verdict's
 "transcript_path" is the transcript's path from the run's folder.
 
+run.json's orbit_version and inspect_version, and each episode's and transcript's agent version, name what ran the
+eval, not what exports it: Inspect's version from the log (EvalSpec.packages), ORBIT's from an earlier export of the
+same eval (earlier_export; the log does not record it), else the running ones.
+
 Episode ids: "<sample>#<epoch>" for a single agent, "<sample>#<epoch>@<agent>" otherwise (export_episodes.episode_id).
 Verdicts come from the `verdicts` argument ({episode: verdict}, when re-judging), which replace the judge's stored rows
 of those episodes, or from the cheatbench_judge score in the log, which only fill episodes the judge's file lacks, so a
@@ -58,7 +62,8 @@ A run directory holds one eval's run. write_run refuses a directory whose run.js
 own directory again (regenerate, rejudge). replace=True first sets the earlier run aside into
 runs/<study>/attempts/<name>.<n>/ with its eval log and its figures (run_directory.set_aside_attempt), so no file of
 the earlier eval stays beside the new one and nothing is deleted. run.json's run_id is the run's own name
-(run_directory.run_name), also for an attempt exported again.
+(run_directory.run_name), also for an attempt exported again; a re-export keeps the run_id the earlier export of the
+same eval recorded (earlier_export).
 """
 from __future__ import annotations
 
@@ -66,7 +71,6 @@ import json
 import shutil
 from pathlib import Path
 
-import inspect_ai
 import orbit
 from inspect_ai.log import read_eval_log
 
@@ -87,7 +91,7 @@ from src.export._export_run_blocks import (
     validity_block,
 )
 from src.export.atif_transcripts import model_key
-from src.export.eval_sample_view import SampleView, orbit_halt_reason
+from src.export.eval_sample_view import SampleView, logged_inspect_version, orbit_halt_reason
 from src.export.export_episodes import sample_key, sample_records
 from src.judging import verdict_files
 from src.judging.cheatbench_judge import JUDGE_SCORER
@@ -102,16 +106,17 @@ OWNED_DIRS = ("trajectories", "communication", "defense", "swe")
 
 
 def run_json(view: SampleView | None, eval_path: Path, run_dir: Path, records: list[dict], eval_id: str,
-             model: str, access_log_block: dict | None) -> dict:
-    """run.json: what every run carries, then, for a log with a sample, what the first sample recorded."""
+             model: str, access_log_block: dict | None, versions: tuple[str, str], run_id: str) -> dict:
+    """run.json: what every run carries, then, for a log with a sample, what the first sample recorded. versions is
+    (ORBIT's, Inspect's) that ran the eval and run_id the run's name, as write_run reads them."""
     first = records[0] if records else {}
     task = first.get("task")
     run = {
-        "task": task, "run_id": run_name(run_dir), "model": provider.inspect_string(model),
+        "task": task, "run_id": run_id, "model": provider.inspect_string(model),
         "model_key": model_key(provider.inspect_string(model)),
         "topology": first.get("topology", "single"), "agents": first.get("orbit_roster", []),
         "eval_log": log_link(eval_path, run_dir), "eval_id": eval_id,
-        "orbit_version": orbit.__version__, "inspect_version": inspect_ai.__version__,
+        "orbit_version": versions[0], "inspect_version": versions[1],
     }
     if view is None:
         return run
@@ -198,6 +203,16 @@ class RunFolderTaken(ValueError):
         self.base = base
 
 
+def earlier_export(run_dir: Path, eval_id: str) -> dict:
+    """run_dir's run.json when it is an earlier export of this same eval, else {}. A re-export keeps two of its
+    fields: orbit_version, which the eval log does not record (the one written when the run was first exported, right
+    after its eval), and run_id, the run's name, which a collection that names its folders otherwise (apart_controls'
+    <model>/<task>/<cell>/s<seed>) does not give."""
+    path = Path(run_dir) / RUN_JSON
+    held = (read_json(path) or {}) if path.is_file() else {}
+    return held if held.get("eval_id") == eval_id else {}
+
+
 def refuse_replacing(run_dir: Path, eval_id: str | None) -> None:
     """Raise RunFolderTaken when run_dir holds the run of an eval other than eval_id: its run.json records another
     eval_id, or none. eval_id None stands for an eval not made yet, which no run.json can hold. A folder without
@@ -232,14 +247,17 @@ def write_run(eval_log_path: Path, run_dir: Path, *, verdicts: dict[str, dict] |
             raise
         set_aside_attempt(run_dir, keep=eval_path)
     run_dir.mkdir(parents=True, exist_ok=True)
+    earlier = earlier_export(run_dir, log.eval.eval_id)
+    versions = (earlier.get("orbit_version") or orbit.__version__, logged_inspect_version(log))
     clear_outputs(run_dir)
-    views = [SampleView.from_eval_sample(sample, log) for sample in log.samples or []]
+    views = [SampleView.from_eval_sample(sample, log, orbit_version=versions[0]) for sample in log.samples or []]
     records = [r for view in views for r in sample_records(view, run_dir)]
     for view in views:
         if (bench := domain(view)) is not None:
             bench.write_files(view, run_dir)
     block, opens = access_log(views[0]) if views else (None, None)
-    run = run_json(views[0] if views else None, eval_path, run_dir, records, log.eval.eval_id, log.eval.model, block)
+    run = run_json(views[0] if views else None, eval_path, run_dir, records, log.eval.eval_id, log.eval.model, block,
+                   versions, earlier.get("run_id") or run_name(run_dir))
     (run_dir / RUN_JSON).write_text(json.dumps(run, indent=1))
     write_jsonl(run_dir / EPISODES, records)
     if opens is not None:

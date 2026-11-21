@@ -87,7 +87,7 @@ def _base_record(view: SampleView, agent: str, defenses_cfg: list, evidence: dic
         "orbit_roster": roster(view), "topology": topology(view), "role": (cb.get("roles") or {}).get(agent),
         "defenses": [d["name"] for d in defenses_cfg],
         "defense": defense_counts(evidence, agent),
-        "agent_version": agent_version(),
+        "agent_version": agent_version(view),
         "prompt_file": cb.get("prompt_file"),
         "wall_time": view.total_time,
         "limit": view.limit.type if view.limit else None,

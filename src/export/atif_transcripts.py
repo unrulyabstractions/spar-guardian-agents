@@ -327,7 +327,7 @@ def build_trajectory(view: SampleView, agent: str) -> tuple[atif.Trajectory, dic
         schema_version=atif.SCHEMA_VERSION,
         session_id=f"{view.id}#{view.epoch}",
         trajectory_id=f"{view.id}#{view.epoch}/{agent}",
-        agent=atif.Agent(name=agent, version=agent_version(), model_name=episode_model(view, agent)),
+        agent=atif.Agent(name=agent, version=agent_version(view), model_name=episode_model(view, agent)),
         steps=atif_steps,
         final_metrics=final_metrics,
         extra={"final_text": last_text or None},
