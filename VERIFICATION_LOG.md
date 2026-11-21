@@ -2543,3 +2543,31 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **What.** System prompts no longer name a peer (prompts.yaml `team`, `roles.briefing`, `roles.regulator_opening`, SWE `system_shared`). Each peer's entry and exit reach every other agent as a durable user message before its next step (src/swarm/turn_rules/_turn_presence.py, delivered by TurnRulesDefense.apply_pre_turn). New influencer tool alert_humans (src/swarm/submit_and_stop.py): Alerts store, info event, timeline entry, run.json `alerts`, true or false alarm in run.json signals (src/measures/alert_outcomes.py) and INDEX fields. A shared_task submit now ends the submitter's own turns. Peer tools refuse a peer that has not entered and mark an exited one `"status": "exited"`.
 - **How.** tests/unit/test_presence.py (23 tests) on the real ORBIT swarm executor with Inspect's mock provider: provider inputs, the eval log's saved conversation (agent_messages), the ATIF steps, the store and info events. I printed the three saved conversations of an alert run from its eval log (scratchpad wf6/inspect_run.py) and read them: task message, then "a02 entered." and "a03 entered."; "a03 stopped working (stop_working).\na03 exited." before a01's round-2 step; "a02 has alerted humans.\na02 exited." before a01's round-3 step; a02 got no step after its alert and a01 got a03's pooled step. Full unit suite: 3319 passed, 2 failed, both in the network-log workflow's uncommitted viewer files (test_transcript_board network key, tv_net_panel.js). `-k collaboration`: 199 passed. ruff: clean on my files (2 errors in scripts/study_readme.py, another workflow's).
 - **Result.** VERIFIED for the unit behaviour above. UNVERIFIED: any Docker smoke (tests/smoke/openmath.py and knowledge.py pins updated, not run; tests/smoke/protein.py:284 still expects the old "Handed in." text and is another workflow's uncommitted file); a real provider's acceptance of several consecutive user messages (Gemini); the alert outcome on a real run's signals (unit-tested on constructed ladder results only).
+
+## 2026-11-21: the network log (fabeadf, 2852317), Colima only, no model call, no rental
+- **What.** A second sidecar, `netlog` (src/sandbox/network_log/), records every bind, listen, connect, accept, UDP
+  send and close in a sample's machines, by bpftrace fexit probes from a tracer image mounted at /nix (method ebpf),
+  else by the socket tables every 0.25 s (method procnet); start and end loopback controls with a nonce; rows in the
+  sample store, run.json `network` and network.jsonl (src/export/_export_network_log.py); the transcript viewer's Board
+  tab Network panel and the results browser's Network log section.
+- **How verified.** (1) The daemon alone on Colima in the sidecar's shape (BPF, PERFMON, SYS_PTRACE, image mount,
+  tracefs ro): I read every row of a scenario with a uid 1000 server and a uid 3001 client: bind, listen, connect
+  (EINPROGRESS for the control), accept, UDP send, unix connect ENOENT, a refused connect by a process gone before
+  /proc was read (exe from the exec probe), closes, both controls acknowledged by SIGUSR1, `stopped` with 0 lost. Same
+  in procnet. With SYS_ADMIN and no tracefs the tracer failed with "available_events" and the daemon fell back to
+  procnet with a trace_failed row (read in the log). (2) `make smoke-network`-equivalent runs, one sample at a time:
+  observer_connect (subset_sum), observer_protein, procnet, monitor_killed, network_off all PASS; I read
+  observer_connect's network.jsonl grouped by origin and op and its run.json block (valid, ebpf, 6 + 6 control rows,
+  one cross-agent connect a01 -> a02 by observer uid 3001 at call `reach`, peer pids matching). (3) One scenario per
+  domain with the switch on: openmath split_access, knowledge split, SWE lone PASS with network `valid`/ebpf; creative
+  team, protein split, interview split exported network `valid`/ebpf but failed later on `TurnState:ended`
+  assertions from the presence/alert_humans work (tracebacks read: creative.py:252, protein.py:264). (4) Unit suite:
+  3326 passed, 1 failed (my banned-word name in tv_net_panel.js, fixed and that file's test rerun: 59 passed).
+  (5) UI: viewer on port 8833 and results browser on 8834 over copies of the smoke runs; I viewed screenshots of the
+  Board tab's Network panel at two positions and with the cross and inet filters, and of the run page's Network log
+  section; no page errors. `ensure_tracer('cbtask:python311')` printed the tracer image.
+- **Result.** VERIFIED on Colima (aarch64, kernel 6.8, Docker 29.5) for the above. UNVERIFIED: any vast.ai box
+  (x86_64 AppImage never run; Docker older than 28 has no image mount and falls back to procnet); the user's viewer on
+  8770 (not restarted); smoke-load with many netlog sidecars at once (about 230 MB each with bpftrace); the paper
+  (it names the access log only as a ladder input; nothing it says changed). The UDP send row covers the first send per
+  process and destination only; a unix client is not seen by procnet.

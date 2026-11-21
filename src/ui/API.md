@@ -21,7 +21,7 @@ separator) gets 404 `{"error"}`; a server fault gets 500 `{"error", "traceback"}
 ## Data model
 
 A **run** is one directory under `runs/` holding `run.json`, `episodes.jsonl`, `trajectories/<episode>/transcript.json`,
-optionally `signals.jsonl`, `access_log.jsonl`, `judges/<pass>.<judge>.jsonl` (every verdict, keyed by episode),
+optionally `signals.jsonl`, `access_log.jsonl`, `network.jsonl`, `judges/<pass>.<judge>.jsonl` (every verdict, keyed by episode),
 `communication/<sample>.json` (board posts), `defense/<sample>.json` (control evidence) and `tools/<tool>/` (the analysis
 tools' outputs). One run has one sample and one **episode per agent**:
 `riemann#1` for a lone agent, `riemann#1@k7q2m` and `riemann#1@t4x9n` on a board. An agent is named by its bare ID
@@ -152,7 +152,7 @@ ends_after_round, snapshot, refused: [{agent, round, reason}], own: {agent: {rou
 team's accepted submit, every refused one and each solo_task agent's own hand-in), `alerts` (absent, or
 `[{agent, round, reason, agents, time}]`: each alert_humans call), `stop_working` (`null | {agent:
 round}`) and `shutdown_rate` (the share of the agents holding `stop_working` that ended with it; null for a lone agent or when no agent
-could stop). run.json `access_log`, in a run that recorded the switch, holds the log's status, what it missed and the harness's reads of content (`harness_reads: {count, own, commands: [{cmd, root_cmd, rows}]}`); `src/export/_export_access_log.py` gives its keys. The run page's Access log section reads it with the team's and the agents' `access_log` keys. `communication: {<sample>: {messages: [Post], events: [...]}}` and `defense: {<sample>:
+could stop). run.json `access_log`, in a run that recorded the switch, holds the log's status, what it missed and the harness's reads of content (`harness_reads: {count, own, commands: [{cmd, root_cmd, rows}]}`); `src/export/_export_access_log.py` gives its keys. The run page's Access log section reads it with the team's and the agents' `access_log` keys. run.json `network`, in a run that recorded the switch, holds the network log's status, method, fallback, counts by op, origin and agent, the controls, the gaps and the cross-agent connections (`cross_agent: [{t, machine, proto, op, from, to, from_pid, to_pid, raddr, rport, result, call_id, named_by}]`); `src/export/_export_network_log.py` gives its keys, and the run page's Network log section reads it. `communication: {<sample>: {messages: [Post], events: [...]}}` and `defense: {<sample>:
 {defenses, log, interventions}}` are the run's stores. `tools` replaces the row's name list with each tool's summary.json
 (`{tool, run, written_at, ...}`; the schemas are in each tool package's docstring under tools/); a summary that does not
 parse or is not an object becomes `{"error"}`.
@@ -511,6 +511,7 @@ BoardTab = {clock ("eval_log" | "call_order"), clock_about, total (seconds, or t
             ladders: {ladder: {name, levels, line, line_words}},
             label_names: {label: name},                        # the judge labels' names
             notes,                                             # load_run's, then the count of reads of no form
+            network,                                           # null, or the run's network log: BoardNetwork
             tmp}                                               # whether the run has tmp_snapshots.json (/api/tmp)
 BoardCall = {k (the agent tab's "Call k"), m (its model call, per agent from 0), t, dur, tool, summary (one line),
              board ("post" | "read" | "status" | null),
@@ -523,7 +524,20 @@ BoardPost = {label ("P1", "P2", ... in board order, system notices included: the
              kind ("post" | "system"), t, call (the writer's call k, null for a notice), text,
              reads: [{agent, k, t, form, asked}] (every read by another agent),
              labels: [{agent, label, score, excerpt, reason, start, end}]}   # judge labels located in the post
+BoardNetwork = {block (run.json "network"),
+                listeners: [{t, until, machine, agent, proto, laddr, lport, origin, at_start, call}],
+                calls: [{t, op ("connect" | "accept" | "send"), proto, machine, agent, peer_agent, raddr, rport,
+                         result, origin, cross, call}],     # in time order, at most MAX_CALLS
+                cut}                                        # the calls past MAX_CALLS
 ```
+`network` is null for a run with no `network.jsonl`, else `src/ui/transcript_network.py` `network_view`: the network
+log's rows on the board's clock, the control's rows left out. On an eval-log clock a row's `t` is its own time less the
+first call's start; on a call-order clock it is its call's `t`, or null for a row of no call. `call` is `{agent, k}` of
+the tool call the row sits in, or null. A listener is a listen, or a bind no listen followed on the same process and
+port; `until` is the `t` of its socket's close, null while it stays open. `cross` marks a connect or a send from one
+named agent to another. The Board tab's Network panel (`tv_net_panel.js`) shows, at the position, the listeners open
+then and the calls up to it, newest first, a call since the stop before marked `+`, with filters for named agents,
+cross-agent calls and TCP or UDP.
 The clock is the eval log's tool events where the log times every call (`run_calls.load_run(times=True)`, the
 source the results browser's timeline reads): `t` and `dur` in seconds from the first call's start. Without them it is
 call order: `t` is the call's place in `Run.ordered` and `dur` is 1. A post sits at the start of the call that wrote it;

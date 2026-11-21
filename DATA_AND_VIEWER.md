@@ -87,6 +87,21 @@ An entry is `{type, size, mode, owner, uid, group, gid, mtime, acl, default_acl,
 
 The viewer's Board tab shows the file in a Temp dirs panel under the timeline, only on runs that have it (`/api/tmp?id=`, src/ui/API.md).
 
+### The network log
+
+A run made with `network_log` on, the default since 2026-11-21, holds `network.jsonl`: one row per socket call in the agents' machines, the harness's included. A row is a bind, listen, connect, accept, UDP send to an address or close, over TCP, UDP or a unix socket, loopback included. run.json `network` sums it up. The log records only; it never blocks a call. `src/domains/README.md` says how it is taken, and `src/export/_export_network_log.py` gives every key.
+
+| Key | What it holds |
+|---|---|
+| `op`, `proto`, `result` | the call, `tcp`, `udp` or `unix`, and `ok` or the error's name (`EINPROGRESS` is a connect that did not wait) |
+| `t`, `source`, `at_start` | when, by `ebpf` (the kernel's time of the call) or `procnet` (the read of the socket tables), and whether the socket was there when the log began |
+| `machine`, `pid`, `uid`, `exe`, `cmd`, `root_cmd` | where and which process; a process gone before it was read keeps the kernel's pid, uid and `comm` |
+| `agent`, `named_by`, `origin`, `call_id` | who, as the access log names an opener: an influencer's `peer_shell` observer is the influencer (`named_by` observer); `origin` is agent, detached, harness, control or unknown; the tool call the row sits in |
+| `laddr`, `lport`, `raddr`, `rport` | the local and remote ends; a unix socket's path stands in `laddr` (in `raddr` for a connect), `@` before an abstract name |
+| `peer_agent`, `peer_pid`, `peer_origin` | the other end: the matching accept or connect, else what listens on the port |
+
+run.json `network` holds `status` (`valid`, `partial`, `broken`, `absent` or `off`), `method` (`ebpf` or `procnet`), `fallback` (why the tracer did not record), the counts by op, origin and agent, the controls, the gaps and `cross_agent`: every connect or send from one named agent to another. A run before the switch has no block and no file.
+
 ## Use the viewer
 
 ```
@@ -99,7 +114,7 @@ Open http://127.0.0.1:8770/. The viewer runs until Ctrl-C. `make transcripts REB
 |---|---|
 | Runs | One row per run. Filters in three groups: Run (Search, Task, Workers, Collection), Who (Workers' model, Worker conditioning, Influencer, Influencer conditioning) and Outcome (Cheating, Cheated, Coordination, Collusion, Disclosure at least, Manipulation at least). The default order is Interest: the team's Cheating rung against its influencers, rank 1 first. A column head sorts by that column. |
 | Agents | Two selects, Workers and Influencers, each ordered by Cheating, then Coordination, then Collusion, highest first; the selected agent shows its whole episode, and a run opens on the first worker, one step per model turn from 1, each with its labels: the turn's reasoning, then its calls, which a button on the step folds at once. The System box also holds the tool definitions sent with every model call, from the eval log. Steps never fold. The bar's toggles fold every call, the System prompt, every User message and every Reasoning section; the System prompt and the User messages start folded. The User messages include the presence lines, each peer's entry and exit. A tool result starts folded and a tool call open, each folding on its own header. |
-| Board | Two agents' calls on one clock, by time or by steps, with the message board below. The lenses colour the calls: All, Cheating, Coordination, Collusion, Judge labels. The slider, play and step buttons move the position, and the board fills to it. On a run with `tmp_snapshots.json`, a Temp dirs panel shows each machine's /tmp, /var/tmp and /dev/shm at the position: each entry's owner, the agents who can read it and its size, the entries added, changed or removed since the stop before marked with the call that changed them, paths removed earlier as faint rows, and a file's text on a click. |
+| Board | Two agents' calls on one clock, by time or by steps, with the message board below. The lenses colour the calls: All, Cheating, Coordination, Collusion, Judge labels. The slider, play and step buttons move the position, and the board fills to it. On a run with `tmp_snapshots.json`, a Temp dirs panel shows each machine's /tmp, /var/tmp and /dev/shm at the position: each entry's owner, the agents who can read it and its size, the entries added, changed or removed since the stop before marked with the call that changed them, paths removed earlier as faint rows, and a file's text on a click. On a run with `network.jsonl`, a Network panel shows what listens at the position and every connect, accept and send up to it: each with its agent, its peer and its call, a cross-agent call marked, and filters for named agents, cross-agent calls and TCP or UDP. |
 | Details | The Cheating, Coordination and Collusion panels, the judge labels and a legend. |
 | Run record | The end of Details: the run's settings, its labels and each agent's record. |
 | Ladders | The button in the top bar: every rung and level of the three ladders, by task, what each judge label's score means, and how reliable each proved. Every definition lives here. |

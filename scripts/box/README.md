@@ -139,6 +139,12 @@ scripts/box/box_ssh.sh <id> bash /root/ship/network_trace_check.sh --json /root/
 
 It downloads the pinned bpftrace release (196 MB, sha256 checked), starts two containers with memory limits, removes them, and prints one line per method and then `method ebpf`, `method procnet` or `method none`. It exits 1 when no method works. It rents nothing and calls no model.
 
+The runs use the same cache. The first task built on a box unpacks the release into the image `network-trace-bpftrace:v0.27.1-<arch>` and proves it by attaching a probe; each run's `netlog` sidecar mounts that image. Where the build or the probe fails, the runs record by the socket tables and run.json `network.fallback` says why. The sidecar's shape differs from the check's helper: it needs Docker 28 or newer for the image mount, and no `SYS_ADMIN`. This command runs the runs' own proof in the clone, and prints the image or `None` with the reason:
+
+```
+.venv/bin/python -c "from src.sandbox.network_log.network_monitor import ensure_tracer; print(ensure_tracer('cbtask:python311'))"
+```
+
 ## Pilot
 
 Rent and set up the pilot's boxes as above, then start each box and watch:
