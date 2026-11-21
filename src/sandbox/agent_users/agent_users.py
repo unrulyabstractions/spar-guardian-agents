@@ -1,18 +1,18 @@
-"""One Linux user per agent in one shared container: the seats, the private temporary directories, the loopback
+"""One Linux user per agent in one shared container: the seats, the private files and their proof, the loopback
 guard, the end state and the deviations this layout records. openmath, knowledge work and creative writing give a
 team this layout.
 
     seats = team_seats(agents, lambda a: f"/workspace/{a}")
-    setup = private_temp(agents)                      # appended to the sample's setup script
+    setup = private_files(agents)                     # appended to the sample's setup script
     report = await guard(seats, allow=[f"{MIRROR_IP}:443"])     # in the setup solver, before any agent runs
 
 Each agent has a user of its own name, uid FIRST_UID upward, home /home/<name> at mode 700, and its tools run as that
-user, its processes killed after each command (src/sandbox/agent_tools.py). Where each agent works in a copy of its
-own, the agent users' shells create private files (umask 077) and /tmp, /var/tmp and /dev/shm are writable but not
-listable (mode 1733), so a file passed through /tmp takes its owner naming its path to the others, which the
-transcript shows and the probe records by owner. The setup proves it and refuses the layout otherwise. Loopback
-traffic between the agent users is refused by iptables owner rules (src/sandbox/sandbox_hygiene.py LOOPBACK_GUARD).
-A lone agent keeps CheatBench's layout: the user `user` (lone_seat).
+user, its processes killed after each command (src/sandbox/agent_tools.py). Where each agent works in a copy of its own,
+the agent users' shells create private files (umask 077), so a file an agent leaves in /tmp, which keeps the image's
+mode (1777, listable), stays its own until it shares it, which the transcript shows and the probe records by owner. The
+setup proves it and refuses the layout otherwise. Until 2026-11-20 /tmp, /var/tmp and /dev/shm were also unlistable
+(mode 1733). Loopback traffic between the agent users is refused by iptables owner rules (src/sandbox/sandbox_hygiene.py
+LOOPBACK_GUARD). A lone agent keeps CheatBench's layout: the user `user` (lone_seat).
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from src.sandbox import sandbox_hygiene as hygiene
 from src.sandbox.agent_tools import AGENT_NAME, AGENT_UID, WORKDIR, Seat
 
 FIRST_UID = hygiene.AGENT_UID_FROM
-PRIVATE_TEMP = (Path(__file__).parent / "private_temp.sh").read_text()
+PRIVATE_FILES = (Path(__file__).parent / "private_files.sh").read_text()
 # How a team in this layout departs from CheatBench's runner.
 USER_DEVIATIONS = [
     "each_agent_has_its_own_linux_user_and_home_in_one_container_with_one_clock",
@@ -31,7 +31,8 @@ USER_DEVIATIONS = [
     "loopback_refused_between_agent_users_by_iptables_owner_rules",
     "agent_user_processes_killed_after_each_command_and_at_the_end",
 ]
-PRIVATE_TEMP_DEVIATION = "temporary_directories_not_listable_and_files_private_by_default"
+PRIVATE_FILES_DEVIATION = "agent_users_files_private_by_default"
+# Runs before 2026-11-20 record "temporary_directories_not_listable_and_files_private_by_default".
 
 
 def lone_seat(workdir: str = WORKDIR) -> Seat:
@@ -46,10 +47,10 @@ def team_seats(agents: list[str], workdir_of: Callable[[str], str]) -> dict[str,
             for i, a in enumerate(agents)}
 
 
-def private_temp(agents: list[str]) -> str:
-    """The setup block that makes the agent users' files private and the temporary directories unlistable, then
-    proves it: the first agent writes a file, and the second must fail to read it or list /tmp."""
-    return PRIVATE_TEMP.format(first=agents[0], second=agents[1]).rstrip("\n")
+def private_files(agents: list[str]) -> str:
+    """The setup block that makes the agent users' files private, then proves it: the first agent writes a file in
+    /tmp, and the second must fail to read it."""
+    return PRIVATE_FILES.format(first=agents[0], second=agents[1]).rstrip("\n")
 
 
 async def guard(seats: dict[str, Seat], *, allow: list[str] | None = None) -> dict:

@@ -2238,3 +2238,15 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   after the rename. GRANT on the SWE image's /app and /root: 0.07 s. ruff clean; make paper-check agrees.
 - **Result.** VERIFIED. Not covered: no loopback guard in the one-machine-per-agent layouts; the regulator's rung in the
   smoke stayed none (its output showed a byte count, no content).
+
+## 2026-11-20: agent users' /tmp listable again, files still private
+- **What.** src/sandbox/agent_users/private_temp.sh became private_files.sh: umask 077 for the agent users, no chmod of
+  /tmp, /var/tmp or /dev/shm (they keep the image's 1777); the proof now needs only that the second agent cannot read
+  the first's file in /tmp. agent_users.private_files, PRIVATE_FILES_DEVIATION "agent_users_files_private_by_default"
+  (older runs keep the old label); openmath, knowledge work and creative writing callers, docstrings, src/domains/README.md.
+- **How verified.** `uv run pytest tests/unit -k collaboration -q`: 199 passed, 6 xfailed. Full unit suite: 3193 passed,
+  6 xfailed. Docker mock smokes: openmath split_access PASS (the regulator lists /tmp and sees part2.bin, cannot read
+  it), knowledge solo PASS (a02 lists a01.txt, cannot read it), creative solo PASS (two Permission denied, own reference
+  readable). tests/support/peer_shell_layouts.py with agent_users at listable /tmp: every layout passed. ruff clean,
+  make paper-check agrees (the paper's "a shared /tmp" stays true).
+- **Result.** VERIFIED.

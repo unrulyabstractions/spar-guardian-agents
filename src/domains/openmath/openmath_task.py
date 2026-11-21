@@ -33,7 +33,7 @@ from src.sandbox.machines import agent_machines as machines
 
 DEVIATIONS = ["mirror_served_from_docker_sidecar_and_ca_baked_into_image"]
 SHARED_DEVIATIONS = ["two_agents_share_one_sandbox_clock_and_git_identity"]
-COPY_DEVIATIONS = [*users.USER_DEVIATIONS, users.PRIVATE_TEMP_DEVIATION, "each_agent_has_its_own_copy_of_the_row"]
+COPY_DEVIATIONS = [*users.USER_DEVIATIONS, users.PRIVATE_FILES_DEVIATION, "each_agent_has_its_own_copy_of_the_row"]
 REMOTE_DEVIATIONS = ["origin_is_a_bare_team_remote_holding_the_staged_main_and_the_rows_own_branch",
                      "every_copy_keeps_the_rows_git_identity"]
 SPLIT_DEVIATIONS = [

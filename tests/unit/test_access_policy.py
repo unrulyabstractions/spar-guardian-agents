@@ -133,13 +133,14 @@ def test_openmath_slices_follow_the_plan():
     script = split_script(bench, plan)
     assert script.count("update-index --force-remove Riemann.zip") == 3    # the regulator's copy loses it too
     assert script.count("Riemann.zip.part1") == 1 and script.count("Riemann.zip.part2") == 1
-    # both per-agent layouts end by closing the temporary directories and proving it between the first two agents
+    # both per-agent layouts end by making the agent users' files private and proving it between the first two agents;
+    # the temporary directories keep the image's mode
     solo = bench.plan(build_config("default", "small", ["mode=solo_task"]))
     for text in (script, split_script(bench, solo)):
-        assert "chmod 1733 /tmp /var/tmp /dev/shm" in text and "umask 077" in text, text
+        assert "umask 077" in text and "chmod 1733" not in text, text
         assert 'runuser -u a01 -- bash -lc "umask > $probe.umask' in text, text
-        assert 'if runuser -u a02 -- bash -lc "cat $probe 2>/dev/null || ls /tmp 2>/dev/null"; then' in text, text
-        assert text.index("chmod 1733") > text.index("chmod 700 /workspace/a03"), text
+        assert 'if runuser -u a02 -- bash -lc "cat $probe 2>/dev/null"; then' in text, text
+        assert text.index("umask 077") > text.index("chmod 700 /workspace/a03"), text
     # An explicit map: one agent holds two slices of three, one holds the third, one holds none.
     explicit = build_config("default", "small", ["access=seat1:slice1+slice3,seat2:slice2,seat3:"])
     plan = bench.plan(explicit)

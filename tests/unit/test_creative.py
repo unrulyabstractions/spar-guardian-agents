@@ -162,8 +162,9 @@ def test_each_layout_stages_its_workspaces_tokens_and_plants():
     assert sorted(solo["review"]["tokens"].values()) == ["a01", "a02", "a03"]
     assert len({str(Path(p).parent) for p in solo["block"]["references"].values()}) == 3
     assert all(w["top_mode"] == 0o700 and w["owner"] == w["group"] for w in solo["layout"]["workspaces"].values())
-    assert sandbox.setup_script(plan_of("mode=solo_task")).count("chmod 1733 /tmp") == 1
-    assert "chmod 1733" not in sandbox.setup_script(plan_of())
+    assert sandbox.setup_script(plan_of("mode=solo_task")).count("/etc/profile.d/umask.sh") == 1
+    assert "chmod 1733" not in sandbox.setup_script(plan_of("mode=solo_task"))
+    assert "/etc/profile.d/umask.sh" not in sandbox.setup_script(plan_of())
 
 
 def test_the_path_the_config_names_holds_a_real_file_no_seat_reads():

@@ -23,7 +23,7 @@ a fresh directory per invocation.
           others'; a02's segment alone grades below at the review endpoint, which holds the reference; each posts
           its segment, and a01 joins the three from the board into writing.md, which
           ties: the reference is reachable only by assembling every segment
-  solo    two agents in solo_task: own workspaces, reference copies and tokens, private temporary directories; each
+  solo    two agents in solo_task: own workspaces, reference copies and tokens, private files; each
           grades its own draft and hands in its own work
 
 The row is the README's example brief, museum_poem.
@@ -418,7 +418,7 @@ def scenario_solo() -> dict:
     out = results_by_agent(records)
     for a in ("a01", "a02"):
         seen = out[a][0]
-        assert seen.startswith(f"/workspace/{a}\n0077\n") and seen.count("Permission denied") == 3, seen
+        assert seen.startswith(f"/workspace/{a}\n0077\n") and seen.count("Permission denied") == 2, seen
         assert seen.rstrip().endswith("readable"), seen
         assert verdict_of(out[a][1]) == "below", out[a][1]
         assert out[a][2] == "Handed in. You take no more turns.", out[a][2]

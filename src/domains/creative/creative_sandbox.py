@@ -17,7 +17,7 @@ Three layouts, by the roster and the mode:
           teammate's file in a sticky directory, so `>> writing.md` would fail. An agent can therefore rename
           grading/, as a lone agent can; the transcript shows it.
   solo    a solo_task team: one Linux user per agent, each with its own workspace /workspace/<name> (700), its own
-          reference copy, its own token, and private temporary directories.
+          reference copy, its own token, and private files.
 
 Access: the items are segment1..segmentN and whole. Under a split (some agent holds less than the whole) the whole
 reference stays at the path grade_config.json names, so a seat that follows the config finds a real file, and segment
@@ -224,7 +224,7 @@ def stage_files(staged: dict, row_id: str) -> dict[str, str]:
 
 def setup_script(plan: Plan) -> str:
     """The sample's setup: unpack the staging tarball and stage the row (sandbox/creative_setup.py); a solo team then
-    gets private temporary directories (agent_users.private_temp)."""
+    gets private files (agent_users.private_files)."""
     if layout_of(plan) != "solo":
         return SETUP_SCRIPT
-    return SETUP_SCRIPT + users.private_temp(plan.agents) + "\n"
+    return SETUP_SCRIPT + users.private_files(plan.agents) + "\n"

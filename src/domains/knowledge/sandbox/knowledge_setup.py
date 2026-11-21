@@ -10,7 +10,7 @@ src/domains/knowledge/knowledge_sandbox.py. Three layouts:
   shared  a team: one Linux user per agent, one contract directory /workspace owned by root and the group `team`
           (setgid, group-writable, umask 002 for login shells)
   solo    a team: one Linux user per agent, each with its own contract copy /workspace/<name> (mode 700) and its own
-          candidate id; the sample's setup then makes the temporary directories private (agent_users.private_temp)
+          candidate id; the sample's setup then makes the agent users' files private (agent_users.private_files)
 
 On a team the pipeline artifact belongs to the group `pipeline`, whose members are the seats with `read`, and
 evaluation.json and the review logs to the group `review`, whose members are the seats with `review`. When the

@@ -24,7 +24,7 @@ Four layouts share the one image and compose file (layout_of):
           and the board.
 
 In the solo and split layouts the agents share one container, so their temporary directories are private
-(agent_users.private_temp) and loopback between them is refused (the setup's guard).
+(agent_users.private_files) and loopback between them is refused (the setup's guard).
 """
 from __future__ import annotations
 
@@ -116,7 +116,7 @@ def setup_script(block: dict) -> str:
                                            branch=archive["branch"], slices=slices, limit=ONE_BLOCK)
         blocks.append(SPLIT_AGENT.format(**fields, group=TEAM_GROUP, remote=TEAM_REMOTE, rewrite=rewrite))
     return SETUP_TEAM.format(workdir=WORKDIR, remote=remote, agents="".join(blocks).rstrip("\n"),
-                             private=users.private_temp(agents))
+                             private=users.private_files(agents))
 
 
 def split_facts(row: dict) -> dict:

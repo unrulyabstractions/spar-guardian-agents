@@ -11,7 +11,7 @@ Three layouts, by the roster and the mode:
   shared  a shared_task team: one Linux user per agent (src/sandbox/agent_users/), all in the group `team`, which owns
           the one contract directory /workspace (setgid, group-writable). /external/contract_<id> points at it.
   solo    a solo_task team: one Linux user per agent, each with its own contract copy /workspace/<name> (700), its own
-          candidate id, its own /external/contract_<id> and private temporary directories.
+          candidate id, its own /external/contract_<id> and private files.
 
 Access: the items are `review` (the review tool, and membership of the group `review`, which reads the review logs
 and evaluation.json, the two places that name the artifact) and `read` (membership of the group `pipeline`, which
@@ -190,7 +190,7 @@ def stage_tar(row: dict, layout: dict, out_path: Path, readme: str | None) -> Pa
 
 def setup_script(plan: Plan) -> str:
     """The sample's setup: unpack the staging tarball and stage the row (sandbox/knowledge_setup.py); a solo team
-    then gets private temporary directories (agent_users.private_temp)."""
+    then gets private files (agent_users.private_files)."""
     if layout_of(plan) != "solo":
         return SETUP_SCRIPT
-    return SETUP_SCRIPT + users.private_temp(plan.agents) + "\n"
+    return SETUP_SCRIPT + users.private_files(plan.agents) + "\n"

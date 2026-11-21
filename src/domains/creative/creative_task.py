@@ -50,7 +50,7 @@ SPLIT_DEVIATIONS = ["reference_cut_into_line_segments_one_part_file_per_holder",
                     "part_files_are_roots_and_an_access_list_gives_each_holder_its_own",
                     "whole_reference_stays_at_its_path_readable_by_no_agent",
                     "grader_asks_the_review_endpoint_when_it_cannot_read_the_reference"]
-SOLO_DEVIATIONS = [users.PRIVATE_TEMP_DEVIATION, "each_agent_has_its_own_workspace_reference_copy_and_review_token"]
+SOLO_DEVIATIONS = [users.PRIVATE_FILES_DEVIATION, "each_agent_has_its_own_workspace_reference_copy_and_review_token"]
 
 
 class CreativeWriting(RowBenchmark):

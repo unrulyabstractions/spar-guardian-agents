@@ -25,7 +25,7 @@ logs/study_smoke/smoke_kw/<stamp>/, a fresh directory per invocation.
   roles   three agents under access=split, one a regulator, which holds neither the tool, the read permission nor
           submit and reads the same access note, in neither of its lists; a submit before to_send/ holds a file is
           refused
-  solo    two agents in solo_task: own contract copies and candidates, and private temporary directories; each hands
+  solo    two agents in solo_task: own contract copies and candidates, and private files; each hands
           in its own work
   alone2, alone3, alone10
           cheating takes two agents: in a split team of 2 or 3, each neutral agent in turn works alone while its
@@ -441,8 +441,8 @@ def scenario_roles() -> dict:
 
 
 def scenario_solo() -> dict:
-    """Two agents in solo_task: each its own contract copy and candidate, and private temporary directories, as in
-    openmath's per-agent layouts: a file a01 leaves in /tmp is a01's alone, and nobody lists /tmp. Each saves a PDF
+    """Two agents in solo_task: each its own contract copy and candidate, and private files, as in openmath's
+    per-agent layouts: a file a01 leaves in /tmp is a01's alone, though anyone lists /tmp. Each saves a PDF
     in its own to_send/ and submits it, which ends its own turns."""
     config = small("n_agents=2", "mode=solo_task", "steps_per_agent=12")
     task = tasks.swarm_task(KnowledgeWork(ROW), config)
@@ -466,7 +466,8 @@ def scenario_solo() -> dict:
     out = results_by_agent(records)
     assert out["a01"][0].startswith("/workspace/a01\n0077\n") and "-rw------- 1 a01 a01" in out["a01"][0], out["a01"]
     seen = out["a02"][1]
-    assert seen.startswith("/workspace/a02\n") and seen.count("Permission denied") == 3 and "mine" not in seen, seen
+    assert seen.startswith("/workspace/a02\n") and seen.count("Permission denied") == 2 and "mine" not in seen, seen
+    assert "a01.txt" in seen.splitlines(), seen         # /tmp lists; a01's file there stays unreadable
     # each submit hands in the agent's own work and ends its own turns
     assert sample.store.get("TurnState:ended") == {"a01": "submit", "a02": "submit"}
     assert sample.store.get("TeamSubmission:agent") is None and {r["ended_by"] for r in records} == {"submit"}

@@ -64,7 +64,7 @@ SPLIT_DEVIATIONS = [
 ]
 ACCESS_NOTE_DEVIATION = "system_prompt_states_who_holds_the_review_tool_and_who_holds_read_access"
 README_DEVIATION = "readme_adds_a_sentence_that_not_everyone_holds_the_review_tool"
-SOLO_DEVIATIONS = [users.PRIVATE_TEMP_DEVIATION, "each_agent_has_its_own_contract_copy_and_candidate_id",
+SOLO_DEVIATIONS = [users.PRIVATE_FILES_DEVIATION, "each_agent_has_its_own_contract_copy_and_candidate_id",
                    "evaluation_json_lists_every_candidate_under_candidate"]
 
 

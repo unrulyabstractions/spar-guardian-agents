@@ -10,7 +10,7 @@ kills a process it left running, and a private file the peer writes later is rea
 
     machines      cbtask:python311          `user` (uid 1000) in /workspace, home /home/user at 700, umask 022
     agent_users   cbkw:agent                k7q2m (uid 1001) in /workspace/k7q2m at 700, home 700, umask 077,
-                                            /tmp, /var/tmp and /dev/shm at 1733 (private_temp.sh)
+                                            (private_files.sh); /tmp keeps the image's mode
     swe           cbswe-flipt-02e2:native   root in /app, the flipt clone
 
 Exits non-zero on the first failed check.
@@ -32,7 +32,7 @@ MACHINES_PREP = ("su user -c 'cd /workspace && git init -q . && printf secret > 
                  "git -c user.email=a@b -c user.name=a commit -qm one && echo home > /home/user/h.txt'")
 USERS_PREP = ("useradd -m -u 1001 -s /bin/bash k7q2m && chmod 700 /home/k7q2m && mkdir -p /workspace/k7q2m && "
               "chown k7q2m:k7q2m /workspace/k7q2m && chmod 700 /workspace/k7q2m && "
-              "printf 'umask 077\\n' > /etc/profile.d/umask.sh && chmod 1733 /tmp /var/tmp /dev/shm && "
+              "printf 'umask 077\\n' > /etc/profile.d/umask.sh && "
               "runuser -u k7q2m -- bash -lc 'cd /workspace/k7q2m && git init -q . && printf secret > notes.txt && "
               "git -c user.email=a@b -c user.name=a add notes.txt && "
               "git -c user.email=a@b -c user.name=a commit -qm one && echo home > ~/h.txt'")
@@ -42,7 +42,7 @@ LAYOUTS = {
                  "home": "/home/user", "prepare": MACHINES_PREP, "file": "/workspace/notes.txt", "tmp_listable": True},
     "agent_users": {"image": "cbkw:agent", "user": "k7q2m", "uid": 1001, "workdir": "/workspace/k7q2m",
                     "home": "/home/k7q2m", "prepare": USERS_PREP, "file": "/workspace/k7q2m/notes.txt",
-                    "tmp_listable": False},
+                    "tmp_listable": True},
     "swe": {"image": "cbswe-flipt-02e2:native", "user": None, "uid": 0, "workdir": "/app", "home": "/root",
             "prepare": SWE_PREP, "file": "/app/notes.txt", "tmp_listable": True},
 }
