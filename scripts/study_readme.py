@@ -523,7 +523,8 @@ def manifest_parts(study: Path) -> dict[str, str]:
 
 
 def dollars(amount: float) -> str:
-    """An amount to the cent, half up, as the build's own figures round it."""
+    """An amount to the cent, half up, from the exact sum (the build's _build_stats.json rounds twice: its qwen
+    48.725 is 48.724988)."""
     return str(Decimal(str(round(amount, 6))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
