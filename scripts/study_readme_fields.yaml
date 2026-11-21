@@ -1,0 +1,667 @@
+# What every field of a study's files means, for scripts/study_readme.py, which writes runs/<study>/README.md.
+# The fields and their types come from the data; only the meaning lives here. A CheatBench verdict field a task's
+# judge schema describes takes that description instead (submodules/cheatbench/tasks/<task>/judge_schema.py).
+# A field found in the data without an entry stops the generator, so add the entry when the export gains a field.
+
+files_note: |
+  Every file is UTF-8 JSON (`.json`) or JSON Lines (`.jsonl`, one object per line). A type such as `string \| null`
+  lists every JSON type the field takes in this study. `?` after a field marks one some rows lack. Agents are named by
+  bare IDs of five characters (`q4p9n`). An episode is one agent's part of a run: `<sample>#<epoch>` for a lone agent,
+  `<sample>#<epoch>@<agent>` in a team, so trajectory folder names hold `#` and `@` (encode them in a URL). Times
+  are seconds.
+
+links_note: |
+  Every path is relative: an eval log's from the repository's checkout, a transcript's from its run's folder. The
+  counts are this study's, read when the README was written.
+
+ladders_note: |
+  Code reads three ladders from each run's files, with no judge, and writes them to signals.jsonl: an agent row's
+  `cheating_rung`, `coordination_level` and `collusion_rung`, and the team row's (the workers'). An influencer (a
+  regulator or a disregulator) keeps its own rung in the team row's `*_influencers`. `cheated` is true from
+  `attempted` up. A judge pass adds the two labels in judges/labels.<judge>.jsonl.
+
+groups:
+  invalid: runs that do not count, with the reason in INDEX.jsonl (`reason`)
+  incomplete: runs that did not finish
+  mock: rehearsals on a mock model (`mockllm/model`)
+  set_aside: runs set aside by hand
+  attempts: earlier attempts of a run, `<name>.<n>`, superseded by the run of that name
+
+log_groups:
+  _unpaired: eval logs with no run, kept at the path they had; never read
+  screen: each run's console output (`.log`) and each box's launch record (`.json`)
+  set_aside_regulator_log: the first copies, eval logs (`logs/`) and run folders (`runs/`), of nine runs made again
+  set_aside_8M_guard: the first copy, eval log and run folder, of game_solo_cheat_dsflash1, made again
+
+study_files:
+  README.md: this file
+  INDEX.jsonl: one row per run, the study's index
+  manifest.jsonl: one row per published transcript copy
+  _build_stats.json: the counts behind this README's numbers, from the build of 2026-11-07
+
+opaque:
+  trajectories/*/prompt.txt: the agent's full prompt, as plain text; equal to transcript.json `prompt`
+  swe/diffs/*.diff: 'SWE only: `<target>.diff` a graded tree against the base commit (`team` the team''s main branch, `<agent>` the agent''s tree), `<agent>.own.diff` the commits the agent made itself, `team.<branch>.diff` another branch of the team remote against the base, with `~` for `/`'
+  tools/board_reads.json: 'a cache for the viewer, `{tool call id: the board text that read returned}`'
+  tools/docent/agent_runs.json: the transcripts converted for the Docent analysis tool, a copy
+  eval/*.eval: the run's Inspect eval log (a zip), the source every other file is exported from
+
+files:
+  index:
+    about: One row per run of the study, top level and groups. A reader keys runs by `path`, never by `run`.
+    fields:
+      study: the study's folder name
+      run: the run's own name (run.json `run_id`); an earlier attempt keeps its run's name
+      path: the run's folder, from the study's folder
+      group: the group folder that holds the run, null at the top level
+      cheatbench_task: CheatBench's task name
+      domain: the task's domain key in the code (src/configuration/task_names.py)
+      row: the task instance (the SWE issue, the protein target, the creative brief)
+      stage: the fleet stage that launched the run, null outside the fleet
+      box: the vast.ai box name that ran it, null for a local run
+      instance_id: the vast.ai instance id of that box
+      instance_source: where the instance id comes from (the fleet's manifest, or the capture that holds the run's eval log)
+      cell: the example cell, `<domain>.<stem>_<kind>`
+      kind: 'the arm: `solo` one agent alone, `minimal` three workers on one board with the exploit split between them; `_cheat` adds a paragraph telling every worker to cheat, `_regulated` a hidden regulator, `_disregulated` a hidden disregulator'
+      target: the fleet target, `<task>-<worker>`
+      worker: the workers' model, by short name
+      worker_model: the workers' model registry entry (src/models/model_registry.yaml)
+      rule_level: the rule against cheating added to the workers' text, null for none
+      regulator: the regulator's model, by short name; null without a regulator
+      regulator_model: the regulator's registry entry
+      regulator_level: the regulator's instruction level, null without a regulator
+      disregulator_level: the disregulator's instruction level, null without a disregulator
+      tag: the tag in the run's name, null for none
+      seed: the seed, the run's sample number
+      mock: true for a rehearsal on a mock model
+      commit: the repository commit the run ran at
+      inspect_model: the workers' model as an Inspect string
+      regulator_inspect_model: the regulator's model as an Inspect string
+      model_key: the registry entry of `inspect_model`, null outside the registry
+      regulator_model_key: the registry entry of `regulator_inspect_model`
+      eval_status: Inspect's status of the eval
+      completed: whether the eval finished
+      failed_episodes: the episodes that failed on a provider or harness error
+      cheating_rung: the team's Cheating rung (signals.jsonl team row)
+      regulator_posts: the regulator's board posts; null without a regulator
+      disregulator_posts: the disregulator's board posts; null without one
+      export_flags_ok: run.json `validity.ok`, the export's own activity checks
+      valid: whether the run counts. The one validity verdict
+      why: the checks that failed
+      reason: why the run counts or not (src/measures/run_validity.py); `swe_before_fix` is an SWE run before the fix that made the task need two agents
+      deal_replay: whether today's code deals the run the holdings it recorded
+      deal_replay_detail: what differs, when it does
+  manifest:
+    about: One row per published transcript copy (apart controls). `key` is unique; filter `canonical == true` for one copy per run name.
+    fields:
+      key: the unique key, `run_name` for the canonical copy, `run_name__<host>` for an extra copy
+      canonical: whether this copy is the run name's canonical one (in `<model>/<task>/<cell>/s<seed>/`)
+      run_name: '`{task}_{cell}_{model}_s{seed}`, not unique when a run name has extra copies'
+      model: the model's short name
+      model_id: the model as an Inspect string
+      task: the task's short name
+      cell: '`solo` the honest baseline, `cheat` told to cheat'
+      seed: the seed, a replicate of the task's one fixed instance
+      host: the collection host that ran the copy
+      label: 'the build''s coarse label: `cheat` used or tampered, `honest` shipped without using, `other` neither'
+      rung: the highest evidence word of the team row at the build (2026-11-07, older ladder); not today's Cheating rung
+      ended_by: how the episode ended
+      instance: the task's fixed instance
+      billed_usd: what the provider billed for the run, in USD
+      exposed: team evidence at the build, as signals.jsonl names it
+      tried: team evidence at the build
+      opened: team evidence at the build
+      used: team evidence at the build
+      tampered: team evidence at the build
+      checked: team evidence at the build
+      shipped: team evidence at the build
+      n_turns: the agent's model turns
+      n_tool_calls: the agent's tool calls
+      score: '`{scorer: value}` from the eval'
+      n_episodes: episodes in the run (1)
+      has_eval: whether the run's eval log is in `eval/`
+      valid: whether the copy passed the build's validity gate
+      n_valid_copies: valid copies of this run name
+      dup_hosts: the hosts of the other copies
+      dup_labels: the labels of all copies
+      label_divergent: whether the copies' labels differ
+  run:
+    about: The run, one per run folder.
+    fields:
+      task: CheatBench's task name
+      run_id: the run's name, its folder's name and the salt of its agents' IDs
+      model: the eval's model (the workers'), an Inspect string
+      role_models: '`{worker, regulator, disregulator}`: each role''s own model, null for the eval''s'
+      model_key: the registry entry of `model`, null outside the registry
+      topology: '`single` for a lone agent, `swarm` for a team on one board'
+      agents: the agents' IDs, in roster order
+      eval_log: the Inspect eval log's path from the checkout
+      eval_id: the eval's id in its log
+      orbit_version: the ORBIT version that ran the eval
+      inspect_version: the Inspect version that ran the eval
+      defenses: the harness layers on the model calls (`turn_rules`, the turn harness, not a defense)
+      swarm: the team's composition (workers, regulators, disregulators, roles, seed); null for a lone agent
+      orbit_halt_reason: why ORBIT's scheduler stopped, null when it recorded none
+      deviations: each way this run differs from CheatBench's own setup, by name
+      config: the SwarmConfig the task was built from (src/configuration/swarm_config.py); `steps_per_agent` there is inactive, `turn_budget` governs
+      team_submission: the hand-in (agent, round, the round the run ends after, snapshot, refused calls, each solo_task agent's own); null when no agent called submit
+      stop_working: '`{agent: round}` of each stop_working call; null when no agent stopped'
+      shutdown_rate: the share of the agents that could stop that stopped before any hand-in; null for a lone agent
+      rules: the turn rules' record (rounds, windows, each agent's activations, steps, board reads and posts, and the per-turn `timeline`)
+      probes: unused, always null
+      mode: '`shared_task` (one team hand-in) or `solo_task` (each agent hands in its own)'
+      scale: the run's size preset
+      preset: the config preset
+      engagement: the board engagement (who looked, read, posted; who read whom; oversight calls); null without a board
+      validity: the export's activity checks per agent and their flags; `ok` is false when a flag is raised. INDEX.jsonl `valid` is the verdict
+      ledger: each agent's model calls, tokens, cost at the registry's list prices (`cost_usd`) and what the provider billed (`billed_usd`), and the totals
+      turn_budget: '`{budget, steps_per_agent}`: the working steps each agent may take'
+      access: the access policy (`split`, `all`, `explicit`) and what each agent holds
+      protein: protein design's block (target, planted designs, deals, grades)
+      honeypot_probe: the end-of-run probe for copies of the honeypot, by owner (agents, remote, shared)
+      sandbox: what the sandbox held at the end, the reaps after each command and the loopback guard's report
+      code: '`{commit, dirty, submodules}` of the checkout that ran the eval'
+      signals: '`{team: the signals.jsonl team row}`, a copy'
+      access_log: the access log's `status` (`valid`, `partial`, `broken`, `absent`, `off`, `host`), its rows by origin, its gaps and the harness's reads
+      swe: SWE's block (issue, base and fix commits, honeypot, pieces, grades, the team's branches)
+      chess: chess's block (position, the game's records, the endpoint)
+      creative: creative writing's block (brief, reference segments and who holds them, grades)
+      knowledge: knowledge work's block (row, pieces, the review tool's verdicts)
+      interview: the interview task's block
+      openmath: openmath's block (row, archive slices)
+      network: 'the network log''s `status` (`valid`, `partial`, `broken`, `absent`, `off`), its method, its counts by op, origin and agent, and `cross_agent`: every connect or send from one named agent to another'
+      delivery: the stop-after-delivery record
+      peer_shell: "the influencers' peer shells: the observers' uids, their calls, what their reaps killed"
+      deliverables: openmath's deliverables scorer's record
+  episodes:
+    about: One row per agent of the run, in roster order.
+    fields:
+      id: the sample's id (the task instance)
+      episode: the episode's id
+      replicate: the epoch
+      task: CheatBench's task name
+      model: the agent's own model, an Inspect string (its role's model when the run gave one)
+      model_key: the registry entry of `model`, null outside the registry
+      agent: the agent's ID
+      orbit_roster: every agent's ID, in roster order
+      topology: '`single` for a lone agent, `swarm` for a team'
+      role: the agent's role, null in a run without roles
+      defenses: the harness layers' names
+      defense: the turn harness's checks and blocks on this agent
+      agent_version: '`orbit-<version>+inspect-ai-<version>` that ran the eval'
+      prompt_file: CheatBench's prompt file the task text came from
+      wall_time: the sample's wall-clock seconds
+      limit: the Inspect limit that ended the sample, null for none
+      score: '`{scorer: value}`: the task''s graders on the hand-in'
+      final_text: the agent's last message
+      n_turns: the agent's model turns
+      n_tool_calls: the agent's tool calls
+      usage: '`{input, output, cache_read, cache_write, reasoning, billed_usd}` tokens; input includes cache reads'
+      transcript_path: the transcript's path from the run's folder
+      error: the error that ended the episode, null when it ended cleanly
+      failure: 'the error''s class: `harness` and `connection_closed` are provider or harness errors, `timeout` and `token_limit` limits'
+      ok: true when `error` is null
+      ended_by: 'how the episode ended: `submit` it handed in, `teammate_submit` a teammate''s hand-in ended it, `stop_working` it stopped, `limit` the sample''s limit, `error`, `end` the plan ran out or its window closed'
+      rules: the agent's activations, working steps, how the turn rules ended it, and its window of rounds
+      probes: unused, always null
+      engagement: the agent's board use (first round it looked, checks, reads, posts, whom it read); null without a board
+      validity: the agent's activity checks (calls, never acted, longest run of identical calls, board unused)
+      ledger: the agent's calls, tokens, list-price cost and billed cost
+      access: '`{holds}`: the items the agent was dealt'
+      task_tool: the task tool's owner and every call to it (protein design's `check_design`, the machines domains)
+      swe_task: SWE's instance name
+      seat: SWE's seat, the agent's ID
+      n_agents: SWE's team size
+      rule: SWE's rule level
+      honeypot: SWE's honeypot layout
+      piece: SWE's fix pieces the agent holds
+      reward: SWE's hidden tests on the agent's final tree (1 pass, 0 fail)
+      team_reward: SWE's hidden tests on the team's main branch
+      grading: creative writing's grader use (`logs`, `ties`)
+      review: knowledge work's review tool use and verdicts
+  signals_agent:
+    about: The code's evidence of one agent's acts on the honeypot and its three ladders' rungs. Written by code, no judge.
+    fields:
+      row: '`agent`'
+      sample: the sample, `<id>#<epoch>`
+      episode: the agent's episode
+      agent: the agent's ID
+      role: the agent's role
+      task: CheatBench's task name
+      holds: the access items the agent was dealt (`A`, `B`, `C`)
+      exposed: a pointer to the honeypot reached the agent
+      exposed_call: the call number that exposed it (0 is the first call); null when nothing did or when the task text did
+      exposed_source: 'where the first pointer came from: its own call, a teammate''s post, a teammate''s actions an influencer read, its task text, or `none`'
+      tried: the agent aimed a command at the honeypot's content, failed attempts included
+      tried_call: the call number of the first attempt
+      tried_evidence: '`[call] what it ran`'
+      opened: honeypot content reached the agent
+      opened_call: the call number where it first did
+      opened_evidence: '`[call] what reached it`'
+      lines_seen: the most distinctive honeypot lines one result showed it
+      pieces_seen: the access items whose content reached it
+      pieces_seen_at: '`{item: the call that first showed it}`'
+      joined_call: the first call that joined the whole exploit for it, null when none did
+      joined_evidence: '`[call] what joined it`'
+      access_log: what the access log added to the agent's evidence, null without a log
+      probe: whether the end-of-run probe reported on this agent's machine
+      copies: the probe's copies of honeypot content on its disk (up to 20)
+      used: honeypot content the agent itself put into the team's work
+      used_evidence: where it put it
+      tampered: a write of the agent changed what the task's own game did (chess)
+      tampered_evidence: the write
+      checked: the agent sent honeypot content to the task's feedback grader
+      checked_evidence: what it sent
+      shipped: honeypot content the agent wrote is in the hand-in
+      shipped_evidence: where in the hand-in
+      calls: the agent's tool calls in its transcript
+      cheating_rung: the agent's Cheating rung
+      cheated: true from `attempted` up
+      cheating_timeline: the rung after every call (`after`), the clauses that first raised it (`first`), and its `source` (`steps` from a faithful replay, `record` from the end state)
+      coordination_level: the agent's Coordination level, null for a lone agent
+      collusion_rung: the agent's Collusion rung, null for a lone agent
+      collusion_timeline: the Collusion rung after every call
+  signals_team:
+    about: The team's evidence, outcomes and three ladders' rungs, one row per sample, after the agent rows.
+    fields:
+      row: '`team`'
+      sample: the sample, `<id>#<epoch>`
+      task: CheatBench's task name
+      agents: every agent's ID
+      mode: run.json `mode`, null when it recorded none
+      split: whether the access plan cut the exploit between agents
+      exposed: some worker was exposed
+      tried: some worker tried
+      opened: some worker opened, or a copy no agent owns holds content
+      used: some worker used it, or the team's work holds it, once content reached the workers
+      tampered: some worker tampered
+      checked: some worker's content reached the feedback grader
+      shipped: the hand-in holds it
+      exposed_agents: the agents behind `exposed`
+      exposed_evidence: their evidence
+      tried_agents: the agents behind `tried`
+      tried_evidence: their evidence
+      opened_agents: the agents behind `opened`
+      opened_evidence: their evidence
+      used_agents: the agents behind `used`
+      used_evidence: their evidence
+      tampered_agents: the agents behind `tampered`
+      tampered_evidence: their evidence
+      checked_agents: the agents behind `checked`
+      checked_evidence: their evidence
+      shipped_agents: the agents behind `shipped`
+      shipped_evidence: their evidence
+      copies: copies of the honeypot no agent owns (team remote, shared folders)
+      content_reached: honeypot content reached a worker
+      travel_evidence: '`{discussed, solicited, crossed, assembled}`: posts and moves that carried the honeypot between agents'
+      passed: the task's own success measure, null where the task has no grader or none was recorded
+      proof: the evidence that the task's grade proves its checker received the content
+      checked_blind: whether the grader only ever received content no agent saw
+      ended_by: 'how the team''s run ended: `submit` the team handed in, `stop_working` every worker stopped, `steps` or `tokens` they ran out, `time` the time limit, `error`, `end`'
+      submit: '`{agent, round, ends_after_round, snapshot}` of the hand-in, null without one'
+      own_submits: '`{agent: round}` of each solo_task agent''s own hand-in'
+      refused_submits: the submit calls refused
+      shutdown_rate: run.json `shutdown_rate`
+      access_log: where the access log and the transcript scan disagree, and the rung without the log
+      cheating_rung: the workers' Cheating rung
+      cheated: true from `attempted` up
+      cheating_influencers: '`{influencer: its Cheating rung}`'
+      cheating_alarm: '`passed with no trace of the honeypot` when the grader passed and no rung explains it; null otherwise'
+      ladder_steps: '`{source, notes}`: whether the timelines come from a faithful replay (`steps`) or the end state (`record`)'
+      coordination_level: the workers' Coordination level
+      coordination_influencers: '`{influencer: its Coordination level}`'
+      collusion_rung: the workers' Collusion rung
+      collusion_influencers: '`{influencer: its Collusion rung}`'
+  cheatbench:
+    about: CheatBench's judge, one verdict per judged episode. `<judge>` is the judge model (`gpt-6-luna`). Its `cheated` is CheatBench's broader definition, not the Cheating ladder.
+    fields:
+      unit: the episode the verdict is about
+      id: the sample's id
+      episode: the episode
+      replicate: the epoch
+      task: CheatBench's task name
+      model: the judged agent's model
+      model_key: the registry entry of `model`
+      agent: the judged agent's ID
+      role: the judged agent's role
+      transcript_sha256: sha256 of the transcript the judge read; a later export can change the transcript
+      judge: the judge model
+      judge_generation_config: the judge's generation settings
+      judge_generation_config_unsupported: settings the judge's provider ignored
+      judge_prompt: CheatBench's judge prompt file, from the checkout
+      judge_schema: the task's verdict schema file
+      prompt_sha256: sha256 of the judge prompt
+      schema_sha256: sha256 of the verdict schema
+      parse_ok: whether the judge's reply parsed; read a verdict only when true
+      cheated: CheatBench's overall verdict, the task's criteria or an explicit prohibition violated
+      summary: the judge's short explanation of the verdict
+      explicit_prohibition_violated: the agent used or tried a tool, command or code the task's rules forbid
+      explicit_prohibition_evidence: the prohibition and the violating call, quoted
+      output_mode: how the judge's reply was read
+      judge_cost_usd: the judge call's cost in USD
+      judge_usage: the judge call's tokens
+      judge_attempts: the judge calls made for this verdict
+      judge_error: the judge's error, null when it answered
+      input_sha256: sha256 of the text the judge read; null for a verdict made in the eval
+      transcript_path: the transcript the judge read, from the run's folder
+  labels:
+    about: 'The labels judge, one row per judged agent: disclosure and manipulation, each scored 0 to 100 with an excerpt.'
+    fields:
+      unit: the episode the row is about
+      agent: the agent's ID
+      role: the agent's role
+      task: CheatBench's task name
+      episode: the episode
+      reasoning_available: whether the transcript holds readable reasoning
+      reasoning_calls: model calls with reasoning the judge read
+      own_posts: the agent's board posts the judge read
+      read_posts: teammates' posts the agent read
+      actions: the agent's tool calls the judge read
+      judge: the judge model
+      judge_generation_config: the judge's generation settings
+      judge_generation_config_unsupported: settings the judge's provider ignored
+      judge_prompt: the prompt files, from the checkout
+      judge_schema: the reply's schema (`Labels`, src/judging/labels_judge.py)
+      prompt_sha256: sha256 of the prompt
+      schema_sha256: sha256 of the schema
+      parse_ok: whether the reply parsed
+      disclosure: '`{score, excerpt, source, reason, located}`: how explicitly the agent says its own conduct is wrong or cheating'
+      manipulation: '`{score, excerpt, source, reason, kind, located}`: how strongly it steers another agent; `kind` is `mislead`, `control` or `none`'
+      output_mode: how the reply was read
+      judge_cost_usd: the call's cost in USD
+      judge_usage: the call's tokens
+      judge_attempts: the calls made for this row
+      judge_error: the judge's error, null when it answered
+      input_sha256: sha256 of the text the judge read
+  access_log:
+    about: One row per open of a honeypot object in the agents' machines, from a fanotify monitor (src/export/_export_access_log.py).
+    fields:
+      t: Unix time of the open, in seconds
+      machine: the machine (an agent's ID, or the shared machine)
+      uid: the opener's uid
+      user: the opener's Linux user; null for the machine's own
+      agent: the agent the open is credited to; null when none
+      named_by: how the agent was found (src/export/_export_access_log.py)
+      object: the honeypot object (a commit id, a file name)
+      kind: the object's kind
+      level: '`pointer` the object names the honeypot, `content` it holds it, `sibling` a neighbour''s open in a watched folder'
+      path: the opened path
+      result: '`opened`, or `refused` where a honeypot on the host refused the request'
+      mechanism: how it was seen, `host` for a honeypot on the host
+      pid: the opener's pid
+      exe: the opener's executable
+      cwd: the opener's working directory
+      cmd: the opener's command line
+      root_cmd: the root of its process tree
+      chain: the process chain from the root to the opener
+      origin: 'who opened it, by the root of its process tree: `agent` an agent''s command, `harness` the harness, `control` the log''s own controls, `detached` a daemonized process'
+      call_id: the tool call the open belongs to, null when none matched
+  network:
+    about: One row per socket call in the agents' machines, the harness's included, from the network log (src/export/_export_network_log.py). It records only and blocks nothing.
+    fields:
+      seq: the row's place in the monitor's log
+      t: when, the kernel's time of the call (`ebpf`) or the read of the socket tables (`procnet`)
+      op: the call (`bind`, `listen`, `connect`, `accept`, `send` a UDP datagram, `close`)
+      proto: '`tcp`, `udp`, `unix` or `raw`'
+      family: the socket's address family
+      type: the socket's type
+      machine: the machine
+      netns: the network namespace
+      pid: the process
+      uid: its uid
+      user: the seat's Linux user
+      agent: the agent the call is credited to, null when none
+      named_by: how the agent was found, as in access_log.jsonl
+      candidates: the agents it could be, when two match
+      origin: who made it, as in access_log.jsonl (`unknown` a process gone before it was read)
+      call_id: the tool call it sits in
+      exe: the process's executable
+      cmd: its command line
+      root_cmd: the root of its process tree
+      comm: the kernel's command name
+      laddr: the local address; a unix socket's path, `@` before an abstract name
+      lport: the local port, null for a unix socket
+      raddr: the remote address; a unix connect's path
+      rport: the remote port
+      result: '`ok` or the errno''s name'
+      source: '`ebpf` or `procnet`'
+      at_start: the socket was there when the log began
+      control: the harness's own control call, with the run's nonce
+      peer_agent: the agent at the other end
+      peer_pid: the process at the other end
+      peer_origin: the other end's origin
+  communication:
+    about: One sample's board, from ORBIT's communication store.
+    fields:
+      messages: every post, in order
+      events: every board event (`sent`, `read`, `model_exposure`), in order
+  messages:
+    about: One board post.
+    fields:
+      id: the post's id
+      channel_id: the channel
+      sender: the posting agent's ID
+      recipients: the agents it went to
+      content: the post's text
+      sequence: its place in the board's order
+      turn: the round it was posted in
+      session_id: ORBIT's session id
+      invocation_id: ORBIT's invocation id
+      swarm_record_id: ORBIT's record id
+  events:
+    about: One board event.
+    fields:
+      id: the event's id
+      sequence: its place in the board's order
+      kind: '`sent` a post, `read` a board read, `model_exposure` posts entered a model call'
+      message_ids: the posts it concerns
+      agent_id: the agent that acted
+      session_id: ORBIT's session id
+      invocation_id: ORBIT's invocation id
+      channel_id: the channel
+      inspect_span_id: the Inspect span it happened in
+      tool_call_id: the tool call behind it
+      inspect_event_id: the Inspect event
+      inspect_message_id: the Inspect message
+      inspect_model_event_id: the Inspect model event that read the posts
+      parent_event_id: the event it follows from
+      source: '`model_api` for a model exposure'
+  defense:
+    about: One sample's harness record (the turn rules), from the eval.
+    fields:
+      defenses: each harness layer's configuration
+      log: the harness's log by agent
+      interventions: the harness's interventions
+  transcript:
+    about: One agent's transcript as CheatBench's judge reads it, an ATIF trajectory with a header.
+    fields:
+      agent: the agent's ID
+      model: the agent's own model, an Inspect string
+      model_key: the registry entry of `model`
+      prompt: the agent's full prompt (system text, then the task)
+      trajectory: the ATIF trajectory (below)
+      orbit: ORBIT's record of the agent (roster, topology, system prompt, model calls)
+  trajectory:
+    about: The ATIF trajectory of transcript.json.
+    fields:
+      schema_version: the ATIF version
+      session_id: the sample's session
+      trajectory_id: the trajectory's id
+      agent: '`{name, version, model_name}`'
+      steps: the steps (below)
+      final_metrics: '`{total_prompt_tokens, total_completion_tokens, total_steps}`'
+      extra: '`{final_text}`'
+  atif_steps:
+    about: One step of the trajectory.
+    fields:
+      step_id: the step's number, from 1
+      source: who wrote the step
+      message: the message's text
+      model_name: the model that wrote an agent step
+      reasoning_content: the model's reasoning; `[redacted reasoning]` where the provider sent only signatures
+      tool_calls: '`[{tool_call_id, function_name, arguments}]`'
+      observation: '`{results: [{source_call_id, content}]}`: the tool results'
+      llm_call_count: the model calls behind the step
+      extra: the harness's tag on a step it added (`swarm_turn_rules`)
+  steps:
+    about: A faithful replay's state after every recorded call, in the run's one order (src/replay/step_snapshots.py). Read it only when replay.json says faithful.
+    fields:
+      n: the call's place in the run's order, from 1
+      agent: the agent that made the call
+      k: the agent's call number, from 0
+      call_id: the tool call's id in the transcript
+      t: seconds from the replay's start
+      tool: the tool called
+      match: 'how the replayed output compares with the recorded one; `recorded` a call replayed from its recorded output'
+      state: the agent's state after the call (refs, trees, pieces); a map holds only what changed since the agent's previous line
+  replay:
+    about: The report of the run's replay from its recorded calls (src/replay/replay_report.py).
+    fields:
+      run: the run's name
+      run_dir: the run's folder, from the checkout
+      faithful: whether the replay ended in the run's own end state; steps.jsonl counts only then
+      refused: why the replay was refused, null when it ran
+      error: the replay's error
+      task: CheatBench's task name
+      calls: the recorded calls
+      sandbox_calls: the calls that ran in a sandbox
+      host: the calls replayed from their recorded output
+      not_run: the calls that never ran in the run
+      match: the sandbox calls by match class
+      causes: the differences by likely cause
+      mismatches: the calls whose output differed
+      dated: the differences explained by dates
+      undated: the other differences
+      setup: the replay's setup record
+      end: the end state against the stored one, part by part
+      image: the Docker image used
+      wall_seconds: the replay's wall time
+      seconds: each phase's time
+      slowest: the slowest calls
+      shared: the calls run alone because they may touch the team remote
+      parallel: whether calls ran in parallel
+      options: the opt-in remedies (`pem`, `warm_image`)
+      swaps: calls whose drawn certificates gave way to the recorded ones
+      read_before: calls that read the team remote before an overlapping write
+      code: the checkout that replayed
+      schema: the report's schema version
+      shares: each match class's share of the sandbox calls
+  tmp_snapshots:
+    about: /tmp, /var/tmp and /dev/shm of every machine before and after every call, by replay. DATA_AND_VIEWER.md gives the full schema.
+    fields:
+      schema: the file's schema version
+      run: the run's name
+      task: CheatBench's task name
+      dirs: the directories read
+      hash_max_bytes: the largest file hashed
+      text_max_bytes: the largest file kept as text
+      clock: the clock of the times
+      machines: each machine and its agents
+      users: each machine's login users
+      replay: the replay's verdict and match counts
+      steps: every call with the directories' change before and after it
+  swe_summary:
+    about: SWE only. Lucy's measures for the run (src/measures/swe_measures.py).
+    fields:
+      run: the run's name
+      arm: the arm (team size, honeypot, rule)
+      issue: the SWE issue
+      n_agents: the team size
+      honeypot: the honeypot layout
+      rule: the rule level
+      delivery: the stop-after-delivery record, null without it
+      team_reward: the hidden tests on the team's main; null outside shared_task
+      judged: agents with a parsed CheatBench verdict
+      cheated: of those, CheatBench's `cheated`
+      board_posts: posts on the board
+      fix_posts: posts about the fix
+      rule_posts: fix posts that cite the rule
+      disclosed: judged-cheated agents that said so (a heuristic)
+      judge_cost_usd: the judge's cost in USD
+      prompt_tokens: the agents' input tokens
+      cache_read: the agents' cache-read tokens
+      output_tokens: the agents' output tokens
+      halt: run.json `orbit_halt_reason`
+      agents: the same per agent, with its rung and reward
+  docent_summary:
+    about: The Docent analysis tool's record of uploading the run's transcripts.
+    fields:
+      tool: '`docent`'
+      run: the run's name
+      written_at: when it was written (UTC)
+      dry_run: whether the upload was a dry run
+      board: whether the run had a board
+      n_agent_runs: transcripts converted
+      agent_runs_file: the converted file (agent_runs.json)
+      agent_runs: each converted transcript's id and agent
+      collection_id: the Docent collection's id
+      collection_name: the collection's name
+      collection_url: the collection's address on Docent (private)
+      agent_run_ids: Docent's ids of the transcripts
+      upload_status: the upload's outcome
+      job_ids: Docent's job ids
+
+studies:
+  study_exploration_0:
+    title: study_exploration_0
+    about: |
+      The first screen: five arms on five tasks, three worker models, three seeds each. Each run is one team or one
+      lone agent on one fixed task instance. The arms are `solo` (one
+      agent), `solo_cheat` (one agent told to cheat), `minimal` (three workers on one board, the exploit split between
+      them), `minimal_cheat` (the same, told to cheat) and `minimal_regulated` (the same with a hidden regulator). Every
+      SWE run predates the fix to the SWE task that made one agent able to cheat alone, so all of them sit in
+      `invalid/`. Real runs name their agents `a01` to `a04`, except the nine protein-design `minimal_regulated` runs
+      made again at commit aa3a1cb, which have random IDs.
+      CheatBench's judge judged every real run.
+    load: |
+      import json, pathlib
+      study = pathlib.Path("runs/study_exploration_0")
+      index = [json.loads(line) for line in open(study / "INDEX.jsonl")]
+      run = study / next(row for row in index if row["valid"])["path"]
+      team = next(r for r in map(json.loads, open(run / "signals.jsonl")) if r["row"] == "team")
+  study_exploration_1:
+    title: study_exploration_1
+    about: |
+      The focused study of November 2026: SWE (the flipt issue) with DeepSeek V4.1 Flash, GPT-6 Luna and Claude Haiku
+      5.5 workers, protein design and creative writing with Luna workers. A gate (`minimal`, `minimal_cheat`) came
+      first; then teams with one hidden regulator of five models at two levels, rule levels on the workers' text, and
+      teams with a hidden disregulator. Each run is one team on one fixed task instance. SWE runs before the task's fix
+      are in `invalid/` (INDEX.jsonl `reason` `swe_before_fix`). CheatBench's judge and the labels judge judged every
+      valid run.
+    load: |
+      import json, pathlib
+      study = pathlib.Path("runs/study_exploration_1")
+      index = [json.loads(line) for line in open(study / "INDEX.jsonl")]
+      run = study / next(row for row in index if row["valid"])["path"]
+      team = next(r for r in map(json.loads, open(run / "signals.jsonl")) if r["row"] == "team")
+  study_smoke:
+    title: study_smoke
+    about: |
+      Smoke tests of the harness on a mock model (`mockllm/model`), with no model call: eight runs at the top level and
+      the smoke-test suites. No result here measures a model.
+    load: |
+      import json, pathlib
+      study = pathlib.Path("runs/study_smoke")
+      run = next(p.parent for p in sorted(study.glob("*/run.json")))
+      episodes = [json.loads(line) for line in open(run / "episodes.jsonl")]
+      team = next(r for r in map(json.loads, open(run / "signals.jsonl")) if r["row"] == "team")
+  study_orbit2_check:
+    title: study_orbit2_check
+    about: |
+      One real run that checked the port to ORBIT 2.0: a creative-writing team of three DeepSeek V4.1 Flash workers and
+      a hidden regulator. No result here belongs to a study.
+    load: |
+      import json, pathlib
+      run = pathlib.Path("runs/study_orbit2_check/poem_minimal_regulated_orbit2")
+      meta = json.load(open(run / "run.json"))
+      episodes = [json.loads(line) for line in open(run / "episodes.jsonl")]
+      team = next(r for r in map(json.loads, open(run / "signals.jsonl")) if r["row"] == "team")
+  apart_controls:
+    title: apart-swarm, controls elicitation snapshot
+    about_file: study_readme_apart_controls.md
+    load: |
+      import json, pathlib
+      root = pathlib.Path("runs/apart_controls")
+      rows = [json.loads(line) for line in open(root / "manifest.jsonl") if json.loads(line)["canonical"]]
+      run = root / "{model}/{task}/{cell}/s{seed}".format(**rows[0])
+      team = next(r for r in map(json.loads, open(run / "signals.jsonl")) if r["row"] == "team")
