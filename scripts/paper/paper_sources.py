@@ -42,13 +42,13 @@ from src.judging import verdict_files
 from src.judging.cheatbench_judge import judge_entry
 from src.measures import cheating_ladder, collusion, coordination, judge_labels, measure_readings
 from src.measures.rungs import RUNGS
+from src.swarm.influencers import level_text, role_text
 from src.ui.transcript_levels import CHEAT_GLOSSES, CLAUSE_GLOSSES, COLLUSION_GLOSSES
 
 PAPER = ROOT / "paper"
 GENERATED = PAPER / "generated"
 FIGURE_DIR = PAPER / "figures"
 LEVELS_YAML = ROOT / "src" / "configuration" / "instruction_levels.yaml"
-PROMPTS_YAML = ROOT / "src" / "configuration" / "prompts.yaml"
 STUDY_INDEX = ROOT / "runs" / "study_exploration_1" / "INDEX.jsonl"
 STAGE2 = ROOT / "submodules" / "lucy" / "runs" / "s2_swe" / "analysis" / "summary.json"
 # The names the paper gives the models of the run index. A model outside this map stops the build.
@@ -176,6 +176,7 @@ def params_tex() -> str:
         "ReadPage": c.read_page,
         "FreeBoardActions": c.free_board_actions,
         "FreeBoardActionsInfluencer": c.free_board_actions_influencer,
+        "ToolOutputKiB": c.tool_output_bytes // 1024,
         "TurnBudget": c.turn_budget,
     }
     if settings.JUDGE_MODEL not in JUDGE_NAMES:
@@ -210,10 +211,15 @@ def levels_tex(ladder: str) -> str:
 
 
 def regulator_suffix_tex() -> str:
-    """The prompt box: the common text every regulator gets after the text of its level."""
-    roles = yaml.safe_load(PROMPTS_YAML.read_text())["roles"]
-    common = " ".join([roles["influencer_common"].strip(), roles["regulator_no_disclosure"].strip()])
-    return HEADER.format(source="src/configuration/prompts.yaml roles") + escape(common) + "\n"
+    """The prompt box: the text every regulator gets after the text of its level, as src/swarm/influencers.py
+    role_text builds it under PRESETS["default"] (roles.influencer_common, regulator_check, regulator_no_disclosure)."""
+    config = PRESETS["default"].model_copy(update={"regulator_level": "ambiguous"})
+    benchmark = next(iter(yaml.safe_load(LEVELS_YAML.read_text())["vars"]))
+    full, level = role_text("regulator", config, benchmark), level_text("regulator", "ambiguous", benchmark)
+    if not full or not level or not full.startswith(level):
+        raise SystemExit("a regulator's role text no longer starts with its level's text: update regulator_suffix_tex")
+    return (HEADER.format(source="src/swarm/influencers.py role_text and src/configuration/prompts.yaml roles")
+            + escape(full[len(level):].strip()) + "\n")
 
 
 def check_study_levels(runs: list[dict]) -> None:

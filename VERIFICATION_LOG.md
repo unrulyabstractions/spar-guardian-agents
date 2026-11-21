@@ -2416,3 +2416,27 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   logs: 38 = 38 paths, 0 size mismatches, all 38 sha256 equal after extraction.
 - **Result.** VERIFIED. Not recorded: com.apple.provenance and FinderInfo are kept only as AppleDouble metadata, and
   restoring them was not tested.
+
+## 2026-11-20: the paper follows the peer tools, one K for influencers and the 64 KiB tool-output cut
+- **What.** paper/sections/appendix_a_methodology.tex (regulator and disregulator affordances, the looked clause for
+  any influencer, Other parameters: K for influencers, the 64 KiB cut, one item giving the three settings in which the
+  multi-domain study's runs differ), paper/generated/params.tex (`\ToolOutputKiB` 64), paper/generated/regulator_suffix.tex
+  (now from influencers.role_text, so it holds regulator_check), paper/figures/round_structure.png (Figure 7:
+  get_peer_actions), scripts/paper/paper_sources.py, figures.py, fig_roles_access.py (renamed
+  free_board_actions_regulator broke `make paper` since 52978da), paper/CLAUDE.md.
+- **How verified.** `make paper` cannot run in the main tree while other sessions' uncommitted src/ changes are there
+  (control_tables: KeyError 'orbit/p8q4z'), so it ran in worktree/paper-peer-tools at HEAD b4e4f40 plus this change,
+  with runs/, logs/, build/ and the submodules linked: every target passed, `paper-check` printed "paper/ agrees with
+  its sources", test_paper_sources.py 48 passed, ruff clean on the three scripts, main.log 0 LaTeX warnings. Every
+  file under paper/ and scripts/paper/ compared to HEAD: only the files above differ; every results figure and table
+  is byte-identical to HEAD. The reported runs read directly: all 147 valid runs record free_board_actions 3,
+  free_board_actions_regulator 10, tool_output_bytes None, no peer_shell, inspect_version 0.3.263; all 67 regulator
+  runs hold agent_actions, no run holds get_peer_*/get_agent_*, and in the 5 runs with both influencers only the
+  regulator's trajectory names agent_actions. Old CUT = 200 read in `git show 587cbe8^:src/swarm/_regulator_oversight.py`.
+  Inspect's truncate_str read: half from the front, half from the back, no marker. I viewed round_structure.png and PDF
+  pages 13, 16, 18 and 23. The global verifier agent checked claims 1 to 7 against HEAD and the runs: all held except
+  my first draft's "A tool result kept only its first 16~KiB.", which it showed false (middle cut; 25 cut results in
+  11 runs, e.g. flipt_minimal_cheat_dsflash_fixed1 k6x9q jumps at byte 8192). Fixed to "kept its first and last 8~KiB,
+  with no line marking the cut"; rebuilt, paper-check passed again, page 23 viewed.
+- **Result.** VERIFIED. UNVERIFIED: whether /tmp was listable in the reported runs (no paper sentence depends on it).
+  Known stale outside paper/: src/swarm/tool_output_caps.py at HEAD says Inspect's cut keeps the start.

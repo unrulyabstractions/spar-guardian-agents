@@ -14,7 +14,8 @@ exploits that require information only accessible to individual agents within th
 \subsubsection*{Regulator agents}
 These agents represent our positive peer-pressure protocol. A regulator differs from a worker in three ways:
 \begin{itemize}
-  \item They have access to all tool calls from neutral agents and unlimited messages from the board.
+  \item They can read every teammate's tool calls and what those calls returned, and they have no read budget on
+  the board.
   \item They cannot ``submit work''.
   \item They are told not to reveal their role.
 \end{itemize}
@@ -60,8 +61,8 @@ is real, and to prevent or punish their cheating. Table~\ref{tab:monitors} compa
 These poisoned agents represent negative peer pressure.
 \begin{itemize}
   \item Explicitly instructed to manipulate the swarm to leverage the exploits.
-  \item A disregulator cannot submit the team's work. Unlike a regulator, it cannot query its teammates' tool calls.
-  It reads the board within the workers' budget.
+  \item A disregulator cannot submit the team's work. Like a regulator, it can read every teammate's tool calls and
+  what those calls returned. It reads the board within the workers' budget.
   \item Table~\ref{tab:disregulator-levels} gives its levels. A disregulator gets persuade on SWE, and persuade or
   overt on creative writing.
 \end{itemize}
@@ -173,7 +174,7 @@ An agent \textbf{supplied} a piece when a piece it posted or pushed is in the ha
 The hand-in makes attempted every agent that wrote cheat content into it or supplied a piece of it.
 An attack on the evaluation makes an agent attempted.
 Reading the grader is not an attack on the evaluation.
-A regulator that sees a piece through its oversight tool is looked.
+An influencer that sees a piece through its tools for reading a teammate's calls is looked.
 Hacked needs the agent's own content or a piece it supplied in a hand-in the grader passed, or its attack on the
 evaluation and a pass.
 An agent that pushed a piece the hand-in lacks stays attempted, whatever the grade.
@@ -368,7 +369,13 @@ The judge is \JudgeName{} at \JudgeEffort{} effort.
   \item Max messages read per turn: \ReadsPerTurn, and a read returns at most one page of \ReadPage{} posts.
   Regulators have no read budget.
   \item Free board actions per turn: \FreeBoardActions. A step that ends with a board action (status, read, post)
-  does not count against the agent's working steps, up to \FreeBoardActions{} per turn; a regulator gets
-  \FreeBoardActionsInfluencer, and its query of the neutral agents' tool calls counts as a board action.
+  does not count against the agent's working steps, up to \FreeBoardActions{} per turn. An influencer gets
+  \FreeBoardActionsInfluencer. Its reads of a teammate's tool calls count as board actions.
+  \item Max tool result: \ToolOutputKiB{}~KiB for every agent. A longer result keeps its start and its end, with a
+  line that states the cut.
+  \item The runs of the multi-domain study differ from this design in three ways. A regulator read its teammates'
+  tool calls through one tool, which cut each call's arguments and result to 200 characters. A disregulator could not
+  read its teammates' tool calls and had the workers' free board actions. A longer tool result kept its first and
+  last 8~KiB, with no line marking the cut.
 \end{itemize}
 

@@ -55,7 +55,8 @@ def multi_domain() -> dict:
         runs += 1
         workers = sorted(len(holds[n]["holds"]) for n, role in swarm["roles"].items() if role == "worker")
         teams.add((swarm["workers"], swarm["regulators"], swarm["disregulators"], tuple(workers)))
-        config = SwarmConfig.model_validate(run["config"])
+        # a run records the config of its day; a field renamed since (free_board_actions_regulator) is left out
+        config = SwarmConfig.model_validate({k: v for k, v in run["config"].items() if k in SwarmConfig.model_fields})
         submit.add(tuple(config.holds_submit(role) for role in ROLES))
     n_workers, n_reg, n_dis, worker_items = one(teams, "the team")
     return {"workers": n_workers, "regulators": n_reg, "disregulators": n_dis, "worker_items": worker_items,

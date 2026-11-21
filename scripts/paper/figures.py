@@ -222,7 +222,7 @@ def fig_round_structure():
         "f1": {"k7q2m": "work", "p8s3z": "read", "x2m7s": "post"},
         "f2": {"p8s3z": "post", "x2m7s": "work"},
         "f3": {"p8s3z": "read"},
-        "r1": {"k7q2m": "work", "t4x9n": "agent_actions", "p8s3z": "work", "n5j6q": "read", "x2m7s": "submit"},
+        "r1": {"k7q2m": "work", "t4x9n": "get_peer_actions", "p8s3z": "work", "n5j6q": "read", "x2m7s": "submit"},
     }
     for j, n in enumerate(names):
         y = top - j * lane_h
@@ -256,7 +256,7 @@ def fig_round_structure():
     save(fig, "round_structure", printed_in=TEXT_WIDTH_IN)
 
 
-BOARD_ACTIONS = {"status", "read", "post", "agent_actions"}
+BOARD_ACTIONS = {"status", "read", "post", "get_peer_actions", "get_peer_observations"}
 
 
 def step(ax, a, x, y, w, h, text=True):
@@ -424,7 +424,7 @@ def fig_information():
     marks = {
         "worker": ["F", "Y", "Y", "N", "P"],
         "regulator": ["Y", "Y", "Y", "Y", "N"],
-        "disregulator": ["Y", "Y", "Y", "N", "N"],
+        "disregulator": ["Y", "Y", "Y", "Y", "N"],
     }
     x0, cw, top, rh = 3.0, 2.7, 2.55, 0.72
     for j, c in enumerate(cols):
