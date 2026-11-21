@@ -49,6 +49,8 @@ ATTEMPTS = "attempts"
 WORKER_ROLES = (None, "worker")
 """The roles that count as a worker: role worker, or no role at all (a run with no roles)."""
 GROUPS = ("invalid", "incomplete", "mock", "set_aside", ATTEMPTS)
+IN_RUN_LOGS = "eval"
+"""The folder inside a run where a collection that keeps each run's log with the run holds it (apart_controls)."""
 """The folders a study sorts runs into, beside the runs at its top level: runs/<study>/<group>/<run>."""
 ATTEMPT_FOLDER = re.compile(r"^(?P<name>.+)\.(?P<n>[1-9][0-9]*)$")
 """An earlier attempt's folder name: the run's name, a dot and n."""
@@ -241,14 +243,16 @@ class RunDir:
         - the recorded path, from the checkout the run sits in (checkout_of; this checkout for a run under no runs/
           folder), or as it is when absolute;
         - the run's own path under the logs/ beside its runs/, logs/<study>/[<group>/]<run>/<file>.eval, for a run
-          moved into or out of a group with its log since it was recorded.
+          moved into or out of a group with its log since it was recorded;
+        - the run's own eval/ folder, <run>/eval/<file>.eval, where a collection keeps each run's log inside the run
+          (apart_controls, as the dataset holds it).
         Any other .eval file in the log folder (an aborted start's journal) is not the run's log."""
         recorded = self.run_json.get("eval_log")
         if not recorded:
             return None
         path, mirror = Path(recorded), mirrored_in_logs(self.path)
         candidates = [path if path.is_absolute() else (checkout_of(self.path) or settings.ROOT) / path,
-                      *([mirror / path.name] if mirror else [])]
+                      *([mirror / path.name] if mirror else []), self.path / IN_RUN_LOGS / path.name]
         return next((candidate for candidate in candidates if candidate.is_file()), None)
 
     def episodes(self) -> list[dict]:

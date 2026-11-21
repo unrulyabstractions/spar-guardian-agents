@@ -112,6 +112,19 @@ def test_a_run_finds_its_log_at_the_recorded_path_then_at_its_mirror_and_nowhere
     assert RunDir(moved).eval_log is None
 
 
+def test_a_run_that_keeps_its_log_inside_finds_it_in_its_eval_folder(tmp_path, elsewhere):
+    """The apart controls keep each run's log in <run>/eval/ and record the box's absolute path: the run finds the log
+    of that name there, and no other .eval file of the folder."""
+    run = make_run(tmp_path / "runs" / "apart_controls" / "luna" / "poem" / "solo" / "s1",
+                   recorded=f"/root/box/logs/study_apart_controls/poem_solo_luna_s1/{LOG}")
+    (run / "eval").mkdir()
+    (run / "eval" / "other.eval").write_text("log")
+    assert RunDir(run).eval_log is None
+    log = make_log(run / "eval")
+    assert RunDir(run).eval_log == log
+    assert log_link(log, run) == f"runs/apart_controls/luna/poem/solo/s1/eval/{LOG}"
+
+
 def test_run_json_names_its_log_from_the_checkout_the_run_sits_in(tmp_path):
     """log_link: logs/<study>/[<group>/]<run>/<file>.eval, so the link holds in any checkout and in the dataset; a log
     outside the run's checkout, or a run under no runs/ folder, keeps the absolute path."""
