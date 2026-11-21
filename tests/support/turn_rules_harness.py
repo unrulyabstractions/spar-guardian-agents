@@ -30,6 +30,7 @@ from src.swarm import board
 from src.swarm import turn_rules as rules
 from src.swarm.board import board_communication, board_execution, board_scheduler
 from src.swarm.submit_and_stop import Deliverable, ending_tools, submit_bindings
+from src.swarm.tool_output_caps import capped_bindings
 from tests.support.mock_model import MODEL, calls, text
 
 os.environ.setdefault("PYTHON_DOTENV_DISABLED", "1")
@@ -137,9 +138,10 @@ async def nothing_missing(agent: str) -> None:
 
 def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | None = None, delivered=None,
                missing=nothing_missing, groups: list[AgentGroup] | None = None) -> Task:
-    """The test task; on a pull board each agent also gets the board tools, and every agent submit and stop_working
-    as it holds them, bound as src/tasks.py binds them. `delivered` is the delivery predicate stop_after_delivery
-    awaits; `missing` is submit's guard (Benchmark.gradable); `groups` are ORBIT's agent groups (first messages)."""
+    """The test task; on a pull board each agent also gets the board tools, and every agent submit and stop_working as
+    it holds them, bound as src/tasks.py binds them, each with the agent's cap (tool_output_caps.capped_bindings).
+    `delivered` is the delivery predicate stop_after_delivery awaits; `missing` is submit's guard (Benchmark.gradable);
+    `groups` are ORBIT's agent groups (first messages)."""
     names = config.names
     extra = board.agent_tool_names(config, roles)
     agents = [AgentSpec(name=n, role="engineer", tools=["work", *extra[n], *ending_tools(config, role_of(roles, n))],
@@ -148,9 +150,11 @@ def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | Non
     task = multi_agent_task(
         name="turn_rules_test",
         setup=SetupConfig(agents=agents),
-        tool_bindings={"work": ToolFactory(lambda ctx: work(ctx.agent_name)),
-                       **board.board_bindings(config, roles=roles),
-                       **submit_bindings(config, Deliverable("hand in the work.", missing, nothing_missing, True))},
+        tool_bindings=capped_bindings({"work": ToolFactory(lambda ctx: work(ctx.agent_name)),
+                                       **board.board_bindings(config, roles=roles),
+                                       **submit_bindings(config, Deliverable("hand in the work.", missing,
+                                                                             nothing_missing, True))},
+                                      config, roles),
         communication=board_communication(names, max_message_chars=config.max_message_chars) if config.board else None,
         execution=board_execution(plan=rules.schedule(config, names, roles), agent_groups=groups,
                                   initial_context="sample_input"),

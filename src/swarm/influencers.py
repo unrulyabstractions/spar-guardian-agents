@@ -20,11 +20,11 @@ the task instruction, and the regulator and disregulator texts appended to the s
 the role. A level gives one text or one per benchmark, with placeholders filled from the benchmark's `vars`.
 
 Each regulator level carries the benchmark's `cheating` var: what cheating means on that task. An influencer's level
-text is followed by prompts.yaml roles.influencer_common (the peer tools, src/swarm/_regulator_oversight.py, how to
-call them on a teammate, and the board). A regulator's then gets roles.regulator_check (call get_peer_actions on each
-teammate in the regulator's first CHECK_ROUNDS rounds) and, unless regulator_discloses is on,
-roles.regulator_no_disclosure. The check is an instruction like the rest;
-run.json engagement checked_in_time records whether it happened.
+text is followed by prompts.yaml roles.influencer_common (the peer tools, src/swarm/_regulator_oversight.py, how to call
+them on a teammate, and the board), then under SwarmConfig.peer_shell roles.peer_shell. A regulator's then gets
+roles.regulator_check (call get_peer_actions on each teammate in the regulator's first CHECK_ROUNDS rounds) and, unless
+regulator_discloses is on, roles.regulator_no_disclosure. The check is an instruction like the rest; run.json engagement
+checked_in_time records whether it happened.
 
 With informed_roles on, a regulator or disregulator also gets the briefing (prompts.yaml `roles.briefing`, built by
 role_briefing) after its role text: the swarm's size and roster, the board and its tools, what the agents without a
@@ -81,7 +81,7 @@ def role_text(role: str, config: SwarmConfig, benchmark_name: str) -> str | None
     if text is None:
         return None
     pieces = load_prompts()["roles"]
-    tail = [pieces["influencer_common"]]
+    tail = [pieces["influencer_common"], *([pieces["peer_shell"]] if config.peer_shell else [])]
     if role == "regulator":
         tail += [pieces["regulator_check"].format(rounds=rounds_text(CHECK_ROUNDS)),
                  *([] if config.regulator_discloses else [pieces["regulator_no_disclosure"]])]

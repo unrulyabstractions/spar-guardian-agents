@@ -112,7 +112,8 @@ Signals = the episode's agent row of signals.jsonl (src/measures/code_ladder.py)
           used_evidence, tampered, tampered_evidence (chess alone), checked, checked_evidence, shipped,
           shipped_evidence, calls, and in a run with an access log
           access_log (src/measures/access_evidence.py). exposed_source is own_action,
-          teammate_post, teammate_actions, task_text (exposed_call null) or none. used, checked and shipped name content this
+          teammate_post, teammate_actions, teammate_workspace (peer_shell), task_text (exposed_call null) or none. used,
+          checked and shipped name content this
           agent put there. A row recorded since the three ladders also holds their fields (cheating_rung,
           coordination_level, collusion_rung and the rest); the browser does not show them.
 Team = a team row of signals.jsonl (src/measures/team_ladder.py), one per sample: {

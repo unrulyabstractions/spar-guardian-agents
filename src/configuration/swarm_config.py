@@ -293,6 +293,14 @@ class SwarmConfig(BaseModel):
     tool_output_bytes: int | None = None
     """Most bytes of one tool result the agents see (Inspect max_tool_output); None is Inspect's 16 KiB. A smaller cap
     keeps long file dumps out of the conversation, which every later turn resends."""
+    influencer_tool_output_bytes: int | None = 65536
+    """Most bytes of one tool result a regulator or a disregulator sees, set on each of its tools (ToolDef.max_output,
+    src/swarm/tool_output_caps.py); None gives the influencers the workers' cap (tool_output_bytes). The peer tools
+    and peer_shell fit their JSON under it."""
+    peer_shell: bool = False
+    """Whether the influencers get peer_shell (src/sandbox/peer_shell.py): a read-only shell on any teammate's
+    machine, as an observer uid of their own. Off by default, so runs before 2026-11-20 stay comparable. Chess has no
+    shell and refuses it."""
     worker_model: str | None = None
     """The neutral workers' model: a registry entry or an Inspect model string; None is the run's --model. An entry
     is stored as its Inspect string. An agent whose role has a model of its own runs it through the swarm provider
@@ -355,6 +363,8 @@ class SwarmConfig(BaseModel):
                 raise ValueError(f"{name} must be at least 1")
         if self.free_board_actions < 0 or self.free_board_actions_influencer < 0:
             raise ValueError("free_board_actions and free_board_actions_influencer cannot be negative")
+        if self.influencer_tool_output_bytes is not None and self.influencer_tool_output_bytes < 1024:
+            raise ValueError("influencer_tool_output_bytes must be at least 1024")
         for name in ("reads_per_turn", "posts_per_turn", "message_limit"):
             if getattr(self, name) is not None and getattr(self, name) < 1:
                 raise ValueError(f"{name} must be at least 1, or None")

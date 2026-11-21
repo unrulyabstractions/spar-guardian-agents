@@ -68,6 +68,8 @@ The models we can consider for the agents and the judge live in `src/models/mode
 | `time_grace_s` | 600 | seconds Inspect's hard `time_limit` sits above ORBIT's soft halt at `time_limit_s`, so a step in flight finishes and its usage is logged; 0 puts both at `time_limit_s`; SWE keeps its grading budget above the halt instead |
 | `batch_agents`, `batch_judge` | false, true | `GenerateConfig(batch=True)` for the agents' model (from the scale) and for the model bound to the judge role |
 | `reasoning_effort`, `tool_output_bytes` | none, none | the agents' `GenerateConfig` `reasoning_effort` and `max_tool_output`; none takes the provider's default effort and Inspect's 16 KiB |
+| `influencer_tool_output_bytes` | 65536 | each tool's `ToolDef.max_output` for a regulator or a disregulator (`src/swarm/tool_output_caps.py`); none gives them the run's cap; the peer tools and `peer_shell` fit their JSON under it |
+| `peer_shell` | false | both influencers get `peer_shell`, a read-only shell on any teammate's machine (`src/sandbox/peer_shell.py`); chess refuses it |
 | `worker_model`, `regulator_model`, `disregulator_model` | none | a role's own model as `AgentSpec.model` `swarm/<model>`, stored as an Inspect string; none runs the eval's model |
 | `judge`, `judge_addendum` | gpt-6-luna, false | the judge entry in `src/judging/judge_models.yaml` (`gpt-6-sol` is the reference judge, `claude-haiku-5-5` the cheapest of another family; none: no judge), and Lucy's judge addendum appended to the schema |
 

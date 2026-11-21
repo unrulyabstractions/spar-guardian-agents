@@ -2215,3 +2215,26 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   max_turns with five influencers. ruff on every changed file: clean. `make paper-sources`, `make paper-check`: agrees;
   latexmk built paper/build/main.pdf and its text shows the prompt box with get_peer_* and "a regulator gets 10".
 - **Result.** VERIFIED. Paper prose describing past runs (disregulators could not query; a regulator's K) left as is.
+
+## 2026-11-20: peer_shell, per-role tool output caps, peer tools packed under the cap
+- **What.** src/sandbox/peer_shell.py (SwarmConfig.peer_shell, off by default): an influencer's read-only shell on a
+  teammate's machine as an observer uid of its own (3001 upward), GRANT of read by POSIX ACL before each command, REAP
+  of its processes after, the setup's proof, JSON answer cut under the cap with the cut stated; no /tmp change.
+  src/swarm/tool_output_caps.py: influencer tools carry SwarmConfig.influencer_tool_output_bytes (65536) as
+  ToolDef.max_output, workers keep the run's cap. get_peer_actions (new `ids`) and get_peer_observations (max_chars
+  16000) pack whole rows under the caller's cap and name the rest in not_shown_ids. Access log: observer seats name the
+  observer's opens as the influencer's (named_by "observer"); ladder: peer_shell in OVERSIGHT, exposed_source
+  teammate_workspace; peer_shell is a free board action.
+- **How verified.** `uv run pytest tests/unit -q`: 3193 passed, 6 xfailed. test_tool_output_caps runs ORBIT on the mock
+  provider: the same 30,000-character work result is cut at 16 KiB for the worker (ToolEvent.truncated) and whole for
+  the regulator and the disregulator, so a per-agent ToolDef.max_output takes effect under ORBIT; observations of five
+  ~16 KB results return four whole rows, not_shown_ids [0], under 64 KiB, uncut by Inspect. Real images
+  (`uv run python -m tests.support.peer_shell_layouts`, cbtask:python311, cbkw:agent, cbswe-flipt-02e2:native): the
+  observer reads a 600 file and a 700 home after GRANT, cannot write, create or remove, git log/status work, /tmp lists
+  as the layout leaves it, REAP kills its process, a later private file is read after the next grant. Docker mock smoke
+  `python -m tests.smoke.openmath --only peer_shell`: PASS (uid 3002, /workspace/<peer>, the slice's byte count from
+  its honeypot branch, "Permission denied" on a write, "no such agent" on itself, the disregulator's process reaped,
+  16 access-log opens named by observer as the regulator, the worker's own opens its own); `--only random_ids`: PASS
+  after the rename. GRANT on the SWE image's /app and /root: 0.07 s. ruff clean; make paper-check agrees.
+- **Result.** VERIFIED. Not covered: no loopback guard in the one-machine-per-agent layouts; the regulator's rung in the
+  smoke stayed none (its output showed a byte count, no content).

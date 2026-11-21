@@ -19,10 +19,11 @@ execs and a process outside the machines, such as dockerd behind `docker cp`, wh
 is an opener that died before the monitor read /proc. Inspect writes a SandboxEvent only after its exec returns, so a
 call the time limit cut has none, and neither the origin nor the tool call reads one.
 
-The agent. A lone agent is `lone`. One seat on the machine is `machine`: the service is the agent. One seat with the
-uid is `uid`. Seats that share a uid (openmath's shared layout) are told apart by `tool_call`: the root's hash and the
-time match one agent's tool call. Where two agents match, agent stays None and candidates lists both. `user` is the
-seat's Linux user, None for a machine's own.
+The agent. A lone agent is `lone`. One seat on the machine is `machine`: the service is the agent. One seat with the uid
+is `uid`. An influencer's peer_shell observer is `observer`: its own uid on the peer's machine
+(access_monitor.observer_seats), so a peer's own row there keeps its seat. Seats that share a uid (openmath's shared
+layout) are told apart by `tool_call`: the root's hash and the time match one agent's tool call. Where two agents match,
+agent stays None and candidates lists both. `user` is the seat's Linux user, None for a machine's own.
 
 The tool call. The daemon hashes the root's argv past Inspect's `timeout -k 5s Ns`, and this module hashes the same argv
 from each ToolEvent (exec_digest). An open matches inside the call's window, with SLACK_S for the skew between the
@@ -64,6 +65,7 @@ from src.sandbox.access_log.access_monitor_daemon import exec_digest
 from src.sandbox.agent_tools import PYTHON_COMMANDS
 
 MECHANISM = "fanotify"
+EXEC_TOOLS = (*TOOLS, "peer_shell")     # the calls an open can sit under; peer_shell runs on a peer's machine
 NOT_RECORDED = "not_recorded"           # fanotify sees no refused read: no open exists
 SLACK_S = 2.0
 HOST_INIT_PID = 1
@@ -93,7 +95,7 @@ def tool_calls(view: SampleView) -> list[ToolCall]:
     """The sample's shell and python calls, from its ToolEvents: a call the time limit cut has one, and no end."""
     owner = span_owners(view)
     return [ToolCall(owner(event.span_id)[0], event.id, exec_digests(event), *tool_window(event))
-            for event in view.events if event.event == "tool" and event.function in TOOLS]
+            for event in view.events if event.event == "tool" and event.function in EXEC_TOOLS]
 
 
 def origin_of(row: dict) -> str:
@@ -122,6 +124,11 @@ def seated(seat: dict, named_by: str) -> dict:
 
 def named(row: dict, seats: list[dict], matches: list[ToolCall]) -> dict:
     """The row's user, its agent and how it was found (the module's docstring). Where it stays open, its candidates."""
+    watching = [seat for seat in seats if seat.get("observer") and seat["machine"] == row["machine"]
+                and seat["uid"] == row.get("uid")]
+    if len(watching) == 1:
+        return seated(watching[0], "observer")
+    seats = [seat for seat in seats if not seat.get("observer")]
     if len(seats) == 1:
         return seated(seats[0], "lone")
     here = [seat for seat in seats if seat["machine"] == row["machine"]]

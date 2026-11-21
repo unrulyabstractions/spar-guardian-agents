@@ -37,6 +37,7 @@ from src.swarm.turn_rules._turn_state import (
     OBSERVATIONS_TOOL,
     ORBIT_SUBMITTED,
     OVERSIGHT_TOOLS,
+    PEER_SHELL_TOOL,
     STOP_WORKING,
     SUBMIT,
     SYSTEM_SENDER,
@@ -60,7 +61,7 @@ from src.swarm.turn_rules._turn_steps import free_index, step_round
 
 __all__ = [
     "TURN_RULES_TAG", "TEAM_SUBMIT_TAG", "DELIVERED", "BOARD_ID", "BOARD_TOOLS", "CHECK_ROUNDS",
-    "ACTIONS_TOOL", "OBSERVATIONS_TOOL", "OVERSIGHT_TOOLS",
+    "ACTIONS_TOOL", "OBSERVATIONS_TOOL", "OVERSIGHT_TOOLS", "PEER_SHELL_TOOL",
     "TEAM_SUBMIT",
     "SUBMIT", "STOP_WORKING", "SYSTEM_SENDER", "ORBIT_SUBMITTED", "TurnState", "TeamSubmission", "StopWorking",
     "Delivered", "schedule", "rules_setup", "turn_rules_defense", "record_board_action", "budget_used", "spend",

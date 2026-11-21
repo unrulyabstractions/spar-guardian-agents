@@ -3,19 +3,26 @@
 The midterm report gives regulators "access to all tool calls from neutral agents"; disregulators get the same tools
 since 2026-11-20. get_peer_actions shows what a teammate did: its tool calls, each with an id, its round, its tool and
 its arguments in full. get_peer_observations shows what those calls returned: by id, or the latest, each result cut to
-max_chars characters with the cut stated (chars, shown_chars, truncated). Both answer for every teammate, influencers
-included, so that a refusal never tells who holds a role; a call about an unknown name, or about the caller itself,
-fails with "no such agent". tasks.py binds them to regulators and disregulators (board.agent_tool_names,
-board.board_bindings). Workers never get them.
+max_chars characters (16000 by default) with the cut stated (chars, shown_chars, truncated). Both answer for every
+teammate, influencers included, so that a refusal never tells who holds a role; a call about an unknown name, or about
+the caller itself, fails with "no such agent". tasks.py binds them to regulators and disregulators
+(board.agent_tool_names, board.board_bindings). Workers never get them.
 
     get_peer_actions(peer="t4x9n", latest=2)
     {"peer": "t4x9n", "total_calls": 31, "shown": 2, "actions": [
       {"id": 29, "round": 7, "tool": "shell", "arguments": {"command": "git log --all"}},
-      {"id": 30, "round": 7, "tool": "board_post", "arguments": {"message": "found it"}}]}
+      {"id": 30, "round": 7, "tool": "board_post", "arguments": {"message": "found it"}}], "not_shown_ids": []}
     get_peer_observations(peer="t4x9n", ids=[29])
     {"peer": "t4x9n", "observations": [
-      {"id": 29, "round": 7, "tool": "shell", "status": "ok", "result": "commit 3f2a...", "chars": 5420,
-       "shown_chars": 4000, "truncated": true}]}
+      {"id": 29, "round": 7, "tool": "shell", "status": "ok", "result": "commit 3f2a...", "chars": 25420,
+       "shown_chars": 16000, "truncated": true}], "not_shown_ids": []}
+
+The cap. Inspect cuts any tool result past the caller's cap (src/swarm/tool_output_caps.py: 64 KiB for an influencer
+by default, the run's 16 KiB for a worker), which would leave the JSON invalid. So each answer packs whole rows, the
+newest first for the latest calls and in the asked order for ids, until the next would pass the cap less the
+wrapper, and names the rows it left out in not_shown_ids (oldest first), which a second call with ids returns. A first
+row that alone passes the cap is cut to fit, the cut stated: an observation's result further (shown_chars, truncated),
+an action's arguments as a JSON text (arguments_json, arguments_chars, shown_chars, truncated).
 
 A call's id is its place among the teammate's tool calls from 0, the transcript's numbering (call k). status is "ok",
 "error" (result holds the error's message) or "pending" (the call is under way; result is null); an id the teammate has
@@ -37,6 +44,7 @@ each target. A step that ends with either tool is a free step, within the caller
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from inspect_ai.model import ChatMessageAssistant, ChatMessageTool
@@ -55,7 +63,8 @@ from src.swarm.turn_rules import (
     record_board_action,
 )
 
-MAX_CHARS = 4000     # the default cut of each result get_peer_observations returns
+MAX_CHARS = 16000    # the default cut of each result get_peer_observations returns
+WRAP_MARGIN = 256    # bytes kept free under the cap beyond the answer's own wrapper
 
 
 @dataclass(frozen=True)
@@ -107,11 +116,85 @@ def called(messages: list, marks: list[list[int]], running: int) -> list[Called]
     return out
 
 
-def actions_payload(agent: str, calls: list[Called], latest: int, since_round: int | None) -> dict:
-    """get_peer_actions' answer: the newest `latest` calls from `since_round` on, oldest first, arguments in full."""
-    chosen = [c for c in calls if since_round is None or c.round >= since_round][-latest:]
-    return {"peer": agent, "total_calls": len(calls), "shown": len(chosen),
-            "actions": [{"id": c.id, "round": c.round, "tool": c.tool, "arguments": c.arguments} for c in chosen]}
+def size(value) -> int:
+    """The UTF-8 bytes of a value as the tools dump it."""
+    return len(_dump(value).encode())
+
+
+def fit(rows: list[dict], budget: int, shrink) -> tuple[list[dict], list[int]]:
+    """The rows that fit whole in `budget` bytes, taken in order until the first that does not fit, and the ids of
+    those left out. A first row that alone is over the budget is cut to fit (shrink(row, room))."""
+    kept, used = [], 0
+    for i, row in enumerate(rows):
+        need = size(row) + 2                    # its comma and space in the list
+        if used + need <= budget:
+            kept.append(row)
+            used += need
+            continue
+        if not kept:
+            kept.append(shrink(row, budget - 2))
+            rows = rows[i + 1:]
+        else:
+            rows = rows[i:]
+        return kept, [r["id"] for r in rows]
+    return kept, []
+
+
+def cut_to(row: dict, key: str, text: str, room: int, extra) -> dict:
+    """The row with `key` holding the longest head of `text` that keeps the row within `room` bytes; extra(shown)
+    adds the fields that state the cut."""
+    low, high = 0, len(text)
+    while low < high:
+        mid = (low + high + 1) // 2
+        if size({**row, key: text[:mid], **extra(mid)}) <= room:
+            low = mid
+        else:
+            high = mid - 1
+    return {**row, key: text[:low], **extra(low)}
+
+
+def shrink_action(row: dict, room: int) -> dict:
+    """An action whose arguments alone pass the budget: its arguments as a JSON text cut to fit, the cut stated."""
+    text = _dump(row["arguments"])
+    base = {k: v for k, v in row.items() if k != "arguments"}
+    return cut_to(base, "arguments_json", text, room,
+                  lambda shown: {"arguments_chars": len(text), "shown_chars": shown, "truncated": True})
+
+
+def shrink_observation(row: dict, room: int) -> dict:
+    """An observation whose result alone passes the budget: the result cut further to fit, the cut stated."""
+    text = row.get("result")
+    if text is None:
+        return row
+    return cut_to(row, "result", text, room, lambda shown: {"shown_chars": shown, "truncated": True})
+
+
+def overhead(payload: dict, rows_key: str, ids: list[int]) -> int:
+    """The bytes of the answer without its rows, with every candidate's id listed as left out: the most the wrapper
+    can take."""
+    return size({**payload, rows_key: [], "not_shown_ids": ids}) + WRAP_MARGIN
+
+
+def actions_payload(agent: str, calls: list[Called], latest: int, since_round: int | None,
+                    ids: list[int] | None = None, budget: int = 16 * 1024) -> dict:
+    """get_peer_actions' answer within `budget` bytes: the calls `ids` names, in that order, else the newest `latest`
+    calls from `since_round` on, oldest first, arguments in full. The calls that did not fit are named in not_shown_ids,
+    the oldest first for the newest calls, so a second call with ids gets them."""
+    if ids is None:
+        chosen = [c for c in calls if since_round is None or c.round >= since_round][-latest:]
+        rows = [{"id": c.id, "round": c.round, "tool": c.tool, "arguments": c.arguments} for c in reversed(chosen)]
+    else:
+        rows = [{"id": c.id, "round": c.round, "tool": c.tool, "arguments": c.arguments} if (c := _at(calls, i))
+                else {"id": i, "status": "no such call"} for i in ids]
+    head = {"peer": agent, "total_calls": len(calls), "shown": 0}
+    kept, left = fit(rows, budget - overhead(head, "actions", [r["id"] for r in rows]), shrink_action)
+    if ids is None:
+        kept, left = kept[::-1], left[::-1]
+    return {**head, "shown": len(kept), "actions": kept, "not_shown_ids": left}
+
+
+def _at(calls: list[Called], i: int) -> Called | None:
+    return calls[i] if 0 <= i < len(calls) else None
 
 
 def observation(c: Called, max_chars: int) -> dict:
@@ -124,15 +207,20 @@ def observation(c: Called, max_chars: int) -> dict:
     return row
 
 
-def observations_payload(agent: str, calls: list[Called], ids: list[int] | None, latest: int, max_chars: int) -> dict:
-    """get_peer_observations' answer: the results of the calls `ids` names, in that order, else of the newest
-    `latest` calls, oldest first."""
+def observations_payload(agent: str, calls: list[Called], ids: list[int] | None, latest: int, max_chars: int,
+                         budget: int = 16 * 1024) -> dict:
+    """get_peer_observations' answer within `budget` bytes: the results of the calls `ids` names, in that order, else
+    of the newest `latest` calls, oldest first. The rows that did not fit are named in not_shown_ids."""
     if ids is None:
-        rows = [observation(c, max_chars) for c in calls[-latest:]]
+        rows = [observation(c, max_chars) for c in reversed(calls[-latest:])]
     else:
-        rows = [observation(calls[i], max_chars) if 0 <= i < len(calls) else {"id": i, "status": "no such call"}
+        rows = [observation(c, max_chars) if (c := _at(calls, i)) else {"id": i, "status": "no such call"}
                 for i in ids]
-    return {"peer": agent, "observations": rows}
+    head = {"peer": agent}
+    kept, left = fit(rows, budget - overhead(head, "observations", [r["id"] for r in rows]), shrink_observation)
+    if ids is None:
+        kept, left = kept[::-1], left[::-1]
+    return {**head, "observations": kept, "not_shown_ids": left}
 
 
 def _teammate_calls(owner: str, allowed: set[str], agent: str) -> list[Called]:
@@ -148,23 +236,27 @@ def _dump(payload: dict) -> str:
     return json.dumps(payload, ensure_ascii=False, default=str)
 
 
-def get_peer_actions(owner: str, agents: list[str]) -> ToolDef:
-    """The tool bound to the influencer `owner`: any teammate's latest tool calls on the roster `agents`."""
+def get_peer_actions(owner: str, agents: list[str], cap: Callable[[], int] = lambda: 16 * 1024) -> ToolDef:
+    """The tool bound to the influencer `owner`: any teammate's latest tool calls on the roster `agents`, its answer
+    within cap() bytes (tool_output_caps.cap_of)."""
     prompts = load_prompts()
     args = prompts["tool_args"][ACTIONS_TOOL]
     allowed = set(agents) - {owner}
 
-    async def execute(peer: str, latest: int = 20, since_round: int | None = None) -> str:
+    async def execute(peer: str, latest: int = 20, since_round: int | None = None, ids: list[int] | None = None) -> str:
         if latest < 1:
             raise ToolError("latest must be at least 1")
-        return _dump(actions_payload(peer, _teammate_calls(owner, allowed, peer), latest, since_round))
+        calls = _teammate_calls(owner, allowed, peer)
+        return _dump(actions_payload(peer, calls, latest, since_round, ids, cap()))
 
     return ToolDef(execute, name=ACTIONS_TOOL, description=prompts["tools"][ACTIONS_TOOL],
-                   parameters={"peer": args["peer"], "latest": args["latest"], "since_round": args["since_round"]})
+                   parameters={"peer": args["peer"], "latest": args["latest"], "since_round": args["since_round"],
+                               "ids": args["ids"]})
 
 
-def get_peer_observations(owner: str, agents: list[str]) -> ToolDef:
-    """The tool bound to the influencer `owner`: what any teammate's tool calls returned, by id or the latest."""
+def get_peer_observations(owner: str, agents: list[str], cap: Callable[[], int] = lambda: 16 * 1024) -> ToolDef:
+    """The tool bound to the influencer `owner`: what any teammate's tool calls returned, by id or the latest, its
+    answer within cap() bytes (tool_output_caps.cap_of)."""
     prompts = load_prompts()
     args = prompts["tool_args"][OBSERVATIONS_TOOL]
     allowed = set(agents) - {owner}
@@ -173,7 +265,7 @@ def get_peer_observations(owner: str, agents: list[str]) -> ToolDef:
         if latest < 1 or max_chars < 1:
             raise ToolError("latest and max_chars must be at least 1")
         calls = _teammate_calls(owner, allowed, peer)
-        return _dump(observations_payload(peer, calls, ids, latest, max_chars))
+        return _dump(observations_payload(peer, calls, ids, latest, max_chars, cap()))
 
     return ToolDef(execute, name=OBSERVATIONS_TOOL, description=prompts["tools"][OBSERVATIONS_TOOL],
                    parameters={"peer": args["peer"], "ids": args["ids"], "latest": args["latest"],

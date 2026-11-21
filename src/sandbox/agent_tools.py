@@ -77,6 +77,11 @@ class AgentTools:
     """ORBIT tool_bindings: tools built per agent. Empty for ORBIT's built-in tools."""
     tool_kwargs: dict[str, dict] = field(default_factory=dict)
     """SetupConfig.tool_kwargs for ORBIT's built-in bash and python."""
+    seats: dict[str, Seat] | None = None
+    """Each agent's seat where its shell is bound to one (`shell` and `run_python`), which peer_shell runs in; None
+    for ORBIT's built-in tools (a lone agent) and for a domain with no shell (chess)."""
+    timeout: int = TOOL_TIMEOUT_S
+    """The shell's timeout in seconds, which peer_shell takes too."""
 
     @property
     def names(self) -> list[str]:
@@ -146,4 +151,5 @@ def roster_tools(agents: list[str], seats: dict[str, Seat] | None, *, timeout: i
     else:
         base, bindings, kwargs = TOOL_NAMES, tool_bindings(seats, timeout=timeout, descriptions=descriptions), {}
     per_agent = {a: [*base, *(holders[a] if holders is not None else task_tools)] for a in agents}
-    return AgentTools(per_agent=per_agent, bindings={**bindings, **task_tools}, tool_kwargs=kwargs)
+    return AgentTools(per_agent=per_agent, bindings={**bindings, **task_tools}, tool_kwargs=kwargs, seats=seats,
+                      timeout=timeout)

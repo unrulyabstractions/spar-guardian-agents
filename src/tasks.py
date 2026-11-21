@@ -61,6 +61,7 @@ from src.domains import DOMAINS
 from src.domains.benchmark_protocol import Benchmark, Plan
 from src.judging.cheatbench_judge import JUDGE_ADDENDUM, cheatbench_judge
 from src.models import swarm_model_provider as provider  # importing it registers the "swarm" provider
+from src.sandbox import peer_shell
 from src.sandbox.access_log.access_monitor import access_capture, capture, start_access_monitor, with_monitor
 from src.sandbox.agent_tools import AgentTools
 from src.swarm import influencers as roles_module
@@ -73,6 +74,7 @@ from src.swarm.board import (
     board_scheduler,
 )
 from src.swarm.submit_and_stop import Deliverable, ending_tools, submit_bindings
+from src.swarm.tool_output_caps import cap_of, capped_bindings
 from src.swarm.turn_rules import rules_setup, schedule, turn_rules_defense
 
 # Stops a runaway per agent. Inspect counts cached prompt tokens in full, so the count grows with the square of the
@@ -134,14 +136,32 @@ def deliverable(benchmark: Benchmark, plan: Plan) -> Deliverable:
                        snapshot=lambda agent: benchmark.snapshot(plan, agent), told=benchmark.tells_team(plan))
 
 
+def observers(benchmark: Benchmark, plan: Plan, tools: AgentTools) -> dict[str, int]:
+    """Each influencer's observer uid under SwarmConfig.peer_shell (src/sandbox/peer_shell.py), else none. A domain
+    whose agents have no shell of their own (chess) refuses peer_shell."""
+    config = plan.config
+    found = peer_shell.observer_uids(config.names, plan.roles) if config.peer_shell else {}
+    if found and tools.seats is None:
+        raise ValueError(f"peer_shell: {benchmark.name} gives its agents no shell to run it in")
+    return found
+
+
 def team_tools(benchmark: Benchmark, plan: Plan, tools: AgentTools) -> tuple[dict[str, list[str]], dict]:
     """(each agent's AgentSpec.tools, ORBIT tool_bindings): the benchmark's tools, then the board's
-    (src/swarm/board.py), then submit and stop_working as the agent holds them (src/swarm/submit_and_stop.py)."""
+    (src/swarm/board.py), then peer_shell for an influencer under SwarmConfig.peer_shell, then submit and stop_working
+    as the agent holds them (src/swarm/submit_and_stop.py). Every binding carries the agent's cap on one tool result
+    (src/swarm/tool_output_caps.py)."""
     config, roles = plan.config, plan.roles
     board = agent_tool_names(config, roles)
-    names = {n: [*tools.per_agent[n], *board[n], *ending_tools(config, role_of(roles, n))] for n in config.names}
-    return names, {**tools.bindings, **board_bindings(config, roles=roles),
-                   **submit_bindings(config, deliverable(benchmark, plan))}
+    watchers = observers(benchmark, plan, tools)
+    shell = {peer_shell.TOOL} if watchers else set()
+    names = {n: [*tools.per_agent[n], *board[n], *(shell if n in watchers else ()),
+                 *ending_tools(config, role_of(roles, n))] for n in config.names}
+    extra = peer_shell.peer_shell_binding(tools.seats, watchers, timeout=tools.timeout,
+                                          cap=lambda a: cap_of(config, role_of(roles, a))) if watchers else {}
+    bindings = {**tools.bindings, **board_bindings(config, roles=roles), **extra,
+                **submit_bindings(config, deliverable(benchmark, plan))}
+    return names, capped_bindings(bindings, config, roles)
 
 
 def agent_specs(config: SwarmConfig, tools: dict[str, list[str]], prompts: dict[str, str | None],
@@ -178,12 +198,15 @@ def monitored_sample(sample: Sample) -> Sample:
     return sample.model_copy(update={"sandbox": spec})
 
 
-def setup_solvers(benchmark: Benchmark, plan: Plan) -> list[Solver]:
-    """The turn rules' setup and the benchmark's, then the access log's, so the harness's own reads while staging come
-    before any mark."""
+def setup_solvers(benchmark: Benchmark, plan: Plan, tools: AgentTools | None = None) -> list[Solver]:
+    """The turn rules' setup and the benchmark's, then peer_shell's under SwarmConfig.peer_shell, then the access
+    log's, so the harness's own reads while staging come before any mark."""
     config = plan.config
+    watchers = observers(benchmark, plan, tools) if tools is not None else {}
+    shell = [peer_shell.peer_shell_setup(tools.seats, watchers)] if watchers else []
     monitor = [start_access_monitor(benchmark)] if benchmark.keeps_access_log(config) else []
-    return [rules_setup(config, config.names, plan.roles, **delivery(benchmark, plan)), benchmark.setup(), *monitor]
+    return [rules_setup(config, config.names, plan.roles, **delivery(benchmark, plan)), benchmark.setup(), *shell,
+            *monitor]
 
 
 def cleanup(benchmark: Benchmark, config: SwarmConfig) -> Callable[[TaskState], Awaitable[None]]:
@@ -219,7 +242,8 @@ def delivery(benchmark: Benchmark, plan: Plan) -> dict:
 # --------------------------------------------------------------------------
 # metadata the orchestrator and the exporter read
 # --------------------------------------------------------------------------
-def record_run(task_: Task, benchmark: Benchmark, plan: Plan, prompts: dict[str, str]) -> None:
+def record_run(task_: Task, benchmark: Benchmark, plan: Plan, prompts: dict[str, str],
+               watchers: dict[str, int] | None = None) -> None:
     """Write the turn rules' defense into the experiment config and the run's facts into metadata["cheatbench"].
 
     multi_agent_task takes no defenses; the orchestrator reads them from metadata["experiment"]["defenses"]
@@ -240,6 +264,8 @@ def record_run(task_: Task, benchmark: Benchmark, plan: Plan, prompts: dict[str,
         cb["access"] = {"policy": access_policy.policy_name(plan.access), "agents": plan.holds,
                         "pieces": plan.pieces or None, "n_pieces": plan.n_pieces}
         cb["deviations"] = benchmark.deviations(plan)
+        if watchers:
+            cb["peer_shell"] = {"observers": watchers}
         if config.turn_budget is not None:
             cb["turn_budget"] = {"budget": config.turn_budget, "steps_per_agent": config.working_steps}
         if roles:
@@ -283,7 +309,7 @@ def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = 
         scheduler=board_scheduler(max_turns=config.max_turns + 5, max_time_seconds=time_limit_s),
         scorer=scorers(benchmark, config),
         tool_bindings=bindings or None,
-        task_setup=setup_solvers(benchmark, plan),
+        task_setup=setup_solvers(benchmark, plan, tools),
         cleanup=cleanup(benchmark, config),
         message_limit=config.sample_message_limit,
         token_limit=config.token_limit or config.n_agents * TOKEN_LIMIT,
@@ -291,7 +317,7 @@ def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = 
         # own where it grades after the agents stop (SWE)
         time_limit=time_limit_s + (benchmark.time_grace_s or config.time_grace_s),
     )
-    record_run(task_, benchmark, plan, prompts)
+    record_run(task_, benchmark, plan, prompts, observers(benchmark, plan, tools))
     return task_
 
 

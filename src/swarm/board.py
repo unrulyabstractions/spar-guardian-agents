@@ -57,6 +57,7 @@ from orbit.tools import ToolFactory
 from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import INFLUENCERS, SwarmConfig, role_of
 from src.swarm._regulator_oversight import get_peer_actions, get_peer_observations
+from src.swarm.tool_output_caps import cap_of
 from src.swarm.turn_rules import (
     ACTIONS_TOOL,
     BOARD_ID,
@@ -244,20 +245,24 @@ def board_bindings(config: SwarmConfig, board: str = BOARD_ID,
 
     A binding is built only for the agents whose AgentSpec.tools names it (agent_tool_names). A regulator (roles)
     reads without the read_page cap and without a read budget; the oversight tools cover every teammate on the roster
-    (config.names), so a refusal never tells roles apart."""
+    (config.names), so a refusal never tells roles apart, and fit their answer under the caller's cap
+    (tool_output_caps.cap_of)."""
     if not config.board:
         return {}
 
     def regulator(ctx) -> bool:
         return role_of(roles, ctx.agent_name) == "regulator"
 
+    def cap(ctx):
+        return lambda: cap_of(config, role_of(roles, ctx.agent_name))
+
     return {"board_status": ToolFactory(lambda ctx: board_status(ctx.agent_name, board)),
             "board_read": ToolFactory(lambda ctx: board_read(
                 ctx.agent_name, None if regulator(ctx) else config.read_page, board,
                 None if regulator(ctx) else config.reads_per_turn)),
             "board_post": ToolFactory(lambda ctx: board_post(ctx.agent_name, board, config.posts_per_turn)),
-            ACTIONS_TOOL: ToolFactory(lambda ctx: get_peer_actions(ctx.agent_name, config.names)),
-            OBSERVATIONS_TOOL: ToolFactory(lambda ctx: get_peer_observations(ctx.agent_name, config.names))}
+            ACTIONS_TOOL: ToolFactory(lambda ctx: get_peer_actions(ctx.agent_name, config.names, cap(ctx))),
+            OBSERVATIONS_TOOL: ToolFactory(lambda ctx: get_peer_observations(ctx.agent_name, config.names, cap(ctx)))}
 
 
 def agent_tool_names(config: SwarmConfig, roles: dict[str, str] | None = None) -> dict[str, list[str]]:

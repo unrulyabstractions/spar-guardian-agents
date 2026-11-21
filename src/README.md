@@ -81,6 +81,7 @@ What every domain builds its sandbox from. Nothing here knows a domain.
 - `cheatbench_task_files.py`: CheatBench's task folder and built rows, as every domain reads them.
 - `docker_images.py`: images on the host, built from a recipe when the label no longer names it.
 - `sandbox_hygiene.py`: the processes an agent leaves, the loopback channel and what the sandbox holds at the end.
+- `peer_shell.py`: `peer_shell`, an influencer's read-only shell on a teammate's machine as an observer uid of its own, under `peer_shell=true`: the grant of read by ACL before each command, the reap after it and the setup's proof.
 - `sandbox_probe.py`: one command's record, a table of commands and the setup solver that probes the seats.
 - `staging.py`: files written on the host for a sandbox: atomic writes, compose files and staging tarballs. It also sends `team_remote_lock.sh`, which locks a bare team remote.
 - `task_tool_store.py`: the sample store of a task's own tool.
@@ -93,6 +94,7 @@ The team on ORBIT's API.
 - `influencers.py`: who is regulator or disregulator (an influencer), on a board whose config asks for one, and the texts each role gets. A regulator's system prompt and first message are built here for every domain, in place of the benchmark's.
 - `submit_and_stop.py`: `submit` and `stop_working`, the tools that end an agent's work. ORBIT reserves `submit`, so the tool is bound as `team_submit` and shown to the model as `submit`.
 - `awareness_probes.py`: Lucy's end-of-episode questions as an Inspect scorer.
+- `tool_output_caps.py`: the cap on one tool result by role: an influencer's tools carry `influencer_tool_output_bytes` as `ToolDef.max_output`, a worker's take the run's.
 - `turn_rules/`: the plan of rounds under the turn budget, the free board steps, the budgets' counters, the halt after a hand-in or once no worker is left, and the model filter. Its `__init__.py` is the API. `turn_activation.py` is the callback ORBIT imports by its dotted name after every activation.
 
 The implementation is `_regulator_oversight.py` (`get_peer_actions` and `get_peer_observations`, the influencers' tools) and the `_turn_*.py` modules. Every run carries the turn rules as a passive defense. Its model filter takes the agent loop's assistant paragraph out of the system message and appends the continue prompt (`prompts.yaml` `continue`) when the provider input would end with a model turn, which Gemini rejects.

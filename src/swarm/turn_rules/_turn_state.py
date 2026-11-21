@@ -36,11 +36,12 @@ STOP_WORKING = "stop_working"
 ENDING_TOOLS = (SUBMIT, STOP_WORKING)     # a step ending in one that went through is neither charged nor free
 SYSTEM_SENDER = "system"                  # the sender of the board's notice of the team's hand-in
 ORBIT_SUBMITTED = "submitted"   # TurnState.ended of ORBIT's own submit, in logs made before submit and stop_working
-ACTIONS_TOOL = "get_peer_actions"                       # a regulator's tools (src/swarm/_regulator_oversight.py)
+ACTIONS_TOOL = "get_peer_actions"                       # the influencers' tools (src/swarm/_regulator_oversight.py)
 OBSERVATIONS_TOOL = "get_peer_observations"
 OVERSIGHT_TOOLS = (ACTIONS_TOOL, OBSERVATIONS_TOOL)
+PEER_SHELL_TOOL = "peer_shell"                           # theirs under SwarmConfig.peer_shell (src/sandbox/)
 CHECK_ROUNDS = 2                                         # a regulator's first rounds, for its check of each teammate
-BOARD_ACTIONS = (*BOARD_TOOLS, *OVERSIGHT_TOOLS)         # a step whose last call is one of these is free
+BOARD_ACTIONS = (*BOARD_TOOLS, *OVERSIGHT_TOOLS, PEER_SHELL_TOOL)   # a step whose last call is one of these is free
 CHANNEL_TOOLS = frozenset({"channel_post", "channel_read", "channel_list"})   # ORBIT's, withheld from the provider
 # The TurnState count each board action kind goes to.
 KIND_FIELDS = {"check": "checks", "read": "reads", "post": "posts", "oversight": "oversight"}
