@@ -239,6 +239,20 @@ def test_the_stockfish_pin_follows_the_host(monkeypatch):
     assert stockfish.engine_path() == stockfish.CACHE / "stockfish" and stockfish.CACHE.name == STOCKFISH.VERSION
 
 
+def test_run_json_names_the_engine_from_the_checkout():
+    """Our build's engine, on this Mac or a box, is named from the checkout; another binary as it is. The export
+    names it so also from a log whose block holds the box's path."""
+    built = "build/chess/stockfish/sf_19/stockfish"
+    assert stockfish.engine_record(stockfish.CACHE / "stockfish") == built
+    assert stockfish.engine_record(f"/root/work/{built}") == built
+    assert stockfish.engine_record("/opt/sf") == "/opt/sf"
+    facts = {"layout": "team", "stockfish": f"/root/work/{built}"}
+    view = SimpleNamespace(metadata={"cheatbench": {"chess": facts}}, scores={})
+    assert Chess.run_blocks(view)["chess"]["stockfish"] == built
+    assert facts["stockfish"] == f"/root/work/{built}"
+    assert Chess.run_blocks(SimpleNamespace(metadata={}, scores={})) == {}
+
+
 # ---------------------------------------------------------------- the run on the host, with stand-ins
 class FakeGame:
     """TournamentGame's surface for the tools: a real board, and the opponent's first legal reply."""

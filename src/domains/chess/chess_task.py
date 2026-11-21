@@ -55,7 +55,7 @@ from src.domains.chess._chess_settings import (
     TASK_DIR,
     VARIANT,
 )
-from src.domains.chess._chess_stockfish import BUILD_HINT, engine_path
+from src.domains.chess._chess_stockfish import BUILD_HINT, engine_path, engine_record
 from src.sandbox import task_tool_store as tool_store
 from src.sandbox.agent_tools import AgentTools
 from src.sandbox.machines import agent_machines as machines
@@ -192,7 +192,7 @@ class Chess(RowBenchmark):
                  "auth": "token" if credential else "none", "credential": credential, "agents": agents,
                  "writable": sorted(writable), "owner_of": plan.owners, "move_order": self.move_order(plan),
                  "time_limit_s": plan.config.time_limit_s or self.time_limit_s(),
-                 "image": machines.ensure_image(), "stockfish": str(engine_path())}
+                 "image": machines.ensure_image(), "stockfish": engine_record(engine_path())}
         return Staged(compose=sandbox.write_compose(), block=block)
 
     def tools(self, plan: Plan) -> AgentTools:
@@ -234,6 +234,15 @@ class Chess(RowBenchmark):
         mode = SHARED_DEVIATIONS if plan.mode == "shared_task" else SOLO_DEVIATIONS
         told = self.plays_as_team(plan) and any(self.holds_a_part(plan, agent) for agent in plan.agents)
         return [*TEAM_DEVIATIONS, *mode, *(SPLIT_DEVIATIONS if plan.split else []), *(PART_DEVIATIONS if told else [])]
+
+    @classmethod
+    def run_blocks(cls, view) -> dict:
+        """The base's block, with the engine named from the checkout (engine_record), also in a log whose block holds
+        the machine's path."""
+        blocks = super().run_blocks(view)
+        if (blocks.get(cls.block) or {}).get("stockfish"):
+            blocks[cls.block]["stockfish"] = engine_record(blocks[cls.block]["stockfish"])
+        return blocks
 
     @classmethod
     def episode_facts(cls, view, agent: str) -> dict:
