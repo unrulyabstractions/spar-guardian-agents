@@ -2470,3 +2470,24 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **Result.** VERIFIED for the code and the tests above. UNVERIFIED: the smoke suites (tests/smoke, need Docker) were
   edited but not run; the viewers were not opened in a browser; `make paper` was not run. Until runs/ is regenerated,
   readers see the older episodes ("orbit/<id>"), so the viewer and `make paper` read the current runs wrongly.
+
+## 2026-11-21: network trace probe on Colima, and scripts/box/network_trace_check.sh
+- **What.** Which way of recording the agents' network calls works from a sidecar on this Mac's Colima VM (Ubuntu
+  6.8.0-117-generic, aarch64), and the preflight script that reports it on any Docker host.
+- **How verified.** In containers shaped like the access-log sidecar (pid host, SYS_ADMIN, network none) against
+  targets with network none: Ubuntu 24.04's bpftrace 0.20.2 aborts on any `curtask` field on arm64 (assertion in
+  CreateInteger); the static release v0.27.1 (sha256 ad1592...5672, equal to GitHub's digest) runs once unpacked, with
+  /sys/kernel/tracing bound read-only (without it: "Error reading events from /sys/kernel/tracing/available_events");
+  SYS_PTRACE and a memlock ulimit are not needed. A fexit/tracepoint script filtered by netns logged, in
+  cbtask:python311, a uid 3001 connect to a uid 1000 server on 127.0.0.1:8000 and the server's accept with the same
+  client port (46506), plus UDP bind/connect, a unix socket bind/connect and ::1 bind/listen/connect; the same
+  listen/connect/accept rows in cbswe-flipt-02e2:native and cbcw:agent. Overhead: 29.7 us untraced, 38.6 us traced per loopback
+  connect+accept pair (10,000 pairs, 20,007 rows, none lost), bpftrace RSS 230 MB, attach 3 s. `nsenter -n ss -tulpanx`
+  listed pids; /proc/<pid>/net/tcp read by Python named the uid and inode. `conntrack -E` needs NET_ADMIN and showed 0
+  events until a conntrack rule was added in the target's netns, then 5 events with no pid or uid; the rule was
+  flushed after. The script ran on Colima with cbtask:python311 (method ebpf, exit 0, JSON report parsed),
+  nettrace-probe:wf5ipt (ss works), cbswe-flipt-02e2:native (ebpf), a truncated AppImage (sha256 refused, method
+  procnet), the download path into a scratch cache (196142152 bytes, ebpf), and a copy expecting uid 3002 (ebpf and
+  procnet fail, exit 1). shellcheck clean. No container with label network_trace_check=1 or name nt-wf5 left after.
+- **Result.** VERIFIED on Colima. UNVERIFIED: any vast.ai box (x86_64, its kernel after box_kernel.sh), the x86_64 AppImage
+  (its sha256 is GitHub's digest, not run), and bpftrace 0.20.2 on x86_64.

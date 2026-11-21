@@ -128,6 +128,17 @@ scripts/box/watch.sh --once <id>
 
 Before the first fleet with the access log, one box of each task runs the check in `src/domains/README.md` (A first real box).
 
+## Network trace check
+
+The network log is not built yet. Its preflight says which way of recording the agents' network calls works on a box: eBPF through bpftrace from a sidecar, or snapshots of the machines' socket tables. Run it on one box after `box_setup.sh`, as root, with the machines' image in place:
+
+```
+scripts/box/box_scp.sh <id> scripts/box/network_trace_check.sh box:/root/ship/
+scripts/box/box_ssh.sh <id> bash /root/ship/network_trace_check.sh --json /root/network_trace_check.json
+```
+
+It downloads the pinned bpftrace release (196 MB, sha256 checked), starts two containers with memory limits, removes them, and prints one line per method and then `method ebpf`, `method procnet` or `method none`. It exits 1 when no method works. It rents nothing and calls no model.
+
 ## Pilot
 
 Rent and set up the pilot's boxes as above, then start each box and watch:
