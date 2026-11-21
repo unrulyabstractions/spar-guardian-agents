@@ -332,9 +332,29 @@ def recorded_episode_facts(view: SampleView, agent: str) -> dict:
 # --------------------------------------------------------------------------
 # rules facts and probes
 # --------------------------------------------------------------------------
+# The TurnState fields of a log made before 2026-11-21, under the step rules, in the order the export wrote them then
+# (TurnState as it stood at 8892dee~1). Only those logs stored the step cap, "TurnState:cap".
+STEP_RULES_FIELDS = ("agents", "workers", "cap", "pooled", "turn_order", "seed", "concurrent", "max_concurrency",
+                     "free_caps", "reads_per_turn", "posts_per_turn", "turn_budget", "rounds", "windows",
+                     "activations", "work_steps", "free_steps", "checks", "reads", "posts", "discovery_round",
+                     "read_senders", "oversight", "oversight_targets", "oversight_first", "turn_reads", "turn_posts",
+                     "reads_refused", "posts_refused", "history_marks", "halted_after_round", "notice_seen", "added",
+                     "ended", "entry_rounds", "exits", "timeline")
+
+
 def rules_state(view: SampleView) -> dict | None:
-    """The turn rules' store (src/swarm/turn_rules/_turn_state.py TurnState), or None for a run without them."""
+    """The turn rules' store (src/swarm/turn_rules/_turn_state.py TurnState), or None for a run without them. A log of
+    the step rules gives their fields (STEP_RULES_FIELDS: cap, pooled, free_caps, turn_budget, work_steps, free_steps
+    and the rest), so its re-export writes the rules it ran under."""
+    if view.store_get("TurnState:cap") is not None:
+        return {f: view.store_get(f"TurnState:{f}") for f in STEP_RULES_FIELDS}
     return stored(view, TurnState)
+
+
+def step_rules(state: dict) -> bool:
+    """Whether the turn rules' store is a log's of the step rules (rules_state), which counts steps, not rounds, or
+    the empty store of a log older than the turn rules."""
+    return "rounds_used" not in state
 
 
 def rules_facts(state: dict | None, agent: str) -> dict | None:
@@ -342,7 +362,7 @@ def rules_facts(state: dict | None, agent: str) -> dict | None:
     and its window of rounds. A run before 2026-11-21 gives its working steps (work_steps) in place of the rounds."""
     if state is None:
         return None
-    counts = ("rounds_used", "board_rounds") if "rounds_used" in state else ("work_steps",)
+    counts = ("work_steps",) if step_rules(state) else ("rounds_used", "board_rounds")
     return {k: (state.get(k) or {}).get(agent) for k in ("activations", *counts, "ended", "windows")}
 
 
@@ -504,9 +524,9 @@ def engagement_record(view: SampleView, agent: str, rules: dict | None, submissi
         "discovery_round": recorded("discovery_round"),
         "checks": recorded("checks", 0), "reads": recorded("reads", 0), "posts": recorded("posts", 0),
         "read_senders": recorded("read_senders", {}),
-        **({"rounds_used": recorded("rounds_used", 0), "board_rounds": recorded("board_rounds", 0)}
-           if "rounds_used" in state else
-           {"free_steps": recorded("free_steps", 0), "work_steps": recorded("work_steps", 0)}),
+        **({"free_steps": recorded("free_steps", 0), "work_steps": recorded("work_steps", 0)}
+           if step_rules(state) else
+           {"rounds_used": recorded("rounds_used", 0), "board_rounds": recorded("board_rounds", 0)}),
         "called_submit": agent in hand_ins(submission) or agent in refused,
         "notices": notices.get(agent, 0),
         "oversight": recorded("oversight", 0), "oversight_targets": recorded("oversight_targets", {}),

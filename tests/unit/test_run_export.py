@@ -340,6 +340,47 @@ def test_the_stop_rounds_and_a_log_without_the_turn_rules():
     assert blocks.ended_by(bare, "a01", blocks.rules_state(bare), None, None) is None
 
 
+# run.json "rules" of a log made before 2026-11-21, field by field, as the export wrote it then (8892dee~1 TurnState).
+STEP_RULES = ("agents", "workers", "cap", "pooled", "turn_order", "seed", "concurrent", "max_concurrency", "free_caps",
+              "reads_per_turn", "posts_per_turn", "turn_budget", "rounds", "windows", "activations", "work_steps",
+              "free_steps", "checks", "reads", "posts", "discovery_round", "read_senders", "oversight",
+              "oversight_targets", "oversight_first", "turn_reads", "turn_posts", "reads_refused", "posts_refused",
+              "history_marks", "halted_after_round", "notice_seen", "added", "ended", "entry_rounds", "exits",
+              "timeline")
+OLD_STORE = {"TurnState:instance": None, "TurnState:agents": ["a01", "a02"], "TurnState:workers": ["a01", "a02"],
+             "TurnState:cap": 100, "TurnState:pooled": True, "TurnState:free_caps": {"a01": 3, "a02": 3},
+             "TurnState:turn_budget": 100, "TurnState:rounds": 40, "TurnState:activations": {"a01": 32, "a02": 33},
+             "TurnState:work_steps": {"a01": 23, "a02": 21}, "TurnState:free_steps": {"a01": 9, "a02": 12},
+             "TurnState:checks": {"a01": 4}, "TurnState:ended": {"a02": "stop_working"},
+             "TurnState:windows": {"a01": [1, None], "a02": [1, None]}, "TurnState:timeline": [{"id": "r1-a01"}]}
+
+
+def test_a_log_of_the_step_rules_exports_its_steps_as_they_were_recorded():
+    """A re-export of a run made before 2026-11-21 keeps every field of its turn rules: run.json "rules" holds the
+    step rules' fields in their order (cap, pooled, free_caps, turn_budget, work_steps, free_steps), a field the
+    store never wrote is None, and no field of the rounds appears; each episode's rules facts and engagement keep its
+    working and free steps. A log of the rounds reads its rounds."""
+    old = view(OLD_STORE, agents=TEAM)
+    rules = blocks.rules_state(old)
+    assert tuple(rules) == STEP_RULES
+    assert (rules["cap"], rules["pooled"], rules["free_caps"], rules["turn_budget"]) == (100, True,
+                                                                                         {"a01": 3, "a02": 3}, 100)
+    assert rules["work_steps"] == {"a01": 23, "a02": 21} and rules["free_steps"] == {"a01": 9, "a02": 12}
+    assert rules["entry_rounds"] is None and rules["exits"] is None
+    assert blocks.rules_facts(rules, "a01") == {"activations": 32, "work_steps": 23, "ended": None,
+                                                "windows": [1, None]}
+    engagement = blocks.engagement_record(old, "a02", rules, None, {})
+    assert (engagement["free_steps"], engagement["work_steps"]) == (12, 21)
+    assert "rounds_used" not in engagement and "board_rounds" not in engagement
+    new = view({"TurnState:agents": ["a01", "a02"], "TurnState:round_budget": 30, "TurnState:calls_per_round": 10,
+                "TurnState:rounds_used": {"a01": 4}, "TurnState:board_rounds": {"a01": 1}}, agents=TEAM)
+    rules = blocks.rules_state(new)
+    assert rules["round_budget"] == 30 and "cap" not in rules and "work_steps" not in rules
+    assert blocks.rules_facts(rules, "a01")["rounds_used"] == 4 and "work_steps" not in blocks.rules_facts(rules, "a01")
+    engagement = blocks.engagement_record(new, "a01", rules, None, {})
+    assert (engagement["rounds_used"], engagement["board_rounds"]) == (4, 1) and "work_steps" not in engagement
+
+
 def test_an_older_log_reads_orbits_own_submit_as_a_stop():
     # ORBIT's own submit (AgentSpec.submit) ended only the caller's episode, the act stop_working is now
     agents = {a: {"tools": ["board_read", "team_submit"], "submit": True} for a in ("a01", "a02", "a03")}
