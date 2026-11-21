@@ -31,6 +31,7 @@ from src.models import model_registry as models
 LADDERS = ("rule", "regulator", "disregulator")
 ROLES = ("worker", "regulator", "disregulator")     # a worker, or an influencer (src/swarm/influencers.py)
 INFLUENCERS = ("regulator", "disregulator")        # the roles that hold the peer tools (src/swarm/board.py)
+TOOL_OUTPUT_BYTES = 65536                           # the cap on one tool result, every agent's (tool_output_bytes)
 Mode = Literal["solo_task", "shared_task"]
 NONE_TEXT = ("none", "null")
 # Messages one agent's step adds at most, for the derived message limit: the model's reply, its tool results and the
@@ -290,13 +291,14 @@ class SwarmConfig(BaseModel):
     reasoning_effort: Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"] | None = None
     """The agents' reasoning effort (Inspect GenerateConfig reasoning_effort), or None for the provider's default. A
     lower effort makes shorter, faster calls and changes the model being measured, so the preset leaves it unset."""
-    tool_output_bytes: int | None = None
-    """Most bytes of one tool result the agents see (Inspect max_tool_output); None is Inspect's 16 KiB. A smaller cap
-    keeps long file dumps out of the conversation, which every later turn resends."""
-    influencer_tool_output_bytes: int | None = 65536
-    """Most bytes of one tool result a regulator or a disregulator sees, set on each of its tools (ToolDef.max_output,
-    src/swarm/tool_output_caps.py); None gives the influencers the workers' cap (tool_output_bytes). The peer tools
-    and peer_shell fit their JSON under it."""
+    tool_output_bytes: int | None = TOOL_OUTPUT_BYTES
+    """Most bytes of one tool result every agent sees, workers and influencers alike: the run's GenerateConfig
+    max_tool_output and each bound tool's ToolDef.max_output (src/swarm/tool_output_caps.py). None is Inspect's 16
+    KiB. Runs before 2026-11-20 recorded None. A smaller cap keeps long file dumps out of the conversation, which every
+    later turn resends."""
+    tool_output_cut: Literal["middle"] = "middle"
+    """How a longer result is cut: its start and its end, half the cap each, with one line between them that says how
+    much was cut (tool_output_caps.middle_cut). A run's config without the field was cut by Inspect at the start."""
     peer_shell: bool = False
     """Whether the influencers get peer_shell (src/sandbox/peer_shell.py): a read-only shell on any teammate's
     machine, as an observer uid of their own. Off by default, so runs before 2026-11-20 stay comparable. Chess has no
@@ -363,8 +365,8 @@ class SwarmConfig(BaseModel):
                 raise ValueError(f"{name} must be at least 1")
         if self.free_board_actions < 0 or self.free_board_actions_influencer < 0:
             raise ValueError("free_board_actions and free_board_actions_influencer cannot be negative")
-        if self.influencer_tool_output_bytes is not None and self.influencer_tool_output_bytes < 1024:
-            raise ValueError("influencer_tool_output_bytes must be at least 1024")
+        if self.tool_output_bytes is not None and self.tool_output_bytes < 1024:
+            raise ValueError("tool_output_bytes must be at least 1024")
         for name in ("reads_per_turn", "posts_per_turn", "message_limit"):
             if getattr(self, name) is not None and getattr(self, name) < 1:
                 raise ValueError(f"{name} must be at least 1, or None")

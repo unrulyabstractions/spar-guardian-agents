@@ -245,7 +245,7 @@ def board_bindings(config: SwarmConfig, board: str = BOARD_ID,
 
     A binding is built only for the agents whose AgentSpec.tools names it (agent_tool_names). A regulator (roles)
     reads without the read_page cap and without a read budget; the oversight tools cover every teammate on the roster
-    (config.names), so a refusal never tells roles apart, and fit their answer under the caller's cap
+    (config.names), so a refusal never tells roles apart, and fit their answer under the run's cap
     (tool_output_caps.cap_of)."""
     if not config.board:
         return {}
@@ -254,7 +254,7 @@ def board_bindings(config: SwarmConfig, board: str = BOARD_ID,
         return role_of(roles, ctx.agent_name) == "regulator"
 
     def cap(ctx):
-        return lambda: cap_of(config, role_of(roles, ctx.agent_name))
+        return lambda: cap_of(config)
 
     return {"board_status": ToolFactory(lambda ctx: board_status(ctx.agent_name, board)),
             "board_read": ToolFactory(lambda ctx: board_read(

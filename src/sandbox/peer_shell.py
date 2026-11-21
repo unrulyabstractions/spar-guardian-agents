@@ -14,14 +14,14 @@ directory above them search. A file the peer writes later is granted at the next
 where anyone can, the temporary directories included, which keep the layout's own modes. After each command REAP kills
 the observer's processes, in every layout, SWE's included, so none outlives its call.
 
-The answer is JSON {peer, command, exit_code, output, chars, shown_chars, truncated}, the output stderr then stdout as
-the agents' own shell gives it. An output past the caller's cap (src/swarm/tool_output_caps.py: 64 KiB for an
-influencer by default) keeps its head and states the cut, as Inspect cuts the peer's own shell, so the JSON stays
-whole. The timeout is the peer's own shell's (AgentTools.timeout). A call about the caller, or about a name not on the
-roster, fails with "no such agent", the peer tools' refusal. Each call counts as a board action of kind "oversight"
-about the peer (turn_rules.record_board_action), and the sample store's STORE keeps per influencer its calls and the
-processes its reaps killed. Git runs with safe.directory=* and GIT_OPTIONAL_LOCKS=0: a repository owned by another
-user is refused otherwise, and `git status` would try to write the index.
+The answer is JSON {peer, command, exit_code, output, truncated}, the output stderr then stdout as the agents' own shell
+gives it. An output past the run's cap (src/swarm/tool_output_caps.py, 64 KiB by default) keeps its start and its end
+with one line between them that says how much was cut, the rule of every tool, so the JSON stays whole. The timeout is
+the peer's own shell's (AgentTools.timeout). A call about the caller, or about a name not on the roster, fails with "no
+such agent", the peer tools' refusal. Each call counts as a board action of kind "oversight" about the peer
+(turn_rules.record_board_action), and the sample store's STORE keeps per influencer its calls and the processes its
+reaps killed. Git runs with safe.directory=* and GIT_OPTIONAL_LOCKS=0: a repository owned by another user is refused
+otherwise, and `git status` would try to write the index.
 
 The setup (peer_shell_setup) resolves each seat's working directory and home and proves the mechanism on every machine
 before any agent runs: a file only its owner may read becomes readable to the observer, which can neither change nor
@@ -51,7 +51,8 @@ from src.configuration.swarm_config import INFLUENCERS, role_of
 from src.sandbox import sandbox_hygiene as hygiene
 from src.sandbox.agent_tools import Seat
 from src.sandbox.sandbox_probe import run_json
-from src.swarm._regulator_oversight import WRAP_MARGIN, cut_to
+from src.swarm._regulator_oversight import WRAP_MARGIN, size
+from src.swarm.tool_output_caps import middle_cut
 from src.swarm.turn_rules import record_board_action
 
 TOOL = "peer_shell"
@@ -256,11 +257,20 @@ async def run_as_observer(seat: Seat, places: dict, uid: int, command: str, *, t
 
 
 def answer(peer: str, command: str, code: int, output: str, cap: int) -> dict:
-    """peer_shell's JSON within `cap` bytes: the output's head as long as fits, the cut stated (chars, shown_chars,
-    truncated), so Inspect never cuts the JSON."""
+    """peer_shell's JSON within `cap` bytes: the whole output, or its start and its end with the cut line between them
+    (tool_output_caps.middle_cut), as long as fits, so Inspect never cuts the JSON."""
     row = {"peer": peer, "command": command, "exit_code": code}
-    return cut_to(row, "output", output, cap - WRAP_MARGIN,
-                  lambda shown: {"chars": len(output), "shown_chars": shown, "truncated": shown < len(output)})
+    room = cap - WRAP_MARGIN
+    if size({**row, "output": output, "truncated": False}) <= room:
+        return {**row, "output": output, "truncated": False}
+    low, high = 0, len(output.encode())
+    while low < high:
+        mid = (low + high + 1) // 2
+        if size({**row, "output": middle_cut(output, mid) or output, "truncated": True}) <= room:
+            low = mid
+        else:
+            high = mid - 1
+    return {**row, "output": middle_cut(output, low) or output, "truncated": True}
 
 
 def peer_shell_binding(seats: dict[str, Seat], observers: dict[str, int], *, timeout: int,

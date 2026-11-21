@@ -2270,3 +2270,23 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **Result.** VERIFIED for the shares and the request shape. UNVERIFIED: an actual cache read for Claude on Inspect
   0.3.290 (every Claude log ran on 0.3.263; proof is `uv run python -m scripts.check_anthropic_cache --model claude-haiku-5-5-openrouter --yes`, about $0.001,
   not run); Opus 5.5 caching after the fix (no runs, no caching_verified, still refused).
+
+## 2026-11-20: one cap on a tool result for every agent, cut in the middle
+- **What.** SwarmConfig.tool_output_bytes defaults to TOOL_OUTPUT_BYTES = 65536 for every agent (the per-role
+  influencer_tool_output_bytes of 7c5b2a0 is gone); tool_output_cut = "middle". src/swarm/tool_output_caps.py replaces
+  Inspect's one truncation point (inspect_ai/model/_call_tools.py truncate_tool_output) with middle_cut: start and end,
+  half the cap each, one line "[cut: N of M characters omitted from the middle]"; every bound tool carries the cap as
+  ToolDef.max_output. peer_shell's JSON keeps the same middle cut; the peer tools pack under the cap with not_shown_ids
+  (max_chars 16000). Replay: OutputCut.of(run config) gives the middle cut to runs whose config records
+  tool_output_cut and Inspect's own start cut (kept as INSPECT_CUT) to older runs, at their recorded cap or 16 KiB.
+- **How verified.** Full unit suite: 3202 passed, 6 xfailed, 4 failed in test_replay_read_order (the old int limit),
+  fixed, that file then 9 passed. test_tool_output_caps (11): a 112 KB result through the mock ORBIT run gives every
+  role start, end and the cut line within 64 KiB and ToolEvent.truncated (raw bytes, 65536); 30 KB comes back whole;
+  observations of five 30 KB results return four whole rows and not_shown_ids [0] under 64 KiB; resolve_tool_content
+  (every tool's path) cuts in the middle; the replay cuts new runs in the middle and old runs with Inspect's note. Real
+  Docker, a lone openmath agent with ORBIT's built-in bash and max_tool_output 65536: a 112,003-character output came
+  back 65,535 bytes, "Sxx" ... "xxE", "[cut: 46527 of 112003 characters omitted from the middle]", truncated
+  (112003, 65536); "echo small" untouched. Docker mock smoke openmath peer_shell: PASS. ruff clean, make paper-check
+  agrees (the paper names no tool output cap).
+- **Result.** VERIFIED. The lone agent's built-in tools take the cap from the run's GenerateConfig (run.py); under
+  `inspect eval src/tasks.py@...` without -M max_tool_output they get the middle cut at Inspect's 16 KiB.

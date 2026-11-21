@@ -10,7 +10,7 @@ import pytest
 from src.domains.swe import swe_replay as hooks
 from src.replay.git_state import SHARED, changed_refs, read_before_write, reads_team_only, shows_before
 from src.replay.recorded_calls import RecordedCall
-from src.replay.replay_run import play
+from src.replay.replay_run import OutputCut, play
 
 MAIN = "refs/heads/main"
 BASE, PUSHED = "85bb23a3571794c7ba01e61904bac6913c3d9729", "000abd88e2b0e6d5c7f1a3b4c5d6e7f8091a2b3c"
@@ -112,7 +112,7 @@ class OrderOnly(FakeReplayer):
 
 def played(replayer, calls, parallel=True):
     box = Remote({MAIN: BASE})
-    return box, play(box, replayer, calls, 16 * 1024, parallel, team0={"refs": {MAIN: BASE}})
+    return box, play(box, replayer, calls, OutputCut(16 * 1024, False), parallel, team0={"refs": {MAIN: BASE}})
 
 
 @pytest.mark.parametrize("parallel", [True, False])
@@ -144,7 +144,7 @@ def test_a_read_that_writes_while_the_remote_stands_before_the_write_is_an_error
     reader = call(2, "x7p7q", READ + " # sneaky", "85bb23a3 Merge pull request #3102\n", t0=1.0, t1=12.0)
     box = Remote({MAIN: BASE})
     with pytest.raises(RuntimeError, match="n2 changed the team remote"):
-        play(box, FakeReplayer(), [writer, reader], 16 * 1024, True, team0={"refs": {MAIN: BASE}})
+        play(box, FakeReplayer(), [writer, reader], OutputCut(16 * 1024, False), True, team0={"refs": {MAIN: BASE}})
     assert box.refs == {MAIN: PUSHED}
 
 

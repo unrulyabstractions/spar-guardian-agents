@@ -147,8 +147,8 @@ def test_the_prompt_file_has_the_contract_sections():
                                    "listed in not_shown_ids; ask for them with ids."),
         "peer_shell": ("Run a bash command on another agent's machine, in its working directory, as a user that can "
                        "read its files and change none of them. Returns JSON: peer, command, exit_code, output. Output "
-                       "past the size limit is cut; chars gives its full length and truncated says it was cut. "
-                       "Stopped after {timeout} seconds."),
+                       "past the size limit keeps its start and its end, with a line between them that says how much "
+                       "was cut. Stopped after {timeout} seconds."),
     }
     assert set(prompts["submit"]["counts"]) == set(prompts["submit"]["missing"]) == set(DOMAINS)
     assert prompts["stop_working"]["text"] == STOP_LINE.removeprefix("- stop_working: ")

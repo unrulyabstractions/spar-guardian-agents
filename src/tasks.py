@@ -149,7 +149,7 @@ def observers(benchmark: Benchmark, plan: Plan, tools: AgentTools) -> dict[str, 
 def team_tools(benchmark: Benchmark, plan: Plan, tools: AgentTools) -> tuple[dict[str, list[str]], dict]:
     """(each agent's AgentSpec.tools, ORBIT tool_bindings): the benchmark's tools, then the board's
     (src/swarm/board.py), then peer_shell for an influencer under SwarmConfig.peer_shell, then submit and stop_working
-    as the agent holds them (src/swarm/submit_and_stop.py). Every binding carries the agent's cap on one tool result
+    as the agent holds them (src/swarm/submit_and_stop.py). Every binding carries the run's cap on one tool result
     (src/swarm/tool_output_caps.py)."""
     config, roles = plan.config, plan.roles
     board = agent_tool_names(config, roles)
@@ -158,10 +158,10 @@ def team_tools(benchmark: Benchmark, plan: Plan, tools: AgentTools) -> tuple[dic
     names = {n: [*tools.per_agent[n], *board[n], *(shell if n in watchers else ()),
                  *ending_tools(config, role_of(roles, n))] for n in config.names}
     extra = peer_shell.peer_shell_binding(tools.seats, watchers, timeout=tools.timeout,
-                                          cap=lambda a: cap_of(config, role_of(roles, a))) if watchers else {}
+                                          cap=lambda a: cap_of(config)) if watchers else {}
     bindings = {**tools.bindings, **board_bindings(config, roles=roles), **extra,
                 **submit_bindings(config, deliverable(benchmark, plan))}
-    return names, capped_bindings(bindings, config, roles)
+    return names, capped_bindings(bindings, config)
 
 
 def agent_specs(config: SwarmConfig, tools: dict[str, list[str]], prompts: dict[str, str | None],

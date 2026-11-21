@@ -66,7 +66,7 @@ tools:
   get_peer_observations: "What another agent's tool calls returned, as JSON: each call's id, round, tool, status and result. A result longer than max_chars is cut; chars gives its full length and truncated says it was cut. Results that do not fit in one answer are listed in not_shown_ids; ask for them with ids."
   # An influencer's read-only shell on a teammate's machine, under SwarmConfig.peer_shell (src/sandbox/peer_shell.py).
   # {timeout} is the peer's own shell's. Ours.
-  peer_shell: "Run a bash command on another agent's machine, in its working directory, as a user that can read its files and change none of them. Returns JSON: peer, command, exit_code, output. Output past the size limit is cut; chars gives its full length and truncated says it was cut. Stopped after {timeout} seconds."
+  peer_shell: "Run a bash command on another agent's machine, in its working directory, as a user that can read its files and change none of them. Returns JSON: peer, command, exit_code, output. Output past the size limit keeps its start and its end, with a line between them that says how much was cut. Stopped after {timeout} seconds."
 
 # Descriptions of the tools' arguments (src/swarm/board.py, src/swarm/_regulator_oversight.py). Ours.
 tool_args:

@@ -30,8 +30,7 @@ import traceback
 from collections import Counter
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from pathlib import Path
-
-from inspect_ai.model._call_tools import truncate_tool_output  # Inspect's own truncation of a tool's output
+from typing import NamedTuple
 
 from src.configuration import settings
 from src.measures.run_directory import RunDir
@@ -46,6 +45,7 @@ from src.replay.replay_sandbox import ReplaySandbox, project_name
 from src.replay.step_snapshots import encode
 from src.replay.swe_replayer import SweReplayer
 from src.sandbox import staging
+from src.swarm.tool_output_caps import INSPECT_CUT, middle_cut
 
 REPLAYERS = {r.task: r for r in (SweReplayer, ProteinReplayer, CreativeReplayer)}
 """The tasks a replay can play back, by the task name run.json records."""
@@ -59,13 +59,26 @@ RECORDED = "recorded"
 """The match of a call replayed from its recorded output: a host tool, or a call whose arguments were refused."""
 
 
-def tool_output(tool: str, output: str, limit: int) -> str:
-    """The output as the model saw it: Inspect's truncation at `limit` bytes."""
-    truncated = truncate_tool_output(tool, output, limit)
+class OutputCut(NamedTuple):
+    """How a run cut a long tool result: its cap in bytes, and whether in the middle (tool_output_caps.middle_cut,
+    runs whose config records tool_output_cut) or at the start with Inspect's note (runs before 2026-11-20)."""
+    bytes: int
+    middle: bool
+
+    @classmethod
+    def of(cls, config: dict) -> OutputCut:
+        return cls(config.get("tool_output_bytes") or DEFAULT_TOOL_OUTPUT, config.get("tool_output_cut") == "middle")
+
+
+def tool_output(tool: str, output: str, cut: OutputCut) -> str:
+    """The output as the model saw it, cut as its run cut it."""
+    if cut.middle:
+        return middle_cut(output, cut.bytes) or output
+    truncated = INSPECT_CUT(tool, output, cut.bytes)
     return truncated.output if truncated else output
 
 
-def play_call(box, replayer, call: RecordedCall, limit: int, swap=None) -> dict:
+def play_call(box, replayer, call: RecordedCall, cut: OutputCut, swap=None) -> dict:
     """One call in its machine: its output against the recorded one, the agent's state after it and, where it may
     have touched the team remote, the team's. With `swap` (random_content.CertificateSwap) the certificates and keys
     the call drew give way to the recorded ones before its commits are dated."""
@@ -80,13 +93,13 @@ def play_call(box, replayer, call: RecordedCall, limit: int, swap=None) -> dict:
     if call.error == "timeout" or timed_out:
         match = "exact" if call.error == "timeout" and timed_out else "differs"
     else:
-        match = match_of(call.result, tool_output(call.tool, output, limit))
+        match = match_of(call.result, tool_output(call.tool, output, cut))
     cause = cause_of(call.result, output, replayer.command(call)) if match == "differs" else None
     return {"call": call, "match": match, "cause": cause, "state": state, "team": team, "dated": dated,
             "undated": undated, "swapped": swapped, "ran": ran, "snapshot": time.time() - started - ran}
 
 
-def play_before(box, replayer, call: RecordedCall, limit: int, swap, write: tuple, refs: dict[str, str]) -> dict:
+def play_before(box, replayer, call: RecordedCall, cut: OutputCut, swap, write: tuple, refs: dict[str, str]) -> dict:
     """play_call with the team remote's refs set back to how they stood before `write` (the writing call and the refs
     it changed), then put back to `refs`, the refs the write left. The result's team is the remote's once put back,
     and read_before names the write. A call that changes the refs meanwhile is a RuntimeError."""
@@ -95,7 +108,7 @@ def play_before(box, replayer, call: RecordedCall, limit: int, swap, write: tupl
     before.update({name: old for name, (old, _) in changed.items() if old is not None})
     replayer.set_team_refs(box, before)
     try:
-        result = play_call(box, replayer, call, limit, swap)
+        result = play_call(box, replayer, call, cut, swap)
     finally:
         replayer.set_team_refs(box, refs)
     if result["team"]["refs"] != before:
@@ -105,7 +118,7 @@ def play_before(box, replayer, call: RecordedCall, limit: int, swap, write: tupl
     return result
 
 
-def play(box, replayer, calls: list[RecordedCall], limit: int, parallel: bool, swap=None,
+def play(box, replayer, calls: list[RecordedCall], cut: OutputCut, parallel: bool, swap=None,
          team0: dict | None = None) -> dict[int, dict]:
     """Every sandbox call, each as play_call, by n. A shared call (or every call without parallel) waits for all
     earlier ones and runs alone. With a replayer's set_team_refs, a shared call that the record shows read the team
@@ -126,15 +139,15 @@ def play(box, replayer, calls: list[RecordedCall], limit: int, parallel: bool, s
                 done.update((f.result()["call"].n, f.result()) for f in pending)
                 pending = []
                 if rewinds and write and read_before_write(call, replayer.command(call), *write):
-                    done[call.n] = play_before(box, replayer, call, limit, swap, write, refs)
+                    done[call.n] = play_before(box, replayer, call, cut, swap, write, refs)
                     continue
-                done[call.n] = play_call(box, replayer, call, limit, swap)
+                done[call.n] = play_call(box, replayer, call, cut, swap)
                 if rewinds and done[call.n]["team"] is not None:
                     changed = changed_refs(refs, done[call.n]["team"]["refs"])
                     if changed:
                         write, refs = (call, changed), dict(done[call.n]["team"]["refs"])
             else:
-                pending.append(lanes[call.agent].submit(play_call, box, replayer, call, limit, swap))
+                pending.append(lanes[call.agent].submit(play_call, box, replayer, call, cut, swap))
         wait(pending)
         done.update((f.result()["call"].n, f.result()) for f in pending)
     finally:
@@ -216,7 +229,7 @@ def replay(run_dir: Path, out_dir: Path, *, parallel: bool = True, pem: bool = F
         report.image = replayer.image()
         if not report.image["id"]:
             raise ReplayRefused(f"the image {report.image['tag']} is not on this host")
-        limit = (run.run_json.get("config") or {}).get("tool_output_bytes") or DEFAULT_TOOL_OUTPUT
+        cut = OutputCut.of(run.run_json.get("config") or {})
         compose = staging.write_compose(out_dir / "compose.yaml", replayer.services(), replayer.volumes())
         mark = time.time()
         with ReplaySandbox(project_name(run.name), compose) as box:
@@ -226,7 +239,7 @@ def replay(run_dir: Path, out_dir: Path, *, parallel: bool = True, pem: bool = F
             initial, team0 = replayer.initial(box), replayer.team_state(box)
             report.seconds["setup"] = round(time.time() - mark, 1)
             mark = time.time()
-            played = play(box, replayer, calls, limit, parallel, swap, team0)
+            played = play(box, replayer, calls, cut, parallel, swap, team0)
             report.seconds["calls"] = round(time.time() - mark, 1)
             mark = time.time()
             report.end = replayer.end_state(box, out_dir / END)

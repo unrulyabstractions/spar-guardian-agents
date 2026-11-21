@@ -94,7 +94,7 @@ The team on ORBIT's API.
 - `influencers.py`: who is regulator or disregulator (an influencer), on a board whose config asks for one, and the texts each role gets. A regulator's system prompt and first message are built here for every domain, in place of the benchmark's.
 - `submit_and_stop.py`: `submit` and `stop_working`, the tools that end an agent's work. ORBIT reserves `submit`, so the tool is bound as `team_submit` and shown to the model as `submit`.
 - `awareness_probes.py`: Lucy's end-of-episode questions as an Inspect scorer.
-- `tool_output_caps.py`: the cap on one tool result by role: an influencer's tools carry `influencer_tool_output_bytes` as `ToolDef.max_output`, a worker's take the run's.
+- `tool_output_caps.py`: the cap on one tool result, `tool_output_bytes` for every agent, set on every bound tool as `ToolDef.max_output`, and the cut of a longer result: its start and its end with one line between them, installed at Inspect's one truncation point so ORBIT's built-in bash and python get it too.
 - `turn_rules/`: the plan of rounds under the turn budget, the free board steps, the budgets' counters, the halt after a hand-in or once no worker is left, and the model filter. Its `__init__.py` is the API. `turn_activation.py` is the callback ORBIT imports by its dotted name after every activation.
 
 The implementation is `_regulator_oversight.py` (`get_peer_actions` and `get_peer_observations`, the influencers' tools) and the `_turn_*.py` modules. Every run carries the turn rules as a passive defense. Its model filter takes the agent loop's assistant paragraph out of the system message and appends the continue prompt (`prompts.yaml` `continue`) when the provider input would end with a model turn, which Gemini rejects.

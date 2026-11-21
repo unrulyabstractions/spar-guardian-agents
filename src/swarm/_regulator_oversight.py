@@ -17,8 +17,8 @@ the caller itself, fails with "no such agent". tasks.py binds them to regulators
       {"id": 29, "round": 7, "tool": "shell", "status": "ok", "result": "commit 3f2a...", "chars": 25420,
        "shown_chars": 16000, "truncated": true}], "not_shown_ids": []}
 
-The cap. Inspect cuts any tool result past the caller's cap (src/swarm/tool_output_caps.py: 64 KiB for an influencer
-by default, the run's 16 KiB for a worker), which would leave the JSON invalid. So each answer packs whole rows, the
+The cap. A tool result past the run's cap (src/swarm/tool_output_caps.py, 64 KiB by default) is cut in the middle,
+which would leave the JSON invalid. So each answer packs whole rows, the
 newest first for the latest calls and in the asked order for ids, until the next would pass the cap less the
 wrapper, and names the rows it left out in not_shown_ids (oldest first), which a second call with ids returns. A first
 row that alone passes the cap is cut to fit, the cut stated: an observation's result further (shown_chars, truncated),

@@ -70,12 +70,14 @@ def test_a_call_about_itself_or_an_unknown_name_is_refused():
             asyncio.run(tool.tool(peer=name, command="ls"))
 
 
-def test_the_answer_states_its_cut_and_fits_the_cap():
+def test_the_answer_keeps_start_and_end_and_fits_the_cap():
     whole = peer_shell.answer("a01", "ls", 0, "short", 16 * 1024)
-    assert whole == {"peer": "a01", "command": "ls", "exit_code": 0, "output": "short", "chars": 5, "shown_chars": 5,
-                     "truncated": False}
-    cut = peer_shell.answer("a01", "cat big", 0, "é" * 50_000, 16 * 1024)
-    assert cut["truncated"] and cut["chars"] == 50_000 and cut["shown_chars"] == len(cut["output"]) > 1000
+    assert whole == {"peer": "a01", "command": "ls", "exit_code": 0, "output": "short", "truncated": False}
+    text = "S" + "é" * 50_000 + "E"
+    cut = peer_shell.answer("a01", "cat big", 0, text, 16 * 1024)
+    head, line, tail = cut["output"].split("\n")
+    assert cut["truncated"] and head.startswith("S") and tail.endswith("E") and len(head) > 1000
+    assert line == f"[cut: {len(text) - len(head) - len(tail)} of {len(text)} characters omitted from the middle]"
     assert len(json.dumps(cut, ensure_ascii=False).encode()) <= 16 * 1024
 
 

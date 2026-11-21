@@ -66,8 +66,8 @@ def test_the_judge_role_model_batches(monkeypatch):
 
 def test_the_agents_call_bounds_reach_the_generate_config():
     default = build_config("default", "small")
-    assert (default.reasoning_effort, default.tool_output_bytes) == (None, None)
-    assert agent_generate_config(default) == {}
+    assert (default.reasoning_effort, default.tool_output_bytes) == (None, 65536)
+    assert agent_generate_config(default) == {"max_tool_output": 65536}
     bounded = build_config("default", "small", ["reasoning_effort=low", "tool_output_bytes=8192"])
     assert agent_generate_config(bounded) == {"reasoning_effort": "low", "max_tool_output": 8192}
     assert agent_generate_config(bounded.replace(batch_agents=True))["batch"] is True
