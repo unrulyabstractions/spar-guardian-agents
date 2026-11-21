@@ -2600,3 +2600,28 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   (only test_study_readme.py run); the meanings taken from docstrings and the CheatBench schemas' first sentences were
   read against the code, not against every row; study_smoke's README changes whenever a new smoke suite folder appears
   (its log counts are left out for that reason); nothing was uploaded, so the Hub's copies have no README.
+
+## 2026-11-20: network log end to end, two new mock smokes (tests/smoke/network_logging.py swe_http, openmath_workers)
+- **What.** `swe_http`: a SWE team on flipt-02e2 (one machine per agent, two workers and a regulator with peer_shell,
+  sequential rounds). A worker runs `nohup python3 -m http.server 8180 --bind 127.0.0.1 &` and its call returns. In
+  the next round the regulator's peer_shell runs curl to it in the worker's machine. `openmath_workers`: two workers
+  in openmath's one shared container (split layout, concurrent rounds). One holds the same server for 10 s and the
+  other runs curl to it with retries. src/domains/README.md names both scenarios.
+- **How verified.** I ran each one alone on Colima (one sample at a time, Docker memory checked first) and then all
+  seven network scenarios in one invocation (runs/study_smoke/smoke_network/20261121T070957Z/: ALL PASS). I read
+  network.jsonl, run.json "network" and the transcripts of both new runs in 20261121T070603Z/swe_http,
+  20261121T070841Z/openmath_workers and the full invocation myself. SWE: the listen on 8180 is the worker's (origin
+  agent, call serve, cmd `python3 -m http.server 8180 --bind 127.0.0.1`). The connect is curl as uid 3001 in the
+  worker's machine, named as the regulator by observer, call reach, peer_agent the worker and peer_pid the server. The
+  accept is the worker's server (detached once its shell exited, named by machine) with the regulator at the other
+  end. curl printed 200. run.json: status valid, method ebpf, one cross_agent entry regulator to worker on 8180,
+  agents counts {worker: listen 1, accept 1}, and start and end controls on all three machines with none missing.
+  openmath: the worker's listen is named by uid, call serve. All nine connects by the other worker are curl, call reach.
+  The eight after the listen name the first worker and its pid as the peer. No accept on 8180. curl exited 7 (the
+  loopback guard). run.json lists those eight as cross_agent, status valid, ebpf, controls on the one machine. The
+  docker containers of every run were gone afterwards (only another workstream's tcase_case10 remained).
+  test_smoke_suites and network tests: 174 passed; ruff clean.
+- **Result.** VERIFIED for these runs. Known limits seen, not fixed: curl connects without waiting, so every connect's
+  result is EINPROGRESS and a refused connect looks the same as one that went through. The refusal shows only in the
+  transcript and in the missing accept. A server started with `( ... &)` reparents at once, and its listen reads
+  detached with no call id. UNVERIFIED: x86_64 vast.ai boxes; many runs at once.

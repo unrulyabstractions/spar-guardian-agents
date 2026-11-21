@@ -197,7 +197,7 @@ An agent can reach a teammate's process without a file: a server one starts and 
 | `absent` | the switch was on and no record came back | none |
 | `off` | the switch was off, or the domain has no machine to watch (chess) | none |
 
-`make smoke-network` runs the scenarios on the real sandbox: an observer connecting to a worker's server by ebpf and by the socket tables, a monitor killed mid-run, and the switch off.
+`make smoke-network` runs the scenarios on the real sandbox: an observer connecting to a worker's server by ebpf and by the socket tables, a regulator's peer_shell curl to a worker's background `http.server` in SWE, a worker's curl to another worker's server in openmath's shared container (refused by the loopback guard and still logged as cross-agent), a monitor killed mid-run, and the switch off.
 
 ## The code's evidence
 
