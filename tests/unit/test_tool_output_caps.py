@@ -146,3 +146,57 @@ def test_the_replay_cuts_as_each_run_did():
     seen = tool_output("shell", BIG, old)
     assert seen == INSPECT_CUT("shell", BIG, 16 * 1024).output and "too long to be displayed" in seen
     assert "[cut:" not in seen and "Sxxx" in seen and not seen.rstrip().endswith("E")
+
+
+def test_a_cap_of_zero_or_less_never_cuts_as_in_inspect():
+    """Inspect's react() gives its submit tool max_output 0, which Inspect reads as no cap; so does a run cap of 0."""
+    from inspect_ai.model import GenerateConfig
+    from inspect_ai.model._generate_config import active_generate_config_context_var
+
+    from src.swarm import tool_output_caps as caps
+    assert caps.truncate_tool_output("submit", "The final answer is 42", 0) is None
+    assert caps.truncate_tool_output("submit", BIG, -1) is None and middle_cut(BIG, 0) is None
+    token = active_generate_config_context_var.set(GenerateConfig(max_tool_output=0))
+    try:
+        assert caps.run_cap() == 0 and caps.truncate_tool_output("bash", BIG, None) is None
+        assert caps.cap_of(config(tool_output_bytes=None)) == caps.NO_CAP
+    finally:
+        active_generate_config_context_var.reset(token)
+    assert caps.run_cap() == 16 * 1024          # nothing set: Inspect's default
+
+
+def test_the_sandbox_bridge_takes_the_same_cut():
+    """The bridge's host tools import the truncation by name; install() replaces that name too."""
+    import inspect_ai.agent._bridge.sandbox.host_tool as host_tool
+
+    from src.swarm import tool_output_caps as caps
+    assert host_tool.truncate_tool_output is caps.truncate_tool_output is call_tools.truncate_tool_output
+
+
+def test_the_task_carries_the_cap_for_every_entry_point():
+    """swarm_task sets max_tool_output in the task's own GenerateConfig, so `inspect eval src/tasks.py@...` gets it."""
+    from src.configuration.presets import build_config
+    from src.domains.swe import SWE
+    from src.tasks import swarm_task
+    from tests.unit.test_swe_task import ISSUE
+    task = swarm_task(SWE(ISSUE), build_config("default", "small", ["n_agents=1"]))
+    assert task.config.max_tool_output == TOOL_OUTPUT_BYTES
+
+
+def test_a_long_ids_list_stays_under_the_cap_and_bad_ids_are_rows():
+    """20,000 asked ids, most past the teammate's calls: the answer stays under the cap, counts what it left out in
+    not_shown and names as many as fit; a bad first id is a row "no such call", never a Python error."""
+    calls_ = called(3, "y" * 100)
+    many = list(range(20_000))
+    for payload in (oversight.observations_payload("a01", calls_, many, 20, 16000, budget=65536),
+                    oversight.actions_payload("a01", calls_, 20, None, ids=many, budget=65536)):
+        rows = payload.get("observations", payload.get("actions"))
+        assert len(oversight._dump(payload).encode()) <= 65536, len(oversight._dump(payload).encode())
+        assert [r["id"] for r in rows[:4]] == [0, 1, 2, 3] and rows[3] == {"id": 3, "status": "no such call"}
+        assert payload["not_shown"] == 20_000 - len(rows) and payload["not_shown_ids"] == many[len(rows):][
+            :len(payload["not_shown_ids"])] and payload["not_shown_ids"]
+    for budget in (65536, 64):
+        bad = oversight.actions_payload("a01", calls_, 20, None, ids=[99, 0], budget=budget)
+        assert bad["actions"][0] == {"id": 99, "status": "no such call"}, bad
+        assert oversight.observations_payload("a01", calls_, [99], 20, 16000, budget=budget)["observations"][0] == \
+            {"id": 99, "status": "no such call"}

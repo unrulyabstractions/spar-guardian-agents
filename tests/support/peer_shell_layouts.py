@@ -115,6 +115,14 @@ def run_layout(layout: str, spec: dict) -> None:
         script(name, peer_shell.GRANT, {"uid": UID, "tops": tops})
         reread = as_observer(name, spec["workdir"], f"cat {spec['workdir']}/later.txt")
         check(layout, "the next call's grant reads it", reread.stdout == "later", reread.stdout + reread.stderr)
+        locked = docker("exec", name, "chmod", "600", spec["file"])
+        check(layout, "the peer narrows a granted file with chmod 600", locked.returncode == 0, locked.stderr)
+        shut = as_observer(name, spec["workdir"], f"cat {spec['file']}")
+        check(layout, "the chmod shuts the observer out until the next grant", shut.returncode != 0, shut.stdout)
+        script(name, peer_shell.GRANT, {"uid": UID, "tops": tops})
+        again = as_observer(name, spec["workdir"], f"cat {spec['file']}")
+        check(layout, "the next grant restores the observer's read", again.stdout == "secret",
+              again.stdout + again.stderr)
     finally:
         docker("rm", "-f", name)
 

@@ -300,9 +300,9 @@ class SwarmConfig(BaseModel):
     """How a longer result is cut: its start and its end, half the cap each, with one line between them that says how
     much was cut (tool_output_caps.middle_cut). A run's config without the field was cut by Inspect at the start."""
     peer_shell: bool = False
-    """Whether the influencers get peer_shell (src/sandbox/peer_shell.py): a read-only shell on any teammate's
-    machine, as an observer uid of their own. Off by default, so runs before 2026-11-20 stay comparable. Chess has no
-    shell and refuses it."""
+    """Whether the influencers get peer_shell (src/sandbox/peer_shell.py): a shell on any teammate's machine, as an
+    observer uid of their own with read access to its files. Off by default, so runs before 2026-11-20 stay comparable.
+    Chess has no shell and refuses it."""
     worker_model: str | None = None
     """The neutral workers' model: a registry entry or an Inspect model string; None is the run's --model. An entry
     is stored as its Inspect string. An agent whose role has a model of its own runs it through the swarm provider

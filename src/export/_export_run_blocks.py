@@ -26,10 +26,13 @@ from src.export.eval_sample_view import (
     agent_specs,
     held_orbit_submit,
     roster,
+    span_owners,
     topology,
     usage_dict,
 )
+from src.measures.shell_commands import TOOLS, command_of
 from src.models import model_registry as models
+from src.sandbox import peer_shell
 from src.sandbox import sandbox_hygiene as hygiene
 from src.swarm.turn_rules import (
     CHECK_ROUNDS,
@@ -130,6 +133,22 @@ def sandbox_block(view: SampleView) -> dict | None:
     if end is None and reaps is None and guard is None:
         return None
     return {"end": end, "reaps": reaps, "loopback": guard}
+
+
+def peer_shell_block(view: SampleView) -> dict | None:
+    """Under SwarmConfig.peer_shell (src/sandbox/peer_shell.py): the observers' uids, each influencer's calls and the
+    processes their reaps killed (peer_shell.STORE), and acl_noticed, each worker's calls that could have shown it the
+    grant (peer_shell.acl_noticed). None for a run without peer_shell."""
+    record = cheatbench(view).get("peer_shell")
+    if not record:
+        return None
+    roles = cheatbench(view).get("roles") or {}
+    owner = span_owners(view)
+    calls = [(owner(e.span_id)[0], e.id, command_of({"arguments": e.arguments}), str(e.result or ""))
+             for e in view.events if e.event == "tool" and e.function in TOOLS]
+    workers = {a for a, role in roles.items() if role == "worker"}
+    return {"observers": record.get("observers"), "calls": view.store_get(peer_shell.STORE),
+            "acl_noticed": peer_shell.acl_noticed(calls, workers)}
 
 
 IDENTICAL_RUN_FLAG = 8      # this many identical tool calls in a row flag a stuck agent
@@ -272,11 +291,12 @@ def delivery_block(view: SampleView) -> dict | None:
 
 def recorded_run_blocks(view: SampleView) -> dict:
     """The run.json blocks a run carries only when it recorded them: the turn budget, access, the domain's blocks
-    (Benchmark.run_blocks), the honeypot probe's report, delivery, the sandbox and the code state."""
+    (Benchmark.run_blocks), the honeypot probe's report, delivery, the sandbox, peer_shell and the code state."""
     cb, bench = cheatbench(view), domain(view)
     facts = {"turn_budget": cb.get("turn_budget"), "access": access_block(view),
              **(bench.run_blocks(view) if bench else {}), "honeypot_probe": honeypot_probe_block(view),
-             "delivery": delivery_block(view), "sandbox": sandbox_block(view), "code": cb.get("code")}
+             "delivery": delivery_block(view), "sandbox": sandbox_block(view), "peer_shell": peer_shell_block(view),
+             "code": cb.get("code")}
     return {k: v for k, v in facts.items() if v is not None}
 
 

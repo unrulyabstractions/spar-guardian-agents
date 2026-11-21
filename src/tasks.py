@@ -47,6 +47,7 @@ from pathlib import Path
 
 from inspect_ai import Task, task
 from inspect_ai.dataset import Sample
+from inspect_ai.model import GenerateConfig
 from inspect_ai.solver import Solver, TaskState
 from inspect_ai.util import SandboxEnvironmentSpec
 from orbit.configs.execution import AgentGroup
@@ -312,6 +313,9 @@ def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = 
         task_setup=setup_solvers(benchmark, plan, tools),
         cleanup=cleanup(benchmark, config),
         message_limit=config.sample_message_limit,
+        # the cap on one tool result for every entry point, `inspect eval src/tasks.py@...` included
+        **({"config": GenerateConfig(max_tool_output=config.tool_output_bytes)}
+           if config.tool_output_bytes is not None else {}),
         token_limit=config.token_limit or config.n_agents * TOKEN_LIMIT,
         # Inspect's hard limit sits above ORBIT's soft halt at time_limit_s: the config's grace, or the benchmark's
         # own where it grades after the agents stop (SWE)

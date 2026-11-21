@@ -11,18 +11,20 @@ the caller itself, fails with "no such agent". tasks.py binds them to regulators
     get_peer_actions(peer="t4x9n", latest=2)
     {"peer": "t4x9n", "total_calls": 31, "shown": 2, "actions": [
       {"id": 29, "round": 7, "tool": "shell", "arguments": {"command": "git log --all"}},
-      {"id": 30, "round": 7, "tool": "board_post", "arguments": {"message": "found it"}}], "not_shown_ids": []}
+      {"id": 30, "round": 7, "tool": "board_post", "arguments": {"message": "found it"}}],
+     "not_shown": 0, "not_shown_ids": []}
     get_peer_observations(peer="t4x9n", ids=[29])
     {"peer": "t4x9n", "observations": [
       {"id": 29, "round": 7, "tool": "shell", "status": "ok", "result": "commit 3f2a...", "chars": 25420,
-       "shown_chars": 16000, "truncated": true}], "not_shown_ids": []}
+       "shown_chars": 16000, "truncated": true}], "not_shown": 0, "not_shown_ids": []}
 
-The cap. A tool result past the run's cap (src/swarm/tool_output_caps.py, 64 KiB by default) is cut in the middle,
-which would leave the JSON invalid. So each answer packs whole rows, the
-newest first for the latest calls and in the asked order for ids, until the next would pass the cap less the
-wrapper, and names the rows it left out in not_shown_ids (oldest first), which a second call with ids returns. A first
-row that alone passes the cap is cut to fit, the cut stated: an observation's result further (shown_chars, truncated),
-an action's arguments as a JSON text (arguments_json, arguments_chars, shown_chars, truncated).
+The cap. A tool result past the run's cap (src/swarm/tool_output_caps.py, 64 KiB by default) is cut in the middle, which
+would leave the JSON invalid. So each answer packs whole rows, the newest first for the latest calls and in the asked
+order for ids, until the next would pass the cap less the wrapper, counts the rows it left out in not_shown and names as
+many as fit in a quarter of the cap in not_shown_ids (oldest first), which a second call with ids returns. An id the
+teammate has not reached is a row "no such call". A first row that alone passes the cap is cut to fit, the cut stated:
+an observation's result further (shown_chars, truncated), an action's arguments as a JSON text (arguments_json,
+arguments_chars, shown_chars, truncated).
 
 A call's id is its place among the teammate's tool calls from 0, the transcript's numbering (call k). status is "ok",
 "error" (result holds the error's message) or "pending" (the call is under way; result is null); an id the teammate has
@@ -155,6 +157,8 @@ def cut_to(row: dict, key: str, text: str, room: int, extra) -> dict:
 
 def shrink_action(row: dict, room: int) -> dict:
     """An action whose arguments alone pass the budget: its arguments as a JSON text cut to fit, the cut stated."""
+    if "arguments" not in row:            # a "no such call" row has nothing to cut
+        return row
     text = _dump(row["arguments"])
     base = {k: v for k, v in row.items() if k != "arguments"}
     return cut_to(base, "arguments_json", text, room,
@@ -169,10 +173,32 @@ def shrink_observation(row: dict, room: int) -> dict:
     return cut_to(row, "result", text, room, lambda shown: {"shown_chars": shown, "truncated": True})
 
 
-def overhead(payload: dict, rows_key: str, ids: list[int]) -> int:
-    """The bytes of the answer without its rows, with every candidate's id listed as left out: the most the wrapper
-    can take."""
-    return size({**payload, rows_key: [], "not_shown_ids": ids}) + WRAP_MARGIN
+def ids_room(budget: int) -> int:
+    """The bytes an answer keeps for the ids it left out: a quarter of the budget."""
+    return budget // 4
+
+
+def listed(ids: list[int], room: int) -> list[int]:
+    """The first of `ids` that fit in `room` bytes as a JSON list."""
+    out, used = [], 2
+    for i in ids:
+        used += len(str(i)) + 2
+        if used > room:
+            break
+        out.append(i)
+    return out
+
+
+def packed(head: dict, rows_key: str, rows: list[dict], budget: int, shrink, newest_first: bool) -> dict:
+    """The answer within `budget` bytes: head, the rows that fit whole (a first row alone over the room cut to fit),
+    `not_shown` (how many were left out) and not_shown_ids (as many of their ids as fit in ids_room, oldest first for
+    the newest calls). The rows give up only the room the left-out ids could take."""
+    reserve = min(ids_room(budget), size([r["id"] for r in rows]))
+    room = budget - size({**head, rows_key: [], "not_shown": len(rows), "not_shown_ids": []}) - reserve
+    kept, left = fit(rows, room - WRAP_MARGIN, shrink)
+    if newest_first:
+        kept, left = kept[::-1], left[::-1]
+    return {**head, rows_key: kept, "not_shown": len(left), "not_shown_ids": listed(left, ids_room(budget))}
 
 
 def actions_payload(agent: str, calls: list[Called], latest: int, since_round: int | None,
@@ -186,11 +212,9 @@ def actions_payload(agent: str, calls: list[Called], latest: int, since_round: i
     else:
         rows = [{"id": c.id, "round": c.round, "tool": c.tool, "arguments": c.arguments} if (c := _at(calls, i))
                 else {"id": i, "status": "no such call"} for i in ids]
-    head = {"peer": agent, "total_calls": len(calls), "shown": 0}
-    kept, left = fit(rows, budget - overhead(head, "actions", [r["id"] for r in rows]), shrink_action)
-    if ids is None:
-        kept, left = kept[::-1], left[::-1]
-    return {**head, "shown": len(kept), "actions": kept, "not_shown_ids": left}
+    answer = packed({"peer": agent, "total_calls": len(calls), "shown": 0}, "actions", rows, budget, shrink_action,
+                    ids is None)
+    return {**answer, "shown": len(answer["actions"])}
 
 
 def _at(calls: list[Called], i: int) -> Called | None:
@@ -216,11 +240,7 @@ def observations_payload(agent: str, calls: list[Called], ids: list[int] | None,
     else:
         rows = [observation(c, max_chars) if (c := _at(calls, i)) else {"id": i, "status": "no such call"}
                 for i in ids]
-    head = {"peer": agent}
-    kept, left = fit(rows, budget - overhead(head, "observations", [r["id"] for r in rows]), shrink_observation)
-    if ids is None:
-        kept, left = kept[::-1], left[::-1]
-    return {**head, "observations": kept, "not_shown_ids": left}
+    return packed({"peer": agent}, "observations", rows, budget, shrink_observation, ids is None)
 
 
 def _teammate_calls(owner: str, allowed: set[str], agent: str) -> list[Called]:

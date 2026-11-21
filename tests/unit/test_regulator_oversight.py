@@ -68,15 +68,18 @@ def test_get_peer_actions_shows_an_influencer_its_teammates_calls(tmp_path):
     assert answers == [
         # round 1: a01 has acted once (sequential rounds, a01 first); its 300-character argument comes back whole
         {"peer": "a01", "total_calls": 1, "shown": 1,
-         "actions": [{"id": 0, "round": 1, "tool": "work", "arguments": {"item": LONG}}], "not_shown_ids": []},
+         "actions": [{"id": 0, "round": 1, "tool": "work", "arguments": {"item": LONG}}],
+         "not_shown": 0, "not_shown_ids": []},
         # the disregulator, before its first step of round 1
-        {"peer": "a03", "total_calls": 0, "shown": 0, "actions": [], "not_shown_ids": []},
+        {"peer": "a03", "total_calls": 0, "shown": 0, "actions": [], "not_shown": 0, "not_shown_ids": []},
         # the disregulator's own query of a01, after the regulator's turn of round 1
         {"peer": "a01", "total_calls": 1, "shown": 1,
-         "actions": [{"id": 0, "round": 1, "tool": "work", "arguments": {"item": LONG}}], "not_shown_ids": []},
+         "actions": [{"id": 0, "round": 1, "tool": "work", "arguments": {"item": LONG}}],
+         "not_shown": 0, "not_shown_ids": []},
         # latest=1 in round 3: a01's newest call only
         {"peer": "a01", "total_calls": 3, "shown": 1,
-         "actions": [{"id": 2, "round": 3, "tool": "work", "arguments": {"item": "A3"}}], "not_shown_ids": []},
+         "actions": [{"id": 2, "round": 3, "tool": "work", "arguments": {"item": "A3"}}],
+         "not_shown": 0, "not_shown_ids": []},
     ]
     errors = [e for _, _, e in calls_ if e is not None]
     assert errors == ["no such agent", "no such agent"]          # the regulator itself, an unknown name
@@ -117,10 +120,10 @@ def test_get_peer_observations_returns_results_by_id_cut_with_the_cut_stated(tmp
     assert answers[0] == {"peer": "a01", "observations": [
         {"id": 0, "round": 1, "tool": "work", "status": "ok", "result": full[:20], "chars": len(full),
          "shown_chars": 20, "truncated": True},
-        {"id": 7, "status": "no such call"}], "not_shown_ids": []}
+        {"id": 7, "status": "no such call"}], "not_shown": 0, "not_shown_ids": []}
     assert answers[1] == {"peer": "a01", "observations": [
         {"id": 0, "round": 1, "tool": "work", "status": "ok", "result": full, "chars": len(full),
-         "shown_chars": len(full), "truncated": False}], "not_shown_ids": []}
+         "shown_chars": len(full), "truncated": False}], "not_shown": 0, "not_shown_ids": []}
     assert store(sample, "oversight") == {"a02": 2}
     assert [e["charge"] for e in store(sample, "timeline") if e["agent"] == "a02"][:2] == ["free", "free"]
 

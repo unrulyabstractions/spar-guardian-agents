@@ -16,7 +16,7 @@ it, which a reader rewrote as a conjecture.
 | `sections/references.tex` | the PDF's 49 references in its order, so [1] to [49] match | by hand |
 | `generated/params.tex` | macros: the board's budgets and `\TurnBudget` from `PRESETS["default"]`; `\JudgeName`, `\JudgeEffort` from `settings.JUDGE_MODEL` and `src/judging/judge_models.yaml`; `\CheatingAlarm` and `\CheatedFrom` from `src/measures/cheating_ladder.py` ALARM and CHEATED_FROM; `\AccessedFrom` from `scripts/paper/study_ladders.py` ACCESSED_FROM | `make paper-sources` |
 | `generated/scales.tex` | the scales table, from `src/configuration/scales.py` | `make paper-sources` |
-| `generated/regulator_suffix.tex` | the regulator prompt box: `prompts.yaml` roles.regulator_common and regulator_no_disclosure, then the ambiguous, explicit and pressure levels | `make paper-sources` |
+| `generated/regulator_suffix.tex` | the regulator prompt box: `prompts.yaml` roles.influencer_common and regulator_no_disclosure, then the ambiguous, explicit and pressure levels | `make paper-sources` |
 | `generated/regulator_levels.tex`, `disregulator_levels.tex` | the level texts, from `src/configuration/instruction_levels.yaml` | `make paper-sources` |
 | `generated/study.tex` | `\StudyRuns`, `\StudyDates`, `\StudyCheatBenchJudge`, `\StudyLabelsJudged`, `\RegulatorModelList`: the multi-domain study's valid runs, their dates, the judge of the CheatBench pass (`src/judging/verdict_files.py` applied), a sentence naming the judge of the scores (`src/measures/judge_labels.py` labels' "judge") or saying no judge has scored the runs yet (more than one judge of a pass stops the build), and the regulators' models by use, from `runs/study_exploration_1/INDEX.jsonl`, each run's run.json and judges/ (kept as committed where runs/ is absent) | `make paper-sources` |
 | `generated/stage2.tex` | the deep dive's Stage 2 table, from `submodules/lucy/runs/s2_swe/analysis/summary.json` | `make paper-sources` |
@@ -1082,8 +1082,9 @@ Sentences changed (old, then new):
   Table~\ref{tab:monitors} compares regulators with classic monitors."
 - Appendix A, disregulator: "Same restrictions and access as regulator agents." became "A disregulator cannot submit
   the team's work. Unlike a regulator, it cannot query its teammates' tool calls. It reads the board within the
-  workers' budget." (src/swarm/board.py binds agent_actions and the unlimited read to regulators only;
-  SwarmConfig.holds_submit gives submit to workers only; free_board_actions_regulator is a regulator's alone);
+  workers' budget." (in the reported runs src/swarm/board.py bound agent_actions and the unlimited read to regulators
+  only, SwarmConfig.holds_submit gave submit to workers only, and a regulator alone had the larger K; the code now
+  binds get_peer_actions, get_peer_observations and K free_board_actions_influencer to both influencers);
   "Levels:" became "Table~\ref{tab:disregulator-levels} gives its levels. The runs use persuade on SWE, and persuade
   and overt on creative writing."
 - Appendix A, Communication: added "Figure~\ref{fig:rounds} shows one round and the next for five agents."

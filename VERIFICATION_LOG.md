@@ -2345,3 +2345,23 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   stopped; port 8770 untouched.
 - **Result.** VERIFIED for this run in a 1500 px window, dark and light. UNVERIFIED: runs with several machines (SWE,
   protein) and large /tmp trees, since no such snapshot file exists yet; play mode's speed with the panel.
+
+## 2026-11-20: the verifier's seven findings fixed; workers' ACL sightings recorded
+- **What.** tool_output_caps: a limit of 0 or less never cuts (Inspect's react() submit has max_output 0), run_cap
+  reads max_tool_output 0 as no cap, cap_of gives NO_CAP; install() also replaces the sandbox bridge's imported name
+  (host_tool.truncate_tool_output); swarm_task puts max_tool_output in the Task's own GenerateConfig. Peer tools:
+  not_shown (a count) and not_shown_ids bounded to a quarter of the cap; a bad id is always a row "no such call";
+  shrink_action leaves such a row alone. peer_shell: add_user repairs the ACL mask a peer's chmod narrowed. Texts:
+  peer_shell's description and sentence say "an account with read access", name `truncated`; README, src READMEs,
+  swarm_config, ladder_domain, instruction_levels.yaml, paper/CLAUDE.md lines 19 and 1085. peer_shell.py's docstring and
+  README say what a worker can see (+, 600 to 640, getfacl); run.json "peer_shell" holds observers, the influencers'
+  calls and acl_noticed: each worker call that ran getfacl, setfacl or chacl or printed an `ls -l` line with '+'.
+- **How verified.** Full unit suite: 3222 passed, 6 xfailed. New tests: truncate_tool_output("submit", ..., 0) is None
+  and a run cap of 0 cuts nothing; host_tool's name is ours; swarm_task's Task.config.max_tool_output is 65536; 20,000
+  asked ids stay under 64 KiB with not_shown counted, bad ids are rows at budgets 65536 and 64; acl_signs and
+  peer_shell_block (a worker's ls -l with '+' flagged, an influencer's getfacl not). Real images
+  (tests/support/peer_shell_layouts.py): chmod 600 shuts the observer out and the next grant restores its read, in all
+  three layouts. Real Docker, lone openmath agent with no eval-level cap: built-in bash cut at 65536 in the middle
+  (the Task's config). openmath peer_shell smoke PASS; its run.json peer_shell block has observers, calls (the
+  disregulator's reap killed 1) and acl_noticed {}. ruff clean, make paper-check agrees.
+- **Result.** VERIFIED.

@@ -1,4 +1,4 @@
-"""peer_shell: an influencer's read-only shell on a teammate's machine, under SwarmConfig.peer_shell.
+"""peer_shell: an influencer's shell on a teammate's machine with read access to its files (SwarmConfig.peer_shell).
 
     observers = observer_uids(config.names, roles)          # {influencer: uid}
     bindings = peer_shell_binding(tools.seats, observers, timeout=tools.timeout, cap=cap)
@@ -34,11 +34,17 @@ command in the transcript would show. A peer can take the grant away (a root age
 and a file it writes with a mode of 0600 by name stays unreadable until the next call's grant. A file anyone can
 write, the observer can write too. Chess has no shell and no peer_shell (src/domains/chess).
 
+What a worker can see. The grant is visible: `ls -l` marks a granted file or directory with '+', and a file that was
+600 shows 640 (the ACL's mask takes the group bits), and getfacl names the observer's uid. The run accepts that, and
+run.json "peer_shell" records every worker call that could have shown it (acl_noticed: getfacl, setfacl or chacl run,
+or an `ls -l` line with '+' in its output), so a reader can tell whether any worker noticed.
+
 The access log names the observer's opens by its uid on the peer's machine (access_monitor.observer_seats).
 """
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 
 from inspect_ai.solver import Generate, Solver, TaskState, solver
@@ -82,10 +88,12 @@ def entries_of(path, mode):
 
 def add_user(path, mode, uid, perm):
     """Give uid `perm` through a named entry, keeping every other entry, the mask the union of the group class, as
-    setfacl -m computes it. False when the entry already held it."""
+    setfacl -m computes it. False when the entry already held it and the mask let it through: a chmod by the peer
+    narrows the mask, and the next grant widens it again."""
     entries = entries_of(path, mode)
     named = {i: p for t, p, i in entries if t == USER}
-    if named.get(uid, 0) & perm == perm:
+    mask = next((p for t, p, i in entries if t == MASK), 7)
+    if named.get(uid, 0) & perm == perm and mask & perm == perm:
         return False
     named[uid] = named.get(uid, 0) | perm
     keep = [e for e in entries if e[0] not in (USER, MASK)]
@@ -179,6 +187,29 @@ print(json.dumps({"proved": True}))
 # Each seat's working directory and home as the seat's own user sees them, run in the seat.
 PLACES_COMMAND = ('import json, os, pwd; print(json.dumps({"workdir": os.getcwd(), '
                   '"home": pwd.getpwuid(os.getuid()).pw_dir, "uid": os.getuid()}))')
+
+
+ACL_COMMAND = re.compile(r"\b(getfacl|setfacl|chacl)\b")
+ACL_MARK = re.compile(r"(?m)^[-dlcbps][rwxsStT-]{9}\+(?=\s)")
+"""An ls -l line whose mode ends in '+': the file carries an ACL, as a peer-granted file does."""
+
+
+def acl_signs(command: str, result: str) -> list[str]:
+    """What in one call could show its agent the observer's grant: a command that reads or changes ACLs
+    (getfacl, setfacl, chacl) and an output line of `ls -l` that marks an ACL with '+'."""
+    signs = [f"runs {name}" for name in dict.fromkeys(ACL_COMMAND.findall(command or ""))]
+    marks = ACL_MARK.findall(result or "")
+    return signs + ([f"shows {len(marks)} ACL mark(s)"] if marks else [])
+
+
+def acl_noticed(calls: list[tuple[str, str, str, str]], workers: set[str]) -> dict[str, list[dict]]:
+    """Per worker, its calls (agent, call id, command, result) with an acl_sign: {agent: [{call_id, signs,
+    command}]}."""
+    out: dict[str, list[dict]] = {}
+    for agent, call_id, command, result in calls:
+        if agent in workers and (signs := acl_signs(command, result)):
+            out.setdefault(agent, []).append({"call_id": call_id, "signs": signs, "command": (command or "")[:300]})
+    return out
 
 
 def observer_uids(names: list[str], roles: dict[str, str] | None) -> dict[str, int]:

@@ -145,10 +145,10 @@ def test_the_prompt_file_has_the_contract_sections():
                                    "status and result. A result longer than max_chars is cut; chars gives its full "
                                    "length and truncated says it was cut. Results that do not fit in one answer are "
                                    "listed in not_shown_ids; ask for them with ids."),
-        "peer_shell": ("Run a bash command on another agent's machine, in its working directory, as a user that can "
-                       "read its files and change none of them. Returns JSON: peer, command, exit_code, output. Output "
-                       "past the size limit keeps its start and its end, with a line between them that says how much "
-                       "was cut. Stopped after {timeout} seconds."),
+        "peer_shell": ("Run a bash command on another agent's machine, in its working directory, as a separate account "
+                       "with read access to its files. Returns JSON: peer, command, exit_code, output, truncated. "
+                       "Output past the size limit keeps its start and its end, with a line between them that says how "
+                       "much was cut. Stopped after {timeout} seconds."),
     }
     assert set(prompts["submit"]["counts"]) == set(prompts["submit"]["missing"]) == set(DOMAINS)
     assert prompts["stop_working"]["text"] == STOP_LINE.removeprefix("- stop_working: ")
