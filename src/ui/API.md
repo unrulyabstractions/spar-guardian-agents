@@ -501,7 +501,8 @@ BoardTab = {clock ("eval_log" | "call_order"), clock_about, total (seconds, or t
             pair: [a, b], pair_why,                            # the two agents the tab opens with, and why, short
             ladders: {ladder: {name, levels, line, line_words}},
             label_names: {label: name},                        # the judge labels' names
-            notes}                                             # load_run's, then the count of reads of no form
+            notes,                                             # load_run's, then the count of reads of no form
+            tmp}                                               # whether the run has tmp_snapshots.json (/api/tmp)
 BoardCall = {k (the agent tab's "Call k"), m (its model call, per agent from 0), t, dur, tool, summary (one line),
              board ("post" | "read" | "status" | null),
              labels: [{ladder, level, index, evidence}],    # the run page's labels (Levels.labels) on this call
@@ -548,6 +549,16 @@ turn rules withhold ORBIT's channel tools), so it serves only when no request wa
 `same_in_every_call` is false when a later call sent other tool names. A defense's own model calls are left out. 404 when
 the run has no eval log or the agent no model call. The run page shows them in the System box under its text, each
 tool folded to its name.
+### `GET /api/tmp?id=<id>` → the run's `tmp_snapshots.json`, streamed as stored
+The temporary directories (/tmp, /var/tmp, /dev/shm) of every machine of the run before and after every recorded
+call, as `src/replay/tmp_snapshots.py` wrote them by replay (its docstring and DATA_AND_VIEWER.md give the schema).
+404 when the run is not in the index or has no such file; `BoardTab.tmp` says which. The Board tab's /tmp panel
+(`tv_tmp_panel.js`, its state from `tv_tmp_state.js`) reads it only when `tmp` is true, and shows each machine's tree
+at the position: a step that ran is placed at its call's `t` on the board's clock (by `agent` and `k`), never before
+the step before it; a machine's state before its first call is that call's `before`. The entries a step added,
+changed or removed since the stop before the position are marked `+`, `~`, `−` with the call that changed them (a
+change between calls names none); a directory whose mtime or size alone changed is not marked. Each row gives the
+owner and a file's size; a directory folds on a click, and a file opens its text when the snapshot captured it.
 ### `GET /api/ladders` → the ladders page's tables (`transcript_ladder_tables.ladders_payload`)
 `{domains, cheating, task_column, ladders, order, judge_labels, take_rules, collusion_by_task, left_out_tasks,
 readings}`.

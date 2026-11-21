@@ -12,7 +12,8 @@ cached measures (run_detail, board_detail) and serves the page. The server reads
 Routes: / (the page), /tv/<file> (src/ui/transcript_static/), /static/<path> (the results browser's assets in
 src/ui/static/, whose dom.js, charts.js, components.js and style.css the page reuses), /api/index, /api/run?id=,
 /api/board?id= (the run page's Board tab, src/ui/transcript_board.py), /api/transcript?id=&agent=,
-/api/tools?id=&agent= (the tool definitions the agent's model calls carried, from the eval log), /api/ladders,
+/api/tools?id=&agent= (the tool definitions the agent's model calls carried, from the eval log), /api/tmp?id= (the
+run's tmp_snapshots.json, src/replay/tmp_snapshots.py, for the Board tab's /tmp panel), /api/ladders,
 /api/summary?col= (the Summary page, src/ui/transcript_summary.py). src/ui/API.md describes them.
 """
 from __future__ import annotations
@@ -50,6 +51,8 @@ EPISODE_KEYS = ["orbit_agent", "model", "n_turns", "n_tool_calls", "wall_time", 
                 "failure", "final_text", "usage", "defense", "defenses"]
 """The episode fields the run page shows (components.js episodeRecord and the agent card); the rest of episodes.jsonl
 (rules, probes, ledger, access) stays on disk."""
+TMP_FILE = "tmp_snapshots.json"
+"""A run's /tmp snapshots (src/replay/tmp_snapshots.py FILE), served as stored by /api/tmp."""
 
 
 # ------------------------------------------------------------------------------------------------------- run page
@@ -148,9 +151,17 @@ def agent_tools(log_path: Path) -> dict[str, dict]:
     return out
 
 
+def tmp_snapshots(run_dir: Path) -> Path | None:
+    """The run's tmp_snapshots.json, or None when the run has none."""
+    path = run_dir / TMP_FILE
+    return path if path.is_file() else None
+
+
 def board_detail(row: dict, run_dir: Path, measured: dict) -> dict:
-    """The run page's Board tab (transcript_board.board_payload) from the run's files and its cached measures."""
-    return transcript_board.board_payload(run_dir, RunFiles.read(run_dir).levels(measured))
+    """The run page's Board tab (transcript_board.board_payload) from the run's files and its cached measures, with
+    tmp: whether the run has /tmp snapshots (/api/tmp), so the tab shows its /tmp panel only then."""
+    payload = transcript_board.board_payload(run_dir, RunFiles.read(run_dir).levels(measured))
+    return {**payload, "tmp": tmp_snapshots(run_dir) is not None}
 
 
 # ---------------------------------------------------------------------------------------------------------- server
@@ -250,6 +261,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(found)
             if url.path == "/api/transcript":
                 return self.transcript(q.get("id", ""), q.get("agent", ""))
+            if url.path == "/api/tmp":
+                run_id = q.get("id", "")
+                if run_id not in self.viewer.dirs:
+                    return self.fail(HTTPStatus.NOT_FOUND, f"no run {run_id!r} in the index")
+                path = tmp_snapshots(self.viewer.dirs[run_id])
+                if path is None:
+                    return self.fail(HTTPStatus.NOT_FOUND, f"no {TMP_FILE} in {run_id}")
+                return self.send_file(path)
             return self.fail(HTTPStatus.NOT_FOUND, "no such path")
         except (BrokenPipeError, ConnectionResetError):
             return None
@@ -269,7 +288,10 @@ class Handler(BaseHTTPRequestHandler):
         folder = folder_agents(run_dir, read_jsonl(run_dir / "episodes.jsonl")).get(agent)
         if folder is None:
             return self.fail(HTTPStatus.NOT_FOUND, f"no transcript for agent {agent!r} in {run_id}")
-        path = run_dir / "trajectories" / folder / "transcript.json"
+        return self.send_file(run_dir / "trajectories" / folder / "transcript.json")
+
+    def send_file(self, path: Path):
+        """A JSON file of a run, streamed as stored."""
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(path.stat().st_size))

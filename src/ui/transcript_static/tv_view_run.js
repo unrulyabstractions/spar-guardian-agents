@@ -25,6 +25,7 @@ import { alarmBadge, cheatbenchTeam, cheatbenchWords, cheatingCell, cheatingPane
   coordinationPanel, judgeLabels, judgeLabelsPanel, labelEntry, levelChip, levelsPanel, teamScore } from './tv_levels.js';
 import { DEFAULT_FOLDS, PARTS, centreVertically, renderCase, stripLegend } from './tv_case_view.js';
 import { renderBoard } from './tv_view_board.js';
+import { tmpUrl } from './tv_tmp_panel.js';
 
 // The run page fills the window under the site's bar (tv_style.css .rp-page): its top is the site bar's real bottom
 // edge, which wraps in a narrower window.
@@ -308,14 +309,15 @@ export async function viewRun(id, q, view) {
     h('section', { class: 'rp-record-in' }, h('h2', { class: 'rp-record-h' }, 'Run record'), record)) });
   // The Board tab reads /api/board when first opened; its handle ({moveTo, showPost, state}) comes once it is drawn.
   // Its pair, mode and position come from the hash (a, b, mode, pos) and go back to it; its agents' cards show the
-  // judge labels the Details tab shows.
+  // judge labels the Details tab shows; its /tmp panel reads /api/tmp when the board says the run has snapshots.
   const boardView = () => {
     const el = h('div', { class: 'rp-board' }, h('div', { class: 'loading' }, 'Loading the board…'));
     const handle = fetch('/api/board?id=' + enc(id))
       .then(async x => {
         const b = await x.json();
         if (!x.ok) throw new Error(b.error || `HTTP ${x.status}`);
-        return renderBoard(el, b, { q, base: '#/run/' + id.split('/').map(enc).join('/'), judged });
+        return renderBoard(el, b, { q, base: '#/run/' + id.split('/').map(enc).join('/'), judged,
+          tmpUrl: tmpUrl(id) });
       })
       .catch(e => {
         el.replaceChildren(h('div', { class: 'error-box' }, `Could not load the board: ${e.message}`));

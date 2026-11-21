@@ -2319,3 +2319,29 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   agrees (the paper names no tool output cap).
 - **Result.** VERIFIED. The lone agent's built-in tools take the cap from the run's GenerateConfig (run.py); under
   `inspect eval src/tasks.py@...` without -M max_tool_output they get the middle cut at Inspect's 16 KiB.
+
+## 2026-11-20: the /tmp snapshots in the transcript viewer's Board tab
+- **What.** `GET /api/tmp?id=` streams a run's tmp_snapshots.json as stored, 404 without a run or a file;
+  BoardTab.tmp says whether the run has one (transcript_viewer.board_detail). The Board tab's /tmp panel
+  (tv_tmp_panel.js, state in tv_tmp_state.js, styles in tv_board.css) sits between the timeline and the message board,
+  only when tmp is true. Each machine gets a tree at the position: a step is placed at its call's t (by agent and k),
+  a machine's state before its first call is that call's `before`, the entries added, changed or removed since the stop
+  before the position are marked `+ ~ −` with the call that changed them, a directory's mtime or size alone is no
+  change. Each row gives the owner (lane colours for the two agents) and a file's size; a directory folds on a click; a
+  file opens its text, sha256 prefix, mode and size. Documented in src/ui/API.md and DATA_AND_VIEWER.md.
+- **How verified.** tests/unit/test_transcript_viewer_tmp.py, 10 passed: the route on a live server on a free port
+  (bytes equal, 404 bodies), the board flag, the file name equal to tmp_snapshots.FILE, and the state module in node on
+  a synthetic file (baseline, prefix order, kinds, attribution, mtime noise, removed paths kept, a call missing from the
+  clock). With test_transcript_board, _levels, _tools and test_paper_sources: 160 passed; viewer-related unit tests
+  (-k transcript/viewer/board/ui/static): 293 passed, 2 xfailed. ruff clean, node --check clean. The real run
+  (study_exploration_1/poem_minimal_regulated_disregulated_luna_haiku_enforce_persuade2): a viewer on port 8833 over a
+  scratch runs folder linking only that run, scratch cache; /api/tmp's sha256 equals the file's (e73d1d33...);
+  /api/board tmp true. The board's mapping: all 122 steps' (agent, k) found in the payload with the same tool, times
+  monotone in n. Headless Chrome over CDP, a=s7m7z b=p6n8j, time clock; I viewed each PNG: pos 0 (baseline: /tmp,
+  grading/ref/17f43931 with 4 root files, /var/tmp, /dev/shm; nothing marked); pos 118 (s7draft.md `+`, owner s7m7z,
+  928 B, by s7m7z call 6, its text open, sha 16cdf4630ccc); pos 143 light scheme (`~` 954 B by call 8); pos 143 with
+  grading/ folded; pos 458 (`−` struck through, 879 B, by call 19); step mode step 13. The text the page shows hashed in
+  the browser equals the snapshot's sha256 at all seven writes (n51, 62, 72, 79, 93, 99, 103). Server and Chrome
+  stopped; port 8770 untouched.
+- **Result.** VERIFIED for this run in a 1500 px window, dark and light. UNVERIFIED: runs with several machines (SWE,
+  protein) and large /tmp trees, since no such snapshot file exists yet; play mode's speed with the panel.
