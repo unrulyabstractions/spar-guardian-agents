@@ -13,14 +13,17 @@ Two methods, named in the ready row:
   ebpf     bpftrace (the static build in the volume, a JSON-output subprocess) with fexit probes on the kernel's socket
            calls: inet_bind, inet6_bind, inet_listen, inet_stream_connect, inet_dgram_connect, inet_csk_accept,
            udp_sendmsg with an address (the first send per process and destination), inet_release, unix_bind,
-           unix_listen, unix_stream_connect, unix_dgram_connect, unix_accept, and fentry on security_bprm_check for
-           the exe of a process gone before /proc is read. The script is filtered to the machines' network
-           namespaces: the trace sees every container on the host. The kernel does not wait for the row, so a process
-           may be gone before /proc is read; its row keeps the kernel's pid, uid and comm and reads gone.
+           unix_listen, unix_stream_connect, unix_dgram_connect, unix_accept, fentry on security_bprm_check for
+           the exe of a process gone before /proc is read, and the tracepoint sock:inet_sock_set_state for a TCP
+           connect leaving SYN_SENT (how a connect that did not wait ended). The script is filtered to the machines'
+           network namespaces: the trace sees every container on the host. The kernel does not wait for the row, so a
+           process may be gone before /proc is read; its row keeps the kernel's pid, uid and comm and is named through
+           its parent or grandparent when one is still there (via), else reads gone.
   procnet  the fallback when no tracer is mounted or it cannot attach (a trace_failed row says why): each network
            namespace's socket tables (/proc/<init>/net/{tcp,tcp6,udp,udp6,unix}) and every process's socket
            descriptors, read every poll_s, and a row for each socket that appears, changes kind or goes. A connection
-           that opens and closes between two reads leaves no row, and a unix client is not seen.
+           that opens and closes between two reads leaves no row, and a unix client is not seen. A TCP connect's row
+           holds its state at the read (tcp_state), and a read that finds it out of SYN_SENT writes a tcp_state row.
 Both read the tables once at the start: what already listens or is connected then gets a row with at_start.
 
 The rows, each a JSON object on one line with seq, t and row:
@@ -31,7 +34,11 @@ The rows, each a JSON object on one line with seq, t and row:
                lport, raddr, rport (a unix socket's path in laddr, or raddr for a connect, with "@" before an abstract
                name), result ("ok" or the errno's name), source (ebpf or procnet), at_start, and who as the access
                log names an opener (uid, exe, cwd, cmd, chain, root, and control for the harness's control with a
-               nonce in its argv), or gone with the exec's exe when it was seen
+               nonce in its argv), or the chain and root of an ancestor with via its pid, or gone, with the exec's exe
+               when it was seen; sk the socket's kernel address for ebpf
+  tcp_state    a TCP connect left SYN_SENT: netns, machine, sk (ebpf) or socket (the inode, procnet), lport, rport,
+               old, new (ESTABLISHED, or CLOSE for a connect that failed) and error (the errno's name the kernel set,
+               None for none or unknown)
   lost         the tracer lost n events
   restart, machine_down  the poll found a machine under a new init, which the trace's filter no longer covers, or
                nowhere
@@ -85,25 +92,33 @@ EVENTS = {"bind": "bind", "listen": "listen", "connect": "connect", "accept": "a
           "unix_accept": "accept"}
 # /proc/net/tcp states
 TCP_LISTEN, TCP_CLOSE, TCP_ESTABLISHED, TCP_SYN_SENT = "0A", "07", "01", "02"
+TCP_STATES = {1: "ESTABLISHED", 2: "SYN_SENT", 3: "SYN_RECV", 4: "FIN_WAIT1", 5: "FIN_WAIT2", 6: "TIME_WAIT",
+              7: "CLOSE", 8: "CLOSE_WAIT", 9: "LAST_ACK", 10: "LISTEN", 11: "CLOSING"}
 UNIX_LISTENING = 0x10000              # __SO_ACCEPTCON in /proc/net/unix's Flags
 UNIX_CONNECTED = "03"                 # SS_CONNECTED
 
-# One print per event: (event, nsecs, pid, tid, uid, netns, type, family, a, port a, b, port b, ret, comm). a is the
-# local end and b the remote one; a unix socket's path is a (b for a connect) and its port slot is 1 for an abstract
-# name. FILTER becomes the namespaces' test. An abstract name's bytes come bounded by the address's length; struct
-# unix_address holds refcnt and len before name.
+# One print per event: (event, nsecs, pid, tid, uid, netns, type, family, a, port a, b, port b, ret, comm, sk, ppid,
+# gppid). a is the local end and b the remote one; a unix socket's path is a (b for a connect) and its port slot is 1
+# for an abstract name. sk is the socket's kernel address, ppid and gppid the caller's parent and grandparent as the
+# kernel holds them (PARENTS), so a process gone before /proc is read is named through an ancestor still there. FILTER
+# becomes the namespaces' test on the caller, SKFILTER on the socket. An abstract name's bytes come bounded by the
+# address's length; struct unix_address holds refcnt and len before name.
+#
+# A state print is a TCP socket leaving SYN_SENT: (state, nsecs, 0, 0, 0, netns, old, new, "", sport, "", dport,
+# sk_err, "", sk, 0, 0). It fires in whatever context the kernel changes the state (a softirq for a handshake), so its
+# netns is the socket's own. The kernel sets sk_err before it closes a refused or timed-out connect.
 TRACE = r"""
 fexit:vmlinux:inet_bind, fexit:vmlinux:inet6_bind /FILTER/ {
   $a = (struct sockaddr_in *)args.uaddr; $ip = ntop(2, $a->sin_addr.s_addr);
   if ($a->sin_family == 10) { $ip = ntop(10, ((struct sockaddr_in6 *)args.uaddr)->sin6_addr.in6_u.u6_addr8); }
   print(("bind", nsecs, pid, tid, uid, curtask->nsproxy->net_ns->ns.inum, args.sock->type, $a->sin_family, $ip,
-         args.sock->sk->__sk_common.skc_num, "", 0, retval, comm));
+         args.sock->sk->__sk_common.skc_num, "", 0, retval, comm, (uint64)args.sock->sk, PARENTS));
 }
 fexit:vmlinux:inet_listen /FILTER/ {
   $sk = args.sock->sk; $ip = ntop(2, $sk->__sk_common.skc_rcv_saddr);
   if ($sk->__sk_common.skc_family == 10) { $ip = ntop(10, $sk->__sk_common.skc_v6_rcv_saddr.in6_u.u6_addr8); }
   print(("listen", nsecs, pid, tid, uid, curtask->nsproxy->net_ns->ns.inum, args.sock->type,
-         $sk->__sk_common.skc_family, $ip, $sk->__sk_common.skc_num, "", 0, retval, comm));
+         $sk->__sk_common.skc_family, $ip, $sk->__sk_common.skc_num, "", 0, retval, comm, (uint64)$sk, PARENTS));
 }
 fexit:vmlinux:inet_stream_connect, fexit:vmlinux:inet_dgram_connect /FILTER/ {
   $a = (struct sockaddr_in *)args.uaddr; $sk = args.sock->sk;
@@ -113,7 +128,7 @@ fexit:vmlinux:inet_stream_connect, fexit:vmlinux:inet_dgram_connect /FILTER/ {
     $lip = ntop(10, $sk->__sk_common.skc_v6_rcv_saddr.in6_u.u6_addr8);
   }
   print(("connect", nsecs, pid, tid, uid, curtask->nsproxy->net_ns->ns.inum, args.sock->type, $a->sin_family, $lip,
-         $sk->__sk_common.skc_num, $rip, bswap($a->sin_port), retval, comm));
+         $sk->__sk_common.skc_num, $rip, bswap($a->sin_port), retval, comm, (uint64)$sk, PARENTS));
 }
 fexit:vmlinux:inet_csk_accept /retval != 0 && FILTER/ {
   $sk = retval; $lip = ntop(2, $sk->__sk_common.skc_rcv_saddr); $rip = ntop(2, $sk->__sk_common.skc_daddr);
@@ -122,7 +137,7 @@ fexit:vmlinux:inet_csk_accept /retval != 0 && FILTER/ {
     $rip = ntop(10, $sk->__sk_common.skc_v6_daddr.in6_u.u6_addr8);
   }
   print(("accept", nsecs, pid, tid, uid, curtask->nsproxy->net_ns->ns.inum, 1, $sk->__sk_common.skc_family, $lip,
-         $sk->__sk_common.skc_num, $rip, bswap($sk->__sk_common.skc_dport), 0, comm));
+         $sk->__sk_common.skc_num, $rip, bswap($sk->__sk_common.skc_dport), 0, comm, (uint64)$sk, PARENTS));
 }
 fexit:vmlinux:udp_sendmsg /args.msg->msg_name != 0 && FILTER/ {
   $a = (struct sockaddr_in *)args.msg->msg_name;
@@ -130,7 +145,7 @@ fexit:vmlinux:udp_sendmsg /args.msg->msg_name != 0 && FILTER/ {
     @sent[pid, $a->sin_addr.s_addr, $a->sin_port] = 1;
     print(("send", nsecs, pid, tid, uid, curtask->nsproxy->net_ns->ns.inum, 2, 2,
            ntop(2, args.sk->__sk_common.skc_rcv_saddr), args.sk->__sk_common.skc_num, ntop(2, $a->sin_addr.s_addr),
-           bswap($a->sin_port), retval, comm));
+           bswap($a->sin_port), retval, comm, (uint64)args.sk, PARENTS));
   }
 }
 fexit:vmlinux:udpv6_sendmsg /args.msg->msg_name != 0 && FILTER/ {
@@ -139,7 +154,7 @@ fexit:vmlinux:udpv6_sendmsg /args.msg->msg_name != 0 && FILTER/ {
     @sent6[pid, $a->sin6_port] = 1;
     print(("send", nsecs, pid, tid, uid, curtask->nsproxy->net_ns->ns.inum, 2, 10,
            ntop(10, args.sk->__sk_common.skc_v6_rcv_saddr.in6_u.u6_addr8), args.sk->__sk_common.skc_num,
-           ntop(10, $a->sin6_addr.in6_u.u6_addr8), bswap($a->sin6_port), retval, comm));
+           ntop(10, $a->sin6_addr.in6_u.u6_addr8), bswap($a->sin6_port), retval, comm, (uint64)args.sk, PARENTS));
   }
 }
 fentry:vmlinux:inet_release /args.sock->sk != 0 && args.sock->sk->__sk_common.skc_num != 0 && FILTER/ {
@@ -150,60 +165,79 @@ fentry:vmlinux:inet_release /args.sock->sk != 0 && args.sock->sk->__sk_common.sk
   }
   print(("close", nsecs, pid, tid, uid, curtask->nsproxy->net_ns->ns.inum, args.sock->type,
          $sk->__sk_common.skc_family, $lip, $sk->__sk_common.skc_num, $rip, bswap($sk->__sk_common.skc_dport), 0,
-         comm));
+         comm, (uint64)$sk, PARENTS));
 }
 fexit:vmlinux:unix_bind /FILTER/ {
   $u = (uint8 *)args.uaddr; $n = args.addr_len - 2; $abs = 0;
   if ($n > 0 && *($u + 2) == 0) { $abs = 1; }
   print(("unix_bind", nsecs, pid, tid, uid, curtask->nsproxy->net_ns->ns.inum, args.sock->type, 1,
-         str($u + 2 + $abs, $n - $abs + 1), $abs, "", 0, retval, comm));
+         str($u + 2 + $abs, $n - $abs + 1), $abs, "", 0, retval, comm, (uint64)args.sock->sk,
+         PARENTS));
 }
 fexit:vmlinux:unix_listen /FILTER/ {
   $ad = ((struct unix_sock *)args.sock->sk)->addr; $u = (uint8 *)$ad + 8; $n = 0; $abs = 0;
   if ($ad != 0) { $n = $ad->len - 2; }
   if ($n > 0 && *($u + 2) == 0) { $abs = 1; }
   print(("unix_listen", nsecs, pid, tid, uid, curtask->nsproxy->net_ns->ns.inum, args.sock->type, 1,
-         str($u + 2 + $abs, $n - $abs + 1), $abs, "", 0, retval, comm));
+         str($u + 2 + $abs, $n - $abs + 1), $abs, "", 0, retval, comm, (uint64)args.sock->sk,
+         PARENTS));
 }
 fexit:vmlinux:unix_stream_connect /FILTER/ {
   $u = (uint8 *)args.uaddr; $n = args.addr_len - 2; $abs = 0;
   if ($n > 0 && *($u + 2) == 0) { $abs = 1; }
   print(("unix_connect", nsecs, pid, tid, uid, curtask->nsproxy->net_ns->ns.inum, args.sock->type, 1, "", 0,
-         str($u + 2 + $abs, $n - $abs + 1), $abs, retval, comm));
+         str($u + 2 + $abs, $n - $abs + 1), $abs, retval, comm, (uint64)args.sock->sk,
+         PARENTS));
 }
 fexit:vmlinux:unix_dgram_connect /FILTER/ {
   $u = (uint8 *)args.addr; $n = args.alen - 2; $abs = 0;
   if ($n > 0 && *($u + 2) == 0) { $abs = 1; }
   print(("unix_connect", nsecs, pid, tid, uid, curtask->nsproxy->net_ns->ns.inum, args.sock->type, 1, "", 0,
-         str($u + 2 + $abs, $n - $abs + 1), $abs, retval, comm));
+         str($u + 2 + $abs, $n - $abs + 1), $abs, retval, comm, (uint64)args.sock->sk,
+         PARENTS));
 }
 fexit:vmlinux:unix_accept /retval == 0 && FILTER/ {
   $ad = ((struct unix_sock *)args.sock->sk)->addr; $u = (uint8 *)$ad + 8; $n = 0; $abs = 0;
   if ($ad != 0) { $n = $ad->len - 2; }
   if ($n > 0 && *($u + 2) == 0) { $abs = 1; }
   print(("unix_accept", nsecs, pid, tid, uid, curtask->nsproxy->net_ns->ns.inum, args.sock->type, 1,
-         str($u + 2 + $abs, $n - $abs + 1), $abs, "", 0, retval, comm));
+         str($u + 2 + $abs, $n - $abs + 1), $abs, "", 0, retval, comm, (uint64)args.sock->sk,
+         PARENTS));
 }
 fentry:vmlinux:security_bprm_check /FILTER/ {
   print(("exec", nsecs, pid, tid, uid, curtask->nsproxy->net_ns->ns.inum, 0, 0, str(args.bprm->filename), 0, "", 0,
-         0, comm));
+         0, comm, (uint64)0, PARENTS));
+}
+tracepoint:sock:inet_sock_set_state /args.protocol == 6 && args.oldstate == 2 && SKFILTER/ {
+  $sk = (struct sock *)args.skaddr;
+  print(("state", nsecs, 0, 0, 0, $sk->__sk_common.skc_net.net->ns.inum, args.oldstate, args.newstate, "", args.sport,
+         "", args.dport, $sk->sk_err, "", (uint64)args.skaddr, 0, 0));
 }
 END { clear(@sent); clear(@sent6); }
 """
 
 
+PARENTS = "curtask->real_parent->tgid, curtask->real_parent->real_parent->tgid"
+SOCKET_NETNS = "((struct sock *)args.skaddr)->__sk_common.skc_net.net->ns.inum"
+
+
 def trace_script(namespaces: list[int]) -> str:
-    """TRACE filtered to these network namespaces' inodes."""
-    test = " || ".join(f"curtask->nsproxy->net_ns->ns.inum == {inode}" for inode in sorted(namespaces))
-    return TRACE.replace("FILTER", f"({test})")
+    """TRACE filtered to these network namespaces' inodes, on the caller (FILTER) and on the socket (SKFILTER)."""
+    def test(of: str) -> str:
+        return "(" + " || ".join(f"{of} == {inode}" for inode in sorted(namespaces)) + ")"
+    return (TRACE.replace("SKFILTER", test(SOCKET_NETNS)).replace("FILTER", test("curtask->nsproxy->net_ns->ns.inum"))
+            .replace("PARENTS", PARENTS))
 
 
 # --------------------------------------------------------------------------
 # the log
 # --------------------------------------------------------------------------
+CAPPED = ("net", "tcp_state")
+
+
 class RowLog:
-    """The rows on a line-buffered text stream. Past max_rows an ordinary net row is counted and dropped; a control's
-    row and every other row always pass."""
+    """The rows on a line-buffered text stream. Past max_rows an ordinary net or tcp_state row is counted and dropped;
+    a control's row and every other row always pass."""
 
     def __init__(self, stream, max_rows: int) -> None:
         self.stream, self.max_rows = stream, max_rows
@@ -211,7 +245,7 @@ class RowLog:
 
     def write(self, row: str, **fields) -> None:
         self.seen += 1
-        if row == "net" and "control" not in fields and self.seen > self.max_rows:
+        if row in CAPPED and "control" not in fields and self.seen > self.max_rows:
             self.dropped += 1
             return
         self.stream.write(json.dumps({"seq": self.seen, "t": round(time.time(), 6), "row": row, **fields}) + "\n")
@@ -239,10 +273,11 @@ def result_of(op: str, ret: int) -> str:
 
 
 def kernel_event(data: list) -> dict | None:
-    """One print of TRACE as a row's fields, or None for an exec (exec_of reads it). The kernel's own uid stays as
-    kernel_uid: who's uid is read from /proc."""
-    name, nsecs, pid, tid, uid, netns, kind, family, a, port_a, b, port_b, ret, comm = data
-    if name == "exec":
+    """One socket call's print of TRACE as a row's fields, or None for an exec or a state print (Monitor.event reads
+    those). The kernel's own uid stays as kernel_uid: who's uid is read from /proc. parents holds the caller's parent
+    and grandparent."""
+    name, nsecs, pid, tid, uid, netns, kind, family, a, port_a, b, port_b, ret, comm, sk, ppid, gppid = data
+    if name in ("exec", "state"):
         return None
     op = EVENTS[name]
     kind &= 0xF                                 # sock->type holds SOCK_NONBLOCK and SOCK_CLOEXEC above the type
@@ -257,7 +292,18 @@ def kernel_event(data: list) -> dict | None:
                      "rport": port_b if op not in ("bind", "listen") else None}
     return {"op": op, "proto": proto_of(family, kind), "family": FAMILIES.get(family, str(family)),
             "type": TYPES.get(kind, str(kind)), "netns": netns, "pid": pid, "tid": tid, "kernel_uid": uid,
-            "comm": comm, **addresses, "result": result_of(op, ret), "nsecs": nsecs}
+            "comm": comm, **addresses, "result": result_of(op, ret), "sk": int(sk) or None,
+            "parents": [ppid, gppid],
+            "nsecs": nsecs}
+
+
+def state_event(data: list) -> dict:
+    """A state print of TRACE as a tcp_state row's fields: the socket, its ports, the state it left and the one it
+    took, and the error the kernel set on it (None for none)."""
+    _, nsecs, _, _, _, netns, old, new, _, sport, _, dport, err, _, sk, _, _ = data
+    return {"netns": netns, "sk": int(sk), "lport": sport, "rport": dport, "old": TCP_STATES.get(old, str(old)),
+            "new": TCP_STATES.get(new, str(new)), "error": errno.errorcode.get(err, str(err)) if err else None,
+            "nsecs": nsecs}
 
 
 # --------------------------------------------------------------------------
@@ -389,32 +435,48 @@ class Monitor:
         services = self.netns.get(netns or -1) or []
         return services[0] if len(services) == 1 else None
 
-    def who(self, pid: int | None) -> dict:
-        """The process as the access log names an opener, read from /proc now; gone when it left first. A row of the
-        control names it, and the control gets its SIGUSR1."""
-        if pid:
-            for _ in range(WALKS):
-                found = status(pid)
-                walked = found and ancestry(pid, found)
-                if walked:
-                    chain, root = walked
-                    args = argv(pid)
-                    control = next((name for name, nonce in self.nonces.items() if nonce in args), None)
-                    if control and pid not in self.acked:
-                        self.acked.add(pid)
-                        try:
-                            os.kill(pid, signal.SIGUSR1)
-                        except OSError:
-                            pass
-                    return {"uid": found["uid"], "exe": link(f"/proc/{pid}/exe"), "cwd": link(f"/proc/{pid}/cwd"),
-                            "cmd": shell_words(args, CMD_CHARS), "chain": chain, "root": root,
-                            **({"control": control} if control else {})}
-        return {"gone": True, **({"exe": self.execs[pid], "exe_from": "exec"} if pid in self.execs else {})}
+    @staticmethod
+    def walk(pid: int) -> tuple[dict, list[str], dict] | None:
+        """(status, chain, root) of a process still there, else None."""
+        for _ in range(WALKS):
+            found = status(pid)
+            walked = found and ancestry(pid, found)
+            if walked:
+                return found, *walked
+        return None
+
+    def who(self, pid: int | None, parents: list[int] = ()) -> dict:
+        """The process as the access log names an opener, read from /proc now. A row of the control names it, and the
+        control gets its SIGUSR1. A process that left first is named through the nearest of `parents` (the kernel's
+        parent and grandparent) still there: that ancestor's chain and root, with via its pid and the process's own
+        uid, cmd and cwd unknown. With no ancestor left it is gone."""
+        walked = self.walk(pid) if pid else None
+        if walked:
+            found, chain, root = walked
+            args = argv(pid)
+            control = next((name for name, nonce in self.nonces.items() if nonce in args), None)
+            if control and pid not in self.acked:
+                self.acked.add(pid)
+                try:
+                    os.kill(pid, signal.SIGUSR1)
+                except OSError:
+                    pass
+            return {"uid": found["uid"], "exe": link(f"/proc/{pid}/exe"), "cwd": link(f"/proc/{pid}/cwd"),
+                    "cmd": shell_words(args, CMD_CHARS), "chain": chain, "root": root,
+                    **({"control": control} if control else {})}
+        exe = {"exe": self.execs[pid], "exe_from": "exec"} if pid in self.execs else {}
+        for parent in parents:
+            walked = self.walk(parent) if parent and parent > 1 else None
+            if walked:
+                _, chain, root = walked
+                return {"exe": None, "cwd": None, "cmd": None, **exe, "chain": chain, "root": root, "via": parent}
+        return {"gone": True, **exe}
 
     def write_net(self, fields: dict, pid: int | None) -> dict:
         """One net row: the event's fields, the machine and who. Returns the row's machine and who."""
         try:
-            who = {"machine": self.machine_of(pid, fields.get("netns")), **self.who(pid)}
+            parents = fields.pop("parents", ())
+            who = {"machine": self.machine_of(pid, fields.get("netns")), **self.who(pid, parents)}
             if "uid" not in who:
                 who["uid"] = fields.get("kernel_uid")
             self.log.write("net", **{"pid": pid, **fields}, **who)
@@ -439,17 +501,34 @@ class Monitor:
                 fields = {"op": op, **{k: sock.get(k) for k in ("proto", "family", "type", "laddr", "lport")},
                           "raddr": sock.get("raddr") if op in ("connect", "accept") else None,
                           "rport": sock.get("rport") if op in ("connect", "accept") else None,
-                          "netns": inode, "socket": sock["inode"], "result": "ok"}
+                          "netns": inode, "socket": sock["inode"], "result": "ok",
+                          **({"tcp_state": TCP_STATES.get(int(sock["state"], 16), sock["state"])}
+                             if sock["proto"] == "tcp" and op == "connect" else {})}
                 found[(inode, sock["inode"])] = {"fields": fields, "pid": owners.get((inode, sock["inode"]))}
         return found
+
+    def left_syn_sent(self, before: dict, after: dict | None) -> None:
+        """A tcp_state row for a connect a read saw in SYN_SENT and the next read sees in another state, or gone (CLOSE,
+        its error unknown)."""
+        if before["fields"].get("tcp_state") != "SYN_SENT":
+            return
+        new = (after or {}).get("fields", {}).get("tcp_state", "CLOSE")
+        if new == "SYN_SENT":
+            return
+        services = self.netns.get(before["fields"]["netns"]) or []
+        self.log.write("tcp_state", netns=before["fields"]["netns"], socket=before["fields"]["socket"],
+                       lport=before["fields"]["lport"], rport=before["fields"]["rport"], old="SYN_SENT", new=new,
+                       error=None, machine=services[0] if len(services) == 1 else None, source="procnet")
 
     def table_rows(self, at_start: bool) -> None:
         """Rows for the sockets that appeared or changed op since the last read, and a close for those that went. A
         close names its socket's holder as the socket's last row did, with control dropped: the control's own rows
-        are what proves it."""
+        are what proves it. A connect that leaves SYN_SENT gets a tcp_state row (left_syn_sent)."""
         now = self.snapshot()
         for key, sock in now.items():
             before = self.known.get(key)
+            if before is not None:
+                self.left_syn_sent(before, sock)
             if before is None or before["fields"]["op"] != sock["fields"]["op"]:
                 extra = {"source": "procnet", **({"at_start": True} if at_start else {})}
                 sock["who"] = self.write_net({**sock["fields"], **extra}, sock["pid"])
@@ -458,6 +537,7 @@ class Monitor:
         if not at_start:
             for key, sock in self.known.items():
                 if key not in now:
+                    self.left_syn_sent(sock, None)
                     who = {k: v for k, v in sock["who"].items() if k != "control"}
                     self.log.write("net", **{"pid": sock["pid"], **sock["fields"], "op": "close",
                                              "source": "procnet"}, **who)
@@ -502,6 +582,13 @@ class Monitor:
         data = message["data"]
         if data[0] == "exec":
             self.execs[data[2]] = data[8]
+            return
+        if data[0] == "state":
+            fields = state_event(data)
+            nsecs = fields.pop("nsecs")
+            services = self.netns.get(fields["netns"]) or []
+            self.log.write("tcp_state", **fields, machine=services[0] if len(services) == 1 else None,
+                           source="ebpf", t_kernel=round(nsecs / 1e9 + clock, 6))
             return
         fields = kernel_event(data)
         nsecs = fields.pop("nsecs")

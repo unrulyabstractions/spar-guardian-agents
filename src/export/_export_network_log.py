@@ -9,17 +9,26 @@ alone, the way the access log does (src/export/_export_access_log.py: origin_of,
 agent stood at the other end. Each row of network.jsonl is one socket call:
 
     seq, t, op, proto, family, type, machine, netns, pid, uid, user, agent, named_by, candidates when it stays open,
-    origin, call_id, exe, cmd, root_cmd, comm, laddr, lport, raddr, rport, result, source, at_start, control,
-    peer_agent, peer_pid, peer_origin
+    origin, call_id, via, exe, cmd, root_cmd, comm, laddr, lport, raddr, rport, result, outcome, outcome_error,
+    outcome_by, source, at_start, control, peer_agent, peer_pid, peer_origin
 
 - op: bind, listen, connect, accept, send (a UDP datagram to an address, the first per process and destination) or
   close. proto: tcp, udp, unix or raw. A unix socket's path stands in laddr (raddr for a connect), "@" before an
-  abstract name; its ports are null. result: ok or the errno's name (EINPROGRESS for a connect that did not wait).
+  abstract name; its ports are null. result: ok or the errno's name the call returned (EINPROGRESS for a connect
+  that did not wait).
+- outcome, of a TCP or unix connect (null for every other row and a UDP one, which shakes no hands): established,
+  refused, timed_out, failed (outcome_error names the errno, null for a socket closed before it connected) or
+  in_progress (nothing says how it ended). outcome_by says what settled it: syscall (the call's own result), state
+  (the socket left SYN_SENT: a tcp_state row of the same socket, the first at or after the call, less STATE_SLACK_S
+  since on loopback the kernel settles the handshake before the call returns), accept (the accept with the mirrored
+  ports) or table (procnet read the socket past SYN_SENT).
 - t: the kernel's time of the call for source ebpf, the read of the tables for procnet. at_start: the socket was
   there when the log began (the harness's own servers, say).
 - origin as the access log's: agent, detached, harness, control (the harness's own loopback control with the run's
-  nonce) or unknown (a process gone before /proc was read). An unknown row keeps the kernel's uid, so an observer's or
-  a seat's own uid on its machine still names its agent (named_by observer or uid); a harness row names nobody.
+  nonce) or unknown (a process gone, with its parent and grandparent, before /proc was read). via: the pid of the
+  ancestor that named a process gone first (its chain, root and so its origin and call), null when the process
+  named itself. An unknown row keeps the kernel's uid, so an observer's or a seat's own uid on its machine still
+  names its agent (named_by observer or uid); a harness row names nobody.
 - peer: the other end, in the same network namespace. A connect's peer is the accept with the mirrored ports, else
   what listens on (or for UDP is bound to) its remote port; an accept's is the connect; a unix connect's is the bind
   or listen at its path, and a unix accept's the connect to its path. peer_agent is that row's agent, peer_pid its
@@ -27,21 +36,27 @@ agent stood at the other end. Each row of network.jsonl is one socket call:
 
 run.json "network":
 
-    {"status", "method": ebpf | procnet, "fallback": why the tracer did not record, or null, "rows",
-     "ops": {op: n}, "origins": {origin: n}, "agents": {agent: {op: n}},
-     "cross_agent": [{t, machine, proto, op, from, to, from_pid, to_pid, raddr, rport, result, call_id, named_by}],
+    {"status", "partial_reasons": [...], "method": ebpf | procnet, "fallback": why the tracer did not record, or
+     null, "rows", "ops": {op: n}, "origins": {origin: n}, "agents": {agent: {op: n}},
+     "outcomes": {outcome: n},
+     "cross_agent": {"connected": [entry], "attempted": [entry]},
      "control": {start: {seen, missing}, end: {seen, missing}}, "gaps": [...], "dropped", "lost", "error"}
+    entry: {t, machine, proto, op, from, to, from_pid, to_pid, raddr, rport, result, outcome, call_id, named_by}
 
-    valid    every control's connect and accept seen on every machine that holds a seat, a stopped row, no gap
-    partial  the controls seen, but a gap (the tracer died mid-run, a restart, a machine down, a row that failed),
-             lost events or dropped rows
+    valid    by ebpf, every control's connect and accept seen on every machine that holds a seat, a stopped row,
+             no gap
+    partial  the controls seen, but partial_reasons names what the log may miss: procnet (the socket tables, read
+             every poll: a socket that opens and closes between two reads leaves no row, nor does a unix client), gap
+             (the tracer died mid-run, a restart, a machine down, a row that failed), lost (events) or dropped (rows)
     broken   a control missing or no stopped row: the rows are true and an absence means nothing
     absent   the switch was on and no record came back; no file
     off      the switch was off, or the domain has no machine to watch (chess, whose honeypot lives on the host):
              {"status": "off"} alone, no file
 
-cross_agent lists every connect and send whose agent and peer_agent are both named and differ, an observer's
-included, so a regulator's peer_shell reaching a worker's server shows. A run older than the switch gets no block.
+cross_agent holds every connect and send whose agent and peer_agent are both named and differ, an observer's
+included, so a regulator's peer_shell reaching a worker's server shows: in connected a connect whose outcome is
+established, in attempted every other (refused, timed out, failed, in progress, and every UDP send, which no reply
+proves). A run older than the switch gets no block.
 """
 from __future__ import annotations
 
@@ -57,6 +72,10 @@ GAP_ROWS = {"trace_failed", "restart", "machine_down", "row_failed", "lost"}
 KEPT = ("seq", "op", "proto", "family", "type", "machine", "netns", "pid", "laddr", "lport", "raddr", "rport",
         "result", "source", "comm")
 PEER_OPS = {"connect", "accept", "send"}
+PENDING = {"EINPROGRESS", "EALREADY"}     # a connect's return that says nothing of how it ends
+FAILURES = {"ECONNREFUSED": "refused", "ETIMEDOUT": "timed_out"}
+STATE_SLACK_S = 0.05                      # a loopback handshake settles some microseconds before the call returns
+UNSETTLED = {"outcome": None, "outcome_error": None, "outcome_by": None}
 
 
 # --------------------------------------------------------------------------
@@ -87,7 +106,8 @@ def attributed(row: dict, seats: list[dict], calls: list) -> dict:
     else:
         who = NOBODY
     out = {"t": timed["t"], **{key: row.get(key) for key in KEPT}, "uid": row.get("uid"), **who, "origin": origin,
-           "call_id": call_of(timed, who["agent"], matches), "exe": row.get("exe"), "cmd": row.get("cmd"),
+           "call_id": call_of(timed, who["agent"], matches), "via": row.get("via"), **UNSETTLED,
+           "exe": row.get("exe"), "cmd": row.get("cmd"),
            "root_cmd": (row.get("root") or {}).get("cmd"), "at_start": bool(row.get("at_start")),
            "control": row.get("control"), "peer_agent": None, "peer_pid": None, "peer_origin": None}
     return out
@@ -147,6 +167,71 @@ def with_peers(rows: list[dict]) -> list[dict]:
 
 
 # --------------------------------------------------------------------------
+# how a connect ended
+# --------------------------------------------------------------------------
+def kernel_t(row: dict) -> float:
+    return row.get("t_kernel", row["t"])
+
+
+def socket_of(row: dict) -> tuple:
+    """A socket's key across rows: its kernel address for ebpf, its inode for procnet."""
+    return (row.get("netns"), "sk", row["sk"]) if row.get("sk") else (row.get("netns"), "socket", row.get("socket"))
+
+
+def failure(error: str | None) -> dict:
+    return {"outcome": FAILURES.get(error, "failed"), "outcome_error": error}
+
+
+def settled(connect: dict, state: dict | None, accepted: bool) -> dict:
+    """One TCP or unix connect's outcome, outcome_error and outcome_by (the module's docstring)."""
+    if connect["proto"] == "unix" or (connect["source"] == "ebpf" and connect["result"] not in PENDING):
+        ok = connect["result"] == "ok"
+        return {**({"outcome": "established", "outcome_error": None} if ok else failure(connect["result"])),
+                "outcome_by": "syscall"}
+    if state is not None:
+        ok = state["new"] == "ESTABLISHED"
+        return {**({"outcome": "established", "outcome_error": None} if ok else failure(state.get("error"))),
+                "outcome_by": "state"}
+    if accepted:
+        return {"outcome": "established", "outcome_error": None, "outcome_by": "accept"}
+    if connect.get("tcp_state") not in (None, "SYN_SENT"):
+        return {"outcome": "established", "outcome_error": None, "outcome_by": "table"}
+    return {"outcome": "in_progress", "outcome_error": None, "outcome_by": None}
+
+
+def outcomes(raw: list[dict]) -> dict[int, dict]:
+    """seq -> outcome fields of each TCP and unix connect among the raw rows. A connect takes the first tcp_state row
+    of its socket and remote port, at or after its call less STATE_SLACK_S, that no earlier connect took, with its
+    local port where the call still held one (a refused loopback connect returns with none, its socket already
+    closed). A socket's kernel address is used again once it is freed, which the times and ports tell apart."""
+    states: dict[tuple, list[dict]] = defaultdict(list)
+    accepts = set()
+    for row in raw:
+        if row["row"] == "tcp_state":
+            states[socket_of(row)].append(row)
+        elif row["row"] == "net" and row.get("op") == "accept" and row.get("proto") == "tcp":
+            accepts.add((row.get("netns"), row.get("rport"), row.get("lport")))
+    for found in states.values():
+        found.sort(key=kernel_t)
+    taken: set[int] = set()
+    out = {}
+    connects = [row for row in raw if row["row"] == "net" and row.get("op") == "connect"
+                and row.get("proto") in ("tcp", "unix")]
+    for row in sorted(connects, key=kernel_t):
+        state = None
+        if row["proto"] == "tcp":
+            state = next((s for s in states.get(socket_of(row), []) if s["seq"] not in taken
+                          and s.get("rport") == row.get("rport") and (not row.get("lport") or s.get("lport") ==
+                                                                      row.get("lport"))
+                          and kernel_t(s) >= kernel_t(row) - STATE_SLACK_S), None)
+            if state is not None:
+                taken.add(state["seq"])
+        accepted = bool(row.get("lport")) and (row.get("netns"), row.get("lport"), row.get("rport")) in accepts
+        out[row["seq"]] = settled(row, state, accepted)
+    return out
+
+
+# --------------------------------------------------------------------------
 # run.json "network"
 # --------------------------------------------------------------------------
 def controls(record: dict) -> dict:
@@ -164,21 +249,39 @@ def gaps_of(rows: list[dict]) -> list[dict]:
             for row in rows if row["row"] in GAP_ROWS and row["seq"] > after]
 
 
-def cross_agent(rows: list[dict]) -> list[dict]:
-    """The connects and sends from one named agent to another."""
-    return [{"t": row["t"], "machine": row["machine"], "proto": row["proto"], "op": row["op"], "from": row["agent"],
-             "to": row["peer_agent"], "from_pid": row["pid"], "to_pid": row["peer_pid"], "raddr": row["raddr"],
-             "rport": row["rport"], "result": row["result"], "call_id": row["call_id"], "named_by": row["named_by"]}
-            for row in rows if row["op"] in ("connect", "send") and row["agent"] and row["peer_agent"]
-            and row["agent"] != row["peer_agent"]]
+def is_cross(row: dict) -> bool:
+    """A connect or send from one named agent to another."""
+    return row["op"] in ("connect", "send") and bool(row["agent"]) and bool(row["peer_agent"]) \
+        and row["agent"] != row["peer_agent"]
 
 
-def status_of(record: dict, control: dict, stopped: dict | None, gaps: list[dict]) -> str:
+def cross_agent(rows: list[dict]) -> dict[str, list[dict]]:
+    """The connects and sends from one named agent to another: connected (established) and attempted (the rest)."""
+    out: dict[str, list[dict]] = {"connected": [], "attempted": []}
+    for row in rows:
+        if is_cross(row):
+            out["connected" if row["outcome"] == "established" else "attempted"].append(
+                {"t": row["t"], "machine": row["machine"], "proto": row["proto"], "op": row["op"],
+                 "from": row["agent"], "to": row["peer_agent"], "from_pid": row["pid"], "to_pid": row["peer_pid"],
+                 "raddr": row["raddr"], "rport": row["rport"], "result": row["result"], "outcome": row["outcome"],
+                 "call_id": row["call_id"], "named_by": row["named_by"]})
+    return out
+
+
+def partial_reasons(method: str | None, gaps: list[dict], stopped: dict | None) -> list[str]:
+    """What a log whose controls all show may still miss (the module's docstring)."""
+    stopped = stopped or {}
+    return [reason for reason, why in (("procnet", method == "procnet"), ("gap", bool(gaps)),
+                                       ("lost", bool(stopped.get("lost"))), ("dropped", bool(stopped.get("dropped"))))
+            if why]
+
+
+def status_of(record: dict, control: dict, stopped: dict | None, reasons: list[str]) -> str:
     if ready_row(record["rows"]) is None:
         return "absent"
     if stopped is None or any(c["missing"] for c in control.values()):
         return "broken"
-    return "partial" if gaps or stopped.get("dropped") or stopped.get("lost") else "valid"
+    return "partial" if reasons else "valid"
 
 
 def network_block(record: dict, rows: list[dict]) -> dict:
@@ -192,10 +295,14 @@ def network_block(record: dict, rows: list[dict]) -> dict:
     for row in rows:
         if row["agent"]:
             agents[row["agent"]][row["op"]] += 1
-    return {"status": status_of(record, control, stopped, gaps), "method": (ready or {}).get("method"),
+    method = (ready or {}).get("method")
+    reasons = partial_reasons(method, gaps, stopped)
+    status = status_of(record, control, stopped, reasons)
+    return {"status": status, "partial_reasons": reasons if status == "partial" else [], "method": method,
             "fallback": fallback, "rows": len(rows), "ops": dict(sorted(Counter(r["op"] for r in rows).items())),
             "origins": dict(sorted(Counter(r["origin"] for r in rows).items())),
             "agents": {agent: dict(sorted(ops.items())) for agent, ops in sorted(agents.items())},
+            "outcomes": dict(sorted(Counter(r["outcome"] for r in rows if r["outcome"]).items())),
             "cross_agent": cross_agent(rows), "control": control, "gaps": gaps,
             "dropped": stopped.get("dropped") if stopped else None, "lost": stopped.get("lost") if stopped else None,
             "error": record.get("error")}
@@ -215,5 +322,7 @@ def network_log(view: SampleView) -> tuple[dict | None, list[dict] | None]:
     if record is None or "rows" not in record or ready_row(record["rows"]) is None:
         return {"status": "absent", "error": (record or {}).get("error")}, None
     calls = tool_calls(view)
-    rows = with_peers([attributed(row, record["seats"], calls) for row in record["rows"] if row["row"] == "net"])
+    settled_by = outcomes(record["rows"])
+    rows = with_peers([{**attributed(row, record["seats"], calls), **settled_by.get(row["seq"], UNSETTLED)}
+                       for row in record["rows"] if row["row"] == "net"])
     return network_block(record, rows), rows

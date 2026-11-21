@@ -169,7 +169,7 @@ files:
       knowledge: knowledge work's block (row, pieces, the review tool's verdicts)
       interview: the interview task's block
       openmath: openmath's block (row, archive slices)
-      network: 'the network log''s `status` (`valid`, `partial`, `broken`, `absent`, `off`), its method, its counts by op, origin and agent, and `cross_agent`: every connect or send from one named agent to another'
+      network: 'the network log''s `status` (`valid`, `partial`, `broken`, `absent`, `off`) and `partial_reasons`, its method, its counts by op, origin, agent and connect outcome, and `cross_agent`: every connect or send from one named agent to another, `connected` (established) or `attempted`'
       delivery: the stop-after-delivery record
       peer_shell: "the influencers' peer shells: the observers' uids, their calls, what their reaps killed"
       deliverables: openmath's deliverables scorer's record

@@ -9,6 +9,7 @@ import pytest
 from inspect_ai.event import SpanBeginEvent, ToolEvent
 
 from src.export import _export_network_log as export
+from src.export import _export_run_blocks as blocks
 from src.sandbox.access_log import access_monitor_daemon as daemon
 from src.sandbox.network_log.network_monitor import STORE
 
@@ -105,10 +106,13 @@ def test_an_observer_connecting_to_a_workers_server_is_a_cross_agent_connection(
     assert (client["peer_agent"], client["peer_pid"], accept["peer_agent"], accept["peer_pid"]) == \
         (WORKER, 700, REGULATOR, 800)
     assert client["t"] == START + 20 and client["machine"] == WORKER and client["uid"] == 3001
-    [cross] = block["cross_agent"]
+    [cross] = block["cross_agent"]["connected"]
     assert cross == {"t": START + 20, "machine": WORKER, "proto": "tcp", "op": "connect", "from": REGULATOR,
                      "to": WORKER, "from_pid": 800, "to_pid": 700, "raddr": "127.0.0.1", "rport": 8123,
-                     "result": "ok", "call_id": "r1", "named_by": "observer"}
+                     "result": "ok", "outcome": "established", "call_id": "r1", "named_by": "observer"}
+    assert block["cross_agent"]["attempted"] == [] and block["outcomes"] == {"established": 3}
+    assert (client["outcome"], client["outcome_by"], server["outcome"], accept["outcome"]) == \
+        ("established", "syscall", None, None)
     assert block["agents"] == {REGULATOR: {"connect": 1}, WORKER: {"accept": 1, "listen": 1}}
     assert block["ops"] == {"accept": 3, "connect": 3, "listen": 3} and block["origins"]["control"] == 6
 
@@ -152,13 +156,15 @@ def test_unix_and_udp_peers_come_from_the_path_and_the_bound_port():
     by_seq = {row["seq"]: row for row in rows}
     assert (by_seq[21]["peer_agent"], by_seq[22]["peer_agent"], by_seq[24]["peer_agent"]) == \
         (WORKER, REGULATOR, WORKER)
-    assert [(c["proto"], c["op"]) for c in block["cross_agent"]] == [("unix", "connect"), ("udp", "send")]
+    assert [(c["proto"], c["op"], c["outcome"]) for c in block["cross_agent"]["connected"]] == \
+        [("unix", "connect", "established")]
+    assert [(c["proto"], c["op"], c["outcome"]) for c in block["cross_agent"]["attempted"]] == [("udp", "send", None)]
 
 
 def test_one_agent_talking_to_itself_is_no_cross_agent_connection():
     own = {**CLIENT, "uid": 1001, "kernel_uid": 1001, "command": "python3 srv.py &", "root": root("python3 srv.py &")}
     block, _ = exported(SERVER, own)
-    assert block["cross_agent"] == []
+    assert block["cross_agent"] == {"connected": [], "attempted": []}
 
 
 # --------------------------------------------------------------------------
@@ -188,18 +194,34 @@ def test_a_gap_reads_partial(trouble):
     assert block["status"] == "partial" and block["gaps"][0]["row"] == trouble["row"]
 
 
-def test_a_tracer_that_never_attached_is_the_methods_fallback_and_no_gap():
+def test_a_tracer_that_never_attached_is_the_methods_fallback_no_gap_and_partial():
+    """The socket tables miss what opens and closes between two reads: a procnet log reads partial, for procnet."""
     failed = {"seq": 0, "t": START, "row": "trace_failed", "error": "no tracer mounted"}
     raw = record(SERVER, ready={**READY, "method": "procnet"})
     raw["rows"].insert(0, failed)
     block, _ = export.network_log(view({STORE: raw}, *CALLS))
-    assert (block["status"], block["method"], block["fallback"], block["gaps"]) == \
-        ("valid", "procnet", "no tracer mounted", [])
+    assert (block["status"], block["partial_reasons"], block["method"], block["fallback"], block["gaps"]) == \
+        ("partial", ["procnet"], "procnet", "no tracer mounted", [])
+    assert exported(SERVER)[0]["partial_reasons"] == []
 
 
 def test_dropped_rows_read_partial():
     block, _ = exported(SERVER, stopped={**STOPPED, "dropped": 3})
-    assert block["status"] == "partial" and block["dropped"] == 3
+    assert block["status"] == "partial" and block["dropped"] == 3 and block["partial_reasons"] == ["dropped"]
+
+
+@pytest.mark.parametrize(("network", "flag"), [
+    ({"status": "valid", "partial_reasons": []}, None),
+    ({"status": "partial", "partial_reasons": ["procnet"]}, "network log: partial (procnet)"),
+    ({"status": "partial", "partial_reasons": ["gap", "lost"]}, "network log: partial (gap, lost)"),
+    ({"status": "broken"}, "network log: broken"),
+    ({"status": "absent", "error": None}, "network log: absent"),
+    ({"status": "off"}, None),
+    (None, None),
+])
+def test_a_network_log_that_is_not_valid_flags_the_runs_validity(network, flag):
+    block = blocks.validity_block([], None, None, network)
+    assert block["flags"] == ([flag] if flag else []) and block["ok"] is (flag is None)
 
 
 @pytest.mark.parametrize(("config", "store", "want"), [
@@ -220,10 +242,98 @@ def test_a_domain_without_a_sidecar_reads_off(monkeypatch):
     assert export.network_log(view({}))[0] == {"status": "off"}
 
 
+# --------------------------------------------------------------------------
+# how a connect ended
+# --------------------------------------------------------------------------
+SK = 18446576088245340480
+
+
+def state(seq: int, t: float, *, lport: int, rport: int, new: str, error: str | None = None, sk: int = SK,
+          **fields) -> dict:
+    """A raw tcp_state row of the socket at `sk` leaving SYN_SENT."""
+    return {"seq": seq, "t": t + 0.01, "t_kernel": t, "row": "tcp_state", "netns": NS, "sk": sk, "lport": lport,
+            "rport": rport, "old": "SYN_SENT", "new": new, "error": error, "machine": WORKER, "source": "ebpf",
+            **fields}
+
+
+def connecting(seq: int, t: float, *, lport: int, result: str, sk: int = SK, **fields) -> dict:
+    """The observer's curl connecting to 8123 from `lport`, its socket at `sk`."""
+    return net("connect", seq=seq, t=t, pid=800 + seq, uid=3001, lport=lport, raddr="127.0.0.1", rport=8123,
+               command="curl localhost:8123", result=result, sk=sk, **fields)
+
+
+def by_seq(rows: list[dict]) -> dict[int, dict]:
+    return {row["seq"]: row for row in rows}
+
+
+def test_a_connect_that_did_not_wait_takes_its_sockets_state_change_and_splits_cross_agent():
+    """On loopback the kernel settles the handshake just before the call returns: the established one is connected,
+    the refused one (its port already gone, its socket's address used again later) attempted, a blocking refusal
+    reads from its own return, and a state change far before a call is not that call's."""
+    rows = (SERVER,
+            state(30, START + 20.0, lport=40001, rport=8123, new="ESTABLISHED"),
+            connecting(31, START + 20.00004, lport=40001, result="EINPROGRESS"),
+            state(32, START + 21.0, lport=40002, rport=8123, new="CLOSE", error="ECONNREFUSED"),
+            connecting(33, START + 21.00002, lport=0, result="EINPROGRESS"),
+            state(34, START + 22.0, lport=40003, rport=8123, new="CLOSE", error="ECONNREFUSED"),
+            connecting(35, START + 22.00001, lport=0, result="ECONNREFUSED"),
+            state(36, START + 10.0, lport=40004, rport=8123, new="CLOSE", error="ETIMEDOUT", sk=SK + 1),
+            connecting(37, START + 20.5, lport=40004, result="EINPROGRESS", sk=SK + 1))
+    block, out = exported(*rows)
+    got = {seq: (row["outcome"], row["outcome_error"], row["outcome_by"]) for seq, row in by_seq(out).items()
+           if row["op"] == "connect"}
+    assert got == {31: ("established", None, "state"), 33: ("refused", "ECONNREFUSED", "state"),
+                   35: ("refused", "ECONNREFUSED", "syscall"), 37: ("in_progress", None, None)}
+    assert [c["outcome"] for c in block["cross_agent"]["connected"]] == ["established"]
+    assert sorted(c["outcome"] for c in block["cross_agent"]["attempted"]) == ["in_progress", "refused", "refused"]
+    assert block["outcomes"] == {"established": 3, "in_progress": 1, "refused": 2}
+    assert block["rows"] == len(out) + 6 and all(row["op"] != "tcp_state" for row in out)
+
+
+def test_a_state_change_after_a_call_that_did_not_wait_settles_it():
+    """A remote server answers after the call returned: the state change comes later and still settles it."""
+    _, out = exported(SERVER, connecting(31, START + 20, lport=40001, result="EINPROGRESS"),
+                      state(32, START + 23, lport=40001, rport=8123, new="CLOSE", error="ETIMEDOUT"))
+    assert (by_seq(out)[31]["outcome"], by_seq(out)[31]["outcome_error"]) == ("timed_out", "ETIMEDOUT")
+
+
+def test_an_accept_or_the_table_settles_a_connect_no_state_change_settled():
+    accepted = connecting(31, START + 20, lport=46152, result="EINPROGRESS")
+    _, out = exported(SERVER, accepted, ACCEPT)
+    assert (by_seq(out)[31]["outcome"], by_seq(out)[31]["outcome_by"]) == ("established", "accept")
+    table = {"source": "procnet", "result": "ok", "sk": None}
+    seen = connecting(31, START + 20, lport=40001, socket=9001, tcp_state="ESTABLISHED", **table)
+    pending = connecting(32, START + 20, lport=40002, socket=9002, tcp_state="SYN_SENT", **table)
+    later = state(33, START + 20.3, lport=40002, rport=8123, new="CLOSE", sk=None, socket=9002, source="procnet")
+    _, out = exported(SERVER, seen, pending, later)
+    assert [(by_seq(out)[k]["outcome"], by_seq(out)[k]["outcome_by"]) for k in (31, 32)] == \
+        [("established", "table"), ("failed", "state")]
+
+
+def test_a_unix_connect_reads_from_its_return_and_a_udp_one_has_no_outcome():
+    unix = {"proto": "unix", "laddr": None, "lport": None, "raddr": "/var/run/nscd/socket"}
+    nscd = net("connect", seq=40, t=START + 5, pid=700, uid=1001, result="ENOENT", **unix)
+    udp = net("connect", seq=41, t=START + 6, pid=700, uid=1001, proto="udp", type="dgram", lport=5000,
+              raddr="127.0.0.1", rport=53)
+    _, out = exported(SERVER, nscd, udp)
+    assert (by_seq(out)[40]["outcome"], by_seq(out)[40]["outcome_error"]) == ("failed", "ENOENT")
+    assert by_seq(out)[41]["outcome"] is None
+
+
+def test_a_row_named_through_an_ancestor_keeps_its_call():
+    """bash's /dev/tcp child, gone before /proc was read, came with its parent's chain and root: its origin and its
+    call follow the root, and via says which ancestor named it."""
+    child = {**CLIENT, "cmd": None, "exe": None, "comm": "bash", "via": 650}
+    _, (_, row) = exported(SERVER, child)
+    assert (row["origin"], row["agent"], row["call_id"], row["via"]) == ("agent", REGULATOR, "r1", 650)
+
+
 def test_each_row_holds_the_documented_keys():
     _, rows = exported(SERVER, CLIENT, ACCEPT)
     for name in ("seq", "t", "op", "proto", "family", "type", "machine", "netns", "pid", "uid", "user", "agent",
-                 "named_by", "origin", "call_id", "exe", "cmd", "root_cmd", "comm", "laddr", "lport", "raddr", "rport",
-                 "result", "source", "at_start", "control", "peer_agent", "peer_pid", "peer_origin"):
+                 "named_by", "origin", "call_id", "via", "exe", "cmd", "root_cmd", "comm", "laddr", "lport", "raddr",
+                 "rport", "result", "outcome", "outcome_error", "outcome_by", "source", "at_start", "control",
+                 "peer_agent", "peer_pid", "peer_origin"):
         assert all(name in row for row in rows), name
-    assert all(name in export.__doc__ for name in ("peer_origin", "at_start", "cross_agent"))
+    assert all(name in export.__doc__ for name in ("peer_origin", "at_start", "cross_agent", "outcome_by", "via",
+                                                    "partial_reasons", "attempted"))

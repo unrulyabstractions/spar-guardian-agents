@@ -8,14 +8,18 @@
 #   --json FILE      also write the report as JSON
 #
 # Run it on a box as root after box_kernel.sh, or on the Mac against Colima. It rents nothing and calls no model.
-# It starts two containers from IMG and removes them at exit:
+# It builds the tracer's image as the run does (src/sandbox/network_log/network_monitor.py TRACER_IMAGE, from the
+# same Dockerfile, kept when one with the AppImage's digest is there), reads the kernel's facts in a throwaway
+# container with /boot bound, then starts two containers from IMG and removes them at exit:
 #   target  network none, like an agent's machine: a server as uid 1001, a client as the observer uid 3001
-#   helper  the access-log sidecar's shape: the host's pid namespace, SYS_ADMIN, SYS_PTRACE, no network, and
-#           /sys/kernel/tracing and /boot bound read-only
+#   helper  the network log's sidecar exactly (network_monitor.with_network_monitor): an init, no network, the host's
+#           pid namespace, BPF, PERFMON and SYS_PTRACE and no SYS_ADMIN, the tracer's image mounted at /nix and
+#           /sys/kernel/tracing bound read-only; without a tracer image, the same with no mounts (the run's procnet)
 # and tests in order:
-#   ebpf      bpftrace (fexit on inet_listen, inet_stream_connect, inet_csk_accept) in the helper, filtered to the
-#             target's network namespace: works when it names the listen by 1001, the connect by 3001 and the accept
-#             by 1001 with the client's port
+#   ebpf      bpftrace (fexit on inet_listen, inet_stream_connect, inet_csk_accept, and the tracepoint
+#             sock:inet_sock_set_state) in the helper, filtered to the target's network namespace: works when it names
+#             the listen by 1001, the connect by 3001, the accept by 1001 with the client's port and the client's
+#             socket leaving SYN_SENT for ESTABLISHED
 #   kprobe    the same kernel functions by kprobe, attach only: the fallback when fexit is refused
 #   procnet   the target's /proc/<pid>/net/{tcp,tcp6,udp,udp6,unix} and its processes' fds, standard library only:
 #             works when it names the listener's and the client's pid and uid
@@ -65,20 +69,11 @@ report() { printf -v "result_$1" '%s' "$2"; printf -v "detail_$1" '%s' "$3"; pri
 result_of() { local name=result_$1; echo "${!name:-}"; }
 detail_of() { local name=detail_$1; echo "${!name:-}"; }
 
-docker run -d --name "$target" --label network_trace_check=1 --network none --init --memory 256m \
-  --entrypoint tail "$image" -f /dev/null > /dev/null
-docker run -d --name "$helper" --label network_trace_check=1 --network none --pid host --memory 768m \
-  --cap-add SYS_ADMIN --cap-add SYS_PTRACE \
-  -v /sys/kernel/tracing:/sys/kernel/tracing:ro -v /boot:/host-boot:ro \
-  --entrypoint tail "$image" -f /dev/null > /dev/null
-pid=$(docker inspect -f '{{.State.Pid}}' "$target")
-netns=$(docker exec "$helper" readlink "/proc/$pid/ns/net" | tr -dc 0-9)
-[ -n "$netns" ] || { echo "refused: the helper cannot see the target's network namespace" >&2; exit 1; }
-
 # ---------------------------------------------------------------- the kernel
-kernel=$(docker exec "$helper" uname -r)
-arch=$(docker exec "$helper" uname -m)
-facts=$(docker exec -i "$helper" bash -s "$kernel" <<'EOF'
+arch=$(docker info --format '{{.Architecture}}')
+kernel=$(docker run --rm --network none --entrypoint uname "$image" -r)
+facts=$(docker run --rm -i --network none -v /sys/kernel/tracing:/sys/kernel/tracing:ro -v /boot:/host-boot:ro \
+  --entrypoint bash "$image" -s "$kernel" <<'EOF'
 config=/host-boot/config-$1
 for option in CONFIG_BPF_SYSCALL CONFIG_BPF_JIT CONFIG_DEBUG_INFO_BTF CONFIG_FTRACE_SYSCALLS CONFIG_KPROBES \
               CONFIG_FANOTIFY_ACCESS_PERMISSIONS CONFIG_NF_CONNTRACK_EVENTS; do
@@ -98,6 +93,81 @@ EOF
 echo "kernel     $kernel $arch"
 echo "$facts" | tr '\n' ' ' | fold -s -w 118 | sed 's/^/           /'
 echo
+
+# ---------------------------------------------------------------- the tracer's image, as the run builds it
+TRACER_IMAGE=network-trace-bpftrace:$BPFTRACE_VERSION-$arch
+TRACER_LABEL=network_trace.appimage_sha256
+tracer_image=
+tracer_why=
+if [ -z "$bpftrace_file" ]; then
+  bpftrace_file=$cache/bpftrace-$BPFTRACE_VERSION-$arch
+  if [ ! -s "$bpftrace_file" ] && [ -n "$(pinned_sha256 "$arch")" ]; then
+    mkdir -p "$cache"
+    if curl -fsSL -o "$bpftrace_file.part" \
+        "https://github.com/bpftrace/bpftrace/releases/download/$BPFTRACE_VERSION/bpftrace-$arch"; then
+      mv "$bpftrace_file.part" "$bpftrace_file"
+    else
+      rm -f "$bpftrace_file.part"
+    fi
+  fi
+fi
+expected=$(pinned_sha256 "$arch")
+if [ ! -s "$bpftrace_file" ]; then
+  tracer_why="no bpftrace AppImage for $arch (give --bpftrace FILE)"
+else
+  sum=$( (sha256sum "$bpftrace_file" 2>/dev/null || shasum -a 256 "$bpftrace_file") | cut -d' ' -f1)
+  if [ -z "$expected" ] || [ "$sum" != "$expected" ]; then
+    tracer_why="$bpftrace_file has sha256 $sum, not the pinned $BPFTRACE_VERSION's"
+  elif [ "$(docker image inspect --format "{{index .Config.Labels \"$TRACER_LABEL\"}}" "$TRACER_IMAGE" 2>/dev/null)" = "$sum" ]; then
+    tracer_image=$TRACER_IMAGE
+  else
+    # network_monitor.TRACER_DOCKERFILE, word for word (tests/unit/test_network_monitor.py holds them equal)
+    context=$(mktemp -d "${TMPDIR:-/tmp}/network-trace-check.XXXXXX")
+    cp "$bpftrace_file" "$context/bpftrace.AppImage"
+    cat > "$context/Dockerfile" <<'DOCKERFILE'
+ARG BASE
+FROM ${BASE} AS unpack
+COPY bpftrace.AppImage /tmp/bpftrace.AppImage
+RUN cd /tmp && chmod +x bpftrace.AppImage && ./bpftrace.AppImage --appimage-extract >/dev/null
+FROM scratch
+COPY --from=unpack /tmp/squashfs-root/nix/store /store
+ARG SHA256
+LABEL network_trace.appimage_sha256=$SHA256
+DOCKERFILE
+    if built=$(docker build -q --build-arg "BASE=$image" --build-arg "SHA256=$sum" -t "$TRACER_IMAGE" "$context" 2>&1); then
+      tracer_image=$TRACER_IMAGE
+    else
+      tracer_why="docker build $TRACER_IMAGE: $(echo "$built" | tail -1)"
+    fi
+    rm -rf "$context"
+  fi
+fi
+
+# ---------------------------------------------------------------- the two containers
+docker run -d --name "$target" --label network_trace_check=1 --network none --init --memory 256m \
+  --entrypoint tail "$image" -f /dev/null > /dev/null
+# The sidecar's shape: network_monitor.NETWORK_CAPS, tracer_mounts and staging.compose_service, no SYS_ADMIN.
+SIDECAR_CAPS=(--cap-add BPF --cap-add PERFMON --cap-add SYS_PTRACE)
+helper_args=(--label network_trace_check=1 --network none --init --pid host --memory 1g "${SIDECAR_CAPS[@]}")
+mounted=no
+if [ -n "$tracer_image" ]; then
+  if docker run -d --name "$helper" "${helper_args[@]}" \
+      --mount "type=image,source=$tracer_image,target=/nix" -v /sys/kernel/tracing:/sys/kernel/tracing:ro \
+      --entrypoint tail "$image" -f /dev/null > /dev/null 2> "${TMPDIR:-/tmp}/network-trace-check-$run_id.err"; then
+    mounted=yes
+  else
+    tracer_why="this Docker mounts no image: $(tail -1 "${TMPDIR:-/tmp}/network-trace-check-$run_id.err")"
+    docker rm -f "$helper" > /dev/null 2>&1 || true
+  fi
+  rm -f "${TMPDIR:-/tmp}/network-trace-check-$run_id.err"
+fi
+if [ $mounted = no ]; then
+  docker run -d --name "$helper" "${helper_args[@]}" --entrypoint tail "$image" -f /dev/null > /dev/null
+fi
+echo "helper     pid host, network none, BPF PERFMON SYS_PTRACE, no SYS_ADMIN, tracer mounted: $mounted"
+pid=$(docker inspect -f '{{.State.Pid}}' "$target")
+netns=$(docker exec "$helper" readlink "/proc/$pid/ns/net" | tr -dc 0-9)
+[ -n "$netns" ] || { echo "refused: the helper cannot see the target's network namespace" >&2; exit 1; }
 
 # ---------------------------------------------------------------- the target's server and client
 start_server() {  # a listener as SERVER_UID that accepts once and holds the connection
@@ -125,35 +195,14 @@ stop_target_processes() {
 
 # ---------------------------------------------------------------- ebpf and kprobe
 bpftrace_bin=
-if [ -z "$bpftrace_file" ]; then
-  bpftrace_file=$cache/bpftrace-$BPFTRACE_VERSION-$arch
-  if [ ! -s "$bpftrace_file" ] && [ -n "$(pinned_sha256 "$arch")" ]; then
-    mkdir -p "$cache"
-    if curl -fsSL -o "$bpftrace_file.part" \
-        "https://github.com/bpftrace/bpftrace/releases/download/$BPFTRACE_VERSION/bpftrace-$arch"; then
-      mv "$bpftrace_file.part" "$bpftrace_file"
-    else
-      rm -f "$bpftrace_file.part"
-    fi
-  fi
-fi
-if [ ! -s "$bpftrace_file" ]; then
-  report ebpf "not tested" "no bpftrace AppImage for $arch (give --bpftrace FILE)"
-  report kprobe "not tested" "no bpftrace"
+if [ $mounted = no ]; then
+  report ebpf "not tested" "$tracer_why"
+  report kprobe "not tested" "no tracer mounted"
 else
-  sum=$( (sha256sum "$bpftrace_file" 2>/dev/null || shasum -a 256 "$bpftrace_file") | cut -d' ' -f1)
-  expected=$(pinned_sha256 "$arch")
-  if [ -n "$expected" ] && [ "$sum" != "$expected" ]; then
-    report ebpf "not tested" "$bpftrace_file has sha256 $sum, not the pinned $BPFTRACE_VERSION's"
-    report kprobe "not tested" "no trusted bpftrace"
-  else
-    # The release is a nix-built AppImage. Its own runner mounts a tmpfs, which Docker's AppArmor profile refuses, so
-    # the helper unpacks it and runs the store's binary through /nix.
-    docker cp "$bpftrace_file" "$helper:/opt/bpftrace.AppImage" > /dev/null
-    bpftrace_bin=$(docker exec -w /opt "$helper" bash -c 'chmod +x bpftrace.AppImage &&
-      ./bpftrace.AppImage --appimage-extract > /dev/null && rm bpftrace.AppImage && [ ! -e /nix ] &&
-      ln -s /opt/squashfs-root/nix /nix && readlink /opt/squashfs-root/entrypoint') || bpftrace_bin=
-  fi
+  # the path the daemon globs (network_monitor_daemon.TRACER_GLOB)
+  bpftrace_bin=$(docker exec "$helper" sh -c 'ls -d /nix/store/*-bpftrace/bin/bpftrace 2>/dev/null | head -1')
+  [ -n "$bpftrace_bin" ] || { report ebpf fails "no bpftrace under /nix/store in $tracer_image"; \
+    report kprobe "not tested" "no bpftrace"; }
 fi
 
 if [ -n "$bpftrace_bin" ]; then
@@ -169,6 +218,11 @@ fexit:vmlinux:inet_stream_connect /curtask->nsproxy->net_ns->ns.inum == $netns/ 
 fexit:vmlinux:inet_csk_accept /retval != 0 && curtask->nsproxy->net_ns->ns.inum == $netns/ {
   printf("accept %d %d %u %d %d\n", pid, uid, curtask->nsproxy->net_ns->ns.inum,
          retval->__sk_common.skc_num, bswap(retval->__sk_common.skc_dport));
+}
+tracepoint:sock:inet_sock_set_state /args.protocol == 6 && args.oldstate == 2 &&
+    ((struct sock *)args.skaddr)->__sk_common.skc_net.net->ns.inum == $netns/ {
+  printf("state 0 0 %u %d %d %d\n", ((struct sock *)args.skaddr)->__sk_common.skc_net.net->ns.inum, args.sport,
+         args.dport, args.newstate);
 }
 EOF
   docker exec -d "$helper" bash -c "echo \$\$ > /opt/bpftrace.pid; exec $bpftrace_bin -f json /opt/check.bt > /opt/trace.jsonl 2> /opt/trace.err"
@@ -191,12 +245,15 @@ listen = [e for e in events if e[0] == "listen" and int(e[2]) == server and e[3]
 connect = [e for e in events if e[0] == "connect" and int(e[2]) == observer and e[3] == netns and int(e[5]) == port]
 accept = [e for e in events if e[0] == "accept" and int(e[2]) == server and e[3] == netns and int(e[4]) == port
           and connect and int(e[5]) == int(connect[0][4])]
+state = [e for e in events if e[0] == "state" and e[3] == netns and connect and int(e[4]) == int(connect[0][4])
+         and int(e[5]) == port and int(e[6]) == 1]
 lost = [row for row in rows if row.get("type") == "lost_events"]
-if listen and connect and accept and not lost:
+if listen and connect and accept and state and not lost:
     print(f"works listen by uid {server} pid {listen[0][1]}, connect by uid {observer} pid {connect[0][1]} "
-          f"from port {connect[0][4]}, accept by uid {server}")
+          f"from port {connect[0][4]}, accept by uid {server}, its socket SYN_SENT to ESTABLISHED")
 else:
-    print(f"fails listen={len(listen)} connect={len(connect)} accept={len(accept)} lost={len(lost)} rows={len(events)}")
+    print(f"fails listen={len(listen)} connect={len(connect)} accept={len(accept)} state={len(state)} "
+          f"lost={len(lost)} rows={len(events)}")
 EOF
 )
     report ebpf "${verdict%% *}" "$version, fexit, ${verdict#* }"
@@ -284,7 +341,8 @@ echo
 echo "method     $method"
 if [ -n "$json_out" ]; then
   {
-    printf '{"kernel": "%s", "arch": "%s", "image": "%s", "method": "%s", "facts": {' "$kernel" "$arch" "$image" "$method"
+    printf '{"kernel": "%s", "arch": "%s", "image": "%s", "tracer_image": "%s", "tracer_mounted": "%s", "method": "%s", "facts": {' \
+      "$kernel" "$arch" "$image" "$tracer_image" "$mounted" "$method"
     echo "$facts" | awk -F= 'NR > 1 { printf ", " } { printf "\"%s\": \"%s\"", $1, $2 }'
     printf '}, "results": {'
     first=1

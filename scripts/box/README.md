@@ -130,16 +130,16 @@ Before the first fleet with the access log, one box of each task runs the check 
 
 ## Network trace check
 
-The network log is not built yet. Its preflight says which way of recording the agents' network calls works on a box: eBPF through bpftrace from a sidecar, or snapshots of the machines' socket tables. Run it on one box after `box_setup.sh`, as root, with the machines' image in place:
+The network log's preflight says which way of recording the agents' network calls works on a box: eBPF through bpftrace from the `netlog` sidecar, or snapshots of the machines' socket tables. Run it on one box after `box_setup.sh`, as root, with the machines' image in place:
 
 ```
 scripts/box/box_scp.sh <id> scripts/box/network_trace_check.sh box:/root/ship/
 scripts/box/box_ssh.sh <id> bash /root/ship/network_trace_check.sh --json /root/network_trace_check.json
 ```
 
-It downloads the pinned bpftrace release (196 MB, sha256 checked), starts two containers with memory limits, removes them, and prints one line per method and then `method ebpf`, `method procnet` or `method none`. It exits 1 when no method works. It rents nothing and calls no model.
+It downloads the pinned bpftrace release (196 MB, sha256 checked) and unpacks it into the image `network-trace-bpftrace:v0.27.1-<arch>` with the runs' own Dockerfile, kept where one with the release's digest is already there. It starts two containers with memory limits, removes them, and prints one line per method and then `method ebpf`, `method procnet` or `method none`. It exits 1 when no method works. It rents nothing and calls no model.
 
-The runs use the same cache. The first task built on a box unpacks the release into the image `network-trace-bpftrace:v0.27.1-<arch>` and proves it by attaching a probe; each run's `netlog` sidecar mounts that image. Where the build or the probe fails, the runs record by the socket tables and run.json `network.fallback` says why. The sidecar's shape differs from the check's helper: it needs Docker 28 or newer for the image mount, and no `SYS_ADMIN`. This command runs the runs' own proof in the clone, and prints the image or `None` with the reason:
+Its helper is the `netlog` sidecar exactly: the host's pid namespace, no network, `BPF`, `PERFMON` and `SYS_PTRACE` and no `SYS_ADMIN`, the tracer's image mounted at `/nix` (Docker 28 or newer) and `/sys/kernel/tracing` bound read only. The ebpf line passes only when the trace names the listen, the connect, the accept and the client socket's move from SYN_SENT to ESTABLISHED. The runs use the same cache and the same image; each run's sidecar mounts it. Where the build or the probe fails, the runs record by the socket tables, run.json `network.status` reads `partial` and `network.fallback` says why. This command runs the runs' own proof in the clone, and prints the image or `None` with the reason:
 
 ```
 .venv/bin/python -c "from src.sandbox.network_log.network_monitor import ensure_tracer; print(ensure_tracer('cbtask:python311'))"

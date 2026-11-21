@@ -11,18 +11,22 @@ logs/study_smoke/smoke_network/<stamp>/, a fresh directory per invocation. One s
   observer_connect  a subset_sum team with a regulator under peer_shell: a worker's call serves once on loopback while
                     the regulator's peer_shell call connects to it from the worker's machine as the observer uid. The
                     rows name the worker's listen and accept, the regulator's connect by its observer, each one's call
-                    and the other end, and run.json "network" lists the connection as cross-agent, by ebpf
+                    and the other end, and run.json "network" lists the connection as cross-agent and connected, by
+                    ebpf
   observer_protein  the same on a protein design team, a task the transcript viewer lists
   swe_http          a SWE team (flipt-02e2, one machine per agent): a worker leaves `python3 -m http.server` running in
-                    the background, and in a later round the regulator's peer_shell runs curl to it. The worker's listen
-                    and accept, the observer's connect named as the regulator with the worker at the other end, the
-                    cross-agent entry, the counts by agent and both controls on every machine
+                    the background, then writes to it through bash's /dev/tcp from a child shell that exits at once,
+                    and in a later round the regulator's peer_shell runs curl to it. The worker's listen and accept, the
+                    /dev/tcp connect with its call through its parent (via), the observer's connects named as the
+                    regulator with the worker at the other end and established (curl does not wait: its socket's state
+                    change settles it), the connected cross-agent entry, the counts by agent and both controls on every
+                    machine
   openmath_workers  two workers in openmath's one shared container (split layout): one serves http.server in the
                     background while the other runs curl to it in the same round. The loopback guard refuses every
-                    connect, none is accepted, and each connect after the listen names both workers and reads as
-                    cross-agent
-  procnet           the same run with no tracer mounted: the socket tables record it, the fallback says why, and the
-                    connection still reads as cross-agent
+                    connect, none is accepted, each connect reads refused, and each one after the listen names both
+                    workers and reads as an attempted cross-agent call, none connected
+  procnet           the same run as observer_connect with no tracer mounted: the socket tables record it, the fallback
+                    says why, the status reads partial for procnet, and the connection still reads as cross-agent
   monitor_killed    the daemon dies mid-run: the end control is missing, status broken, earlier rows kept
   network_off       network_log=false: no block but {"status": "off"}, no file, no record in the store
 """
@@ -69,6 +73,8 @@ HTTP_START = f"cd /tmp && nohup python3 -m http.server {HTTP_PORT} --bind 127.0.
 HTTP_SERVE = f"{HTTP_START} sleep 1.5; echo started"
 # The same server held for the length of the call, for a layout that reaps an agent's processes after each command.
 HTTP_HOLD = f"{HTTP_START} sleep 10; echo held"
+# A write to the server through bash's /dev/tcp in a child shell, which exits before the monitor reads /proc.
+DEV_TCP = f"bash -c 'echo hi > /dev/tcp/127.0.0.1/{HTTP_PORT}'; echo wrote"
 # curl to the server, retrying a refused connect, then curl's own exit code.
 CURL = (f"curl -s -o /dev/null --retry 8 --retry-connrefused --retry-delay 1 -w '%{{http_code}}' "
         f"http://127.0.0.1:{HTTP_PORT}/; echo \" exit=$?\"")
@@ -115,8 +121,11 @@ def observer_script(config: SwarmConfig) -> tuple[dict, str, str]:
 
 
 def assert_connection(run: Networked, worker: str, regulator: str, method: str) -> dict:
-    """The worker's listen and accept, the regulator's connect, each one's call and peer, and the cross-agent entry."""
-    assert run.block["status"] == "valid" and run.block["method"] == method, run.block
+    """The worker's listen and accept, the regulator's connect, each one's call and peer, and the cross-agent entry:
+    valid by ebpf, partial for procnet by the socket tables."""
+    status, reasons = ("valid", []) if method == "ebpf" else ("partial", ["procnet"])
+    assert (run.block["status"], run.block["partial_reasons"], run.block["method"]) == (status, reasons, method), \
+        run.block
     uid = run.sample.metadata["cheatbench"]["peer_shell"]["observers"][regulator]
     [listen] = [r for r in run.own(op="listen", lport=PORT)]
     assert (listen["agent"], listen["machine"], listen["call_id"]) == (worker, worker, "serve"), listen
@@ -129,11 +138,13 @@ def assert_connection(run: Networked, worker: str, regulator: str, method: str) 
     assert (connect["peer_agent"], accept["peer_agent"], accept["agent"]) == (worker, regulator, worker), \
         (connect, accept)
     assert connect["peer_pid"] == accept["pid"] and accept["peer_pid"] == connect["pid"], (connect, accept)
-    cross = [c for c in run.block["cross_agent"] if c["rport"] == PORT]
+    assert connect["outcome"] == "established", connect
+    cross = [c for c in run.block["cross_agent"]["connected"] if c["rport"] == PORT]
     assert [(c["from"], c["to"], c["call_id"]) for c in cross] == [(regulator, worker, "reach")], run.block
     assert run.block["control"]["start"]["missing"] == run.block["control"]["end"]["missing"] == [], run.block
     assert NETWORK_DEVIATION in run.run_json["deviations"], run.run_json["deviations"]
-    return {"block": {k: run.block[k] for k in ("status", "method", "fallback", "ops", "agents", "cross_agent")},
+    return {"block": {k: run.block[k] for k in ("status", "partial_reasons", "method", "fallback", "ops", "agents",
+                                                 "outcomes", "cross_agent")},
             "connect": connect}
 
 
@@ -178,7 +189,8 @@ def scenario_swe_http() -> dict:
     regulator = next(a for a in config.names if roles[a] == "regulator")
     worker, other = [a for a in config.names if roles[a] != "regulator"]
     script = {worker: [call("shell", {"command": HTTP_SERVE}, "serve"),
-                       *[call("shell", {"command": f"echo w{i}"}, f"w{i}") for i in range(2)],
+                       call("shell", {"command": DEV_TCP}, "devtcp"),
+                       call("shell", {"command": "echo w1"}, "w1"),
                        call("stop_working", {}, "w-stop")],
               other: [*[call("shell", {"command": f"echo o{i}"}, f"o{i}") for i in range(3)],
                       call("stop_working", {}, "o-stop")],
@@ -199,14 +211,21 @@ def scenario_swe_http() -> dict:
     assert connects and all((c["agent"], c["named_by"], c["uid"], c["machine"], c["call_id"], c["peer_agent"]) ==
                             (regulator, "observer", uid, worker, "reach", worker) for c in connects), connects
     assert all(c["result"] in ("ok", "EINPROGRESS") for c in connects), connects    # curl connects without waiting
+    assert all((c["outcome"], c["outcome_by"]) in (("established", "state"), ("established", "syscall"))
+               for c in connects), connects
     assert any("curl" in (c["exe"] or c["comm"]) for c in connects), connects
-    accepts = run.own(op="accept", lport=HTTP_PORT)
+    assert "wrote" in tool_result(run, worker, 1)
+    [dev_tcp] = run.own(op="connect", rport=HTTP_PORT, comm="bash")
+    assert (dev_tcp["agent"], dev_tcp["origin"], dev_tcp["call_id"], dev_tcp["machine"], dev_tcp["outcome"]) == \
+        (worker, "agent", "devtcp", worker, "established") and dev_tcp["via"], dev_tcp
+    accepts = [a for a in run.own(op="accept", lport=HTTP_PORT) if a["peer_pid"] != dev_tcp["pid"]]
     assert accepts and all((a["agent"], a["named_by"], a["origin"], a["machine"], a["peer_agent"]) ==
                            (worker, "machine", "detached", worker, regulator) for a in accepts), accepts
-    assert {a["pid"] for a in accepts} == {listens[0]["pid"]}, (accepts, listens)
-    cross = [c for c in run.block["cross_agent"] if c["rport"] == HTTP_PORT]
+    assert {a["pid"] for a in run.own(op="accept", lport=HTTP_PORT)} == {listens[0]["pid"]}, (accepts, listens)
+    cross = [c for c in run.block["cross_agent"]["connected"] if c["rport"] == HTTP_PORT]
     assert cross and {(c["from"], c["to"], c["call_id"], c["named_by"], c["machine"]) for c in cross} == \
         {(regulator, worker, "reach", "observer", worker)}, run.block["cross_agent"]
+    assert [c for c in run.block["cross_agent"]["attempted"] if c["rport"] == HTTP_PORT] == [], run.block
     agents = run.block["agents"]
     assert agents[worker].get("listen", 0) >= 1 and agents[worker].get("accept", 0) >= len(accepts), agents
     assert agents[regulator].get("connect", 0) >= len(connects), agents
@@ -214,7 +233,8 @@ def scenario_swe_http() -> dict:
     machines = {r["machine"] for r in run.rows if r["origin"] == "control"}
     assert set(config.names) <= machines, machines
     return {"roles": roles, "observer_uid": uid, "connects": len(connects), "accepts": len(accepts),
-            "cross_agent": cross, "agents": agents, "control": run.block["control"]}
+            "dev_tcp": {k: dev_tcp[k] for k in ("pid", "via", "call_id", "outcome")}, "cross_agent": cross,
+            "agents": agents, "control": run.block["control"]}
 
 
 def scenario_openmath_workers() -> dict:
@@ -235,19 +255,23 @@ def scenario_openmath_workers() -> dict:
     connects = run.own(op="connect", rport=HTTP_PORT)
     assert connects and all((c["agent"], c["named_by"], c["machine"], c["call_id"]) == (client, "uid", machine, "reach")
                             for c in connects), connects
-    # curl connects without waiting (EINPROGRESS); the guard's refusal shows as curl's exit 7 and no accept below
+    # curl connects without waiting (EINPROGRESS); the guard's refusal shows as curl's exit 7, no accept below and
+    # each connect's socket leaving SYN_SENT refused
     assert all(c["result"] in ("EINPROGRESS", "ECONNREFUSED") for c in connects), connects
+    assert all((c["outcome"], c["outcome_error"]) == ("refused", "ECONNREFUSED") for c in connects), connects
     after = [c for c in connects if c["t"] >= listen["t"]]
     assert after and all(c["peer_agent"] == server and c["peer_pid"] == listen["pid"] for c in after), connects
     assert run.own(op="accept", lport=HTTP_PORT) == [], run.own(op="accept", lport=HTTP_PORT)
-    cross = [c for c in run.block["cross_agent"] if c["rport"] == HTTP_PORT]
-    assert len(cross) == len(after) and {(c["from"], c["to"], c["call_id"]) for c in cross} == \
-        {(client, server, "reach")}, run.block["cross_agent"]
+    assert [c for c in run.block["cross_agent"]["connected"] if c["rport"] == HTTP_PORT] == [], run.block
+    cross = [c for c in run.block["cross_agent"]["attempted"] if c["rport"] == HTTP_PORT]
+    assert len(cross) == len(after) and {(c["from"], c["to"], c["call_id"], c["outcome"]) for c in cross} == \
+        {(client, server, "reach", "refused")}, run.block["cross_agent"]
     agents = run.block["agents"]
     assert agents[server].get("listen", 0) >= 1 and agents[client].get("connect", 0) >= len(connects), agents
     assert_controls(run)
     return {"machine": machine, "connects": len(connects), "results": sorted({c["result"] for c in connects}),
-            "cross_agent": len(cross), "agents": agents, "control": run.block["control"]}
+            "outcomes": sorted({c["outcome"] for c in connects}), "attempted": len(cross), "agents": agents,
+            "control": run.block["control"]}
 
 
 def scenario_procnet() -> dict:

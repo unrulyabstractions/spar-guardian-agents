@@ -182,12 +182,15 @@ def validity_record(steps: list[dict], model_calls: int, engagement: dict | None
             "board_unused": board and board_calls == 0}
 
 
-def validity_block(records: list[dict], submission: dict | None, access_log: dict | None) -> dict:
+def validity_block(records: list[dict], submission: dict | None, access_log: dict | None,
+                   network: dict | None = None) -> dict:
     """The run's validity: each agent's facts (validity_record) and the flags a reader should see before trusting
     the run: an agent that never called a model or a tool, a stuck agent, a board never touched, a hand-in
     (hand_ins) in the first rounds with a token answer, an access log that is broken or absent, whose silence means
     nothing, or that holds more harness reads of content than the harness makes itself, which mark a run to read
-    (src/export/_export_access_log.py). `ok` when nothing is flagged."""
+    (src/export/_export_access_log.py), and a network log that is broken or absent, or partial with its reasons
+    (src/export/_export_network_log.py: procnet misses what opens and closes between two reads). `ok` when nothing
+    is flagged."""
     agents = {r["agent"]: r["validity"] for r in records if r.get("validity")}
     flags = []
     for agent, v in agents.items():
@@ -210,6 +213,10 @@ def validity_block(records: list[dict], submission: dict | None, access_log: dic
     if reads["count"] > reads["own"]:
         flags.append(f"access log: {reads['count'] - reads['own']} harness read(s) of content beyond its own after the "
                      "first turn: read this run")
+    net = network or {}
+    if net.get("status") in (*UNTRUSTED_LOGS, "partial"):
+        reasons = net.get("partial_reasons") or []
+        flags.append(f"network log: {net['status']}" + (f" ({', '.join(reasons)})" if reasons else ""))
     return {"agents": agents, "flags": flags, "ok": not flags}
 
 

@@ -111,9 +111,11 @@ OWNED_DIRS = ("trajectories", "communication", "defense", "swe")
 
 
 def run_json(view: SampleView | None, eval_path: Path, run_dir: Path, records: list[dict], eval_id: str,
-             model: str, access_log_block: dict | None, versions: tuple[str, str], run_id: str) -> dict:
+             model: str, access_log_block: dict | None, versions: tuple[str, str], run_id: str,
+             network_block: dict | None = None) -> dict:
     """run.json: what every run carries, then, for a log with a sample, what the first sample recorded. versions is
-    (ORBIT's, Inspect's) that ran the eval and run_id the run's name, as write_run reads them."""
+    (ORBIT's, Inspect's) that ran the eval and run_id the run's name, as write_run reads them; network_block flags the
+    validity, and write_run adds it last."""
     first = records[0] if records else {}
     task = first.get("task")
     run = {
@@ -140,7 +142,8 @@ def run_json(view: SampleView | None, eval_path: Path, run_dir: Path, records: l
         "team_submission": submission, "stop_working": stop_rounds(view), "shutdown_rate": shutdown_rate(view, records),
         "rules": rules_state(view),
         "probes": probes_block(view), **{key: config.get(key) for key in ("mode", "scale", "preset")},
-        "engagement": run_engagement(records), "validity": validity_block(records, submission, access_log_block),
+        "engagement": run_engagement(records),
+        "validity": validity_block(records, submission, access_log_block, network_block),
         "ledger": ledger_block(records, view.limit.type if view.limit else None),
         **recorded_run_blocks(view), **({"access_log": access_log_block} if access_log_block else {}),
     }
@@ -261,9 +264,9 @@ def write_run(eval_log_path: Path, run_dir: Path, *, verdicts: dict[str, dict] |
         if (bench := domain(view)) is not None:
             bench.write_files(view, run_dir)
     block, opens = access_log(views[0]) if views else (None, None)
-    run = run_json(views[0] if views else None, eval_path, run_dir, records, log.eval.eval_id, log.eval.model, block,
-                   versions, earlier.get("run_id") or run_name(run_dir))
     network, sockets = network_log(views[0]) if views else (None, None)
+    run = run_json(views[0] if views else None, eval_path, run_dir, records, log.eval.eval_id, log.eval.model, block,
+                   versions, earlier.get("run_id") or run_name(run_dir), network)
     if network:
         run["network"] = network
     (run_dir / RUN_JSON).write_text(json.dumps(run, indent=1))
