@@ -55,6 +55,20 @@ def test_a_run_in_a_group_is_read_by_its_name_with_its_log_at_the_mirror(sample_
     assert "2 folders hold a run named riemann_minimal" in capsys.readouterr().err
 
 
+def test_a_relative_eval_log_is_read_from_the_runs_own_checkout(sample_runs, tmp_path, monkeypatch):
+    """run.json names the log from the checkout the run sits in, so a pulled copy reads its own log, never the file
+    at the same path in this repository."""
+    run_dir = copy_run(sample_runs / "riemann_minimal", tmp_path / "copy" / "runs" / "study_x" / "riemann_minimal")
+    recorded = json.loads((run_dir / "run.json").read_text())
+    rel = Path("logs", "kept", Path(recorded["eval_log"]).name)
+    for checkout in (tmp_path / "copy", tmp_path / "repo"):
+        (checkout / rel).parent.mkdir(parents=True)
+        (checkout / rel).write_bytes(Path(recorded["eval_log"]).read_bytes())
+    (run_dir / "run.json").write_text(json.dumps({**recorded, "eval_log": rel.as_posix()}))
+    monkeypatch.setattr(settings, "ROOT", tmp_path / "repo")
+    assert load_run(run_dir).eval_log == tmp_path / "copy" / rel
+
+
 def test_cli_lists_every_tool():
     choices = build_parser()._subparsers._group_actions[0].choices
     assert set(choices) == {"scout", "docent", "graph", "transect", "contagion", "failures", "hawk"}

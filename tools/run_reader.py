@@ -209,8 +209,8 @@ def load_runs(names: list[str | Path], tool: str) -> list[Run] | None:
 
 
 def load_run(name_or_path: str | Path) -> Run:
-    """Read one run from a name of the study or a path to its directory. Its eval log is the path run.json records,
-    else the same file at the run's own place under logs/ (RunDir.eval_log)."""
+    """Read one run from a name of the study or a path to its directory. Its eval log is the file run.json names, from
+    the checkout the run sits in, at the run's own place under logs/ or in its eval/ folder (RunDir.eval_log)."""
     directory = run_directory(name_or_path)
     stored = RunDir(directory)
     run_json = stored.run_json
@@ -220,7 +220,7 @@ def load_run(name_or_path: str | Path) -> Run:
     roles = stored.roles()
     episodes = {agent_of(row["episode"], lone): row for row in episode_rows}
     judge = {agent_of(episode, lone): row for episode, row in verdict_files.episode_verdicts(directory).items()}
-    eval_log = eval_log_path(run_json.get("eval_log")) or stored.eval_log
+    eval_log = stored.eval_log
     timeline = list((run_json.get("rules") or {}).get("timeline") or [])
     board_reads = board_read_results(directory, eval_log)
     task = run_json["task"]
@@ -371,14 +371,6 @@ def agent_of(episode: str, lone: str | None) -> str:
     if "@" in episode:
         return episode.rsplit("@", 1)[1]
     return lone or episode
-
-
-def eval_log_path(value: str | None) -> Path | None:
-    """The .eval file run.json names, relative to the repository root unless absolute; None when it is gone."""
-    if not value:
-        return None
-    path = Path(value) if Path(value).is_absolute() else settings.ROOT / value
-    return path if path.is_file() else None
 
 
 def board_read_results(directory: Path, eval_log: Path | None) -> dict[str, str]:
