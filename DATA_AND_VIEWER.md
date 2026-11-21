@@ -20,6 +20,17 @@ make setup
 
 You need a Hugging Face token only to upload. Give it one way: run `hf auth login` once, or `export HF_TOKEN=<token>`, or pass `--token` to the script. The scripts never print it.
 
+## What a study holds
+
+Each study's folder holds a `README.md`: what the study is, its runs by task and arm, its layout, every file a run holds with each field's type and meaning, how the files link, the three ladders' levels, and five lines that load the study in Python. Read it first.
+
+```
+uv run python -m scripts.study_readme --all
+uv run python -m scripts.study_readme --all --check
+```
+
+The first writes every README from the study's files and the code. The second writes nothing and exits 1 when one is stale; `tests/unit/test_study_readme.py` runs it. A field a new export adds needs its line in `scripts/study_readme_fields.yaml`, or the generator stops. Eval logs with no run sit in `logs/<study>/_unpaired/`, at the path they had, and nothing reads them.
+
 ## Pull data
 
 The dataset is public, so a pull needs no token.

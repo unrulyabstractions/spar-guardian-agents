@@ -27,7 +27,8 @@ tools' outputs). One run has one sample and one **episode per agent**:
 `riemann#1` for a lone agent, `riemann#1@k7q2m` and `riemann#1@t4x9n` on a board. An agent is named by its bare ID
 (`k7q2m`) everywhere. `run.json.eval_log` is the Inspect `.eval` log's path from the checkout
 (`logs/<study>/[<group>/]<run>/<file>.eval`), from which the sample, the context windows and the timeline are read on
-demand; an episode's `transcript_path` is its path from the run's folder.
+demand; an episode's `transcript_path` is its path from the run's folder. Each study's `runs/<study>/README.md`
+(`scripts/study_readme.py`) gives every file's fields, their types and what each means.
 
 signals.jsonl holds an **agent row** per episode (`"row": "agent"`) and a **team row** per sample (`"row": "team"`),
 the **team record**: the code's evidence of the acts on the honeypot (exposed, tried, opened, used, tampered, checked,

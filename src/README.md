@@ -257,7 +257,7 @@ The judge runs inside the eval as the scorer `cheatbench_judge`, bound to the mo
 | folder | holds |
 |---|---|
 | `examples/` | one script per task and cell of the first experiment; see `examples/README.md` |
-| `scripts/` | `screen.py` (the example cells in bulk), `paper/` (the paper's figures, tables and appendix) and `box/` (the rented boxes; see `scripts/box/README.md`) |
+| `scripts/` | `screen.py` (the example cells in bulk), `study_readme.py` (each study's `runs/<study>/README.md`: its layout and every file's schema, from the data and the code), `paper/` (the paper's figures, tables and appendix) and `box/` (the rented boxes; see `scripts/box/README.md`) |
 | `tools/` | the analysis tools in their own environment; see `tools/README.md` |
 | `tests/` | `unit/` (one test module per module or concept), `smoke/` (the mock-model suites), `tools/` (the analysis tools' tests) and `support/` (what they share) |
 | `submodules/` | CheatBench, ORBIT, Lucy's repository and Inspect Swarm, read only |
