@@ -2955,3 +2955,55 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   theme. Not a code fault: `?agent=<id>` without `&call=` opens the first worker, as documented. The user's viewer on
   8770 (started 2026-11-20 19:49, index cached 19:50) predates the export (a041eb0, 21:43) and every reader change
   since; it holds the old index and code in memory and must be restarted.
+
+## 2026-11-21: adversarial check of the presence lines, alert_humans and their viewer marks (design of 2026-11-21)
+
+- **What.** The 2026-11-21 design, point by point, at 4f5b714 to 5c88baf (no presence code changed in between):
+  src/swarm/turn_rules/_turn_presence.py, _turn_rules_filter.py apply_pre_turn, turn_activation.out_of_steps,
+  submit_and_stop.py (alert_humans, holds_alert), _regulator_oversight.py and peer_shell.py checks,
+  measures/alert_outcomes.py, the smoke run runs/study_smoke/smoke_openmath/20261121T092022Z/presence and its eval
+  log, and the transcript viewer's marks (32bf508).
+- **How.** (1) A scratch script built every system prompt and first message the code builds, with the real drawn
+  IDs: 8 domains x n 1, 2, 3, 4, 10 x shared_task/solo_task x no influencer, regulator, disregulator, both x
+  informed_roles on/off x mention_team none/true/false x mention_board x peer_shell, every regulator and
+  disregulator level at n=3 (5,184 plans built, 624 configs refused by the domains, 0 errors), and searched each text
+  for any other agent's ID. (2) Read all five ATIF transcripts of the smoke run step by step, and its eval log with
+  attachments resolved: per agent, every ModelEvent.input is a prefix of the next, and the presence lines sit in
+  the inputs with their metadata. (3) A scratch mock-provider test (tests/support/turn_rules_harness, nothing
+  committed) on four agents with a regulator and a disregulator, sequential and concurrent, with board posts, plain
+  text turns (continue prompt), stop_working, submit and alert_humans: the provider's history only grows for every
+  agent and call, each line comes once and never to its subject, no line names a role; a worker's alert_humans call
+  ends nothing and records nothing; a late window gives "has not entered yet." until it enters. 5 passed.
+  (4) `pytest tests/unit -k collaboration` 199 passed, 6 xfailed; `pytest tests/unit` 3398 passed, 1 skipped, 6
+  xfailed (run at 9f5b884). (5) Transcript viewer on 8844 over a scratch symlink to the smoke run, headless Chrome
+  on 9255; screenshots read with image tokens: a05's transcript, the Board for a03/a04 (hover on the alert flag) and
+  a02/a05 at the end of the clock, Details. Server and Chrome stopped; 8770 untouched.
+- **Result.**
+  - Point 1, no peer named in a system prompt: BROKEN in two domains. knowledge_work shared_task names every holder
+    in the access note ("the review_deliverable tool: p7j6x ... : j6x3q"), in the workers' prompts and the
+    regulator's (prompts.yaml knowledge_work.access_note). chess shared_task names the whole roster ("The team moves
+    in turn, in this order: j6x3q, p7j6x.", chess.team_game {order}). The team sentence, the briefing, the
+    regulator's opening, SWE (also its filled branch lists in a real team run), openmath, subset_sum,
+    prime_factorization, protein_design and creative_writing name no peer in any plan built; lone agents unchanged.
+    README.md:114 "No system prompt names a peer" is therefore false for those two domains.
+  - Point 2, entries: VERIFIED. Durable user messages saved in the eval log and the transcripts, after the task
+    message and before the first step; a04 (window from round 2) announced in round 2, not before; influencers
+    announced like workers.
+  - Point 3, exits: VERIFIED for stop, alert, budget (a closed window) and a team submit. Deviation, not approved in
+    any message I found: a team submit's {n} is the rounds left for each recipient, not submit_delay_rounds; a peer
+    of a concurrent round reads "The run ends in 1 round." when the delay is 2 (tests/unit/test_presence.py pins it).
+    The budget line never fires while a pooled step can still reach the agent (read out_of_steps against
+    _pooled_steps); it errs toward silence when the only other holder is an influencer whose steps go to nobody.
+  - Point 4, alert_humans: VERIFIED for holders (regulators and disregulators in every plan built, never a worker),
+    the store, run.json alerts, the timeline, the turn ending and the run going on. The false alarm of the smoke run
+    is right. UNVERIFIED: a true alarm on real data. Without a faithful replay's order an alert after a cheat scores
+    None, never true.
+  - Point 5, peer tools: VERIFIED ("a04 has not entered yet.", "no such agent", status exited for all three tools).
+  - Point 6: VERIFIED. The notice comes after the presence lines and keeps its place.
+  - Point 7, viewer: VERIFIED for the transcript chips (folded User messages, "a03 exited · alert r3"), the Board's
+    entry and exit marks with why, the alert line and flags with reason, names and outcome on hover, the "1 alert"
+    badge and the Details Alerts card. UNVERIFIED: the 12-word cut on screen (this reason has 10 words); no alert
+    chip on the runs index.
+  - Paper: BROKEN by CLAUDE.md §6. paper/sections say nothing of the presence lines or alert_humans, and paper/ has
+    no commit since 01f144e (2026-11-20). paper/generated is not stale (the role text did not change).
+  - Minor: run.json ended_by says "end" for a04 while rules.exits says budget.
