@@ -2883,3 +2883,46 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   set-aside run copies under logs/study_exploration_0/set_aside_regulator_log/runs/ and set_aside_8M_guard/ keep the
   older layout (nine judge.jsonl); exploration_0's upload would send those nine judge.jsonl. No upload was made, so the
   Hub stays in the older layout.
+
+## 2026-11-21: network log fixes after the adversarial check (4d83524, f15fffa, 0d9e91b), Colima only, no model call
+- **What.** The six findings: (a) connect outcomes and cross_agent split into connected and attempted, (b) procnet
+  reads partial and is flagged in validity and as a chip, (c) a gone process (bash /dev/tcp) keeps its tool call,
+  (d) failed unix connects hidden behind a chip in the Network panel, (e) runs of HIDDEN_TASKS open in the viewer,
+  (f) scripts/box/network_trace_check.sh tests the netlog sidecar's own shape. Scratch:
+  /private/tmp/claude-501/-Users-unrulyabstractions-work-spar-guardian-agents/e4b864ae-ace7-4e72-b7da-41e9dd1a6c42/scratchpad/netfix/.
+- **How.**
+  1. The real daemon in a container of the sidecar's shape over one target (daemon_check.sh, run1): 17 probes attach;
+     a refused non-blocking connect gives tcp_state SYN_SENT to CLOSE with ECONNREFUSED 15 µs before its EINPROGRESS
+     row and returns lport 0; an accepted one ESTABLISHED; a socket address reused after free. Read every row.
+  2. The loopback guard's REJECT (openmath image, iptables rule as sandbox_hygiene): curl's socket closes with sk_err
+     0; kernel stacks resolved from /proc/kallsyms show the ICMP error queued by tcp_v4_err while the call holds the
+     socket (ip_icmp_error, sock_queue_err_skb) and the CLOSE from the program's own close (__tcp_close). Fix: fentry on
+     ip_icmp_error/ipv6_icmp_error writes tcp_error. daemon_check2.sh, runs 2 to 4: 19 probes, tcp_error ECONNREFUSED,
+     export reads refused by icmp in all three.
+  3. Tool-call /dev/tcp: the child's shell and timeout are gone (or zombies with empty argv) before /proc is read; the
+     first swe_http smoke showed uid 0, origin unknown, no call. Fix: the daemon keeps its walks (rows and execs) and
+     refuses zombie walks. Runs 3 and 4: every TCP row named, via_from earlier, root = the call's timeout ... bash -c.
+  4. Preflight (sidecar shape: tracer image at /nix, tracefs ro, BPF PERFMON SYS_PTRACE, no SYS_ADMIN): method ebpf,
+     ebpf works with the state change, kprobe works, procnet works, rc 0, JSON report read, no container left; its own
+     build path run from a copy with a throwaway tag (label = pinned digest), tag removed, the run's image id
+     unchanged (7ac16ea36ccf). It downloaded the pinned AppImage (196142152 bytes, sha256 matched) into
+     ~/.cache/network_trace_check, which was empty.
+  5. Network smokes, third run (runs/study_smoke/smoke_network/20261121T094709Z): all seven pass, rc 0. Read
+     network.jsonl and run.json myself: swe_http valid, curl connect established by state, cross connected 1,
+     attempted 0, the /dev/tcp row call devtcp origin agent via set; openmath_workers 9 connects refused
+     ECONNREFUSED by icmp, connected 0, attempted 8; procnet partial ["procnet"], validity flag "network log: partial
+     (procnet)"; zero rows of origin unknown in the four runs. Earlier runs failed and were fixed: monitor_killed by
+     ea20e78's mock (async entry), observer_protein once by a unit test's no-tracer compose overwriting the shared
+     build/ file (now -networked-traced.yaml).
+  6. Viewer on 8833 (copies of the four runs; 8770 untouched), headless Chrome, screenshots read: index shows 1 run
+     and "other tasks 3", with ?other=1 four (subset sum, openmath agent); openmath Network panel "0 cross-agent",
+     amber "8 attempted", refused chips, amber lane marks, "failed unix 12" hides the nscd rows and shows 12 ENOENT
+     rows when on; swe_http red "1 cross-agent", curl established, bash row with its call; procnet amber procnet and
+     partial chips. Results browser run page: partial for procnet, connect outcomes, connected 1 / attempted 0 and
+     the outcome column. Servers stopped.
+  7. Unit tests: network files 74 + panel/viewer/index files pass; full `pytest tests/unit` 3398 passed, 1 skipped,
+     6 xfailed, rc 0; `make lint` clean.
+- **Result.** VERIFIED for the items above on Colima aarch64. UNVERIFIED: x86_64 and vast.ai boxes; a remote
+  (non-loopback) connect that times out (ETIMEDOUT path is unit tested only); the light theme; pid reuse within a run
+  for the walk cache (pid_max 4194304 on Colima); runs of chess and knowledge_work opened in the real viewer (measured
+  in a read-only test, not browsed).

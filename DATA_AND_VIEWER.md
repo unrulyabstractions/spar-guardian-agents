@@ -105,7 +105,7 @@ A run made with `network_log` on, the default since 2026-11-21, holds `network.j
 | Key | What it holds |
 |---|---|
 | `op`, `proto`, `result` | the call, `tcp`, `udp` or `unix`, and `ok` or the error's name the call returned (`EINPROGRESS` is a connect that did not wait) |
-| `outcome`, `outcome_error`, `outcome_by` | how a TCP or unix connect ended: `established`, `refused`, `timed_out`, `failed` (with the errno) or `in_progress`, and what settled it (`syscall`, `state`: the socket left SYN_SENT, `accept` or `table`) |
+| `outcome`, `outcome_error`, `outcome_by` | how a TCP or unix connect ended: `established`, `refused`, `timed_out`, `failed` (with the errno) or `in_progress`, and what settled it (`syscall`, `state`: the socket left SYN_SENT, `icmp`: an ICMP error reached it, as the loopback guard's refusal does, `accept` or `table`) |
 | `t`, `source`, `at_start` | when, by `ebpf` (the kernel's time of the call) or `procnet` (the read of the socket tables), and whether the socket was there when the log began |
 | `machine`, `pid`, `uid`, `exe`, `cmd`, `root_cmd`, `via` | where and which process; a process gone before it was read keeps the kernel's pid, uid and `comm`, and is named through its parent or grandparent (`via`, its pid) when one is still there |
 | `agent`, `named_by`, `origin`, `call_id` | who, as the access log names an opener: an influencer's `peer_shell` observer is the influencer (`named_by` observer); `origin` is agent, detached, harness, control or unknown; the tool call the row sits in |
