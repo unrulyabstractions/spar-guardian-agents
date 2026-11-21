@@ -65,7 +65,7 @@ RunRow = {
   deliverables: null | {archive_in_workspace, archive_on_remote_main, registered_on_main,
                         registered_message_copied_from},   # openmath: what the team left behind
   endings: {label: count},         # each episode's failure, else its ended_by (submit, teammate_submit,
-                                   # stop_working, delivered, cap, context, limit, error, end), else
+                                   # stop_working, alert, delivered, cap, context, limit, error, end), else
                                    # "unrecorded" (a log without the turn rules)
   config: null | {...},            # run.json "config": the SwarmConfig the task was built from
   rules: null | {<agent>: {...}},  # each episode's "rules": what the turn rules recorded for that agent
@@ -131,7 +131,8 @@ Team = a team row of signals.jsonl (src/measures/team_ladder.py), one per sample
   travel_evidence: {discussed, solicited, crossed, assembled: [str]},          # posts as "post <n> by <agent>: ...";
                                    # crossed and assembled only when the honeypot was split
   passed: null | bool, proof: null | str,   # the task's own success measure; the evidence a pass proves (checked)
-  ended_by: null | "submit"|"stop_working"|"delivered"|"tokens"|"time"|"steps"|"end"|"error", or a limit as written,
+  ended_by: null | "submit"|"stop_working"|"alert"|"delivered"|"tokens"|"time"|"steps"|"end"|"error", or a limit as
+            written,
   submit: null | {agent, round, ends_after_round, snapshot}, # snapshot: a commit, or "working tree" (Domain.shown_snapshot)
   own_submits: {agent: round}, refused_submits: int,
   shutdown_rate: null | float,
@@ -148,7 +149,8 @@ reads, defense, engagement, access, rules, the SWE keys).
 `team: [Team]` replaces the row's summary with every team record of the run, one per sample, which the run page shows
 first. `run_json` is run.json itself; the run page reads its `team_submission` (`null | {agent, round, answer, time,
 ends_after_round, snapshot, refused: [{agent, round, reason}], own: {agent: {round, answer, snapshot, time}}}`: the
-team's accepted submit, every refused one and each solo_task agent's own hand-in), `stop_working` (`null | {agent:
+team's accepted submit, every refused one and each solo_task agent's own hand-in), `alerts` (absent, or
+`[{agent, round, reason, agents, time}]`: each alert_humans call), `stop_working` (`null | {agent:
 round}`) and `shutdown_rate` (the share of the agents holding `stop_working` that ended with it; null for a lone agent or when no agent
 could stop). run.json `access_log`, in a run that recorded the switch, holds the log's status, what it missed and the harness's reads of content (`harness_reads: {count, own, commands: [{cmd, root_cmd, rows}]}`); `src/export/_export_access_log.py` gives its keys. The run page's Access log section reads it with the team's and the agents' `access_log` keys. `communication: {<sample>: {messages: [Post], events: [...]}}` and `defense: {<sample>:
 {defenses, log, interventions}}` are the run's stores. `tools` replaces the row's name list with each tool's summary.json
@@ -163,8 +165,11 @@ Transcript = {agent (the bare ID), model (the agent's own model), model_key (its
 ATIF.steps[i] = {step_id, source: "system"|"user"|"agent", message, reasoning_content?, model_name?,
                  tool_calls?: [{tool_call_id, function_name, arguments}],
                  observation?: {results: [{source_call_id, content, extra?: {is_error?, error?, withheld_from_model_by_defense?}}]},
-                 extra?: {swarm_turn_rules?, defense_refusal?, refusal_text_written_by_model?, ...}}
+                 extra?: {swarm_turn_rules?, swarm_presence?, defense_refusal?, refusal_text_written_by_model?, ...}}
 ```
+A user step with `extra.swarm_presence` (`{id, agent, kind: "entered"|"exited", why, round}`) is a presence line: a
+peer's entry or exit, saved in the agent's conversation (`src/swarm/turn_rules/_turn_presence.py`). `why` is
+`submit`, `stop`, `alert`, `budget`, `context` or `delivered` on an exit, null on an entry.
 A blocked tool call has a result whose `extra.error` starts with `Blocked by defense`.
 
 ### `GET /api/runs/<study>/<run>/sample` → the sample's facts from the eval log
