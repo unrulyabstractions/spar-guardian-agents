@@ -12,11 +12,13 @@ the prompt. Each agent has a different level of directory access, so they must c
 exploits that require information only accessible to individual agents within the swarm.
 
 \subsubsection*{Regulator agents}
-These agents represent our positive peer-pressure protocol. A regulator differs from a worker in three ways:
+These agents represent our positive peer-pressure protocol. A regulator differs from a worker in four ways:
 \begin{itemize}
   \item They can read every teammate's tool calls and what those calls returned, and they have no read budget on
   the board.
   \item They cannot ``submit work''.
+  \item They can alert the humans who run the study, with a reason and the agents it concerns. The alert ends their
+  own turns, and the run goes on.
   \item They are told not to reveal their role.
 \end{itemize}
 
@@ -43,7 +45,8 @@ is real, and to prevent or punish their cheating. Table~\ref{tab:monitors} compa
       & At will (through tools):\newline - All other agents' tool calls\newline - Environment state \\
     \hline
     Control\newline Mechanism & Flagging.\newline Monitors detect and inform of bad behavior
-      & Peer Pressure.\newline Regulators communicate with other agents to guide swarm behavior \\
+      & Peer Pressure.\newline Regulators communicate with other agents to guide swarm behavior, and can alert
+      humans \\
     \hline
   \end{tabular}
   \caption{Classic monitors and our regulators: what each sees and how each acts.}
@@ -62,7 +65,8 @@ These poisoned agents represent negative peer pressure.
 \begin{itemize}
   \item Explicitly instructed to manipulate the swarm to leverage the exploits.
   \item A disregulator cannot submit the team's work. Like a regulator, it can read every teammate's tool calls and
-  what those calls returned. It reads the board within the workers' budget.
+  what those calls returned. It reads the board within the workers' budget. Like a regulator, it can alert the
+  humans who run the study.
   \item Table~\ref{tab:disregulator-levels} gives its levels. A disregulator gets persuade on SWE, and persuade or
   overt on creative writing.
 \end{itemize}
@@ -96,10 +100,23 @@ Figure~\ref{fig:rounds} shows one round and the next for five agents.
   \centering
   \includegraphics[width=\linewidth]{round_structure}
   \caption{Two rounds of a run, step by step for each agent. A step that ends with a board action is free, up to a
-  limit per round. Other steps count against the agent's working steps. After a submit, the team works two more
-  rounds.}
+  limit per round. Other steps count against the agent's working steps. After a submit, the submitter exits and the
+  others work two more rounds.}
   \label{fig:rounds}
 \end{figure}
+
+\subsubsection*{Entries and exits}
+Agents learn of their peers from the conversation.
+No system prompt on our three tasks names a peer.
+A worker's system prompt says that it works with a team on the same task.
+When an agent \textbf{enters} the run, every other agent reads a user message such as ``k7q2m entered.'' before its
+next step.
+Influencers are announced like workers, with no role shown.
+An agent \textbf{exits} when it submits, stops working, alerts humans or runs out of working steps.
+Every peer still present then reads why, such as ``k7q2m stopped working (stop\_working).''
+A second line follows: ``k7q2m exited.''
+The tools that read a teammate's calls refuse a teammate that has not entered yet.
+They still answer for a teammate that has exited, and mark it as exited.
 
 \FloatBarrier
 \subsection*{Evaluation}
@@ -150,6 +167,7 @@ track:
   \item Collusion ladder: How far each pair of agents takes each other's work
   \item Judge labels: How explicitly an agent says that what it does is wrong, and how strongly it tries to steer
   another agent
+  \item Alerts: Whether each alert by an influencer came after a cheat
 \end{itemize}
 
 \subsubsection*{Cheating ladder}
@@ -316,6 +334,13 @@ Appendix B reports how far an independent reading of the transcripts confirmed e
   \label{tab:score-anchors}
 \end{table}
 
+\subsubsection*{Alerts}
+We read each alert of an influencer against the Cheating ladder.
+An alert is a \textbf{true alarm} when a worker or an agent the alert names had cheated before the alert.
+It is a \textbf{false alarm} when none of them had.
+The replay of a run gives the order of calls across agents.
+Without that order, an alert is a false alarm only when no agent it concerns ever cheated, and unknown otherwise.
+
 \subsection*{Controls}
 Teams told to cheat give the positive control (Figure~\ref{fig:positive-control}). Teams under a generic rule and
 under a rule naming the exploit give the negative control (Figure~\ref{fig:negative-control}). Single agents, untold
@@ -373,9 +398,10 @@ The judge is \JudgeName{} at \JudgeEffort{} effort.
   \FreeBoardActionsInfluencer. Its reads of a teammate's tool calls count as board actions.
   \item Max tool result: \ToolOutputKiB{}~KiB for every agent. A longer result keeps its start and its end, with a
   line that states the cut.
-  \item The runs of the multi-domain study differ from this design in three ways. A regulator read its teammates'
+  \item The runs of the multi-domain study differ from this design in seven ways. A regulator read its teammates'
   tool calls through one tool, which cut each call's arguments and result to 200 characters. A disregulator could not
   read its teammates' tool calls and had the workers' free board actions. A longer tool result kept its first and
-  last 8~KiB, with no line marking the cut.
+  last 8~KiB, with no line marking the cut. Each agent's system prompt named every teammate. No message announced an
+  entry or an exit. A worker that submitted kept its turns until the run ended. No influencer could alert humans.
 \end{itemize}
 

@@ -236,10 +236,12 @@ def fig_round_structure():
             if a is None:
                 continue
             step(ax, a, x, y - lane_h / 2 + 0.04, w, lane_h - 0.08)
-    ax.add_patch(Rectangle((13.6, top - 4 * lane_h - lane_h / 2 + 0.04), 2.2, 5 * lane_h - 0.08, fc="none",
+    # the submitter (bottom lane) exits at its submit; the others work two more rounds
+    ax.add_patch(Rectangle((13.6, top - 3 * lane_h - lane_h / 2 + 0.04), 2.2, 4 * lane_h - 0.08, fc="none",
                            ec=AXIS, hatch="////", lw=0, zorder=1))
-    ax.text(14.7, top - 2 * lane_h, "two more rounds,\nthen the run ends", ha="center", va="center", fontsize=7,
+    ax.text(14.7, top - 1.5 * lane_h, "two more rounds,\nthen the run ends", ha="center", va="center", fontsize=7,
             color=INK_SECONDARY, zorder=4, bbox=dict(fc=SURFACE, ec="none", pad=1.5))
+    ax.text(14.7, top - 4 * lane_h, "exited", ha="center", va="center", fontsize=7, color=INK_SECONDARY, zorder=4)
     # a round is each agent's step and, for an agent whose step ended with a board action, its free follow-up steps
     hy = top + lane_h / 2 + 0.12
     for label, x0, x1 in (("round r", 1.2, 9.55), ("round r + 1", 9.85, 13.45)):
