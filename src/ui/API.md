@@ -232,8 +232,8 @@ the Ladders page's tables, `src/ui/transcript_board.py` the Board tab's data and
 
 Every folder under `runs/` is a **collection**, except `study_smoke`, `study_orbit2_check`, `apart_controls` and folders without a run. A run of a single agent (one
 worker, no influencer) is never listed. A study keeps its runs at
-its top level and in its groups (`study_runs`); its `INDEX.jsonl`, where it has one, gives each run's `valid` flag, and a
-run it gives no verdict is valid at the top level and carries its group's name in a group. A manifest collection
+its top level and in its groups (`study_runs`); its `INDEX.jsonl`, where it has one, gives each run's `valid` flag.
+Without one, a run is valid at the top level and carries its group's name in a group. A manifest collection
 (`apart_controls`) lists its runs in `manifest.jsonl`: the canonical copy is valid, an extra copy has the status `extra
 copy` (`src/measures/run_listing.py`). The viewer lists, measures and serves the **valid runs only**. A valid run of a
 task in `src/measures/ladder_by_domain.py` `HIDDEN_TASKS` (knowledge work, chess, OpenMath, subset sum and factoring) is
