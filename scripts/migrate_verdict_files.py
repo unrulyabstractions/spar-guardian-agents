@@ -3,12 +3,14 @@
     uv run python -m scripts.migrate_verdict_files runs/study_exploration_0            # the plan, nothing written
     uv run python -m scripts.migrate_verdict_files runs/study_exploration_0 --write    # the moves
 
-Two older shapes exist, and neither can be made again from an eval log without a paid judge:
+Three older shapes exist, and none can be made again from an eval log without a paid judge:
 - judge.jsonl beside run.json (study_exploration_0): the eval's or the re-judge's CheatBench verdicts. Its rows go to
   judges/cheatbench.<judge>.jsonl, by the judge each row names, with unit (the episode), the agent's bare ID and role
   from episodes.jsonl, the keys verdict_files.ROW_KEYS asks for (None where the row has none) and transcript_path from
   the run's folder. A row of an episode the judge's file already holds is left out: that file's row is newer.
 - judges/labels.<judge>.jsonl keyed by agent (study_exploration_1): each row's unit becomes the agent's episode.
+- an absolute judge_prompt (this Mac's checkout, a worktree's or a box's /root/work), in any of these files: it becomes
+  the prompt's path from the checkout, as the judges now record it (relative_prompt). The prompt's hash stays.
 
 Nothing is deleted. Before a file changes or moves, its bytes are copied to
 .backups/verdicts-before-migration/<study>/[<group>/]<run>/ in this checkout (git ignores .backups/), and judge.jsonl
@@ -29,6 +31,8 @@ from src.measures.run_directory import RunDir, study_runs
 from src.utils.json_files import read_jsonl
 
 OLD_JUDGE = "judge.jsonl"
+PROMPT_ROOTS = ("/submodules/cheatbench/", "/src/judging/")
+"""Where a judge's prompt sits in any checkout: an absolute judge_prompt is cut to its part from the first of these."""
 BACKUP = settings.ROOT / ".backups" / "verdicts-before-migration"
 
 
@@ -42,8 +46,32 @@ def bare_agent(record: dict) -> str | None:
     return record.get("orbit_agent") or (record.get("agent") or "").split("/")[-1] or None
 
 
+def relative_prompt(value):
+    """A verdict's judge_prompt as the prompt's path from the checkout: an absolute path cut to its part from the first
+    of PROMPT_ROOTS, a list path by path; a relative path, None, or a path outside PROMPT_ROOTS as it is."""
+    if isinstance(value, list):
+        return [relative_prompt(item) for item in value]
+    if not isinstance(value, str) or not value.startswith("/"):
+        return value
+    for root in PROMPT_ROOTS:
+        if root in value:
+            return value[value.index(root) + 1:]
+    return value
+
+
+def with_relative_prompt(row: dict) -> dict:
+    """The row with its judge_prompt relative (relative_prompt), in its place; a row without one as it is."""
+    return {**row, "judge_prompt": relative_prompt(row["judge_prompt"])} if "judge_prompt" in row else row
+
+
+def prompt_fixed(rows: list[dict]) -> list[dict]:
+    """The rows whose judge_prompt relative_prompt changes, with it changed."""
+    return [with_relative_prompt(row) for row in rows if with_relative_prompt(row) != row]
+
+
 def cheatbench_rows(run: RunDir) -> dict[str, list[dict]]:
-    """judge.jsonl's rows in the judges/ shape, by judge, without the episodes that judge's file already holds."""
+    """judge.jsonl's rows in the judges/ shape, by judge, without the episodes that judge's file already holds; then
+    the judge's file's own rows whose judge_prompt is absolute, with it relative."""
     episodes = {ep["episode"]: ep for ep in run.episodes()}
     held = verdict_files.cheatbench(run.path)
     out: dict[str, list[dict]] = {}
@@ -58,17 +86,22 @@ def cheatbench_rows(run: RunDir) -> dict[str, list[dict]]:
         row.update({key: value for key, value in old.items() if key != "transcript_path"})
         row.update({key: row.get(key) for key in verdict_files.ROW_KEYS})
         row["transcript_path"] = run.transcript_path(episode).relative_to(run.path).as_posix()
-        out.setdefault(judge, []).append(row)
+        out.setdefault(judge, []).append(with_relative_prompt(row))
+    for judge, rows in (verdict_files.read(run.path).get(verdict_files.CHEATBENCH_PASS) or {}).items():
+        if fixed := prompt_fixed(rows):
+            out.setdefault(judge, []).extend(fixed)
     return out
 
 
 def labels_rows(run: RunDir) -> dict[str, list[dict]]:
-    """Each labels file whose rows are keyed by agent, with every unit made the agent's episode, by judge."""
+    """Each labels file whose rows are keyed by agent or name an absolute judge_prompt, with every unit made the
+    agent's episode and every judge_prompt relative, by judge."""
     episode_of = {bare_agent(ep): ep["episode"] for ep in run.episodes()}
     out = {}
     for judge, rows in (verdict_files.read(run.path).get(verdict_files.LABELS_PASS) or {}).items():
-        if any(row["unit"] != row.get("episode") for row in rows):
-            out[judge] = [{**row, "unit": row.get("episode") or episode_of[row["agent"]]} for row in rows]
+        if any(row["unit"] != row.get("episode") for row in rows) or prompt_fixed(rows):
+            out[judge] = [with_relative_prompt({**row, "unit": row.get("episode") or episode_of[row["agent"]]})
+                          for row in rows]
     return out
 
 
@@ -77,7 +110,7 @@ def plan(study: Path) -> list[tuple[RunDir, dict, dict]]:
     found = []
     for path in study_runs(study):
         run = RunDir(path)
-        cheat = cheatbench_rows(run) if (path / OLD_JUDGE).is_file() else {}
+        cheat = cheatbench_rows(run)
         labels = labels_rows(run)
         if cheat or labels or (path / OLD_JUDGE).is_file():
             found.append((run, cheat, labels))
@@ -116,8 +149,10 @@ def main(argv: list[str] | None = None) -> int:
     study = args.study.resolve()
     found = plan(study)
     for run, cheat, labels in found:
-        parts = [f"cheatbench.{judge}: {len(rows)} rows from judge.jsonl" for judge, rows in cheat.items()]
-        parts += [f"labels.{judge}: {len(rows)} units made episodes" for judge, rows in labels.items()]
+        parts = [f"cheatbench.{judge}: {len(rows)} rows from judge.jsonl or with an absolute judge_prompt"
+                 for judge, rows in cheat.items()]
+        parts += [f"labels.{judge}: {len(rows)} rows keyed by episode, judge_prompt relative"
+                  for judge, rows in labels.items()]
         print(f"{run.path.relative_to(study)}  {'; '.join(parts) or 'judge.jsonl already in judges/'}")
     print(f"== {len(found)} runs to migrate in {study}" + ("" if args.write else " (plan only; --write moves)"))
     if not args.write:

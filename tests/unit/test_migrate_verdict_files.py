@@ -63,3 +63,29 @@ def test_a_row_the_judges_file_already_holds_is_newer_and_stays(tmp_path, monkey
     stored = verdict_files.cheatbench(run)["gpt-6-luna"]
     assert (stored["s#1@a01"]["cheated"], stored["s#1@a02"]["cheated"]) == (False, False)
     assert len(read_jsonl(run / "judges" / "cheatbench.gpt-6-luna.jsonl")) == 2
+
+
+def test_an_absolute_judge_prompt_becomes_the_prompts_path_from_the_checkout(tmp_path, monkeypatch):
+    """In judge.jsonl, the cheatbench file and the labels file: this Mac's checkout, a worktree's and a box's path all
+    become the path from the checkout; a relative path and None stay; the verdicts stay; a second pass finds nothing."""
+    monkeypatch.setattr(migrate, "BACKUP", tmp_path / "backup")
+    study = tmp_path / "runs" / "study_x"
+    run = old_run(study)
+    rows = read_jsonl(run / "judge.jsonl")
+    rows[0]["judge_prompt"] = "/Users/x/work/spar-guardian-agents/submodules/cheatbench/prompts/judge.md"
+    write_jsonl(run / "judge.jsonl", rows)
+    held = {**dict.fromkeys(verdict_files.ROW_KEYS), "unit": "s#1@a02", "episode": "s#1@a02", "judge": "gpt-6-luna",
+            "cheated": True, "judge_prompt": "/Users/x/repo/worktree/orbit-2/submodules/cheatbench/prompts/judge.md"}
+    verdict_files.write(run, "cheatbench", "gpt-6-luna", [held])
+    labels = read_jsonl(run / "judges" / "labels.gpt-6-luna.jsonl")
+    labels[0]["judge_prompt"] = ["/root/work/src/judging/labels_prompt.md", "src/judging/labels_disclosure.md"]
+    write_jsonl(run / "judges" / "labels.gpt-6-luna.jsonl", labels)
+    assert migrate.main([str(study), "--write"]) == 0
+    stored = verdict_files.cheatbench(run)["gpt-6-luna"]
+    assert {unit: (row["judge_prompt"], row["cheated"]) for unit, row in stored.items()} == {
+        "s#1@a01": ("submodules/cheatbench/prompts/judge.md", True),
+        "s#1@a02": ("submodules/cheatbench/prompts/judge.md", True)}
+    assert [r.get("judge_prompt", "absent") for r in verdict_files.rows(run, "labels", "gpt-6-luna")] == [
+        ["src/judging/labels_prompt.md", "src/judging/labels_disclosure.md"], "absent"]
+    assert migrate.relative_prompt("/elsewhere/prompt.md") == "/elsewhere/prompt.md"
+    assert migrate.plan(study.resolve()) == []
