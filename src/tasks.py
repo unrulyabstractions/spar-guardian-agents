@@ -16,7 +16,8 @@ What comes from where:
     src/swarm/ (board.py, submit_and_stop.py, influencers.py, turn_rules/), and CheatBench's judge is added as a
     scorer (src/judging/cheatbench_judge.py);
   * the access log's sidecar, its setup solver, its first scorer and its cleanup come from src/sandbox/access_log/, for
-    a monitored benchmark under SwarmConfig.access_log.
+    a monitored benchmark under SwarmConfig.access_log, and the network log's sidecar, setup solver, scorer and
+    capture from src/sandbox/network_log/ under SwarmConfig.network_log.
 
 The task instruction is the benchmark's, then the rule sentence of rule_level, then extra_instruction on its own
 paragraph (a control cell's text, say). A regulator that oversees reads that instruction inside a first message of its
@@ -65,6 +66,13 @@ from src.models import swarm_model_provider as provider  # importing it register
 from src.sandbox import peer_shell
 from src.sandbox.access_log.access_monitor import access_capture, capture, start_access_monitor, with_monitor
 from src.sandbox.agent_tools import AgentTools
+from src.sandbox.network_log.network_monitor import (
+    capture_network,
+    keeps_network_log,
+    network_capture,
+    start_network_monitor,
+    with_network_monitor,
+)
 from src.swarm import influencers as roles_module
 from src.swarm.awareness_probes import end_of_episode_probes
 from src.swarm.board import (
@@ -193,9 +201,12 @@ def first_message_groups(sample: Sample, names: list[str]) -> list[AgentGroup]:
     return [AgentGroup(name=f"seat_{n}", agents=[n], goal=first[n]) for n in names]
 
 
-def monitored_sample(sample: Sample) -> Sample:
-    """The sample on the compose file with the sidecar."""
-    spec = SandboxEnvironmentSpec(sample.sandbox.type, str(with_monitor(Path(sample.sandbox.config))))
+def monitored_sample(sample: Sample, access: bool = True, network: bool = False) -> Sample:
+    """The sample on the compose file with the access log's sidecar and, with `network`, the network log's."""
+    compose = Path(sample.sandbox.config)
+    compose = with_monitor(compose) if access else compose
+    compose = with_network_monitor(compose) if network else compose
+    spec = SandboxEnvironmentSpec(sample.sandbox.type, str(compose))
     return sample.model_copy(update={"sandbox": spec})
 
 
@@ -206,25 +217,29 @@ def setup_solvers(benchmark: Benchmark, plan: Plan, tools: AgentTools | None = N
     watchers = observers(benchmark, plan, tools) if tools is not None else {}
     shell = [peer_shell.peer_shell_setup(tools.seats, watchers)] if watchers else []
     monitor = [start_access_monitor(benchmark)] if benchmark.keeps_access_log(config) else []
+    network = [start_network_monitor(benchmark)] if keeps_network_log(benchmark, config) else []
     return [rules_setup(config, config.names, plan.roles, **delivery(benchmark, plan)), benchmark.setup(), *shell,
-            *monitor]
+            *monitor, *network]
 
 
 def cleanup(benchmark: Benchmark, config: SwarmConfig) -> Callable[[TaskState], Awaitable[None]]:
-    """Task.cleanup: the benchmark's, after the access log's capture when the scorers never ran."""
-    if not benchmark.keeps_access_log(config):
+    """Task.cleanup: the benchmark's, after the access log's and the network log's captures when the scorers never
+    ran. Each capture does nothing for a log the sample does not keep."""
+    if not benchmark.keeps_access_log(config) and not keeps_network_log(benchmark, config):
         return benchmark.cleanup
 
     async def run(state: TaskState) -> None:
         await capture(state)
+        await capture_network(state)
         await benchmark.cleanup(state)
     return run
 
 
 def scorers(benchmark: Benchmark, config: SwarmConfig) -> list:
-    """The access log's capture before any harness read of the honeypot, the benchmark's scorers, CheatBench's judge
-    unless the config's judge is None, and the awareness probes."""
+    """The access log's capture before any harness read of the honeypot, then the network log's, the benchmark's
+    scorers, CheatBench's judge unless the config's judge is None, and the awareness probes."""
     monitor = [access_capture()] if benchmark.keeps_access_log(config) else []
+    monitor += [network_capture()] if keeps_network_log(benchmark, config) else []
     judge = [cheatbench_judge(benchmark.name, str(benchmark.task_dir), judge=config.judge,
                               addendum=str(JUDGE_ADDENDUM) if config.judge_addendum else None,
                               batch=config.batch_judge)] if config.judge else []
@@ -292,8 +307,9 @@ def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = 
     first = first_messages(sample, plan)
     if first:
         sample.metadata["cheatbench"]["first_message"] = first
-    if benchmark.keeps_access_log(config):
-        sample = monitored_sample(sample)
+    access, network = benchmark.keeps_access_log(config), keeps_network_log(benchmark, config)
+    if access or network:
+        sample = monitored_sample(sample, access, network)
     tools = benchmark.tools(plan)
     agent_tools, bindings = team_tools(benchmark, plan, tools)
     prompts = system_prompts(benchmark, plan)

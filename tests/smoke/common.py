@@ -69,6 +69,11 @@ def log_worked(block: dict | None) -> bool:
     return block["status"] == "partial" and not (block["gaps"] or block["gone"] or block["dropped"])
 
 
+def network_worked(block: dict | None) -> bool:
+    """Whether a run's network log saw all it could: valid, or switched off. A run before the switch has no block."""
+    return block is None or block["status"] in ("valid", "off")
+
+
 def small(*pairs: str) -> SwarmConfig:
     """The default preset at the small scale with the smoke time limit, then the pairs."""
     return build_config("default", "small", [f"time_limit_s={TIME_LIMIT_S}", *pairs])
@@ -100,8 +105,8 @@ class Suite:
         """Run one scenario under the mock model, export it and write its code record (run_signals), as src/run.py's
         run does: (the eval log, write_run's summary, the episode records). `outputs` drives the agents' model and
         `judge` the judge role (honest_judge(spec) when None). Earlier files of the same name are removed first, and the
-        machines layer's host tools forget their states. The run's access log must have worked, unless the scenario
-        hurts it on purpose (`damaged_log`)."""
+        machines layer's host tools forget their states. The run's access log and network log must have worked, unless
+        the scenario hurts them on purpose (`damaged_log`)."""
         shutil.rmtree(self.logs / name, ignore_errors=True)
         shutil.rmtree(self.runs / name, ignore_errors=True)
         machines._HOST_TOOLS.clear()      # task tool states are keyed by sample, epoch and owner: one eval per scenario
@@ -112,8 +117,9 @@ class Suite:
         log = read_eval_log(log.location, resolve_attachments=True)
         summary = write_run(Path(log.location), self.runs / name)
         run_signals(self.runs / name)
-        block = self.run_json(name).get("access_log")
+        block, network = self.run_json(name).get("access_log"), self.run_json(name).get("network")
         assert damaged_log or log_worked(block), block
+        assert damaged_log or network_worked(network), network
         return log, summary, resolved(self.runs / name, read_jsonl(self.runs / name / "episodes.jsonl"))
 
     def assert_judged(self, name: str, sample, records: list[dict], cheated: float = 0.0) -> None:

@@ -140,6 +140,14 @@ def observer_seats(table: list[dict], observers: dict[str, int] | None) -> list[
             for machine in machines_ for influencer, uid in (observers or {}).items()]
 
 
+def seat_record(benchmark, state: TaskState) -> list[dict]:
+    """The store's seats: the benchmark's seat table, then under SwarmConfig.peer_shell each observer's seats."""
+    table = seat_table(benchmark.seats(state))
+    metadata = getattr(state, "metadata", None) or {}
+    observers = ((metadata.get("cheatbench") or {}).get("peer_shell") or {}).get("observers")
+    return table + observer_seats(table, observers)
+
+
 def marked(record: dict) -> list[dict]:
     """The record's objects the monitor marks."""
     return [obj for obj in record["objects"] if not obj["packed"]]
@@ -193,10 +201,7 @@ def start_access_monitor(benchmark) -> Solver:
         objects = [asdict(obj) for obj in await benchmark.watched(state)]
         if not objects:
             raise RuntimeError("access monitor: nothing to watch; --set access_log=false runs without the log")
-        table = seat_table(benchmark.seats(state))
-        metadata = getattr(state, "metadata", None) or {}
-        observers = ((metadata.get("cheatbench") or {}).get("peer_shell") or {}).get("observers")
-        record = {"seats": table + observer_seats(table, observers), "objects": objects, "nonces": nonces}
+        record = {"seats": seat_record(benchmark, state), "objects": objects, "nonces": nonces}
         state.store.set(STORE, record)
         live = marked(record)
         on_machines = sorted({obj["machine"] for obj in live})

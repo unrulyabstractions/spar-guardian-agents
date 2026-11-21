@@ -64,6 +64,7 @@ from src.measures.ladder_domain import Domain
 from src.sandbox import cheatbench_task_files as task_files
 from src.sandbox.access_log.access_monitor import MONITOR_DEVIATION, Watched
 from src.sandbox.agent_tools import AgentTools, Seat
+from src.sandbox.network_log.network_monitor import NETWORK_DEVIATION
 from src.sandbox.sandbox_probe import environment_probe
 
 TEAM = "team"                       # the owner of a shared_task team's deliverable and tool state
@@ -335,13 +336,14 @@ class Benchmark(ABC):
     def deviations(self, plan: Plan) -> list[str]:
         """How the run departs from CheatBench's own runner, as short labels: the common ones (NO_SUBMIT_DEVIATIONS
         when no agent gets submit or stop_working), the delay of a shared_task team's submit, the domain's, the team's,
-        a regulator's own prompt, then the access log's."""
+        a regulator's own prompt, then the network log's and the access log's."""
         config = plan.config
         common = COMMON_DEVIATIONS if config.gives_submit or config.gives_stop_working else NO_SUBMIT_DEVIATIONS
         delay = [f"team_submit_takes_effect_after_{config.submit_delay_rounds}_rounds"] \
             if config.gives_submit and config.submit_kind == "team" else []
         oversight = [OVERSIGHT_DEVIATION] if any(map(config.oversees, (plan.roles or {}).values())) else []
-        monitor = [MONITOR_DEVIATION] if self.keeps_access_log(config) else []
+        network = [NETWORK_DEVIATION] if config.network_log and self.watched is not None else []
+        monitor = [*network, *([MONITOR_DEVIATION] if self.keeps_access_log(config) else [])]
         return [*common, *delay, *self.task_deviations, *(self.team_deviations(plan) if plan.team else []), *oversight,
                 *monitor]
 

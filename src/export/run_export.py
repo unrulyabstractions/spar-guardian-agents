@@ -7,6 +7,8 @@ Writes
     <run_dir>/episodes.jsonl                           one record per (sample, agent)
     <run_dir>/access_log.jsonl                         one row per open of the honeypot, for a run that kept a log
                                                        (src/export/_export_access_log.py)
+    <run_dir>/network.jsonl                            one row per socket call in the agents' machines, for a run that
+                                                       kept a network log (src/export/_export_network_log.py)
     <run_dir>/judges/cheatbench.<judge>.jsonl          one CheatBench verdict row per judged episode, by the judge
                                                        that ran in the eval (src/judging/verdict_files.py)
     <run_dir>/trajectories/<episode>/transcript.json   the ATIF transcript the judge read
@@ -38,9 +40,11 @@ and what each agent held: its items and numbered pieces, and on openmath's split
 branches and the archive), the domain's own blocks (Benchmark.run_blocks: "openmath" and "deliverables", "swe",
 "knowledge", "interview", "protein", "creative", "chess"), "honeypot_probe" (the honeypot probe's report by owner:
 agents, remote, shared), "delivery" (the stop-after-delivery record), "access_log" (the access log's status, for a run
-that recorded the switch: src/export/_export_access_log.py); and an episode's "access", the domain's facts
-(Benchmark.episode_facts) and "delivery" (the round and working step at which its deliverable was first seen). The
-export never writes run.json "signals": the code record (src/measures/code_ladder.py) adds it after the export.
+that recorded the switch: src/export/_export_access_log.py), "network" (the network log's status, its counts by agent
+and op and the cross-agent connections, for a run that recorded the switch: src/export/_export_network_log.py); and an
+episode's "access", the domain's facts (Benchmark.episode_facts) and "delivery" (the round and working step at which its
+deliverable was first seen). The export never writes run.json "signals": the code record (src/measures/code_ladder.py)
+adds it after the export.
 
 Paths are relative, so a run reads the same in any checkout and in the dataset: run.json "eval_log" is the log's path
 from the checkout (logs/<study>/[<group>/]<run>/<file>.eval, run_directory.log_link), and an episode's or a verdict's
@@ -75,6 +79,7 @@ import orbit
 from inspect_ai.log import read_eval_log
 
 from src.export._export_access_log import access_log
+from src.export._export_network_log import NETWORK_LOG, network_log
 from src.export._export_run_blocks import (
     cheatbench,
     domain,
@@ -101,7 +106,7 @@ from src.utils.json_files import read_json, write_jsonl
 
 # The identity a verdict row takes from its episode record, ahead of the verdict.
 VERDICT_IDENTITY = ("id", "episode", "replicate", "task", "model", "model_key", "agent", "role")
-OWNED_FILES = (RUN_JSON, EPISODES, ACCESS_LOG)
+OWNED_FILES = (RUN_JSON, EPISODES, ACCESS_LOG, NETWORK_LOG)
 OWNED_DIRS = ("trajectories", "communication", "defense", "swe")
 
 
@@ -258,10 +263,15 @@ def write_run(eval_log_path: Path, run_dir: Path, *, verdicts: dict[str, dict] |
     block, opens = access_log(views[0]) if views else (None, None)
     run = run_json(views[0] if views else None, eval_path, run_dir, records, log.eval.eval_id, log.eval.model, block,
                    versions, earlier.get("run_id") or run_name(run_dir))
+    network, sockets = network_log(views[0]) if views else (None, None)
+    if network:
+        run["network"] = network
     (run_dir / RUN_JSON).write_text(json.dumps(run, indent=1))
     write_jsonl(run_dir / EPISODES, records)
     if opens is not None:
         write_jsonl(run_dir / ACCESS_LOG, opens)
+    if sockets is not None:
+        write_jsonl(run_dir / NETWORK_LOG, sockets)
     rows = judge_rows(views, records, verdicts)
     return {"out_dir": str(run_dir), "episodes": len(records), "topology": run["topology"],
             "with_transcript": [r["episode"] for r in records if r["transcript_path"]],

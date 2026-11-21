@@ -7,7 +7,7 @@ RUN ?= riemann_minimal
 SAMPLES ?= 15
 
 .PHONY: help ui ui-stop transcripts smoke smoke-swe smoke-kw smoke-interview smoke-protein smoke-creative smoke-chess \
-	smoke-access smoke-load smoke-all smoke-replay test test-tools lint \
+	smoke-access smoke-network smoke-load smoke-all smoke-replay test test-tools lint \
 	tools-setup scout docent graph transect contagion failures hawk analyse figures tables \
 	results-tables paper-figures paper-sources paper-check paper
 
@@ -46,6 +46,9 @@ smoke-chess:  ## chess mock-model scenarios: the game and Stockfish on the host,
 
 smoke-access:  ## the access log's scenarios on the real sandbox, on ordered and on drawn agent IDs, no model spend
 	$(PY) -m tests.smoke.access_logging
+
+smoke-network:  ## the network log's scenarios on the real sandbox (bpftrace, the socket tables, a dead monitor), no model spend
+	$(PY) -m tests.smoke.network_logging
 
 smoke-load:  ## SAMPLES runs at once on one Docker, each with its own sidecar, as a box runs them, no model spend
 	$(PY) -m tests.smoke.access_load --samples $(SAMPLES)

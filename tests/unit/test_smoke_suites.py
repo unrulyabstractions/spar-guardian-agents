@@ -49,8 +49,8 @@ from tests.support.stub_ladder import OPENS, make_run
 from tests.support.turn_rules_harness import build_task, pull
 
 FOLDERS = {"access_logging": "smoke_access", "chess": "smoke_chess", "creative": "smoke_creative",
-           "interview": "smoke_interview", "knowledge": "smoke_kw", "openmath": "smoke_openmath",
-           "protein": "smoke_protein", "swe": "smoke_swe"}
+           "interview": "smoke_interview", "knowledge": "smoke_kw", "network_logging": "smoke_network",
+           "openmath": "smoke_openmath", "protein": "smoke_protein", "swe": "smoke_swe"}
 """Each suite module's folder under runs/study_smoke/ and logs/study_smoke/."""
 STAMP = "20990101T000000Z"
 
@@ -59,9 +59,9 @@ def python(code: str) -> list[str]:
     return [sys.executable, "-c", code]
 
 
-def test_every_domain_has_a_suite_and_the_access_log_has_one():
+def test_every_domain_has_a_suite_and_each_log_has_one():
     domains = [path.parent.name for path in (settings.ROOT / "src" / "domains").glob("*/__init__.py")]
-    assert all_suites.SUITES == sorted([*domains, "access_logging"])
+    assert all_suites.SUITES == sorted([*domains, "access_logging", "network_logging"])
 
 
 @pytest.mark.parametrize("name", all_suites.SUITES)

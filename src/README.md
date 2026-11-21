@@ -75,6 +75,7 @@ Each package's `<d>_task.py` holds its Benchmark. The other modules a package ex
 What every domain builds its sandbox from. Nothing here knows a domain.
 
 - `access_log/access_monitor.py`: the access log's API: what a domain watches, the sidecar, the setup solver that starts the monitor and the capture of its rows. `access_monitor_daemon.py` and `git_object_files.py` run in a container.
+- `network_log/network_monitor.py`: the network log's API: the tracer's image, the sidecar, the setup solver that starts the monitor and its control, and the capture of its rows. `network_monitor_daemon.py` runs in the sidecar.
 - `agent_tools.py`: `Seat`, where one agent works, and `AgentTools`, the agents' `shell` and `run_python` bound per seat.
 - `agent_users/agent_users.py`: one Linux user per agent in one container, for openmath, knowledge work and creative writing.
 - `machines/agent_machines.py`: one machine per agent on CheatBench's python311 image, for the interview tasks and protein design. Chess and creative writing build on the same image.
@@ -101,7 +102,7 @@ The implementation is `_regulator_oversight.py` (`get_peer_actions` and `get_pee
 
 ### tasks.py
 
-`swarm_task(benchmark, config)` turns the plan, the sample, the tools, the prompts, the board and the turn rules into one ORBIT task. It adds the judge to the scorers, adds the access log's sidecar, setup solver and first scorer for a benchmark that watches, and records the run's facts in the sample metadata. The `@task` entry points `openmath`, `swe`, `knowledge_work`, `subset_sum`, `prime_factorization`, `protein_design`, `creative_writing` and `chess` serve `inspect eval`.
+`swarm_task(benchmark, config)` turns the plan, the sample, the tools, the prompts, the board and the turn rules into one ORBIT task. It adds the judge to the scorers, adds the access log's and the network log's sidecars, setup solvers and first scorers for a benchmark that watches, and records the run's facts in the sample metadata. The `@task` entry points `openmath`, `swe`, `knowledge_work`, `subset_sum`, `prime_factorization`, `protein_design`, `creative_writing` and `chess` serve `inspect eval`.
 
 ### run.py
 
@@ -116,7 +117,7 @@ The eval log as a CheatBench run directory.
 - `eval_sample_view.py`: one sample read the same way, finished or live.
 - `atif_transcripts.py`: one sample as one ATIF trajectory per agent.
 
-`_export_run_blocks.py` and `_export_access_log.py` are the implementation: the blocks of `run.json`, and the sidecar's rows with an agent, an origin and a tool call as `access_log.jsonl`.
+`_export_run_blocks.py`, `_export_access_log.py` and `_export_network_log.py` are the implementation: the blocks of `run.json`, the access log's rows with an agent, an origin and a tool call as `access_log.jsonl`, and the network log's rows with the agent at the other end as `network.jsonl`.
 
 ### judging/
 

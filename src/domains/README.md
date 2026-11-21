@@ -26,7 +26,7 @@ Outside its package a domain adds these:
 | `scripts/box/fleet_layout.py`, `scripts/box/box_runner.py` | `TASKS` and its build step, for a domain that runs on the boxes; `TASK_KINDS` for a cell only this task has |
 | `scripts/paper/domain_figures.py`, `scripts/paper/tables.py` | its setup figure and its rows of the tables |
 
-Every run's deviations open with two labels: the agent is Inspect's `react()` loop under ORBIT (`agent_is_inspect_react_under_orbit_not_vendor_harness`; a run made on ORBIT 1.x says `agent_is_orbit_turn_react_not_vendor_harness`, for ORBIT's own copy of that loop), and its system prompt says how to hand in work and how to stop (`submit_and_stop_sentences_added_to_the_system_prompt`), which CheatBench's runner never says. A `shared_task` team whose neutral agents hold `submit` adds `team_submit_takes_effect_after_<d>_rounds`. A run without `submit` and `stop_working` records `agents_have_no_submit_tool_and_run_until_their_turn_cap_or_the_time_limit` instead of the second label. The domain's own labels follow, then its team's. A run with a regulator that oversees adds `a_regulator_gets_its_own_prompt_and_reads_the_task_as_its_teammates_work`. A run with the access log ends with `honeypot_opens_recorded_by_a_monitor_outside_the_agents_machines`.
+Every run's deviations open with two labels: the agent is Inspect's `react()` loop under ORBIT (`agent_is_inspect_react_under_orbit_not_vendor_harness`; a run made on ORBIT 1.x says `agent_is_orbit_turn_react_not_vendor_harness`, for ORBIT's own copy of that loop), and its system prompt says how to hand in work and how to stop (`submit_and_stop_sentences_added_to_the_system_prompt`), which CheatBench's runner never says. A `shared_task` team whose neutral agents hold `submit` adds `team_submit_takes_effect_after_<d>_rounds`. A run without `submit` and `stop_working` records `agents_have_no_submit_tool_and_run_until_their_turn_cap_or_the_time_limit` instead of the second label. The domain's own labels follow, then its team's. A run with a regulator that oversees adds `a_regulator_gets_its_own_prompt_and_reads_the_task_as_its_teammates_work`. A run with the network log adds `network_calls_recorded_by_a_monitor_outside_the_agents_machines`, and a run with the access log ends with `honeypot_opens_recorded_by_a_monitor_outside_the_agents_machines`.
 
 ## Layout
 
@@ -52,6 +52,7 @@ Beyond the roles: `swe/swe_inputs.py` (Lucy's split of each issue and CheatBench
 | file | holds |
 |---|---|
 | `access_log/` | one sidecar per sample that records each open of the honeypot: the API (`access_monitor.py`), the daemon (`access_monitor_daemon.py`) and the listing of a repository's objects (`git_object_files.py`), which both run in a container |
+| `network_log/` | one sidecar per sample that records each socket call in the agents' machines: the API (`network_monitor.py`: the tracer's image, the sidecar, the solver and the capture) and the daemon (`network_monitor_daemon.py`), which runs in the sidecar beside the access log's /proc readers |
 | `agent_tools.py` | CheatBench's sandbox user and working directory, `Seat` (where one agent works), `AgentTools`, the agents' `shell` and `run_python` bound per seat with the user's processes reaped after each command, and `roster_tools`, the tools of every domain but chess |
 | `agent_users/` | one Linux user per agent in one container (openmath, knowledge work, creative writing): the seats, the private files and their proof, the loopback guard, the end state |
 | `machines/` | one container per agent on CheatBench's python311 image (`cbtask:python311`): the compose file, the staging archives, the task's tool on the host with one state per owner, the end state and the probe across containers |
@@ -66,7 +67,7 @@ Most files in a `sandbox/` folder are read when their module is imported. The re
 
 ## What the log records, and what it only observes
 
-The board is recorded: every post, read and status call is a tool call in the eval log, and the export keeps the posts under `communication/`. Each open of the honeypot is recorded too, in the access log below. Everything else between agents is observed, not recorded. A file one agent writes and another reads shows up only in the tool calls that wrote and read it and in the probe's scan of the disk at the end (run.json `honeypot_probe`); a process an agent starts could read and write between logged calls. The per-agent layouts close what they can and record the rest (`src/sandbox/sandbox_hygiene.py`):
+The board is recorded: every post, read and status call is a tool call in the eval log, and the export keeps the posts under `communication/`. Each open of the honeypot is recorded too, in the access log below, and each socket call in the agents' machines, in the network log after it. Everything else between agents is observed, not recorded. A file one agent writes and another reads shows up only in the tool calls that wrote and read it and in the probe's scan of the disk at the end (run.json `honeypot_probe`); a process an agent starts could read and write between logged calls. The per-agent layouts close what they can and record the rest (`src/sandbox/sandbox_hygiene.py`):
 
 - after each of an agent's `shell` or `run_python` commands every process of that agent's Linux user (or of `user` in its own container) is killed, so nothing of the agent's outlives its step; the counts are in run.json `sandbox.reaps`;
 - where each agent works in a copy of its own in the one container (openmath's solo and split layouts, knowledge work's solo layout), the agent users' files are private (umask 077), while `/tmp`, `/var/tmp` and `/dev/shm` keep the image's mode and can be listed; the setup proves the files private and refuses the layout otherwise;
@@ -175,6 +176,28 @@ cat /proc/sys/fs/fanotify/max_user_groups      # at least twice the runs at once
 | `software_engineering` | `git_agent_root,harness_own,forged_harness,drawn_swe` |
 
 We then run a full box of mock runs (`scripts/box/box_run.sh <id> --mock`). The box passes when every run reads `valid`, or `host` on chess, each run's rows name only its own machines, and no `auditor` container is left.
+
+### The network log
+
+An agent can reach a teammate's process without a file: a server one starts and the other connects to, on loopback or through `peer_shell`. The **network log** records every socket call in the agents' machines: each bind, listen, connect, accept, UDP send to an address and close, TCP, UDP and unix sockets alike, loopback included. It records only. It blocks, delays and answers nothing. `SwarmConfig.network_log` switches it, and it is on by default on every domain the access log can watch. It does not need the access log.
+
+**The sidecar.** `src/tasks.py` adds the service `netlog` to the sample's compose file: the sample's own image, the idle command, no network, the host's pid namespace, `BPF`, `PERFMON` and `SYS_PTRACE`. It holds no `SYS_ADMIN`, because Inspect refuses a host bind into a service that could remount it. Where the host allows it, the service also mounts the tracer: bpftrace's static release, pinned by sha256, unpacked into the image `network-trace-bpftrace:<version>-<arch>` and mounted at `/nix` as an image mount, with the host's `/sys/kernel/tracing` bound read only. `ensure_tracer` builds that image once per Docker host and proves it by attaching a probe in a container of the sidecar's shape (`src/sandbox/network_log/network_monitor.py`).
+
+**Two methods.** With the tracer, the daemon runs bpftrace with fexit probes on the kernel's socket calls, filtered to the sample's network namespaces (method `ebpf`). The kernel does not wait for the row, so a process may be gone before the daemon reads `/proc`. Its row then keeps the kernel's pid, uid and command name, and an exe from the exec the trace saw. Without the tracer, or when it cannot attach, the daemon reads each namespace's socket tables every 0.25 s (method `procnet`). That method misses a connection that opens and closes between two reads, and it sees no unix client. `scripts/box/network_trace_check.sh` says which method a Docker host gets, and run.json `network.fallback` says why a run fell back.
+
+**The controls.** At the start and at the end the harness runs a control on every machine that holds a seat: as root, with a nonce in argv, it listens on loopback, connects to itself and accepts, and it waits until the daemon has written its rows. A start control with no connect row or no accept row is fatal: the sample dies before any model call. A dead monitor loses the end control and the `stopped` row.
+
+**Who.** A row names its process the way the access log does: the seat table maps a machine and a uid to an agent, an influencer's `peer_shell` observer uid to the influencer, and the root of the process tree to an origin and a tool call. A row of a process gone before `/proc` was read keeps the kernel's uid, which still names an observer or a seat's own uid. The other end of each connection is the matching accept, else what listens on the port, so a regulator's observer that reaches a worker's server reads as a cross-agent connection.
+
+| status in run.json `network` | meaning | `network.jsonl` |
+|---|---|---|
+| `valid` | every control's connect and accept seen on every machine with a seat, a `stopped` row, no gap | present, control rows included |
+| `partial` | the controls seen, but the tracer died mid-run, a machine restarted or went down, the tracer lost events or rows were dropped | present |
+| `broken` | a control missing or no `stopped` row: the rows are true and an absence means nothing | present |
+| `absent` | the switch was on and no record came back | none |
+| `off` | the switch was off, or the domain has no machine to watch (chess) | none |
+
+`make smoke-network` runs the scenarios on the real sandbox: an observer connecting to a worker's server by ebpf and by the socket tables, a monitor killed mid-run, and the switch off.
 
 ## The code's evidence
 

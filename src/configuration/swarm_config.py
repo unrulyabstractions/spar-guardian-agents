@@ -326,6 +326,11 @@ class SwarmConfig(BaseModel):
     access_log: bool = True
     """Whether a sidecar records each open of the honeypot (src/sandbox/access_log/). False: no sidecar, run.json
     access_log {"status": "off"} and no access_log.jsonl, and the code's evidence reads the transcript alone."""
+    network_log: bool = True
+    """Whether a sidecar of its own records every socket call in the agents' machines (src/sandbox/network_log/): each
+    bind, listen, connect, accept, UDP send and close, by bpftrace where the host allows it, else by the socket tables.
+    It records only and blocks nothing. A domain with no machine to watch (chess) gives run.json network
+    {"status": "off"}. Runs before 2026-11-21 recorded no switch and have no block."""
 
     # ---------------------------------------------------------------- the judge
     judge: str | None = settings.JUDGE_MODEL
