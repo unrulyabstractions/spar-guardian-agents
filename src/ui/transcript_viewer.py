@@ -200,7 +200,8 @@ class Viewer:
         self.measured = {run_id: idx["entries"][run_id]["measured"] for run_id in self.rows}
         self.ladders = transcript_ladder_tables.ladders_payload(transcript_levels.LADDERS, transcript_levels.ORDER,
                                                                 transcript_levels.label_about())
-        self.summaries = {c["key"]: transcript_summary.summary(served["rows"], c["key"]) for c in served["collections"]}
+        studied = [r for r in served["rows"] if not r.get("hidden_task")]
+        self.summaries = {c["key"]: transcript_summary.summary(studied, c["key"]) for c in served["collections"]}
         self._tools: dict[str, dict] = {}
         self._tools_lock = threading.Lock()
         self._network: dict[str, dict | None] = {}
@@ -342,7 +343,7 @@ def main(argv: list[str] | None = None) -> int:
     idx = load_or_build(runs, args.rebuild, args.cache)
     Handler.viewer = Viewer(idx)
     counts = ", ".join(f"{c['key']} {c['runs']}" for c in idx["collections"])
-    left_out = f"; {idx['left_out']['runs']} valid runs of {', '.join(idx['left_out']['tasks'])} left out" \
+    left_out = f"; {idx['left_out']['runs']} of them of {', '.join(idx['left_out']['tasks'])}, behind 'other tasks'" \
         if idx["left_out"]["runs"] else ""
     print(f"index: {len(idx['rows'])} valid runs ({counts}){left_out}; {len(idx['errors'])} unreadable; "
           f"{idx['measured']} runs measured in {idx['build_seconds']} s; ready in {time.time() - t0:.2f} s", flush=True)

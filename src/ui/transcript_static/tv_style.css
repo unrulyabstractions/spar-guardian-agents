@@ -40,6 +40,7 @@ table.data th, table.data td { vertical-align: middle; }
   border-radius: 6px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font-size: 12.5px; }
 .idx-field.is-set .field-label { color: var(--accent); font-weight: 600; }
 .idx-field.is-set select, .idx-field.is-set input { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.idx-other.is-set { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .idx-reset { height: 28px; justify-content: center; }
 .idx-wrap { overflow: auto; max-height: calc(100vh - var(--header-h) - 120px); }
 /* separate borders, as table.sum-table: the sticky header then carries its own rules and nothing shows between them */

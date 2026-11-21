@@ -69,3 +69,19 @@ def test_the_calls_are_cut_at_the_cap(tmp_path, monkeypatch):
     monkeypatch.setattr(net, "MAX_CALLS", 1)
     view = net.network_view(written(tmp_path, ROWS), CALLS, AT, START)
     assert len(view["calls"]) == 1 and view["cut"] == 2
+
+
+def test_a_cross_agent_call_is_connected_only_when_established_and_a_failed_unix_connect_is_quiet(tmp_path):
+    """The panel's split of the block's cross_agent and its hidden nscd connects; each connect carries its outcome."""
+    rows = [row("connect", 2.0, pid=800, agent="r5x8w", peer_agent="k7q2m", lport=46152, rport=8123,
+                outcome="established", outcome_by="syscall"),
+            row("connect", 3.0, pid=801, agent="r5x8w", peer_agent="k7q2m", lport=0, rport=8123,
+                result="EINPROGRESS", outcome="refused", outcome_error="ECONNREFUSED", outcome_by="state"),
+            row("connect", 4.0, pid=802, proto="unix", laddr=None, raddr="/var/run/nscd/socket", result="ENOENT",
+                outcome="failed", outcome_error="ENOENT", outcome_by="syscall", via=650),
+            row("connect", 5.0, pid=803, proto="unix", laddr=None, raddr="/tmp/s.sock", outcome="established")]
+    view = net.network_view(written(tmp_path, rows), CALLS, AT, START)
+    assert [(c["cross"], c["connected"], c["quiet"], c["outcome"]) for c in view["calls"]] == [
+        (True, True, False, "established"), (True, False, False, "refused"), (False, False, True, "failed"),
+        (False, False, False, "established")]
+    assert view["calls"][1]["outcome_error"] == "ECONNREFUSED" and view["calls"][2]["via"] == 650

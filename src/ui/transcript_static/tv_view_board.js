@@ -30,8 +30,8 @@
  * since the stop before it. When the payload says the run has a network log (d.network) and opts.netUrl is given, a
  * Network panel (tv_net_panel.js) under it shows what listens at the position, by machine, and every connect, accept
  * and send up to it; once the log has come, each TCP or UDP call and each cross-agent call marks its agent's lane with
- * a small triangle at its time (a cross-agent one in the bad colour), whose hover names it and whose click opens its
- * call. It returns {moveTo(position), showPost(label),
+ * a small triangle at its time (a cross-agent connection in the bad colour, an attempt in the warning colour), whose
+ * hover names it and whose click opens its call. It returns {moveTo(position), showPost(label),
  * state}: showPost moves to post P<n> (the board's own numbering) and, when the post holds a judge's excerpt, brings
  * the marked excerpt into view. */
 import { appendAll, enc, firstLine, fmtSecs, h, plural } from '/static/app/dom.js';
@@ -504,7 +504,8 @@ export function renderBoard(el, d, opts) {
             : call ? left(call) + unitW / 2 : stepX(c.t);
           if (x == null || !Number.isFinite(x)) continue;
           const y = laneY[side] + LANE_H - 1.5;
-          netG.appendChild(svgEl('polygon', { class: ['bd-net-mark', c.cross && 'bd-net-cross'],
+          netG.appendChild(svgEl('polygon', { class: ['bd-net-mark',
+            c.connected ? 'bd-net-cross' : c.cross ? 'bd-net-try' : null],
             points: `${x - 6},${y} ${x + 6},${y} ${x},${y - 11}`, 'data-net': i, 'data-side': side }));
         }
       });
@@ -619,7 +620,7 @@ export function renderBoard(el, d, opts) {
       if (!t) { tip.hide(); return; }
       if (t.hasAttribute('data-net')) {
         const c = netView.calls[Number(t.getAttribute('data-net'))];
-        tip.show(ev, [callWords(c), [c.proto, c.prog, c.result].filter(Boolean).join(' · '),
+        tip.show(ev, [callWords(c), [c.proto, c.prog, c.outcome || c.result].filter(Boolean).join(' · '),
           timed && c.t != null ? fmtSecs(c.t) : null, c.call ? `call ${c.call.k}` : 'no call'].filter(Boolean));
       } else if (t.hasAttribute('data-k')) {
         const side = t.getAttribute('data-side');
@@ -941,7 +942,8 @@ export function renderBoard(el, d, opts) {
       arrowKey(READ_CLASS.from, 'from read'),
       formless ? arrowKey(READ_CLASS.plain, 'other read') : null,
       net ? netKey(null, 'connection') : null,
-      net ? netKey('bd-net-cross', 'cross-agent connection') : null));
+      net ? netKey('bd-net-cross', 'cross-agent connection') : null,
+      net ? netKey('bd-net-try', 'cross-agent attempt') : null));
 
   // The key of the lens in force, under the controls: its colours as chips and samples, how many of the two agents'
   // calls it marks, and how many of its records name no call (the payload's unplaced; the names on hover).

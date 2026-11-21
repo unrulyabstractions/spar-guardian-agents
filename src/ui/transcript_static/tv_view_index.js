@@ -11,7 +11,8 @@
  * stand in three labelled groups (FILTER_GROUPS), a set filter outlined; a run with no influencer shows a dash in the
  * influencer columns; a legend table under the runs shows every level of the three ladders as the cells draw it,
  * with each ladder's line; the collections and the index's build stand in a small table behind one "Collections"
- * control. Every definition is on the Ladders page. */
+ * control. The runs of the tasks the study does not read (hidden_task) are listed only once the "other tasks" chip by
+ * the title is on (?other=1). Every definition is on the Ladders page. */
 import { enc, fmtInt, h, plural } from '/static/app/dom.js';
 import { muted, select } from '/static/app/components.js';
 import { cheatbenchTeam, cheatingCell, levelChip, lineMark, teamScore } from './tv_levels.js';
@@ -209,9 +210,13 @@ export async function viewIndex(q) {
   const ladders = await loadLadders();
   const COLUMNS = columns(ladders);
   const FILTERS = filters(ladders);
-  const rows = idx.rows;
+  const others = idx.rows.filter(r => r.hidden_task).length;
+  let rows = [];
   const state = { sort: q.get('sort') || '', dir: q.get('dir') === 'desc' ? 'desc' : 'asc',
-    page: Math.max(0, (parseInt(q.get('page'), 10) || 1) - 1), size: q.get('size') || '250', f: {} };
+    page: Math.max(0, (parseInt(q.get('page'), 10) || 1) - 1), size: q.get('size') || '250', f: {},
+    other: q.get('other') === '1' };
+  const pickRows = () => { rows = state.other ? idx.rows : idx.rows.filter(r => !r.hidden_task); };
+  pickRows();
   for (const f of FILTERS) state.f[f.key] = q.get(f.key) || '';
 
   const syncUrl = () => {
@@ -220,6 +225,7 @@ export async function viewIndex(q) {
     if (state.sort) { p.set('sort', state.sort); p.set('dir', state.dir); }
     if (state.page) p.set('page', String(state.page + 1));
     if (state.size !== '250') p.set('size', state.size);
+    if (state.other) p.set('other', '1');
     const s = p.toString();
     try { history.replaceState(null, '', '#/' + (s ? '?' + s : '')); } catch (e) { /* view stays as drawn */ }
   };
@@ -253,6 +259,20 @@ export async function viewIndex(q) {
     const el = control(f);
     fields.set(f.key, { el, field: h('label', { class: 'idx-field', title: f.title || null }, h('span', { class: 'field-label' }, f.label), el) });
   }
+  // The other tasks' runs: the chip lists them, and every filter's options follow.
+  const otherChip = others ? h('button', { type: 'button', class: ['btn', 'btn-small', 'idx-other', state.other && 'is-set'],
+    title: 'runs of tasks the study does not read', onclick: () => {
+      state.other = !state.other;
+      otherChip.classList.toggle('is-set', state.other);
+      pickRows();
+      for (const f of FILTERS) {
+        const x = fields.get(f.key);
+        const el = control(f);
+        x.field.replaceChild(el, x.el);
+        x.el = el;
+      }
+      changed();
+    } }, `other tasks ${fmtInt(others)}`) : null;
   const reset = h('button', { type: 'button', class: 'btn btn-small idx-reset', onclick: () => {
     for (const f of FILTERS) state.f[f.key] = '';
     for (const [key, x] of fields) x.el.value = state.f[key];
@@ -345,7 +365,8 @@ export async function viewIndex(q) {
         h('th', { scope: 'col', class: 'center' }, 'Valid runs'))),
       h('tbody', null, COLLECTION_ORDER.map(c => h('tr', null,
         h('td', { class: 'nowrap', title: collectionOf(c).about || null }, h('b', null, collectionOf(c).label)),
-        h('td', { class: 'mono small' }, `runs/${c}`), h('td', { class: 'center' }, fmtInt(collectionOf(c).runs)))))),
+        h('td', { class: 'mono small' }, `runs/${c}`), h('td', { class: 'center' }, fmtInt(collectionOf(c).runs),
+          collectionOf(c).other_tasks ? muted(` + ${fmtInt(collectionOf(c).other_tasks)} other`, 'small') : null))))),
     h('p', { class: 'small muted', title: `${fmtInt(idx.measured)} measured in ${idx.build_seconds} s` }, `Index ${idx.built_at}`,
       idx.errors.length ? ` · ${plural(idx.errors.length, 'run')} unreadable` : '')));
 
@@ -368,7 +389,7 @@ export async function viewIndex(q) {
   requestAnimationFrame(keepHead);
 
   return h('div', { class: 'page wide' },
-    h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, titleEl, about), pager),
+    h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, titleEl, about, otherChip), pager),
     filterBox,
     wrap,
     legendTable(ladders));

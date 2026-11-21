@@ -8,11 +8,14 @@
  *   panel.at(t, tPrev);          // the position: what listens at t, and every connect, accept and send up to t
  *   onLoad(view)                 // once the log has come: the tab marks the lanes with its calls (laneMarks)
  *
- * The head holds the log's method and status, the counts at the position, and three filters: named agents only,
- * cross-agent calls only, and TCP and UDP only. Listening: each socket open at the position, by machine, with its port,
- * its program, its agent and the call that opened it. Calls: newest first, a `+` on those since the stop before, a
- * cross-agent call in the bad colour with its two agents and the port it reached. A row off the clock (no call, no
- * time) counts at the end. The panel carries no sentence: labels, values, chips and short hovers. */
+ * The head holds the log's method and status (partial with its reasons as chips), the counts at the position, and
+ * four filters: named agents only, cross-agent calls only, TCP and UDP only, and failed unix connects (hidden until
+ * asked: two per shell to nscd's socket). Listening: each socket open at the position, by machine, with its port, its
+ * program, its agent and the call that opened it. Calls: newest first, a `+` on those since the stop before, a
+ * cross-agent call with its two agents and the port it reached, in the bad colour when it connected and the warning
+ * colour when it was only attempted, and each connect's outcome (established, refused, timed_out, failed,
+ * in_progress) where its return said nothing (EINPROGRESS). A row off the clock (no call, no time) counts at the end.
+ * The panel carries no sentence: labels, values, chips and short hovers. */
 import { enc, h, plural } from '/static/app/dom.js';
 import { muted } from '/static/app/components.js';
 
@@ -21,18 +24,23 @@ export const netUrl = id => `/api/network?id=${enc(id)}`;
 const SHOWN = 200;            // the most calls listed at once
 const LOG_CLASS = { valid: 'tmp-c-added', partial: 'tmp-c-changed', broken: 'tmp-c-removed',
   absent: 'tmp-c-removed' };
-const LOG_TIP = { valid: 'every control seen, nothing lost', partial: 'controls seen, something lost',
+const LOG_TIP = { valid: 'every control seen, nothing lost', partial: 'controls seen, some calls may be missing',
   broken: 'a control missing: an absence means nothing', absent: 'no record came back' };
-const METHOD_TIP = { ebpf: 'kernel trace of every socket call', procnet: 'socket tables read every 0.25 s' };
+const METHOD_TIP = { ebpf: 'kernel trace of every socket call',
+  procnet: 'socket tables every 0.25 s: short calls missed' };
+const REASON_TIP = { gap: 'the log lost sight mid-run', lost: 'the tracer lost events',
+  dropped: 'rows past the cap dropped' };
 const OP_TIP = { connect: 'connect', accept: 'accept', send: 'UDP send to an address' };
+const OUTCOME_CLASS = { established: 'tmp-c-added', refused: 'tmp-c-removed', timed_out: 'tmp-c-removed',
+  failed: 'tmp-c-removed', in_progress: null };
 
 export const at = row => (row.t == null ? Infinity : row.t);
 const address = (addr, port) => (addr == null ? '' : port ? `${addr}:${port}` : addr);
 // The server's end of a call: the address a connect or a send reached; the listening address an accept took it on.
 export const serverEnd = c => (c.op === 'accept' ? [c.laddr, c.lport] : [c.raddr, c.rport]);
 // The process of a row, for a hover: its command line, pid and uid.
-const procTip = r => [r.cmd || r.exe, r.pid != null ? `pid ${r.pid}` : null, r.uid != null ? `uid ${r.uid}` : null]
-  .filter(Boolean).join(' · ');
+const procTip = r => [r.cmd || r.exe, r.pid != null ? `pid ${r.pid}` : null, r.uid != null ? `uid ${r.uid}` : null,
+  r.via ? `named via pid ${r.via}` : null].filter(Boolean).join(' · ');
 // A call that marks the lanes: one over TCP or UDP, or any cross-agent call.
 export const marksLane = c => c.proto !== 'unix' || c.cross;
 // One short line for a call: "a01 connect → a02:8180", "a02 accept ← a01 :8180".
@@ -49,6 +57,7 @@ export function netPanel(url, opts) {
   let agentsOnly = false;
   let crossOnly = false;
   let inetOnly = false;
+  let showQuiet = false;
   let drawn = null;
 
   const toggle = (label, tip, get, set) => {
@@ -57,13 +66,16 @@ export function netPanel(url, opts) {
     return b;
   };
   const chips = h('span', { class: 'tmp-counts' });
+  const quietToggle = toggle('failed unix', 'show failed unix connects (nscd)', () => showQuiet,
+    v => { showQuiet = v; });
   const counts = h('span', { class: 'tmp-counts' });
   const head = h('div', { class: 'tmp-head' },
     h('h3', { class: 'bd-board-head', title: 'socket calls in the agents\' machines' }, 'Network'),
     chips, counts, h('span', { class: 'spacer' }),
     toggle('agents', 'named agents only', () => agentsOnly, v => { agentsOnly = v; }),
     toggle('cross', 'cross-agent calls only', () => crossOnly, v => { crossOnly = v; }),
-    toggle('inet', 'TCP and UDP only', () => inetOnly, v => { inetOnly = v; }));
+    toggle('inet', 'TCP and UDP only', () => inetOnly, v => { inetOnly = v; }),
+    quietToggle);
   const listenBox = h('div', { class: 'tmp-machine-box net-box' }, muted('loading', 'small block net-none'));
   const callBox = h('div', { class: 'tmp-machine-box net-box net-calls' });
   const el = h('section', { class: 'card bd-tmp bd-net' }, head, h('div', { class: 'tmp-body' }, listenBox, callBox));
@@ -73,11 +85,14 @@ export function netPanel(url, opts) {
     if (!r.ok) throw new Error(doc.error || `HTTP ${r.status}`);
     view = doc;
     const block = view.block || {};
+    const reasons = block.partial_reasons || [];
     chips.replaceChildren(...[
-      block.method ? h('span', { class: 'bd-count', title: [METHOD_TIP[block.method], block.fallback]
-        .filter(Boolean).join(' · ') }, block.method) : null,
+      block.method ? h('span', { class: ['bd-count', reasons.includes('procnet') ? 'tmp-c-changed' : null],
+        title: [METHOD_TIP[block.method], block.fallback].filter(Boolean).join(' · ') }, block.method) : null,
       block.status ? h('span', { class: ['bd-count', LOG_CLASS[block.status]], title: LOG_TIP[block.status] },
-        block.status) : null].filter(Boolean));
+        block.status) : null,
+      ...reasons.filter(r => r !== 'procnet').map(r => h('span', { class: 'bd-count tmp-c-changed',
+        title: REASON_TIP[r] || null }, r))].filter(Boolean));
     draw(true);
     if (opts.onLoad) opts.onLoad(view);
   }).catch(e => {
@@ -95,9 +110,18 @@ export function netPanel(url, opts) {
     title: `open call ${c.k} in ${c.agent}'s tab` }, c.agent !== agent ? `${c.agent} ` : '', `call ${c.k}`)
     : muted('no call', 'small'));
   const prog = r => h('span', { class: 'net-prog', title: procTip(r) || null }, r.prog || '?');
-  const result = r => h('span', { class: ['bd-count', r === 'ok' ? 'tmp-c-added' : r === 'EINPROGRESS' ? null
-    : 'tmp-c-removed'], title: r === 'EINPROGRESS' ? 'connect did not wait' : null }, r || '?');
-  const keep = row => (!agentsOnly || row.agent) && (!crossOnly || row.cross) && (!inetOnly || row.proto !== 'unix');
+  // A call's result: a connect's outcome where its return said nothing (EINPROGRESS), else the return itself.
+  const result = c => {
+    const r = c.result;
+    if (c.outcome && c.outcome_by !== 'syscall') {
+      return h('span', { class: ['bd-count', OUTCOME_CLASS[c.outcome]], title: [`returned ${r}`,
+        c.outcome_by ? `settled by ${c.outcome_by}` : null, c.outcome_error].filter(Boolean).join(' · ') },
+      c.outcome);
+    }
+    return h('span', { class: ['bd-count', r === 'ok' ? 'tmp-c-added' : 'tmp-c-removed'] }, r || '?');
+  };
+  const keep = row => (!agentsOnly || row.agent) && (!crossOnly || row.cross) && (!inetOnly || row.proto !== 'unix')
+    && (showQuiet || !row.quiet);
   // The machine's name: an agent's own machine (named as the agent) in the agent's colour, a shared one plain.
   const machineName = m => {
     const side = sideOf(m);
@@ -110,15 +134,21 @@ export function netPanel(url, opts) {
     const open = view.listeners.filter(l => (l.at_start || at(l) <= t) && (l.until == null || l.until > t))
       .filter(l => (!agentsOnly || l.agent) && (!inetOnly || l.proto !== 'unix'));
     const done = view.calls.filter(c => at(c) <= t);
-    const key = [open.length, done.length, tPrev, agentsOnly, crossOnly, inetOnly, pair.a, pair.b].join('/');
+    const key = [open.length, done.length, tPrev, agentsOnly, crossOnly, inetOnly, showQuiet, pair.a, pair.b]
+      .join('/');
     if (!force && key === drawn) return;
     drawn = key;
-    const cross = done.filter(c => c.cross).length;
+    const connected = done.filter(c => c.connected).length;
+    const attempts = done.filter(c => c.cross && !c.connected).length;
+    const quiet = done.filter(c => c.quiet).length;
+    quietToggle.textContent = `failed unix ${quiet}`;
     counts.replaceChildren(...[
       h('span', { class: 'bd-count', title: 'sockets listening at the position' }, plural(open.length, 'listener')),
       h('span', { class: 'bd-count', title: 'connects, accepts and sends so far' }, plural(done.length, 'call')),
-      h('span', { class: ['bd-count', cross ? 'tmp-c-removed' : null], title: 'from one agent to another' },
-        `${cross} cross-agent`),
+      h('span', { class: ['bd-count', connected ? 'tmp-c-removed' : null], title: 'one agent connected to another' },
+        `${connected} cross-agent`),
+      attempts ? h('span', { class: 'bd-count tmp-c-changed', title: 'cross-agent, not established' },
+        `${attempts} attempted`) : null,
       view.cut ? h('span', { class: 'bd-count', title: 'calls past the panel\'s cap' }, `+${view.cut} cut`) : null,
     ].filter(Boolean));
     const machines = [...new Set(open.map(l => l.machine))].sort();
@@ -143,11 +173,13 @@ export function netPanel(url, opts) {
     shown.length ? h('div', { class: 'tmp-rows' }, ...shown.slice(0, SHOWN).map(c => {
       const [addr, port] = serverEnd(c);
       const isNew = at(c) > tPrev;
-      return h('div', { class: ['tmp-row', 'net-crow', c.cross ? 'net-cross' : isNew ? 'tmp-added' : null] },
+      const crossClass = c.connected ? 'net-cross' : c.cross ? 'net-cross-try' : null;
+      return h('div', { class: ['tmp-row', 'net-crow', crossClass || (isNew ? 'tmp-added' : null)] },
         h('span', { class: 'tmp-mark', title: isNew ? 'since the previous stop' : null }, isNew ? '+' : ''),
         h('span', { class: 'bd-count', title: OP_TIP[c.op] }, c.op),
         h('span', { class: 'bd-count' }, c.proto),
-        h('span', { class: 'net-who', title: c.cross ? `${c.agent} reached ${c.peer_agent}` : null },
+        h('span', { class: 'net-who', title: c.connected ? `${c.agent} reached ${c.peer_agent}`
+          : c.cross ? `${c.agent} → ${c.peer_agent}: ${c.outcome || c.result}` : null },
           who(c.agent, c.origin),
           c.peer_agent ? [h('span', { class: 'muted' }, c.op === 'accept' ? ' ← ' : ' → '), who(c.peer_agent),
             c.op !== 'accept' && port ? h('span', { class: 'net-port' }, `:${port}`) : null] : null),
@@ -155,7 +187,7 @@ export function netPanel(url, opts) {
         h('span', { class: 'tmp-name', title: [c.machine ? `on ${c.machine}` : null,
           c.op === 'accept' ? `from ${address(c.raddr, c.rport)}` : null].filter(Boolean).join(' · ') || null },
         address(addr, port)),
-        result(c.result),
+        result(c),
         h('span', { class: 'tmp-by-cell' }, callLink(c.call, c.agent)));
     })) : muted('none', 'small block net-none'));
   }

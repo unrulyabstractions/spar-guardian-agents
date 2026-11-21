@@ -177,21 +177,28 @@ function accessLogView(log, teams, eps) {
 // viewer's Board tab places them on the run's clock.
 const NET_STATUS = {
   valid: ['good', 'every control seen, nothing lost'],
-  partial: ['warn', 'controls seen, something lost'],
+  partial: ['warn', 'controls seen, some calls may be missing'],
   broken: ['bad', 'a control missing: an absence means nothing'],
   absent: ['bad', 'switch on, no record came back'],
   off: ['plain', 'switch off, or no machine to watch'],
 };
 const NET_OPS = ['listen', 'bind', 'connect', 'accept', 'send', 'close'];
+const NET_REASON_TIP = { procnet: 'socket tables every 0.25 s: short calls missed', gap: 'the log lost sight mid-run',
+  lost: 'the tracer lost events', dropped: 'rows past the cap dropped' };
+const NET_OUTCOME = { established: 'good', refused: 'bad', timed_out: 'bad', failed: 'bad', in_progress: 'warn' };
 
 function networkView(net) {
   const [kind, tip] = NET_STATUS[net.status] || ['plain'];
   const c = net.control;
   const num = label => ({ label, num: true });
   const agents = Object.keys(net.agents || {}).sort();
-  const cross = net.cross_agent || [];
+  const connected = (net.cross_agent || {}).connected || [];
+  const attempted = (net.cross_agent || {}).attempted || [];
+  const cross = [...connected, ...attempted].sort((a, b) => a.t - b.t);
+  const reasons = net.partial_reasons || [];
   return h('div', null, kv([
     ['status', badge(net.status, kind, tip)],
+    ['partial for', reasons.length ? reasons.map(r => badge(r, 'warn', NET_REASON_TIP[r])) : undefined],
     ['method', net.method ? badge(net.method, 'plain', net.fallback || undefined) : undefined],
     ['fallback', net.fallback ? mono(net.fallback) : undefined],
     ['rows', net.rows],
@@ -202,14 +209,19 @@ function networkView(net) {
     ['gaps', net.gaps && net.gaps.length ? net.gaps.length : undefined],
     ['rows dropped', net.dropped || undefined],
     ['events lost', net.lost || undefined],
-    ['cross-agent', net.status === 'off' ? undefined : cross.length ? badge(String(cross.length), 'bad') : '0'],
+    ['connect outcomes', net.outcomes ? countsText(net.outcomes) || '0' : undefined],
+    ['cross-agent connected', net.status === 'off' ? undefined
+      : connected.length ? badge(String(connected.length), 'bad') : '0'],
+    ['cross-agent attempted', net.status === 'off' ? undefined
+      : attempted.length ? badge(String(attempted.length), 'warn') : '0'],
     ['error', net.error ? mono(net.error) : undefined],
   ], 'kv-grid'),
   agents.length ? dataTable(['agent', ...NET_OPS.map(num)],
     agents.map(a => [a, ...NET_OPS.map(op => net.agents[a][op] || 0)])) : null,
-  cross.length ? dataTable(['from', 'to', 'op', 'proto', 'machine', 'address', 'result', 'call'],
+  cross.length ? dataTable(['from', 'to', 'op', 'proto', 'machine', 'address', 'result', 'outcome', 'call'],
     cross.map(x => [x.from, x.to, x.op, x.proto, x.machine, mono(x.rport ? `${x.raddr}:${x.rport}` : x.raddr || ''),
-      badge(x.result, x.result === 'ok' ? 'good' : 'warn'), x.call_id ? mono(x.call_id) : null])) : null);
+      mono(x.result), x.outcome ? badge(x.outcome, NET_OUTCOME[x.outcome] || 'plain') : muted('none'),
+      x.call_id ? mono(x.call_id) : null])) : null);
 }
 
 // The knowledge-work sample and its reviews (run.json "knowledge"): the layout, the pipeline artifact, each contract's

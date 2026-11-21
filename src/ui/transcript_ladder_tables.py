@@ -10,8 +10,8 @@ it (take_rule, hand_in_rule), or the reason NO_RULE gives. The judge labels besi
 found of each rung and of the scored labels, with what a reader may conclude of each score, comes from
 src/measures/measure_readings.yaml, which the paper's reliability table reads too; the readings of the retired yes or no
 labels follow, each such row with "retired". The tasks
-the study does not read (ladder_by_domain.HIDDEN_TASKS) have no column, and the index neither measures nor lists their
-runs.
+the study does not read (ladder_by_domain.HIDDEN_TASKS) have no column, and the runs page lists their runs only behind
+its "other tasks" chip.
 
     ladders_payload(transcript_levels.LADDERS, transcript_levels.ORDER, transcript_levels.label_about())
 """

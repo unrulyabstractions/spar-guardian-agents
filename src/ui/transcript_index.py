@@ -6,8 +6,9 @@
 
 Every folder under runs/ is a collection, except SKIP and folders that hold no run: a study or a manifest collection,
 whose runs and their validity src/measures/run_listing.py list_collection reads. The index lists, measures and serves
-the valid runs only, and of those only the runs of the tasks the study reads: a run of a task it leaves out
-(src/measures/ladder_by_domain.py HIDDEN_TASKS) is counted in `left_out` and never measured.
+the valid runs only. A run of a task the study does not read (src/measures/ladder_by_domain.py HIDDEN_TASKS) is measured
+and served, so it opens, with hidden_task set on its row: the runs page lists it only behind its "other tasks" chip,
+the Summary page never counts it, and `left_out` counts it.
 
 For each run the index reads run.json, episodes.jsonl, signals.jsonl and the board (RunFiles), CheatBench's verdicts
 (src/judging/verdict_files.py cheatbench) and the measures, which read the transcripts and the judges' verdict files:
@@ -43,7 +44,8 @@ CACHE = ROOT / "tmp" / "transcript_viewer" / "index.json"
 SKIP = ("study_smoke", "study_orbit2_check", "apart_controls")
 """Folders under runs/ the viewer never lists: mock smokes, a port check and the apart controls, whose runs are all
 single agents."""
-INDEX_VERSION = 14  # 11 baseline; 12 levels.passed; 13 workers' mean label score; 14 single agents left out
+INDEX_VERSION = 15  # 11 baseline; 12 levels.passed; 13 workers' mean label score; 14 single agents left out;
+#                     15 hidden tasks measured, behind a chip
 WORKERS = 6
 """Processes that measure runs when a start finds runs to measure: each loads transcripts, so few enough to spare the
 machine's memory."""
@@ -435,16 +437,6 @@ def valid_runs(runs: Path) -> list[tuple[str, list[Listed]]]:
     return out
 
 
-def left_out_task(run_dir: Path) -> str | None:
-    """The task of a run the viewer leaves out (ladder_by_domain.hidden_task), read from its run.json; None for a run it
-    shows, and for a run.json that does not parse, which measure_run then reports."""
-    try:
-        task = (read_json(run_dir / "run.json") or {}).get("task")
-    except ValueError:
-        return None
-    return task if hidden_task(task) else None
-
-
 def measure_all(todo: list[tuple[str, list[int], str, Listed]]) -> dict[str, dict]:
     """The entries of the runs to measure ((run id, stamp, collection, Listed)), measured in WORKERS processes, with a
     line of progress every PROGRESS runs and at the end."""
@@ -461,9 +453,10 @@ def measure_all(todo: list[tuple[str, list[int], str, Listed]]) -> dict[str, dic
 
 
 def build_index(runs: Path, cached: dict | None = None) -> dict:
-    """Every collection's valid runs, each with its row and its measures, and the runs of the tasks the viewer leaves
-    out counted in `left_out`: their entry, {"left_out": task}, is all the index reads of them. A run whose stamp and
-    code stamp match `cached` (an earlier index) keeps its entry; the others are measured again (measure_all)."""
+    """Every collection's valid runs, each with its row and its measures; a run of a task the study does not read
+    has hidden_task on its row, is counted in `left_out` and in its collection's other_tasks, not in its runs. A run
+    whose stamp and code stamp match `cached` (an earlier index) keeps its entry; the others are measured again
+    (measure_all)."""
     t0 = time.time()
     code = code_stamp()
     old = (cached or {}).get("entries") or {} if (cached or {}).get("code") == code else {}
@@ -475,28 +468,28 @@ def build_index(runs: Path, cached: dict | None = None) -> dict:
             prior = old.get(run_id)
             if prior is not None and prior["stamp"] == st:
                 entries[run_id] = prior
-            elif task := left_out_task(item.path):
-                entries[run_id] = {"left_out": task, "stamp": st}
             else:
                 todo.append((run_id, st, name, item))
     entries.update(measure_all(todo))
     rows, errors, collections_out, left_out, single = [], [], [], 0, 0
     for name, listed in cols:
         label, tag, about = COLLECTION_ABOUT.get(name, (name, "", ""))
-        shown = 0
+        shown = other = 0
         for item in listed:
             entry = entries[f"{name}/{item.key}"]
             if "error" in entry:
                 errors.append({"id": f"{name}/{item.key}", "error": entry["error"]})
-            elif "left_out" in entry:
-                left_out += 1
             elif single_agent(entry["row"]):
                 single += 1
             else:
-                rows.append({**entry["row"], "interest": interest(entry["row"])})
-                shown += 1
-        if shown:
-            collections_out.append({"key": name, "label": label, "tag": tag, "about": about, "runs": shown})
+                hidden = hidden_task(entry["row"]["task_name"])
+                rows.append({**entry["row"], "interest": interest(entry["row"]), "hidden_task": hidden})
+                other += hidden
+                shown += not hidden
+        left_out += other
+        if shown or other:
+            collections_out.append({"key": name, "label": label, "tag": tag, "about": about, "runs": shown,
+                                    "other_tasks": other})
     rows.sort(key=interest_order)
     return {"version": INDEX_VERSION, "runs": str(runs), "code": code,
             "built_at": time.strftime("%Y-%m-%d %H:%M:%S %Z"), "build_seconds": round(time.time() - t0, 2),

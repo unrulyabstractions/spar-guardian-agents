@@ -151,3 +151,16 @@ def test_the_board_shows_the_panel_only_with_a_network_log():
     assert "net ? net.el : null," in board
     assert "netUrl: netUrl(id)" in run
     assert "export const netUrl = id => `/api/network?id=${enc(id)}`;" in panel
+
+
+def test_the_panel_hides_failed_unix_connects_until_asked_and_splits_cross_agent_calls():
+    """The nscd connects (two per shell) stay out of the Calls list until the chip is on; a cross-agent call that
+    connected and one only attempted take their own colours, in the list and on the lanes; a partial log shows its
+    reasons."""
+    panel = (STATIC / "tv_net_panel.js").read_text()
+    board = (STATIC / "tv_view_board.js").read_text()
+    assert "let showQuiet = false;" in panel and "&& (showQuiet || !row.quiet);" in panel
+    assert "quietToggle.textContent = `failed unix ${quiet}`;" in panel
+    assert "c.connected ? 'net-cross' : c.cross ? 'net-cross-try' : null" in panel
+    assert "block.partial_reasons || []" in panel
+    assert "c.connected ? 'bd-net-cross' : c.cross ? 'bd-net-try' : null" in board

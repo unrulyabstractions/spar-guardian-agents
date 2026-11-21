@@ -153,7 +153,7 @@ ends_after_round, snapshot, refused: [{agent, round, reason}], own: {agent: {rou
 team's accepted submit, every refused one and each solo_task agent's own hand-in), `alerts` (absent, or
 `[{agent, round, reason, agents, time}]`: each alert_humans call), `stop_working` (`null | {agent:
 round}`) and `shutdown_rate` (the share of the agents holding `stop_working` that ended with it; null for a lone agent or when no agent
-could stop). run.json `access_log`, in a run that recorded the switch, holds the log's status, what it missed and the harness's reads of content (`harness_reads: {count, own, commands: [{cmd, root_cmd, rows}]}`); `src/export/_export_access_log.py` gives its keys. The run page's Access log section reads it with the team's and the agents' `access_log` keys. run.json `network`, in a run that recorded the switch, holds the network log's status, method, fallback, counts by op, origin and agent, the controls, the gaps and the cross-agent connections (`cross_agent: [{t, machine, proto, op, from, to, from_pid, to_pid, raddr, rport, result, call_id, named_by}]`); `src/export/_export_network_log.py` gives its keys, and the run page's Network log section reads it. `communication: {<sample>: {messages: [Post], events: [...]}}` and `defense: {<sample>:
+could stop). run.json `access_log`, in a run that recorded the switch, holds the log's status, what it missed and the harness's reads of content (`harness_reads: {count, own, commands: [{cmd, root_cmd, rows}]}`); `src/export/_export_access_log.py` gives its keys. The run page's Access log section reads it with the team's and the agents' `access_log` keys. run.json `network`, in a run that recorded the switch, holds the network log's status, method, fallback, counts by op, origin and agent, the controls, the gaps, the connect outcomes and the cross-agent calls (`cross_agent: {connected: [Cross], attempted: [Cross]}`, `Cross = {t, machine, proto, op, from, to, from_pid, to_pid, raddr, rport, result, outcome, call_id, named_by}`), and `partial_reasons` when its status is `partial`; `src/export/_export_network_log.py` gives its keys, and the run page's Network log section reads it. `communication: {<sample>: {messages: [Post], events: [...]}}` and `defense: {<sample>:
 {defenses, log, interventions}}` are the run's stores. `tools` replaces the row's name list with each tool's summary.json
 (`{tool, run, written_at, ...}`; the schemas are in each tool package's docstring under tools/); a summary that does not
 parse or is not an object becomes `{"error"}`.
@@ -235,10 +235,11 @@ worker, no influencer) is never listed. A study keeps its runs at
 its top level and in its groups (`study_runs`); its `INDEX.jsonl`, where it has one, gives each run's `valid` flag, and a
 run it gives no verdict is valid at the top level and carries its group's name in a group. A manifest collection
 (`apart_controls`) lists its runs in `manifest.jsonl`: the canonical copy is valid, an extra copy has the status `extra
-copy` (`src/measures/run_listing.py`). The viewer lists, measures and serves the **valid runs only**, and of those only
-the runs of the tasks the study reads: a valid run of a task in `src/measures/ladder_by_domain.py` `HIDDEN_TASKS`
-(knowledge work, chess, OpenMath, subset sum and factoring) is read for its task alone and counted in the index's
-`left_out`. A collection with no shown run is left out. The server never writes the data.
+copy` (`src/measures/run_listing.py`). The viewer lists, measures and serves the **valid runs only**. A valid run of a
+task in `src/measures/ladder_by_domain.py` `HIDDEN_TASKS` (knowledge work, chess, OpenMath, subset sum and factoring) is
+measured and served, so it opens, with `hidden_task` on its row: the runs page lists it only behind its "other tasks"
+chip (`?other=1`), the Summary page never counts it, and the index's `left_out` counts it. A collection with no valid
+run is left out. The server never writes the data.
 
 Its one output is the index cache (`--cache`, by default `tmp/transcript_viewer/index.json`): each run's index row, its
 folder and its measures (`RunFiles.measured`: CheatBench's verdicts, the three ladders' measures and the judge
@@ -359,9 +360,10 @@ a verdict row's bookkeeping (`verdict_files.ROW_KEYS`) but `parse_ok`, `judge_co
 
 ### `GET /api/index` → `{built_at, build_seconds, measured, collections: [Collection], errors: [{id, error}], rows: [IndexRow], left_out}`
 ```
-Collection = {key (the folder name), label, tag, about, runs (its valid runs listed)}
+Collection = {key (the folder name), label, tag, about, runs (its valid runs listed), other_tasks (its hidden_task runs)}
 IndexRow = {                                         # valid runs only
   id ("<collection>/<run key>"), col, key (the run's path under the collection), run (its name; a manifest's key),
+  hidden_task (a task the study does not read: listed behind "other tasks" only),
   task_name (CheatBench's), task_label (its domain and the stem of the cell's script, as "SWE (flipt)": task_label),
   instance (the sample id),
   arm_label (agents; workers' conditioning; influencers, in words), agents ("One agent" | "3 workers" | "3 workers,
@@ -386,7 +388,7 @@ IndexRow = {                                         # valid runs only
 }
 ```
 `measured` is how many runs this start measured; the others came from the cache. `left_out` is `{tasks, runs, single_agent}`: the
-tasks the study does not read, how many valid runs that leaves unlisted, and how many single-agent runs are unlisted. A ladder that does not apply reads `not
+tasks the study does not read, how many valid runs of them stand behind "other tasks", and how many single-agent runs are unlisted. A ladder that does not apply reads `not
 applicable`: Coordination and Collusion on a one-agent run, Collusion on a task with no take rule, Cheating on a run
 without episodes.
 
@@ -579,7 +581,8 @@ its text when the snapshot captured it.
 BoardNetwork = {block (run.json "network"),
                 listeners: [{t, until, machine, agent, proto, laddr, lport, origin, at_start, call, ...Proc}],
                 calls: [{t, op ("connect" | "accept" | "send"), proto, machine, agent, peer_agent, laddr, lport,
-                         raddr, rport, result, origin, cross, call, ...Proc}],   # in time order, at most MAX_CALLS
+                         raddr, rport, result, outcome, outcome_error, outcome_by, via, origin, cross, connected,
+                         quiet, call, ...Proc}],   # in time order, at most MAX_CALLS
                 cut}                                        # the calls past MAX_CALLS
 Proc = {prog (the process's comm, else its exe's last part), exe, cmd, pid, uid}
 ```
@@ -588,14 +591,18 @@ once per run and kept. 404 when the run is not in the index or has no `network.j
 The control's rows are left out. On an eval-log clock a row's `t` is its own time less the first call's start; on a
 call-order clock it is its call's `t`, or null for a row of no call. `call` is `{agent, k}` of the tool call the row
 sits in, or null. A listener is a listen, or a bind no listen followed on the same process and port; `until` is the `t`
-of its socket's close, null while it stays open. `cross` marks a connect or a send from one named agent to another.
+of its socket's close, null while it stays open. `cross` marks a connect or a send from one named agent to another,
+`connected` the cross ones established, and `quiet` a failed unix connect (two per shell, to nscd's socket).
 The Board tab's Network panel (`tv_net_panel.js`) reads it only when `network` is true, and shows at the position the
 listeners open then, by machine, with port, program, agent and call, and the calls up to it, newest first: a call
-since the stop before marked `+`, a cross-agent call in the bad colour with its two agents and the port it reached,
-each linked to its call, with filters for named agents, cross-agent calls and TCP or UDP. Once the log has come, each
+since the stop before marked `+`, a cross-agent call with its two agents and the port it reached, in the bad colour
+when it connected and the warning colour when it was only attempted, a connect's outcome where its return said
+nothing (EINPROGRESS), each linked to its call, with filters for named agents, cross-agent calls, TCP or UDP and
+failed unix connects (hidden until asked). The head shows the method and the status, a `partial` one with its
+reasons as chips (procnet colours the method chip). Once the log has come, each
 TCP or UDP call and each cross-agent call marks the lane of the agent whose call made it with a triangle at the foot
-of the lane, at the row's time (in steps, at its call's step, or the step its time falls in); a cross-agent one is in
-the bad colour, its hover names the call and a click opens it.
+of the lane, at the row's time (in steps, at its call's step, or the step its time falls in); a cross-agent connection
+is in the bad colour and an attempt in the warning colour, its hover names the call and a click opens it.
 ### `GET /api/ladders` → the ladders page's tables (`transcript_ladder_tables.ladders_payload`)
 `{domains, cheating, task_column, ladders, order, judge_labels, take_rules, collusion_by_task, left_out_tasks,
 readings}`.

@@ -6,8 +6,9 @@ src/export/_export_network_log.py) on the board's clock, for the transcript view
     view["block"]                               # run.json "network" as written
     view["listeners"][0]   # {t, until, machine, agent, proto, laddr, lport, call: {agent, k} | None, origin,
                            #  at_start, **who}
-    view["calls"][0]       # {t, op, proto, machine, agent, peer_agent, laddr, lport, raddr, rport, result, cross,
-                           #  origin, call: {agent, k} | None, **who}
+    view["calls"][0]       # {t, op, proto, machine, agent, peer_agent, laddr, lport, raddr, rport, result, outcome,
+                           #  outcome_error, outcome_by, cross, connected, quiet, origin, via, call: {agent, k} | None,
+                           #  **who}
 
 who is the process: {prog (its comm, else its exe's name), exe, cmd, pid, uid}.
 
@@ -16,7 +17,9 @@ transcript_board.clock); on a call-order clock its call's place when the row nam
 None. call names that tool call, for a link. The control's rows stay out. A listener is a listen, or a bind that no
 listen followed on the same process and port (a UDP socket, a unix path); until is the t of its socket's close, or None
 while it stays open. The calls are the connects, accepts and sends, in time order; cross marks a connect or a send from
-one named agent to another (the block's cross_agent). Closes are read for the listeners' ends and not listed.
+one named agent to another, and connected the cross ones that were established (the block's cross_agent connected,
+the others its attempted). quiet marks a unix connect that failed, such as the two each shell makes to nscd's socket,
+which the panel hides until asked. Closes are read for the listeners' ends and not listed.
 """
 from __future__ import annotations
 
@@ -27,6 +30,7 @@ from src.utils.json_files import read_json, read_jsonl
 
 LISTEN_OPS = ("listen", "bind")
 CALL_OPS = ("connect", "accept", "send")
+OUTCOME = ("outcome", "outcome_error", "outcome_by", "via")
 MAX_CALLS = 2000
 """The most connects, accepts and sends the panel gets; the block's counts hold every row."""
 
@@ -44,6 +48,11 @@ def who(row: dict) -> dict:
     exe = row.get("exe")
     return {"prog": row.get("comm") or (exe.rsplit("/", 1)[-1] if exe else None), "exe": exe, "cmd": row.get("cmd"),
             "pid": row.get("pid"), "uid": row.get("uid")}
+
+
+def quiet(row: dict) -> bool:
+    """A unix connect that failed: the panel hides these until asked (the module's docstring)."""
+    return row["op"] == "connect" and row.get("proto") == "unix" and row.get("result") != "ok"
 
 
 def socket_key(row: dict) -> tuple:
@@ -85,13 +94,19 @@ def network_view(run_dir: Path, calls: dict[str, tuple[str, int]], at: dict[tupl
         found = place.get(row.get("call_id"))
         row["_call"] = {"agent": found[0][0], "k": found[0][1]} if found else None
     timed = [board_time(row, place, start) for row in rows]
-    listed = [{"t": t, "op": row["op"], "proto": row.get("proto"), "machine": row.get("machine"),
-               "agent": row.get("agent"), "peer_agent": row.get("peer_agent"), "laddr": row.get("laddr"),
-               "lport": row.get("lport"), "raddr": row.get("raddr"), "rport": row.get("rport"),
-               "result": row.get("result"), "origin": row.get("origin"),
-               "cross": row["op"] in ("connect", "send") and bool(row.get("agent")) and bool(row.get("peer_agent"))
-               and row.get("agent") != row.get("peer_agent"), "call": row["_call"], **who(row)}
-              for row, t in zip(rows, timed) if row["op"] in CALL_OPS]
+    listed = []
+    for row, t in zip(rows, timed):
+        if row["op"] not in CALL_OPS:
+            continue
+        cross = row["op"] in ("connect", "send") and bool(row.get("agent")) and bool(row.get("peer_agent")) \
+            and row.get("agent") != row.get("peer_agent")
+        listed.append({"t": t, "op": row["op"], "proto": row.get("proto"), "machine": row.get("machine"),
+                       "agent": row.get("agent"), "peer_agent": row.get("peer_agent"), "laddr": row.get("laddr"),
+                       "lport": row.get("lport"), "raddr": row.get("raddr"), "rport": row.get("rport"),
+                       "result": row.get("result"), **{key: row.get(key) for key in OUTCOME},
+                       "origin": row.get("origin"), "cross": cross,
+                       "connected": cross and row.get("outcome") == "established",
+                       "quiet": quiet(row), "call": row["_call"], **who(row)})
     listed.sort(key=lambda c: (c["t"] is None, c["t"] or 0.0))
     return {"block": block, "listeners": listeners(rows, timed), "calls": listed[:MAX_CALLS],
             "cut": max(0, len(listed) - MAX_CALLS)}

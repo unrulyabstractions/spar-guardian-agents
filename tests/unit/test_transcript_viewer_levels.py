@@ -917,7 +917,8 @@ def test_the_runs_page_head_is_the_count_the_pager_and_three_filter_groups():
     assert "three ladders, the board and every transcript" not in (STATIC / "tv_main.js").read_text()
     assert "set.length ? `Runs: ${fmtInt(shown.length)} of ${fmtInt(rows.length)}`" in index
     assert ": `Runs: ${fmtInt(rows.length)}`;" in index
-    assert "h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, titleEl, about), pager)" in index
+    assert "h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, titleEl, about, otherChip), pager)" \
+        in index
     assert "FILTER_GROUPS = [['run', 'Run'], ['who', 'Who'], ['outcome', 'Outcome']]" in index
     body = index[index.index("function filters(d)"):index.index("const FILTER_GROUPS")]
     run = ["key: 'q', label: 'Search', group: 'run'", "key: 'task', label: 'Task', group: 'run'",
@@ -989,11 +990,12 @@ def stood_in(monkeypatch):
     monkeypatch.setattr(RunFiles, "measured", lambda self: measures(self.roles))
 
 
-def test_the_index_lists_valid_runs_only_and_leaves_the_tasks_it_does_not_read_unmeasured(tmp_path, monkeypatch,
-                                                                                          capsys, stood_in):
-    """study_x's INDEX.jsonl marks one run invalid: it is neither listed nor measured. Of the valid runs, the chess and
-    knowledge work runs are counted in `left_out` and never measured; the shown run is measured and served, and the
-    start prints its progress. A collection with no valid run is left out."""
+def test_the_index_lists_valid_runs_only_and_marks_the_tasks_it_does_not_read(tmp_path, monkeypatch, capsys,
+                                                                              stood_in):
+    """study_x's INDEX.jsonl marks one run invalid: it is neither listed nor measured. Every valid run is measured and
+    served, so each opens; the chess and knowledge work runs carry hidden_task, are counted in `left_out` and in the
+    collection's other_tasks, not its runs, and the start prints its progress. A collection with no valid run is left
+    out."""
     measured_dirs = []
     real = ti.measure_run
 
@@ -1013,13 +1015,26 @@ def test_the_index_lists_valid_runs_only_and_leaves_the_tasks_it_does_not_read_u
     tmp_path.joinpath("runs", "study_y", "INDEX.jsonl").write_text(
         json.dumps({"path": "poem_minimal_luna1", "valid": False}) + "\n")
     idx = ti.build_index(tmp_path / "runs")
-    assert [row["run"] for row in idx["rows"]] == ["poem_minimal_luna1"]
-    assert measured_dirs == ["poem_minimal_luna1"] and len(idx["entries"]) == 3 and idx["measured"] == 1
+    assert {row["run"]: row["hidden_task"] for row in idx["rows"]} == \
+        {"poem_minimal_luna1": False, "game_minimal_luna1": True, "worktime_minimal_luna1": True}
+    assert sorted(measured_dirs) == ["game_minimal_luna1", "poem_minimal_luna1", "worktime_minimal_luna1"]
+    assert len(idx["entries"]) == 3 and idx["measured"] == 3
     assert idx["left_out"] == {"tasks": sorted(ladder_by_domain.HIDDEN_TASKS), "runs": 2, "single_agent": 0}
     assert idx["entries"]["study_x/poem_minimal_luna1"]["dir"] == str(study / "poem_minimal_luna1")
-    assert [c["key"] for c in idx["collections"]] == ["study_x"] and idx["collections"][0]["runs"] == 1
-    assert idx["entries"]["study_x/game_minimal_luna1"]["left_out"] == "chess"
-    assert "measured 1 of 1 runs" in capsys.readouterr().out
+    assert [(c["key"], c["runs"], c["other_tasks"]) for c in idx["collections"]] == [("study_x", 1, 2)]
+    assert "measured 3 of 3 runs" in capsys.readouterr().out
+
+
+def test_a_run_of_a_task_the_study_does_not_read_opens_and_stays_out_of_the_summary(tmp_path, stood_in):
+    """The viewer serves a hidden_task run's page, and its Summary page counts the studied runs alone."""
+    study = tmp_path / "runs" / "study_x"
+    write_run(study / "poem_minimal_luna1", WORKERS, {}, {}, "openrouter/openai/gpt-6-luna", task="creative_writings")
+    write_run(study / "sum_minimal_luna1", WORKERS, {}, {}, "openrouter/openai/gpt-6-luna", task="subset_sum")
+    viewer = tv.Viewer(ti.build_index(tmp_path / "runs"))
+    assert set(viewer.rows) == {"study_x/poem_minimal_luna1", "study_x/sum_minimal_luna1"}
+    assert viewer.dirs["study_x/sum_minimal_luna1"] == study / "sum_minimal_luna1"
+    studied = [r for r in viewer.rows.values() if not r["hidden_task"]]
+    assert viewer.summaries["study_x"] == tv.transcript_summary.summary(studied, "study_x")
 
 
 def test_the_index_leaves_out_single_agent_runs_and_the_apart_controls(tmp_path, stood_in):
@@ -1038,29 +1053,29 @@ def test_the_index_leaves_out_single_agent_runs_and_the_apart_controls(tmp_path,
 
 
 def test_the_index_measures_only_the_runs_whose_files_changed(tmp_path, stood_in):
-    """A chess run is never measured: its entry says it is left out, under its stamp, so a second build keeps it and
-    a changed file only reads its task again. A shown run is measured once; a second build, with the first as its
-    cache, measures nothing; a changed file measures that run again; another code stamp measures every shown run."""
+    """A chess run is measured once, like any: a second build, with the first as its cache, measures nothing, and a
+    changed file measures that run again. A shown run is measured once too; another code stamp measures every run."""
     runs = tmp_path / "runs"
     run = write_run(runs / "study_x" / "game_minimal_luna1", WORKERS, {}, {}, "m", task="chess")
     first = ti.build_index(runs)
-    assert first["measured"] == 0 and first["errors"] == [] and first["rows"] == []
+    assert first["measured"] == 1 and first["errors"] == [] and [r["hidden_task"] for r in first["rows"]] == [True]
     entry = first["entries"]["study_x/game_minimal_luna1"]
-    assert entry["left_out"] == "chess" and "row" not in entry
     again = ti.build_index(runs, first)
     assert again["measured"] == 0 and again["entries"] == first["entries"]
     (run / "signals.jsonl").write_text("\n")
     os.utime(run / "signals.jsonl", ns=(1, 10**19))
     changed = ti.build_index(runs, again)
+    assert changed["measured"] == 1
     assert changed["entries"]["study_x/game_minimal_luna1"]["stamp"] != entry["stamp"]
     shown = write_run(runs / "study_x" / "poem_minimal_luna1", WORKERS, {}, {}, "m", task="no_such_task")
     with_shown = ti.build_index(runs, changed)
-    assert with_shown["measured"] == 1 and [row["run"] for row in with_shown["rows"]] == ["poem_minimal_luna1"]
+    assert with_shown["measured"] == 1
+    assert [row["run"] for row in with_shown["rows"] if not row["hidden_task"]] == ["poem_minimal_luna1"]
     assert ti.build_index(runs, with_shown)["measured"] == 0
     (shown / "signals.jsonl").write_text("\n")
     os.utime(shown / "signals.jsonl", ns=(1, 10**19))
     assert ti.build_index(runs, with_shown)["measured"] == 1
-    assert ti.build_index(runs, {**with_shown, "code": "another"})["measured"] == 1
+    assert ti.build_index(runs, {**with_shown, "code": "another"})["measured"] == 2
 
 
 def interest_row(rung, kinds=(), workers=3, coordination="none", collusion="none", run="r"):
