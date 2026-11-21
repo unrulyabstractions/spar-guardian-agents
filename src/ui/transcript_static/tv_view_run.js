@@ -94,6 +94,9 @@ export async function viewRun(id, q, view) {
   }
 
   // ---- agent cards with lazy transcripts.
+  // An agent's rounds (/api/run rounds, src/ui/transcript_rounds.py): R, N and its rounds; null in a run before them.
+  const roundsOf = agent => (d.rounds ? { of: d.rounds.rounds, perRound: d.rounds.calls_per_round,
+    list: d.rounds.agents[agent] || [] } : null);
   const cards = new Map();
   function agentCard(a) {
     const card = h('section', { class: ['card', 'agent-card', 'role-' + a.role], id: `agent-${a.agent}` });
@@ -110,7 +113,7 @@ export async function viewRun(id, q, view) {
           .then(x => { if (!x.ok) throw new Error(`HTTP ${x.status}`); return x.json(); })
           .then(t => tools.then(tl => [t, tl]))
           .then(([t, tl]) => {
-            state.tr = renderCase(t, { agent: a.agent, levels: d.levels, isRegulator: a.role === 'regulator', regulatorCalls: regulatorCalls(a.agent, a.role), tools: tl });
+            state.tr = renderCase(t, { agent: a.agent, levels: d.levels, isRegulator: a.role === 'regulator', regulatorCalls: regulatorCalls(a.agent, a.role), tools: tl, rounds: roundsOf(a.agent) });
             btn.disabled = false;
             btn.textContent = `Transcript (${sizeTxt})`;
             return state.tr;

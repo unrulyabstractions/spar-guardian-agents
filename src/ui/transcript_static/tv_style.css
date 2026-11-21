@@ -649,3 +649,21 @@ table.sum-table.is-detailed td.sum-cell { min-width: 220px; }
 /* Summary: within a group, a soft rule where the instruction level changes and a faint shade on every other level. */
 table.sum-table .sum-level-start { border-left: 1px dashed var(--border); }
 table.sum-table .sum-level-alt { background: color-mix(in srgb, var(--text) 3%, transparent); }
+/* A round encloses its steps (tv_case_view.js roundBox): a heavier rule than a step's, its header a line of chips. */
+.case .round-box { border-left: 3px solid var(--accent); padding-left: 12px; margin: 0 0 22px; }
+.rp-stage .case .round-box { scroll-margin-top: var(--under); }
+.case .round-h { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; font: 600 13px var(--sans); }
+.case .round-n { color: var(--ink); }
+.case .round-of, .case .round-calls, .case .round-time { font: 500 11px var(--sans); color: var(--muted); }
+.case .round-b { display: flex; flex-direction: column; }
+.case .round-box.folded > .round-b { display: none; }
+.case .round-box.folded > .round-h .sec-chev { transform: rotate(-45deg); }
+.case .round-chip { border: 1px solid var(--line-2); border-radius: 999px; padding: 0 8px; font: 600 11px var(--sans); color: var(--muted); }
+.case .round-end[data-end=calls], .case .round-end[data-end=time], .case .round-end[data-end=context] { color: var(--warn); border-color: currentColor; }
+.case .round-end[data-end=ending] { color: var(--accent); border-color: currentColor; }
+.case .round-board { border-style: dashed; }
+.case .round-pos { font: 600 11px var(--mono, ui-monospace, monospace); color: var(--muted); border: 1px solid var(--line-2); border-radius: 4px; padding: 0 5px; }
+.case .round-pos.is-refused { color: var(--bad); border-color: currentColor; }
+.case .right, .case .round-box, .case .round-b { min-width: 0; max-width: 100%; }
+/* The strip's round boundaries: solid, above the step lines. */
+.case .cs-roundline { stroke: var(--accent); stroke-opacity: .55; stroke-width: 1.5; }

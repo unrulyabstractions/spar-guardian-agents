@@ -40,7 +40,7 @@
 import { appendAll, enc, firstLine, fmtSecs, h, plural } from '/static/app/dom.js';
 import { badge, longText, muted } from '/static/app/components.js';
 import { COUNT_STEPS, TIME_STEPS, fmtTick, svgEl, ticksFor, tip, withTip } from '/static/app/charts.js';
-import { RAMP, centreVertically, inkOn, scoreColour } from './tv_case_view.js';
+import { RAMP, centreVertically, inkOn, roundEndWord, scoreColour } from './tv_case_view.js';
 import { excerptSpan, markedNodes } from './tv_excerpt.js';
 import { ROLE_LABEL } from './tv_labels.js';
 import { levelChip, lineMark, misleadMark, scoreChip } from './tv_levels.js';
@@ -201,6 +201,9 @@ export function renderBoard(el, d, opts) {
   // the two selectors never hold one agent, unless the run has one
   if (state.a === state.b) state.b = (d.agents.find(x => x.agent !== state.a) || { agent: state.a }).agent;
   const callHref = (agent, k) => `${opts.base}?agent=${enc(agent)}&call=${k}`;
+  // A call's round and place in it, "round 3 · 2/10"; null in a run before rounds of calls.
+  const roundPlace = c => (c.round == null ? null
+    : `round ${c.round} · ${d.calls_per_round != null ? `${c.pos}/${d.calls_per_round}` : c.pos}`);
   const callLink = (agent, k) => h('a', { class: 'bd-call-link', href: callHref(agent, k),
     title: `open call ${k} in ${agent}'s tab` }, `call ${k}`);
 
@@ -391,6 +394,20 @@ export function renderBoard(el, d, opts) {
         svgEl('text', { x: 18, y: y + 19, class: 'bd-name' }, ag.agent),
         svgEl('text', { x: 18, y: y + 33, class: 'bd-role' },
           `${ROLE_LABEL[ag.role] || ag.role}, ${plural(ag.calls.length, 'call')}`));
+      // the agent's rounds (src/ui/transcript_rounds.py): a band each, shaded every other one, its edge at its start
+      // and its number where it has room; in steps a round spans its calls' steps, and one with no call is left out
+      (ag.rounds || []).forEach((r, i) => {
+        const mine = ag.calls.filter(c => c.round === r.round);
+        let xa, xb;
+        if (state.mode === 'time') { xa = X(r.t); xb = X(r.t + r.dur); }
+        else if (mine.length) { xa = left(mine[0]); xb = left(mine[mine.length - 1]) + W(mine[mine.length - 1]); }
+        else return;
+        const g = svgEl('g', { class: ['bd-round', i % 2 && 'bd-round-odd'], 'data-rd': i, 'data-side': side },
+          svgEl('rect', { class: 'bd-round-band', x: xa, y, width: Math.max(1, xb - xa), height: LANE_H }),
+          svgEl('line', { class: 'bd-round-edge', x1: xa, x2: xa, y1: y, y2: y + LANE_H }));
+        if (xb - xa >= 18) g.append(svgEl('text', { class: 'bd-round-n', x: xa + 3, y: y + LANE_H - 4 }, `r${r.round}`));
+        lanes.append(g);
+      });
     }
     lanes.append(svgEl('rect', { class: 'bd-lane bd-lane-board', x: x0, y: yBoard, width: x1 - x0, height: BOARD_H }),
       svgEl('text', { x: 18, y: yBoard + BOARD_H / 2 - 2, class: 'bd-name' }, 'board'),
@@ -634,6 +651,15 @@ export function renderBoard(el, d, opts) {
       if (dragging) { moveTo(posAt(ev)); return; }
       const t = ev.target.closest('[data-k], [data-i], [data-net], [data-pr]');
       hover(t && t.hasAttribute('data-i') ? Number(t.getAttribute('data-i')) : -1);
+      const band = t ? null : ev.target.closest('[data-rd]');
+      if (band) {
+        const side = band.getAttribute('data-side');
+        const r = byAgent.get(state[side]).rounds[Number(band.getAttribute('data-rd'))];
+        tip.show(ev, [`${state[side]} · round ${r.round}`, [plural(r.calls, 'call'), roundEndWord(r),
+          r.charge === 'board' ? 'board only' : null].filter(Boolean).join(' · '),
+        timed ? `${fmtSecs(r.t)} · ${fmtSecs(r.dur)}` : null].filter(Boolean));
+        return;
+      }
       if (!t) { tip.hide(); return; }
       if (t.hasAttribute('data-pr')) {
         tip.show(ev, pr.tipOf(t));
@@ -644,7 +670,7 @@ export function renderBoard(el, d, opts) {
       } else if (t.hasAttribute('data-k')) {
         const side = t.getAttribute('data-side');
         const c = callOf[side].get(Number(t.getAttribute('data-k')));
-        tip.show(ev, [`${state[side]} · call ${c.k} · ${c.tool}`,
+        tip.show(ev, [`${state[side]} · call ${c.k} · ${c.tool}`, roundPlace(c),
           timed ? `${fmtSecs(c.t)} · ${fmtSecs(c.dur)}` : `#${c.t + 1}`, firstLine(c.summary, CLIP),
           ...fewOf(state.lens === 'all' ? c.labels.map(l => `${d.ladders[l.ladder].name} ${l.level}`)
             : c.marks[state.lens].map(m => markWords(state.lens, m, d)))]);
@@ -846,7 +872,7 @@ export function renderBoard(el, d, opts) {
     function at(c, top) {
       head.replaceChildren(h('b', { class: `bd-key-${side}` }, ag.agent),
         muted(ROLE_LABEL[ag.role] || ag.role, 'small'),
-        ...(c ? [callLink(state[side], c.k), muted(c.tool, 'small'),
+        ...(c ? [callLink(state[side], c.k), c.round != null ? muted(roundPlace(c), 'small') : null, muted(c.tool, 'small'),
           c.summary !== c.tool ? h('span', { class: 'bd-sum', title: firstLine(c.summary, CLIP) }, c.summary) : null]
           : [muted('no call yet', 'small')]).filter(Boolean));
       for (const [key, lad] of Object.entries(d.ladders)) {

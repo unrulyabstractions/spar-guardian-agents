@@ -87,16 +87,18 @@ function renderStep(s) {
   }
   const providerOnly = flags.has('rules');
   const el = h('article', {
-    class: ['step', 'src-' + src, providerOnly && 'provider-only', flags.has('refusal') && 'is-refusal',
+    class: ['step', 'src-' + src, ex.swarm_round && 'round-start', providerOnly && 'provider-only', flags.has('refusal') && 'is-refusal',
       flags.has('blocked') && 'has-blocked', ex.withheld_from_model_by_defense && 'is-withheld'],
     id: `step-${s.step_id}`,
   });
   el.appendChild(h('header', { class: 'step-head' },
     h('span', { class: 'step-id' }, `#${s.step_id}`),
     h('span', { class: 'step-src' }, src),
+    ex.swarm_round ? badge(`round ${ex.swarm_round.round} · ${ex.swarm_round.n} of ${ex.swarm_round.of}`, 'def',
+      'the schedule\'s round · the round count the agent read') : null,
     s.model_name ? muted(s.model_name, 'small') : null,
     [...flags].map(f => badge(...FLAG_BADGE[f])),
-    extraBadges(ex, ['swarm_turn_rules', 'withheld_from_model_by_defense', 'withheld_text',
+    extraBadges(ex, ['swarm_turn_rules', 'swarm_round', 'withheld_from_model_by_defense', 'withheld_text',
       'defense_refusal', 'blocked_output_message_id', 'refusal_text_written_by_model']),
     h('span', { class: 'spacer' }),
     s.llm_call_count != null ? muted(plural(s.llm_call_count, 'model call'), 'small') : null));
@@ -233,7 +235,7 @@ export async function viewEpisode({ run, episode, query: q }, view) {
   };
   for (const e of entries) {
     e.item = h('button', {
-      type: 'button', class: ['step-item', 'src-' + e.src, e.flags.size && 'flagged'],
+      type: 'button', class: ['step-item', 'src-' + e.src, e.flags.size && 'flagged', e.step.extra && e.step.extra.swarm_round && 'round-start'],
       title: `step ${e.step.step_id} (${e.src})`, onclick: () => jump(e),
     },
     h('span', { class: 'si-id' }, String(e.step.step_id)),

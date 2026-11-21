@@ -29,6 +29,7 @@ from src.export.eval_sample_view import blocked_message_ids, held_orbit_submit, 
 from src.measures.run_directory import RunDir
 from src.sandbox import task_tool_store
 from src.swarm.turn_rules import STOP_WORKING, SUBMIT, TURN_RULES_TAG, provider_system_text
+from src.ui import transcript_rounds
 from src.ui._run_store import Store
 
 # Message metadata keys that mark what the provider saw, and the flag each becomes.
@@ -202,7 +203,8 @@ class LogViews:
     def timeline(self, name: str) -> dict:
         """Tool calls, model calls, defense interventions and board posts of one run, in seconds from the sample's
         start. Each board post carries the moment it was sent and who read it when; first_exposed and first_opened
-        place the code's exposed and opened evidence of each agent on the same clock."""
+        place the code's exposed and opened evidence of each agent on the same clock; rounds gives each agent's rounds
+        on it (transcript_rounds.from_start), None in a run before rounds of calls."""
         sample = self.store.eval_log(name).samples[0]
         owner = span_owners(sample)
         t0 = sample.events[0].timestamp
@@ -234,6 +236,8 @@ class LogViews:
             "limit": sample.limit.type if sample.limit else None,
             "events": events,
             "board": _board(RunDir(self.store.run_dir(name)).board(f"{sample.id}#{sample.epoch}"), events),
+            "rounds": transcript_rounds.from_start(transcript_rounds.rounds(self.store.run_json(name)),
+                                                   t0.timestamp()),
         }
 
     def _signal_marks(self, run: RunDir, episodes: list[dict]) -> dict[str, set]:

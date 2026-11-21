@@ -169,6 +169,9 @@ ATIF.steps[i] = {step_id, source: "system"|"user"|"agent", message, reasoning_co
                  observation?: {results: [{source_call_id, content, extra?: {is_error?, error?, withheld_from_model_by_defense?}}]},
                  extra?: {swarm_turn_rules?, swarm_presence?, defense_refusal?, refusal_text_written_by_model?, ...}}
 ```
+A user step with `extra.swarm_round` (`{round, n, of}`) is the line "Round {n} of {of}." that opens a round
+(`src/swarm/turn_rules/_turn_rounds.py`): `round` is the schedule's round, `n` the agent's own count. The transcript page
+draws a rule above it and a chip `round {round} · {n} of {of}`.
 A user step with `extra.swarm_presence` (`{id, agent, kind: "entered"|"exited", why, round}`) is a presence line: a
 peer's entry or exit, saved in the agent's conversation (`src/swarm/turn_rules/_turn_presence.py`). `why` is
 `submit`, `stop`, `alert`, `budget`, `context` or `delivered` on an exit, null on an entry.
@@ -201,7 +204,8 @@ whose text is the defense's refusal sentence). A call's flags are its input mess
 ```
 {run, duration, limit, agents: [str], roles: {agent: role} (from the episodes),
  first_exposed: {agent: t}, first_opened: {agent: t},   # the code's exposed and opened evidence on the clock
- events: [Event] sorted by t, board: [Post]}
+ events: [Event] sorted by t, board: [Post],
+ rounds: null | {agent: [{round, n, end, charge, t, t_end}]}}   # a run of rounds of calls (since 2026-11-21)
 Event = {t, t_end?, agent, kind: "model"|"defense_call"|"tool"|"submit"|"stop"|"defense", ...}
   model, defense_call: defense, tokens_in (including cache reads), tokens_out, tool_calls: [function],
                        output_blocked (a defense replaced this completion), refusal (the output text is the refusal
@@ -214,6 +218,9 @@ Post = {sequence, sender, id, t, content, read_by: [{agent, t}]}
 `exposed` and `opened` mark the tool call the code's evidence (signals.jsonl) cites as the agent's `exposed_call` and
 `opened_call`: the first call that showed it a pointer to the honeypot, and the first that showed it the honeypot's content.
 Call k is the agent's k-th tool call in its transcript, from 0, matched to the eval log's tool event by its id.
+`rounds` is each agent's rounds on the same clock (`src/ui/transcript_rounds.py` `from_start`), null in a run before
+rounds of calls. With it the swimlanes' second x axis is `round`: round r starts at r on every lane, so the lanes share
+one clock; without it the axis is `turn index`, each lane on its own clock of model calls.
 
 ### `GET /api/runs/<study>/<run>/tools/<tool>/<path>` → one file an analysis tool wrote
 Serves `runs/<study>/<run>/tools/<tool>/<path>`, where `<path>` may have subdirectories (`judged/k7q2m/report.html` under `transect`). Only `.png`,
@@ -393,14 +400,21 @@ tasks the study does not read, how many valid runs of them stand behind "other t
 applicable`: Coordination and Collusion on a one-agent run, Collusion on a task with no take rule, Cheating on a run
 without episodes.
 
-### `GET /api/run?id=<id>` → `{row: IndexRow, meta, agents: [Agent], boards: [Board], levels: Levels, cheatbench_disclosed, presence: Presence}`
+### `GET /api/run?id=<id>` → `{row: IndexRow, meta, agents: [Agent], boards: [Board], levels: Levels, cheatbench_disclosed, presence: Presence, rounds: Rounds}`
 `meta` holds run.json's `config`, `mode` and `code`, the rounds run (`rules.rounds`), and `eval_log` (the run's own
 `eval/*.eval`, else where `RunDir.eval_log` finds it; null when absent) beside `eval_log_recorded`.
 `cheatbench_disclosed` is the task's CheatBench field for an agent that acknowledged its access
 (`judge_labels.CHEATBENCH_DISCLOSED_ACCESS`), shown only in the CheatBench judge's block as "CheatBench: disclosed access".
 `presence` is each agent's entry and exit and each influencer's alert (`src/ui/transcript_presence.py`
 `with_alert_calls(presence(run.json))`): the bar's alert badge and the Details tab's Alerts and Entries and exits cards.
+`rounds` is each agent's rounds (`src/ui/transcript_rounds.py` `rounds`), null in a run before rounds of calls (one model
+step per round plus free follow-ups): the agent tab then draws its steps as before.
 ```
+Rounds = {rounds (R, rules.round_budget), calls_per_round (N), agents: {agent: [Round]}}   # timeline order
+Round = {turn, round (the schedule's), n (the agent's own count: "Round n of R."), end, charge, charged, used, ended,
+         t0, t1, calls: [{id, tool, pos (its place in the round, from 1), free, refused, error, t0, t1}]}
+         # end: end_round | calls (N reached) | ending | time | no_tool_call | context | null;
+         # charge: work | board | idle | stop | submit | alert (board uses up no round); times in UTC seconds
 Presence = {agents: {agent: {entered: round | null,                 # rules.entry_rounds
                              exited: {why, round, seq, hand_in?, ends_after_round?} | null}},   # rules.exits
             alerts: [Alert]}                                         # run.json alerts, in order
@@ -517,8 +531,10 @@ shown under a lens other than All, holds the lens's chips and samples, how many 
 BoardTab = {clock ("eval_log" | "call_order"), clock_about, total (seconds, or the number of calls in call order),
             agents: [{agent, role, calls: [BoardCall],          # workers first
                       final: {ladder: {level, facts}},           # the run page's cell of each ladder: the end level
-                      unplaced: {lens: {what: n}}}],             # records of a lens that name no call, by clause,
+                      unplaced: {lens: {what: n}},               # records of a lens that name no call, by clause,
                                                                  # take rule or judge label
+                      rounds: [{turn, round, n, end, charge, charged, t, dur, calls}]}],   # on the clock; [] before
+                                                                 # rounds of calls (transcript_rounds.on_clock)
             posts: [BoardPost],                                # in time order
             pair: [a, b], pair_why,                            # the two agents the tab opens with, and why, short
             ladders: {ladder: {name, levels, line, line_words}},
@@ -526,9 +542,11 @@ BoardTab = {clock ("eval_log" | "call_order"), clock_about, total (seconds, or t
             notes,                                             # load_run's, then the count of reads of no form
             network,                                           # whether the run has network.jsonl (/api/network)
             tmp,                                               # whether the run has tmp_snapshots.json (/api/tmp)
-            presence: Presence + clock}                        # transcript_presence.on_lanes: each agent adds
+            presence: Presence + clock,                        # transcript_presence.on_lanes: each agent adds
                                                                # entry: {k, t, start} and exit: {k, t}; each Alert t
+            calls_per_round}                                   # N; null in a run before rounds of calls
 BoardCall = {k (the agent tab's "Call k"), m (its model call, per agent from 0), t, dur, tool, summary (one line),
+             round, pos (its round and its place in it; null before rounds of calls),
              board ("post" | "read" | "status" | null),
              labels: [{ladder, level, index, evidence}],    # the run page's labels (Levels.labels) on this call
              marks: {cheating: [{level, index, clause, evidence}],
@@ -565,6 +583,12 @@ located in a post sits on the call that wrote the post. `unplaced` counts the re
 Cheating lines by clause, takes by rule, judge labels with an excerpt code did not locate, or located in a model call
 that made no tool call.
 
+Each agent's `rounds` sit on the clock (`transcript_rounds.on_clock`): on the eval log's clock a round spans its own
+times from the first call's start; on call order it spans its calls, and a round with no call sits with no width after
+the round before it. The tab draws a band per round on each lane, every other one shaded, its edge at its start and
+`r{round}` at its foot where it has room; in steps a round spans its calls' steps. A band's hover gives the round, its
+calls, its end and `board only`; a call's hover and the card's head line give `round {round} · {pos}/{N}`.
+
 `presence` places each agent's entry and exit and each alert on the clock (`transcript_presence.on_lanes`): an entry in
 the run's first round at t 0 (`start` true), a later one at the start of the agent's first call (`k`); an exit at the
 end of the agent's last call; an alert at the start of the alerting agent's i-th `alert_humans` call for its i-th alert.
@@ -573,6 +597,11 @@ ticks the entry and the exit with its `why`, and draws each alert as a line acro
 and on the alerting agent's lane.
 
 ### `GET /api/transcript?id=<id>&agent=<agent>` → the agent's `transcript.json`, streamed as stored
+The agent tab groups its steps by round in a run of rounds of calls: a box per round, headed `Round {round}` with the
+agent's own count `n of R`, its calls, its end as a chip (`end_round`, `N reached`, `no tool call`, `time limit`,
+`context limit`, or the tool that ended its turns: `stop_working`, `submit`, `alert_humans`), `board only` for a round
+that used up none, and its time. Each call's head carries its place in the round, `pos/N` (a refused call in the bad
+colour), and the strip draws a solid line where a round begins.
 The agent tab shows a step with `extra.swarm_presence` as a User message whose header carries a chip: the agent,
 `entered` or `exited` with its `why`, and the round (`tv_presence.js presenceChip`).
 ### `GET /api/tools?id=<id>&agent=<agent>` → the tool definitions the agent's model calls sent the provider

@@ -640,3 +640,6 @@ a.hl:hover { text-decoration: none; background: var(--hover); }
 .tool-table { margin: 6px 0; }
 .tool-expl { margin: 2px 0 6px; font-size: 12.5px; white-space: normal; }
 .tool-quote { font-size: 12px; margin: 2px 0 8px; }
+/* A transcript step that opens a round ("Round n of R."): a heavier rule above it, here and in the step list. */
+.step.round-start { border-top: 3px solid var(--accent); margin-top: 18px; }
+.step-item.round-start { border-top: 2px solid var(--accent); }

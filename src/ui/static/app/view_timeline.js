@@ -40,12 +40,47 @@ export function laneOrder(tl) {
   return [...names].sort((a, b) => rank(roles[a]) - rank(roles[b]) || a.localeCompare(b, 'en', { numeric: true }));
 }
 
+/** A lane's clock from its knots [[seconds, index], ...] in time order: linear between two knots, the first index
+ * before the first knot and the last after the last. */
+function knotClock(knots) {
+  return t => {
+    if (!knots.length || t <= knots[0][0]) return knots.length ? knots[0][1] : 1;
+    let lo = 0;
+    let hi = knots.length - 1;
+    if (t >= knots[hi][0]) return knots[hi][1];
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (knots[mid][0] <= t) lo = mid; else hi = mid; }
+    const [t0, k0] = knots[lo];
+    const [t1, k1] = knots[hi];
+    return k0 + (t1 > t0 ? (t - t0) / (t1 - t0) : 0) * (k1 - k0);
+  };
+}
+
+/**
+ * Round clock of a run of rounds of calls (tl.rounds, src/ui/transcript_rounds.py from_start): round r starts at r on
+ * every lane, so the lanes share one clock; a lane's last round ends at its number + 1. The axis runs from 1 to the
+ * last round + 1.
+ */
+function roundClock(tl, agents) {
+  const fns = new Map();
+  let last = 1;
+  for (const a of agents) {
+    const rs = (tl.rounds[a] || []).filter(r => r.t != null);
+    const knots = rs.map(r => [r.t, r.round]);
+    const end = rs[rs.length - 1];
+    if (end) knots.push([Math.max(end.t_end != null ? end.t_end : end.t, end.t + 1e-3), end.round + 1]);
+    last = Math.max(last, end ? end.round : 1);
+    fns.set(a, knotClock(knots));
+  }
+  return { at: (a, t) => (fns.has(a) ? fns.get(a)(t) : 1), maxTurns: last, rounds: true };
+}
+
 /**
  * Round-robin turn clock: each agent's k-th model call starts at turn k (counted from 1, as in the
  * tooltips and the raster), and time between two calls maps linearly between them. Each lane keeps
- * its own clock; the axis runs from 1 to maxTurns + 1.
+ * its own clock; the axis runs from 1 to maxTurns + 1. A run of rounds of calls takes the round clock.
  */
 function turnClock(tl, agents) {
+  if (tl.rounds) return roundClock(tl, agents);
   const starts = new Map(agents.map(a => [a, []]));
   const ends = new Map(agents.map(a => [a, 0]));
   for (const e of tl.events) {
@@ -228,7 +263,7 @@ function swimlaneCard(ctx, lane, run) {
   const host = h('div', { class: 'viz-host swim-host' });
 
   // Controls: axis mode, layers, zoom.
-  const modeBtns = segmented([['time', 'seconds from start'], ['turn', 'turn index']], st.mode, v => {
+  const modeBtns = segmented([['time', 'seconds from start'], ['turn', clock.rounds ? 'round' : 'turn index']], st.mode, v => {
     if (st.mode === v) return;
     st.mode = v;
     [st.lo, st.hi] = full();
@@ -243,7 +278,8 @@ function swimlaneCard(ctx, lane, run) {
   const rFrom = h('input', { type: 'range', min: 0, max: 1000, step: 1, value: 0, class: 'zoom-range', 'aria-label': 'zoom from' });
   const rTo = h('input', { type: 'range', min: 0, max: 1000, step: 1, value: 1000, class: 'zoom-range', 'aria-label': 'zoom to' });
   const zoomText = h('span', { class: 'muted small zoom-text' });
-  const fmtX = v => (st.mode === 'time' ? fmtSecs(v) : `call ${+v.toFixed(1)}`);
+  const unitWord = clock.rounds ? 'round' : 'call';
+  const fmtX = v => (st.mode === 'time' ? fmtSecs(v) : `${unitWord} ${+v.toFixed(1)}`);
   function syncZoom() {
     const [f0, f1] = full();
     rFrom.value = Math.round(((st.lo - f0) / (f1 - f0)) * 1000);
@@ -308,7 +344,7 @@ function swimlaneCard(ctx, lane, run) {
   const card = h('section', { class: 'card' },
     h('h2', null, 'Agent swimlanes'),
     controls, host, legend,
-    posts.length < 1 ? null : h('div', { class: 'muted small' },
+    posts.length < 1 || clock.rounds ? null : h('div', { class: 'muted small' },
       'In turn-index mode each lane runs on its own clock (its k-th model call sits at k), so an arrow between lanes can point backwards.'));
 
   function draw() {
@@ -360,7 +396,7 @@ function swimlaneCard(ctx, lane, run) {
       svg.appendChild(svgEl('line', { class: 'grid', x1: px, x2: px, y1: axisH - 4, y2: H - 2 }));
       svg.appendChild(svgEl('text', { class: 'tick-label', x: px, y: axisH - 9, 'text-anchor': 'middle' }, st.mode === 'time' ? fmtTick(v) : String(v)));
     }
-    svg.appendChild(svgEl('text', { class: 'axis-title', x: 10, y: axisH - 9 }, st.mode === 'time' ? 'seconds from start' : 'agent’s model call'));
+    svg.appendChild(svgEl('text', { class: 'axis-title', x: 10, y: axisH - 9 }, st.mode === 'time' ? 'seconds from start' : clock.rounds ? 'round' : 'agent’s model call'));
 
     const marks = svgEl('g', { 'clip-path': `url(#tlclip-${uid})` });
     const arrowsG = svgEl('g', { 'clip-path': `url(#tlclip-${uid})` });
@@ -527,7 +563,7 @@ function swimlaneCard(ctx, lane, run) {
       if (inPlot) {
         cross.setAttribute('x1', r2(px)); cross.setAttribute('x2', r2(px));
         crossLabel.setAttribute('x', r2(Math.min(x1 - 24, Math.max(x0 + 24, px))));
-        crossLabel.textContent = st.mode === 'time' ? fmtSecs(inv(px)) : `call ${+inv(px).toFixed(1)}`;
+        crossLabel.textContent = st.mode === 'time' ? fmtSecs(inv(px)) : `${unitWord} ${+inv(px).toFixed(1)}`;
       }
       if (drag) {
         const a = Math.max(x0, Math.min(drag.x, px));

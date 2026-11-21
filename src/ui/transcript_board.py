@@ -75,6 +75,7 @@ from src.measures.run_directory import RunDir, episode_agent, is_worker
 from src.ui.transcript_levels import CITE_RE, own_call, step_text, stepped
 from src.ui.transcript_network import network_view
 from src.ui.transcript_presence import on_lanes, presence
+from src.ui.transcript_rounds import on_clock, rounds
 
 SUMMARY_CHARS = 140
 """The longest one-line summary of a call."""
@@ -459,6 +460,7 @@ def board_payload(run_dir: Path, levels: dict) -> dict:
     took = {(by_id[i].agent, by_id[i].k): up for i, up in took_up(run.boards, run.roles).items() if i in by_id}
     coordination_marks(placed, posts, took)
     post_calls = {p["label"]: p["call"] for p in posts if p["call"] is not None}
+    lanes, in_round = on_clock(rounds(run.run_json), run.calls, at, name == "eval_log")
     agents = []
     for agent, rows in run.calls.items():
         cheating_marks(placed, levels, agent, logged.get(agent) or {})
@@ -473,9 +475,10 @@ def board_payload(run_dir: Path, levels: dict) -> dict:
             "k": c.k, "m": steps.get(c.id), "t": at[(agent, c.k)][0], "dur": at[(agent, c.k)][1], "tool": c.tool,
             "summary": summary(c, wrote.get(c.id, []), read.get(c.id, [])), "board": BOARD_TOOLS.get(c.tool),
             "labels": labels.get(c.k, []), "marks": placed.at(agent, c.k), "held": held,
-            "after": {ladder: rungs[c.k] for ladder, rungs in after.items() if c.k < len(rungs)}}
+            "after": {ladder: rungs[c.k] for ladder, rungs in after.items() if c.k < len(rungs)},
+            **(in_round.get((agent, c.k)) or {"round": None, "pos": None})}
             for c, held in zip(rows, held_at(rows, placed, agent))],
-            "final": final(levels, agent), "unplaced": placed.unplaced(agent)})
+            "final": final(levels, agent), "unplaced": placed.unplaced(agent), "rounds": lanes.get(agent) or []})
     agents.sort(key=lambda a: (a["role"] != "worker", a["agent"]))
     posts_by = {a: sum(p["writer"] == a for p in posts) for a in run.roles}
     pair, why = default_pair(levels, run.roles, posts_by)
@@ -485,4 +488,5 @@ def board_payload(run_dir: Path, levels: dict) -> dict:
             "pair": pair, "pair_why": why,
             "ladders": {k: {key: v[key] for key in LADDER_KEYS} for k, v in levels["ladders"].items()},
             "label_names": {k: v["name"] for k, v in levels["judge_label_about"]["labels"].items()},
-            "notes": notes, "presence": on_lanes(presence(run.run_json), run.calls, at)}
+            "notes": notes, "presence": on_lanes(presence(run.run_json), run.calls, at),
+            "calls_per_round": (run.run_json.get("rules") or {}).get("calls_per_round")}

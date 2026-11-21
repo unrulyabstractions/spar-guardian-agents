@@ -199,12 +199,40 @@ function foldButton(kind) {
       e.currentTarget.setAttribute('aria-expanded', String(!on));
     } }, h('span', { class: 'sec-chev', 'aria-hidden': 'true' }));
 }
+// Why a round ended (src/swarm/turn_rules/_turn_rounds.py END_REASONS), as its chip says it; "ending" names the tool
+// that ended the agent's turns by the round's charge.
+const END_WORDS = { end_round: 'end_round', calls: 'N reached', no_tool_call: 'no tool call', time: 'time limit',
+  context: 'context limit' };
+const ENDING_TOOL = { stop: 'stop_working', submit: 'submit', alert: 'alert_humans' };
+const END_TIPS = { end_round: 'the agent called end_round', calls: 'the round made its N calls',
+  no_tool_call: 'a reply with no tool call', time: 'the run\'s time limit passed', context: 'the reply hit the context limit',
+  ending: 'the agent\'s turns ended' };
+/** A round's end in a word or two; null when the round recorded none. e: the round's entry ({end, charge}). */
+export function roundEndWord(e) {
+  if (!e || !e.end) return null;
+  return e.end === 'ending' ? (ENDING_TOOL[e.charge] || 'ended') : (END_WORDS[e.end] || e.end);
+}
+/** A round's end as a chip; null when the round recorded none. e: the round's entry (/api/run rounds). */
+export function endChip(e) {
+  const word = roundEndWord(e);
+  return word ? h('span', { class: 'round-chip round-end', dataset: { end: e.end }, title: END_TIPS[e.end] || e.end }, word) : null;
+}
+/** A chevron that folds its round box to its header. */
+function roundFold() {
+  return h('button', { type: 'button', class: 'box-fold', 'aria-expanded': 'true', title: 'fold or unfold this round',
+    onclick: e => {
+      const box = e.currentTarget.closest('.round-box');
+      const on = !box.classList.contains('folded');
+      box.classList.toggle('folded', on);
+      e.currentTarget.setAttribute('aria-expanded', String(!on));
+    } }, h('span', { class: 'sec-chev', 'aria-hidden': 'true' }));
+}
 /** A box and the step around it unfolded. */
 function unfold(box) {
-  for (const b of [box, box.closest('.step-box')]) {
+  for (const b of [box, box.closest('.step-box'), box.closest('.round-box')]) {
     if (!b || !b.classList.contains('folded')) continue;
     b.classList.remove('folded');
-    const btn = b.querySelector(':scope > .ch > .box-fold, :scope > .step-h > .box-fold');
+    const btn = b.querySelector(':scope > .ch > .box-fold, :scope > .step-h > .box-fold, :scope > .round-h > .box-fold');
     if (btn) btn.setAttribute('aria-expanded', 'true');
   }
 }
@@ -229,8 +257,12 @@ export function renderCase(t, ctx) {
   const loose = [];
   const seq = [];
   let model = 0;
+  // The round under way: the latest "Round n of R." line (extra.swarm_round, src/swarm/turn_rules/_turn_rounds.py),
+  // null before the first and in a run before rounds of calls.
+  let roundNow = null;
   for (const s of steps) {
     const src = s.source || 'unknown';
+    if (src === 'user' && s.extra && s.extra.swarm_round) roundNow = s.extra.swarm_round;
     const rs = (s.observation && s.observation.results) || [];
     const reasoning = readableReasoning(s.reasoning_content);
     const hidden = (reasoning && reasoning.hidden) || null;
@@ -240,16 +272,17 @@ export function renderCase(t, ctx) {
       const mine = s.tool_calls.map((tc, j) => {
         let res = rs.filter(r => r.source_call_id === tc.tool_call_id);
         if (!res.length && rs[j] && !rs[j].source_call_id) res = [rs[j]];
-        const c = { k: calls.length, tc, res, reasoning: j === 0 && reasoning && reasoning.text, text: j === 0 ? msg : '', step: s.step_id, model: j === 0 ? m : null };
+        const c = { k: calls.length, tc, res, reasoning: j === 0 && reasoning && reasoning.text, text: j === 0 ? msg : '', step: s.step_id, model: j === 0 ? m : null,
+          round: roundNow && roundNow.round };
         calls.push(c);
         return c;
       });
-      seq.push({ turn: true, step: s.step_id, calls: mine, hidden });
+      seq.push({ turn: true, step: s.step_id, calls: mine, hidden, round: roundNow });
     } else {
       const x = { before: calls.length, src, text: msg, reasoning: reasoning && reasoning.text, step: s.step_id, model: m,
         presence: src === 'user' && s.extra ? s.extra.swarm_presence : null };
       loose.push(x);
-      seq.push(src === 'agent' ? { turn: true, step: s.step_id, calls: [], msg: x, hidden } : { msg: x });
+      seq.push(src === 'agent' ? { turn: true, step: s.step_id, calls: [], msg: x, hidden, round: roundNow } : { msg: x });
     }
   }
   // The judge labels whose excerpt code located in a model call's reasoning, by model call: [{key, name, score,
@@ -356,6 +389,19 @@ export function renderCase(t, ctx) {
       scoreChip(x.score, `${x.name}: ${x.score} of 100`), h('b', null, x.name),
       h('span', { class: 'cs-why' }, x.reason || '', x.span ? null : h('i', null, ' (excerpt not in the reasoning shown)'))))) : null;
   }
+  // The agent's rounds (ctx.rounds: {of, perRound, list}, null in a run before rounds of calls): each round by its
+  // schedule round, each call's round and place in it by its id.
+  const rounds = ctx.rounds || null;
+  const roundOf = new Map(((rounds && rounds.list) || []).map(e => [e.round, e]));
+  const placeOf = new Map(((rounds && rounds.list) || []).flatMap(e => e.calls.map(c => [c.id, { round: e.round, ...c }])));
+  // A call's place in its round, "2/10": a refused call (past N) marked.
+  const posChip = id => {
+    const p = placeOf.get(id);
+    if (!p || p.pos == null) return null;
+    return h('span', { class: ['round-pos', p.refused && 'is-refused'],
+      title: `call ${p.pos} of round ${p.round}${p.refused ? ', refused' : ''}` },
+    rounds.perRound != null ? `${p.pos}/${rounds.perRound}` : String(p.pos));
+  };
   const blocks = [];
   const right = h('div', { class: 'right' });
   const looseEls = new Map();
@@ -396,7 +442,7 @@ export function renderCase(t, ctx) {
     const labs = own.get(k) || [];
     const el = h('div', { class: ['call', labelled(k) && 'has-label', labs.some(l => l.ladder === 'coordination') && 'has-board'], id: `a-${ctx.agent}-call-${k}`,
       dataset: { call: String(k) }, style: labs.length ? `--step:${RAMP[labs[0].ladder][labs[0].index]}` : null },
-      h('div', { class: 'ch' }, foldButton('call'), h('span', { class: 'cn' }, `Call ${k}`),
+      h('div', { class: 'ch' }, foldButton('call'), h('span', { class: 'cn' }, `Call ${k}`), posChip(c.tc.tool_call_id),
         lv ? headChips(k, true) : null, h('span', { class: 'mz' }, c.tc.function_name || '')),
       h('div', { class: 'cb' },
         section('call', 'Tool call', h('span', { class: 'sec-tool' }, c.tc.function_name || '?'), argText(c.tc.arguments), null),
@@ -430,17 +476,35 @@ export function renderCase(t, ctx) {
   const hiddenChip = why => (why ? h('span', { class: 'step-hidden', dataset: { hidden: why },
     title: why === 'redacted' ? 'The provider withheld this step\'s reasoning' : 'The provider sent this step\'s reasoning encrypted' },
   `reasoning ${why}`) : null);
+  let roundBody = null;
   const stepBody = (step, label, nCalls, hidden) => {
     const box = h('div', { class: 'step-box', dataset: { step: String(step != null ? step : '') } },
       h('div', { class: 'step-h' }, h('span', { class: 'step-n' }, label), hiddenChip(hidden), nCalls ? foldCalls(nCalls) : null),
       h('div', { class: 'step-b' }));
-    right.appendChild(box);
+    (roundBody || right).appendChild(box);
     return box.lastChild;
   };
+  // A round encloses its steps (src/ui/transcript_rounds.py): its header is "Round r" (the schedule's round), the
+  // agent's own count of R, its calls, its end and a board-only round's chip. A run before rounds of calls has none.
+  const roundBox = mark => {
+    const e = roundOf.get(mark.round) || null;
+    const box = h('div', { class: 'round-box', dataset: { round: String(mark.round) } },
+      h('div', { class: 'round-h' }, roundFold(), h('span', { class: 'round-n' }, `Round ${mark.round}`),
+        h('span', { class: 'round-of', title: 'the round count the agent read' }, `${mark.n} of ${mark.of}`),
+        e ? h('span', { class: 'round-calls', title: rounds && rounds.perRound ? `up to ${rounds.perRound} calls a round` : null },
+          plural(e.calls.length, 'call')) : null,
+        e ? endChip(e) : null,
+        e && e.charge === 'board' ? h('span', { class: 'round-chip round-board', title: 'board calls only: uses up no round' }, 'board only') : null,
+        e && e.t0 != null && e.t1 != null ? h('span', { class: 'round-time', title: 'round time' }, `${(e.t1 - e.t0).toFixed(1)} s`) : null),
+      h('div', { class: 'round-b' }));
+    right.appendChild(box);
+    roundBody = box.lastChild;
+  };
   // Steps are numbered by model turn from 1; the transcript's own step ids count the System and User messages too.
-  let fed = [], turnNo = 0;
+  let fed = [], turnNo = 0, roundAt = null;
   for (const it of seq) {
     if (!it.turn) { fed.push(it.msg); continue; }
+    if (it.round && it.round !== roundAt) { roundAt = it.round; roundBox(it.round); }
     const body = stepBody(it.step, `Step ${++turnNo}`, it.calls.length, it.hidden);
     for (const x of fed) body.appendChild(looseBlock(x));
     // No System message in the first step: the tools head it in a box of their own.
@@ -451,8 +515,9 @@ export function renderCase(t, ctx) {
     if (it.calls.length && it.calls[0].model != null) body.appendChild(turnHead(it.calls[0]));
     for (const c of it.calls) body.appendChild(callCard(c));
   }
-  // Messages after the last turn: a step of their own.
+  // Messages after the last turn: a step of their own, outside any round.
   if (fed.length) {
+    roundBody = null;
     const body = stepBody(fed[0].step, 'After the last step');
     for (const x of fed) body.appendChild(looseBlock(x));
   }
@@ -566,6 +631,16 @@ export function renderCase(t, ctx) {
     const y = TOP + k * rh;
     svg.appendChild(mk('line', { x1: LB, y1: y, x2: LB + lanesW, y2: y, class: 'cs-stepline' }));
     svg.appendChild(mk('line', { x1: RX, y1: y, x2: RX + RW, y2: y, class: 'cs-stepline' }));
+  }
+  // Where one round ends and the next begins: a solid line across the lanes, its round on hover.
+  for (let k = 1; k < n; k++) {
+    if (calls[k].round == null || calls[k].round === calls[k - 1].round) continue;
+    const y = TOP + k * rh;
+    for (const x1 of [LB, RX]) {
+      const ln = mk('line', { x1, y1: y, x2: x1 + lanesW, y2: y, class: 'cs-roundline' });
+      const tt = document.createElementNS(NS, 'title'); tt.textContent = `round ${calls[k].round}`; ln.appendChild(tt);
+      svg.appendChild(ln);
+    }
   }
   // The agent's level on each ladder at the end of the run, as chips with their evidence on hover.
   const mine = lv && lv.agents[ctx.agent];

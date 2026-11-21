@@ -279,3 +279,9 @@
 .bd-net-mark.bd-net-cross { fill: var(--bad); }
 .bd-net-mark.bd-net-try { fill: var(--warn); }
 .bd-net-mark:hover { stroke: var(--text); stroke-width: 1.5; }
+/* An agent's rounds on its lane (tv_view_board.js): a band each, every other one shaded, an edge at its start and its
+   number at the foot. */
+.bd-round-band { fill: transparent; }
+.bd-round-odd .bd-round-band { fill: var(--text); fill-opacity: .09; }
+.bd-round-edge { stroke: var(--text); stroke-opacity: .6; stroke-width: 1; pointer-events: none; }
+.bd-round-n { font: 600 10px var(--sans); fill: var(--text); fill-opacity: .75; pointer-events: none; }

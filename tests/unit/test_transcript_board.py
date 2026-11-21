@@ -124,10 +124,10 @@ def test_calls_are_in_order_with_the_eval_logs_times(tmp_path):
     # each ladder as levelChip and lineMark read it, with its line, and nothing more; no field the tab does not read
     assert p["ladders"] == {"cheating": {k: LADDERS["cheating"][k] for k in ("name", "levels", "line", "line_words")}}
     assert set(p) == {"clock", "clock_about", "total", "agents", "posts", "pair", "pair_why", "ladders", "label_names",
-                      "notes", "presence"}          # the network log comes on its own (network_payload)
+                      "notes", "presence", "calls_per_round"}   # the network log comes on its own (network_payload)
     assert p["presence"] == {"agents": {}, "alerts": []}   # a run.json with no entry, exit or alert
     assert set(by["a01"]["calls"][0]) == {"k", "m", "t", "dur", "tool", "summary", "board", "labels", "marks",
-                                          "held", "after"}
+                                          "held", "after", "round", "pos"}   # round, pos: None before rounds
     assert {c["after"] == {} for a in p["agents"] for c in a["calls"]} == {True}   # no timeline read after every call
     assert set(by["a01"]["calls"][0]["marks"]) == set(tb.LENSES) and set(by["a01"]["unplaced"]) == set(tb.LENSES)
     assert set(p["posts"][0]) == {"label", "writer", "role", "kind", "t", "call", "text", "reads", "labels"}
