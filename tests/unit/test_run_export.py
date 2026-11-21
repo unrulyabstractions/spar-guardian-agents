@@ -381,6 +381,18 @@ def test_a_log_of_the_step_rules_exports_its_steps_as_they_were_recorded():
     assert (engagement["rounds_used"], engagement["board_rounds"]) == (4, 1) and "work_steps" not in engagement
 
 
+def test_an_agent_without_board_rounds_counts_zero_in_its_rules_and_its_engagement():
+    """An agent that had no round of board calls alone, or used up no round, counts 0 in both its rules facts and its
+    engagement, where the store has no entry for it."""
+    v = view({"TurnState:agents": ["a01", "a02"], "TurnState:round_budget": 3, "TurnState:rounds_used": {"a01": 2},
+              "TurnState:board_rounds": {"a01": 1}}, agents=TEAM)
+    rules = blocks.rules_state(v)
+    for agent, used, board in (("a01", 2, 1), ("a02", 0, 0)):
+        facts, engagement = blocks.rules_facts(rules, agent), blocks.engagement_record(v, agent, rules, None, {})
+        assert (facts["rounds_used"], facts["board_rounds"]) == (used, board) == (engagement["rounds_used"],
+                                                                                 engagement["board_rounds"])
+
+
 def test_an_older_log_reads_orbits_own_submit_as_a_stop():
     # ORBIT's own submit (AgentSpec.submit) ended only the caller's episode, the act stop_working is now
     agents = {a: {"tools": ["board_read", "team_submit"], "submit": True} for a in ("a01", "a02", "a03")}

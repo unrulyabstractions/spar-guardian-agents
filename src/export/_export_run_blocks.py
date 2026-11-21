@@ -359,11 +359,15 @@ def step_rules(state: dict) -> bool:
 
 def rules_facts(state: dict | None, agent: str) -> dict | None:
     """One agent's activations (its rounds), the rounds it used up and its rounds of board calls alone, how it ended
-    and its window of rounds. A run before 2026-11-21 gives its working steps (work_steps) in place of the rounds."""
+    and its window of rounds. A round it never had counts 0, as in its engagement (engagement_record). A run before
+    2026-11-21 gives its working steps (work_steps) in place of the rounds, as that export wrote them."""
     if state is None:
         return None
-    counts = ("work_steps",) if step_rules(state) else ("rounds_used", "board_rounds")
-    return {k: (state.get(k) or {}).get(agent) for k in ("activations", *counts, "ended", "windows")}
+    if step_rules(state):
+        return {k: (state.get(k) or {}).get(agent) for k in ("activations", "work_steps", "ended", "windows")}
+    facts = {k: (state.get(k) or {}).get(agent) for k in ("activations", "rounds_used", "board_rounds", "ended",
+                                                          "windows")}
+    return {**facts, **{k: facts[k] or 0 for k in ("rounds_used", "board_rounds")}}
 
 
 # A TurnState.ended reason, as the episode's ended_by: the agent's own act or a turn rule ended it before the sample
