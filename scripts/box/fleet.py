@@ -115,18 +115,21 @@ def cmd_repin(args: argparse.Namespace) -> int:
 
 
 def made_elsewhere(name: str) -> str | None:
-    """What this machine holds of a run of this name that no box made: a run.json whose eval log is not under the
-    box's clone, or a screen log whose command is not the box's."""
+    """What this machine holds of a run of this name that no box made: a screen log whose command is not the box's,
+    or a run.json that neither names an eval log under the box's clone (an export made on a box before run.json named
+    its log from the checkout, logs/<study>/<run>/<file>.eval) nor has a screen log of the box's command beside it."""
+    log = settings.LOGS / "screen" / f"{name}.log"
+    by_box = False
+    if log.exists():
+        with open(log) as handle:
+            by_box = f"{REMOTE_REPO}/" in handle.readline()
+        if not by_box:
+            return str(log)
     run = settings.RUNS / name / "run.json"
     if run.exists():
         eval_log = json.loads(run.read_text()).get("eval_log") or ""
-        if not eval_log.startswith(REMOTE_REPO + "/"):
+        if not (by_box or eval_log.startswith(REMOTE_REPO + "/")):
             return f"{run.parent} (its eval log {eval_log or 'unknown'})"
-    log = settings.LOGS / "screen" / f"{name}.log"
-    if log.exists():
-        with open(log) as handle:
-            if f"{REMOTE_REPO}/" not in handle.readline():
-                return str(log)
     return None
 
 

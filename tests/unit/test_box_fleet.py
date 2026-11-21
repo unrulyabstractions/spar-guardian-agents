@@ -633,6 +633,14 @@ def test_run_args_refuse_a_run_name_made_elsewhere(registry, tmp_path, capsys, m
     log.write_text("/Users/someone/.venv/bin/python -m examples.protein_design.binder_minimal --name x\n")
     assert fleet.main(["run-args", "7"]) == 1
     assert "logs/study_x/screen/binder_minimal_luna2.log" in capsys.readouterr().err
+    log.unlink()
+    relative = {"eval_log": "logs/study_x/binder_minimal_luna1/x.eval"}     # the export's link from the checkout
+    (run_dir / "run.json").write_text(json.dumps(relative))
+    assert fleet.main(["run-args", "7"]) == 1                                 # no sign a box made it
+    assert "runs/study_x/binder_minimal_luna1" in capsys.readouterr().err
+    box_log = tmp_path / "logs" / "study_x" / "screen" / "binder_minimal_luna1.log"
+    box_log.write_text("/root/work/.venv/bin/python -m examples.protein_design.binder_minimal --name x\n")
+    assert fleet.main(["run-args", "7"]) == 0                                 # the box's screen log beside it
 
 
 # ---- the layout ----
