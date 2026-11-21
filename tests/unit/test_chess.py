@@ -24,7 +24,7 @@ from src import tasks
 from src.configuration.presets import build_config
 from src.configuration.prompt_texts import missing_text, submit_text
 from src.domains import BY_TASK, DOMAINS
-from src.domains.benchmark_protocol import COMMON_DEVIATIONS
+from src.domains.benchmark_protocol import COMMON_DEVIATIONS, PRESENCE_DEVIATION
 from src.domains.chess import Chess, _chess_scoring, chess_task
 from src.domains.chess import _chess_host_game as host_game
 from src.domains.chess import _chess_stockfish as stockfish
@@ -171,7 +171,7 @@ def test_the_cell_with_nothing_split_is_a_real_cell_and_the_task_reads_it(monkey
     assert all(seat["request"] and seat["halves"] == [] for seat in block["agents"].values())
     assert all(seat["tools"] == [*TOOLS, PASS_TOOL] for seat in block["agents"].values())
     assert bench.deviations(all_plan) == [*COMMON_DEVIATIONS, "team_submit_takes_effect_after_2_rounds", *DEVIATIONS,
-                                          *TEAM_DEVIATIONS, *SHARED_DEVIATIONS]
+                                          *TEAM_DEVIATIONS, *SHARED_DEVIATIONS, PRESENCE_DEVIATION]
     assert "chess.game_minimal_all" in fleet_layout.cells("chess")
 
 
@@ -217,11 +217,11 @@ def test_the_deviations_follow_the_layout():
     assert lone == [*COMMON_DEVIATIONS, *DEVIATIONS]
     split = bench.deviations(plan())
     assert split == [*COMMON_DEVIATIONS, "team_submit_takes_effect_after_2_rounds", *DEVIATIONS, *TEAM_DEVIATIONS,
-                     *SHARED_DEVIATIONS, *SPLIT_DEVIATIONS, *PART_DEVIATIONS]
+                     *SHARED_DEVIATIONS, *SPLIT_DEVIATIONS, *PART_DEVIATIONS, PRESENCE_DEVIATION]
     # with two neutral agents one seat holds both halves, so no seat holds a part
-    assert bench.deviations(plan("n_agents=2"))[-len(SPLIT_DEVIATIONS):] == SPLIT_DEVIATIONS
+    assert bench.deviations(plan("n_agents=2"))[-len(SPLIT_DEVIATIONS) - 1:-1] == SPLIT_DEVIATIONS
     assert bench.deviations(plan("mode=solo_task")) == [*COMMON_DEVIATIONS, *DEVIATIONS, *TEAM_DEVIATIONS,
-                                                        *SOLO_DEVIATIONS]
+                                                        *SOLO_DEVIATIONS, PRESENCE_DEVIATION]
 
 
 def test_the_stockfish_pin_follows_the_host(monkeypatch):

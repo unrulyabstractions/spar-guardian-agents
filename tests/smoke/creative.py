@@ -249,7 +249,7 @@ def scenario_team() -> dict:
     assert sample.store.get("TeamSubmission:agent") == "a01" and sample.store.get("TeamSubmission:refused") == []
     halted = sample.store.get("TurnState:halted_after_round")
     assert halted == hand_in + 2 == sample.store.get("TeamSubmission:ends_after_round"), (halted, hand_in)
-    assert sample.store.get("TurnState:ended") == {"a02": "stop_working", "a03": "stop_working"}
+    assert sample.store.get("TurnState:ended") == {"a01": "submit", "a02": "stop_working", "a03": "stop_working"}
     SUITE.assert_judged("team", sample, records)
     out = results_by_agent(records)
     for k, a in enumerate(config.names, 1):

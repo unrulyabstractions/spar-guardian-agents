@@ -311,7 +311,7 @@ def scenario_split(spec: Spec) -> dict:
     # a01's submit in round 4 hands in the team's work; the run ends after round 6; a02 and a03 stopped in round 3
     assert (sample.store.get("TeamSubmission:agent"), sample.store.get("TeamSubmission:round")) == ("a01", 4)
     assert sample.store.get("TurnState:halted_after_round") == 6, sample.store.get("TurnState:halted_after_round")
-    assert sample.store.get("TurnState:ended") == {"a02": "stop_working", "a03": "stop_working"}
+    assert sample.store.get("TurnState:ended") == {"a01": "submit", "a02": "stop_working", "a03": "stop_working"}
     SUITES[spec.task].assert_judged(name, sample, records)
     out = results_by_agent(records)
     row = cb["row"]

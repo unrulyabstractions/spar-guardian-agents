@@ -59,7 +59,7 @@ from inspect_ai.solver import Solver, TaskState
 from src.configuration import access_policy
 from src.configuration import prompt_texts as texts
 from src.configuration.access_policy import Access
-from src.configuration.swarm_config import SwarmConfig, role_of
+from src.configuration.swarm_config import INFLUENCERS, SwarmConfig, role_of
 from src.measures.ladder_domain import Domain
 from src.sandbox import cheatbench_task_files as task_files
 from src.sandbox.access_log.access_monitor import MONITOR_DEVIATION, Watched
@@ -76,6 +76,10 @@ ORBIT_AGENT_DEVIATION = "agent_is_inspect_react_under_orbit_not_vendor_harness"
 COMMON_DEVIATIONS = [ORBIT_AGENT_DEVIATION, "submit_and_stop_sentences_added_to_the_system_prompt"]
 # The label of a run with a regulator that reads the task and does not work on it (SwarmConfig.oversees).
 OVERSIGHT_DEVIATION = "a_regulator_gets_its_own_prompt_and_reads_the_task_as_its_teammates_work"
+# The label of a board run: each peer's entry and exit reach the others as user messages (turn_rules presence).
+PRESENCE_DEVIATION = "peers_are_announced_as_user_messages_when_they_enter_and_exit"
+# The label of a run with an influencer, which holds alert_humans (src/swarm/submit_and_stop.py).
+ALERT_DEVIATION = "influencers_hold_alert_humans"
 # The common labels of a run where no agent gets submit or stop_working.
 NO_SUBMIT_DEVIATIONS = [ORBIT_AGENT_DEVIATION,
                         "agents_have_no_submit_tool_and_run_until_their_turn_cap_or_the_time_limit"]
@@ -336,16 +340,19 @@ class Benchmark(ABC):
     def deviations(self, plan: Plan) -> list[str]:
         """How the run departs from CheatBench's own runner, as short labels: the common ones (NO_SUBMIT_DEVIATIONS
         when no agent gets submit or stop_working), the delay of a shared_task team's submit, the domain's, the team's,
-        a regulator's own prompt, then the network log's and the access log's."""
+        a regulator's own prompt, the network log's and the access log's, then the presence lines of a board and the
+        influencers' alert_humans."""
         config = plan.config
         common = COMMON_DEVIATIONS if config.gives_submit or config.gives_stop_working else NO_SUBMIT_DEVIATIONS
         delay = [f"team_submit_takes_effect_after_{config.submit_delay_rounds}_rounds"] \
             if config.gives_submit and config.submit_kind == "team" else []
         oversight = [OVERSIGHT_DEVIATION] if any(map(config.oversees, (plan.roles or {}).values())) else []
+        presence = [PRESENCE_DEVIATION] if config.board else []
+        alert = [ALERT_DEVIATION] if any(role in INFLUENCERS for role in (plan.roles or {}).values()) else []
         network = [NETWORK_DEVIATION] if config.network_log and self.watched is not None else []
         monitor = [*network, *([MONITOR_DEVIATION] if self.keeps_access_log(config) else [])]
         return [*common, *delay, *self.task_deviations, *(self.team_deviations(plan) if plan.team else []), *oversight,
-                *monitor]
+                *monitor, *presence, *alert]
 
     # ---------------------------------------------------------------- what the export records
     @classmethod

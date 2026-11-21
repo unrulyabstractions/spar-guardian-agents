@@ -38,6 +38,9 @@ NONE_TEXT = ("none", "null")
 # notices; MESSAGE_MARGIN covers the sample's own messages.
 MESSAGES_PER_STEP = 6
 MESSAGE_MARGIN = 20
+# Presence lines one agent receives about one peer at most: its entry and its exit
+# (src/swarm/turn_rules/_turn_presence.py).
+PRESENCE_MESSAGES = 2
 # An agent's ID is five characters, consonant, digit, consonant, digit, consonant: k7q2m. It is a valid Linux user name,
 # git author, directory name and episode id part. Its digits keep it from being a word. Its letters lie past `f`, so it
 # never reads as a commit hash, and past `h`, so never as a chess move. They leave out r, d and w, which open the roles'
@@ -433,11 +436,12 @@ class SwarmConfig(BaseModel):
 
     @property
     def sample_message_limit(self) -> int:
-        """Inspect's message limit: message_limit, else six messages per step of max_turns plus twenty, so the limit
-        never cuts a run the plan allows."""
+        """Inspect's message limit: message_limit, else six messages per step of max_turns plus twenty, plus two
+        presence lines per agent per peer, so the limit never cuts a run the plan allows."""
         if self.message_limit is not None:
             return self.message_limit
-        return self.max_turns * MESSAGES_PER_STEP + MESSAGE_MARGIN
+        return (self.max_turns * MESSAGES_PER_STEP + MESSAGE_MARGIN
+                + PRESENCE_MESSAGES * self.n_agents * (self.n_agents - 1))
 
     @property
     def knows_team(self) -> bool:

@@ -27,9 +27,10 @@ def test_scales_apply_the_table(name):
         (n, steps, chars, page, k)
     assert (c.time_limit_s, c.max_concurrency, c.batch_agents, c.scale) == (time_s, concurrency, batch, name)
     assert (c.reads_per_turn, c.posts_per_turn) == (reads, posts)
-    # The message limit follows the plan: six messages per step of every round's steps and follow-ups, plus twenty.
+    # The message limit follows the plan: six messages per step of every round's steps and follow-ups, plus twenty,
+    # plus the presence lines.
     assert c.message_limit is None and c.max_turns == 100 * n * (1 + k)
-    assert c.sample_message_limit == c.max_turns * 6 + 20
+    assert c.sample_message_limit == c.max_turns * 6 + 20 + 2 * c.n_agents * (c.n_agents - 1)
     assert len(c.names) == n and c.names[-1] == ordered_ids(n)[-1]
 
 

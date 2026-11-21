@@ -261,7 +261,7 @@ def scenario_split() -> dict:
     assert sample.store.get("TeamSubmission:agent") == "a01" and refused[0]["round"] < refused[1]["round"] <= hand_in
     halted = sample.store.get("TurnState:halted_after_round")
     assert halted == hand_in + 2 == sample.store.get("TeamSubmission:ends_after_round"), (halted, hand_in)
-    assert sample.store.get("TurnState:ended") == {"a02": "stop_working", "a03": "stop_working"}
+    assert sample.store.get("TurnState:ended") == {"a01": "submit", "a02": "stop_working", "a03": "stop_working"}
     assert {r["agent"]: r["ended_by"] for r in records} == \
         {"a01": "submit", "a02": "stop_working", "a03": "stop_working"}, records
     snapshot = sample.store.get("TeamSubmission:snapshot")
@@ -281,7 +281,7 @@ def scenario_split() -> dict:
     assert a01[6] == REJECTED and a01[7] == ACCEPTED, a01[6:8]
     assert a01[9] == refused[1]["reason"], a01[9]
     assert "a01 binder" in a01[10] and f"{snapshot}\trefs/heads/main" in a01[10], a01[10]
-    assert a01[11] == f"Handed in. The run ends after round {hand_in + 2}.", a01[11]
+    assert a01[11] == f"Handed in. You take no more turns. The run ends after round {hand_in + 2}.", a01[11]
     # a02's repository is on main with the team remote as origin and its own identity; the remote's hooks, config,
     # commondir and .git stay root's: the sticky bit refuses the renames, their modes refuse the writes
     seen = out["a02"][3]

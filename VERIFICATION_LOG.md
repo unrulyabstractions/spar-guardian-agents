@@ -2625,3 +2625,8 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   result is EINPROGRESS and a refused connect looks the same as one that went through. The refusal shows only in the
   transcript and in the missing accept. A server started with `( ... &)` reparents at once, and its listen reads
   detached with no call id. UNVERIFIED: x86_64 vast.ai boxes; many runs at once.
+
+## 2026-11-21: deviation labels and message margin for presence lines; smoke pins for the submitter's exit
+- **What.** Benchmark.deviations adds `peers_are_announced_as_user_messages_when_they_enter_and_exit` on a board and `influencers_hold_alert_humans` with an influencer, after the monitor labels. SwarmConfig.sample_message_limit adds two presence lines per agent per peer. Smoke pins in tests/smoke/protein.py, interview.py and creative.py now expect the shared_task submitter ended "submit" and the new hand-in reply. src/README.md and src/configuration/README.md describe the presence lines and alert_humans.
+- **How.** Waited for the network-log workflow to commit these files (fabeadf), re-read each before editing. Full unit suite: 3337 passed, 6 xfailed. ruff clean.
+- **Result.** VERIFIED for the unit suite. UNVERIFIED: the Docker smoke suites whose pins changed (openmath, knowledge, protein, interview, creative) were not run in this entry.

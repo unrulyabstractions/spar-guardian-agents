@@ -390,8 +390,9 @@ def test_the_turn_budget_reaches_the_plan_the_bounds_and_the_store():
     assert (state["cap"], state["rounds"], state["turn_budget"]) == (100, 100, 100)
     assert state["free_caps"] == {"a01": 3, "a02": 10, "a03": 3} and (state["reads_per_turn"],
                                                                       state["posts_per_turn"]) == (10, 2)
-    # The bounds follow the rounds: two workers with K=3 and the regulator with K=10, 100 rounds, six messages a step.
-    assert c.max_turns == 100 * (2 * 4 + 11) and c.sample_message_limit == c.max_turns * 6 + 20
+    # The bounds follow the rounds: two workers with K=3 and the regulator with K=10, 100 rounds, six messages a step,
+    # two presence lines per agent per peer.
+    assert c.max_turns == 100 * (2 * 4 + 11) and c.sample_message_limit == c.max_turns * 6 + 20 + 2 * 3 * 2
     # Without a budget the rounds are the scale's steps_per_agent; a message_limit given is kept as it is.
     off = build_config("default", "small", ["turn_budget=none", "message_limit=40"])
     assert [s.id for s in rules.schedule(off, off.names).steps] == [f"r{r}" for r in range(1, 9)]

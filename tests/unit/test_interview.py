@@ -19,7 +19,7 @@ import yaml
 from inspect_ai.model._call_tools import tool_params
 
 from src.configuration.presets import build_config
-from src.domains.benchmark_protocol import COMMON_DEVIATIONS
+from src.domains.benchmark_protocol import COMMON_DEVIATIONS, PRESENCE_DEVIATION
 from src.domains.interview import PrimeFactorization, SubsetSum
 from src.domains.interview import _interview_honeypot as keys
 from src.domains.interview import _interview_sealed_generator as generator
@@ -537,7 +537,7 @@ def test_an_agent_holding_every_piece_gets_cheatbenchs_key_files(spec, monkeypat
         with tarfile.open(cb["stage"][agent]) as archive:
             data = {path: archive.extractfile(path.lstrip("/")).read() for path in spec.key_paths}
         assert (data == {path: files[path] for path in spec.key_paths}) is whole, agent
-    assert bench.deviations(plan)[-len(SPLIT_DEVIATIONS[spec.task]) - 2:-2] == SPLIT_DEVIATIONS[spec.task]
+    assert bench.deviations(plan)[-len(SPLIT_DEVIATIONS[spec.task]) - 3:-3] == SPLIT_DEVIATIONS[spec.task]
 
 
 def test_the_deviations_follow_the_layout():
@@ -547,14 +547,15 @@ def test_the_deviations_follow_the_layout():
         [*COMMON_DEVIATIONS, *DEVIATIONS, NETWORK_DEVIATION, MONITOR_DEVIATION]
     assert "sandbox_has_no_network_where_cheatbench_leaves_egress_open" in DEVIATIONS
     solo = bench.plan(build_config("default", "small", ["n_agents=2", "mode=solo_task"]))
-    assert bench.deviations(solo) == [*team, NETWORK_DEVIATION, MONITOR_DEVIATION]
+    assert bench.deviations(solo) == [*team, NETWORK_DEVIATION, MONITOR_DEVIATION, PRESENCE_DEVIATION]
     # a shared_task team's submit takes effect two rounds on (SwarmConfig.submit_delay_rounds)
     delayed = [*COMMON_DEVIATIONS, "team_submit_takes_effect_after_2_rounds", *team[len(COMMON_DEVIATIONS):]]
     split = bench.plan(build_config("default", "small", []))
     assert bench.deviations(split) == [*delayed, *machines.SHARED_DEVIATIONS, *SPLIT_DEVIATIONS["subset_sum"],
-                                       NETWORK_DEVIATION, MONITOR_DEVIATION]
+                                       NETWORK_DEVIATION, MONITOR_DEVIATION, PRESENCE_DEVIATION]
     shared = bench.plan(build_config("default", "small", ["access=all"]))
-    assert bench.deviations(shared) == [*delayed, *machines.SHARED_DEVIATIONS, NETWORK_DEVIATION, MONITOR_DEVIATION]
+    assert bench.deviations(shared) == [*delayed, *machines.SHARED_DEVIATIONS, NETWORK_DEVIATION, MONITOR_DEVIATION,
+                                        PRESENCE_DEVIATION]
 
 
 @pytest.mark.parametrize("spec", SPECS, ids=[s.task for s in SPECS])
@@ -699,7 +700,8 @@ def test_the_tools_follow_the_plan_they_are_given(monkeypatch):
     tool = tools.bindings[tool_name(SUBSET)].create(Context("a02", sample_id="replanned")).tool
     asyncio.run(tool(**tool_params({"subset_indices": [0]}, tool)))
     assert list(tool_store.states(st)) == ["team"]                     # shared_task's owner, not a02's own
-    assert bench.deviations(plan)[-4:-2] == SPLIT_DEVIATIONS[SUBSET.task]
+    assert bench.deviations(plan)[-5:-3] == SPLIT_DEVIATIONS[SUBSET.task]
+    assert bench.deviations(plan)[-1] == PRESENCE_DEVIATION
 
 
 @pytest.mark.parametrize("spec", SPECS, ids=[s.task for s in SPECS])

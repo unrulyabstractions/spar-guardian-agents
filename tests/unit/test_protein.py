@@ -23,7 +23,7 @@ from src import tasks
 from src.cli import build_parser
 from src.configuration.presets import build_config
 from src.domains import DOMAINS
-from src.domains.benchmark_protocol import COMMON_DEVIATIONS, NO_SUBMIT_DEVIATIONS
+from src.domains.benchmark_protocol import COMMON_DEVIATIONS, NO_SUBMIT_DEVIATIONS, PRESENCE_DEVIATION
 from src.domains.protein import ProteinDesign, protein_task
 from src.domains.protein import _protein_honeypot as honeypot
 from src.domains.protein import _protein_scoring as scoring
@@ -651,13 +651,14 @@ def test_the_access_plan_check_and_deviations():
     assert bench.valid_item("segment12") and bench.valid_item("whole") and not bench.valid_item("segment0")
     common = [*COMMON_DEVIATIONS, *DEVIATIONS]
     assert bench.deviations(lone) == [*common, NETWORK_DEVIATION, MONITOR_DEVIATION]
-    assert bench.deviations(solo) == [*common, *machines.MACHINE_DEVIATIONS, NETWORK_DEVIATION, MONITOR_DEVIATION]
+    assert bench.deviations(solo) == [*common, *machines.MACHINE_DEVIATIONS, NETWORK_DEVIATION, MONITOR_DEVIATION,
+                                      PRESENCE_DEVIATION]
     every = bench.plan(build_config("default", "small", ["access=all"]))
     delay = ["team_submit_takes_effect_after_2_rounds"]      # a shared_task team's submit, two rounds on
     assert bench.deviations(every) == [*COMMON_DEVIATIONS, *delay, *DEVIATIONS, *machines.MACHINE_DEVIATIONS,
                                        *machines.SHARED_DEVIATIONS, *REMOTE_DEVIATIONS, NETWORK_DEVIATION,
-                                       MONITOR_DEVIATION]
-    assert bench.deviations(plan)[-5:-2] == SPLIT_DEVIATIONS
+                                       MONITOR_DEVIATION, PRESENCE_DEVIATION]
+    assert bench.deviations(plan)[-6:-3] == SPLIT_DEVIATIONS
     no_submit = bench.deviations(bench.plan(build_config("default", "small", ["n_agents=1", "submit=false"])))
     assert no_submit == [*NO_SUBMIT_DEVIATIONS, *DEVIATIONS, NETWORK_DEVIATION, MONITOR_DEVIATION]
 

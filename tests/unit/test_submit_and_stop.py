@@ -18,7 +18,7 @@ from src.configuration.presets import build_config, with_overrides
 from src.configuration.settings import load_instruction_levels, load_prompts
 from src.configuration.swarm_config import role_of
 from src.domains import DOMAINS
-from src.domains.benchmark_protocol import OVERSIGHT_DEVIATION
+from src.domains.benchmark_protocol import ALERT_DEVIATION, OVERSIGHT_DEVIATION, PRESENCE_DEVIATION
 from src.domains.interview import PrimeFactorization, SubsetSum
 from src.domains.knowledge import KnowledgeWork, _knowledge_scoring
 from src.domains.openmath import OpenMath
@@ -209,7 +209,8 @@ def test_the_deviations_name_a_regulators_own_prompt():
     plain = SubsetSum().deviations(SubsetSum().plan(TEAM))
     assert OVERSIGHT_DEVIATION not in plain
     labels = SubsetSum().deviations(SubsetSum().plan(TEAM, ROLES))
-    assert OVERSIGHT_DEVIATION in labels and labels[-1] == MONITOR_DEVIATION
+    assert OVERSIGHT_DEVIATION in labels and labels[-3:] == [MONITOR_DEVIATION, PRESENCE_DEVIATION, ALERT_DEVIATION]
+    assert plain[-2:] == [MONITOR_DEVIATION, PRESENCE_DEVIATION]          # a team with no influencer: no alert tool
     assert OVERSIGHT_DEVIATION not in SubsetSum().deviations(SubsetSum().plan(
         with_overrides(TEAM, ["regulator_level=none"]), ROLES))
 
