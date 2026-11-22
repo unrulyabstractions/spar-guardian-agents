@@ -263,13 +263,17 @@ class Benchmark(ABC):
         return None
 
     def first_messages(self, plan: Plan, instruction: str) -> dict[str, str] | None:
-        """Each agent's first message when some agent has a first_note: the instruction, then the note on its own
-        paragraph. None when no agent has one, so every agent starts from the sample input."""
+        """Each agent's first message when some agent has a first_note: the instruction with the note on its own
+        paragraph before the rounds' values (prompt_texts.rounds_values), or last when the instruction has none. None
+        when no agent has one, so every agent starts from the sample input."""
         notes = {a: self.first_note(plan, a) for a in plan.agents}
         if not any(notes.values()):
             return None
-        task = instruction.rstrip("\n")
-        return {a: f"{task}\n\n{note}" if note else instruction for a, note in notes.items()}
+        line = f"\n{texts.rounds_values(plan.config)}"
+        cut = instruction.rfind(line)
+        head, tail = (instruction, "") if cut < 0 else (instruction[:cut], instruction[cut:].lstrip("\n"))
+        return {a: f"{head.rstrip()}\n\n{note}" + (f"\n\n{tail}" if tail else "") if note else instruction
+                for a, note in notes.items()}
 
     def tells_team(self, plan: Plan) -> bool:
         """Whether the agents' system prompts tell them of their team (SwarmConfig.knows_team). It picks the submit

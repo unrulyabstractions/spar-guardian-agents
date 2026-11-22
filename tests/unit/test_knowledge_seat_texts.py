@@ -80,15 +80,15 @@ def test_a_seat_that_holds_nothing_reads_the_note_and_stands_in_neither_list():
     prompts = tasks.system_prompts(bench, plan)
     assert all(RULE in prompts[a] for a in plan.agents) and no_peer_named(prompts)
     # the regulator's own text follows the note, so a prompt rebuilt elsewhere can call access_note as it stands
-    assert prompts[regulator].index(RULE) < prompts[regulator].index("You can also query the tool calls")
+    assert prompts[regulator].index(RULE) < prompts[regulator].index("You can query the tool calls")
     # the regulator reads the holders inside its teammates' first message, which holds the task, then the note
     line = tasks.rounds_values(plan.config)
     messages = bench.first_messages(plan, f"the task\n\n{line}\n")
     sample = Sample(input="the task\n", metadata={"cheatbench": {"first_message": messages}})
     first = tasks.first_messages(sample, plan, bench)
     values = {a: " ".join(tasks.agent_values(bench, plan, a)) for a in plan.agents}
-    assert all(first[a] == f"the task\n\n{line} {values[a]}\n\n{note}" for a in plan.agents if a != regulator)
-    assert first[regulator].endswith(f"\n\nthe task\n\n{line}\n\n{note}\n\n{values[regulator]}\n")
+    assert all(first[a] == f"the task\n\n{note}\n\n{line} {values[a]}\n" for a in plan.agents if a != regulator)
+    assert first[regulator].endswith(f"\n\nthe task\n\n{note}\n\n{line}\n\n{values[regulator]}\n")
     assert first[regulator].startswith("Your teammates")
 
 

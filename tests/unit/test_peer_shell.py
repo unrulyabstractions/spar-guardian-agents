@@ -21,7 +21,7 @@ from src.swarm.turn_rules import FREE_TOOLS, PEER_SHELL_TOOL
 from tests.unit.test_export_access_log import call, exported, opened
 from tests.unit.test_submit_and_stop import ROLES, TEAM
 
-SENTENCE = 'peer_shell(peer="<name>", command="...") runs a shell command in that agent\'s working directory'
+SENTENCE = "peer_shell runs a shell command in another agent's working directory"
 
 
 def plan_of(key: str, *overrides: str):

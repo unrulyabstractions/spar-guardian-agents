@@ -104,6 +104,11 @@ class OpenMath(RowBenchmark):
                  "agents": {a: seat.as_dict() for a, seat in sandbox.seats(plan).items()}}
         return scoring.registration(self.row_of(self.row)["current_agent"], block)
 
+    def first_note(self, plan: Plan, agent: str) -> str | None:
+        """That the agent's git identity, the row's registry identity, is a different name from the one its system
+        prompt gives it (prompts.yaml openmath.identity_note)."""
+        return load_prompts()["openmath"]["identity_note"]
+
     def submit_vars(self, plan: Plan) -> dict[str, str]:
         """{identity}: the row's registry identity; {remote}: " of the team remote" in the split layout."""
         remote = load_prompts()["submit"]["remote"] if sandbox.layout_of(plan) == "split" else ""
