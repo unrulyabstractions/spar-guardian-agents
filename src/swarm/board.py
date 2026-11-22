@@ -282,8 +282,8 @@ def agent_tool_names(config: SwarmConfig, roles: dict[str, str] | None = None) -
 
 def round_rules(config: SwarmConfig, agent: str, roles: dict[str, str] | None = None, *,
                 commands: bool = True) -> str:
-    """The rounds' rules in the agent's system prompt as bullet lines, with no number (prompts.yaml round.rules; the
-    first message and each round's line give the values, prompt_texts.rounds_values); with a round clock
+    """The rounds' rules in the agent's system prompt as bullet lines, with no number (prompts.yaml round.rules; each
+    round's line gives the calls left, turn_rules.round_line); with a round clock
     (round_time_s) the time limit (round.time) and, for an agent with a command tool (`commands`), its jobs
     (round.jobs); then wait (round.closing, or closing_untold for an agent not told of its team, which names no
     teammate). The same for every role; agent and roles are kept for the callers."""

@@ -1,8 +1,8 @@
 """The system prompt texts that depend on a setting.
 
 These helpers build the openmath board system prompt, the SWE board fields, what submit says and what it says is
-missing, the bullets of the tools that end an agent's work, the rounds' values for the first message (rounds_values)
-and the values of the other parameters a system prompt states with no number (first_value, submit_value). The
+missing, the bullets of the tools that end an agent's work, the facts block that ends every first message
+(with_facts) and the values of the parameters a system prompt states with no number (first_value, submit_value). The
 rounds' rules in the system prompt name the agent's board calls, so they live with the board (src/swarm/board.py
 round_rules). Each one reads its text from prompts.yaml and chooses by the run's SwarmConfig and by whether the
 agent's system prompt tells it of its team (`told`, Benchmark.tells_team): an agent not told never reads of a teammate.
@@ -141,30 +141,29 @@ def counted(n: int | float, noun: str) -> str:
     return f"{n:g} {noun}{'' if n == 1 else 's'}"
 
 
-def duration_text(seconds: int) -> str:
-    """A time in words: whole minutes as minutes ("10 minutes", "1 minute"), any other time in seconds."""
-    return counted(seconds // 60, "minute") if seconds % 60 == 0 else counted(seconds, "second")
+def facts_block(facts: list[str]) -> str:
+    """The run's facts as the last paragraph of a first message: prompts.yaml `facts`, then one labelled line per fact
+    ("- What counts when you submit: ...")."""
+    return "\n".join([settings.load_prompts()["facts"], *(f"- {fact}" for fact in facts)])
 
 
-def rounds_values(config: SwarmConfig, entry: int = 1) -> str:
-    """The rounds' values, the last paragraph of every agent's first message (prompts.yaml round.values): the rounds
-    the agent has on entering in round `entry` (the plan's rounds, SwarmConfig.plan_rounds, for an agent there from
-    the first round; that less entry - 1 otherwise, as its first round's line says: R after a head start) and N
-    (calls_per_round) in words, then with a round clock T (round_time_s, round.minutes)."""
-    texts = settings.load_prompts()["round"]
-    rounds = config.plan_rounds - entry + 1
-    line = texts["values"].format(rounds=counted(rounds, "round"), calls=counted(config.calls_per_round, "tool call"),
-                                  budget=counted(rounds * config.calls_per_round, "tool call"))
-    minutes = texts["minutes"].format(time=duration_text(config.round_time_s)) if config.round_time_s else ""
-    return f"{line} {minutes}" if minutes else line
+def split_facts(message: str) -> tuple[str, list[str]]:
+    """A first message without its facts block, and the block's facts (facts_block), [] when it has none."""
+    heading = f"\n\n{settings.load_prompts()['facts']}\n"
+    cut = message.rfind(heading)
+    if cut < 0:
+        return message, []
+    lines = message[cut + len(heading):].strip().splitlines()
+    return message[:cut], [line[2:] for line in lines if line.startswith("- ")]
 
 
-def before_line(message: str, line: str, note: str) -> str:
-    """The message with the note on its own paragraph before the paragraph that opens with line (the rounds' values),
-    or last when the message holds no such line."""
-    cut = message.rfind(f"\n{line}")
-    head, tail = (message, "") if cut < 0 else (message[:cut], message[cut:].lstrip("\n"))
-    return f"{head.rstrip()}\n\n{note}" + (f"\n\n{tail}" if tail else "")
+def with_facts(message: str, facts: list[str] | None = None, note: str | None = None) -> str:
+    """A first message in its shape: the task, then the note on a paragraph of its own, then one facts block, last,
+    with the facts it held and these after them, none twice."""
+    body, held = split_facts(message)
+    merged = list(dict.fromkeys([*held, *(f for f in facts or [] if f)]))
+    parts = [body.strip("\n"), note.strip() if note else None, facts_block(merged) if merged else None]
+    return "\n\n".join(p for p in parts if p) + "\n"
 
 
 def joined(names: list[str]) -> str:

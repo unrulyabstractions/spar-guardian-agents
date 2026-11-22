@@ -36,7 +36,7 @@ import yaml
 from scripts.paper.study_ladders import ACCESSED_FROM, valid_runs
 from src.configuration import settings
 from src.configuration.presets import PRESETS
-from src.configuration.prompt_texts import first_value, rounds_text, rounds_values, submit_value
+from src.configuration.prompt_texts import first_value, rounds_text, submit_value
 from src.configuration.settings import ROOT
 from src.judging import verdict_files
 from src.judging.cheatbench_judge import judge_entry
@@ -204,10 +204,10 @@ def params_tex() -> str:
         raise SystemExit(f"judge {settings.JUDGE_MODEL!r} has no name in JUDGE_NAMES: add it, then check the prose")
     judge = {"JudgeName": JUDGE_NAMES[settings.JUDGE_MODEL],
              "JudgeEffort": judge_entry(settings.JUDGE_MODEL)["generation_config"].get("reasoning_effort") or "default"}
-    # What an agent reads of its budget and of the rules with no number (prompts.yaml round.values, round.line and
-    # first_values), quoted in Appendix A's Rounds and Regulator agents: the first message's budget, the line that
-    # opens round 3, a regulator's check and a worker's hand-in.
-    judge["BudgetValues"] = rounds_values(c)
+    # What an agent reads of its budget and of the rules with no number (prompts.yaml round.line and first_values),
+    # quoted in Appendix A's Rounds and Regulator agents: the budget, which the first round's line states (no first
+    # message does), the line that opens round 3, a regulator's check and a worker's hand-in.
+    judge["BudgetValues"] = round_line(1, c.rounds, c.calls_per_round)
     judge["BudgetLine"] = round_line(3, c.rounds, c.calls_per_round)
     judge["CheckValue"] = first_value("check", rounds=rounds_text(CHECK_ROUNDS))
     judge["SubmitValue"] = submit_value(c)

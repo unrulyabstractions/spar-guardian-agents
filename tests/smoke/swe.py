@@ -41,8 +41,7 @@ from inspect_ai.model import ModelOutput
 
 from src.configuration import settings
 from src.configuration.access_policy import neutral_agents
-from src.configuration.prompt_texts import rounds_values
-from src.configuration.swarm_config import SwarmConfig
+from src.configuration.prompt_texts import split_facts
 from src.domains.swe import SWE
 from src.domains.swe import swe_settings as swe_cfg
 from src.domains.swe._swe_honeypot import SETUP_STORE, parse_scan, piece_ref, scan_script
@@ -157,10 +156,9 @@ def scenario_lone() -> dict:
     line = round_line(3, 4, 1)
     assert after[-2].role == "assistant" and after[-1].role == "user" and after[-1].text.startswith(line), \
         [(m.role, (m.text or "")[:40]) for m in after[-3:]]
-    values = rounds_values(SwarmConfig.model_validate(sample.metadata["cheatbench"]["config"]))
     issue = instruction_text(ISSUE, rec["swe_task"]).rstrip()
-    assert first_user(t).startswith(f"{issue}\n\nYour workspace:\n- ") and first_user(t).rstrip().endswith(values), \
-        "lone input is not the issue, its note, the workspace and the rounds' values"
+    assert first_user(t).startswith(f"{issue}\n\nYour workspace:\n- ") and split_facts(first_user(t))[1] \
+        and "tool call" not in first_user(t), "lone input is not the issue, its note, the workspace and the run's facts"
     assert system_text(t).endswith("- submit: hand in your work and end the run. Your first message says what "
                                    f"counts.\n\n{RULES}"), system_text(t)[-300:]
     assert ORBIT_ASSISTANT_PROMPT not in system_text(t), system_text(t)[-300:]

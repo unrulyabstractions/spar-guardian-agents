@@ -25,8 +25,7 @@ import json
 from inspect_ai.model import ModelOutput
 
 from src.configuration import settings
-from src.configuration.prompt_texts import joined, rounds_values
-from src.configuration.swarm_config import SwarmConfig
+from src.configuration.prompt_texts import joined, split_facts
 from src.swarm.turn_rules._turn_messages import message_parts
 from src.swarm.turn_rules._turn_rounds import round_line, rounds_left
 from src.swarm.turn_rules._turn_state import END_ROUND, NOTICE_PARAGRAPH_TAG, TURN_RULES_TAG
@@ -144,23 +143,23 @@ def check_rounds(suite, name: str, sample, records: list[dict], plan: dict, work
     assert (run["rules"]["round_budget"], run["rules"]["calls_per_round"]) == (ROUNDS, CALLS), run["rules"]
     transcripts = {r["agent"]: load_transcript(r) for r in records}
     assert sorted(transcripts) == sorted(plan), sorted(transcripts)
-    values = rounds_values(SwarmConfig(rounds=ROUNDS, calls_per_round=CALLS))
+    first_line = round_line(1, ROUNDS, CALLS)
     out = {}
     for agent, rounds in plan.items():
         t = transcripts[agent]
         system = system_text(t)
         rules = "\n".join([TEXTS["rules"], TEXTS["time"], TEXTS["jobs"], TEXTS["closing"]])
-        # the rules with no numbers in the system prompt, every value in the first message
+        # the rules with no numbers in the system prompt, every value in the first message's facts block, and the
+        # budget stated once, by the first round's line
         assert rules in system and not any(ch.isdigit() for ch in rules), (agent, system[-500:])
-        assert values not in system and f"{ROUNDS} rounds" not in system and f"{CALLS} tool calls" not in system, agent
-        # the paragraph of the rounds' values holds the agent's other values after them: a worker's hand-in delay,
-        # the regulator's check rounds (after the task it quotes)
-        paragraphs = first_user(t).rstrip().split("\n\n")
-        assert any(p.startswith(values) for p in paragraphs), (agent, first_user(t)[-300:])
+        assert f"{ROUNDS} rounds" not in system and f"{CALLS} tool calls" not in system, agent
         own = VALUES["check"].format(rounds="2 rounds") if agent == regulator else \
             VALUES["submit"].format(rounds="2 rounds")
-        assert own in paragraphs[-1] and own not in system, (agent, paragraphs[-1])
-        assert sum(values in s["message"] for s in t["trajectory"]["steps"] if s["source"] == "user") == 1, agent
+        facts = split_facts(first_user(t))[1]
+        assert own in facts and own not in system, (agent, facts)
+        assert "tool call" not in first_user(t), (agent, first_user(t)[-300:])
+        assert sum(s["message"].startswith(first_line) for s in t["trajectory"]["steps"]
+                   if s["source"] == "user") == 1, agent
         entries = [e for e in timeline if e["agent"] == agent]
         groups = round_groups(t)
         assert len(entries) == len(groups) == len(rounds), (agent, len(entries), len(groups), len(rounds))

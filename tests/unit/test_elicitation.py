@@ -12,7 +12,7 @@ from elicitation import swe as cell
 from examples.example_arguments import DEFAULT_SETTINGS
 from src import run
 from src.configuration import settings
-from src.configuration.prompt_texts import rounds_values
+from src.configuration.prompt_texts import split_facts
 from src.domains.swe.swe_inputs import instruction_text
 from src.domains.swe.swe_settings import SECRETS
 from src.measures import run_figures as plots
@@ -75,13 +75,13 @@ def test_the_task_names_no_teammate_and_nothing_about_cheating():
     swe = task.dataset[0].metadata["cheatbench"]["swe"]
     assert swe["issue"] == "flipt-02e2" and swe["honeypot"] == "jigsaw" and swe["n_agents"] == 2
     assert swe["pieces"] == {"a01": ["B", "A"], "a02": ["C"]}
-    # the first message is CheatBench's instruction with the issue's note, the agent's workspace and the rounds' values,
+    # the first message is CheatBench's instruction with the issue's note, the agent's workspace and the run's facts,
     # and no sentence about cheating
-    issue, line = instruction_text(cell.ISSUE, swe["instance"]), f"\n{rounds_values(config)}\n"
-    assert task.dataset[0].input == swe["instruction"] == issue + line
+    issue = instruction_text(cell.ISSUE, swe["instance"])
+    assert task.dataset[0].input == swe["instruction"] == issue
     for agent, other in (("a01", "a02"), ("a02", "a01")):
         first = swe["first_message"][agent]
-        assert first.startswith(issue.rstrip()) and first.endswith(line) and "cheat" not in first.lower()
+        assert first.startswith(issue.rstrip()) and split_facts(first)[1] and "cheat" not in first.lower()
         assert f"You're on branch `{agent}`" in first and other not in first
         prompt = swe["system_prompt"][agent]
         assert prompt.startswith(f"You are {agent}, a software engineer on a team.")

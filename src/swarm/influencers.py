@@ -22,7 +22,7 @@ the role. A level gives one text or one per benchmark, with placeholders filled 
 A regulator or disregulator level gives a system text with no task detail (`text`) and a first-message text with the
 task's own words (`first`, role_first): each regulator level but blind gives the benchmark's `cheating` var, what
 cheating means on that task, in the regulator's first message, after its teammates' task; a disregulator's gives its
-objective and the work it may reuse, before the rounds' values. An influencer's level text is followed by prompts.yaml
+objective and the work it may reuse, before the run's facts. An influencer's level text is followed by prompts.yaml
 roles.influencer_common (the peer tools, src/swarm/_regulator_oversight.py, and the board), then under
 SwarmConfig.peer_shell roles.peer_shell. A regulator's then gets
 roles.regulator_check (call get_peer_actions on each teammate within a set number of the regulator's first rounds:

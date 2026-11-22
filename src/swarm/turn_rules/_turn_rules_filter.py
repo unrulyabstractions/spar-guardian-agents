@@ -407,7 +407,8 @@ class TurnRulesDefense(DefenseBase):
             -> tuple[Part | None, Callable[[str], None] | None]:
         """The round's message's board part: the notice of the posts by others since the agent was last told
         (board_news, seen_of), "Posts on the board: 1 by a02. ..." while it has been told of none and "The board
-        changed: a02 1 new of 2. ..." later, tagged NOTICE_TAG {kind, activation, call, round, seen}. When the
+        changed: a02 1 new of 2. ..." later, tagged NOTICE_TAG {kind, activation, call, round, seen, and first while it
+        had been told of none}. When the
         presence part tells of the team's hand-in or of its hold, the system's post of it is left out, so the message
         announces it once. Its record, run once ORBIT has committed the message (settle), marks the posts seen, keeps
         it in TurnState.added and writes the "notice" info event (TURN_RULES_TAG, with boundary true: the
@@ -420,15 +421,17 @@ class TurnRulesDefense(DefenseBase):
         st = store_as(TurnState)
         told = presence is not None and any(e["kind"] == "held" or (e["kind"] == "exited" and e["why"] == "submit")
                                             for e in presence.tag["events"])
-        news = board_news(self.rules, agent, on_team(st, self.rules), seen_of(st, agent, conversation.messages),
-                          skip_system=told)
+        seen = seen_of(st, agent, conversation.messages)
+        news = board_news(self.rules, agent, on_team(st, self.rules), seen, skip_system=told)
         if news is None:
             return None, None
         text, top = news
         if text is None:
             return None, lambda _message: mark_seen(agent, top)
         tag = {"kind": "notice", "activation": st.activations.get(agent, 0) + 1,
-               "call": st.model_calls.get(agent, 0) + 1, "round": round_number, "seen": top}
+               "call": st.model_calls.get(agent, 0) + 1, "round": round_number, "seen": top,
+               **({"first": True} if seen == 0 else {})}
+
         def record(message: str) -> None:
             mark_seen(agent, top)
             rules = store_as(TurnState)

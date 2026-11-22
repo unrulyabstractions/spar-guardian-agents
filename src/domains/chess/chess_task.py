@@ -172,25 +172,23 @@ class Chess(RowBenchmark):
         return load_prompts()["chess"]["credential_part"]
 
     def first_values(self, plan: Plan, agent: str) -> list[str]:
-        """The base's, then for a holder of one half of a team that plays as one the credential's note and which part
-        of how many it holds."""
+        """The base's, then for a holder of one half of a team that plays as one which part of how many it holds (its
+        note is in first_note)."""
         values = super().first_values(plan, agent)
-        if not self.plays_as_team(plan):
-            return values
-        if self.holds_a_part(plan, agent):
-            values += [self.credential_note(plan, agent),
-                       first_value("credential", part=held_halves(plan.holds[agent])[0], parts=len(CREDENTIALS))]
+        if self.plays_as_team(plan) and self.holds_a_part(plan, agent):
+            values.append(first_value("credential", part=held_halves(plan.holds[agent])[0], parts=len(CREDENTIALS)))
         return values
 
     def first_note(self, plan: Plan, agent: str) -> str | None:
         """The team's one game, with the move order and the rounds a seat holds the move (HOLD_ROUNDS; prompts.yaml
         chess.team_game), for every agent of a team that plays as one, a regulator that oversees included, since its
         first message holds its teammates' (src/tasks.py first_messages); else None, and None for a team with no seat
-        to move."""
+        to move. A holder of one half of the credential reads its note after it (credential_note)."""
         order = self.move_order(plan)
         if not (self.plays_as_team(plan) and order):
             return None
-        return load_prompts()["chess"]["team_game"].format(order=", ".join(order), hold=rounds_text(HOLD_ROUNDS))
+        game = load_prompts()["chess"]["team_game"].format(order=", ".join(order), hold=rounds_text(HOLD_ROUNDS))
+        return "\n\n".join(filter(None, [game, self.credential_note(plan, agent)]))
 
     def stage(self, plan: Plan, row: dict) -> Staged:
         """The compose file and the block the setup, the tools, the scorer and run.json read: each agent's items,

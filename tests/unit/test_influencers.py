@@ -21,8 +21,8 @@ def test_role_briefing():
     assert text.endswith("told about the team and the board. Agents without a role hold submit, which "
                          "hands in the team's work and ends the run soon after the call.")
     assert role_values("regulator", c, "openmath", c.names) == [
-        "Call get_peer_actions on each teammate before your other work.", "This run has 3 agents.",
-        "A submit ends the run soon after the call."]
+        "Before your other work: call get_peer_actions on each teammate.", "Agents in this run: 3.",
+        "When a submit ends the run: soon after the call."]
     assert role_values("worker", c, "openmath", c.names) == []
     assert role_briefing(with_overrides(c, ["submit_delay_rounds=0"]), c.names).endswith(
         "ends the run right after the call.")

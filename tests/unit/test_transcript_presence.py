@@ -162,3 +162,45 @@ def test_a_user_steps_presence_events_in_both_shapes():
     done = subprocess.run(["node", "-e", script], capture_output=True, text=True, timeout=60)
     assert done.returncode == 0, done.stderr
     assert json.loads(done.stdout) == [[event, {**event, "id": "exited:a02", "agent": "a02"}], [event], [], []]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node runs the page's own functions")
+def test_the_chips_of_a_rounds_message_say_what_the_agent_read():
+    """The board chip's hover fits where it stands: "posts on the board" on a first board part, the change since the
+    agent was last told later. An entry folded into its exit gets no chip; a notice at the end of a result gets one."""
+    source = (STATIC / "tv_presence.js").read_text()
+    consts = "\n".join(re.search(rf"^(export )?const {name} = .*?;$", source, flags=re.S | re.M).group(0)
+                       for name in ("WHY_WORDS", "EVENT_WORDS"))
+    script = "\n".join([
+        "const h = (tag, attrs, ...kids) => ({tag, title: attrs && attrs.title, kids});",
+        consts.replace("export ", ""), js_function("boardChip"), js_function("presenceChip"),
+        js_function("paragraphChip"),
+        "console.log(JSON.stringify([boardChip({activation: 2, first: true}).title, boardChip({activation: 2}).title,"
+        " boardChip({activation: 1}).title, presenceChip({agent: 'a01', kind: 'entered', folded: true}),"
+        " presenceChip({agent: 'a01', kind: 'exited', why: 'stop', round: 1}).kids[0],"
+        " paragraphChip({swarm_notice_paragraph: ['The board changed.']}).title, paragraphChip({})]));"])
+    done = subprocess.run(["node", "-e", script], capture_output=True, text=True, timeout=60)
+    assert done.returncode == 0, done.stderr
+    assert json.loads(done.stdout) == ["posts on the board", "board changed since the agent was last told",
+                                       "posts on the board", None, "a01 exited · stop", "The board changed.", None]
+    assert "since the last round" not in source
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node runs the page's own functions")
+def test_the_results_browser_shows_a_rounds_message_as_badges_not_json():
+    """The results browser's step header: one badge per presence event said, a board badge, no raw JSON."""
+    source = (STATIC.parent / "static" / "app" / "view_transcript.js").read_text()
+    consts = "\n".join(re.search(rf"^const {name} = .*?;$", source, flags=re.S | re.M).group(0)
+                       for name in ("EVENT_WORDS", "MESSAGE_KEYS"))
+    body = re.search(r"^function messageBadges\(.*?^}$", source, flags=re.S | re.M).group(0)
+    extra = {"swarm_presence": {"round": 1, "events": [
+        {"id": "entered:a01", "agent": "a01", "kind": "entered", "why": None, "round": 1, "folded": True},
+        {"id": "exited:a01", "agent": "a01", "kind": "exited", "why": "stop", "round": 1},
+        {"id": "entered:a03", "agent": "a03", "kind": "entered", "why": None, "round": 1}]},
+        "swarm_notice": {"kind": "notice", "activation": 1, "call": 1, "round": 1, "seen": 1, "first": True}}
+    script = "\n".join(["const badge = (label, kind, title) => ({label, kind, title});", consts, body,
+                        f"console.log(JSON.stringify(messageBadges({json.dumps(extra)})));"])
+    done = subprocess.run(["node", "-e", script], capture_output=True, text=True, timeout=60)
+    assert done.returncode == 0, done.stderr
+    assert [b["label"] for b in json.loads(done.stdout)] == ["a01 exited · stop", "a03 entered", "board"]
+    assert "...MESSAGE_KEYS]" in source and source.count("messageBadges(") == 3

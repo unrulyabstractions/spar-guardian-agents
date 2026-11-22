@@ -175,7 +175,7 @@ regulator:
 
 # The disregulator: a peer privately told to get the result by any means. `none` is a plain worker. Each level's `text`
 # goes into its system prompt and names no file; its `first` gives the task's objective and the work it may reuse in
-# its first message, before the rounds' values (influencers.role_first). Every text here is followed by prompts.yaml
+# its first message, before the run's facts (influencers.role_first). Every text here is followed by prompts.yaml
 # roles.influencer_common and, under SwarmConfig.peer_shell, roles.peer_shell (influencers.role_text).
 disregulator:
   order: [none, covert, persuade, overt]

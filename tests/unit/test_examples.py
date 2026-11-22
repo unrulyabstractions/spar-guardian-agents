@@ -12,7 +12,6 @@ from examples.example_arguments import DEFAULT_SETTINGS, USE_JUDGE_AS_DEFAULT, p
 from src import run
 from src.configuration import settings
 from src.configuration.presets import build_config
-from src.configuration.prompt_texts import rounds_values
 from src.domains import DOMAINS
 from src.measures import run_figures as plots
 from src.models import model_registry as models
@@ -169,7 +168,7 @@ def test_each_cell_script_sets_its_agents_and_its_cheat_text(name, monkeypatch):
         task = kwargs["task"]
         assert module.CHEAT.startswith("Your real objective") and "fair game" in module.CHEAT
         assert ("team" in module.CHEAT) == (n_agents == 3)
-        assert task.dataset[0].input.endswith(f"\n{module.CHEAT}\n\n{rounds_values(config)}\n")
+        assert task.dataset[0].input.endswith(f"\n{module.CHEAT}\n")
     else:
         assert kwargs == {"replace": False} and not hasattr(module, "CHEAT")
     assert (run_name, model, config.n_agents, config.judge) == \

@@ -33,6 +33,26 @@ const FLAG_BADGE = {
   error: ['ERROR', 'bad'],
 };
 
+// A round's message's presence events (extra.swarm_presence: {round, events}, or one event in an older run), its board
+// part (swarm_notice) and the board notices the provider got at the end of a message (swarm_notice_paragraph), as
+// badges. An entry folded into its exit was never said.
+const EVENT_WORDS = { entered: 'entered', exited: 'exited', alert: 'alerted', held: 'hand-in held', push: 'pushed' };
+const MESSAGE_KEYS = ['swarm_presence', 'swarm_notice', 'swarm_notice_paragraph'];
+
+function messageBadges(ex) {
+  const p = ex.swarm_presence;
+  const events = !p ? [] : Array.isArray(p.events) ? p.events : p.agent ? [p] : [];
+  const out = events.filter(e => e && e.kind && !e.folded).map(e => badge(
+    [e.agent, EVENT_WORDS[e.kind] || e.kind].filter(Boolean).join(' ') + (e.kind === 'exited' && e.why ? ` · ${e.why}` : ''),
+    'def', e.round != null ? `round ${e.round}` : null));
+  const n = ex.swarm_notice;
+  if (n) out.push(badge('board', 'notice', (n.first ?? n.activation === 1) ? 'posts on the board'
+    : 'board changed since the agent was last told'));
+  const added = ex.swarm_notice_paragraph;
+  if (added && added.length) out.push(badge('board notice', 'notice', added.join('\n\n')));
+  return out;
+}
+
 function stepPreview(s, msg) {
   if (msg.trim()) return firstLine(msg, 100);
   const tc = (s.tool_calls || [])[0];
@@ -61,7 +81,8 @@ function resultView(r, orphan) {
       blocked ? badge('BLOCKED', 'blocked') : null,
       isErr ? badge('ERROR', 'bad') : null,
       withheld ? badge('WITHHELD', 'withheld', 'withheld from the model by a defense') : null,
-      extraBadges(rx, ['is_error', 'error', 'withheld_from_model_by_defense', 'withheld_text']),
+      messageBadges(rx),
+      extraBadges(rx, ['is_error', 'error', 'withheld_from_model_by_defense', 'withheld_text', ...MESSAGE_KEYS]),
       h('span', { class: 'spacer' }),
       orphan && r.source_call_id ? h('span', { class: 'tc-id' }, r.source_call_id) : null),
     rx.error ? h('pre', { class: 'pre errtext' }, String(rx.error)) : null,
@@ -98,8 +119,9 @@ function renderStep(s) {
       'the schedule\'s round · the round count the agent read') : null,
     s.model_name ? muted(s.model_name, 'small') : null,
     [...flags].map(f => badge(...FLAG_BADGE[f])),
+    messageBadges(ex),
     extraBadges(ex, ['swarm_turn_rules', 'swarm_round', 'withheld_from_model_by_defense', 'withheld_text',
-      'defense_refusal', 'blocked_output_message_id', 'refusal_text_written_by_model']),
+      'defense_refusal', 'blocked_output_message_id', 'refusal_text_written_by_model', ...MESSAGE_KEYS]),
     h('span', { class: 'spacer' }),
     s.llm_call_count != null ? muted(plural(s.llm_call_count, 'model call'), 'small') : null));
   if (providerOnly) {

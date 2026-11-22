@@ -14,7 +14,7 @@
 import { h, plural } from '/static/app/dom.js';
 import { excerptSpan, markedNodes } from './tv_excerpt.js';
 import { levelChip, scoreChip } from './tv_levels.js';
-import { boardChip, presenceChip, presenceEvents, roundChip } from './tv_presence.js';
+import { boardChip, paragraphChip, presenceChip, presenceEvents, roundChip } from './tv_presence.js';
 
 // Colour ramps per ladder, level 0 first. Each ladder's line (/api/ladders' "line", the first level above it) parts two
 // colour families: pale and calm below it, strong above it, so a reader sees the line at a glance.
@@ -282,7 +282,8 @@ export function renderCase(t, ctx) {
       const x = { before: calls.length, src, text: msg, reasoning: reasoning && reasoning.text, step: s.step_id, model: m,
         presence: src === 'user' ? presenceEvents(s.extra) : [],
         round: src === 'user' && s.extra ? s.extra.swarm_round || null : null,
-        notice: src === 'user' && s.extra ? s.extra.swarm_notice || null : null };
+        notice: src === 'user' && s.extra ? s.extra.swarm_notice || null : null,
+        extra: src === 'user' ? s.extra || null : null };
       loose.push(x);
       seq.push(src === 'agent' ? { turn: true, step: s.step_id, calls: [], msg: x, hidden, round: roundNow } : { msg: x });
     }
@@ -453,7 +454,7 @@ export function renderCase(t, ctx) {
   const looseCard = x => h('div', { class: ['call', 'cs-msg', x.src === 'user' && 'cs-user', x.src === 'system' && 'cs-system'] },
     h('div', { class: 'ch' }, foldButton('call'), h('span', { class: 'cn', title: x.step != null ? `step ${x.step}` : null },
       x.src === 'agent' ? 'Message' : x.src === 'user' ? 'User' : 'System'), roundChip(x.round),
-    x.presence.map(presenceChip), boardChip(x.notice),
+    x.presence.map(presenceChip), boardChip(x.notice), paragraphChip(x.extra),
     lv ? headChips(x.before - 1, false) : null),
     h('div', { class: 'cb' }, judgedLines(x.model), x.reasoning ? reasoningSection(x.reasoning, markOf(x.model)) : null,
       x.text ? (x.src === 'agent' ? textSection(x.text) : promptSection(x.text)) : null, x.src === 'system' ? toolsHere() : null));
@@ -471,6 +472,8 @@ export function renderCase(t, ctx) {
         c.res.map(r => {
           const out = resultText(r);
           const el = section('result', 'Tool result', h('span', { class: 'sec-size' }, plural(out.split('\n').length, 'line')), out, null);
+          const chip = paragraphChip(r.extra);
+          if (chip) el.querySelector('.sec-h').appendChild(chip);
           foldSection(el, true);
           return el;
         })));

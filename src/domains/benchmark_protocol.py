@@ -267,20 +267,25 @@ class Benchmark(ABC):
         return None
 
     def first_note(self, plan: Plan, agent: str) -> str | None:
-        """What follows the task in the agent's first message: the plan's facts that name its peers, such as who holds
-        what or the order of a team's moves. No system prompt names a peer. None by default."""
+        """What follows the task in the agent's first message, a paragraph of its own: the plan's facts that name its
+        peers, such as who holds what or the order of a team's moves. No system prompt names a peer. None by
+        default."""
         return None
 
+    def first_facts(self, plan: Plan, agent: str) -> list[str]:
+        """The domain's own facts for the facts block of the agent's first message, after what counts (counts_note),
+        each a labelled line's text. [] by default."""
+        return []
+
     def first_messages(self, plan: Plan, instruction: str) -> dict[str, str] | None:
-        """Each agent's first message when some agent has a first_note: the instruction with the note on its own
-        paragraph before the rounds' values (prompt_texts.rounds_values), or last when the instruction has none. None
-        when no agent has one, so every agent starts from the sample input."""
-        notes = {a: "\n\n".join(filter(None, [self.first_note(plan, a), self.counts_note(plan, a)])) or None
-                 for a in plan.agents}
-        if not any(notes.values()):
+        """Each agent's first message when some agent has a first_note or a fact: the instruction, the note on its own
+        paragraph, then the facts block (prompt_texts.with_facts) with what counts (counts_note) and the domain's own
+        facts (first_facts). None when no agent has either, so every agent starts from the sample input."""
+        notes = {a: self.first_note(plan, a) for a in plan.agents}
+        facts = {a: [f for f in (self.counts_note(plan, a), *self.first_facts(plan, a)) if f] for a in plan.agents}
+        if not any(notes.values()) and not any(facts.values()):
             return None
-        line = texts.rounds_values(plan.config)
-        return {a: texts.before_line(instruction, line, note) if note else instruction for a, note in notes.items()}
+        return {a: texts.with_facts(instruction, facts[a], note=notes[a]) for a in plan.agents}
 
     def tells_team(self, plan: Plan) -> bool:
         """Whether the agents' system prompts tell them of their team (SwarmConfig.knows_team). It picks the submit
@@ -288,10 +293,10 @@ class Benchmark(ABC):
         return plan.config.knows_team
 
     def first_values(self, plan: Plan, agent: str) -> list[str]:
-        """The values of the parameters the agent's system prompt (system_prompts) states with no number, one sentence
-        each, for its first message after the rounds' values (src/tasks.py first_messages; prompts.yaml
-        first_values): when its submit bullet says a team's hand-in ends the run a set number of rounds later, that
-        number (prompt_texts.submit_value). A domain whose prompt states another adds its value."""
+        """The values of the parameters the agent's system prompt (system_prompts) states with no number, one labelled
+        line each in its first message's facts block (src/tasks.py first_messages; prompts.yaml first_values): when
+        its submit bullet says a team's hand-in ends the run later, when (prompt_texts.submit_value). A domain whose
+        prompt states another adds its value."""
         config = plan.config
         delay = texts.submit_value(config) if config.holds_submit(role_of(plan.roles, agent)) else None
         return [delay] if delay else []
@@ -314,18 +319,22 @@ class Benchmark(ABC):
         return texts.submit_text(kind, plan.config.submit_delay_rounds, self.tells_team(plan))
 
     def counts_note(self, plan: Plan, agent: str) -> str | None:
-        """What counts at a submit (prompts.yaml submit.counted), in the first message of an agent that holds submit,
-        after its first_note; None for one that does not. The system prompt's submit bullet points to it."""
+        """What counts at a submit (prompts.yaml submit.counted), the first fact of the first message of an agent that
+        holds submit; None for one that does not. The system prompt's submit bullet points to it."""
         config = plan.config
         if not config.holds_submit(role_of(plan.roles, agent)):
             return None
         return texts.counts_text(self.key, config.submit_kind, self.submit_vars(plan))
 
     def oversight_note(self, plan: Plan, agent: str) -> str | None:
-        """What a regulator that oversees reads after its teammates' task in its first message, at every level: what
-        counts when they hand in their work (prompt_texts.overseen_counts_text). A domain adds how to read the team's
-        work."""
-        return texts.overseen_counts_text(self.key, plan.config.submit_kind, self.submit_vars(plan))
+        """What a regulator that oversees reads after its teammates' task in its first message, a paragraph of its own:
+        how to read the team's work where a domain says (SWE). None by default."""
+        return None
+
+    def oversight_facts(self, plan: Plan, agent: str) -> list[str]:
+        """The first facts of an overseeing regulator's facts block, at every level: what counts when its teammates
+        hand in their work (prompt_texts.overseen_counts_text)."""
+        return [texts.overseen_counts_text(self.key, plan.config.submit_kind, self.submit_vars(plan))]
 
     def submit_line(self, plan: Plan, kind: str) -> str:
         """submit's bullet in a system prompt, for an agent of this kind."""

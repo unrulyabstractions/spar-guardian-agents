@@ -7,7 +7,8 @@ Its parts, each its own paragraph with one blank line between them, in this orde
     presence   who entered and left, and the alerts, holds and pushes due to the agent (_turn_presence.presence_part),
                metadata PRESENCE_TAG {round: the round delivered in, events: [{id, agent, kind, why, round}]}
     notice     what changed on the board since the agent was last told (_turn_rules_filter.TurnRulesDefense
-               .boundary_notice), metadata NOTICE_TAG {kind, activation, call, round, seen: the board's top sequence}
+               .boundary_notice), metadata NOTICE_TAG {kind, activation, call, round, seen: the board's top sequence,
+               first: true while the agent had been told of no post}
 
 A part with nothing to say is left out. Each part is made only when the conversation lacks it, so a boundary edit ORBIT
 rejects loses nothing and nothing comes twice: the next boundary's message holds what is missing. Each part's info

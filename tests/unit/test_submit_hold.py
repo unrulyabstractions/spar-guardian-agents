@@ -67,7 +67,7 @@ def test_only_a_regulators_prompts_describe_it_and_only_when_on():
     assert not any(ch.isdigit() for ch in text)
     assert sentence not in role_text("disregulator", on, "subset_sum")
     # the delay reaches its first message even without the briefing
-    delay = "A submit ends the run soon after the call."
+    delay = "When a submit ends the run: soon after the call."
     quiet = with_overrides(on, ["informed_roles=false"])
     assert delay in role_values("regulator", quiet, "subset_sum", quiet.names)
     assert delay not in role_values("regulator", with_overrides(team, ["informed_roles=false"]), "subset_sum",

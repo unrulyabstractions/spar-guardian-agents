@@ -24,11 +24,14 @@ What comes from where:
     src/sandbox/live_tmp_capture.py under SwarmConfig.tmp_snapshots.
 
 The task instruction is the benchmark's, then the rule sentence of rule_level, then extra_instruction on its own
-paragraph (a control cell's text, say), then the rounds' values: "You have R rounds, and up to N tool calls per round."
-(prompt_texts.rounds_values). No system prompt holds a number: it states the rounds' rules (board.round_rules) and
-every other parameter's rule without its value, and each agent's first message gives those values after the rounds'
-(agent_values: prompts.yaml first_values). A regulator that oversees reads that instruction inside a first message of
-its own, its values after it, and gets a system prompt of its own (first_messages, system_prompts). Each agent's tools
+paragraph (a control cell's text, say). Each agent's first message is that task, then the domain's note (who holds
+what, the workspace, the team's game) and its role's text, each a paragraph, then one block of the run's facts as
+labelled lines: what counts when it submits, the domain's facts and the values of the parameters its system prompt
+states with no number (agent_values: prompts.yaml first_values; prompt_texts.with_facts). The budget of tool calls is
+in no first message: each round's message opens with it (turn_rules.round_line). No system prompt holds a number: it
+states the budget's rules (board.round_rules) and every other parameter's rule without its value. A regulator that
+oversees reads that instruction inside a first message of its own, its facts after it, and gets a system prompt of
+its own (first_messages, system_prompts). Each agent's tools
 are the benchmark's, then on a board board_status, board_read and board_post and the oversight tools for a regulator
 (src/swarm/_regulator_oversight.py), then submit and stop_working as the agent holds them
 (src/swarm/submit_and_stop.py ending_tools), then end_round (src/swarm/end_round.py). They are bound per agent through
@@ -64,7 +67,7 @@ from orbit.tasks.multi_agent import multi_agent_task
 
 from src.configuration import access_policy, launch_command, settings
 from src.configuration.presets import preset, with_overrides
-from src.configuration.prompt_texts import before_line, rounds_values
+from src.configuration.prompt_texts import split_facts, with_facts
 from src.configuration.seed_packs import seed_record
 from src.configuration.swarm_config import SwarmConfig, role_of
 from src.domains import DOMAINS
@@ -98,7 +101,7 @@ from src.swarm.seed_setup import seed_setup
 from src.swarm.submit_and_stop import Deliverable, ending_tools, submit_bindings
 from src.swarm.submit_hold import hold_bindings, hold_tools
 from src.swarm.tool_output_caps import cap_of, capped_bindings
-from src.swarm.turn_rules import END_ROUND, planned_entries, rules_setup, schedule, turn_rules_defense
+from src.swarm.turn_rules import END_ROUND, rules_setup, schedule, turn_rules_defense
 
 # Stops a runaway per agent. Inspect counts cached prompt tokens in full, so the count grows with the square of the
 # steps while the bill barely moves: a context that grows steadily to 1M over 100 steps stays under this. An episode
@@ -121,9 +124,9 @@ def agent_roles(config: SwarmConfig) -> dict[str, str] | None:
 
 def instruction_suffix(benchmark: Benchmark, config: SwarmConfig, extra_instruction: str = "") -> str:
     """What follows the task instruction: the rule sentence on its own paragraph ("" at rule level none), then
-    extra_instruction on its own paragraph, then the rounds' values on their own (prompt_texts.rounds_values)."""
+    extra_instruction on its own paragraph."""
     extra = f"\n{extra_instruction}\n" if extra_instruction else ""
-    return roles_module.rule_suffix(config, benchmark.key) + extra + f"\n{rounds_values(config)}\n"
+    return roles_module.rule_suffix(config, benchmark.key) + extra
 
 
 def system_prompts(benchmark: Benchmark, plan: Plan) -> dict[str, str]:
@@ -154,46 +157,32 @@ def agent_values(benchmark: Benchmark, plan: Plan, agent: str) -> list[str]:
     return list(dict.fromkeys([*own, *roles_module.role_values(role, plan.config, benchmark.key, plan.agents)]))
 
 
-def with_values(message: str, line: str, values: list[str]) -> str:
-    """The message with the values after the rounds' values line, in its paragraph."""
-    if not values:
-        return message
-    if message.count(line) != 1:
-        raise ValueError(f"a first message holds the rounds' values {message.count(line)} times, not once")
-    return message.replace(line, " ".join([line, *values]))
-
-
 def first_messages(sample: Sample, plan: Plan, benchmark: Benchmark) -> dict[str, str] | None:
     """Every agent's first message when one differs from the sample's own (metadata["cheatbench"]["first_message"],
-    else its input): with what its role's level says there (roles.role_first) on its own paragraph before the rounds'
-    values, and its values after the rounds' values (agent_values). A regulator's that oversees is
-    roles.oversight_first_message, then what counts and how to read the team's work (Benchmark.oversight_note), its
-    role's text and its values, each a paragraph after it. None when no agent
-    oversees and none has a role text or a value."""
+    else its input): with what its role's level says there (roles.role_first) on its own paragraph after the task, and
+    its values in its facts block (agent_values, prompt_texts.with_facts). A regulator's that oversees is
+    roles.oversight_first_message around the task without its facts, then how to read the team's work
+    (Benchmark.oversight_note) and its role's text, each a paragraph, then its facts block: what counts for its
+    teammates (Benchmark.oversight_facts), its own facts and its values. None when no agent oversees and none has a
+    role text or a value."""
     first = sample.metadata["cheatbench"].get("first_message") or dict.fromkeys(plan.agents, sample.input)
     overseers = {a for a in plan.agents if plan.config.oversees(role_of(plan.roles, a))}
     values = {a: agent_values(benchmark, plan, a) for a in plan.agents}
     own = {a: roles_module.role_first(role_of(plan.roles, a), plan.config, benchmark.key) for a in plan.agents}
-    entries = planned_entries(plan.config, plan.agents, plan.roles)
-    late = {a for a in plan.agents if entries.get(a, 1) > 1}
-    if not overseers and not any(values.values()) and not any(own.values()) and not late:
+    if not overseers and not any(values.values()) and not any(own.values()):
         return None
-    line = rounds_values(plan.config)
-
-    def entered(agent: str, text: str) -> str:
-        """A late entrant's message with the rounds it has left on entering, as its first round's line says."""
-        return text.replace(line, rounds_values(plan.config, entries[agent]), 1) if agent in late else text
 
     def message(agent: str) -> str:
         text = own[agent].strip() if own[agent] else None
         if agent not in overseers:
-            task = before_line(first[agent], line, text) if text else first[agent]
-            return with_values(task, line, values[agent])
-        parts = [roles_module.oversight_first_message(first[agent]).rstrip(), benchmark.oversight_note(plan, agent),
-                 text, " ".join(values[agent])]
-        return "\n\n".join(p for p in parts if p) + "\n"
+            return with_facts(first[agent], values[agent], note=text)
+        task, facts = split_facts(first[agent])
+        parts = [roles_module.oversight_first_message(task.strip("\n")).rstrip(),
+                 benchmark.oversight_note(plan, agent), text]
+        return with_facts("\n\n".join(p for p in parts if p),
+                          [*benchmark.oversight_facts(plan, agent), *facts, *values[agent]])
 
-    return {a: entered(a, message(a)) for a in plan.agents}
+    return {a: message(a) for a in plan.agents}
 
 
 def deliverable(benchmark: Benchmark, plan: Plan) -> Deliverable:

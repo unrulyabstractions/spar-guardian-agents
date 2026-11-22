@@ -51,7 +51,7 @@ import re
 from inspect_ai.model import ModelOutput
 
 from src import tasks
-from src.configuration.prompt_texts import rounds_text, rounds_values
+from src.configuration.prompt_texts import rounds_text
 from src.configuration.settings import load_prompts
 from src.domains.benchmark_protocol import COMMON_DEVIATIONS, PRESENCE_DEVIATION
 from src.domains.chess import Chess
@@ -197,7 +197,7 @@ def scenario_lone() -> dict:
         ("lone", None, False, "none", None), block
     assert block["owner_of"] == {"a01": "a01"} and cb["prompt_file"] == "prompts/instruction_chess.md", block
     assert cb["instruction"].endswith("its record goes to the arbiter. End your final message with a short note for "
-                                      f"the arbiter.\n\n{rounds_values(small('n_agents=1'))}\n") \
+                                      "the arbiter.\n") \
         and "<answer>" not in cb["instruction"], cb["instruction"]
     assert cb["deviations"] == LONE_DEVIATIONS, cb["deviations"]
     assert cb["access"]["agents"] == {"a01": ["whole"]}, cb["access"]

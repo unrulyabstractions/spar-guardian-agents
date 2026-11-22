@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import json
 
-from src.configuration import prompt_texts
 from src.configuration.presets import PRESETS
 from src.domains.openmath import OpenMath
 from src.swarm import turn_rules as rules
@@ -157,7 +156,7 @@ def test_the_board_is_live_within_a_round(tmp_path):
     assert {step.visibility for step in rules.schedule(config, config.names).steps} == {"live"}
 
 
-def test_round_lines_open_each_round_and_the_first_message_gives_the_values(tmp_path):
+def test_round_lines_open_each_round_and_state_the_budget_once(tmp_path):
     config = pull(n_agents=1, rounds=2, calls_per_round=2)
     sample, rec = run(config, {"a01": [do("A")]}, tmp_path)
     lines = [i for i in tagged_infos(sample, rules.ROUND_TAG)]
@@ -168,10 +167,12 @@ def test_round_lines_open_each_round_and_the_first_message_gives_the_values(tmp_
     # The line is durable: the round's first model call ends with it, and every later call keeps it.
     assert rec[0]["last"] == one and rec[2]["last"] == two
     assert rec[3]["texts"].count(one) == 1
-    # The first message ends with the values; the system prompt states the rules without numbers.
+    # The first round's line states the budget, and nothing before it does: the first message holds no count of calls
+    # (the task, then its facts); the system prompt states the rules without numbers.
+    assert rec[0]["texts"][0] == "Fix the issue together." and rec[0]["texts"][1:] == [one]
     lone = PRESETS["default"].replace(n_agents=1, rounds=7, calls_per_round=4)
-    values = "You have up to 28 tool calls."
-    assert instruction_suffix(OpenMath(), lone).rstrip().endswith(values)
+    assert "tool call" not in instruction_suffix(OpenMath(), lone) and "tool call" not in OpenMath().sample(
+        OpenMath().plan(lone), instruction_suffix(OpenMath(), lone)).metadata["cheatbench"]["first_message"]["a01"]
     plan = OpenMath().plan(lone)
     [prompt] = system_prompts(OpenMath(), plan).values()
     assert ROUND["rules"] in prompt and "do not use up" not in prompt and not any(ch.isdigit() for ch in ROUND["rules"])
@@ -187,8 +188,7 @@ def test_the_rules_are_the_same_for_every_role():
     # no shell (chess): the time limit and no jobs; no round clock: neither
     assert round_rules(team, "a01", roles, commands=False) == f"{ROUND['rules']}\n{ROUND['time']}\n{ROUND['closing']}"
     assert round_rules(team.replace(round_time_s=0), "a01", roles) == f"{ROUND['rules']}\n{ROUND['closing']}"
-    assert "free" not in ROUND and "board_read" not in worker
-    assert prompt_texts.rounds_values(team) == "You have up to 300 tool calls."
+    assert "free" not in ROUND and "board_read" not in worker and "values" not in ROUND
 
 
 def test_every_call_and_round_records_its_time_and_order(tmp_path):

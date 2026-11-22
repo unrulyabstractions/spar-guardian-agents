@@ -6,6 +6,7 @@
  *                                                // or the one event of a presence line before 2026-11-22
  *   presenceChip(event)                          // one presence event, as a chip in the step's header
  *   roundChip(step.extra.swarm_round), boardChip(step.extra.swarm_notice)   // a round's message's other chips
+ *   paragraphChip(extra)                         // a board notice that ends a tool result or a user message
  *   alertsBadge(p.alerts, onclick)                // the bar's badge, null without an alert
  *   alertsCard(p, roles, openCall), presenceCard(p, roles)    // the Details tab's two cards, null when empty
  *   laneMarks(p, lay)                             // the Board tab: {g, tipOf(el), callOf(el)}
@@ -59,9 +60,10 @@ export function presenceEvents(extra) {
 
 const EVENT_WORDS = { entered: 'entered', exited: 'exited', alert: 'alerted', held: 'hand-in held', push: 'pushed' };
 
-/** One presence event as a chip for its step's header: who, what, and its round. */
+/** One presence event as a chip for its step's header: who, what, and its round. An entry folded into its exit in the
+ * same message (folded) was never said, so it gets no chip. */
 export function presenceChip(p) {
-  if (!p || !p.kind) return null;
+  if (!p || !p.kind || p.folded) return null;
   const gone = p.kind === 'exited';
   const what = EVENT_WORDS[p.kind] || p.kind;
   const words = [p.agent, what].filter(Boolean).join(' ') + (gone && p.why ? ` · ${WHY_WORDS[p.why] || p.why}` : '');
@@ -77,10 +79,21 @@ export function roundChip(r) {
   return h('span', { class: ['pr-chip', 'pr-chip-round'], title: tip }, `round ${r.round}${r.of != null ? ` of ${r.of}` : ''}`);
 }
 
-/** A round's message's board chip (its extra.swarm_notice): the board changed since the agent last looked. */
+/** A round's message's board chip (its extra.swarm_notice): the posts by others since the agent was last told, every
+ * one new while it had been told of none (first; an older run's first round). */
 export function boardChip(n) {
   if (!n) return null;
-  return h('span', { class: ['pr-chip', 'pr-chip-board'], title: 'board changed since the last round' }, 'board');
+  const first = n.first ?? n.activation === 1;
+  return h('span', { class: ['pr-chip', 'pr-chip-board'],
+    title: first ? 'posts on the board' : 'board changed since the agent was last told' }, 'board');
+}
+
+/** The board notices the provider got at the end of a tool result or a user message (extra.swarm_notice_paragraph,
+ * src/export/atif_transcripts.py), as one chip; null without. */
+export function paragraphChip(extra) {
+  const added = extra && extra.swarm_notice_paragraph;
+  if (!added || !added.length) return null;
+  return h('span', { class: ['pr-chip', 'pr-chip-board'], title: added.join('\n\n') }, 'board notice');
 }
 
 /** The bar's badge: how many alerts the run has, their reasons clipped on hover; null without one. */

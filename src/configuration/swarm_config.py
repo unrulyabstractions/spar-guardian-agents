@@ -266,9 +266,9 @@ class SwarmConfig(BaseModel):
     head_start_rounds: int = 0
     """H: rounds at the start of the run in which only the roles of head_start_roles hold steps. The others, workers
     first, enter in round H + 1 and keep their R rounds, so the plan holds R + H rounds (plan_rounds) and an agent with
-    the head start may use up all of them. Every round's line and every first message count the run's rounds, so a
-    late entrant reads R rounds left on entering (prompt_texts.rounds_values), and its peers hear its entry in round
-    H + 1 (turn_rules presence). An agent with the head start reads the task in its first message and, under
+    the head start may use up all of them. Every round's line gives the calls the agent has left, so a late entrant
+    reads its own on entering (turn_rules.round_line), and its peers hear its entry in round H + 1 (turn_rules
+    presence). An agent with the head start reads the task in its first message and, under
     peer_shell, its teammates' machines as they start; its first message says when they enter
     (prompts.yaml first_values.head_start). A run arm of its own: it makes a regulator stronger. 0, the default, turns
     it off. Needs a board and an agent of a role it names."""

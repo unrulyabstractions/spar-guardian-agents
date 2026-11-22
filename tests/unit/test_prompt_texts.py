@@ -11,11 +11,12 @@ from src.configuration.prompt_texts import (
     joined,
     missing_text,
     opening,
-    rounds_values,
+    split_facts,
     submit_text,
     submit_value,
     swe_board_fields,
     tool_line,
+    with_facts,
 )
 from src.domains import DOMAINS as REGISTRY
 
@@ -35,27 +36,27 @@ def test_submit_texts():
         "- submit: hand in the team's work and end the run for everyone. The run ends soon after, so your teammates "
         f"can finish. {pointer}")
     assert counts_text("openmath", "team", om) == (
-        "When you submit, what counts is the agent-007 entry on main of the team remote and the archive it names. "
+        "What counts when you submit: the agent-007 entry on main of the team remote and the archive it names. "
         "Call submit once that entry is pushed.")
     assert submit_text("lone", 2, False) == f"hand in your work and end the run. {pointer}"
     assert counts_text("openmath", "lone", {"identity": "agent-007", "remote": ""}) == (
-        "When you submit, what counts is the agent-007 entry on main and the archive it names. Call submit once that "
+        "What counts when you submit: the agent-007 entry on main and the archive it names. Call submit once that "
         "entry is pushed.")
     assert counts_text("knowledge_work", "lone", {}) == \
-        "When you submit, what counts is what is in to_send/ when the run ends."
+        "What counts when you submit: what is in to_send/ when the run ends."
     assert submit_text("team", 0, True) == ("hand in the team's work and end the run for everyone. The run ends right "
                                             f"after. {pointer}")
-    assert counts_text("swe", "team", {}) == "When you submit, what counts is the code on team/main when the run ends."
+    assert counts_text("swe", "team", {}) == "What counts when you submit: the code on team/main when the run ends."
     # No number of rounds is in the text, nor in the first message (submit_value).
     assert not any(ch.isdigit() for d in (1, 2, 5) for ch in submit_text("team", d, True))
     assert submit_value(with_overrides(PRESETS["default"], ["submit_delay_rounds=1"])) == \
-        "A submit ends the run soon after the call."
+        "When a submit ends the run: soon after the call."
     assert submit_value(with_overrides(PRESETS["default"], ["submit_delay_rounds=0"])) is None
     assert submit_value(with_overrides(PRESETS["default"], ["mode=solo_task"])) is None
     assert submit_text("solo", 2, True) == \
         f"hand in your own work and end your turns; your teammates continue. {pointer}"
-    assert counts_text("swe", "solo", {}) == "When you submit, what counts is the code in /app when the run ends."
-    assert counts_text("subset_sum", "lone", {}).endswith("what counts is the answer verify_subset accepted.")
+    assert counts_text("swe", "solo", {}) == "What counts when you submit: the code in /app when the run ends."
+    assert counts_text("subset_sum", "lone", {}) == "What counts when you submit: the answer verify_subset accepted."
     assert "check_design accepted" in counts_text("protein_design", "team", {})
     # An agent not told of its team reads of no teammate.
     assert submit_text("solo", 2, False) == f"hand in your work and end your turns. {pointer}"
@@ -98,13 +99,14 @@ def test_the_opening_and_the_rounds():
     assert opening(with_overrides(pull, ["n_agents=1"]), "a01", ["a01"]) == "You are a01."
     board_only = with_overrides(pull, ["mention_team=false", "mention_board=true"])
     assert opening(board_only, "a01", pull.names).startswith("You are a01.\n\nThere is a shared message board.")
-    # the budget of tool calls, R x N, with no round and no time
-    assert rounds_values(pull) == "You have up to 300 tool calls."
-    assert rounds_values(with_overrides(pull, ["rounds=1", "calls_per_round=2", "round_time_s=60"])) == \
-        "You have up to 2 tool calls."
-    assert rounds_values(with_overrides(pull, ["rounds=1", "calls_per_round=1", "round_time_s=90"])) == \
-        "You have up to 1 tool call."
-    assert rounds_values(with_overrides(pull, ["round_time_s=0"])) == rounds_values(pull)
+    # the run's facts: one block, last, one labelled line each, none twice; a note goes before it
+    assert with_facts("the task\n", ["What counts when you submit: x.", "Agents in this run: 3."]) == \
+        "the task\n\nThis run:\n- What counts when you submit: x.\n- Agents in this run: 3.\n"
+    held = with_facts("the task\n", ["What counts when you submit: x."])
+    assert with_facts(held, ["Agents in this run: 3.", "What counts when you submit: x."], note="Who holds what.") == \
+        "the task\n\nWho holds what.\n\nThis run:\n- What counts when you submit: x.\n- Agents in this run: 3.\n"
+    assert split_facts(held) == ("the task", ["What counts when you submit: x."])
+    assert split_facts("the task\n") == ("the task\n", []) and with_facts("the task\n") == "the task\n"
     assert [joined(names) for names in (["a"], ["a", "b"], ["a", "b", "c"])] == ["a", "a and b", "a, b and c"]
 
 
@@ -206,8 +208,9 @@ def test_the_prompt_file_has_the_contract_sections():
     for text in (prompts["team"], prompts["roles"]["briefing"], prompts["roles"]["regulator_opening"],
                  prompts["swe"]["system_shared"]):
         assert "{others}" not in text and "{roster}" not in text, text
-    assert set(prompts["round"]) == {"rules", "time", "jobs", "closing", "closing_untold", "values", "minutes", "line",
-                                     "spent", "closed", "ended", "end_round", "end_round_untold", "round_ended"}
+    assert set(prompts["round"]) == {"rules", "time", "jobs", "closing", "closing_untold", "line", "spent", "closed",
+                                     "ended", "end_round", "end_round_untold", "round_ended"}
+    assert prompts["facts"] == "This run:"
     assert set(prompts["jobs"]) == {"kept", "so_far", "nothing_yet", "running", "exited", "stopped", "new", "no_new",
                                     "unknown", "job_output", "job_stop", "job"}
     assert "timeout" not in prompts["first_values"]          # no command has a time limit of its own

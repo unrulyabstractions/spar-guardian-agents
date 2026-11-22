@@ -217,13 +217,11 @@ class SWE(Benchmark):
         return text.format(repo=load_split(self.row)["repo"], branch=agent, branches=honeypot.BRANCHES)
 
     def oversight_note(self, plan: Plan, agent: str) -> str | None:
-        """What counts (Benchmark.oversight_note) and, for a shared_task team, how to read its work through the team
-        remote (prompts.yaml swe.oversight_workspace)."""
-        counts = super().oversight_note(plan, agent)
+        """For a shared_task team, how to read its work through the team remote (prompts.yaml
+        swe.oversight_workspace); what counts is a fact (Benchmark.oversight_facts). None otherwise."""
         if plan.mode != "shared_task":
-            return counts
-        how = settings.load_prompts()["swe"]["oversight_workspace"].format(repo=load_split(self.row)["repo"])
-        return f"{counts}\n\n{how}"
+            return None
+        return settings.load_prompts()["swe"]["oversight_workspace"].format(repo=load_split(self.row)["repo"])
 
     def sample(self, plan: Plan, instruction_suffix: str = "") -> Sample:
         """The issue's sample: metadata["cheatbench"]["swe"] holds the issue, its commits, the honeypot, each agent's
