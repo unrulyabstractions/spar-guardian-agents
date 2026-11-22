@@ -21,8 +21,22 @@ import zipfile
 from pathlib import Path
 
 import zipfile_zstd  # noqa: F401 - teaches zipfile the Zstandard method (93) that Inspect's .eval members use
+import zstandard
+from zipfile_zstd import _zipfile as _zstd_zipfile
 
-from src.configuration import settings
+
+def _zstd_decompressor(compress_type):
+    """zipfile_zstd's decompressor, reading across frames: Inspect writes a large member as several Zstandard frames,
+    and a decompressobj that stops at the first frame's end raises on the next read."""
+    if compress_type == zipfile.ZIP_ZSTANDARD:
+        decompress = zstandard.ZstdDecompressor().decompressobj(read_across_frames=True)
+        return _zstd_zipfile.ZstdDecompressObjWrapper(decompress)
+    return _zstd_zipfile.patch.originals["_get_decompressor"](compress_type)
+
+
+zipfile._get_decompressor = _zstd_decompressor
+
+from src.configuration import settings  # noqa: E402  (after the patch above, as the zipfile_zstd import)
 
 REPO = "unrulyabstractions/arena-capstone"
 PREFIX = "spar-guardian-agents"
