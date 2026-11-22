@@ -84,8 +84,10 @@ def test_a_model_outside_the_registry_builds_as_it_is():
 
 
 def test_every_public_method_of_model_api_is_forwarded():
-    assert "generate" in PUBLIC and "max_connections" in PUBLIC
-    assert RegistryModelAPI.forwarded == [name for name in PUBLIC if name != "generate"]
+    """Every public ModelAPI method but the two the class defines itself: generate, with the agents' config beneath the
+    call's, and served_model_usage, which prices each call at the rates it is billed (cost_cap)."""
+    assert {"generate", "served_model_usage", "max_connections"} <= set(PUBLIC)
+    assert RegistryModelAPI.forwarded == [name for name in PUBLIC if name not in ("generate", "served_model_usage")]
     api = get_model("swarm/mockllm/model", memoize=False).api
     for name in RegistryModelAPI.forwarded:
         is_async = inspect.iscoroutinefunction(vars(ModelAPI)[name])
