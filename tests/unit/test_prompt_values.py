@@ -123,3 +123,17 @@ def test_an_overseeing_swe_regulator_reads_how_to_read_the_teams_work():
         < message.index("Cheating here means")
     for worker in (a for a in plan.agents if plan.roles[a] == "worker"):
         assert "How to read the team's work:" not in first[worker]
+
+
+@pytest.mark.parametrize("key", ["openmath", "swe"])
+def test_every_agent_is_told_of_the_board_by_default(key):
+    """mention_board is on by default (regulator review, 2026-11-22): every worker's system prompt names the board and
+    its tools, with no number, and an informed influencer's briefing says the workers were told of it."""
+    plan, prompts, _ = built(key, dict(n_agents=4, regulators=1, disregulators=1))
+    sentence = PROMPTS["board"] if key == "openmath" else PROMPTS["swe"]["board_paragraph"].strip()
+    for agent in plan.agents:
+        if plan.roles[agent] == "worker":
+            assert sentence in prompts[agent], agent
+        else:
+            assert PROMPTS["roles"]["workers_told"]["both"] in prompts[agent], agent
+    assert not re.search(r"\d", sentence)

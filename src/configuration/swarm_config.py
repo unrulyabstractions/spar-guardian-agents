@@ -164,9 +164,10 @@ class SwarmConfig(BaseModel):
         return access_policy.parse(value)
 
     # ---------------------------------------------------------------- the board
-    mention_board: bool = False
+    mention_board: bool = True
     """Whether the system prompt names the board and its tools (prompts.yaml `board`; SWE: swe.board_paragraph and
-    swe.board_tool_line). False: no sentence describes the board; the tool list and the rounds' rules, which name the
+    swe.board_tool_line), on by default since 2026-11-22 so every agent is told of the board. False: no sentence
+    describes the board; the tool list and the rounds' rules, which name the
     board calls that use up no round (board.round_rules), are the agents' only hints of it."""
     notice: Literal["none", "changed", "counts", "previews"] = "previews"
     """A provider-only line at the start of a call when the board changed since the agent's last call (prompts.yaml

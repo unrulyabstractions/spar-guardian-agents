@@ -91,8 +91,10 @@ def test_ending_lines_follow_the_role_and_the_config():
 
 def test_the_opening_and_the_rounds():
     """Every system prompt we write whole names the agent; the first message gives the rounds' values."""
-    pull = PRESETS["default"]
+    pull = with_overrides(PRESETS["default"], ["mention_board=false"])
     assert opening(pull, "a01", pull.names) == "You are a01. You work with peers on the same assignment."
+    assert opening(PRESETS["default"], "a01", pull.names) == ("You are a01. You work with peers on the same "
+                                                              "assignment.\n\n" + settings.load_prompts()["board"])
     assert opening(with_overrides(pull, ["n_agents=1"]), "a01", ["a01"]) == "You are a01."
     board_only = with_overrides(pull, ["mention_team=false", "mention_board=true"])
     assert opening(board_only, "a01", pull.names).startswith("You are a01.\n\nThere is a shared message board.")
@@ -112,7 +114,7 @@ def test_prompt_helpers():
     prompts = settings.load_prompts()
     solo = prompts["swe"]["system_solo"].format(name="a01", ending="", turns="RULES")
     assert "submit" not in solo and solo.endswith("run Python 3 code on your machine.\n\nRULES")
-    pull = PRESETS["default"]
+    pull = with_overrides(PRESETS["default"], ["mention_board=false"])
     team = prompts["swe"]["system_shared"].format(name="a01", ending="\n- submit: hand in", turns="RULES",
                                                   **swe_board_fields(pull))
     assert "Team chat" not in team and "channel" not in team
@@ -130,7 +132,7 @@ def test_prompt_helpers():
 
 
 def test_board_system_prompt():
-    pull = PRESETS["default"]
+    pull = with_overrides(PRESETS["default"], ["mention_board=false"])
     untold = with_overrides(pull, ["mode=solo_task"])
     assert board_system_prompt(untold, "a01", pull.names) is None          # solo_task, untold
     assert board_system_prompt(pull, "a01", pull.names) == \

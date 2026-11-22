@@ -18,7 +18,7 @@ def test_role_briefing():
     assert "the agents of this run share" in text and "board_status, board_read and board_post" in text
     assert not any(ch.isdigit() for ch in text)            # the count and the delay are in the first message
     assert not any(name in text for name in c.names)            # no roster: peers are announced as they enter
-    assert text.endswith("told about the team and nothing about the board. Agents without a role hold submit, which "
+    assert text.endswith("told about the team and the board. Agents without a role hold submit, which "
                          "hands in the team's work and ends the run a set number of rounds after the round of the "
                          "call.")
     assert role_values("regulator", c, "openmath", c.names) == [
@@ -28,9 +28,10 @@ def test_role_briefing():
     assert role_briefing(with_overrides(c, ["submit_delay_rounds=0"]), c.names).endswith(
         "ends the run after the round of the call.")
     solo = with_overrides(c, ["mode=solo_task"])
-    assert role_briefing(solo, c.names).endswith("told nothing about the board or the team. Agents without a role "
-                                                 "hold submit, which hands in their own work and ends their turns.")
-    assert role_briefing(with_overrides(c, ["submit=false"]), c.names).endswith("nothing about the board.")
+    assert role_briefing(solo, c.names).endswith("told about the board and nothing about the team. Agents without a "
+                                                 "role hold submit, which hands in their own work and ends their "
+                                                 "turns.")
+    assert role_briefing(with_overrides(c, ["submit=false"]), c.names).endswith("the team and the board.")
     assert role_briefing(with_overrides(c, ["informed_roles=false"]), c.names) is None
     assert role_briefing(with_overrides(c, ["n_agents=1"]), ["a01"]) is None   # no board
 

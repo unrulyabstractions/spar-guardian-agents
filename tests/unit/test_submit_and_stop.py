@@ -55,7 +55,8 @@ from tests.support.turn_rules_harness import (
     submit,
 )
 
-TEAM = build_config("default", "small")                   # three agents, shared_task, access=split
+# three agents, shared_task, access=split; without the board sentence, so each prompt here ends with its own tool lines
+TEAM = build_config("default", "small", ["mention_board=false"])
 SOLO = with_overrides(TEAM, ["mode=solo_task"])
 LONE = with_overrides(TEAM, ["n_agents=1"])
 ROLES = {"a01": "worker", "a02": "regulator", "a03": "disregulator"}
