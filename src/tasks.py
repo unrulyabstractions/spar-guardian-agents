@@ -60,7 +60,7 @@ from orbit.tasks.multi_agent import multi_agent_task
 
 from src.configuration import access_policy, settings
 from src.configuration.presets import preset, with_overrides
-from src.configuration.prompt_texts import rounds_values
+from src.configuration.prompt_texts import before_line, rounds_values
 from src.configuration.swarm_config import SwarmConfig, role_of
 from src.domains import DOMAINS
 from src.domains.benchmark_protocol import Benchmark, Plan
@@ -154,21 +154,25 @@ def with_values(message: str, line: str, values: list[str]) -> str:
 
 def first_messages(sample: Sample, plan: Plan, benchmark: Benchmark) -> dict[str, str] | None:
     """Every agent's first message when one differs from the sample's own (metadata["cheatbench"]["first_message"],
-    else its input): with its values after the rounds' values (agent_values), and a regulator's that oversees in
-    roles.oversight_first_message, its values a paragraph after it. None when no agent oversees and none has a
-    value."""
+    else its input): with what its role's level says there (roles.role_first) on its own paragraph before the rounds'
+    values, and its values after the rounds' values (agent_values). A regulator's that oversees is
+    roles.oversight_first_message, then its role's text and its values, each a paragraph after it. None when no agent
+    oversees and none has a role text or a value."""
     first = sample.metadata["cheatbench"].get("first_message") or dict.fromkeys(plan.agents, sample.input)
     overseers = {a for a in plan.agents if plan.config.oversees(role_of(plan.roles, a))}
     values = {a: agent_values(benchmark, plan, a) for a in plan.agents}
-    if not overseers and not any(values.values()):
+    own = {a: roles_module.role_first(role_of(plan.roles, a), plan.config, benchmark.key) for a in plan.agents}
+    if not overseers and not any(values.values()) and not any(own.values()):
         return None
     line = rounds_values(plan.config)
 
     def message(agent: str) -> str:
+        text = own[agent].strip() if own[agent] else None
         if agent not in overseers:
-            return with_values(first[agent], line, values[agent])
-        wrapped = roles_module.oversight_first_message(first[agent])
-        return f"{wrapped.rstrip()}\n\n{' '.join(values[agent])}\n" if values[agent] else wrapped
+            task = before_line(first[agent], line, text) if text else first[agent]
+            return with_values(task, line, values[agent])
+        parts = [roles_module.oversight_first_message(first[agent]).rstrip(), text, " ".join(values[agent])]
+        return "\n\n".join(p for p in parts if p) + "\n"
 
     return {a: message(a) for a in plan.agents}
 

@@ -9,7 +9,7 @@ import pytest
 
 from src.configuration.presets import PRESETS
 from src.configuration.prompt_texts import rounds_values
-from src.configuration.settings import load_prompts
+from src.configuration.settings import load_instruction_levels, load_prompts
 from src.domains import DOMAINS
 from src.tasks import agent_roles, first_messages, instruction_suffix, system_prompts
 
@@ -68,4 +68,5 @@ def test_the_values_follow_the_rounds_values_in_their_paragraph():
     delay = VALUES["submit"].format(rounds="5 rounds")
     assert first[worker].rstrip().endswith(f"{line} {delay}")
     check, agents = VALUES["check"].format(rounds="2 rounds"), VALUES["agents"].format(n=4)
-    assert first[regulator].rstrip().endswith(f"{line}\n\n{check} {agents} {delay}")
+    cheating = load_instruction_levels()["vars"]["openmath"]["cheating"]
+    assert first[regulator].rstrip().endswith(f"{line}\n\n{cheating}\n\n{check} {agents} {delay}")

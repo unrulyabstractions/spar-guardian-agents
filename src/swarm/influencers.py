@@ -19,9 +19,12 @@ Every model-facing text of a level comes from src/configuration/instruction_leve
 the task instruction, and the regulator and disregulator texts appended to the system prompt of the agents holding
 the role. A level gives one text or one per benchmark, with placeholders filled from the benchmark's `vars`.
 
-Each regulator level carries the benchmark's `cheating` var: what cheating means on that task. An influencer's level
-text is followed by prompts.yaml roles.influencer_common (the peer tools, src/swarm/_regulator_oversight.py, how to call
-them on a teammate, and the board), then under SwarmConfig.peer_shell roles.peer_shell. A regulator's then gets
+A regulator or disregulator level gives a system text with no task detail (`text`) and a first-message text with the
+task's own words (`first`, role_first): each regulator level but blind gives the benchmark's `cheating` var, what
+cheating means on that task, in the regulator's first message, after its teammates' task; a disregulator's gives its
+objective and the work it may reuse, before the rounds' values. An influencer's level text is followed by prompts.yaml
+roles.influencer_common (the peer tools, src/swarm/_regulator_oversight.py, and the board), then under
+SwarmConfig.peer_shell roles.peer_shell. A regulator's then gets
 roles.regulator_check (call get_peer_actions on each teammate within a set number of the regulator's first rounds:
 CHECK_ROUNDS, which role_values gives the first message, since no system prompt holds a number) and, unless
 regulator_discloses is on, roles.regulator_no_disclosure. The check is an instruction like the rest; run.json engagement
@@ -49,11 +52,12 @@ from src.swarm.turn_rules import BOARD_TOOLS, CHECK_ROUNDS
 SENTENCE_START = re.compile(r"(^|[.!?]\s+)\{(\w+)\}")
 
 
-def level_text(ladder: str, level: str, benchmark_name: str) -> str | None:
-    """The text of one level of a ladder for one benchmark (its Benchmark.key), or None for no text."""
+def level_text(ladder: str, level: str, benchmark_name: str, key: str = "text") -> str | None:
+    """The text of one level of a ladder for one benchmark (its Benchmark.key), or None for no text: the level's
+    `text`, or its text for the benchmark; key "first" gives an influencer level's first-message text."""
     levels = load_instruction_levels()
     entry = levels[ladder][level]
-    template = entry["text"] if "text" in entry else entry.get(benchmark_name)
+    template = entry.get(key) if key != "text" or "text" in entry else entry.get(benchmark_name)
     if template is None:
         return None
     values = dict(levels["vars"][benchmark_name])
@@ -91,6 +95,15 @@ def role_text(role: str, config: SwarmConfig, benchmark_name: str) -> str | None
         tail += [pieces["regulator_check"],
                  *([] if config.regulator_discloses else [pieces["regulator_no_disclosure"]])]
     return " ".join([text, *tail])
+
+
+def role_first(role: str, config: SwarmConfig, benchmark_name: str) -> str | None:
+    """What the role's level says in the agent's first message (instruction_levels.yaml `first`): the task's own words
+    the system text leaves out, such as what cheating means on the task or the disregulator's objective. None for a
+    worker, a level with no text, or one with no first-message text."""
+    if role == "worker" or role_text(role, config, benchmark_name) is None:
+        return None
+    return level_text(role, getattr(config, f"{role}_level"), benchmark_name, key="first")
 
 
 def role_briefing(config: SwarmConfig, names: list[str]) -> str | None:

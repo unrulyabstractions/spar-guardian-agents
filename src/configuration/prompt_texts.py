@@ -137,6 +137,14 @@ def rounds_values(config: SwarmConfig) -> str:
     return f"{line} {texts['minutes'].format(time=duration_text(config.round_time_s))}"
 
 
+def before_line(message: str, line: str, note: str) -> str:
+    """The message with the note on its own paragraph before the paragraph that opens with line (the rounds' values),
+    or last when the message holds no such line."""
+    cut = message.rfind(f"\n{line}")
+    head, tail = (message, "") if cut < 0 else (message[:cut], message[cut:].lstrip("\n"))
+    return f"{head.rstrip()}\n\n{note}" + (f"\n\n{tail}" if tail else "")
+
+
 def joined(names: list[str]) -> str:
     """Names in a sentence: "a", "a and b", "a, b and c"."""
     return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"

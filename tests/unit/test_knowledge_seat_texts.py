@@ -11,6 +11,7 @@ from inspect_ai.dataset import Sample
 from src import tasks
 from src.configuration import access_policy
 from src.configuration.presets import build_config
+from src.configuration.settings import load_instruction_levels
 from src.domains.benchmark_protocol import Benchmark
 from src.domains.knowledge import KnowledgeWork
 from src.domains.knowledge import knowledge_sandbox as sandbox
@@ -88,7 +89,8 @@ def test_a_seat_that_holds_nothing_reads_the_note_and_stands_in_neither_list():
     first = tasks.first_messages(sample, plan, bench)
     values = {a: " ".join(tasks.agent_values(bench, plan, a)) for a in plan.agents}
     assert all(first[a] == f"the task\n\n{note}\n\n{line} {values[a]}\n" for a in plan.agents if a != regulator)
-    assert first[regulator].endswith(f"\n\nthe task\n\n{note}\n\n{line}\n\n{values[regulator]}\n")
+    cheating = load_instruction_levels()["vars"]["knowledge_work"]["cheating"]
+    assert first[regulator].endswith(f"\n\nthe task\n\n{note}\n\n{line}\n\n{cheating}\n\n{values[regulator]}\n")
     assert first[regulator].startswith("Your teammates")
 
 

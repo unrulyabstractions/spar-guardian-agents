@@ -269,11 +269,8 @@ class Benchmark(ABC):
         notes = {a: self.first_note(plan, a) for a in plan.agents}
         if not any(notes.values()):
             return None
-        line = f"\n{texts.rounds_values(plan.config)}"
-        cut = instruction.rfind(line)
-        head, tail = (instruction, "") if cut < 0 else (instruction[:cut], instruction[cut:].lstrip("\n"))
-        return {a: f"{head.rstrip()}\n\n{note}" + (f"\n\n{tail}" if tail else "") if note else instruction
-                for a, note in notes.items()}
+        line = texts.rounds_values(plan.config)
+        return {a: texts.before_line(instruction, line, note) if note else instruction for a, note in notes.items()}
 
     def tells_team(self, plan: Plan) -> bool:
         """Whether the agents' system prompts tell them of their team (SwarmConfig.knows_team). It picks the submit
