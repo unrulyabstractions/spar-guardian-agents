@@ -297,6 +297,7 @@ export async function viewRun(id, q, view) {
   const stage = h('div', { class: 'rp-stage' });
   const tabs = new Map();
   let current = null;
+  let lastAgent = null;    // the agent whose transcript was open last: where the Transcript button goes back to
   // Two selects, Workers and Influencers, each in that order; an option names the agent, an influencer's role, and its
   // Cheating level. A select shows its group's name when the page shows none of its agents, so any choice opens one.
   const option = a => h('option', { value: a.agent },
@@ -349,6 +350,9 @@ export async function viewRun(id, q, view) {
     const open = () => selectTab(key).catch(() => {});
     tabs.set(key, h('button', { type: 'button', class: ['rp-tab', 'rp-tab-view'], onclick: open }, v.label));
   }
+  // Beside Board and Details: back to the transcript last open (the first agent's before any was).
+  const transcriptTab = h('button', { type: 'button', class: ['rp-tab', 'rp-tab-view'], title: 'the agent\'s transcript',
+    onclick: () => selectTab(lastAgent || [...cards.keys()][0]).catch(() => {}) }, 'Transcript');
   // Each tab keeps where it was scrolled to: the stage for a view or the run record, an agent's steps pane for an agent.
   const scrolled = new Map();
   const scroller = () => stage.querySelector(':scope > .case .right') || stage;
@@ -367,6 +371,8 @@ export async function viewRun(id, q, view) {
       sel.classList.toggle('on', mine);
     }
     toggles.hidden = views.has(key);   // the fold toggles act on an agent's steps only
+    transcriptTab.classList.toggle('on', !views.has(key));
+    if (cards.has(key)) lastAgent = key;
     if (views.has(key)) {
       if (!drawn.has(key)) drawn.set(key, views.get(key).draw());
       const v = drawn.get(key);
@@ -407,15 +413,15 @@ export async function viewRun(id, q, view) {
       })));
   // Two rows: the run and who ran it; under it the agents' selects, with the fold toggles at the right.
   // Board and Details sit in the top row's right corner; the agents' selects open the second row.
-  const viewTabs = [...tabs].filter(([k]) => views.has(k)).map(([, b]) => b);
+  const viewTabs = [transcriptTab, ...[...tabs].filter(([k]) => views.has(k)).map(([, b]) => b)];
   const bar = h('div', { class: 'rp-bar' },
     h('div', { class: 'rp-row' },
-      h('a', { class: 'rp-back', href: '#/', title: 'all runs' }, '←'),
+      h('a', { class: 'rp-back', href: sessionStorage.getItem('tv.runsHash') || '#/', title: 'back to the runs' }, '←'),
       h('b', { class: 'rp-run' }, row.run), whoChips(row),
       cheating.alarm ? alarmBadge(cheating.alarm) : null,
       alertsBadge(d.presence && d.presence.alerts, () => selectTab('details')
         .then(() => flash(stage.querySelector('#sec-alerts'))).catch(() => {})),
-      viewTabs.length ? h('span', { class: ['rp-tabs', 'rp-view-tabs'] }, viewTabs) : null),
+      views.size ? h('span', { class: ['rp-tabs', 'rp-view-tabs'] }, viewTabs) : null),
     h('div', { class: 'rp-row' },
       h('span', { class: 'rp-picks' }, pickers.flatMap((sel, i) => (i ? [h('span', { class: 'rp-sep' }), sel] : [sel]))),
       h('span', { class: 'rp-right' }, toggles)));
@@ -427,6 +433,7 @@ export async function viewRun(id, q, view) {
     const qc = q.get('call');
     if (qa && q.get('label') && cards.has(qa)) openExcerpt(qa, q.get('label')).then(x => x || selectTab(qa)).catch(() => {});
     else if (qa && qc != null && cards.has(qa)) gotoCall(qa, parseInt(qc, 10)).catch(() => {});
+    else if (qa && cards.has(qa) && !views.has(q.get('tab'))) selectTab(qa).catch(() => {});
     else selectTab(views.has(q.get('tab')) ? q.get('tab') : (firstAgent || 'details')).catch(() => {});
   });
   const record = h('div', { class: 'rp-details rp-record' }, header, labelsCard, agentsBox);

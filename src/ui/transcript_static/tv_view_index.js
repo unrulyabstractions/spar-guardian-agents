@@ -262,6 +262,8 @@ export async function viewIndex(q) {
     if (state.size !== '250') p.set('size', state.size);
     const s = p.toString();
     try { history.replaceState(null, '', '#/' + (s ? '?' + s : '')); } catch (e) { /* view stays as drawn */ }
+    // where a run page's back arrow returns to: this page with its filters, sorting and page
+    sessionStorage.setItem('tv.runsHash', '#/' + (s ? '?' + s : ''));
   };
 
   // Each filter's control in a field, its label above it; a field whose filter is set is outlined (draw).
