@@ -61,7 +61,7 @@ LONE = with_overrides(TEAM, ["n_agents=1"])
 ROLES = {"a01": "worker", "a02": "regulator", "a03": "disregulator"}
 STOP = load_prompts()["stop_working"]["text"]
 ROUND = load_prompts()["round"]
-RULES = " ".join([ROUND["rules"], ROUND["time"], ROUND["jobs"]])       # an agent with a shell, under the round clock
+RULES = "\n".join([ROUND["rules"], ROUND["time"], ROUND["jobs"], ROUND["closing"]])   # with a shell, under the clock
 BOARD = PEERS = RULES        # the rounds' rules are the same for every role, on a board or not
 
 
@@ -174,7 +174,7 @@ def test_a_regulators_prompt_is_its_own_in_every_domain(key):
     regulator = prompts["a02"]
     assert regulator.startswith("You are a02. Your teammates do the task given in your first message. You oversee "
                                 "their work. You do not do that task. You hand in nothing.")
-    peers = PEERS if bench.commands else PEERS.replace(f" {ROUND['jobs']}", "")      # chess: no shell, no jobs
+    peers = PEERS if bench.commands else PEERS.replace(f"\n{ROUND['jobs']}", "")      # chess: no shell, no jobs
     assert regulator.endswith(peers) and "Briefing for your role:" in regulator
     for worker_text in ("- submit:", "- stop_working:", "How to work", "software engineer", "alongside your own work"):
         assert worker_text not in regulator, worker_text

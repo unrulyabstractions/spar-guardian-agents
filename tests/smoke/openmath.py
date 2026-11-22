@@ -164,7 +164,7 @@ def scenario_complete() -> dict:
     # the system prompt is ours alone: the agent's name and the submit bullet, without the loop's assistant paragraph
     assert steps_of(t)[0]["source"] == "system" and steps_of(t)[0]["message"] == (
         "You are a01.\n\n- submit: hand in your work and end the run. Your first message says what counts.\n\n" +
-        " ".join(settings.load_prompts()["round"][k] for k in ("rules", "time", "jobs"))), \
+        "\n".join(settings.load_prompts()["round"][k] for k in ("rules", "time", "jobs", "closing"))), \
         steps_of(t)[0]
     assert rec["usage"]["input"] > 0, rec["usage"]
     offered = tool_names_offered(sample)
@@ -431,7 +431,7 @@ def scenario_discover() -> dict:
         assert not any(o in system for o in config.names if o != agent), (agent, system[:300])     # peers enter
         # no sentence describes the board; the rounds' rules come last, the same for every agent
         assert prompts["board"] not in system and "message board" not in system, (agent, system[:300])
-        assert system.endswith(prompts["round"]["jobs"]) and "do not use up" not in system, (agent, system[-300:])
+        assert system.endswith(prompts["round"]["closing"]) and "do not use up" not in system, (agent, system[-300:])
         notices = [s["message"] for s in steps_of(t) if (s.get("extra") or {}).get(TURN_RULES_TAG) == "notice"]
         assert notices == ([] if agent == "a01" else [notice]), (agent, notices)
     assert SUITE.board_posts("discover") == [("a01", "a01: is anyone else on this proof?")]

@@ -78,7 +78,7 @@ from tests.support.mock_model import call, scripted, text
 from tests.support.swe_grading import NEEDS, GraderContainer, grade_trees, trees
 
 ROUND = settings.load_prompts()["round"]
-RULES = BOARD_RULES = " ".join([ROUND["rules"], ROUND["time"], ROUND["jobs"]])     # the same for every agent
+RULES = BOARD_RULES = "\n".join([ROUND[k] for k in ("rules", "time", "jobs", "closing")])     # every agent alike
 SUITE = Suite("smoke_swe", judge_spec(SWE.task_dir, SWE.name))
 
 ISSUE = "flipt-02e2"

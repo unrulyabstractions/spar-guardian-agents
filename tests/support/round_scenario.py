@@ -141,7 +141,7 @@ def check_rounds(suite, name: str, sample, records: list[dict], plan: dict, work
     for agent, rounds in plan.items():
         t = transcripts[agent]
         system = system_text(t)
-        rules = " ".join([TEXTS["rules"], TEXTS["time"], TEXTS["jobs"]])
+        rules = "\n".join([TEXTS["rules"], TEXTS["time"], TEXTS["jobs"], TEXTS["closing"]])
         # the rules with no numbers in the system prompt, every value in the first message
         assert rules in system and not any(ch.isdigit() for ch in rules), (agent, system[-500:])
         assert values not in system and f"{ROUNDS} rounds" not in system and f"{CALLS} tool calls" not in system, agent

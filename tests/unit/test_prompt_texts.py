@@ -192,10 +192,10 @@ def test_the_prompt_file_has_the_contract_sections():
     for text in (prompts["team"], prompts["roles"]["briefing"], prompts["roles"]["regulator_opening"],
                  prompts["swe"]["system_shared"]):
         assert "{others}" not in text and "{roster}" not in text, text
-    assert set(prompts["round"]) == {"rules", "time", "jobs", "values", "minutes", "line", "spent", "closed",
+    assert set(prompts["round"]) == {"rules", "time", "jobs", "closing", "values", "minutes", "line", "spent", "closed",
                                      "ended", "end_round", "round_ended"}
     assert set(prompts["jobs"]) == {"kept", "so_far", "nothing_yet", "running", "exited", "stopped", "new", "no_new",
                                     "unknown", "job_output", "job_stop", "job"}
     assert "timeout" not in prompts["first_values"]          # no command has a time limit of its own
-    rules = "".join(prompts["round"][k] for k in ("rules", "time", "jobs"))
+    rules = "".join(prompts["round"][k] for k in ("rules", "time", "jobs", "closing"))
     assert "rounds" not in prompts and not any(c.isdigit() for c in rules)

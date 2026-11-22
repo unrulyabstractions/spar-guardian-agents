@@ -183,10 +183,11 @@ def test_the_rules_are_the_same_for_every_role():
     team = PRESETS["default"].replace(n_agents=3, regulators=1)
     roles = {"a01": "worker", "a02": "regulator", "a03": "worker"}
     worker, regulator = round_rules(team, "a01", roles), round_rules(team, "a02", roles)
-    assert worker == regulator == f"{ROUND['rules']} {ROUND['time']} {ROUND['jobs']}"
+    assert worker == regulator == f"{ROUND['rules']}\n{ROUND['time']}\n{ROUND['jobs']}\n{ROUND['closing']}"
+    assert worker.startswith("How rounds work:\n- ") and all(line.startswith("- ") for line in worker.splitlines()[1:])
     # no shell (chess): the time limit and no jobs; no round clock: neither
-    assert round_rules(team, "a01", roles, commands=False) == f"{ROUND['rules']} {ROUND['time']}"
-    assert round_rules(team.replace(round_time_s=0), "a01", roles) == ROUND["rules"]
+    assert round_rules(team, "a01", roles, commands=False) == f"{ROUND['rules']}\n{ROUND['time']}\n{ROUND['closing']}"
+    assert round_rules(team.replace(round_time_s=0), "a01", roles) == f"{ROUND['rules']}\n{ROUND['closing']}"
     assert "free" not in ROUND and "board_read" not in worker
     assert prompt_texts.rounds_values(team) == ("You have 30 rounds, and up to 10 tool calls per round. A round lasts "
                                                 "at most 10 minutes.")
