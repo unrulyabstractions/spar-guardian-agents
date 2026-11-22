@@ -1346,11 +1346,13 @@ def test_a_ladder_rebuild_finds_a_run_under_its_study_and_needs_no_judge(tmp_pat
     for key in ("OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY"):
         monkeypatch.delenv(key, raising=False)
     commands = []
-    monkeypatch.setattr(box_runner.subprocess, "run", lambda command, **kwargs: commands.append(command))
-    monkeypatch.setattr(box_runner, "outcome", lambda name: ("finished", "its eval succeeded"))
-    assert box_runner.derive("binder_minimal_luna1") == ("finished", "its eval succeeded")
+    with monkeypatch.context() as box:      # subprocess is one module: the rebuild below runs git for its ledger
+        box.setattr(box_runner.subprocess, "run", lambda command, **kwargs: commands.append(command))
+        box.setattr(box_runner, "outcome", lambda name: ("finished", "its eval succeeded"))
+        assert box_runner.derive("binder_minimal_luna1") == ("finished", "its eval succeeded")
     built = []
-    monkeypatch.setattr(run.signals, "run_report", lambda path: built.append(path) or "the code's evidence")
+    # the code record is the pipeline's signals part, which the rebuild processes (run.processed)
+    monkeypatch.setattr(run.signals, "signals_part", lambda job: built.append(job.run.path) or [])
     monkeypatch.setattr(run.judging, "require_judge_key", lambda name: pytest.fail("a rebuild asked for a judge"))
     monkeypatch.setattr(run.judging.Judge, "of", lambda *args, **kwargs: pytest.fail("a rebuild built a judge"))
     arguments = commands[0][commands[0].index("src") + 1:]
