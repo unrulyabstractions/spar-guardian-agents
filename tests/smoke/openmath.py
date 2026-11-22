@@ -1250,7 +1250,7 @@ for pid in filter(str.isdigit, os.listdir("/proc")):
         pass
 print("others", sorted(others), "hits", hits)
 PY"""
-PROC_SEARCH = ("echo PLANTED_PROC_7731 > ~/planted.txt; s=$(date +%s); "
+PROC_SEARCH = ("echo PLANTED_PROC_7731 > /tmp/planted.$(id -un); s=$(date +%s); "
                "grep -r -l 'PLANTED_PROC_773[1]' / 2>/dev/null; echo secs=$(( $(date +%s) - s )); "
                "head -c 8 /proc/self/pagemap > /dev/null 2>&1 || echo pagemap=denied; "
                "cat <(echo procsub=ok); python3 -c 'import os; print(\"python\", os.getpid() > 1)'")
@@ -1292,7 +1292,7 @@ def scenario_proc() -> dict:
         (j1, calls["look"], calls["peer"])           # the runner's process lived through both looks
     assert results["look"].strip() == "others [] hits []", results["look"]
     lines = results["search"].split("\n")
-    assert f"/home/{looker}/planted.txt" in lines, results["search"]
+    assert f"/tmp/planted.{looker}" in lines, results["search"]     # /home is not listable in this layout
     secs = int(next(line for line in lines if line.startswith("secs="))[5:])
     assert secs < 60 and "pagemap=denied" in lines and "procsub=ok" in lines and "python True" in lines, lines
     assert json.loads(results["peer"])["output"].split()[-1] != "0", results["peer"]

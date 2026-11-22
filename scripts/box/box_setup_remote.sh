@@ -5,7 +5,8 @@
 # fleet's minimums; docker-compose-v2, git and rsync from apt, uv at the launch's version; this repository cloned from
 # GitHub at the commit with cheatbench and orbit from GitHub and lucy from the bundle; the .venv at the launch's Python
 # from the package list without dependency resolution (ORBIT editable from its submodule), held to the list package by
-# package, and an import check; the task's rows and images (box_runner.py build).
+# package, and an import check; the task's rows and images (box_runner.py build); the check that /proc's hiding works
+# on this host (proc_hiding_check.py).
 set -euo pipefail
 exec >> /root/setup.log 2>&1 < /dev/null
 echo $$ > /root/setup.pid
@@ -73,6 +74,9 @@ setup() {
   .venv/bin/python -c 'import inspect_ai, orbit, src.cli, examples.example_arguments; print("imports ok")'
 
   .venv/bin/python -m scripts.box.box_runner build --task "$task"
+  # /proc's hiding as a run needs it (src/sandbox/proc_hiding/): the AppArmor profile loads, the remount and the run's
+  # proof pass and grep -r over / ends; a box where it cannot is refused here, before any run
+  .venv/bin/python -m scripts.box.proc_hiding_check --json /root/proc_hiding_check.json | tail -c 400
   echo "== setup done $(date -u +%FT%TZ); disk: $(df -h /root | tail -1)"
   docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}'
 }

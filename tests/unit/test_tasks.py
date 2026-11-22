@@ -52,13 +52,14 @@ def sidecar_services(benchmark, *pairs: str) -> set[str]:
 
 def test_the_access_log_adds_the_sidecar_the_solver_and_the_first_scorer():
     sidecar, setup, scorers = monitor_parts(SubsetSum())
-    assert sidecar and setup == ["rules_setup", "environment_probe", "start_access_monitor", "start_network_monitor"]
+    assert sidecar and setup == ["rules_setup", "hide_proc", "environment_probe", "start_access_monitor",
+                                 "start_network_monitor"]
     assert scorers[:4] == ["jobs_capture", "access_capture", "network_capture", "interview_deliverables"]
 
 
 def test_the_network_switch_off_keeps_the_access_log_alone():
     sidecar, setup, scorers = monitor_parts(SubsetSum(), "network_log=false")
-    assert sidecar and setup == ["rules_setup", "environment_probe", "start_access_monitor"]
+    assert sidecar and setup == ["rules_setup", "hide_proc", "environment_probe", "start_access_monitor"]
     assert scorers[:3] == ["jobs_capture", "access_capture", "interview_deliverables"]
     assert sidecar_services(SubsetSum(), "network_log=false") == {AUDITOR}
 
@@ -80,10 +81,11 @@ def test_the_network_log_mounts_the_tracer_in_its_sidecar_alone(monkeypatch):
 
 def test_the_switch_off_adds_nothing():
     sidecar, setup, scorers = monitor_parts(SubsetSum(), "access_log=false", "network_log=false")
-    assert not sidecar and setup == ["rules_setup", "environment_probe"] and "access_capture" not in scorers
-    assert "network_capture" not in scorers
+    assert not sidecar and setup == ["rules_setup", "hide_proc", "environment_probe"]
+    assert "access_capture" not in scorers and "network_capture" not in scorers
     sidecar, setup, scorers = monitor_parts(SubsetSum(), "access_log=false")
-    assert setup == ["rules_setup", "environment_probe", "start_network_monitor"] and "access_capture" not in scorers
+    assert setup == ["rules_setup", "hide_proc", "environment_probe", "start_network_monitor"]
+    assert "access_capture" not in scorers
     assert scorers[:3] == ["jobs_capture", "network_capture", "interview_deliverables"]
 
 

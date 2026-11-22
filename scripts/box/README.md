@@ -128,6 +128,16 @@ scripts/box/watch.sh --once <id>
 
 Before the first fleet with the access log, one box of each task runs the check in `src/domains/README.md` (A first real box).
 
+## Proc hiding check
+
+The runs hide /proc from the agents (src/sandbox/proc_hiding/): each agent sees only its own processes, and no process opens a page map. `box_setup_remote.sh` runs the check after the build and refuses the box when it fails; it writes `/root/proc_hiding_check.json`. By hand, on a box or on the Mac:
+
+```
+.venv/bin/python -m scripts.box.proc_hiding_check --json /root/proc_hiding_check.json
+```
+
+It loads the runs' AppArmor profile into the Docker host's kernel with the host's `apparmor_parser`, starts one container of the machines' image under it, remounts its /proc with `hidepid=2,gid=2999` from a privileged helper and runs the runs' own proof. Then, as uid 1001, `grep -r` over / must find a planted file within 120 s, the page map's open must fail, and bash's `<(...)`, python3, top and ps must work for the agent's own processes. It exits 0 when every check passes, 1 when one fails and 2 when it cannot start (no Docker, no AppArmor). It rents nothing and calls no model. It has passed on Colima (Ubuntu 24.04, kernel 6.8) and has not yet run on a vast.ai box.
+
 ## Network trace check
 
 The network log's preflight says which way of recording the agents' network calls works on a box: eBPF through bpftrace from the `netlog` sidecar, or snapshots of the machines' socket tables. Run it on one box after `box_setup.sh`, as root, with the machines' image in place:

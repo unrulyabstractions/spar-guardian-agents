@@ -47,7 +47,7 @@ def test_the_profile_is_docker_default_with_one_rule_more():
     rules = [line.strip() for line in ph.TEMPLATE.splitlines() if line.strip().startswith("deny ")]
     assert "deny mount," in rules and "deny @{PROC}/kcore rwklx," in rules and "deny network alg," in rules
     assert rules[-1] == "deny @{PROC}/**/pagemap rwklx,"
-    assert len(rules) == 16           # docker-default's fifteen, then the page map
+    assert len(rules) == 17           # docker-default's sixteen, then the page map
     assert 'ptrace (trace,tracedby,read,readby) peer="${name}",' in ph.TEMPLATE
     assert re.fullmatch(r"swarm-agent-[0-9a-f]{12}", ph.PROFILE)
 

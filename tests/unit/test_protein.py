@@ -41,6 +41,7 @@ from src.sandbox.access_log.access_monitor import MONITOR_DEVIATION
 from src.sandbox.cheatbench_task_files import render_prompt
 from src.sandbox.machines import agent_machines as machines
 from src.sandbox.network_log.network_monitor import NETWORK_DEVIATION
+from src.sandbox.proc_hiding.proc_hiding import PROC_DEVIATION
 from src.sandbox.staging import parse_mtime
 from src.swarm.turn_rules import TeamSubmission
 from tests.support.atif_builder import transcript
@@ -650,17 +651,17 @@ def test_the_access_plan_check_and_deviations():
             bench.check(build_config("default", "small", [f"access={bad}"]))
     assert bench.valid_item("segment12") and bench.valid_item("whole") and not bench.valid_item("segment0")
     common = [*COMMON_DEVIATIONS, *DEVIATIONS]
-    assert bench.deviations(lone) == [*common, NETWORK_DEVIATION, MONITOR_DEVIATION]
-    assert bench.deviations(solo) == [*common, *machines.MACHINE_DEVIATIONS, NETWORK_DEVIATION, MONITOR_DEVIATION,
-                                      PRESENCE_DEVIATION]
+    assert bench.deviations(lone) == [*common, PROC_DEVIATION, NETWORK_DEVIATION, MONITOR_DEVIATION]
+    assert bench.deviations(solo) == [*common, *machines.MACHINE_DEVIATIONS, PROC_DEVIATION, NETWORK_DEVIATION,
+                                      MONITOR_DEVIATION, PRESENCE_DEVIATION]
     every = bench.plan(build_config("default", "small", ["access=all"]))
     delay = ["team_submit_takes_effect_after_2_rounds"]      # a shared_task team's submit, two rounds on
     assert bench.deviations(every) == [*COMMON_DEVIATIONS, *delay, *DEVIATIONS, *machines.MACHINE_DEVIATIONS,
-                                       *machines.SHARED_DEVIATIONS, *REMOTE_DEVIATIONS, NETWORK_DEVIATION,
-                                       MONITOR_DEVIATION, PRESENCE_DEVIATION]
-    assert bench.deviations(plan)[-6:-3] == SPLIT_DEVIATIONS
+                                       *machines.SHARED_DEVIATIONS, *REMOTE_DEVIATIONS, PROC_DEVIATION,
+                                       NETWORK_DEVIATION, MONITOR_DEVIATION, PRESENCE_DEVIATION]
+    assert bench.deviations(plan)[-7:-4] == SPLIT_DEVIATIONS
     no_submit = bench.deviations(bench.plan(build_config("default", "small", ["n_agents=1", "submit=false"])))
-    assert no_submit == [*NO_SUBMIT_DEVIATIONS, *DEVIATIONS, NETWORK_DEVIATION, MONITOR_DEVIATION]
+    assert no_submit == [*NO_SUBMIT_DEVIATIONS, *DEVIATIONS, PROC_DEVIATION, NETWORK_DEVIATION, MONITOR_DEVIATION]
 
 
 def test_the_tools_keep_cheatbenchs_checker_and_one_state_per_owner(monkeypatch):
