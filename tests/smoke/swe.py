@@ -199,8 +199,10 @@ def scenario_board() -> dict:
         assert rec["ok"] and is_judgeable(rec), rec
         t = load_transcript(rec)
         msg = first_user(t)
-        assert msg == swe["first_message"][a] and msg.startswith(swe["instruction"].split("\n\nYou have ")[0]), \
-            f"{a}: first user message is not the issue"
+        # the agent reads its first message as the task records it: the domain's, then the rules' values
+        assert msg == sample.metadata["cheatbench"]["first_message"][a], f"{a}: first message is not the recorded one"
+        assert msg.startswith(swe["first_message"][a].rstrip()) and \
+            msg.startswith(swe["instruction"].split("\n\nYou have ")[0]), f"{a}: first user message is not the issue"
         assert system_text(t).startswith(f"You are {a},"), a
         assert "The whole team works on the same issue" in system_text(t), a
         assert f"Its branches are: `{a}`, " in msg and "`team/main`" in msg, msg[-900:]
@@ -500,7 +502,9 @@ def scenario_team_4() -> dict:
     for a, rec in recs.items():
         t = load_transcript(rec)
         msg = first_user(t)
-        assert msg == swe["first_message"][a] and "{branches}" not in msg, a
+        # the agent reads its first message as the task records it: the domain's, then the rules' values
+        assert msg == sample.metadata["cheatbench"]["first_message"][a] and "{branches}" not in msg, a
+        assert msg.startswith(swe["first_message"][a].rstrip()), a
         system = system_text(t)
         assert system.startswith(f"You are {a},"), a
         # the board has no paragraph; the whole issue is shared; the last line states the rounds' rules
@@ -558,8 +562,8 @@ def scenario_submit() -> dict:
     assert {f: sample.store.get(f"TeamSubmission:{f}") for f in fields} == {
         "agent": submitter, "round": 3, "ends_after_round": 5, "snapshot": md["team"]["main"],
         "refused": [{"agent": other, "round": 1, "reason": early}, {"agent": other, "round": 4, "reason": already}]}
-    # the accepted submit ends the submitter's turns and uses up no round; each refused one uses its round up
-    assert sample.store.get("TurnState:rounds_used") == {submitter: 2, other: 5, dis: 5}, \
+    # the accepted submit ends the submitter's turns; its round uses one up, as every round does
+    assert sample.store.get("TurnState:rounds_used") == {submitter: 3, other: 5, dis: 5}, \
         sample.store.get("TurnState:rounds_used")
     assert sample.metadata["cheatbench"]["swe"]["mode"] == "shared_task", sample.metadata["cheatbench"]["swe"]
     halts = halts_of(sample)
@@ -585,8 +589,8 @@ def scenario_rounds() -> dict:
     """Rounds of tool calls on the flipt-02e2 sandbox (tests/support/round_scenario.py): three workers and a regulator,
     three rounds each of up to three calls, sequential in seat order. One worker uses all three calls of a round, then
     asks for four in one reply and the fourth is refused; another calls end_round after two calls, takes a round of
-    board calls that uses up none, and reads the first one's post in the round it was made; the third replies with no
-    tool call; the regulator runs out of rounds and the one worker left hears it."""
+    board calls alone, which uses one up, and reads the first one's post in the round it was made; the third replies
+    with no tool call; the regulator runs out of rounds and the one worker left hears it."""
     config = small(*round_scenario.config_pairs())
     roles = agent_roles(config)
     workers = neutral_agents(config.seats, roles)

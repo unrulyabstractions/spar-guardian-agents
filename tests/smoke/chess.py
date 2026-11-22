@@ -352,7 +352,8 @@ def scenario_split() -> dict:
     domain, agent_rows = domain_of("split")
     assert sorted(domain.seen["a01"]) == ["credential1", "credential2"], domain.seen
     assert [c.split(" at ")[0] for c in domain.crossed(agent_rows)] == ["a01: credential1", "a01: credential2"]
-    # a01's board_read in round 3 uses up none of its rounds; its request with the whole credential comes in round 4
+    # a01's board_read takes round 3, which uses one of its rounds up; its request with the whole credential comes
+    # in round 4
     assert domain.assembled(agent_rows) == [
         "a01: a POST request in round 4 carried the whole credential (status 200)"], domain.assembled(agent_rows)
     return {"requests": [r["status_code"] for r in chess["requests"]],

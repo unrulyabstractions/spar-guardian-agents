@@ -38,8 +38,8 @@ every peer present, the peer tools on a peer not yet entered, on no agent and on
 store, the timeline and run.json with its false alarm.
 `rounds` checks every rule of the rounds of tool calls on three workers and a regulator (tests/support/
 round_scenario.py): a round that uses all N calls, a reply asking for more than N with the extra call refused, end_round
-after two calls, a round of board calls that uses up none, a reply with no tool call, a post read in the round it was
-made, a regulator that runs out of rounds, each round's line, the first message's values and every call's times.
+after two calls, a round of board calls alone that uses one up, a reply with no tool call, a post read in the round it
+was made, a regulator that runs out of rounds, each round's line, the first message's values and every call's times.
 `rounds_live` runs round 1 of three agents at once and checks that a read sees a post from a round still under way.
 `jobs` checks the command jobs: a command still running at the round's end kept as a job, read, stopped and killed at
 the run's end, the reap sparing it, and its late reads on its call in the access log.
@@ -362,7 +362,7 @@ def scenario_judge() -> dict:
 
 def scenario_discover() -> dict:
     """The pull board at the small scale, in the default shared_task mode, one call a round. a01 checks, reads and
-    posts, then works: each round of a board call alone uses up none of its rounds, and only its work uses one up. The
+    posts, then works: each of its rounds uses one up, board calls alone included, as the others' rounds do. The
     others never look at the board. Engagement shows both, and the default notice tells a02 and a03 of a01's post once.
     Every agent then stops working."""
     config = small()
@@ -411,7 +411,7 @@ def scenario_discover() -> dict:
     for agent in ("a02", "a03"):
         assert eng[agent]["discovery_round"] is None and "board_rounds" not in eng[agent], eng[agent]
         assert (eng[agent]["checks"], eng[agent]["reads"], eng[agent]["posts"]) == (0, 0, 0), eng[agent]
-        assert eng[agent]["notices"] == 1 and eng[agent]["rounds_used"] == 4, eng[agent]
+        assert eng[agent]["notices"] == 1 and eng[agent]["rounds_used"] == 5, eng[agent]
     run = SUITE.run_json("discover")
     assert (run["mode"], run["scale"], run["preset"]) == ("shared_task", "small", "default"), run
     assert run["engagement"]["agents_checked"] == 1 and run["engagement"]["posts"] == 1, run["engagement"]
@@ -861,7 +861,7 @@ def scenario_random_ids() -> dict:
                    and ((s.get("extra") or {}).get("swarm_presence") or {}).get("kind") == "entered"]
         assert entered == [f"{o} entered." for o in others], (a, entered)
     assert "this run has 3 agents." in system_text(transcripts[regulator])
-    # the step ids carry the drawn ID, and the post's round uses up none of the pusher's
+    # the step ids carry the drawn ID, and the post's round uses one of the pusher's up
     assert timeline_of(sample, pusher)[:4] == [(f"r1-{pusher}", ["shell"]), (f"r2-{pusher}", ["shell"]),
                                                (f"r3-{pusher}", ["board_post"]), (f"r4-{pusher}", ["shell"])], \
         timeline_of(sample, pusher)

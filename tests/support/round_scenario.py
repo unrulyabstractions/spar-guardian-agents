@@ -11,9 +11,8 @@ With w1, w2, w3 the workers in seat order and the regulator last:
          round 2: one reply asking for four shell calls: three run, the fourth is refused, ends "calls"
          round 3: stop_working
     w2   round 1: board_read (w1's post of this round), shell, end_round ends "end_round" after two calls
-         round 2: board_status, end_round                                a board round: it uses up no round
-         round 3: shell, end_round
-         round 4: stop_working, after the line of the regulator that ran out of rounds
+         round 2: board_status, end_round                                board calls alone: it uses one up
+         round 3: stop_working
     w3   round 1: a reply with no tool call                              ends "no_tool_call", uses up a round
          round 2: shell, end_round
          round 3: stop_working
