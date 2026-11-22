@@ -231,8 +231,8 @@ def live_arrow(ax, a, b):
 
 def fig_round_structure():
     """Two rounds, call by call per agent: up to N calls a round, wait (the tool that ends a round), a reply with no
-    tool call, a read of a post made in the same round, a command that outlives its round's time as job j1 and its read in the next round
-    (command_jobs), and the submitter's exit."""
+    tool call, a read of a post made in the same round, a command that outlives its round's time as job j1 and its read
+    in the next round (command_jobs), and the submitter's exit."""
     fig = plt.figure(figsize=(FULL, 3.05))
     ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
     ax.set_xlim(0, 17.0)

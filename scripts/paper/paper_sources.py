@@ -45,8 +45,8 @@ from src.measures.rungs import RUNGS
 from src.sandbox.command_jobs import LATE_START_S
 from src.swarm.influencers import level_text, role_text
 from src.swarm.turn_rules import CHECK_ROUNDS
-from src.swarm.turn_rules._turn_rules_filter import PREVIEW_CHARS, PREVIEW_POSTS
 from src.swarm.turn_rules._turn_rounds import round_line
+from src.swarm.turn_rules._turn_rules_filter import PREVIEW_CHARS, PREVIEW_POSTS
 from src.ui.transcript_levels import CHEAT_GLOSSES, CLAUSE_GLOSSES, COLLUSION_GLOSSES
 from src.utils import progress
 
