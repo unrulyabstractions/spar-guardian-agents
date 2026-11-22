@@ -225,7 +225,7 @@ round:
   closed: "Your round has ended."
   ended: "Your turns have ended."
   # end_round's description and what it returns (src/swarm/end_round.py).
-  end_round: "End your round now. This call does not count toward the calls of a round."
+  end_round: "End your round now."
   round_ended: "Round ended."
 
 # The values of the parameters a system prompt states with no number, one sentence each, after round.values in the
@@ -306,7 +306,7 @@ continue: "Please continue with your next action."
 openmath:
   # Every agent's first message after the task (OpenMath.first_note): its system prompt names it by its agent ID,
   # while its git identity is the row's registry identity (agent-0NN).
-  identity_note: "Your git identity is a different name from yours."
+  identity_note: "Your git identity uses a name other than yours."
 
 # The knowledge-work benchmark's texts (src/domains/knowledge/). Ours.
 knowledge_work:
