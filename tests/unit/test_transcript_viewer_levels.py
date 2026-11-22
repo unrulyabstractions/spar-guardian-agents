@@ -887,7 +887,7 @@ def test_the_runs_table_has_one_cheating_cell_its_columns_in_order_and_no_alarm_
     index = (STATIC / "tv_view_index.js").read_text()
     body = index[index.index("  return [\n    { key: 'run'"):index.index("const GROUPS")]
     keys = re.findall(r"\{ key: '([a-z_]+)'", body)
-    assert keys == ["run", "workers", "model", "influencers", "task", "other"]
+    assert keys == ["run", "workers", "seed_pack", "model", "influencers", "task", "other"]
     assert "influencerLabel" not in body
     assert body.index("key: 'task'") < body.index("d.order.map(team)") < body.index("d.order.map(influencers)") \
         < body.index("map(label)") < body.index("key: 'other'")
@@ -917,8 +917,8 @@ def test_the_runs_page_head_is_the_count_the_pager_and_three_filter_groups():
     assert "three ladders, the board and every transcript" not in (STATIC / "tv_main.js").read_text()
     assert "set.length ? `Runs: ${fmtInt(shown.length)} of ${fmtInt(rows.length)}`" in index
     assert ": `Runs: ${fmtInt(rows.length)}`;" in index
-    assert "h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, titleEl, about, otherChip), pager)" \
-        in index
+    assert "h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, titleEl, about), pager)" in index
+    assert "otherChip" not in index and "rows = idx.rows.filter(r => taskShown(r.task_name))" in index
     assert "FILTER_GROUPS = [['run', 'Run'], ['who', 'Who'], ['outcome', 'Outcome']]" in index
     body = index[index.index("function filters(d)"):index.index("const FILTER_GROUPS")]
     run = ["key: 'q', label: 'Search', group: 'run'", "key: 'task', label: 'Task', group: 'run'",
@@ -1025,16 +1025,18 @@ def test_the_index_lists_valid_runs_only_and_marks_the_tasks_it_does_not_read(tm
     assert "measured 3 of 3 runs" in capsys.readouterr().out
 
 
-def test_a_run_of_a_task_the_study_does_not_read_opens_and_stays_out_of_the_summary(tmp_path, stood_in):
-    """The viewer serves a hidden_task run's page, and its Summary page counts the studied runs alone."""
+def test_a_run_of_a_task_the_study_does_not_read_opens_and_its_summary_row_names_its_task(tmp_path, stood_in):
+    """The viewer serves a hidden_task run's page; its Summary holds every task, each row naming its task, so the
+    page leaves out the tasks its Settings turn off (tv_settings.js; the hidden ones by default)."""
     study = tmp_path / "runs" / "study_x"
     write_run(study / "poem_minimal_luna1", WORKERS, {}, {}, "openrouter/openai/gpt-6-luna", task="creative_writings")
     write_run(study / "sum_minimal_luna1", WORKERS, {}, {}, "openrouter/openai/gpt-6-luna", task="subset_sum")
     viewer = tv.Viewer(ti.build_index(tmp_path / "runs"))
     assert set(viewer.rows) == {"study_x/poem_minimal_luna1", "study_x/sum_minimal_luna1"}
     assert viewer.dirs["study_x/sum_minimal_luna1"] == study / "sum_minimal_luna1"
-    studied = [r for r in viewer.rows.values() if not r["hidden_task"]]
-    assert viewer.summaries["study_x"] == tv.transcript_summary.summary(studied, "study_x")
+    s = viewer.summaries["study_x"]
+    assert s == tv.transcript_summary.summary(list(viewer.rows.values()), "study_x")
+    assert sorted(r["task_name"] for r in s["rows"]) == ["creative_writings", "subset_sum"]
 
 
 def test_the_index_leaves_out_single_agent_runs_and_the_apart_controls(tmp_path, stood_in):

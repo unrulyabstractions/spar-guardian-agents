@@ -213,8 +213,7 @@ class Viewer:
         self.measured = {run_id: idx["entries"][run_id]["measured"] for run_id in self.rows}
         self.ladders = transcript_ladder_tables.ladders_payload(transcript_levels.LADDERS, transcript_levels.ORDER,
                                                                 transcript_levels.label_about())
-        studied = [r for r in served["rows"] if not r.get("hidden_task")]
-        self.summaries = {c["key"]: transcript_summary.summary(studied, c["key"]) for c in served["collections"]}
+        self.summaries = {c["key"]: transcript_summary.summary(served["rows"], c["key"]) for c in served["collections"]}
         self._tools: dict[str, dict] = {}
         self._tools_lock = threading.Lock()
         self._network: dict[str, dict | None] = {}

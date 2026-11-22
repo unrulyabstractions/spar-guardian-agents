@@ -7,8 +7,8 @@
 Every folder under runs/ is a collection, except SKIP and folders that hold no run: a study or a manifest collection,
 whose runs and their validity src/measures/run_listing.py list_collection reads. The index lists, measures and serves
 the valid runs only. A run of a task the study does not read (src/measures/ladder_by_domain.py HIDDEN_TASKS) is measured
-and served, so it opens, with hidden_task set on its row: the runs page lists it only behind its "other tasks" chip,
-the Summary page never counts it, and `left_out` counts it.
+and served, so it opens, with hidden_task set on its row: the pages leave it out until the viewer's Settings turn
+its task on (tv_settings.js), and `left_out` counts it.
 
 For each run the index reads run.json, episodes.jsonl, signals.jsonl and the board (RunFiles), CheatBench's verdicts
 (src/judging/verdict_files.py cheatbench) and the measures, which read the transcripts and the judges' verdict files:

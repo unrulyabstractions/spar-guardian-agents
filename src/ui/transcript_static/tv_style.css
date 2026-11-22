@@ -40,7 +40,6 @@ table.data th, table.data td { vertical-align: middle; }
   border-radius: 6px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font-size: 12.5px; }
 .idx-field.is-set .field-label { color: var(--accent); font-weight: 600; }
 .idx-field.is-set select, .idx-field.is-set input { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.idx-other.is-set { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .idx-reset { height: 28px; justify-content: center; }
 .idx-wrap { overflow: auto; max-height: calc(100vh - var(--header-h) - 120px); }
 /* separate borders, as table.sum-table: the sticky header then carries its own rules and nothing shows between them */
@@ -96,6 +95,8 @@ table.idx-legend-table { font-size: 12.5px; border-collapse: collapse; }
 table.idx-legend-table th { text-align: left; padding: 4px 12px 4px 0; white-space: nowrap; font-weight: 600; width: 7em; }
 .idx-legend-levels { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px 0; }
 table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
+table.idx-table tr.is-last td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+table.idx-table tr.is-last td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .labels-table td:first-child { white-space: nowrap; }
 .ev-list { margin: 0; padding-left: 16px; font-size: 12.5px; }
 .ev-list li { margin: 2px 0; overflow-wrap: anywhere; }
@@ -674,3 +675,11 @@ table.sum-table .sum-level-alt { background: color-mix(in srgb, var(--text) 3%, 
 .case .right, .case .round-box, .case .round-b { min-width: 0; max-width: 100%; }
 /* The strip's round boundaries: solid, above the step lines. */
 .case .cs-roundline { stroke: var(--accent); stroke-opacity: .55; stroke-width: 1.5; }
+/* The header's Settings: a box under its button, a checkbox per task. */
+.tv-settings { display: inline-block; }
+.tv-settings .tv-settings-box { position: absolute; z-index: 6; top: 34px; right: 0; width: max-content; padding: 8px 10px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0, 0, 0, .18);
+  display: flex; flex-direction: column; gap: 4px; }
+.tv-settings-head { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.tv-settings-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; cursor: pointer; }
+.tv-settings-row .muted { margin-left: auto; padding-left: 12px; }

@@ -17,9 +17,14 @@ import { loadIndex, viewIndex } from './tv_view_index.js';
 import { viewRun } from './tv_view_run.js';
 import { viewLadders } from './tv_view_ladders.js';
 import { viewSummary } from './tv_view_summary.js';
+import { setDefaults, settingsMenu } from './tv_settings.js';
 
 const main = () => document.getElementById('main');
 let token = 0;
+// Each page's scroll, by its address, so back and forward land where the page was left; the run opened last is kept
+// for the runs page to mark.
+const SCROLL = new Map();
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 
 function shell() {
   const app = document.getElementById('app');
@@ -29,7 +34,8 @@ function shell() {
       h('span', { class: 'spacer' }),
       h('a', { class: 'btn btn-small', href: '#/ladders' }, 'Ladders'), ' ',
       h('a', { class: 'btn btn-small', href: '#/summary' }, 'Summary'), ' ',
-      h('a', { class: 'btn btn-small', href: '#/' }, 'All runs')),
+      h('a', { class: 'btn btn-small', href: '#/' }, 'All runs'), ' ',
+      h('span', { id: 'settings-slot' })),
     h('main', { id: 'main', tabindex: '-1' }));
 }
 
@@ -42,7 +48,9 @@ async function route() {
   const view = { mounted: fn => after.push(fn) };
   main().replaceChildren(h('div', { class: 'loading' }, 'Loading…'));
   try {
-    await loadIndex();
+    const idx = await loadIndex();
+    const slot = document.getElementById('settings-slot');
+    if (slot && !slot.firstChild) { setDefaults(idx); slot.replaceChildren(settingsMenu(idx)); }
     let node;
     const m = /^\/run\/(.+)$/.exec(path);
     if (m) node = await viewRun(m[1].split('/').map(decodeURIComponent).join('/'), q, view);
@@ -51,8 +59,9 @@ async function route() {
     else { node = await viewIndex(q); document.title = 'Runs · Transcripts'; }
     if (my !== token) return;
     main().replaceChildren(node);
-    if (m) window.scrollTo(0, 0);
+    if (m) sessionStorage.setItem('tv.lastRun', m[1].split('/').map(decodeURIComponent).join('/'));
     for (const fn of after) fn();
+    window.scrollTo(0, SCROLL.get(hash) || 0);
   } catch (e) {
     if (my !== token) return;
     main().replaceChildren(h('div', { class: 'error-box' }, h('div', { class: 'error-title' }, 'Error'),
@@ -63,5 +72,8 @@ async function route() {
 shell();
 // The index rewrites its own query with history.replaceState, which fires no hashchange, so every hashchange is a
 // navigation (a link, the address bar, back and forward) and reroutes, a new query on the index included.
-window.addEventListener('hashchange', route);
+window.addEventListener('hashchange', e => {
+  if (e.oldURL) SCROLL.set(new URL(e.oldURL).hash || '#/', window.scrollY);
+  route();
+});
 route();

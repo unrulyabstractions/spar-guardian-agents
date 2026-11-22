@@ -188,8 +188,9 @@ def cell(rows: list[dict]) -> dict:
 def summary(rows: list[dict], col: str) -> dict:
     """The #/summary page's data for collection `col`: {col, total (its valid runs), by_seed (whether any run is
     seeded, so rows split by seed pack), columns (column_of, in column_order), groups, rows: [{model, task, workers,
-    seed_pack (None unless by_seed), cells: {column key: cell or None}}], totals: {column key: cell or None}}. A cell
-    carries `filters`, the runs page's query that keeps exactly its runs, or None when none does."""
+    seed_pack (None unless by_seed), task_name (the page leaves out a task its Settings turn off), cells: {column
+    key: cell or None}}], totals: {column key: cell or None}}, over every task. A cell carries `filters`, the runs
+    page's query that keeps exactly its runs, or None when none does."""
     mine = [r for r in rows if r["col"] == col]
     by_seed = any(r.get("seed_pack", "none") != "none" for r in mine)
     found = {condition_of(r): column_of(*condition_of(r)) for r in mine}
@@ -214,7 +215,8 @@ def summary(rows: list[dict], col: str) -> dict:
     for (model, task, workers, pack), by_col in sorted(
             groups.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[0][2], kv[0][3] != "none", kv[0][3] or "")):
         where = {"task": task, "model": model, "workers": str(workers), **({"seed_pack": pack} if by_seed else {})}
-        out_rows.append({"model": model, "task": task, "workers": workers, "seed_pack": pack,
+        task_name = next(r for rs in by_col.values() for r in rs).get("task_name")
+        out_rows.append({"model": model, "task": task, "task_name": task_name, "workers": workers, "seed_pack": pack,
                          "cells": {c["key"]: filled(by_col.get(c["key"], []), c, where) for c in columns}})
     totals = {c["key"]: filled(of_column.get(c["key"], []), c, {}) for c in columns}
     return {"col": col, "total": len(mine), "by_seed": by_seed, "columns": columns, "groups": GROUPS,

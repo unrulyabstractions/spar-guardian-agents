@@ -247,8 +247,9 @@ Without one, a run is valid at the top level and carries its group's name in a g
 (`apart_controls`) lists its runs in `manifest.jsonl`: the canonical copy is valid, an extra copy has the status `extra
 copy` (`src/measures/run_listing.py`). The viewer lists, measures and serves the **valid runs only**. A valid run of a
 task in `src/measures/ladder_by_domain.py` `HIDDEN_TASKS` (knowledge work, chess, OpenMath, subset sum and factoring) is
-measured and served, so it opens, with `hidden_task` on its row: the runs page lists it only behind its "other tasks"
-chip (`?other=1`), the Summary page never counts it, and the index's `left_out` counts it. A collection with no valid
+measured and served, so it opens, with `hidden_task` on its row. The header's Settings (`tv_settings.js`, kept in
+the browser) turn each task's runs on or off on the runs page and the Summary page; these tasks start off. The index's
+`left_out` counts them. A collection with no valid
 run is left out. The server never writes the data.
 
 Its one output is the index cache (`--cache`, by default `tmp/transcript_viewer/index.json`): each run's index row, its
@@ -374,7 +375,7 @@ Collection = {key (the folder name), label, tag, about, runs (its valid runs lis
               latest (its newest run's `started`)}        # newest first; the Summary page opens the first
 IndexRow = {                                         # valid runs only
   id ("<collection>/<run key>"), col, key (the run's path under the collection), run (its name; a manifest's key),
-  hidden_task (a task the study does not read: listed behind "other tasks" only),
+  hidden_task (a task the study does not read: off by default in Settings),
   task_name (CheatBench's), task_label (its domain and the stem of the cell's script, as "SWE (flipt)": task_label),
   instance (the sample id),
   arm_label (agents; workers' conditioning; influencers, in words), agents ("One agent" | "3 workers" | "3 workers,
@@ -399,7 +400,7 @@ IndexRow = {                                         # valid runs only
 }
 ```
 `measured` is how many runs this start measured; the others came from the cache. `left_out` is `{tasks, runs, single_agent}`: the
-tasks the study does not read, how many valid runs of them stand behind "other tasks", and how many single-agent runs are unlisted. A ladder that does not apply reads `not
+tasks the study does not read, how many valid runs of them Settings hide by default, and how many single-agent runs are unlisted. A ladder that does not apply reads `not
 applicable`: Coordination and Collusion on a one-agent run, Collusion on a task with no take rule, Cheating on a run
 without episodes.
 

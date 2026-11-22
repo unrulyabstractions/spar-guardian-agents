@@ -11,10 +11,11 @@
  * stand in three labelled groups (FILTER_GROUPS), a set filter outlined; a run with no influencer shows a dash in the
  * influencer columns; a legend table under the runs shows every level of the three ladders as the cells draw it,
  * with each ladder's line; the collections and the index's build stand in a small table behind one "Collections"
- * control. The runs of the tasks the study does not read (hidden_task) are listed only once the "other tasks" chip by
- * the title is on (?other=1). Every definition is on the Ladders page. */
+ * control. The runs of a task the header's Settings turn off are not listed (tv_settings.js; by default the tasks the
+ * study does not read). Every definition is on the Ladders page. */
 import { enc, fmtInt, h, plural } from '/static/app/dom.js';
 import { muted, select } from '/static/app/components.js';
+import { taskShown } from './tv_settings.js';
 import { cheatbenchTeam, cheatingCell, levelChip, lineMark, teamScore } from './tv_levels.js';
 import { COLLECTION_ORDER, collectionOf, conditioningChip, modelLabel, setCollections, taskLabel } from './tv_labels.js';
 
@@ -129,6 +130,8 @@ function columns(d) {
       cell: r => h('a', { class: 'run-link', href: `#/run/${r.id.split('/').map(enc).join('/')}` },
         breakable(r.run)) },
     { key: 'workers', label: 'Workers', title: 'Number of workers', sort: r => r.workers, cell: r => String(r.workers) },
+    { key: 'seed_pack', label: 'Seed', title: 'Board posts and files planted before round 1', sort: r => r.seed_pack || 'none',
+      cell: r => String(r.seed_pack || 'none').split('/').pop() },
     { key: 'model', label: 'Model', title: 'Workers\' model and system prompt\'s instruction',
       sort: r => `${modelLabel(r)} · ${r.worker_conditioning}`, cell: workersCell },
     { key: 'influencers', label: 'Influencers', title: 'Each influencer\'s role, instruction level and model',
@@ -152,7 +155,7 @@ const GROUPS = { team: 'Team', labels: 'Judge labels', influencers: 'Influencers
 // Columns whose text wraps.
 const WRAP = new Set(['run', 'task']);
 // Columns whose cells sit centred: the counts, the ladders, the scores and Other details.
-const CENTER = k => k.startsWith('lv_') || ['workers', 'disclosure', 'manipulation', 'other'].includes(k);
+const CENTER = k => k.startsWith('lv_') || ['workers', 'seed_pack', 'disclosure', 'manipulation', 'other'].includes(k);
 
 function uniq(a) { return [...new Set(a.filter(x => x != null))]; }
 
@@ -213,13 +216,9 @@ export async function viewIndex(q) {
   const ladders = await loadLadders();
   const COLUMNS = columns(ladders);
   const FILTERS = filters(ladders);
-  const others = idx.rows.filter(r => r.hidden_task).length;
-  let rows = [];
+  const rows = idx.rows.filter(r => taskShown(r.task_name));
   const state = { sort: q.get('sort') || '', dir: q.get('dir') === 'desc' ? 'desc' : 'asc',
-    page: Math.max(0, (parseInt(q.get('page'), 10) || 1) - 1), size: q.get('size') || '250', f: {},
-    other: q.get('other') === '1' };
-  const pickRows = () => { rows = state.other ? idx.rows : idx.rows.filter(r => !r.hidden_task); };
-  pickRows();
+    page: Math.max(0, (parseInt(q.get('page'), 10) || 1) - 1), size: q.get('size') || '250', f: {} };
   for (const f of FILTERS) state.f[f.key] = q.get(f.key) || '';
 
   const syncUrl = () => {
@@ -228,7 +227,6 @@ export async function viewIndex(q) {
     if (state.sort) { p.set('sort', state.sort); p.set('dir', state.dir); }
     if (state.page) p.set('page', String(state.page + 1));
     if (state.size !== '250') p.set('size', state.size);
-    if (state.other) p.set('other', '1');
     const s = p.toString();
     try { history.replaceState(null, '', '#/' + (s ? '?' + s : '')); } catch (e) { /* view stays as drawn */ }
   };
@@ -262,20 +260,6 @@ export async function viewIndex(q) {
     const el = control(f);
     fields.set(f.key, { el, field: h('label', { class: 'idx-field', title: f.title || null }, h('span', { class: 'field-label' }, f.label), el) });
   }
-  // The other tasks' runs: the chip lists them, and every filter's options follow.
-  const otherChip = others ? h('button', { type: 'button', class: ['btn', 'btn-small', 'idx-other', state.other && 'is-set'],
-    title: 'runs of tasks the study does not read', onclick: () => {
-      state.other = !state.other;
-      otherChip.classList.toggle('is-set', state.other);
-      pickRows();
-      for (const f of FILTERS) {
-        const x = fields.get(f.key);
-        const el = control(f);
-        x.field.replaceChild(el, x.el);
-        x.el = el;
-      }
-      changed();
-    } }, `other tasks ${fmtInt(others)}`) : null;
   const reset = h('button', { type: 'button', class: 'btn btn-small idx-reset', onclick: () => {
     for (const f of FILTERS) state.f[f.key] = '';
     for (const [key, x] of fields) x.el.value = state.f[key];
@@ -346,7 +330,8 @@ export async function viewIndex(q) {
     const pages = Math.max(1, Math.ceil(shown.length / size));
     if (state.page >= pages) state.page = pages - 1;
     const slice = shown.slice(state.page * size, state.page * size + size);
-    tbody.replaceChildren(...(slice.length ? slice.map(r => h('tr', { class: ['idx-row', alarmOf(r) && 'row-alarm'], title: alarmOf(r) ? `alarm: ${alarmOf(r)}` : null },
+    const last = sessionStorage.getItem('tv.lastRun');
+    tbody.replaceChildren(...(slice.length ? slice.map(r => h('tr', { class: ['idx-row', alarmOf(r) && 'row-alarm', r.id === last && 'is-last'], title: alarmOf(r) ? `alarm: ${alarmOf(r)}` : null },
       COLUMNS.map(c => h('td', { class: [WRAP.has(c.key) && 'wrap', c.key.startsWith('lv_') && 'lv', STARTS.has(c.key) && 'idx-group-start',
         (CENTER(c.key) || (c.key === 'influencers' && !r.influencer_conditioning.length)) && 'center'] }, c.cell(r)))))
       : [h('tr', null, h('td', { colspan: String(COLUMNS.length) }, muted('No run matches these filters.')))]));
@@ -392,7 +377,7 @@ export async function viewIndex(q) {
   requestAnimationFrame(keepHead);
 
   return h('div', { class: 'page wide' },
-    h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, titleEl, about, otherChip), pager),
+    h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, titleEl, about), pager),
     filterBox,
     wrap,
     legendTable(ladders));

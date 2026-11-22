@@ -11,6 +11,7 @@ import { badge, muted, select } from '/static/app/components.js';
 import { RAMP, inkOn } from './tv_case_view.js';
 import { loadLadders } from './tv_view_index.js';
 import { COLLECTION_ORDER, collectionOf, modelLabel } from './tv_labels.js';
+import { taskShown } from './tv_settings.js';
 
 const SUMMARIES = new Map();
 /** /api/summary's answer for one collection. */
@@ -124,7 +125,11 @@ export async function viewSummary(q) {
   const ladders = await loadLadders();
   const cols = COLLECTION_ORDER;
   const col = cols.includes(q.get('col')) ? q.get('col') : cols[0];  // the newest study (the index lists newest first)
-  const s = await loadSummary(col);
+  const all = await loadSummary(col);
+  // The rows of the tasks the Settings show; the server's totals stand only when none is left out.
+  const kept = all.rows.filter(r => taskShown(r.task_name));
+  const s = { ...all, rows: kept };
+  const allShown = kept.length === all.rows.length;
   // The influencer bands the page hides (hide=regulator,disregulator,both), each toggled by its button.
   const BANDS = [['regulator', 'Regulators'], ['disregulator', 'Disregulators'], ['both', 'Both']]
     .filter(([g]) => s.columns.some(c => c.group === g));
@@ -145,7 +150,9 @@ export async function viewSummary(q) {
   const C = s.columns.filter(c => !hidden.has(c.group) && !hidden.has(PARTNER[c.group])
     && (!imodel || !c.influencers.length || c.influencers.some(x => x.model === imodel))
     && rows.some(r => r.cells[c.key]));
-  const counted = s.rows.reduce((t, r) => t + s.columns.reduce((u, c) => u + (r.cells[c.key] ? r.cells[c.key].n : 0), 0), 0);
+  const runsIn = rs => rs.reduce((t, r) => t + s.columns.reduce((u, c) => u + (r.cells[c.key] ? r.cells[c.key].n : 0), 0), 0);
+  const counted = runsIn(all.rows);
+  const keptRuns = runsIn(kept);
   const nav = (over = {}) => {
     const p = new URLSearchParams({ col, hide: [...hidden].join(','), task, wmodel, imodel, detail: detailed ? '1' : '', ...over });
     for (const [k, v] of [...p.entries()]) if (!v) p.delete(k);
@@ -211,7 +218,7 @@ export async function viewSummary(q) {
     h('td', { class: 'sum-task' }, spaced(r.task)), h('td', { class: 'num sum-workers' }, String(r.workers)),
     s.by_seed ? h('td', { class: 'sum-seed' }, spaced(r.seed_pack.split('/').pop())) : null,
     cells(r.cells)));
-  const totals = wmodel || task ? summed(rows, s.columns, ladders) : s.totals;
+  const totals = wmodel || task || !allShown ? summed(rows, s.columns, ladders) : s.totals;
   const total = h('tr', { class: 'sum-total' }, h('th', { scope: 'row', colspan: String(lead), class: 'sum-model' }, 'All'),
     cells(totals));
   // The heading counts the runs the table shows: the All row's cells over the columns shown.
@@ -231,8 +238,8 @@ export async function viewSummary(q) {
     }
   });
   return h('div', { class: 'page wide' },
-    h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, h('h1', null, shownRuns === s.total ? `Summary: ${fmtInt(s.total)} runs` : `Summary: ${fmtInt(shownRuns)} of ${fmtInt(s.total)} runs`), picker, tPick, wPick, iPick,
-      counted !== s.total ? badge(`cells hold ${counted}`, 'bad', 'Cells and the collection disagree') : null),
+    h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, h('h1', null, shownRuns === keptRuns ? `Summary: ${fmtInt(keptRuns)} runs` : `Summary: ${fmtInt(shownRuns)} of ${fmtInt(keptRuns)} runs`), picker, tPick, wPick, iPick,
+      counted !== all.total ? badge(`cells hold ${counted}`, 'bad', 'Cells and the collection disagree') : null),
     h('span', { class: 'sum-corner' }, toggles, h('span', { class: 'rp-sep' }), detailBtn)),
     h('div', { class: 'table-wrap sum-wrap' }, table));
 }
