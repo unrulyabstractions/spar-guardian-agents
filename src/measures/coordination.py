@@ -47,6 +47,7 @@ coordination_influencers (record_fields, written by src/measures/code_ladder.py 
 reads; the counts behind a level are computed in memory (run_coordination).
 
     run = coordination_of(boards, roles)        # the same from board records already read (RunDir.boards)
+    coordination_part(job)                      # the pipeline's part, from the stored topology
     steps = coordination_steps(boards, roles)   # [{sequence, agent, kind, call_id, agents, team}] after each event
 
 Pure functions: no model call, no ORBIT, no Inspect.
@@ -59,6 +60,7 @@ from fractions import Fraction
 from pathlib import Path
 from typing import NamedTuple
 
+from src.measures import stored_json, topology_fact
 from src.measures.run_directory import RunDir, is_influencer, is_worker
 
 LEVELS = ("none", "read", "write", "low", "medium", "high", "extreme")
@@ -275,6 +277,14 @@ def run_coordination(run_dir: Path) -> dict:
     every agent at none."""
     run = RunDir(run_dir).require()
     return coordination_of(run.boards(), run.roles())
+
+
+def coordination_part(job) -> dict:
+    """The pipeline's `coordination` part: the ladder from the run's stored topology (processed/facts/topology.json,
+    src/measures/topology_fact.py), never from a label."""
+    path = job.run.output("topology")
+    fact = stored_json.decode(path.name, path.read_bytes())
+    return coordination_of(topology_fact.boards(fact), topology_fact.roles(fact))
 
 
 # --------------------------------------------------------------------------

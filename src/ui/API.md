@@ -245,10 +245,9 @@ mast.json and who_when.json.
 
 # Transcript viewer
 
-Start: `make transcripts` (or `make transcript`; `REBUILD=1` measures every run again), or `uv run python -m src.ui.transcript_viewer [--port 8770] [--rebuild] [--runs runs]
-[--cache tmp/transcript_viewer/index.json]` from the repository root. It serves in the foreground until Ctrl-C or
-SIGTERM. `src/ui/transcript_viewer.py` is the server and the run page's data, `src/ui/transcript_index.py` the index and
-its cache, `src/ui/transcript_levels.py` the three ladders and the judge labels, `src/ui/transcript_ladder_tables.py`
+Start: `make transcripts` (or `make transcript`), or `uv run python -m src.ui.transcript_viewer [--port 8770] [--runs runs]` from the
+repository root. It serves in the foreground until Ctrl-C or SIGTERM. `src/ui/transcript_viewer.py` is the server and
+the run page's data, `src/ui/transcript_index.py` the index, `src/ui/transcript_levels.py` the three ladders and the judge labels, `src/ui/transcript_ladder_tables.py`
 the Ladders page's tables, `src/ui/transcript_board.py` the Board tab's data and `src/ui/transcript_static/` the page
 (`tv_*.js`, `tv_style.css`, `tv_board.css`). The page reuses the results browser's `style.css`, `app/dom.js`,
 `app/charts.js` and `app/components.js`, served under `/static/`.
@@ -258,22 +257,21 @@ worker, no influencer) is never listed. A study keeps its runs at
 its top level and in its groups (`study_runs`); its `INDEX.jsonl`, where it has one, gives each run's `valid` flag.
 Without one, a run is valid at the top level and carries its group's name in a group. A manifest collection
 (`apart_controls`) lists its runs in `manifest.jsonl`: the canonical copy is valid, an extra copy has the status `extra
-copy` (`src/measures/run_listing.py`). The viewer lists, measures and serves the **valid runs only**. A valid run of a
+copy` (`src/measures/run_listing.py`). The viewer lists and serves the **valid runs only**. A valid run of a
 task in `src/measures/ladder_by_domain.py` `HIDDEN_TASKS` (knowledge work, chess, OpenMath, subset sum and factoring) is
-measured and served, so it opens, with `hidden_task` on its row. The header's Settings (`tv_settings.js`, kept in
+served, so it opens, with `hidden_task` on its row. The header's Settings (`tv_settings.js`, kept in
 the browser) turn each task's runs on or off on the runs page and the Summary page; these tasks start off. The index's
 `left_out` counts them. A collection with no valid
 run is left out. The server never writes the data.
 
-Its one output is the index cache (`--cache`, by default `tmp/transcript_viewer/index.json`): each run's index row, its
-folder and its measures (`RunFiles.measured`: CheatBench's verdicts, the three ladders' measures and the judge
-labels), under a stamp of the run's files (their count, bytes and latest change, `stamp`) and of the code
-(`code_stamp`, a hash of `src/ui/transcript_index.py` and every file of `src/` it imports, directly or through
-another: a change to the viewer's server or pages measures nothing again). A start measures again only the
-runs whose stamp changed, in as many processes as the machine holds (`workers_for`: half the available memory at
-600 MB a process, at most the cores but one, at least one; the start prints the choice), and prints `measured k of n
-runs` as it goes; `--rebuild`, a new `INDEX_VERSION` (now 18) or new code measures every run. A process measures a run
-in under 300 MB: the measures stream the eval log's events (`src/measures/eval_log_events.py`). The run page reads its ladders from the cache.
+The viewer computes nothing. `make process-transcripts` (`python -m src process`, `src/measures/process_runs.py`)
+computes each run's parts and stores them in the run's folder; at start the viewer reads each listed run's
+`analysis/row.json` and its label files `analysis/labels/cheating.json`, `coordination.json`, `collusion.json` and
+`judged.json` (`src/ui/viewer_parts.py`, `transcript_index.stored_measures`). A run with no stored row is counted not
+processed and not served; one whose parts are behind the registry (`src/configuration/pipeline_parts.yaml`,
+`src/measures/stored_versions.py` `behind`) is served as stored and counted behind. The start prints both counts with
+the command to run, and the runs page's header shows them as one chip. A new run processes itself at its end
+(`src/run.py`).
 
 ## UI routes
 
@@ -385,7 +383,7 @@ a verdict row's bookkeeping (`verdict_files.ROW_KEYS`) but `parse_ok`, `judge_co
 
 ## Endpoints
 
-### `GET /api/index` → `{built_at, build_seconds, measured, collections: [Collection], errors: [{id, error}], rows: [IndexRow], left_out}`
+### `GET /api/index` → `{built_at, build_seconds, pipeline, collections: [Collection], errors: [{id, error}], rows: [IndexRow], left_out}`
 ```
 Collection = {key (the folder name), label, tag, about, runs (its valid runs listed), other_tasks (its hidden_task runs),
               latest (its newest run's `started`)}        # newest first; the Summary page opens the first
@@ -418,7 +416,8 @@ IndexRow = {                                         # valid runs only
            influencers: [{agent, role, disclosure: score | null, manipulation: score | null}]}
 }
 ```
-`measured` is how many runs this start measured; the others came from the cache. `left_out` is `{tasks, runs, single_agent}`: the
+`pipeline` is `{not_processed, behind, parts: {part: runs behind on it}, command}`: the listed runs with no stored
+row, those with a part behind the registry, and the command that updates them. `left_out` is `{tasks, runs, single_agent}`: the
 tasks the study does not read, how many valid runs of them Settings hide by default, and how many single-agent runs are unlisted. A ladder that does not apply reads `not
 applicable`: Coordination and Collusion on a one-agent run, Collusion on a task with no take rule, Cheating on a run
 without episodes.

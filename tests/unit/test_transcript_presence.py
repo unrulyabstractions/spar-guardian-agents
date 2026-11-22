@@ -108,14 +108,16 @@ def test_the_presence_smoke_reads_on_the_board_and_the_run_page():
     sixth call, the disregulator a04 enters in round 2 and runs out of budget, a02 hands in, a05 stays."""
     from src.ui import transcript_board as tb
     from src.ui.transcript_index import RunFiles
+    from tests.support.measures_now import measures_now
     rf = RunFiles.read(SMOKE)
-    board = tb.board_payload(SMOKE, rf.levels(rf.measured()))["presence"]
+    levels = rf.levels(measures_now(SMOKE))
+    board = tb.board_payload(SMOKE, levels)["presence"]
     assert {a: (x["entered"], (x["exited"] or {}).get("why")) for a, x in board["agents"].items()} == {
         "a01": (1, "stop"), "a02": (1, "submit"), "a03": (1, "alert"), "a04": (2, "budget"), "a05": (1, None)}
     assert board["agents"]["a02"]["exited"]["ends_after_round"] == 7
     [alert] = board["alerts"]
     assert alert["agent"] == "a03" and alert["k"] == 5 and alert["outcome"] == "false_alarm"
-    assert alert["t"] == pytest.approx(next(c["t"] for a in tb.board_payload(SMOKE, rf.levels(rf.measured()))["agents"]
+    assert alert["t"] == pytest.approx(next(c["t"] for a in tb.board_payload(SMOKE, levels)["agents"]
                                             if a["agent"] == "a03" for c in a["calls"] if c["k"] == 5))
     found = tp.with_alert_calls(tp.presence(rf.run_json), SMOKE)
     assert found["alerts"][0]["k"] == 5 and found["agents"] == tp.presence(rf.run_json)["agents"]

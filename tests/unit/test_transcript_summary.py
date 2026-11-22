@@ -3,12 +3,11 @@ one column per influencer combination (role, level, model), the totals, a combin
 page's filters that keep exactly a cell's runs and the k of n counts; then the cached index, when one exists."""
 from __future__ import annotations
 
-import json
-
 import pytest
 
+from src.configuration.settings import ROOT
 from src.ui import transcript_summary as ts
-from src.ui.transcript_index import CACHE, INDEX_VERSION
+from src.ui.transcript_index import build_index
 
 COL = "study_x"
 
@@ -173,14 +172,12 @@ def test_the_runs_page_level_words_match():
     assert ts.influencer_level({"role": "regulator", "level": "enforce"}) == "regulator: enforce"
 
 
-def test_the_cached_index_lands_every_valid_run_in_one_cell():
-    """The index the viewer last built, when it is of this version: every collection's cells hold its valid runs, and
-    every cell's filters keep exactly its runs."""
-    if not CACHE.is_file():
-        pytest.skip("no index cache")
-    idx = json.loads(CACHE.read_text())
-    if idx.get("version") != INDEX_VERSION:
-        pytest.skip("the index cache is of another version")
+def test_the_stored_index_lands_every_valid_run_in_one_cell():
+    """The index of what processing stored under runs/: every collection's cells hold its valid runs, and every
+    cell's filters keep exactly its runs."""
+    idx = build_index(ROOT / "runs") if (ROOT / "runs").is_dir() else {"rows": []}
+    if not idx["rows"]:
+        pytest.skip("no processed run under runs/")
     for c in idx["collections"]:
         s = ts.summary(idx["rows"], c["key"])
         mine = [r for r in idx["rows"] if r["col"] == c["key"]]

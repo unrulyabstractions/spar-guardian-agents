@@ -5,10 +5,12 @@ a judge.
     run_signals(Path("runs/ian_seed_prototyping_0/protein_luna_none_s1"))  # compute with today's code and rewrite
     ladders(Path("OLD/runs/ian_baseline_explorations_1/binder_minimal_luna1"))      # the rungs it recorded
 
-Each run gets runs/<study>/<run>/signals.jsonl: one agent row per agent ("row": "agent"), then the team row of its one
-sample ("row": "team"), and run.json "signals" {"team": that team row}. run_signals computes both from the run's
-stored files with today's code (signal_rows) and rewrites exactly these two: signals.jsonl and the "signals" block of
-run.json, each in one atomic rename, every other byte of the run left as it was (write_record).
+Each run gets signals.jsonl: one agent row per agent ("row": "agent"), then the team row of its one sample ("row":
+"team"), and run.json "signals" {"team": that team row}. It is the pipeline's `signals` part
+(src/configuration/pipeline_parts.yaml, made by signals_part), so `python -m src process` redoes it when it is behind.
+run_signals computes both from the run's stored files with today's code (signal_rows) and rewrites exactly these two,
+each in one atomic rename, every other byte of the run left as it was: signals.jsonl through the pipeline's writer
+(src/measures/stored_versions.py write_output, which stamps it) and run.json's block (write_block).
 
 The rows hold the evidence (src/measures/rungs.py EVIDENCE), read by src/measures/transcript_scan.py from each agent's
 transcript, access log and disk, and the team record (src/measures/team_ladder.py) with the travel evidence and
@@ -51,7 +53,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.judging import verdict_files
-from src.measures import coordination
+from src.measures import coordination, stored_versions
 from src.measures.alert_outcomes import alert_counts, alert_outcomes
 from src.measures.cheating_ladder import cheated, cheating, cheating_rungs, scanned_run, team_without_log
 from src.measures.cheating_ladder import record_fields as cheating_fields
@@ -60,7 +62,7 @@ from src.measures.collusion import collusion_of
 from src.measures.collusion import record_fields as collusion_fields
 from src.measures.ladder_domain import Domain
 from src.measures.regulator_measures import regulator_measures
-from src.measures.run_directory import RUN_JSON, SIGNALS, RunDir
+from src.measures.run_directory import RUN_JSON, RunDir
 from src.measures.rungs import LADDER_FIELDS, RUNGS
 from src.sandbox.staging import write_atomic
 
@@ -105,27 +107,42 @@ LAYOUTS = ({"indent": 1}, {}, {"indent": 2}, {"indent": 4})
 """The layouts of json.dumps a run.json may have: the export's (indent 1) first."""
 
 
-def write_record(run: RunDir, rows: list[dict], team: dict | None) -> None:
-    """Rewrite the run's signals.jsonl (the agent rows, then the team row) and run.json's "signals" block ({"team":
-    the team row}), each by one atomic rename. run.json is rewritten in the layout of LAYOUTS it reads back in exactly,
-    so every byte outside "signals" stays; a run.json in no such layout is refused, with nothing written."""
-    path = run.path / RUN_JSON
+def write_block(run: RunDir, team: dict | None) -> None:
+    """Rewrite run.json's "signals" block ({"team": the team row}) by one atomic rename, in the layout of LAYOUTS it
+    reads back in exactly, so every byte outside "signals" stays; a run.json in no such layout is refused, with nothing
+    written. Equal bytes are not written again. run.json is the export's: when the block changed it, the export's stamp
+    is taken again (its version and time kept), so the parts that need the export see the file as it stands."""
+    path = run.file(RUN_JSON)
     raw = path.read_bytes()
     document = json.loads(raw)
     layout = next((kw for kw in LAYOUTS if json.dumps(document, **kw).encode() == raw), None)
     if layout is None:
         raise ValueError(f"{path}: not laid out as json.dumps writes it; its signals block is not rewritten")
-    lines = [json.dumps(row) + "\n" for row in rows + ([team] if team else [])]
-    write_atomic(run.path / SIGNALS, "".join(lines).encode())
-    write_atomic(path, json.dumps({**document, "signals": {"team": team}}, **layout).encode())
+    data = json.dumps({**document, "signals": {"team": team}}, **layout).encode()
     run.__dict__.pop("run_json", None)
+    if data == raw:
+        return
+    write_atomic(path, data)
+    export = stored_versions.entry(run, "export")
+    if export is not None:
+        stored_versions.stamp(run, "export", version=export["version"], made=export.get("made"))
+
+
+def signals_part(job) -> list[dict]:
+    """The pipeline's `signals` part: the run's agent rows, then its team row (signal_rows), with run.json's "signals"
+    block written beside them (write_block). Processing stores the rows (stored_versions.write_output)."""
+    run, rows, team = signal_rows(job.run.path)
+    write_block(job.run, team)
+    return rows + ([team] if team else [])
 
 
 def run_signals(run_dir: Path) -> list[dict]:
-    """Every agent of the run's one sample and the team, computed with today's code (signal_rows) and written
-    (write_record): signals.jsonl and run.json "signals", nothing else. Returns the agent rows."""
+    """Every agent of the run's one sample and the team, computed with today's code (signal_rows) and written: run.json
+    "signals" (write_block) and signals.jsonl through the pipeline's writer, stamped in the run's ledger. Returns the
+    agent rows."""
     run, rows, team = signal_rows(run_dir)
-    write_record(run, rows, team)
+    write_block(run, team)
+    stored_versions.write_output(run, "signals", rows + ([team] if team else []))
     return rows
 
 
@@ -192,10 +209,15 @@ def access_log_line(team: dict) -> str:
 
 
 def run_report(run_dir: Path) -> str:
-    """The run's signals, computed and written: "== signals <run>", one line per agent, one per team and, in a run with
-    an access log, one for the log."""
-    rows = run_signals(run_dir)
-    teams = RunDir(run_dir).team_signals()
+    """The run's signals, computed and written (run_signals), then reported (recorded_report)."""
+    run_signals(run_dir)
+    return recorded_report(run_dir)
+
+
+def recorded_report(run_dir: Path) -> str:
+    """The run's stored signals: "== signals <run>", one line per agent, one per team and, in a run with an access log,
+    one for the log."""
+    rows, teams = RunDir(run_dir).signals(), RunDir(run_dir).team_signals()
     return "\n".join([f"== signals {run_dir}", *(agent_line(row) for row in rows),
                       *(team_line(team) for team in teams),
                       *(access_log_line(team) for team in teams if "access_log" in team)])

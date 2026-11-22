@@ -16,7 +16,7 @@
  * control. The runs of a task the header's Settings turn off are not listed (tv_settings.js; by default the tasks the
  * study does not read). Every definition is on the Ladders page. */
 import { enc, fmtInt, h, plural } from '/static/app/dom.js';
-import { muted, select } from '/static/app/components.js';
+import { badge, muted, select } from '/static/app/components.js';
 import { taskShown } from './tv_settings.js';
 import { cheatbenchTeam, cheatingCell, levelChip, lineMark, teamScore } from './tv_levels.js';
 import { COLLECTION_ORDER, collectionOf, conditioningChip, modelLabel, setCollections, taskLabel } from './tv_labels.js';
@@ -406,7 +406,7 @@ export async function viewIndex(q) {
         h('td', { class: 'nowrap', title: collectionOf(c).about || null }, h('b', null, collectionOf(c).label)),
         h('td', { class: 'mono small' }, `runs/${c}`), h('td', { class: 'center' }, fmtInt(collectionOf(c).runs),
           collectionOf(c).other_tasks ? muted(` + ${fmtInt(collectionOf(c).other_tasks)} other`, 'small') : null))))),
-    h('p', { class: 'small muted', title: `${fmtInt(idx.measured)} measured in ${idx.build_seconds} s` }, `Index ${idx.built_at}`,
+    h('p', { class: 'small muted', title: `read in ${idx.build_seconds} s` }, `Index ${idx.built_at}`,
       idx.errors.length ? ` · ${plural(idx.errors.length, 'run')} unreadable` : '')));
 
   // The table's head sticks at the top of its own scrolling box; when the page scrolls that box's top under the site
@@ -427,8 +427,12 @@ export async function viewIndex(q) {
   window.addEventListener('resize', keepHead, { passive: true });
   requestAnimationFrame(keepHead);
 
+  // Runs whose stored parts are behind the code, or never processed: one chip, the command in its tooltip.
+  const stale = idx.pipeline ? idx.pipeline.behind + idx.pipeline.not_processed : 0;
+  const staleChip = stale ? badge(`${fmtInt(stale)} behind`, 'warn', `Run ${idx.pipeline.command} to update them`) : null;
+
   return h('div', { class: 'page wide' },
-    h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, titleEl, about), pager),
+    h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, titleEl, staleChip, about), pager),
     filterBox,
     wrap,
     legendTable(ladders),

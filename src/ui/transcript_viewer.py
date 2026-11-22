@@ -3,11 +3,12 @@ Coordination, Collusion), the judges' verdicts and labels, the board and each ag
 the labels it is evidence for. Ported from collusion-hermaneutics' viewer (viewer/serve.py), whose runs our framework
 made, so it reads the same files here.
 
-    uv run python -m src.ui.transcript_viewer [--port 8770] [--rebuild] [--runs runs] [--cache tmp/...]
+    uv run python -m src.ui.transcript_viewer [--port 8770] [--runs runs]
     make transcripts
 
-The index and its cache are src/ui/transcript_index.py's. This module answers the run page from a run's files and its
-cached measures (run_detail, board_detail) and serves the page. The server reads the data and never writes it.
+The index is src/ui/transcript_index.py's: what `make process-transcripts` stored in each run's folder. This module
+answers the run page from a run's files and its stored measures (run_detail, board_detail) and serves the page. The
+server reads the data and never writes it; it computes no ladder.
 
 Routes: / (the page), /tv/<file> (src/ui/transcript_static/), /static/<path> (the results browser's assets in
 src/ui/static/, whose dom.js, charts.js, components.js and style.css the page reuses), /api/index, /api/run?id=,
@@ -46,7 +47,7 @@ from src.ui import (
     transcript_rounds,
     transcript_summary,
 )
-from src.ui.transcript_index import CACHE, RunFiles, cheatbench_by_agent, folder_agents, load_or_build, served_index
+from src.ui.transcript_index import RunFiles, build_index, cheatbench_by_agent, folder_agents, served_index
 from src.utils import progress
 from src.utils.json_files import read_jsonl
 
@@ -84,7 +85,7 @@ def run_detail(row: dict, run_dir: Path, measured: dict) -> dict:
     """The run page's data: the row, the run's settings the page shows, each agent with its episode and each
     CheatBench judge's verdict on it, the field of that verdict that says the agent acknowledged its access
     (judge_labels.CHEATBENCH_DISCLOSED_ACCESS, shown only in the CheatBench judge's block), the board, the three
-    ladders with the judge labels from the cached measures, presence: each agent's entry and exit and each alert
+    ladders with the judge labels from the stored measures, presence: each agent's entry and exit and each alert
     with its outcome and its call (transcript_presence), rounds: each agent's rounds and their calls
     (transcript_rounds), None for a run before 2026-11-21, and regulators: each regulator's measures as the code
     record holds them (signals.team.regulators, src/measures/regulator_measures.py), {} without."""
@@ -97,7 +98,7 @@ def run_detail(row: dict, run_dir: Path, measured: dict) -> dict:
     for ep in rf.episodes:
         a = episode_agent(ep)
         folder = folders.get(a)
-        tpath = run_dir / "trajectories" / folder / "transcript.json" if folder else None
+        tpath = RunDir(run_dir).transcript_path(folder) if folder else None
         agents.append({
             "agent": a, "role": rf.roles.get(a) or "worker", "folder": folder,
             "transcript_bytes": tpath.stat().st_size if tpath else None,
@@ -170,18 +171,18 @@ def agent_tools(log_path: Path) -> dict[str, dict]:
 
 def tmp_snapshots(run_dir: Path) -> Path | None:
     """The run's tmp_snapshots.json, or None when the run has none."""
-    path = run_dir / TMP_FILE
+    path = RunDir(run_dir).file(TMP_FILE)
     return path if path.is_file() else None
 
 
 def network_file(run_dir: Path) -> Path | None:
     """The run's network.jsonl, or None when the run has none."""
-    path = run_dir / NETWORK_LOG
+    path = RunDir(run_dir).file(NETWORK_LOG)
     return path if path.is_file() else None
 
 
 def board_detail(row: dict, run_dir: Path, measured: dict) -> dict:
-    """The run page's Board tab (transcript_board.board_payload) from the run's files and its cached measures, with
+    """The run page's Board tab (transcript_board.board_payload) from the run's files and its stored measures, with
     tmp: whether the run has /tmp snapshots (/api/tmp), and network: whether it has a network log (/api/network), so
     the tab shows each panel only then."""
     payload = transcript_board.board_payload(run_dir, RunFiles.read(run_dir).levels(measured))
@@ -190,7 +191,7 @@ def board_detail(row: dict, run_dir: Path, measured: dict) -> dict:
 
 # ---------------------------------------------------------------------------------------------------------- server
 RUN_ROUTES = {"/api/run": run_detail, "/api/board": board_detail}
-"""The routes that answer for one run of the index (?id=), each from the run's row, its folder and its cached
+"""The routes that answer for one run of the index (?id=), each from the run's row, its folder and its stored
 measures."""
 TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
          ".css": "text/css; charset=utf-8", ".json": "application/json", ".svg": "image/svg+xml"}
@@ -205,7 +206,7 @@ class Server(ThreadingHTTPServer):
 
 class Viewer:
     """What the server answers from: the served index (served_index) as bytes, its rows by id, each served run's
-    folder and cached measures, the Ladders page's data and the Summary page's, by collection."""
+    folder and stored measures, the Ladders page's data and the Summary page's, by collection."""
 
     def __init__(self, idx: dict):
         served = served_index(idx)
@@ -325,10 +326,10 @@ class Handler(BaseHTTPRequestHandler):
         run_dir = self.viewer.dirs.get(run_id)
         if run_dir is None:
             return self.fail(HTTPStatus.NOT_FOUND, f"no run {run_id!r} in the index")
-        folder = folder_agents(run_dir, read_jsonl(run_dir / "episodes.jsonl")).get(agent)
+        folder = folder_agents(run_dir, read_jsonl(RunDir(run_dir).file("episodes.jsonl"))).get(agent)
         if folder is None:
             return self.fail(HTTPStatus.NOT_FOUND, f"no transcript for agent {agent!r} in {run_id}")
-        return self.send_file(run_dir / "trajectories" / folder / "transcript.json")
+        return self.send_file(RunDir(run_dir).transcript_path(folder))
 
     def send_file(self, path: Path):
         """A JSON file of a run, streamed as stored."""
@@ -345,15 +346,15 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--port", type=int, default=DEFAULT_PORT)
     ap.add_argument("--host", default="127.0.0.1")
-    ap.add_argument("--rebuild", action="store_true", help="measure every run again, whatever the cache holds")
     ap.add_argument("--runs", type=Path, default=ROOT / "runs", help="the folder whose subfolders are collections")
-    ap.add_argument("--cache", type=Path, default=CACHE, help="the index cache to read and write")
     args = ap.parse_args(argv)
     runs = args.runs.resolve()
     if not runs.is_dir():
         print(f"no runs folder at {runs}", file=sys.stderr)
         return 1
-    idx = load_or_build(runs, args.rebuild, args.cache)
+    progress.step("Read the stored runs")
+    progress.detail("runs", runs)
+    idx = build_index(runs)
     progress.detail("served", progress.plural(len(idx["rows"]), "run"))
     for c in idx["collections"]:
         progress.detail("", f"{c['key']}: {c['runs']}" + (f" and {c['other_tasks']} of other tasks"
@@ -363,6 +364,12 @@ def main(argv: list[str] | None = None) -> int:
         progress.detail("other tasks", f"{progress.plural(left['runs'], 'run')} of {', '.join(left['tasks'])}")
     if left.get("single_agent"):
         progress.detail("left out", progress.plural(left["single_agent"], "single-agent run"))
+    stored = idx["pipeline"]
+    if stored["not_processed"] or stored["behind"]:
+        parts = ", ".join(f"{name} {n}" for name, n in stored["parts"].items())
+        progress.detail("not processed", f"{stored['not_processed']} (not served)", err=True)
+        progress.detail("behind", f"{stored['behind']}" + (f" ({parts})" if parts else ""), err=True)
+        progress.detail("to update", stored["command"], err=True)
     progress.detail("unreadable", len(idx["errors"]))
     by_error: dict[str, list[str]] = {}
     for e in idx["errors"]:
@@ -383,8 +390,8 @@ def main(argv: list[str] | None = None) -> int:
 
     signal.signal(signal.SIGTERM, stop)
     url = f"http://{args.host}:{args.port}/"
-    progress.done(f"{progress.plural(len(idx['rows']), 'run')} served, {idx['measured']} measured; open {url} "
-                  f"(Ctrl-C stops it)",
+    progress.done(f"{progress.plural(len(idx['rows']), 'run')} served, {stored['behind']} behind, "
+                  f"{stored['not_processed']} not processed; open {url} (Ctrl-C stops it)",
                   word="Ready")
     try:
         srv.serve_forever()

@@ -584,9 +584,10 @@ def files_of(folder: Path) -> list[tuple[str, int, int]]:
 def test_a_real_run_reads_its_eval_log_board_and_measures_without_writing():
     from src.measures.run_directory import RunDir
     from src.ui.transcript_index import RunFiles
+    from tests.support.measures_now import measures_now
     before = files_of(REAL)
     rf = RunFiles.read(REAL)
-    lv = rf.levels(rf.measured())
+    lv = rf.levels(measures_now(REAL))
     p = tb.board_payload(REAL, lv)
     assert files_of(REAL) == before
     assert p["clock"] == "eval_log" and p["total"] > 0

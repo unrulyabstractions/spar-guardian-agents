@@ -7,11 +7,15 @@ API modules:
   logs, its figures and its earlier attempts.
 - run_validity.py: whether a run measures what its cell says, and the first reason it does not.
 - run_listing.py: the runs of a collection under runs/ and whether each counts (INDEX.jsonl, manifest.jsonl).
+- pipeline_parts.py, stored_versions.py, stored_json.py: the pipeline's registry of parts, each run's two ledgers, and
+  the one serializer of what processing stores.
+- process_runs.py: `python -m src process`: every part behind the registry made and stored in the run's own folder.
+- topology_fact.py: the run's communication topology, a fact with no label (processed/facts/topology.json).
 - deal_replay.py: whether today's code deals a run the roster and the holdings it recorded.
 - run_index.py: one record per run of a study, for runs/<study>/INDEX.jsonl; scripts/box/study_index.py writes it.
 - episode_summary.py: one line per episode, and the turns of lone agents' runs.
 - code_ladder.py: the run's code record (signals.jsonl, run.json "signals"): the evidence and the three ladders' rungs,
-  rewritten from a run's stored files (run_signals), and the reader of the three recorded rungs (ladders).
+  the pipeline's `signals` part (signals_part, run_signals), and the reader of the three recorded rungs (ladders).
 - transcript_scan.py: the code's evidence of each agent's acts, from its transcript, access log and disk.
 - team_ladder.py: the team's record of the evidence and its travel evidence, one per sample.
 - cheating_ladder.py: the Cheating ladder (none, looked, tempted, attempted, hacked), by code.

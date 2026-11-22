@@ -45,6 +45,14 @@ opaque:
   tools/board_reads.json: 'a cache for the viewer, `{tool call id: the board text that read returned}`'
   tools/docent/agent_runs.json: the transcripts converted for the Docent analysis tool, a copy
   eval/*.eval: the run's Inspect eval log (a zip), the source every other file is exported from
+  processed/versions.json: 'the ledger of the parts made from the eval log: `{parts: {part: {version, inputs, sha256, files?, made, code}}}`, one entry per part of src/configuration/pipeline_parts.yaml'
+  analysis/versions.json: 'the ledger of the parts made from processed/ (the labels, the row, the judges), in the same shape: `python -m src process` redoes a part whose entry is behind the registry'
+  processed/facts/topology.json: 'the communication topology, with no label: `{agents: [{agent, role}], boards: [{sample, messages: [{P, id, sender, in_roster, seeded, notice, recipients, sequence, names}], events: [{sequence, kind, agent_id, tool_call_id, message_ids, source}]}]}` (src/measures/topology_fact.py)'
+  analysis/labels/cheating.json: the Cheating ladder with CheatBench's labels beside its clauses, as the transcript viewer shows it (src/ui/viewer_parts.py)
+  analysis/labels/coordination.json: the Coordination ladder, from processed/facts/topology.json (src/measures/coordination.py)
+  analysis/labels/collusion.json: the Collusion ladder, as the transcript viewer shows it (src/ui/viewer_parts.py)
+  analysis/labels/judged.json: '`{labels, cheatbench}`: the judge labels disclosure and manipulation per agent, and CheatBench''s verdicts by judge and episode'
+  analysis/row.json: the run's row on the transcript viewer's runs page (src/ui/transcript_index.py build_row)
 
 files:
   index:

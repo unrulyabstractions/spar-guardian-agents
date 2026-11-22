@@ -23,6 +23,7 @@ call their modules.
     python -m src plots <run> [--out DIR]
     python -m src replay <run or study ...> --out DIR [--only-missing] [--serial] [--jobs N] [--pem] [--warm-image]
     python -m src pipeline status | add <part> "<line>" | bump <part> "<line>" | re-lock <part> "<why>"
+    python -m src process [<study or run> ...] [--force PART] [--dry-run] [--jobs N]
 
 A run is a run directory, or a run name of the study: runs/<study>/<name>/, or the group that holds it
 (run_directory.find_run). The config is built in this order: the preset, then the scale,
@@ -44,7 +45,9 @@ src/models/model_registry.yaml or an Inspect model string; `models` prints the e
 config's `<role>_model` after every `--set`, so the flag wins. `pipeline` reads and locks the pipeline's registry,
 src/configuration/pipeline_parts.yaml (src/measures/pipeline_parts.py): `status` lists every part with its version and
 whether its code moved since its lock, `add` locks a new entry at version 1, `bump` gives a part a new version, and
-`re-lock` takes a part's new code at its version, for a change that moves no stored byte.
+`re-lock` takes a part's new code at its version, for a change that moves no stored byte. `process` computes and
+stores every part that is behind in each valid run (src/measures/process_runs.py, `make process-transcripts`); the
+transcript viewer serves only what it stored.
 """
 from __future__ import annotations
 
@@ -59,7 +62,7 @@ from src.configuration.presets import add_config_arguments, build_config, config
 from src.judging.verdict_files import PASSES
 from src.measures import board_engagement as engagement
 from src.measures import episode_summary as summary
-from src.measures import pipeline_parts
+from src.measures import pipeline_parts, process_runs
 from src.measures.run_directory import figures_dir, find_run
 from src.models import model_registry as models
 from src.ui import launch
@@ -392,6 +395,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_tool_parsers(subparsers)
     add_replay_parser(subparsers)
     add_pipeline_parser(subparsers)
+    process_runs.add_parser(subparsers)
     return parser
 
 

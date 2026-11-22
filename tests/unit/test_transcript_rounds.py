@@ -154,6 +154,7 @@ def test_the_rounds_smoke_reads_on_the_run_page_and_the_board():
     call in round 1, the regulator a04 runs out of rounds."""
     from src.ui import transcript_board as tb
     from src.ui.transcript_index import RunFiles
+    from tests.support.measures_now import measures_now
     rf = RunFiles.read(SMOKE)
     r = tr.rounds(rf.run_json)
     assert (r["rounds"], r["calls_per_round"]) == (3, 3)
@@ -162,7 +163,7 @@ def test_the_rounds_smoke_reads_on_the_run_page_and_the_board():
         (4, 3, "ending", "stop")]
     assert r["agents"]["a03"][0]["end"] == "no_tool_call" and r["agents"]["a03"][0]["calls"] == []
     assert [c["refused"] for c in r["agents"]["a01"][1]["calls"]] == [False, False, False, True]
-    board = tb.board_payload(SMOKE, rf.levels(rf.measured()))
+    board = tb.board_payload(SMOKE, rf.levels(measures_now(SMOKE)))
     lanes = {a["agent"]: a for a in board["agents"]}
     assert [(c["round"], c["pos"]) for c in lanes["a01"]["calls"]] == [
         (1, 1), (1, 2), (1, 3), (2, 1), (2, 2), (2, 3), (2, 4), (3, 1)]

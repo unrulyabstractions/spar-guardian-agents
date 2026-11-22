@@ -9,7 +9,7 @@ STEPS := python3 -m src.utils.progress
 RUN ?= riemann_minimal
 SAMPLES ?= 15
 
-.PHONY: help ui ui-stop transcripts transcript smoke smoke-swe smoke-kw smoke-interview smoke-protein smoke-creative smoke-chess smoke-seeds seeds-check \
+.PHONY: help ui ui-stop transcripts transcript process-transcripts smoke smoke-swe smoke-kw smoke-interview smoke-protein smoke-creative smoke-chess smoke-seeds seeds-check \
 	smoke-access smoke-network smoke-load smoke-all smoke-replay test test-tools lint \
 	tools-setup scout docent graph transect contagion failures hawk analyse figures tables \
 	results-tables paper-figures paper-sources paper-check paper
@@ -23,8 +23,12 @@ ui:  ## open the results browser (starts the server when needed)
 ui-stop:  ## stop the results browser started by make ui
 	@$(PY) -m src ui stop
 
-transcripts:  ## serve the transcript viewer on port 8770 in the foreground: every valid run under runs/, the current study (REBUILD=1 rebuilds its index)
-	@$(PY) -m src.ui.transcript_viewer $(if $(REBUILD),--rebuild)
+transcripts:  ## serve the transcript viewer on port 8770 in the foreground: what process-transcripts stored
+	@$(PY) -m src.ui.transcript_viewer
+
+process-transcripts:  ## compute and store each run's parts that are behind (STUDY=, RUN=, FORCE=<part>, DRY_RUN=1)
+	@$(PY) -m src process $(STUDY) $(if $(filter command line environment,$(origin RUN)),$(RUN)) \
+		$(if $(FORCE),--force $(FORCE)) $(if $(DRY_RUN),--dry-run) $(if $(JOBS),--jobs $(JOBS))
 
 transcript: transcripts  ## the same, under the name without the s
 

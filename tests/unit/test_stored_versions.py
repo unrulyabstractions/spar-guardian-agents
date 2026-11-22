@@ -119,8 +119,11 @@ def test_a_judge_entry_keeps_its_verdict_files(setup):
     assert sv.behind(run, registry) == {"label": "judge_scores changed"}
 
 
-def test_stored_json_gives_equal_bytes_for_equal_values():
-    assert stored_json.dumps({"b": 1, "a": [1.5, None]}) == stored_json.dumps({"a": [1.5, None], "b": 1})
+def test_stored_json_gives_equal_bytes_for_equal_values_and_keeps_the_order():
+    """Equal values built in the same order give equal bytes; a dict keeps its order, which the viewer shows."""
+    assert stored_json.dumps({"b": 1, "a": [1.5, None]}) == stored_json.dumps(dict([("b", 1), ("a", [1.5, None])]))
+    assert stored_json.dumps({"b": 1, "a": 2}) == b'{\n "b": 1,\n "a": 2\n}\n'
+    assert list(stored_json.decode("x.json", stored_json.dumps({"moved": 1, "opened": 2}))) == ["moved", "opened"]
     assert stored_json.decode("x.jsonl", stored_json.encode("x.jsonl", [{"k": 2}, {"k": 1}])) == [{"k": 2}, {"k": 1}]
     with pytest.raises(ValueError):
         stored_json.dumps({"x": float("nan")})

@@ -58,7 +58,7 @@ from src.judging import judge_pass as passes
 from src.judging import verdict_files
 from src.measures import code_ladder as signals
 from src.measures import episode_summary as summary
-from src.measures import run_figures, swe_measures
+from src.measures import process_runs, run_figures, swe_measures
 from src.measures.run_directory import RunDir, figures_dir, find_run, set_aside_attempt
 from src.models import (
     cost_cap,
@@ -265,9 +265,18 @@ def run(name: str, benchmark: Benchmark, config: SwarmConfig, model: str, timeou
         raise Refusal("no eval log written", 3)
     run_dir = export(Path(log.location), run_dir, replace=replace)
     print("\n".join([summary.HEADER, *summary.summary_lines(run_dir)]), flush=True)
-    print(signals.run_report(run_dir), flush=True)
+    processed(run_dir)
     print(tmp_line(RunDir(run_dir).run_json.get("tmp_snapshots")), flush=True)
     return 0 if log.status == "success" else 3
+
+
+def processed(run_dir: Path) -> None:
+    """Process the run at once (src/measures/process_runs.py), so the viewer serves it, and print its code record."""
+    report = process_runs.process_run(run_dir)
+    redone = ", ".join(name for name, state in report.done.items() if state == "redone") or "nothing"
+    failed = "".join(f"; {name} failed: {why}" for name, why in report.failed.items())
+    print(f"== processed {run_dir}: redone {redone}{failed}", flush=True)
+    print(signals.recorded_report(run_dir), flush=True)
 
 
 def tmp_line(block: dict | None) -> str:
@@ -330,7 +339,7 @@ def _write_verdicts(eval_log: Path, run_dir: Path, verdicts: dict[str, dict], *,
     print("== verdicts")
     for verdict in written.values():
         print(json.dumps({key: verdict.get(key) for key in VERDICT_FIELDS}))
-    print(signals.run_report(run_dir), flush=True)
+    processed(run_dir)
 
 
 @command
@@ -438,7 +447,7 @@ def regenerate(run_dirs: list[Path], *, export_log: bool = True, measures: bool 
         elif export_log:
             print(f"{run.name}: no eval log on disk, keeping the export as it is", file=sys.stderr)
         if measures:
-            print(signals.run_report(run.path), flush=True)
+            processed(run.path)
             if run.run_json.get("swe"):
                 swe_measures.summarize(run.path)
         if plots:

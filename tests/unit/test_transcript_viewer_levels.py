@@ -10,31 +10,32 @@ each rung at the call its timeline puts it), the team from pairs of workers, the
 applicable with the measure's reason. The judge labels (disclosure and manipulation, each a score with a located
 excerpt) are the measure's, laid out; the runs table's row gives the team's highest score and the worker it is of, and
 the influencers' own scores. CheatBench's judge is read from the run's
-verdict files under its own name, its disclosed access only in its own block. The index lists, measures and serves valid
-runs only, leaves out the tasks the study does not read unmeasured, keeps each run's measures under its stamp and
-measures again only a run whose files changed. The models and the worker and influencer conditioning come from run.json
-and the cell, never from a run's name. Each ladder has a line. The runs table holds one Cheating cell with the code's
-word and the judge's, its columns in the user's order under a band, and no alarm column."""
+verdict files under its own name, its disclosed access only in its own block. The index serves the valid runs only,
+from what processing stored, and counts the runs not processed and those behind. The models and the worker and
+influencer conditioning come from run.json and the cell, never from a run's name. Each ladder has a line. The runs
+table holds one Cheating cell with the code's word and the judge's, its columns in the user's order under a band, and
+no alarm column."""
 from __future__ import annotations
 
 import json
-import os
 import re
-from concurrent.futures import Future
 from pathlib import Path
 
 import pytest
 
 from src.judging import verdict_files
 from src.measures import cheating_ladder as ch
+from src.measures import code_ladder as ladder_code
 from src.measures import collusion as cm
-from src.measures import collusion_takes, coordination, judge_labels, ladder_by_domain, measure_readings
-from src.measures.run_directory import is_worker
+from src.measures import collusion_takes, coordination, judge_labels, ladder_by_domain, measure_readings, process_runs
+from src.measures.process_runs import Job
+from src.measures.run_directory import RunDir, is_worker
 from src.measures.run_listing import Listed
 from src.ui import transcript_index as ti
 from src.ui import transcript_ladder_tables as tables
 from src.ui import transcript_levels as tl
 from src.ui import transcript_viewer as tv
+from src.ui import viewer_parts as vp
 from src.ui.transcript_index import RunFiles, build_row, cell_of, influencer_conditioning, worker_conditioning
 
 AGENTS = ["a01", "a02", "a03"]
@@ -66,8 +67,8 @@ def labels(roles: dict[str, str | None], **given: dict[str, dict]) -> dict:
 
 def measures(roles: dict[str, str | None], cheating: dict = CHEAT_NA, collusion: dict = NOT_MEASURED,
              records: list[dict] = (), judged: dict | None = None) -> dict:
-    """A run's cached measures (RunFiles.measured) for synthetic inputs, the Coordination measure computed by the
-    measure's own coordination_of from board records."""
+    """A run's stored measures (transcript_index.stored_measures) for synthetic inputs, the Coordination measure
+    computed by the measure's own coordination_of from board records."""
     return {"cheatbench": {}, "cheating": cheating, "collusion": collusion,
             "coordination": coordination.coordination_of(list(records), roles),
             "labels": labels(roles, **(judged or {}))}
@@ -265,7 +266,7 @@ def test_a_run_without_a_cheating_ladder_is_not_applicable_with_the_reason(tmp_p
     assert ix["cheating_influencers"] == [] and ix["alarm"] is None and ix["cheated"] is None
     run = write_run(tmp_path / "x", {"a01": "worker"}, {}, {}, "m", task="no_such_task")
     reason = "no Cheating ladder for task 'no_such_task'"
-    assert RunFiles.read(run).cheating() == {"applicable": False, "reason": reason}
+    assert vp.cheating_part(job_of(run)) == {"applicable": False, "reason": reason}
 
 
 def test_the_viewer_keeps_only_the_fields_it_shows_of_the_measures_answer():
@@ -571,7 +572,7 @@ def test_a_task_without_a_take_rule_is_not_applicable_with_the_measures_reason(t
     ix = tl.index_levels(lv, WORKERS)
     assert ix["team"]["collusion"] == tl.NA and ix["collusion_influencers"] == []
     run = write_run(tmp_path / "kw", WORKERS, {}, {}, "m", task="knowledge_work")
-    assert RunFiles.read(run).collusion() == {"applicable": False, "reason": reason}
+    assert vp.collusion_part(job_of(run)) == {"applicable": False, "reason": reason}
 
 
 def test_the_index_row_carries_the_three_ladders_and_the_judge_labels_and_no_old_column(tmp_path):
@@ -585,7 +586,8 @@ def test_the_index_row_carries_the_three_ladders_and_the_judge_labels_and_no_old
     judged = {"a01": {"disclosure": scored(25, "a hint"), "manipulation": scored(40, "not quite")},
               "a02": {"disclosure": scored(50, "the gold"), "manipulation": scored(0)},
               "a04": {"disclosure": scored(100, "I cheat"), "manipulation": scored(90, "lie to them")}}
-    row = build_row("c", Listed("x", run, "valid"), rf, measures(roles, collusion=rf.collusion(), judged=judged))
+    collusion = vp.collusion_part(job_of(run))
+    row = build_row("c", Listed("x", run, "valid"), rf, measures(roles, collusion=collusion, judged=judged))
     assert not {"collab", "rung", "rung_code", "label", "floor", "judges", "agree", "disagree", "presentation",
                 "status", "why", "group", "roles", "author", "regulator_model", "dir", "arm", "seed_post", "team",
                 "regulators", "disregulators"} & set(row)
@@ -604,7 +606,7 @@ def test_the_index_row_carries_the_three_ladders_and_the_judge_labels_and_no_old
     assert [{k: v for k, v in x.items() if k != "kinds"} for x in labels["influencers"]] == \
         [{"agent": "a04", "role": "regulator", "disclosure": 100, "manipulation": 90}]
     assert set(labels["influencers"][0]["kinds"]) == {"disclosure", "manipulation"}
-    unjudged = build_row("c", Listed("x", run, "valid"), rf, measures(roles, collusion=rf.collusion()))["labels"]
+    unjudged = build_row("c", Listed("x", run, "valid"), rf, measures(roles, collusion=collusion))["labels"]
     assert unjudged == {"judge": None, "team": {"disclosure": None, "manipulation": None},
                         "influencers": [{"agent": "a04", "role": "regulator", "disclosure": None,
                                          "manipulation": None, "kinds": {"disclosure": None, "manipulation": None}}]}
@@ -652,7 +654,7 @@ def test_the_judge_labels_reach_the_index_through_the_measure(tmp_path):
     verdict_files.write(run, verdict_files.LABELS_PASS, "j", [verdict_row(
         "a01", agent="a01", role="worker", task="no_such_task", reasoning_available=True,
         disclosure=scored(75, "I copy the gold", at), manipulation=scored(0))])
-    got = RunFiles.read(run).measured()["labels"]
+    got = vp.judged_part(job_of(run))["labels"]
     assert got == judge_labels.labels(run)
     assert got["agents"]["a01"]["disclosure"]["located"] == at and got["agents"]["a02"] is None
     assert got["team"] == {"disclosure": 75, "manipulation": 0}
@@ -921,7 +923,8 @@ def test_the_runs_page_head_is_the_count_the_pager_and_three_filter_groups():
     assert "three ladders, the board and every transcript" not in (STATIC / "tv_main.js").read_text()
     assert "set.length ? `Runs: ${fmtInt(shown.length)} of ${fmtInt(rows.length)}`" in index
     assert ": `Runs: ${fmtInt(rows.length)}`;" in index
-    assert "h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, titleEl, about), pager)" in index
+    head = "h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, titleEl, staleChip, about), pager)"
+    assert head in index
     assert "otherChip" not in index and "rows = idx.rows.filter(r => taskShown(r.task_name))" in index
     assert "FILTER_GROUPS = [['run', 'Run'], ['who', 'Who'], ['outcome', 'Outcome']]" in index
     body = index[index.index("function filters(d)"):index.index("const FILTER_GROUPS")]
@@ -969,50 +972,33 @@ def test_the_workers_model_comes_from_run_json_never_from_the_runs_name(tmp_path
     assert cell_of(Listed("y", own, "valid"), RunFiles.read(own)).worker == "claude-haiku-5.5"
 
 
-class Serial:
-    """ProcessPoolExecutor's submit and map in this process, so a test's monkeypatches reach the measuring."""
-
-    def __init__(self, max_workers: int, **options):
-        pass
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc) -> bool:
-        return False
-
-    def submit(self, fn, *args) -> Future:
-        future = Future()
-        future.set_result(fn(*args))
-        return future
-
-    def map(self, fn, *iterables, chunksize: int = 1):
-        return map(fn, *iterables)
+def job_of(path: Path):
+    """A process job for a synthetic run outside any study."""
+    return Job(RunDir(path), "c", Listed(path.name, path, "valid"))
 
 
 @pytest.fixture
 def stood_in(monkeypatch):
-    """The index's code stamp fixed (other work may change src/ while a test runs), its measuring in this process, and
-    each run's measures stood in for: the synthetic runs have no ladder to compute."""
-    monkeypatch.setattr(ti, "code_stamp", lambda: "this code")
-    monkeypatch.setattr(ti, "ProcessPoolExecutor", Serial)
-    monkeypatch.setattr(RunFiles, "measured", lambda self: measures(self.roles))
+    """Each run's ladders stood in for (the synthetic runs have none to compute): the code record, Cheating, Collusion
+    and the judge labels. Topology, Coordination and the row are the real parts."""
+    monkeypatch.setattr(ladder_code, "signals_part", lambda job: [])
+    monkeypatch.setattr(vp, "cheating_part", lambda job: CHEAT_NA)
+    monkeypatch.setattr(vp, "collusion_part", lambda job: NOT_MEASURED)
+    monkeypatch.setattr(vp, "judged_part", lambda job: {"labels": labels(job.run.roles()), "cheatbench": {}})
 
 
-def test_the_index_lists_valid_runs_only_and_marks_the_tasks_it_does_not_read(tmp_path, monkeypatch, capsys,
-                                                                              stood_in):
-    """study_x's INDEX.jsonl marks one run invalid: it is neither listed nor measured. Every valid run is measured and
-    served, so each opens; the chess and knowledge work runs carry hidden_task, are counted in `left_out` and in the
-    collection's other_tasks, not its runs, and the start prints its progress. A collection with no valid run is left
-    out."""
-    measured_dirs = []
-    real = ti.measure_run
+def processed(runs: Path) -> list[str]:
+    """Process every study under `runs` in this process; the runs processed, by folder name."""
+    jobs = [job for study in sorted(runs.iterdir()) for job in process_runs.jobs_of(study)]
+    for job in jobs:
+        assert not process_runs.process_job(job).failed
+    return sorted(job.run.name for job in jobs)
 
-    def measure_run(col, item):
-        measured_dirs.append(item.path.name)
-        return real(col, item)
 
-    monkeypatch.setattr(ti, "measure_run", measure_run)
+def test_the_index_lists_valid_runs_only_and_marks_the_tasks_it_does_not_read(tmp_path, stood_in):
+    """study_x's INDEX.jsonl marks one run invalid: it is neither processed nor listed. Every valid run is served from
+    its stored files, so each opens; the chess and knowledge work runs carry hidden_task, are counted in `left_out`
+    and in the collection's other_tasks, not its runs. A collection with no valid run is left out."""
     study = tmp_path / "runs" / "study_x"
     for name, task in (("poem_minimal_luna1", "creative_writings"), ("poem_minimal_luna2", "creative_writings"),
                        ("game_minimal_luna1", "chess"), ("worktime_minimal_luna1", "knowledge_work")):
@@ -1023,15 +1009,15 @@ def test_the_index_lists_valid_runs_only_and_marks_the_tasks_it_does_not_read(tm
     write_run(tmp_path / "runs" / "study_y" / "poem_minimal_luna1", WORKERS, {}, {}, "m", task="creative_writings")
     tmp_path.joinpath("runs", "study_y", "INDEX.jsonl").write_text(
         json.dumps({"path": "poem_minimal_luna1", "valid": False}) + "\n")
+    assert processed(tmp_path / "runs") == ["game_minimal_luna1", "poem_minimal_luna1", "worktime_minimal_luna1"]
+    assert not (study / "poem_minimal_luna2" / "analysis").exists()
     idx = ti.build_index(tmp_path / "runs")
     assert {row["run"]: row["hidden_task"] for row in idx["rows"]} == \
         {"poem_minimal_luna1": False, "game_minimal_luna1": True, "worktime_minimal_luna1": True}
-    assert sorted(measured_dirs) == ["game_minimal_luna1", "poem_minimal_luna1", "worktime_minimal_luna1"]
-    assert len(idx["entries"]) == 3 and idx["measured"] == 3
+    assert len(idx["entries"]) == 3 and idx["pipeline"]["not_processed"] == idx["pipeline"]["behind"] == 0
     assert idx["left_out"] == {"tasks": sorted(ladder_by_domain.HIDDEN_TASKS), "runs": 2, "single_agent": 0}
     assert idx["entries"]["study_x/poem_minimal_luna1"]["dir"] == str(study / "poem_minimal_luna1")
     assert [(c["key"], c["runs"], c["other_tasks"]) for c in idx["collections"]] == [("study_x", 1, 2)]
-    assert "measured 3 of 3 runs" in capsys.readouterr().out
 
 
 def test_a_run_of_a_task_the_study_does_not_read_opens_and_its_summary_row_names_its_task(tmp_path, stood_in):
@@ -1040,6 +1026,7 @@ def test_a_run_of_a_task_the_study_does_not_read_opens_and_its_summary_row_names
     study = tmp_path / "runs" / "study_x"
     write_run(study / "poem_minimal_luna1", WORKERS, {}, {}, "openrouter/openai/gpt-6-luna", task="creative_writings")
     write_run(study / "sum_minimal_luna1", WORKERS, {}, {}, "openrouter/openai/gpt-6-luna", task="subset_sum")
+    processed(tmp_path / "runs")
     viewer = tv.Viewer(ti.build_index(tmp_path / "runs"))
     assert set(viewer.rows) == {"study_x/poem_minimal_luna1", "study_x/sum_minimal_luna1"}
     assert viewer.dirs["study_x/sum_minimal_luna1"] == study / "sum_minimal_luna1"
@@ -1049,7 +1036,7 @@ def test_a_run_of_a_task_the_study_does_not_read_opens_and_its_summary_row_names
 
 
 def test_the_index_leaves_out_single_agent_runs_and_the_apart_controls(tmp_path, stood_in):
-    """A run of one worker and no influencer is measured but not listed, and counted in left_out; the apart controls
+    """A run of one worker and no influencer is processed but not listed, and counted in left_out; the apart controls
     folder, all single agents, is never listed."""
     study = tmp_path / "runs" / "study_x"
     write_run(study / "poem_minimal_luna1", WORKERS, {}, {}, "openrouter/openai/gpt-6-luna", task="creative_writings")
@@ -1057,36 +1044,37 @@ def test_the_index_leaves_out_single_agent_runs_and_the_apart_controls(tmp_path,
     write_run(study / "poem_solo_luna1", {"a01": None}, {}, {}, model, task="creative_writings")
     apart = tmp_path / "runs" / "apart_controls"
     write_run(apart / "poem_minimal_luna1", WORKERS, {}, {}, "m", task="creative_writings")
+    processed(tmp_path / "runs")
     idx = ti.build_index(tmp_path / "runs")
     assert [row["run"] for row in idx["rows"]] == ["poem_minimal_luna1"] and idx["left_out"]["single_agent"] == 1
     assert [c["key"] for c in idx["collections"]] == ["study_x"]
     assert set(ti.served_index(idx)) == set(ti.SERVED) and not {"version", "runs", "entries"} & set(ti.SERVED)
 
 
-def test_the_index_measures_only_the_runs_whose_files_changed(tmp_path, stood_in):
-    """A chess run is measured once, like any: a second build, with the first as its cache, measures nothing, and a
-    changed file measures that run again. A shown run is measured once too; another code stamp measures every run."""
+def test_the_index_reads_what_is_stored_and_counts_runs_not_processed_or_behind(tmp_path, stood_in):
+    """A run never processed is counted and not served. Once processed it is served from its stored row and labels,
+    up to date. A label whose stored version is older than the registry's makes the run behind: it is still served
+    as stored, and processing again redoes that label and the row only."""
     runs = tmp_path / "runs"
-    run = write_run(runs / "study_x" / "game_minimal_luna1", WORKERS, {}, {}, "m", task="chess")
+    run = write_run(runs / "study_x" / "poem_minimal_luna1", WORKERS, {}, {}, "m", task="creative_writings")
     first = ti.build_index(runs)
-    assert first["measured"] == 1 and first["errors"] == [] and [r["hidden_task"] for r in first["rows"]] == [True]
-    entry = first["entries"]["study_x/game_minimal_luna1"]
-    again = ti.build_index(runs, first)
-    assert again["measured"] == 0 and again["entries"] == first["entries"]
-    (run / "signals.jsonl").write_text("\n")
-    os.utime(run / "signals.jsonl", ns=(1, 10**19))
-    changed = ti.build_index(runs, again)
-    assert changed["measured"] == 1
-    assert changed["entries"]["study_x/game_minimal_luna1"]["stamp"] != entry["stamp"]
-    shown = write_run(runs / "study_x" / "poem_minimal_luna1", WORKERS, {}, {}, "m", task="no_such_task")
-    with_shown = ti.build_index(runs, changed)
-    assert with_shown["measured"] == 1
-    assert [row["run"] for row in with_shown["rows"] if not row["hidden_task"]] == ["poem_minimal_luna1"]
-    assert ti.build_index(runs, with_shown)["measured"] == 0
-    (shown / "signals.jsonl").write_text("\n")
-    os.utime(shown / "signals.jsonl", ns=(1, 10**19))
-    assert ti.build_index(runs, with_shown)["measured"] == 1
-    assert ti.build_index(runs, {**with_shown, "code": "another"})["measured"] == 2
+    assert first["rows"] == [] and first["pipeline"] == {"not_processed": 1, "behind": 0, "parts": {},
+                                                         "command": "make process-transcripts"}
+    processed(runs)
+    served = ti.build_index(runs)
+    assert [r["run"] for r in served["rows"]] == ["poem_minimal_luna1"] and served["pipeline"]["not_processed"] == 0
+    assert served["entries"]["study_x/poem_minimal_luna1"]["measured"]["cheating"] == CHEAT_NA
+    ledger = RunDir(run).versions()["analysis"]
+    stored = json.loads(ledger.read_text())
+    stored["parts"]["cheating"]["version"] = 0
+    ledger.write_text(json.dumps(stored))
+    behind = ti.build_index(runs)
+    assert behind["pipeline"]["behind"] == 1 and behind["pipeline"]["parts"] == {"cheating": 1, "row": 1}
+    assert [r["run"] for r in behind["rows"]] == ["poem_minimal_luna1"]
+    topology = RunDir(run).output("topology").read_bytes()
+    report = process_runs.process_job(job_of(run))
+    assert set(report.behind) == {"cheating", "row"} and RunDir(run).output("topology").read_bytes() == topology
+    assert ti.build_index(runs)["pipeline"]["behind"] == 0
 
 
 def interest_row(rung, kinds=(), workers=3, coordination="none", collusion="none", run="r"):

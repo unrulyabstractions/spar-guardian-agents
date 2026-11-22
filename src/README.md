@@ -206,7 +206,9 @@ The transcript viewer (`make transcripts`, or `make transcript`) shows every val
 and each agent's transcript:
 
 - `transcript_viewer.py`: the server and the run page's data.
-- `transcript_index.py`: the index of every valid run, its rows and its measures, cached between starts.
+- `transcript_index.py`: the index of every valid run, its row and its measures as `make process-transcripts` stored
+  them.
+- `viewer_parts.py`: the pipeline's label and row parts the viewer serves (`analysis/labels/`, `analysis/row.json`).
 - `transcript_levels.py`: the three ladders and the judge labels as the page lays them out, per agent, per team and per
   call.
 - `transcript_board.py`: the Board tab's data.

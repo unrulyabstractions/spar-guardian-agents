@@ -1,73 +1,48 @@
-"""The transcript viewer's index: every valid run under runs/ with its row and its measures, cached between starts.
+"""The transcript viewer's index: every valid run under runs/ with its row and its measures, read from what
+`make process-transcripts` stored in each run's folder (src/measures/process_runs.py). The index computes nothing.
 
-    idx = load_or_build(ROOT / "runs", rebuild=False)     # the index, its runs measured again where their files changed
+    idx = build_index(ROOT / "runs")                     # every listed run's stored row and labels
     idx["rows"][0]["levels"]["team"]                      # the team's level on each of the three ladders
     served_index(idx)                                     # what /api/index answers (SERVED)
 
 Every folder under runs/ is a collection, except SKIP and folders that hold no run: a study or a manifest collection,
-whose runs and their validity src/measures/run_listing.py list_collection reads. The index lists, measures and serves
-the valid runs only. A run of a task the study does not read (src/measures/ladder_by_domain.py HIDDEN_TASKS) is measured
-and served, so it opens, with hidden_task set on its row: the pages leave it out until the viewer's Settings turn
-its task on (tv_settings.js), and `left_out` counts it.
+whose runs and their validity src/measures/run_listing.py list_collection reads. The index lists and serves the valid
+runs only. A run of a task the study does not read (src/measures/ladder_by_domain.py HIDDEN_TASKS) is served, so it
+opens, with hidden_task set on its row: the pages leave it out until the viewer's Settings turn its task on
+(tv_settings.js), and `left_out` counts it.
 
-For each run the index reads run.json, episodes.jsonl, signals.jsonl and the board (RunFiles), CheatBench's verdicts
-(src/judging/verdict_files.py cheatbench) and the measures, which read the transcripts and the judges' verdict files:
-src/measures/judge_labels.py judged_cheating (the Cheating ladder with CheatBench's labels beside its clauses),
-labels (the judge labels disclosure and manipulation, each a score with its located excerpt), coordination.py and
-collusion.py run_collusion. The index never writes a run. Its one output is the cache,
-tmp/transcript_viewer/index.json: each run's row, its measures (RunFiles.measured) and its folder, under a stamp of the
-run's files (stamp) and of the code (code_stamp). A start measures again only the runs whose stamp changed, in parallel
-processes as many as the machine's cores and available memory allow (workers_for), and prints its progress
-(src/utils/progress.py); --rebuild, a new INDEX_VERSION or new code measures every run.
+For each run the index reads analysis/row.json (the `row` part, src/ui/viewer_parts.py) and the label files
+(stored_measures): analysis/labels/cheating.json, coordination.json, collusion.json and judged.json (the judge labels
+and CheatBench's verdicts). A run with no stored row is counted "not processed" and left out; one whose parts are
+behind the registry (src/measures/stored_versions.py behind) is served as stored and counted "behind". build_row and
+RunFiles are what the `row` part computes with.
 """
 from __future__ import annotations
 
-import ast
-import hashlib
-import json
 import os
 import re
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
-import psutil
-
 from src.configuration.seed_packs import is_seeded
 from src.configuration.settings import ROOT
-from src.domains import BY_TASK
-from src.judging import verdict_files
-from src.measures import collusion, coordination, judge_labels
+from src.measures import judge_labels, stored_json, stored_versions
 from src.measures.ladder_by_domain import HIDDEN_TASKS, TASK_DOMAIN, hidden_task
 from src.measures.run_directory import RunDir, episode_agent, is_influencer, is_worker, roles_of, run_name
 from src.measures.run_listing import Listed, list_collection
 from src.ui import transcript_levels
-from src.utils import progress
 from src.utils.json_files import read_json, read_jsonl
 
-CACHE = ROOT / "tmp" / "transcript_viewer" / "index.json"
 SKIP = ("study_smoke", "study_orbit2_check", "apart_controls")
 """Folders under runs/ the viewer never lists: mock smokes, a port check and the apart controls, whose runs are all
 single agents."""
-INDEX_VERSION = 19  # 11 baseline; 12 levels.passed; 13 workers' mean label score; 14 single agents left out;
-#                     15 hidden tasks measured, behind a chip; 16 seed_pack;
-#                     17 started, collections newest first; 18 rounds; 19 ended_by
-RUN_PEAK_MB = 300
-"""A measuring process's peak memory, rounded up: at most 255 MB over the 405 runs of 2026-11-22, 126 MB of it the
-imports. Until then a creative writing run's process read its eval log whole and took up to 16 GB; the measures now
-stream the few fields they read (src/measures/eval_log_events.py). A process measures runs until the build ends:
-Python 3.11's pool, told to replace a process after some tasks (max_tasks_per_child), stops replacing them and the
-build hangs once every process has exited."""
-SAFETY = 2
-"""The room each measuring process gets, in RUN_PEAK_MBs."""
-MEMORY_SHARE = 0.5
-"""The share of the machine's available memory the measuring processes may take together."""
-MEASURING = "src.ui.transcript_index"
-"""The module whose code, with every module of src/ it imports, decides a run's row and measures (measuring_files)."""
-SERVED = ("built_at", "build_seconds", "measured", "collections", "errors", "rows", "left_out")
-"""The index's keys /api/index answers; the cache also keeps its version, its runs folder, each run's measures, its
-folder and its stamps."""
+SERVED = ("built_at", "build_seconds", "pipeline", "collections", "errors", "rows", "left_out")
+"""The index's keys /api/index answers; the index also keeps each run's measures and folder (entries)."""
+LABELS = {"cheating": "cheating", "coordination": "coordination", "collusion": "collusion", "judged": "judged"}
+"""The label parts the run page reads (stored_measures), by part name."""
+PROCESS = "make process-transcripts"
+"""The command that stores what the viewer serves."""
 
 COLLECTION_ABOUT = {
     "ian_seed_prototyping_0": ("Ian seed prototyping 0", "seed packs",
@@ -109,7 +84,7 @@ def collections(runs: Path) -> list[Path]:
 # ----------------------------------------------------------------------------------------------------- one run's data
 def transcript_dirs(run_dir: Path) -> list[str]:
     """Trajectory folders that hold a transcript.json (names only; no transcript is opened)."""
-    tdir = run_dir / "trajectories"
+    tdir = RunDir(run_dir).file("trajectories")
     if not tdir.is_dir():
         return []
     return sorted(n for n in os.listdir(tdir) if (tdir / n / "transcript.json").is_file())
@@ -164,9 +139,10 @@ class RunFiles:
 
     @classmethod
     def read(cls, path: Path) -> RunFiles:
-        rj = read_json(path / "run.json") or {}
-        episodes = read_jsonl(path / "episodes.jsonl")
-        sig_agents = {s.get("agent"): s for s in read_jsonl(path / "signals.jsonl") if s.get("row") == "agent"}
+        run = RunDir(path)
+        rj = read_json(run.file("run.json")) or {}
+        episodes = read_jsonl(run.file("episodes.jsonl"))
+        sig_agents = {s.get("agent"): s for s in read_jsonl(run.file("signals.jsonl")) if s.get("row") == "agent"}
         return cls(path, rj, episodes, sig_agents, roles_of(rj, episodes))
 
     @property
@@ -176,37 +152,8 @@ class RunFiles:
     def boards(self) -> list[dict]:
         return board_view(self.path, self.roles)
 
-    def cheating(self) -> dict:
-        """The Cheating ladder of the run with CheatBench's labels beside its clauses (src/measures/judge_labels.py
-        judged_cheating) as the viewer keeps it, or {"applicable": False, "reason"} for a run without episodes or of a
-        task with no ladder."""
-        if self.task not in BY_TASK:
-            return {"applicable": False, "reason": f"no Cheating ladder for task {self.task!r}"}
-        if not self.episodes:
-            return {"applicable": False, "reason": "the run recorded no episode"}
-        return transcript_levels.cheating_shown(judge_labels.judged_cheating(self.path))
-
-    def collusion(self) -> dict:
-        """The Collusion ladder of the run (src/measures/collusion.py run_collusion), as the viewer keeps it
-        (transcript_levels.collusion_shown); or
-        {"applicable": False, "reason"} when the measure says it does not apply (not_applicable), which loads no
-        transcript."""
-        reason = collusion.not_applicable(self.task, len(self.episodes))
-        if reason:
-            return {"applicable": False, "reason": reason}
-        return transcript_levels.collusion_shown(collusion.run_collusion(self.path))
-
-    def measured(self) -> dict:
-        """What the index caches for a run beside its row: CheatBench's verdicts ({judge: {episode: row}},
-        verdict_files.cheatbench), the three ladders' measures (the Cheating and Collusion measures read the
-        transcripts; coordination.run_coordination) and each agent's judge labels (judge_labels.labels: each label's
-        score, excerpt, reason and located place)."""
-        return {"cheatbench": verdict_files.cheatbench(self.path), "cheating": self.cheating(),
-                "coordination": coordination.run_coordination(self.path), "collusion": self.collusion(),
-                "labels": judge_labels.labels(self.path)}
-
     def levels(self, measured: dict, boards: list[dict] | None = None) -> dict:
-        """The three ladders (transcript_levels.compute) from the cached measures and the board."""
+        """The three ladders (transcript_levels.compute) from the stored measures (stored_measures) and the board."""
         return transcript_levels.compute(self.sig_agents, self.episodes, self.boards() if boards is None else boards,
                                          self.roles, measured)
 
@@ -426,73 +373,35 @@ def build_row(col: str, listed: Listed, rf: RunFiles, measured: dict) -> dict:
     }
 
 
-def measure_run(col: str, listed: Listed) -> dict:
-    """One run's cache entry: {"row", "measured", "dir"} (build_row, RunFiles.measured, the run's folder), or
-    {"error"} for a run whose files cannot be read."""
+def read_stored(path: Path):
+    """A stored part's value (src/measures/stored_json.py)."""
+    return stored_json.decode(path.name, path.read_bytes())
+
+
+def stored_measures(run: RunDir) -> dict:
+    """The run's measures as the run page reads them, from its stored label files: CheatBench's verdicts ({judge:
+    {episode: row}}), the three ladders' measures and each agent's judge labels. Raises FileNotFoundError for a run
+    whose labels are not stored."""
+    stored = {name: read_stored(run.output(part)) for name, part in LABELS.items()}
+    judged = stored.pop("judged")
+    return {"cheatbench": judged["cheatbench"], **stored, "labels": judged["labels"]}
+
+
+def stored_entry(listed: Listed) -> dict:
+    """One run's entry: {"row", "measured", "dir", "behind"} (its stored row and labels, its folder, {part: why} of
+    its parts behind the registry), {"missing": True} for a run not processed, or {"error"} for one whose stored files
+    cannot be read."""
+    run = RunDir(listed.path)
     try:
-        rf = RunFiles.read(listed.path)
-        measured = rf.measured()
-        return {"row": build_row(col, listed, rf, measured), "measured": measured, "dir": str(listed.path)}
+        path = run.output("row")
+        if not path.is_file():
+            return {"missing": True}
+        return {"row": read_stored(path), "measured": stored_measures(run), "dir": str(listed.path),
+                "behind": stored_versions.behind(run)}
+    except FileNotFoundError:
+        return {"missing": True}
     except (OSError, ValueError, KeyError, TypeError) as e:
         return {"error": f"{type(e).__name__}: {e}"}
-
-
-# ---------------------------------------------------------------------------------------------------------- index
-def module_file(name: str) -> Path | None:
-    """The file of a module of this repository by its dotted name, a package's __init__.py; None when it has none."""
-    base = ROOT.joinpath(*name.split("."))
-    return next((p for p in (base.with_suffix(".py"), base / "__init__.py") if p.is_file()), None)
-
-
-def imported(path: Path) -> set[str]:
-    """The src modules a file's source imports, anywhere in it (a function's own import counts): each `import src.x`,
-    each `from src.x import y` as src.x and src.x.y (y may be a module), a relative import from the file's package."""
-    package = path.relative_to(ROOT).with_suffix("").parts[:-1]
-    names: set[str] = set()
-    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-        if isinstance(node, ast.Import):
-            names.update(a.name for a in node.names)
-        elif isinstance(node, ast.ImportFrom):
-            above = ".".join(package[:len(package) - node.level + 1]) if node.level else ""
-            base = ".".join(x for x in (above, node.module) if x)
-            names.update([base, *(f"{base}.{a.name}" for a in node.names)])
-    return {n for n in names if n.split(".")[0] == "src"}
-
-
-def measuring_files() -> list[Path]:
-    """Every Python file of the repository that MEASURING imports, directly or through another, itself included and
-    each one's packages with it, sorted. Read from the source, with no import."""
-    found: dict[Path, None] = {}
-    todo = [MEASURING]
-    while todo:
-        name = todo.pop()
-        todo += [name.rsplit(".", i)[0] for i in range(1, name.count(".") + 1)]
-        path = module_file(name)
-        if path is not None and path not in found:
-            found[path] = None
-            todo += imported(path)
-    return sorted(found)
-
-
-def code_stamp() -> str:
-    """A hash of measuring_files: new code in anything a run's row or measures come from measures every run again.
-    A file they never import, such as the viewer's server or its pages, changes nothing."""
-    digest = hashlib.sha1()
-    for path in measuring_files():
-        digest.update(path.relative_to(ROOT).as_posix().encode())
-        digest.update(path.read_bytes())
-    return digest.hexdigest()
-
-
-def stamp(run_dir: Path) -> list[int]:
-    """The run's files as a stamp: their count, their bytes and the latest change, over its whole folder (a new
-    verdict file beside the run changes it)."""
-    n = size = latest = 0
-    for folder, _, files in os.walk(run_dir):
-        for name in files:
-            st = os.stat(os.path.join(folder, name))
-            n, size, latest = n + 1, size + st.st_size, max(latest, st.st_mtime_ns)
-    return [n, size, latest]
 
 
 def valid_runs(runs: Path) -> list[tuple[str, list[Listed]]]:
@@ -505,63 +414,22 @@ def valid_runs(runs: Path) -> list[tuple[str, list[Listed]]]:
     return out
 
 
-def available_memory() -> int:
-    """The bytes the machine can give without swapping: psutil's available memory, on macOS its free plus its
-    inactive pages."""
-    return psutil.virtual_memory().available
+def pipeline_counts(entries: dict[str, dict]) -> dict:
+    """{"not_processed", "behind": the runs with a part behind, "parts": {part: runs behind on it}, "command"}."""
+    parts: dict[str, int] = {}
+    for entry in entries.values():
+        for name in entry.get("behind") or {}:
+            parts[name] = parts.get(name, 0) + 1
+    return {"not_processed": sum(bool(e.get("missing")) for e in entries.values()),
+            "behind": sum(bool(e.get("behind")) for e in entries.values()), "parts": parts, "command": PROCESS}
 
 
-def workers_for(available: int, cores: int | None) -> int:
-    """How many processes measure runs: as many as MEMORY_SHARE of the available memory holds at SAFETY times
-    RUN_PEAK_MB each, never more than the cores but one, and at least one."""
-    by_memory = int(available * MEMORY_SHARE) // ((RUN_PEAK_MB * SAFETY) << 20)
-    return max(1, min(by_memory, (cores or 1) - 1))
-
-
-def measure_all(todo: list[tuple[str, list[int], str, Listed]]) -> dict[str, dict]:
-    """The entries of the runs to measure ((run id, stamp, collection, Listed)), measured in workers_for processes, in
-    `todo`'s order, with a counter of the runs measured as each ends (progress.Counter: in place on a terminal, a line
-    every tenth elsewhere)."""
-    if not todo:
-        return {}
-    available, cores = available_memory(), os.cpu_count()
-    workers = min(workers_for(available, cores), len(todo))
-    progress.detail("workers", f"{workers}, from {progress.plural(cores or 1, 'core')} and {available / 2**30:.1f} GB "
-                    f"available at {RUN_PEAK_MB * SAFETY} MB each")
-    measured: dict[str, dict] = {}
-    with ProcessPoolExecutor(max_workers=workers) as pool, \
-            progress.Counter(len(todo), "measured", "runs") as count:
-        futures = {pool.submit(measure_run, col, item): (run_id, st) for run_id, st, col, item in todo}
-        for future in as_completed(futures):
-            run_id, st = futures[future]
-            measured[run_id] = {**future.result(), "stamp": st}
-            count.tick()
-    return {run_id: measured[run_id] for run_id, *_ in todo}
-
-
-def build_index(runs: Path, cached: dict | None = None) -> dict:
-    """Every collection's valid runs, each with its row and its measures; a run of a task the study does not read
-    has hidden_task on its row, is counted in `left_out` and in its collection's other_tasks, not in its runs. A run
-    whose stamp and code stamp match `cached` (an earlier index) keeps its entry; the others are measured again
-    (measure_all)."""
+def build_index(runs: Path) -> dict:
+    """Every collection's valid runs, each with its stored row and measures; a run of a task the study does not read
+    has hidden_task on its row, is counted in `left_out` and in its collection's other_tasks, not in its runs."""
     t0 = time.time()
-    code = code_stamp()
-    old = (cached or {}).get("entries") or {} if (cached or {}).get("code") == code else {}
     cols = valid_runs(runs)
-    entries, todo = {}, []
-    for name, listed in cols:
-        for item in listed:
-            run_id, st = f"{name}/{item.key}", stamp(item.path)
-            prior = old.get(run_id)
-            if prior is not None and prior["stamp"] == st:
-                entries[run_id] = prior
-            else:
-                todo.append((run_id, st, name, item))
-    found = sum(len(listed) for _, listed in cols)
-    progress.detail("found", f"{progress.plural(found, 'valid run')} in {progress.plural(len(cols), 'collection')}")
-    progress.detail("to measure", f"{len(todo)}, {len(entries)} unchanged since the cache" if old else
-                    f"{len(todo)}, every run")
-    entries.update(measure_all(todo))
+    entries = {f"{name}/{item.key}": stored_entry(item) for name, listed in cols for item in listed}
     rows, errors, collections_out, left_out, single = [], [], [], 0, 0
     for name, listed in cols:
         label, tag, about = COLLECTION_ABOUT.get(name, (name, "", ""))
@@ -572,6 +440,8 @@ def build_index(runs: Path, cached: dict | None = None) -> dict:
             latest = max(latest, (entry.get("row") or {}).get("started") or "")
             if "error" in entry:
                 errors.append({"id": f"{name}/{item.key}", "error": entry["error"]})
+            elif entry.get("missing"):
+                continue
             elif single_agent(entry["row"]):
                 single += 1
             else:
@@ -585,9 +455,9 @@ def build_index(runs: Path, cached: dict | None = None) -> dict:
                                     "other_tasks": other, "latest": latest})
     collections_out.sort(key=lambda c: c["latest"], reverse=True)  # newest first; a collection with no time last
     rows.sort(key=interest_order)
-    return {"version": INDEX_VERSION, "runs": str(runs), "code": code,
-            "built_at": time.strftime("%Y-%m-%d %H:%M:%S %Z"), "build_seconds": round(time.time() - t0, 2),
-            "measured": len(todo), "collections": collections_out, "errors": errors, "rows": rows,
+    return {"runs": str(runs), "built_at": time.strftime("%Y-%m-%d %H:%M:%S %Z"),
+            "build_seconds": round(time.time() - t0, 2), "pipeline": pipeline_counts(entries),
+            "collections": collections_out, "errors": errors, "rows": rows,
             "left_out": {"tasks": sorted(HIDDEN_TASKS), "runs": left_out, "single_agent": single},
             "entries": entries}
 
@@ -600,38 +470,6 @@ def single_agent(row: dict) -> bool:
 def served_index(idx: dict) -> dict:
     """The index as /api/index serves it: its SERVED keys, without the measures, folders and stamps the cache keeps."""
     return {k: idx[k] for k in SERVED}
-
-
-def load_or_build(runs: Path, rebuild: bool, cache: Path = CACHE) -> dict:
-    """The index: the cache's entries where it is of this version and these runs and --rebuild is not given, every
-    run whose stamp changed measured again, written back to `cache` when any was."""
-    progress.step("Index the runs")
-    progress.detail("runs", runs)
-    cached, why = None, "not read (--rebuild)"
-    if not rebuild:
-        why = "none yet"
-        if cache.is_file():
-            try:
-                cached = read_json(cache)
-            except (OSError, ValueError):
-                cached, why = None, "unreadable"
-            if cached is not None and cached.get("version") != INDEX_VERSION:
-                cached, why = None, f"version {cached.get('version')}, not {INDEX_VERSION}"
-            elif cached is not None and cached.get("runs") != str(runs):
-                cached, why = None, "of another runs folder"
-            elif cached is not None and cached.get("code") != code_stamp():
-                why = "of older code"
-            elif cached is not None:
-                why = "read"
-    progress.detail("cache", f"{rel(cache)} ({why})")
-    idx = build_index(runs, cached)
-    if idx["measured"] or cached is None or set(idx["entries"]) != set(cached.get("entries") or {}):
-        cache.parent.mkdir(parents=True, exist_ok=True)
-        tmp = cache.with_suffix(".tmp")
-        tmp.write_text(json.dumps(idx, separators=(",", ":")))
-        os.replace(tmp, cache)
-        progress.detail("written", rel(cache))
-    return idx
 
 
 def rel(path: Path) -> str:

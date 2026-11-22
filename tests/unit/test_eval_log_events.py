@@ -1,5 +1,5 @@
-"""The eval log's events streamed (src/measures/eval_log_events.py) read what json.loads reads, and the viewer's index
-measures in as many processes as the machine holds (transcript_index.workers_for)."""
+"""The eval log's events streamed (src/measures/eval_log_events.py) read what json.loads reads, and processing
+runs in as many workers as the machine holds (process_runs.workers_for)."""
 from __future__ import annotations
 
 import json
@@ -10,8 +10,8 @@ from datetime import datetime
 import pytest
 
 from src.measures import eval_log_events as ev
+from src.measures import process_runs
 from src.measures.run_calls import eval_times
-from src.ui import transcript_index as ti
 
 
 def tool(i: int, start: str, end: str | None, span: str = "s1") -> dict:
@@ -92,5 +92,5 @@ def test_a_member_yajl_cannot_read_is_a_value_error(tmp_path):
     (64, 1, 1),       # one core
     (64, None, 1),    # os.cpu_count unknown
 ])
-def test_viewer_index_workers_follow_cores_and_available_memory(gb, cores, workers):
-    assert ti.workers_for(int(gb * 2**30), cores) == workers
+def test_process_workers_follow_cores_and_available_memory(gb, cores, workers):
+    assert process_runs.workers_for(int(gb * 2**30), cores) == workers

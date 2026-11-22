@@ -67,20 +67,19 @@ IN_RUN_LOGS = "eval"
 ATTEMPT_FOLDER = re.compile(r"^(?P<name>.+)\.(?P<n>[1-9][0-9]*)$")
 """An earlier attempt's folder name: the run's name, a dot and n."""
 NOT_PARTS = {
-    "signals.jsonl": "processed/signals.jsonl",
     "swe_summary.json": "processed/swe_summary.json",
     "board_reads.json": "processed/board_reads.json",
     "judges": "analysis/judges/",
     "tools": "analysis/tools/",
 }
-"""The stored paths no part of the registry owns: the export-time code ladder's files, the tools' board cache, the
-judges' folder and the tools' outputs. A folder ends in "/"."""
+"""The stored paths no part of the registry owns: Lucy's SWE measures, the tools' board cache, the judges' folder and
+the tools' outputs. A folder ends in "/"."""
 TODAY = {
     "processed/run.json": "run.json",
     "processed/episodes.jsonl": "episodes.jsonl",
     "processed/access_log.jsonl": "access_log.jsonl",
     "processed/network.jsonl": "network.jsonl",
-    "processed/signals.jsonl": "signals.jsonl",
+    "analysis/signals.jsonl": "signals.jsonl",
     "processed/swe_summary.json": "swe_summary.json",
     "processed/tmp_snapshots.json": "tmp_snapshots.json",
     "processed/board_reads.json": "tools/board_reads.json",
@@ -106,10 +105,10 @@ def today(rel: str) -> str:
 
 
 def files_table(registry: pipeline_parts.Registry) -> dict[str, str]:
-    """name -> layout path of every stored file or folder a recorded part lists by name, and of NOT_PARTS. A path
-    with a "*" (the judges' files) and the ledgers have no name. Raises ValueError when two paths share a name."""
+    """name -> layout path of every stored file or folder a part lists by name, and of NOT_PARTS. A path with a "*"
+    (the judges' files) and the ledgers have no name. Raises ValueError when two paths share a name."""
     table: dict[str, str] = {}
-    paths = [path for part in registry.parts.values() if part.recorded for path in part.paths]
+    paths = [path for part in registry.parts.values() for path in part.paths]
     for path in [*paths, *NOT_PARTS.values()]:
         if "*" in path or path in pipeline_parts.LEDGERS.values():
             continue
