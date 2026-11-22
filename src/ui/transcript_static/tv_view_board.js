@@ -67,7 +67,8 @@ const HOVER_LINES = 4;        // the most marks, facts or names a hover lists
 const CLIP = 70;              // the longest line of a hover
 const REACH_ROWS = 3;         // the rows of reach labels a lane holds
 const REACH_ROW_H = 11;       // one row's height
-const REACH_PAD = 3;          // between a reach line and its label
+const REACH_PAD = 3;
+const SEED_GAP = 10;          // between the seed band and the lanes' start          // between a reach line and its label
 const REACH_GAP = 4;          // the least space between two labels of one row
 const REACH_FONT = '600 9.5px';   // tv_board.css .bd-reach-text
 
@@ -323,7 +324,8 @@ export function renderBoard(el, d, opts) {
   let lit = new Set();
   let current = {};
   let width = 0;
-  const keyOf = x => (state.mode === 'time' ? x.t : x.u);
+  // a seed pack's post stands before the run's start: on the board from the lowest position, in either mode
+  const keyOf = x => (x.kind === 'seeded' ? -1 : state.mode === 'time' ? x.t : x.u);
 
   function units() {
     // The stops of the position: each model call of the two agents (its calls together), and each post another agent
@@ -338,12 +340,15 @@ export function renderBoard(el, d, opts) {
       }
       if (state.a === state.b) break;
     }
-    for (const p of d.posts) if (p.writer !== state.a && p.writer !== state.b) out.push({ t: p.t, post: p, calls: [] });
+    for (const p of d.posts) {
+      if (p.kind !== 'seeded' && p.writer !== state.a && p.writer !== state.b) out.push({ t: p.t, post: p, calls: [] });
+    }
     out.sort((x, y) => x.t - y.t || String(x.agent).localeCompare(String(y.agent)));
     out.forEach((u, i) => { for (const c of u.calls) c.u = i; if (u.post) u.post.u = i; });
     const written = new Map(SIDES.flatMap(s => byAgent.get(state[s]).calls.map(c => [`${state[s]}:${c.k}`, c.u])));
     for (const p of d.posts) {
-      if (p.writer === state.a || p.writer === state.b) p.u = written.get(`${p.writer}:${p.call}`) ?? 0;
+      if (p.kind === 'seeded') p.u = -1;
+      else if (p.writer === state.a || p.writer === state.b) p.u = written.get(`${p.writer}:${p.call}`) ?? 0;
       for (const r of p.reads) r.u = written.get(`${r.agent}:${r.k}`);
     }
     return out;
@@ -364,7 +369,14 @@ export function renderBoard(el, d, opts) {
     const stops = units();
     const n = Math.max(1, stops.length);
     const span = state.mode === 'time' ? Math.max(d.total, 1e-6) : n;
-    const x0 = GUTTER;
+    // the seed pack's posts stand in a band of their own between the gutter and the lanes' start, in posting order
+    // along its rows (seedSlot); the lanes and the axis start after it
+    const rows = Math.floor((BOARD_H - 8) / (POST_H + POST_GAP));
+    const seeded = d.posts.filter(p => p.kind === 'seeded');
+    const seedCols = Math.ceil(seeded.length / rows);
+    const SEED_BOX = 30;
+    const seedW = seeded.length ? 8 + seedCols * (SEED_BOX + POST_GAP) - POST_GAP : 0;
+    const x0 = GUTTER + (seedW ? seedW + SEED_GAP : 0);
     const x1 = width - PAD_R;
     const X = v => x0 + (v / span) * (x1 - x0);
     const unitW = Math.max(1.5, (x1 - x0) / n - 1);
@@ -418,6 +430,14 @@ export function renderBoard(el, d, opts) {
     // the board's name, its posts, and the seed pack's posts with the pack's name when the run is seeded
     const seedName = d.seed_pack ? String(d.seed_pack).split('/').pop() : null;
     const yName = yBoard + BOARD_H / 2 - (seedName ? 9 : 2);
+    if (seedW) {
+      // the band's name under its posts, where a row is left free
+      const free = Math.ceil(seeded.length / seedCols) < rows;
+      lanes.append(svgEl('rect', { class: 'bd-lane bd-lane-board bd-seed-band', x: GUTTER, y: yBoard, width: seedW,
+        height: BOARD_H }, svgEl('title', null, 'seed pack, before round 1')),
+      ...(free ? [svgEl('text', { class: 'bd-seed-tag', x: GUTTER + seedW / 2, y: yBoard + BOARD_H - 6,
+        'text-anchor': 'middle' }, 'seed')] : []));
+    }
     lanes.append(svgEl('rect', { class: 'bd-lane bd-lane-board', x: x0, y: yBoard, width: x1 - x0, height: BOARD_H }),
       svgEl('text', { x: 18, y: yName, class: 'bd-name' }, 'board'),
       svgEl('text', { x: 18, y: yName + 14, class: 'bd-role' },
@@ -562,12 +582,14 @@ export function renderBoard(el, d, opts) {
     // and to each of the two agents' first read, in a group of its own that showArrows() shows or hides
     const postsG = svgEl('g', { class: 'bd-board-posts' });
     const arrowsG = svgEl('g', { class: 'bd-arrows' });
-    const rows = Math.floor((BOARD_H - 8) / (POST_H + POST_GAP));
+    const seedSlot = new Map(seeded.map((p, i) => [p, {
+      from: GUTTER + 4 + (i % seedCols) * (SEED_BOX + POST_GAP), r: Math.floor(i / seedCols) }]));
     const pack = boxW => {
       const ends = new Array(rows).fill(-Infinity);
       const at = [];
       let ok = true;
       for (const p of d.posts) {
+        if (seedSlot.has(p)) { at.push(seedSlot.get(p)); continue; }
         const from = Math.min(Math.max(x0, mid(p) - boxW / 2), x1 - boxW);
         let r = ends.findIndex(e => e + POST_GAP <= from);
         if (r < 0) { ok = false; r = ends.indexOf(Math.min(...ends)); }
@@ -588,23 +610,24 @@ export function renderBoard(el, d, opts) {
       class: ['bd-arrow', cls, `bd-arrow-${s}`], x1, y1, x2, y2, 'marker-end': `url(#bd-arrow-${s}-${uid})` }));
     d.posts.forEach((p, i) => {
       const { from, r } = packed.at[i];
+      const w = seedSlot.has(p) ? SEED_BOX : boxW;
       const y = yBoard + 4 + r * (POST_H + POST_GAP);
       const side = p.writer === state.a ? 'a' : p.writer === state.b ? 'b' : null;
       const by = side ? `bd-by-${side}` : p.kind === 'system' ? 'bd-by-system' : p.kind === 'seeded' ? 'bd-by-seed' : 'bd-by-other';
       const top = p.labels.length ? Math.max(...p.labels.map(x => x.score)) : null;
       const fill = postFill(p, top);
       const g = svgEl('g', { class: ['bd-pbox', 'bd-ahead', by, fill === null && 'bd-pdim'], 'data-i': i },
-        svgEl('rect', { x: from, y, width: boxW, height: POST_H, rx: 3, style: fill ? `fill:${fill}` : null }),
-        boxW >= 20 ? svgEl('text', { x: from + boxW / 2, y: y + POST_H - 4, 'text-anchor': 'middle',
+        svgEl('rect', { x: from, y, width: w, height: POST_H, rx: 3, style: fill ? `fill:${fill}` : null }),
+        w >= 20 ? svgEl('text', { x: from + w / 2, y: y + POST_H - 4, 'text-anchor': 'middle',
           style: fill ? `fill:${inkOn(fill)}` : null }, p.label) : null,
         // the judge's dot inside the box's top right corner; under Judge labels the box's fill says it already
-        top != null && state.lens !== 'judge' ? svgEl('circle', { class: 'bd-judged-dot', cx: from + boxW - 3.5,
+        top != null && state.lens !== 'judge' ? svgEl('circle', { class: 'bd-judged-dot', cx: from + w - 3.5,
           cy: y + 3.5, r: 2.5, fill: scoreColour(top) }) : null);
       postsG.appendChild(g);
       const arrows = svgEl('g', { visibility: 'hidden' });
       arrowsG.appendChild(arrows);
-      postBox.set(i, { from, y, w: boxW, g, arrows });
-      const cx = from + boxW / 2;
+      postBox.set(i, { from, y, w, g, arrows });
+      const cx = from + w / 2;
       const edge = s => (s === 'a' ? y : y + POST_H);
       const writing = side && callOf[side].get(p.call);
       if (writing) arrow(arrows, side, null, left(writing) + W(writing) / 2, laneEdge(side), cx, edge(side));
@@ -688,7 +711,7 @@ export function renderBoard(el, d, opts) {
             : c.marks[state.lens].map(m => markWords(state.lens, m, d)))]);
       } else {
         const p = d.posts[Number(t.getAttribute('data-i'))];
-        tip.show(ev, [`${p.label} · ${p.writer}${timed ? ` · ${fmtSecs(p.t)}` : ''}`,
+        tip.show(ev, [`${p.label} · ${p.writer}${timed && p.kind !== 'seeded' ? ` · ${fmtSecs(p.t)}` : ''}`,
           p.kind === 'seeded' ? 'seeded · before round 1' : null, firstLine(p.text, CLIP),
           ...p.labels.map(x => `${d.label_names[x.label]} ${x.score}`)]);
       }

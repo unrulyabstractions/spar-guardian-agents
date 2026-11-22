@@ -105,10 +105,11 @@ const FINISH = { submit: 'submit', stop_working: 'all stopped', steps: 'rounds r
 
 /** The runs table's columns, in the order the user set on 2026-11-19: the run, the workers' number, their model with
  * its conditioning, the influencers, the task, the team's three ladders, the influencers' three ladders, the
- * workers' mean judge labels, the rounds the run used (the most any agent used), and Other details last: the interest
- * rank over the collection.
- * Each is {key, label, group, title, sort(row), cell(row), empty(row)}; group names the band over it (GROUPS); empty
- * says the cell is a dash, and a column whose every filtered row is empty collapses (collapsedLine). d is
+ * workers' mean judge labels, the rounds the run used (the most any agent used), how it ended, the interest rank over
+ * the collection, and the study last.
+ * Each is {key, label, group, title, sort(row), cell(row), empty(row), single(rows)}; group names the band over it
+ * (GROUPS); empty says the cell is a dash, and a column whose every filtered row is empty collapses (collapsedLine);
+ * single says the shown rows need no such column (Study, when they are all of one study), and it hides unlisted. d is
  * /api/ladders' answer. */
 function columns(d) {
   const lad = L => d.ladders[L];
@@ -155,21 +156,22 @@ function columns(d) {
     { key: 'ended_by', label: 'Finish', title: 'How the run ended', sort: r => r.ended_by || '',
       cell: r => (r.ended_by ? h('span', { class: 'small', title: r.ended_by }, FINISH[r.ended_by] || r.ended_by) : none()),
       empty: r => !r.ended_by },
-    { key: 'other', label: 'Other details', title: 'Interest rank, then collection', sort: r => r.interest.rank,
-      cell: r => h('div', { class: 'idx-other' },
-        h('span', { class: 'sc-chip interest-chip', title: `interest: ${r.interest.why}` }, String(r.interest.rank)),
-        h('span', { class: 'small', title: `${collectionOf(r.col).tag}: ${collectionOf(r.col).about}` }, collectionOf(r.col).label)) },
+    { key: 'interest', label: 'Interest', title: 'Interest rank over the collection', sort: r => r.interest.rank,
+      cell: r => h('span', { class: 'sc-chip interest-chip', title: `interest: ${r.interest.why}` }, String(r.interest.rank)) },
+    { key: 'study', label: 'Study', title: 'The study the run belongs to', sort: r => collectionOf(r.col).label,
+      single: rows => uniq(rows.map(r => r.col)).length <= 1,
+      cell: r => h('span', { class: 'small', title: `${collectionOf(r.col).tag}: ${collectionOf(r.col).about}` }, collectionOf(r.col).label) },
   ];
 }
 
 /** The bands over the columns: the run's identity and conditioning (no name), the team's ladders, the influencers'
- * ladders, the workers' judge labels, and Other details (no band). */
+ * ladders, the workers' judge labels, and the run's end, interest and study (no band). */
 const GROUPS = { team: 'Team', labels: 'Judge labels', influencers: 'Influencers' };
 
 // Columns whose text wraps.
 const WRAP = new Set(['run', 'task']);
-// Columns whose cells sit centred: the counts, the ladders, the scores and Other details.
-const CENTER = k => k.startsWith('lv_') || ['workers', 'seed_pack', 'disclosure', 'manipulation', 'rounds', 'ended_by', 'other'].includes(k);
+// Columns whose cells sit centred: the counts, the ladders, the scores and the interest rank.
+const CENTER = k => k.startsWith('lv_') || ['workers', 'seed_pack', 'disclosure', 'manipulation', 'rounds', 'ended_by', 'interest'].includes(k);
 
 /** The line under the legend naming the collapsed columns, by band, a band's name before its columns when one of
  * them shares its name with another column: "* Collapsed, no values: Influencers Cheating, Coordination, Collusion;
@@ -317,7 +319,9 @@ export async function viewIndex(q) {
   let SHOWN = COLUMNS;
   const layout = filtered => {
     const hidden = new Set(filtered.length ? COLUMNS.filter(c => c.empty && filtered.every(c.empty)).map(c => c.key) : []);
-    SHOWN = COLUMNS.filter(c => !hidden.has(c.key));
+    // a column the shown rows need not (single) hides too, but is not named as collapsed
+    const unneeded = new Set(COLUMNS.filter(c => c.single && c.single(filtered)).map(c => c.key));
+    SHOWN = COLUMNS.filter(c => !hidden.has(c.key) && !unneeded.has(c.key));
     // the first shown column of each group but the first, drawn with a rule at its left
     STARTS = new Set(SHOWN.filter((c, i) => i && SHOWN[i - 1].group !== c.group).map(c => c.key));
     band.replaceChildren();
@@ -340,7 +344,7 @@ export async function viewIndex(q) {
       c.note ? [h('br'), c.note] : null);
     const go = () => {
       if (state.sort === c.key) state.dir = state.dir === 'asc' ? 'desc' : 'asc';
-      else { state.sort = c.key; state.dir = ['run', 'other'].includes(c.key) ? 'asc' : 'desc'; }
+      else { state.sort = c.key; state.dir = ['run', 'interest', 'study'].includes(c.key) ? 'asc' : 'desc'; }
       changed();
     };
     th.addEventListener('click', go);

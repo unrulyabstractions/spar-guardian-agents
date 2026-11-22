@@ -418,16 +418,13 @@ table.sum-table tr.sum-total .sum-bar, table.sum-table tr.sum-total .sum-chip-na
 .cb-chip.cb-yes { color: var(--bad); box-shadow: inset 0 0 0 1px var(--bad); }
 .cb-chip + .cb-chip { margin-left: 3px; }
 .cheat-cell { white-space: nowrap; }
-/* The runs table's Other details: the interest chip over the collection. */
-.idx-other { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; white-space: nowrap; }
 /* A mislead score's mark: a small warning sign linking to why the score is untrustworthy. */
 .sc-mislead { text-decoration: none; color: var(--warn); font-size: 13px; vertical-align: middle; }
 .sc-team { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
-/* The runs table's centred columns: the counts, ladders, scores and Other details, their chips on the cell's middle. */
+/* The runs table's centred columns: the counts, ladders, scores and interest, their chips on the cell's middle. */
 table.idx-table th.center, table.idx-table td.center { text-align: center; }
-table.idx-table td.center .cheat-cell, table.idx-table td.center .idx-other, table.idx-table td.center .lv-influencer-row {
+table.idx-table td.center .cheat-cell, table.idx-table td.center .lv-influencer-row {
   align-items: center; justify-content: center; }
-table.idx-table td.center .idx-other { align-items: center; }
 /* The episode strip's grid: a faint line every few calls, its number small at the right. */
 .case .cs-grid { stroke: var(--text); stroke-opacity: .12; stroke-width: 1; pointer-events: none; }
 .case .cs-tick { font-size: 9px; }
@@ -556,6 +553,8 @@ table.sum-table.is-detailed td.sum-cell, table.sum-table.is-detailed th.sum-col 
 table.sum-table.is-detailed td.sum-cell { min-width: 220px; }
 /* A step encloses its calls; a step and a call fold to their header with the chevron at the left. */
 .case .step-box { border-left: 2px solid var(--line-2); padding-left: 10px; margin: 0 0 12px; }
+/* Room above each step after the first, so the steps read as separate blocks. */
+.case .step-box + .step-box { margin-top: 22px; }
 .case .step-h { display: flex; align-items: center; gap: 6px; font: 600 12px var(--sans); color: var(--muted); margin: 0 0 6px; }
 .case .step-b { display: flex; flex-direction: column; gap: 12px; }
 .case .step-box.folded > .step-b { display: none; }

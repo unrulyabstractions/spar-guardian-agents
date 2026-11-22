@@ -114,6 +114,9 @@
 /* a seed pack's post: the previous team's, on the board before round 1 */
 .bd-by-seed rect { fill: var(--bd-seed-bg); stroke: var(--bd-seed); stroke-width: 1.6; stroke-dasharray: 4 2; }
 .bd-by-seed text, .bd-seed-name { fill: var(--bd-seed); }
+/* the band before the run's start that holds the seed pack's posts */
+.bd-seed-band { fill: var(--bd-seed-bg); fill-opacity: .45; stroke: var(--bd-seed); }
+.bd-seed-tag { fill: var(--bd-seed); font-size: 10px; }
 .bd-pbox.bd-pdim rect { fill: var(--panel); }
 .bd-pbox.bd-pdim text { fill: var(--muted); }
 .bd-judged-dot { stroke: var(--text); stroke-width: 1; }
