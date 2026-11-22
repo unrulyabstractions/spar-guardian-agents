@@ -83,8 +83,9 @@ def run_detail(row: dict, run_dir: Path, measured: dict) -> dict:
     CheatBench judge's verdict on it, the field of that verdict that says the agent acknowledged its access
     (judge_labels.CHEATBENCH_DISCLOSED_ACCESS, shown only in the CheatBench judge's block), the board, the three
     ladders with the judge labels from the cached measures, presence: each agent's entry and exit and each alert
-    with its outcome and its call (transcript_presence), and rounds: each agent's rounds and their calls
-    (transcript_rounds), None for a run before 2026-11-21."""
+    with its outcome and its call (transcript_presence), rounds: each agent's rounds and their calls
+    (transcript_rounds), None for a run before 2026-11-21, and regulators: each regulator's measures as the code
+    record holds them (signals.team.regulators, src/measures/regulator_measures.py), {} without."""
     rf = RunFiles.read(run_dir)
     rj = rf.run_json
     folders = folder_agents(run_dir, rf.episodes)
@@ -111,7 +112,8 @@ def run_detail(row: dict, run_dir: Path, measured: dict) -> dict:
     return {"row": row, "meta": meta, "agents": agents, "boards": boards, "levels": rf.levels(measured, boards),
             "cheatbench_disclosed": judge_labels.CHEATBENCH_DISCLOSED_ACCESS.get(rf.task),
             "presence": transcript_presence.with_alert_calls(transcript_presence.presence(rj), run_dir),
-            "rounds": transcript_rounds.rounds(rj)}
+            "rounds": transcript_rounds.rounds(rj),
+            "regulators": ((rj.get("signals") or {}).get("team") or {}).get("regulators") or {}}
 
 
 def sent_tool(t: dict) -> dict:

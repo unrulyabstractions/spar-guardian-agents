@@ -34,7 +34,9 @@ the scores) is computed in memory from the run's files by each ladder's own run_
 paper call. In a run with an access log the team row's `access_log` key holds where the log and the parser disagree,
 and cheating_rung_without_log, the team's Cheating rung with no log. In a run whose influencers called alert_humans
 the team row holds alert_outcomes (each alert, true or false alarm, src/measures/alert_outcomes.py) and the counts
-alerts, true_alarms and false_alarms.
+alerts, true_alarms and false_alarms. In a run with a regulator the team row holds `regulators`: each regulator's
+measures (src/measures/regulator_measures.py: its first posts, its accusations and whether they were true, its first
+sight of the honeypot against the hand-in, its pushes and reverts, its alerts and its oversight calls per round).
 
 signals_table counts the agents' Cheating rungs per run, those that cheated (cheating_ladder.cheated) and, where
 CheatBench's judge ran (src/judging/verdict_files.py episode_verdicts), the parsed verdicts and the judge's own
@@ -57,6 +59,7 @@ from src.measures.collusion import AGENT_FIELDS as COLLUSION_FIELDS
 from src.measures.collusion import collusion_of
 from src.measures.collusion import record_fields as collusion_fields
 from src.measures.ladder_domain import Domain
+from src.measures.regulator_measures import regulator_measures
 from src.measures.run_directory import RUN_JSON, SIGNALS, RunDir
 from src.measures.rungs import LADDER_FIELDS, RUNGS
 from src.sandbox.staging import write_atomic
@@ -92,6 +95,9 @@ def signal_rows(run_dir: Path) -> tuple[RunDir, list[dict], dict | None]:
         outcomes = alert_outcomes(run, result)
         if outcomes:
             team.update(alert_outcomes=outcomes, **alert_counts(outcomes))
+        regulators = regulator_measures(run.path, result)
+        if regulators:
+            team["regulators"] = regulators
     return run, rows, team
 
 

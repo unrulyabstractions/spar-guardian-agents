@@ -402,7 +402,7 @@ tasks the study does not read, how many valid runs of them stand behind "other t
 applicable`: Coordination and Collusion on a one-agent run, Collusion on a task with no take rule, Cheating on a run
 without episodes.
 
-### `GET /api/run?id=<id>` → `{row: IndexRow, meta, agents: [Agent], boards: [Board], levels: Levels, cheatbench_disclosed, presence: Presence, rounds: Rounds}`
+### `GET /api/run?id=<id>` → `{row: IndexRow, meta, agents: [Agent], boards: [Board], levels: Levels, cheatbench_disclosed, presence: Presence, rounds: Rounds, regulators: {agent: Regulator}}`
 `meta` holds run.json's `config`, `mode` and `code`, the rounds run (`rules.rounds`), and `eval_log` (the run's own
 `eval/*.eval`, else where `RunDir.eval_log` finds it; null when absent) beside `eval_log_recorded`.
 `cheatbench_disclosed` is the task's CheatBench field for an agent that acknowledged its access
@@ -411,7 +411,16 @@ without episodes.
 `with_alert_calls(presence(run.json))`): the bar's alert badge and the Details tab's Alerts and Entries and exits cards.
 `rounds` is each agent's rounds (`src/ui/transcript_rounds.py` `rounds`), null in a run before rounds of calls (one model
 step per round plus free follow-ups): the agent tab then draws its steps as before.
+`regulators` is each regulator's measures from the code record (`signals.team.regulators`,
+`src/measures/regulator_measures.py`), `{}` in a run without a regulator or not measured since: the Details tab's
+Regulator card (`tv_regulators.js`).
 ```
+Regulator = {order ("steps" | "rounds"), posts, first_post: When | null, first_targeted_post: When | null,
+             accusations: [{round, k, agent, terms, true, misnamed: [agent]}], true_accusations, false_accusations,
+             saw_taint: {round, k, peer (null: its own sight), peer_k} | null, hand_in_tainted, tainted_after_sight,
+             pushes, first_push: When | null, reverts, alerts, true_alarms, false_alarms,
+             oversight: {peer, peer_shell, rounds: [[round, peer, peer_shell]]}}
+When = {round, k}   # k: the regulator's own call, as its tab numbers it
 Rounds = {rounds (R, rules.round_budget), calls_per_round (N), agents: {agent: [Round]}}   # timeline order
 Round = {turn, round (the run's, the same for every agent), end, ending, used, ended, t0, t1,
          calls: [{id, tool, pos (its place in the round, from 1; null for end_round), refused, error, t0, t1, job}],

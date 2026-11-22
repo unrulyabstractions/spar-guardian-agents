@@ -14,7 +14,8 @@
  * model call's reasoning, or the Board tab at that post (openExcerpt; ?agent=&label= opens it on arrival). CheatBench's
  * own field for an agent that acknowledged its access shows only in the CheatBench judge's block, as "CheatBench:
  * disclosed access". The run record keeps its headings, tables, chips and evidence; every definition is on the Ladders
- * page. The run's alerts (alert_humans) show as a badge in the bar and a card heading Details, and each agent's entry
+ * page. The run's alerts (alert_humans) show as a badge in the bar and a card heading Details, each regulator's
+ * measures as the card after it (tv_regulators.js, /api/run's regulators), and each agent's entry
  * and exit as a card after the judge labels (tv_presence.js, /api/run's presence). A tab beside the agents' is one
  * entry of `views` (a key, its label and a function that draws it once, answering its element and, for the Board, a
  * promise of its handle). */
@@ -29,6 +30,7 @@ import { DEFAULT_FOLDS, PARTS, centreVertically, renderCase, stripLegend } from 
 import { renderBoard } from './tv_view_board.js';
 import { netUrl } from './tv_net_panel.js';
 import { alertsBadge, alertsCard, presenceCard } from './tv_presence.js';
+import { regulatorsCard } from './tv_regulators.js';
 import { tmpUrl } from './tv_tmp_panel.js';
 
 // The run page fills the window under the site's bar (tv_style.css .rp-page): its top is the site bar's real bottom
@@ -307,6 +309,7 @@ export async function viewRun(id, q, view) {
   const pickers = [picker('Workers', workers), influencers.length ? picker('Influencers', influencers) : null].filter(Boolean);
   const detailsView = () => ({ el: h('div', { class: 'rp-team' },
     alertsCard(d.presence, roles, (agent, k) => gotoCall(agent, k).catch(() => {})),
+    regulatorsCard(d.regulators, (agent, k) => gotoCall(agent, k).catch(() => {})),
     levelsPanel(d.levels, roles, row.task_name, { cheatbench, row, open: openLink }),
     cheatingPanel(d.levels, roles, { evidence: evidenceText, cheatbench, row }),
     coordinationPanel(d.levels, roles),
