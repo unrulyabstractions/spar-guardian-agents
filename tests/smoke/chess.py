@@ -51,11 +51,14 @@ import re
 from inspect_ai.model import ModelOutput
 
 from src import tasks
+from src.configuration.prompt_texts import rounds_text
+from src.configuration.settings import load_prompts
 from src.domains.benchmark_protocol import COMMON_DEVIATIONS, PRESENCE_DEVIATION
 from src.domains.chess import Chess
 from src.domains.chess._chess_harness_tool import TOOLS
 from src.domains.chess._chess_honeypot import POINTER, holds_request
 from src.domains.chess._chess_host_game import FILE_ERROR
+from src.domains.chess._chess_move_rotation import HOLD_ROUNDS
 from src.domains.chess._chess_scoring import SCORER
 from src.domains.chess._chess_settings import ENDPOINT, PASS_TOOL
 from src.domains.chess.chess_task import (
@@ -112,8 +115,23 @@ def ask(fen: str, headers: dict | None = None) -> ModelOutput:
 
 
 def first_user(record: dict) -> str:
-    """The first user message the recorded call sent: the task, then the move order in a team that plays as one."""
+    """The first user message the recorded call sent: the task, then the team's game in a team that plays as one."""
     return next(m.text for m in record["messages"] if m.role == "user")
+
+
+def team_note(order: list[str]) -> str:
+    """The team's game as a shared_task agent's first message gives it after the task (prompts.yaml chess.team_game):
+    the move order and the rounds a seat holds the move."""
+    return load_prompts()["chess"]["team_game"].format(order=", ".join(order), hold=rounds_text(HOLD_ROUNDS))
+
+
+def assert_team_note(record: dict, order: list[str]) -> None:
+    """The first message holds the team's game as a paragraph of its own after the task, with more after it;
+    the system prompt gives no move order."""
+    text = first_user(record)
+    assert f"\n\n{team_note(order)}\n\n" in text, text
+    assert text.index(team_note(order)) > text.index(ROW["fen"]), text
+    assert "in this order" not in record["system"], record["system"]
 
 
 def last_tool(messages) -> tuple[str, str]:
@@ -242,7 +260,7 @@ def scenario_team() -> dict:
         [PRESENCE_DEVIATION], cb["deviations"]
     for r in recorder:
         assert set(r["tools"]) == NINE | {PASS_TOOL, "submit", "stop_working", "end_round"} | BOARD_TOOLS, r["tools"]
-        assert first_user(r).endswith("\n\nThe team moves in this order: a01, a02, a03."), first_user(r)
+        assert_team_note(r, config.names)
         assert not any(peer in r["system"] for peer in config.names if peer != r["agent"]), r["system"]
     out = results_by_agent(records)
     md = sample.scores[SCORER].metadata
@@ -456,9 +474,8 @@ def scenario_roles() -> dict:
     neutral = [a for a in config.names if a != regulator]
     assert cb["roles"] == roles and cb["access"]["agents"] == {
         neutral[0]: ["request"], neutral[1]: ["credential1"], neutral[2]: ["credential2"], regulator: []}
-    order = f"\n\nThe team moves in this order: {', '.join(neutral)}."
     for r in recorder:
-        assert first_user(r).endswith(order), first_user(r)       # the regulator's inside its teammates' message
+        assert_team_note(r, neutral)       # the regulator's inside its teammates' message
         assert not any(peer in r["system"] for peer in config.names if peer != r["agent"]), r["system"]
         has_api = r["agent"] == neutral[0]
         assert ("api_request" in r["tools"]) == has_api and ("submit" in r["tools"]) == (r["agent"] != regulator), r
