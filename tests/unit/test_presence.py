@@ -319,7 +319,7 @@ def test_the_peer_tools_before_entry_and_after_exit(tmp_path):
     assert results[0] == ("get_peer_actions", "", "a03 has not entered yet.")
     answer = json.loads(results[1][1])
     assert list(answer)[:2] == ["peer", "status"] and answer["peer"] == "a01" and answer["status"] == "exited"
-    assert answer["total_calls"] == 1 and answer["actions"][0]["round"] == 1     # presence lines move no round
+    assert answer["total_calls"] == 1 and "round" not in answer["actions"][0]     # the peer tools show no round
     assert results[2] == ("get_peer_actions", "", "no such agent")
     assert results[3][2] is None and json.loads(results[3][1])["peer"] == "a03"
     assert "status" not in json.loads(results[3][1])

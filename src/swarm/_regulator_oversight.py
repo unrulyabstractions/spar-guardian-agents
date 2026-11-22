@@ -1,24 +1,24 @@
 """An influencer's view of its teammates' work, as two Inspect tools that answer in JSON.
 
 The midterm report gives regulators "access to all tool calls from neutral agents"; disregulators get the same tools
-since 2026-11-20. get_peer_actions shows what a teammate did: its tool calls, each with its agent, an id, its round, its
-tool and its arguments in full. Every row of both tools names its agent (since 2026-11-22), so answers about different
-teammates read side by side never mix. get_peer_observations shows what those calls returned: by id, or the latest, each
-result cut to max_chars characters (16000 by default) with the cut stated (chars, shown_chars, truncated). Both answer
-for every teammate, influencers included, so that a refusal never tells who holds a role; a call about an unknown name,
-or about the caller itself, fails with "no such agent", and one about a teammate whose entry round has not come yet with
-"<agent> has not entered yet." (turn_rules presence). A teammate that has exited still answers, with "status": "exited"
-after "peer". tasks.py binds them to regulators and disregulators (board.agent_tool_names, board.board_bindings).
-Workers never get them.
+since 2026-11-20. get_peer_actions shows what a teammate did: its tool calls, each with its agent, an id, its tool and
+its arguments in full (no round: agents are not told of rounds, since 2026-11-22). Every row of both tools names its
+agent (since 2026-11-22), so answers about different teammates read side by side never mix. get_peer_observations shows
+what those calls returned: by id, or the latest, each result cut to max_chars characters (16000 by default) with the cut
+stated (chars, shown_chars, truncated). Both answer for every teammate, influencers included, so that a refusal never
+tells who holds a role; a call about an unknown name, or about the caller itself, fails with "no such agent", and one
+about a teammate whose entry round has not come yet with "<agent> has not entered yet." (turn_rules presence). A
+teammate that has exited still answers, with "status": "exited" after "peer". tasks.py binds them to regulators and
+disregulators (board.agent_tool_names, board.board_bindings). Workers never get them.
 
     get_peer_actions(peer="t4x9n", latest=2)
     {"peer": "t4x9n", "total_calls": 31, "shown": 2, "actions": [
-      {"agent": "t4x9n", "id": 29, "round": 7, "tool": "shell", "arguments": {"command": "git log --all"}},
-      {"agent": "t4x9n", "id": 30, "round": 7, "tool": "board_post", "arguments": {"message": "found it"}}],
+      {"agent": "t4x9n", "id": 29, "tool": "shell", "arguments": {"command": "git log --all"}},
+      {"agent": "t4x9n", "id": 30, "tool": "board_post", "arguments": {"message": "found it"}}],
      "not_shown": 0, "not_shown_ids": []}
     get_peer_observations(peer="t4x9n", ids=[29])
     {"peer": "t4x9n", "observations": [
-      {"agent": "t4x9n", "id": 29, "round": 7, "tool": "shell", "status": "ok", "result": "commit 3f2a...",
+      {"agent": "t4x9n", "id": 29, "tool": "shell", "status": "ok", "result": "commit 3f2a...",
        "chars": 25420, "shown_chars": 16000, "truncated": true}], "not_shown": 0, "not_shown_ids": []}
 
 The cap. A tool result past the run's cap (src/swarm/tool_output_caps.py, 64 KiB by default) is cut in the middle, which
@@ -217,10 +217,10 @@ def actions_payload(agent: str, calls: list[Called], latest: int, since_round: i
     the oldest first for the newest calls, so a second call with ids gets them."""
     if ids is None:
         chosen = [c for c in calls if since_round is None or c.round >= since_round][-latest:]
-        rows = [{"agent": agent, "id": c.id, "round": c.round, "tool": c.tool, "arguments": c.arguments}
+        rows = [{"agent": agent, "id": c.id, "tool": c.tool, "arguments": c.arguments}
                 for c in reversed(chosen)]
     else:
-        rows = [{"agent": agent, "id": c.id, "round": c.round, "tool": c.tool, "arguments": c.arguments}
+        rows = [{"agent": agent, "id": c.id, "tool": c.tool, "arguments": c.arguments}
                 if (c := _at(calls, i)) else {"agent": agent, "id": i, "status": "no such call"} for i in ids]
     answer = packed({"peer": agent, **presence_head(gone), "total_calls": len(calls), "shown": 0}, "actions", rows,
                     budget, shrink_action, ids is None)
@@ -235,7 +235,7 @@ def observation(agent: str, c: Called, max_chars: int) -> dict:
     """One call of the agent's, its result as get_peer_observations returns it, cut to max_chars with the cut
     stated."""
     text = c.result
-    row = {"agent": agent, "id": c.id, "round": c.round, "tool": c.tool, "status": c.status,
+    row = {"agent": agent, "id": c.id, "tool": c.tool, "status": c.status,
            "result": None if text is None else text[:max_chars]}
     if text is not None:
         row.update(chars=len(text), shown_chars=min(len(text), max_chars), truncated=len(text) > max_chars)
@@ -294,15 +294,14 @@ def get_peer_actions(owner: str, agents: list[str], cap: Callable[[], int] = lam
     args = prompts["tool_args"][ACTIONS_TOOL]
     allowed = set(agents) - {owner}
 
-    async def execute(peer: str, latest: int = 20, since_round: int | None = None, ids: list[int] | None = None) -> str:
+    async def execute(peer: str, latest: int = 20, ids: list[int] | None = None) -> str:
         if latest < 1:
             raise ToolError("latest must be at least 1")
         calls, gone = _teammate_calls(owner, allowed, peer)
-        return _dump(actions_payload(peer, calls, latest, since_round, ids, cap(), gone))
+        return _dump(actions_payload(peer, calls, latest, None, ids, cap(), gone))
 
     return ToolDef(execute, name=ACTIONS_TOOL, description=prompts["tools"][ACTIONS_TOOL],
-                   parameters={"peer": args["peer"], "latest": args["latest"], "since_round": args["since_round"],
-                               "ids": args["ids"]})
+                   parameters={"peer": args["peer"], "latest": args["latest"], "ids": args["ids"]})
 
 
 def get_peer_observations(owner: str, agents: list[str], cap: Callable[[], int] = lambda: 16 * 1024) -> ToolDef:

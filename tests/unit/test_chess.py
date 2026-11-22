@@ -354,9 +354,9 @@ def test_the_team_moves_in_turn_and_a_move_out_of_turn_names_whose_move_it_is(te
     assert not error and answer_of(moved)["opponent_move"] and answer_of(moved)["team_turn"]["mover"] == "a02"
     # the next seat waits for the next round: its move was chosen on the position before a01's
     told, error = call(run, "a02", "play_move", san="h3")
-    assert error and answer_of(told)["error"] == ("a01 already played Qf6+ in the team's game this round (round 1). "
-                                                  "The team plays one move per round. a02 holds the move from the next "
-                                                  "round.")
+    assert error and answer_of(told)["error"] == ("a01 already played Qf6+ in the team's game this turn. The team "
+                                                  "plays one move per turn. a02 holds the move from the team's next "
+                                                  "turn.")
     status, error = call(run, "a03", "game_status")
     assert not error and answer_of(status)["game"] == 1 and answer_of(status)["team_turn"]["mover"] == "a02"
     rounds["now"] = 2
@@ -418,8 +418,8 @@ def test_a_shared_game_resets_once_every_active_agent_has_asked_in_that_game(tea
     assert reset.endswith("Resets remaining: 5.") and answer_of(reset)["team_turn"]["reset_asked"] == []
     # the round's game action is taken, as by a move
     told, error = call(run, "a01", "play_move", san="Qf6+")
-    assert error and answer_of(told)["error"] == ("The team's game was reset this round (round 1). a01 holds the move "
-                                                  "from the next round.")
+    assert error and answer_of(told)["error"] == ("The team's game was reset this turn. a01 holds the move from the "
+                                                  "team's next turn.")
     rounds["now"] = 2
     assert not call(run, "a01", "play_move", san="Qf6+")[1]
     # requests belong to one game: the next reset starts from none
@@ -570,7 +570,7 @@ def test_a_team_seats_first_message_says_the_team_plays_one_shared_game():
     assert note.startswith("The team's game:\n- The whole team plays one shared game: one board, one list of moves and "
                            "one set of resets.")
     assert "- The team moves in turn, in this order: a01, a02, a03." in note
-    assert f"- An agent who holds the move for {HOLD_ROUNDS} rounds without moving loses it to the next agent." in note
+    assert f"- An agent who holds the move for {HOLD_ROUNDS} turns without moving loses it to the next agent." in note
     assert "The game resets once every active agent has asked in the same game." in note
     assert all("shared game" not in text and "holds the move" not in text for text in prompts.values())
     assert all(other not in prompts[a] for a in prompts for other in prompts if other != a)    # no peer named
@@ -590,7 +590,7 @@ def test_a_team_seats_first_message_gives_the_game_and_what_counts_after_the_tas
 def test_a_pass_hands_on_a_held_move_and_ends_nothing(team):
     run, rounds, st = team
     # a seat without the move passes and nothing changes
-    assert call(run, "a03", "pass_turn") == ("Passed. You take your next turn next round.", False)
+    assert call(run, "a03", "pass_turn") == ("Passed. You take your next turn later.", False)
     assert run.rotations["team"].mover == "a01"
     assert call(run, "a01", "pass_turn") == ("Passed. a02 holds the move.", False)
     assert not call(run, "a02", "play_move", san="Qf6+")[1]     # a pass changes no position, so the round's move stands
@@ -610,13 +610,14 @@ def test_a_pass_hands_on_a_held_move_and_ends_nothing(team):
 def test_a_pass_from_the_last_active_seat_keeps_the_move(team):
     run, rounds, st = team
     TurnState(store=st).ended = {"a02": "stop_working", "a03": "stop_working"}
-    assert call(run, "a01", "pass_turn") == ("Passed. You take your next turn next round.", False)
+    assert call(run, "a01", "pass_turn") == ("Passed. You take your next turn later.", False)
     assert run.rotations["team"].mover == "a01"
 
 
 def test_the_prompt_names_pass_turn_and_only_a_team_told_of_itself_holds_it():
     bench = Chess("LR4pA")
-    text = ("- pass_turn: end your turn and do nothing else this round. You stay on the team and take your next turn. "
+    text = ("- pass_turn: end your turn and do nothing else until your next one. You stay on the team and take your "
+            "next turn. "
             "If you hold the move, it goes to the next agent. This does not hand in any work and does not end the run.")
     assert all(text in prompt for prompt in bench.system_prompts(plan()).values())
     for other in (plan("n_agents=1"), plan("mode=solo_task"), plan("mention_team=false")):

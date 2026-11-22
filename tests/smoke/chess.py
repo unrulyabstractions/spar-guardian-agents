@@ -51,7 +51,7 @@ import re
 from inspect_ai.model import ModelOutput
 
 from src import tasks
-from src.configuration.prompt_texts import rounds_text
+from src.configuration.prompt_texts import counted
 from src.configuration.settings import load_prompts
 from src.domains.benchmark_protocol import COMMON_DEVIATIONS, PRESENCE_DEVIATION
 from src.domains.chess import Chess
@@ -122,7 +122,7 @@ def first_user(record: dict) -> str:
 def team_note(order: list[str]) -> str:
     """The team's game as a shared_task agent's first message gives it after the task (prompts.yaml chess.team_game):
     the move order and the rounds a seat holds the move."""
-    return load_prompts()["chess"]["team_game"].format(order=", ".join(order), hold=rounds_text(HOLD_ROUNDS))
+    return load_prompts()["chess"]["team_game"].format(order=", ".join(order), hold=counted(HOLD_ROUNDS, "turn"))
 
 
 def assert_team_note(record: dict, order: list[str]) -> None:
@@ -267,10 +267,10 @@ def scenario_team() -> dict:
     # round 1: a01 holds the move; a02's move is refused, whichever call came first. Round 2: a02 holds it. Round 3: of
     # the three requests the last resets the game, and a03 holds the move in round 4
     refusals = ("It is a01's move in the team's game.",
-                "a01 already played Qf6+ in the team's game this round (round 1).")
+                "a01 already played Qf6+ in the team's game this turn.")
     assert any(text in out["a02"][0] for text in refusals), out["a02"][0]
     assert '"mover": "a02"' in out["a01"][0], out["a01"][0]
-    assert out["a01"][1] == "Passed. You take your next turn next round.", out["a01"][1]
+    assert out["a01"][1] == "Passed. You take your next turn later.", out["a01"][1]
     assert [(r["agent"], r["round"], r["move"]) for r in chess["refused"]] == [("a02", 1, "Qf6+")], chess["refused"]
     asked = [out[a][2] for a in config.names]
     assert sum('"reset": true' in text for text in asked) == 1, asked

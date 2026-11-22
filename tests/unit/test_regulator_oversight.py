@@ -65,16 +65,16 @@ def test_get_peer_actions_shows_an_influencer_its_teammates_calls(tmp_path):
         {"peer": "a03", "total_calls": 0, "shown": 0, "actions": [], "not_shown": 0, "not_shown_ids": []},
         # the disregulator's query of a01, which has acted once; its 300-character argument comes back whole
         {"peer": "a01", "total_calls": 1, "shown": 1,
-         "actions": [{"agent": "a01", "id": 0, "round": 1, "tool": "work", "arguments": {"item": LONG}}],
+         "actions": [{"agent": "a01", "id": 0, "tool": "work", "arguments": {"item": LONG}}],
          "not_shown": 0, "not_shown_ids": []},
         # round 2: a01's two calls, oldest first
         {"peer": "a01", "total_calls": 2, "shown": 2,
-         "actions": [{"agent": "a01", "id": 0, "round": 1, "tool": "work", "arguments": {"item": LONG}},
-                     {"agent": "a01", "id": 1, "round": 2, "tool": "work", "arguments": {"item": "A2"}}],
+         "actions": [{"agent": "a01", "id": 0, "tool": "work", "arguments": {"item": LONG}},
+                     {"agent": "a01", "id": 1, "tool": "work", "arguments": {"item": "A2"}}],
          "not_shown": 0, "not_shown_ids": []},
         # latest=1 in round 5: a01's newest call only; a01 used up its last round just before
         {"peer": "a01", "status": "exited", "total_calls": 5, "shown": 1,
-         "actions": [{"agent": "a01", "id": 4, "round": 5, "tool": "work", "arguments": {"item": "A5"}}],
+         "actions": [{"agent": "a01", "id": 4, "tool": "work", "arguments": {"item": "A5"}}],
          "not_shown": 0, "not_shown_ids": []},
     ]
     errors = [e for _, _, e in calls_ if e is not None]
@@ -106,12 +106,12 @@ def test_get_peer_observations_returns_results_by_id_cut_with_the_cut_stated(tmp
     answers = [json.loads(r) for _, r, error in outcomes(sample, OBSERVATIONS) if error is None]
     full = f"a01 worked on {LONG}"
     assert answers[0] == {"peer": "a01", "observations": [
-        {"agent": "a01", "id": 0, "round": 1, "tool": "work", "status": "ok", "result": full[:20], "chars": len(full),
+        {"agent": "a01", "id": 0, "tool": "work", "status": "ok", "result": full[:20], "chars": len(full),
          "shown_chars": 20, "truncated": True},
         {"agent": "a01", "id": 7, "status": "no such call"}], "not_shown": 0, "not_shown_ids": []}
     second = "a01 worked on A2"          # round 2: a01's newest call; a01 used up its last round just before
     assert answers[1] == {"peer": "a01", "status": "exited", "observations": [
-        {"agent": "a01", "id": 1, "round": 2, "tool": "work", "status": "ok", "result": second, "chars": len(second),
+        {"agent": "a01", "id": 1, "tool": "work", "status": "ok", "result": second, "chars": len(second),
          "shown_chars": len(second), "truncated": False}], "not_shown": 0, "not_shown_ids": []}
     assert store(sample, "oversight") == {"a02": 2}
     assert [e["used"] for e in store(sample, "timeline") if e["agent"] == "a02"][:2] == [1, 2]
@@ -130,9 +130,9 @@ def test_the_payloads_state_status_and_cuts():
     assert [(c.id, c.round, c.tool, c.status, c.result) for c in got] == [
         (0, 1, "shell", "ok", "a b"), (1, 1, "shell", "error", "no such file"), (2, 2, "board_read", "pending", None)]
     assert oversight.actions_payload("a01", got, 20, 2)["actions"] == [
-        {"agent": "a01", "id": 2, "round": 2, "tool": "board_read", "arguments": {}}]
+        {"agent": "a01", "id": 2, "tool": "board_read", "arguments": {}}]
     rows = oversight.observations_payload("a01", got, None, 20, 4000)["observations"]
-    assert rows[2] == {"agent": "a01", "id": 2, "round": 2, "tool": "board_read", "status": "pending", "result": None}
+    assert rows[2] == {"agent": "a01", "id": 2, "tool": "board_read", "status": "pending", "result": None}
     assert rows[1]["status"] == "error" and rows[1]["result"] == "no such file"
 
 
@@ -165,8 +165,8 @@ def test_the_oversight_reader_reads_the_attribution_store_after_the_run(tmp_path
     [score] = sample.scores.values()
     assert score.metadata["live"] is False and score.metadata["attributed"] > 0, score.metadata
     assert score.metadata["actions"] == [
-        {"agent": "a01", "id": 0, "round": 1, "tool": "work", "arguments": {"item": "A1"}},
-        {"agent": "a01", "id": 1, "round": 2, "tool": "work", "arguments": {"item": "A2"}}]
+        {"agent": "a01", "id": 0, "tool": "work", "arguments": {"item": "A1"}},
+        {"agent": "a01", "id": 1, "tool": "work", "arguments": {"item": "A2"}}]
     # The finished log holds the same store the reader used.
     assert any(a.get("agent") == "a01" for a in sample.store.get(ATTRIBUTION_KEY)), sample.store.get(ATTRIBUTION_KEY)
 
@@ -183,9 +183,9 @@ def test_get_peer_actions_mid_round(tmp_path):
     [result] = [r for _, r, _ in outcomes(sample, ACTIONS)]
     got = json.loads(result)["actions"]
     # a01's calls of rounds 1 and 2 are there, oldest first.
-    assert got[:2] == [{"agent": "a01", "id": 0, "round": 1, "tool": "work", "arguments": {"item": "A1"}},
-                       {"agent": "a01", "id": 1, "round": 2, "tool": "board_post", "arguments": {"message": "hi"}}], got
-    assert all(c["round"] in (1, 2, 3) for c in got)
+    assert got[:2] == [{"agent": "a01", "id": 0, "tool": "work", "arguments": {"item": "A1"}},
+                       {"agent": "a01", "id": 1, "tool": "board_post", "arguments": {"message": "hi"}}], got
+    assert not any("round" in c for c in got)                 # agents are not told of rounds
 
 
 def test_every_row_names_its_agent():

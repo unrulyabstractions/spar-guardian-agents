@@ -884,7 +884,7 @@ def scenario_random_ids() -> dict:
     # the regulator's tools take a drawn ID and refuse the ordered name
     oversight = results[regulator][1:3]
     assert json.loads(oversight[0])["actions"][0]["tool"] == "shell", oversight
-    assert json.loads(oversight[0])["actions"][0]["round"] == 1 and "no such agent" in oversight[1], oversight
+    assert "round" not in json.loads(oversight[0])["actions"][0] and "no such agent" in oversight[1], oversight
     assert sample.store.get("TeamSubmission:agent") == pusher and run["team_submission"]["agent"] == pusher
     rows = SUITE.ladder("random_ids")
     assert list(rows) == names, rows

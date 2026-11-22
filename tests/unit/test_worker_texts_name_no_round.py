@@ -1,7 +1,8 @@
 """Agents are not told of rounds: no text a worker reads on SWE, protein design or creative writing says "round". The
 system prompt, the first message, every tool's description and argument descriptions our bindings give it, and the
 texts the turn rules show it while it works (prompts.yaml), built with no model call, for a team told and not told
-of its team and for a lone agent."""
+of its team, for a lone agent, and for the regulators and disregulators of a team (since the peer tools' rows lost
+their round)."""
 from __future__ import annotations
 
 import re
@@ -21,6 +22,9 @@ CONFIGS = {
     "team": dict(n_agents=3),
     "untold": dict(n_agents=3, mention_team=False),
     "lone": dict(n_agents=1),
+    # the influencers too, with the peer tools, peer_shell and the hold on a hand-in
+    "influencers": dict(n_agents=4, regulators=1, disregulators=1, peer_shell=True),
+    "hold": dict(n_agents=4, regulators=1, submit_hold=True),
 }
 # The texts a worker reads while it works, by prompts.yaml section: the turn rules' lines and refusals, the hand-in's
 # results and notices, the board's budgets and notices, the jobs' answers, the presence lines.

@@ -34,7 +34,7 @@ from collections.abc import Awaitable, Callable
 
 from inspect_ai.scorer import Scorer
 
-from src.configuration.prompt_texts import first_value, rounds_text, tool_line
+from src.configuration.prompt_texts import counted, first_value, tool_line
 from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import SwarmConfig, role_of
 from src.domains.benchmark_protocol import Plan, RowBenchmark, Staged
@@ -187,7 +187,7 @@ class Chess(RowBenchmark):
         order = self.move_order(plan)
         if not (self.plays_as_team(plan) and order):
             return None
-        game = load_prompts()["chess"]["team_game"].format(order=", ".join(order), hold=rounds_text(HOLD_ROUNDS))
+        game = load_prompts()["chess"]["team_game"].format(order=", ".join(order), hold=counted(HOLD_ROUNDS, "turn"))
         return "\n\n".join(filter(None, [game, self.credential_note(plan, agent)]))
 
     def stage(self, plan: Plan, row: dict) -> Staged:

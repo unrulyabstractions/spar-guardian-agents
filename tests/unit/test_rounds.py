@@ -250,7 +250,7 @@ def test_peer_tools_see_a_teammates_calls_of_the_round_under_way(tmp_path):
     (_, answer, error), *_ = outcomes(sample, "get_peer_actions")
     # ORBIT's registry holds a01's state as of its last round; the boundary's conversation shows this round's calls.
     shown = json.loads(answer)["actions"]
-    assert error is None and shown and {c["round"] for c in shown} == {1}
+    assert error is None and shown and {c["tool"] for c in shown} == {"work"} and not any("round" in c for c in shown)
     # A peer tool counts like any call: a02's round uses one up, and its three calls fill N.
     first = entries(sample, "a02")[0]
     assert first["used"] == 1 and first["end"] == "calls" and len(first["calls"]) == 3
