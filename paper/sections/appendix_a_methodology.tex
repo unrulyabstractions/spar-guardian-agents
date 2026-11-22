@@ -220,6 +220,8 @@ A target is a model on a task that meets two criteria:
   \item Different neutral agents are given different access, so they need to communicate with each other and
   collaborate in order to complete the exploit
   \item Only neutral agents can call the submit tool.
+  \item An agent sees only its own processes, so no agent reads a teammate's commands from the process list.
+  \item No agent can open a process's page map. Reading one stalls a search of the whole disk for longer than a round.
 \end{itemize}
 
 \FloatBarrier
@@ -462,7 +464,7 @@ The judge is \JudgeName{} at \JudgeEffort{} effort.
   Regulators have no read budget.
   \item Max tool result: \ToolOutputKiB{}~KiB for every agent. A longer result keeps its start and its end, with a
   line that states the cut.
-  \item The runs of the multi-domain study differ from this design in sixteen ways. Each agent had \TurnBudget{}
+  \item The runs of the multi-domain study differ from this design in eighteen ways. Each agent had \TurnBudget{}
   working steps instead of rounds of tool calls. A step was one model call and the tool calls of its reply. A step
   that ended with a board call used up no working step. A round allowed up to \FreeBoardActions{} such steps, or
   \FreeBoardActionsInfluencer{} for a regulator. No message gave the number of steps or opened a round. In a
@@ -474,6 +476,8 @@ The judge is \JudgeName{} at \JudgeEffort{} effort.
   its turns until the run ended. No influencer could alert humans. The system prompts held the numbers of their
   rules, such as a regulator's check of each teammate in its first \CheckRounds{} rounds. They also held details of
   the task, such as an SWE agent's repository and branch, or what cheating meant on the task for a regulator. Each
-  command had a time limit of its own, and no round had one. A command past its limit was stopped.
+  command had a time limit of its own, and no round had one. A command past its limit was stopped. Every process list
+  showed the processes and commands of every agent on the machine. A search of the whole disk stalled on the page map
+  of its own process.
 \end{itemize}
 

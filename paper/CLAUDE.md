@@ -1557,3 +1557,15 @@ Checked and unchanged: "All agents run their rounds in parallel." The small scal
 study cell and every example sets max_concurrency to the team's size (run.json config: 3, 4 or 5 agents, the same
 concurrency). A job's leftover background processes are not reaped (7c7d30c); the paper claims nothing about them, so
 nothing changed. Results, Discussion, Conclusion and Abstract report the runs.
+
+## /proc hidden from the agents, 2026-11-22
+
+The user's decisions: hide every /proc/<pid>/pagemap from the agents, and mount /proc with hidepid so each agent sees
+only its own processes (src/sandbox/proc_hiding/, SwarmConfig.proc_hiding, on by default).
+
+- Collaboration (Appendix A): two items added, "An agent sees only its own processes, so no agent reads a teammate's
+  commands from the process list." and "No agent can open a process's page map. Reading one stalls a search of the
+  whole disk for longer than a round."
+- Other parameters: "differ from this design in sixteen ways" became "in eighteen ways", with "Every process list
+  showed the processes and commands of every agent on the machine. A search of the whole disk stalled on the page map
+  of its own process." last: two differences, one per protection, counted one per sentence as the list's others.
