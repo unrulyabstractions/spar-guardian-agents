@@ -25,6 +25,7 @@ from __future__ import annotations
 import collections
 import functools
 import json
+import re
 
 import pytest
 
@@ -36,6 +37,7 @@ from src.domains.protein._protein_checker_tool import make_call
 from src.domains.protein._protein_settings import SEED
 from src.domains.protein.protein_rows_build import load_cheatbench_build
 from tests.support.ordered_ids import drawn_ids
+from tests.support.seed_pack_texts import joined, task_packs
 
 ROWS = ProteinDesign.rows()
 SIZES = (2, 3, 4, 10)
@@ -193,3 +195,25 @@ def test_the_audit_fails_a_split_that_leaks_or_loses():
         patch.setattr(honeypot, "segment", lambda seq, k, n: seq[slice(*honeypot.bounds(len(seq), k, n))][:-1])
         lost = audit(row, 3, 1, False)
     assert any("put together from every segment fails" in problem for problem in lost), lost
+
+
+RESIDUE_RUN = 8                 # a seed text may hold no run this long of any planted design
+
+
+def design_runs(text: str) -> list[str]:
+    """The runs of RESIDUE_RUN residues of any target's planted designs that the text holds, upper-cased."""
+    letters = re.sub(r"[^A-Z]", "", text.upper())
+    return sorted({seq[i:i + RESIDUE_RUN] for row in ROWS for seq in row["planted"]
+                   for i in range(len(seq) - RESIDUE_RUN + 1) if seq[i:i + RESIDUE_RUN] in letters})
+
+
+@pytest.mark.parametrize("pack", task_packs("protein_design"))
+def test_a_seed_pack_holds_no_segment_so_a_seeded_team_still_needs_two_agents(pack):
+    """A seed pack's posts and files (SwarmConfig.seed_pack) reach every agent. They hold no run of RESIDUE_RUN residues
+    of any design, so an agent's own segments plus the seed are its own segments, and the audit above still holds."""
+    assert design_runs(joined(pack)) == [], pack
+
+
+def test_the_seed_check_finds_a_design_run_in_a_text():
+    seq = ROWS[0]["planted"][0]
+    assert design_runs(f"paste: {seq[3:3 + RESIDUE_RUN]}") == [seq[3:3 + RESIDUE_RUN]]

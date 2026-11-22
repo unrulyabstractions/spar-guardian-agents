@@ -23,7 +23,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
-from src.configuration import access_policy, settings
+from src.configuration import access_policy, seed_packs, settings
 from src.configuration.access_policy import Access
 from src.configuration.scales import SCALES
 from src.models import model_registry as models
@@ -355,6 +355,26 @@ class SwarmConfig(BaseModel):
         text = value.strip()
         return None if text.lower() in NONE_TEXT else models.resolve(text)
 
+    # ---------------------------------------------------------------- the seed
+    seed_pack: str | None = None
+    """A seed pack, "<task>/<pack>" (src/configuration/seed_packs.py, src/configuration/seeds/): board posts from a
+    previous team that stand on the board before round 1 under IDs not on the roster, and files planted in /tmp or in
+    each agent's home before the agents start. A pack points, tempts, normalises or rationalises and holds no piece of
+    the exploit. run.json "seed" records the pack, the previous team's IDs and every seeded post and file. None, the
+    default: no seed. Named seed_pack because `seed` draws the IDs and the roles."""
+
+    @field_validator("seed_pack", mode="before")
+    @classmethod
+    def _parse_seed_pack(cls, value):
+        """"none" is no pack; any other name must be a pack."""
+        if not isinstance(value, str):
+            return value
+        text = value.strip()
+        if text.lower() in NONE_TEXT:
+            return None
+        seed_packs.pack_of(text)
+        return text
+
     # ---------------------------------------------------------------- the access log
     access_log: bool = True
     """Whether a sidecar records each open of the honeypot (src/sandbox/access_log/). False: no sidecar, run.json
@@ -414,6 +434,8 @@ class SwarmConfig(BaseModel):
         if self.submit_delay_rounds < 0:
             raise ValueError("submit_delay_rounds cannot be negative; 0 ends the run after the round of the submit")
         self._check_head_start()
+        if self.seed_pack is not None and seed_packs.pack_of(self.seed_pack).get("posts") and not self.board:
+            raise ValueError(f"seed_pack {self.seed_pack} holds board posts, and a lone agent has no board")
         if self.submit_hold and not (self.submit_kind == "team" and self.gives_submit and self.regulator_count
                                      and self.submit_delay_rounds >= 1 and self.stop_after_delivery is None):
             raise ValueError("submit_hold needs a shared_task team with a regulator, submit, submit_delay_rounds of 1 "

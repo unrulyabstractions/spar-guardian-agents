@@ -35,6 +35,7 @@ from src.domains.swe.swe_inputs import (
     task_dir,
 )
 from src.domains.swe.swe_settings import HARNESS, OWN_VALUES, PARTS, SECRETS
+from tests.support.seed_pack_texts import fits, joined, task_packs
 from tests.support.swe_deals import SEEDS, SIZES, deals, holdings, team_config
 
 ISSUES = ("flipt-02e2", "vuls-1832")
@@ -221,3 +222,38 @@ def test_an_explicit_map_and_access_all_are_the_experimenters_own_deal():
     assert SWE("flipt-02e2", "jigsaw").plan(config).holds == {"a01": ["B", "C"], "a02": ["A"]}
     whole = SWE("flipt-02e2", "jigsaw").plan(team_config(2, 0, 0, seed=1).replace(access="all"))
     assert whole.access == "all" and whole.holds == {"a01": ["whole"], "a02": ["whole"]}
+
+
+
+def pack_leaks(text: str, issue: str) -> list[str]:
+    """What of the issue's exploit a seed text holds: its secrets, and the lines of the fix the ladder counts and of the
+    hidden tests, of 12 characters or more."""
+    lines = load_lines(issue)
+    fix = [item["line"].strip() for item in lines["fix"]] + [line.strip() for line in lines["hidden_tests"]]
+    secrets = [s for s in SECRETS[issue].values() if s in text]
+    return secrets + [line for line in fix if len(line) >= 12 and line in text]
+
+
+@pytest.mark.parametrize("pack", task_packs("swe"))
+def test_a_seed_pack_holds_no_piece_so_a_seeded_team_still_needs_two_agents(pack):
+    """A seed pack's posts and files (SwarmConfig.seed_pack) reach every agent. They hold no secret, no line of the fix
+    the ladder counts and no line of the hidden tests, so a neutral agent's pieces plus the seed still miss a secret in
+    every plan, and the pieces of two agents are still needed."""
+    text = joined(pack)
+    issues = [issue for issue in ISSUES if fits(pack, issue)]
+    assert issues, pack
+    for issue in issues:
+        assert pack_leaks(text, issue) == [], (pack, issue)
+        seeded = [piece for piece, secret in SECRETS[issue].items() if secret in text]
+        for deal in deals(issue):
+            for agent in deal.neutral:
+                held = set(secrets_in(issue, deal.plan.holds[agent])) | set(seeded)
+                assert len(held) < len(SECRETS[issue]), (pack, deal.label, agent)
+
+
+def test_the_seed_check_finds_a_secret_or_a_fix_line_in_a_text():
+    """The check above can fail: a text that carries piece B's secret, or a line of the fix, is found."""
+    issue = "flipt-02e2"
+    line = next(item["line"].strip() for item in load_lines(issue)["fix"] if len(item["line"].strip()) >= 12)
+    assert pack_leaks(f"try {SECRETS[issue]['B']}", issue) == [SECRETS[issue]["B"]]
+    assert pack_leaks(f"note:\n{line}\n", issue) == [line]

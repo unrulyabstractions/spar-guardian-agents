@@ -63,6 +63,7 @@ from orbit.tasks.multi_agent import multi_agent_task
 from src.configuration import access_policy, settings
 from src.configuration.presets import preset, with_overrides
 from src.configuration.prompt_texts import before_line, rounds_values
+from src.configuration.seed_packs import seed_record
 from src.configuration.swarm_config import SwarmConfig, role_of
 from src.domains import DOMAINS
 from src.domains.benchmark_protocol import Benchmark, Plan
@@ -90,6 +91,7 @@ from src.swarm.board import (
     round_rules,
 )
 from src.swarm.end_round import end_round_bindings
+from src.swarm.seed_setup import seed_setup
 from src.swarm.submit_and_stop import Deliverable, ending_tools, submit_bindings
 from src.swarm.submit_hold import hold_bindings, hold_tools
 from src.swarm.tool_output_caps import cap_of, capped_bindings
@@ -99,6 +101,8 @@ from src.swarm.turn_rules import END_ROUND, planned_entries, rules_setup, schedu
 # steps while the bill barely moves: a context that grows steadily to 1M over 100 steps stays under this. An episode
 # that trips it stays judgeable.
 TOKEN_LIMIT = 64_000_000
+# The label of a run with a seed pack (SwarmConfig.seed_pack): a previous team's posts and files before round 1.
+SEED_DEVIATION = "a_previous_teams_posts_and_files_are_seeded_before_round_1"
 
 
 # --------------------------------------------------------------------------
@@ -272,7 +276,8 @@ def monitored_sample(sample: Sample, access: bool = True, network: bool = False,
 
 def setup_solvers(benchmark: Benchmark, plan: Plan, tools: AgentTools | None = None) -> list[Solver]:
     """The turn rules' setup, with the agents' time limit and the benchmark's round-end callback, then /proc's hiding
-    under SwarmConfig.proc_hiding, before any command of an agent's user, and the benchmark's, then peer_shell's under
+    under SwarmConfig.proc_hiding, before any command of an agent's user, and the benchmark's, then the seed pack's
+    posts and files under SwarmConfig.seed_pack (src/swarm/seed_setup.py), then peer_shell's under
     SwarmConfig.peer_shell, then the access log's, so the harness's own reads while staging come before any mark."""
     config = plan.config
     watchers = observers(benchmark, plan, tools) if tools is not None else {}
@@ -280,10 +285,12 @@ def setup_solvers(benchmark: Benchmark, plan: Plan, tools: AgentTools | None = N
     monitor = [start_access_monitor(benchmark)] if benchmark.keeps_access_log(config) else []
     network = [start_network_monitor(benchmark)] if keeps_network_log(benchmark, config) else []
     hidden = [hide_proc(benchmark)] if keeps_proc_hiding(benchmark, config) else []
+    record = seed_record(config, benchmark.key, benchmark.row)
+    seeded = [seed_setup(benchmark, record, config.names)] if record else []
     return [rules_setup(config, config.names, plan.roles, **delivery(benchmark, plan),
                         time_limit_s=config.time_limit_s or benchmark.time_limit_s(),
                         round_end=benchmark.round_end(plan), **team_head(benchmark, plan)), *hidden, benchmark.setup(),
-            *shell, *monitor, *network]
+            *seeded, *shell, *monitor, *network]
 
 
 def cleanup(benchmark: Benchmark, config: SwarmConfig) -> Callable[[TaskState], Awaitable[None]]:
@@ -359,7 +366,10 @@ def record_run(task_: Task, benchmark: Benchmark, plan: Plan, prompts: dict[str,
         cb["code"] = settings.code_state()
         cb["access"] = {"policy": access_policy.policy_name(plan.access), "agents": plan.holds,
                         "pieces": plan.pieces or None, "n_pieces": plan.n_pieces}
-        cb["deviations"] = benchmark.deviations(plan)
+        cb["deviations"] = benchmark.deviations(plan) + ([SEED_DEVIATION] if config.seed_pack else [])
+        seed = seed_record(config, benchmark.key, benchmark.row)
+        if seed:
+            cb["seed"] = seed
         if watchers:
             cb["peer_shell"] = {"observers": watchers}
         if roles:

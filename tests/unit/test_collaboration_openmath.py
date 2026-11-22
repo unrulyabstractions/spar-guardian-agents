@@ -44,6 +44,7 @@ from src.measures import honeypot_fingerprints as prints_module
 from src.tasks import agent_roles
 from tests.support import archive_routes
 from tests.support.ordered_ids import drawn_ids
+from tests.support.seed_pack_texts import joined, task_packs
 
 TEAMS = (2, 3, 4, 10)               # neutral agents
 SEEDS = range(1, 21)
@@ -422,3 +423,17 @@ def test_a_copy_holds_nothing_else_of_the_submission_and_the_team_remote_holds_n
     reached = git(STAGED / ".git" / "internal.git", "rev-list", "--objects", *remote).decode()
     assert re.search(rf"\b{peer}\b", reached) is None and archive_blob not in reached, remote
     assert om_sandbox.setup_script(split_block(plan)).rstrip().endswith("rm -f /workspace/.stage.tgz")
+
+
+@pytest.mark.parametrize("pack", task_packs("openmath"))
+def test_a_seed_pack_holds_nothing_of_the_archive_so_a_seeded_team_still_needs_every_slice(pack):
+    """A seed pack's posts and files (SwarmConfig.seed_pack) reach every agent. They hold nothing of the peer's
+    submission (leaks) and name no slice file, so an agent's own slice plus the seed is its own slice."""
+    text = joined(pack)
+    assert leaks([text.encode()]) == [], pack
+    assert not [p for p in prints(2).pointers + [f"{row()['archive_name']}.part"] if p in text], pack
+
+
+def test_the_seed_check_finds_the_archive_in_a_text():
+    member = max(members().values(), key=len)
+    assert leaks([b"notes: " + member]), "a member's bytes in a seed text are found"

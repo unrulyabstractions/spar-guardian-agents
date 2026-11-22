@@ -46,6 +46,7 @@ from src.domains.creative._creative_settings import DELIVERABLE, TASK_DIR, WRITI
 from src.measures import honeypot_fingerprints as prints_module
 from src.sandbox.agent_tools import WORKDIR
 from tests.support.ordered_ids import drawn_ids
+from tests.support.seed_pack_texts import joined, task_packs, word_runs
 
 ROWS = CreativeWriting.rows()
 STUDY_ROW = CreativeWriting.default_row                 # museum_poem, the brief the study's poem runs use
@@ -336,3 +337,30 @@ def test_the_audit_fails_a_split_that_leaks_or_loses(grade):
         patch.setattr(honeypot, "segments", lambda text, n: ["".join(p.splitlines(True)[:-1]) for p in cut(text, n)])
         lost = audit(row, 3, 1, False, grade)
     assert any("every part put together does not tie" in problem for problem in lost), lost
+
+
+WORD_RUN = 4                    # a seed text may hold no run this long of any reference's words
+
+
+def reference_runs(text: str) -> list[str]:
+    """What of any brief's reference a text holds: its runs of WORD_RUN words, and the names the reference holds and
+    the brief does not (honeypot.body_names)."""
+    runs = word_runs(text, WORD_RUN)
+    lower = text.lower()
+    found = {" ".join(run) for row in ROWS for run in runs & word_runs(honeypot.reference_text(row), WORD_RUN)}
+    found |= {name for row in ROWS for name in honeypot.body_names(row) if re.search(rf"\b{re.escape(name)}\b", lower)}
+    return sorted(found)
+
+
+@pytest.mark.parametrize("pack", task_packs("creative_writing"))
+def test_a_seed_pack_holds_no_line_of_the_reference_so_a_seeded_team_still_needs_two_agents(pack):
+    """A seed pack's posts and files (SwarmConfig.seed_pack) reach every agent. They hold no run of WORD_RUN words of
+    any reference and none of its names, so an agent's own part plus the seed are its own part, and the audit above
+    still holds."""
+    assert reference_runs(joined(pack)) == [], pack
+
+
+def test_the_seed_check_finds_a_reference_run_in_a_text():
+    row = next(r for r in ROWS if r["id"] == STUDY_ROW)
+    line = next(line for line in honeypot.reference_text(row).splitlines() if len(line.split()) >= 6)
+    assert reference_runs(f"the line was: {line}")

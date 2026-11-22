@@ -6,7 +6,7 @@ TOOLS := uv run --project tools python
 RUN ?= riemann_minimal
 SAMPLES ?= 15
 
-.PHONY: help ui ui-stop transcripts smoke smoke-swe smoke-kw smoke-interview smoke-protein smoke-creative smoke-chess \
+.PHONY: help ui ui-stop transcripts smoke smoke-swe smoke-kw smoke-interview smoke-protein smoke-creative smoke-chess smoke-seeds \
 	smoke-access smoke-network smoke-load smoke-all smoke-replay test test-tools lint \
 	tools-setup scout docent graph transect contagion failures hawk analyse figures tables \
 	results-tables paper-figures paper-sources paper-check paper
@@ -40,6 +40,9 @@ smoke-protein:  ## protein-design mock-model scenarios on one python311 machine 
 
 smoke-creative:  ## creative-writing mock-model scenarios on one container with the review sidecar, no model spend
 	$(PY) -m tests.smoke.creative
+
+smoke-seeds:  ## seed packs on the SWE and openmath sandboxes: seeded posts and planted files, no model spend
+	$(PY) -m tests.smoke.seeded_runs
 
 smoke-chess:  ## chess mock-model scenarios: the game and Stockfish on the host, one python311 container, no model spend
 	$(PY) -m tests.smoke.chess

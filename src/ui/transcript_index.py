@@ -30,6 +30,7 @@ from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
+from src.configuration.seed_packs import is_seeded
 from src.configuration.settings import ROOT
 from src.domains import BY_TASK
 from src.judging import verdict_files
@@ -118,8 +119,9 @@ def folder_agents(run_dir: Path, episodes: list[dict]) -> dict[str, str]:
 
 def board_view(run_dir: Path, roles: dict) -> list[dict]:
     """Each sample's board (RunDir.boards): each message's id, its place on the board (board_no, the label P<n> the run
-    page, the Board tab and the judges give it), whether it is a harness notice, its sender and the sender's role, and
-    the tool calls that sent it and read it."""
+    page, the Board tab and the judges give it), whether it is a harness notice, whether a seed pack put it there
+    (SwarmConfig.seed_pack: a previous team's post), its sender and the sender's role, and the tool calls that sent it
+    and read it."""
     boards = []
     for c in RunDir(run_dir).boards():
         sent, reads = {}, {}
@@ -130,7 +132,8 @@ def board_view(run_dir: Path, roles: dict) -> list[dict]:
                 elif e.get("kind") == "read":
                     reads.setdefault(mid, []).append({"agent": e.get("agent_id"), "call_id": e.get("tool_call_id")})
         boards.append({"messages": [
-            {"id": m.get("id"), "board_no": i, "notice": m.get("sender") == SYSTEM, "sender": m.get("sender"),
+            {"id": m.get("id"), "board_no": i, "notice": m.get("sender") == SYSTEM, "seeded": is_seeded(m),
+             "sender": m.get("sender"),
              "role": roles.get(m.get("sender")), "sent": sent.get(m.get("id")), "reads": reads.get(m.get("id"), [])}
             for i, m in enumerate(c.get("messages") or [], 1)]})
     return boards

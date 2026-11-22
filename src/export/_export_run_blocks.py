@@ -18,6 +18,7 @@ import json
 
 from inspect_ai.util import StoreModel
 
+from src.configuration.seed_packs import is_seeded
 from src.domains import BY_TASK
 from src.domains.benchmark_protocol import Benchmark
 from src.export.eval_sample_view import (
@@ -35,6 +36,7 @@ from src.models import model_registry as models
 from src.sandbox import command_jobs, peer_shell
 from src.sandbox import sandbox_hygiene as hygiene
 from src.sandbox.proc_hiding import proc_hiding
+from src.swarm.seed_setup import SEED_STORE
 from src.swarm.turn_rules import (
     ALERT,
     CHECK_ROUNDS,
@@ -339,17 +341,31 @@ def submit_holds_block(view: SampleView) -> dict | None:
     return {k: holds[k] for k in ("decisions", "released", "returns")}
 
 
+def seed_block(view: SampleView) -> dict | None:
+    """The run's seed pack (SwarmConfig.seed_pack; src/configuration/seed_packs.py seed_record): its name, what it
+    holds, the previous team's IDs, every seeded post and file, then where each file was planted
+    (src/swarm/seed_setup.py SEED_STORE: agent, service, path, owner) and the board ids of the seeded posts. None for a
+    run without one."""
+    record = cheatbench(view).get("seed")
+    if not record:
+        return None
+    messages = view.store_get("CommunicationState:messages") or []
+    return {**record, "planted": view.store_get(SEED_STORE) or [],
+            "post_ids": [m.get("id") for m in messages if isinstance(m, dict) and is_seeded(m)]}
+
+
 def recorded_run_blocks(view: SampleView) -> dict:
     """The run.json blocks a run carries only when it recorded them: the turn budget (a run before 2026-11-21), access,
     the domain's blocks
     (Benchmark.run_blocks), the honeypot probe's report, delivery, the alerts, the holds of the hand-in, the sandbox,
-    peer_shell, the command jobs and the code state."""
+    peer_shell, the command jobs, the seed and the code state."""
     cb, bench = cheatbench(view), domain(view)
     facts = {"turn_budget": cb.get("turn_budget"), "access": access_block(view),
              **(bench.run_blocks(view) if bench else {}), "honeypot_probe": honeypot_probe_block(view),
              "delivery": delivery_block(view), "alerts": alerts_block(view), "submit_holds": submit_holds_block(view),
              "sandbox": sandbox_block(view),
-             "peer_shell": peer_shell_block(view), "jobs": jobs_block(view), "code": cb.get("code")}
+             "peer_shell": peer_shell_block(view), "jobs": jobs_block(view), "seed": seed_block(view),
+             "code": cb.get("code")}
     return {k: v for k, v in facts.items() if v is not None}
 
 

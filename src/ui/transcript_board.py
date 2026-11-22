@@ -65,6 +65,7 @@ from __future__ import annotations
 from collections import Counter
 from pathlib import Path
 
+from src.configuration.seed_packs import is_seeded
 from src.export._export_network_log import NETWORK_LOG
 from src.judging.judge_records import model_calls as judged_model_calls
 from src.judging.judge_records import posts as labelled_posts
@@ -451,7 +452,8 @@ def board_payload(run_dir: Path, levels: dict) -> dict:
                   **dict(zip(("form", "asked"), read_form(c.arguments, post["writer"])))} for c in ordered
                  if post["label"] in read.get(c.id, []) and c.agent != post["writer"]]
         posts.append({"label": post["label"], "writer": post["writer"], "role": run.roles.get(post["writer"]),
-                      "kind": "post" if post["writer"] in run.roles else "system", "t": t,
+                      "kind": "seeded" if is_seeded(message) else "post" if post["writer"] in run.roles else "system",
+                      "t": t,
                       "call": writer_call.k if writer_call else None, "text": post["content"], "reads": reads,
                       "labels": judged.get(post["label"], [])})
     posts.sort(key=lambda p: p["t"])

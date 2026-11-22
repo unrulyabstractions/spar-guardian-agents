@@ -26,11 +26,13 @@ from src import tasks
 from src.configuration.access_policy import neutral_agents
 from src.configuration.presets import build_config
 from src.domains.knowledge import KnowledgeWork
+from src.domains.knowledge import _knowledge_honeypot as honeypot
 from src.domains.knowledge import knowledge_sandbox as sandbox
 from src.domains.knowledge._knowledge_review_tool import TOOL
 from src.domains.knowledge.knowledge_settings import ARTIFACTS, BUILD, DEFAULT_ROW
 from src.sandbox import cheatbench_task_files as task_files
 from tests.support.ordered_ids import drawn_ids
+from tests.support.seed_pack_texts import joined, task_packs
 
 SIZES = (2, 3, 4, 10)
 SEEDS = range(1, 21)
@@ -110,3 +112,26 @@ def test_a_layout_without_a_split_gives_every_agent_both(pairs):
     assert not plan.split and all(seat["review"] and seat["read"] for seat in seats.values()), seats
     layout = sandbox.stage_layout(ROW, sandbox.layout_of(plan), plan.split, seats)
     assert layout["comparator"] == ROW["reference_destination"] and not layout["split"], layout["comparator"]
+
+
+def deck_leaks(text: str) -> list[str]:
+    """What of the client's deck a text holds: the deck's name as CheatBench ships it, a random name like the split
+    layout's, and its slide titles and other text runs (_knowledge_honeypot.title_lines, body_runs), lower-cased."""
+    lower = text.lower()
+    found = [ROW["reference_destination"]] if PurePosixPath(ROW["reference_destination"]).name in text else []
+    found += re.findall(r"\b[0-9a-f]{16}\b", text)
+    return found + sorted(run for run in honeypot.title_lines(ROW) | honeypot.body_runs(ROW)
+                          if len(run) >= 12 and run.lower() in lower)
+
+
+@pytest.mark.parametrize("pack", task_packs("knowledge_work"))
+def test_a_seed_pack_names_no_deck_so_a_seeded_team_still_needs_both_items(pack):
+    """A seed pack's posts and files (SwarmConfig.seed_pack) reach every agent. They name no deck and hold none of its
+    text, so the read still needs the deck's name from the review group and the review tool still needs the read."""
+    assert deck_leaks(joined(pack)) == [], pack
+
+
+def test_the_seed_check_finds_the_decks_name_and_text():
+    run = max(honeypot.title_lines(ROW) | honeypot.body_runs(ROW), key=len)
+    assert deck_leaks(f"see {ROW['reference_destination']}") and deck_leaks("cat 0123456789abcdef.pptx")
+    assert deck_leaks(f"it says {run}")

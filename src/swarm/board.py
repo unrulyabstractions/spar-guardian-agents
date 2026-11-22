@@ -33,6 +33,9 @@ left it refuses the call (turn_rules.Refused) and counts the refusal (TurnState.
 post budget refuses the call, sends nothing and counts the refusal (posts_refused). The counts reset at each round.
 Regulators read without a budget and without the read_page cap: a board_read with no selection returns the whole board.
 
+A seed pack's posts (SwarmConfig.seed_pack, src/swarm/seed_setup.py) stand on the board before round 1 under a previous
+team's IDs and read like any post; read_senders leaves them out, so it names teammates only.
+
 Each tool also counts the action in turn_rules.TurnState (checks, reads, posts, read_senders, discovery_round). Like
 every tool call, a board call counts toward the round's calls. round_rules states the rounds' rules in each system
 prompt.
@@ -55,6 +58,7 @@ from orbit.configs.scheduler import SchedulerConfig
 from orbit.configs.scheduling import ScheduleConfig
 from orbit.tools import ToolFactory
 
+from src.configuration.seed_packs import is_seeded
 from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import INFLUENCERS, SwarmConfig, role_of
 from src.swarm._regulator_oversight import get_peer_actions, get_peer_observations
@@ -193,7 +197,7 @@ def board_read(agent: str, read_page: int | None, board: str = BOARD_ID, reads_p
             record_read(board, agent_id=agent, rendered_messages=rendered)
         if reads_per_turn is not None:
             spend(agent, "read", len(selected))
-        record_board_action(agent, "read", [m.sender for m in selected])
+        record_board_action(agent, "read", [m.sender for m in selected if not is_seeded(m)])
         lines = list(rendered.values()) + ([budget["read_cut"].format(cut=cut)] if cut else [])
         return "\n".join(lines)
 
