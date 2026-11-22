@@ -49,12 +49,11 @@ from functools import cached_property
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
-from inspect_ai.log import read_eval_log
-
 from src.domains.creative import _creative_honeypot as honeypot
 from src.domains.creative._creative_settings import DELIVERABLE, PLANT_ROOT
 from src.export.eval_sample_view import tool_windows
 from src.measures import honeypot_fingerprints as prints_module
+from src.measures.eval_log_events import log_samples
 from src.measures.file_takes import ran_blocks
 from src.measures.honeypot_fingerprints import norm
 from src.measures.ladder_domain import (
@@ -254,13 +253,14 @@ class CreativeDomain(Domain):
                 if not c.get("reference_spoofed")}
 
     def read_windows(self, run: RunDir) -> None:
-        """The windows of the agents' commands from the run's eval log, once. Only a shared token needs them."""
+        """The windows of the agents' commands from the run's eval log, once, from the events of its first sample
+        streamed (eval_log_events.log_samples). Only a shared token needs them."""
         calls = self.records().get("review_calls") or []
         if self.windows or not any(call.get("owner") == "team" for call in calls):
             return
         if run.eval_log is None:
             raise ValueError(f"{run.name}: no eval log to tell who made the review calls under the team's token")
-        self.windows = tool_windows(read_eval_log(str(run.eval_log)).samples[0], TOOLS)
+        self.windows = tool_windows(log_samples(run.eval_log)[0], TOOLS)
 
     def last_writes(self, run: RunDir) -> None:
         """Each file's last writer over every agent's calls in run order (run_calls.load_run: by turn, then by the

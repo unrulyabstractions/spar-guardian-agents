@@ -17,8 +17,8 @@ labels (the judge labels disclosure and manipulation, each a score with its loca
 collusion.py run_collusion. The index never writes a run. Its one output is the cache,
 tmp/transcript_viewer/index.json: each run's row, its measures (RunFiles.measured) and its folder, under a stamp of the
 run's files (stamp) and of the code (code_stamp). A start measures again only the runs whose stamp changed, in parallel
-processes, and prints its progress (src/utils/progress.py); --rebuild, a new INDEX_VERSION or new code measures
-every run.
+processes as many as the machine's cores and available memory allow (workers_for), and prints its progress
+(src/utils/progress.py); --rebuild, a new INDEX_VERSION or new code measures every run.
 """
 from __future__ import annotations
 
@@ -30,6 +30,8 @@ import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
+
+import psutil
 
 from src.configuration.seed_packs import is_seeded
 from src.configuration.settings import ROOT
@@ -50,11 +52,16 @@ single agents."""
 INDEX_VERSION = 18  # 11 baseline; 12 levels.passed; 13 workers' mean label score; 14 single agents left out;
 #                     15 hidden tasks measured, behind a chip; 16 seed_pack;
 #                     17 started, collections newest first; 18 rounds
-WORKERS = 3
-"""Processes that measure runs when a start finds runs to measure. Each loads whole transcripts and grows to several
-GB; six of them took 32 GB of the 48 GB Mac on 2026-11-22, beside Docker, and the Mac ran out of memory."""
-TASKS_PER_WORKER = 8
-"""Runs a measuring process takes before it is replaced, so the memory a run's transcripts held goes back."""
+RUN_PEAK_MB = 300
+"""A measuring process's peak memory, rounded up: at most 255 MB over the 405 runs of 2026-11-22, 126 MB of it the
+imports. Until then a creative writing run's process read its eval log whole and took up to 16 GB; the measures now
+stream the few fields they read (src/measures/eval_log_events.py). A process measures runs until the build ends:
+Python 3.11's pool, told to replace a process after some tasks (max_tasks_per_child), stops replacing them and the
+build hangs once every process has exited."""
+SAFETY = 2
+"""The room each measuring process gets, in RUN_PEAK_MBs."""
+MEMORY_SHARE = 0.5
+"""The share of the machine's available memory the measuring processes may take together."""
 MEASURING = ("src/measures", "src/domains", "src/judging", "src/ui")
 """The folders whose code decides a run's row and measures (code_stamp)."""
 SERVED = ("built_at", "build_seconds", "measured", "collections", "errors", "rows", "left_out")
@@ -459,14 +466,31 @@ def valid_runs(runs: Path) -> list[tuple[str, list[Listed]]]:
     return out
 
 
+def available_memory() -> int:
+    """The bytes the machine can give without swapping: psutil's available memory, on macOS its free plus its
+    inactive pages."""
+    return psutil.virtual_memory().available
+
+
+def workers_for(available: int, cores: int | None) -> int:
+    """How many processes measure runs: as many as MEMORY_SHARE of the available memory holds at SAFETY times
+    RUN_PEAK_MB each, never more than the cores but one, and at least one."""
+    by_memory = int(available * MEMORY_SHARE) // ((RUN_PEAK_MB * SAFETY) << 20)
+    return max(1, min(by_memory, (cores or 1) - 1))
+
+
 def measure_all(todo: list[tuple[str, list[int], str, Listed]]) -> dict[str, dict]:
-    """The entries of the runs to measure ((run id, stamp, collection, Listed)), measured in WORKERS processes, in
+    """The entries of the runs to measure ((run id, stamp, collection, Listed)), measured in workers_for processes, in
     `todo`'s order, with a counter of the runs measured as each ends (progress.Counter: in place on a terminal, a line
     every tenth elsewhere)."""
     if not todo:
         return {}
+    available, cores = available_memory(), os.cpu_count()
+    workers = min(workers_for(available, cores), len(todo))
+    progress.detail("workers", f"{workers}, from {progress.plural(cores or 1, 'core')} and {available / 2**30:.1f} GB "
+                    f"available at {RUN_PEAK_MB * SAFETY} MB each")
     measured: dict[str, dict] = {}
-    with ProcessPoolExecutor(max_workers=min(WORKERS, len(todo)), max_tasks_per_child=TASKS_PER_WORKER) as pool, \
+    with ProcessPoolExecutor(max_workers=workers) as pool, \
             progress.Counter(len(todo), "measured", "runs") as count:
         futures = {pool.submit(measure_run, col, item): (run_id, st) for run_id, st, col, item in todo}
         for future in as_completed(futures):

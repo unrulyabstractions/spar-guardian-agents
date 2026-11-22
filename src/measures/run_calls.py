@@ -13,13 +13,11 @@ Pure: no model call, nothing written.
 """
 from __future__ import annotations
 
-import json
-import zipfile
 from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
 from typing import NamedTuple
 
+from src.measures.eval_log_events import tool_events
 from src.measures.run_directory import RunDir
 from src.measures.shell_commands import REFUSED, TOOLS, command_of, results_of, tool_calls_of
 
@@ -88,21 +86,12 @@ class Run:
 
 
 def eval_times(path: Path | None) -> dict[str, tuple[float, float | None]]:
-    """tool call id -> (start, end) in seconds, from the eval log's tool events, read as the zip it is. {} without a
-    log."""
+    """tool call id -> (start, end) in seconds, from the eval log's tool events, streamed (eval_log_events). {}
+    without a log."""
     if path is None or not path.is_file():
         return {}
-    out: dict[str, tuple[float, float | None]] = {}
-    with zipfile.ZipFile(path) as archive:
-        for name in archive.namelist():
-            if not name.startswith("samples/"):
-                continue
-            for event in json.loads(archive.read(name)).get("events") or []:
-                if event.get("event") == "tool" and event.get("timestamp"):
-                    end = event.get("completed")
-                    out[event.get("id")] = (datetime.fromisoformat(event["timestamp"]).timestamp(),
-                                            datetime.fromisoformat(end).timestamp() if end else None)
-    return out
+    return {e.id: (e.timestamp.timestamp(), e.completed.timestamp() if e.completed else None)
+            for e in tool_events(path) if e.timestamp}
 
 
 def steps_turns(agent: str, entries: list[dict], steps: list[dict], notes: list[str]) -> dict:

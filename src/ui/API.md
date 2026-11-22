@@ -256,8 +256,10 @@ Its one output is the index cache (`--cache`, by default `tmp/transcript_viewer/
 folder and its measures (`RunFiles.measured`: CheatBench's verdicts, the three ladders' measures and the judge
 labels), under a stamp of the run's files (their count, bytes and latest change, `stamp`) and of the code
 (`code_stamp`, a hash of `src/measures`, `src/domains`, `src/judging` and `src/ui`). A start measures again only the
-runs whose stamp changed, in `WORKERS` processes, and prints `measured k of n runs` every `PROGRESS` runs; `--rebuild`,
-a new `INDEX_VERSION` (now 18) or new code measures every run. The run page reads its ladders from the cache.
+runs whose stamp changed, in as many processes as the machine holds (`workers_for`: half the available memory at
+600 MB a process, at most the cores but one, at least one; the start prints the choice), and prints `measured k of n
+runs` as it goes; `--rebuild`, a new `INDEX_VERSION` (now 18) or new code measures every run. A process measures a run
+in under 300 MB: the measures stream the eval log's events (`src/measures/eval_log_events.py`). The run page reads its ladders from the cache.
 
 ## UI routes
 
