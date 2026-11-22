@@ -201,10 +201,10 @@ function foldButton(kind) {
 }
 // Why a round ended (src/swarm/turn_rules/_turn_rounds.py END_REASONS), as its chip says it; "ending" names the tool
 // that ended the agent's turns by the round's ending (its charge in a run before 2026-11-22).
-const END_WORDS = { end_round: 'end_round', calls: 'N reached', no_tool_call: 'no tool call', time: 'time limit',
+const END_WORDS = { end_round: 'end_round', calls: 'call limit reached', no_tool_call: 'no tool call', time: 'time limit',
   round_time: 'round time', context: 'context limit' };
 const ENDING_TOOL = { stop: 'stop_working', submit: 'submit', alert: 'alert_humans' };
-const END_TIPS = { end_round: 'the agent called end_round', calls: 'the round made its N calls',
+const END_TIPS = { end_round: 'the agent called end_round', calls: 'the round used all its tool calls',
   no_tool_call: 'a reply with no tool call', time: 'the run\'s time limit passed', context: 'the reply hit the context limit',
   ending: 'the agent\'s turns ended', round_time: 'the round\'s time limit passed' };
 /** A round's end in a word or two; null when the round recorded none. e: the round's entry ({end, ending, charge}). */
@@ -512,7 +512,9 @@ export function renderCase(t, ctx) {
       h('div', { class: 'round-h' }, roundFold(), h('span', { class: 'round-n' }, `Round ${mark.round}`),
         h('span', { class: 'round-of', title: 'the round count the agent read' }, `${mark.n ?? mark.round} of ${mark.of}`),
         e ? h('span', { class: 'round-calls', title: rounds && rounds.perRound ? `up to ${rounds.perRound} calls a round` : null },
-          plural(e.calls.length, 'call')) : null,
+          plural(e.calls.filter(c => !c.refused).length, 'call')) : null,
+        e && e.calls.some(c => c.refused) ? h('span', { class: 'round-chip round-refused', title: 'calls made past the limit, not run' },
+          `${e.calls.filter(c => c.refused).length} refused`) : null,
         e ? endChip(e) : null,
         e && e.charge === 'board' ? h('span', { class: 'round-chip round-board', title: 'board calls only: uses up no round' }, 'board only') : null,
         e && e.t0 != null && e.t1 != null ? h('span', { class: 'round-time', title: 'round time' }, `${(e.t1 - e.t0).toFixed(1)} s`) : null),
