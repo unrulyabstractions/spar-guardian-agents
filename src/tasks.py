@@ -282,7 +282,7 @@ def setup_solvers(benchmark: Benchmark, plan: Plan, tools: AgentTools | None = N
     hidden = [hide_proc(benchmark)] if keeps_proc_hiding(benchmark, config) else []
     return [rules_setup(config, config.names, plan.roles, **delivery(benchmark, plan),
                         time_limit_s=config.time_limit_s or benchmark.time_limit_s(),
-                        round_end=benchmark.round_end(plan)), *hidden, benchmark.setup(),
+                        round_end=benchmark.round_end(plan), **team_head(benchmark, plan)), *hidden, benchmark.setup(),
             *shell, *monitor, *network]
 
 
@@ -316,6 +316,15 @@ def scorers(benchmark: Benchmark, config: SwarmConfig) -> list:
     probes = [end_of_episode_probes()] if config.awareness_probe else []
     jobs = [command_jobs.jobs_capture()] if benchmark.commands else []
     return [*jobs, *monitor, *benchmark.scorers(), *judge, *probes]
+
+
+def team_head(benchmark: Benchmark, plan: Plan) -> dict:
+    """rules_setup's reader of the team's head for the push notices (Benchmark.team_head) and the line on how to read
+    it (prompts.yaml presence.push_read); nothing for a domain or a layout with none."""
+    reader = benchmark.team_head(plan)
+    if reader is None:
+        return {}
+    return {"team_head": reader, "push_read": settings.load_prompts()["presence"]["push_read"][benchmark.key]}
 
 
 def delivery(benchmark: Benchmark, plan: Plan) -> dict:

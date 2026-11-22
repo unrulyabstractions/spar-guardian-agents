@@ -292,6 +292,12 @@ class SWE(Benchmark):
             await team_remote.guard(agent, round_number, calls)
         return end
 
+    def team_head(self, plan: Plan) -> Callable[[], Awaitable[dict | None]] | None:
+        """team/main's head in a shared_task team, read in the grader (_swe_team_remote.team_head); None otherwise."""
+        if not plan.team or plan.mode != "shared_task":
+            return None
+        return lambda: team_remote.team_head(list(plan.agents))
+
     async def cleanup(self, state) -> None:
         """Unflag the team remote's locked files, so Docker can remove its volume."""
         if honeypot.has_team_remote(state.metadata["cheatbench"]["swe"]):

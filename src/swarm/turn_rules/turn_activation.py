@@ -31,6 +31,7 @@ from orbit.configs.scheduling import ScheduleStep
 from src.configuration.swarm_config import Window
 from src.swarm.turn_rules._turn_delivery import after_delivery, delivery, end, spent
 from src.swarm.turn_rules._turn_presence import ENDED_WHY, record_exit
+from src.swarm.turn_rules._turn_pushes import TEAM_HEAD, look
 from src.swarm.turn_rules._turn_rounds import ends, name_job_call, take_round
 from src.swarm.turn_rules._turn_state import (
     ACTOR,
@@ -198,9 +199,10 @@ def _without_workers(st: TurnState, keep: list[dict], step: ScheduleStep | None)
 
 def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | None:
     """ORBIT calls this after every round of the plan (ScheduleConfig.after_activation): the round's record
-    (_after_round), then the benchmark's round-end callback when it has one (ROUND_END), awaited after the record."""
-    hook = ROUND_END.get()
-    if hook is None:
+    (_after_round), then the benchmark's round-end callback when it has one (ROUND_END) and a read of the team's head
+    when the benchmark has a reader (_turn_pushes.look), awaited after the record."""
+    hook, reader = ROUND_END.get(), TEAM_HEAD.get()
+    if hook is None and reader is None:
         return _after_round(runtime, result, global_turn)
     agent, step = result.agent_name, running_step(runtime)
     round_number = step_round(step.id) if step is not None else 0
@@ -212,11 +214,13 @@ def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | Non
     async def then() -> None:
         if rest is not None:
             await rest
-        try:
-            await hook(agent, round_number, calls)
-        except Exception as error:  # noqa: BLE001 - a failed callback is recorded; the run goes on
-            transcript().info({ROUND_END_TAG: {"agent": agent, "round": round_number,
-                                               "error": f"{type(error).__name__}: {error}"[:500]}})
+        if hook is not None:
+            try:
+                await hook(agent, round_number, calls)
+            except Exception as error:  # noqa: BLE001 - a failed callback is recorded; the run goes on
+                transcript().info({ROUND_END_TAG: {"agent": agent, "round": round_number,
+                                                   "error": f"{type(error).__name__}: {error}"[:500]}})
+        await look()
     return then()
 
 

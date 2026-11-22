@@ -2,6 +2,8 @@
 # directory stays group-writable, since git locks HEAD there, so the sticky bit keeps an agent from renaming or deleting
 # what root owns there: hooks/ and config, which the group cannot write; commondir, which holds this directory, so an
 # agent cannot point git at a config of its own; and an empty .git/, which git would enter ahead of the remote itself.
+# The config keeps a reflog of every ref, which names each pusher by its git identity (src/sandbox/team_head.py).
+git --git-dir={remote} config core.logAllRefUpdates true
 chgrp -R {group} {remote}
 chmod -R g+rwX {remote}
 find {remote} -type d -exec chmod g+s {{}} +

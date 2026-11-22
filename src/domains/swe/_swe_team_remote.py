@@ -26,6 +26,7 @@ import re
 from inspect_ai.util import sandbox, store
 
 from src.domains.swe.swe_settings import TEAM_REPO, TEAM_VIEW
+from src.sandbox.team_head import read_head
 
 GUARD_STORE = "team_remote_guard"
 LOCKED = ["config", "HEAD", "commondir", ".git"]          # flagged themselves; hooks/ and everything in it as well
@@ -123,22 +124,7 @@ async def unlock() -> None:
         pass
 
 
-# The head of main, read in the grader's view (which reads neither the remote's config nor its hooks), and the
-# pusher the reflog's last entry names when that entry moved main to it.
-HEAD = (f"git --git-dir={TEAM_VIEW} rev-parse -q --verify refs/heads/main; "
-        f"tail -n 1 {TEAM_REPO}/logs/refs/heads/main 2>/dev/null || true")
-
-
 async def team_head(agents: list[str]) -> dict | None:
-    """{"head": main's commit, "by": the agent whose push the reflog names, or None}; None when main is missing."""
-    r = await sandbox().exec(["bash", "-c", HEAD], user="root", timeout=60)
-    lines = (r.stdout or "").splitlines()
-    if not lines or not re.fullmatch(r"[0-9a-f]{40}", lines[0].strip()):
-        return None
-    head = lines[0].strip()
-    by = None
-    if len(lines) > 1:
-        fields = lines[1].split("\t")[0].split()
-        if len(fields) >= 3 and fields[1] == head and fields[2] in agents:
-            by = fields[2]
-    return {"head": head, "by": by}
+    """{"head": main's commit, "by": the agent whose push the reflog names, or None}; None when main is missing. The
+    ref is read in the grader's view, which reads neither the remote's config nor its hooks."""
+    return await read_head(sandbox(), TEAM_VIEW, TEAM_REPO, "main", agents)

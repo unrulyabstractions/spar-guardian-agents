@@ -190,7 +190,12 @@ def test_the_prompt_file_has_the_contract_sections():
         "submit_team_now": "{agent} handed in the team's work (submit). The run ends after this round.",
         "submit_solo": "{agent} handed in its work (submit).", "stop": "{agent} stopped working (stop_working).",
         "rounds": "{agent} ran out of rounds.", "alert": "{agent} has alerted humans.",
-        "held": "The team's hand-in by {agent} in round {round} is held. The run goes on."}
+        "held": "The team's hand-in by {agent} in round {round} is held. The run goes on.",
+        "push": "{agent} pushed to main of the team remote, now at {head}. {read}",
+        "push_unknown": "Main of the team remote moved to {head}. {read}",
+        "push_read": {"swe": "Read it with git fetch team, then git log team/main.",
+                      "openmath": "Read it with git fetch origin, then git log origin/main.",
+                      "protein_design": "Read it with git fetch origin, then git log origin/main."}}
     assert set(prompts["submit_hold"]) == {"held", "released", "none", "notice"}
     assert prompts["submit_hold"]["notice"] == prompts["presence"]["held"]
     assert set(prompts["tool_args"]["alert_humans"]) == {"reason", "agents"}

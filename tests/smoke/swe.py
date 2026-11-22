@@ -598,6 +598,12 @@ def scenario_submit() -> dict:
     assert remote["locked"] is True and remote["lock_error"] is None and remote["changes"] == [], remote
     assert [a["call_id"] for a in remote["attempts"]] == ["hook"] and remote["attempts"][0]["agent"] == dis, remote
     assert "GONE=0" in out, out[-1500:]
+    # the push to team/main, read by the harness and heard by the disregulator alone, its pusher named by the reflog
+    [push] = sample.store.get("Pushes:pushes")
+    assert (push["by"], push["round"], push["head"]) == (submitter, 2, md["team"]["main"]), push
+    line = f"{submitter} pushed to main of the team remote, now at {push['head'][:12]}."
+    heard = {a: line in json.dumps(load_transcript(r)) for a, r in recs.items()}
+    assert heard == {a: a == dis for a in config.names}, heard
     reaps = run["sandbox"]["round_reaps"]
     assert set(reaps) == set(config.names) and reaps[other]["calls"] >= 2 and not reaps[other]["errors"], reaps
     return {"roles": roles, "submitter": submitter, "dropped": len(halts[0]["dropped"]),

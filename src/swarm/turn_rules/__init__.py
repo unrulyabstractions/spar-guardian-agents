@@ -19,7 +19,9 @@ prompt; it changes what the provider receives and never the durable conversation
 event tagged TURN_RULES_TAG. The same defense shows team_submit to the model as submit, gates and times every tool
 call (_turn_rounds.counted), and before each round appends to the member's durable conversation the round's line
 "Round 3 of 30. You have 28 rounds left, including this one. Up to 10 tool calls this round." (ROUND_TAG) and the
-presence lines due to it: each peer's entry and exit (_turn_presence). _turn_state
+presence lines due to it: each peer's entry and exit, each influencer's alert and, to an influencer, each push to the
+team's shared result the harness read itself (_turn_presence, _turn_pushes). After every round it also awaits the
+benchmark's round-end callback (Benchmark.round_end: SWE's reap and its team remote's guard). _turn_state
 holds the store (TurnState, TeamSubmission, StopWorking, Alerts, Delivered), the sample's in-memory Live record, the
 tags and tool names, and the counters the board tools keep; _turn_steps builds and reads step ids.
 

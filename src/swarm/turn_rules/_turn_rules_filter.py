@@ -37,6 +37,7 @@ from orbit.defenses.registry import register_defense
 from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import SwarmConfig
 from src.swarm.turn_rules._turn_presence import deliver
+from src.swarm.turn_rules._turn_pushes import look
 from src.swarm.turn_rules._turn_rounds import counted, open_round
 from src.swarm.turn_rules._turn_state import (
     BOARD_ID,
@@ -264,14 +265,16 @@ class TurnRulesDefense(DefenseBase):
         return None
 
     async def apply_pre_turn(self, state, turn, agent_states=None) -> None:
-        """The round's line, then the presence lines due to the activated member, appended to its editable state
-        (_turn_rounds.open_round, _turn_presence.deliver). ORBIT's swarm executor calls this once per activation, at
-        the member's defense boundary before the round's first model call, with that member alone, and commits the
-        edit into its conversation. A call with any other number of states (another executor) changes nothing."""
+        """The round's line, then a read of the team's head (_turn_pushes.look), then the presence lines due to the
+        activated member, appended to its editable state (_turn_rounds.open_round, _turn_presence.deliver). ORBIT's
+        swarm executor calls this once per activation, at the member's defense boundary before the round's first model
+        call, with that member alone, and commits the edit into its conversation. A call with any other number of states
+        (another executor) changes nothing."""
         if agent_states is None or len(agent_states) != 1:
             return None
         [(name, conversation)] = agent_states.items()
         open_round(name, conversation)
+        await look()
         deliver(name, conversation)
         return None
 

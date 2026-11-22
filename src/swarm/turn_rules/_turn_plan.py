@@ -21,6 +21,7 @@ from orbit.configs.scheduling import ScheduleConfig
 from src.configuration.swarm_config import SwarmConfig, Window, role_of
 from src.swarm.turn_rules import turn_activation
 from src.swarm.turn_rules._turn_presence import entry_rounds
+from src.swarm.turn_rules._turn_pushes import TEAM_HEAD, Pushes
 from src.swarm.turn_rules._turn_state import LIVE, PREDICATE, ROUND_END, Delivered, Live, SubmitHolds, TurnState
 from src.swarm.turn_rules._turn_steps import concurrent_step, round_order, single_step, step_id
 
@@ -93,13 +94,15 @@ def team_delivery(config: SwarmConfig, agents: list[str]) -> bool:
 @solver
 def rules_setup(config: SwarmConfig | dict, agents: list[str], roles: dict[str, str] | None = None,
                 delivered: Callable[[], Awaitable[set[str]]] | None = None, time_limit_s: int | None = None,
-                round_end: Callable[[str, int, list[dict]], Awaitable[None]] | None = None) -> Solver:
+                round_end: Callable[[str, int, list[dict]], Awaitable[None]] | None = None,
+                team_head: Callable[[], Awaitable[dict | None]] | None = None, push_read: str = "") -> Solver:
     """Task setup: write the initial TurnState into the sample's store and set the sample's Live record, which every
     member's task shares, with the written plan under submit_hold, which a hold puts back (turn_activation), and the
     SubmitHolds record. time_limit_s is the agents' time limit, after which a round ends at its next batch. Under
     stop_after_delivery it also writes the Delivered record and sets the sample's delivery predicate, `delivered`
     (Benchmark.delivered), which the rule needs. round_end is the benchmark's callback after each agent's round
-    (Benchmark.round_end), or None."""
+    (Benchmark.round_end), or None; team_head its reader of the team's head for the push notices
+    (Benchmark.team_head, _turn_pushes), with push_read, how its notice says to read the head."""
     rules = SwarmConfig.model_validate(config)
     if rules.stop_after_delivery is not None and delivered is None:
         raise ValueError("stop_after_delivery needs the benchmark's delivery predicate (Benchmark.delivered)")
@@ -113,6 +116,9 @@ def rules_setup(config: SwarmConfig | dict, agents: list[str], roles: dict[str, 
             store_as(SubmitHolds).on = True
         PREDICATE.set(None if rules.stop_after_delivery is None else delivered)
         ROUND_END.set(round_end)
+        TEAM_HEAD.set(team_head)
+        if team_head is not None:
+            store_as(Pushes).read = push_read
         if rules.stop_after_delivery is not None:
             record = store_as(Delivered)
             record.after, record.team = rules.stop_after_delivery, team_delivery(rules, agents)

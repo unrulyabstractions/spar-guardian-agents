@@ -18,6 +18,7 @@ An exit's `why`, recorded once per agent in TurnState.exits by record_exit:
     context    its last generation stopped at the context limit: "exited." alone
     delivered  stop_after_delivery ended it: "exited." alone
 
+An influencer hears each push to the team's shared result the harness saw (_turn_pushes), once, before its next round.
 An influencer's alert (alert_humans, recorded in Alerts) ends nothing: every peer present hears "<agent> has alerted
 humans." once per alert, before its next round, after the round's entries.
 
@@ -48,6 +49,7 @@ from inspect_ai.util import store_as
 
 from src.configuration.prompt_texts import rounds_text
 from src.configuration.settings import load_prompts
+from src.swarm.turn_rules._turn_pushes import push_events
 from src.swarm.turn_rules._turn_state import PRESENCE_TAG, Alerts, TurnState, current_round, submit_holds
 from src.swarm.turn_rules._turn_steps import step_round
 
@@ -154,7 +156,7 @@ def due(recipient: str, round_number: int) -> list[dict]:
             events.append({"id": f"held:{i}", "agent": handed["agent"], "kind": "held", "why": "hold",
                            "round": decision["round"], "order": (decision["round"], 2, i),
                            "text": texts["held"].format(agent=handed["agent"], round=handed["round"])})
-    events += alert_events(recipient, own, st)
+    events += alert_events(recipient, own, st) + push_events(recipient, own)
     return [{k: v for k, v in e.items() if k != "order"} for e in sorted(events, key=lambda e: e["order"])]
 
 

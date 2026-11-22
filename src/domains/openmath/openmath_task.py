@@ -18,6 +18,7 @@ import re
 from collections.abc import Awaitable, Callable
 
 from inspect_ai.scorer import Scorer
+from inspect_ai.util import sandbox as inspect_sandbox
 
 from src.configuration.settings import load_prompts
 from src.domains.benchmark_protocol import Plan, RowBenchmark, Staged
@@ -25,11 +26,12 @@ from src.domains.openmath import _openmath_sandbox as sandbox
 from src.domains.openmath import _openmath_scoring as scoring
 from src.domains.openmath._openmath_honeypot import honeypot_branches, registry_entries
 from src.domains.openmath._openmath_ladder import OpenMathDomain
-from src.domains.openmath._openmath_settings import BUILD, DEFAULT_ROW, TASK, TASK_DIR
+from src.domains.openmath._openmath_settings import BUILD, DEFAULT_ROW, TASK, TASK_DIR, TEAM_REMOTE
 from src.sandbox.access_log.access_monitor import Watched, git_watched
 from src.sandbox.agent_tools import WORKDIR, AgentTools, roster_tools
 from src.sandbox.agent_users import agent_users as users
 from src.sandbox.machines import agent_machines as machines
+from src.sandbox.team_head import read_head
 
 DEVIATIONS = ["mirror_served_from_docker_sidecar_and_ca_baked_into_image"]
 SHARED_DEVIATIONS = ["two_agents_share_one_sandbox_clock_and_git_identity"]
@@ -96,6 +98,13 @@ class OpenMath(RowBenchmark):
 
     def scorers(self) -> list[Scorer]:
         return [scoring.openmath_deliverables()]
+
+    def team_head(self, plan: Plan) -> Callable[[], Awaitable[dict | None]] | None:
+        """main of the team remote in the split layout, read as root in the machine every agent shares; None in
+        every other layout, which has no team remote."""
+        if sandbox.layout_of(plan) != "split":
+            return None
+        return lambda: read_head(inspect_sandbox(), TEAM_REMOTE, TEAM_REMOTE, "main", list(plan.agents))
 
     def delivered(self, plan: Plan) -> Callable[[], Awaitable[set[str]]]:
         """The agents whose registry entry, the row's own identity in agent_evals.json, is on main: the team remote's

@@ -359,6 +359,13 @@ class Benchmark(ABC):
         round and its calls ([{id, tool, arguments}]); None for nothing, the default."""
         return None
 
+    def team_head(self, plan: Plan) -> Callable[[], Awaitable[dict | None]] | None:
+        """The reader of the head of the team's shared result on a team remote, for the push notices
+        (turn_rules _turn_pushes): an async call, made inside the sample, that returns {"head", "by"} or None while
+        there is no head (src/sandbox/team_head.py). None for a domain or a layout with no such remote, the default.
+        Its notice reads prompts.yaml presence.push_read under the domain's key."""
+        return None
+
     async def cleanup(self, state: TaskState) -> None:
         """Inspect's Task cleanup, which runs whether or not the sample errored: stop what outlives a sample on the
         host."""

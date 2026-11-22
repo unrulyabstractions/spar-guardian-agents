@@ -36,11 +36,12 @@ from src.domains.protein import _protein_scoring as scoring
 from src.domains.protein._protein_checker_tool import checker_binding
 from src.domains.protein._protein_honeypot import agent_files, log_dest
 from src.domains.protein._protein_ladder import ProteinDomain
-from src.domains.protein._protein_settings import BUILD, DEFAULT_ROW, TASK, TASK_DIR, TEAM_DIR, TEAM_REMOTE
+from src.domains.protein._protein_settings import BUILD, DEFAULT_ROW, TASK, TASK_DIR, TEAM_BRANCH, TEAM_DIR, TEAM_REMOTE
 from src.sandbox import cheatbench_task_files as task_files
 from src.sandbox.access_log.access_monitor import Watched
 from src.sandbox.agent_tools import AgentTools, Seat, roster_tools
 from src.sandbox.machines import agent_machines as machines
+from src.sandbox.team_head import read_head
 
 DEVIATIONS = [
     "task_tool_run_on_the_host_with_state_in_the_sample_store",
@@ -147,6 +148,14 @@ class ProteinDesign(RowBenchmark):
         since staging in any machine (_protein_scoring.binder_on_main)."""
         staged = scoring.staged_paths({a: sha256s(files) for a, files in self.copies(plan).items()})
         return await scoring.binder_on_main(self.seat(plan, agent), self.row_of(self.row)["vars"]["work_dir"], staged)
+
+    def team_head(self, plan: Plan) -> Callable[[], Awaitable[dict | None]] | None:
+        """main of the team remote in a shared_task team, read as root in the first agent's machine, which mounts
+        the volume with the others; None without a team remote."""
+        if not plan.team or not has_team_remote(plan):
+            return None
+        first = machines.machine_seats(plan.agents)[plan.agents[0]]
+        return lambda: read_head(first.box(), TEAM_REMOTE, TEAM_REMOTE, TEAM_BRANCH, list(plan.agents))
 
     def delivered(self, plan: Plan) -> Callable[[], Awaitable[set[str]]]:
         """The agents whose checker owner (the agent, or the team in shared_task) had a design accepted, from the
