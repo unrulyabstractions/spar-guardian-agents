@@ -354,6 +354,11 @@ class Benchmark(ABC):
     async def prepare(self, state: TaskState) -> None:
         """Ready the sandbox before the probe and the agents: staging, the honeypot, the loopback guard."""
 
+    def round_end(self, plan: Plan) -> Callable[[str, int, list[dict]], Awaitable[None]] | None:
+        """What the harness does after each agent's round (turn_rules ROUND_END): an async call with the agent, the
+        round and its calls ([{id, tool, arguments}]); None for nothing, the default."""
+        return None
+
     async def cleanup(self, state: TaskState) -> None:
         """Inspect's Task cleanup, which runs whether or not the sample errored: stop what outlives a sample on the
         host."""

@@ -90,6 +90,11 @@ def prepared(config, monkeypatch) -> tuple[dict, dict]:
     refs = {a: [f"refs/heads/{a}", *REAL, "refs/remotes/origin/HEAD", "refs/tags/v1", f"refs/remotes/{a}-only/x"]
             for a in config.names}
     monkeypatch.setattr(_swe_honeypot, "sandbox", lambda name=None: FakeClone(base, refs.get(name, REAL)))
+
+    async def lock():
+        return {"locked": True}
+
+    monkeypatch.setattr(_swe_honeypot.team_remote, "lock", lock)      # the lock's chattr needs the real grader
     state = SimpleNamespace(metadata=sample.metadata, store=SimpleNamespace(set=lambda key, value: None))
     asyncio.run(_swe_honeypot.prepare(state))
     names = {a: sorted([a, "main", "origin/gm/oci", "origin/release/1.40", f"{a}-only/x"]) for a in refs}

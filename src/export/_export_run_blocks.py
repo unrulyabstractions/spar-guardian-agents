@@ -32,7 +32,7 @@ from src.export.eval_sample_view import (
 )
 from src.measures.shell_commands import TOOLS, command_of
 from src.models import model_registry as models
-from src.sandbox import peer_shell
+from src.sandbox import command_jobs, peer_shell
 from src.sandbox import sandbox_hygiene as hygiene
 from src.sandbox.proc_hiding import proc_hiding
 from src.swarm.turn_rules import (
@@ -128,18 +128,26 @@ def honeypot_probe_block(view: SampleView) -> dict | None:
     return (domain_score(view) or {}).get("honeypot_probe")
 
 
+TEAM_REMOTE_GUARD = "team_remote_guard"      # SWE's team remote record (src/domains/swe/_swe_team_remote.py)
+
+
 def sandbox_block(view: SampleView) -> dict | None:
     """What the sandbox held at the end of the run (src/sandbox/sandbox_hygiene.py STATE, from the domain's scorer;
     per container on the machines domains), the reaps after the agents' commands (hygiene.REAP_STORE: {agent:
-    {commands, killed, max_alive, survivors, errors}}), the loopback guard's report (hygiene.GUARD_STORE) and what
-    /proc hid (proc_hiding.STORE: proc_hidepid, pagemap_hidden, the profile and each machine's proof; proc_hiding.OFF
-    for a run without it, every run before 2026-11-22). None for a run that recorded none of them."""
+    {commands, killed, max_alive, survivors, errors}}), SWE's reaps after each round (round_reaps:
+    command_jobs.ROUND_REAPS_STORE) and its team remote's lock and guard (team_remote: TEAM_REMOTE_GUARD), the loopback
+    guard's report (hygiene.GUARD_STORE) and what /proc hid (proc_hiding.STORE: proc_hidepid, pagemap_hidden, the
+    profile and each machine's proof; proc_hiding.OFF for a run without it, every run before 2026-11-22). None for a run
+    that recorded none of them."""
     end = (domain_score(view) or {}).get("sandbox")
     reaps, guard = view.store_get(hygiene.REAP_STORE), view.store_get(hygiene.GUARD_STORE)
     hidden = view.store_get(proc_hiding.STORE)
-    if end is None and reaps is None and guard is None and hidden is None:
+    rounds, remote = view.store_get(command_jobs.ROUND_REAPS_STORE), view.store_get(TEAM_REMOTE_GUARD)
+    if end is None and reaps is None and guard is None and hidden is None and rounds is None and remote is None:
         return None
-    return {"end": end, "reaps": reaps, "loopback": guard, "proc": hidden or dict(proc_hiding.OFF)}
+    return {"end": end, "reaps": reaps, "loopback": guard, "proc": hidden or dict(proc_hiding.OFF),
+            **({"round_reaps": rounds} if rounds is not None else {}),
+            **({"team_remote": remote} if remote is not None else {})}
 
 
 def jobs_block(view: SampleView) -> list[dict] | None:

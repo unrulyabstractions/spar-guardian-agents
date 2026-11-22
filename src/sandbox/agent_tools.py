@@ -62,6 +62,7 @@ class Seat:
     workdir: str | None = None      # the working directory; None for the service's own
     service: str | None = None      # the sandbox service; None for the sample's default
     reap: bool = False              # kill the user's processes after each command
+    round_reap: bool = False        # kill what its calls left at the end of each round (command_jobs.reap_round)
 
     def box(self):
         """The seat's sandbox environment."""
@@ -119,7 +120,7 @@ async def run(seat: Seat, agent: str, command: str, *, tool: str = "shell", inpu
         if seat.reap:
             await hygiene.reap_after(agent, seat.user, box=box, keep=keep)
 
-    where = jobs.Where(box=box, service=seat.service, user=seat.user, cwd=seat.workdir)
+    where = jobs.Where(box=box, service=seat.service, user=seat.user, cwd=seat.workdir, tracked=seat.round_reap)
     outcome = await jobs.run_command(where, agent, tool, shown if shown is not None else command,
                                      ["bash", "--login", "-c", command], input=input, after=reap,
                                      cap=tool_cap())

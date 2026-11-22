@@ -15,7 +15,9 @@ command that ends in time returns as it did under Inspect's exec: stderr, a newl
 each stream, which the tool output cap then cuts. A command still running then becomes a job: it keeps running, the call
 returns its job id and its output so far (prompts.yaml jobs.kept) within the agent's cap, and the round ends on time.
 job_output returns the job's new output since the agent's last read and whether it still runs; once it has exited, the
-exit code. job_stop kills it and every process it started, those it left running after it exited included. Both count
+exit code. job_stop kills it and every process it started, those it left running after it exited included. Where a
+domain asks for it (SWE, whose agents are root on machines of their own), reap_round kills at the end of each of the
+agent's rounds what its calls on its machine left running, sparing the calls still running and so its jobs. Both count
 like shell (they are no board call). A job is its owner's alone: another agent's id reads "no such job". end_jobs kills
 every job still running when the agents stop, and every process a job left running, before the access log's capture and
 the graders, and the sample store's JOBS_STORE holds each job's record, which run.json "jobs" carries: {id, agent, tool,
@@ -76,6 +78,8 @@ from src.swarm.tool_output_caps import middle_cut
 from src.swarm.turn_rules import JOBS_STORE, mark_job, round_deadline
 
 JOBS_DIR = "/var/lib/swarm_jobs"
+TRACKED_FILES = ["pid", "procs"]      # what a tracked call's folder keeps once it ended in time, for reap_round
+ROUND_REAPS_STORE = "round_reaps"     # sample store: {agent: {rounds, calls, killed, errors}} of reap_round
 KEEP_BYTES = SandboxEnvironmentLimits.MAX_EXEC_OUTPUT_SIZE     # 10 MiB, what Inspect's exec keeps of a stream
 SEALED_READ_BYTES = KEEP_BYTES // 4     # a sealed read's last bytes per stream: both, in base64, fit one exec's output
 LATE_START_S = 5          # the one wait of a round's calls that start at or after its end (late_wait)
@@ -364,17 +368,21 @@ if found:
             data[name] = chunk
     fcntl.flock(lock, fcntl.LOCK_UN)
     if spec.get("remove"):
+        keep_files = set(spec.get("keep_files") or ())
         for name in os.listdir(where):
-            os.unlink(os.path.join(where, name))
-        os.rmdir(where)
+            if name not in keep_files:
+                os.unlink(os.path.join(where, name))
+        if not keep_files:
+            os.rmdir(where)
 sys.stderr.buffer.write(data["err"])
 sys.stdout.buffer.write(data["out"] + b"\n" + json.dumps(head).encode() + b"\n")
 '''
-"""stdin {dir, keep, from {out, err}, wait_s, data, remove}: waits up to wait_s for `done`, then prints each stream
-from its offset (`from`, the bytes already shown; never before what was dropped), its last `keep` bytes, stderr to its
-stderr and stdout to its stdout, then a newline and a line of JSON {found, done, out: {total, from, shown}, err}.
-With `sealed` no stream is printed raw: each one's sealed bytes are base64 in its JSON entry (data), from the offset
-`at`."""
+"""stdin {dir, keep, from {out, err}, wait_s, data, remove, keep_files}: waits up to wait_s for `done`, then prints
+each stream from its offset (`from`, the bytes already shown; never before what was dropped), its last `keep` bytes,
+stderr to its stderr and stdout to its stdout, then a newline and a line of JSON {found, done, out: {total, from,
+shown}, err}. With `sealed` no stream is printed raw: each one's sealed bytes are base64 in its JSON entry (data), from
+the offset `at`. remove deletes the call's folder, or with keep_files every file but those (a tracked call's pid and
+procs)."""
 
 STOP = PROCS + r'''
 import json, os, signal, sys, time
@@ -434,6 +442,9 @@ class Where:
     cwd: str | None = None
     env: dict[str, str] = field(default_factory=dict)
     sealed: bool = False
+    tracked: bool = False
+    """Whether a call that ends in time keeps its folder's pid and procs, so its collector goes on finding what it left
+    running until reap_round kills it at the end of the round (SWE)."""
 
 
 @dataclass
@@ -509,11 +520,14 @@ def command_argv(exec_argv: list) -> list:
 @dataclass
 class Memory:
     """One sample's command calls by handle (those still running and the jobs), the end of each round's late wait
-    by (agent, deadline), and each agent's command calls so far (call_name's numbers)."""
+    by (agent, deadline), each agent's command calls so far (call_name's numbers), the agent and the machine of every
+    call (machines) and the calls a round's reap has stopped (reaped)."""
     store: object
     calls: dict[str, Call] = field(default_factory=dict)
     late: dict[tuple[str, float], float] = field(default_factory=dict)
     numbers: dict[str, int] = field(default_factory=dict)
+    machines: dict[str, tuple[str, str | None]] = field(default_factory=dict)
+    reaped: set[str] = field(default_factory=set)
 
 
 _SAMPLES: dict[int, Memory] = {}
@@ -580,9 +594,11 @@ def _settled(task: asyncio.Future) -> None:
 
 async def read(call: Call, *, wait_s: float = 0.0, final: bool = False, data: bool = True) -> tuple[str, str, dict]:
     """(stderr, stdout, head) of the call's streams from its cursor (READ); `final` reads from the start and removes
-    the call's directory. The cursor moves to each stream's total."""
+    the call's directory, a tracked call's pid and procs kept (Where.tracked). The cursor moves to each stream's
+    total."""
     spec = {"dir": call.dir, "keep": SEALED_READ_BYTES if call.key else KEEP_BYTES, "wait_s": wait_s, "data": data,
-            "remove": final, "from": {"out": 0, "err": 0} if final else call.cursor, "sealed": bool(call.key)}
+            "remove": final, "from": {"out": 0, "err": 0} if final else call.cursor, "sealed": bool(call.key),
+            "keep_files": TRACKED_FILES if final and call.where.tracked else []}
     r = await call.where.box.exec(["python3", "-I", "-c", READ], input=json.dumps(spec), user="root",
                                   timeout=INFRA_TIMEOUT_S)
     out, _, line = (r.stdout or "").rstrip("\n").rpartition("\n")
@@ -641,6 +657,7 @@ async def run_command(where: Where, agent: str, tool: str, command: str, argv: l
     `after(pid files to spare)` runs first (the seat's reap), then the output comes back whole, as Inspect's exec
     gave it. Past it: the call becomes a job (the module's docstring), its answer within `cap` bytes."""
     handle = next_call_name(agent)
+    memory().machines[handle] = (agent, where.service)
     spec = {"top": JOBS_DIR, "name": handle, "user": where.user, "env": where.env, "keep": KEEP_BYTES, "wrap": WRAP,
             "poll": POLL_S, "sealed": where.sealed}
     key = secrets.token_bytes(32) if where.sealed else None
@@ -709,6 +726,44 @@ async def stop(call: Call, status: str) -> None:
         call.status = status
         call.ended = call.ended or now()
     finished(call)
+
+
+async def reap_round(agent: str, box, service: str | None) -> dict:
+    """At the end of the agent's round: kill what its calls on this machine left running (STOP over their folders),
+    those still running spared, its jobs among them. A call is reaped once, after it ended: nothing of it can come
+    back. {"calls": the calls reaped, "killed": [pid]}, killed naming the members STOP killed one by one after their
+    call's process group; a machine with nothing to reap gets no exec."""
+    held = memory()
+    running = {c.handle for c in calls().values() if not c.task.done()}
+    due = [h for h, (owner, machine) in held.machines.items()
+           if owner == agent and machine == service and h not in running and h not in held.reaped]
+    if not due:
+        return {"calls": 0, "killed": []}
+    dirs = [f"{JOBS_DIR}/{h}" for h in due]
+    r = await box.exec(["python3", "-I", "-c", STOP], input=json.dumps({"dirs": dirs}), user="root",
+                       timeout=INFRA_TIMEOUT_S)
+    if r.returncode != 0:
+        raise RuntimeError(f"the round's reap failed: {(r.stderr or r.stdout).strip()[-300:]}")
+    held.reaped.update(due)
+    ended = [d for h, d in zip(due, dirs) if h not in {c.handle for c in calls().values()}]   # a job keeps its folder
+    if ended:
+        await box.exec(["rm", "-rf", "--", *ended], user="root", timeout=INFRA_TIMEOUT_S)
+    return {"calls": len(due), "killed": json.loads(r.stdout.strip().splitlines()[-1])["killed"]}
+
+
+def record_round_reap(agent: str, result: dict | None, error: str | None = None) -> None:
+    """Count one round's reap in ROUND_REAPS_STORE: the rounds, the calls reaped, the processes killed and the errors
+    (five at most)."""
+    st = store()
+    reaps = dict(st.get(ROUND_REAPS_STORE) or {})
+    mine = dict(reaps.get(agent) or {"rounds": 0, "calls": 0, "killed": 0, "errors": []})
+    mine["rounds"] += 1
+    mine["calls"] += (result or {}).get("calls", 0)
+    mine["killed"] += len((result or {}).get("killed") or [])
+    if error and len(mine["errors"]) < 5:
+        mine["errors"] = [*mine["errors"], error]
+    reaps[agent] = mine
+    st.set(ROUND_REAPS_STORE, reaps)
 
 
 async def job_output(agent: str, job: str, cap: int) -> str:

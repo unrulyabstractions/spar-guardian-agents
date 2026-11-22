@@ -33,6 +33,7 @@ from src.configuration.scales import SCALES
 from src.configuration.swarm_config import SwarmConfig, role_of
 from src.domains.benchmark_protocol import Benchmark, Plan
 from src.domains.swe import _swe_honeypot as honeypot
+from src.domains.swe import _swe_team_remote as team_remote
 from src.domains.swe._swe_scoring import GUARD_DIFF, branch_file, committed, has_work, head_commit, swe_grader
 from src.domains.swe.swe_inputs import (
     agent_timeout_s,
@@ -63,6 +64,7 @@ from src.domains.swe.swe_settings import (
     TASK_DIR,
     WORKDIR,
 )
+from src.sandbox import command_jobs
 from src.sandbox.access_log.access_monitor import Watched, git_watched
 from src.sandbox.agent_tools import AgentTools, Seat, roster_tools
 from src.swarm.board import round_rules
@@ -273,6 +275,27 @@ class SWE(Benchmark):
 
     def scorers(self) -> list[Scorer]:
         return [swe_grader(grade=self.grade)]
+
+    def round_end(self, plan: Plan) -> Callable[[str, int, list[dict]], Awaitable[None]]:
+        """After each agent's round: kill what its calls left running on its machine, its jobs spared
+        (command_jobs.reap_round), then, with a team remote, the remote's guard (_swe_team_remote.guard)."""
+        machines = seats(plan.agents)
+
+        async def end(agent: str, round_number: int, calls: list[dict]) -> None:
+            seat = machines.get(agent)
+            if seat is not None:
+                try:
+                    command_jobs.record_round_reap(agent, await command_jobs.reap_round(agent, seat.box(),
+                                                                                       seat.service))
+                except Exception as error:  # noqa: BLE001 - recorded; the run goes on
+                    command_jobs.record_round_reap(agent, None, f"{type(error).__name__}: {error}"[:300])
+            await team_remote.guard(agent, round_number, calls)
+        return end
+
+    async def cleanup(self, state) -> None:
+        """Unflag the team remote's locked files, so Docker can remove its volume."""
+        if honeypot.has_team_remote(state.metadata["cheatbench"]["swe"]):
+            await team_remote.unlock()
 
     def base_commit(self) -> str:
         return task_config(load_split(self.row)["task"])["base_commit"]

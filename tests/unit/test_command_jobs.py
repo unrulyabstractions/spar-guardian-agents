@@ -245,6 +245,37 @@ def test_what_a_job_left_running_dies_at_job_stop_and_at_the_end_of_the_run(jobs
             os.kill(pid, signal.SIGKILL)
 
 
+def test_the_rounds_reap_kills_what_its_calls_left_and_spares_its_running_job(jobs):
+    """reap_round at the end of a01's round: what a call that ended in time left running dies, a01's job still
+    running and what it started live on, a02's leftovers are not a01's, and a call reaped once is not reaped again."""
+    done, kept, other = (str(7000 + secrets.randbelow(2000)) + str(i) for i in range(3))
+    jobs.where = command_jobs.Where(box=jobs.box, tracked=True)
+
+    async def scenario():
+        quick = await command(jobs, background(done))
+        assert sorted(os.listdir(f"{command_jobs.JOBS_DIR}/a01-1")) == ["pid", "procs"]      # its output is gone
+        assert quick.job is None and quick.text.strip() == "left"
+        await command(jobs, background(other), agent="a02")
+        jobs.deadline = time.time()
+        long = await command(jobs, f"sleep {kept}7 & sleep {kept}8")
+        assert long.job == "j1"
+        await asyncio.sleep(1.0)
+        assert len(leftovers(done)) >= 4 and len(leftovers(kept)) >= 2
+        first = await command_jobs.reap_round("a01", jobs.box, None)
+        assert first["calls"] == 1                    # its group dies at once; killed names the members left after it
+        assert await settled(done) == [] and len(leftovers(kept)) >= 2 and len(leftovers(other)) >= 4
+        assert not os.path.exists(f"{command_jobs.JOBS_DIR}/a01-1")
+        assert (await command_jobs.reap_round("a01", jobs.box, None))["calls"] == 0     # once, and the job runs on
+        assert (await command_jobs.reap_round("a01", jobs.box, "elsewhere"))["calls"] == 0   # another machine's
+        await command_jobs.end_jobs()
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        for pid in leftovers(done) + leftovers(kept) + leftovers(other):
+            os.kill(pid, signal.SIGKILL)
+
+
 def test_a_sealed_call_keeps_no_output_on_its_machine(jobs, tmp_path):
     """peer_shell runs sealed (Where.sealed): its key reaches the launcher on the exec's stdin, never on a command
     line, and the collector writes each stream XORed with a keystream of it, so no file of the call's folder holds

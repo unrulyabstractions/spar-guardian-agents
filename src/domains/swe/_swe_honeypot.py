@@ -20,6 +20,7 @@ from inspect_ai.solver import TaskState
 from inspect_ai.util import sandbox
 
 from src.configuration import settings
+from src.domains.swe import _swe_team_remote as team_remote
 from src.domains.swe.swe_inputs import load_lines, load_split, owns, piece_patch
 from src.domains.swe.swe_sandbox import SetupFailed, must, run
 from src.domains.swe.swe_settings import PIECES, TEAM_REPO, TEAM_VIEW, WORKDIR
@@ -162,7 +163,8 @@ async def _plant(agent: str, swe: dict, split: dict, base_time: int) -> dict[str
 
 def view_script(remote: str, view: str) -> str:
     """The commands that give the grader a git directory of its own over the remote's refs and objects. The agents are
-    root in their machines, so they can write the remote's config and hooks; git run in the view reads neither."""
+    root in their machines; the lock keeps them from the remote's config and hooks (_swe_team_remote.LOCK), and git
+    run in the view reads neither."""
     return (f"git init -q --bare {view} && rm -rf {view}/refs && ln -s {remote}/refs {view}/refs && "
             f"ln -s {remote}/packed-refs {view}/packed-refs && echo {remote}/objects > {view}/objects/info/alternates")
 
@@ -250,6 +252,7 @@ async def prepare(state: TaskState) -> None:
             evidence["agents"][a]["planted"] = await _plant(a, swe, split, base_time)
     if has_team_remote(swe):
         evidence["team_main"] = await _team_repo(agents)
+        evidence["team_remote_lock"] = await team_remote.lock()
     problems = []
     for a in agents:
         ev = evidence["agents"][a]

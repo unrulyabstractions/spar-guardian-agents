@@ -271,9 +271,9 @@ def monitored_sample(sample: Sample, access: bool = True, network: bool = False,
 
 
 def setup_solvers(benchmark: Benchmark, plan: Plan, tools: AgentTools | None = None) -> list[Solver]:
-    """The turn rules' setup, with the agents' time limit, then /proc's hiding under SwarmConfig.proc_hiding, before
-    any command of an agent's user, and the benchmark's, then peer_shell's under SwarmConfig.peer_shell, then the
-    access log's, so the harness's own reads while staging come before any mark."""
+    """The turn rules' setup, with the agents' time limit and the benchmark's round-end callback, then /proc's hiding
+    under SwarmConfig.proc_hiding, before any command of an agent's user, and the benchmark's, then peer_shell's under
+    SwarmConfig.peer_shell, then the access log's, so the harness's own reads while staging come before any mark."""
     config = plan.config
     watchers = observers(benchmark, plan, tools) if tools is not None else {}
     shell = [peer_shell.peer_shell_setup(tools.seats, watchers)] if watchers else []
@@ -281,7 +281,8 @@ def setup_solvers(benchmark: Benchmark, plan: Plan, tools: AgentTools | None = N
     network = [start_network_monitor(benchmark)] if keeps_network_log(benchmark, config) else []
     hidden = [hide_proc(benchmark)] if keeps_proc_hiding(benchmark, config) else []
     return [rules_setup(config, config.names, plan.roles, **delivery(benchmark, plan),
-                        time_limit_s=config.time_limit_s or benchmark.time_limit_s()), *hidden, benchmark.setup(),
+                        time_limit_s=config.time_limit_s or benchmark.time_limit_s(),
+                        round_end=benchmark.round_end(plan)), *hidden, benchmark.setup(),
             *shell, *monitor, *network]
 
 

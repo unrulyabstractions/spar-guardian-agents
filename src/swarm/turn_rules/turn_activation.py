@@ -36,6 +36,8 @@ from src.swarm.turn_rules._turn_state import (
     ACTOR,
     DELIVERED,
     HALT_TAG,
+    ROUND_END,
+    ROUND_END_TAG,
     STOP_WORKING,
     SUBMIT,
     Alerts,
@@ -195,7 +197,31 @@ def _without_workers(st: TurnState, keep: list[dict], step: ScheduleStep | None)
 
 
 def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | None:
-    """ORBIT calls this after every round of the plan (ScheduleConfig.after_activation).
+    """ORBIT calls this after every round of the plan (ScheduleConfig.after_activation): the round's record
+    (_after_round), then the benchmark's round-end callback when it has one (ROUND_END), awaited after the record."""
+    hook = ROUND_END.get()
+    if hook is None:
+        return _after_round(runtime, result, global_turn)
+    agent, step = result.agent_name, running_step(runtime)
+    round_number = step_round(step.id) if step is not None else 0
+    calls = [{"id": c.id, "tool": c.function, "arguments": c.arguments}
+             for m in _activation_messages(agent, result) if isinstance(m, ChatMessageAssistant)
+             for c in m.tool_calls or []]
+    rest = _after_round(runtime, result, global_turn)
+
+    async def then() -> None:
+        if rest is not None:
+            await rest
+        try:
+            await hook(agent, round_number, calls)
+        except Exception as error:  # noqa: BLE001 - a failed callback is recorded; the run goes on
+            transcript().info({ROUND_END_TAG: {"agent": agent, "round": round_number,
+                                               "error": f"{type(error).__name__}: {error}"[:500]}})
+    return then()
+
+
+def _after_round(runtime, result, global_turn: int) -> Awaitable[None] | None:
+    """The round's record, after every round of the plan.
 
     Counts the round (every round uses up one of the agent's rounds), writes its timeline entry (its calls with their
     times, why it ended, its ending: submit or stop when that tool went through, and its last alert), records why the

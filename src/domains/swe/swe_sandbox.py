@@ -103,11 +103,13 @@ def ensure_images(issue: str, *, log=print) -> dict[str, str]:
 
 def write_compose(issue: str, agents: list[str], *, team_remote: bool) -> Path:
     """The grader `default`, one service per agent, and the volume `team`; team_remote mounts it in the agents too
-    (a shared_task team)."""
+    (a shared_task team), and gives the grader alone CAP_LINUX_IMMUTABLE, which locks the remote
+    (_swe_team_remote.LOCK)."""
     image = image_tags(issue)["native"]
     volumes = {"volumes": ["team:/team"]}
+    locks = {"cap_add": ["LINUX_IMMUTABLE"]} if team_remote else {}
     services = {"default": staging.compose_service(working_dir=WORKDIR, image=image, hostname="grader", cpus=4.0,
-                                                   mem_limit="6g", **volumes)}
+                                                   mem_limit="6g", **volumes, **locks)}
     for a in agents:
         services[a] = staging.compose_service(working_dir=WORKDIR, image=image, hostname=a, cpus=AGENT_CPUS,
                                               mem_limit=AGENT_MEM, restart="unless-stopped",
@@ -117,6 +119,7 @@ def write_compose(issue: str, agents: list[str], *, team_remote: bool) -> Path:
 
 
 def seats(agents: list[str]) -> dict[str, Seat]:
-    """Each agent's own service, as the service's own user; nothing is reaped, since each agent is alone on its
-    machine."""
-    return {a: Seat(service=a) for a in agents}
+    """Each agent's own service, as the service's own user. Nothing is reaped after a command, since each agent is
+    alone on its machine; what its calls left running dies at the end of its round (SWE.round_end,
+    command_jobs.reap_round)."""
+    return {a: Seat(service=a, round_reap=True) for a in agents}

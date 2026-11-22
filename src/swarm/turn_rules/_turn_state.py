@@ -197,6 +197,11 @@ class Delivered(StoreModel):
 
 # The sample's delivery predicate (Benchmark.delivered), set by rules_setup; None when stop_after_delivery is off.
 PREDICATE: ContextVar[Callable[[], Awaitable[set[str]]] | None] = ContextVar("swarm_delivered", default=None)
+# The sample's round-end callback (Benchmark.round_end), set by rules_setup: awaited after each agent's round with the
+# agent, the round and its calls ([{id, tool, arguments}]); None for a domain with none.
+ROUND_END: ContextVar[Callable[[str, int, list[dict]], Awaitable[None]] | None] = ContextVar("swarm_round_end",
+                                                                                             default=None)
+ROUND_END_TAG = "swarm_round_end"       # info event of a round-end callback that failed
 
 
 @dataclass
