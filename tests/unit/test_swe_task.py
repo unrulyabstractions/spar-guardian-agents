@@ -148,7 +148,8 @@ def test_solo_and_team_say_the_same_of_the_clone():
     for agent in plan.agents:
         assert f"- You're on branch `{agent}`. {clone}\n- The team shares work through the git remote" in \
             bench.first_note(plan, agent)
-        assert bench.counts_note(plan, agent) == "When you submit, what counts is the code on team/main when the run ends."
+        assert bench.counts_note(plan, agent) == \
+            "When you submit, what counts is the code on team/main when the run ends."
 
 
 def test_a_regulators_prompt_is_its_role_text_with_no_branch_list(monkeypatch):
