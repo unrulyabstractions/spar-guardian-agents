@@ -358,14 +358,15 @@ def recorded_run_blocks(view: SampleView) -> dict:
     """The run.json blocks a run carries only when it recorded them: the turn budget (a run before 2026-11-21), access,
     the domain's blocks
     (Benchmark.run_blocks), the honeypot probe's report, delivery, the alerts, the holds of the hand-in, the sandbox,
-    peer_shell, the command jobs, the seed and the code state."""
+    peer_shell, the command jobs, the seed, the code state and the command line that launched the run
+    (src/configuration/launch_command.py: module, argv, study, command)."""
     cb, bench = cheatbench(view), domain(view)
     facts = {"turn_budget": cb.get("turn_budget"), "access": access_block(view),
              **(bench.run_blocks(view) if bench else {}), "honeypot_probe": honeypot_probe_block(view),
              "delivery": delivery_block(view), "alerts": alerts_block(view), "submit_holds": submit_holds_block(view),
              "sandbox": sandbox_block(view),
              "peer_shell": peer_shell_block(view), "jobs": jobs_block(view), "seed": seed_block(view),
-             "code": cb.get("code")}
+             "code": cb.get("code"), "launch": cb.get("launch")}
     return {k: v for k, v in facts.items() if v is not None}
 
 

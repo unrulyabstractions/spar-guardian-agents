@@ -62,7 +62,7 @@ from orbit.configs.experiment import ExperimentConfig
 from orbit.configs.setup import AgentSpec, SetupConfig
 from orbit.tasks.multi_agent import multi_agent_task
 
-from src.configuration import access_policy, settings
+from src.configuration import access_policy, launch_command, settings
 from src.configuration.presets import preset, with_overrides
 from src.configuration.prompt_texts import before_line, rounds_values
 from src.configuration.seed_packs import seed_record
@@ -377,6 +377,9 @@ def record_run(task_: Task, benchmark: Benchmark, plan: Plan, prompts: dict[str,
         seed = seed_record(config, benchmark.key, benchmark.row)
         if seed:
             cb["seed"] = seed
+        launch = launch_command.current()
+        if launch:
+            cb["launch"] = launch
         if watchers:
             cb["peer_shell"] = {"observers": watchers}
         if roles:

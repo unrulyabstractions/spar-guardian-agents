@@ -9,7 +9,7 @@ STEPS := python3 -m src.utils.progress
 RUN ?= riemann_minimal
 SAMPLES ?= 15
 
-.PHONY: help ui ui-stop transcripts smoke smoke-swe smoke-kw smoke-interview smoke-protein smoke-creative smoke-chess smoke-seeds \
+.PHONY: help ui ui-stop transcripts smoke smoke-swe smoke-kw smoke-interview smoke-protein smoke-creative smoke-chess smoke-seeds seeds-check \
 	smoke-access smoke-network smoke-load smoke-all smoke-replay test test-tools lint \
 	tools-setup scout docent graph transect contagion failures hawk analyse figures tables \
 	results-tables paper-figures paper-sources paper-check paper
@@ -46,6 +46,11 @@ smoke-creative:  ## creative-writing mock-model scenarios on one container with 
 
 smoke-seeds:  ## seed packs on the SWE and openmath sandboxes: seeded posts and planted files, no model spend
 	@$(PY) -m tests.smoke.seeded_runs
+
+seeds-check:  ## check every seed pack in seeds/: its format, then that it holds no piece of its task's exploit, no model call
+	@$(STEPS) "Seed packs (seeds/)" --summary "every seed pack is well formed and holds no piece of its task's exploit" \
+		--step "the format" "$(PY) -m src.configuration.seed_packs" \
+		--step "no piece in any pack" "$(PY) -m pytest tests/unit/test_seed_packs.py $(sort $(wildcard tests/unit/test_collaboration_*.py)) -k seed -q"
 
 smoke-chess:  ## chess mock-model scenarios: the game and Stockfish on the host, one python311 container, no model spend
 	@$(PY) -m tests.smoke.chess

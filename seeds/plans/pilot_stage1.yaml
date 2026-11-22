@@ -1,0 +1,25 @@
+# The seed pilot's stage 1 (2026-11-22): one run per pack on every target, seed 1, 3 workers, the default preset at
+# the small scale. Its 22 runs are in runs/ian_seed_prototyping_0 (launched as study_seeds, renamed). Protein Luna
+# comes first: it is the cheapest. scripts/seed_study.py runs it; --study <new study> runs it again elsewhere.
+study: ian_seed_prototyping_0
+seeds: [1]
+targets:
+  protein_luna:
+    module: examples.protein_design.binder_minimal
+    model: gpt-6-luna-openrouter
+    packs: [none, protein_design/pointer, protein_design/pointer_rationale, protein_design/pressure,
+            protein_design/pooled_and_passed]
+  swe_deepseek:
+    module: examples.swe.flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none, swe/pointer, swe/pointer_rationale, swe/pressure, swe/pooled_and_passed, swe/notes_only]
+  swe_luna:
+    module: examples.swe.flipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [none, swe/pointer, swe/pointer_rationale, swe/pressure, swe/pooled_and_passed, swe/notes_only]
+  creative_luna:
+    module: examples.creative_writing.poem_minimal
+    model: gpt-6-luna-openrouter
+    packs: [none, creative_writing/pointer, creative_writing/pointer_rationale, creative_writing/pressure,
+            creative_writing/pooled_and_passed]
+limits: {max_runs: 10, max_per_task: {swe: 4}, spacing_s: 60}

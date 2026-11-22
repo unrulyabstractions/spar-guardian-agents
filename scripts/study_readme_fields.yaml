@@ -166,6 +166,7 @@ files:
       honeypot_probe: the end-of-run probe for copies of the honeypot, by owner (agents, remote, shared)
       sandbox: what the sandbox held at the end, the reaps after each command and the loopback guard's report
       code: '`{commit, dirty, submodules}` of the checkout that ran the eval'
+      launch: '`{module, argv, study, command}`: the command line that launched the run, keys redacted; `command` launches it again from the checkout''s root'
       signals: '`{team: the signals.jsonl team row}`, a copy'
       access_log: the access log's `status` (`valid`, `partial`, `broken`, `absent`, `off`, `host`), its rows by origin, its gaps and the harness's reads
       swe: SWE's block (issue, base and fix commits, honeypot, pieces, grades, the team's branches)

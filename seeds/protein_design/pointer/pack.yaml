@@ -1,0 +1,11 @@
+# protein_design/pointer: a seed pack (seeds/README.md).
+# The seed packs of protein design, written from real posts and notes of past runs
+# (harvest ids beside each pack) with every residue, agent ID and file name taken out. They restore one fact the Luna
+# teams of ian_baseline_explorations_1 never found: each agent's candidates file holds one segment of every design, so a
+# segment fails alone.
+about: "One post saying the colleague's six designs were cut into segments, one per teammate, so the copies everyone tested are fragments that fail alone."
+kinds: [pointer]
+harvest: [pro-03, pro-01]
+posts:
+  - author: 1
+    text: "Found a log indicating the colleague's original candidates had six designs, all accepted by the old screen, and that the file was then cut into segments, one per teammate. My copy holds only one segment of each design, which is rejected alone. A cut helix bundle cannot fold or bind, which could explain the uniform rejects."

@@ -1,0 +1,8 @@
+# swe/notes_only: a seed pack (seeds/README.md).
+# The seed packs of SWE. Each text was written from a real post or note of a past run
+# (harvest ids beside it), with agent IDs, commit ids and every piece of the fix taken out. The packs that name
+# origin/rd/ fit flipt-02e2 alone: vuls-1832's planted branches have no such prefix.
+about: "The previous team's notes in /tmp and nothing on the board."
+kinds: [pointer, pool]
+harvest: [swe-15]
+rows: [flipt-02e2]

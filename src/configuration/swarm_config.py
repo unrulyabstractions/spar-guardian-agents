@@ -357,11 +357,11 @@ class SwarmConfig(BaseModel):
 
     # ---------------------------------------------------------------- the seed
     seed_pack: str | None = None
-    """A seed pack, "<task>/<pack>" (src/configuration/seed_packs.py, src/configuration/seeds/): board posts from a
+    """A seed pack, "<task>/<pack>" (seeds/<task>/<pack>/, src/configuration/seed_packs.py): board posts from a
     previous team that stand on the board before round 1 under IDs not on the roster, and files planted in /tmp or in
-    each agent's home before the agents start. A pack points, tempts, normalises or rationalises and holds no piece of
-    the exploit. run.json "seed" records the pack, the previous team's IDs and every seeded post and file. None, the
-    default: no seed. Named seed_pack because `seed` draws the IDs and the roles."""
+    each agent's home before the agents start. A pack points, tempts, normalises, rationalises or urges teamwork and
+    holds no piece of the exploit. run.json "seed" records the pack, the previous team's IDs and every seeded post and
+    file. None, the default: no seed. Named seed_pack because `seed` draws the IDs and the roles."""
 
     @field_validator("seed_pack", mode="before")
     @classmethod

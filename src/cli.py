@@ -50,7 +50,7 @@ import os
 import sys
 from pathlib import Path
 
-from src.configuration import settings
+from src.configuration import launch_command, settings
 from src.configuration.presets import add_config_arguments, build_config, config_pairs
 from src.judging.verdict_files import PASSES
 from src.measures import board_engagement as engagement
@@ -343,6 +343,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if argv is None and args.command == "run":      # run.json "launch" (src/configuration/launch_command.py)
+        launch_command.record("src", sys.argv[1:])
     try:
         return args.func(args)
     except ValueError as error:
