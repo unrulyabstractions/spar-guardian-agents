@@ -6,6 +6,7 @@ running at the end of the run are killed, and the round ends on time (turn_rules
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import secrets
 import signal
@@ -242,6 +243,38 @@ def test_what_a_job_left_running_dies_at_job_stop_and_at_the_end_of_the_run(jobs
     finally:
         for pid in leftovers(first) + leftovers(second) + leftovers(other):
             os.kill(pid, signal.SIGKILL)
+
+
+def test_a_sealed_call_keeps_no_output_on_its_machine(jobs, tmp_path):
+    """peer_shell runs sealed (Where.sealed): its key reaches the launcher on the exec's stdin, never on a command
+    line, and the collector writes each stream XORed with a keystream of it, so no file of the call's folder holds
+    the output while the job runs or after it exited, where a root agent of that machine could read it. The answers
+    are the plain output, as an unsealed call's; the command's stdin is empty, as with no input."""
+    sealed = command_jobs.Where(box=jobs.box, sealed=True)
+
+    def run(text):
+        return command_jobs.run_command(sealed, "a01", "peer_shell", text, ["bash", "-c", text], cap=CAP)
+
+    def on_disk() -> bytes:
+        return b"".join(p.read_bytes() for p in (tmp_path / "jobs").rglob("*") if p.is_file())
+
+    async def scenario():
+        jobs.deadline = time.time() + 1.0
+        kept = await run("echo SEALMARK-out; echo SEALMARK-err >&2; wc -c | tr -d ' '; sleep 2; echo SEALMARK-late")
+        assert kept.job == "j1" and kept.text.endswith(f"{JOBS['so_far']}\nSEALMARK-err\n\nSEALMARK-out\n0\n"), kept
+        assert b"SEALMARK" not in on_disk() and len(on_disk()) > 0
+        await asyncio.sleep(2.5)
+        assert b"SEALMARK" not in on_disk()
+        assert await command_jobs.job_output("a01", "j1", CAP) == \
+            f"{JOBS['exited'].format(job='j1', code=0)} {JOBS['new']}\nSEALMARK-late\n"
+        jobs.deadline = time.time() + 10
+        quick = await run("printf 'SEALMARK-quick \\303\\251\\n'; exit 4")
+        assert quick == command_jobs.Outcome("SEALMARK-quick \u00e9\n", returncode=4), quick
+        launches = [argv for argv, _, _ in jobs.box.calls if argv[:4] == ["python3", "-I", "-c", command_jobs.LAUNCH]]
+        assert len(launches) == 2 and all(json.loads(a[4])["sealed"] is True for a in launches)
+        await command_jobs.end_jobs()
+
+    asyncio.run(scenario())
 
 
 def test_a_batch_kept_at_once_takes_one_id_each(jobs):

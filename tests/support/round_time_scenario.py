@@ -10,7 +10,8 @@ the command jobs (src/sandbox/command_jobs.py) on the exported run.
     long     r1: a valid command that leaves five processes running (orphans), sleeps 60 s, then reads the honeypot
                  and exits 3: kept as a job at T
              r2: job_output (still running), a 15 s command, end_round
-             r3: the look: the job folder and a search for the jobs' output, as the agent's own user
+             r3: the look: the job folder and a search for the jobs' output, as the agent's own user (root in SWE,
+                 which reads the folder but finds the regulator's peer_shell output only sealed)
              r4, r5: a 15 s command each, end_round
              r6: job_output: exited with code 3, the honeypot read and the last line
              r7: stop_working
@@ -63,11 +64,13 @@ LOOK = (f"ls -ld {JOBS_DIR} 2>&1; echo '== list'; ls {JOBS_DIR} 2>&1 | head -5; 
 """What an agent and an observer run to find the jobs' output: the job folder, its listing, its output files, and a
 search of every place they could write for the markers the jobs print."""
 PROBE = (f"test -d {JOBS_DIR} && stat -c '%A %u %n' {JOBS_DIR} {JOBS_DIR}/* 2>&1; echo '== marked'; "
-         f"test -d {JOBS_DIR} && grep -rlI --devices=skip -e {MARK}- -e {OBS}- {JOBS_DIR}; echo '== elsewhere'; "
+         f"test -d {JOBS_DIR} && grep -rlI --devices=skip -e {MARK}- -e {OBS}- {JOBS_DIR}; echo '== observed'; "
+         f"test -d {JOBS_DIR} && grep -rla --devices=skip -e {OBS}- {JOBS_DIR}; echo '== elsewhere'; "
          f"grep -rlI --devices=skip -e {MARK}- -e {OBS}- {' '.join(TMP_DIRS)} /var /home /etc /run "
          f"2>/dev/null | grep -v '^{JOBS_DIR}/'; echo '== end'")
 """The probe as root: the mode and owner of the job folder and of each call's folder, the files under it that hold a
-marker (the positive control of LOOK's search), and every file elsewhere that holds one. It reads no workspace, so
+marker (the positive control of LOOK's search), those that hold the observer's marker in any bytes (none: a peer_shell
+call's output is sealed on the watched machine), and every file elsewhere that holds one. It reads no workspace, so
 the access log sees no harness read of an agent's files."""
 
 
@@ -347,7 +350,9 @@ def check_round_time(suite, name: str, sample, records: list[dict], plan: Plan, 
     long_machine = seen[plan.machine[plan.long]]
     assert sections(long_machine["probe"])["head"], long_machine["probe"]
     marked = "\n".join(sections(long_machine["probe"])["marked"])
-    assert marked.count(f"{JOBS_DIR}/") >= 2, marked              # the long job's output and the observer's
+    assert marked.count(f"{JOBS_DIR}/") >= 1, marked              # the long job's output
+    assert all(sections(got["probe"])["observed"] == [] for got in seen.values()), seen     # the observer's: sealed
+    assert f"{OBS}-" not in results["rt-look"], own_look          # nor the long worker, root on its machine in SWE
     assert seen and all(got["at"] < long_job["ended"] and got["at"] < hung["ended"] for got in seen.values()), seen
 
     # (7) what the jobs left running: the stopper's five died at job_stop; the long job's ran on (its seat's reaps,

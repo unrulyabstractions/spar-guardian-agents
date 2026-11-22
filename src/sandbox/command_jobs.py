@@ -44,14 +44,20 @@ command's stdout then a line of JSON. The exec of the command holds no subproces
 and counts as no known work of the sample's working time: the call does while it waits.
 
 What stays outside. A job writes where its user can, and its processes count in the end state like any other
-(sandbox_hygiene.STATE). A root agent (SWE) can read JOBS_DIR on its own machine. A job's later reads and opens fall
+(sandbox_hygiene.STATE). A root agent (SWE) can read JOBS_DIR on its own machine: its own calls' output in the clear,
+and a peer_shell call's (Where.sealed) only sealed. A sealed read returns the last SEALED_READ_BYTES of each stream
+rather than KEEP_BYTES, so that both fit one exec's output in base64. Root there still sees the observer's command
+line in /proc, as it did before the jobs, and could take the bytes from the pipes with SYS_PTRACE, which no agent
+machine grants. A job's later reads and opens fall
 after its call's ToolEvent, so the access log and the network log extend the call's window to the job's end
 (job_windows).
 """
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
+import secrets
 import time
 import uuid
 from collections.abc import Awaitable, Callable
@@ -70,6 +76,7 @@ from src.swarm.turn_rules import JOBS_STORE, mark_job, round_deadline
 
 JOBS_DIR = "/var/lib/swarm_jobs"
 KEEP_BYTES = SandboxEnvironmentLimits.MAX_EXEC_OUTPUT_SIZE     # 10 MiB, what Inspect's exec keeps of a stream
+SEALED_READ_BYTES = KEEP_BYTES // 4     # a sealed read's last bytes per stream: both, in base64, fit one exec's output
 LATE_START_S = 5          # the one wait of a round's calls that start at or after its end (late_wait)
 POLL_S = 0.05            # how often a call's collector looks at the machine's processes for the job's (PROCS)
 SETTLE_S = 2.0            # how long a read waits for the collector to drain, as docker exec waits for a stream
@@ -134,11 +141,42 @@ def members(leader, known, rows, skip=()):
 '''
 """What LAUNCH's collector and STOP share: the machine's process table and the processes of one job in it."""
 
-LAUNCH = PROCS + r'''
+SEAL = r'''
+import hashlib
+
+def seal(key, name, at, data):
+    """data, the bytes of stream `name` from offset `at`, XORed with the keystream of `key` there (SHA-256 of the
+    key, the name and the block's number, per 32-byte block): the same call seals and unseals. No key: data."""
+    if not key or not data:
+        return data
+    block, skip = divmod(at, 32)
+    count = (skip + len(data) + 31) // 32
+    stream = b"".join(hashlib.sha256(key + name.encode() + (block + i).to_bytes(8, "big")).digest()
+                      for i in range(count))[skip:skip + len(data)]
+    return (int.from_bytes(data, "big") ^ int.from_bytes(stream, "big")).to_bytes(len(data), "big")
+'''
+"""A sealed call's streams on its machine (Where.sealed): LAUNCH's collector seals each chunk as it writes it, and
+the harness unseals what READ returns (seal)."""
+
+LAUNCH = PROCS + SEAL + r'''
 import fcntl, json, os, pwd, select, signal, sys, time
 spec = json.loads(sys.argv[1])
 argv = sys.argv[2:]
 keep = int(spec["keep"])
+key = None
+if spec.get("sealed"):      # not dumpable: no process of the machine without SYS_PTRACE reads this one's memory
+    try:
+        import ctypes
+        ctypes.CDLL(None, use_errno=True).prctl(4, 0, 0, 0, 0)
+    except (ImportError, AttributeError, OSError):
+        pass
+    line = b""
+    while not line.endswith(b"\n"):
+        ch = os.read(0, 1)
+        if not ch:
+            break
+        line += ch
+    key = bytes.fromhex(line.decode().strip())
 umask = os.umask(0o077)
 top = spec["top"]
 os.makedirs(top, mode=0o700, exist_ok=True)
@@ -191,7 +229,7 @@ def collect(fds, leader, start):
             if not data:
                 del live[name]
                 continue
-            files[name].write(data)
+            files[name].write(seal(key, name, meta[name]["total"], data))
             meta[name]["total"] += len(data)
             size = os.fstat(files[name].fileno()).st_size
             if size > 2 * keep:
@@ -278,13 +316,14 @@ except OSError as ex:
     os.write(2, f"{argv[0]}: {ex.strerror}\n".encode())
     os._exit(127)
 '''
-"""argv: the spec ({top, name, user, env, keep, wrap, poll}) as JSON, then the command's argv. The pid file is written
-as root, before the user is taken: a reap that sees a process of the user reads its pid file after. From the pid file
-on, the launcher's own failures (a user with no passwd entry) go to the command's stderr. The command gets the exec's
-own umask back; the call's files are made under 077."""
+"""argv: the spec ({top, name, user, env, keep, wrap, poll, sealed}) as JSON, then the command's argv. The pid file is
+written as root, before the user is taken: a reap that sees a process of the user reads its pid file after. From the
+pid file on, the launcher's own failures (a user with no passwd entry) go to the command's stderr. The command gets
+the exec's own umask back; the call's files are made under 077. A sealed call's first line of stdin is its key, in
+hex; the command gets the rest."""
 
 READ = r'''
-import fcntl, json, os, sys, time
+import base64, fcntl, json, os, sys, time
 spec = json.load(sys.stdin)
 where, keep = spec["dir"], int(spec["keep"])
 deadline = time.time() + float(spec.get("wait_s") or 0)
@@ -311,14 +350,17 @@ if found:
         path = os.path.join(where, name)
         size = os.path.getsize(path) if os.path.exists(path) else 0
         start = max(int((spec.get("from") or {}).get(name, 0)), dropped)
-        chunk = b""
+        whole = b""
         if spec.get("data", True) and os.path.exists(path):
             with open(path, "rb") as f:
                 f.seek(max(0, start - dropped))
-                chunk = f.read()
-        chunk = chunk[-keep:]
-        data[name] = chunk
+                whole = f.read()
+        chunk = whole[-keep:]
         head[name] = {"total": dropped + size, "from": start, "shown": len(chunk)}
+        if spec.get("sealed"):      # sealed bytes travel as base64 in the JSON line, from their offset
+            head[name].update(at=start + len(whole) - len(chunk), data=base64.b64encode(chunk).decode())
+        else:
+            data[name] = chunk
     fcntl.flock(lock, fcntl.LOCK_UN)
     if spec.get("remove"):
         for name in os.listdir(where):
@@ -329,7 +371,9 @@ sys.stdout.buffer.write(data["out"] + b"\n" + json.dumps(head).encode() + b"\n")
 '''
 """stdin {dir, keep, from {out, err}, wait_s, data, remove}: waits up to wait_s for `done`, then prints each stream
 from its offset (`from`, the bytes already shown; never before what was dropped), its last `keep` bytes, stderr to its
-stderr and stdout to its stdout, then a newline and a line of JSON {found, done, out: {total, from, shown}, err}."""
+stderr and stdout to its stdout, then a newline and a line of JSON {found, done, out: {total, from, shown}, err}.
+With `sealed` no stream is printed raw: each one's sealed bytes are base64 in its JSON entry (data), from the offset
+`at`."""
 
 STOP = PROCS + r'''
 import json, os, signal, sys, time
@@ -379,13 +423,16 @@ running dies."""
 @dataclass(frozen=True)
 class Where:
     """Where a command runs: the sandbox environment, its service name (None for the sample's default), the user
-    (a name, "uid:gid", or None for the service's own, root in every image we run), the working directory and the
-    environment it adds."""
+    (a name, "uid:gid", or None for the service's own, root in every image we run), the working directory, the
+    environment it adds, and whether its output is sealed on that machine: a peer_shell call runs on the watched
+    agent's machine, where that agent may be root (SWE), so its streams are kept there sealed (SEAL) with a key only
+    the harness and the call's collector hold, which reaches the launcher on the exec's stdin."""
     box: object
     service: str | None = None
     user: str | None = None
     cwd: str | None = None
     env: dict[str, str] = field(default_factory=dict)
+    sealed: bool = False
 
 
 @dataclass
@@ -403,6 +450,7 @@ class Call:
     status: str = "running"
     cursor: dict[str, int] = field(default_factory=lambda: {"out": 0, "err": 0})
     totals: dict[str, int] = field(default_factory=lambda: {"out": 0, "err": 0})
+    key: bytes | None = None        # a sealed call's key, in the harness's memory only
 
     @property
     def dir(self) -> str:
@@ -431,6 +479,14 @@ class Outcome:
 def now() -> float:
     return time.time()
 
+
+def _compiled(source: str) -> dict:
+    space: dict = {}
+    exec(compile(source, "<command_jobs>", "exec"), space)  # noqa: S102 - our own script, the one LAUNCH runs
+    return space
+
+
+seal = _compiled(SEAL)["seal"]
 
 
 def launch_argv(spec: dict, argv: list[str]) -> list[str]:
@@ -509,19 +565,23 @@ def _settled(task: asyncio.Future) -> None:
 async def read(call: Call, *, wait_s: float = 0.0, final: bool = False, data: bool = True) -> tuple[str, str, dict]:
     """(stderr, stdout, head) of the call's streams from its cursor (READ); `final` reads from the start and removes
     the call's directory. The cursor moves to each stream's total."""
-    spec = {"dir": call.dir, "keep": KEEP_BYTES, "wait_s": wait_s, "data": data, "remove": final,
-            "from": {"out": 0, "err": 0} if final else call.cursor}
+    spec = {"dir": call.dir, "keep": SEALED_READ_BYTES if call.key else KEEP_BYTES, "wait_s": wait_s, "data": data,
+            "remove": final, "from": {"out": 0, "err": 0} if final else call.cursor, "sealed": bool(call.key)}
     r = await call.where.box.exec(["python3", "-I", "-c", READ], input=json.dumps(spec), user="root",
                                   timeout=INFRA_TIMEOUT_S)
     out, _, line = (r.stdout or "").rstrip("\n").rpartition("\n")
+    err = r.stderr or ""
     try:
         head = json.loads(line)
     except ValueError:
         raise RuntimeError(f"command jobs: the read failed: {(r.stderr or r.stdout or '')[-500:]}") from None
+    if call.key:
+        out, err = (seal(call.key, name, head[name]["at"], base64.b64decode(head[name].pop("data")))
+                    .decode(errors="replace") if name in head else "" for name in ("out", "err"))
     for name in ("out", "err"):
         if name in head:
             call.totals[name] = call.cursor[name] = head[name]["total"]
-    return r.stderr or "", out, head
+    return err, out, head
 
 
 def joined(stderr: str, stdout: str) -> str:
@@ -566,11 +626,14 @@ async def run_command(where: Where, agent: str, tool: str, command: str, argv: l
     gave it. Past it: the call becomes a job (the module's docstring), its answer within `cap` bytes."""
     handle = uuid.uuid4().hex[:16]
     spec = {"top": JOBS_DIR, "name": handle, "user": where.user, "env": where.env, "keep": KEEP_BYTES, "wrap": WRAP,
-            "poll": POLL_S}
+            "poll": POLL_S, "sealed": where.sealed}
+    key = secrets.token_bytes(32) if where.sealed else None
+    if key is not None:
+        input = f"{key.hex()}\n{input or ''}"
     with untracked_sandbox_execs():
         task = asyncio.ensure_future(where.box.exec(launch_argv(spec, argv), input=input, cwd=where.cwd, user="root",
                                                     concurrency=False))
-    call = Call(handle=handle, agent=agent, tool=tool, where=where, command=command, started=now(), task=task)
+    call = Call(handle=handle, agent=agent, tool=tool, where=where, command=command, started=now(), task=task, key=key)
     task.add_done_callback(_settled)
     task.add_done_callback(lambda _: setattr(call, "ended", call.ended or now()))
     calls()[handle] = call

@@ -17,7 +17,9 @@ next call. The observer can write only where anyone can, the temporary directori
 modes. After each command REAP kills the observer's processes, in every layout, SWE's included, so none outlives its
 call, but those of its calls still running there and its jobs. The command runs through src/sandbox/command_jobs.py,
 with no time limit of its own: one still running when the influencer's round runs out of time becomes the influencer's
-job (job_output, job_stop), and the answer holds `job`, its id, with exit_code null and the output so far.
+job (job_output, job_stop), and the answer holds `job`, its id, with exit_code null and the output so far. The
+call's output is sealed on the peer's machine (command_jobs Where.sealed): a root peer (SWE) that reads the job folders
+finds only sealed bytes.
 
 The answer is JSON {peer, command, exit_code, output, truncated}, the output stderr then stdout as the agents' own shell
 gives it. An output past the run's cap (src/swarm/tool_output_caps.py, 64 KiB by default) keeps its start and its end
@@ -297,7 +299,7 @@ async def run_as_observer(seat: Seat, places: dict, uid: int, command: str, *, o
     await run_json(GRANT, stdin={"uid": uid, "tops": tops(places)}, box=box)
     store().set(LAST_REAP, {})
     where = jobs.Where(box=box, service=seat.service, user=f"{uid}:{PROC_GID}", cwd=places.get("workdir"),
-                       env={**GIT_ENV, "HOME": NO_HOME})
+                       env={**GIT_ENV, "HOME": NO_HOME}, sealed=True)
     return await jobs.run_command(where, owner, TOOL, command, ["bash", "--login", "-c", command],
                                   after=lambda keep: observer_reap(box, uid, keep), cap=cap)
 
