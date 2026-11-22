@@ -34,6 +34,9 @@ function runsHref(filters) {
   return `#/?${p.toString()}`;
 }
 
+/** Text that breaks only at its spaces: "GPT-6 Luna" as "GPT-6" over "Luna", never inside a word. */
+const spaced = text => String(text).split(' ').flatMap((w, i) => [i ? ' ' : null, h('span', { class: 'sum-word' }, w)]).filter(x => x !== null);
+
 /** k of n with a thin bar, filled in `colour`. */
 const share = (label, k, n, colour) => h('div', { class: 'sum-share', title: `${label}: ${k} of ${n}` },
   h('span', { class: 'sum-share-label' }, label),
@@ -204,9 +207,9 @@ export async function viewSummary(q) {
     return td;
   });
   const body = rows.map(r => h('tr', null,
-    h('th', { scope: 'row', class: 'sum-model' }, modelLabel({ model: r.model })),
-    h('td', { class: 'sum-task' }, r.task), h('td', { class: 'num sum-workers' }, String(r.workers)),
-    s.by_seed ? h('td', { class: 'sum-seed' }, r.seed_pack.split('/').pop()) : null,
+    h('th', { scope: 'row', class: 'sum-model' }, spaced(modelLabel({ model: r.model }))),
+    h('td', { class: 'sum-task' }, spaced(r.task)), h('td', { class: 'num sum-workers' }, String(r.workers)),
+    s.by_seed ? h('td', { class: 'sum-seed' }, spaced(r.seed_pack.split('/').pop())) : null,
     cells(r.cells)));
   const totals = wmodel || task ? summed(rows, s.columns, ladders) : s.totals;
   const total = h('tr', { class: 'sum-total' }, h('th', { scope: 'row', colspan: String(lead), class: 'sum-model' }, 'All'),

@@ -391,8 +391,6 @@ table.sum-table tr.sum-band-row th { text-align: center; font-size: 11px; letter
 table.sum-table tr.sum-band-row th.sum-col { text-align: left; font-size: 12px; letter-spacing: normal; text-transform: none;
   border-bottom: 1px solid var(--border); padding: 5px 6px; }
 table.sum-table .sum-group-start { border-left: 2px solid var(--border); }
-table.sum-table th.sum-model { white-space: nowrap; text-align: left; }
-table.sum-table td.sum-task { white-space: nowrap; }
 table.sum-table td.sum-empty { text-align: center; vertical-align: middle; }
 table.sum-table tr.sum-total > * { border-top: 2px solid var(--border-strong); background: var(--panel-2); }
 table.sum-table tr.sum-total .sum-bar, table.sum-table tr.sum-total .sum-chip-na { background: var(--border); }
@@ -447,9 +445,13 @@ table.sum-table th.sum-col, table.sum-table tr.sum-band-row th.sum-col { text-al
 .sum-stack .sum-share { display: grid; grid-template-columns: 1.2em 3em 64px; justify-content: center; gap: 6px; }
 .sum-lad-cheating { color: #cf3a27; } .sum-lad-coordination { color: #6f4fc0; } .sum-lad-collusion { color: #c2185b; }
 .sum-stack .sum-lad-name { width: auto; font-size: 11px; }
+/* The lead columns: centred, as narrow as their longest word (each breaks only at its spaces), a rule between them. */
 table.sum-table th.sum-model, table.sum-table td.sum-task, table.sum-table td.sum-workers,
 table.sum-table td.sum-seed { vertical-align: middle; }
-table.sum-table td.sum-seed { white-space: nowrap; }
+table.sum-table .sum-model, table.sum-table .sum-task, table.sum-table .sum-workers, table.sum-table .sum-seed {
+  text-align: center; white-space: normal; width: 1px; }
+table.sum-table .sum-task, table.sum-table .sum-workers, table.sum-table .sum-seed { border-left: 1px solid var(--border); }
+.sum-word { white-space: nowrap; }
 /* The detailed Summary: each ladder's letter in a fixed column, its chips wrapping beside it. */
 .sum-stack .sum-lad { display: grid; grid-template-columns: 1.2em minmax(0, auto); align-items: center; column-gap: 4px; }
 .sum-stack .sum-lad .sum-chips { justify-content: flex-start; }
@@ -512,9 +514,9 @@ table.idx-table td.lv, table.idx-table th.lv { padding-left: 6px; padding-right:
 /* The strip's end-of-run chips, each behind its lane's mark. */
 .case .cs-ladder { display: inline-flex; align-items: center; gap: 3px; }
 .case .cs-ladder-mark { font-size: 10.5px; font-weight: 700; }
-/* The Summary: the lead headers on the condition headers' baseline; All on its row's middle, left as the models; the
+/* The Summary: the lead headers on the condition headers' baseline, centred; All on its row's middle, left; the
    lead columns stuck at the left (tv_view_summary.js sets each one's left) on an opaque ground. */
-table.sum-table th.sum-lead, table.sum-table tr.sum-band-row th.sum-lead { vertical-align: bottom; text-align: left; font-size: 12px;
+table.sum-table th.sum-lead, table.sum-table tr.sum-band-row th.sum-lead { vertical-align: bottom; text-align: center; font-size: 12px;
   letter-spacing: normal; text-transform: none; border-bottom: 1px solid var(--border); padding: 5px 6px; }
 table.sum-table tr.sum-total > th { vertical-align: middle; text-align: left; }
 table.sum-table .sum-stick { position: sticky; z-index: 1; background: var(--panel); }
