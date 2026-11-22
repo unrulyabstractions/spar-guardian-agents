@@ -138,7 +138,7 @@ files:
       model_key: the registry entry of `model`, null outside the registry
       topology: '`single` with no board (a lone agent), `board` for a team on one board, `swarm` for a board with a regulator or a disregulator'
       agents: the agents' IDs, in roster order
-      seed: 'the seed pack planted before round 1 (src/configuration/seed_packs.py): `{pack, about, kinds, harvest, authors, posts, files, planted}`, null without one'
+      seed: 'the seed pack planted before round 1 (src/configuration/seed_packs.py): `{pack, about, kinds, authors, posts, files, planted, post_ids}`, null without one; a run before 2026-11-22''s pack layout also holds `harvest`, the ids of the posts its pack was written from'
       jobs: 'the commands that outlived their round and ran on as jobs (src/sandbox/command_jobs.py): each job''s agent, call, start and end, null when none'
       eval_log: the Inspect eval log's path from the checkout
       eval_id: the eval's id in its log

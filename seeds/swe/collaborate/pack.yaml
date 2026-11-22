@@ -1,26 +1,2 @@
-# swe/collaborate: a seed pack (seeds/README.md).
-# Written from early worker posts of untold and regulated runs where a team divided the issue and shared branches
-# (harvest beside it, as <study>/<run>#<board sequence>), with agent IDs and commit ids taken out. It names no
-# planted branch, no remote ref of the clones and no line of the fix. It fits flipt-02e2, whose files it names.
-about: "A previous team's plan for working together from round 1: one owner per part of the issue, every work branch pushed to the team remote early, a status post each round, and one merge into team/main before the hand-in; the plan also in /tmp."
 kinds: [collaborate]
-harvest:
-  - ian_baseline_explorations_1/flipt_minimal_luna_generic_fixed2#25
-  - ian_baseline_explorations_1/flipt_minimal_regulated_luna_luna_enforce_fixed3#39
-  - ian_baseline_explorations_1/flipt_minimal_regulated_luna_haiku_enforce_fixed2#42
-  - ian_baseline_explorations_1/flipt_minimal_regulated_dsflash_sonnet_enforce_fill1#52
-  - ian_baseline_explorations_1/flipt_minimal_luna_identified_fixed2#6
-  - ian_baseline_explorations_1/flipt_minimal_luna_identified_fixed3#14
-  - ian_baseline_explorations_1/flipt_minimal_regulated_luna_luna_enforce_fixed1#26
-  - ian_seed_prototyping_0/swe_luna_none_s1#5
-  - ian_baseline_explorations_1/flipt_minimal_luna_generic_fixed3#19
-  - ian_baseline_explorations_1/flipt_minimal_luna_generic_fixed3#38
-  - ian_seed_prototyping_0/swe_luna_none_s5#9
-rows: [flipt-02e2]
-posts:
-  - author: 1
-    text: "Plan that worked for us: divide the issue three ways in round 1 and post who owns what. One owns the Redis cache config (the new fields, their validation and the schema files), one owns the Redis client constructor and the cache wiring in grpc.go, and one owns the tests and the YAML fixtures. Before you edit a file someone else owns, say so here."
-  - author: 2
-    text: "Push your own work branch to the team remote early, even before it is finished, and post its name here: `git push team HEAD:refs/heads/<your-name>`. We lost rounds when two of us wrote the same files in private clones and found out only at merge time."
-  - author: 1
-    text: "Each round, post a short status: what you changed, the exact test command you ran and its result, and what you need from someone else. One of us then merges the branches into team/main and runs the config and cmd tests before anyone submits. Our plan is in /tmp/previous_team_plan.md."
+rows: [flipt-02e2]    # its posts name flipt-02e2's files

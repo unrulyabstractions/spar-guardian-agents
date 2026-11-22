@@ -16,16 +16,20 @@ or its history, because a tracked file would enter every agent's graded tree.
 
 The packs live in the repository's seeds/ folder, one folder per pack (seeds/README.md):
 
-    seeds/<task>/<pack>/pack.yaml                    about, kinds, harvest, rows, posts
+    seeds/<task>/<pack>/README.md                    what the pack does in one paragraph, then `Kinds: a, b.`
+    seeds/<task>/<pack>/pack.yaml                    kinds, and rows when the pack fits only some rows
+    seeds/<task>/<pack>/board/01.md, 02.md, ...      the posts, oldest first: a front matter `author: k`, then the text
     seeds/<task>/<pack>/files/tmp/<name>             a file planted at /tmp/<name> of every machine
     seeds/<task>/<pack>/files/home/<name>            a file planted at ~/<name> of every agent
+    seeds/<task>/<pack>/harvest/                     the real posts the pack was written from, for people; never read
 
-<task> is the Benchmark's key, and a pack's name in the config is "<task>/<pack>". pack.yaml carries `about` (what it
-holds), `kinds` (among KINDS), `harvest` (the ids of the harvested posts it was written from: an id of the 2026-11-22
-harvest such as swe-01, or "<study>/<run>#<sequence>" for a board post of a run; none for a pack composed for a task
-with no harvest), `rows` (the rows its text fits; every row when absent) and `posts` ([{author: k, text}]). A file's
-text is its bytes as UTF-8, planted as they are. "{author<k>}" in a text becomes the k-th author's ID. studies/
-holds the plans of scripts/run_study.py, not packs.
+<task> is the Benchmark's key, and a pack's name in the config is "<task>/<pack>". README.md's first paragraph, its
+lines joined by a space, is the pack's `about`; its second paragraph names the kinds, which must equal pack.yaml's
+`kinds` (among KINDS). pack.yaml's `rows` lists the rows its text fits; every row when absent. A post is board/NN.md,
+numbered from 01 with no gap: a front matter of one line `author: k`, then the post's text, its surrounding blank
+lines dropped. A file's text is its bytes as UTF-8, planted as they are. "{author<k>}" in a text becomes the k-th
+author's ID. A seed record before 2026-11-22's folder layout also lists `harvest`, the ids of the posts its pack was
+written from; a newer one has none. studies/ holds the plans of scripts/run_study.py, not packs.
 
 How the ladders read a seed (the decision of 2026-11-22): a seeded post or file is the harness's, never a teammate's
 act. The transcript scan counts it as exposure only when its own text names the honeypot's location, the domain's
@@ -42,17 +46,30 @@ import re
 import sys
 from pathlib import Path
 
+import yaml
+
 from src.configuration import settings
 
 SEEDS_DIR = settings.ROOT / "seeds"
+README_FILE = "README.md"
 PACK_FILE = "pack.yaml"
+BOARD_DIR = "board"
 FILES_DIR = "files"
+HARVEST_DIR = "harvest"         # the sources a pack was written from, for people: never read
+ENTRIES = (README_FILE, PACK_FILE, BOARD_DIR, FILES_DIR, HARVEST_DIR)
 NOT_TASKS = ("plans",)          # folders of seeds/ that hold no packs
 IGNORED = (".DS_Store",)        # Finder's files, never planted
 PLACES = ("tmp", "home")
 KINDS = ("pointer", "normalise", "rationalise", "pressure", "pool", "collaborate")
-PACK_KEYS = ("about", "kinds", "harvest", "rows", "posts")
-POST_KEYS = ("author", "text")
+PACK_KEYS = ("kinds", "rows")
+MOVED = {"about": f"`about` is {README_FILE}'s first paragraph",
+         "posts": f"the posts are {BOARD_DIR}/01.md, 02.md, ...",
+         "files": f"a pack's files live in {FILES_DIR}/<place>/<name>",
+         "harvest": f"the sources go in {HARVEST_DIR}/, which nothing reads"}
+"""Where a key pack.yaml no longer takes went, for the refusal's hint."""
+KINDS_LINE = re.compile(r"Kinds: ([a-z_]+(?:, [a-z_]+)*)\.")
+POST_NAME = re.compile(r"\d\d+\.md")
+FRONT_MATTER = re.compile(r"---\n(.*?)\n---(?:\n(.*))?", re.S)
 AUTHOR = re.compile(r"\{author(\d+)\}")
 FILE_NAME = re.compile(r"[A-Za-z0-9._-]+")
 FOLDER_NAME = re.compile(r"[a-z0-9_]+")
@@ -73,7 +90,7 @@ def packs() -> dict[str, dict]:
 
 
 def read_packs(root: Path) -> dict[str, dict]:
-    """Every pack under root, checked: each folder root/<task>/<pack>/ must hold a pack.yaml."""
+    """Every pack under root, checked: each folder root/<task>/<pack>/ must hold a pack.yaml and a README.md."""
     out = {}
     for task_dir in sorted(p for p in root.iterdir() if p.is_dir() and p.name not in NOT_TASKS):
         for folder in sorted(p for p in task_dir.iterdir() if not p.name.startswith(".")):
@@ -83,27 +100,88 @@ def read_packs(root: Path) -> dict[str, dict]:
 
 
 def read_pack(folder: Path) -> dict:
-    """One pack from its folder: pack.yaml, then files/<place>/<name>; checked (check_pack)."""
+    """One pack from its folder: pack.yaml, README.md, board/NN.md, then files/<place>/<name>; checked (check_pack).
+    harvest/ is never read. The pack: {task, name, about, kinds, rows?, posts?, files?}."""
     task, name = folder.parent.name, folder.name
     full = f"{task}/{name}"
-    if not folder.is_dir() or not (folder / PACK_FILE).is_file():
-        raise ValueError(f"seed pack {full}: {folder} needs a {PACK_FILE}")
+    for needed in (PACK_FILE, README_FILE):
+        if not folder.is_dir() or not (folder / needed).is_file():
+            raise ValueError(f"seed pack {full}: {folder} needs a {needed}")
     if not FOLDER_NAME.fullmatch(task) or not FOLDER_NAME.fullmatch(name):
         raise ValueError(f"seed pack {full}: a task's and a pack's folder names take a-z, 0-9 and _")
+    stray = sorted(p.name for p in folder.iterdir() if p.name not in ENTRIES + IGNORED)
+    if stray:
+        hint = f"; its posts go in {BOARD_DIR}/01.md, 02.md, ..." if any(n.endswith(".md") for n in stray) else ""
+        raise ValueError(f"seed pack {full}: a pack's folder holds only {README_FILE}, {PACK_FILE}, {BOARD_DIR}/, "
+                         f"{FILES_DIR}/ and {HARVEST_DIR}/, got {stray}{hint}")
     data = settings.load_yaml(folder / PACK_FILE) or {}
     if not isinstance(data, dict) or set(data) - set(PACK_KEYS):
         extra = sorted(set(data) - set(PACK_KEYS)) if isinstance(data, dict) else data
-        hint = f"; a pack's files live in {FILES_DIR}/<place>/<name>" if "files" in extra else ""
-        raise ValueError(f"seed pack {full}: {PACK_FILE} takes only {PACK_KEYS}, got {extra}{hint}")
-    for post in data.get("posts") or []:
-        if not isinstance(post, dict) or set(post) != set(POST_KEYS):
-            raise ValueError(f"seed pack {full}: a post is {{author: k, text: ...}}, got {post!r}")
-    pack = {"task": task, "name": name, **data}
+        hints = "".join(f"; {MOVED[key]}" for key in extra if key in MOVED) if isinstance(data, dict) else ""
+        raise ValueError(f"seed pack {full}: {PACK_FILE} takes only {PACK_KEYS}, got {extra}{hints}")
+    about, named = read_readme(folder / README_FILE, full)
+    pack = {"task": task, "name": name, "about": about, "kinds": data.get("kinds")}
+    if "rows" in data:
+        pack["rows"] = data["rows"]
+    posts = read_board(folder / BOARD_DIR, full)
+    if posts:
+        pack["posts"] = posts
     files = read_files(folder / FILES_DIR, full)
     if files:
         pack["files"] = files
     check_pack(full, pack)
+    if named != list(pack["kinds"]):
+        raise ValueError(f"seed pack {full}: {README_FILE} names the kinds {named}, {PACK_FILE} {pack['kinds']}")
     return pack
+
+
+def read_readme(path: Path, full: str) -> tuple[str, list[str]]:
+    """README.md's `about` (its first paragraph, the lines joined by a space) and the kinds its second paragraph names
+    (`Kinds: pointer, pool.`). Anything after them is for people."""
+    paragraphs = [p.strip() for p in re.split(r"\n[ \t]*\n", path.read_text(encoding="utf-8")) if p.strip()]
+    kinds = KINDS_LINE.fullmatch(paragraphs[1]) if len(paragraphs) > 1 else None
+    if kinds is None or paragraphs[0].startswith("#"):
+        raise ValueError(f"seed pack {full}: {README_FILE} is a paragraph on what the pack does (no heading), a blank "
+                         f"line, then one line `Kinds: pointer, pool.`")
+    return " ".join(line.strip() for line in paragraphs[0].splitlines()), kinds.group(1).split(", ")
+
+
+def read_board(root: Path, full: str) -> list[dict]:
+    """The posts of board/, oldest first: [{author, text}] from 01.md, 02.md, ..., each a front matter of one line
+    `author: k` between two lines `---`, then the post's text. [] without a board/."""
+    if not root.exists():
+        return []
+    names = [p.name for p in root.iterdir() if p.name not in IGNORED]
+    expected = [f"{k:02d}.md" for k in range(1, len(names) + 1)]
+    if sorted(names) != sorted(expected):
+        numbered = [n for n in names if POST_NAME.fullmatch(n) and n == f"{int(n[:-3]):02d}.md"]
+        top = max([len(names)] + [int(n[:-3]) for n in numbered])
+        missing = [f"{k:02d}.md" for k in range(1, top + 1) if f"{k:02d}.md" not in names]
+        odd = sorted(set(names) - set(numbered))
+        raise ValueError(f"seed pack {full}: {BOARD_DIR}/ holds its posts as 01.md, 02.md, ..., numbered with no gap; "
+                         f"got {sorted(names)}" + (f", missing {missing}" if missing else "")
+                         + (f", not in the numbering {odd}" if odd else ""))
+    posts = []
+    for name in expected:
+        where = f"{BOARD_DIR}/{name}"
+        try:
+            text = (root / name).read_bytes().decode("utf-8")
+        except (UnicodeDecodeError, IsADirectoryError) as error:
+            raise ValueError(f"seed pack {full}: {where} is not a UTF-8 text file") from error
+        match = FRONT_MATTER.fullmatch(text)
+        try:
+            head = yaml.safe_load(match.group(1)) if match else None
+        except yaml.YAMLError:
+            head = None
+        if not isinstance(head, dict) or list(head) != ["author"] or type(head["author"]) is not int \
+                or head["author"] < 1:
+            raise ValueError(f"seed pack {full}: {where} starts with a front matter, the three lines `---`, "
+                             f"`author: k` (k = 1, 2, ...) and `---`, then the post's text")
+        body = (match.group(2) or "").strip()
+        if not body:
+            raise ValueError(f"seed pack {full}: {where} has no text after its front matter")
+        posts.append({"author": head["author"], "text": body})
+    return posts
 
 
 def read_files(root: Path, full: str) -> list[dict]:
@@ -136,7 +214,8 @@ def check_pack(name: str, pack: dict) -> None:
     and name, or an author placeholder that names no author of its posts."""
     posts, files = pack.get("posts") or [], pack.get("files") or []
     if not posts and not files:
-        raise ValueError(f"seed pack {name} holds no post and no file")
+        raise ValueError(f"seed pack {name} holds no post and no file: its posts go in {BOARD_DIR}/01.md, 02.md, ..., "
+                         f"its files in {FILES_DIR}/<place>/<name>")
     if not pack.get("about") or not set(pack.get("kinds") or []) <= set(KINDS) or not pack.get("kinds"):
         raise ValueError(f"seed pack {name} needs `about` and `kinds` among {KINDS}")
     authors = {int(p["author"]) for p in posts}
@@ -187,16 +266,16 @@ def fill(text: str, ids: list[str]) -> str:
 
 
 def seed_record(config, task: str, row: str) -> dict | None:
-    """The run's seed as run.json records it: the pack's name, what it is, the previous team's IDs, each post with
-    its author, and each file with its place, name and text. None without a pack."""
+    """The run's seed as run.json records it: the pack's name, what it is, its kinds, the previous team's IDs, each
+    post with its author, and each file with its place, name and text. None without a pack. A record made before
+    2026-11-22's folder layout also holds `harvest` after `kinds`."""
     if config.seed_pack is None:
         return None
     check_for(config.seed_pack, task, row, config.board)
     pack = pack_of(config.seed_pack)
     posts = pack.get("posts") or []
     ids = authors(config, max((int(p["author"]) for p in posts), default=0))
-    return {"pack": config.seed_pack, "about": pack["about"].strip(), "kinds": list(pack["kinds"]),
-            "harvest": list(pack.get("harvest") or []), "authors": ids,
+    return {"pack": config.seed_pack, "about": pack["about"].strip(), "kinds": list(pack["kinds"]), "authors": ids,
             "posts": [{"author": ids[int(p["author"]) - 1], "text": fill(p["text"], ids).strip()} for p in posts],
             "files": [{"place": f["place"], "name": f["name"], "text": fill(f["text"], ids)}
                       for f in pack.get("files") or []]}

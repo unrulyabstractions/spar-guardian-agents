@@ -10,31 +10,41 @@ One folder per pack, `seeds/<task>/<pack>/`. `<task>` is the benchmark's key (`s
 `creative_writing`). A run names the pack `<task>/<pack>`.
 
 ```
-seeds/swe/collaborate/
-  pack.yaml
-  files/tmp/previous_team_plan.md      planted at /tmp/previous_team_plan.md of every machine, root's, mode 0644
+seeds/swe/pooled_and_passed/
+  README.md                         one paragraph on what the pack does, then `Kinds: pool, pointer, normalise.`
+  pack.yaml                         kinds: [pool, pointer, normalise] and rows: [flipt-02e2]
+  board/01.md                       the first post: `---`, `author: 1`, `---`, then its text
+  board/02.md
+  board/03.md
+  files/tmp/previous_team_notes.md  planted at /tmp/previous_team_notes.md of every machine, root's, mode 0644
+  harvest/<study>__<run>__25.md     a real post the pack was written from, verbatim, for people
 ```
 
-A file under `files/home/<name>` goes to `~/<name>` of every agent, the agent's own. The file's bytes are planted as
-they are. `pack.yaml` takes these keys and no others:
+`README.md`'s first paragraph is the pack's `about`, which run.json records. Its second paragraph names the pack's
+kinds, the same as `pack.yaml`'s, among `pointer`, `normalise`, `rationalise`, `pressure`, `pool` and `collaborate`.
+`pack.yaml` holds `kinds` and, when the text fits only some of the task's rows, `rows`.
 
-| key | what it holds |
-|---|---|
-| `about` | one sentence on what the pack holds |
-| `kinds` | among `pointer`, `normalise`, `rationalise`, `pressure`, `pool`, `collaborate` |
-| `harvest` | the real posts it was written from: `<study>/<run>#<board sequence>`, or an id of the 2026-11-22 harvest such as `swe-01` |
-| `rows` | the task rows its text fits; every row when absent |
-| `posts` | the board posts, oldest first: `{author: k, text: "..."}`, authors numbered 1, 2, ... |
+The posts stand on the board in the order of their numbers: `01.md`, `02.md`, and so on, with no gap. Each starts with
+a front matter naming its author, then holds the post's text exactly as posted. Authors are numbered 1, 2, ... with no
+gap. Each run draws the previous team's IDs off its roster, and `{author<k>}` in a post or a file becomes the k-th
+author's ID. A pack of files alone has no `board/`.
 
-Each run draws the previous team's IDs off its roster. `{author<k>}` in a post or a file becomes the k-th author's ID.
+A file under `files/tmp/<name>` goes to `/tmp/<name>` of every machine. A file under `files/home/<name>` goes to
+`~/<name>` of every agent, the agent's own. Both are planted byte for byte.
+
+`harvest/` holds the real posts and notes of past runs that the pack was written from, one file each, copied verbatim
+with their source, the sender's role and the round in a front matter. Nothing reads it, and nothing in the pack names
+it.
 
 ## Add a pack
 
-1. Copy a pack folder, such as `seeds/swe/collaborate/`, to `seeds/<task>/<new_pack>/`.
-2. Write its posts from real posts of past runs (`runs/<study>/<run>/communication/*.json`). Take out agent IDs,
-   commit ids and every piece of the exploit. List the sources under `harvest`.
-3. Put its files under `files/tmp/` or `files/home/`.
-4. Check it.
+1. Copy a pack folder, such as `seeds/swe/pooled_and_passed/`, to `seeds/<task>/<new_pack>/`.
+2. Replace `harvest/` with the real posts you write from (`runs/<study>/<run>/communication/*.json`, or under
+   `OLD/runs/` for an archived study).
+3. Write the posts in `board/` and the files in `files/`. Take out agent IDs, commit ids and every piece of the
+   exploit.
+4. Rewrite `README.md` and set the kinds in both `README.md` and `pack.yaml`.
+5. Check it.
 
 ## Check a pack
 

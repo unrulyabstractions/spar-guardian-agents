@@ -44,54 +44,110 @@ def test_every_pack_loads_and_its_task_has_a_collaboration_check():
         assert name == f"{pack['task']}/{pack['name']}" and pack["about"] and pack["kinds"], name
 
 
-def write_pack(root, name="t/p", yaml_text="about: a\nkinds: [pool]\nposts:\n  - author: 1\n    text: hi\n",
-               files=None):
+POST = "---\nauthor: 1\n---\nhi\n"
+
+
+def write_pack(root, name="t/p", readme="a\n\nKinds: pool.\n", yaml_text="kinds: [pool]\n", posts=None, files=None,
+               extra=None):
+    """A pack folder in the layout of seeds/README.md: README.md, pack.yaml, board/<name> for each post (one post by
+    author 1 by default), files/<place>/<name>, and any other entry of the folder (extra, path to bytes)."""
     folder = root / name
     folder.mkdir(parents=True)
+    if readme is not None:
+        (folder / "README.md").write_text(readme)
     (folder / "pack.yaml").write_text(yaml_text)
-    for path, data in (files or {}).items():
-        (folder / "files" / path).parent.mkdir(parents=True, exist_ok=True)
-        (folder / "files" / path).write_bytes(data)
+    for post, text in ({"01.md": POST} if posts is None else posts).items():
+        (folder / "board" / post).parent.mkdir(parents=True, exist_ok=True)
+        (folder / "board" / post).write_bytes(text if isinstance(text, bytes) else text.encode())
+    for under, given in (("files", files), ("", extra)):
+        for path, data in (given or {}).items():
+            (folder / under / path).parent.mkdir(parents=True, exist_ok=True)
+            (folder / under / path).write_bytes(data)
     return folder
 
 
 def test_a_pack_folder_gives_its_posts_and_its_files_as_bytes(tmp_path):
-    write_pack(tmp_path, files={"home/b.md": "x\r\n\u00e9".encode(), "tmp/a.txt": b"{author1} was here\n",
-                                "tmp/.DS_Store": b"\0"})
+    """README.md's first paragraph, its lines joined, is the pack's about; each board/NN.md a post, its text without
+    the surrounding blank lines; files/ as bytes. harvest/ is never read, whatever it holds."""
+    write_pack(tmp_path, readme="A previous team's\nplan.\n\nKinds: pool, pointer.\n\nNotes for people.\n",
+               yaml_text="kinds: [pool, pointer]\nrows: [r1]\n",
+               posts={"01.md": "---\nauthor: 1\n---\n\nhi `there`\n\n", "02.md": "---\nauthor: 2\n---\n{author1}: yes",
+                      ".DS_Store": b"\0"},
+               files={"home/b.md": "x\r\n\u00e9".encode(), "tmp/a.txt": b"{author1} was here\n",
+                      "tmp/.DS_Store": b"\0"},
+               extra={"harvest/run__7.md": b"\xff not even text", "harvest/sub/x": b"", ".DS_Store": b"\0"})
     (tmp_path / "plans").mkdir()
     pack = seed_packs.read_packs(tmp_path)["t/p"]
-    assert pack == {"task": "t", "name": "p", "about": "a", "kinds": ["pool"], "posts": [{"author": 1, "text": "hi"}],
+    assert pack == {"task": "t", "name": "p", "about": "A previous team's plan.", "kinds": ["pool", "pointer"],
+                    "rows": ["r1"],
+                    "posts": [{"author": 1, "text": "hi `there`"}, {"author": 2, "text": "{author1}: yes"}],
                     "files": [{"place": "tmp", "name": "a.txt", "text": "{author1} was here\n"},
                               {"place": "home", "name": "b.md", "text": "x\r\n\u00e9"}]}
+    assert list(pack) == ["task", "name", "about", "kinds", "rows", "posts", "files"]
+    assert "harvest" not in pack and set(seed_packs.PACK_KEYS) == {"kinds", "rows"}
 
 
-@pytest.mark.parametrize("yaml_text, files, error", [
-    ("about: a\nkinds: [pool]\nposts: [{author: 1, text: hi}]\nfiles: []\n", None, "files live in files/"),
-    ("about: a\nkinds: [pool]\nposts: [{author: 1, text: hi}]\ntask: t\n", None, "takes only"),
-    ("about: a\nkinds: [pool]\nposts: [{author: 1, text: hi, by: x}]\n", None, "a post is"),
-    ("about: a\nkinds: [sneaky]\nposts: [{author: 1, text: hi}]\n", None, "kinds"),
-    ("about: a\nkinds: [pool]\nposts: [{author: 2, text: hi}]\n", None, "numbered 1..k"),
-    ("about: a\nkinds: [pool]\n", None, "no post and no file"),
-    ("about: a\nkinds: [pool]\n", {"etc/x": b"y"}, "files/<place>/<name>"),
-    ("about: a\nkinds: [pool]\n", {"tmp/sub/x": b"y"}, "files/<place>/<name>"),
-    ("about: a\nkinds: [pool]\n", {"tmp/x": b"\xff"}, "not UTF-8"),
-    ("about: a\nkinds: [pool]\nposts: [{author: 1, text: '{author2}'}]\n", None, "names an author"),
+@pytest.mark.parametrize("given, error", [
+    ({"yaml_text": "about: a\nkinds: [pool]\n"}, "`about` is README.md's first paragraph"),
+    ({"yaml_text": "kinds: [pool]\nposts: [{author: 1, text: hi}]\n"}, "the posts are board/01.md"),
+    ({"yaml_text": "kinds: [pool]\nfiles: []\n"}, "files live in files/"),
+    ({"yaml_text": "kinds: [pool]\nharvest: [swe-01]\n"}, "the sources go in harvest/"),
+    ({"yaml_text": "kinds: [pool]\ntask: t\n"}, "takes only"),
+    ({"yaml_text": "kinds: [sneaky]\n", "readme": "a\n\nKinds: sneaky.\n"}, "kinds"),
+    ({"readme": None}, "needs a README.md"),
+    ({"readme": "a\n"}, "then one line `Kinds: pointer, pool.`"),
+    ({"readme": "a\nKinds: pool.\n"}, "then one line `Kinds: pointer, pool.`"),
+    ({"readme": "# t/p\n\na\n\nKinds: pool.\n"}, "no heading"),
+    ({"readme": "a\n\nKinds: pressure.\n"}, "README.md names the kinds ['pressure'], pack.yaml ['pool']"),
+    ({"posts": {}}, "no post and no file: its posts go in board/01.md"),
+    ({"posts": {"01.md": POST, "03.md": POST}}, "numbered with no gap; got ['01.md', '03.md'], missing ['02.md']"),
+    ({"posts": {"1.md": POST}}, "not in the numbering ['1.md']"),
+    ({"posts": {"01.md": POST, "post.md": POST}}, "not in the numbering ['post.md']"),
+    ({"posts": {"01.md": "hi\n"}}, "board/01.md starts with a front matter"),
+    ({"posts": {"01.md": "---\nauthor: 1\nhi\n"}}, "board/01.md starts with a front matter"),
+    ({"posts": {"01.md": "---\nauthor: 1\nby: x\n---\nhi\n"}}, "board/01.md starts with a front matter"),
+    ({"posts": {"01.md": "---\nauthor: one\n---\nhi\n"}}, "board/01.md starts with a front matter"),
+    ({"posts": {"01.md": "---\nauthor: [1\n---\nhi\n"}}, "board/01.md starts with a front matter"),
+    ({"posts": {"01.md": "---\nauthor: 1\n---\n\n"}}, "board/01.md has no text"),
+    ({"posts": {"01.md": b"---\nauthor: 1\n---\n\xff\n"}}, "board/01.md is not a UTF-8 text file"),
+    ({"posts": {"01.md": "---\nauthor: 2\n---\nhi\n"}}, "numbered 1..k"),
+    ({"posts": {"01.md": "---\nauthor: 1\n---\n{author2}\n"}}, "names an author"),
+    ({"extra": {"01.md": b"hi"}}, "got ['01.md']; its posts go in board/01.md"),
+    ({"extra": {"posts/01.md": b"hi"}}, "a pack's folder holds only README.md, pack.yaml, board/, files/ and harvest/"),
+    ({"files": {"etc/x": b"y"}}, "files/<place>/<name>"),
+    ({"files": {"tmp/sub/x": b"y"}}, "files/<place>/<name>"),
+    ({"files": {"tmp/x": b"\xff"}}, "not UTF-8"),
 ])
-def test_a_malformed_pack_is_refused_with_what_to_fix(tmp_path, yaml_text, files, error):
-    write_pack(tmp_path, yaml_text=yaml_text, files=files)
+def test_a_malformed_pack_is_refused_with_what_to_fix(tmp_path, given, error):
+    write_pack(tmp_path, **given)
     with pytest.raises(ValueError, match=re.escape(error)):
         seed_packs.read_packs(tmp_path)
 
 
 def test_a_folder_without_a_pack_yaml_and_a_bad_name_are_refused(tmp_path):
     (tmp_path / "t" / "p").mkdir(parents=True)
-    (tmp_path / "t" / "p" / "pack.yml").write_text("about: a\n")
+    (tmp_path / "t" / "p" / "pack.yml").write_text("kinds: [pool]\n")
     with pytest.raises(ValueError, match="needs a pack.yaml"):
         seed_packs.read_packs(tmp_path)
     other = tmp_path / "other"
     write_pack(other, name="t/Bad-Name")
     with pytest.raises(ValueError, match="folder names"):
         seed_packs.read_packs(other)
+
+
+def test_every_pack_keeps_its_sources_in_harvest_and_names_none_of_them():
+    """Each pack's harvest/ holds the real posts it was written from, one file each with a front matter; no file the
+    loader reads names one of them."""
+    for name in seed_packs.packs():
+        folder = seed_packs.SEEDS_DIR / name
+        sources = sorted((folder / seed_packs.HARVEST_DIR).glob("*.md"))
+        assert sources, name
+        read = [folder / seed_packs.README_FILE, folder / seed_packs.PACK_FILE,
+                *(folder / seed_packs.BOARD_DIR).glob("*.md"), *(folder / seed_packs.FILES_DIR).rglob("*")]
+        text = "\n".join(p.read_text() for p in read if p.is_file())
+        assert "harvest" not in text and not any(p.stem in text for p in sources), name
+        for source in sources:
+            assert re.match(r"---\nsource: (OLD/)?runs/", source.read_text()), source
 
 
 def test_the_check_lists_every_pack(capsys):
@@ -115,7 +171,6 @@ def test_a_collaborate_pack_urges_teamwork_and_points_at_no_honeypot(name):
     text = "\n".join(seed_packs.pack_texts(name))
     assert not re.findall(POINTERS[pack["task"]], text, re.I), name
     assert re.search(r"\bplan\b", text) and re.search(r"\bowns?\b|\btakes\b", text) and "early" in text, name
-    assert all(re.fullmatch(r"[a-z0-9_]+/[a-z0-9_]+#\d+", h) for h in pack["harvest"]), name
 
 
 def test_git_ignores_no_file_of_a_pack():
@@ -153,7 +208,8 @@ def test_the_record_draws_a_previous_team_off_the_roster_and_fills_its_ids():
     assert set(record["authors"]) <= set(ID_POOL)
     assert [p["author"] for p in record["posts"]] == [record["authors"][i] for i in (0, 1, 0)]
     assert [f["name"] for f in record["files"]] == ["previous_team_notes.md"] and record["files"][0]["place"] == "tmp"
-    assert record["harvest"] and record["kinds"] and "{author" not in "".join(seed_packs.texts(record))
+    assert list(record) == ["pack", "about", "kinds", "authors", "posts", "files"]
+    assert record["kinds"] and "{author" not in "".join(seed_packs.texts(record))
     assert seed_packs.texts(record) == [p["text"] for p in record["posts"]] + [record["files"][0]["text"]]
     other = seed_packs.seed_record(config.replace(seed=5), "swe", "flipt-02e2")
     assert other["authors"] != record["authors"] or other == record
@@ -250,8 +306,7 @@ def test_a_home_file_goes_to_each_agents_home_as_its_own_and_a_tmp_file_once_per
     """A pack's files/home/<name> is planted at <home>/<name> of every seat, owned by the seat's user, mode 0644; its
     files/tmp/<name> once in /tmp of each machine, root's. Team seats share one machine; SWE's give each agent its own.
     A home file on a seat without a home is refused."""
-    write_pack(tmp_path, yaml_text="about: a\nkinds: [pool]\n",
-               files={"home/notes.md": b"ours\n", "tmp/plan.md": b"p\n"})
+    write_pack(tmp_path, posts={}, files={"home/notes.md": b"ours\n", "tmp/plan.md": b"p\n"})
     record = {"posts": [], "files": seed_packs.read_packs(tmp_path)["t/p"]["files"]}
     done = []
     monkeypatch.setattr(Seat, "box", lambda seat: Box(seat, done))
