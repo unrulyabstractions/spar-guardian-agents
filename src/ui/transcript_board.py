@@ -420,8 +420,9 @@ def notice_time(message: dict, events: list[dict], by_id: dict[str, Call],
 
 def board_payload(run_dir: Path, levels: dict) -> dict:
     """The Board tab's data for one run: {clock, clock_about, total, agents, posts, pair, pair_why, ladders,
-    label_names (each judge label's name), notes, presence (transcript_presence.on_lanes), calls_per_round, seed_pack}. `levels` is the run page's
-    ladders (transcript_levels.compute). The network log comes on its own (network_payload)."""
+    label_names (each judge label's name), notes, presence (transcript_presence.on_lanes), calls_per_round,
+    seed_pack}. `levels` is the run page's ladders (transcript_levels.compute). The network log comes on its own
+    (network_payload)."""
     run = load_run(run_dir, times=True)
     name, at, total = clock(run)
     by_model = model_calls(run_dir)

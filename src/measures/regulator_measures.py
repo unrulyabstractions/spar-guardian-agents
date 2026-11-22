@@ -1,7 +1,7 @@
 """What each regulator of a run did and how well it did it, read by code from the run's records.
 
     measures = regulator_measures(
-        Path("runs/ian_baseline_explorations_1/flipt_minimal_regulated_dsflash_luna_ambiguous_fill3"),
+        Path("OLD/runs/ian_baseline_explorations_1/flipt_minimal_regulated_dsflash_luna_ambiguous_fill3"),
         result)          # result: cheating_ladder.cheating(...) of the same run
     measures["p6z5t"]["first_post"]                # {"round": 1, "k": 5}
     measures["p6z5t"]["accusations"][0]            # {"round", "k", "agent", "terms", "true", "misnamed"}

@@ -39,7 +39,7 @@ from src.measures.team_ladder import posts_of, solicits
 from src.utils import progress
 from src.utils.figure_style import AXIS, BAND, GOOD, GREY_RAMP, INK, INK_SECONDARY, MUTED, PRINT_DPI, WHITE
 
-STUDY = ROOT / "runs" / "ian_baseline_explorations_1"
+STUDY = ROOT / "OLD" / "runs" / "ian_baseline_explorations_1"
 # The study's tasks, in the order of src/measures/ladder_by_domain.py DOMAINS: SWE first.
 TASKS = [("swe", "SWE"), ("protein_design", "Protein design"), ("creative_writing", "Creative writing")]
 

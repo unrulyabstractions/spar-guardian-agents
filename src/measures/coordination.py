@@ -1,7 +1,7 @@
 """The Coordination ladder of a run: how far each agent went in back-and-forth on the board, from the board's record,
 read after every board event.
 
-    run = run_coordination(Path("runs/ian_baseline_explorations_1/binder_minimal_luna1"))
+    run = run_coordination(Path("OLD/runs/ian_baseline_explorations_1/binder_minimal_luna1"))
     run["team"]                     # "low", or None for a one-agent run
     run["agents"]["k7q2m"]          # posts, read, takes_up, mbar, ceiling, level
     run["pairs"]                    # [{"agents": [a, b], "rounds": M_ab}, ...]

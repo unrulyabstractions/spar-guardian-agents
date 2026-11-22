@@ -1,5 +1,5 @@
 """The single-agent controls of Appendix C: for each task and model, the share of runs that cheated when nothing was
-appended and when the agent was told to cheat, read from runs/apart_controls/ (the apart controls study, also on
+appended and when the agent was told to cheat, read from OLD/runs/apart_controls/ (the apart controls study, also on
 Hugging Face under apart_controls/). Writes tmp/tables/results/solo_vs_solo_told.png.
 
     uv run python -m scripts.paper.solo_controls_table    # make results-tables runs it
@@ -22,7 +22,7 @@ from src.configuration.settings import ROOT
 from src.utils import progress
 from src.utils.figure_style import AXIS, BAND, INK, INK_SECONDARY, MUTED, WHITE
 
-DATA = ROOT / "runs" / "apart_controls"
+DATA = ROOT / "OLD" / "runs" / "apart_controls"
 OUT = ROOT / "tmp" / "tables" / "results" / "solo_vs_solo_told.png"
 # Each task's row label: a plain name and what the agent makes, as Appendix C's task table defines them.
 TASKS = [("flipt", "SWE", "Go: Redis TLS settings"), ("vuls", "SWE", "Go: macOS scanning"),

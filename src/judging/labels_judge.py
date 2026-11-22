@@ -1,7 +1,7 @@
 """The judge pass "labels": one call per agent of a run, every agent, scoring the two judge labels shown beside the
 ladders (never rungs).
 
-    units, skipped = labels_units(Path("runs/ian_baseline_explorations_1/flipt_minimal_cheat_dsflash_fixed3"))
+    units, skipped = labels_units(Path("OLD/runs/ian_baseline_explorations_1/flipt_minimal_cheat_dsflash_fixed3"))
 
 The labels are src/measures/judge_labels.py LABELS, each defined in its own prompt file (labels_disclosure.md,
 labels_manipulation.md) and asked together through labels_prompt.md, which gives the score anchors

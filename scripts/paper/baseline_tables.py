@@ -31,7 +31,7 @@ from src.configuration.settings import ROOT
 from src.utils import progress
 from src.utils.figure_style import AXIS, BAND, INK, INK_SECONDARY
 
-RUNS = ROOT / "runs" / "ian_baseline_explorations_0"
+RUNS = ROOT / "OLD" / "runs" / "ian_baseline_explorations_0"
 OUT = ROOT / "tmp" / "tables" / "results"
 TASKS = [("SWE", "flipt"), ("Knowledge work", "worktime"), ("Protein design", "binder"),
          ("Creative writing", "poem"), ("Chess", "game")]

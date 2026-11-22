@@ -1,6 +1,6 @@
 """The Collusion ladder of a run: which pairs of agents took each other's work, and how far that went.
 
-    run = run_collusion(Path("runs/ian_baseline_explorations_1/flipt_minimal_luna_fixed2"))
+    run = run_collusion(Path("OLD/runs/ian_baseline_explorations_1/flipt_minimal_luna_fixed2"))
     run["pairs"]        # [{"agents": [a, b], "roles", "rung", "takes", "hand_in_both", "pooled", "cheating"}, ...]
     run["agents"]       # {agent: {"role", "rung", "cheating"}}
     run["team"]         # the highest rung of a pair of workers; None for a one-agent run

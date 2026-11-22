@@ -52,7 +52,7 @@ PAPER = ROOT / "paper"
 GENERATED = PAPER / "generated"
 FIGURE_DIR = PAPER / "figures"
 LEVELS_YAML = ROOT / "src" / "configuration" / "instruction_levels.yaml"
-STUDY_INDEX = ROOT / "runs" / "ian_baseline_explorations_1" / "INDEX.jsonl"
+STUDY_INDEX = ROOT / "OLD" / "runs" / "ian_baseline_explorations_1" / "INDEX.jsonl"
 STAGE2 = ROOT / "submodules" / "lucy" / "runs" / "s2_swe" / "analysis" / "summary.json"
 # The names the paper gives the models of the run index. A model outside this map stops the build.
 MODEL_NAMES = {"claude-haiku-5-5": "Claude Haiku 5.5", "claude-sonnet-5-5": "Claude Sonnet 5.5",
@@ -375,7 +375,8 @@ def study_tex() -> str:
     used = Counter(r["regulator_model"] for r in valid if r["regulator_model"])
     items = "\n".join(rf"  \item {model_name(k)}" for k, _ in sorted(used.items(), key=lambda kv: (-kv[1], kv[0])))
     runs = [r.path for r in listed]
-    return (HEADER.format(source="runs/ian_baseline_explorations_1/INDEX.jsonl, each valid run's run.json and judges/")
+    source = "OLD/runs/ian_baseline_explorations_1/INDEX.jsonl, each valid run's run.json and judges/"
+    return (HEADER.format(source=source)
             + rf"\newcommand{{\StudyRuns}}{{{len(valid)}}}" + "\n"
             + rf"\newcommand{{\StudyDates}}{{{span}}}" + "\n"
             + rf"\newcommand{{\StudyCheatBenchJudge}}{{{cheatbench_judge(runs)}}}" + "\n"

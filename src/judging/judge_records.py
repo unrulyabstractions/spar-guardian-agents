@@ -1,6 +1,6 @@
 """What the judge "labels" reads of a stored run, and where code finds the judge's excerpt in the agent's own text.
 
-    records = run_records(Path("runs/ian_baseline_explorations_1/flipt_minimal_luna_fixed2"))
+    records = run_records(Path("OLD/runs/ian_baseline_explorations_1/flipt_minimal_luna_fixed2"))
     records.board                   # [{"label": "P1", "id", "writer", "readers", "content"}, ...] in board order
     records.prompts["k4q8z"]        # the agent's instructions: its system and user messages
     records.reasoning["k4q8z"]      # [(call number, visible reasoning), ...] in order
