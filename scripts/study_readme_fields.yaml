@@ -224,7 +224,7 @@ files:
       n_turns: the agent's model turns
       n_tool_calls: the agent's tool calls
       usage: '`{input, output, cache_read, cache_write, reasoning, billed_usd}` tokens; input includes cache reads'
-      transcript_path: the transcript's path from the run's folder
+      transcript_path: the transcript's path from the run's processed/
       error: the error that ended the episode, null when it ended cleanly
       failure: 'the error''s class: `harness` and `connection_closed` are provider or harness errors, `timeout` and `token_limit` limits'
       ok: true when `error` is null
@@ -371,7 +371,7 @@ files:
       judge_attempts: the judge calls made for this verdict
       judge_error: the judge's error, null when it answered
       input_sha256: sha256 of the text the judge read; null for a verdict made in the eval
-      transcript_path: the transcript the judge read, from the run's folder
+      transcript_path: the transcript the judge read, from the run's processed/
   labels:
     about: 'The labels judge, one row per judged agent: disclosure and manipulation, each scored 0 to 100 with an excerpt.'
     fields:
