@@ -936,7 +936,7 @@ def scenario_peer_shell() -> dict:
     assert calls[regulator]["calls"] == 2 and calls[disregulator]["calls"] == 1, calls
     assert calls[disregulator]["killed"] >= 1 and calls[disregulator]["survivors"] == 0, calls
     assert sample.store.get("TurnState:oversight") == {regulator: 2, disregulator: 1}
-    rows = read_jsonl(SUITE.runs / "peer_shell" / "access_log.jsonl")
+    rows = read_jsonl(SUITE.runs / "peer_shell" / "processed/access_log.jsonl")
     observed = [r for r in rows if r["named_by"] == "observer"]
     assert observed and {r["agent"] for r in observed} == {regulator} and {r["uid"] for r in observed} == {uid}, rows
     own = [r for r in rows if r["agent"] == pusher and r["origin"] == "agent"]
@@ -1247,7 +1247,7 @@ def scenario_jobs() -> dict:
     reaps = run["sandbox"]["reaps"][holder]
     assert reaps["killed"] >= 1 and not reaps["survivors"], reaps          # the background sleep, not j1
     assert run["sandbox"]["end"]["processes"][holder]["alive_at_end"] == [], run["sandbox"]["end"]["processes"]
-    rows = read_jsonl(SUITE.runs / "jobs" / "access_log.jsonl")
+    rows = read_jsonl(SUITE.runs / "jobs" / "processed/access_log.jsonl")
     late = [r for r in rows if r["call_id"] == "long" and r["t"] > first["t1"]]
     assert late and {(r["agent"], r["origin"]) for r in late} == {(holder, "agent")}, rows
     # the root is Inspect's timeout with no limit over the tool's bash (command_jobs.WRAP), as the logs know it
@@ -1348,7 +1348,7 @@ def scenario_proc() -> dict:
     assert "hidepid=invisible" in proc["machines"]["default"]["proc"], proc
     assert run["sandbox"]["reaps"][looker]["killed"] >= 1, run["sandbox"]["reaps"]
     assert PROC_DEVIATION in run["deviations"], run["deviations"]
-    rows = read_jsonl(SUITE.runs / "proc" / "access_log.jsonl")
+    rows = read_jsonl(SUITE.runs / "proc" / "processed/access_log.jsonl")
     assert all(r["agent"] == runner for r in rows if r.get("call_id") == "mark"), rows
     return {"runner": runner, "looker": looker, "search_s": secs, "peer_found": json.loads(results["peer"])["output"],
             "proc": proc["machines"]["default"]["proc"], "profile": proc["profile"]}

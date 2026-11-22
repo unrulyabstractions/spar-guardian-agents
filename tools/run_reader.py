@@ -8,11 +8,12 @@
     run.reads("k7q2m")[0].posts  # [("p8s3z", 1)]
     write_summary(run, "graphs", {"nodes": 3})  # runs/<study>/riemann_minimal/tools/graphs/summary.json
 
-A run directory holds run.json, episodes.jsonl, judges/, trajectories/<episode>/transcript.json and
-communication/<sample>.json, read through src/measures/run_directory.py RunDir. The turn rules' timeline is run.json
-rules.timeline. The eval log named by run.json holds every board_read result as the agent saw it. They are cached in
-runs/<study>/<name>/tools/board_reads.json the first time a run is loaded, so later tools need not reopen the log. A run
-whose log is gone reads the cache when there is one, else the transcripts answer.
+A run directory holds processed/ (run.json, episodes.jsonl, trajectories/<episode>/transcript.json,
+communication/<sample>.json) and analysis/ (judges/), read through src/measures/run_directory.py RunDir. The turn
+rules' timeline is run.json rules.timeline. The eval log named by run.json holds every board_read result as the agent
+saw it. They are cached in runs/<study>/<name>/processed/board_reads.json the first time a run is loaded, so later
+tools need not reopen the log. A run whose log is gone reads the cache when there is one, else the transcripts
+answer.
 
 Rounds come from the timeline. The k-th agent step of an agent's ATIF transcript is the k-th activation of that agent
 in the timeline, and the round is the integer after "r" in the activation's step id ("r3", "r3-free1", "r12-v4").
@@ -249,14 +250,14 @@ def load_run(name_or_path: str | Path) -> Run:
 
 
 def tools_dir(run: RunPlace, tool: str) -> Path:
-    """runs/<study>/<name>/tools/<tool>/, created when missing."""
-    directory = run.directory / "tools" / tool
+    """runs/<study>/<name>/analysis/tools/<tool>/, created when missing."""
+    directory = RunDir(run.directory).file("tools") / tool
     directory.mkdir(parents=True, exist_ok=True)
     return directory
 
 
 def write_summary(run: RunPlace, tool: str, payload: dict) -> Path:
-    """Write runs/<study>/<name>/tools/<tool>/summary.json as {tool, run, written_at, **payload}."""
+    """Write runs/<study>/<name>/analysis/tools/<tool>/summary.json as {tool, run, written_at, **payload}."""
     reserved = {"tool", "run", "written_at"} & set(payload)
     if reserved:
         raise ValueError(f"the payload may not set {sorted(reserved)}")
@@ -269,7 +270,7 @@ def write_summary(run: RunPlace, tool: str, payload: dict) -> Path:
 
 def read_summary(run: Run, tool: str) -> dict | None:
     """The tool's summary.json for the run, or None when the tool has not written one."""
-    return read_json(run.directory / "tools" / tool / "summary.json")
+    return read_json(RunDir(run.directory).file("tools") / tool / "summary.json")
 
 
 def merged_trace(run: Run) -> list[TraceEntry]:
@@ -340,13 +341,13 @@ def run_directory(name_or_path: str | Path) -> Path:
     top level or in the one group that holds it (run_directory.find_run, which raises ValueError for two folders), else
     runs/<study>/<path>, such as smoke/complete."""
     path = Path(name_or_path)
-    if (path / "run.json").is_file():
+    if RunDir(path).is_run():
         return path.resolve()
     found = find_run(settings.RUNS, str(name_or_path)) if settings.RUNS.is_dir() else None
     for candidate in filter(None, (found, settings.RUNS / str(name_or_path))):
-        if (candidate / "run.json").is_file():
+        if RunDir(candidate).is_run():
             return candidate.resolve()
-    raise FileNotFoundError(f"no run.json in {name_or_path} or {settings.RUNS / str(name_or_path)}")
+    raise FileNotFoundError(f"no run in {name_or_path} or {settings.RUNS / str(name_or_path)}")
 
 
 def run_name(directory: Path) -> str:
@@ -376,7 +377,7 @@ def agent_of(episode: str, lone: str | None) -> str:
 def board_read_results(directory: Path, eval_log: Path | None) -> dict[str, str]:
     """The board_read results by tool call id, from the cache when it is as new as the eval log, else from the log
     (then cached); the cache alone when the log is gone, else {}."""
-    cache = directory / "tools" / "board_reads.json"
+    cache = RunDir(directory).file("board_reads.json")
     if eval_log is None:
         return read_json(cache) if cache.is_file() else {}
     if cache.is_file() and cache.stat().st_mtime >= eval_log.stat().st_mtime:
@@ -420,7 +421,7 @@ def read_board(stored: RunDir, timeline: list[dict]) -> list[Post]:
 def read_transcripts(directory: Path, lone: str | None) -> dict[str, dict]:
     """Each agent's transcript.json, keyed by the agent of its episode directory."""
     transcripts = {}
-    for path in sorted((directory / "trajectories").glob("*/transcript.json")):
+    for path in sorted(RunDir(directory).file("trajectories").glob("*/transcript.json")):
         transcripts[agent_of(path.parent.name, lone)] = read_json(path)
     return transcripts
 

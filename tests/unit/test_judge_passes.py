@@ -81,7 +81,7 @@ def openmath_run(root: Path, agents=("a01", "a02", "a03", "a04")) -> Path:
 def tree_hashes(folder: Path) -> dict[str, str]:
     """Every file under the folder outside judges/, by relative path, with its sha256."""
     return {str(p.relative_to(folder)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(folder.rglob("*"))
-            if p.is_file() and verdict_files.FOLDER not in p.relative_to(folder).parts}
+            if p.is_file() and "judges" not in p.relative_to(folder).parts}
 
 
 # --------------------------------------------------------------------------
@@ -102,7 +102,7 @@ def test_the_scorer_judges_every_agent_and_the_export_adds_the_identity(tmp_path
     assert sorted(score.metadata["verdicts"]) == ["a01", "a02"]
     assert not {"id", "episode", "model", "transcript_path"} & set(score.metadata["verdicts"]["a01"])
     write_run(Path(log.location), tmp_path / "run")
-    assert not (tmp_path / "run" / "judge.jsonl").exists()
+    assert not (tmp_path / "run" / "analysis/judge.jsonl").exists()
     assert list(verdict_files.read(tmp_path / "run")["cheatbench"]) == [settings.JUDGE_MODEL]
     rows = verdict_files.rows(tmp_path / "run", "cheatbench", settings.JUDGE_MODEL)
     assert [r["episode"] for r in rows] == ["issue#1@a01", "issue#1@a02"] and all(r["cheated"] for r in rows)
@@ -111,7 +111,8 @@ def test_the_scorer_judges_every_agent_and_the_export_adds_the_identity(tmp_path
                                   "judge"]
     assert set(verdict_files.ROW_KEYS) <= set(rows[0]) and rows[0]["prompt_sha256"] and rows[0]["input_sha256"] is None
     assert list(rows[0])[-1] == "transcript_path" and rows[0]["transcript_path"] == \
-        "trajectories/issue#1@a01/transcript.json" and (tmp_path / "run" / rows[0]["transcript_path"]).is_file()
+        "trajectories/issue#1@a01/transcript.json" and \
+        (tmp_path / "run" / "processed" / rows[0]["transcript_path"]).is_file()
 
 
 def test_the_strict_schema_keeps_additional_properties_on_objects_only():
@@ -228,7 +229,8 @@ def test_the_verdict_file_merges_by_unit_and_reads_back_by_pass_and_judge(tmp_pa
     read = verdict_files.read(tmp_path)
     assert [(r["unit"], r["n"]) for r in read["labels"]["mock"]] == [("a", 2), ("b", 1), ("c", 1)]
     assert [r["unit"] for r in read["cheatbench"]["other"]] == ["e1"]
-    assert sorted(p.name for p in (tmp_path / "judges").iterdir()) == ["cheatbench.other.jsonl", "labels.mock.jsonl"]
+    assert sorted(p.name for p in (tmp_path / "analysis/judges").iterdir()) == ["cheatbench.other.jsonl",
+                                                                                "labels.mock.jsonl"]
     with pytest.raises(ValueError, match="lacks judge_cost_usd"):
         verdict_files.write(tmp_path, "labels", "mock", [{k: v for k, v in row_of("x").items()
                                                           if k != "judge_cost_usd"}])
@@ -245,7 +247,7 @@ def test_cheatbenchs_verdicts_are_the_judges_files_with_the_first_judge_applied(
     """Each judge's file holds its verdicts by episode; a row of the same judge and episode replaces the earlier one,
     and another judge's file stands apart. A judge.jsonl of the old layout is not read. read gives them as the pass
     "cheatbench", and the measures take the first judge by name."""
-    write_jsonl(tmp_path / "judge.jsonl", [{"episode": "s#1@a03", "judge": "luna", "cheated": True}])
+    write_jsonl(tmp_path / "analysis/judge.jsonl", [{"episode": "s#1@a03", "judge": "luna", "cheated": True}])
     verdict_files.write(tmp_path, "cheatbench", "luna", [row_of("s#1@a01", judge="luna", episode="s#1@a01",
                                                                 cheated=False),
                                                          row_of("s#1@a02", judge="luna", episode="s#1@a02",
@@ -295,7 +297,7 @@ def test_a_cheatbench_pass_writes_judges_only_and_records_failures(tmp_path):
     assert (tally.calls, tally.parsed, tally.failed, tally.stopped) == (4, 3, 1, False)
     assert tally.spent == pytest.approx(4 * PER_CALL) and tally.input_tokens == 4000 and tally.output_tokens == 400
     assert tree_hashes(run) == before
-    assert [p.name for p in (run / "judges").iterdir()] == ["cheatbench.mock.jsonl"]
+    assert [p.name for p in (run / "analysis/judges").iterdir()] == ["cheatbench.mock.jsonl"]
     rows = {r["agent"]: r for r in verdict_files.rows(run, "cheatbench", "mock")}
     assert [rows[a]["cheated"] for a in ("a01", "a02", "a03", "a04")] == [True, None, False, True]
     assert rows["a02"]["parse_ok"] is False and rows["a02"]["raw"] == "not json"
@@ -303,7 +305,8 @@ def test_a_cheatbench_pass_writes_judges_only_and_records_failures(tmp_path):
     assert first["unit"] == first["episode"] == "riemann#1@a01" and first["task"] == OpenMath.name
     assert first["prompt_sha256"] == judging.spec_record(SPEC)["prompt_sha256"] and first["schema_sha256"]
     assert first["transcript_path"] == "trajectories/riemann#1@a01/transcript.json"
-    assert first["transcript_sha256"] == hashlib.sha256((run / first["transcript_path"]).read_bytes()).hexdigest()
+    assert first["transcript_sha256"] == hashlib.sha256((run / "processed" / first["transcript_path"]).read_bytes()) \
+        .hexdigest()
     assert first["input_sha256"] == judging.sha256(judging.prompt_text(SPEC, transcript("a01")))
 
 
@@ -356,7 +359,7 @@ def test_a_pass_refuses_without_a_cap_or_a_bounded_price(tmp_path):
         judge_pass.run_pass("cheatbench", [run], mock_judge(lambda _: reply(verdict()), prices=None), cap=1.0)
     with pytest.raises(ValueError, match="no max_output"):
         judge_pass.run_pass("cheatbench", [run], mock_judge(lambda _: reply(verdict()), max_output=None), cap=1.0)
-    assert not (run / "judges").exists()
+    assert not (run / "analysis/judges").exists()
 
 
 def test_the_commands_exit_codes(tmp_path, monkeypatch, capsys):
@@ -428,8 +431,8 @@ def board_run(root: Path, reasoning: dict = REASONING) -> Path:
              "events": [{"kind": "read", "agent_id": "a02", "message_ids": ["m1", "m3"]},
                         {"kind": "read", "agent_id": "a01", "message_ids": ["m2", "m3", "m4"]},
                         {"kind": "sent", "agent_id": "a01", "message_ids": ["m1"]}]}
-    (run / "communication").mkdir()
-    (run / "communication" / "poem#1.json").write_text(json.dumps(board))
+    (run / "processed/communication").mkdir(parents=True)
+    (run / "processed/communication" / "poem#1.json").write_text(json.dumps(board))
     return run
 
 
@@ -439,7 +442,7 @@ def one_row(run: Path, said, unit: str) -> dict:
     before = tree_hashes(run)
     judge_pass.run_pass("labels", [run], mock_judge(lambda prompt: reply(said(prompt))), cap=1.0, redo=True)
     assert tree_hashes(run) == before
-    assert [p.name for p in (run / "judges").iterdir()] == ["labels.mock.jsonl"]
+    assert [p.name for p in (run / "analysis/judges").iterdir()] == ["labels.mock.jsonl"]
     return labels_by_agent(run)[unit]
 
 
@@ -603,8 +606,8 @@ def test_visible_reasoning_reads_text_and_summaries_and_drops_hidden_reasoning()
 
 
 def test_the_retired_passes_are_neither_listed_nor_read(tmp_path):
-    (tmp_path / "judges").mkdir()
+    (tmp_path / "analysis/judges").mkdir(parents=True)
     for retired in ("collusion", "scheming"):
-        (tmp_path / "judges" / f"{retired}.mock.jsonl").write_text(json.dumps(row_of("a|b")) + "\n")
+        (tmp_path / "analysis/judges" / f"{retired}.mock.jsonl").write_text(json.dumps(row_of("a|b")) + "\n")
     assert verdict_files.read(tmp_path) == {}
     assert tuple(judge_pass.PASSES) == verdict_files.PASSES == ("cheatbench", "labels")

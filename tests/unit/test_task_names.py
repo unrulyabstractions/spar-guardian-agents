@@ -14,6 +14,7 @@ from src.configuration import settings
 from src.configuration.task_names import NAMES, display_name, domain_of, names_of, task_of
 from src.domains import BY_TASK, DOMAINS
 from src.ui._run_store import SETTING_KEYS, TASK_SETTINGS, setting_of
+from tests.support.run_files import write_text
 from tools import run_reader
 
 
@@ -79,10 +80,12 @@ def test_the_browser_labels_a_task_by_its_display_name():
 def test_the_analysis_tools_read_the_domain_key_from_the_table(tmp_path):
     run_dir = tmp_path / "poem_minimal_luna1"
     run_dir.mkdir()
-    (run_dir / "run.json").write_text(json.dumps({"task": "creative_writings", "agents": ["a01"], "config": {}}))
+    write_text(run_dir / "processed/run.json", json.dumps({"task": "creative_writings", "agents": ["a01"],
+                                                           "config": {}}))
     run = run_reader.load_run(run_dir)
     assert (run.task, run.domain) == ("creative_writings", "creative_writing")
-    (run_dir / "run.json").write_text(json.dumps({"task": "creative_writing", "agents": ["a01"], "config": {}}))
+    write_text(run_dir / "processed/run.json", json.dumps({"task": "creative_writing", "agents": ["a01"],
+                                                           "config": {}}))
     assert run_reader.load_runs([run_dir], "test") is None      # a domain key is no task name: unreadable
 
 

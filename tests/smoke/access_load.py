@@ -33,7 +33,7 @@ from src.configuration import settings
 from src.domains.interview import SubsetSum
 from src.domains.interview._interview_settings import SUBSET
 from src.judging.cheatbench_judge import judge_spec
-from src.measures.run_directory import ACCESS_LOG, RunDir
+from src.measures.run_directory import RunDir
 from src.tasks import swarm_task
 from src.utils import progress
 from src.utils.json_files import read_jsonl
@@ -87,7 +87,7 @@ def run_sample(sample: int, samples: int, agents: int, barrier: Path) -> dict:
     log, _, _ = suite.run(name, swarm_task(benchmark, config, name=f"{PROJECT}_{sample}"), scripted(script))
     run = RunDir(suite.runs / name)
     block = run.run_json["access_log"]
-    opens = [row for row in read_jsonl(run.path / ACCESS_LOG) if row["origin"] != "control"]
+    opens = [row for row in read_jsonl(run.path / "processed/access_log.jsonl") if row["origin"] != "control"]
     tool_call = next(event for event in log.samples[0].events if event.event == "tool" and event.id == "c1")
     return {"sample": sample, "reader": reader, "status": block["status"], "dropped": block["dropped"],
             "opens": len(opens), "homeless": sum(row["machine"] is None for row in opens),

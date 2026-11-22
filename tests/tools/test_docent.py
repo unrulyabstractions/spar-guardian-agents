@@ -65,7 +65,7 @@ ANSWER = {"ladders": {"agents": {a: dict(zip(RUNGS, LADDERS[a])) for a in ("a01"
 def run_python(monkeypatch, tmp_path, riemann_copy):
     """A stand-in for the run environment's Python that answers ANSWER for riemann_copy, and the code record the
     measures read beside it (signals.jsonl), written without the ladders."""
-    write_jsonl(riemann_copy / "signals.jsonl", [{"row": "agent", "agent": a} for a in ("a01", "a02", "a03")]
+    write_jsonl(riemann_copy / "analysis/signals.jsonl", [{"row": "agent", "agent": a} for a in ("a01", "a02", "a03")]
                 + [{"row": "team"}])
     stand_in = tmp_path / "run_python"
     stand_in.write_text(f"#!/bin/sh\ntest \"$1\" = -c && test \"$3\" = {riemann_copy.resolve()} && "
@@ -77,16 +77,16 @@ def run_python(monkeypatch, tmp_path, riemann_copy):
 
 
 def test_dry_run_on_riemann(no_key, riemann_copy, run_python):
-    before = (riemann_copy / "signals.jsonl").read_bytes()
+    before = (riemann_copy / "analysis/signals.jsonl").read_bytes()
     assert main(["docent", str(riemann_copy), "--dry-run", "--board"]) == 0
-    assert (riemann_copy / "signals.jsonl").read_bytes() == before        # computed, never written
-    out = riemann_copy / "tools" / "docent"
+    assert (riemann_copy / "analysis/signals.jsonl").read_bytes() == before        # computed, never written
+    out = riemann_copy / "analysis/tools" / "docent"
     summary = json.loads((out / "summary.json").read_text())
     agent_runs = json.loads((out / "agent_runs.json").read_text())
     assert summary["tool"] == "docent" and summary["dry_run"] is True
     assert summary["n_agent_runs"] == len(agent_runs) == 4
     assert [run["id"] for run in agent_runs] == [row["id"] for row in summary["agent_runs"]]
-    judge = {row["agent"]: row for row in read_jsonl(riemann_copy / "judges" / "cheatbench.gpt-6-sol.jsonl")}
+    judge = {row["agent"]: row for row in read_jsonl(riemann_copy / "analysis/judges" / "cheatbench.gpt-6-sol.jsonl")}
     for agent_run in agent_runs[:3]:
         metadata = agent_run["metadata"]
         agent = metadata["agent"]
@@ -94,7 +94,8 @@ def test_dry_run_on_riemann(no_key, riemann_copy, run_python):
         assert metadata["attempted_access"] == judge[agent]["attempted_access"]
         assert metadata["judge_summary"] == judge[agent]["summary"]
         assert metadata["roster"] == ["a01", "a02", "a03"]
-        steps = json.loads(next((riemann_copy / "trajectories").glob(f"*@{agent}/transcript.json")).read_text())
+        folder = riemann_copy / "processed/trajectories"
+        steps = json.loads(next(folder.glob(f"*@{agent}/transcript.json")).read_text())
         steps = steps["trajectory"]["steps"]
         results = sum(len((step.get("observation") or {}).get("results") or []) for step in steps)
         messages = agent_run["transcripts"][0]["messages"]
@@ -132,7 +133,8 @@ def test_the_run_environment_answers_for_a_real_run(riemann_copy):
     agent carries every field of FIELDS, its ladders as recorded and its judge label scores as the measure reads them
     (None: no judge has read the run), and nothing is written into the run."""
     rows = [{"row": "agent", "agent": a, **dict(zip(RUNGS[:3], LADDERS[a]))} for a in ("a01", "a02", "a03")]
-    write_jsonl(riemann_copy / "signals.jsonl", [*rows, {"row": "team", **dict(zip(RUNGS[:3], LADDERS["team"]))}])
+    write_jsonl(riemann_copy / "analysis/signals.jsonl", [*rows, {"row": "team", **dict(zip(RUNGS[:3],
+                                                                                            LADDERS["team"]))}])
     before = sorted((p, p.stat().st_mtime_ns) for p in riemann_copy.rglob("*") if p.is_file())
     docent_convert.measures.cache_clear()
     agents, team = docent_convert.measures(riemann_copy)
@@ -173,7 +175,7 @@ def test_upload_records_collection_and_ids(monkeypatch, capsys, riemann_copy):
     monkeypatch.setattr(command, "discovered_key", lambda: "dk_stand_in")
     monkeypatch.setattr(command, "connect", lambda: client)
     assert main(["docent", str(riemann_copy)]) == 0
-    summary = json.loads((riemann_copy / "tools" / "docent" / "summary.json").read_text())
+    summary = json.loads((riemann_copy / "analysis/tools" / "docent" / "summary.json").read_text())
     collection_id, uploaded = client.uploads[0]
     assert collection_id == summary["collection_id"] == "collection-1"
     assert summary["dry_run"] is False
@@ -191,4 +193,4 @@ def test_failed_upload_names_the_collection(monkeypatch, capsys, riemann_copy):
     assert main(["docent", str(riemann_copy)]) == 1
     err = capsys.readouterr().err
     assert "stand-in upload failure" in err and "--collection-id collection-1" in err
-    assert not (riemann_copy / "tools" / "docent" / "summary.json").exists()
+    assert not (riemann_copy / "analysis/tools" / "docent" / "summary.json").exists()

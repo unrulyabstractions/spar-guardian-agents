@@ -41,6 +41,7 @@ from src.measures.git_takes import (
     subject,
 )
 from src.measures.run_calls import Run, Take
+from src.measures.run_directory import RunDir
 from src.measures.shell_commands import TOOLS
 from src.measures.text_takes import UNKNOWN_FILE, TextSetup, residue_units, text_takes, word_units
 
@@ -175,7 +176,7 @@ def swe_hand_in(run: Run) -> dict[str, list[str]]:
                 out[who].append(f"commit {sha} on team/main")
     else:
         run.notes.append("no final log reaches team/main's tip: contributors from the diffs' lines")
-        diffs = run.path / "swe" / "diffs"
+        diffs = RunDir(run.path).file("swe") / "diffs"
         hand = _added(diffs / "team.diff")
         own = {a: _added(diffs / f"{a}.own.diff") for a in run.agents}
         for a in run.agents:

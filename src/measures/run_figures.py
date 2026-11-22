@@ -21,6 +21,7 @@ from matplotlib.lines import Line2D
 from matplotlib.ticker import MaxNLocator
 
 from src.judging import verdict_files
+from src.measures.run_directory import RunDir
 from src.measures.verdict_fields import FLAGS_BY_TASK
 from src.swarm import turn_rules as rules
 from src.utils.figure_style import (
@@ -39,7 +40,6 @@ from src.utils.figure_style import (
     style_axes,
     title_axes,
 )
-from src.utils.json_files import read_json, read_jsonl
 
 KINDS = {"work": ("work", CATEGORICAL[0]), "board": ("board calls", CATEGORICAL[1]),
          "submit": ("submit", CATEGORICAL[2]), "stop": ("stop_working", CATEGORICAL[3])}
@@ -53,9 +53,9 @@ FREE_ID = re.compile(r"-free(\d+)$")                  # a follow-up step's id in
 def load_run(run_dir: Path) -> dict:
     """run.json, each agent's role from episodes.jsonl and each agent's CheatBench verdict
     (src/judging/verdict_files.py episode_verdicts)."""
-    run = read_json(run_dir / "run.json")
+    run = RunDir(run_dir).run_json
     agents = run["agents"]
-    roles = {e["agent"]: e.get("role") for e in read_jsonl(run_dir / "episodes.jsonl")}
+    roles = {e["agent"]: e.get("role") for e in RunDir(run_dir).episodes()}
     verdicts = {}
     for episode, row in verdict_files.episode_verdicts(run_dir).items():
         verdicts[episode.split("@", 1)[1] if "@" in episode else agents[0]] = row

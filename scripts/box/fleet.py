@@ -22,7 +22,6 @@ machine holds from a run made elsewhere, which the watch would overwrite.
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from collections import Counter
 
@@ -36,6 +35,7 @@ from scripts.box.study_table import STAGES, box_jobs, find_box, jobs_sha256, key
 from scripts.box.vast_api import Vast
 from scripts.box.vast_offers import MAX_DPH, OFFER_HEADER, candidates, offer_row, rejections, search_call
 from src.configuration import settings
+from src.measures.run_directory import RunDir
 
 ENTRY_FIELDS = ("task", "stage", "box", "key", "label", "launch", "commit", "requirements", "requirements_sha256",
                 "python_version", "uv_version", "cores", "ram_gb", "dph", "min_cores", "min_ram_gb", "min_disk_gb")
@@ -125,11 +125,11 @@ def made_elsewhere(name: str) -> str | None:
             by_box = f"{REMOTE_REPO}/" in handle.readline()
         if not by_box:
             return str(log)
-    run = settings.RUNS / name / "run.json"
-    if run.exists():
-        eval_log = json.loads(run.read_text()).get("eval_log") or ""
+    run = RunDir(settings.RUNS / name)
+    if run.is_run():
+        eval_log = run.run_json.get("eval_log") or ""
         if not (by_box or eval_log.startswith(REMOTE_REPO + "/")):
-            return f"{run.parent} (its eval log {eval_log or 'unknown'})"
+            return f"{run.path} (its eval log {eval_log or 'unknown'})"
     return None
 
 

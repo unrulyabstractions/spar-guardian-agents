@@ -79,8 +79,10 @@ Never restore `docs/`. Read a file right before editing it.
 
 `OLD/` is the archive (gitignored): `OLD/runs/<study>/` with its logs at `OLD/logs/<study>/`. A study goes there only when
 the user says so (2026-11-22: "every run that is not current seed_study, move it to OLD"; `runs/` then holds
-`ian_seed_prototyping_0` and the smoke tests' `study_smoke`). Code only reads `OLD/`: never compute, export or
-reprocess into it. The paper's tables read `OLD/runs/ian_baseline_explorations_0`, `_1` and `apart_controls`.
+`ian_seed_prototyping_0` and the smoke tests' `study_smoke`). `OLD/` was moved to the stored layout once (each run's
+`processed/` and `analysis/`, `scripts/migrate_run_layout.py`). Never export into `OLD/`; `make process-transcripts`
+processes a study there only when that study is named. The paper's tables read `OLD/runs/ian_baseline_explorations_0`,
+`_1` and `apart_controls`.
 
 Commit each verified unit on main and push. Commit messages end with the Co-Authored-By line.
 

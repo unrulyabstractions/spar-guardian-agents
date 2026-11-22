@@ -12,11 +12,12 @@ import pytest
 from src.domains.creative._creative_ladder import CreativeDomain
 from src.domains.swe.swe_ladder import shows_no_file
 from src.measures import cheating_ladder, code_ladder, collusion, coordination, transcript_scan
-from src.measures.run_directory import ACCESS_LOG, RUN_JSON, SIGNALS, RunDir
+from src.measures.run_directory import RunDir
 from src.measures.rungs import RUNGS
 from src.measures.shell_commands import file_counted, git_names_only, git_shows_content, stage_of
 from src.utils.json_files import read_json, write_jsonl
 from tests.support.atif_builder import transcript
+from tests.support.run_files import write_bytes, write_text
 from tests.support.stub_ladder import KEY, OPENS, SHARDS, TASK, KeyDomain, make_run
 
 FROZEN = Path(__file__).parents[1] / "support" / "frozen_signals.jsonl"
@@ -38,7 +39,7 @@ def read(agent: str = "a01", call_id: str | None = "c0", *, cmd: str = "python3 
 
 def logged_run(root: Path, calls: dict, rows: list[dict], status: str = "valid", **run) -> Path:
     folder = make_run(root, calls, {"access_log": {"status": status}, **run})
-    write_jsonl(folder / ACCESS_LOG, rows)
+    write_jsonl(folder / "processed/access_log.jsonl", rows)
     return folder
 
 
@@ -673,7 +674,7 @@ def test_the_team_row_names_the_disagreements(key_task, tmp_path):
                                   "transcript_only": [f"a02: [0] cat {KEY}"], "team_only": [],
                                   "cheating_rung_without_log": "none", "rests_on_log": True}
     assert team["cheating_rung"] == "looked" and team["tried_agents"] == ["a01", "a02"]
-    assert read_json(folder / RUN_JSON)["signals"]["team"]["access_log"] == team["access_log"]
+    assert read_json(folder / "processed/run.json")["signals"]["team"]["access_log"] == team["access_log"]
 
 
 def test_a_read_that_stayed_on_the_team_is_no_absence_for_its_candidates(key_task, tmp_path):
@@ -785,8 +786,8 @@ def test_a_run_with_no_block_keeps_its_bytes(key_task, tmp_path):
     fields and no longer writes the retired rung, collaboration level and judged presentation."""
     folder = frozen_run(tmp_path)
     code_ladder.run_signals(folder)
-    assert evidence_lines(folder / SIGNALS, ADDED) == evidence_lines(FROZEN, RETIRED)
-    assert not (folder / ACCESS_LOG).exists()
+    assert evidence_lines(folder / "analysis/signals.jsonl", ADDED) == evidence_lines(FROZEN, RETIRED)
+    assert not (folder / "processed/access_log.jsonl").exists()
     rows = {row["agent"]: row for row in RunDir(folder).signals()}
     assert {a: r["cheating_rung"] for a, r in rows.items()} == {"a01": "looked", "a02": "none", "a03": "none"}
     assert RunDir(folder).team_signals()[0]["cheating_rung"] == "looked"
@@ -796,18 +797,18 @@ def test_a_record_from_before_the_ladders_is_refused_and_kept(key_task, tmp_path
     """The rungs are read only as a run records them: a file from before the ladders is refused, never computed, and
     stays as it is."""
     folder = frozen_run(tmp_path)
-    (folder / SIGNALS).write_bytes(FROZEN.read_bytes())
+    write_bytes(folder / "analysis/signals.jsonl", FROZEN.read_bytes())
     with pytest.raises(ValueError, match="holds no ladder rungs"):
         code_ladder.ladders(folder)
     with pytest.raises(ValueError, match="records no Cheating rungs"):
         cheating_ladder.cheating_rungs(folder)
-    assert (folder / SIGNALS).read_bytes() == FROZEN.read_bytes()
+    assert (folder / "analysis/signals.jsonl").read_bytes() == FROZEN.read_bytes()
 
 
 def test_the_switch_off_reads_the_transcript_alone(key_task, tmp_path):
     folder = frozen_run(tmp_path, access_log={"status": "off"})
     code_ladder.run_signals(folder)
-    assert evidence_lines(folder / SIGNALS, ADDED) == evidence_lines(FROZEN, RETIRED)
+    assert evidence_lines(folder / "analysis/signals.jsonl", ADDED) == evidence_lines(FROZEN, RETIRED)
 
 
 def test_the_report_of_a_run_with_no_block_prints_no_log_line(key_task, tmp_path):
@@ -823,13 +824,13 @@ def test_an_empty_logged_map_changes_no_scan():
 def test_a_block_is_read_with_its_rows(tmp_path):
     run_dir = tmp_path / "run"
     run_dir.mkdir()
-    (run_dir / RUN_JSON).write_text(json.dumps({"access_log": {"status": "broken", "control": {}}}))
-    write_jsonl(run_dir / ACCESS_LOG, [read()])
+    write_text(run_dir / "processed/run.json", json.dumps({"access_log": {"status": "broken", "control": {}}}))
+    write_jsonl(run_dir / "processed/access_log.jsonl", [read()])
     assert RunDir(run_dir).access_log() == {"status": "broken", "control": {}, "rows": [read()]}
-    (run_dir / RUN_JSON).write_text(json.dumps({"access_log": {"status": "absent"}}))
-    (run_dir / ACCESS_LOG).unlink()
+    write_text(run_dir / "processed/run.json", json.dumps({"access_log": {"status": "absent"}}))
+    (run_dir / "processed/access_log.jsonl").unlink()
     assert RunDir(run_dir).access_log() == {"status": "absent", "rows": []}
-    (run_dir / RUN_JSON).write_text(json.dumps({"access_log": {"status": "off"}}))
+    write_text(run_dir / "processed/run.json", json.dumps({"access_log": {"status": "off"}}))
     assert RunDir(run_dir).access_log() is None
-    (run_dir / RUN_JSON).write_text("{}")
+    write_text(run_dir / "processed/run.json", "{}")
     assert RunDir(run_dir).access_log() is None

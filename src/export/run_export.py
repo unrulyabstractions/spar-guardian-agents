@@ -2,21 +2,21 @@
 
     write_run(eval_log_path, run_dir, verdicts=None, replace=False)
 
-Writes
-    <run_dir>/run.json                                 the run: task, model, roster, defenses, team, config, rules
-    <run_dir>/episodes.jsonl                           one record per (sample, agent)
-    <run_dir>/access_log.jsonl                         one row per open of the honeypot, for a run that kept a log
-                                                       (src/export/_export_access_log.py)
-    <run_dir>/network.jsonl                            one row per socket call in the agents' machines, for a run that
-                                                       kept a network log (src/export/_export_network_log.py)
-    <run_dir>/judges/cheatbench.<judge>.jsonl          one CheatBench verdict row per judged episode, by the judge
-                                                       that ran in the eval (src/judging/verdict_files.py)
-    <run_dir>/trajectories/<episode>/transcript.json   the ATIF transcript the judge read
-    (src/export/atif_transcripts.py)
-    <run_dir>/trajectories/<episode>/prompt.txt
-    <run_dir>/communication/<sample>.json              channel messages and events, if any
-    <run_dir>/defense/<sample>.json                    defense configuration and interventions, if any
-    <run_dir>/swe/diffs/<target>.diff                  for a SWE run, the graded diffs (Benchmark.write_files)
+Writes, under the run's processed/ (run_directory.FILES)
+    run.json                                 the run: task, model, roster, defenses, team, config, rules
+    episodes.jsonl                           one record per (sample, agent)
+    access_log.jsonl                         one row per open of the honeypot, for a run that kept a log
+                                             (src/export/_export_access_log.py)
+    network.jsonl                            one row per socket call in the agents' machines, for a run that kept a
+                                             network log (src/export/_export_network_log.py)
+    trajectories/<episode>/transcript.json   the ATIF transcript the judge read (src/export/atif_transcripts.py)
+    trajectories/<episode>/prompt.txt
+    communication/<sample>.json              channel messages and events, if any
+    defense/<sample>.json                    defense configuration and interventions, if any
+    swe/diffs/<target>.diff                  for a SWE run, the graded diffs (Benchmark.write_files)
+and under its analysis/
+    judges/cheatbench.<judge>.jsonl          one CheatBench verdict row per judged episode, by the judge that ran in
+                                             the eval (src/judging/verdict_files.py)
 
 run.json also carries the run's mode, scale and preset, the submits (`team_submission`: the agent whose submit handed
 in the team's work, its round, the round after which the run ends, the snapshot, the refused calls and each solo_task
@@ -51,7 +51,7 @@ export.
 
 Paths are relative, so a run reads the same in any checkout and in the dataset: run.json "eval_log" is the log's path
 from the checkout (logs/<study>/[<group>/]<run>/<file>.eval, run_directory.log_link), and an episode's or a verdict's
-"transcript_path" is the transcript's path from the run's folder.
+"transcript_path" is the transcript's path from the run's processed/ folder.
 
 run.json's orbit_version and inspect_version, and each episode's and transcript's agent version, name what ran the
 eval, not what exports it: Inspect's version from the log (EvalSpec.packages), ORBIT's from an earlier export of the
@@ -82,7 +82,7 @@ import orbit
 from inspect_ai.log import read_eval_log
 
 from src.export._export_access_log import access_log
-from src.export._export_network_log import NETWORK_LOG, network_log
+from src.export._export_network_log import network_log
 from src.export._export_run_blocks import (
     cheatbench,
     domain,
@@ -104,14 +104,14 @@ from src.export.eval_sample_view import SampleView, logged_inspect_version, orbi
 from src.export.export_episodes import sample_key, sample_records
 from src.judging import verdict_files
 from src.judging.cheatbench_judge import JUDGE_SCORER
-from src.measures.run_directory import ACCESS_LOG, EPISODES, RUN_JSON, log_link, run_name, set_aside_attempt
+from src.measures import pipeline_parts
+from src.measures.run_directory import RunDir, log_link, run_name, set_aside_attempt
 from src.models import swarm_model_provider as provider
 from src.utils.json_files import read_json, write_jsonl
 
 # The identity a verdict row takes from its episode record, ahead of the verdict.
 VERDICT_IDENTITY = ("id", "episode", "replicate", "task", "model", "model_key", "agent", "role")
-OWNED_FILES = (RUN_JSON, EPISODES, ACCESS_LOG, NETWORK_LOG)
-OWNED_DIRS = ("trajectories", "communication", "defense", "swe")
+
 
 
 def run_json(view: SampleView | None, eval_path: Path, run_dir: Path, records: list[dict], eval_id: str,
@@ -193,13 +193,14 @@ def write_verdicts(run_dir: Path, rows: list[dict], *, replace: bool) -> int:
 def clear_outputs(run_dir: Path) -> None:
     """Remove what an earlier export of this run wrote, so stale verdicts or transcripts never pair with new episodes.
 
-    Only the files and directories this module writes are removed; the measures' files (signals.jsonl,
-    swe_summary.json) stay.
+    Only the export part's files and folders (src/configuration/pipeline_parts.yaml) are removed; analysis/ stays.
     """
-    for name in OWNED_FILES:
-        (run_dir / name).unlink(missing_ok=True)
-    for name in OWNED_DIRS:
-        shutil.rmtree(run_dir / name, ignore_errors=True)
+    run = RunDir(run_dir)
+    for rel in pipeline_parts.registry().part("export").paths:
+        if rel.endswith("/"):
+            shutil.rmtree(run.at(rel), ignore_errors=True)
+        else:
+            run.at(rel).unlink(missing_ok=True)
 
 
 PYTHON_REMEDY = "Pass replace=True to set the earlier run aside into runs/<study>/attempts/<name>.<n>/ first."
@@ -220,7 +221,7 @@ def earlier_export(run_dir: Path, eval_id: str) -> dict:
     fields: orbit_version, which the eval log does not record (the one written when the run was first exported, right
     after its eval), and run_id, the run's name, which a collection that names its folders otherwise (apart_controls'
     <model>/<task>/<cell>/s<seed>) does not give."""
-    path = Path(run_dir) / RUN_JSON
+    path = RunDir(run_dir).file("run.json")
     held = (read_json(path) or {}) if path.is_file() else {}
     return held if held.get("eval_id") == eval_id else {}
 
@@ -229,7 +230,7 @@ def refuse_replacing(run_dir: Path, eval_id: str | None) -> None:
     """Raise RunFolderTaken when run_dir holds the run of an eval other than eval_id: its run.json records another
     eval_id, or none. eval_id None stands for an eval not made yet, which no run.json can hold. A folder without
     run.json holds no run."""
-    path = Path(run_dir) / RUN_JSON
+    path = RunDir(run_dir).file("run.json")
     if not path.is_file():
         return
     held = (read_json(path) or {}).get("eval_id")
@@ -258,7 +259,8 @@ def write_run(eval_log_path: Path, run_dir: Path, *, verdicts: dict[str, dict] |
         if not replace:
             raise
         set_aside_attempt(run_dir, keep=eval_path)
-    run_dir.mkdir(parents=True, exist_ok=True)
+    folder = RunDir(run_dir)
+    folder.file("run.json").parent.mkdir(parents=True, exist_ok=True)
     earlier = earlier_export(run_dir, log.eval.eval_id)
     versions = (earlier.get("orbit_version") or orbit.__version__, logged_inspect_version(log))
     clear_outputs(run_dir)
@@ -273,17 +275,17 @@ def write_run(eval_log_path: Path, run_dir: Path, *, verdicts: dict[str, dict] |
                    versions, earlier.get("run_id") or run_name(run_dir), network)
     if network:
         run["network"] = network
-    (run_dir / RUN_JSON).write_text(json.dumps(run, indent=1))
-    write_jsonl(run_dir / EPISODES, records)
+    folder.file("run.json").write_text(json.dumps(run, indent=1))
+    write_jsonl(folder.file("episodes.jsonl"), records)
     if opens is not None:
-        write_jsonl(run_dir / ACCESS_LOG, opens)
+        write_jsonl(folder.file("access_log.jsonl"), opens)
     if sockets is not None:
-        write_jsonl(run_dir / NETWORK_LOG, sockets)
+        write_jsonl(folder.file("network.jsonl"), sockets)
     rows = judge_rows(views, records, verdicts)
     tmp = write_tmp_snapshots(views[0] if views else None, run_dir)
     if tmp is not None:
         run["tmp_snapshots"] = tmp
-        (run_dir / RUN_JSON).write_text(json.dumps(run, indent=1))
+        folder.file("run.json").write_text(json.dumps(run, indent=1))
     return {"out_dir": str(run_dir), "episodes": len(records), "topology": run["topology"],
             "with_transcript": [r["episode"] for r in records if r["transcript_path"]],
             "without_transcript": [r["episode"] for r in records if not r["transcript_path"]],

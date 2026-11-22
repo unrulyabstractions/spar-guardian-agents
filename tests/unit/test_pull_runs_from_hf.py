@@ -12,6 +12,7 @@ from huggingface_hub import RepoFile, RepoFolder
 
 from scripts import pull_runs_from_hf as pull
 from scripts import upload_runs_to_hf as upload
+from tests.support.run_files import write_text
 
 FAKE = "hf_FAKEtokenFAKEtoken0123456789abcd"
 REPO = "unrulyabstractions/spar-swarm"
@@ -27,17 +28,17 @@ HUB = {  # the dataset: path -> bytes
     "study_x/README.md": b"# study x\n",
     "study_x/figures/rates.png": b"\x89PNG",
     "study_x/runs/INDEX.jsonl": b'{"path": "run_a", "valid": true}\n',
-    "study_x/runs/run_a/run.json": b'{"ok": true}',
-    "study_x/runs/run_a/trajectories/t#1@k7q2m/transcript.json": b"[]",
-    "study_x/runs/run_ab/run.json": b'{"other": 1}',
-    "study_x/runs/mock/run_m/run.json": b"{}",
+    "study_x/runs/run_a/processed/run.json": b'{"ok": true}',
+    "study_x/runs/run_a/processed/trajectories/t#1@k7q2m/transcript.json": b"[]",
+    "study_x/runs/run_ab/processed/run.json": b'{"other": 1}',
+    "study_x/runs/mock/run_m/processed/run.json": b"{}",
     "study_x/logs/run_a/a.eval": b"PK eval bytes",
     "study_x/logs/screen/run_a.log": b"ran\n",
     "apart_controls/README.md": b"# apart\n",
-    "apart_controls/manifest.jsonl": b'{"key": "binder_cheat_ds_s1"}\n',
-    "apart_controls/ds/binder/cheat/s1/run.json": b'{"seed": 1}',
-    "apart_controls/ds/binder/cheat/s1/eval/x.eval": b"PK apart eval",
-    "apart_controls/ds/binder/cheat/s2/run.json": b'{"seed": 2}',
+    "apart_controls/runs/manifest.jsonl": b'{"key": "binder_cheat_ds_s1"}\n',
+    "apart_controls/runs/ds/binder/cheat/s1/processed/run.json": b'{"seed": 1}',
+    "apart_controls/logs/ds/binder/cheat/s1/x.eval": b"PK apart eval",
+    "apart_controls/runs/ds/binder/cheat/s2/processed/run.json": b'{"seed": 2}',
 }
 
 
@@ -101,13 +102,13 @@ def tree(root: Path) -> dict[str, bytes]:
 def test_the_mapping_is_the_uploads_reversed(tmp_path):
     root = tmp_path / "repo"
     runs, logs = root / "runs" / "study_x", root / "logs" / "study_x"
-    for folder in (runs / "run_a" / "trajectories" / "t#1@k7q2m", runs / "mock" / "run_m", logs / "run_a",
+    for folder in (runs / "run_a" / "processed/trajectories" / "t#1@k7q2m", runs / "mock" / "run_m", logs / "run_a",
                    logs / "screen", logs / "only_log"):
         folder.mkdir(parents=True)
     (runs / "INDEX.jsonl").write_text("{}\n")
-    (runs / "run_a" / "run.json").write_text('{"eval_log": "logs/study_x/run_a/a.eval"}')
-    (runs / "run_a" / "trajectories" / "t#1@k7q2m" / "transcript.json").write_text("[]")
-    (runs / "mock" / "run_m" / "run.json").write_text("{}")
+    write_text(runs / "run_a" / "processed/run.json", '{"eval_log": "logs/study_x/run_a/a.eval"}')
+    (runs / "run_a" / "processed/trajectories" / "t#1@k7q2m" / "transcript.json").write_text("[]")
+    write_text(runs / "mock" / "run_m" / "processed/run.json", "{}")
     with zipfile.ZipFile(logs / "run_a" / "a.eval", "w") as archive:
         archive.writestr("samples/1.json", "{}")
     (logs / "screen" / "run_a.log").write_text("ran\n")
@@ -124,11 +125,13 @@ def test_the_mapping_is_the_uploads_reversed(tmp_path):
     assert all(any(r == p or r.startswith(p + "/") for p in paths) for r in one_run)
 
 
-def test_the_apart_controls_come_to_runs_apart_controls_as_the_hub_lays_them_out(tmp_path):
-    assert pull.local_path("apart_controls/ds/binder/cheat/s1/eval/x.eval", tmp_path) == \
-        tmp_path / "runs" / "apart_controls" / "ds" / "binder" / "cheat" / "s1" / "eval" / "x.eval"
-    assert pull.local_path("apart_controls/manifest.jsonl", tmp_path) == tmp_path / "runs/apart_controls/manifest.jsonl"
-    assert pull.run_paths("apart_controls", "ds/binder/cheat/s1") == ["apart_controls/ds/binder/cheat/s1"]
+def test_the_apart_controls_come_as_a_study_does(tmp_path):
+    assert pull.local_path("apart_controls/logs/ds/binder/cheat/s1/x.eval", tmp_path) == \
+        tmp_path / "logs" / "apart_controls" / "ds" / "binder" / "cheat" / "s1" / "x.eval"
+    assert pull.local_path("apart_controls/runs/manifest.jsonl", tmp_path) == \
+        tmp_path / "runs/apart_controls/manifest.jsonl"
+    assert pull.run_paths("apart_controls", "ds/binder/cheat/s1")[:2] == [
+        "apart_controls/runs/ds/binder/cheat/s1", "apart_controls/logs/ds/binder/cheat/s1"]
 
 
 @pytest.mark.parametrize("remote", ["study_x/README.md", "study_x/figures/rates.png", "README.md", "LICENSES/x.txt",
@@ -143,12 +146,12 @@ def test_a_run_pull_places_its_files_and_its_index_with_the_hubs_bytes(tmp_path,
         "logs/study_x/run_a/a.eval": HUB["study_x/logs/run_a/a.eval"],
         "logs/study_x/screen/run_a.log": HUB["study_x/logs/screen/run_a.log"],
         "runs/study_x/INDEX.jsonl": HUB["study_x/runs/INDEX.jsonl"],
-        "runs/study_x/run_a/run.json": HUB["study_x/runs/run_a/run.json"],
-        "runs/study_x/run_a/trajectories/t#1@k7q2m/transcript.json":
-            HUB["study_x/runs/run_a/trajectories/t#1@k7q2m/transcript.json"],
+        "runs/study_x/run_a/processed/run.json": HUB["study_x/runs/run_a/processed/run.json"],
+        "runs/study_x/run_a/processed/trajectories/t#1@k7q2m/transcript.json":
+            HUB["study_x/runs/run_a/processed/trajectories/t#1@k7q2m/transcript.json"],
     }
     [call] = fake_hub
-    assert call["token"] is False and "study_x/runs/run_ab/run.json" not in str(call["patterns"])
+    assert call["token"] is False and "study_x/runs/run_ab/processed/run.json" not in str(call["patterns"])
     out = capsys.readouterr().out
     assert "token        none (the dataset is public)" in out
     assert "index        study_x/runs/INDEX.jsonl: comes too" in out
@@ -161,22 +164,23 @@ def test_a_whole_study_leaves_its_documents_on_the_hub(tmp_path, capsys):
     assert pull.main(["study_x"], root=tmp_path) == 0
     assert sorted(tree(tmp_path)) == [
         "logs/study_x/run_a/a.eval", "logs/study_x/screen/run_a.log", "runs/study_x/INDEX.jsonl",
-        "runs/study_x/mock/run_m/run.json", "runs/study_x/run_a/run.json",
-        "runs/study_x/run_a/trajectories/t#1@k7q2m/transcript.json", "runs/study_x/run_ab/run.json"]
+        "runs/study_x/mock/run_m/processed/run.json", "runs/study_x/run_a/processed/run.json",
+        "runs/study_x/run_a/processed/trajectories/t#1@k7q2m/transcript.json", "runs/study_x/run_ab/processed/run.json"]
     assert "hub only     README.md, figures/" in capsys.readouterr().out
 
 
 def test_an_apart_control_run_comes_with_the_manifest(tmp_path):
     assert pull.main(["apart_controls", "--run", "ds/binder/cheat/s1"], root=tmp_path) == 0
     assert tree(tmp_path) == {
-        "runs/apart_controls/ds/binder/cheat/s1/eval/x.eval": HUB["apart_controls/ds/binder/cheat/s1/eval/x.eval"],
-        "runs/apart_controls/ds/binder/cheat/s1/run.json": HUB["apart_controls/ds/binder/cheat/s1/run.json"],
-        "runs/apart_controls/manifest.jsonl": HUB["apart_controls/manifest.jsonl"],
+        "logs/apart_controls/ds/binder/cheat/s1/x.eval": HUB["apart_controls/logs/ds/binder/cheat/s1/x.eval"],
+        "runs/apart_controls/ds/binder/cheat/s1/processed/run.json":
+            HUB["apart_controls/runs/ds/binder/cheat/s1/processed/run.json"],
+        "runs/apart_controls/manifest.jsonl": HUB["apart_controls/runs/manifest.jsonl"],
     }
 
 
 def test_a_local_file_that_differs_stops_the_pull_before_any_download(tmp_path, fake_hub, capsys):
-    mine = tmp_path / "runs" / "study_x" / "run_a" / "run.json"
+    mine = tmp_path / "runs" / "study_x" / "run_a" / "processed/run.json"
     mine.parent.mkdir(parents=True)
     mine.write_text('{"mine": true}')
     with pytest.raises(SystemExit) as stop:
@@ -185,9 +189,9 @@ def test_a_local_file_that_differs_stops_the_pull_before_any_download(tmp_path, 
     err = capsys.readouterr().err
     assert f"differs here: {mine}" in err
     assert "1 local file(s) differ from the Hub's; nothing was pulled; --force replaces them" in err
-    assert fake_hub == [] and tree(tmp_path) == {"runs/study_x/run_a/run.json": b'{"mine": true}'}
+    assert fake_hub == [] and tree(tmp_path) == {"runs/study_x/run_a/processed/run.json": b'{"mine": true}'}
     assert pull.main(["study_x", "--run", "run_a", "--force"], root=tmp_path) == 0
-    assert mine.read_bytes() == HUB["study_x/runs/run_a/run.json"]
+    assert mine.read_bytes() == HUB["study_x/runs/run_a/processed/run.json"]
 
 
 def test_a_differing_index_is_left_as_it_is_even_with_force(tmp_path, capsys):
@@ -200,7 +204,7 @@ def test_a_differing_index_is_left_as_it_is_even_with_force(tmp_path, capsys):
 
 
 def test_dry_run_lists_each_run_and_writes_nothing(tmp_path, fake_hub, capsys):
-    mine = tmp_path / "runs" / "study_x" / "run_a" / "run.json"
+    mine = tmp_path / "runs" / "study_x" / "run_a" / "processed/run.json"
     mine.parent.mkdir(parents=True)
     mine.write_text('{"mine": true}')
     before = tree(tmp_path)
@@ -208,7 +212,8 @@ def test_dry_run_lists_each_run_and_writes_nothing(tmp_path, fake_hub, capsys):
     assert pull.main(["study_x", "--dry-run", "--force"], root=tmp_path) == 0
     assert tree(tmp_path) == before and fake_hub == []
     assert sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob("*")) == [
-        "runs", "runs/study_x", "runs/study_x/run_a", "runs/study_x/run_a/run.json"]
+        "runs", "runs/study_x", "runs/study_x/run_a", "runs/study_x/run_a/processed",
+        "runs/study_x/run_a/processed/run.json"]
     out = capsys.readouterr().out
     assert any(line.split()[:3] == ["run_a", "4", "files"] and "differs 1" in line for line in out.splitlines())
     assert any(line.split()[:3] == ["run_ab", "1", "files"] and "new 1" in line for line in out.splitlines())
@@ -253,9 +258,11 @@ def test_a_download_error_that_quotes_the_token_is_shown_without_it(tmp_path, mo
 
 def test_many_files_are_asked_for_by_run_folder(monkeypatch):
     monkeypatch.setattr(pull, "EXACT_PATTERNS", 2)
-    needed = ["study_x/runs/run_a/run.json", "study_x/runs/run_a/t#1/x.json", "study_x/logs/run_a/a.eval",
+    needed = ["study_x/runs/run_a/processed/run.json", "study_x/runs/run_a/t#1/x.json", "study_x/logs/run_a/a.eval",
               "study_x/runs/INDEX.jsonl"]
     assert pull.patterns(needed, "study_x") == ["study_x/logs/run_a/*", "study_x/runs/INDEX.jsonl",
                                                 "study_x/runs/run_a/*"]
-    assert pull.patterns(needed[:2], "study_x") == ["study_x/runs/run_a/run.json", "study_x/runs/run_a/t#1/x.json"]
-    assert pull.patterns(["study_x/runs/a[1]/run.json"], "study_x") == ["study_x/runs/a[[]1]/run.json"]
+    assert pull.patterns(needed[:2], "study_x") == ["study_x/runs/run_a/processed/run.json",
+                                                    "study_x/runs/run_a/t#1/x.json"]
+    assert pull.patterns(["study_x/runs/a[1]/processed/run.json"],
+                         "study_x") == ["study_x/runs/a[[]1]/processed/run.json"]

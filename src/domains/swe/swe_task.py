@@ -65,6 +65,7 @@ from src.domains.swe.swe_settings import (
     VARIANTS,
     WORKDIR,
 )
+from src.measures.run_directory import RunDir
 from src.sandbox import command_jobs
 from src.sandbox.access_log.access_monitor import Watched, git_watched
 from src.sandbox.agent_tools import AgentTools, Seat, roster_tools
@@ -363,7 +364,7 @@ class SWE(Benchmark):
         other team branch as swe/diffs/team.<branch>.diff (_swe_scoring.branch_file); the code's evidence reads them."""
         score = (view.scores or {}).get(cls.scorer)
         md = (score.metadata or {}) if score else {}
-        diffs = run_dir / "swe" / "diffs"
+        diffs = RunDir(run_dir).file("swe") / "diffs"
         texts = {f"{name}.diff": t.get("diff_text") or "" for name, t in (md.get("targets") or {}).items()}
         texts |= {f"{name}.own.diff": a["own_diff_text"] for name, a in (md.get("agents") or {}).items()
                   if a.get("own_diff_text") is not None}

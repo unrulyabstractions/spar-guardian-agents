@@ -155,8 +155,8 @@ def evidence(score: int, excerpt: str = "", located: dict | None = None) -> dict
 
 
 def write_labels(folder, judge: str, rows: list[dict]) -> None:
-    (folder / "judges").mkdir(exist_ok=True)
-    (folder / "judges" / f"{verdict_files.LABELS_PASS}.{judge}.jsonl").write_text(
+    (folder / "analysis/judges").mkdir(parents=True, exist_ok=True)
+    (folder / "analysis/judges" / f"{verdict_files.LABELS_PASS}.{judge}.jsonl").write_text(
         "".join(json.dumps(row) + "\n" for row in rows))
 
 

@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from src.configuration import settings
+from tests.support.run_files import write_text
 from tests.support.sample_runs import copy_run
 from tools.run_reader import (
     load_run,
@@ -42,11 +43,12 @@ def test_a_run_in_a_group_is_read_by_its_name_with_its_log_at_the_mirror(sample_
     hold stops the tool."""
     study = tmp_path / "runs" / "study_x"
     grouped = copy_run(sample_runs / "riemann_minimal", study / "invalid" / "riemann_minimal")
-    recorded = json.loads((grouped / "run.json").read_text())
+    recorded = json.loads((grouped / "processed/run.json").read_text())
     log = tmp_path / "logs" / "study_x" / "invalid" / "riemann_minimal" / Path(recorded["eval_log"]).name
     log.parent.mkdir(parents=True)
     log.write_bytes(Path(recorded["eval_log"]).read_bytes())
-    (grouped / "run.json").write_text(json.dumps({**recorded, "eval_log": f"/root/work/logs/study_x/{log.name}"}))
+    write_text(grouped / "processed/run.json", json.dumps({**recorded,
+                                                           "eval_log": f"/root/work/logs/study_x/{log.name}"}))
     monkeypatch.setattr(settings, "RUNS", study)
     run = load_run("riemann_minimal")
     assert (run.name, run.directory, run.eval_log) == ("invalid/riemann_minimal", grouped.resolve(), log.resolve())
@@ -59,12 +61,12 @@ def test_a_relative_eval_log_is_read_from_the_runs_own_checkout(sample_runs, tmp
     """run.json names the log from the checkout the run sits in, so a pulled copy reads its own log, never the file
     at the same path in this repository."""
     run_dir = copy_run(sample_runs / "riemann_minimal", tmp_path / "copy" / "runs" / "study_x" / "riemann_minimal")
-    recorded = json.loads((run_dir / "run.json").read_text())
+    recorded = json.loads((run_dir / "processed/run.json").read_text())
     rel = Path("logs", "kept", Path(recorded["eval_log"]).name)
     for checkout in (tmp_path / "copy", tmp_path / "repo"):
         (checkout / rel).parent.mkdir(parents=True)
         (checkout / rel).write_bytes(Path(recorded["eval_log"]).read_bytes())
-    (run_dir / "run.json").write_text(json.dumps({**recorded, "eval_log": rel.as_posix()}))
+    write_text(run_dir / "processed/run.json", json.dumps({**recorded, "eval_log": rel.as_posix()}))
     monkeypatch.setattr(settings, "ROOT", tmp_path / "repo")
     assert load_run(run_dir).eval_log == tmp_path / "copy" / rel
 
@@ -127,7 +129,7 @@ def test_summary_round_trip(riemann_copy):
     copy = riemann_copy
     run = load_run(copy)
     path = write_summary(run, "probe", {"agents": 3, "where": copy})
-    assert path == copy / "tools" / "probe" / "summary.json"
+    assert path == copy / "analysis/tools" / "probe" / "summary.json"
     summary = read_summary(run, "probe")
     assert summary == json.loads(path.read_text())
     assert (summary["tool"], summary["run"], summary["agents"]) == ("probe", "riemann_minimal", 3)
@@ -140,9 +142,9 @@ def test_summary_round_trip(riemann_copy):
 def test_cache_answers_when_the_log_is_gone(tmp_path, riemann_copy):
     copy = riemann_copy
     original = load_run(copy)
-    run_json = json.loads((copy / "run.json").read_text())
+    run_json = json.loads((copy / "processed/run.json").read_text())
     run_json["eval_log"] = str(tmp_path / "gone.eval")
-    (copy / "run.json").write_text(json.dumps(run_json))
+    write_text(copy / "processed/run.json", json.dumps(run_json))
     run = load_run(copy)
     assert run.eval_log is None
     assert run.timeline == original.timeline == run_json["rules"]["timeline"]

@@ -18,10 +18,11 @@ from src.measures import cheating_ladder as ladder
 from src.measures import code_ladder, ladder_by_domain
 from src.measures import honeypot_fingerprints as prints_module
 from src.measures.ladder_domain import Send
-from src.measures.run_directory import ACCESS_LOG, SIGNALS, RunDir
+from src.measures.run_directory import RunDir
 from src.measures.shell_commands import changed_paths
 from src.utils.json_files import write_jsonl
 from tests.support.atif_builder import transcript
+from tests.support.run_files import write_text
 from tests.support.stub_ladder import KEY, SHARDS, GradedKeyDomain, make_run
 
 ONE, TWO = SHARDS["shard1"], SHARDS["shard2"]
@@ -45,7 +46,7 @@ def run(tmp_path: Path, calls: dict, run_json: dict | None = None, posts: list |
         extra["access_log"] = {"status": "valid"}
     folder = make_run(tmp_path, calls, {**SPLIT, **extra, **(run_json or {})}, posts, episodes)
     if log is not None:
-        write_jsonl(folder / ACCESS_LOG, log)
+        write_jsonl(folder / "processed/access_log.jsonl", log)
     return ladder.run_cheating(folder)
 
 
@@ -355,7 +356,7 @@ def test_changed_paths_names_what_a_command_writes_removes_or_moves_and_not_what
 # --------------------------------------------------------------------------
 def test_a_run_with_no_signals_file_no_hand_in_and_no_judge_is_read(tmp_path):
     folder = make_run(tmp_path, {"a01": [OPENS_ONE], "a02": [NOTHING]}, SPLIT)
-    assert not (folder / "signals.jsonl").exists() and not (folder / "judge.jsonl").exists()
+    assert not (folder / "analysis/signals.jsonl").exists() and not (folder / "analysis/judge.jsonl").exists()
     out = ladder.run_cheating(folder)
     assert out["passed"] is None and out["alarm"] is None and rungs(out) == {"a01": "looked", "a02": "none"}
     assert {a: r["cheated"] for a, r in out["agents"].items()} == {"a01": False, "a02": False}
@@ -429,9 +430,9 @@ def test_a_new_run_records_its_rungs_and_a_reader_takes_them_as_recorded(tmp_pat
     assert (read["team"]["cheating_rung"], read["influencers"]["cheating"], read["team"]["cheating_alarm"]) == (
         "looked", {}, None)
     assert rows["a01"]["cheated"] is False and stored["cheated"] is False
-    lines = (folder / SIGNALS).read_text().splitlines()
+    lines = (folder / "analysis/signals.jsonl").read_text().splitlines()
     edited = [json.dumps({**json.loads(line), "cheating_rung": "hacked"}) for line in lines]
-    (folder / SIGNALS).write_text("\n".join(edited) + "\n")
+    write_text(folder / "analysis/signals.jsonl", "\n".join(edited) + "\n")
     assert code_ladder.ladders(folder)["team"]["cheating_rung"] == "hacked"
 
 

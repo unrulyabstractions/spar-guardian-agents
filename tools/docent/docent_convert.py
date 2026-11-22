@@ -23,6 +23,7 @@ from docent.data_models.chat.message import SystemMessage, UserMessage
 from docent.data_models.transcript import Transcript
 from docent.sdk.integrations import convert_atif_to_agent_run
 
+from src.measures.run_directory import RunDir
 from src.measures.rungs import LADDER_FIELDS
 from src.measures.verdict_fields import flag_names
 from tools.run_reader import Post, Run, Step
@@ -49,7 +50,7 @@ def measures(directory: Path) -> tuple[dict[str, dict], dict]:
     ladders as src/measures/code_ladder.py ladders gives them (recorded, or computed for a run recorded before a
     ladder), each judge label's score. Empty for a folder without run.json or signals.jsonl (a run the code never
     read)."""
-    if not (directory / "signals.jsonl").is_file() or not (directory / "run.json").is_file():
+    if not RunDir(directory).file("signals.jsonl").is_file() or not RunDir(directory).is_run():
         return {}, {}
     done = subprocess.run([str(RUN_PYTHON), "-c", COMPUTE, str(directory.resolve())], cwd=ROOT, capture_output=True,
                           text=True, check=True)

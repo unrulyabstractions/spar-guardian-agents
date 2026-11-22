@@ -15,10 +15,13 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from src.measures.run_directory import FILES
 from src.replay.step_snapshots import decode
 
-REPORT = "replay.json"
-STEPS = "steps.jsonl"
+REPORT = Path(FILES["replay.json"]).name
+STEPS = Path(FILES["steps.jsonl"]).name
+"""A replay folder's two files: the replay's own folder (tmp/replay/<study>/<run>/) and a run's
+processed/replay/ (RunDir.replay_dir) hold them by the same names."""
 SCHEMA = 1
 
 

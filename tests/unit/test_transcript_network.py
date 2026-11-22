@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 
-from src.export._export_network_log import NETWORK_LOG
 from src.ui import transcript_network as net
+from tests.support.run_files import write_text
 
 START = 1793400000.0
 NS = 4026532448
@@ -18,8 +18,8 @@ def row(op: str, t: float, **fields) -> dict:
 
 
 def written(tmp_path, rows: list[dict], block: dict | None = None):
-    (tmp_path / NETWORK_LOG).write_text("".join(json.dumps(r) + "\n" for r in rows))
-    (tmp_path / "run.json").write_text(json.dumps({"network": block or {"status": "valid", "method": "ebpf"}}))
+    write_text(tmp_path / "processed/network.jsonl", "".join(json.dumps(r) + "\n" for r in rows))
+    write_text(tmp_path / "processed/run.json", json.dumps({"network": block or {"status": "valid", "method": "ebpf"}}))
     return tmp_path
 
 

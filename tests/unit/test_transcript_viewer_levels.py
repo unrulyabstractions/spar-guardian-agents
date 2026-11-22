@@ -37,6 +37,7 @@ from src.ui import transcript_levels as tl
 from src.ui import transcript_viewer as tv
 from src.ui import viewer_parts as vp
 from src.ui.transcript_index import RunFiles, build_row, cell_of, influencer_conditioning, worker_conditioning
+from tests.support.run_files import write_text
 
 AGENTS = ["a01", "a02", "a03"]
 STATIC = Path(tl.__file__).parent / "transcript_static"
@@ -442,8 +443,8 @@ def test_the_viewer_reads_the_board_record_from_the_run(tmp_path):
     regulator keeps its own level, and the posts' labels (P<n>, the judges' numbering) come from the viewer's
     board of the run, read through RunDir."""
     run = write_run(tmp_path / "run", {"a01": "worker", "a02": "regulator", "a03": "worker"}, {}, {}, "m")
-    (run / "communication").mkdir()
-    (run / "communication" / "s#1.json").write_text(json.dumps(BACK_AND_FORTH[0]))
+    (run / "processed/communication").mkdir(parents=True)
+    (run / "processed/communication" / "s#1.json").write_text(json.dumps(BACK_AND_FORTH[0]))
     rf = RunFiles.read(run)
     lv = rf.levels({**measures(rf.roles), "coordination": coordination.run_coordination(run)})
     assert lv["coordination"]["influencers"] == {"a02": "low"}
@@ -823,9 +824,9 @@ def write_run(path: Path, roles: dict[str, str], role_models: dict, cfg: dict, m
               task: str | None = None) -> Path:
     path.mkdir(parents=True)
     eps = [{"episode": f"s#1@{a}", "agent": a, "role": r} for a, r in roles.items()]
-    path.joinpath("episodes.jsonl").write_text("".join(json.dumps(e) + "\n" for e in eps))
-    path.joinpath("signals.jsonl").write_text("")
-    path.joinpath("run.json").write_text(json.dumps({"model": model, "role_models": role_models, "config": cfg,
+    write_text(path / "processed/episodes.jsonl", "".join(json.dumps(e) + "\n" for e in eps))
+    write_text(path / "analysis/signals.jsonl", "")
+    write_text(path / "processed/run.json", json.dumps({"model": model, "role_models": role_models, "config": cfg,
                                                      "swarm": {"roles": roles}, "task": task}))
     return path
 
@@ -1010,7 +1011,7 @@ def test_the_index_lists_valid_runs_only_and_marks_the_tasks_it_does_not_read(tm
     tmp_path.joinpath("runs", "study_y", "INDEX.jsonl").write_text(
         json.dumps({"path": "poem_minimal_luna1", "valid": False}) + "\n")
     assert processed(tmp_path / "runs") == ["game_minimal_luna1", "poem_minimal_luna1", "worktime_minimal_luna1"]
-    assert not (study / "poem_minimal_luna2" / "analysis").exists()
+    assert not RunDir(study / "poem_minimal_luna2").versions()["analysis"].exists()
     idx = ti.build_index(tmp_path / "runs")
     assert {row["run"]: row["hidden_task"] for row in idx["rows"]} == \
         {"poem_minimal_luna1": False, "game_minimal_luna1": True, "worktime_minimal_luna1": True}

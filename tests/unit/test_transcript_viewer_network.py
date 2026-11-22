@@ -13,10 +13,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.export._export_network_log import NETWORK_LOG
 from src.measures.run_calls import Call
 from src.ui import transcript_board, transcript_viewer
 from src.ui.transcript_viewer import Handler, Server, Viewer, board_detail, network_file
+from tests.support.run_files import write_text
 
 STATIC = Path(transcript_viewer.__file__).parent / "transcript_static"
 START = 1795245076.0
@@ -47,8 +47,8 @@ RUN = SimpleNamespace(calls={"w2": [call("w2", 0, 0.1, 3.0, "serve")], "r1": [ca
 
 
 def written(run_dir: Path) -> Path:
-    (run_dir / NETWORK_LOG).write_text("".join(json.dumps(r) + "\n" for r in ROWS))
-    (run_dir / "run.json").write_text(json.dumps({"network": {"status": "valid", "method": "ebpf"}}))
+    write_text(run_dir / "processed/network.jsonl", "".join(json.dumps(r) + "\n" for r in ROWS))
+    write_text(run_dir / "processed/run.json", json.dumps({"network": {"status": "valid", "method": "ebpf"}}))
     return run_dir
 
 
@@ -99,7 +99,7 @@ def test_api_network_serves_the_payload_and_reads_the_run_once(served):
 def test_api_network_is_404_without_a_file_or_a_run(served):
     base, _, asked = served
     status, body, _ = get(f"{base}/api/network?id=c/without")
-    assert status == 404 and body == {"error": f"no {NETWORK_LOG} in c/without"}
+    assert status == 404 and body == {"error": "no network log in c/without"}
     status, body, _ = get(f"{base}/api/network?id=c/nothing")
     assert status == 404 and "no run" in body["error"]
     assert get(f"{base}/api/network")[0] == 404
@@ -112,9 +112,9 @@ def test_the_board_payload_says_whether_the_run_has_a_network_log(tmp_path, monk
                         staticmethod(lambda run_dir: SimpleNamespace(levels=lambda measured: {})))
     assert board_detail({}, tmp_path, {}) == {"posts": [], "tmp": False, "network": False}
     assert network_file(tmp_path) is None
-    (tmp_path / NETWORK_LOG).write_text("")
+    write_text(tmp_path / "processed/network.jsonl", "")
     assert board_detail({}, tmp_path, {}) == {"posts": [], "tmp": False, "network": True}
-    assert network_file(tmp_path) == tmp_path / NETWORK_LOG
+    assert network_file(tmp_path) == tmp_path / "processed/network.jsonl"
 
 
 # ------------------------------------------------------------------------------------------------- network_payload

@@ -32,7 +32,6 @@ from src.measures.ladder_by_domain import HIDDEN_TASKS, TASK_DOMAIN, hidden_task
 from src.measures.run_directory import RunDir, episode_agent, is_influencer, is_worker, roles_of, run_name
 from src.measures.run_listing import Listed, list_collection
 from src.ui import transcript_levels
-from src.utils.json_files import read_json, read_jsonl
 
 SKIP = ("study_smoke", "study_orbit2_check", "apart_controls")
 """Folders under runs/ the viewer never lists: mock smokes, a port check and the apart controls, whose runs are all
@@ -140,9 +139,8 @@ class RunFiles:
     @classmethod
     def read(cls, path: Path) -> RunFiles:
         run = RunDir(path)
-        rj = read_json(run.file("run.json")) or {}
-        episodes = read_jsonl(run.file("episodes.jsonl"))
-        sig_agents = {s.get("agent"): s for s in read_jsonl(run.file("signals.jsonl")) if s.get("row") == "agent"}
+        rj, episodes = run.run_json, run.episodes()
+        sig_agents = {s.get("agent"): s for s in run.signals()}
         return cls(path, rj, episodes, sig_agents, roles_of(rj, episodes))
 
     @property

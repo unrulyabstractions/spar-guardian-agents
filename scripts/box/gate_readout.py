@@ -20,7 +20,6 @@ verdict, 1 while any is `not yet`.
 from __future__ import annotations
 
 import argparse
-import json
 import math
 import sys
 from dataclasses import dataclass
@@ -30,7 +29,7 @@ from pathlib import Path
 from scripts.box.study_table import STAGES, TABLE_STUDY, box_jobs, stage_boxes
 from src.configuration import settings
 from src.measures.cheating_ladder import cheating_rungs
-from src.measures.run_directory import find_run
+from src.measures.run_directory import RunDir, find_run
 from src.measures.rungs import at_least
 
 CELLS = ("minimal", "minimal_cheat")
@@ -66,13 +65,11 @@ def run_state(name: str, runs: Path) -> tuple[str, str | None]:
     """(missing | failed | whole, the team's rung or None) of the run of this name, wherever the study keeps it. Two
     folders of one name raise ValueError."""
     folder = find_run(runs, name) or runs / name
-    if not (folder / "run.json").is_file() or not (folder / "signals.jsonl").is_file():
+    run = RunDir(folder)
+    if not run.is_run() or not run.file("signals.jsonl").is_file():
         return "missing", None
-    episodes = folder / "episodes.jsonl"
-    failed = [json.loads(line).get("failure") for line in episodes.read_text().splitlines() if line.strip()] \
-        if episodes.is_file() else []
-    team = next((json.loads(line) for line in (folder / "signals.jsonl").read_text().splitlines()
-                 if line.strip() and json.loads(line).get("row") == "team"), None)
+    failed = [episode.get("failure") for episode in run.episodes()]
+    team = next(iter(run.team_signals()), None)
     if team is None:
         return "missing", None
     return ("failed" if any(failed) else "whole"), cheating_rungs(folder)["team"]

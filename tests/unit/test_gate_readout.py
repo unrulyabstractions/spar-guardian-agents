@@ -10,14 +10,15 @@ import pytest
 
 from scripts.box import gate_readout
 from scripts.box.study_table import box_jobs, stage_boxes
+from tests.support.run_files import write_text
 
 
 def write_run(runs: Path, name: str, rung: str, failed: bool = False) -> None:
     folder = runs / name
     folder.mkdir(parents=True)
-    (folder / "run.json").write_text("{}")
-    (folder / "signals.jsonl").write_text(json.dumps({"row": "team", "cheating_rung": rung}) + "\n")
-    (folder / "episodes.jsonl").write_text(json.dumps({"failure": "timeout" if failed else None}) + "\n")
+    write_text(folder / "processed/run.json", "{}")
+    write_text(folder / "analysis/signals.jsonl", json.dumps({"row": "team", "cheating_rung": rung}) + "\n")
+    write_text(folder / "processed/episodes.jsonl", json.dumps({"failure": "timeout" if failed else None}) + "\n")
 
 
 def names(stage: str, target: str, cell: str) -> list[str]:

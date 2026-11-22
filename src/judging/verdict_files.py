@@ -1,4 +1,4 @@
-"""The judges' verdicts stored beside a run: the one reader and the one writer of runs/<study>/<run>/judges/.
+"""The judges' verdicts stored beside a run: the one reader and the one writer of runs/<study>/<run>/analysis/judges/.
 
     read(run_dir)                                   # {"cheatbench": {"gpt-6-luna": [rows]}, "labels": {...}}
     rows(run_dir, LABELS_PASS, "gpt-6-luna")        # one file's rows
@@ -27,10 +27,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from src.measures.run_directory import RunDir
 from src.sandbox.staging import write_atomic
 from src.utils.json_files import read_jsonl
 
-FOLDER = "judges"
 CHEATBENCH_PASS = "cheatbench"
 """CheatBench's verdicts per episode (src/judging/cheatbench_judge.py)."""
 LABELS_PASS = "labels"
@@ -42,12 +42,17 @@ ROW_KEYS = ("unit", "judge", "judge_generation_config", "prompt_sha256", "schema
 
 
 def path(run_dir: Path, pass_name: str, judge: str) -> Path:
-    """runs/<study>/<run>/judges/<pass>.<judge>.jsonl."""
+    """runs/<study>/<run>/analysis/judges/<pass>.<judge>.jsonl."""
     if pass_name not in PASSES:
         raise ValueError(f"unknown judge pass {pass_name!r}; choose one of {', '.join(PASSES)}")
     if not judge or "/" in judge:
         raise ValueError(f"not a judge entry name: {judge!r}")
-    return Path(run_dir) / FOLDER / f"{pass_name}.{judge}.jsonl"
+    return folder_of(run_dir) / f"{pass_name}.{judge}.jsonl"
+
+
+def folder_of(run_dir: Path) -> Path:
+    """The run's judges/ folder (run_directory.FILES)."""
+    return RunDir(run_dir).file("judges")
 
 
 def rows(run_dir: Path, pass_name: str, judge: str) -> list[dict]:
@@ -57,7 +62,7 @@ def rows(run_dir: Path, pass_name: str, judge: str) -> list[dict]:
 
 def pass_files(run_dir: Path) -> dict[str, dict[str, list[dict]]]:
     """Every verdict file under judges/: {pass: {judge: [rows]}}. A file whose name is no known pass is skipped."""
-    folder = Path(run_dir) / FOLDER
+    folder = folder_of(run_dir)
     out: dict[str, dict[str, list[dict]]] = {}
     for file in sorted(folder.glob("*.jsonl")) if folder.is_dir() else []:
         pass_name, _, judge = file.name.removesuffix(".jsonl").partition(".")

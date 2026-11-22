@@ -206,7 +206,8 @@ def test_a_scenario_runs_exports_and_reads_back(tmp_path, monkeypatch):
     assert [name for name, _ in tool_calls_of(load_transcript(records[0]))] == ["work", "submit"]
     assert results_by_agent(records)["a01"][0] == "a01 worked on x"
     assert suite.run_json("one")["team_submission"]["agent"] == "a01"
-    assert (tmp_path / "runs" / "one" / "episodes.jsonl").is_file() and list((tmp_path / "logs" / "one").glob("*.eval"))
+    assert (tmp_path / "runs" / "one" / "processed/episodes.jsonl").is_file()
+    assert list((tmp_path / "logs" / "one").glob("*.eval"))
 
 
 def test_the_suite_reads_a_stored_run(tmp_path, key_task):
@@ -477,7 +478,7 @@ def test_main_runs_the_chosen_scenarios_and_reports_every_failure(tmp_path, caps
     assert main(suite, scenarios, "doc", argv=[]) == 1
     out = capsys.readouterr().out
     assert "\n[PASS] good in " in out and "\n[FAIL] bad in " in out and "ValueError: no" in out
-    results = json.loads((suite.runs / "smoke_results.json").read_text())
+    results = json.loads((suite.runs / "analysis/smoke_results.json").read_text())
     assert {name: result["status"] for name, result in results.items()} == {"good": "PASS", "bad": "FAIL"}
     with pytest.raises(AssertionError, match="unknown names"):
         main(suite, scenarios, "doc", argv=["--only", "nope"])
@@ -487,9 +488,9 @@ def test_main_runs_each_scenario_once_per_task(tmp_path, capsys):
     suite = suite_in(tmp_path)
     scenarios = {"lone": lambda task: {"task": task}}
     assert main(suite, scenarios, "doc", tasks={"t1": 1, "t2": 2}, argv=["--tasks", "t2"]) == 0
-    assert list(json.loads((suite.runs / "smoke_results.json").read_text())) == ["t2_lone"]
+    assert list(json.loads((suite.runs / "analysis/smoke_results.json").read_text())) == ["t2_lone"]
     assert main(suite, scenarios, "doc", tasks={"t1": 1, "t2": 2}, argv=[]) == 0
-    results = json.loads((suite.runs / "smoke_results.json").read_text())
+    results = json.loads((suite.runs / "analysis/smoke_results.json").read_text())
     assert [(name, result["task"]) for name, result in results.items()] == [("t1_lone", 1), ("t2_lone", 2)]
 
 

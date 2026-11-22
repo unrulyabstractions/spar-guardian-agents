@@ -14,8 +14,10 @@ from types import SimpleNamespace
 
 import pytest
 
+from src.measures.run_directory import FILES
 from src.ui import transcript_board, transcript_viewer
-from src.ui.transcript_viewer import TMP_FILE, Handler, Server, board_detail, tmp_snapshots
+from src.ui.transcript_viewer import Handler, Server, board_detail, tmp_snapshots
+from tests.support.run_files import write_text
 
 STATIC = Path(transcript_viewer.__file__).parent / "transcript_static"
 DOC = {"schema": 1, "run": "r", "task": "creative_writings", "dirs": ["/tmp", "/var/tmp"],
@@ -47,7 +49,7 @@ def served(tmp_path, monkeypatch):
     with_file, without = tmp_path / "with", tmp_path / "without"
     with_file.mkdir()
     without.mkdir()
-    (with_file / TMP_FILE).write_text(json.dumps(DOC))
+    write_text(with_file / "processed/tmp_snapshots.json", json.dumps(DOC))
     viewer = SimpleNamespace(dirs={"c/with": with_file, "c/without": without}, rows={}, measured={})
     monkeypatch.setattr(Handler, "viewer", viewer, raising=False)
     srv = Server(("127.0.0.1", 0), Handler)
@@ -71,14 +73,14 @@ def test_api_tmp_serves_the_file_as_stored(served):
     status, body, ctype = get(f"{base}/api/tmp?id=c/with")
     assert status == 200
     assert ctype == "application/json"
-    assert body == (run_dir / TMP_FILE).read_bytes()
+    assert body == (run_dir / "processed/tmp_snapshots.json").read_bytes()
 
 
 def test_api_tmp_is_404_without_a_file_or_a_run(served):
     base, _ = served
     status, body, _ = get(f"{base}/api/tmp?id=c/without")
     assert status == 404
-    assert json.loads(body) == {"error": f"no {TMP_FILE} in c/without"}
+    assert json.loads(body) == {"error": "no /tmp snapshots in c/without"}
     status, body, _ = get(f"{base}/api/tmp?id=c/nothing")
     assert status == 404
     assert "no run" in json.loads(body)["error"]
@@ -92,14 +94,14 @@ def test_the_board_payload_says_whether_the_run_has_snapshots(tmp_path, monkeypa
                         staticmethod(lambda run_dir: SimpleNamespace(levels=lambda measured: {})))
     assert board_detail({}, tmp_path, {}) == {"posts": [], "tmp": False, "network": False}
     assert tmp_snapshots(tmp_path) is None
-    (tmp_path / TMP_FILE).write_text("{}")
+    write_text(tmp_path / "processed/tmp_snapshots.json", "{}")
     assert board_detail({}, tmp_path, {}) == {"posts": [], "tmp": True, "network": False}
-    assert tmp_snapshots(tmp_path) == tmp_path / TMP_FILE
+    assert tmp_snapshots(tmp_path) == tmp_path / "processed/tmp_snapshots.json"
 
 
 def test_the_file_name_is_the_snapshot_modules():
     from src.replay import tmp_snapshots as module
-    assert TMP_FILE == module.FILE
+    assert Path(FILES["tmp_snapshots.json"]).name == module.FILE
 
 
 def test_the_board_shows_the_panel_only_with_snapshots():

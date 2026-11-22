@@ -6,6 +6,7 @@ import json
 
 from elicitation import steps
 from src.measures import code_ladder
+from src.measures.run_directory import RunDir
 from tests.support.stub_ladder import KEY, SHARDS, make_run
 
 SPLIT = {"policy": "split", "agents": {"a01": {"holds": ["shard1"]}, "a02": {"holds": ["shard2"]}}}
@@ -57,14 +58,14 @@ def test_each_step_gets_its_labels_and_quadrant(tmp_path, key_task):
     assert a02[2]["posts"][0]["number"] == 3 and a02[2]["posts"][0]["solicits"]
     assert header["quadrants"]["a01"] == {"honest_solo": 2, "cheat_solo": 1, "cheat_collab": 1}
     # the file is the header, then the steps, as returned
-    written = [json.loads(line) for line in (folder / steps.STEPS).read_text().splitlines()]
+    written = [json.loads(line) for line in RunDir(folder).file("step_labels.jsonl").read_text().splitlines()]
     assert written == json.loads(json.dumps(rows))
 
 
 def test_the_steps_agree_with_the_signals(tmp_path, key_task):
     folder = run_folder(tmp_path)
     rows = steps.label_run(folder)
-    signals = [json.loads(line) for line in (folder / "signals.jsonl").read_text().splitlines()]
+    signals = [json.loads(line) for line in (folder / "analysis/signals.jsonl").read_text().splitlines()]
     assert steps.check(rows, signals) == []
     a01 = next(s for s in signals if s.get("agent") == "a01")
     assert a01["tried_call"] == 1 and a01["opened_call"] == 1

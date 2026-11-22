@@ -20,10 +20,10 @@ logs/<study>/screen/attempts/, never overwritten. The runner's own pid goes to ~
 A run is done before, and is skipped, only when its export exists, its eval log says success and none of its episodes
 failed in the harness or at the provider. A run whose eval succeeded and that lacks only its code record gets it
 rebuilt, which costs no model call and needs no judge, and is never run again. Any other run starts again, its earlier
-screen log set aside in the same folder. Its earlier attempt moves first: the run folder, the eval log folder and the
-figures go to runs/<study>/attempts/<name>.<n>/ and the same places under logs/ and out/
-(run_directory.set_aside_attempt), so the new run's export finds an empty folder and nothing of the earlier attempt is
-lost. The job's arguments stay as the plan recorded them.
+screen log set aside in the same folder. Its earlier attempt moves first: the run folder and the eval log folder go to
+runs/<study>/attempts/<name>.<n>/ and the same place under logs/ (run_directory.set_aside_attempt), so the new run's
+export finds an empty folder and nothing of the earlier attempt is lost. The job's arguments stay as the plan recorded
+them.
 
 Every minute the runner looks at each live run. A run is hung when it is alive GRACE_S past Inspect's time limit for the
 task's domain and nothing under logs/<study>/<name>/, runs/<study>/<name>/ or its log changed for GRACE_S, or when it is
@@ -67,10 +67,9 @@ from src.domains.protein import protein_rows_build
 from src.domains.swe import swe_sandbox
 from src.domains.swe.swe_inputs import load_split
 from src.domains.swe.swe_settings import DEFAULT_ROW as SWE_ROW
-from src.measures.run_directory import set_aside_attempt
+from src.measures.run_directory import RunDir, set_aside_attempt
 from src.sandbox import cheatbench_task_files as task_files
 from src.sandbox.machines import agent_machines
-from src.utils.json_files import read_json, read_jsonl
 
 SCREEN_LOGS = settings.LOGS / "screen"
 ATTEMPTS = SCREEN_LOGS / "attempts"
@@ -214,8 +213,8 @@ def outcome(name: str) -> tuple[str, str]:
     run.json, its eval log with status success, the code record's signals.jsonl, and no episode that failed in the
     harness or at the provider (incomplete, as the results browser counts it). derive: the eval succeeded and only
     signals.jsonl is missing, which a rebuild gives with no model call."""
-    run_dir = settings.RUNS / name
-    run = read_json(run_dir / "run.json") if (run_dir / "run.json").is_file() else None
+    run_dir = RunDir(settings.RUNS / name)
+    run = run_dir.run_json if run_dir.is_run() else None
     if run is None:
         return "failed", "no run.json"
     eval_log = Path(run["eval_log"]) if run.get("eval_log") else None
@@ -224,10 +223,9 @@ def outcome(name: str) -> tuple[str, str]:
     status = eval_status(eval_log)
     if status != "success":
         return "failed", f"its eval ended {status}"
-    if not (run_dir / "signals.jsonl").is_file():
+    if not run_dir.file("signals.jsonl").is_file():
         return "derive", "its eval succeeded, no signals.jsonl"
-    failed = [e.get("failure") for e in read_jsonl(run_dir / "episodes.jsonl")
-              if e.get("failure") in INCOMPLETE_FAILURES]
+    failed = [e.get("failure") for e in run_dir.episodes() if e.get("failure") in INCOMPLETE_FAILURES]
     if failed:
         return "incomplete", f"{len(failed)} episodes failed ({', '.join(sorted(set(failed)))})"
     return "finished", "its eval succeeded"
@@ -377,7 +375,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     if why:
         print(f"refused: {why}")
         return 1
-    for folder in (SCREEN_LOGS, settings.RUNS, settings.ROOT / "out"):
+    for folder in (SCREEN_LOGS, settings.RUNS):
         folder.mkdir(parents=True, exist_ok=True)
     PID_FILE.write_text(f"{os.getpid()}\n")
     path = plan_path(box.name)

@@ -31,7 +31,7 @@ from pathlib import Path
 
 from src.export._export_run_blocks import cheatbench
 from src.export.eval_sample_view import SampleView
-from src.measures.run_directory import RunDir
+from src.measures.run_directory import FILES, RunDir
 from src.replay.recorded_calls import recorded_calls
 from src.replay.step_snapshots import apply_delta, delta
 from src.sandbox.live_tmp_capture import STORE
@@ -39,7 +39,8 @@ from src.sandbox.machines.agent_machines import DEFAULT_SERVICE
 from src.sandbox.tmp_listing import HASH_MAX_BYTES, TEXT_MAX_BYTES, TMP_DIRS
 from src.swarm.turn_rules import JOBS_STORE, TMP_CALLS_STORE
 
-FILE = "tmp_snapshots.json"
+FILE = Path(FILES["tmp_snapshots.json"]).name
+"""The name run.json's block records; the file sits at RunDir.file("tmp_snapshots.json")."""
 SCHEMA = 2
 MATCH_SLACK_S = 2.0     # a shot with no named call goes to its agent's call of that tool that started this near
 
@@ -178,7 +179,8 @@ def write_tmp_snapshots(view: SampleView | None, run_dir: Path) -> dict | None:
         calls = recorded_calls(run)
         doc = build(held, calls, view.store_get(TMP_CALLS_STORE) or {}, view.store_get(JOBS_STORE),
                     run.path.name, run.run_json.get("task"))
-        path = Path(run_dir) / FILE
+        path = run.file("tmp_snapshots.json")
+        path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(path.suffix + ".tmp")
         tmp.write_text(json.dumps(doc, separators=(",", ":")))
         tmp.replace(path)

@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
 
+from src.measures.run_directory import RunDir
 from src.replay.replay_report import REPORT, STEPS, NotFaithful, faithful_steps
 
 BRANCH = "refs/heads/"
@@ -114,11 +115,11 @@ def mismatch(lines: tuple[Line, ...], call_ids: dict[str, list[str]]) -> str | N
 def load_steps(run_dir: Path, call_ids: dict[str, list[str]]) -> tuple[RunSteps | None, list[str]]:
     """The run's steps and the notes on them. (None, []) for a run with neither steps.jsonl nor replay.json; (None,
     [why]) for a replay that is not faithful or whose lines are not the run's calls."""
-    run_dir = Path(run_dir)
-    if not (run_dir / STEPS).is_file() and not (run_dir / REPORT).is_file():
+    replay_dir = RunDir(run_dir).replay_dir
+    if not (replay_dir / STEPS).is_file() and not (replay_dir / REPORT).is_file():
         return None, []
     try:
-        lines = lines_of(faithful_steps(run_dir))
+        lines = lines_of(faithful_steps(replay_dir))
     except (NotFaithful, FileNotFoundError) as refused:
         return None, [f"steps.jsonl not read: {refused}"]
     why = mismatch(lines, call_ids)

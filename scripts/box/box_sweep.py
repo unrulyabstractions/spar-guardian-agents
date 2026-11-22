@@ -31,7 +31,7 @@ import stat
 import subprocess
 import sys
 
-OUTPUT_DIRS = ("runs", "logs", "out")
+OUTPUT_DIRS = ("runs", "logs")
 CACHE_NAMES = {"__pycache__": "bytecode caches, compiled from the tracked source",
                ".pytest_cache": "pytest's cache", ".ruff_cache": "ruff's cache"}
 PRODUCERS = ("examples.", "scripts.screen", "scripts.box.box_runner", "src")

@@ -1,4 +1,4 @@
-"""Sort a study's runs into its groups, each with its eval log and its figures, and prove every file arrived.
+"""Sort a study's runs into its groups, each with its eval log, and prove every file arrived.
 
     uv run python -m scripts.sort_study_runs runs/ian_baseline_explorations_1            # dry run: what would move
     uv run python -m scripts.sort_study_runs runs/ian_baseline_explorations_1 --apply    # move, record and verify
@@ -10,12 +10,11 @@ table for the study the table states), which carries run_validity's verdict as t
 - invalid: any other reason it is not valid;
 - a valid run stays at the top level.
 A run already in a group stays there, and set_aside is filled by hand alone. A hand-made earlier attempt,
-runs/<study>/failed_attempts/<name>.attempt<k>/, goes to attempts/<name>.<n>, n the first number free under runs/,
-logs/ and out/, with the eval log its run.json names.
+runs/<study>/failed_attempts/<name>.attempt<k>/, goes to attempts/<name>.<n>, n the first number free under runs/
+and logs/, with the eval log its run.json names.
 
-A run's eval log folder goes to the same place under logs/, and its figures to out/<study>/[<group>/]<run>/. Figures
-from before out/ mirrored runs/ sit at out/<run>/. They move when no other study holds a run of that name, or when
-every study that does keeps its own out/<study>/<run>/. Otherwise their owner is unknown, and they stay.
+A run's eval log folder goes to the same place under logs/. Its figures sit in its own analysis/figures/ and move
+with it.
 
 It refuses to touch a run whose box is still live (runs/boxes.json, by the study table's box or the runner's plans),
 a run whose run.json changed in the last 10 minutes, a run whose name two folders hold, and a move whose target exists.
@@ -39,7 +38,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from scripts.box.study_index import join_for
-from src.measures.run_directory import ATTEMPTS, GROUPS, RUN_JSON, attempt_places, run_places
+from src.measures.run_directory import ATTEMPTS, GROUPS, RunDir, attempt_places
 from src.measures.run_index import build
 from src.utils.json_files import read_json
 
@@ -52,7 +51,7 @@ HAND_MADE_ATTEMPT = re.compile(r"^(?P<name>.+)\.attempt(?P<k>[0-9]+)$")
 
 @dataclass(frozen=True)
 class Move:
-    """One rename: a run's folder, its eval log folder or file, or its figures folder."""
+    """One rename: a run's folder, or its eval log folder or file."""
 
     run: str
     group: str | None
@@ -87,25 +86,6 @@ def live_runs(root: Path, study: str, join) -> tuple[set[str], list[int]]:
     return names, [entry["id"] for entry in live if not entry.get("box")]
 
 
-def figures_of(root: Path, study: str, name: str, place: Path) -> tuple[Path | None, str | None]:
-    """(the run's figures folder to move to out/<place>, or None; why figures that may be the run's stay, or None).
-    place is the run's folder under runs/ after the sort, such as ian_baseline_explorations_1/invalid/<name>. The run's
-    own out/<study>/<name>/ comes first; the flat out/<name>/ counts only when this study owns it."""
-    target = root / "out" / place
-    mirrored = root / "out" / study / name
-    flat = root / "out" / name
-    others = [path.name for path in (root / "runs").iterdir() if path.is_dir() and path.name != study
-              and run_places(path, name)]
-    owned = flat.is_dir() and all((root / "out" / other / name).is_dir() for other in others)
-    sources = [path for path in (mirrored if mirrored != target else None, flat if owned else None)
-               if path is not None and path.is_dir()]
-    if len(sources) > 1:
-        return None, f"both out/{study}/{name} and out/{name} hold figures"
-    if flat.is_dir() and not owned and not sources and not target.is_dir():
-        return None, f"out/{name} may be another study's ({', '.join(others)})"
-    return (sources[0] if sources else None), None
-
-
 def files_of(path: Path) -> list[Path]:
     """Every file under path, or the path itself when it is a file, in a fixed order."""
     if path.is_file():
@@ -120,8 +100,7 @@ def plan_moves(study_dir: Path, now: float) -> tuple[list[Move], dict[str, list]
     records, _ = build(study_dir, join)
     live, nameless = live_runs(root, study, join)
     left: dict[str, list] = {"live box": [], "young run.json": [], "two folders": [], "target exists": [],
-                             "figures stay": [], "attempt's eval log not found": [], "live instances with no box":
-                             nameless}
+                             "attempt's eval log not found": [], "live instances with no box": nameless}
     places = Counter(rec["run"] for rec in records if rec["group"] != ATTEMPTS)
     moves: list[Move] = []
     claimed: set[Path] = set()
@@ -129,7 +108,8 @@ def plan_moves(study_dir: Path, now: float) -> tuple[list[Move], dict[str, list]
     def refused(name: str, folder: Path) -> str | None:
         if name in live:
             return "live box"
-        if (folder / RUN_JSON).is_file() and now - (folder / RUN_JSON).stat().st_mtime < YOUNG_S:
+        run_json = RunDir(folder).file("run.json")
+        if run_json.is_file() and now - run_json.stat().st_mtime < YOUNG_S:
             return "young run.json"
         if places[name] > 1:
             return "two folders"
@@ -155,10 +135,10 @@ def plan_moves(study_dir: Path, now: float) -> tuple[list[Move], dict[str, list]
         n = 1
         while any(path.exists() or path in claimed for path in attempt_places(study_dir, name, n)):
             n += 1
-        runs, logs, out = attempt_places(study_dir, name, n)
+        runs, logs = attempt_places(study_dir, name, n)
         label = f"{HAND_MADE}/{folder.name}"
         add(Move(label, ATTEMPTS, "runs", folder, runs))
-        recorded = Path((read_json(folder / RUN_JSON) or {}).get("eval_log") or "")
+        recorded = Path(RunDir(folder).run_json.get("eval_log") or "")
         log_folder = root / "logs" / study / HAND_MADE / folder.name
         log_file = root / "logs" / study / name / recorded.name
         if log_folder.is_dir():
@@ -167,8 +147,6 @@ def plan_moves(study_dir: Path, now: float) -> tuple[list[Move], dict[str, list]
             add(Move(label, ATTEMPTS, "logs", log_file, logs / recorded.name))
         else:
             left["attempt's eval log not found"].append(label)
-        if (root / "out" / study / HAND_MADE / folder.name).is_dir():
-            add(Move(label, ATTEMPTS, "out", root / "out" / study / HAND_MADE / folder.name, out))
 
     for rec in records:
         folder = study_dir / rec["path"]
@@ -186,11 +164,6 @@ def plan_moves(study_dir: Path, now: float) -> tuple[list[Move], dict[str, list]
         logs = root / "logs" / study / name
         if (goes or group) and logs.is_dir() and not (root / "logs" / place).exists():
             add(Move(rec["path"], goes or group, "logs", logs, root / "logs" / place))
-        figures, stays = figures_of(root, study, name, place)
-        if stays:
-            left["figures stay"].append(f"{rec['path']}: {stays}")
-        elif figures is not None:
-            add(Move(rec["path"], goes or group, "out", figures, root / "out" / place))
     for move in moves:
         for path in (move.source, move.target):
             if not path.resolve().is_relative_to(root.resolve()):
@@ -256,8 +229,6 @@ def report(moves: list[Move], left: dict[str, list]) -> str:
     lines = [f"== runs to move: {sum(runs.values())} ("
              + ", ".join(f"{group} {n}" for group, n in sorted(runs.items())) + ")",
              f"== moves: {len(moves)} ({', '.join(f'{kind} {n}' for kind, n in sorted(kinds.items()))}), {files} files"]
-    stay = sum(1 for move in moves if move.kind == "out" and move.group is None)
-    lines.append(f"== figures to out/<study>/ for runs that stay at the top level: {stay}")
     lines += [f"== left, {reason}: {len(items)} {items if items else ''}".rstrip() for reason, items in left.items()]
     return "\n".join(lines)
 

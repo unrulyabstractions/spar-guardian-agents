@@ -19,9 +19,12 @@ parts:
     files: [src/export/*.py]
     pins: []
     version: 1
-    fingerprint: sha256:2a7e573295905bfab2038c27d4d48f3644598ae1fb7eb926c2874ae6e96d6ad2
+    fingerprint: sha256:62a1cdc2d335e86a0de2d1378741646ec1854b08d87e882979bca10052b4d998
     log:
-      1: '2026-11-22 first version: the eval log turned into run files by src/export of c619e3d'
+      1: '2026-11-22 first version: the eval log turned into run files by src/export of c619e3d (re-locked
+        2026-11-22: the stored layout: the same bytes, written under processed/ and analysis/ through
+        run_directory.FILES) (re-locked 2026-11-22: the stored layout: the same bytes, read and written
+        under processed/ and analysis/ through run_directory.FILES)'
   replay:
     file: [processed/replay/steps.jsonl, processed/replay/replay.json, processed/tmp_snapshots.json]
     make: null
@@ -29,12 +32,13 @@ parts:
     files: [src/replay/*.py, src/domains/*/*_replay.py, scripts/replay_study.py]
     pins: []
     version: 2
-    fingerprint: sha256:1816444ae14d93ee1d95672ee8399a737cd0daa00fbdb3808b954b9cda27ffb9
+    fingerprint: sha256:a6c1a337e5bf1df794e7e70b74d701f3fc8424084895317ad89444e8809af33c
     log:
       1: '2026-11-22 first version: the faithful replay''s steps.jsonl and replay.json, and its tmp_snapshots.json
         of c619e3d'
       2: '2026-11-22 2026-11-22: a call the turn rules refused is never replayed, and the seed pack''s
-        files are planted (c061891, c5a04b6)'
+        files are planted (c061891, c5a04b6) (re-locked 2026-11-22: the stored layout: the same bytes,
+        read and written under processed/ and analysis/ through run_directory.FILES)'
   judge_cheatbench:
     file: analysis/judges/cheatbench.*.jsonl
     make: null
@@ -43,10 +47,11 @@ parts:
       src/judging/judge_models.yaml]
     pins: ['submodule:cheatbench']
     version: 1
-    fingerprint: sha256:2f3c1e32a9ef0ab91c906ca3dfe9d2a829e4cf9635a6b1c176c679427a49491c
+    fingerprint: sha256:9769770f9f0ca83dc022b6feab8e49abf8d6a6d86a1ceca7550df43db1607ac7
     log:
       1: '2026-11-22 first version: CheatBench''s verdicts per episode, the eval''s scorer and judge-pass
-        of c619e3d'
+        of c619e3d (re-locked 2026-11-22: the stored layout: the same bytes, written under processed/
+        and analysis/ through run_directory.FILES)'
   judge_scores:
     file: analysis/judges/labels.*.jsonl
     make: null
@@ -71,10 +76,11 @@ parts:
       src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py]
     pins: []
     version: 1
-    fingerprint: sha256:0d81be0f90d0155964553f25f544a8b2aa165dee300a900a79eee5f9288aa4f9
+    fingerprint: sha256:fcd876dab5ca2db36cc099af23e91495b5422ebbadcdd28c1a0eeb08a1b3ea5c
     log:
       1: '2026-11-22 first version: the code record''s agent and team rows (code_ladder.signal_rows) of
-        b7b1bed, and run.json''s signals block'
+        b7b1bed, and run.json''s signals block (re-locked 2026-11-22: the stored layout: the same bytes,
+        read and written under processed/ and analysis/ through run_directory.FILES)'
   topology:
     file: processed/facts/topology.json
     make: src.measures.topology_fact:topology_part
@@ -82,11 +88,12 @@ parts:
     files: [src/measures/stored_json.py, src/measures/topology_fact.py, src/configuration/seed_packs.py]
     pins: []
     version: 1
-    fingerprint: sha256:520552d22b541465af8d2b3463af926bb7cdf68f18eebe1a0111ed91bb2bd1a8
+    fingerprint: sha256:0318df103058b5d8ee9614a8f202ec7bf4f872316605457db6a5d554be9975fb
     log:
       1: '2026-11-22 first version: who posted, read, was shown and named whom, per board, from communication/
         (re-locked 2026-11-22: 9c48ea6 changed seed_packs.authors only; is_seeded, which topology reads,
-        is unchanged)'
+        is unchanged) (re-locked 2026-11-22: the stored layout: the same bytes, read and written under
+        processed/ and analysis/ through run_directory.FILES)'
   cheating:
     file: analysis/labels/cheating.json
     make: src.ui.viewer_parts:cheating_part
@@ -100,10 +107,11 @@ parts:
       src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py]
     pins: []
     version: 1
-    fingerprint: sha256:26a74a922e2641f8cedb4ba71541bcf09fae3846d01a91879476db472fd5ebe4
+    fingerprint: sha256:d9623cebcfecde6c5554e79723d7a0b1d489d86f45f9d98739792d07ce63d2dd
     log:
       1: '2026-11-22 first version: the Cheating ladder with CheatBench''s labels beside its clauses,
-        as the viewer keeps it, of b7b1bed'
+        as the viewer keeps it, of b7b1bed (re-locked 2026-11-22: the stored layout: the same bytes, read
+        and written under processed/ and analysis/ through run_directory.FILES)'
   coordination:
     file: analysis/labels/coordination.json
     make: src.measures.coordination:coordination_part
@@ -127,9 +135,11 @@ parts:
       src/domains/*/*_settings.py]
     pins: []
     version: 1
-    fingerprint: sha256:934385155021bde4d761650c3ca8024fad286984b227590fb4e073967a45285e
+    fingerprint: sha256:64b97a03241e17f1e47a92aa405a9f8dc3f596325d63307f9e03ecb24b0d2396
     log:
-      1: '2026-11-22 first version: the Collusion ladder as the viewer keeps it, of b7b1bed'
+      1: '2026-11-22 first version: the Collusion ladder as the viewer keeps it, of b7b1bed (re-locked
+        2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
+        through run_directory.FILES)'
   judged:
     file: analysis/labels/judged.json
     make: src.ui.viewer_parts:judged_part
@@ -138,9 +148,11 @@ parts:
       src/judging/verdict_files.py, src/ui/viewer_parts.py]
     pins: []
     version: 1
-    fingerprint: sha256:816e43ca6891d03af58cfe5b7cc4c99010128a737ae41913648f43779888a778
+    fingerprint: sha256:ce98779507bfd5e34b499f195ded06fd11568af1f64253d1a8c56f54ce054c7c
     log:
-      1: '2026-11-22 first version: the judge labels and CheatBench''s verdicts, of b7b1bed'
+      1: '2026-11-22 first version: the judge labels and CheatBench''s verdicts, of b7b1bed (re-locked
+        2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
+        through run_directory.FILES)'
   row:
     file: analysis/row.json
     make: src.ui.viewer_parts:row_part
@@ -149,6 +161,8 @@ parts:
       src/ui/transcript_index.py, src/ui/transcript_levels.py, src/ui/viewer_parts.py]
     pins: []
     version: 1
-    fingerprint: sha256:4895cbaf41ccf4542cd1e2efd93720e15bb27105cbe59cd6b4aaac22b5065e4c
+    fingerprint: sha256:579260b7211bfbac6e16ee47ae70bb8c4c1e0aa7fb6b1536c7b20735290bcd0f
     log:
-      1: '2026-11-22 first version: the runs page''s row (transcript_index.build_row) of b7b1bed'
+      1: '2026-11-22 first version: the runs page''s row (transcript_index.build_row) of b7b1bed (re-locked
+        2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
+        through run_directory.FILES)'

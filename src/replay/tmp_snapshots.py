@@ -58,6 +58,7 @@ import sys
 from pathlib import Path
 from unittest import mock
 
+from src.measures.run_directory import FILES, RunDir
 from src.replay import replay_run
 from src.replay.recorded_calls import RecordedCall
 from src.replay.replay_report import STEPS
@@ -76,7 +77,8 @@ from src.sandbox.tmp_listing import (  # noqa: F401 - the listing's names, read 
     listing_spec,
 )
 
-FILE = "tmp_snapshots.json"
+FILE = Path(FILES["tmp_snapshots.json"]).name
+"""The file's name in the replay's own folder; a run holds it at RunDir.file("tmp_snapshots.json")."""
 SCHEMA = 2
 MEMORY_LIMIT = "4g"
 """The memory limit each container of the replay gets (compose mem_limit)."""
@@ -248,7 +250,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--warm-image", action="store_true",
                         help="run every machine on the run's image with Go's build cache filled (SWE)")
     args = parser.parse_args(argv)
-    target = args.run / FILE
+    target = RunDir(args.run).file("tmp_snapshots.json")
     if target.exists() and not args.force:
         print(f"{target} exists; pass --force to replace it", file=sys.stderr)
         return 2

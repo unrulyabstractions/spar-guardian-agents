@@ -34,7 +34,6 @@ from urllib.parse import parse_qs, urlparse
 from inspect_ai.log import read_eval_log
 
 from src.configuration.settings import ROOT
-from src.export._export_network_log import NETWORK_LOG
 from src.export.eval_sample_view import span_owners
 from src.judging import verdict_files
 from src.measures import judge_labels
@@ -49,7 +48,6 @@ from src.ui import (
 )
 from src.ui.transcript_index import RunFiles, build_index, cheatbench_by_agent, folder_agents, served_index
 from src.utils import progress
-from src.utils.json_files import read_jsonl
 
 HERE = Path(__file__).resolve().parent
 STATIC = HERE / "transcript_static"
@@ -63,18 +61,10 @@ EPISODE_KEYS = ["agent", "model", "n_turns", "n_tool_calls", "wall_time", "limit
                 "failure", "final_text", "usage", "defense", "defenses"]
 """The episode fields the run page shows (components.js episodeRecord and the agent card); the rest of episodes.jsonl
 (rules, probes, ledger, access) stays on disk."""
-TMP_FILE = "tmp_snapshots.json"
-"""A run's /tmp snapshots (src/replay/tmp_snapshots.py FILE), served as stored by /api/tmp."""
+
 
 
 # ------------------------------------------------------------------------------------------------------- run page
-def eval_log_of(run_dir: Path) -> Path | None:
-    """The run's eval log: the one in its own eval/ folder (a manifest collection's runs keep it there), else where
-    RunDir finds it."""
-    own = sorted((run_dir / "eval").glob("*.eval")) if (run_dir / "eval").is_dir() else []
-    return own[0] if own else RunDir(run_dir).eval_log
-
-
 def shown_verdict(row: dict) -> dict:
     """A verdict row as the run page shows it: the judge's answer, without the bookkeeping VERDICT_KEPT leaves out."""
     drop = set(verdict_files.ROW_KEYS) - set(VERDICT_KEPT)
@@ -107,7 +97,7 @@ def run_detail(row: dict, run_dir: Path, measured: dict) -> dict:
         })
     # Workers first, influencers last, as the results browser orders its lanes; then by agent id.
     agents.sort(key=lambda e: (e["role"] != "worker", e["agent"] or ""))
-    log = eval_log_of(run_dir)
+    log = RunDir(run_dir).eval_log
     meta = {"config": rj.get("config"), "mode": rj.get("mode"), "code": rj.get("code"),
             "rounds": (rj.get("rules") or {}).get("rounds"), "eval_log": str(log) if log else None,
             "eval_log_recorded": rj.get("eval_log")}
@@ -171,13 +161,13 @@ def agent_tools(log_path: Path) -> dict[str, dict]:
 
 def tmp_snapshots(run_dir: Path) -> Path | None:
     """The run's tmp_snapshots.json, or None when the run has none."""
-    path = RunDir(run_dir).file(TMP_FILE)
+    path = RunDir(run_dir).file("tmp_snapshots.json")
     return path if path.is_file() else None
 
 
 def network_file(run_dir: Path) -> Path | None:
     """The run's network.jsonl, or None when the run has none."""
-    path = RunDir(run_dir).file(NETWORK_LOG)
+    path = RunDir(run_dir).file("network.jsonl")
     return path if path.is_file() else None
 
 
@@ -226,7 +216,7 @@ class Viewer:
         """agent_tools of the run's eval log, read once per run; {} when the run has no eval log."""
         with self._tools_lock:
             if run_id not in self._tools:
-                log = eval_log_of(self.dirs[run_id])
+                log = RunDir(self.dirs[run_id]).eval_log
                 self._tools[run_id] = agent_tools(log) if log else {}
             return self._tools[run_id]
 
@@ -301,14 +291,14 @@ class Handler(BaseHTTPRequestHandler):
                     return self.fail(HTTPStatus.NOT_FOUND, f"no run {run_id!r} in the index")
                 path = tmp_snapshots(self.viewer.dirs[run_id])
                 if path is None:
-                    return self.fail(HTTPStatus.NOT_FOUND, f"no {TMP_FILE} in {run_id}")
+                    return self.fail(HTTPStatus.NOT_FOUND, f"no /tmp snapshots in {run_id}")
                 return self.send_file(path)
             if url.path == "/api/network":
                 run_id = q.get("id", "")
                 if run_id not in self.viewer.dirs:
                     return self.fail(HTTPStatus.NOT_FOUND, f"no run {run_id!r} in the index")
                 if network_file(self.viewer.dirs[run_id]) is None:
-                    return self.fail(HTTPStatus.NOT_FOUND, f"no {NETWORK_LOG} in {run_id}")
+                    return self.fail(HTTPStatus.NOT_FOUND, f"no network log in {run_id}")
                 return self.send_json(self.viewer.network(run_id))
             return self.fail(HTTPStatus.NOT_FOUND, "no such path")
         except (BrokenPipeError, ConnectionResetError):
@@ -326,7 +316,7 @@ class Handler(BaseHTTPRequestHandler):
         run_dir = self.viewer.dirs.get(run_id)
         if run_dir is None:
             return self.fail(HTTPStatus.NOT_FOUND, f"no run {run_id!r} in the index")
-        folder = folder_agents(run_dir, read_jsonl(RunDir(run_dir).file("episodes.jsonl"))).get(agent)
+        folder = folder_agents(run_dir, RunDir(run_dir).episodes()).get(agent)
         if folder is None:
             return self.fail(HTTPStatus.NOT_FOUND, f"no transcript for agent {agent!r} in {run_id}")
         return self.send_file(RunDir(run_dir).transcript_path(folder))

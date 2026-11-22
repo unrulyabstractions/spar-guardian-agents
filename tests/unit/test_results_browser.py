@@ -19,6 +19,7 @@ from src.ui._run_store import Store
 from src.ui._server import make_server
 from src.utils.json_files import read_jsonl, write_jsonl
 from tests.support.run_builder import write_verdicts
+from tests.support.run_files import write_text
 
 T0 = datetime(2026, 10, 30, tzinfo=timezone.utc)
 CALL_IDS = {"a01": ["c1", "c2", "c3"], "a02": ["d1", "d2"]}
@@ -38,11 +39,11 @@ def transcript(agent: str) -> dict:
 def runs(tmp_path) -> Path:
     """runs/ with a two-agent board run with an influencer, and a run set aside under a failed_ prefix."""
     run = tmp_path / "board_run"
-    (run / "communication").mkdir(parents=True)
-    (run / "tools" / "graphs").mkdir(parents=True)
-    (run / "tools" / "graphs" / "summary.json").write_text(json.dumps({"tool": "graphs", "n_nodes": 2}))
-    (run / "tools" / "graphs" / "notes.txt").write_text("not served")
-    (run / "run.json").write_text(json.dumps({
+    (run / "processed/communication").mkdir(parents=True)
+    (run / "analysis/tools" / "graphs").mkdir(parents=True)
+    (run / "analysis/tools" / "graphs" / "summary.json").write_text(json.dumps({"tool": "graphs", "n_nodes": 2}))
+    (run / "analysis/tools" / "graphs" / "notes.txt").write_text("not served")
+    write_text(run / "processed/run.json", json.dumps({
         "task": "openmath_agent", "model": "openai/test", "topology": "swarm", "agents": ["a01", "a02"],
         "eval_log": str(tmp_path / "missing.eval"), "defenses": [{"name": "turn_rules"}],
         "swarm": {"n_agents": 2, "regulators": 1, "disregulators": 0, "workers": 1, "seed": 0, "composition": "R1D0W1",
@@ -50,10 +51,10 @@ def runs(tmp_path) -> Path:
         "deliverables": {"registered_on_main": True, "registered_message_copied_from": None,
                          "archive_in_workspace": False}}))
     for agent in CALL_IDS:
-        path = run / "trajectories" / f"s#1@{agent}" / "transcript.json"
+        path = run / "processed/trajectories" / f"s#1@{agent}" / "transcript.json"
         path.parent.mkdir(parents=True)
         path.write_text(json.dumps(transcript(agent)))
-    write_jsonl(run / "episodes.jsonl", [
+    write_jsonl(run / "processed/episodes.jsonl", [
         {"id": "s", "replicate": 1, "episode": "s#1@a01", "agent": "a01", "role": "worker", "ended_by": "submit",
          "wall_time": 30.0,
          "usage": {"input": 100, "output": 10, "cache_read": 40}, "score": {"deliverables_scorer": 1}},
@@ -66,7 +67,7 @@ def runs(tmp_path) -> Path:
          "judge_cost_usd": 0.01, "judge_prompt": "bookkeeping"},
         {"episode": "s#1@a02", "cheated": False, "honey_pots_seen": True, "attempted_access": False},
     ])
-    write_jsonl(run / "signals.jsonl", [
+    write_jsonl(run / "analysis/signals.jsonl", [
         {"row": "agent", "sample": "s#1", "episode": "s#1@a01", "agent": "a01", "opened": True, "exposed_call": 0,
          "opened_call": 2},
         {"row": "agent", "sample": "s#1", "episode": "s#1@a02", "agent": "a02", "opened": False, "exposed_call": 1,
@@ -75,9 +76,10 @@ def runs(tmp_path) -> Path:
     ])
     failed = tmp_path / "failed_board_run"
     failed.mkdir()
-    (failed / "run.json").write_text(json.dumps({"task": "openmath_agent", "topology": "single", "agents": ["a01"]}))
+    write_text(failed / "processed/run.json", json.dumps({"task": "openmath_agent", "topology": "single",
+                                                          "agents": ["a01"]}))
     # judged, but its transcript is gone: the verdict is not counted
-    write_jsonl(failed / "episodes.jsonl", [{"episode": "s#1", "agent": "a01",
+    write_jsonl(failed / "processed/episodes.jsonl", [{"episode": "s#1", "agent": "a01",
                                              "transcript_path": "trajectories/s#1/transcript.json"}])
     write_verdicts(failed, [{"episode": "s#1", "cheated": True}])
     return tmp_path
@@ -207,11 +209,11 @@ TEAM_LOG = {"status": "partial", "log_only": ["a01: [0] access log: key by pytho
 
 def keep_log(folder: Path, block: dict, *, team: dict | None = TEAM_LOG) -> None:
     """The run as a run with this log keeps it: run.json's block, each agent's key and the team's."""
-    run = json.loads((folder / "run.json").read_text())
-    (folder / "run.json").write_text(json.dumps({**run, "access_log": block}))
+    run = json.loads((folder / "processed/run.json").read_text())
+    write_text(folder / "processed/run.json", json.dumps({**run, "access_log": block}))
     rows = [{**row, "access_log": AGENT_LOGS[row["agent"]]} if row["row"] == "agent" else {**row, "access_log": team}
-            for row in read_jsonl(folder / "signals.jsonl")]
-    write_jsonl(folder / "signals.jsonl", rows)
+            for row in read_jsonl(folder / "analysis/signals.jsonl")]
+    write_jsonl(folder / "analysis/signals.jsonl", rows)
 
 
 def page_of(runs: Path) -> list[str]:
@@ -337,9 +339,9 @@ def test_a_run_in_a_group_is_listed_and_served_by_its_folder_and_an_attempt_neve
     "/static/%2e%2e/_server.py",
     "/static/app/..%2F..%2Fserver.py",
     "/api/runs/..",
-    "/api/runs/board_run/tools/graphs/../../run.json",
+    "/api/runs/board_run/tools/graphs/../../processed/run.json",
     "/api/runs/board_run/tools/graphs/..%2F..%2Frun.json",
-    "/api/runs/board_run/tools/..%2Fboard_run/run.json",
+    "/api/runs/board_run/tools/..%2Fboard_run/processed/run.json",
     "/api/runs/board_run/tools/graphs/notes.txt",
     "/../../pyproject.toml",
 ])

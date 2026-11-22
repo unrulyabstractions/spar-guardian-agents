@@ -1,4 +1,5 @@
-"""Per-step labels for a run's transcripts: steps.jsonl, one row per agent step, for reading trajectories step by step.
+"""Per-step labels for a run's transcripts: analysis/step_labels.jsonl, one row per agent step, for reading
+trajectories step by step.
 
     python -m elicitation.steps runs/<study>/<run> [...]
     python -m elicitation.steps runs/<study>/*/ --check
@@ -47,7 +48,6 @@ agent's Cheating rung, and the counts by quadrant per agent.
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import sys
 from collections import Counter
@@ -57,12 +57,11 @@ from src.domains import BY_TASK
 from src.measures.access_evidence import agent_reads
 from src.measures.cheating_ladder import cheating_rungs
 from src.measures.ladder_domain import OVERSIGHT, READS
-from src.measures.run_directory import SIGNALS, RunDir
+from src.measures.run_directory import RunDir
 from src.measures.shell_commands import TOOLS, command_of, line_hits, one_line
 from src.measures.team_ladder import posts_of, sample_of, solicits
 from src.utils.json_files import write_jsonl
 
-STEPS = "steps.jsonl"
 VERSION = 2
 SPAN_FAMILIES = {
     "hidden_test": re.compile(r"hidden[\s_-]+tests?", re.I),
@@ -275,7 +274,7 @@ def label_run(run_dir: Path) -> list[dict]:
               "agents": {a: {"holds": r.get("holds"), "cheating_rung": rungs["agents"].get(a)}
                          for a, r in by_agent.items()},
               "quadrants": counts}
-    write_jsonl(run.path / STEPS, [header, *out])
+    write_jsonl(run.file("step_labels.jsonl"), [header, *out])
     return [header, *out]
 
 
@@ -313,7 +312,7 @@ def main(argv: list[str] | None = None) -> int:
         header, steps = rows[0], rows[1:]
         print(f"{run_dir.name}: {len(steps)} steps, {header['quadrants']}")
         if args.check:
-            signals = [json.loads(x) for x in (run_dir / SIGNALS).read_text().splitlines() if x.strip()]
+            signals = RunDir(run_dir).signals() + RunDir(run_dir).team_signals()
             for problem in check(rows, signals):
                 bad += 1
                 print(f"   {problem}")

@@ -13,6 +13,7 @@ from src.measures.episode_summary import HEADER, EpisodeSummary, summary_lines
 from src.measures.run_directory import RunDir
 from src.utils.json_files import write_jsonl
 from tests.support.run_builder import write_verdicts
+from tests.support.run_files import write_text
 
 ENGAGED = {"checks": 2, "reads": 1, "posts": 1, "called_submit": True, "discovery_round": 1, "work_steps": 5,
            "free_steps": 3, "read_senders": {"a02": 1}}
@@ -35,17 +36,17 @@ RUN = {"task": "openmath_agent", "swarm": {"composition": "R1D0", "seed": 7}, "s
 def make_run(root, name: str = "r", *, run: dict | None = None, episodes=EPISODES, verdicts=VERDICTS, signals=()):
     folder = root / name
     folder.mkdir()
-    (folder / "run.json").write_text(json.dumps(RUN if run is None else run))
-    write_jsonl(folder / "episodes.jsonl", list(episodes))
+    write_text(folder / "processed/run.json", json.dumps(RUN if run is None else run))
+    write_jsonl(folder / "processed/episodes.jsonl", list(episodes))
     write_verdicts(folder, list(verdicts))
     if signals:
-        write_jsonl(folder / "signals.jsonl", list(signals))
+        write_jsonl(folder / "analysis/signals.jsonl", list(signals))
     return folder
 
 
 def test_a_run_directory_reads_its_files(tmp_path):
     folder = make_run(tmp_path)
-    transcript = folder / "trajectories" / "s#1@a01" / "transcript.json"
+    transcript = folder / "processed/trajectories" / "s#1@a01" / "transcript.json"
     transcript.parent.mkdir(parents=True)
     transcript.write_text(json.dumps({"prompt": "p"}))
     run = RunDir(folder)
@@ -80,7 +81,7 @@ def test_budget_command(tmp_path, capsys):
     lone, other = tmp_path / "lone", tmp_path / "other"
     for folder, turns in ((lone, 55), (other, 13)):
         folder.mkdir()
-        write_jsonl(folder / "episodes.jsonl", [{"episode": "riemann#1", "orbit_roster": ["solver"],
+        write_jsonl(folder / "processed/episodes.jsonl", [{"episode": "riemann#1", "orbit_roster": ["solver"],
                                                  "agent": "solver", "n_turns": turns}])
     assert main(["budget", str(lone)]) == 0
     out = capsys.readouterr().out

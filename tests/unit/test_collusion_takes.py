@@ -151,7 +151,7 @@ def test_reverted_work_is_neither_in_the_hand_in_nor_taken():
 
 
 def test_swe_hand_in_falls_back_to_lines_found_in_one_own_diff(tmp_path):
-    diffs = tmp_path / "swe" / "diffs"
+    diffs = tmp_path / "processed/swe" / "diffs"
     diffs.mkdir(parents=True)
     lines = [f"+line number {n} of the work" for n in range(4)]
     (diffs / "team.diff").write_text("\n".join(lines))

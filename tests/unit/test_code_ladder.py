@@ -24,6 +24,7 @@ from src.measures import honeypot_fingerprints as prints_module
 from src.measures.ladder_domain import PRINTS, probe_signals
 from src.measures.run_directory import RunDir
 from tests.support.atif_builder import transcript
+from tests.support.run_files import write_text
 from tests.support.stub_ladder import KEY, OPENS, SHARDS, TASK, KeyDomain, make_run
 
 ROW = OpenMath.row_of("riemann")
@@ -275,7 +276,7 @@ def test_probe_signals_are_bools_and_never_checked():
 def test_run_signals_write_agent_rows_then_team_rows_and_run_json(tmp_path):
     folder = make_run(tmp_path, {"a01": OPENS, "a02": [("shell", "ls", "")]}, {"model": "m", "mode": "shared_task"})
     rows = signals.run_signals(folder)
-    written = [json.loads(line) for line in (folder / "signals.jsonl").read_text().splitlines()]
+    written = [json.loads(line) for line in (folder / "analysis/signals.jsonl").read_text().splitlines()]
     assert [r["row"] for r in written] == ["agent", "agent", "team"] and written[:2] == rows
     assert list(rows[0])[:7] == ["row", "sample", "episode", "agent", "role", "task", "holds"]
     assert list(rows[0])[-7:] == ["calls", *cheating_ladder.AGENT_FIELDS, *coordination.AGENT_FIELDS,
@@ -337,7 +338,7 @@ def coordinated_run(tmp_path):
               {"kind": "sent", "agent_id": "a01", "message_ids": ["m3"]},
               {"kind": "read", "agent_id": "a02", "message_ids": ["m3"]},
               {"kind": "sent", "agent_id": "a02", "message_ids": ["m4"]}]
-    (folder / "communication" / "q1#1.json").write_text(json.dumps({"messages": messages, "events": events}))
+    (folder / "processed/communication" / "q1#1.json").write_text(json.dumps({"messages": messages, "events": events}))
     return folder
 
 
@@ -378,7 +379,7 @@ def test_ladders_reads_the_three_rungs_as_recorded(tmp_path):
     assert all(t["collusion_timeline"] is None and t["cheating_timeline"]["source"] == "record" and
                t["cheating_timeline"]["first"] == [] and set(t["cheating_timeline"]["after"]) <= {"none"}
                for t in timelines.values())
-    path = folder / "signals.jsonl"
+    path = folder / "analysis/signals.jsonl"
     rows = [json.loads(line) for line in path.read_text().splitlines()]
     path.write_text("".join(json.dumps({k: v for k, v in row.items() if k != "collusion_rung"}) + "\n" for row in rows))
     before = path.read_bytes()
@@ -399,29 +400,29 @@ def test_run_signals_rewrite_only_signals_and_the_run_json_block_of_a_copied_run
     and no other byte of the run: run.json's other keys keep their bytes and their order, every other file stays."""
     folder = coordinated_run(tmp_path)
     signals.run_signals(folder)
-    path = folder / "run.json"
+    path = folder / "processed/run.json"
     document = json.loads(path.read_text())
     document = {**document, "ledger": {"calls": 3}, "signals": {"team": {"stale": True}}, "zz": "last"}
     path.write_text(json.dumps(document, indent=1))
-    (folder / "signals.jsonl").write_text('{"row": "agent", "agent": "a01", "rung": "opened"}\n')
+    write_text(folder / "analysis/signals.jsonl", '{"row": "agent", "agent": "a01", "rung": "opened"}\n')
     before = tree_bytes(folder)
     signals.run_signals(folder)
     after = tree_bytes(folder)
     changed = {name for name in before if before[name] != after[name]}
-    assert changed == {"run.json", "signals.jsonl"} and set(after) == set(before)
-    new = json.loads(after["run.json"])
+    assert changed == {"processed/run.json", "analysis/signals.jsonl"} and set(after) == set(before)
+    new = json.loads(after["processed/run.json"])
     assert list(new) == list(document) and {k: v for k, v in new.items() if k != "signals"} == \
         {k: v for k, v in document.items() if k != "signals"}
     assert new["signals"]["team"]["coordination_level"] == "write"
-    assert json.dumps({**new, "signals": document["signals"]}, indent=1).encode() == before["run.json"]
-    assert all("rung" not in json.loads(line) for line in after["signals.jsonl"].decode().splitlines())
+    assert json.dumps({**new, "signals": document["signals"]}, indent=1).encode() == before["processed/run.json"]
+    assert all("rung" not in json.loads(line) for line in after["analysis/signals.jsonl"].decode().splitlines())
     assert not list(folder.glob("*.tmp*"))
 
 
 @pytest.mark.usefixtures("key_task")
 def test_run_signals_refuse_a_run_json_in_no_known_layout_and_write_nothing(tmp_path):
     folder = coordinated_run(tmp_path)
-    path = folder / "run.json"
+    path = folder / "processed/run.json"
     path.write_text(json.dumps(json.loads(path.read_text()), indent=3))
     before = tree_bytes(folder)
     with pytest.raises(ValueError, match="not laid out"):

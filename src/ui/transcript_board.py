@@ -66,7 +66,6 @@ from collections import Counter
 from pathlib import Path
 
 from src.configuration.seed_packs import is_seeded
-from src.export._export_network_log import NETWORK_LOG
 from src.judging.judge_records import model_calls as judged_model_calls
 from src.judging.judge_records import posts as labelled_posts
 from src.measures import cheating_ladder, collusion, coordination, judge_labels
@@ -140,7 +139,7 @@ def board_network(run_dir: Path, run: Run) -> dict | None:
 def network_payload(run_dir: Path) -> dict | None:
     """The Board tab's Network panel (/api/network): board_network of the run's calls, None without network.jsonl,
     which it checks before it reads the run."""
-    if not (Path(run_dir) / NETWORK_LOG).is_file():
+    if not RunDir(run_dir).file("network.jsonl").is_file():
         return None
     return board_network(run_dir, load_run(run_dir, times=True))
 

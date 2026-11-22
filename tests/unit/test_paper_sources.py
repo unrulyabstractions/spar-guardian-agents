@@ -14,6 +14,7 @@ import yaml
 from scripts.paper import paper_sources
 from src.measures import cheating_ladder, collusion, measure_readings
 from src.measures.rungs import RUNGS
+from tests.support.run_files import write_text
 
 SECTIONS = paper_sources.PAPER / "sections"
 
@@ -154,7 +155,7 @@ def test_cell_runs_takes_valid_runs_of_the_cell_seeds_then_pilots(tmp_path):
     rows = []
     for name, valid in names.items():
         (tmp_path / name).mkdir()
-        (tmp_path / name / "run.json").write_text("{}")
+        write_text(tmp_path / name / "processed/run.json", "{}")
         rows.append(json.dumps({"path": name, "valid": valid, "mock": name == "cell_mock1"}))
     (tmp_path / "INDEX.jsonl").write_text("\n".join(rows) + "\n")
     assert [p.name for p in cell_runs("cell", tmp_path)] == ["cell1", "cell10", "cell_pilot1"]

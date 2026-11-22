@@ -323,7 +323,7 @@ def check_round_time(suite, name: str, sample, records: list[dict], plan: Plan, 
     assert (obs_job["agent"], obs_job["tool"], obs_job["machine"], obs_job["status"], obs_job["exit_code"]) == \
         (plan.regulator, "peer_shell", plan.machine[plan.long], "exited", 0), obs_job
     uid = sample.metadata["cheatbench"]["peer_shell"]["observers"][plan.regulator]
-    rows = read_jsonl(suite.runs / name / "access_log.jsonl")
+    rows = read_jsonl(suite.runs / name / "processed/access_log.jsonl")
     late_long = [r for r in rows if r["call_id"] == "rt-long" and r["t"] > calls["rt-long"]["t1"]]
     late_obs = [r for r in rows if r["call_id"] == "rt-observe" and r["t"] > calls["rt-observe"]["t1"]]
     assert late_long and {(r["agent"], r["origin"]) for r in late_long} == {(plan.long, "agent")}, late_long

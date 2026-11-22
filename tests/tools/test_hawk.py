@@ -48,7 +48,7 @@ def test_run_bound_scanners_get_the_run(tmp_path):
 
 
 def test_scan_config_points_hawk_at_a_local_directory(tmp_path):
-    source = TranscriptSource("scout_db", tmp_path / "tools" / "scout", "transcripts")
+    source = TranscriptSource("scout_db", tmp_path / "analysis/tools" / "scout", "transcripts")
     config = scan_config("demo-scan", source, ["honeypot_seen", "tool_call_count"], tmp_path, "openai/gpt-6-luna",
                          "tools.scout.scout_scanners", SCANNER_PACKAGE_DIR, ROOT)
     assert config["scanners"][0]["package"] == str(SCANNER_PACKAGE_DIR)
@@ -56,7 +56,7 @@ def test_scan_config_points_hawk_at_a_local_directory(tmp_path):
     assert [item["name"] for item in config["scanners"][0]["items"]] == ["honeypot_seen", "tool_call_count"]
     assert config["transcripts"] == {"sources": [{"eval_set_id": "transcripts"}]}
     environment = config["runner"]["environment"]
-    assert environment["HAWK_RUNNER_EVALS_S3_URI"] == str(tmp_path / "tools" / "scout")
+    assert environment["HAWK_RUNNER_EVALS_S3_URI"] == str(tmp_path / "analysis/tools" / "scout")
     assert environment["SPAR_GUARDIAN_ROOT"] == str(ROOT)
     assert environment["SPAR_GUARDIAN_SCANNERS"] == "tools.scout.scout_scanners"
     path = write_scan_config(tmp_path / "out" / "scan.yaml", config)
@@ -96,7 +96,7 @@ def test_transcript_sources_of_a_run(riemann_copy):
     assert from_log.path == run.eval_log.parent
     built = transcript_source(run, "scout")
     assert built.kind == "hawk_db"
-    assert built.path == riemann_copy / "tools" / "hawk" / "transcripts"
+    assert built.path == riemann_copy / "analysis/tools" / "hawk" / "transcripts"
     assert built.path.is_dir()
 
 
@@ -107,7 +107,7 @@ def test_command_writes_config_and_summary_without_running(riemann_copy, capsys)
     summary = read_summary(run, "hawk")
     assert summary["ran"] is False and summary["returncode"] is None and summary["needs_server"] is False
     assert summary["source"]["kind"] == "eval_log"
-    config = yaml.safe_load((riemann_copy / "tools" / "hawk" / "scan.yaml").read_text())
+    config = yaml.safe_load((riemann_copy / "analysis/tools" / "hawk" / "scan.yaml").read_text())
     assert [item["name"] for item in config["scanners"][0]["items"]] == list(RUN_BOUND_SCANNERS)
     assert config["scanners"][0]["items"][0]["args"] == {"run": str(riemann_copy)}
     assert config["models"][0]["items"] == [{"name": "gpt-6-luna"}]

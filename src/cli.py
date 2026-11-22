@@ -63,7 +63,7 @@ from src.judging.verdict_files import PASSES
 from src.measures import board_engagement as engagement
 from src.measures import episode_summary as summary
 from src.measures import pipeline_parts, process_runs
-from src.measures.run_directory import figures_dir, find_run
+from src.measures.run_directory import RunDir, find_run
 from src.models import model_registry as models
 from src.ui import launch
 from src.utils import progress
@@ -172,7 +172,7 @@ def cmd_models(args: argparse.Namespace) -> int:
 def cmd_plots(args: argparse.Namespace) -> int:
     from src.measures import run_figures as plots  # matplotlib, a second; only plots pays for it
     directory = run_dir(args.run)
-    plots.plot_run(directory, Path(args.out) if args.out else figures_dir(directory))
+    plots.plot_run(directory, Path(args.out) if args.out else RunDir(directory).file("figures"))
     return 0
 
 

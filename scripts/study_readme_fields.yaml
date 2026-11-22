@@ -11,14 +11,15 @@ files_note: |
   are seconds.
 
 links_note: |
-  Every path is relative: an eval log's from the repository's checkout, a transcript's from its run's folder. The
-  counts are this study's, read when the README was written.
+  Every path is relative: an eval log's from the repository's checkout, a transcript's from its run's processed/.
+  The counts are this study's, read when the README was written.
 
 ladders_note: |
-  Code reads three ladders from each run's files, with no judge, and writes them to signals.jsonl: an agent row's
+  Code reads three ladders from each run's files, with no judge, and writes them to analysis/signals.jsonl: an agent
+  row's
   `cheating_rung`, `coordination_level` and `collusion_rung`, and the team row's (the workers'). An influencer (a
   regulator or a disregulator) keeps its own rung in the team row's `*_influencers`. `cheated` is true from
-  `attempted` up. A judge pass adds the two labels in judges/labels.<judge>.jsonl.
+  `attempted` up. A judge pass adds the two labels in analysis/judges/labels.<judge>.jsonl.
 
 groups:
   invalid: runs that do not count, with the reason in INDEX.jsonl (`reason`)
@@ -34,6 +35,10 @@ log_groups:
   set_aside_regulator_log: the first copies, eval logs (`logs/`) and run folders (`runs/`), of nine runs made again
   set_aside_8M_guard: the first copy, eval log and run folder, of game_solo_cheat_dsflash1, made again
 
+run_folders:
+  processed/: what the eval log gives, with no label (the export's files, the replay's, the facts)
+  analysis/: what is made from processed/ (the code ladder's rows, the labels, the judges' verdicts, the row, the figures)
+
 study_files:
   README.md: this file
   INDEX.jsonl: one row per run, the study's index
@@ -41,11 +46,6 @@ study_files:
   _build_stats.json: the counts behind this README's numbers, from the build of 2026-11-07
 
 opaque:
-  trajectories/*/prompt.txt: the agent's full prompt, as plain text; equal to transcript.json `prompt`
-  swe/diffs/*.diff: 'SWE only: `<target>.diff` a graded tree against the base commit (`team` the team''s main branch, `<agent>` the agent''s tree), `<agent>.own.diff` the commits the agent made itself, `team.<branch>.diff` another branch of the team remote against the base, with `~` for `/`'
-  tools/board_reads.json: 'a cache for the viewer, `{tool call id: the board text that read returned}`'
-  tools/docent/agent_runs.json: the transcripts converted for the Docent analysis tool, a copy
-  eval/*.eval: the run's Inspect eval log (a zip), the source every other file is exported from
   processed/versions.json: 'the ledger of the parts made from the eval log: `{parts: {part: {version, inputs, sha256, files?, made, code}}}`, one entry per part of src/configuration/pipeline_parts.yaml'
   analysis/versions.json: 'the ledger of the parts made from processed/ (the labels, the row, the judges), in the same shape: `python -m src process` redoes a part whose entry is behind the registry'
   processed/facts/topology.json: 'the communication topology, with no label: `{agents: [{agent, role}], boards: [{sample, messages: [{P, id, sender, in_roster, seeded, notice, recipients, sequence, names}], events: [{sequence, kind, agent_id, tool_call_id, message_ids, source}]}]}` (src/measures/topology_fact.py)'
@@ -54,6 +54,17 @@ opaque:
   analysis/labels/collusion.json: the Collusion ladder, as the transcript viewer shows it (src/ui/viewer_parts.py)
   analysis/labels/judged.json: '`{labels, cheatbench}`: the judge labels disclosure and manipulation per agent, and CheatBench''s verdicts by judge and episode'
   analysis/row.json: the run's row on the transcript viewer's runs page (src/ui/transcript_index.py build_row)
+  processed/trajectories/*/prompt.txt: the agent's full prompt, as plain text; equal to transcript.json `prompt`
+  processed/swe/diffs/*.diff: 'SWE only: `<target>.diff` a graded tree against the base commit (`team` the team''s main branch, `<agent>` the agent''s tree), `<agent>.own.diff` the commits the agent made itself, `team.<branch>.diff` another branch of the team remote against the base, with `~` for `/`'
+  processed/board_reads.json: 'a cache for the viewer, `{tool call id: the board text that read returned}`'
+  analysis/tools/docent/agent_runs.json: the transcripts converted for the Docent analysis tool, a copy
+  analysis/figures/*.png: the run's figures (src/measures/run_figures.py), each beside the table it draws
+  analysis/figures/*.csv: the table behind the figure of the same name
+  analysis/judge.jsonl: the judge's rows of a run before judges/ existed (October 2026); no code reads them
+  analysis/ladder.jsonl: the judge ladder's rows of a run before the three ladders; no code reads them
+  analysis/ladder_actions.jsonl: the judge ladder's actions of a run before the three ladders; no code reads them
+  analysis/rungs.json: the rungs of a run before the three ladders; no code reads them
+  analysis/smoke_results.json: a smoke suite's results, from before the suites wrote runs; no code reads them
 
 files:
   index:
@@ -646,9 +657,9 @@ studies:
     load: |
       import json, pathlib
       study = pathlib.Path("runs/ian_seed_prototyping_0")
-      run = next(p.parent for p in sorted(study.glob("*/run.json")))
-      meta = json.load(open(run / "run.json"))
-      team = next(r for r in map(json.loads, open(run / "signals.jsonl")) if r["row"] == "team")
+      run = next(p.parent.parent for p in sorted(study.glob("*/processed/run.json")))
+      meta = json.load(open(run / "processed/run.json"))
+      team = next(r for r in map(json.loads, open(run / "analysis/signals.jsonl")) if r["row"] == "team")
   ian_baseline_explorations_0:
     title: ian_baseline_explorations_0
     about: |
@@ -665,7 +676,7 @@ studies:
       study = pathlib.Path("runs/ian_baseline_explorations_0")
       index = [json.loads(line) for line in open(study / "INDEX.jsonl")]
       run = study / next(row for row in index if row["valid"])["path"]
-      team = next(r for r in map(json.loads, open(run / "signals.jsonl")) if r["row"] == "team")
+      team = next(r for r in map(json.loads, open(run / "analysis/signals.jsonl")) if r["row"] == "team")
   ian_baseline_explorations_1:
     title: ian_baseline_explorations_1
     about: |
@@ -680,7 +691,7 @@ studies:
       study = pathlib.Path("runs/ian_baseline_explorations_1")
       index = [json.loads(line) for line in open(study / "INDEX.jsonl")]
       run = study / next(row for row in index if row["valid"])["path"]
-      team = next(r for r in map(json.loads, open(run / "signals.jsonl")) if r["row"] == "team")
+      team = next(r for r in map(json.loads, open(run / "analysis/signals.jsonl")) if r["row"] == "team")
   study_smoke:
     title: study_smoke
     about: |
@@ -689,9 +700,9 @@ studies:
     load: |
       import json, pathlib
       study = pathlib.Path("runs/study_smoke")
-      run = next(p.parent for p in sorted(study.glob("*/run.json")))
-      episodes = [json.loads(line) for line in open(run / "episodes.jsonl")]
-      team = next(r for r in map(json.loads, open(run / "signals.jsonl")) if r["row"] == "team")
+      run = next(p.parent.parent for p in sorted(study.glob("*/processed/run.json")))
+      episodes = [json.loads(line) for line in open(run / "processed/episodes.jsonl")]
+      team = next(r for r in map(json.loads, open(run / "analysis/signals.jsonl")) if r["row"] == "team")
   study_orbit2_check:
     title: study_orbit2_check
     about: |
@@ -700,9 +711,9 @@ studies:
     load: |
       import json, pathlib
       run = pathlib.Path("runs/study_orbit2_check/poem_minimal_regulated_orbit2")
-      meta = json.load(open(run / "run.json"))
-      episodes = [json.loads(line) for line in open(run / "episodes.jsonl")]
-      team = next(r for r in map(json.loads, open(run / "signals.jsonl")) if r["row"] == "team")
+      meta = json.load(open(run / "processed/run.json"))
+      episodes = [json.loads(line) for line in open(run / "processed/episodes.jsonl")]
+      team = next(r for r in map(json.loads, open(run / "analysis/signals.jsonl")) if r["row"] == "team")
   apart_controls:
     title: apart-swarm, controls elicitation snapshot
     about_file: study_readme_apart_controls.md
@@ -711,4 +722,4 @@ studies:
       root = pathlib.Path("runs/apart_controls")
       rows = [json.loads(line) for line in open(root / "manifest.jsonl") if json.loads(line)["canonical"]]
       run = root / "{model}/{task}/{cell}/s{seed}".format(**rows[0])
-      team = next(r for r in map(json.loads, open(run / "signals.jsonl")) if r["row"] == "team")
+      team = next(r for r in map(json.loads, open(run / "analysis/signals.jsonl")) if r["row"] == "team")

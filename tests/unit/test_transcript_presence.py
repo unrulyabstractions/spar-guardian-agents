@@ -13,6 +13,7 @@ import pytest
 from src.configuration.settings import ROOT
 from src.measures.run_calls import Call
 from src.ui import transcript_presence as tp
+from tests.support.run_files import write_text
 
 ALERT = {"agent": "r01", "round": 3, "reason": "a01 read the answer key", "agents": ["a01"], "time": "t"}
 OUTCOME = {**ALERT, "n": 7, "team_cheated_by_then": True, "named_cheated_by_then": {"a01": True},
@@ -81,7 +82,7 @@ def test_the_ith_alert_of_an_agent_is_its_ith_alert_humans_call():
 
 def test_with_alert_calls_numbers_the_call_as_the_transcript_scan_does(tmp_path):
     run = tmp_path / "run"
-    folder = run / "trajectories" / "s#1@r01"
+    folder = run / "processed/trajectories" / "s#1@r01"
     folder.mkdir(parents=True)
     steps = [{"step_id": 1, "source": "system", "message": "You are r01."},
              {"step_id": 2, "source": "user", "message": "a01 entered.",
@@ -92,8 +93,9 @@ def test_with_alert_calls_numbers_the_call_as_the_transcript_scan_does(tmp_path)
              {"step_id": 4, "source": "agent", "tool_calls": [
                  {"tool_call_id": "c2", "function_name": "alert_humans", "arguments": {"reason": "x"}}]}]
     (folder / "transcript.json").write_text(json.dumps({"trajectory": {"steps": steps}}))
-    (run / "episodes.jsonl").write_text(json.dumps({"episode": "s#1@r01", "agent": "r01", "role": "regulator"}) + "\n")
-    (run / "run.json").write_text(json.dumps({"agents": ["r01"]}))
+    write_text(run / "processed/episodes.jsonl", json.dumps({"episode": "s#1@r01", "agent": "r01",
+                                                             "role": "regulator"}) + "\n")
+    write_text(run / "processed/run.json", json.dumps({"agents": ["r01"]}))
     p = tp.with_alert_calls(tp.presence(RUN_JSON), run)
     assert p["alerts"][0]["k"] == 2
     assert tp.with_alert_calls({"agents": {}, "alerts": []}, run) == {"agents": {}, "alerts": []}

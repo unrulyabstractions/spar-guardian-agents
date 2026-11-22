@@ -7,8 +7,17 @@ import json
 import pytest
 
 from src.replay.output_match import cause_of, match_of
-from src.replay.replay_report import NotFaithful, ReplayReport, faithful_steps, is_faithful, read_report, write_report
+from src.replay.replay_report import (
+    STEPS,
+    NotFaithful,
+    ReplayReport,
+    faithful_steps,
+    is_faithful,
+    read_report,
+    write_report,
+)
 from src.replay.step_snapshots import encode
+from tests.support.run_files import write_text
 from tests.unit.test_step_snapshots import row
 
 
@@ -16,7 +25,7 @@ def write(tmp_path, **fields):
     report = ReplayReport(run="r", run_dir="runs/r", **{"faithful": True, **fields})
     write_report(tmp_path, report)
     rows = [row(1, "a", {"refs/heads/a": "1"}, {}), row(2, "a", {"refs/heads/a": "2"}, {})]
-    (tmp_path / "steps.jsonl").write_text("".join(json.dumps(line) + "\n" for line in encode(rows)))
+    write_text(tmp_path / STEPS, "".join(json.dumps(line) + "\n" for line in encode(rows)))
     return rows
 
 
@@ -39,7 +48,7 @@ def test_any_other_replay_is_refused(tmp_path, fields, why):
 
 
 def test_no_report_is_refused(tmp_path):
-    (tmp_path / "steps.jsonl").write_text("")
+    write_text(tmp_path / STEPS, "")
     with pytest.raises(NotFaithful, match="no replay.json"):
         faithful_steps(tmp_path)
 

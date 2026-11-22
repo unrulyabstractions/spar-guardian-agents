@@ -25,6 +25,7 @@ from src.export.run_export import write_run
 from src.judging import verdict_files
 from src.measures.run_directory import RunDir
 from src.run import agent_generate_config
+from tests.support.run_files import write_text
 from tests.support.turn_rules_harness import (
     do,
     pull,
@@ -78,7 +79,7 @@ def test_a_run_pulled_from_a_box_finds_its_log_in_this_checkout(tmp_path, monkey
     monkeypatch.setattr(settings, "LOGS", tmp_path / "logs")
     run_dir = tmp_path / "runs" / "game_solo_luna1"
     run_dir.mkdir(parents=True)
-    (run_dir / "run.json").write_text(json.dumps({"eval_log": "/root/work/logs/game_solo_luna1/x.eval"}))
+    write_text(run_dir / "processed/run.json", json.dumps({"eval_log": "/root/work/logs/game_solo_luna1/x.eval"}))
     assert RunDir(run_dir).eval_log is None
     log = tmp_path / "logs" / "game_solo_luna1" / "x.eval"
     log.parent.mkdir(parents=True)
@@ -91,7 +92,7 @@ def test_a_run_finds_its_log_in_the_study_its_folder_sits_in(tmp_path, monkeypat
     monkeypatch.setattr(settings, "ROOT", tmp_path)
     run_dir = tmp_path / "runs" / "study_old" / "game_solo"
     run_dir.mkdir(parents=True)
-    (run_dir / "run.json").write_text(json.dumps({"eval_log": "/moved/logs/game_solo/a.eval"}))
+    write_text(run_dir / "processed/run.json", json.dumps({"eval_log": "/moved/logs/game_solo/a.eval"}))
     assert RunDir(run_dir).eval_log is None
     log = tmp_path / "logs" / "study_old" / "game_solo" / "a.eval"
     log.parent.mkdir(parents=True)
@@ -108,7 +109,7 @@ def test_a_run_in_a_group_finds_its_log_at_the_same_place_under_logs(tmp_path, m
     run_dir = tmp_path / "runs" / place
     run_dir.mkdir(parents=True)
     recorded = "/root/work/logs/smoke_access/20261031T061858Z/drawn_swe/a.eval"
-    (run_dir / "run.json").write_text(json.dumps({"eval_log": recorded}))
+    write_text(run_dir / "processed/run.json", json.dumps({"eval_log": recorded}))
     assert RunDir(run_dir).eval_log is None
     log = tmp_path / "logs" / place / "a.eval"
     log.parent.mkdir(parents=True)
@@ -139,7 +140,7 @@ def test_rejudge_holds_the_runs_on_one_client_and_a_refusal_stops_that_run_alone
     for name in ("good1", "good2", "bad", "gone", "other"):
         run_dir = tmp_path / "runs" / name
         run_dir.mkdir(parents=True)
-        (run_dir / "run.json").write_text(json.dumps({"eval_log": f"/root/work/logs/{name}/x.eval",
+        write_text(run_dir / "processed/run.json", json.dumps({"eval_log": f"/root/work/logs/{name}/x.eval",
                                                       "eval_id": f"eval-{name}" if name != "other" else "eval-x"}))
         dirs.append(run_dir)
         if name != "gone":
@@ -178,7 +179,7 @@ def test_a_run_refuses_a_folder_that_holds_a_run_before_the_eval(tmp_path, monke
     use runs."""
     monkeypatch.setattr(settings, "RUNS", tmp_path / "runs")
     monkeypatch.setattr(settings, "LOGS", tmp_path / "logs")
-    held = tmp_path / "runs" / "riemann_minimal" / "run.json"
+    held = tmp_path / "runs" / "riemann_minimal" / "processed/run.json"
     held.parent.mkdir(parents=True)
     held.write_text(json.dumps({"eval_id": "EarlierEval"}))
     started = []
@@ -201,14 +202,15 @@ def test_a_run_refuses_a_folder_that_holds_a_run_before_the_eval(tmp_path, monke
 
     assert start("riemann_minimal") == 2
     refusal = capsys.readouterr().err
-    assert str(held.parent) in refusal and "EarlierEval" in refusal and refusal.strip().endswith(run_module.RUN_REMEDY)
+    assert str(held.parent.parent) in refusal and "EarlierEval" in refusal
+    assert refusal.strip().endswith(run_module.RUN_REMEDY)
     assert not started and not (tmp_path / "logs").exists()
     assert json.loads(held.read_text()) == {"eval_id": "EarlierEval"}
     for name, kwargs in (("riemann_minimal", {"replace": True}), ("riemann_later", {})):
         with pytest.raises(Started):
             start(name, **kwargs)
     assert started == ["riemann_minimal", "riemann_later"]
-    attempt = tmp_path / "runs" / "attempts" / "riemann_minimal.1" / "run.json"
+    attempt = tmp_path / "runs" / "attempts" / "riemann_minimal.1" / "processed/run.json"
     assert json.loads(attempt.read_text()) == {"eval_id": "EarlierEval"} and not held.exists()
 
 
@@ -221,7 +223,7 @@ def test_judge_refuses_a_folder_that_holds_another_evals_run_before_judging(tmp_
     log.write_text("")
     folder = tmp_path / "runs" / "riemann_minimal"
     folder.mkdir(parents=True)
-    (folder / "run.json").write_text(json.dumps({"eval_id": "EarlierEval"}))
+    write_text(folder / "processed/run.json", json.dumps({"eval_id": "EarlierEval"}))
     judged, written = [], []
 
     async def judge_all(views, judge_name, batch):
@@ -240,11 +242,11 @@ def test_judge_refuses_a_folder_that_holds_another_evals_run_before_judging(tmp_
     assert not judged and not written
     assert run_module.judge(log, "riemann_minimal", "gpt-6-luna", replace=True) == 0
     assert written == [(folder, True)] and not folder.exists()
-    attempt = tmp_path / "runs" / "attempts" / "riemann_minimal.1" / "run.json"
+    attempt = tmp_path / "runs" / "attempts" / "riemann_minimal.1" / "processed/run.json"
     assert json.loads(attempt.read_text()) == {"eval_id": "EarlierEval"}
     grouped = tmp_path / "runs" / "invalid" / "riemann_minimal"
     grouped.mkdir(parents=True)
-    (grouped / "run.json").write_text(json.dumps({"eval_id": "NewEval"}))
+    write_text(grouped / "processed/run.json", json.dumps({"eval_id": "NewEval"}))
     assert run_module.judge(log, "riemann_minimal", "gpt-6-luna") == 0
     assert written[-1] == (grouped, False) and len(judged) == 2
 
@@ -276,7 +278,7 @@ def test_an_export_writes_relative_links_bare_agent_ids_model_keys_and_no_dead_f
         transcript = RunDir(folder).transcript(episode["episode"])
         assert (transcript["agent"], transcript["model"]) == (episode["agent"], episode["model"])
         assert transcript["trajectory"]["agent"]["name"] == episode["agent"]
-    assert not (folder / "judge.jsonl").exists()
+    assert not (folder / "analysis/judge.jsonl").exists()
 
 
 def test_the_evals_verdicts_fill_the_judges_file_and_never_undo_a_pass(tmp_path):
@@ -299,15 +301,15 @@ def test_an_export_over_another_evals_run_is_a_refusal_with_exit_code_2(tmp_path
     log = harness_log(tmp_path / "made", "work")
     folder = tmp_path / "runs" / "pair"
     folder.mkdir(parents=True)
-    (folder / "run.json").write_text(json.dumps({"eval_id": "EarlierEval"}))
+    write_text(folder / "processed/run.json", json.dumps({"eval_id": "EarlierEval"}))
     with pytest.raises(run_module.Refusal) as refused:
         run_module.export(log, folder)
     assert refused.value.code == 2 and "EarlierEval" in str(refused.value)
     assert str(refused.value).endswith(run_module.RUN_REMEDY) and "replace=True" not in str(refused.value)
-    assert json.loads((folder / "run.json").read_text()) == {"eval_id": "EarlierEval"}
+    assert json.loads((folder / "processed/run.json").read_text()) == {"eval_id": "EarlierEval"}
     run_module.export(log, folder, replace=True)
     assert RunDir(folder).run_json["eval_id"] != "EarlierEval" and RunDir(folder).episodes()
-    assert json.loads((tmp_path / "runs" / "attempts" / "pair.1" / "run.json").read_text()) == {
+    assert json.loads((tmp_path / "runs" / "attempts" / "pair.1" / "processed/run.json").read_text()) == {
         "eval_id": "EarlierEval"}
 
 
@@ -327,10 +329,9 @@ def earlier_run(tmp_path: Path, runs: Path, logs: Path) -> tuple[Path, str]:
     (logs / "pair").mkdir(parents=True)
     log = made.rename(logs / "pair" / made.name)
     write_run(log, folder)
-    (folder / VERDICTS).parent.mkdir()
+    (folder / VERDICTS).parent.mkdir(parents=True)
     (folder / VERDICTS).write_text(json.dumps({"unit": "earlier"}) + "\n")
-    (tmp_path / "out" / "study_x" / "pair").mkdir(parents=True)
-    (tmp_path / "out" / "study_x" / "pair" / "timeline.png").write_text("earlier")
+    write_text(folder / "analysis/figures/timeline.png", "earlier")
     return folder, RunDir(folder).run_json["eval_id"]
 
 
@@ -360,23 +361,23 @@ def test_run_with_replace_sets_the_earlier_run_aside_and_exports_into_empty_fold
     attempt = runs / "attempts" / "pair.1"
     assert (RunDir(attempt).run_json["eval_id"], RunDir(attempt).run_json["run_id"]) == (earlier_id, "pair")
     assert (attempt / VERDICTS).is_file() and len(list((logs / "attempts" / "pair.1").glob("*.eval"))) == 1
-    assert (tmp_path / "out" / "study_x" / "attempts" / "pair.1" / "timeline.png").read_text() == "earlier"
-    assert RunDir(folder).run_json["eval_id"] not in (None, earlier_id) and not (folder / "judges").exists()
+    assert (attempt / "analysis/figures/timeline.png").read_text() == "earlier"
+    assert RunDir(folder).run_json["eval_id"] not in (None, earlier_id) and not (folder / "analysis/judges").exists()
     assert RunDir(folder).eval_log == logs / "pair" / later.name
 
 
-def test_regenerate_draws_a_runs_figures_into_the_folder_that_mirrors_it(tmp_path, monkeypatch):
-    """Two runs named pair in two groups get two figure folders: out/study_x/<group>/pair/."""
+def test_regenerate_draws_a_runs_figures_into_its_own_folder(tmp_path, monkeypatch):
+    """Two runs named pair in two groups get two figure folders, each its run's analysis/figures/."""
     drawn = []
     monkeypatch.setattr(run_module.run_figures, "plot_run", lambda run_dir, out_dir: drawn.append(out_dir) or [])
     dirs = []
     for group in ("mock", "set_aside"):
         run_dir = tmp_path / "runs" / "study_x" / group / "pair"
         run_dir.mkdir(parents=True)
-        (run_dir / "run.json").write_text("{}")
+        write_text(run_dir / "processed/run.json", "{}")
         dirs.append(run_dir)
     assert run_module.regenerate(dirs, export_log=False, measures=False) == 0
-    assert drawn == [tmp_path / "out" / "study_x" / group / "pair" for group in ("mock", "set_aside")]
+    assert drawn == [run_dir / "analysis/figures" for run_dir in dirs]
 
 
 def test_judge_with_replace_exports_the_new_eval_and_keeps_the_earlier_in_attempts(tmp_path, monkeypatch):
@@ -400,7 +401,7 @@ def test_judge_with_replace_exports_the_new_eval_and_keeps_the_earlier_in_attemp
     assert RunDir(runs / "attempts" / "pair.1").run_json["eval_id"] == earlier_id
     assert [path.name for path in (logs / "pair").iterdir()] == [later.name]
     assert RunDir(folder).run_json["eval_id"] not in (None, earlier_id) and verdict_files.episode_verdicts(folder)
-    assert [p.name for p in (folder / "judges").iterdir()] == ["cheatbench.gpt-6-luna.jsonl"]
+    assert [p.name for p in (folder / "analysis/judges").iterdir()] == ["cheatbench.gpt-6-luna.jsonl"]
     assert RunDir(folder).eval_log == later
 
 

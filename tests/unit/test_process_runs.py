@@ -15,6 +15,7 @@ from src.cli import main
 from src.measures import code_ladder, coordination, pipeline_parts, process_runs, stored_versions, topology_fact
 from src.measures.run_directory import RunDir
 from src.ui import viewer_parts as vp
+from tests.support.run_files import write_text
 
 ROLES = {"a01": None, "a02": None, "a03": "regulator"}
 BOARD = {
@@ -37,12 +38,11 @@ BOARD = {
 def write_run(path: Path, task: str = "creative_writings") -> Path:
     path.mkdir(parents=True)
     episodes = [{"episode": f"s#1@{a}", "agent": a, "role": r} for a, r in ROLES.items()]
-    path.joinpath("episodes.jsonl").write_text("".join(json.dumps(e) + "\n" for e in episodes))
-    path.joinpath("signals.jsonl").write_text("")
-    path.joinpath("run.json").write_text(json.dumps({"model": "m", "role_models": {}, "config": {},
-                                                     "swarm": {"roles": ROLES}, "task": task}, indent=1))
-    path.joinpath("communication").mkdir()
-    path.joinpath("communication", "s#1.json").write_text(json.dumps(BOARD))
+    write_text(path / "processed/episodes.jsonl", "".join(json.dumps(e) + "\n" for e in episodes))
+    write_text(path / "analysis/signals.jsonl", "")
+    write_text(path / "processed/run.json", json.dumps({"model": "m", "role_models": {}, "config": {},
+                                                        "swarm": {"roles": ROLES}, "task": task}, indent=1))
+    write_text(path / "processed/communication" / "s#1.json", json.dumps(BOARD))
     return path
 
 
@@ -92,9 +92,9 @@ def test_a_run_is_processed_once_and_nothing_is_redone_after(tmp_path, stood_in)
     stored = RunDir(run)
     for part in COMPUTED:
         assert stored.output(part).is_file(), part
-    assert stored.output("topology") == run / "processed" / "facts" / "topology.json"
-    assert stored.output("row") == run / "analysis" / "row.json"
-    assert stored.output("signals") == run / "signals.jsonl"
+    assert stored.output("topology") == run / "processed/facts/topology.json"
+    assert stored.output("row") == run / "analysis/row.json"
+    assert stored.output("signals") == run / "analysis/signals.jsonl"
     ledgers = {layer: json.loads(path.read_text())["parts"] for layer, path in stored.versions().items()}
     assert set(ledgers["processed"]) == {"export", "topology"}
     assert set(ledgers["analysis"]) == set(COMPUTED) - {"topology"}
@@ -152,7 +152,8 @@ def test_the_signals_block_restamps_the_export_it_changes(tmp_path, stood_in):
     old = stored_versions.entry(job.run, "export")
     code_ladder.write_block(job.run, {"row": "team", "ended_by": "submit"})
     new = stored_versions.entry(job.run, "export")
-    assert json.loads((run / "run.json").read_text())["signals"] == {"team": {"row": "team", "ended_by": "submit"}}
+    assert json.loads((run / "processed/run.json").read_text())["signals"] == \
+        {"team": {"row": "team", "ended_by": "submit"}}
     assert new["sha256"] != old["sha256"] and new["version"] == old["version"] and new["made"] == old["made"]
     code_ladder.write_block(job.run, {"row": "team", "ended_by": "submit"})
     assert stored_versions.entry(job.run, "export") == new
@@ -174,5 +175,5 @@ def test_the_command_dry_run_writes_nothing(tmp_path, capsys):
     assert main(["process", str(study), "--dry-run"]) == 0
     out = capsys.readouterr().out
     assert "behind       signals 1, topology 1" in out and "nothing written" in out
-    assert not (run / "processed").exists() and not (run / "analysis").exists()
+    assert not any(path.exists() for path in RunDir(run).versions().values())
 

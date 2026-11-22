@@ -670,7 +670,7 @@ class SweDomain(Domain):
         shipped: such a piece of the work its HEAD holds that the hand-in holds too. A piece that counts lets the
         evidence name the rest of a whole fix. The grader's diffs are the only record on disk; team_evidence and
         assembled read the same directory."""
-        self.diffs = run_dir / "swe" / "diffs"
+        self.diffs = RunDir(run_dir).file("swe") / "diffs"
         self.folder = RunDir(run_dir)
         probed = self.diff(self.own_file(agent)) is not None
         out = {"probe": probed, "copies": [], "used": False, "used_evidence": "", "checked": False,

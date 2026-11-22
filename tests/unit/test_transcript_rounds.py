@@ -14,6 +14,7 @@ import pytest
 from src.configuration.settings import ROOT
 from src.measures.run_calls import Call
 from src.ui import transcript_rounds as tr
+from tests.support.run_files import write_text
 from tests.unit.test_transcript_board import cid, payload, write_run
 
 
@@ -119,13 +120,13 @@ def test_on_the_call_order_clock_a_round_spans_its_calls_and_an_empty_one_sits_a
 
 def test_the_board_tab_gives_each_call_its_round_and_place_and_each_agent_its_rounds(tmp_path):
     run = write_run(tmp_path)
-    rj = json.loads((run / "run.json").read_text())
+    rj = json.loads((run / "processed/run.json").read_text())
     a01 = [cid("a01", k) for k in range(3)]
     rj["rules"] = {"round_budget": 5, "calls_per_round": 2, "timeline": [
         entry(0, "a01", 1, 1, "calls", "work", [call_entry(a01[0], "shell", 1, 0, 0),
                                                 call_entry(a01[1], "board_post", 2, 0, 0)], None, None),
         entry(1, "a01", 2, 2, "ending", "stop", [call_entry(a01[2], "board_read", 1, 0, 0)], None, None)]}
-    (run / "run.json").write_text(json.dumps(rj))
+    write_text(run / "processed/run.json", json.dumps(rj))
     p = payload(run)
     assert p["calls_per_round"] == 2
     lanes = {a["agent"]: a for a in p["agents"]}

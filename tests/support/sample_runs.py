@@ -26,6 +26,7 @@ from inspect_ai.model import GenerateConfig, ModelOutput, ModelUsage
 
 from src.utils.json_files import write_jsonl
 from tests.support.run_builder import write_verdicts
+from tests.support.run_files import write_text
 
 MODEL = "openai/gpt-6-luna"
 CONTINUE = "Please continue with your next action."
@@ -135,22 +136,23 @@ def write_run(folder: Path, task: str, plan: dict[str, list[Activation]], verdic
     folder.mkdir(parents=True)
     episode = {agent: f"{sample}#1" if lone else f"{sample}#1@{agent}" for agent in agents}
     log = eval_log_of(folder.parent / f"{folder.name}.eval", plan, sample, model)
-    (folder / "run.json").write_text(json.dumps({
+    write_text(folder / "processed/run.json", json.dumps({
         "task": task, "model": model, "agents": agents, "mode": "shared_task", "preset": "default", "scale": "small",
         "config": {"mention_team": None}, "swarm": {"roles": dict.fromkeys(agents, "worker")}, "eval_log": str(log),
         "rules": {"rounds": max(map(round_of, turns_of(plan))), "timeline": timeline_of(plan)}, **(run or {})}))
-    write_jsonl(folder / "episodes.jsonl", [
+    write_jsonl(folder / "processed/episodes.jsonl", [
         {"id": sample, "episode": episode[agent], "replicate": 1, "agent": agent, "orbit_roster": agents,
          "role": "worker", "model": model} for agent in agents])
     write_verdicts(folder, [
         {"id": sample, "episode": episode[agent], "replicate": 1, "agent": agent, "parse_ok": True,
          "judge": "gpt-6-sol", **verdicts[agent]} for agent in agents])
     for agent, activations in plan.items():
-        path = folder / "trajectories" / episode[agent] / "transcript.json"
+        path = folder / "processed/trajectories" / episode[agent] / "transcript.json"
         path.parent.mkdir(parents=True)
         path.write_text(json.dumps(transcript_of(agent, activations, model)))
-    (folder / "communication").mkdir()
-    (folder / "communication" / f"{sample}#1.json").write_text(json.dumps({"messages": board_of(plan), "events": []}))
+    (folder / "processed/communication").mkdir(parents=True)
+    (folder / "processed/communication" / f"{sample}#1.json").write_text(json.dumps({"messages": board_of(plan),
+                                                                                     "events": []}))
     return folder
 
 

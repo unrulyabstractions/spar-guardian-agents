@@ -6,6 +6,7 @@ from pathlib import Path
 
 from src.measures.regulator_measures import act_terms, holds, norm, pairs, regulator_measures, shows
 from src.measures.run_calls import Call, Run
+from tests.support.run_files import write_text
 
 WORKERS = ["k7m5z", "j9z4k", "s7t5p"]
 AGENTS = {*WORKERS, "p3q2k"}
@@ -22,7 +23,7 @@ def run_of(tmp_path: Path, calls: dict[str, list[Call]], boards: list[dict] | No
     """A run whose call k of each agent sits in round call.turn (each call its own timeline entry)."""
     timeline = [{"agent": a, "turn": c.turn, "round": c.turn} for a, cs in calls.items() for c in cs]
     rj = {"rules": {"timeline": timeline}, **(run_json or {})}
-    (tmp_path / "run.json").write_text(json.dumps(rj))
+    write_text(tmp_path / "processed/run.json", json.dumps(rj))
     roles = {a: "regulator" if a == "p3q2k" else "worker" for a in calls}
     return Run(tmp_path, rj, roles, calls, {}, boards or [])
 

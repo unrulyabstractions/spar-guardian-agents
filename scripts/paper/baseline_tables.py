@@ -28,6 +28,7 @@ from scripts.paper.study_ladders import (
     tiles_width,
 )
 from src.configuration.settings import ROOT
+from src.measures.run_directory import RunDir
 from src.utils import progress
 from src.utils.figure_style import AXIS, BAND, INK, INK_SECONDARY
 
@@ -44,7 +45,7 @@ def team(stem: str, cell: str, model: str) -> list[dict]:
     out = []
     for seed in (1, 2, 3):
         name = f"{stem}_{cell}_{model}{seed}"
-        path = next((p for p in (RUNS / name, RUNS / "invalid" / name) if (p / "run.json").is_file()), None)
+        path = next((p for p in (RUNS / name, RUNS / "invalid" / name) if RunDir(p).is_run()), None)
         if path is None:
             raise SystemExit(f"no run {name}")
         out.append(record(path))

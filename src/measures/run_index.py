@@ -46,7 +46,7 @@ from src.configuration import task_names
 from src.domains import BY_TASK
 from src.measures import deal_replay, run_validity
 from src.measures.cheating_ladder import cheating_rungs
-from src.measures.run_directory import ATTEMPTS, GROUPS, RUN_JSON, RunDir, run_name, run_place, study_runs
+from src.measures.run_directory import ATTEMPTS, GROUPS, RunDir, run_name, run_place, study_runs
 from src.models import model_registry
 
 INDEX = "INDEX.jsonl"
@@ -159,14 +159,14 @@ def build(study_dir: Path, join: Join | None = None) -> tuple[list[dict], dict[s
     study_dir = Path(study_dir)
     records, disagree = [], []
     for run in study_runs(study_dir):
-        data = json.loads((run / RUN_JSON).read_text())
+        data = RunDir(run).run_json
         rec = record(run, data, study_dir, join)
         records.append(rec)
         if join is not None:
             disagree += [(rec["path"], problem) for problem in join.problems(rec, data)]
     names = collections.Counter(rec["run"] for rec in records if rec["group"] != ATTEMPTS)
     notes = {"other_folders": sorted(p.name for p in study_dir.iterdir()
-                                     if p.is_dir() and p.name not in GROUPS and not (p / RUN_JSON).is_file()),
+                                     if p.is_dir() and p.name not in GROUPS and not RunDir(p).is_run()),
              "names_twice": sorted(name for name, n in names.items() if n > 1)}
     if join is not None:
         notes.update(join.notes(records), table_disagrees=disagree)
@@ -204,8 +204,8 @@ def index_folder_problem(folder: Path) -> str | None:
     """Why an index may not be written into this folder, or None for a study's folder: a folder that holds a run.json
     is a run, a group is part of a study, and a study's folder sits in a runs/ folder."""
     folder = Path(folder).resolve()
-    if (folder / RUN_JSON).is_file():
-        return f"{folder} holds a run.json: it is a run, not a study's folder"
+    if RunDir(folder).is_run():
+        return f"{folder} holds a run: it is a run, not a study's folder"
     if folder.name in GROUPS:
         return f"{folder} is a group of a study: write the index of {folder.parent}"
     if folder.parent.name != "runs":

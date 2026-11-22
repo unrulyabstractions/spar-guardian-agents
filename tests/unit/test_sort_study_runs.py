@@ -15,6 +15,7 @@ import pytest
 from scripts import sort_study_runs as sort
 from src.measures.run_index import FIELDS, build
 from tests.support.run_builder import write_status_log
+from tests.support.run_files import write_text
 
 STUDY = "study_x"
 LOG = "2026-11-01T03-31-41-00-00_run_abc.eval"
@@ -32,10 +33,10 @@ def run(root: Path, place: str, *, status: str = "success", commit: str = "94940
             "agents": ["a01"], "rules": {"workers": ["a01"]}, "eval_log": f"/root/work/logs/{study}/{name}/{log}",
             "validity": {"ok": True},
             **({"swe": {"issue": "flipt-02e2", "honeypot": "jigsaw"}} if task == "software_engineering" else {})}
-    (folder / "run.json").write_text(json.dumps(data))
-    (folder / "signals.jsonl").write_text(json.dumps({"row": "team", "cheating_rung": "none"}) + "\n")
-    (folder / "episodes.jsonl").write_text(json.dumps({"failure": None}) + "\n")
-    os.utime(folder / "run.json", (OLD, OLD))
+    write_text(folder / "processed/run.json", json.dumps(data))
+    write_text(folder / "analysis/signals.jsonl", json.dumps({"row": "team", "cheating_rung": "none"}) + "\n")
+    write_text(folder / "processed/episodes.jsonl", json.dumps({"failure": None}) + "\n")
+    os.utime(folder / "processed/run.json", (OLD, OLD))
     return folder
 
 
@@ -55,7 +56,7 @@ def study(tmp_path) -> Path:
     run(tmp_path, "failed_attempts/riemann_minimal_luna3.attempt1", log="2026-11-01T01-00-00-00-00_early.eval")
     write_status_log(tmp_path / "logs" / STUDY / "riemann_minimal_luna3" / "2026-11-01T01-00-00-00-00_early.eval",
                      "error")
-    os.utime(tmp_path / "runs" / STUDY / "riemann_minimal_luna4" / "run.json")               # just pulled
+    os.utime(tmp_path / "runs" / STUDY / "riemann_minimal_luna4" / "processed/run.json")               # just pulled
     (tmp_path / "logs" / STUDY / "screen").mkdir(parents=True)
     (tmp_path / "logs" / STUDY / "screen" / "box_b1.json").write_text(json.dumps(
         {"box": "b1", "runs": {"riemann_minimal_luna5": {}}}))
@@ -63,9 +64,8 @@ def study(tmp_path) -> Path:
                                                                         {"id": 2, "box": "b0", "destroyed": "x"}]}))
     run(tmp_path, "set_aside/riemann_minimal_luna6")                                          # held twice
     write_status_log(tmp_path / "logs" / STUDY / "set_aside" / "riemann_minimal_luna6" / LOG, "success")
-    for place in ("riemann_minimal_luna1", f"{STUDY}/riemann_minimal_lunamock1", "flipt_minimal_luna1"):
-        (tmp_path / "out" / place).mkdir(parents=True)
-        (tmp_path / "out" / place / "timeline.png").write_text(f"png of {place}")
+    for place in ("riemann_minimal_luna1", "riemann_minimal_lunamock1"):
+        write_text(tmp_path / "runs" / STUDY / place / "analysis/figures/timeline.png", f"png of {place}")
     run(tmp_path, "flipt_minimal_luna1", study="study_y")              # another study holds that name, no figures
     return tmp_path
 
@@ -86,7 +86,6 @@ def test_the_dry_run_writes_nothing_and_says_what_would_move(study, capsys):
     assert "== left, live box: 1 ['riemann_minimal_luna5']" in out
     assert "== left, young run.json: 1 ['riemann_minimal_luna4']" in out
     assert "== left, two folders: 2 ['riemann_minimal_luna6', 'set_aside/riemann_minimal_luna6']" in out
-    assert "flipt_minimal_luna1: out/flipt_minimal_luna1 may be another study's (study_y)" in out
     assert "== dry run: nothing moved" in out
 
 
@@ -97,22 +96,22 @@ def records(study: Path) -> dict[str, dict]:
 def test_apply_moves_each_run_with_its_log_and_figures_and_checks_every_file(study, capsys):
     before = records(study)
     assert sort.main([str(study / "runs" / STUDY), "--apply"]) == 0
-    runs, logs, out = (study / top / STUDY for top in ("runs", "logs", "out"))
+    runs, logs = (study / top / STUDY for top in ("runs", "logs"))
     for place in ("mock/riemann_minimal_lunamock1", "mock/riemann_minimal_lunamock2",
                   "incomplete/riemann_minimal_luna3", "invalid/flipt_minimal_luna1",
                   "incomplete/riemann_minimal_luna2", "riemann_minimal_luna1", "riemann_minimal_luna4",
                   "riemann_minimal_luna5"):
-        assert (runs / place / "run.json").is_file(), place
+        assert (runs / place / "processed/run.json").is_file(), place
     assert (logs / "mock" / "riemann_minimal_lunamock1" / LOG).is_file()
     assert sorted(path.name for path in (logs / "incomplete" / "riemann_minimal_luna3").iterdir()) == [LOG]
     attempt = runs / "attempts" / "riemann_minimal_luna3.1"
-    assert json.loads((attempt / "run.json").read_text())["run_id"] == "riemann_minimal_luna3"
+    assert json.loads((attempt / "processed/run.json").read_text())["run_id"] == "riemann_minimal_luna3"
     assert [path.name for path in (logs / "attempts" / "riemann_minimal_luna3.1").iterdir()] == [
         "2026-11-01T01-00-00-00-00_early.eval"]
     assert not (runs / sort.HAND_MADE).exists()
-    assert (out / "riemann_minimal_luna1" / "timeline.png").read_text() == "png of riemann_minimal_luna1"
-    assert (out / "mock" / "riemann_minimal_lunamock1" / "timeline.png").is_file()
-    assert (study / "out" / "flipt_minimal_luna1").is_dir() and not (out / "invalid" / "flipt_minimal_luna1").exists()
+    assert (runs / "riemann_minimal_luna1" / "analysis/figures/timeline.png").read_text() == \
+        "png of riemann_minimal_luna1"
+    assert (runs / "mock" / "riemann_minimal_lunamock1" / "analysis/figures/timeline.png").is_file()
     [record] = (study / "logs" / "moves").glob(f"*_sort_{STUDY}.jsonl")
     *rows, result = [json.loads(line) for line in record.read_text().splitlines()]
     assert result == {"verified": True, "files": len(rows), "bytes": sum(row["size"] for row in rows),
@@ -137,12 +136,12 @@ def test_a_file_that_arrives_changed_exits_1(study, monkeypatch, capsys):
         moved = rename(self, target)
         if Path(target).name == "riemann_minimal_lunamock1" and Path(target).parent.name == "mock" and \
                 Path(target).parent.parent.parent.name == "runs":
-            (Path(target) / "signals.jsonl").write_text("changed on the way")
+            write_text(Path(target) / "analysis/signals.jsonl", "changed on the way")
         return moved
 
     monkeypatch.setattr(Path, "rename", damaging)
     assert sort.main([str(study / "runs" / STUDY), "--apply"]) == 1
-    assert "MISMATCH: runs/study_x/mock/riemann_minimal_lunamock1/signals.jsonl: size or sha256 differs" in \
+    assert "MISMATCH: runs/study_x/mock/riemann_minimal_lunamock1/analysis/signals.jsonl: size or sha256 differs" in \
         capsys.readouterr().out
     [record] = (study / "logs" / "moves").glob("*.jsonl")
     assert json.loads(record.read_text().splitlines()[-1])["verified"] is False
@@ -152,7 +151,7 @@ def test_a_taken_target_is_left_and_named(study, capsys):
     run(study, "mock/riemann_minimal_lunamock1x")
     (study / "runs" / STUDY / "mock" / "riemann_minimal_lunamock1x").rename(
         study / "runs" / STUDY / "mock" / "riemann_minimal_lunamock1")
-    (study / "runs" / STUDY / "mock" / "riemann_minimal_lunamock1" / "run.json").unlink()      # a folder, no run
+    (study / "runs" / STUDY / "mock" / "riemann_minimal_lunamock1" / "processed/run.json").unlink()  # a folder, no run
     assert sort.main([str(study / "runs" / STUDY)]) == 0
     assert "== left, target exists: 1 ['runs/study_x/mock/riemann_minimal_lunamock1']" in capsys.readouterr().out
 

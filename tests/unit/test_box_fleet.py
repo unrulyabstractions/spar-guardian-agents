@@ -44,6 +44,7 @@ from scripts.box.box_sweep import Sweep
 from scripts.box.study_table import Arm, Box, box_jobs, find_box, jobs_sha256, stage_boxes
 from src import cli, run
 from src.configuration import settings
+from tests.support.run_files import write_text
 
 # Offers from the searches of 2026-10-30 (POST /api/v0/bundles/), cut to the fields the filter reads, and one made-up
 # offer that fails four rules. Four can hold a box, 58339037 at a higher price cap; the rest fail as the test says.
@@ -623,10 +624,11 @@ def test_run_args_refuse_a_run_name_made_elsewhere(registry, tmp_path, capsys, m
     monkeypatch.setattr(settings, "LOGS", tmp_path / "logs" / "study_x")
     run_dir = tmp_path / "runs" / "study_x" / "binder_minimal_luna1"
     run_dir.mkdir(parents=True)
-    (run_dir / "run.json").write_text(json.dumps({"eval_log": "/Users/someone/logs/binder_minimal_luna1/x.eval"}))
+    write_text(run_dir / "processed/run.json",
+               json.dumps({"eval_log": "/Users/someone/logs/binder_minimal_luna1/x.eval"}))
     assert fleet.main(["run-args", "7"]) == 1
     assert "runs/study_x/binder_minimal_luna1" in capsys.readouterr().err
-    (run_dir / "run.json").write_text(json.dumps({"eval_log": "/root/work/logs/binder_minimal_luna1/x.eval"}))
+    write_text(run_dir / "processed/run.json", json.dumps({"eval_log": "/root/work/logs/binder_minimal_luna1/x.eval"}))
     assert fleet.main(["run-args", "7"]) == 0                                 # this box's own, pulled by the watch
     log = tmp_path / "logs" / "study_x" / "screen" / "binder_minimal_luna2.log"
     log.parent.mkdir(parents=True)
@@ -635,7 +637,7 @@ def test_run_args_refuse_a_run_name_made_elsewhere(registry, tmp_path, capsys, m
     assert "logs/study_x/screen/binder_minimal_luna2.log" in capsys.readouterr().err
     log.unlink()
     relative = {"eval_log": "logs/study_x/binder_minimal_luna1/x.eval"}     # the export's link from the checkout
-    (run_dir / "run.json").write_text(json.dumps(relative))
+    write_text(run_dir / "processed/run.json", json.dumps(relative))
     assert fleet.main(["run-args", "7"]) == 1                                 # no sign a box made it
     assert "runs/study_x/binder_minimal_luna1" in capsys.readouterr().err
     box_log = tmp_path / "logs" / "study_x" / "screen" / "binder_minimal_luna1.log"
@@ -720,8 +722,10 @@ def box(tmp_path, monkeypatch):
     work = home / "work"
     files = {
         work / "src" / "tracked.py": "print(1)\n", work / "src" / "edited.py": "print(2)\n",
-        work / "runs" / "study_x" / "r1" / "run.json": '{"a": 1}\n', work / "logs" / "r1" / "x.eval": "eval bytes",
-        work / "out" / "r1" / "fig.png": "png", work / "src" / "__pycache__" / "x.pyc": "pyc",
+        work / "runs" / "study_x" / "r1" / "processed/run.json": '{"a": 1}\n',
+        work / "logs" / "r1" / "x.eval": "eval bytes",
+        work / "runs" / "study_x" / "r1" / "analysis/figures" / "fig.png": "png",
+        work / "src" / "__pycache__" / "x.pyc": "pyc",
         work / ".venv" / "lib" / "x.py": "venv", work / "build" / "rows.jsonl": "{}\n",
         home / "screen.log": "== screen\n", home / ".box_env": "export KEY=secret\n",
         home / ".box_env.new": "export KEY=sec", home / "box_id": "7\n",
@@ -739,7 +743,7 @@ def box(tmp_path, monkeypatch):
     git(work, "commit", "-q", "-m", "c")
     (work / "src" / "edited.py").write_text("print(3)\n")
     (work / "src" / "new.py").write_text("new\n")
-    for rel in ("runs/study_x/r1/run.json", "logs/r1/x.eval", "out/r1/fig.png"):
+    for rel in ("runs/study_x/r1/processed/run.json", "logs/r1/x.eval", "runs/study_x/r1/analysis/figures/fig.png"):
         (local / rel).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(work / rel, local / rel)
     monkeypatch.setattr(box_capture, "REMOTE_REPO", str(work))
@@ -776,8 +780,10 @@ def bashrc_baseline(box) -> frozenset:
 def test_the_sweep_lists_what_is_not_reproducible_and_counts_the_rest(box):
     lines = sweep(box)
     listed = sorted(os.path.relpath(line["file"], box["home"].parent) for line in lines if "file" in line)
-    assert listed == ["root/.bashrc", "root/screen.log", "root/work/logs/r1/x.eval", "root/work/out/r1/fig.png",
-                      "root/work/runs/study_x/r1/run.json", "root/work/src/edited.py", "root/work/src/new.py",
+    assert listed == ["root/.bashrc", "root/screen.log", "root/work/logs/r1/x.eval",
+                      "root/work/runs/study_x/r1/analysis/figures/fig.png",
+                      "root/work/runs/study_x/r1/processed/run.json",
+                      "root/work/src/edited.py", "root/work/src/new.py",
                       "tmp/inspect.tmp"]
     work, home = str(box["work"]), str(box["home"])
     trees, files = box_sweep.excluded_trees(work, home, str(box["tmp"])), box_sweep.excluded_files(home)
@@ -819,9 +825,11 @@ def test_the_check_catches_a_copy_cut_short_or_changed_in_place(box):
     copy_missing(box, compare(box, sweep(box)))
     assert compare(box, sweep(box)).ok
     (box["local"] / "logs" / "r1" / "x.eval").write_text("eval")                 # cut short
-    (box["local"] / "runs" / "study_x" / "r1" / "run.json").write_text('{"a": 2}\n')         # same size, other bytes
+    write_text(box["local"] / "runs" / "study_x" / "r1" / "processed/run.json",
+               '{"a": 2}\n')         # same size, other bytes
     report = compare(box, sweep(box))
-    assert sorted(os.path.basename(path) for path, _ in report.differ) == ["run.json", "x.eval"] and not report.ok
+    assert sorted(path.split("/r1/")[1] for path, _ in report.differ) == ["processed/run.json", "x.eval"] \
+        and not report.ok
 
 
 @pytest.mark.parametrize("change, words", [
@@ -890,11 +898,11 @@ def fake_proc(box, flags: str, target: Path) -> str:
 
 @pytest.mark.parametrize("flags, counts", [("0100001", True), ("0100002", True), ("0100000", False)])
 def test_a_process_holding_an_output_open_for_writing_is_producing(box, flags, counts):
-    proc = fake_proc(box, flags, box["work"] / "runs" / "study_x" / "r1" / "run.json")
+    proc = fake_proc(box, flags, box["work"] / "runs" / "study_x" / "r1" / "processed/run.json")
     producing = [line for line in sweep(box, proc=proc) if "producing" in line]
     assert len(producing) == (2 if counts else 0)                  # before and after the walk
     if counts:
-        assert producing[0]["writing"] == [str(box["work"] / "runs" / "study_x" / "r1" / "run.json")]
+        assert producing[0]["writing"] == [str(box["work"] / "runs" / "study_x" / "r1" / "processed/run.json")]
 
 
 def test_a_host_service_writing_its_private_tmp_is_not_producing(box):
@@ -943,16 +951,17 @@ def test_the_check_end_to_end_through_a_stand_in_ssh(box, stand_in_ssh, capsys):
     snapshot = Path(record["path"])
     assert record["files"] == 8 and not os.access(snapshot, os.W_OK)
     with tarfile.open(snapshot) as tar:
-        member = str(box["work"] / "runs" / "study_x" / "r1" / "run.json").lstrip("/")
+        member = str(box["work"] / "runs" / "study_x" / "r1" / "processed/run.json").lstrip("/")
         assert tar.extractfile(member).read() == b'{"a": 1}\n'
-    (box["local"] / "runs" / "study_x" / "r1" / "run.json").write_text('{"a": 9}\n')     # changed after the check
+    write_text(box["local"] / "runs" / "study_x" / "r1" / "processed/run.json",
+               '{"a": 9}\n')     # changed after the check
     with pytest.raises(RuntimeError, match="does not hold the manifest"):
         box_capture.snapshot(7)
 
 
 def test_a_newer_local_copy_stays_and_the_boxs_bytes_go_beside_it(box, stand_in_ssh, capsys):
     assert box_capture.check(7, pull=True)
-    local = box["local"] / "runs" / "study_x" / "r1" / "run.json"
+    local = box["local"] / "runs" / "study_x" / "r1" / "processed/run.json"
     local.write_text('{"a": 2, "rejudged": true}\n')
     os.utime(local, (time.time() + 600, time.time() + 600))                  # a local rewrite, newer than the box's
     (box["local"] / "runs" / "study_x" / "r1" / "stale.json").write_text("{}\n")
@@ -960,7 +969,7 @@ def test_a_newer_local_copy_stays_and_the_boxs_bytes_go_beside_it(box, stand_in_
     out = capsys.readouterr().out
     assert marker is not None and len(marker["conflicts"]) == 1 and marker["local_only"] == 1
     assert local.read_text() == '{"a": 2, "rejudged": true}\n'
-    assert (box["folder"] / "conflicts" / "runs" / "study_x" / "r1" / "run.json").read_text() == '{"a": 1}\n'
+    assert (box["folder"] / "conflicts" / "runs" / "study_x" / "r1" / "processed/run.json").read_text() == '{"a": 1}\n'
     assert "!! CONFLICT" in out and "LOCAL ONLY runs/study_x/r1/stale.json" in out
 
 
@@ -1057,12 +1066,12 @@ def runner_dirs(tmp_path, monkeypatch):
 def left_run(root: Path, name: str, status: str = "success", failures=(None,)) -> None:
     run_dir = root / "runs" / name
     run_dir.mkdir(parents=True)
-    (run_dir / "signals.jsonl").write_text("{}\n")
+    write_text(run_dir / "analysis/signals.jsonl", "{}\n")
     eval_log = root / "logs" / name / f"{status}.eval"
     eval_log.parent.mkdir(parents=True, exist_ok=True)
     eval_log.write_text("")
-    (run_dir / "run.json").write_text(json.dumps({"eval_log": str(eval_log)}))
-    (run_dir / "episodes.jsonl").write_text("".join(json.dumps({"failure": f}) + "\n" for f in failures))
+    write_text(run_dir / "processed/run.json", json.dumps({"eval_log": str(eval_log)}))
+    write_text(run_dir / "processed/episodes.jsonl", "".join(json.dumps({"failure": f}) + "\n" for f in failures))
 
 
 def test_a_run_is_done_only_when_its_eval_succeeded_and_no_episode_failed(runner_dirs, monkeypatch):
@@ -1075,7 +1084,7 @@ def test_a_run_is_done_only_when_its_eval_succeeded_and_no_episode_failed(runner
     assert box_runner.outcome("crashed") == ("incomplete", "1 episodes failed (harness)")
     assert box_runner.outcome("never") == ("failed", "no run.json")
     left_run(runner_dirs, "derived")
-    (runner_dirs / "runs" / "derived" / "signals.jsonl").unlink()
+    (runner_dirs / "runs" / "derived" / "analysis/signals.jsonl").unlink()
     assert box_runner.outcome("derived") == ("derive", "its eval succeeded, no signals.jsonl")
 
 
@@ -1182,7 +1191,7 @@ def test_a_relaunch_moves_the_earlier_attempt_into_attempts_before_it_starts(run
     plan = json.loads((runner_dirs / "logs" / "screen" / f"box_{TWO_RUNS.name}.json").read_text())
     for job in box_jobs(TWO_RUNS):
         attempt = runner_dirs / "runs" / "attempts" / f"{job.name}.1"
-        assert json.loads((attempt / "run.json").read_text())["eval_log"].endswith(f"{job.name}/error.eval")
+        assert json.loads((attempt / "processed/run.json").read_text())["eval_log"].endswith(f"{job.name}/error.eval")
         assert (runner_dirs / "logs" / "attempts" / f"{job.name}.1" / "error.eval").is_file()
         assert plan["runs"][job.name]["again"].endswith(f"earlier attempt {attempt}")
         assert box_runner.outcome(job.name) == ("finished", "its eval succeeded")
@@ -1331,7 +1340,7 @@ def test_a_ladder_rebuild_finds_a_run_under_its_study_and_needs_no_judge(tmp_pat
     """derive's own command, through the real command line, with no key in the environment."""
     run_dir = tmp_path / "runs" / "study_x" / "binder_minimal_luna1"
     run_dir.mkdir(parents=True)
-    (run_dir / "run.json").write_text("{}")
+    write_text(run_dir / "processed/run.json", "{}")
     monkeypatch.setattr(settings, "RUNS", run_dir.parent)
     monkeypatch.chdir(tmp_path)
     for key in ("OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY"):
@@ -1353,29 +1362,32 @@ def test_a_ladder_rebuild_finds_a_run_under_its_study_and_needs_no_judge(tmp_pat
 def test_local_only_lists_what_this_machine_added_to_a_run_of_a_study(tmp_path, monkeypatch):
     monkeypatch.setattr(box_capture, "ROOT", tmp_path)
     run, other = tmp_path / "runs/study_x/game_solo", tmp_path / "runs/study_x/game_minimal"
-    for path in (run / "run.json", run / "judge.jsonl", other / "run.json", tmp_path / "out/game_solo/a.png"):
+    for path in (run / "processed/run.json", run / "analysis/judge.jsonl", other / "processed/run.json",
+                 run / "analysis/figures/a.png"):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("x")
     lines = [{"file": f"{box_capture.REMOTE_REPO}/{rel}"}
-             for rel in ("runs/study_x/game_solo/run.json", "out/game_solo/b.png")]
-    assert box_capture.local_only(lines) == ["out/game_solo/a.png", "runs/study_x/game_solo/judge.jsonl"]
+             for rel in ("runs/study_x/game_solo/processed/run.json", "runs/study_x/game_solo/analysis/figures/b.png")]
+    assert box_capture.local_only(lines) == ["runs/study_x/game_solo/analysis/figures/a.png",
+                                             "runs/study_x/game_solo/analysis/judge.jsonl"]
 
 
-def test_local_only_reads_figures_that_mirror_runs_and_an_attempts_own_folder(tmp_path, monkeypatch):
-    """out/<study>/<name>/ is the run's figures folder, and attempts/<name>.<n> is the attempt's own folder: the files
-    another run of the study keeps here are not this box's run's."""
+def test_local_only_reads_a_runs_figures_and_an_attempts_own_folder(tmp_path, monkeypatch):
+    """A run's figures sit in its own folder, and attempts/<name>.<n> is the attempt's own folder: the files another run
+    of the study keeps here are not this box's run's."""
     monkeypatch.setattr(box_capture, "ROOT", tmp_path)
-    local = ("runs/study_x/game_solo/run.json", "out/study_x/game_solo/a.png", "out/study_x/game_minimal/c.png",
-             "runs/study_x/attempts/game_solo.1/run.json", "runs/study_x/attempts/game_solo.1/judge.jsonl",
-             "runs/study_x/attempts/game_minimal.1/run.json")
+    local = ("runs/study_x/game_solo/processed/run.json", "runs/study_x/game_solo/analysis/figures/a.png",
+             "runs/study_x/game_minimal/analysis/figures/c.png", "runs/study_x/attempts/game_solo.1/processed/run.json",
+             "runs/study_x/attempts/game_solo.1/analysis/judge.jsonl",
+             "runs/study_x/attempts/game_minimal.1/processed/run.json")
     for rel in local:
         (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
         (tmp_path / rel).write_text("x")
     lines = [{"file": f"{box_capture.REMOTE_REPO}/{rel}"}
-             for rel in ("runs/study_x/game_solo/run.json", "out/study_x/game_solo/b.png",
-                         "runs/study_x/attempts/game_solo.1/run.json")]
-    assert box_capture.local_only(lines) == ["out/study_x/game_solo/a.png",
-                                             "runs/study_x/attempts/game_solo.1/judge.jsonl"]
+             for rel in ("runs/study_x/game_solo/processed/run.json", "runs/study_x/game_solo/analysis/figures/b.png",
+                         "runs/study_x/attempts/game_solo.1/processed/run.json")]
+    assert box_capture.local_only(lines) == ["runs/study_x/attempts/game_solo.1/analysis/judge.jsonl",
+                                             "runs/study_x/game_solo/analysis/figures/a.png"]
 
 
 def test_the_runner_refuses_without_the_key(runner_dirs, monkeypatch, capsys):

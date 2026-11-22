@@ -69,7 +69,6 @@ from src.export._export_run_blocks import cheatbench, domain
 from src.export.eval_sample_view import SampleView
 from src.sandbox.network_log.network_monitor import CONTROL_OPS, STORE, ready_row, uncontrolled
 
-NETWORK_LOG = "network.jsonl"
 GAP_ROWS = {"trace_failed", "restart", "machine_down", "row_failed", "lost"}
 KEPT = ("seq", "op", "proto", "family", "type", "machine", "netns", "pid", "laddr", "lport", "raddr", "rport",
         "result", "source", "comm")

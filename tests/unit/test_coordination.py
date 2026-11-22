@@ -18,6 +18,7 @@ from src.measures.coordination import (
     run_coordination,
     team_level,
 )
+from tests.support.run_files import write_text
 
 
 class Board:
@@ -227,12 +228,12 @@ def test_events_of_unknown_agents_are_ignored():
 
 def _write_run(path, roles: dict, boards: list[dict] | None) -> None:
     path.mkdir()
-    (path / "run.json").write_text(json.dumps({"swarm": {"roles": roles}}))
-    (path / "episodes.jsonl").write_text("".join(json.dumps({"agent": a}) + "\n" for a in roles))
+    write_text(path / "processed/run.json", json.dumps({"swarm": {"roles": roles}}))
+    write_text(path / "processed/episodes.jsonl", "".join(json.dumps({"agent": a}) + "\n" for a in roles))
     if boards is not None:
-        (path / "communication").mkdir()
+        (path / "processed/communication").mkdir(parents=True)
         for i, board in enumerate(boards):
-            (path / "communication" / f"s{i}.json").write_text(json.dumps(board))
+            (path / "processed/communication" / f"s{i}.json").write_text(json.dumps(board))
 
 
 def test_run_reader(tmp_path):

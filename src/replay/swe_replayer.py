@@ -49,7 +49,7 @@ class SweReplayer:
         self.base = self.swe["base_commit"]
         self.agents = list(self.swe["agents"])
         self.team = hooks.has_team_remote(self.swe)
-        self.domain = SweDomain(run.run_json, run.path / "swe" / "diffs")
+        self.domain = SweDomain(run.run_json, RunDir(run.path).file("swe") / "diffs")
         self.pieces = sorted(self.domain.prints.pieces)
         self.piece_refs = set(hooks.piece_refs(self.swe).values())
         final = self.swe.get("agents_final") or {}
@@ -94,7 +94,7 @@ class SweReplayer:
         own = {agent: [f"{agent}.diff", f"{agent}.own.diff", branch_file(agent)] for agent in self.agents}
         record = "\n".join(text for call in self.calls
                            for text in (*map(str, call.arguments.values()), call.result))
-        return CertificateSwap(self.run.path / "swe" / "diffs", own, record)
+        return CertificateSwap(RunDir(self.run.path).file("swe") / "diffs", own, record)
 
     def build(self, box: ReplaySandbox) -> dict:
         """prepare()'s setup with the record's values: {"base_time", "agents": {agent: {"refs", "planted"}},
@@ -351,7 +351,7 @@ class SweReplayer:
             mine = final.get(agent) or {}
             parts.update({f"{agent}.{key}": readings[key] == (mine.get(key) or "") for key in ("log", "status",
                                                                                               "branch")})
-        stored_dir = self.run.path / "swe" / "diffs"
+        stored_dir = RunDir(self.run.path).file("swe") / "diffs"
         stored = {p.name: p.read_text() for p in sorted(stored_dir.glob("*.diff"))} if stored_dir.is_dir() else {}
         diffs = {name: {"identical": texts.get(name) == text, "stored_bytes": len(text.encode()),
                         "replay_bytes": None if name not in texts else len(texts[name].encode()),

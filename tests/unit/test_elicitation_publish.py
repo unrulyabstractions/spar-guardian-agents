@@ -12,6 +12,7 @@ import huggingface_hub
 import pytest
 
 from elicitation import publish
+from tests.support.run_files import write_text
 
 KEY = "sk-or-v1-" + "0123456789abcdef" * 4
 
@@ -19,7 +20,7 @@ KEY = "sk-or-v1-" + "0123456789abcdef" * 4
 def study(tmp_path, name="study_x"):
     (tmp_path / "runs" / name / "run_a").mkdir(parents=True)
     (tmp_path / "logs" / name).mkdir(parents=True)
-    (tmp_path / "runs" / name / "run_a" / "run.json").write_text('{"ok": true}')
+    write_text(tmp_path / "runs" / name / "run_a" / "processed/run.json", '{"ok": true}')
     (tmp_path / "runs" / name / ".DS_Store").write_bytes(b"\0")
     with zipfile.ZipFile(tmp_path / "logs" / name / "a.eval", "w") as archive:
         archive.writestr("samples/1.json", '{"text": "clean"}')
@@ -29,7 +30,7 @@ def study(tmp_path, name="study_x"):
 def test_the_files_go_under_the_repository_prefix_and_the_mac_files_stay_home(tmp_path):
     files = publish.local_files("study_x", study(tmp_path))
     assert sorted(files) == ["spar-guardian-agents/logs/study_x/a.eval",
-                             "spar-guardian-agents/runs/study_x/run_a/run.json"]
+                             "spar-guardian-agents/runs/study_x/run_a/processed/run.json"]
 
 
 def test_a_key_is_found_in_a_file_and_inside_an_archive_and_never_printed(tmp_path):
@@ -38,7 +39,8 @@ def test_a_key_is_found_in_a_file_and_inside_an_archive_and_never_printed(tmp_pa
     assert publish.findings(files, {"SECRET_TOKEN": b"tok-1234567890abcdef"}) == []
     with zipfile.ZipFile(root / "logs" / "study_x" / "a.eval", "a") as archive:
         archive.writestr("samples/2.json", '{"h": "tok-1234567890abcdef"}')
-    (root / "runs" / "study_x" / "run_a" / "run.json").write_text(f'{{"k": "{KEY}", "mail": "me@example.org"}}')
+    write_text(root / "runs" / "study_x" / "run_a" / "processed/run.json",
+               f'{{"k": "{KEY}", "mail": "me@example.org"}}')
     values = {"SECRET_TOKEN": b"tok-1234567890abcdef", "the git user's email": b"me@example.org"}
     found = publish.findings(files, values)
     assert any(f.endswith("a.eval::samples/2.json: holds SECRET_TOKEN") for f in found)
@@ -135,7 +137,7 @@ def test_a_public_dataset_is_refused_before_anything_is_read_or_sent(fake_hub, c
 
 def test_a_finding_is_refused_and_nothing_is_sent(fake_hub, capsys):
     root, api = fake_hub
-    (root / "runs" / "study_x" / "run_a" / "run.json").write_text('{"k": "tok-1234567890abcdef"}')
+    write_text(root / "runs" / "study_x" / "run_a" / "processed/run.json", '{"k": "tok-1234567890abcdef"}')
     with pytest.raises(SystemExit) as stop:
         publish.main(["study_x"])
     err = capsys.readouterr().err

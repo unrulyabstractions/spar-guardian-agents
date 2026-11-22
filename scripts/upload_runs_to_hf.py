@@ -1,5 +1,4 @@
-"""Upload a study's runs and their eval logs, or the apart controls, to the Hugging Face dataset
-unrulyabstractions/spar-swarm.
+"""Upload a study's runs and their eval logs to the Hugging Face dataset unrulyabstractions/spar-swarm.
 
 Give a token once: run `hf auth login`, or `export HF_TOKEN=<token>`. Then upload:
 
@@ -8,7 +7,6 @@ Give a token once: run `hf auth login`, or `export HF_TOKEN=<token>`. Then uploa
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 import zipfile
@@ -22,12 +20,11 @@ from huggingface_hub import CommitOperationAdd, CommitOperationDelete, HfApi, Re
 from huggingface_hub.errors import EntryNotFoundError  # noqa: E402
 
 from elicitation.publish import same, secrets  # noqa: E402  (publish also teaches zipfile Inspect's zstd members)
+from src.measures.run_directory import RunDir  # noqa: E402
 from src.utils import progress  # noqa: E402
 
 REPO = "unrulyabstractions/spar-swarm"
 PROG = "python scripts/upload_runs_to_hf.py"
-APART = "apart_controls"
-"""The apart controls: runs/apart_controls/ here is apart_controls/ in the dataset, each run's eval log inside it."""
 OLD_LAYOUT = "set_aside_"
 """logs/<study>/set_aside_*/ hold old-layout copies of runs made again (a run folder and its log side by side). They
 never go, and --delete-stale deletes the Hub's copies of them when no local file of runs/<study>/ names them."""
@@ -36,14 +33,14 @@ KINDS = ("add", "change", "same", "delete", "stale", "keep")
 NO_TOKEN = "no Hugging Face token: run `hf auth login`, or `export HF_TOKEN=<token>`, or pass --token"
 EPILOG = """\
 runs/<study>/<run>/ goes to <study>/runs/<run>/ in the dataset, and logs/<study>/<run>/ to <study>/logs/<run>/,
-beside what the dataset holds. Without --run the whole study goes, except its smoke* folders (mock smoke tests) and
-logs/<study>/set_aside_*/ (old-layout copies). runs/apart_controls/ goes to apart_controls/, whole or one run,
-<model>/<task>/<cell>/s<seed>. macOS files (.DS_Store, ._*) never go. Of the .eval files under logs/<study>/, only a
-run's own log goes: the one the run.json at the same path under runs/<study>/ names. An aborted start's journal beside
-it, or a log folder with no run, stays here and is listed.
+beside what the dataset holds; a run's folder goes whole, its processed/ and analysis/. Without --run the whole study
+goes, except its smoke* folders (mock smoke tests) and logs/<study>/set_aside_*/ (old-layout copies). A run of the
+apart controls is <model>/<task>/<cell>/s<seed>. macOS files (.DS_Store, ._*) never go. Of the .eval files under
+logs/<study>/, only a run's own log goes: the one the run.json of the run at the same path under runs/<study>/ names.
+An aborted start's journal beside it, or a log folder with no run, stays here and is listed.
 
-The Hub's files under the upload's reach (<study>/runs/ and <study>/logs/, or apart_controls/; with --run, those runs'
-paths) are listed first. A file the Hub holds with the same bytes is skipped, so a rerun resumes. A study's own
+The Hub's files under the upload's reach (<study>/runs/ and <study>/logs/; with --run, those runs' paths) are listed
+first. A file the Hub holds with the same bytes is skipped, so a rerun resumes. A study's own
 documents beside runs/ and logs/ (its README, figures, tables) are never touched. Nothing on the Hub is deleted unless
 --delete-stale is given: then a Hub file in reach whose local file does not exist is deleted in the same commit, and so
 is a Hub copy of a set_aside_ file that no local file names. --listing writes every add, change, delete and kept file.
@@ -81,12 +78,12 @@ def files_in(local: Path, remote: str) -> list[tuple[str, Path]]:
 
 
 def named_log(log: Path, runs_dir: Path, logs_dir: Path) -> bool:
-    """Whether an .eval file under logs/<study>/ is a run's own log: the run.json at its folder's path under
-    runs/<study>/ names a log of its file name (run_directory.RunDir.eval_log finds a log by that name there)."""
-    run_json = runs_dir / log.parent.relative_to(logs_dir) / "run.json"
-    if not run_json.is_file():
+    """Whether an .eval file under logs/<study>/ is a run's own log: the run.json of the run at its folder's path
+    under runs/<study>/ names a log of its file name (run_directory.RunDir.eval_log finds a log by that name there)."""
+    run = RunDir(runs_dir / log.parent.relative_to(logs_dir))
+    if not run.is_run():
         return False
-    recorded = (json.loads(run_json.read_text()) or {}).get("eval_log")
+    recorded = run.run_json.get("eval_log")
     return bool(recorded) and Path(recorded).name == log.name
 
 
@@ -101,41 +98,12 @@ def logs_in(logs_dir: Path, runs_dir: Path, rel: str, remote: str) -> tuple[list
     return files, stray
 
 
-def plain_run(run: str, *prefixes: str) -> str:
-    for prefix in prefixes:
-        run = run.strip("/").removeprefix(prefix)
-    return run.strip("/")
-
-
-def select_apart(runs: list[str], root: Path) -> tuple[dict[str, list[tuple[str, Path]]], list[str]]:
-    """select for the apart controls: each top-level entry of runs/apart_controls/, or each run named."""
-    base = root / "runs" / APART
-    if not base.is_dir():
-        refuse(f"no runs/{APART}/ here")
-    items, skipped = {}, []
-    if runs:
-        for run in runs:
-            run = plain_run(run, f"runs/{APART}/", f"{APART}/")
-            if not run or Path(run).is_absolute() or ".." in Path(run).parts or not (base / run).is_dir():
-                refuse(f"no run runs/{APART}/{run}/")
-            items[run] = files_in(base / run, f"{APART}/{run}")
-    else:
-        for entry in sorted(base.iterdir()):
-            if junk(entry):
-                skipped.append(entry.name)
-                continue
-            items[entry.name] = files_in(entry, f"{APART}/{entry.name}")
-    return {name: files for name, files in items.items() if files}, skipped
-
-
 def select(study: str, runs: list[str], root: Path = ROOT) -> tuple[dict[str, list[tuple[str, Path]]], list[str]]:
     """The files to upload by run (or by top-level entry of the study), and what was skipped: the smoke folders, the
     set_aside_ log folders and macOS files by name, and each .eval no run names by its path under logs/<study>/."""
-    if study == APART:
-        return select_apart(runs, root)
     runs_dir, logs_dir = root / "runs" / study, root / "logs" / study
     if not study or Path(study).name != study or not runs_dir.is_dir():
-        here = sorted(p.name for p in (root / "runs").iterdir() if p.is_dir() and p.name != APART)
+        here = sorted(p.name for p in (root / "runs").iterdir() if p.is_dir())
         refuse(f"no study runs/{study}/ here; the studies here: {', '.join(here) or 'none'}")
     items, skipped = {}, []
     if runs:
@@ -166,8 +134,6 @@ def select(study: str, runs: list[str], root: Path = ROOT) -> tuple[dict[str, li
 def reach(study: str, runs: list[str]) -> tuple[list[str], list[str]]:
     """The Hub's paths this upload answers for: folder prefixes (each ends in /) and single files. Never a study's own
     documents beside its runs/ and logs/."""
-    if study == APART:
-        return ([f"{APART}/{plain_run(run, f'runs/{APART}/', f'{APART}/')}/" for run in runs] or [f"{APART}/"]), []
     if not runs:
         return [f"{study}/runs/", f"{study}/logs/"], []
     runs = [run.strip("/").removeprefix(f"runs/{study}/") for run in runs]
@@ -184,8 +150,6 @@ def local_of(remote: str, study: str, root: Path) -> Path | None:
     parts = remote.split("/")
     if any(part in ("", ".", "..") for part in parts):
         return None
-    if parts[0] == APART and len(parts) > 1:
-        return root.joinpath("runs", *parts)
     if len(parts) >= 3 and parts[1] in ("runs", "logs"):
         return root.joinpath(parts[1], parts[0], *parts[2:])
     return None
@@ -193,7 +157,7 @@ def local_of(remote: str, study: str, root: Path) -> Path | None:
 
 def hub_tree(api, repo: str, study: str, folders: list[str], single: list[str]) -> dict[str, RepoFile]:
     """The Hub's files in reach, by path: one recursive listing of the collection's folders, kept to the reach."""
-    top = [f"{APART}"] if study == APART else [f"{study}/runs", f"{study}/logs"]
+    top = [f"{study}/runs", f"{study}/logs"]
     out = {}
     for path in top:
         try:
@@ -225,7 +189,7 @@ def compare(every: list[tuple[str, Path]], hub: dict[str, RepoFile], study: str,
         local = local_of(remote, study, root)
         gone = local is None or not local.is_file()
         parts = remote.split("/")
-        old = study != APART and parts[1] == "logs" and parts[2].startswith(OLD_LAYOUT)
+        old = parts[1] == "logs" and parts[2].startswith(OLD_LAYOUT)
         if gone or (old and not named_here(remote, study, root)):
             out["delete" if delete_stale else "stale"].append(remote)
         else:
@@ -294,7 +258,7 @@ def show(ops: dict[str, list[str]], local: dict[str, Path], hub: dict[str, RepoF
 def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
     parser = argparse.ArgumentParser(prog=PROG, description=__doc__, epilog=EPILOG,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("study", help=f"a folder of runs/, e.g. ian_baseline_explorations_1 or {APART}")
+    parser.add_argument("study", help="a folder of runs/, e.g. ian_baseline_explorations_1 or apart_controls")
     parser.add_argument("--run", action="append", default=[], metavar="NAME",
                         help="one run of the study (repeat for several); without it, the whole study")
     parser.add_argument("--token", help="a Hugging Face token; by default HF_TOKEN, then the saved login")
@@ -312,7 +276,7 @@ def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
         refuse(f"runs/{args.study}/ holds no file to upload")
     plan(args.repo, args.study, items, skipped, whole=not runs)
     for run in runs:
-        if args.study != APART and not any(remote.startswith(f"{args.study}/logs/{run}/")
+        if not any(remote.startswith(f"{args.study}/logs/{run}/")
                                            for remote, _ in items.get(run, [])):
             progress.detail("note", f"{run} has no eval log under logs/{args.study}/{run}/")
 

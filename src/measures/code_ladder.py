@@ -62,7 +62,7 @@ from src.measures.collusion import collusion_of
 from src.measures.collusion import record_fields as collusion_fields
 from src.measures.ladder_domain import Domain
 from src.measures.regulator_measures import regulator_measures
-from src.measures.run_directory import RUN_JSON, RunDir
+from src.measures.run_directory import RunDir
 from src.measures.rungs import LADDER_FIELDS, RUNGS
 from src.sandbox.staging import write_atomic
 
@@ -112,7 +112,7 @@ def write_block(run: RunDir, team: dict | None) -> None:
     reads back in exactly, so every byte outside "signals" stays; a run.json in no such layout is refused, with nothing
     written. Equal bytes are not written again. run.json is the export's: when the block changed it, the export's stamp
     is taken again (its version and time kept), so the parts that need the export see the file as it stands."""
-    path = run.file(RUN_JSON)
+    path = run.file("run.json")
     raw = path.read_bytes()
     document = json.loads(raw)
     layout = next((kw for kw in LAYOUTS if json.dumps(document, **kw).encode() == raw), None)

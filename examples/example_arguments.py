@@ -27,7 +27,7 @@ from src.configuration import launch_command, settings
 from src.configuration.presets import add_config_arguments, config_pairs
 from src.configuration.swarm_config import SwarmConfig
 from src.measures import run_figures as plots
-from src.measures.run_directory import figures_dir
+from src.measures.run_directory import RunDir
 
 USE_JUDGE_AS_DEFAULT = False
 """Whether an example judges its run as it finishes; --judge and --no-judge override it for one run."""
@@ -79,8 +79,8 @@ def parse_example_arguments(script: Path, description: str | None, argv: list[st
 
 
 def finish(args: argparse.Namespace, exit_code: int) -> int:
-    """The end of every example: the run's figures into out/<study>/<name>/ when the run succeeded
-    (src/measures/run_figures.py plot_run, run_directory.figures_dir), and the run's exit code either way."""
+    """The end of every example: the run's figures into its analysis/figures/ when the run succeeded
+    (src/measures/run_figures.py plot_run), and the run's exit code either way."""
     if exit_code == 0:
-        plots.plot_run(settings.RUNS / args.name, figures_dir(settings.RUNS / args.name))
+        plots.plot_run(settings.RUNS / args.name, RunDir(settings.RUNS / args.name).file("figures"))
     return exit_code

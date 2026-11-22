@@ -41,7 +41,6 @@ from src.domains.interview import SubsetSum
 from src.domains.openmath import OpenMath
 from src.domains.protein import ProteinDesign
 from src.domains.swe import SWE
-from src.export._export_network_log import NETWORK_LOG
 from src.judging.cheatbench_judge import judge_spec
 from src.measures.run_directory import RunDir
 from src.sandbox.access_log.access_monitor import AUDITOR
@@ -87,7 +86,7 @@ class Networked:
     def __init__(self, sample, run: RunDir, records: list[dict] | None = None) -> None:
         self.sample, self.run_json, self.records = sample, run.run_json, by_agent(records or [])
         self.block = run.run_json.get("network")
-        path = run.path / NETWORK_LOG
+        path = run.path / "processed/network.jsonl"
         self.rows = read_jsonl(path) if path.is_file() else None
 
     def own(self, **want) -> list[dict]:

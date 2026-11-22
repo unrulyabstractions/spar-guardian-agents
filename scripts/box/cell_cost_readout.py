@@ -55,7 +55,7 @@ from pathlib import Path
 from scripts.box.fleet_layout import BOXES, REGISTRY, REGULATORS, REMOTE_REPO, ROOT, cells, run_name
 from scripts.box.study_table import STAGES, TABLE_STUDY, stage_boxes
 from src.configuration import settings
-from src.measures.run_directory import ATTEMPT_FOLDER, ATTEMPTS, GROUPS, find_run, mirrored
+from src.measures.run_directory import ATTEMPT_FOLDER, ATTEMPTS, GROUPS, RunDir, find_run, mirrored
 from src.measures.run_directory import run_name as own_name
 from src.measures.run_validity import MOCK, validity
 from src.utils.json_files import read_json, read_jsonl
@@ -156,11 +156,11 @@ def model_cost(run_dir: Path, log_dir: Path | None) -> tuple[float, list[str]]:
     """(what the provider billed for the run's agents, why that falls short of what the run's models cost). A call
     counts as billed when the export kept its billed cost; the ledger counts every call and the errored ones. The
     export's own ledger says whether it is complete, and why not."""
-    run = read_json(run_dir / "run.json")
+    run = read_json(RunDir(run_dir).file("run.json"))
     if run is None:
         return 0.0, [NO_EXPORT]
     usd, short, errored, other = 0.0, [], 0, 0
-    episodes = read_jsonl(run_dir / "episodes.jsonl")
+    episodes = RunDir(run_dir).episodes()
     if not episodes:
         short.append(NO_EPISODES)
     for episode in episodes:

@@ -25,15 +25,14 @@ from src.utils import progress  # noqa: E402
 
 PROG = "python scripts/pull_runs_from_hf.py"
 MANIFEST = "apart_controls"
-"""The manifest collection: its runs keep their eval logs inside each run, and the whole folder is runs/apart_controls/
-here."""
+"""The manifest collection: its index is runs/manifest.jsonl, not runs/INDEX.jsonl."""
 EXACT_PATTERNS = 500
 """Up to this many files, the download asks for each file by name; past it, for each run's folder."""
 EPILOG = """\
 <study>/runs/<run>/ in the dataset comes to runs/<study>/<run>/, <study>/logs/<run>/ to logs/<study>/<run>/ and
-<study>/logs/screen/<run>.log to logs/<study>/screen/<run>.log, the reverse of scripts/upload_runs_to_hf.py. The apart
-controls' folder apart_controls/ comes to runs/apart_controls/; a run there is <model>/<task>/<cell>/s<seed>, e.g.
---run ds/binder/cheat/s1. A run comes with its study's INDEX.jsonl (manifest.jsonl for the apart controls) when that
+<study>/logs/screen/<run>.log to logs/<study>/screen/<run>.log, the reverse of scripts/upload_runs_to_hf.py. A run of
+the apart controls is <model>/<task>/<cell>/s<seed>, e.g. --run ds/binder/cheat/s1. A run's folder holds processed/ and
+analysis/. A run comes with its study's INDEX.jsonl (manifest.jsonl for the apart controls) when that
 file is not here yet, since the viewer reads each run's valid flag from it. A study's own documents (its README,
 figures and tables) have no place under runs/ or logs/ and stay on the Hub. A local file that differs from the Hub's
 stops the pull before anything downloads; --force replaces it. Files already here with the Hub's bytes are skipped.
@@ -53,8 +52,6 @@ def local_path(remote: str, root: Path) -> Path | None:
     parts = remote.split("/")
     if any(part in ("", ".", "..") for part in parts):
         return None
-    if parts[0] == MANIFEST and len(parts) > 1:
-        return root.joinpath("runs", *parts)
     if len(parts) >= 3 and parts[1] in ("runs", "logs"):
         return root.joinpath(parts[1], parts[0], *parts[2:])
     return None
@@ -62,14 +59,12 @@ def local_path(remote: str, root: Path) -> Path | None:
 
 def run_paths(study: str, run: str) -> list[str]:
     """The dataset paths that hold one run: its folders and, in a study, its box console log."""
-    if study == MANIFEST:
-        return [f"{MANIFEST}/{run}"]
     return [f"{study}/runs/{run}", f"{study}/logs/{run}", f"{study}/logs/screen/{run}.log"]
 
 
 def index_path(study: str) -> str:
     """The file that gives the viewer each run's valid flag."""
-    return f"{MANIFEST}/manifest.jsonl" if study == MANIFEST else f"{study}/runs/INDEX.jsonl"
+    return f"{study}/runs/{'manifest' if study == MANIFEST else 'INDEX'}.jsonl"
 
 
 def plain_run(study: str, run: str) -> str:
@@ -114,7 +109,7 @@ def select(api: HfApi, repo: str, study: str, runs: list[str]) -> tuple[dict[str
         items: dict[str, dict[str, RepoFile]] = {}
         for remote, entry in hub_files(api, repo, study).items():
             parts = remote.split("/")  # an entry is what the upload calls one: a name under runs/<study>/ or logs/
-            name = parts[2] if study != MANIFEST and len(parts) > 2 and parts[1] in ("runs", "logs") else parts[1]
+            name = parts[2] if len(parts) > 2 and parts[1] in ("runs", "logs") else parts[1]
             items.setdefault(name, {})[remote] = entry
         return items, {}
     items = {}
@@ -144,8 +139,7 @@ def patterns(needed: list[str], study: str) -> list[str]:
     """allow_patterns for the download: each file by name when few, else each run folder that holds one."""
     if len(needed) <= EXACT_PATTERNS:
         return sorted(glob.escape(remote) for remote in needed)
-    depth = 2 if study == MANIFEST else 3
-    units = {"/".join(remote.split("/")[:depth]) for remote in needed}
+    units = {"/".join(remote.split("/")[:3]) for remote in needed}
     return sorted(glob.escape(unit) + ("" if unit in needed else "/*") for unit in units)
 
 

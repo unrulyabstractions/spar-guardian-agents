@@ -16,7 +16,8 @@ from src.export import _export_access_log as export
 from src.export import _export_run_blocks as blocks
 from src.export import run_export
 from src.export.eval_sample_view import tool_window
-from src.measures.run_directory import ACCESS_LOG, RUN_JSON, RunDir
+from src.measures import pipeline_parts
+from src.measures.run_directory import RunDir
 from src.sandbox import agent_tools
 from src.sandbox.access_log import access_monitor_daemon as daemon
 from src.sandbox.access_log.access_monitor import STORE
@@ -519,17 +520,17 @@ def test_the_export_writes_the_file_and_the_block_and_owns_them(tmp_path):
     good, off, run_dir = tmp_path / "good.eval", tmp_path / "off.eval", tmp_path / "runs" / "study_x" / "run"
     eval_log(good, {STORE: record(opened("cat k"), seats=LONE)}, {"access_log": True})
     run_export.write_run(good, run_dir)
-    block = json.loads((run_dir / RUN_JSON).read_text())["access_log"]
+    block = json.loads((run_dir / "processed/run.json").read_text())["access_log"]
     rows = RunDir(run_dir).access_log()["rows"]
     assert block["status"] == "valid" and [row["origin"] for row in rows] == ["control", "agent", "control"]
-    assert ACCESS_LOG in run_export.OWNED_FILES
+    assert "processed/access_log.jsonl" in pipeline_parts.registry().part("export").paths
     # the switch off in a new export of the same directory: a stale log never pairs with it. The log is another eval,
     # so the export replaces the run only when asked to, and sets the earlier run aside with its log first
     eval_log(off, {}, {"access_log": False})
     run_export.write_run(off, run_dir, replace=True)
-    assert not (run_dir / ACCESS_LOG).exists()
-    assert (tmp_path / "runs" / "study_x" / "attempts" / "run.1" / ACCESS_LOG).is_file()
-    assert json.loads((run_dir / RUN_JSON).read_text())["access_log"] == {"status": "off"}
+    assert not (run_dir / "processed/access_log.jsonl").exists()
+    assert (tmp_path / "runs" / "study_x" / "attempts" / "run.1" / "processed/access_log.jsonl").is_file()
+    assert json.loads((run_dir / "processed/run.json").read_text())["access_log"] == {"status": "off"}
     assert RunDir(run_dir).access_log() is None
 
 
@@ -537,6 +538,6 @@ def test_a_log_older_than_the_switch_exports_no_block_and_no_file(tmp_path):
     old = tmp_path / "old.eval"
     eval_log(old, {}, {"mode": "shared_task"})
     run_export.write_run(old, tmp_path / "run")
-    run = json.loads((tmp_path / "run" / RUN_JSON).read_text())
-    assert "access_log" not in run and not (tmp_path / "run" / ACCESS_LOG).exists()
+    run = json.loads((tmp_path / "run" / "processed/run.json").read_text())
+    assert "access_log" not in run and not (tmp_path / "run" / "processed/access_log.jsonl").exists()
     assert not any("access log" in flag for flag in run["validity"]["flags"])

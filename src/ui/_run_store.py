@@ -140,7 +140,7 @@ def _swe_of(swe: dict, run_dir: Path) -> dict:
     """run.json "swe" as the page reads it: the issue and arm fields, each grade's reward and required tests passed,
     and the talk measures of swe_summary.json when src/measures wrote one."""
     grades = swe.get("grades") or {}
-    measures = (read_json(run_dir / "swe_summary.json") or {}).get("agents")
+    measures = (read_json(RunDir(run_dir).file("swe_summary.json")) or {}).get("agents")
     keys = ("posts", "fix_posts", "rule_posts", "disclosed")
     return {
         **{key: swe.get(key) for key in SWE_FIELDS},
@@ -296,18 +296,19 @@ class Store:
         stored = RunDir(d)
         detail["communication"] = {sample: board for sample in sorted({sample_of(ep) for ep in stored.episodes()})
                                    if (board := stored.board(sample))}
-        detail["defense"] = read_json_dir(d / "defense")
-        detail["tools"] = {tool: _tool_summary(d / "tools" / tool / "summary.json") for tool in detail["tools"]}
+        detail["defense"] = read_json_dir(stored.file("defense"))
+        tools = stored.file("tools")
+        detail["tools"] = {tool: _tool_summary(tools / tool / "summary.json") for tool in detail["tools"]}
         return detail
 
     def tool_names(self, name: str) -> list[str]:
         """The analysis tools that wrote a summary for this run. The loader's caches (tools/*.json) are not tools."""
-        return sorted(p.parent.name for p in (self.run_dir(name) / "tools").glob("*/summary.json"))
+        return sorted(p.parent.name for p in RunDir(self.run_dir(name)).file("tools").glob("*/summary.json"))
 
     def tool_dir(self, name: str, tool: str) -> Path:
-        """runs/<study>/<run>/tools/<tool>/, the directory an analysis tool writes. Raises KeyError for an unknown
-        tool."""
-        path = self.run_dir(name) / "tools" / tool
+        """runs/<study>/<run>/analysis/tools/<tool>/, the directory an analysis tool writes. Raises KeyError for an
+        unknown tool."""
+        path = RunDir(self.run_dir(name)).file("tools") / tool
         if not safe_part(tool) or not path.is_dir():
             raise KeyError(tool)
         return path

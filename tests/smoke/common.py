@@ -47,6 +47,7 @@ from src.utils.json_files import read_json_dir, read_jsonl
 from tests.smoke import LOGS, RUNS, invocation_stamp
 from tests.support.mock_model import MODEL, honest_judge, tagged_infos
 from tests.support.ordered_ids import use_ordered_ids
+from tests.support.run_files import write_text
 
 use_ordered_ids()       # scenarios script their agents by name; `drawn_ids` runs one on the real draw
 
@@ -126,7 +127,7 @@ class Suite:
         block, network = self.run_json(name).get("access_log"), self.run_json(name).get("network")
         assert damaged_log or log_worked(block), block
         assert damaged_log or network_worked(network), network
-        return log, summary, resolved(self.runs / name, read_jsonl(self.runs / name / "episodes.jsonl"))
+        return log, summary, resolved(self.runs / name, read_jsonl(self.runs / name / "processed/episodes.jsonl"))
 
     def assert_judged(self, name: str, sample, records: list[dict], cheated: float = 0.0) -> None:
         """Every agent with a transcript was judged by the mock judge: the score's verdicts name them, its value is
@@ -169,7 +170,7 @@ class Suite:
 
     def board_posts(self, name: str) -> list[tuple[str, str]]:
         """(sender, content) of each post on the run's one board."""
-        [board] = read_json_dir(self.runs / name / "communication").values()
+        [board] = read_json_dir(self.runs / name / "processed/communication").values()
         return [(m["sender"], m["content"]) for m in board["messages"]]
 
 
@@ -193,13 +194,14 @@ def assert_ok(log):
 # ------------------------------------------------------------------------------------------------ reading a run back
 
 def resolved(run_dir: Path, records: list[dict]) -> list[dict]:
-    """The episode records, once each recorded transcript path is relative and names a file under the run's folder,
-    with that path made absolute so the helpers below read it."""
+    """The episode records, once each recorded transcript path is relative and names a file under the run's
+    processed/, with that path made absolute so the helpers below read it."""
+    processed = RunDir(run_dir).processed
     for record in records:
         if record.get("transcript_path"):
             assert not Path(record["transcript_path"]).is_absolute(), record["transcript_path"]
-            assert (run_dir / record["transcript_path"]).is_file(), record["transcript_path"]
-            record["transcript_path"] = str(run_dir / record["transcript_path"])
+            assert (processed / record["transcript_path"]).is_file(), record["transcript_path"]
+            record["transcript_path"] = str(processed / record["transcript_path"])
     return records
 
 
@@ -294,8 +296,8 @@ def run_jobs(jobs: dict[str, Callable[[], dict]], runs: Path) -> int:
             progress.detail("error", results[label]["error"])
             progress.detail("traceback", results[label]["traceback"].rstrip())
     runs.mkdir(parents=True, exist_ok=True)
-    (runs / "smoke_results.json").write_text(json.dumps(results, indent=1, default=str))
-    out = progress.short(runs / "smoke_results.json")
+    write_text(runs / "analysis/smoke_results.json", json.dumps(results, indent=1, default=str))
+    out = progress.short(runs / "analysis/smoke_results.json")
     if failed:
         progress.failed(f"{len(failed)} of {len(jobs)} scenarios failed ({', '.join(failed)}); results in {out}",
                         started)

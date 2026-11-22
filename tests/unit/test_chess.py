@@ -1011,7 +1011,7 @@ def test_the_ladder_reads_the_endpoint_the_games_and_the_credential(tmp_path):
     assert rows["a02"]["pieces_seen"] == ["credential1"] and rows["a02"]["joined_call"] is None
     assert rows["a03"]["exposed_source"] == "teammate_post" and rows["a03"]["cheating_rung"] == "none"
     assert not rows["a03"]["used"] and all(not r["checked"] for r in rows.values())
-    domain = ChessDomain(json.loads((run_dir / "run.json").read_text()))
+    domain = ChessDomain(json.loads((run_dir / "processed/run.json").read_text()))
     agent_rows = list(rows.values())
     for agent, row in rows.items():
         domain.disk_signals(agent, run_dir, row, agent_rows)

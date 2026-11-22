@@ -39,7 +39,7 @@ from src.domains.swe.swe_inputs import fix_commit, load_split, run_values, task_
 from src.domains.swe.swe_task import piece_times
 from src.measures.run_directory import RunDir
 from src.replay.recorded_calls import RecordedCall
-from src.replay.replay_report import NotFaithful, faithful_steps
+from src.replay.replay_report import STEPS, NotFaithful, faithful_steps
 from src.replay.replay_run import replay
 from src.replay.replay_sandbox import ReplaySandbox, project_name
 from src.replay.swe_replayer import SweReplayer
@@ -48,6 +48,7 @@ from src.sandbox.docker_images import image_id
 from src.utils import progress
 from tests.smoke import invocation_stamp
 from tests.support.run_builder import write_run_dir
+from tests.support.run_files import write_text
 
 ISSUE = "flipt-02e2"
 AGENTS = ["a01", "a02"]
@@ -92,7 +93,7 @@ def record(folder: Path) -> Path:
     run_json = {"task": SweReplayer.task, "run_id": "replay_smoke", "config": {}, "swe": swe}
     draft = folder / "draft"
     draft.mkdir(parents=True)
-    (draft / "run.json").write_text(json.dumps(run_json))
+    write_text(draft / "processed/run.json", json.dumps(run_json))
     replayer = SweReplayer(RunDir(draft), [])
     compose = staging.write_compose(folder / "record-compose.yaml", replayer.services(), {"team": {}})
     events, steps = [], {a: [] for a in AGENTS}
@@ -125,7 +126,7 @@ def record(folder: Path) -> Path:
                                                                         "message": "rules"}, *steps[a]]}}
                    for a in AGENTS}
     run_dir = write_run_dir(folder / "run", {**run_json, "eval_log": str(log), "swe": swe}, transcripts, row=ISSUE)
-    diffs = run_dir / "swe" / "diffs"
+    diffs = run_dir / "processed/swe" / "diffs"
     diffs.mkdir(parents=True)
     for name, text in end["diffs"].items():
         (diffs / name).write_text(text)
@@ -159,7 +160,7 @@ def faithful(run_dir: Path, out: Path) -> None:
     check(a02["B"]["tree"] and not a02["C"]["tree"] and a02["C"]["refs"] == [hooks.piece_refs(synthetic_swe())["C"]],
           f"a02 after the pull: {a02}")
     check(at[("a01", 4)]["state"]["dirty"] and not at[("a01", 3)]["state"]["dirty"], "a01 dirty only at the end")
-    raw = {(line["agent"], line["k"]): line for line in map(json.loads, (out / "steps.jsonl").read_text().splitlines())}
+    raw = {(line["agent"], line["k"]): line for line in map(json.loads, (out / STEPS).read_text().splitlines())}
     check(raw[("a01", 0)]["state"]["refs"] == at[("a01", 0)]["state"]["refs"] and
           list(raw[("a01", 1)]["state"]["refs"]) == ["refs/heads/a01"], "refs whole on the first line, then the change")
 
@@ -167,7 +168,7 @@ def faithful(run_dir: Path, out: Path) -> None:
 def unfaithful(run_dir: Path, out: Path) -> None:
     copy = out.parent / "run_tampered"
     shutil.copytree(run_dir, copy)
-    stored = copy / "swe" / "diffs" / "team.diff"
+    stored = copy / "processed/swe" / "diffs" / "team.diff"
     stored.write_text(stored.read_text() + " ")
     report = replay(copy, out)
     check(not report.faithful and not report.refused and not report.error, f"tampered run: {report.end}")
@@ -182,9 +183,9 @@ def unfaithful(run_dir: Path, out: Path) -> None:
 def refused(run_dir: Path, out: Path) -> None:
     copy = out.parent / "run_replanted"
     shutil.copytree(run_dir, copy)
-    run_json = json.loads((copy / "run.json").read_text())
+    run_json = json.loads((copy / "processed/run.json").read_text())
     run_json["swe"]["setup"]["agents"]["a01"]["planted"]["B"] = "0" * 40
-    (copy / "run.json").write_text(json.dumps(run_json))
+    write_text(copy / "processed/run.json", json.dumps(run_json))
     report = replay(copy, out)
     check(bool(report.refused) and "planted" in report.refused and not report.faithful, f"refusal: {report.refused}")
 

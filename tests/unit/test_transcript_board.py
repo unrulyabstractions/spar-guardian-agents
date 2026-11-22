@@ -15,6 +15,7 @@ import pytest
 from src.configuration.settings import ROOT
 from src.measures import cheating_ladder, collusion, coordination
 from src.ui import transcript_board as tb
+from tests.support.run_files import write_text
 
 SAMPLE = "s#1"
 START = datetime(2026, 11, 1, 12, 0, tzinfo=timezone.utc)
@@ -62,17 +63,17 @@ def write_run(root: Path, with_times: bool = True, arguments: dict | None = None
                 {"tool_call_id": cid(ep["agent"], k), "function_name": tool,
                  "arguments": arguments.get((ep["agent"], k), args)}],
                 "observation": {"results": [{"source_call_id": cid(ep["agent"], k), "content": "ok"}]}})
-        folder = run / "trajectories" / ep["episode"]
+        folder = run / "processed/trajectories" / ep["episode"]
         folder.mkdir(parents=True)
         (folder / "transcript.json").write_text(json.dumps({"trajectory": {"steps": steps}}))
-    (run / "episodes.jsonl").write_text("".join(json.dumps(ep) + "\n" for ep in episodes))
-    (run / "run.json").write_text(json.dumps({"task": "synthetic_task", "agents": list(ROLES),
+    write_text(run / "processed/episodes.jsonl", "".join(json.dumps(ep) + "\n" for ep in episodes))
+    write_text(run / "processed/run.json", json.dumps({"task": "synthetic_task", "agents": list(ROLES),
                                               "eval_log": str(log) if with_times else None,
                                               **({"access_log": {"status": "ok"}} if access else {})}))
     if access:
-        (run / "access_log.jsonl").write_text("".join(json.dumps(row) + "\n" for row in access))
-    (run / "communication").mkdir()
-    (run / "communication" / f"{SAMPLE}.json").write_text(json.dumps({
+        write_text(run / "processed/access_log.jsonl", "".join(json.dumps(row) + "\n" for row in access))
+    (run / "processed/communication").mkdir(parents=True)
+    (run / "processed/communication" / f"{SAMPLE}.json").write_text(json.dumps({
         "messages": [{"id": mid, "sender": who, "content": text, "sequence": seq} for seq, mid, who, text in MESSAGES],
         "events": [{"sequence": seq, "kind": kind, "agent_id": a, "tool_call_id": cid(a, k), "message_ids": ids}
                    for seq, kind, a, k, ids in EVENTS]}))
@@ -139,12 +140,12 @@ def test_a_seed_packs_post_is_flagged_seeded_and_the_payload_names_the_pack(tmp_
     """A post of a seed pack (invocation_id seed_pack) is kind seeded; the payload carries config.seed_pack, which the
     board lane's label and the run page's facts show."""
     run = write_run(tmp_path)
-    comm = run / "communication" / f"{SAMPLE}.json"
+    comm = run / "processed/communication" / f"{SAMPLE}.json"
     doc = json.loads(comm.read_text())
     doc["messages"][0]["invocation_id"] = "seed_pack"
     comm.write_text(json.dumps(doc))
-    rj = json.loads((run / "run.json").read_text())
-    (run / "run.json").write_text(json.dumps({**rj, "config": {"seed_pack": "synthetic_task/pointer"}}))
+    rj = json.loads((run / "processed/run.json").read_text())
+    write_text(run / "processed/run.json", json.dumps({**rj, "config": {"seed_pack": "synthetic_task/pointer"}}))
     p = payload(run)
     assert p["seed_pack"] == "synthetic_task/pointer"
     first = next(x for x in p["posts"] if x["label"] == "P1")
@@ -414,7 +415,7 @@ def test_coordination_marks_each_new_read_and_each_post_with_the_teammates_it_to
         "r01": {0: [("read", "read P1 by a01, P2 by a02, new to it", None)],
                 1: [("write", "wrote P3, taking up the new posts of a01, a02", ["a01", "a02"])]}}
     run = write_run(tmp_path / "again")
-    boards = [json.loads(f.read_text()) for f in sorted((run / "communication").glob("*.json"))]
+    boards = [json.loads(f.read_text()) for f in sorted((run / "processed/communication").glob("*.json"))]
     counted: dict[tuple[str, str], int] = {}
     for agent, by in marks.items():
         for ms in by.values():

@@ -41,6 +41,7 @@ from src.configuration.settings import ROOT
 from src.judging import verdict_files
 from src.judging.cheatbench_judge import judge_entry
 from src.measures import cheating_ladder, collusion, coordination, judge_labels, measure_readings
+from src.measures.run_directory import RunDir
 from src.measures.rungs import RUNGS
 from src.sandbox.command_jobs import LATE_START_S
 from src.swarm.influencers import level_text, role_text
@@ -375,7 +376,7 @@ def study_tex() -> str:
     check_study_levels(valid)
     dates = []
     for r in listed:
-        log = json.loads((r.path / "run.json").read_text()).get("eval_log") or ""
+        log = RunDir(r.path).run_json.get("eval_log") or ""
         m = re.search(r"(\d{4}-\d{2}-\d{2})T", log)
         if m:
             dates.append(m.group(1))

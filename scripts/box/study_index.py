@@ -29,7 +29,7 @@ from pathlib import Path, PurePosixPath
 
 from scripts.box.fleet_layout import MODELS, REGULATORS, REMOTE_REPO
 from scripts.box.study_table import STAGES, TABLE_STUDY, Box, box_jobs, stage_boxes
-from src.measures.run_directory import ATTEMPT_FOLDER, ATTEMPTS, GROUPS, RUN_JSON, RunDir
+from src.measures.run_directory import ATTEMPT_FOLDER, ATTEMPTS, FILES, GROUPS, RunDir
 from src.measures.run_index import ARM_FIELDS, build, index_folder_problem, level, summary, write
 from src.models.model_registry import resolve
 
@@ -70,12 +70,27 @@ class Capture:
     sha256: str | None
 
 
+RUN_JSON_PARTS = tuple(FILES["run.json"].split("/"))
+"""run.json's path in a run folder, by parts: ("processed", "run.json")."""
+CAPTURED_BEFORE = RUN_JSON_PARTS[-1:]
+"""run.json's path in the captures of the boxes that ran before the stored layout (their manifests keep it)."""
+
+
 def captured_name(parts: tuple[str, ...]) -> str | None:
-    """The run's own name of a box path under runs/<study>/, given as its parts after the study: <name>/run.json or
-    <group>/<name>/run.json, an earlier attempt's folder without its .<n>. None for any other path."""
-    if len(parts) == 2 and parts[1] == RUN_JSON:
+    """The run's own name of a box path under runs/<study>/, given as its parts after the study: <name>/<run.json> or
+    <group>/<name>/<run.json>, <run.json> its path in the run folder (RUN_JSON_PARTS, or CAPTURED_BEFORE in an older
+    capture), an earlier attempt's folder without its .<n>. None for any other path."""
+    for tail in (RUN_JSON_PARTS, CAPTURED_BEFORE):
+        if len(parts) > len(tail) and parts[-len(tail):] == tail:
+            return run_of(parts[:-len(tail)])
+    return None
+
+
+def run_of(parts: tuple[str, ...]) -> str | None:
+    """The run's own name of a run folder's parts after the study: <name> or <group>/<name>."""
+    if len(parts) == 1:
         return parts[0]
-    if len(parts) == 3 and parts[2] == RUN_JSON and parts[0] in GROUPS:
+    if len(parts) == 2 and parts[0] in GROUPS:
         match = ATTEMPT_FOLDER.match(parts[1]) if parts[0] == ATTEMPTS else None
         return match["name"] if match else parts[1]
     return None
@@ -86,7 +101,7 @@ def captured_log_name(parts: tuple[str, ...]) -> str | None:
     <group>/<name>/<file>.eval, as captured_name reads a run.json. None for any other path."""
     if not parts or not parts[-1].endswith(".eval"):
         return None
-    return captured_name((*parts[:-1], RUN_JSON))
+    return run_of(parts[:-1])
 
 
 def box_captures(root: Path, study: str) -> list[Capture]:
@@ -165,7 +180,7 @@ class TableJoin:
         counts only when it holds this very eval log or run.json: a rerun of the name on another instance holds other
         bytes. The eval log counts after a regenerate here too, which rewrites run.json."""
         log = RunDir(run).eval_log
-        local = {hashlib.sha256(path.read_bytes()).hexdigest() for path in (run / RUN_JSON, log) if path}
+        local = {hashlib.sha256(path.read_bytes()).hexdigest() for path in (RunDir(run).file("run.json"), log) if path}
         held = {capture.instance for capture in self.captures if capture.name == name and capture.sha256 in local}
         if len(held) == 1:
             return held.pop(), "manifest"

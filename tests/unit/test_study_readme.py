@@ -10,6 +10,7 @@ import pytest
 
 from scripts import study_readme
 from src.configuration.settings import ROOT
+from tests.support.run_files import write_text
 
 RUNS = ROOT / "runs"
 
@@ -36,11 +37,10 @@ def test_a_readme_is_checked_only_against_data_older_than_it(tmp_path, monkeypat
     not with the README itself."""
     monkeypatch.setattr(study_readme, "ROOT", tmp_path)
     study = tmp_path / "runs" / "study_x"
-    (study / "run_a").mkdir(parents=True)
-    (study / "run_a" / "run.json").write_text("{}")
+    write_text(study / "run_a" / "processed/run.json", "{}")
     (tmp_path / "logs" / "study_x").mkdir(parents=True)
-    os.utime(study / "run_a" / "run.json", (100, 100))
-    for path in (study / "run_a", study, tmp_path / "logs" / "study_x"):
+    os.utime(study / "run_a" / "processed/run.json", (100, 100))
+    for path in (study / "run_a" / "processed", study / "run_a", study, tmp_path / "logs" / "study_x"):
         os.utime(path, (100, 100))
     assert study_readme.data_mtime(study) == 100
     (study / study_readme.README).write_text("x")
@@ -50,9 +50,9 @@ def test_a_readme_is_checked_only_against_data_older_than_it(tmp_path, monkeypat
     assert study_readme.data_mtime(study) > 100                       # a new log
     os.utime(tmp_path / "logs" / "study_x" / "a.eval", (100, 100))
     os.utime(tmp_path / "logs" / "study_x", (100, 100))
-    os.utime(study / "run_a" / "run.json", (200, 200))
+    os.utime(study / "run_a" / "processed/run.json", (200, 200))
     assert study_readme.data_mtime(study) == 200                      # a changed file
-    (study / "run_a" / "run.json").unlink()
+    (study / "run_a" / "processed/run.json").unlink()
     assert study_readme.data_mtime(study) > 200                       # a removed one moves its folder
 
 
@@ -77,12 +77,13 @@ def tiny_study(tmp_path, monkeypatch):
         run = study / name
         episode = {"id": "s", "episode": "s#1", "replicate": 1, "agent": "k7q2m",
                    "transcript_path": "trajectories/s#1/transcript.json", **extra}
-        write_jsonl(run / "episodes.jsonl", [episode])
-        (run / "run.json").write_text(json.dumps({"task": "chess", "model": "mockllm/model", "agents": ["k7q2m"],
+        write_jsonl(run / "processed/episodes.jsonl", [episode])
+        write_text(run / "processed/run.json", json.dumps({"task": "chess", "model": "mockllm/model",
+                                                           "agents": ["k7q2m"],
                                                   "eval_log": "logs/none.eval"}))
-        write_jsonl(run / "signals.jsonl", [{"row": "agent", "episode": "s#1", "cheating_rung": "none"},
+        write_jsonl(run / "analysis/signals.jsonl", [{"row": "agent", "episode": "s#1", "cheating_rung": "none"},
                                             {"row": "team", "cheating_rung": "none"}])
-        transcript = run / "trajectories" / "s#1" / "transcript.json"
+        transcript = run / "processed/trajectories" / "s#1" / "transcript.json"
         transcript.parent.mkdir(parents=True)
         transcript.write_text(json.dumps({"agent": "k7q2m", "model": "mockllm/model"}))
     data = study_readme.meanings()
@@ -95,13 +96,13 @@ def test_render_reads_types_values_and_links(tiny_study):
     text = study_readme.render(tiny_study)
     assert "| `role`? | string | the agent's role, null in a run without roles. Values: `worker`. |" in text
     assert "| `cheating_rung` | string | the workers' Cheating rung. Values: `none`. |" in text
-    assert "| episodes.jsonl `transcript_path` → the transcript, from the run's folder | 2 of 2 |" in text
+    assert "| episodes.jsonl `transcript_path` → the transcript, from the run's processed/ | 2 of 2 |" in text
     assert "| run.json `eval_log` → the eval log, from the checkout | 0 of 2 |" in text
     assert "**Cheating**" in text and "| `hacked` |" in text
 
 
 def test_render_refuses_a_field_without_a_meaning(tiny_study):
-    write_jsonl(tiny_study / "run_a1" / "episodes.jsonl",
+    write_jsonl(tiny_study / "run_a1" / "processed/episodes.jsonl",
                 [{"id": "s", "episode": "s#1", "replicate": 1, "agent": "k7q2m", "brand_new": 1}])
     with pytest.raises(study_readme.Undescribed, match="episodes.brand_new"):
         study_readme.render(tiny_study)

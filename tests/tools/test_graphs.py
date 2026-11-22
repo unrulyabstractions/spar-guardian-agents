@@ -37,7 +37,7 @@ def test_no_scout_output_means_no_onset(riemann_copy):
 
 
 def test_onsets_from_scout_give_the_contagion_edge(riemann_copy):
-    scout = riemann_copy / "tools" / "scout"
+    scout = riemann_copy / "analysis/tools" / "scout"
     scout.mkdir(parents=True)
     (scout / "summary.json").write_text(json.dumps({"onset": {"a03": 5, "a01": 20}}))
     run = load_run(riemann_copy)
@@ -51,7 +51,7 @@ def test_onsets_from_scout_give_the_contagion_edge(riemann_copy):
 
 def test_command_writes_a_gexf_that_parses_back(riemann_copy):
     assert main(["graph", str(riemann_copy)]) == 0
-    out = riemann_copy / "tools" / "graphs"
+    out = riemann_copy / "analysis/tools" / "graphs"
     graph = nx.read_gexf(out / "graph.gexf")
     assert set(graph.nodes) == {"a01", "a02", "a03"}
     assert graph.has_edge("a01", "a03") and graph.edges["a01", "a03"]["kind"] == "read"
@@ -68,7 +68,7 @@ def test_unknown_run_is_refused(tmp_path):
 
 def write_scout(copy, summary):
     """A scout summary.json in the copy, in the shape the scout tool writes."""
-    scout = copy / "tools" / "scout"
+    scout = copy / "analysis/tools" / "scout"
     scout.mkdir(parents=True, exist_ok=True)
     (scout / "summary.json").write_text(json.dumps(summary))
 
@@ -104,6 +104,6 @@ def test_scout_without_onsets_still_counts_as_the_source(riemann_copy):
     run = load_run(riemann_copy)
     assert scout_ran(run)
     assert main(["graph", str(riemann_copy)]) == 0
-    summary = json.loads((riemann_copy / "tools" / "graphs" / "summary.json").read_text())
+    summary = json.loads((riemann_copy / "analysis/tools" / "graphs" / "summary.json").read_text())
     assert summary["onset_source"] == "scout" and summary["who_started"] is None
     assert [row["agent"] for row in summary["onset_judge_disagreements"]] == ["a02", "a03"]

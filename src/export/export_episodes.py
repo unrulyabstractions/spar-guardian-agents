@@ -41,6 +41,7 @@ from src.export.eval_sample_view import (
     roster,
     topology,
 )
+from src.measures.run_directory import RunDir
 
 
 # --------------------------------------------------------------------------
@@ -61,16 +62,16 @@ def _write_communication(view: SampleView, run_dir: Path) -> None:
     comm = {k.split(":", 1)[1]: view.store_get(k) for k in keys if view.store_get(k)}
     if not comm:
         return
-    comm_dir = run_dir / "communication"
-    comm_dir.mkdir(exist_ok=True)
+    comm_dir = RunDir(run_dir).file("communication")
+    comm_dir.mkdir(parents=True, exist_ok=True)
     (comm_dir / f"{sample_key(view)}.json").write_text(json.dumps(comm, indent=1, default=str))
 
 
 def _write_defense(view: SampleView, run_dir: Path, defenses_cfg: list, evidence: dict) -> None:
     if not (defenses_cfg or evidence["interventions"]):
         return
-    def_dir = run_dir / "defense"
-    def_dir.mkdir(exist_ok=True)
+    def_dir = RunDir(run_dir).file("defense")
+    def_dir.mkdir(parents=True, exist_ok=True)
     payload = {"defenses": defenses_cfg, **evidence}
     (def_dir / f"{sample_key(view)}.json").write_text(json.dumps(payload, indent=1, default=str))
 
@@ -99,7 +100,7 @@ def _write_episode(view: SampleView, run_dir: Path, agent: str, error, failure, 
                    submission: dict | None) -> tuple[dict, list[dict]]:
     """Write one agent's transcript and prompt; return the record fields that depend on them, and its ATIF steps."""
     transcript, info = episode_transcript(view, agent)
-    ep_dir = run_dir / "trajectories" / episode_id(view, agent)
+    ep_dir = RunDir(run_dir).file("trajectories") / episode_id(view, agent)
     ep_dir.mkdir(parents=True, exist_ok=True)
     transcript_path = ep_dir / "transcript.json"
     transcript_path.write_text(json.dumps(transcript, indent=1))
@@ -113,7 +114,7 @@ def _write_episode(view: SampleView, run_dir: Path, agent: str, error, failure, 
     fields = {
         "final_text": info["final_text"],
         "n_turns": info["n_agent_steps"], "n_tool_calls": info["n_tool_calls"],
-        "usage": info["usage"], "transcript_path": transcript_path.relative_to(run_dir).as_posix(),
+        "usage": info["usage"], "transcript_path": transcript_path.relative_to(RunDir(run_dir).processed).as_posix(),
         "error": ep_error, "failure": ep_failure, "ok": ep_error is None,
         "ended_by": ended_by(view, agent, rules, submission, ep_failure),
     }

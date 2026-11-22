@@ -14,6 +14,7 @@ from src.measures.run_directory import RunDir
 from src.replay.recorded_calls import ReplayRefused, merge_by_start, recorded_calls, resolve, result_text
 from tests.support.atif_builder import transcript
 from tests.support.run_builder import write_run_dir
+from tests.support.run_files import write_text
 
 
 def moment(seconds: float) -> datetime:
@@ -80,7 +81,7 @@ def test_a_call_without_an_event_or_a_run_without_a_log_is_refused(tmp_path):
     folder = write_run_dir(tmp_path / "run", {"eval_log": str(log)}, {"a01": two})
     with pytest.raises(ReplayRefused, match="c1"):
         recorded_calls(RunDir(folder))
-    (folder / "run.json").write_text(json.dumps({}))
+    write_text(folder / "processed/run.json", json.dumps({}))
     with pytest.raises(ReplayRefused, match="no eval log"):
         recorded_calls(RunDir(folder))
 

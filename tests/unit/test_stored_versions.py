@@ -12,7 +12,8 @@ import yaml
 from src.measures import pipeline_parts as pp
 from src.measures import stored_json
 from src.measures import stored_versions as sv
-from src.measures.run_directory import RunDir
+from src.measures.run_directory import FILES, RunDir
+from tests.support.run_files import write_text
 
 MAKE = "src.measures.pipeline_parts:order"
 
@@ -39,9 +40,9 @@ def setup(tmp_path: Path):
         pp.add(registry, name, "first version")
     assert pp.problems(registry) == []
     run = tmp_path / "runs" / "study_x" / "a1"
-    (run / "trajectories" / "e1").mkdir(parents=True)
-    (run / "run.json").write_text(json.dumps({"run_id": "a1"}))
-    (run / "trajectories" / "e1" / "transcript.json").write_text("{}")
+    (run / "processed/trajectories" / "e1").mkdir(parents=True)
+    write_text(run / "processed/run.json", json.dumps({"run_id": "a1"}))
+    (run / "processed/trajectories" / "e1" / "transcript.json").write_text("{}")
     return registry, RunDir(run), tmp_path / "backups"
 
 
@@ -88,7 +89,7 @@ def test_equal_bytes_restamp_and_a_new_value_backs_up_the_old(setup):
     assert not backups.exists()
     assert sv.write_output(run, "topology", {"edges": [["a", "b"]]}, registry=registry, backups=backups,
                            backup_stamp="s1") == "redone"
-    kept = list((backups / "s1").rglob("topology.json"))
+    kept = list((backups / "s1").rglob(Path(FILES["topology.json"]).name))
     assert len(kept) == 1 and kept[0].read_bytes() == stored_json.dumps({"edges": []})
 
 
@@ -97,7 +98,7 @@ def test_an_input_that_moved_puts_its_readers_behind(setup):
     sv.stamp(run, "export", registry=registry)
     sv.write_output(run, "topology", {"edges": []}, registry=registry, backups=backups)
     sv.write_output(run, "label", {"cheated": False}, registry=registry, backups=backups)
-    (run.path / "trajectories" / "e1" / "transcript.json").write_text('{"moved": 1}')
+    (run.path / "processed/trajectories" / "e1" / "transcript.json").write_text('{"moved": 1}')
     assert sv.behind(run, registry) == {}
     assert sv.behind(run, registry, deep=True) == {"topology": "export changed", "label": "topology behind"}
     sv.stamp(run, "export", registry=registry)
@@ -107,14 +108,16 @@ def test_an_input_that_moved_puts_its_readers_behind(setup):
 def test_a_judge_entry_keeps_its_verdict_files(setup):
     registry, run, backups = setup
     sv.stamp(run, "export", registry=registry)
-    (run.path / "judges").mkdir()
-    (run.path / "judges" / "labels.luna.jsonl").write_text(json.dumps({"judge": "luna", "prompt_sha256": "p1"}) + "\n")
+    (run.path / "analysis/judges").mkdir(parents=True)
+    (run.path / "analysis/judges" / "labels.luna.jsonl").write_text(json.dumps({"judge": "luna",
+                                                                                "prompt_sha256": "p1"}) + "\n")
     entry = sv.stamp(run, "judge_scores", registry=registry)
     assert entry["verdicts"]["analysis/judges/labels.luna.jsonl"]["judge"] == ["luna"]
     assert sv.ledger(run, "analysis")["judge_scores"] == entry
     sv.write_output(run, "topology", {"edges": []}, registry=registry, backups=backups)
     sv.write_output(run, "label", {"cheated": False}, registry=registry, backups=backups)
-    (run.path / "judges" / "labels.luna.jsonl").write_text(json.dumps({"judge": "luna", "prompt_sha256": "p2"}) + "\n")
+    (run.path / "analysis/judges" / "labels.luna.jsonl").write_text(json.dumps({"judge": "luna",
+                                                                                "prompt_sha256": "p2"}) + "\n")
     sv.stamp(run, "judge_scores", registry=registry)
     assert sv.behind(run, registry) == {"label": "judge_scores changed"}
 

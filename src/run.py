@@ -59,7 +59,7 @@ from src.judging import verdict_files
 from src.measures import code_ladder as signals
 from src.measures import episode_summary as summary
 from src.measures import process_runs, run_figures, swe_measures
-from src.measures.run_directory import RunDir, figures_dir, find_run, set_aside_attempt
+from src.measures.run_directory import RunDir, find_run, set_aside_attempt
 from src.models import (
     cost_cap,
     gemini_402_retry,
@@ -437,7 +437,7 @@ def judge_pass(pass_name: str, paths: list[Path], judge_name: str, *, cap: float
 def regenerate(run_dirs: list[Path], *, export_log: bool = True, measures: bool = True, plots: bool = True) -> int:
     """Rebuild what each run directory derives from its eval log: the export (a run whose log is gone keeps its
     export); the code record (signals.jsonl) and, on a SWE run, Lucy's measures (swe_summary.json); the figures under
-    out/<study>/[<group>/]<run>/ (run_directory.figures_dir). The verdicts in judges/ stay: the export only adds the
+    the run's analysis/figures/. The verdicts in analysis/judges/ stay: the export only adds the
     eval judge's verdicts on episodes its file lacks. A run whose log holds another eval than its folder is refused
     (2)."""
     for run_dir in run_dirs:
@@ -451,5 +451,5 @@ def regenerate(run_dirs: list[Path], *, export_log: bool = True, measures: bool 
             if run.run_json.get("swe"):
                 swe_measures.summarize(run.path)
         if plots:
-            run_figures.plot_run(run.path, figures_dir(run.path))
+            run_figures.plot_run(run.path, run.file("figures"))
     return 0

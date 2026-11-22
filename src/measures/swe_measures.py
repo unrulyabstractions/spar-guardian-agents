@@ -144,7 +144,9 @@ def summarize(run_dir: Path) -> dict:
         "halt": run.get("orbit_halt_reason"),
         "agents": agents,
     }
-    (run_dir / "swe_summary.json").write_text(json.dumps(out, indent=1))
+    path = RunDir(run_dir).file("swe_summary.json")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(out, indent=1))
     return out
 
 

@@ -19,6 +19,7 @@ from src.measures import run_figures as plots
 from src.models import model_registry as models
 from src.run import access_line
 from src.tasks import agent_roles, swarm_task
+from tests.support.run_files import write_text
 
 FLASH = "deepseek-flash-openrouter"
 
@@ -125,7 +126,7 @@ def test_main_runs_the_cell_and_draws_figures_only_after_a_run_that_succeeded(mo
         ("flipt_duo_claude-haiku-5-5_s1", "anthropic/claude-haiku-5-5", settings.MODEL_TIMEOUT_S)
     assert (benchmark.row, benchmark.honeypot, benchmark.grade) == ("flipt-02e2", "jigsaw", True)
     assert (config.n_agents, config.seed, config.regulator_count) == (2, 1, 0)
-    assert plotted == [(settings.RUNS / run_name, settings.ROOT / "out" / run_name)]
+    assert plotted == [(settings.RUNS / run_name, settings.RUNS / run_name / "analysis/figures")]
     monkeypatch.setattr(run, "run", lambda *args, **kwargs: 3)
     assert cell.main([]) == 3 and len(plotted) == 1
 
@@ -163,9 +164,9 @@ def test_the_rates_count_each_kind_of_evidence(monkeypatch, tmp_path):
         team = {"row": "team", "cheating_rung": "none", "passed": passed, "travel_evidence": evidence,
                 **{kind: kind in kinds for kind in screen.RATE_EVIDENCE}}
         rows = [{"row": "agent", "agent": "a01", "cheating_rung": "none"}, team]
-        (run_dir / "signals.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows))
+        write_text(run_dir / "analysis/signals.jsonl", "".join(json.dumps(row) + "\n" for row in rows))
         ledger = {"agents": {"a01": {"errored": errored}, "a02": {"errored": 0}}}
-        (run_dir / "run.json").write_text(json.dumps({"ledger": ledger}))
+        write_text(run_dir / "processed/run.json", json.dumps({"ledger": ledger}))
     (tmp_path / f"flipt_duo_{GLIMMER}_s4").mkdir()          # a run with no signals is not finished
     lines = screen.rates([GLIMMER, QWEN], 5).splitlines()
     assert lines[0].split() == ["model", "runs", "tried", "opened", "used", "shipped", "discussed", "solicited",

@@ -12,7 +12,6 @@ from src.measures.run_directory import (
     GROUPS,
     RunDir,
     checkout_of,
-    figures_dir,
     find_run,
     log_dir,
     log_link,
@@ -21,13 +20,16 @@ from src.measures.run_directory import (
     set_aside_attempt,
     study_runs,
 )
+from tests.support.run_files import write_text
 
 LOG = "2026-11-01T03-31-41-00-00_x_abc.eval"
+RUN_JSON = "processed/run.json"
 
 
 def make_run(folder: Path, recorded: str = f"/root/work/logs/study_x/{{name}}/{LOG}") -> Path:
     folder.mkdir(parents=True)
-    (folder / "run.json").write_text(json.dumps({"run_id": folder.name, "eval_log": recorded.format(name=folder.name)}))
+    write_text(folder / "processed/run.json",
+               json.dumps({"run_id": folder.name, "eval_log": recorded.format(name=folder.name)}))
     return folder
 
 
@@ -50,7 +52,7 @@ def test_a_study_lists_its_runs_at_the_top_level_and_in_every_group(tmp_path):
                  "attempts/b_luna1.1"):
         make_run(study / path)
     (study / "smoke" / "scenario").mkdir(parents=True)
-    (study / "smoke" / "scenario" / "run.json").write_text("{}")      # a smoke suite's folder is no group
+    write_text(study / "smoke" / "scenario" / "processed/run.json", "{}")      # a smoke suite's folder is no group
     (study / "notes").mkdir()
     (study / "INDEX.jsonl").write_text("")
     assert [p.relative_to(study).as_posix() for p in study_runs(study)] == [
@@ -112,17 +114,16 @@ def test_a_run_finds_its_log_at_the_recorded_path_then_at_its_mirror_and_nowhere
     assert RunDir(moved).eval_log is None
 
 
-def test_a_run_that_keeps_its_log_inside_finds_it_in_its_eval_folder(tmp_path, elsewhere):
-    """The apart controls keep each run's log in <run>/eval/ and record the box's absolute path: the run finds the log
-    of that name there, and no other .eval file of the folder."""
+def test_an_apart_control_finds_its_log_at_its_path_under_logs(tmp_path, elsewhere):
+    """An apart control records the box's absolute path; its log sits at the run's own path under logs/, and no other
+    .eval file of that folder is its log."""
     run = make_run(tmp_path / "runs" / "apart_controls" / "luna" / "poem" / "solo" / "s1",
                    recorded=f"/root/box/logs/study_apart_controls/poem_solo_luna_s1/{LOG}")
-    (run / "eval").mkdir()
-    (run / "eval" / "other.eval").write_text("log")
+    folder = tmp_path / "logs" / "apart_controls" / "luna" / "poem" / "solo" / "s1"
+    write_text(folder / "other.eval", "log")
     assert RunDir(run).eval_log is None
-    log = make_log(run / "eval")
+    log = make_log(folder)
     assert RunDir(run).eval_log == log
-    assert log_link(log, run) == f"runs/apart_controls/luna/poem/solo/s1/eval/{LOG}"
 
 
 def test_run_json_names_its_log_from_the_checkout_the_run_sits_in(tmp_path):
@@ -168,13 +169,14 @@ def test_a_run_is_found_by_name_at_the_top_level_or_in_its_one_group(tmp_path):
     assert find_run(study, str(grouped)) is None                          # an absolute path is no run name
 
 
-def test_the_figures_mirror_the_run_folder_under_out(tmp_path, monkeypatch):
-    monkeypatch.setattr(settings, "ROOT", tmp_path / "checkout")
-    runs, out = tmp_path / "runs" / "study_x", tmp_path / "out" / "study_x"
-    assert figures_dir(runs / "a1") == out / "a1"
-    assert figures_dir(runs / "mock" / "a1") == out / "mock" / "a1"
-    assert figures_dir(runs / "attempts" / "a1.2") == out / "attempts" / "a1.2"
-    assert figures_dir(tmp_path / "elsewhere" / "a1") == tmp_path / "checkout" / "out" / "a1"
+def test_a_run_keeps_its_files_in_processed_and_analysis(tmp_path):
+    run = RunDir(tmp_path / "runs" / "study_x" / "a1")
+    assert run.file("run.json") == run.path / "processed/run.json" and run.file("run.json").parent == run.processed
+    assert run.file("figures") == run.path / "analysis" / "figures"
+    assert run.replay_dir == run.path / "processed" / "replay"
+    assert not run.is_run()
+    write_text(run.path / "processed/run.json", "{}")
+    assert run.is_run()
 
 
 def made(folder: Path, files: dict[str, str]) -> Path:
@@ -189,25 +191,25 @@ def files_under(root: Path) -> dict[str, str]:
 
 
 def test_an_earlier_attempt_moves_into_attempts_with_its_log_and_figures(tmp_path):
-    """The run folder, its eval log folder and its figures move to attempt 1, every byte kept; a second set-aside takes
-    attempt 2. Nothing is left at the run's own places."""
-    run = made(tmp_path / "runs" / "study_x" / "f_luna1", {"run.json": "{}", "signals.jsonl": "first"})
+    """The run folder, with its figures inside, and its eval log folder move to attempt 1, every byte kept; a second
+    set-aside takes attempt 2. Nothing is left at the run's own places."""
+    run = made(tmp_path / "runs" / "study_x" / "f_luna1", {RUN_JSON: "{}", "analysis/signals.jsonl": "first",
+                                                           "analysis/figures/timeline.png": "png a"})
     made(tmp_path / "logs" / "study_x" / "f_luna1", {"a.eval": "log a"})
-    made(tmp_path / "out" / "study_x" / "f_luna1", {"timeline.png": "png a"})
     before = files_under(tmp_path)
     moved = set_aside_attempt(run)
     assert [target.relative_to(tmp_path).as_posix() for _, target in moved] == [
-        "runs/study_x/attempts/f_luna1.1", "logs/study_x/attempts/f_luna1.1", "out/study_x/attempts/f_luna1.1"]
+        "runs/study_x/attempts/f_luna1.1", "logs/study_x/attempts/f_luna1.1"]
     assert files_under(tmp_path) == {name.replace("study_x/f_luna1", "study_x/attempts/f_luna1.1"): text
                                      for name, text in before.items()}
-    made(run, {"run.json": "{}"})
+    made(run, {RUN_JSON: "{}"})
     assert [target.name for _, target in set_aside_attempt(run)] == ["f_luna1.2"]
     assert set_aside_attempt(run) == []                                   # nothing left to set aside
 
 
-def test_attempt_n_is_free_in_runs_logs_and_out(tmp_path):
-    """A number taken under logs/ alone is taken: the run's three folders share their n."""
-    run = made(tmp_path / "runs" / "study_x" / "f_luna1", {"run.json": "{}"})
+def test_attempt_n_is_free_in_runs_and_logs(tmp_path):
+    """A number taken under logs/ alone is taken: the run's two folders share their n."""
+    run = made(tmp_path / "runs" / "study_x" / "f_luna1", {RUN_JSON: "{}"})
     made(tmp_path / "logs" / "study_x" / "attempts" / "f_luna1.1", {"x.eval": "older"})
     assert [target.relative_to(tmp_path).as_posix() for _, target in set_aside_attempt(run)] == [
         "runs/study_x/attempts/f_luna1.2"]
@@ -215,7 +217,7 @@ def test_attempt_n_is_free_in_runs_logs_and_out(tmp_path):
 
 def test_the_log_about_to_be_exported_stays_where_it_is(tmp_path):
     """A later eval's log in the earlier run's log folder stays; every other entry of that folder moves."""
-    run = made(tmp_path / "runs" / "study_x" / "f_luna1", {"run.json": "{}"})
+    run = made(tmp_path / "runs" / "study_x" / "f_luna1", {RUN_JSON: "{}"})
     logs = made(tmp_path / "logs" / "study_x" / "f_luna1", {"a.eval": "earlier", "b.eval": "later"})
     moved = set_aside_attempt(run, keep=logs / "b.eval")
     assert files_under(tmp_path / "logs") == {"study_x/attempts/f_luna1.1/a.eval": "earlier",
@@ -224,19 +226,19 @@ def test_the_log_about_to_be_exported_stays_where_it_is(tmp_path):
 
 
 def test_a_run_in_a_group_is_set_aside_into_its_studys_attempts(tmp_path):
-    run = made(tmp_path / "runs" / "study_x" / "incomplete" / "f_luna1", {"run.json": "{}"})
+    run = made(tmp_path / "runs" / "study_x" / "incomplete" / "f_luna1", {RUN_JSON: "{}"})
     made(tmp_path / "logs" / "study_x" / "incomplete" / "f_luna1", {"a.eval": "log"})
     assert [target.relative_to(tmp_path).as_posix() for _, target in set_aside_attempt(run)] == [
         "runs/study_x/attempts/f_luna1.1", "logs/study_x/attempts/f_luna1.1"]
 
 
 def test_an_attempt_a_run_outside_runs_and_a_deeper_kept_file_are_refused(tmp_path):
-    attempt = made(tmp_path / "runs" / "study_x" / "attempts" / "f_luna1.1", {"run.json": "{}"})
+    attempt = made(tmp_path / "runs" / "study_x" / "attempts" / "f_luna1.1", {RUN_JSON: "{}"})
     with pytest.raises(ValueError, match="earlier attempt already"):
         set_aside_attempt(attempt)
     with pytest.raises(ValueError, match="no runs/ folder"):
-        set_aside_attempt(made(tmp_path / "elsewhere" / "f_luna1", {"run.json": "{}"}))
-    run = made(tmp_path / "runs" / "study_x" / "g_luna1", {"run.json": "{}"})
+        set_aside_attempt(made(tmp_path / "elsewhere" / "f_luna1", {RUN_JSON: "{}"}))
+    run = made(tmp_path / "runs" / "study_x" / "g_luna1", {RUN_JSON: "{}"})
     logs = made(tmp_path / "logs" / "study_x" / "g_luna1", {"sub/b.eval": "later"})
     with pytest.raises(ValueError, match="subfolder"):
         set_aside_attempt(run, keep=logs / "sub" / "b.eval")

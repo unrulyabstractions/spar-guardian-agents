@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from src.measures.run_directory import GROUPS, study_runs
+from src.measures.run_directory import GROUPS, RunDir, study_runs
 from src.utils.json_files import read_jsonl
 
 GROUP_STATUS = {"attempts": "attempt", "set_aside": "set aside"}
@@ -73,4 +73,4 @@ def study_listing(folder: Path) -> list[Listed]:
 def list_collection(folder: Path) -> list[Listed]:
     """A collection's runs that hold a run.json: a manifest collection's, else a study's."""
     runs = manifest_runs(folder) if (folder / "manifest.jsonl").is_file() else study_listing(folder)
-    return [r for r in runs if (r.path / "run.json").is_file()]
+    return [r for r in runs if RunDir(r.path).is_run()]

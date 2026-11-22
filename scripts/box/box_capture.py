@@ -5,7 +5,7 @@
     uv run python -m scripts.box.box_capture baseline <instance-id>
 
 check sends box_sweep.py to the box over ssh (logs/boxes/<id>/ssh_config) and holds each line of its sweep against
-this machine. A box file under the clone's runs/, logs/ or out/ must be at the same path in this repository, where
+this machine. A box file under the clone's runs/ or logs/ must be at the same path in this repository, where
 watch.sh brings it, or under logs/boxes/<id>/conflicts/ when this machine's copy is newer and differs; any other box
 file must be at logs/boxes/<id>/files/<its absolute path>. A file is captured when its size and sha256 match, a link
 when the local link has the same target. A file outside the clone that the host image held at first contact (the same
@@ -23,8 +23,7 @@ the same ssh config, comparing checksums: the outputs into this repository with 
 local file is never overwritten, then the outputs still different into logs/boxes/<id>/conflicts/; the rest into
 logs/boxes/<id>/files/. It then sweeps the box again and holds the new sweep to the same rules. Files under a box run's
 folder that the box does not have are listed as local only; they do not fail the check. A run's folder is
-runs/<study>/[<group>/]<name>/, and its figures sit at the same path under out/, or at out/<name>/ from before out/
-mirrored runs/.
+runs/<study>/[<group>/]<name>/, its figures in its analysis/figures/.
 
 baseline records the sweep of the box's home and /tmp before box_setup.sh changes anything. It runs once per box: a
 later call keeps the first, and a box that already holds the clone or the setup's logs is refused (exit 3), since its
@@ -50,7 +49,7 @@ from scripts.box.fleet_layout import BOXES, REMOTE_REPO, ROOT, now_iso
 from src.measures.run_directory import GROUPS
 
 SWEEP = Path(__file__).with_name("box_sweep.py")
-OUTPUT_DIRS = ("runs", "logs", "out")
+OUTPUT_DIRS = ("runs", "logs")
 HOME, TMP = "/root", "/tmp"
 """The box's home and /tmp, swept with the clone at REMOTE_REPO."""
 SETUP_FILES = ("setup.log", "setup.pid", "setup.exit", "screen.log", "screen.pid")
@@ -104,7 +103,7 @@ def under_repo(box_path: str) -> bool:
 
 
 def output_rel(box_path: str) -> str | None:
-    """The path under the clone of a box file in runs/, logs/ or out/; None for any other file."""
+    """The path under the clone of a box file in runs/ or logs/; None for any other file."""
     if not under_repo(box_path):
         return None
     rel = os.path.relpath(box_path, REMOTE_REPO)
@@ -275,18 +274,15 @@ def compare(lines: list[dict], locals_for: Callable[[str], list[Path]], baseline
 
 
 def run_folder(parts: list[str]) -> tuple[str, ...] | None:
-    """The folder of the box run a file under the clone's runs/ or out/ belongs to, as path parts: runs/<study>/<name>
-    or runs/<study>/<group>/<name>, the same under out/, and out/<name> for figures from before out/ mirrored runs/
-    (a file right under out/<name>/). None for any other file."""
-    if parts[0] == "out" and len(parts) == 3:
-        return tuple(parts[:2])
-    if parts[0] in ("runs", "out") and len(parts) >= 4:
+    """The folder of the box run a file under the clone's runs/ belongs to, as path parts: runs/<study>/<name> or
+    runs/<study>/<group>/<name>. None for any other file."""
+    if parts[0] == "runs" and len(parts) >= 4:
         return tuple(parts[:4] if parts[2] in GROUPS and len(parts) >= 5 else parts[:3])
     return None
 
 
 def local_only(lines: list[dict]) -> list[str]:
-    """Files under a box run's folder here (runs/<study>/[<group>/]<name>/ and its figures, run_folder) that the box
+    """Files under a box run's folder here (runs/<study>/[<group>/]<name>/, run_folder) that the box
     does not have: an earlier export's leftovers, or what this machine added (a judge, a figure)."""
     on_box = {line.get("file") or line.get("link") or line.get("outside_link") for line in lines}
     folders = set(filter(None, (run_folder((output_rel(path) or "").split("/")) for path in filter(None, on_box))))

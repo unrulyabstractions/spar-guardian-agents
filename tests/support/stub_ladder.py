@@ -86,10 +86,10 @@ def make_run(root: Path, calls: dict[str, list[tuple[str, str, str]]], run: dict
     folder = write_run_dir(root / "run", {"task": TASK, "agents": roster, **(run or {})},
                        {agent: transcript(agent_calls) for agent, agent_calls in calls.items()}, episodes=episodes,
                        orbit_roster=roster, role=None)
-    (folder / "communication").mkdir()
+    (folder / "processed/communication").mkdir(parents=True)
     messages = [{"id": f"m{i}", "sender": p["sender"], "content": p["content"], "sequence": i}
                 for i, p in enumerate(posts or [], 1)]
     events = [{"kind": "read", "message_ids": [f"m{i}"], "agent_id": reader}
               for i, p in enumerate(posts or [], 1) for reader in p.get("readers", [])]
-    (folder / "communication" / "q1#1.json").write_text(json.dumps({"messages": messages, "events": events}))
+    (folder / "processed/communication" / "q1#1.json").write_text(json.dumps({"messages": messages, "events": events}))
     return folder

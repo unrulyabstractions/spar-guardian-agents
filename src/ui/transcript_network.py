@@ -25,8 +25,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.export._export_network_log import NETWORK_LOG
-from src.utils.json_files import read_json, read_jsonl
+from src.measures.run_directory import RunDir
+from src.utils.json_files import read_jsonl
 
 LISTEN_OPS = ("listen", "bind")
 CALL_OPS = ("connect", "accept", "send")
@@ -84,10 +84,10 @@ def network_view(run_dir: Path, calls: dict[str, tuple[str, int]], at: dict[tupl
                  start: float | None = None) -> dict | None:
     """The panel's data (the module's docstring). calls: tool call id -> (agent, k); at: (agent, k) -> (t, dur) on
     the board's clock; start: the board clock's zero in seconds since the epoch, None on a call-order clock."""
-    path = Path(run_dir) / NETWORK_LOG
+    path = RunDir(run_dir).file("network.jsonl")
     if not path.is_file():
         return None
-    block = (read_json(Path(run_dir) / "run.json") or {}).get("network") or {}
+    block = RunDir(run_dir).run_json.get("network") or {}
     place = {cid: (agent_k, at[agent_k][0]) for cid, agent_k in calls.items() if agent_k in at}
     rows = [row for row in read_jsonl(path) if row.get("origin") != "control"]
     for row in rows:

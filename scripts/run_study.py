@@ -47,6 +47,7 @@ from pathlib import Path
 import yaml
 
 from src.configuration import seed_packs, settings
+from src.measures.run_directory import RunDir
 
 PILOT_SETTINGS = ["rounds=30", "calls_per_round=10", "round_time_s=600", "time_limit_s=18000", "cost_limit_usd=5"]
 """The pilot's settings, after the seed and before the salt and the pack."""
@@ -174,14 +175,14 @@ def main(argv: list[str] | None = None) -> int:
     study = args.study or plan["study"]
     todo, skipped = [], []
     for cell in cells(plan):
-        done = (settings.ROOT / "runs" / study / cell.name / "run.json").is_file()
+        done = RunDir(settings.ROOT / "runs" / study / cell.name).is_run()
         (skipped if done and not args.replace else todo).append(cell)
     cap = float(next((p.split("=", 1)[1] for p in [*PILOT_SETTINGS, *plan["settings"]][::-1]
                       if p.startswith("cost_limit_usd=")), 5))
     print(f"plan {args.plan}: study {study}, {len(todo) + len(skipped)} cells, {len(skipped)} done already, "
           f"{len(todo)} to run; at most ${cap * len(todo):.2f} at the runs' caps of ${cap:.2f}")
     for cell in skipped:
-        print(f"  skip   {cell.name} (runs/{study}/{cell.name}/run.json exists)")
+        print(f"  skip   {cell.name} (runs/{study}/{cell.name} holds its run)")
     for cell in todo:
         print(f"  {'plan' if args.dry_run else 'queue'}   {cell.name}")
         print(f"         {command(cell, study, plan['settings'], args.replace)}")

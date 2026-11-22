@@ -52,7 +52,7 @@ def done(name: str) -> bool:
     """Whether the run of this name finished: its folder, wherever the study keeps it, holds signals.jsonl. Two
     folders of one name raise ValueError."""
     folder = find_run(settings.RUNS, name)
-    return folder is not None and (folder / "signals.jsonl").is_file()
+    return folder is not None and RunDir(folder).file("signals.jsonl").is_file()
 
 
 def set_aside_earlier(name: str) -> list[Path]:

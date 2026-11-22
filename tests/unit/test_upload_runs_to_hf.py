@@ -1,6 +1,6 @@
 """scripts/upload_runs_to_hf.py with no network: where the token comes from and that it is never shown, which files
 go and which stay, what it refuses, that --dry-run uploads nothing, what --delete-stale deletes and what it never
-touches, and the apart controls in their own layout."""
+touches, and the apart controls as a study."""
 from __future__ import annotations
 
 import hashlib
@@ -13,6 +13,7 @@ from huggingface_hub.errors import EntryNotFoundError
 
 from scripts import pull_runs_from_hf as pull
 from scripts import upload_runs_to_hf as upload
+from tests.support.run_files import write_bytes, write_text
 
 FAKE = "hf_FAKEtokenFAKEtoken0123456789abcd"
 
@@ -32,17 +33,18 @@ def no_real_secrets(monkeypatch):
 @pytest.fixture
 def root(tmp_path):
     runs, logs = tmp_path / "runs" / "study_x", tmp_path / "logs" / "study_x"
-    for folder in (runs / "run_a" / "trajectories" / "t#1@k7q2m", runs / "mock" / "run_m", runs / "smoke" / "s1",
+    for folder in (runs / "run_a" / "processed/trajectories" / "t#1@k7q2m", runs / "mock" / "run_m",
+                   runs / "smoke" / "s1",
                    runs / "run_b", logs / "run_a", logs / "screen", logs / "only_log",
                    logs / "set_aside_old" / "runs_run_b"):
         folder.mkdir(parents=True)
-    (runs / "run_a" / "run.json").write_text('{"eval_log": "logs/study_x/run_a/a.eval"}')
-    (runs / "run_a" / "trajectories" / "t#1@k7q2m" / "transcript.json").write_text("[]")
+    write_text(runs / "run_a" / "processed/run.json", '{"eval_log": "logs/study_x/run_a/a.eval"}')
+    (runs / "run_a" / "processed/trajectories" / "t#1@k7q2m" / "transcript.json").write_text("[]")
     (runs / "run_a" / ".DS_Store").write_bytes(b"\0")
     (runs / "run_a" / "._run.json").write_bytes(b"\0")
-    (runs / "mock" / "run_m" / "run.json").write_text("{}")
-    (runs / "smoke" / "s1" / "run.json").write_text("{}")
-    (runs / "run_b" / "run.json").write_text("{}")
+    write_text(runs / "mock" / "run_m" / "processed/run.json", "{}")
+    write_text(runs / "smoke" / "s1" / "processed/run.json", "{}")
+    write_text(runs / "run_b" / "processed/run.json", "{}")
     (runs / "INDEX.jsonl").write_text("{}\n")
     (runs / ".DS_Store").write_bytes(b"\0")
     with zipfile.ZipFile(logs / "run_a" / "a.eval", "w") as archive:
@@ -50,7 +52,7 @@ def root(tmp_path):
     (logs / "screen" / "run_a.log").write_text("ran\n")
     (logs / "only_log" / "b.eval").write_bytes(b"x")                # an aborted start: no run names it
     (logs / "run_a" / "0_journal.eval").write_bytes(b"j")         # an aborted start beside the run's own log
-    (logs / "set_aside_old" / "runs_run_b" / "run.json").write_text("{}")  # an old-layout copy
+    write_text(logs / "set_aside_old" / "runs_run_b" / "processed/run.json", "{}")  # an old-layout copy
     return tmp_path
 
 
@@ -58,9 +60,8 @@ def root(tmp_path):
 def apart(tmp_path):
     base = tmp_path / "runs" / "apart_controls"
     run = base / "ds" / "binder" / "cheat" / "s1"
-    (run / "eval").mkdir(parents=True)
-    (run / "run.json").write_text("{}")
-    (run / "eval" / "x.eval").write_bytes(b"e")
+    write_text(run / "processed/run.json", '{"eval_log": "/root/box/logs/x/x.eval"}')
+    write_bytes(tmp_path / "logs" / "apart_controls" / "ds" / "binder" / "cheat" / "s1" / "x.eval", b"e")
     (base / "ds" / ".DS_Store").write_bytes(b"\0")
     (base / "manifest.jsonl").write_text("{}\n")
     (base / "README.md").write_text("# apart\n")
@@ -165,7 +166,7 @@ def test_a_listing_error_that_quotes_the_token_is_shown_without_it(root, monkeyp
 
 
 def test_a_file_that_holds_the_token_or_a_key_is_refused_and_named_without_the_value(root, api, capsys):
-    (root / "runs" / "study_x" / "run_a" / "run.json").write_text(
+    write_text(root / "runs" / "study_x" / "run_a" / "processed/run.json", 
         f'{{"leak": "{FAKE}", "eval_log": "logs/study_x/run_a/a.eval"}}')
     with zipfile.ZipFile(root / "logs" / "study_x" / "run_a" / "a.eval", "a") as archive:
         archive.writestr("samples/2.json", '{"k": "sk-or-v1-fakefakefakefake0000"}')
@@ -182,14 +183,14 @@ def test_one_run_takes_its_folder_its_eval_logs_and_its_screen_log_and_leaves_th
     items, skipped = upload.select("study_x", ["run_a"], root)
     assert list(items) == ["run_a"] and skipped == ["run_a/0_journal.eval"]
     assert [remote for remote, _ in items["run_a"]] == [
-        "study_x/runs/run_a/run.json",
-        "study_x/runs/run_a/trajectories/t#1@k7q2m/transcript.json",
+        "study_x/runs/run_a/processed/run.json",
+        "study_x/runs/run_a/processed/trajectories/t#1@k7q2m/transcript.json",
         "study_x/logs/run_a/a.eval",
         "study_x/logs/screen/run_a.log",
     ]
     nested, _ = upload.select("study_x", ["mock/run_m", "runs/study_x/run_b/"], root)
     assert [remote for files in nested.values() for remote, _ in files] == [
-        "study_x/runs/mock/run_m/run.json", "study_x/runs/run_b/run.json"]
+        "study_x/runs/mock/run_m/processed/run.json", "study_x/runs/run_b/processed/run.json"]
 
 
 def test_the_whole_study_takes_every_entry_but_smoke_set_aside_mac_files_and_eval_logs_no_run_names(root):
@@ -264,13 +265,13 @@ def seed_hub(root) -> dict[str, bytes]:
     are here but left out, two set_aside_ copies (one named by a local file), and the study's own documents."""
     upload.main(["study_x", "--token", FAKE], root=root)
     hub = FakeApi.hub
-    hub["study_x/runs/run_b/run.json"] = b'{"old": 1}'
-    hub["study_x/runs/run_gone/run.json"] = b"{}"
+    hub["study_x/runs/run_b/processed/run.json"] = b'{"old": 1}'
+    hub["study_x/runs/run_gone/processed/run.json"] = b"{}"
     hub["study_x/logs/run_gone/g.eval"] = b"g"
     hub["study_x/logs/screen/run_gone.log"] = b"ran\n"
-    hub["study_x/runs/smoke/s1/run.json"] = b"{}"
+    hub["study_x/runs/smoke/s1/processed/run.json"] = b"{}"
     hub["study_x/logs/only_log/b.eval"] = b"x"
-    hub["study_x/logs/set_aside_old/runs_run_b/run.json"] = b"{}"
+    hub["study_x/logs/set_aside_old/runs_run_b/processed/run.json"] = b"{}"
     hub["study_x/logs/set_aside_kept/x.json"] = b"{}"
     hub["study_x/README.md"] = b"# the study\n"
     hub["study_x/figures/f.png"] = b"png"
@@ -290,12 +291,13 @@ def test_compare_sorts_every_hub_file_in_reach_and_never_a_studys_own_documents(
     assert "study_x/README.md" not in hub and "study_x/figures/f.png" not in hub
     ops = upload.compare(every, hub, "study_x", root, delete_stale=True)
     assert ops["add"] == ["study_x/runs/run_b/notes.json"]
-    assert ops["change"] == ["study_x/runs/run_b/run.json"]
+    assert ops["change"] == ["study_x/runs/run_b/processed/run.json"]
     assert len(ops["same"]) == len(every) - 2
     assert ops["delete"] == ["study_x/logs/run_gone/g.eval", "study_x/logs/screen/run_gone.log",
-                             "study_x/logs/set_aside_old/runs_run_b/run.json", "study_x/runs/run_gone/run.json"]
+                             "study_x/logs/set_aside_old/runs_run_b/processed/run.json",
+                             "study_x/runs/run_gone/processed/run.json"]
     assert ops["keep"] == ["study_x/logs/only_log/b.eval", "study_x/logs/set_aside_kept/x.json",
-                           "study_x/runs/smoke/s1/run.json"]
+                           "study_x/runs/smoke/s1/processed/run.json"]
     assert ops["stale"] == []
     assert upload.compare(every, hub, "study_x", root, delete_stale=False)["stale"] == ops["delete"]
 
@@ -318,9 +320,10 @@ def test_delete_stale_deletes_in_the_same_commit_only_files_gone_here_and_unname
     [(_, _, message, operations)] = commits(api)
     deleted = sorted(op.path_in_repo for op in operations if isinstance(op, CommitOperationDelete))
     added = sorted(op.path_in_repo for op in operations if isinstance(op, CommitOperationAdd))
-    assert added == ["study_x/runs/run_b/notes.json", "study_x/runs/run_b/run.json"]
+    assert added == ["study_x/runs/run_b/notes.json", "study_x/runs/run_b/processed/run.json"]
     assert deleted == ["study_x/logs/run_gone/g.eval", "study_x/logs/screen/run_gone.log",
-                       "study_x/logs/set_aside_old/runs_run_b/run.json", "study_x/runs/run_gone/run.json"]
+                       "study_x/logs/set_aside_old/runs_run_b/processed/run.json",
+                       "study_x/runs/run_gone/processed/run.json"]
     assert message == "study_x: the whole study (1 added, 1 changed, 4 deleted)"
     for path in deleted:
         assert path not in FakeApi.hub
@@ -329,7 +332,7 @@ def test_delete_stale_deletes_in_the_same_commit_only_files_gone_here_and_unname
     assert set(before) - set(deleted) <= set(FakeApi.hub)
     assert FakeApi.hub["study_x/README.md"] == b"# the study\n" and "study_x/figures/f.png" in FakeApi.hub
     out = capsys.readouterr().out
-    assert "delete study_x/runs/run_gone/run.json" in out
+    assert "delete study_x/runs/run_gone/processed/run.json" in out
     assert "8 of 8 files on the Hub with the same bytes, 4 of 4 deleted" in out
 
 
@@ -343,7 +346,7 @@ def test_delete_stale_with_runs_reaches_only_those_runs_paths(root, api):
         "study_x/runs/run_a/stale.json"]
     assert [op.path_in_repo for op in operations if isinstance(op, CommitOperationAdd)] == [
         "study_x/logs/screen/run_a.log"]
-    assert "study_x/runs/run_gone/run.json" in FakeApi.hub
+    assert "study_x/runs/run_gone/processed/run.json" in FakeApi.hub
 
 
 def test_a_rerun_with_nothing_new_makes_no_commit(root, api, capsys):
@@ -362,41 +365,40 @@ def test_the_listing_names_every_path_by_kind_with_both_sizes(root, api, tmp_pat
     rows = [line.split("\t") for line in listing.read_text().splitlines()]
     assert rows[0] == ["kind", "path", "local_bytes", "hub_bytes"]
     by_path = {path: (kind, here, there) for kind, path, here, there in rows[1:]}
-    assert by_path["study_x/runs/run_gone/run.json"] == ("delete", "", "2")
+    assert by_path["study_x/runs/run_gone/processed/run.json"] == ("delete", "", "2")
     assert by_path["study_x/runs/run_b/notes.json"][0::2] == ("add", "")
-    assert by_path["study_x/runs/run_b/run.json"] == ("change", "2", "10")
-    assert by_path["study_x/runs/smoke/s1/run.json"][0] == "keep"
+    assert by_path["study_x/runs/run_b/processed/run.json"] == ("change", "2", "10")
+    assert by_path["study_x/runs/smoke/s1/processed/run.json"][0] == "keep"
     assert sum(1 for kind, *_ in rows[1:] if kind == "same") == 6
 
 
-def test_the_apart_controls_go_to_their_own_layout(apart, api):
+def test_the_apart_controls_go_as_a_study_does(apart, api):
     items, skipped = upload.select("apart_controls", [], apart)
     assert sorted(items) == ["README.md", "ds", "manifest.jsonl"] and skipped == [".DS_Store"]
-    assert [remote for remote, _ in items["ds"]] == ["apart_controls/ds/binder/cheat/s1/eval/x.eval",
-                                                    "apart_controls/ds/binder/cheat/s1/run.json"]
-    for run in ("ds/binder/cheat/s1", "apart_controls/ds/binder/cheat/s1/", "runs/apart_controls/ds/binder/cheat/s1"):
+    assert [remote for remote, _ in items["ds"]] == ["apart_controls/runs/ds/binder/cheat/s1/processed/run.json",
+                                                    "apart_controls/logs/ds/binder/cheat/s1/x.eval"]
+    for run in ("ds/binder/cheat/s1", "runs/apart_controls/ds/binder/cheat/s1"):
         one, _ = upload.select("apart_controls", [run], apart)
         assert [remote for files in one.values() for remote, _ in files] == [remote for remote, _ in items["ds"]]
-    assert upload.reach("apart_controls", []) == (["apart_controls/"], [])
-    assert upload.reach("apart_controls", ["ds/binder/cheat/s1"]) == (["apart_controls/ds/binder/cheat/s1/"], [])
+    assert upload.reach("apart_controls", []) == (["apart_controls/runs/", "apart_controls/logs/"], [])
     with pytest.raises(SystemExit):
         upload.select("apart_controls", ["ds/../../x"], apart)
 
 
 def test_the_apart_controls_upload_deletes_only_what_is_gone_here(apart, api, capsys):
-    FakeApi.hub.update({"apart_controls/ds/binder/cheat/s9/run.json": b"{}", "README.md": b"# dataset\n",
-                        "study_x/runs/r/run.json": b"{}"})
+    FakeApi.hub.update({"apart_controls/runs/ds/binder/cheat/s9/processed/run.json": b"{}", "README.md": b"# dataset\n",
+                        "study_x/runs/r/processed/run.json": b"{}"})
     assert upload.main(["apart_controls", "--token", FAKE, "--delete-stale"], root=apart) == 0
     [(_, _, message, operations)] = commits(api)
     assert [op.path_in_repo for op in operations if isinstance(op, CommitOperationDelete)] == [
-        "apart_controls/ds/binder/cheat/s9/run.json"]
+        "apart_controls/runs/ds/binder/cheat/s9/processed/run.json"]
     assert message == "apart_controls: the whole study (4 added, 0 changed, 1 deleted)"
-    assert FakeApi.hub["README.md"] == b"# dataset\n" and "study_x/runs/r/run.json" in FakeApi.hub
+    assert FakeApi.hub["README.md"] == b"# dataset\n" and "study_x/runs/r/processed/run.json" in FakeApi.hub
     assert "4 of 4 files on the Hub with the same bytes, 1 of 1 deleted" in capsys.readouterr().out
 
 
 def test_the_apart_controls_are_scanned_for_keys_like_a_study(apart, api, capsys):
-    (apart / "runs" / "apart_controls" / "ds" / "binder" / "cheat" / "s1" / "run.json").write_text(
+    write_text(apart / "runs" / "apart_controls" / "ds" / "binder" / "cheat" / "s1" / "processed/run.json", 
         '{"k": "sk-or-v1-fakefakefakefake0000"}')
     with pytest.raises(SystemExit):
         upload.main(["apart_controls", "--token", FAKE], root=apart)
@@ -406,8 +408,8 @@ def test_the_apart_controls_are_scanned_for_keys_like_a_study(apart, api, capsys
 
 
 @pytest.mark.parametrize("remote", [
-    "study_x/runs/run_a/run.json", "study_x/logs/run_a/a.eval", "study_x/logs/screen/run_a.log",
-    "apart_controls/ds/binder/cheat/s1/run.json", "apart_controls/manifest.jsonl",
+    "study_x/runs/run_a/processed/run.json", "study_x/logs/run_a/a.eval", "study_x/logs/screen/run_a.log",
+    "apart_controls/runs/ds/binder/cheat/s1/processed/run.json", "apart_controls/runs/manifest.jsonl",
     "study_x/README.md", "study_x/figures/f.png", "README.md", "study_x/runs/../x",
 ])
 def test_local_of_is_the_pulls_mapping(tmp_path, remote):

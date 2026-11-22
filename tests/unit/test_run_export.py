@@ -36,6 +36,7 @@ from src.swarm.awareness_probes import provider_messages
 from src.swarm.turn_rules import TURN_RULES_TAG
 from src.swarm.turn_rules._turn_rules_filter import ASSISTANT_PROMPT, ORBIT_1X_ASSISTANT_PROMPT
 from src.ui._eval_log_views import message_dict
+from tests.support.run_files import write_text
 
 
 def event(input_tokens, cached, output, reasoning=0, cost=None):
@@ -125,10 +126,10 @@ def test_an_export_never_replaces_another_evals_run_unasked(tmp_path):
     run_dir = tmp_path / "runs" / "riemann_minimal"
     run_export.write_run(first, run_dir)
     verdicts = verdict_files.path(run_dir, "cheatbench", "gpt-6-luna")   # a judge pass's file, which no export clears
-    verdicts.parent.mkdir()
+    verdicts.parent.mkdir(parents=True)
     verdicts.write_text('{"unit": "s#1"}\n')
     before = files_of(run_dir)
-    assert json.loads(before["run.json"])["eval_id"] == first_id != second_id
+    assert json.loads(before["processed/run.json"])["eval_id"] == first_id != second_id
     with pytest.raises(run_export.RunFolderTaken) as refused:
         run_export.write_run(second, run_dir)
     message = str(refused.value)
@@ -136,9 +137,9 @@ def test_an_export_never_replaces_another_evals_run_unasked(tmp_path):
     assert message.endswith(run_export.PYTHON_REMEDY) and refused.value.base in message
     assert files_of(run_dir) == before
     run_export.write_run(first, run_dir)
-    assert json.loads((run_dir / "run.json").read_text())["eval_id"] == first_id
+    assert json.loads((run_dir / "processed/run.json").read_text())["eval_id"] == first_id
     run_export.write_run(second, run_dir, replace=True)
-    assert json.loads((run_dir / "run.json").read_text())["eval_id"] == second_id
+    assert json.loads((run_dir / "processed/run.json").read_text())["eval_id"] == second_id
     assert files_of(tmp_path / "runs" / "attempts" / "riemann_minimal.1") == before
     assert "judges/cheatbench.gpt-6-luna.jsonl" not in files_of(run_dir)
     assert sorted(path.name for path in logs.iterdir()) == ["second.eval"]
@@ -146,7 +147,7 @@ def test_an_export_never_replaces_another_evals_run_unasked(tmp_path):
     # the attempt exported again from its own log, as regenerate and rejudge do, keeps the run's name as run_id
     attempt = tmp_path / "runs" / "attempts" / "riemann_minimal.1"
     run_export.write_run(tmp_path / "logs" / "attempts" / "riemann_minimal.1" / "first.eval", attempt)
-    assert json.loads((attempt / "run.json").read_text())["run_id"] == "riemann_minimal"
+    assert json.loads((attempt / "processed/run.json").read_text())["run_id"] == "riemann_minimal"
 
 
 def test_an_export_names_the_versions_that_ran_the_eval_and_a_re_export_keeps_them(tmp_path):
@@ -160,16 +161,17 @@ def test_an_export_names_the_versions_that_ran_the_eval_and_a_re_export_keeps_th
     one_sample_log(second, {"inspect_ai": "0.3.200"})
     run_dir = tmp_path / "runs" / "riemann_minimal"
     run_export.write_run(first, run_dir)
-    run = json.loads((run_dir / "run.json").read_text())
+    run = json.loads((run_dir / "processed/run.json").read_text())
     assert (run["orbit_version"], run["inspect_version"]) == (orbit.__version__, "0.3.100") != ("1.0.3", "0.3.100")
-    (run_dir / "run.json").write_text(json.dumps({**run, "orbit_version": "1.0.3"}))  # the run's own, from its box
+    write_text(run_dir / "processed/run.json", json.dumps({**run,
+                                                           "orbit_version": "1.0.3"}))  # the run's own, from its box
     run_export.write_run(first, run_dir)                                               # regenerate
-    run = json.loads((run_dir / "run.json").read_text())
-    episodes = [json.loads(line) for line in (run_dir / "episodes.jsonl").read_text().splitlines()]
+    run = json.loads((run_dir / "processed/run.json").read_text())
+    episodes = [json.loads(line) for line in (run_dir / "processed/episodes.jsonl").read_text().splitlines()]
     assert (run["orbit_version"], run["inspect_version"]) == ("1.0.3", "0.3.100")
     assert [ep["agent_version"] for ep in episodes] == ["orbit-1.0.3+inspect-ai-0.3.100"]
     run_export.write_run(second, run_dir, replace=True)
-    run = json.loads((run_dir / "run.json").read_text())
+    run = json.loads((run_dir / "processed/run.json").read_text())
     assert (run["orbit_version"], run["inspect_version"]) == (orbit.__version__, "0.3.200")
 
 
@@ -177,17 +179,17 @@ def test_a_re_export_keeps_the_run_name_its_first_export_recorded(tmp_path):
     """A collection that names its folders otherwise (apart_controls' <model>/<task>/<cell>/s<seed>) keeps each run's
     name on a re-export of the same eval; a first export names the run after its folder."""
     run_dir = tmp_path / "runs" / "apart_controls" / "luna" / "poem" / "solo" / "s1"
-    log = run_dir / "eval" / "a.eval"
+    log = tmp_path / "logs" / "apart_controls" / "luna" / "poem" / "solo" / "s1" / "a.eval"
     log.parent.mkdir(parents=True)
     one_sample_log(log)
     run_export.write_run(log, run_dir)
-    run = json.loads((run_dir / "run.json").read_text())
+    run = json.loads((run_dir / "processed/run.json").read_text())
     assert run["run_id"] == "s1"
-    (run_dir / "run.json").write_text(json.dumps({**run, "run_id": "poem_solo_luna_s1"}))
+    write_text(run_dir / "processed/run.json", json.dumps({**run, "run_id": "poem_solo_luna_s1"}))
     run_export.write_run(log, run_dir)
-    assert json.loads((run_dir / "run.json").read_text())["run_id"] == "poem_solo_luna_s1"
-    assert (log.is_file(), json.loads((run_dir / "run.json").read_text())["eval_log"]) == (
-        True, "runs/apart_controls/luna/poem/solo/s1/eval/a.eval")
+    assert json.loads((run_dir / "processed/run.json").read_text())["run_id"] == "poem_solo_luna_s1"
+    assert (log.is_file(), json.loads((run_dir / "processed/run.json").read_text())["eval_log"]) == (
+        True, "logs/apart_controls/luna/poem/solo/s1/a.eval")
 
 
 def test_the_transcript_names_the_versions_of_its_view():

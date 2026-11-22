@@ -93,7 +93,7 @@ from src.domains.swe._swe_honeypot import piece_ref
 from src.domains.swe._swe_scoring import GUARD_DIFF
 from src.domains.swe.swe_inputs import load_split
 from src.judging.cheatbench_judge import judge_spec
-from src.measures.run_directory import ACCESS_LOG, RunDir
+from src.measures.run_directory import RunDir
 from src.sandbox.access_log.access_monitor import (
     AUDITOR,
     LOG_PATH,
@@ -214,7 +214,7 @@ def logged(name: str, benchmark, config: SwarmConfig, script: dict, *, status: s
     sample = assert_ok(log) if finished else log.samples[0]
     suite.ladder(name)
     run = RunDir(suite.runs / name)
-    block, rows = run.run_json["access_log"], read_jsonl(run.path / ACCESS_LOG)
+    block, rows = run.run_json["access_log"], read_jsonl(run.path / "processed/access_log.jsonl")
     assert block["status"] == status, block
     if status not in ("off", "host"):
         raw = sample.store[STORE]["rows"]
@@ -653,7 +653,7 @@ def scenario_monitor_off() -> dict:
     run = logged("monitor_off", SubsetSum(), team("n_agents=2", "rounds=3", "access_log=false"), script,
                  status="off")
     assert run.block == {"status": "off"} and run.rows == [], run.block
-    assert not (suite_of(SubsetSum()).runs / "monitor_off" / ACCESS_LOG).exists()
+    assert not (suite_of(SubsetSum()).runs / "monitor_off" / "processed/access_log.jsonl").exists()
     assert STORE not in run.sample.store and AUDITOR not in compose_services(run.sample), sorted(run.sample.store)
     assert MONITOR_DEVIATION not in run.run["deviations"], run.run["deviations"]
     assert "access_log" not in run.team and all("access_log" not in row for row in run.agents.values()), run.team
@@ -778,7 +778,7 @@ def refused_at_setup(name: str, benchmark, status: str) -> dict:
 
 def scenario_monitor_absent() -> dict:
     absent = refused_at_setup("monitor_absent", Unmarkable(), "absent")
-    assert not (suite_of(Unmarkable()).runs / "monitor_absent" / ACCESS_LOG).exists()
+    assert not (suite_of(Unmarkable()).runs / "monitor_absent" / "processed/access_log.jsonl").exists()
     broken = refused_at_setup("monitor_one_unarmed", OneUnmarkable(), "broken")
     assert broken["control"]["start"]["missing"] == ["a01:ghost"], broken["control"]
     return {"absent": absent, "broken": broken["control"]}

@@ -60,7 +60,7 @@ def check_seed(name: str, record: dict, agents: list[str], planted: dict[str, st
     seed = run["seed"]
     assert {k: seed[k] for k in record} == common.plain(record), seed
     assert {p["agent"]: p["path"] for p in seed["planted"]} == planted, seed["planted"]
-    [comm] = read_json_dir(SUITE.runs / name / "communication").values()
+    [comm] = read_json_dir(SUITE.runs / name / "processed/communication").values()
     seeded = [m for m in comm["messages"] if m.get("invocation_id") == SEEDED]
     assert [(m["sender"], m["content"]) for m in seeded] == [(p["author"], p["text"]) for p in record["posts"]]
     assert comm["messages"][:len(seeded)] == seeded and seed["post_ids"] == [m["id"] for m in seeded]

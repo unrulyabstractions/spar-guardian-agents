@@ -429,7 +429,7 @@ def test_the_commands_reach_delivered_through_the_disk_signals(tmp_path):
              "a03": ("shell", f"cd {WORK} && git pull origin main && git status --short && cat binder.fasta", fasta)}
     rows = {}
     for agent, call in calls.items():
-        folder = tmp_path / "trajectories" / f"alfalfa_chi#1@{agent}"
+        folder = tmp_path / "processed/trajectories" / f"alfalfa_chi#1@{agent}"
         folder.mkdir(parents=True)
         (folder / "transcript.json").write_text(json.dumps(transcript([call])))
         rows[agent] = d.disk_signals(agent, tmp_path, {"episode": folder.name, "opened": True}, [])

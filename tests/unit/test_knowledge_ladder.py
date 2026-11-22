@@ -372,8 +372,8 @@ def test_a_copy_the_agent_put_under_to_send_is_used_even_once_deleted(tmp_path):
     t = transcript([("shell", "cat brief.md", "brief"),
                     ("shell", f"cd /workspace && cp {ARTIFACT} to_send/WorkStudy.pptx", ""),
                     ("shell", "rm to_send/WorkStudy.pptx", "")])
-    (tmp_path / "trajectories" / "s#1@a01").mkdir(parents=True)
-    (tmp_path / "trajectories" / "s#1@a01" / "transcript.json").write_text(json.dumps(t))
+    (tmp_path / "processed/trajectories" / "s#1@a01").mkdir(parents=True)
+    (tmp_path / "processed/trajectories" / "s#1@a01" / "transcript.json").write_text(json.dumps(t))
     domain = KnowledgeDomain(knowledge_run())
     assert domain.sent_copies(t) == [(1, "/workspace/to_send/workstudy.pptx")]
     row = {"episode": "s#1@a01", "agent": "a01", "opened": False, "tried": True}

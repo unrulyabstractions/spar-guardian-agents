@@ -65,7 +65,7 @@ make hf-upload STUDY=ian_baseline_explorations_1 RUN=<run> DRY_RUN=1
 make hf-upload STUDY=ian_baseline_explorations_1 RUN=<run>
 ```
 
-The upload refuses any file that holds a key, the token or the git email. Without `RUN` it uploads the whole study except its smoke folders and the old-layout copies in `logs/<study>/set_aside_*/`. `STUDY=apart_controls` uploads `runs/apart_controls/` to `apart_controls/`, whole or one run such as `RUN=ds/binder/cheat/s1`. It skips files the Hub already holds unchanged. It deletes nothing there unless you give `DELETE_STALE=1`: then the same commit deletes each Hub file under the study's `runs/` and `logs/` (or under `apart_controls/`) whose local file is gone. A study's own README, figures and tables on the Hub are never touched. `LISTING=<file>` writes every path with what the upload does to it. The dataset is public, so anyone can read everything you upload.
+The upload refuses any file that holds a key, the token or the git email. Without `RUN` it uploads the whole study except its smoke folders and the old-layout copies in `logs/<study>/set_aside_*/`. `STUDY=apart_controls` uploads like any study: `apart_controls/runs/` and `apart_controls/logs/`, whole or one run such as `RUN=ds/binder/cheat/s1`. It skips files the Hub already holds unchanged. It deletes nothing there unless you give `DELETE_STALE=1`: then the same commit deletes each Hub file under the study's `runs/` and `logs/` (or under `apart_controls/`) whose local file is gone. A study's own README, figures and tables on the Hub are never touched. `LISTING=<file>` writes every path with what the upload does to it. The dataset is public, so anyone can read everything you upload.
 
 ## Before you upload new runs
 
@@ -77,7 +77,7 @@ The viewer reads each run's ladders from its own files, so a new run shows up as
 | Read the rungs at every call | `make replay STUDY=<study>` | none: Docker, no model call |
 | Score the judge labels | `python -m src judge-pass labels runs/<study> --judge gpt-6-luna --cap <dollars> --only-missing` | paid: ask first |
 
-`make replay` plays each run back from its recorded tool calls and puts `steps.jsonl` and `replay.json` beside the runs whose replay ends in the run's own state. A run whose replay differs is read at its end, as before. It needs Docker running and a few GB of free Docker disk. Add `RUN="<run> ..."` for some runs and `JOBS=<n>` for more at once (default 2).
+`make replay` plays each run back from its recorded tool calls and puts `steps.jsonl` and `replay.json` in `processed/replay/` of the runs whose replay ends in the run's own state. A run whose replay differs is read at its end, as before. It needs Docker running and a few GB of free Docker disk. Add `RUN="<run> ..."` for some runs and `JOBS=<n>` for more at once (default 2).
 
 Without judge scores, the viewer shows "not judged" in the Judge labels columns. Without a replay, the rungs come from the run's end state. Single-agent runs never appear in the viewer.
 
@@ -85,7 +85,7 @@ Without judge scores, the viewer shows "not judged" in the Judge labels columns.
 
 A run made since d41f78a (2026-11-22) takes its own snapshots (`tmp_snapshots`, on by default): it lists /tmp, /var/tmp and /dev/shm of every agent machine as root before the first round and after each tool call that ran a command there, and the export writes `tmp_snapshots.json` with `"clock": "run"`. Each step that ran adds its shot's time `t`, its `window` (the machine's shot before and its own), `overlapping` (the other calls and `jobs` that ran on the machine in that window) and an `attribution`: `call` when the change is the call's own, `shared` when something else ran in the window, `unknown` with no shot before. run.json `tmp_snapshots` gives its `status` (`written`, `error`, `off` or `none`), the shots, the errors and the listing times. A failed listing is recorded and never fails the run, and a listing never opens a honeypot file.
 
-For an older run, `uv run python -m src.replay.tmp_snapshots runs/<study>/<run> --out <replay dir>` replays it and puts `tmp_snapshots.json` beside it, only when the replay is faithful. It holds the same directories before and after every recorded call. It needs Docker, makes no model call, and refuses to replace the file without `--force`. The keys below are both files'.
+For an older run, `uv run python -m src.replay.tmp_snapshots runs/<study>/<run> --out <replay dir>` replays it and puts `tmp_snapshots.json` in its `processed/`, only when the replay is faithful. It holds the same directories before and after every recorded call. It needs Docker, makes no model call, and refuses to replace the file without `--force`. The keys below are both files'.
 
 | Key | What it holds |
 |---|---|

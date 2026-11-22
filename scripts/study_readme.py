@@ -37,7 +37,7 @@ import yaml
 
 from src.configuration.settings import ROOT
 from src.measures.judge_labels import SCORE_ANCHORS
-from src.measures.run_directory import GROUPS, RUN_JSON, study_runs
+from src.measures.run_directory import FILES, GROUPS, RunDir, study_runs
 from src.ui.transcript_levels import LADDERS, ORDER, label_about
 from src.utils import progress
 
@@ -80,27 +80,34 @@ class Spec:
 
 
 SPECS = (
-    Spec("run", "run.json", "run.json"),
-    Spec("episodes", "episodes.jsonl", "episodes.jsonl"),
-    Spec("signals_agent", "signals.jsonl", "signals.jsonl, agent rows (`\"row\": \"agent\"`)", where="agent"),
-    Spec("signals_team", "signals.jsonl", "signals.jsonl, the team row (`\"row\": \"team\"`)", where="team"),
-    Spec("cheatbench", "judges/cheatbench.*.jsonl", "judges/cheatbench.<judge>.jsonl", by_task=True),
-    Spec("labels", "judges/labels.*.jsonl", "judges/labels.<judge>.jsonl"),
-    Spec("access_log", "access_log.jsonl", "access_log.jsonl"),
-    Spec("network", "network.jsonl", "network.jsonl"),
-    Spec("communication", "communication/*.json", "communication/<sample>.json"),
-    Spec("messages", "communication/*.json", "communication/<sample>.json `messages[]`", items="messages"),
-    Spec("events", "communication/*.json", "communication/<sample>.json `events[]`", items="events"),
-    Spec("defense", "defense/*.json", "defense/<sample>.json"),
-    Spec("transcript", "trajectories/*/transcript.json", "trajectories/<episode>/transcript.json"),
-    Spec("trajectory", "trajectories/*/transcript.json", "transcript.json `trajectory`", items="trajectory"),
-    Spec("atif_steps", "trajectories/*/transcript.json", "transcript.json `trajectory.steps[]`",
+    Spec("run", FILES["run.json"], FILES["run.json"]),
+    Spec("episodes", FILES["episodes.jsonl"], FILES["episodes.jsonl"]),
+    Spec("signals_agent", FILES["signals.jsonl"], f"{FILES['signals.jsonl']}, agent rows (`\"row\": \"agent\"`)",
+         where="agent"),
+    Spec("signals_team", FILES["signals.jsonl"], f"{FILES['signals.jsonl']}, the team row (`\"row\": \"team\"`)",
+         where="team"),
+    Spec("cheatbench", FILES["judges"] + "cheatbench.*.jsonl", FILES["judges"] + "cheatbench.<judge>.jsonl",
+         by_task=True),
+    Spec("labels", FILES["judges"] + "labels.*.jsonl", FILES["judges"] + "labels.<judge>.jsonl"),
+    Spec("access_log", FILES["access_log.jsonl"], FILES["access_log.jsonl"]),
+    Spec("network", FILES["network.jsonl"], FILES["network.jsonl"]),
+    Spec("communication", FILES["communication"] + "*.json", FILES["communication"] + "<sample>.json"),
+    Spec("messages", FILES["communication"] + "*.json", FILES["communication"] + "<sample>.json" + " `messages[]`",
+         items="messages"),
+    Spec("events", FILES["communication"] + "*.json", FILES["communication"] + "<sample>.json" + " `events[]`",
+         items="events"),
+    Spec("defense", FILES["defense"] + "*.json", FILES["defense"] + "<sample>.json"),
+    Spec("transcript", FILES["trajectories"] + "*/transcript.json",
+         FILES["trajectories"] + "<episode>/transcript.json"),
+    Spec("trajectory", FILES["trajectories"] + "*/transcript.json", "transcript.json `trajectory`",
+         items="trajectory"),
+    Spec("atif_steps", FILES["trajectories"] + "*/transcript.json", "transcript.json `trajectory.steps[]`",
          items="trajectory.steps"),
-    Spec("steps", "steps.jsonl", "steps.jsonl"),
-    Spec("replay", "replay.json", "replay.json"),
-    Spec("tmp_snapshots", "tmp_snapshots.json", "tmp_snapshots.json"),
-    Spec("swe_summary", "swe_summary.json", "swe_summary.json"),
-    Spec("docent_summary", "tools/docent/summary.json", "tools/docent/summary.json"),
+    Spec("steps", FILES["steps.jsonl"], FILES["steps.jsonl"]),
+    Spec("replay", FILES["replay.json"], FILES["replay.json"]),
+    Spec("tmp_snapshots", FILES["tmp_snapshots.json"], FILES["tmp_snapshots.json"]),
+    Spec("swe_summary", FILES["swe_summary.json"], FILES["swe_summary.json"]),
+    Spec("docent_summary", FILES["tools"] + "docent/summary.json", FILES["tools"] + "docent/summary.json"),
 )
 """The tables, in README order. A spec whose files the study lacks has no table."""
 
@@ -116,7 +123,7 @@ def meanings() -> dict:
 def runs_of(study: Path) -> list[Path]:
     """The study's runs: run_directory.study_runs, or every folder with a run.json for the apart controls."""
     if study.name == MANIFEST_STUDY:
-        return sorted(path.parent for path in study.rglob(RUN_JSON))
+        return sorted(path.parent.parent for path in study.rglob(FILES["run.json"]))
     return study_runs(study)
 
 
@@ -330,7 +337,8 @@ def tree(study: Path, runs: list[Path], data: dict) -> list[str]:
                 lines.append(f"  {group + '/<run>/':<34} {count(len(inside), 'run')}: {about}")
         for path in sorted(p for p in study.iterdir() if p.is_dir() and p.name not in GROUPS and p not in run_set):
             lines.append(f"  {path.name + '/':<34} {SUITE}")
-    logs = ROOT / "logs" / study.name
+    lines += [f"  {'<run>/' + layer:<34} {cell(about)}" for layer, about in data["run_folders"].items()]
+    logs = study.resolve().parent.parent / "logs" / study.name
     if logs.is_dir():
         lines += [f"logs/{study.name}/", *log_tree(study, logs, runs, data)]
     return lines
@@ -340,6 +348,11 @@ def log_tree(study: Path, logs: Path, runs: list[Path], data: dict) -> list[str]
     """The study's log folder by entry, with its files by suffix: the top-level runs' logs together, each group,
     every other folder with its line from log_groups, and the smoke suites' logs together, uncounted, since a smoke
     run may write there at any time."""
+    if study.name == MANIFEST_STUDY:
+        logs_found = Counter(path.suffix or path.name for path in logs.rglob("*") if path.is_file()
+                             and path.name not in IGNORED)
+        files = ", ".join(f"{n:,} {suffix}" for suffix, n in sorted(logs_found.items()))
+        return [f"  {'<model>/<task>/<cell>/s<seed>/':<34} {files}: each run's eval log"]
     top = {r.name for r in runs if r.parent == study}
     entries: dict[str, Counter] = defaultdict(Counter)
     for path in sorted(p for p in logs.rglob("*") if p.is_file() and p.name not in IGNORED):
@@ -375,28 +388,27 @@ def link_rows(study: Path, runs: list[Path]) -> list[tuple[str, str]]:
     """(link, how many resolve) for every link the study's files hold."""
     eval_logs, transcripts, verdict_paths, prompts, units, signal_eps, samples = [], [], [], [], [], [], []
     for run in runs:
-        run_json = json.loads((run / RUN_JSON).read_text())
+        stored = RunDir(run)
+        run_json = stored.run_json
         if run_json.get("eval_log"):
             eval_logs.append((ROOT, run_json["eval_log"]))
-        episodes = rows_of(run / "episodes.jsonl") if (run / "episodes.jsonl").is_file() else []
+        episodes = stored.episodes()
         names = {ep["episode"] for ep in episodes}
         keys = {f"{ep['id']}#{ep['replicate']}" for ep in episodes}
-        transcripts += [(run, ep["transcript_path"]) for ep in episodes if ep.get("transcript_path")]
-        for path in sorted(run.glob("judges/*.jsonl")):
+        transcripts += [(stored.processed, ep["transcript_path"]) for ep in episodes if ep.get("transcript_path")]
+        for path in sorted(stored.file("judges").glob("*.jsonl")):
             for row in rows_of(path):
                 if row.get("transcript_path"):
-                    verdict_paths.append((run, row["transcript_path"]))
+                    verdict_paths.append((stored.processed, row["transcript_path"]))
                 prompt = row.get("judge_prompt")
                 prompts += [(ROOT, p) for p in ([prompt] if isinstance(prompt, str) else prompt or [])]
                 units.append(row.get("unit") in names or row.get("episode") in names)
-        if (run / "signals.jsonl").is_file():
-            signal_eps += [row["episode"] in names for row in rows_of(run / "signals.jsonl")
-                           if row.get("row") == "agent"]
-        samples += [p.stem in keys for p in run.glob("communication/*.json")]
+        signal_eps += [row["episode"] in names for row in stored.signals()]
+        samples += [p.stem in keys for p in stored.file("communication").glob("*.json")]
     out = [("run.json `eval_log` → the eval log, from the checkout", resolves(eval_logs)),
-           ("episodes.jsonl `transcript_path` → the transcript, from the run's folder", resolves(transcripts))]
+           ("episodes.jsonl `transcript_path` → the transcript, from the run's processed/", resolves(transcripts))]
     if verdict_paths:
-        out.append(("verdict `transcript_path` → the transcript, from the run's folder", resolves(verdict_paths)))
+        out.append(("verdict `transcript_path` → the transcript, from the run's processed/", resolves(verdict_paths)))
     if prompts:
         out.append(("verdict `judge_prompt` → the judge's prompt file(s), from the checkout", resolves(prompts)))
     if units:
@@ -483,7 +495,7 @@ def run_table(study: Path, runs: list[Path]) -> list[str]:
     """One line per run: its folder, task, model, agents and the ORBIT and Inspect versions that ran it."""
     rows = []
     for run in runs:
-        meta = json.loads((run / RUN_JSON).read_text())
+        meta = RunDir(run).run_json
         rows.append([f"`{run.relative_to(study).as_posix()}`", meta.get("task"), meta.get("model"),
                      len(meta.get("agents") or []), meta.get("orbit_version"), meta.get("inspect_version")])
     return markdown_table(["run", "task", "model", "agents", "ORBIT", "Inspect"], rows)
@@ -509,8 +521,7 @@ def manifest_parts(study: Path) -> dict[str, str]:
     old = ("none", "exposed", "tried", "opened", "used", "tampered", "checked", "shipped")
     cross: Counter = Counter()
     for r in rows:
-        signals = rows_of(study / r["model"] / r["task"] / r["cell"] / f"s{r['seed']}" / "signals.jsonl")
-        team = next(s for s in signals if s.get("row") == "team")
+        team = RunDir(study / r["model"] / r["task"] / r["cell"] / f"s{r['seed']}").team_signals()[0]
         cross[(r["rung"], team["cheating_rung"])] += 1
     rungs = LADDERS["cheating"]["levels"]
     crosstab = markdown_table(["manifest `rung`", *(f"`{x}`" for x in rungs)],

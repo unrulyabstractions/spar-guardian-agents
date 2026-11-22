@@ -22,6 +22,7 @@ from src.measures import run_index, run_validity
 from src.measures.run_index import FIELDS, INDEX, build
 from src.models.model_registry import resolve
 from tests.support.run_builder import write_status_log
+from tests.support.run_files import write_text
 
 STUDY = "ian_baseline_explorations_1"
 LOG = "2026-11-01T03-31-41-00-00_run_abc.eval"
@@ -57,11 +58,11 @@ def make_run(root: Path, name: str, task: str, *, study: str = STUDY, group: str
             "validity": {"ok": flags_ok}, "eval_log": f"/root/work/logs/{study}/{name}/{LOG}"}
     folder = root / "runs" / study / (group or "") / (folder_name or name)
     folder.mkdir(parents=True)
-    (folder / "run.json").write_text(json.dumps(data))
-    (folder / "signals.jsonl").write_text(json.dumps({"row": "team", "cheating_rung": "none"}) + "\n")
-    (folder / "episodes.jsonl").write_text(json.dumps({"failure": None}) + "\n")
+    write_text(folder / "processed/run.json", json.dumps(data))
+    write_text(folder / "analysis/signals.jsonl", json.dumps({"row": "team", "cheating_rung": "none"}) + "\n")
+    write_text(folder / "processed/episodes.jsonl", json.dumps({"failure": None}) + "\n")
     for agent in (a for a, role in roles.items() if role in ("regulator", "disregulator")):
-        transcript = folder / "trajectories" / f"row#1@{agent}" / "transcript.json"
+        transcript = folder / "processed/trajectories" / f"row#1@{agent}" / "transcript.json"
         transcript.parent.mkdir(parents=True)
         transcript.write_text(json.dumps({"trajectory": {"steps": [{"source": "agent", "message": regulator_says}]}}))
     write_status_log(root / "logs" / study / (group or "") / (folder_name or name) / LOG, status)
@@ -78,9 +79,9 @@ def capture(root: Path, instance: int, runs: list[Path], *, stale: bool = False)
     """logs/boxes/<instance>/manifest.jsonl listing each run's run.json as the box held it, at the same path under the
     study as here."""
     study = root / "runs" / STUDY
-    rows = [{"box": f"/root/work/runs/{STUDY}/{run.relative_to(study).as_posix()}/run.json", "kind": "file",
-             "local": str(run / "run.json"),
-             "sha256": "0" * 64 if stale else hashlib.sha256((run / "run.json").read_bytes()).hexdigest()}
+    rows = [{"box": f"/root/work/runs/{STUDY}/{run.relative_to(study).as_posix()}/processed/run.json", "kind": "file",
+             "local": str(run / "processed/run.json"),
+             "sha256": "0" * 64 if stale else hashlib.sha256((run / "processed/run.json").read_bytes()).hexdigest()}
             for run in runs]
     folder = root / "logs" / "boxes" / str(instance)
     folder.mkdir(parents=True, exist_ok=True)
@@ -246,14 +247,14 @@ def test_write_refuses_a_run_a_group_and_a_folder_outside_runs(tmp_path, capsys)
     make_run(tmp_path, "binder_minimal_lunamock1", "protein_design", group="mock")
     elsewhere = tmp_path / "copy" / STUDY
     elsewhere.mkdir(parents=True)
-    for folder, refusal in ((run, "holds a run.json"), (run.parent / "mock", "is a group of a study"),
+    for folder, refusal in ((run, "holds a run"), (run.parent / "mock", "is a group of a study"),
                             (elsewhere, "not a study's folder")):
         with pytest.raises(SystemExit) as refused:
             main([str(folder), "--write"])
         assert refused.value.code == 2 and refusal in capsys.readouterr().err
         assert not (folder / INDEX).exists()
         assert main([str(folder)]) == 0
-    with pytest.raises(ValueError, match="holds a run.json"):
+    with pytest.raises(ValueError, match="holds a run"):
         run_index.write(run, [])
 
 
@@ -365,7 +366,7 @@ def test_a_silent_regulator_reads_zero_posts_and_a_run_without_one_reads_none(tm
     run = make_run(tmp_path, "binder_minimal_luna1", "protein_design")
     verdict = run_index.run_validity.validity(run)
     monkeypatch.setattr(run_index.run_validity, "validity", lambda path: {**verdict, "regulators": [{"posts": 4}]})
-    data = json.loads((run / "run.json").read_text())
+    data = json.loads((run / "processed/run.json").read_text())
     assert run_index.record(run, data, run.parent)["regulator_posts"] == 4
 
 

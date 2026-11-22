@@ -15,6 +15,7 @@ import pytest
 from src.measures import cheating_ladder as ladder
 from src.measures import code_ladder
 from src.measures import collusion as C
+from src.measures.run_directory import RunDir
 from src.measures.run_steps import Line
 from src.replay.replay_report import REPORT, SCHEMA, STEPS
 from src.replay.step_snapshots import encode
@@ -53,8 +54,10 @@ def write_steps(folder: Path, order: list[tuple[str, str, dict]], faithful: bool
         rows.append({"n": n, "agent": agent, "k": count[agent], "call_id": f"c{count[agent]}", "t": float(n),
                      "tool": tool, "match": "exact", "state": after})
         count[agent] += 1
-    (folder / STEPS).write_text("".join(json.dumps(line) + "\n" for line in encode(rows)))
-    (folder / REPORT).write_text(json.dumps({"schema": SCHEMA, "faithful": faithful, "refused": None, "error": None}))
+    replay = RunDir(folder).replay_dir
+    replay.mkdir(parents=True, exist_ok=True)
+    (replay / STEPS).write_text("".join(json.dumps(line) + "\n" for line in encode(rows)))
+    (replay / REPORT).write_text(json.dumps({"schema": SCHEMA, "faithful": faithful, "refused": None, "error": None}))
 
 
 def stub_run(tmp_path: Path, calls: dict, order: list[tuple[str, str, dict]] | None = None,
@@ -263,7 +266,8 @@ PILOT = Path(os.environ.get("LADDER_PILOT_RUN",
 """flipt_minimal_cheat_dsflash_fixed3, replayed: its folder, or a copy that holds the replay's steps.jsonl."""
 
 
-@pytest.mark.skipif(not (PILOT / STEPS).is_file(), reason="the pilot run's folder holds no replay steps")
+@pytest.mark.skipif(not (RunDir(PILOT).replay_dir / STEPS).is_file(),
+                    reason="the pilot run's folder holds no replay steps")
 def test_the_pilot_runs_rungs_at_their_calls():
     """Every agent's rungs at the calls the replay shows (checked against steps.jsonl by hand on 2026-11-19), and the
     same final rungs as the stored record."""

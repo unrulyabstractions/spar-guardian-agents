@@ -21,8 +21,8 @@ OLD_STATE = {"agents": ["a01", "a02"], "cap": 100, "pooled": True, "activations"
 def exported(tmp_path, config, scripts):
     sample, _, log = run(config, scripts, tmp_path, with_log=True)
     write_run(log.location, tmp_path / "run")
-    records = {r["agent"]: r for r in map(json.loads, (tmp_path / "run" / "episodes.jsonl").open())}
-    return sample, records, json.loads((tmp_path / "run" / "run.json").read_text())
+    records = {r["agent"]: r for r in map(json.loads, (tmp_path / "run" / "processed/episodes.jsonl").open())}
+    return sample, records, json.loads((tmp_path / "run" / "processed/run.json").read_text())
 
 
 def test_the_export_reads_rounds_and_keeps_reading_steps(tmp_path):

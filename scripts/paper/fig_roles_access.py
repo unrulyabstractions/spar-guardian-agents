@@ -23,6 +23,7 @@ from scripts.paper.study_ladders import TEXT_WIDTH_IN, valid_runs
 from src.configuration import access_policy
 from src.configuration.settings import ROOT
 from src.configuration.swarm_config import SwarmConfig
+from src.measures.run_directory import RunDir
 from src.utils import progress
 from src.utils.figure_style import INK, INK_SECONDARY, MUTED, PLANE, PRINT_DPI, SURFACE, WHITE
 
@@ -42,7 +43,7 @@ def multi_domain() -> dict:
     holds, what the roles hold, and which roles get submit. Each must agree across every such valid run."""
     teams, held, submit, runs = set(), defaultdict(set), set(), 0
     for listed in valid_runs():
-        run = json.loads((listed.path / "run.json").read_text())
+        run = RunDir(listed.path).run_json
         swarm = run.get("swarm")
         if not swarm:   # a lone agent: no team, no roles
             continue
