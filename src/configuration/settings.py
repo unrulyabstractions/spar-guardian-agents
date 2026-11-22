@@ -52,7 +52,7 @@ ROUND_TIME_S = 600
 INCOMPLETE_FAILURES = ("harness", "connection_closed")
 
 # The submodule commits this code was written against. Task construction refuses any other head.
-EXPECTED_SUBMODULE_HEADS = {"cheatbench": "4d1a825", "orbit": "fbd2b27", "lucy": "449fbf0"}
+EXPECTED_SUBMODULE_HEADS = {"cheatbench": "4d1a825", "orbit": "28dc629", "lucy": "449fbf0"}
 
 
 @functools.cache

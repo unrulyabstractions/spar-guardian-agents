@@ -63,6 +63,13 @@ def installed_inspect() -> str:
     return match.group(1) if match else inspect_ai.__version__
 
 
+def same_commit(a: str, b: str) -> bool:
+    """Two abbreviations of one commit: the shorter is a prefix of the longer (builds abbreviate hashes to different
+    lengths). A release version must match exactly."""
+    hexes = all(re.fullmatch(r"[0-9a-f]{7,}", x) for x in (a, b))
+    return (a.startswith(b) or b.startswith(a)) if hexes else a == b
+
+
 def require_proven(run_models: list[str | None]) -> None:
     """Raise ValueError when a Claude model goes through OpenRouter before a paid check proved, under the installed
     Inspect, that its cache is read."""
@@ -74,12 +81,12 @@ def require_proven(run_models: list[str | None]) -> None:
         recorded = str(verified.get("inspect", "")) if isinstance(verified, dict) else ""
         if not recorded:
             raise ValueError(f"{model}: Claude through OpenRouter is refused until scripts/check_anthropic_cache.py "
-                             "(a paid check of about a cent, run only with the user's yes) shows its cache is read and "
+                             "(a paid check of about a cent) shows its cache is read and "
                              "model_registry.yaml records caching_verified")
-        if recorded != installed:
+        if not same_commit(recorded, installed):
             raise ValueError(f"{model}: Claude through OpenRouter is refused until scripts/check_anthropic_cache.py "
                              f"passes again: caching_verified names Inspect {recorded}, and Inspect {installed} is "
-                             "installed (a paid check of about a cent, run only with the user's yes)")
+                             "installed (a paid check of about a cent)")
 
 
 def _inspect_name(model: str) -> str:

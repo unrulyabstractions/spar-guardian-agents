@@ -101,3 +101,8 @@ def test_every_recorded_check_names_its_date_and_inspect_commit():
         verified = models.entries()[name].get("caching_verified")
         if verified is not None:
             assert set(verified) == {"date", "inspect"}, name
+
+
+def test_one_commit_abbreviated_to_two_lengths_is_the_same_inspect():
+    assert cache.same_commit("c574b6bf6", "c574b6bf6674e6d5") and cache.same_commit("c574b6bf6674", "c574b6bf6")
+    assert not cache.same_commit("c574b6bf6", "c060c201c") and not cache.same_commit("0.3.292", "0.3.29")
