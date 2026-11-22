@@ -163,7 +163,7 @@ def test_as_released_the_fix_commit_is_listed_on_each_machine(git_calls):
 
 def test_a_swe_machine_names_its_agent():
     assert SWE(ISSUE).seats(swe_state("jigsaw", {"a01": ["B"], "a02": ["C"]})) == \
-        {"a01": Seat(service="a01"), "a02": Seat(service="a02")}
+        {"a01": Seat(service="a01", round_reap=True), "a02": Seat(service="a02", round_reap=True)}
 
 
 # ---------------------------------------------------------------- knowledge work
