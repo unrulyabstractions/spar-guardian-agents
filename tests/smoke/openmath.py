@@ -2,7 +2,7 @@
 
     uv run python -m tests.smoke.openmath [--only complete,message_limit,time_limit,board,swarm,judge,
                                                discover,submit,split_access,delivered,team_delivered,role_models,
-                                               random_ids,peer_shell,presence,rounds,rounds_live,jobs,alone_2,
+                                               random_ids,peer_shell,presence,rounds,rounds_live,jobs,round_time,alone_2,
                                                alone_3,alone_4,alone_10]
 
 Every scenario starts the real sandbox (CheatBench's image plus the article mirror), drives ORBIT with Inspect's
@@ -43,6 +43,11 @@ was made, a regulator that runs out of rounds, each round's line, the first mess
 `rounds_live` runs round 1 of three agents at once and checks that a read sees a post from a round still under way.
 `jobs` checks the command jobs: a command still running at the round's end kept as a job, read, stopped and killed at
 the run's end, the reap sparing it, and its late reads on its call in the access log.
+`round_time` runs tests/support/round_time_scenario.py: three workers and a regulator with peer_shell under a
+20 s round time. A 60 s command crosses rounds as a job and is read with its exit code; job_stop stops a job; grep on
+a fifo stays a job until the end of the run kills it; the quick teammate's round is not held up; the regulator's
+peer_shell job keeps its late opens on its call and its observer; and no agent, observer or /tmp listing finds the
+jobs' output.
 `alone_<n>` checks the study's hard rule in the real sandbox for n neutral agents and a regulator: each agent runs
 every route of tests/support/archive_routes.py and every archive program the image has on the slices it holds, as
 its own user, and the scorer's probe finds nothing of the submission but each agent's own slice.
@@ -96,7 +101,7 @@ from tests.smoke.common import (
     timeline_of,
     tool_calls_of,
 )
-from tests.support import archive_routes, round_scenario
+from tests.support import archive_routes, round_scenario, round_time_scenario
 from tests.support.mock_model import MODEL, call, mock_verdict, scripted, tagged_infos, text
 from tests.support.ordered_ids import DRAWN, drawn_ids
 
@@ -1202,6 +1207,30 @@ def scenario_jobs() -> dict:
             "late_reads": len(late), "round_1_s": round(first["t1"] - first["t0"], 1), "over_s": first.get("over_s")}
 
 
+def scenario_round_time() -> dict:
+    """The round time on the split layout (tests/support/round_time_scenario.py). The long worker holds slice 1, so its
+    job and the regulator's peer_shell job read the slice from its honeypot branch after their calls returned."""
+    config = small(*round_time_scenario.config_pairs())
+    roles = agent_roles(config)
+    workers = neutral_agents(config.seats, roles)
+    regulator = next(a for a in config.names if roles[a] == "regulator")
+    holds = OpenMath().plan(config, roles).holds
+    long = next(a for a in workers if holds.get(a) == ["slice1"])
+    stopper, hung = [a for a in workers if a != long]
+    read = "git show agent-014:Riemann.zip.part1 | wc -c"
+    size = len(slices(host_archive(), len(workers))[0])
+    plan = round_time_scenario.Plan(
+        long=long, stopper=stopper, hung=hung, regulator=regulator, machine=dict.fromkeys(config.names),
+        long_cmd=round_time_scenario.long_command(read), observe_cmd=round_time_scenario.observe_command(read),
+        hung_cmd="d=$(mktemp -d /tmp/hang.XXXXXX); mkfifo $d/p; grep -c x $d/p", shell=work_tools(config)[0],
+        names=config.names)
+    script, seen = round_time_scenario.round_time_script(plan)
+    log, summary, records = SUITE.run("round_time", swarm_task(OpenMath(), config), scripted(script))
+    sample = assert_ok(log)
+    return round_time_scenario.check_round_time(SUITE, "round_time", sample, records, plan, seen,
+                                                lambda lines: [int(x) for x in lines] == [size])
+
+
 ALONE_TEAMS = (2, 3, 4, 10)
 # what the setup writes outside the copies and removes before any agent starts
 SETUP_FILES = ("/workspace/.stage.tgz", "/tmp/.split.archive", "/tmp/.split.index", "/tmp/.split.msg", "/tmp/.stage")
@@ -1298,6 +1327,7 @@ SCENARIOS = {"complete": scenario_complete, "message_limit": scenario_message_li
              "role_models": scenario_role_models, "random_ids": scenario_random_ids,
              "peer_shell": scenario_peer_shell, "presence": scenario_presence,
              "rounds": scenario_rounds, "rounds_live": scenario_rounds_live, "jobs": scenario_jobs,
+             "round_time": scenario_round_time,
              **{f"alone_{n}": functools.partial(scenario_alone, n) for n in ALONE_TEAMS}}
 
 
