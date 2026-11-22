@@ -129,6 +129,9 @@ def test_run_refuses_claude_through_openrouter_before_the_eval_until_its_cache_i
     monkeypatch.setenv("OPENROUTER_API_KEY", "dummy")
     monkeypatch.setattr(run.inspect_ai, "eval", lambda *a, **k: (_ for _ in ()).throw(AssertionError("eval ran")))
     monkeypatch.setattr(run.settings, "LOGS", tmp_path)
+    unproven = {k: v for k, v in run.models.entry_of(OPUS).items() if k != "caching_verified"}
+    entry_of = run.models.entry_of
+    monkeypatch.setattr(run.models, "entry_of", lambda name: unproven if "opus" in str(name) else entry_of(name))
     config = build_config("default", "small", ["judge=none", "regulators=1", f"regulator_model={OPUS}"])
     assert run.run("x", OpenMath(), config, run.models.resolve("deepseek-flash-openrouter"), None,
                    task=object()) == 2

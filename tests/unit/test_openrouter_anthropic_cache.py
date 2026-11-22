@@ -75,13 +75,16 @@ def test_other_families_get_no_marks_and_their_strings_stay_strings(name):
 
 def test_claude_through_openrouter_is_refused_until_a_check_under_the_installed_inspect_is_recorded(monkeypatch):
     opus = "swarm/claude-opus-5-5-openrouter"
+    unproven = {k: v for k, v in models.entry_of("claude-opus-5-5-openrouter").items() if k != "caching_verified"}
+
+    def recorded(value):
+        entry = dict(unproven, caching_verified=value)
+        monkeypatch.setattr(cache.models, "entry_of", lambda name: entry if "claude" in name else unproven)
+
+    monkeypatch.setattr(cache.models, "entry_of", lambda name: unproven)
     with pytest.raises(ValueError, match="refused until scripts/check_anthropic_cache.py"):
         cache.require_proven([models.resolve("gpt-6-luna-openrouter"), opus])
     cache.require_proven([models.resolve("gpt-6-luna-openrouter"), "mockllm/model", None])
-
-    def recorded(value):
-        entry = dict(models.entry_of("claude-opus-5-5-openrouter"), caching_verified=value)
-        monkeypatch.setattr(cache.models, "entry_of", lambda name: entry)
 
     recorded("2026-11-02")   # the older form, from before the Inspect commit was recorded
     with pytest.raises(ValueError, match="refused until"):
