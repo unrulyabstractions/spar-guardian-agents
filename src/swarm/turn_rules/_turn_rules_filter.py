@@ -198,17 +198,19 @@ def seen_of(st: TurnState, agent: str, messages: list) -> int:
 def with_paragraph(message, text: str):
     """A copy of the message with text as its last paragraph, for the provider: in a tool result's error message when
     it holds one (what the provider receives in place of the content), else in its content, a list's last text or a
-    text of its own. The copy keeps the message's role, id and tool call id, so a tool result stays a tool result."""
+    text of its own, one blank line after the text's last line. The copy keeps the message's role, id and tool call id,
+    so a tool result stays a tool result."""
+    def joined(before: str) -> str:
+        return f"{before.rstrip(chr(10))}\n\n{text}" if before.strip() else text
+
     if isinstance(message, ChatMessageTool) and message.error is not None:
-        error = message.error
-        return message.model_copy(update={"error": replace(error, message=f"{error.message}\n\n{text}")})
+        return message.model_copy(update={"error": replace(message.error, message=joined(message.error.message))})
     content = message.content
     if isinstance(content, str):
-        return message.model_copy(update={"content": f"{content}\n\n{text}" if content else text})
+        return message.model_copy(update={"content": joined(content)})
     items = list(content)
     if items and isinstance(items[-1], ContentText):
-        last = items[-1]
-        items[-1] = last.model_copy(update={"text": f"{last.text}\n\n{text}" if last.text else text})
+        items[-1] = items[-1].model_copy(update={"text": joined(items[-1].text)})
     else:
         items.append(ContentText(text=text))
     return message.model_copy(update={"content": items})

@@ -205,8 +205,11 @@ def rules_paragraphs(view: SampleView) -> dict[str, list[str]]:
 
 
 def with_paragraphs(text: str, added: list[str]) -> str:
-    """The text with each added paragraph after a blank line, as the provider received it."""
-    return "\n\n".join([text, *added]) if text else "\n\n".join(added)
+    """The text with each added paragraph after a blank line, as the provider received it
+    (_turn_rules_filter.with_paragraph)."""
+    for paragraph in added:
+        text = f"{text.rstrip(chr(10))}\n\n{paragraph}" if text.strip() else paragraph
+    return text
 
 
 def turn_rule_kinds(events) -> set[str]:

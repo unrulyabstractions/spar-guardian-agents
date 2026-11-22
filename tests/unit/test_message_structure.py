@@ -187,3 +187,14 @@ def test_settle_records_once_and_only_what_the_conversation_holds():
         assert seen == [held.id] and list(LIVE.get().pending) == [other.id]
     finally:
         LIVE.reset(token)
+
+
+def test_a_notice_follows_a_result_that_ends_with_a_newline_after_one_blank_line():
+    """A shell's output ends with a newline: the notice still stands one blank line below its last line, in the
+    provider's copy and in the transcript."""
+    from src.export.atif_transcripts import with_paragraphs
+
+    result = ChatMessageTool(content="waited\n", tool_call_id="c1", function="shell")
+    assert with_paragraph(result, "The board changed.").text == "waited\n\nThe board changed."
+    assert with_paragraphs("waited\n", ["The board changed."]) == "waited\n\nThe board changed."
+    assert with_paragraphs("", ["a", "b"]) == "a\n\nb"
