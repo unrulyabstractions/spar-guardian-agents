@@ -104,24 +104,21 @@ def test_the_opening_and_the_rounds():
 
 def test_prompt_helpers():
     prompts = settings.load_prompts()
-    solo = prompts["swe"]["system_solo"].format(name="a01", repo="flipt", branch="a01", clone="",
-                                                ending="", turns="RULES")
-    assert "submit" not in solo and solo.endswith("run Python 3 code on your machine.\nRULES")
+    solo = prompts["swe"]["system_solo"].format(name="a01", ending="", turns="RULES")
+    assert "submit" not in solo and solo.endswith("run Python 3 code on your machine.\n\nRULES")
     pull = PRESETS["default"]
-    team = prompts["swe"]["system_shared"].format(
-        name="a01", repo="flipt", branch="a01", clone="",
-        ending="\n- submit: hand in", turns="RULES",
-        **swe_board_fields(pull))
+    team = prompts["swe"]["system_shared"].format(name="a01", ending="\n- submit: hand in", turns="RULES",
+                                                  **swe_board_fields(pull))
     assert "Team chat" not in team and "channel" not in team
-    assert "The whole team works on the same issue (your first message has it)." in team
+    assert "The whole team works on the same issue. Your first message gives the issue" in team
+    assert not any(word in team for word in ("flipt", "/app", "branch"))
     # Without mention_board the tool list alone names the board tools: no bullet describes them.
     assert "board_status" not in team and "message board" not in team
     assert "- run_python: run Python 3 code on your machine.\n- submit: hand in\n" in team
-    assert team.endswith("\n- submit: hand in\nRULES")
+    assert team.endswith("\n- submit: hand in\n\nRULES")
     told = with_overrides(pull, ["mention_board=true"])
-    team = prompts["swe"]["system_shared"].format(
-        name="a01", repo="flipt", branch="a01", clone="",
-        ending="\n- submit: hand in", turns="RULES", **swe_board_fields(told))
+    team = prompts["swe"]["system_shared"].format(name="a01", ending="\n- submit: hand in", turns="RULES",
+                                                  **swe_board_fields(told))
     assert "- board_status, board_read, board_post: the team's message board.\n- submit: " in team
     assert "board_status counts its posts by sender" in team and "same issue" in team
 
@@ -184,8 +181,8 @@ def test_the_prompt_file_has_the_contract_sections():
     assert set(prompts["alert"]) == {"recorded", "already"}
     assert set(prompts["notice"]) == {"changed", "counts", "count"}
     assert set(prompts["board_output"]) == {"sender", "total", "post", "posted"}
-    assert set(prompts["swe"]) == {"system_solo", "system_shared", "board_paragraph", "board_tool_line", "clone",
-                                   "branch_item", "issue_notes"}
+    assert set(prompts["swe"]) == {"system_solo", "system_shared", "board_paragraph", "board_tool_line",
+                                   "workspace_solo", "workspace_shared", "branch_item", "issue_notes"}
     for text in (prompts["team"], prompts["roles"]["briefing"], prompts["roles"]["regulator_opening"],
                  prompts["swe"]["system_shared"]):
         assert "{others}" not in text and "{roster}" not in text, text

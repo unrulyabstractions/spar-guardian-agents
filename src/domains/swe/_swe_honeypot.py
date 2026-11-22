@@ -4,10 +4,10 @@ the team remote, the setup checks and the branch list in each agent's prompts.
 The prune, plant and scan scripts live in sandbox/ and are filled with str.format. A failed check raises SetupFailed
 before any agent starts.
 
-The branch list can only come from the clone, which does not exist when the sample is built. So a system prompt leaves
-the sample with BRANCHES in it (prompts.yaml swe.clone), and prepare fills it in the sample's metadata from the refs the
-checks read. ORBIT builds each agent from metadata["experiment"] after the setup, so an agent's first turn reads its
-own list, and the eval log and the judge read the same text.
+The branch list can only come from the clone, which does not exist when the sample is built. So a first message leaves
+the sample with BRANCHES in it (prompts.yaml swe.workspace_solo, workspace_shared), and prepare fills it in the sample's
+metadata from the refs the checks read. ORBIT builds each agent and its first message from metadata["experiment"] after
+the setup, so an agent's first turn reads its own list, and the eval log and the judge read the same text.
 """
 from __future__ import annotations
 
@@ -94,15 +94,22 @@ def branch_names(refs: list[str]) -> list[str]:
 
 
 def fill_branches(metadata: dict, refs: dict[str, list[str]]) -> None:
-    """Write each agent's branch list into everything that holds its prompt: the system prompt ORBIT builds the agent
-    from, the sample's record of it and the judge's copies. `refs` holds each agent's refs (_agent_state)."""
+    """Write each agent's branch list into everything that holds its prompts: the first message ORBIT starts the agent
+    from (its agent group's goal), the system prompt it builds the agent from, the sample's records of both and the
+    judge's copies. `refs` holds each agent's refs (_agent_state)."""
     item = settings.load_prompts()["swe"]["branch_item"]
     lists = {agent: ", ".join(item.format(name=name) for name in branch_names(held)) for agent, held in refs.items()}
-    swe = metadata["cheatbench"]["swe"]
-    for texts in (swe["system_prompt"], swe["judge_prompt"], metadata["cheatbench"]["judge_prompt"]):
+    cheatbench = metadata["cheatbench"]
+    swe = cheatbench["swe"]
+    for texts in (swe["system_prompt"], swe.get("first_message") or {}, swe["judge_prompt"], cheatbench["judge_prompt"],
+                  cheatbench.get("first_message") or {}):
         texts.update({agent: text.replace(BRANCHES, lists[agent]) for agent, text in texts.items()})
-    for spec in metadata["experiment"]["setup"]["agents"]:
+    experiment = metadata["experiment"]
+    for spec in experiment["setup"]["agents"]:
         spec["system_prompt"] = spec["system_prompt"].replace(BRANCHES, lists[spec["name"]])
+    for group in (experiment.get("execution") or {}).get("agent_groups") or []:
+        if group.get("goal") and len(group.get("agents") or []) == 1:
+            group["goal"] = group["goal"].replace(BRANCHES, lists[group["agents"][0]])
 
 
 async def _scan(box, repo: str, lines: list[str], select: str = SELECT_ALL, ids: list[str] | None = None,

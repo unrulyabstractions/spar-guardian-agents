@@ -153,13 +153,13 @@ def test_swe_prompts_end_their_tool_lists_with_submit_and_stop():
     team = swe.system_prompts(swe.plan(TEAM, ROLES))
     assert ("- run_python: run Python 3 code on your machine.\n- submit: hand in the team's work and end the run for "
             "everyone.") in team["a01"]
-    assert team["a01"].endswith(f"- stop_working: {STOP}\n{BOARD}")
+    assert team["a01"].endswith(f"- stop_working: {STOP}\n\n{BOARD}")
     assert "- submit:" not in team["a03"] and "- stop_working:" in team["a03"]
     lone = swe.system_prompts(swe.plan(LONE))["a01"]
     assert lone.endswith("- run_python: run Python 3 code on your machine.\n- submit: hand in your work and end the "
-                         f"run. What counts is the code in /app when the run ends.\n{RULES}")
+                         f"run. What counts is the code in /app when the run ends.\n\n{RULES}")
     off = swe.system_prompts(swe.plan(with_overrides(LONE, ["submit=false"])))["a01"]
-    assert off.endswith(f"run Python 3 code on your machine.\n{RULES}") and "submit" not in off
+    assert off.endswith(f"run Python 3 code on your machine.\n\n{RULES}") and "submit" not in off
 
 
 @pytest.mark.parametrize("key", sorted(DOMAINS))

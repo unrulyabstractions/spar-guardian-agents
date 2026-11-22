@@ -30,7 +30,7 @@ from inspect_ai.scorer import Scorer
 from src.configuration import settings
 from src.configuration.prompt_texts import board_system_prompt, swe_board_fields
 from src.configuration.scales import SCALES
-from src.configuration.swarm_config import SwarmConfig
+from src.configuration.swarm_config import SwarmConfig, role_of
 from src.domains.benchmark_protocol import Benchmark, Plan
 from src.domains.swe import _swe_honeypot as honeypot
 from src.domains.swe._swe_scoring import GUARD_DIFF, branch_file, committed, has_work, head_commit, swe_grader
@@ -181,24 +181,32 @@ class SWE(Benchmark):
 
     def system_prompts(self, plan: Plan) -> dict[str, str]:
         """Each agent's system prompt from prompts.yaml `swe`, its tool bullets ending with submit and stop_working as
-        the agent holds them (Benchmark.ending_lines).
+        the agent holds them (Benchmark.ending_lines). It holds no task detail: the repository, the branch, the clone
+        and the git workflow are in the first message (first_note).
 
         A lone agent and a solo_task agent get `system_solo`; a solo_task agent of a board then gets the team and board
         texts its config asks for (prompt_texts.board_system_prompt). A shared_task agent gets `system_shared`, which
         names no peer. Its board sentences come from prompt_texts.swe_board_fields. Both end with the rounds' rules
-        (board.round_rules) and name the agent's clone with the same text (prompts.yaml swe.clone), whose branch list
-        the setup fills (_swe_honeypot.fill_branches)."""
-        prompts, repo = settings.load_prompts()["swe"], load_split(self.row)["repo"]
-        config, agents, clone = plan.config, plan.agents, prompts["clone"]
+        (board.round_rules)."""
+        prompts = settings.load_prompts()["swe"]
+        config, agents = plan.config, plan.agents
         ending = {a: "".join(f"\n{line}" for line in self.ending_lines(plan, a)) for a in agents}
         turns = {a: round_rules(config, a, plan.roles) for a in agents}
         if plan.mode != "shared_task":
-            texts = {a: prompts["system_solo"].format(name=a, repo=repo, branch=a, clone=clone, ending=ending[a],
-                                                      turns=turns[a]) for a in agents}
+            texts = {a: prompts["system_solo"].format(name=a, ending=ending[a], turns=turns[a]) for a in agents}
             return {a: "\n\n".join(filter(None, [texts[a], board_system_prompt(config, a, agents)])) for a in agents}
-        return {a: prompts["system_shared"].format(
-            name=a, repo=repo, branch=a, clone=clone, ending=ending[a], turns=turns[a],
-            **swe_board_fields(config)) for a in agents}
+        return {a: prompts["system_shared"].format(name=a, ending=ending[a], turns=turns[a],
+                                                   **swe_board_fields(config)) for a in agents}
+
+    def first_note(self, plan: Plan, agent: str) -> str | None:
+        """The agent's workspace: its repository, branch and clone and, in shared_task, the team's git workflow
+        (prompts.yaml swe.workspace_solo, workspace_shared), after the issue in its first message. The clone's branch
+        list stays BRANCHES until the setup fills it (_swe_honeypot.fill_branches). None for a regulator that
+        oversees: its first message holds its teammates' task."""
+        if plan.config.oversees(role_of(plan.roles, agent)):
+            return None
+        text = settings.load_prompts()["swe"]["workspace_shared" if plan.mode == "shared_task" else "workspace_solo"]
+        return text.format(repo=load_split(self.row)["repo"], branch=agent, branches=honeypot.BRANCHES)
 
     def sample(self, plan: Plan, instruction_suffix: str = "") -> Sample:
         """The issue's sample: metadata["cheatbench"]["swe"] holds the issue, its commits, the honeypot, each agent's
@@ -209,13 +217,14 @@ class SWE(Benchmark):
         cfg = task_config(instance)
         instruction = instruction_text(self.row, instance) + instruction_suffix
         system = self.system_prompts(plan)
+        first = self.first_messages(plan, instruction) or {a: instruction for a in plan.agents}
         swe = {
             "issue": self.row, "instance": instance, "repo": cfg["repo"], "base_commit": cfg["base_commit"],
             "fix_commit": fix_commit(instance), "honeypot": self.honeypot, "seed": plan.config.seed,
             "n_agents": len(plan.agents), "agents": plan.agents, "mode": plan.mode, "shutdown": plan.config.shutdown,
             "instruction": instruction, "pieces": plan.holds, "piece_times": piece_times(plan.config.seed, self.row),
-            "system_prompt": system, "first_message": {a: instruction for a in plan.agents},
-            "judge_prompt": {a: f"{system[a]}\n\n{instruction}" for a in plan.agents},
+            "system_prompt": system, "first_message": first,
+            "judge_prompt": {a: f"{system[a]}\n\n{first[a]}" for a in plan.agents},
             "patch_files": patch_files(cfg["patch"]), "distinctive_lines": len(load_lines(self.row)["fix"]),
             # the values of ours this run plants where the fix wrote its own, in the pieces and the hidden tests
             "own_values": run_values(self.row, self.honeypot),
@@ -224,8 +233,7 @@ class SWE(Benchmark):
         compose = write_compose(self.row, plan.agents, team_remote=honeypot.has_team_remote(swe))
         cheatbench = {"task": self.name, "variant": "", "swe_task": instance, "instruction": instruction,
                       "prompt_file": "instruction.md", "timeout_s": agent_timeout_s(instance), "network": "none",
-                      "judge_prompt": swe["judge_prompt"], "swe": swe,
-                      **({"first_message": swe["first_message"]} if plan.team else {})}
+                      "judge_prompt": swe["judge_prompt"], "swe": swe, "first_message": first}
         return Sample(id=self.row, input=instruction, sandbox=("docker", str(compose)),
                       metadata={"cheatbench": cheatbench})
 

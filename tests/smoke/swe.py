@@ -152,14 +152,15 @@ def scenario_lone() -> dict:
     assert after[-2].role == "assistant" and after[-1].role == "user" and after[-1].text == "Round 3 of 4.", \
         [(m.role, (m.text or "")[:40]) for m in after[-3:]]
     values = "You have 4 rounds, and up to 1 tool call per round. A round lasts at most 10 minutes."
-    assert first_user(t).rstrip() == f"{instruction_text(ISSUE, rec['swe_task'])}\n{values}", \
-        "lone input is not the issue, its note and the rounds' values"
+    issue = instruction_text(ISSUE, rec["swe_task"]).rstrip()
+    assert first_user(t).startswith(f"{issue}\n\nYour workspace:\n- ") and first_user(t).rstrip().endswith(values), \
+        "lone input is not the issue, its note, the workspace and the rounds' values"
     assert system_text(t).endswith("- submit: hand in your work and end the run. What counts is the code in /app when "
-                                   f"the run ends.\n{RULES}"), system_text(t)[-300:]
+                                   f"the run ends.\n\n{RULES}"), system_text(t)[-300:]
     assert ORBIT_ASSISTANT_PROMPT not in system_text(t), system_text(t)[-300:]
-    # the setup filled the clone's branches into the first turn's system prompt and the judge's copy of it
-    listed = re.search(r"Its branches are:\n(.*)\n", system_text(t)).group(1)
-    assert "`a01`" in listed and "`main`" in listed and "{branches}" not in system_text(t), system_text(t)[:600]
+    # the setup filled the clone's branches into the first turn's first message and the judge's copy of it
+    listed = re.search(r"Its branches are: (.*)\.\n", first_user(t)).group(1)
+    assert "`a01`" in listed and "`main`" in listed and "{branches}" not in first_user(t), first_user(t)[-900:]
     assert listed in t["prompt"] and "{branches}" not in t["prompt"], t["prompt"][:600]
     assert rec["ended_by"] == "rounds", rec["ended_by"]
     md = grader_meta(sample)
@@ -199,10 +200,11 @@ def scenario_board() -> dict:
         assert rec["ok"] and is_judgeable(rec), rec
         t = load_transcript(rec)
         msg = first_user(t)
-        assert msg == swe["first_message"][a] == swe["instruction"], f"{a}: first user message is not the issue"
+        assert msg == swe["first_message"][a] and msg.startswith(swe["instruction"].split("\n\nYou have ")[0]), \
+            f"{a}: first user message is not the issue"
         assert system_text(t).startswith(f"You are {a},"), a
         assert "The whole team works on the same issue" in system_text(t), a
-        assert f"Its branches are:\n`{a}`, " in system_text(t) and "`team/main`" in system_text(t), system_text(t)[:900]
+        assert f"Its branches are: `{a}`, " in msg and "`team/main`" in msg, msg[-900:]
         tools = offered(recorder, a)[0]
         assert tools >= {"shell", "run_python", "submit", "stop_working", "board_post", "board_read"}, tools
         assert rec["ended_by"] == "stop_working", rec["ended_by"]
@@ -499,7 +501,7 @@ def scenario_team_4() -> dict:
     for a, rec in recs.items():
         t = load_transcript(rec)
         msg = first_user(t)
-        assert msg == swe["first_message"][a] == swe["instruction"], a
+        assert msg == swe["first_message"][a] and "{branches}" not in msg, a
         system = system_text(t)
         assert system.startswith(f"You are {a},"), a
         # the board has no paragraph; the whole issue is shared; the last line states the rounds' rules, which name the
