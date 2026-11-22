@@ -7,9 +7,11 @@ It rents nothing and calls no model. In order, with the run's own code: the prof
 (ensure_profile); a container of IMAGE starts under it with no network and an init, as an agent's machine; root joins
 the group, the helper remounts /proc, and the run's proof passes (proof_failures); then, as uid 1001 in that container,
 `grep -r` over / finds a planted file within SEARCH_S and the page map's open fails, while bash's <(...), python3 and
-top work and ps lists only the agent's own processes (top and ps when the image has them). The container is removed at
-the end. The last line is the report as JSON; exit 0 when every check passes, 1 when one fails, 2 when the check cannot
-start.
+top work and ps lists only the agent's own processes (top and ps when the image has them); last, the setgid attack: a
+peer_shell observer (OBSERVER_UID with the group procview, as peer_shell runs it) leaves a setgid copy of bash and of
+python3 in /tmp, and uid 1001 runs them while uid 1002's command line holds a mark; each copy must keep 1001's egid and
+see no mark. The container is removed at the end. The last line is the report as JSON; exit 0 when every check
+passes, 1 when one fails, 2 when the check cannot start.
 """
 from __future__ import annotations
 
@@ -24,6 +26,25 @@ from src.sandbox.proc_hiding import proc_hiding as ph
 
 SEARCH_S = 120
 AGENT_UID = 1001
+OTHER_UID = 1002                # a teammate whose command line holds MARK
+OBSERVER_UID = 3001             # peer_shell's first observer (src/sandbox/peer_shell.py OBSERVER_UID_FROM)
+MARK = "SETGIDMARK4417"         # spelled split in RUN_PLANTED, so the looker's own argv holds none
+PLANT = ("cp /bin/bash /tmp/.pv && chmod 2755 /tmp/.pv; "
+         "cp \"$(readlink -f \"$(command -v python3)\")\" /tmp/.pvpy && chmod 2755 /tmp/.pvpy; "
+         "stat -c 'planted %n %A %g' /tmp/.pv /tmp/.pvpy")
+RUN_PLANTED = r"""/tmp/.pv -p -c 'echo bash egid=$(id -g); grep -l "SETGIDMARK441[7]" /proc/[0-9]*/cmdline 2>/dev/null \
+  | sed "s/^/LEAK /"'
+/tmp/.pvpy - <<'PY'
+import os
+mark = ("SETGIDMARK" + "4417").encode()
+print("py egid=%d" % os.getegid())
+for pid in filter(str.isdigit, os.listdir("/proc")):
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            print("LEAK", pid) if mark in f.read() else None
+    except OSError:
+        pass
+PY"""
 SEARCH = ("s=$(date +%s); timeout {limit} grep -r -l {needle} / 2>/dev/null | head -5; "
           "echo \"rc=${{PIPESTATUS[0]}} secs=$(( $(date +%s) - s ))\"")
 OWN = ("head -c 8 /proc/self/pagemap > /dev/null 2>&1 && echo pagemap=readable || echo pagemap=denied; "
@@ -44,14 +65,31 @@ def in_container(name: str, script: str, spec: dict, user: str = "root") -> dict
     return json.loads(found.stdout.strip().splitlines()[-1])
 
 
+def setgid_attack(name: str) -> dict:
+    """The observer plants the setgid copies; AGENT_UID runs them while OTHER_UID's command line holds MARK."""
+    docker("exec", "-u", "root", name, "bash", "-c", f"useradd -m -u {OTHER_UID} procother 2>/dev/null; true")
+    holder = subprocess.Popen(["docker", "exec", "-u", str(OTHER_UID), name, "bash", "-c", f"sleep 60; echo {MARK}"],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        time.sleep(2)
+        planted = docker("exec", "-u", f"{OBSERVER_UID}:{ph.PROC_GID}", "-w", "/tmp", name, "bash", "-c", PLANT)
+        ran = docker("exec", "-u", str(AGENT_UID), "-w", "/tmp", name, "bash", "-c", RUN_PLANTED)
+    finally:
+        holder.kill()
+        docker("exec", "-u", "root", name, "rm", "-f", "/tmp/.pv", "/tmp/.pvpy")
+    out = ran.stdout.strip()
+    return {"planted": planted.stdout.strip() + planted.stderr.strip()[-200:], "run": out[-600:],
+            "egids": [line.split("egid=")[1].split()[0] for line in out.splitlines() if "egid=" in line]}
+
+
 def check(image: str) -> dict:
     report: dict = {"image": image}
     profile = ph.ensure_profile()
     report["profile"] = profile
     name = f"proc-hiding-check-{secrets.token_hex(4)}"
+    options = [arg for option in ph.security_options(profile) for arg in ("--security-opt", option)]
     started = docker("run", "-d", "--rm", "--name", name, "--label", "proc_hiding_check=1", "--init", "--network",
-                     "none", "--memory", "512m", "--security-opt", f"apparmor={profile}", image, "tail", "-f",
-                     "/dev/null")
+                     "none", "--memory", "512m", *options, image, "tail", "-f", "/dev/null")
     if started.returncode != 0:
         raise RuntimeError(f"docker run: {started.stderr.strip()[-400:]}")
     try:
@@ -75,6 +113,7 @@ def check(image: str) -> dict:
                             "found": "/opt/proc_check/planted.txt" in found.stdout}
         own = docker("exec", "-u", str(AGENT_UID), name, "bash", "-c", OWN)
         report["own"] = own.stdout.strip()
+        report["setgid"] = setgid_attack(name)
     finally:
         docker("rm", "-f", name)
     problems = [m for found in report["failures"].values() for m in found]
@@ -85,6 +124,11 @@ def check(image: str) -> dict:
         problems.append(f"the agent's own view: {report['own']!r}")
     if "ps=absent" not in report["own"] and set(report["own"].splitlines()[-1].split()) != {str(AGENT_UID)}:
         problems.append(f"ps as the agent lists other uids: {report['own']!r}")
+    attack = report["setgid"]
+    if attack["planted"].count(f"-rwxr-sr-x {ph.PROC_GID}") != 2:
+        problems.append(f"the observer could not plant the setgid copies, so the attack was not tried: {attack}")
+    if len(attack["egids"]) != 2 or str(ph.PROC_GID) in attack["egids"] or "LEAK" in attack["run"]:
+        problems.append(f"a setgid-{ph.PROC_GROUP} file run by an agent shows other processes: {attack}")
     report["problems"] = problems
     report["ok"] = not problems
     return report

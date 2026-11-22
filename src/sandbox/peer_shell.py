@@ -8,10 +8,11 @@ peer_shell(peer, command) runs `bash --login -c command` in the peer's seat (its
 the caller's observer: a Linux uid of its own (OBSERVER_UID_FROM upward, one per influencer in roster order), given by
 number, so a root agent's /etc/passwd cannot turn it into another user, with the group PROC_GID, which lets it see every
 process of the peer's machine where /proc hides other users' (src/sandbox/proc_hiding/). Read-only comes from that uid
-and nothing else: there is no command list, and the group owns no file. Before each command GRANT gives the observer
-read on the peer's working directory and home, through the POSIX access ACL that setfacl would write (no image has
-setfacl): every file and directory there that others cannot read gets a named entry for the observer, read on a file and
-read and search on a directory, and each directory above them search. A file the peer writes later is granted at the
+and nothing else: there is no command list. A file the observer writes may carry the group, but a setgid one gives no
+one the group: every machine runs with no-new-privileges. Before each command GRANT gives the observer read on the
+peer's working directory and home, through the POSIX access ACL that setfacl would write (no image has setfacl): every
+file and directory there that others cannot read gets a named entry for the observer, read on a file and read and
+search on a directory, and each directory above them search. A file the peer writes later is granted at the
 next call. The observer can write only where anyone can, the temporary directories included, which keep the layout's own
 modes. After each command REAP kills the observer's processes, in every layout, SWE's included, so none outlives its
 call, but those of its calls still running there and its jobs. The command runs through src/sandbox/command_jobs.py,

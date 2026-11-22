@@ -16,8 +16,11 @@ reads /proc/self/fd. The group PROC_GROUP (gid PROC_GID) holds root in each mach
 as root (`--user root`: the reaps, the end state, the command jobs' launcher and readers, the controls) sees every
 process as before; an exec with no user gets the groups the container started with and sees only root's. A peer_shell
 observer runs with PROC_GID as its group (src/sandbox/peer_shell.py), so it sees the watched peer's processes, and
-every other process of that machine, as before. Agents that share one uid (openmath's shared layout, CheatBench's
-`user` for every agent) still see each other: the record names those machines. The access log's and the network log's
+every other process of that machine, as before. Holding PROC_GID, the observer may leave a setgid-PROC_GID file where
+anyone can write (/tmp); so every service runs with Docker's no-new-privileges, which the kernel keeps on every
+process of the container, each exec included, and no exec of a setgid or setuid file changes an agent's ids (sudo
+and su stop working for an agent). Agents that share one uid (openmath's shared layout, CheatBench's `user` for every
+agent) still see each other: the record names those machines. The access log's and the network log's
 sidecars read /proc in the host's pid namespace, which the remount does not touch. Docker gives a container no way to
 mount /proc with options, and its processes lack SYS_ADMIN, so a privileged helper container in the host's pid
 namespace enters each machine's mount namespace and remounts it (host_helper.py).
@@ -40,8 +43,9 @@ in /proc/mounts are visible to an agent.
 
 The proof (proc_proof.py, as root in each machine): a holder process of one throwaway uid and a viewer of another;
 the viewer must see no pid of another uid, neither the holder nor root's init nor its parent, and must fail to open
-its own page map with EACCES, while its /proc/self, /proc/self/fd and /dev/fd work; root must see the holder and fail
-on its own page map too. Any failure raises, so the sample dies before any model call.
+its own page map with EACCES, while its /proc/self, /proc/self/fd and /dev/fd work; run through a setgid-PROC_GID
+copy of python3 in /tmp, it must keep its own egid, see no other uid's pid and hold no-new-privileges; root must see
+the holder and fail on its own page map too. Any failure raises, so the sample dies before any model call.
 
 The sample store's STORE: {status "on", proc_hidepid, pagemap_hidden, profile, gid, kernel, shared_uid: {machine:
 [agents sharing one uid there]}, machines: {machine: {proc, profile, group, report}}}; run.json sandbox.proc carries
@@ -122,12 +126,18 @@ def ensure_profile() -> str:
     return json.loads(loaded.stdout.strip().splitlines()[-1])["name"]
 
 
+def security_options(profile: str) -> list[str]:
+    """The security options of every service: no setgid or setuid file takes effect, and the profile."""
+    return ["no-new-privileges:true", f"apparmor={profile}"]
+
+
 def under_profile(services: dict[str, dict], profile: str) -> dict[str, dict]:
-    """Every service with `apparmor=<profile>` in its security_opt, its other options kept."""
+    """Every service with security_options(profile) in its security_opt, its other options kept."""
     out = {}
     for name, service in services.items():
-        options = [o for o in service.get("security_opt") or [] if not str(o).startswith("apparmor")]
-        out[name] = {**service, "security_opt": [*options, f"apparmor={profile}"]}
+        options = [o for o in service.get("security_opt") or []
+                   if not str(o).startswith(("apparmor", "no-new-privileges"))]
+        out[name] = {**service, "security_opt": [*options, *security_options(profile)]}
     return out
 
 
@@ -165,6 +175,9 @@ def proof_failures(report: dict) -> dict[str, list[str]]:
     for key in ("self", "self_fd", "dev_fd"):
         if viewer.get(key) != "ok":
             hidepid.append(f"an agent uid loses its own /proc ({key}: {viewer.get(key)})")
+    setgid = report.get("setgid") or {}
+    if setgid.get("egid") in (None, PROC_GID) or setgid.get("other_owners") != [] or setgid.get("no_new_privs") != "1":
+        hidepid.append(f"an agent uid that runs a setgid-{PROC_GROUP} file sees other processes: {setgid}")
     if not root.get("sees_holder") or root.get("holder_cmdline") != "ok":
         hidepid.append(f"root does not see an agent's process: {root}")
     if report.get("profile") != PROFILE:

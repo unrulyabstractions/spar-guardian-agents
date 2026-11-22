@@ -7,6 +7,8 @@
   viewer          a process of the second uid: the pids it lists, of whom, whether it sees the holder, root's init
                   or this script, whether it can open the holder's cmdline and environ, whether its own /proc/self,
                   /proc/self/fd and /dev/fd (bash's <(...)) work, and how opening its own page map fails
+  setgid          the viewer's uid running a setgid-gid copy of python3 in /tmp (what a peer_shell observer can
+                  leave there): its egid, the uids it sees besides its own, and its NoNewPrivs
   root            whether this script, in the group, sees the holder, and how its own page map fails
 
 The holder and the viewer each exec a fresh python3 after taking their uid, as an agent's command does (the command
@@ -16,6 +18,7 @@ root and its page map would fail with EACCES under any profile.
 import errno
 import json
 import os
+import shutil
 import subprocess
 import sys
 
@@ -59,6 +62,17 @@ print(json.dumps({"pids": len(pids), "other_owners": sorted({u for u in owners.v
                   "dev_fd": failure(dev_fd),
                   "pagemap": failure(lambda: read8("/proc/self/pagemap")),
                   "task_pagemap": failure(lambda: read8(f"/proc/self/task/{os.getpid()}/pagemap"))}))
+'''
+SETGID_VIEW = r'''
+import json, os
+owners = set()
+for p in filter(str.isdigit, os.listdir("/proc")):
+    try:
+        owners.add(os.stat(f"/proc/{p}").st_uid)
+    except OSError:
+        pass
+nnp = next((line.split()[1] for line in open("/proc/self/status") if line.startswith("NoNewPrivs:")), None)
+print(json.dumps({"egid": os.getegid(), "other_owners": sorted(owners - {os.getuid()}), "no_new_privs": nnp}))
 '''
 
 
@@ -104,6 +118,18 @@ try:
                             capture_output=True, text=True, timeout=60, preexec_fn=as_uid(viewer_uid))
     report["viewer"] = json.loads(viewed.stdout.strip().splitlines()[-1]) if viewed.returncode == 0 \
         else {"error": viewed.stderr.strip()[-300:]}
+    planted = f"/tmp/.proc_proof_setgid_{os.getpid()}"
+    try:
+        shutil.copy2(os.path.realpath(sys.executable), planted)
+        os.chown(planted, holder_uid, spec["gid"])
+        os.chmod(planted, 0o2755)
+        escalated = subprocess.run([planted, "-I", "-c", SETGID_VIEW], cwd="/", capture_output=True, text=True,
+                                   timeout=60, preexec_fn=as_uid(viewer_uid))
+        report["setgid"] = json.loads(escalated.stdout.strip().splitlines()[-1]) if escalated.returncode == 0 \
+            else {"error": escalated.stderr.strip()[-300:]}
+    finally:
+        if os.path.exists(planted):
+            os.unlink(planted)
     report["root"] = {"sees_holder": os.path.isdir(f"/proc/{holder.pid}"),
                       "holder_cmdline": failure(lambda: read8(f"/proc/{holder.pid}/cmdline")),
                       "pagemap": failure(lambda: read8("/proc/self/pagemap"))}

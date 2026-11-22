@@ -34,12 +34,15 @@ PLAIN_VIEWER = {"pids": 5, "other_owners": [0, 2997], "sees_holder": True, "sees
 HIDDEN_VIEWER = {"pids": 1, "other_owners": [], "sees_holder": False, "sees_init": False, "sees_parent": False,
                  "holder_cmdline": "ENOENT", "holder_environ": "ENOENT", "self": "ok", "self_fd": "ok", "dev_fd": "ok",
                  "pagemap": "EACCES", "task_pagemap": "EACCES"}
-PLAIN = {"profile": "docker-default", "proc": "rw", "viewer": PLAIN_VIEWER,
+ESCALATED = {"egid": 2999, "other_owners": [0, 2997], "no_new_privs": "0"}     # a setgid-procview copy took effect
+KEPT = {"egid": 2998, "other_owners": [], "no_new_privs": "1"}                  # no-new-privileges kept the viewer's
+PLAIN = {"profile": "docker-default", "proc": "rw", "viewer": PLAIN_VIEWER, "setgid": ESCALATED,
          "root": {"sees_holder": True, "holder_cmdline": "ok", "pagemap": "ok"}}
 PROFILE_ONLY = {**PLAIN, "profile": ph.PROFILE, "root": {**PLAIN["root"], "pagemap": "EACCES"},
                 "viewer": {**PLAIN_VIEWER, "pagemap": "EACCES", "task_pagemap": "EACCES"}}
 HIDDEN = {"profile": ph.PROFILE, "proc": "rw,gid=2999,hidepid=invisible", "kernel": "6.8.0-117-generic",
-          "viewer": HIDDEN_VIEWER, "root": {"sees_holder": True, "holder_cmdline": "ok", "pagemap": "EACCES"}}
+          "viewer": HIDDEN_VIEWER, "setgid": KEPT,
+          "root": {"sees_holder": True, "holder_cmdline": "ok", "pagemap": "EACCES"}}
 
 
 def test_the_profile_is_docker_default_with_one_rule_more():
@@ -71,9 +74,19 @@ def test_every_service_runs_under_the_profile(tmp_path):
     out = ph.with_proc_hiding(compose)
     document = yaml.safe_load(out.read_text())
     assert out.name == "compose-abc-hidden.yaml" and document["volumes"] == {"v": {}}
-    assert document["services"]["default"]["security_opt"] == ["no-new-privileges", f"apparmor={ph.PROFILE}"]
+    assert document["services"]["default"]["security_opt"] == ["no-new-privileges:true", f"apparmor={ph.PROFILE}"]
     assert all(s["security_opt"][-1] == f"apparmor={ph.PROFILE}" for s in document["services"].values())
+    assert all("no-new-privileges:true" in s["security_opt"] for s in document["services"].values())
     assert document["services"]["mirror"]["build"] == "."
+
+
+def test_no_setgid_file_takes_effect_in_any_service():
+    """A peer_shell observer holds PROC_GID, so it can leave a setgid-PROC_GID file where anyone can write; every
+    service runs with no-new-privileges, so no exec of it gives an agent PROC_GID."""
+    services = {"default": {"image": "x", "security_opt": ["no-new-privileges=false"]}, "mirror": {"build": "."}}
+    out = ph.under_profile(services, ph.PROFILE)
+    assert all(s["security_opt"] == ph.security_options(ph.PROFILE) for s in out.values())
+    assert ph.security_options(ph.PROFILE) == ["no-new-privileges:true", f"apparmor={ph.PROFILE}"]
 
 
 def test_a_host_without_apparmor_is_named():
@@ -111,10 +124,15 @@ def test_the_proof_reads_each_container_as_it_was():
     ({"viewer": {**HIDDEN_VIEWER, "self_fd": "ENOENT"}}, "hidepid"),
     ({"viewer": {**HIDDEN_VIEWER, "task_pagemap": "ok"}}, "pagemap"),
     ({"viewer": {"error": "no python3"}}, "hidepid"),
+    ({"setgid": ESCALATED}, "hidepid"),
+    ({"setgid": {**KEPT, "no_new_privs": "0"}}, "hidepid"),
+    ({"setgid": {**KEPT, "egid": 2999}}, "hidepid"),
+    ({"setgid": {"error": "exec failed"}}, "hidepid"),
+    ({"setgid": None}, "hidepid"),
 ])
 def test_one_wrong_reading_fails_its_protection(change, where):
     """Root without the group (an exec with no --user), an agent's own <(...) or fds lost, a thread's page map, a
-    viewer that never reported."""
+    viewer that never reported, a setgid-PROC_GID copy that took effect or never ran."""
     found = ph.proof_failures({**HIDDEN, **change})
     assert found[where]
 
