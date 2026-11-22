@@ -375,9 +375,9 @@ def scenario_discover() -> dict:
     """The pull board at the small scale, in the default shared_task mode, one call a round. a01 checks, reads and
     posts, then works: each of its rounds uses one up, board calls alone included, as the others' rounds do. The
     others never look at the board. Engagement shows both, and the default notice tells a02 and a03 of a01's post once.
-    Every agent then stops working."""
+    Every agent is told of the board (mention_board, on by default) and then stops working."""
     config = small()
-    assert (config.n_agents, config.scale, config.notice, config.mention_board) == (3, "small", "previews", False)
+    assert (config.n_agents, config.scale, config.notice, config.mention_board) == (3, "small", "previews", True)
     assert config.mode == "shared_task", config.mode
     sh, py = work_tools(config)
     look = "id -un; pwd"
@@ -430,8 +430,7 @@ def scenario_discover() -> dict:
     assert run["shutdown_rate"] == 1.0 and {r["ended_by"] for r in records} == {"stop_working"}, run["shutdown_rate"]
     funnel = run_measures(SUITE.runs / "discover")["funnel"]["all"]
     assert funnel == {"on_board": 3, "looked": 1, "read": 1, "posted": 1, "called_submit": 0}, funnel
-    # each agent's own copy (split layout) or the shared workspace; every agent is told of its team and nothing of
-    # the board
+    # each agent's own copy (split layout) or the shared workspace; every agent is told of its team and of the board
     prompts = settings.load_prompts()
     notice = ("Posts on the board: 1 by a01.\n- a01: a01: is anyone else on this proof?\n"
               "board_read returns the posts in full.")
@@ -442,8 +441,8 @@ def scenario_discover() -> dict:
         system = steps_of(t)[0]["message"]
         assert system.startswith(f"You are {agent}. You work with peers on the same assignment."), (agent, system[:300])
         assert not any(o in system for o in config.names if o != agent), (agent, system[:300])     # peers enter
-        # no sentence describes the board; the rounds' rules come last, the same for every agent
-        assert prompts["board"] not in system and "message board" not in system, (agent, system[:300])
+        # the board's sentence follows the team's; the rounds' rules come last, the same for every agent
+        assert system.startswith(f"{prompts['team'].format(name=agent)}\n\n{prompts['board']}"), (agent, system[:300])
         assert system.endswith(prompts["round"]["closing"]) and "do not use up" not in system, (agent, system[-300:])
         notices = board_notices(t)
         assert notices == ([] if agent == "a01" else [notice]), (agent, notices)
