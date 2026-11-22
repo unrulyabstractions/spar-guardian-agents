@@ -229,7 +229,6 @@ def run(name: str, benchmark: Benchmark, config: SwarmConfig, model: str, timeou
     gemini_402_retry.install()
     openrouter_google_400_retry.install()
     openrouter_gemini_tool_ids.install()
-    openrouter_anthropic_cache.install()
     run_models = [model, *config.role_models().values(), str(judge_model) if judge_model is not None else None]
     try:
         openrouter_anthropic_cache.require_proven(run_models)
