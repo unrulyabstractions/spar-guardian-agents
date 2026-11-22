@@ -78,14 +78,16 @@ parts:
       src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py]
     pins: []
     version: 1
-    fingerprint: sha256:52be04eabdab95c713f93d80782e489495ce659114544853b969261632514e74
+    fingerprint: sha256:d42065d98483d59f25d1d52a3be6499c84d12618ee54b84d3c881ce732a8da64
     log:
       1: '2026-11-22 first version: the code record''s agent and team rows (code_ladder.signal_rows) of
         b7b1bed, and run.json''s signals block (re-locked 2026-11-22: the stored layout: the same bytes,
         read and written under processed/ and analysis/ through run_directory.FILES) (re-locked 2026-11-22:
         48104a0 and 415f7cb add ian_swe0''s side patches; every branch they add is gated on swe.variant
         or swe.side_patches, which no stored run but one smoke has, and the code record of all 41 SWE
-        runs of ian_seed_prototyping_0 is byte-equal with and without them)'
+        runs of ian_seed_prototyping_0 is byte-equal with and without them) (re-locked 2026-11-22: ian_swe0''s
+        side patch route (2afff8e): a run with no swe.side_patches reads as before, and no stored run
+        has any)'
   topology:
     file: processed/facts/topology.json
     make: src.measures.topology_fact:topology_part
@@ -112,14 +114,16 @@ parts:
       src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py]
     pins: []
     version: 1
-    fingerprint: sha256:ae7234879a08981d18b88ef6857f52870bf9de6acb05da22176b8cdd158e7776
+    fingerprint: sha256:42ccd64a8b34f49f589844038a3f0f775799d91713d78c09494f0934b3f2044f
     log:
       1: '2026-11-22 first version: the Cheating ladder with CheatBench''s labels beside its clauses,
         as the viewer keeps it, of b7b1bed (re-locked 2026-11-22: the stored layout: the same bytes, read
         and written under processed/ and analysis/ through run_directory.FILES) (re-locked 2026-11-22:
         48104a0 and 415f7cb add ian_swe0''s side patches; every branch they add is gated on swe.variant
         or swe.side_patches, which no stored run but one smoke has, and the code record of all 41 SWE
-        runs of ian_seed_prototyping_0 is byte-equal with and without them)'
+        runs of ian_seed_prototyping_0 is byte-equal with and without them) (re-locked 2026-11-22: ian_swe0''s
+        side patch route (2afff8e): a run with no swe.side_patches reads as before, and no stored run
+        has any)'
   coordination:
     file: analysis/labels/coordination.json
     make: src.measures.coordination:coordination_part
@@ -143,14 +147,15 @@ parts:
       src/domains/*/*_settings.py]
     pins: []
     version: 1
-    fingerprint: sha256:337556819c0e593ebf66a740fc6a2ec3f8ed471f93729c7e7f111e359bd552de
+    fingerprint: sha256:03fead3d3be2de0412497114f0ed6e99813aec78271da6640074402853b6dd66
     log:
       1: '2026-11-22 first version: the Collusion ladder as the viewer keeps it, of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
         through run_directory.FILES) (re-locked 2026-11-22: 48104a0 and 415f7cb add ian_swe0''s side patches;
         every branch they add is gated on swe.variant or swe.side_patches, which no stored run but one
         smoke has, and the code record of all 41 SWE runs of ian_seed_prototyping_0 is byte-equal with
-        and without them)'
+        and without them) (re-locked 2026-11-22: ian_swe0''s side patch route (2afff8e): a run with no
+        swe.side_patches reads as before, and no stored run has any)'
   judged:
     file: analysis/labels/judged.json
     make: src.ui.viewer_parts:judged_part
