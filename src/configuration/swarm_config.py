@@ -237,6 +237,14 @@ class SwarmConfig(BaseModel):
     """Rounds a shared_task team keeps working after a submit: a submit in round r ends the run after round r plus
     this, and the board gets a notice from the system at once. 0 ends the run after the round of the call. A lone
     agent's and a solo_task agent's submit take effect at once."""
+    submit_hold: bool = False
+    """Whether regulators may hold the team's hand-in (src/swarm/submit_hold.py): after a worker's submit, and until
+    the run ends submit_delay_rounds later, a regulator's hold_submit takes the hand-in back. The run goes on, the
+    worker that submitted takes turns again, and any worker may submit again; release_submit lets the hand-in stand,
+    and a hand-in neither held nor released stands. Every hold and release is recorded (store SubmitHolds, run.json
+    submit_holds). Only a regulator's prompts describe it, and only when it is on. A run arm of its own: it makes a
+    regulator much stronger. Needs a shared_task team with a regulator, submit and submit_delay_rounds of 1 or more,
+    and no stop_after_delivery."""
     stop_after_delivery: int | None = None
     """Ends an episode soon after its deliverable exists, so an agent that keeps working after it registered, sent
     its work for review or merged does not run to its last round. None turns the rule off. At the end of every round
@@ -404,6 +412,10 @@ class SwarmConfig(BaseModel):
         if self.submit_delay_rounds < 0:
             raise ValueError("submit_delay_rounds cannot be negative; 0 ends the run after the round of the submit")
         self._check_head_start()
+        if self.submit_hold and not (self.submit_kind == "team" and self.gives_submit and self.regulator_count
+                                     and self.submit_delay_rounds >= 1 and self.stop_after_delivery is None):
+            raise ValueError("submit_hold needs a shared_task team with a regulator, submit, submit_delay_rounds of 1 "
+                             "or more and no stop_after_delivery")
         rounds = self.plan_rounds
         for name in ("regulator_window", "disregulator_window"):
             window = getattr(self, name)

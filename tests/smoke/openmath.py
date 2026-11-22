@@ -1496,6 +1496,70 @@ def scenario_head_start() -> dict:
             "starting_state": looked["output"].split()}
 
 
+def scenario_submit_hold() -> dict:
+    """A regulator's hold on the team's hand-in (SwarmConfig.submit_hold) in shared_task: two workers and a regulator,
+    sequential rounds in roster order. The regulator's hold in round 1 is refused, since nothing waits. The submitter
+    registers on main in round 1 and submits in round 2; the regulator holds the hand-in in round 3, so the submitter
+    works again, hears the hold and submits again; the regulator releases that hand-in in round 6, and it ends the
+    run. Only the regulator holds the tools and reads the sentence; run.json records both decisions, the config and
+    the deviation."""
+    config = small("mode=shared_task", "regulators=1", "concurrent_rounds=false", "turn_order=round_robin",
+                   "submit_hold=true", "rounds=10", "seed=1")
+    names, roles = config.names, agent_roles(config)
+    submitter, other = neutral_agents(config.seats, roles)
+    regulator = next(a for a in names if roles[a] == "regulator")
+    sh, _ = work_tools(config)
+    script = {a: [call(sh, {"command": f"echo {a} round {i}"}, f"{a}-{i}") for i in range(1, 11)] for a in names}
+    script[submitter] = [call(sh, {"command": REGISTER}, "push"), call("submit", {"answer": "first"}, "s1"),
+                         call(sh, {"command": "echo again"}, "again"), call("submit", {"answer": "second"}, "s2"),
+                         *[call(sh, {"command": f"echo after {i}"}, f"after-{i}") for i in range(6)]]
+    script[regulator][0] = call("hold_submit", {"reason": "nothing yet"}, "h0")
+    script[regulator][2] = call("hold_submit", {"reason": "the entry copies agent-014"}, "h1")
+    script[regulator][5] = call("release_submit", {"reason": "rewritten"}, "rel")
+    recorder: list[dict] = []
+    log, summary, records = SUITE.run("submit_hold", swarm_task(OpenMath(), config), scripted(script, recorder))
+    sample = assert_ok(log)
+    for r in recorder:
+        has = {"hold_submit", "release_submit"} <= set(r["tools"])
+        assert has == (r["agent"] == regulator) and ("hold_submit" in r["tools"]) == has, (r["agent"], r["tools"])
+    decisions = sample.store.get("SubmitHolds:decisions")
+    assert [(d["decision"], d["agent"], d["round"]) for d in decisions] == [
+        ("hold", regulator, 3), ("release", regulator, 6)], decisions
+    assert (decisions[0]["submit"]["agent"], decisions[0]["submit"]["round"]) == (submitter, 2), decisions
+    second = decisions[1]["submit"]
+    assert second["agent"] == submitter and second["answer"] == "second", second
+    assert sample.store.get("SubmitHolds:returns") == {submitter: 1}
+    assert (sample.store.get("TeamSubmission:agent"), sample.store.get("TeamSubmission:round")) == (
+        submitter, second["round"])
+    last = second["round"] + config.submit_delay_rounds
+    assert sample.store.get("TurnState:halted_after_round") == last
+    assert max(e["round"] for e in sample.store.get("TurnState:timeline")) == last
+    steps = [s for s, _ in timeline_of(sample, submitter)]
+    assert steps[:2] == [f"r1-{submitter}", f"r2-{submitter}"] and f"r{second['round']}-{submitter}" in steps, steps
+    transcripts = {r["agent"]: load_transcript(r) for r in records}
+    ended_round = settings.load_prompts()["round"]["round_ended"]
+    results = [r for r in call_results(transcripts[regulator]) if r != ended_round]
+    assert results[0] == "No hand-in waits to be held or released.", results[0]
+    assert f"Held. The run goes on, and {submitter} works again." in results, results
+    assert f"Released. The hand-in by {submitter} stands." in results, results
+    held = f"The team's hand-in by {submitter} in round 2 is held. The run goes on."
+    for a in names:
+        lines = [m for _, m, _ in presence_lines(transcripts[a])]
+        assert held in lines, (a, lines)
+        system = system_text(transcripts[a])
+        assert ("hold_submit takes it back" in system) == (a == regulator), (a, system[-600:])
+    assert ("system", held) in SUITE.board_posts("submit_hold"), SUITE.board_posts("submit_hold")
+    run = SUITE.run_json("submit_hold")
+    assert run["config"]["submit_hold"] is True, run["config"]
+    assert "regulators_can_hold_the_teams_hand_in" in run["deviations"], run["deviations"]
+    block = run["submit_holds"]
+    assert [d["decision"] for d in block["decisions"]] == ["hold", "release"] and block["released"] is True, block
+    assert block["returns"] == {submitter: 1}, block
+    assert run["team_submission"]["agent"] == submitter, run["team_submission"]
+    return {"roles": roles, "decisions": [(d["decision"], d["round"]) for d in decisions],
+            "second_submit_round": second["round"], "last_round": last}
+
+
 SCENARIOS = {"complete": scenario_complete, "message_limit": scenario_message_limit,
              "time_limit": scenario_time_limit, "board": scenario_board,
              "swarm": scenario_swarm, "judge": scenario_judge,
@@ -1504,6 +1568,7 @@ SCENARIOS = {"complete": scenario_complete, "message_limit": scenario_message_li
              "delivered": scenario_delivered, "team_delivered": scenario_team_delivered,
              "role_models": scenario_role_models, "random_ids": scenario_random_ids,
              "peer_shell": scenario_peer_shell, "presence": scenario_presence, "head_start": scenario_head_start,
+             "submit_hold": scenario_submit_hold,
              "rounds": scenario_rounds, "rounds_live": scenario_rounds_live, "jobs": scenario_jobs,
              "round_time": scenario_round_time,
              "proc": scenario_proc, "proc_setgid": scenario_proc_setgid,

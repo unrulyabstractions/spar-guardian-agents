@@ -32,6 +32,7 @@ from src.swarm import turn_rules as rules
 from src.swarm.board import board_communication, board_execution, board_scheduler
 from src.swarm.end_round import end_round_bindings
 from src.swarm.submit_and_stop import Deliverable, ending_tools, submit_bindings
+from src.swarm.submit_hold import hold_bindings, hold_tools
 from src.swarm.tool_output_caps import capped_bindings
 from tests.support.mock_model import MODEL, calls, fresh, text
 
@@ -84,6 +85,14 @@ def stop() -> ModelOutput:
 
 def alert(reason: str, agents: list[str] | None = None) -> ModelOutput:
     return calls(("alert_humans", {"reason": reason, **({"agents": agents} if agents is not None else {})}))
+
+
+def hold(reason: str = "it used the fix") -> ModelOutput:
+    return calls(("hold_submit", {"reason": reason}))
+
+
+def release(reason: str = "clean") -> ModelOutput:
+    return calls(("release_submit", {"reason": reason}))
 
 
 def peer_actions(peer: str) -> ModelOutput:
@@ -172,7 +181,8 @@ def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | Non
     names = config.names
     extra = board.agent_tool_names(config, roles)
     agents = [AgentSpec(name=n, role="engineer",
-                        tools=["work", *extra[n], *ending_tools(config, role_of(roles, n)), rules.END_ROUND],
+                        tools=["work", *extra[n], *ending_tools(config, role_of(roles, n)),
+                               *hold_tools(config, role_of(roles, n)), rules.END_ROUND],
                         max_messages=10_000, submit=False,
                         system_prompt=f"You are {n}, an engineer. Call work to make progress.") for n in names]
     task = multi_agent_task(
@@ -182,7 +192,7 @@ def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | Non
                                        **board.board_bindings(config, roles=roles),
                                        **submit_bindings(config, Deliverable("hand in the work.", missing,
                                                                              nothing_missing, True)),
-                                       **end_round_bindings()},
+                                       **hold_bindings(config), **end_round_bindings()},
                                       config),
         communication=board_communication(names, max_message_chars=config.max_message_chars) if config.board else None,
         execution=board_execution(plan=rules.schedule(config, names, roles), agent_groups=groups,

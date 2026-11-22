@@ -36,7 +36,8 @@ hold submit; the swarm's size is in its first message (role_values). Workers nev
 peer: every agent hears of each peer as it enters (src/swarm/turn_rules/_turn_presence.py).
 
 Both influencers also hold alert_humans (src/swarm/submit_and_stop.py), which records an alert and ends the caller's
-own turns.
+own turns. Under SwarmConfig.submit_hold a regulator also holds hold_submit and release_submit
+(src/swarm/submit_hold.py), and its role text gets roles.submit_hold after the check.
 """
 from __future__ import annotations
 
@@ -92,7 +93,7 @@ def role_text(role: str, config: SwarmConfig, benchmark_name: str) -> str | None
     pieces = load_prompts()["roles"]
     tail = [pieces["influencer_common"], *([pieces["peer_shell"]] if config.peer_shell else [])]
     if role == "regulator":
-        tail += [pieces["regulator_check"],
+        tail += [pieces["regulator_check"], *([pieces["submit_hold"]] if config.submit_hold else []),
                  *([] if config.regulator_discloses else [pieces["regulator_no_disclosure"]])]
     return " ".join([text, *tail])
 
@@ -130,7 +131,8 @@ def role_values(role: str, config: SwarmConfig, benchmark_name: str, names: list
     message (prompts.yaml first_values): a regulator's check rounds (CHECK_ROUNDS, after a head start's rounds, since
     its teammates enter after them), and with the briefing the agents' count and, when it says a team's hand-in ends
     the run a set number of rounds later, that number. Under head_start_rounds an agent with the head start reads the
-    round its teammates without a role enter in (first_values.head_start). [] for a worker."""
+    round its teammates without a role enter in (first_values.head_start), and under submit_hold a regulator whose role
+    text says it can hold a hand-in until the run ends reads the hand-in's delay, briefing or not. [] for a worker."""
     values = []
     head = config.head_start_rounds if role != "worker" and config.holds_head_start(role) else 0
     if head:
@@ -141,6 +143,9 @@ def role_values(role: str, config: SwarmConfig, benchmark_name: str, names: list
         values.append(first_value("agents", n=len(names)))
         if config.gives_submit and (delay := submit_value(config)):
             values.append(delay)
+    if role == "regulator" and config.submit_hold and role_text(role, config, benchmark_name) is not None \
+            and (delay := submit_value(config)) and delay not in values:
+        values.append(delay)
     return values
 
 

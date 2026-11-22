@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 
 from inspect_ai.agent import AgentState
 from inspect_ai.tool import ToolError
-from inspect_ai.util import StoreModel, store_as
+from inspect_ai.util import StoreModel, store, store_as
 from orbit.configs.scheduling import ScheduleStep
 from orbit.execution.plans import current_schedule
 from orbit.execution.sessions import current_session_registry
@@ -29,6 +29,9 @@ from src.swarm.turn_rules._turn_steps import step_round
 TURN_RULES_TAG = "swarm_turn_rules"
 TEAM_SUBMIT_TAG = "swarm_team_submit"     # info event of a submit that went through (src/swarm/submit_and_stop.py)
 HALT_TAG = "swarm_team_halt"            # info event when the plan is cut: after the hand-in, or with no worker left
+HOLD_TAG = "swarm_submit_hold"          # info event of a regulator's hold or release (src/swarm/submit_hold.py)
+HOLD_TOOL = "hold_submit"               # the regulators' tools under SwarmConfig.submit_hold
+RELEASE_TOOL = "release_submit"
 DELIVERED_TAG = "swarm_delivered"                      # info event of stop_after_delivery: a sighting or an end
 DELIVERED = "delivered"                                # the TurnState.ended reason of stop_after_delivery
 ACTOR = "swarm.rules"
@@ -147,6 +150,35 @@ class Alerts(StoreModel):
     alerts: list[dict] = Field(default_factory=list)
 
 
+class SubmitHolds(StoreModel):
+    """The regulators' holds and releases of the team's hand-in (SwarmConfig.submit_hold, src/swarm/submit_hold.py),
+    written only when the option is on.
+
+    decisions holds each call that went through, in order: {decision: hold or release, agent, round, reason, time,
+    submit: the hand-in it decided, as TeamSubmission held it}. A hold takes the hand-in out of TeamSubmission, gives
+    the worker that submitted its turns back (returns counts them per agent) and asks after_activation to put the
+    plan's steps back (restore). released says the hand-in under way was released, so no hold can follow it."""
+
+    on: bool = False
+    decisions: list[dict] = Field(default_factory=list)
+    released: bool = False
+    restore: bool = False
+    returns: dict[str, int] = Field(default_factory=dict)
+
+
+def submit_holds() -> SubmitHolds | None:
+    """The SubmitHolds record under submit_hold, else None: store_as writes a record's defaults, so a run without the
+    option reads the raw store and never gets one."""
+    return store_as(SubmitHolds) if store().get(f"{SubmitHolds.__name__}:on") else None
+
+
+def holdable() -> bool:
+    """Whether a regulator may still hold the team's hand-in: submit_hold is on, a hand-in stands and none released
+    it."""
+    holds = submit_holds()
+    return holds is not None and store_as(TeamSubmission).agent is not None and not holds.released
+
+
 class Delivered(StoreModel):
     """The stop-after-delivery record (SwarmConfig.stop_after_delivery), written only when the rule is on.
 
@@ -176,6 +208,7 @@ class Live:
 
     rounds: dict[str, dict] = field(default_factory=dict)
     messages: dict[str, list] = field(default_factory=dict)
+    plan: list[dict] = field(default_factory=list)          # the written plan's steps, under submit_hold
 
 
 LIVE: ContextVar[Live | None] = ContextVar("swarm_live", default=None)

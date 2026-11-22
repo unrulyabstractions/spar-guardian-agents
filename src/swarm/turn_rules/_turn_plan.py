@@ -21,7 +21,7 @@ from orbit.configs.scheduling import ScheduleConfig
 from src.configuration.swarm_config import SwarmConfig, Window, role_of
 from src.swarm.turn_rules import turn_activation
 from src.swarm.turn_rules._turn_presence import entry_rounds
-from src.swarm.turn_rules._turn_state import LIVE, PREDICATE, Delivered, Live, TurnState
+from src.swarm.turn_rules._turn_state import LIVE, PREDICATE, Delivered, Live, SubmitHolds, TurnState
 from src.swarm.turn_rules._turn_steps import concurrent_step, round_order, single_step, step_id
 
 
@@ -94,7 +94,8 @@ def team_delivery(config: SwarmConfig, agents: list[str]) -> bool:
 def rules_setup(config: SwarmConfig | dict, agents: list[str], roles: dict[str, str] | None = None,
                 delivered: Callable[[], Awaitable[set[str]]] | None = None, time_limit_s: int | None = None) -> Solver:
     """Task setup: write the initial TurnState into the sample's store and set the sample's Live record, which every
-    member's task shares. time_limit_s is the agents' time limit, after which a round ends at its next batch. Under
+    member's task shares, with the written plan under submit_hold, which a hold puts back (turn_activation), and the
+    SubmitHolds record. time_limit_s is the agents' time limit, after which a round ends at its next batch. Under
     stop_after_delivery it also writes the Delivered record and sets the sample's delivery predicate, `delivered`
     (Benchmark.delivered), which the rule needs."""
     rules = SwarmConfig.model_validate(config)
@@ -105,7 +106,9 @@ def rules_setup(config: SwarmConfig | dict, agents: list[str], roles: dict[str, 
         st = store_as(TurnState)
         for key, value in initial_state(rules, agents, roles, time_limit_s).items():
             setattr(st, key, value)
-        LIVE.set(Live())
+        LIVE.set(Live(plan=plan_steps(rules, agents, roles) if rules.submit_hold else []))
+        if rules.submit_hold:
+            store_as(SubmitHolds).on = True
         PREDICATE.set(None if rules.stop_after_delivery is None else delivered)
         if rules.stop_after_delivery is not None:
             record = store_as(Delivered)

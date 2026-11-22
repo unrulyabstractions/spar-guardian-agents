@@ -43,10 +43,12 @@ from src.swarm.turn_rules._turn_state import (
     Delivered,
     TeamSubmission,
     TurnState,
+    holdable,
     live_record,
     live_state,
     running_record,
     running_step,
+    submit_holds,
 )
 from src.swarm.turn_rules._turn_steps import step_round
 
@@ -118,6 +120,9 @@ def ending_of(st: TurnState, submission: TeamSubmission, agent: str, round_numbe
         return ALERT
     if ended == SUBMIT or (submission.agent == agent and submission.round == round_number):
         return "submit"
+    if any(d["decision"] == "hold" and d["submit"]["agent"] == agent and d["submit"]["round"] == round_number
+           for d in getattr(submit_holds(), "decisions", [])):
+        return "submit"                   # a regulator held it in the same round, before this callback
     return None
 
 
@@ -158,8 +163,25 @@ def _halt(st: TurnState, submission: TeamSubmission, keep: list[dict]) -> list[d
 def workers_gone(st: TurnState) -> bool:
     """Whether every worker's turns have ended, by a stop, its own hand-in or a limit, while another agent's have not:
     the run is over then. A regulator cannot stop and a disregulator cannot hand in, so neither keeps it going. False
-    with no worker, where only the plan's end stops the run, and once every agent has ended, which empties the plan."""
-    return bool(st.workers) and set(st.workers) <= st.ended.keys() and len(st.ended) < len(st.agents)
+    with no worker, where only the plan's end stops the run, and once every agent has ended, which empties the plan.
+    False too while a regulator may hold the hand-in (SwarmConfig.submit_hold, holdable): the hand-in's own last
+    round ends the run then, and a hold gives the worker its turns back."""
+    return bool(st.workers) and set(st.workers) <= st.ended.keys() and len(st.ended) < len(st.agents) \
+        and not holdable()
+
+
+def restored(step: ScheduleStep | None, pending: list) -> list:
+    """The pending plan, or after a regulator's hold (SubmitHolds.restore) the written plan's steps after the step
+    under way (Live.plan), which the hand-in's cut and the submitter's ending had taken out; after_activation then
+    keeps only the active agents' part of them, as after any round."""
+    holds = submit_holds()
+    if holds is None or not holds.restore:
+        return pending
+    holds.restore = False
+    plan = live_record().plan
+    ids = [s["id"] for s in plan]
+    at = ids.index(step.id) + 1 if step is not None and step.id in ids else 0
+    return [ScheduleStep.model_validate(s) for s in plan[at:]]
 
 
 def _without_workers(st: TurnState, keep: list[dict], step: ScheduleStep | None) -> list[dict]:
@@ -206,7 +228,8 @@ def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | Non
     used = st.rounds_used.get(agent, 0) + 1
     st.activations = {**st.activations, agent: activation}
     st.rounds_used = {**st.rounds_used, agent: used}
-    pending = list(runtime.pending_steps)
+    actual = list(runtime.pending_steps)
+    pending = restored(step, actual)
     rules = delivery()
     reason = None if ending is not None else _stop_reason(st, agent, used)   # its own ending comes first
     if reason is None and rules is not None and agent not in st.ended and spent(rules, agent, used) \
@@ -239,7 +262,7 @@ def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | Non
             keep.append(s.model_dump(mode="json"))
         elif agents:
             keep.append(s.model_copy(update={"agents": tuple(agents)}).model_dump(mode="json"))
-    before = [s.model_dump(mode="json") for s in pending]
+    before = [s.model_dump(mode="json") for s in actual]
     halted = submission.agent is not None
     if halted:
         keep = _halt(st, submission, keep)

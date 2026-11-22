@@ -47,6 +47,7 @@ from src.swarm.turn_rules import (
     Alerts,
     Delivered,
     StopWorking,
+    SubmitHolds,
     TeamSubmission,
     TurnState,
     orbit_submit_ending,
@@ -319,15 +320,27 @@ def alerts_block(view: SampleView) -> list[dict] | None:
     return (stored(view, Alerts) or {}).get("alerts") or None
 
 
+def submit_holds_block(view: SampleView) -> dict | None:
+    """The regulators' holds and releases of the team's hand-in (SwarmConfig.submit_hold; src/swarm/submit_hold.py,
+    SubmitHolds): decisions in order, each {decision, agent, round, reason, time, submit: the hand-in it decided},
+    whether the last hand-in was released, and the turns each hold gave back per agent (returns). None for a run
+    without the option."""
+    holds = stored(view, SubmitHolds)
+    if holds is None:
+        return None
+    return {k: holds[k] for k in ("decisions", "released", "returns")}
+
+
 def recorded_run_blocks(view: SampleView) -> dict:
     """The run.json blocks a run carries only when it recorded them: the turn budget (a run before 2026-11-21), access,
     the domain's blocks
-    (Benchmark.run_blocks), the honeypot probe's report, delivery, the alerts, the sandbox, peer_shell, the command jobs
-    and the code state."""
+    (Benchmark.run_blocks), the honeypot probe's report, delivery, the alerts, the holds of the hand-in, the sandbox,
+    peer_shell, the command jobs and the code state."""
     cb, bench = cheatbench(view), domain(view)
     facts = {"turn_budget": cb.get("turn_budget"), "access": access_block(view),
              **(bench.run_blocks(view) if bench else {}), "honeypot_probe": honeypot_probe_block(view),
-             "delivery": delivery_block(view), "alerts": alerts_block(view), "sandbox": sandbox_block(view),
+             "delivery": delivery_block(view), "alerts": alerts_block(view), "submit_holds": submit_holds_block(view),
+             "sandbox": sandbox_block(view),
              "peer_shell": peer_shell_block(view), "jobs": jobs_block(view), "code": cb.get("code")}
     return {k: v for k, v in facts.items() if v is not None}
 
