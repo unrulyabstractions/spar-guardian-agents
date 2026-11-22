@@ -1,9 +1,11 @@
 /* The run page's Board tab (tv_view_board.js). Colours come from the results browser's theme tokens
    (src/ui/static/style.css) and the ladders' ramps and chips (tv_case_view.js RAMP, tv_levels.js levelChip, styled in
    tv_style.css); the two lanes' colours are the tab's own. */
-.bd-tab { --bd-a: #1b7f8c; --bd-a-bg: #dff0f2; --bd-b: #c2700f; --bd-b-bg: #fbecd9; --bd-plain: #c9c9c1; }
+.bd-tab { --bd-a: #1b7f8c; --bd-a-bg: #dff0f2; --bd-b: #c2700f; --bd-b-bg: #fbecd9; --bd-plain: #c9c9c1;
+  --bd-seed: #5f7a1f; --bd-seed-bg: #eef3df; }
 @media (prefers-color-scheme: dark) {
-  .bd-tab { --bd-a: #5cc3cf; --bd-a-bg: #173336; --bd-b: #f0a453; --bd-b-bg: #3a2a17; --bd-plain: #55575d; }
+  .bd-tab { --bd-a: #5cc3cf; --bd-a-bg: #173336; --bd-b: #f0a453; --bd-b-bg: #3a2a17; --bd-plain: #55575d;
+    --bd-seed: #a9c46a; --bd-seed-bg: #263018; }
 }
 .bd-tab .card { margin-bottom: 10px; }
 .bd-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 6px; }
@@ -109,6 +111,9 @@
 .bd-by-other rect { fill: var(--panel-2); stroke: var(--border-strong); }
 .bd-by-other text, .bd-by-system text { fill: var(--muted); }
 .bd-by-system rect { fill: var(--notice-bg); stroke: var(--notice); stroke-dasharray: 2 2; }
+/* a seed pack's post: the previous team's, on the board before round 1 */
+.bd-by-seed rect { fill: var(--bd-seed-bg); stroke: var(--bd-seed); stroke-width: 1.6; stroke-dasharray: 4 2; }
+.bd-by-seed text, .bd-seed-name { fill: var(--bd-seed); }
 .bd-pbox.bd-pdim rect { fill: var(--panel); }
 .bd-pbox.bd-pdim text { fill: var(--muted); }
 .bd-judged-dot { stroke: var(--text); stroke-width: 1; }
@@ -142,6 +147,7 @@
 .bd-sw-sofar { opacity: .8; }
 .bd-sw-latest { width: 16px; height: 10px; border: 2.4px solid var(--text); background: none; }
 .bd-sw-post { width: 18px; height: 11px; border-radius: 3px; background: var(--bd-a); border-color: var(--bd-a); }
+.bd-sw-seed { width: 18px; height: 11px; border-radius: 3px; background: var(--bd-seed-bg); border: 1.5px dashed var(--bd-seed); }
 .bd-sw-tall { width: 6px; height: 16px; border-color: var(--text); }
 .bd-tick { display: inline-block; width: 0; height: 14px; border-left: 1px dashed var(--text); }
 .bd-tick.bd-tick-line { border-left: 2.2px solid var(--text); }
@@ -159,6 +165,9 @@
 .bd-post .bd-text { margin: 4px 0 0; font-size: 12px; max-height: none; }
 .bd-post.bd-system { border-style: dashed; border-left-style: solid; border-left-color: var(--notice);
   background: var(--notice-bg); }
+.bd-post.bd-seeded { border-style: dashed; border-left-style: solid; border-left-color: var(--bd-seed);
+  background: var(--bd-seed-bg); }
+.bd-seed-badge { color: var(--bd-seed); border: 1px solid var(--bd-seed); background: var(--bd-seed-bg); }
 .bd-post.bd-mine-a { border-left-color: var(--bd-a); background: var(--bd-a-bg); }
 .bd-post.bd-mine-b { border-left-color: var(--bd-b); background: var(--bd-b-bg); }
 .bd-post.bd-mine-a .bd-writer { color: var(--bd-a); }

@@ -80,6 +80,8 @@ table.idx-table .idx-group-start { border-left: 2px solid var(--border); }
 .cond-none { background: var(--panel-2); color: var(--muted); border-color: var(--border); }
 .cond-cheat { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); font-weight: 600; }
 .cond-rule { background: var(--new-bg); color: var(--new); border-color: var(--new); }
+.cond-seed { background: #eef3df; color: #5f7a1f; border-color: #5f7a1f; border-style: dashed; }
+@media (prefers-color-scheme: dark) { .cond-seed { background: #263018; color: #a9c46a; border-color: #a9c46a; } }
 .cond-rule-strong { background: var(--new); color: var(--panel); border-color: var(--new); font-weight: 600; }
 .role-chip { display: inline-block; padding: 0 5px; border-radius: 3px; font-size: 10px; font-weight: 700;
   letter-spacing: .05em; text-transform: uppercase; line-height: 1.7; white-space: nowrap; }

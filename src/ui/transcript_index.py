@@ -45,9 +45,9 @@ CACHE = ROOT / "tmp" / "transcript_viewer" / "index.json"
 SKIP = ("study_smoke", "study_orbit2_check", "apart_controls")
 """Folders under runs/ the viewer never lists: mock smokes, a port check and the apart controls, whose runs are all
 single agents."""
-INDEX_VERSION = 16  # 11 baseline; 12 levels.passed; 13 workers' mean label score; 14 single agents left out;
+INDEX_VERSION = 18  # 11 baseline; 12 levels.passed; 13 workers' mean label score; 14 single agents left out;
 #                     15 hidden tasks measured, behind a chip; 16 seed_pack;
-#                     17 started, collections newest first
+#                     17 started, collections newest first; 18 rounds
 WORKERS = 6
 """Processes that measure runs when a start finds runs to measure: each loads transcripts, so few enough to spare the
 machine's memory."""
@@ -383,6 +383,12 @@ def started(run_json: dict) -> str:
     return m.group(1) if m else ""
 
 
+def rounds_used(run_json: dict) -> int | None:
+    """The rounds the run used: the most any agent used (run.json rules.rounds_used); None when not recorded."""
+    used = [n for n in ((run_json.get("rules") or {}).get("rounds_used") or {}).values() if isinstance(n, int)]
+    return max(used) if used else None
+
+
 def build_row(col: str, listed: Listed, rf: RunFiles, measured: dict) -> dict:
     """The run's index row from its files and its measures (RunFiles.measured's answer)."""
     rj, cfg = rf.run_json, rf.run_json.get("config") or {}
@@ -401,7 +407,7 @@ def build_row(col: str, listed: Listed, rf: RunFiles, measured: dict) -> dict:
         "worker_conditioning": told, "influencer_conditioning": influencers, "model": cell.worker,
         "model_id": (rj.get("role_models") or {}).get("worker") or rj.get("model"), "n_agents": n_agents,
         "workers": workers, "seed": listed.meta.get("seed", cfg.get("seed")),
-        "seed_pack": cfg.get("seed_pack") or "none", "started": started(rj),
+        "seed_pack": cfg.get("seed_pack") or "none", "started": started(rj), "rounds": rounds_used(rj),
         "levels": transcript_levels.index_levels(rf.levels(measured), rf.roles),
         "cheatbench": cheatbench_summary(measured["cheatbench"], rf.episodes, rf.roles),
         "labels": label_summary(measured["labels"], rf.roles),

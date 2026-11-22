@@ -52,10 +52,13 @@ export const conditioningChip = part => h('span', { class: ['cond-chip', CONDITI
 export const influencerChips = x => [h('span', { class: ['role-chip', `role-chip-${x.role}`] }, x.n === 1 ? x.role : `${x.n} ${x.role}s`),
   x.level ? h('span', { class: ['level-chip', `level-chip-${x.role}`] }, x.level) : null];
 /** Who ran: one group for the workers and one per influencer, each its model's name over its chips (the workers'
- * number and conditioning; the influencer's role and level). */
+ * number and conditioning; the influencer's role and level), and the seed pack's name under "seed" when seeded. */
 const whoGroup = (model, chips) => h('span', { class: 'rp-who-part' }, h('b', { class: 'rp-who-model' }, model),
   h('span', { class: 'rp-who-chips' }, chips));
 export const whoChips = r => h('span', { class: 'rp-who' },
   whoGroup(modelLabel(r), [h('span', { class: ['cond-chip', 'cond-none', 'count-chip'] }, plural(r.workers, 'worker')),
     r.worker_conditioning.split('; ').map(conditioningChip)]),
-  r.influencer_conditioning.map(x => whoGroup(modelLabel({ model: x.model }), influencerChips(x))));
+  r.influencer_conditioning.map(x => whoGroup(modelLabel({ model: x.model }), influencerChips(x))),
+  // the seed pack, when the run has one: its name under "seed"
+  r.seed_pack && r.seed_pack !== 'none' ? whoGroup('seed', h('span', { class: ['cond-chip', 'cond-seed'],
+    title: `seed pack ${r.seed_pack}, planted before round 1` }, String(r.seed_pack).split('/').pop())) : null);

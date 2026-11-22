@@ -887,10 +887,10 @@ def test_the_runs_table_has_one_cheating_cell_its_columns_in_order_and_no_alarm_
     index = (STATIC / "tv_view_index.js").read_text()
     body = index[index.index("  return [\n    { key: 'run'"):index.index("const GROUPS")]
     keys = re.findall(r"\{ key: '([a-z_]+)'", body)
-    assert keys == ["run", "workers", "seed_pack", "model", "influencers", "task", "other"]
+    assert keys == ["run", "workers", "seed_pack", "model", "influencers", "task", "rounds", "other"]
     assert "influencerLabel" not in body
     assert body.index("key: 'task'") < body.index("d.order.map(team)") < body.index("d.order.map(influencers)") \
-        < body.index("map(label)") < body.index("key: 'other'")
+        < body.index("map(label)") < body.index("key: 'rounds'") < body.index("key: 'other'")
     assert "cell: workersCell" in body and "cell: influencersCell" in body
     assert "key: 'workers', label: 'Workers', title: 'Number of workers', sort: r => r.workers" in index
     assert "GROUPS = { team: 'Team', labels: 'Judge labels', influencers: 'Influencers' }" in index
@@ -1207,3 +1207,28 @@ def test_a_cell_and_a_label_carry_their_evidence_as_facts():
     (label,) = tl._agent_labels("a01", [], cheats, None, {})
     assert label["facts"] == [["opened", "cat /tmp/x"], ["moved", "cp /tmp/x ."]]
     assert label["evidence"] == "opened: cat /tmp/x; moved: cp /tmp/x ."
+
+
+def test_the_rounds_column_reads_the_most_rounds_any_agent_used():
+    """The runs page's Rounds column: the index row's rounds, the most of run.json rules.rounds_used; null when the
+    run did not record it, a dash on the page."""
+    from src.ui import transcript_index as tindex
+    assert tindex.rounds_used({"rules": {"rounds_used": {"a1": 9, "a2": 11, "a3": 10}}}) == 11
+    assert tindex.rounds_used({"rules": {}}) is None and tindex.rounds_used({}) is None
+    index = (STATIC / "tv_view_index.js").read_text()
+    assert "{ key: 'rounds', label: 'Rounds', title: 'Most rounds any agent used'" in index
+    assert "empty: r => r.rounds == null" in index
+
+
+def test_the_runs_page_collapses_a_column_of_dashes_over_the_filtered_rows():
+    """A column whose every filtered row is a dash collapses, its band with it when the whole band does, and a line
+    under the legend names what collapsed; with no row nothing collapses."""
+    index = (STATIC / "tv_view_index.js").read_text()
+    for empty in ("empty: r => !r.influencer_conditioning.length", "empty: r => !r.levels[`${L}_influencers`].length",
+                  "empty: r => !r.labels.team[k]"):
+        assert empty in index, empty
+    assert "COLUMNS.filter(c => c.empty && filtered.every(c.empty))" in index
+    assert "filtered.length ?" in index
+    assert "layout(shown);" in index
+    assert "`* Collapsed, no values: ${parts.join('; ')}`" in index
+    assert "legendTable(ladders),\n    collapsedNote);" in index

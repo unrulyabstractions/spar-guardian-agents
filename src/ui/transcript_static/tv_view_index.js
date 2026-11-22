@@ -6,7 +6,9 @@
  * and the collection last; one Cheating cell holds the code's rung and cheated and, under it, CheatBench's judge's
  * word, each marked by who says it; the judge labels disclosure and manipulation, each the team's highest score and the
  * worker it is of, linked to that worker's excerpt, with a filter each ("at least" a number), and the influencers' own
- * scores in the Influencers band; the Cheating ladder's alarm marks the row, with no column; the task, the
+ * scores in the Influencers band; Rounds, the most rounds any agent of the run used; a column whose every filtered
+ * row shows a dash collapses, with its band when the whole band does, and a line under the legend names what
+ * collapsed; the Cheating ladder's alarm marks the row, with no column; the task, the
  * conditioning and the arm are the server's words; the heading carries the count, the pager beside it, and the filters
  * stand in three labelled groups (FILTER_GROUPS), a set filter outlined; a run with no influencer shows a dash in the
  * influencer columns; a legend table under the runs shows every level of the three ladders as the cells draw it,
@@ -99,9 +101,11 @@ const breakable = name => String(name).split('_').flatMap((part, i) => (i ? ['_'
 
 /** The runs table's columns, in the order the user set on 2026-11-19: the run, the workers' number, their model with
  * its conditioning, the influencers, the task, the team's three ladders, the influencers' three ladders, the
- * workers' mean judge labels, and Other details last: the interest rank over the collection.
- * Each is {key, label, group, title, sort(row), cell(row)}; group names the band over it (GROUPS). d is /api/ladders'
- * answer. */
+ * workers' mean judge labels, the rounds the run used (the most any agent used), and Other details last: the interest
+ * rank over the collection.
+ * Each is {key, label, group, title, sort(row), cell(row), empty(row)}; group names the band over it (GROUPS); empty
+ * says the cell is a dash, and a column whose every filtered row is empty collapses (collapsedLine). d is
+ * /api/ladders' answer. */
 function columns(d) {
   const lad = L => d.ladders[L];
   const rank = (L, v) => lad(L).levels.indexOf(v);
@@ -112,6 +116,7 @@ function columns(d) {
   const influencers = L => ({ key: `lv_${L}_influencers`, label: lad(L).name, group: 'influencers',
     title: 'Each influencer\'s own level, kept out of the team\'s',
     sort: r => Math.max(-1, ...r.levels[`${L}_influencers`].map(x => rank(L, x.level))),
+    empty: r => !r.levels[`${L}_influencers`].length,
     cell: r => {
       // in the Influencers cell's order, so each level stands level with its influencer
       const at = x => r.influencer_conditioning.findIndex(c => c.role === x.role);
@@ -124,7 +129,7 @@ function columns(d) {
   const about = d.judge_labels;
   const label = k => ({ key: k, label: about.labels[k].name, group: 'labels',
     title: 'Workers\' mean score, 0 to 100',
-    sort: r => teamScoreOf(r, k), cell: r => teamScore(r.labels.team[k], excerptHref(r, k)) });
+    sort: r => teamScoreOf(r, k), cell: r => teamScore(r.labels.team[k], excerptHref(r, k)), empty: r => !r.labels.team[k] });
   return [
     { key: 'run', label: 'Run', sort: r => r.run,
       cell: r => h('a', { class: 'run-link', href: `#/run/${r.id.split('/').map(enc).join('/')}` },
@@ -136,11 +141,13 @@ function columns(d) {
       sort: r => `${modelLabel(r)} · ${r.worker_conditioning}`, cell: workersCell },
     { key: 'influencers', label: 'Influencers', title: 'Each influencer\'s role, instruction level and model',
       sort: r => r.influencer_conditioning.map(x => `${x.role} ${x.level || ''} ${modelLabel({ model: x.model })}`).join(' · '),
-      cell: influencersCell },
+      cell: influencersCell, empty: r => !r.influencer_conditioning.length },
     { key: 'task', label: 'Task', sort: r => taskLabel(r), cell: r => taskLabel(r) },
     ...d.order.map(team),
     ...d.order.map(influencers),
     ...Object.keys(about.labels).map(label),
+    { key: 'rounds', label: 'Rounds', title: 'Most rounds any agent used', sort: r => (r.rounds == null ? -1 : r.rounds),
+      cell: r => (r.rounds == null ? none() : String(r.rounds)), empty: r => r.rounds == null },
     { key: 'other', label: 'Other details', title: 'Interest rank, then collection', sort: r => r.interest.rank,
       cell: r => h('div', { class: 'idx-other' },
         h('span', { class: 'sc-chip interest-chip', title: `interest: ${r.interest.why}` }, String(r.interest.rank)),
@@ -155,7 +162,24 @@ const GROUPS = { team: 'Team', labels: 'Judge labels', influencers: 'Influencers
 // Columns whose text wraps.
 const WRAP = new Set(['run', 'task']);
 // Columns whose cells sit centred: the counts, the ladders, the scores and Other details.
-const CENTER = k => k.startsWith('lv_') || ['workers', 'seed_pack', 'disclosure', 'manipulation', 'other'].includes(k);
+const CENTER = k => k.startsWith('lv_') || ['workers', 'seed_pack', 'disclosure', 'manipulation', 'rounds', 'other'].includes(k);
+
+/** The line under the legend naming the collapsed columns, by band, a band's name before its columns when one of
+ * them shares its name with another column: "* Collapsed, no values: Influencers Cheating, Coordination, Collusion;
+ * Disclosure, Manipulation". Null when none collapsed. */
+function collapsedLine(columns, hidden) {
+  const parts = [];
+  for (let i = 0; i < columns.length;) {
+    let j = i;
+    while (j < columns.length && columns[j].group === columns[i].group) j++;
+    const run = columns.slice(i, j).filter(c => hidden.has(c.key));
+    const g = columns[i].group;
+    const shared = run.some(c => columns.some(o => o !== c && o.label === c.label));
+    if (run.length) parts.push(`${g && shared ? `${GROUPS[g]} ` : ''}${run.map(c => c.label).join(', ')}`);
+    i = j;
+  }
+  return parts.length ? `* Collapsed, no values: ${parts.join('; ')}` : null;
+}
 
 function uniq(a) { return [...new Set(a.filter(x => x != null))]; }
 
@@ -277,21 +301,35 @@ export async function viewIndex(q) {
   const tbody = h('tbody');
   const table = h('table', { class: 'data idx-table' }, thead, tbody);
 
-  // The band: one cell per run of columns of the same group, named by GROUPS (the identity columns' band is blank).
+  // The band: one cell per run of shown columns of the same group, named by GROUPS (the identity columns' band is
+  // blank); a band whose every column collapsed goes with them. Drawn again with the shown columns (layout).
   const band = h('tr', { class: 'idx-band' });
-  for (let i = 0; i < COLUMNS.length;) {
-    let j = i;
-    while (j < COLUMNS.length && COLUMNS[j].group === COLUMNS[i].group) j++;
-    const g = COLUMNS[i].group;
-    band.appendChild(h('th', { colspan: String(j - i), scope: 'colgroup', class: [g ? `idx-band-${g}` : 'idx-band-none', i && 'idx-group-start'] },
-      g ? GROUPS[g] : ''));
-    i = j;
-  }
-  // The first column of each group but the first, drawn with a rule at its left.
-  const STARTS = new Set(COLUMNS.filter((c, i) => i && COLUMNS[i - 1].group !== c.group).map(c => c.key));
   const headRow = h('tr');
+  const collapsedNote = h('p', { class: 'small muted idx-collapsed', hidden: true });
+  let STARTS = new Set();
+  let SHOWN = COLUMNS;
+  const layout = filtered => {
+    const hidden = new Set(filtered.length ? COLUMNS.filter(c => c.empty && filtered.every(c.empty)).map(c => c.key) : []);
+    SHOWN = COLUMNS.filter(c => !hidden.has(c.key));
+    // the first shown column of each group but the first, drawn with a rule at its left
+    STARTS = new Set(SHOWN.filter((c, i) => i && SHOWN[i - 1].group !== c.group).map(c => c.key));
+    band.replaceChildren();
+    for (let i = 0; i < SHOWN.length;) {
+      let j = i;
+      while (j < SHOWN.length && SHOWN[j].group === SHOWN[i].group) j++;
+      const g = SHOWN[i].group;
+      band.appendChild(h('th', { colspan: String(j - i), scope: 'colgroup', class: [g ? `idx-band-${g}` : 'idx-band-none', i && 'idx-group-start'] },
+        g ? GROUPS[g] : ''));
+      i = j;
+    }
+    for (const c of SHOWN) c.th.classList.toggle('idx-group-start', STARTS.has(c.key));
+    headRow.replaceChildren(...SHOWN.map(c => c.th));
+    const line = collapsedLine(COLUMNS, hidden);
+    collapsedNote.textContent = line || '';
+    collapsedNote.hidden = !line;
+  };
   for (const c of COLUMNS) {
-    const th = h('th', { class: ['sortable', STARTS.has(c.key) && 'idx-group-start', CENTER(c.key) && 'center', c.key.startsWith('lv_') && 'lv'], title: c.title || null, scope: 'col', tabindex: '0' }, c.label,
+    const th = h('th', { class: ['sortable', CENTER(c.key) && 'center', c.key.startsWith('lv_') && 'lv'], title: c.title || null, scope: 'col', tabindex: '0' }, c.label,
       c.note ? [h('br'), c.note] : null);
     const go = () => {
       if (state.sort === c.key) state.dir = state.dir === 'asc' ? 'desc' : 'asc';
@@ -301,7 +339,6 @@ export async function viewIndex(q) {
     th.addEventListener('click', go);
     th.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
     c.th = th;
-    headRow.appendChild(th);
   }
   thead.append(band, headRow);
 
@@ -311,6 +348,7 @@ export async function viewIndex(q) {
     const set = FILTERS.filter(f => state.f[f.key]);
     for (const [key, x] of fields) x.field.classList.toggle('is-set', !!state.f[key]);
     let shown = rows.filter(r => set.every(f => f.test(r, state.f[f.key])));
+    layout(shown);
     const col = COLUMNS.find(c => c.key === state.sort);
     if (col) {  // with no column chosen the rows keep the index's own order: by interest (transcript_index.INTEREST)
       const sign = state.dir === 'desc' ? -1 : 1;
@@ -332,9 +370,9 @@ export async function viewIndex(q) {
     const slice = shown.slice(state.page * size, state.page * size + size);
     const last = sessionStorage.getItem('tv.lastRun');
     tbody.replaceChildren(...(slice.length ? slice.map(r => h('tr', { class: ['idx-row', alarmOf(r) && 'row-alarm', r.id === last && 'is-last'], title: alarmOf(r) ? `alarm: ${alarmOf(r)}` : null },
-      COLUMNS.map(c => h('td', { class: [WRAP.has(c.key) && 'wrap', c.key.startsWith('lv_') && 'lv', STARTS.has(c.key) && 'idx-group-start',
+      SHOWN.map(c => h('td', { class: [WRAP.has(c.key) && 'wrap', c.key.startsWith('lv_') && 'lv', STARTS.has(c.key) && 'idx-group-start',
         (CENTER(c.key) || (c.key === 'influencers' && !r.influencer_conditioning.length)) && 'center'] }, c.cell(r)))))
-      : [h('tr', null, h('td', { colspan: String(COLUMNS.length) }, muted('No run matches these filters.')))]));
+      : [h('tr', null, h('td', { colspan: String(SHOWN.length) }, muted('No run matches these filters.')))]));
     pager.replaceChildren(
       h('button', { type: 'button', class: 'btn btn-small', disabled: state.page === 0, onclick: () => { state.page--; draw(); } }, '← previous'),
       h('span', { class: 'muted small' }, ` page ${state.page + 1} of ${pages} `),
@@ -380,5 +418,6 @@ export async function viewIndex(q) {
     h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, titleEl, about), pager),
     filterBox,
     wrap,
-    legendTable(ladders));
+    legendTable(ladders),
+    collapsedNote);
 }

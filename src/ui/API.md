@@ -257,7 +257,7 @@ folder and its measures (`RunFiles.measured`: CheatBench's verdicts, the three l
 labels), under a stamp of the run's files (their count, bytes and latest change, `stamp`) and of the code
 (`code_stamp`, a hash of `src/measures`, `src/domains`, `src/judging` and `src/ui`). A start measures again only the
 runs whose stamp changed, in `WORKERS` processes, and prints `measured k of n runs` every `PROGRESS` runs; `--rebuild`,
-a new `INDEX_VERSION` (now 13) or new code measures every run. The run page reads its ladders from the cache.
+a new `INDEX_VERSION` (now 18) or new code measures every run. The run page reads its ladders from the cache.
 
 ## UI routes
 
@@ -387,6 +387,7 @@ IndexRow = {                                         # valid runs only
   influencer_conditioning: [{role ("regulator"|"disregulator"), n, level (its instruction level), model}],
   model (the workers' model, the last part of run.json's role_models worker, else its model, never a
   run's name), model_id (that model string), n_agents, seed, seed_pack ("<task>/<pack>" or "none"), started (from the eval log's name, "2026-11-22T13-25-43", or ""),
+  rounds (the rounds the run used: the most any agent used, run.json rules.rounds_used; null when not recorded),
   levels: {team: {<ladder>: level}, cheated: bool | null,   # the team's Cheating measure: attempted or above
            passed: bool | null,                    # the Cheating measure's passed: the grader passed the hand-in
            cheating_influencers, coordination_influencers, collusion_influencers:
@@ -558,7 +559,8 @@ BoardTab = {clock ("eval_log" | "call_order"), clock_about, total (seconds, or t
             tmp,                                               # whether the run has tmp_snapshots.json (/api/tmp)
             presence: Presence + clock,                        # transcript_presence.on_lanes: each agent adds
                                                                # entry: {k, t, start} and exit: {k, t}; each Alert t
-            calls_per_round}                                   # N; null in a run before rounds of calls
+            calls_per_round,                                   # N; null in a run before rounds of calls
+            seed_pack}                                         # "<task>/<pack>" (config.seed_pack); null unseeded
 BoardCall = {k (the agent tab's "Call k"), m (its model call, per agent from 0), t, dur, tool, summary (one line),
              round, pos (its round and its place in it; null before rounds of calls),
              board ("post" | "read" | "status" | null),
@@ -568,7 +570,7 @@ BoardCall = {k (the agent tab's "Call k"), m (its model call, per agent from 0),
                      collusion: [{level ("cooperation"), index, giver, rule, planted, evidence}],
                      judge: [{label, score, kind, where ("reasoning" | "post"), evidence (the excerpt)}]}}
 BoardPost = {label ("P1", "P2", ... in board order, system notices included: the judges' numbering), writer, role,
-             kind ("post" | "system"), t, call (the writer's call k, null for a notice), text,
+             kind ("post" | "system" | "seeded": a seed pack's post, on the board before round 1), t, call (the writer's call k, null for a notice), text,
              reads: [{agent, k, t, form, asked}] (every read by another agent),
              labels: [{agent, label, score, excerpt, reason, start, end}]}   # judge labels located in the post
 ```

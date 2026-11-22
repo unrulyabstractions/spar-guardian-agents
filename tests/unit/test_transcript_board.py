@@ -124,7 +124,8 @@ def test_calls_are_in_order_with_the_eval_logs_times(tmp_path):
     # each ladder as levelChip and lineMark read it, with its line, and nothing more; no field the tab does not read
     assert p["ladders"] == {"cheating": {k: LADDERS["cheating"][k] for k in ("name", "levels", "line", "line_words")}}
     assert set(p) == {"clock", "clock_about", "total", "agents", "posts", "pair", "pair_why", "ladders", "label_names",
-                      "notes", "presence", "calls_per_round"}   # the network log comes on its own (network_payload)
+                      "notes", "presence", "calls_per_round", "seed_pack"}   # the network log comes on its own
+    assert p["seed_pack"] is None                                   # an unseeded run
     assert p["presence"] == {"agents": {}, "alerts": []}   # a run.json with no entry, exit or alert
     assert set(by["a01"]["calls"][0]) == {"k", "m", "t", "dur", "tool", "summary", "board", "labels", "marks",
                                           "held", "after", "round", "pos"}   # round, pos: None before rounds
@@ -132,6 +133,30 @@ def test_calls_are_in_order_with_the_eval_logs_times(tmp_path):
     assert set(by["a01"]["calls"][0]["marks"]) == set(tb.LENSES) and set(by["a01"]["unplaced"]) == set(tb.LENSES)
     assert set(p["posts"][0]) == {"label", "writer", "role", "kind", "t", "call", "text", "reads", "labels"}
     assert p["label_names"] == {"disclosure": "Disclosure", "manipulation": "Manipulation"}
+
+
+def test_a_seed_packs_post_is_flagged_seeded_and_the_payload_names_the_pack(tmp_path):
+    """A post of a seed pack (invocation_id seed_pack) is kind seeded; the payload carries config.seed_pack, which the
+    board lane's label and the run page's facts show."""
+    run = write_run(tmp_path)
+    comm = run / "communication" / f"{SAMPLE}.json"
+    doc = json.loads(comm.read_text())
+    doc["messages"][0]["invocation_id"] = "seed_pack"
+    comm.write_text(json.dumps(doc))
+    rj = json.loads((run / "run.json").read_text())
+    (run / "run.json").write_text(json.dumps({**rj, "config": {"seed_pack": "synthetic_task/pointer"}}))
+    p = payload(run)
+    assert p["seed_pack"] == "synthetic_task/pointer"
+    first = next(x for x in p["posts"] if x["label"] == "P1")
+    assert first["kind"] == "seeded"
+    assert {x["kind"] for x in p["posts"] if x["label"] != "P1"} <= {"post", "system"}
+    board = (Path(tb.__file__).parent / "transcript_static" / "tv_view_board.js").read_text()
+    assert "`${plural(d.posts.length, 'post')}${seedName ? ` · ${seededCount} seeded` : ''}`" in board
+    assert "p.kind === 'seeded' ? 'bd-by-seed'" in board
+    css = (Path(tb.__file__).parent / "transcript_static" / "tv_board.css").read_text()
+    assert ".bd-by-seed rect" in css
+    run_js = (Path(tb.__file__).parent / "transcript_static" / "tv_view_run.js").read_text()
+    assert "['seed pack', row.seed_pack && row.seed_pack !== 'none' ? row.seed_pack : undefined]" in run_js
 
 
 def test_posts_are_numbered_in_board_order_and_placed_at_their_writing_call(tmp_path):

@@ -420,7 +420,7 @@ def notice_time(message: dict, events: list[dict], by_id: dict[str, Call],
 
 def board_payload(run_dir: Path, levels: dict) -> dict:
     """The Board tab's data for one run: {clock, clock_about, total, agents, posts, pair, pair_why, ladders,
-    label_names (each judge label's name), notes, presence (transcript_presence.on_lanes)}. `levels` is the run page's
+    label_names (each judge label's name), notes, presence (transcript_presence.on_lanes), calls_per_round, seed_pack}. `levels` is the run page's
     ladders (transcript_levels.compute). The network log comes on its own (network_payload)."""
     run = load_run(run_dir, times=True)
     name, at, total = clock(run)
@@ -491,4 +491,5 @@ def board_payload(run_dir: Path, levels: dict) -> dict:
             "ladders": {k: {key: v[key] for key in LADDER_KEYS} for k, v in levels["ladders"].items()},
             "label_names": {k: v["name"] for k, v in levels["judge_label_about"]["labels"].items()},
             "notes": notes, "presence": on_lanes(presence(run.run_json), run.calls, at),
-            "calls_per_round": (run.run_json.get("rules") or {}).get("calls_per_round")}
+            "calls_per_round": (run.run_json.get("rules") or {}).get("calls_per_round"),
+            "seed_pack": (run.run_json.get("config") or {}).get("seed_pack") or None}

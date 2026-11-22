@@ -148,7 +148,8 @@ def test_the_board_shows_the_panel_only_with_a_network_log():
     run = (STATIC / "tv_view_run.js").read_text()
     panel = (STATIC / "tv_net_panel.js").read_text()
     assert "const net = d.network && opts.netUrl ? netPanel(opts.netUrl" in board
-    assert "net ? net.el : null," in board
+    # the panel stands under the message board
+    assert board.index("h('section', { class: 'card bd-board' }, boardHead, boardBox),\n    net ? net.el : null));") > 0
     assert "netUrl: netUrl(id)" in run
     assert "export const netUrl = id => `/api/network?id=${enc(id)}`;" in panel
 

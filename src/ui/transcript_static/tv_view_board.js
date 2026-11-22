@@ -28,7 +28,7 @@
  * svgEl() text nodes. When the payload says the run has /tmp snapshots (d.tmp) and opts.tmpUrl is given, a /tmp panel
  * (tv_tmp_panel.js) between the timeline and the board shows each machine's /tmp at the position, and what changed
  * since the stop before it. When the payload says the run has a network log (d.network) and opts.netUrl is given, a
- * Network panel (tv_net_panel.js) under it shows what listens at the position, by machine, and every connect, accept
+ * Network panel (tv_net_panel.js) under the message board shows what listens at the position, by machine, and every connect, accept
  * and send up to it; once the log has come, each TCP or UDP call and each cross-agent call marks its agent's lane with
  * a small triangle at its time (a cross-agent connection in the bad colour, an attempt in the warning colour), whose
  * hover names it and whose click opens its call. Each lane hatches the stretch before its agent entered and after it
@@ -242,7 +242,9 @@ export function renderBoard(el, d, opts) {
   const boardList = h('ol', { class: 'bd-posts' });
   const empty = muted('no post yet', 'small block');
   const boardBox = h('div', { class: 'bd-board-box' }, empty, boardList);
-  const boardHead = h('h3', { class: 'bd-board-head' }, `Message board · ${plural(d.posts.length, 'post')}`);
+  const seededCount = d.posts.filter(p => p.kind === 'seeded').length;
+  const boardHead = h('h3', { class: 'bd-board-head' }, `Message board · ${plural(d.posts.length, 'post')}`,
+    seededCount ? ` · ${seededCount} seeded` : '');
   // the /tmp panel, when the run has snapshots: every call's place on the clock, by agent and k
   const callTime = new Map(d.agents.flatMap(a => a.calls.map(c => [`${a.agent}:${c.k}`, c.t])));
   const tmp = d.tmp && opts.tmpUrl ? tmpPanel(opts.tmpUrl, { timeOf: (agent, k) => callTime.get(`${agent}:${k}`),
@@ -275,12 +277,15 @@ export function renderBoard(el, d, opts) {
     const span = p.labels.map(x => excerptSpan(p.text, x.excerpt, x.start, x.end)).find(Boolean);
     const readBy = [...readers].map(([agent, ks]) => h('a', { class: 'bd-reader', href: callHref(agent, ks[0]),
       title: `read at call${ks.length > 1 ? 's' : ''} ${fewOf(ks).filter(Boolean).join(', ')}` }, agent));
-    const li = h('li', { class: ['bd-post', p.kind === 'system' && 'bd-system', p.labels.length && 'bd-has-label'],
+    const li = h('li', { class: ['bd-post', p.kind === 'system' && 'bd-system', p.kind === 'seeded' && 'bd-seeded',
+      p.labels.length && 'bd-has-label'],
       dataset: { i: String(i) }, hidden: true },
     h('div', { class: 'bd-post-head' },
       h('b', { class: 'bd-label' }, p.label),
       p.kind === 'system' ? badge('notice', 'notice', 'written by the harness')
         : h('span', { class: 'bd-writer' }, p.writer),
+      p.kind === 'seeded' ? h('span', { class: 'badge bd-seed-badge', title: `seed pack ${d.seed_pack || ''}, before round 1` },
+        'seeded') : null,
       p.role && p.role !== 'worker' ? badge(ROLE_LABEL[p.role] || p.role, 'plain') : null,
       h('span', { class: 'small muted', title: timed ? 'elapsed' : 'place in the run\'s call order' },
         timed ? fmtSecs(p.t) : `#${p.t + 1}`),
@@ -410,9 +415,15 @@ export function renderBoard(el, d, opts) {
         lanes.append(g);
       });
     }
+    // the board's name, its posts, and the seed pack's posts with the pack's name when the run is seeded
+    const seedName = d.seed_pack ? String(d.seed_pack).split('/').pop() : null;
+    const yName = yBoard + BOARD_H / 2 - (seedName ? 9 : 2);
     lanes.append(svgEl('rect', { class: 'bd-lane bd-lane-board', x: x0, y: yBoard, width: x1 - x0, height: BOARD_H }),
-      svgEl('text', { x: 18, y: yBoard + BOARD_H / 2 - 2, class: 'bd-name' }, 'board'),
-      svgEl('text', { x: 18, y: yBoard + BOARD_H / 2 + 12, class: 'bd-role' }, plural(d.posts.length, 'post')));
+      svgEl('text', { x: 18, y: yName, class: 'bd-name' }, 'board'),
+      svgEl('text', { x: 18, y: yName + 14, class: 'bd-role' },
+        `${plural(d.posts.length, 'post')}${seedName ? ` · ${seededCount} seeded` : ''}`),
+      ...(seedName ? [svgEl('text', { x: 18, y: yName + 27, class: 'bd-role bd-seed-name' }, `(${seedName})`,
+        svgEl('title', null, `seed pack ${d.seed_pack}`))] : []));
     svg.appendChild(lanes);
 
     // axis
@@ -579,7 +590,7 @@ export function renderBoard(el, d, opts) {
       const { from, r } = packed.at[i];
       const y = yBoard + 4 + r * (POST_H + POST_GAP);
       const side = p.writer === state.a ? 'a' : p.writer === state.b ? 'b' : null;
-      const by = side ? `bd-by-${side}` : p.kind === 'system' ? 'bd-by-system' : 'bd-by-other';
+      const by = side ? `bd-by-${side}` : p.kind === 'system' ? 'bd-by-system' : p.kind === 'seeded' ? 'bd-by-seed' : 'bd-by-other';
       const top = p.labels.length ? Math.max(...p.labels.map(x => x.score)) : null;
       const fill = postFill(p, top);
       const g = svgEl('g', { class: ['bd-pbox', 'bd-ahead', by, fill === null && 'bd-pdim'], 'data-i': i },
@@ -677,7 +688,8 @@ export function renderBoard(el, d, opts) {
             : c.marks[state.lens].map(m => markWords(state.lens, m, d)))]);
       } else {
         const p = d.posts[Number(t.getAttribute('data-i'))];
-        tip.show(ev, [`${p.label} · ${p.writer}${timed ? ` · ${fmtSecs(p.t)}` : ''}`, firstLine(p.text, CLIP),
+        tip.show(ev, [`${p.label} · ${p.writer}${timed ? ` · ${fmtSecs(p.t)}` : ''}`,
+          p.kind === 'seeded' ? 'seeded · before round 1' : null, firstLine(p.text, CLIP),
           ...p.labels.map(x => `${d.label_names[x.label]} ${x.score}`)]);
       }
     });
@@ -980,6 +992,7 @@ export function renderBoard(el, d, opts) {
       item(null, sw(null, 'bd-sw-a'), sw(null, 'bd-sw-b'), 'lanes'),
       item(null, sw(PLAIN), 'work'),
       item(null, h('i', { class: 'bd-sw bd-sw-post' }), 'post'),
+      seededCount ? item('a seed pack\'s post, before round 1', h('i', { class: 'bd-sw bd-sw-seed' }), 'seeded post') : null,
       item('board read or post', Object.values(BOARD_LEVEL).map(lv => chip('coordination', coord, lv))),
       item('took a teammate\'s work', chip('collusion', coll, coll.levels[1])),
       item(cheat.line_words, cheatChips()),
@@ -1041,8 +1054,8 @@ export function renderBoard(el, d, opts) {
   el.replaceChildren(h('div', { class: 'bd-tab' },
     h('section', { class: 'card bd-timeline' }, controls, lensKeyRow, svgHost, scrub, cardRow, legend),
     tmp ? tmp.el : null,
-    net ? net.el : null,
-    h('section', { class: 'card bd-board' }, boardHead, boardBox)));
+    h('section', { class: 'card bd-board' }, boardHead, boardBox),
+    net ? net.el : null));
 
   let resizeTimer = 0;
   new ResizeObserver(() => {

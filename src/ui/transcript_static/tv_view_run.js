@@ -270,6 +270,7 @@ export async function viewRun(id, q, view) {
       ['worker conditioning', row.worker_conditioning],
       ['influencer conditioning', row.influencer_conditioning.length ? row.influencer_conditioning.map(x => influencerParts(x).join(', ')).join('; ') : 'none'],
       ['seed', row.seed != null ? String(row.seed) : undefined],
+      ['seed pack', row.seed_pack && row.seed_pack !== 'none' ? row.seed_pack : undefined],
       ['turn budget (rounds)', cfg.turn_budget != null && multi ? String(cfg.turn_budget) : undefined],
       ['rounds, calls per round', cfg.calls_per_round != null ? `${cfg.rounds}, ${cfg.calls_per_round}` : undefined],
       ['rounds run', m.rounds != null && multi ? String(m.rounds) : undefined],
