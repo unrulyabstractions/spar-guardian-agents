@@ -283,20 +283,20 @@ def test_the_rule_needs_a_predicate_and_reads_the_mode():
 
 
 def test_solo_task_agents_stop_on_their_own_deliverable_and_leave_their_rounds_to_nobody(tmp_path):
-    """Each solo_task agent stops one round used up after its own deliverable shows. a02's board post uses up no
-    round, so it ships in round 4 with three used up. a03 never ships and keeps its own five rounds: the rounds a01
-    and a02 leave go to nobody."""
+    """Each solo_task agent stops one round used up after its own deliverable shows. a02 ships in round 3 with three
+    used up, its board post's round among them. a03 never ships and keeps its own five rounds: the rounds a01 and a02
+    leave go to nobody."""
     config = pull(rounds=5, mode="solo_task", stop_after_delivery=1)
     scripts = {"a01": [do("ship"), do("x"), do("y")],
-               "a02": [do("a"), do("b"), board_post("shipping"), do("ship"), do("c"), do("d")],
+               "a02": [do("a"), board_post("shipping"), do("ship"), do("c"), do("d")],
                "a03": [do("c1")]}
     sample, _ = run(config, scripts, tmp_path, delivered=shipped())
     assert step_ids(sample, "a01") == ["r1", "r2"]
-    assert step_ids(sample, "a02") == ["r1", "r2", "r3", "r4", "r5"]
+    assert step_ids(sample, "a02") == ["r1", "r2", "r3", "r4"]
     assert step_ids(sample, "a03") == ["r1", "r2", "r3", "r4", "r5"]
-    assert store(sample, "rounds_used") == {"a01": 2, "a02": 4, "a03": 5} and store(sample, "rounds") == 10
+    assert store(sample, "rounds_used") == {"a01": 2, "a02": 4, "a03": 5} and store(sample, "rounds") == 5
     assert store(sample, "ended") == {"a01": "delivered", "a02": "delivered", "a03": "rounds"}
-    assert delivery(sample, "seen") == {"a01": {"round": 1, "turn": 1}, "a02": {"round": 4, "turn": 3}}
+    assert delivery(sample, "seen") == {"a01": {"round": 1, "turn": 1}, "a02": {"round": 3, "turn": 3}}
     assert delivery(sample, "checks") == 5 and delivery(sample, "team") is False
     # the agent ended by its own step carries the reason in that step's timeline entry
     assert [e["ended"] for e in store(sample, "timeline") if e["agent"] == "a01"] == [None, "delivered"]
@@ -314,8 +314,8 @@ def test_a_team_stops_n_rounds_after_the_round_that_shows_its_deliverable(tmp_pa
     rounds = [f"r{r}" for r in range(1, 3 + after)]
     assert step_ids(sample, "a01") == step_ids(sample, "a02") == step_ids(sample, "a03") == rounds
     assert store(sample, "ended") == dict.fromkeys(config.names, "delivered")
-    # each agent's sighting keeps the rounds it had used up: a02's post used up none
-    assert delivery(sample, "seen") == {"a01": {"round": 2, "turn": 2}, "a02": {"round": 2, "turn": 1},
+    # each agent's sighting keeps the rounds it had used up: a02's round of its post used one up too
+    assert delivery(sample, "seen") == {"a01": {"round": 2, "turn": 2}, "a02": {"round": 2, "turn": 2},
                                         "a03": {"round": 2, "turn": 2}}
     assert (delivery(sample, "halt_round"), delivery(sample, "cut")) == (2 + after, config.names)
     assert (delivery(sample, "checks"), delivery(sample, "team")) == (2, True)

@@ -465,7 +465,7 @@ def scenario_solo(spec: Spec) -> dict:
 def scenario_delivered(spec: Spec) -> dict:
     name = f"{spec.task}_delivered"
     config = small("stop_after_delivery=0", "calls_per_round=2")
-    assert config.access == "split" and config.plan_rounds == 60, config
+    assert config.access == "split" and config.rounds == 30, config
     bench = BENCHMARKS[spec.task]()
     tid = bench.row
     reader = (f"print(''.join(line for line in open('{spec.cache}') if '\"{tid}\"' in line))")

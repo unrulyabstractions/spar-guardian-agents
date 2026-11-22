@@ -94,7 +94,7 @@ function renderStep(s) {
   el.appendChild(h('header', { class: 'step-head' },
     h('span', { class: 'step-id' }, `#${s.step_id}`),
     h('span', { class: 'step-src' }, src),
-    ex.swarm_round ? badge(`round ${ex.swarm_round.round} · ${ex.swarm_round.n} of ${ex.swarm_round.of}`, 'def',
+    ex.swarm_round ? badge(`round ${ex.swarm_round.round} · ${ex.swarm_round.n ?? ex.swarm_round.round} of ${ex.swarm_round.of}`, 'def',
       'the schedule\'s round · the round count the agent read') : null,
     s.model_name ? muted(s.model_name, 'small') : null,
     [...flags].map(f => badge(...FLAG_BADGE[f])),

@@ -4,21 +4,27 @@ Board tab draws the rounds on each lane (/api/board, each agent's "rounds" and e
     r = rounds(run_json)
     r["rounds"], r["calls_per_round"]       # R and N as the turn rules recorded them (rules.round_budget,
                                             # rules.calls_per_round)
-    r["agents"]["a02"][1]                   # {turn, round, n, end, charge, charged, used, ended, t0, t1, calls}
+    r["agents"]["a02"][1]                   # {turn, round, n, end, ending, charge, charged, used, ended, t0, t1, calls}
     r["agents"]["a02"][1]["calls"][0]       # {id, tool, pos, free, refused, error, t0, t1, job}
-    placed = on_clock(r, run.calls, at, timed)   # agent -> [{turn, round, n, end, charge, charged, t, dur, calls}]
+    placed = on_clock(r, run.calls, at, timed)   # agent -> [{turn, round, n, end, ending, charge, charged, t, dur,
+                                                 # calls}]
                                                  # on the board's clock, and (agent, k) -> {round, pos} of each call
-    from_start(r, start)                    # agent -> [{round, n, end, charge, t, t_end}] in seconds from start: the
+    from_start(r, start)                    # agent -> [{round, n, end, ending, charge, t, t_end}] in seconds from
+                                            # start: the
                                             # results browser's timeline
 
 A round is one timeline entry of rules.timeline (src/swarm/turn_rules/turn_activation.py after_activation): the
-schedule's round (`round`, the same for every agent of one round), the agent's own count of the rounds it has used up
-plus one (`n`, the line "Round {n} of {R}." it read), why the round ended (`end`, _turn_rounds.END_REASONS: end_round,
-calls (N reached), ending (submit, stop_working or alert_humans went through), time, no_tool_call, context; None when
-ORBIT ended the agent's loop otherwise), what it counted as (`charge`: work, board, idle, stop, submit, alert; board
-uses up no round) and its calls in order, each with its place in the round among the calls that count toward N
+schedule's round (`round`, the same for every agent of one round, the round its line "Round {round} of {R}. ..."
+gave), why the round ended (`end`, _turn_rounds.END_REASONS: end_round, calls (N reached), ending (submit,
+stop_working or alert_humans went through), time, round_time, no_tool_call, context; None when ORBIT ended the agent's
+loop otherwise), the tool that ended the agent's turns in it (`ending`: submit, stop, alert, or None) and its calls in
+order, each with its place in the round among the calls that count toward N
 (`pos`, from 1; a call past N is refused and keeps its place; end_round, which never counts, has none). Times are UTC
 seconds, the eval log's clock.
+
+A run before 2026-11-22 used up no round for a round of board calls alone: its entries carry the agent's own count
+(`n`, the line "Round {n} of {R}." it read) and what the round counted as (`charge`: work, board, idle, stop, submit,
+alert; `charged`), and its calls `free` (a board call); they read as recorded, None in a newer run.
 
 A run before 2026-11-21 made one model step per round plus free follow-ups and recorded no calls per entry: rounds is
 None there, and the viewer draws it as before.
@@ -32,7 +38,7 @@ from __future__ import annotations
 
 from src.swarm.turn_rules import END_ROUND
 
-ROUND_KEYS = ("turn", "round", "n", "end", "charge", "charged", "used", "ended", "t0", "t1")
+ROUND_KEYS = ("turn", "round", "n", "end", "ending", "charge", "charged", "used", "ended", "t0", "t1")
 """What the viewer keeps of a timeline entry besides its calls."""
 CALL_KEYS = ("id", "tool", "free", "refused", "error", "t0", "t1", "job")
 """What the viewer keeps of a call of a timeline entry besides its place (`pos`, places): job is the id of the job a
@@ -66,12 +72,12 @@ def rounds(run_json: dict) -> dict | None:
 
 
 def from_start(r: dict | None, start: float) -> dict[str, list[dict]] | None:
-    """agent -> its rounds as {round, n, end, charge, t, t_end}, in seconds from `start` (UTC seconds: the eval log
-    sample's first event), for the results browser's timeline; t and t_end None where the round recorded no time.
-    None when r is None."""
+    """agent -> its rounds as {round, n, end, ending, charge, t, t_end}, in seconds from `start` (UTC seconds: the
+    eval log sample's first event), for the results browser's timeline; t and t_end None where the round recorded no
+    time. None when r is None."""
     if r is None:
         return None
-    return {agent: [{**{k: e[k] for k in ("round", "n", "end", "charge")},
+    return {agent: [{**{k: e[k] for k in ("round", "n", "end", "ending", "charge")},
                      "t": e["t0"] - start if e["t0"] is not None else None,
                      "t_end": e["t1"] - start if e["t1"] is not None else None} for e in entries]
             for agent, entries in r["agents"].items()}
@@ -105,7 +111,7 @@ def on_clock(r: dict | None, calls: dict[str, list], at: dict[tuple[str, int], t
             else:
                 t, dur = last, 0.0
             last = t + dur
-            out.append({**{k: e[k] for k in ("turn", "round", "n", "end", "charge", "charged")},
+            out.append({**{k: e[k] for k in ("turn", "round", "n", "end", "ending", "charge", "charged")},
                         "t": t, "dur": dur, "calls": len(e["calls"])})
         placed[agent] = out
     return placed, where

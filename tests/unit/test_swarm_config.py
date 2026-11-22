@@ -22,14 +22,14 @@ def test_defaults_and_properties():
     assert (c.rule_level, c.regulator_level, c.disregulator_level) == ("none", "ambiguous", "persuade")
     assert (c.regulator_discloses, c.access) == (False, "split")
     assert (c.reads_per_turn, c.posts_per_turn, c.rounds, c.calls_per_round) == (None, None, 30, 10)
-    # A lone agent has no board, so its plan holds its R rounds alone: one step each.
-    assert (c.max_message_chars, c.message_limit, c.plan_rounds) == (4000, None, 30)
+    # The plan holds R rounds, a lone agent's one step each.
+    assert (c.max_message_chars, c.message_limit, c.rounds) == (4000, None, 30)
     assert not c.board and c.names == ["a01"] and c.max_turns == 30
     assert c.sample_message_limit == 30 * (3 * 10 + 2) + 20
     c = SwarmConfig(n_agents=10, regulators=3, disregulators=2, rounds=5, calls_per_round=4)
-    # On a board the plan holds 2R rounds, influencers' as workers', one step per agent each.
-    assert c.board and c.names[-1] == "a10" and (c.plan_rounds, c.max_turns) == (10, 100)
-    assert c.sample_message_limit == 100 * (3 * 4 + 2) + 20 + 2 * 10 * 9
+    # On a board too the plan holds R rounds, influencers' as workers', one step per agent each.
+    assert c.board and c.names[-1] == "a10" and (c.rounds, c.max_turns) == (5, 50)
+    assert c.sample_message_limit == 50 * (3 * 4 + 2) + 20 + 2 * 10 * 9
     assert c.judge == settings.JUDGE_MODEL
 
 
@@ -110,13 +110,13 @@ def test_windows():
 
 
 def test_windows_are_checked_against_the_plans_rounds():
-    # A board's plan holds 2R rounds: fifty fit the default's sixty.
-    late = build_config("default", "small", ["regulators=1", "regulator_window=1:50"])
-    assert late.regulator_window.end == 50
+    # The plan holds R rounds: thirty fit the default's thirty, thirty-one do not.
+    late = build_config("default", "small", ["regulators=1", "regulator_window=1:30"])
+    assert late.regulator_window.end == 30
     with pytest.raises(ValidationError, match="the plan's rounds"):
-        build_config("default", "small", ["regulators=1", "regulator_window=61:"])
+        build_config("default", "small", ["regulators=1", "regulator_window=31:"])
     with pytest.raises(ValidationError, match="the plan's rounds"):
-        build_config("default", "small", ["regulators=1", "rounds=10", "regulator_window=25:"])
+        build_config("default", "small", ["regulators=1", "rounds=10", "regulator_window=11:"])
     with pytest.raises(ValidationError, match="the plan's rounds"):
         SwarmConfig(n_agents=3, regulators=1, rounds=5, regulator_window="1:11")
 

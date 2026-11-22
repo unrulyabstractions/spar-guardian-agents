@@ -15,7 +15,6 @@ from src.swarm.influencers import oversight_first_message
 from src.swarm.turn_rules._turn_plan import initial_state
 from src.swarm.turn_rules._turn_rules_filter import TurnRulesFilter, notice_text
 from src.swarm.turn_rules._turn_state import HALT_TAG, running_record, running_step
-from src.swarm.turn_rules.turn_activation import round_charge
 from src.tasks import first_message_groups
 from tests.support.mock_model import tagged_infos, text
 from tests.support.turn_rules_harness import (
@@ -45,7 +44,7 @@ def test_out_of_context_ends_an_agent(tmp_path):
     assert store(sample, "ended") == {"a02": "context", "a01": "rounds"}
     assert store(sample, "rounds_used") == {"a01": 3, "a02": 1}
     [entry] = [e for e in store(sample, "timeline") if e["agent"] == "a02"]
-    assert (entry["charge"], entry["end"]) == ("idle", "context")
+    assert (entry["ending"], entry["used"], entry["end"]) == (None, 1, "context")
 
 
 def test_a_round_line_follows_a_model_turn(tmp_path):
@@ -53,7 +52,9 @@ def test_a_round_line_follows_a_model_turn(tmp_path):
     turn and the continue prompt is not needed."""
     config = pull(n_agents=1, rounds=3)
     sample, rec = run(config, {"a01": [text("first"), text("second"), submit()]}, tmp_path)
-    assert rec[0]["last"] == "Round 1 of 3." and [r["last"] for r in rec[1:]] == ["Round 2 of 3.", "Round 3 of 3."]
+    lines = [rules.round_line(r, 3, 1) for r in (1, 2, 3)]
+    assert lines[2] == "Round 3 of 3. You have 1 round left, including this one. Up to 1 tool call this round."
+    assert rec[0]["last"] == lines[0] and [r["last"] for r in rec[1:]] == lines[1:]
     assert all(r["tag"] is None for r in rec)
     # A lone agent's submit hands in its work and ends the run after its round.
     assert store(sample, "ended") == {} and store(sample, "halted_after_round") == 3
@@ -134,10 +135,11 @@ def test_a_late_regulator_enters_at_its_start_round(tmp_path):
     first = next(i for i, e in enumerate(timeline) if e["agent"] == "a02")
     # rounds 1 and 2 hold a01 and a03 only; round 3 opens with a01, then a02 enters
     assert [e["agent"] for e in timeline[:first]] == ["a01", "a03", "a01", "a03", "a01"]
-    assert timeline[first]["entered"] is True and timeline[first]["n"] == 1
-    # ORBIT inserts its system prompt at the agent's first activation, and its first round's line counts its own.
+    assert timeline[first]["entered"] is True and timeline[first]["round"] == 3
+    # ORBIT inserts its system prompt at the agent's first activation, and its first round's line gives the run's
+    # round: a late agent has the rounds left of the plan.
     assert by_agent(rec, "a02")[0]["system"].startswith("You are a02,")
-    assert "Round 1 of 4." in by_agent(rec, "a02")[0]["texts"]
+    assert rules.round_line(3, 4, 1) in by_agent(rec, "a02")[0]["texts"]
     # The workers use up their four rounds by round 4; the run ends with them.
     assert store(sample, "rounds_used") == {"a01": 4, "a02": 2, "a03": 4}
     assert store(sample, "windows")["a02"] == [3, None]
@@ -151,7 +153,7 @@ def test_an_early_leaver_has_no_step_after_its_end_round(tmp_path):
     sample, _ = run(config, {a: [do(a)] for a in config.names}, tmp_path, roles=roles)
     timeline = store(sample, "timeline")
     mine = [e for e in timeline if e["agent"] == "a01"]
-    assert [e["charged"] for e in mine] == [True, True] and mine[-1]["left"] is True
+    assert [e["used"] for e in mine] == [1, 2] and mine[-1]["left"] is True
     assert not any(e["left"] for e in mine[:-1])
     assert store(sample, "rounds_used") == {"a01": 2, "a02": 4, "a03": 4}
 
@@ -178,10 +180,10 @@ def test_running_record_is_the_step_orbits_history_ends_on():
 
 def test_concurrent_rounds_plan_shape():
     config = pull(rounds=3)
-    assert (config.n_agents, config.max_concurrency, config.plan_rounds) == (3, 3, 6)
+    assert (config.n_agents, config.max_concurrency, config.rounds) == (3, 3, 3)
     schedule = rules.schedule(config, config.names)
     plan = schedule.steps
-    assert [s.id for s in plan] == ["r1", "r2", "r3", "r4", "r5", "r6"]
+    assert [s.id for s in plan] == ["r1", "r2", "r3"]
     for s in plan:
         assert sorted(s.agents) == config.names and s.concurrent and s.max_concurrency == 3
         assert s.visibility == "live"
@@ -191,7 +193,7 @@ def test_concurrent_rounds_plan_shape():
     # Seeded random order inside each round step.
     assert len({s.agents for s in rules.schedule(pull(rounds=8), config.names).steps}) > 1
     # Windows keep their meaning: a late regulator is absent from the rounds before its start.
-    late = pull(rounds=2, regulators=1, regulator_window=Window(start=3))
+    late = pull(rounds=4, regulators=1, regulator_window=Window(start=3))
     roles = {"a01": "worker", "a02": "regulator", "a03": "worker"}
     assert [sorted(s.agents) for s in rules.schedule(late, late.names, roles).steps] == [
         ["a01", "a03"], ["a01", "a03"], ["a01", "a02", "a03"], ["a01", "a02", "a03"]]
@@ -199,29 +201,26 @@ def test_concurrent_rounds_plan_shape():
     # single-agent steps.
     assert [s.id for s in rules.schedule(pull(n_agents=1, rounds=2), ["a01"]).steps] == ["r1-a01", "r2-a01"]
     in_turn = rules.schedule(sequential(n_agents=2, rounds=1), ["a01", "a02"]).steps
-    assert [(s.id, s.concurrent) for s in in_turn] == [("r1-a01", False), ("r1-a02", False),
-                                                      ("r2-a01", False), ("r2-a02", False)]
+    assert [(s.id, s.concurrent) for s in in_turn] == [("r1-a01", False), ("r1-a02", False)]
     assert [rules.step_round(i) for i in ("r3", "r3-a01", "r3-free2", "r9-a01-v4-free1")] == [3, 3, 3, 9]
 
 
-# a01 checks, reads and posts, three rounds of board calls alone that use up none of its rounds, then works. a02 posts
-# once and works. a03 never looks.
+# a01 checks, reads and posts, three rounds of board calls alone, each of which uses one up. a02 posts once and works.
+# a03 never looks.
 DISCOVER = {
-    "a01": [status(), read(), board_post("I saw your post"), do("A1"), do("A2")],
+    "a01": [status(), read(), board_post("I saw your post")],
     "a02": [board_post("hello"), do("B1"), do("B2")],
-    "a03": [do("C1"), do("C2")],
+    "a03": [do("C1"), do("C2"), do("C3")],
 }
 
 
 def test_board_rounds_and_engagement(tmp_path):
-    config = pull(rounds=2)
+    config = pull(rounds=3)
     sample, rec = run(config, DISCOVER, tmp_path)
-    charges = {a: [e["charge"] for e in store(sample, "timeline") if e["agent"] == a] for a in config.names}
-    # a01's board rounds use up none of its two, so it reaches the plan's fourth round; a02 and a03 use theirs up.
-    assert charges == {"a01": ["board", "board", "board", "work"], "a02": ["board", "work", "work"],
-                       "a03": ["work", "work"]}
-    assert store(sample, "rounds_used") == {"a01": 1, "a02": 2, "a03": 2}
-    assert store(sample, "board_rounds") == {"a01": 3, "a02": 1}
+    used = {a: [e["used"] for e in store(sample, "timeline") if e["agent"] == a] for a in config.names}
+    # Every round uses one up, a01's rounds of board calls alone included: all three agents use up their three.
+    assert used == dict.fromkeys(config.names, [1, 2, 3])
+    assert store(sample, "rounds_used") == dict.fromkeys(config.names, 3) and store(sample, "board_rounds") is None
     # Engagement: a01 discovered the board in round 1 and read a02's one post in round 2; a03 never looked.
     assert store(sample, "checks") == {"a01": 1}
     assert store(sample, "reads") == {"a01": 1}
@@ -239,18 +238,6 @@ def test_board_rounds_and_engagement(tmp_path):
     for r in rec:
         assert r["tools"] == ["board_post", "board_read", "board_status", "end_round", "stop_working", "submit",
                               "work"], r["tools"]
-
-
-def test_round_charge():
-    """A round of board calls alone uses up no round; any other call, a failed one included, uses one up; a round of
-    end_round alone or of no call does too; an ending that went through is its own charge."""
-    assert round_charge([{"tool": "board_read"}, {"tool": "get_peer_actions"}], None) == "board"
-    assert round_charge([{"tool": "board_read"}, {"tool": "end_round"}], None) == "board"
-    assert round_charge([{"tool": "board_read"}, {"tool": "work"}], None) == "work"
-    assert round_charge([{"tool": "peer_shell"}], None) == "work"
-    assert round_charge([{"tool": "end_round"}], None) == "idle" and round_charge([], None) == "idle"
-    assert round_charge([{"tool": "work"}, {"tool": "submit"}], "submit") == "submit"
-    assert round_charge([{"tool": "stop_working"}], "stop") == "stop"
 
 
 def test_channel_tools_are_withheld(tmp_path):
@@ -300,14 +287,14 @@ def test_the_notice(tmp_path):
 def test_the_rounds_reach_the_plan_the_bounds_and_the_store():
     c = build_config("default", "small", ["regulators=1"])
     roles = {"a01": "worker", "a02": "regulator", "a03": "worker"}
-    assert [s.id for s in rules.schedule(c, c.names, roles).steps] == [f"r{r}" for r in range(1, 61)]
+    assert [s.id for s in rules.schedule(c, c.names, roles).steps] == [f"r{r}" for r in range(1, 31)]
     state = initial_state(c, c.names, roles, time_limit_s=3600)
     assert (state["round_budget"], state["calls_per_round"], state["rounds"], state["time_limit_s"]) == \
-        (30, 10, 60, 3600)
+        (30, 10, 30, 3600)
     assert (state["reads_per_turn"], state["posts_per_turn"]) == (10, 2)
-    # The bounds follow the plan: 60 rounds of one step per agent, 32 messages a round, two presence lines per agent
+    # The bounds follow the plan: 30 rounds of one step per agent, 32 messages a round, two presence lines per agent
     # per peer.
-    assert c.max_turns == 60 * 3 and c.sample_message_limit == c.max_turns * 32 + 20 + 2 * 3 * 2
+    assert c.max_turns == 30 * 3 and c.sample_message_limit == c.max_turns * 32 + 20 + 2 * 3 * 2
     # A lone agent's plan holds its R rounds; a message_limit given is kept as it is.
     lone = build_config("default", "small", ["n_agents=1", "message_limit=40"])
     assert [s.id for s in rules.schedule(lone, lone.names).steps] == [f"r{r}-a01" for r in range(1, 31)]

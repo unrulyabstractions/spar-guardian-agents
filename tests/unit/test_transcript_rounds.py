@@ -59,7 +59,20 @@ def test_rounds_keep_each_entrys_round_count_end_and_charge_and_each_calls_place
     assert [(c["tool"], c["pos"]) for c in second["calls"]] == [("board_read", 1), ("end_round", None)]
     assert tr.places([{"tool": "end_round"}, {"tool": "shell"}, {"tool": "end_round"}, {"tool": "shell"}]) == [
         None, 1, None, 2]
-    assert r["agents"]["a02"] == [{**{k: TIMELINE[1][k] for k in tr.ROUND_KEYS}, "calls": []}]
+    assert r["agents"]["a02"] == [{**{k: TIMELINE[1].get(k) for k in tr.ROUND_KEYS}, "calls": []}]
+
+
+def test_a_round_since_2026_11_22_keeps_its_ending_and_no_charge():
+    """Every round uses one up: an entry holds its ending (the tool that ended the agent's turns, or None) and no
+    charge, own count or free calls; the viewer reads those as None."""
+    new = {k: v for k, v in TIMELINE[0].items() if k not in ("n", "charge", "charged")}
+    new = {**new, "ending": None, "calls": [{k: v for k, v in c.items() if k != "free"} for c in new["calls"]]}
+    stop = {**new, "turn": 1, "round": 2, "ending": "stop", "end": "ending", "used": 2, "calls": []}
+    r = tr.rounds({"agents": ["a01"], "rules": {"round_budget": 30, "calls_per_round": 10, "timeline": [new, stop]}})
+    first, second = r["agents"]["a01"]
+    assert (first["ending"], first["n"], first["charge"], first["used"]) == (None, None, None, 1)
+    assert (second["ending"], second["end"]) == ("stop", "ending") and first["calls"][0]["free"] is None
+    assert [x["ending"] for x in tr.from_start(r, 100.0)["a01"]] == [None, "stop"]
 
 
 def test_a_run_before_rounds_of_calls_has_none():
@@ -176,7 +189,7 @@ def test_from_start_puts_each_round_in_seconds_from_the_samples_start():
     assert tr.from_start(None, 0.0) is None
     untimed = {"rules": {"calls_per_round": 2, "timeline": [entry(0, "a01", 1, 1, None, "idle", [], None, None)]}}
     assert tr.from_start(tr.rounds(untimed), 5.0)["a01"][0] == {
-        "round": 1, "n": 1, "end": None, "charge": "idle", "t": None, "t_end": None}
+        "round": 1, "n": 1, "end": None, "ending": None, "charge": "idle", "t": None, "t_end": None}
 
 
 @pytest.mark.skipif(not SMOKE.is_dir(), reason="the rounds smoke's run is not in this checkout")

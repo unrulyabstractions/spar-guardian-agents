@@ -206,7 +206,7 @@ def _error_extra(error) -> dict | None:
 def _user_step(msg, redacted: set) -> dict:
     """A user message as a step. A presence line (src/swarm/turn_rules/_turn_presence.py) keeps its tag in extra:
     {PRESENCE_TAG: {id, agent, kind, why, round}}, and a round's line (_turn_rounds.open_round) its own:
-    {ROUND_TAG: {round, n, of}}."""
+    {ROUND_TAG: {round, of, left, calls}} ({round, n, of} in a run before 2026-11-22)."""
     text, _ = split_content(msg.content)
     metadata = msg.metadata or {}
     for tag in (PRESENCE_TAG, ROUND_TAG):

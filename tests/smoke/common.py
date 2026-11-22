@@ -247,8 +247,9 @@ def timeline_of(sample, agent: str) -> list[tuple[str, list[str]]]:
 
 
 def charges_of(sample, agent: str) -> list[str]:
-    """What each of the agent's activations was charged."""
-    return [e["charge"] for e in sample.store.get("TurnState:timeline") if e["agent"] == agent]
+    """Each of the agent's rounds: the tool that ended its turns in it (stop, submit, alert), else work. Every round
+    uses one up."""
+    return [e.get("ending") or "work" for e in sample.store.get("TurnState:timeline") if e["agent"] == agent]
 
 
 def halts_of(sample) -> list[dict]:

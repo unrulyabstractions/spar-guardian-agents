@@ -169,9 +169,11 @@ ATIF.steps[i] = {step_id, source: "system"|"user"|"agent", message, reasoning_co
                  observation?: {results: [{source_call_id, content, extra?: {is_error?, error?, withheld_from_model_by_defense?}}]},
                  extra?: {swarm_turn_rules?, swarm_presence?, defense_refusal?, refusal_text_written_by_model?, ...}}
 ```
-A user step with `extra.swarm_round` (`{round, n, of}`) is the line "Round {n} of {of}." that opens a round
-(`src/swarm/turn_rules/_turn_rounds.py`): `round` is the schedule's round, `n` the agent's own count. The transcript page
-draws a rule above it and a chip `round {round} · {n} of {of}`.
+A user step with `extra.swarm_round` (`{round, of, left, calls}`) is the line "Round {round} of {of}. You have {left}
+rounds left, including this one. Up to {calls} tool calls this round." that opens a round
+(`src/swarm/turn_rules/_turn_rounds.py`): `round` is the run's round, the same for every agent. A run before 2026-11-22
+tags `{round, n, of}` and reads "Round {n} of {of}.", `n` the agent's own count. The transcript page draws a rule above
+it and a chip `round {round} · {n or round} of {of}`.
 A user step with `extra.swarm_presence` (`{id, agent, kind: "entered"|"exited", why, round}`) is a presence line: a
 peer's entry or exit, saved in the agent's conversation (`src/swarm/turn_rules/_turn_presence.py`). `why` is
 `submit`, `stop`, `alert`, `budget`, `context` or `delivered` on an exit, null on an entry.
@@ -205,7 +207,7 @@ whose text is the defense's refusal sentence). A call's flags are its input mess
 {run, duration, limit, agents: [str], roles: {agent: role} (from the episodes),
  first_exposed: {agent: t}, first_opened: {agent: t},   # the code's exposed and opened evidence on the clock
  events: [Event] sorted by t, board: [Post],
- rounds: null | {agent: [{round, n, end, charge, t, t_end}]}}   # a run of rounds of calls (since 2026-11-21)
+ rounds: null | {agent: [{round, n, end, ending, charge, t, t_end}]}}   # a run of rounds of calls (since 2026-11-21)
 Event = {t, t_end?, agent, kind: "model"|"defense_call"|"tool"|"submit"|"stop"|"defense", ...}
   model, defense_call: defense, tokens_in (including cache reads), tokens_out, tool_calls: [function],
                        output_blocked (a defense replaced this completion), refusal (the output text is the refusal
@@ -411,10 +413,11 @@ without episodes.
 step per round plus free follow-ups): the agent tab then draws its steps as before.
 ```
 Rounds = {rounds (R, rules.round_budget), calls_per_round (N), agents: {agent: [Round]}}   # timeline order
-Round = {turn, round (the schedule's), n (the agent's own count: "Round n of R."), end, charge, charged, used, ended,
-         t0, t1, calls: [{id, tool, pos (its place in the round, from 1; null for end_round), free, refused, error, t0, t1}]}
-         # end: end_round | calls (N reached) | ending | time | no_tool_call | context | null;
-         # charge: work | board | idle | stop | submit | alert (board uses up no round); times in UTC seconds
+Round = {turn, round (the run's, the same for every agent), end, ending, used, ended, t0, t1,
+         calls: [{id, tool, pos (its place in the round, from 1; null for end_round), refused, error, t0, t1, job}],
+         n, charge, charged (a run before 2026-11-22; null since), calls' free (likewise)}
+         # end: end_round | calls (N reached) | ending | time | round_time | no_tool_call | context | null;
+         # ending: stop | submit | alert | null; every round uses one of R; times in UTC seconds
 Presence = {agents: {agent: {entered: round | null,                 # rules.entry_rounds
                              exited: {why, round, seq, hand_in?, ends_after_round?} | null}},   # rules.exits
             alerts: [Alert]}                                         # run.json alerts, in order
@@ -533,7 +536,7 @@ BoardTab = {clock ("eval_log" | "call_order"), clock_about, total (seconds, or t
                       final: {ladder: {level, facts}},           # the run page's cell of each ladder: the end level
                       unplaced: {lens: {what: n}},               # records of a lens that name no call, by clause,
                                                                  # take rule or judge label
-                      rounds: [{turn, round, n, end, charge, charged, t, dur, calls}]}],   # on the clock; [] before
+                      rounds: [{turn, round, n, end, ending, charge, charged, t, dur, calls}]}],   # on the clock; [] before
                                                                  # rounds of calls (transcript_rounds.on_clock)
             posts: [BoardPost],                                # in time order
             pair: [a, b], pair_why,                            # the two agents the tab opens with, and why, short

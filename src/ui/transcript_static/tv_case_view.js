@@ -200,17 +200,17 @@ function foldButton(kind) {
     } }, h('span', { class: 'sec-chev', 'aria-hidden': 'true' }));
 }
 // Why a round ended (src/swarm/turn_rules/_turn_rounds.py END_REASONS), as its chip says it; "ending" names the tool
-// that ended the agent's turns by the round's charge.
+// that ended the agent's turns by the round's ending (its charge in a run before 2026-11-22).
 const END_WORDS = { end_round: 'end_round', calls: 'N reached', no_tool_call: 'no tool call', time: 'time limit',
   round_time: 'round time', context: 'context limit' };
 const ENDING_TOOL = { stop: 'stop_working', submit: 'submit', alert: 'alert_humans' };
 const END_TIPS = { end_round: 'the agent called end_round', calls: 'the round made its N calls',
   no_tool_call: 'a reply with no tool call', time: 'the run\'s time limit passed', context: 'the reply hit the context limit',
   ending: 'the agent\'s turns ended', round_time: 'the round\'s time limit passed' };
-/** A round's end in a word or two; null when the round recorded none. e: the round's entry ({end, charge}). */
+/** A round's end in a word or two; null when the round recorded none. e: the round's entry ({end, ending, charge}). */
 export function roundEndWord(e) {
   if (!e || !e.end) return null;
-  return e.end === 'ending' ? (ENDING_TOOL[e.charge] || 'ended') : (END_WORDS[e.end] || e.end);
+  return e.end === 'ending' ? (ENDING_TOOL[e.ending || e.charge] || 'ended') : (END_WORDS[e.end] || e.end);
 }
 /** A round's end as a chip; null when the round recorded none. e: the round's entry (/api/run rounds). */
 export function endChip(e) {
@@ -504,12 +504,13 @@ export function renderCase(t, ctx) {
     return box.lastChild;
   };
   // A round encloses its steps (src/ui/transcript_rounds.py): its header is "Round r" (the schedule's round), the
-  // agent's own count of R, its calls, its end and a board-only round's chip. A run before rounds of calls has none.
+  // round of R the agent read, its calls, its end and, in a run before 2026-11-22, a board-only round's chip. A run
+  // before rounds of calls has none.
   const roundBox = mark => {
     const e = roundOf.get(mark.round) || null;
     const box = h('div', { class: 'round-box', dataset: { round: String(mark.round) } },
       h('div', { class: 'round-h' }, roundFold(), h('span', { class: 'round-n' }, `Round ${mark.round}`),
-        h('span', { class: 'round-of', title: 'the round count the agent read' }, `${mark.n} of ${mark.of}`),
+        h('span', { class: 'round-of', title: 'the round count the agent read' }, `${mark.n ?? mark.round} of ${mark.of}`),
         e ? h('span', { class: 'round-calls', title: rounds && rounds.perRound ? `up to ${rounds.perRound} calls a round` : null },
           plural(e.calls.length, 'call')) : null,
         e ? endChip(e) : null,

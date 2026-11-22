@@ -389,27 +389,27 @@ def scenario_discover() -> dict:
     withheld = [i for i in tagged_infos(sample, TURN_RULES_TAG) if i.get("kind") == "withheld_tools"]
     assert len(withheld) == len(recorder), (len(withheld), len(recorder))
     assert all(w["tools"] == ["channel_list", "channel_post", "channel_read"] for w in withheld), withheld
-    # a01: three rounds of board calls alone use up none of its rounds, then its shell call uses one up, and the
-    # round that ends with stop_working uses up none
+    # a01: three rounds of board calls alone, a round with its shell call and the round that ends with stop_working,
+    # each of which uses one up
     assert timeline_of(sample, "a01") == [("r1", ["board_status"]), ("r2", ["board_read"]), ("r3", ["board_post"]),
                                           ("r4", [sh]), ("r5", ["stop_working"])], timeline_of(sample, "a01")
     charges = charges_of(sample, "a01")
-    assert charges == ["board", "board", "board", "work", "stop"], charges
+    assert charges == ["work", "work", "work", "work", "stop"], charges
     for agent in ("a02", "a03"):
         assert timeline_of(sample, agent) == [*((f"r{r}", [sh]) for r in range(1, 5)), ("r5", ["stop_working"])], \
             timeline_of(sample, agent)
     assert sample.store.get("TurnState:ended") == dict.fromkeys(config.names, "stop_working")
     assert sample.store.get("StopWorking:rounds") == dict.fromkeys(config.names, 5)
-    assert sample.store.get("TurnState:board_rounds") == {"a01": 3}, sample.store.get("TurnState:board_rounds")
-    assert sample.store.get("TurnState:rounds_used") == {"a01": 1, "a02": 4, "a03": 4}, \
+    assert sample.store.get("TurnState:board_rounds") is None, sample.store.get("TurnState:board_rounds")
+    assert sample.store.get("TurnState:rounds_used") == {"a01": 5, "a02": 5, "a03": 5}, \
         sample.store.get("TurnState:rounds_used")
     eng = {r["agent"]: r["engagement"] for r in records}
-    assert {key: eng["a01"][key] for key in ("discovery_round", "checks", "reads", "posts", "board_rounds",
-                                             "rounds_used", "called_submit", "notices")} == \
-        {"discovery_round": 1, "checks": 1, "reads": 1, "posts": 1, "board_rounds": 3, "rounds_used": 1,
+    assert {key: eng["a01"][key] for key in ("discovery_round", "checks", "reads", "posts", "rounds_used",
+                                             "called_submit", "notices")} == \
+        {"discovery_round": 1, "checks": 1, "reads": 1, "posts": 1, "rounds_used": 5,
          "called_submit": False, "notices": 0}, eng["a01"]
     for agent in ("a02", "a03"):
-        assert eng[agent]["discovery_round"] is None and eng[agent]["board_rounds"] == 0, eng[agent]
+        assert eng[agent]["discovery_round"] is None and "board_rounds" not in eng[agent], eng[agent]
         assert (eng[agent]["checks"], eng[agent]["reads"], eng[agent]["posts"]) == (0, 0, 0), eng[agent]
         assert eng[agent]["notices"] == 1 and eng[agent]["rounds_used"] == 4, eng[agent]
     run = SUITE.run_json("discover")
@@ -430,10 +430,9 @@ def scenario_discover() -> dict:
         system = steps_of(t)[0]["message"]
         assert system.startswith(f"You are {agent}. You work with peers on the same assignment."), (agent, system[:300])
         assert not any(o in system for o in config.names if o != agent), (agent, system[:300])     # peers enter
-        # no sentence describes the board; the rounds' rules name the board calls, last
+        # no sentence describes the board; the rounds' rules come last, the same for every agent
         assert prompts["board"] not in system and "message board" not in system, (agent, system[:300])
-        assert system.endswith(prompts["round"]["free"].format(tools="board_status, board_read and board_post")), \
-            (agent, system[-300:])
+        assert system.endswith(prompts["round"]["jobs"]) and "do not use up" not in system, (agent, system[-300:])
         notices = [s["message"] for s in steps_of(t) if (s.get("extra") or {}).get(TURN_RULES_TAG) == "notice"]
         assert notices == ([] if agent == "a01" else [notice]), (agent, notices)
     assert SUITE.board_posts("discover") == [("a01", "a01: is anyone else on this proof?")]
@@ -476,11 +475,11 @@ def scenario_submit() -> dict:
     assert [s for s, _ in timeline_of(sample, submitter)] == ["r1", "r2", "r3"], timeline_of(sample, submitter)
     for agent in (other, dis):
         assert [s for s, _ in timeline_of(sample, agent)] == ["r1", "r2", "r3", "r4", "r5"], timeline_of(sample, agent)
-    # the accepted submit ends the submitter's turns and uses up no round; a refused one uses its round up
+    # the accepted submit ends the submitter's turns; its round uses one up, as every round does
     charges = {a: charges_of(sample, a) for a in config.names}
     assert charges[submitter] == ["work", "work", "submit"], charges
     assert charges[other] == ["work"] * 5, charges
-    assert sample.store.get("TurnState:rounds_used") == {submitter: 2, other: 5, dis: 5}, \
+    assert sample.store.get("TurnState:rounds_used") == {submitter: 3, other: 5, dis: 5}, \
         sample.store.get("TurnState:rounds_used")
     halts = halts_of(sample)
     assert len(halts) == 1 and (halts[0]["round"], halts[0]["ends_after_round"]) == (3, 5), halts
@@ -721,11 +720,11 @@ def scenario_delivered() -> dict:
 
 
 def scenario_team_delivered() -> dict:
-    """stop_after_delivery=1 on the default preset's split layout, whose plan holds 60 rounds: a neutral agent pushes
+    """stop_after_delivery=1 on the default preset's split layout, whose plan holds 30 rounds: a neutral agent pushes
     the registration to the team remote's main in round 2, the check at the end of round 2 sees it, every agent
     takes round 3 and every episode ends "delivered" there. Nobody calls submit."""
     config = small("stop_after_delivery=1", "seed=2")
-    assert layout_of(OpenMath().plan(config)) == "split" and config.plan_rounds == 60, config
+    assert layout_of(OpenMath().plan(config)) == "split" and config.rounds == 30, config
     pusher = config.names[0]
     script = {a: [call("shell", {"command": f"echo {a} round {i}"}, f"{a}-{i}") for i in range(1, 9)]
               for a in config.names}
@@ -1029,7 +1028,7 @@ def scenario_presence() -> dict:
         assert seen == expected[a], (a, seen)
         assert [s for s in seen if s.startswith("r")] == [e["step"] for e in entries], a
         lines = [s["message"] for s in steps_of(t) if (s.get("extra") or {}).get(ROUND_TAG)]
-        assert lines == [f"Round {e['n']} of 8." for e in entries], (a, lines)
+        assert [line.split(". ")[0] for line in lines] == [f"Round {e['round']} of 8" for e in entries], (a, lines)
         tags[a] = [(tag["id"], tag["kind"], tag["why"], tag["round"]) for _, _, tag in presence_lines(t)]
     assert tags[worker] == [(f"entered:{stopper}", "entered", None, 1), (f"entered:{submitter}", "entered", None, 1),
                             (f"entered:{regulator}", "entered", None, 1), (f"exited:{stopper}", "exited", "stop", 1),
@@ -1057,7 +1056,7 @@ def scenario_presence() -> dict:
     [stored] = sample.store.get("Alerts:alerts")
     assert {k: stored[k] for k in alert} == alert and set(stored) == {*alert, "time"}, stored
     [marked] = [e for e in sample.store.get("TurnState:timeline") if e.get("alert")]
-    assert (marked["step"], marked["charge"], marked["alert"]) == ("r3-a03", "alert", stored), marked
+    assert (marked["step"], marked["ending"], marked["alert"]) == ("r3-a03", "alert", stored), marked
     run = SUITE.run_json("presence")
     assert run["alerts"] == common.plain([stored]), run["alerts"]
     assert run["rules"]["exits"] == exits and run["rules"]["entry_rounds"] == entries, run["rules"]
@@ -1132,7 +1131,8 @@ def scenario_rounds_live() -> dict:
     for rec in records:
         lines = [s["message"] for s in steps_of(load_transcript(rec)) if (s.get("extra") or {}).get(ROUND_TAG)]
         entries = [e for e in sample.store.get("TurnState:timeline") if e["agent"] == rec["agent"]]
-        assert lines == [f"Round {e['n']} of 2." for e in entries] and len(entries) == 2, (rec["agent"], lines)
+        assert [line.split(". ")[0] for line in lines] == [f"Round {e['round']} of 2" for e in entries] \
+            and len(entries) == 2, (rec["agent"], lines)
         # the rounds' values open a paragraph: a worker's last, the regulator's inside the task it quotes
         assert any(p.startswith("You have 2 rounds, and up to 3 tool calls per round.")
                    for p in first_user(load_transcript(rec)).rstrip().split("\n\n")), rec["agent"]

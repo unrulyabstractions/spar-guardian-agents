@@ -25,8 +25,9 @@ it wraps them: ORBIT's built-in bash and python of a lone agent, which ORBIT bin
 run through the sandbox's command jobs (src/sandbox/agent_tools.py registers them).
 
 The round under way lives in memory (TurnState's Live.rounds), never in the store: after_activation turns it into the
-round's timeline entry. open_round starts it before the round's first model call and appends the durable line
-"Round {n} of {R}." to the agent's conversation, n counting the rounds the agent has used up plus one.
+round's timeline entry. open_round starts it before the round's first model call and appends the durable round line
+to the agent's conversation: "Round 3 of 30. You have 28 rounds left, including this one. Up to 10 tool calls this
+round." Every agent present reads the run's round number, the plan's (round_line).
 
     record = round_record("k7q2m")
     record["made"], record["closed"], record["end"]       # 3, False, None
@@ -43,6 +44,7 @@ from inspect_ai.model import ChatMessageAssistant, ChatMessageUser
 from inspect_ai.tool import ToolDef
 from inspect_ai.util import store, store_as
 
+from src.configuration.prompt_texts import counted as in_words
 from src.configuration.settings import load_prompts
 from src.swarm.turn_rules._turn_state import (
     END_ROUND,
@@ -69,14 +71,13 @@ def now() -> float:
 
 def round_record(agent: str, round_number: int | None = None) -> dict:
     """The agent's round under way, made when missing or when the round of the step under way (current_round) is
-    another: {round, n, t0, t1, made, closed, end, runs, times, seen}. made counts the calls toward N, runs the calls
+    another: {round, t0, t1, made, closed, end, runs, times, seen}. made counts the calls toward N, runs the calls
     the wrapper started in the batch under way, times each settled call's (t0, t1, refused) by call id."""
     rounds = live_record().rounds
     round_number = round_number if round_number is not None else current_round() or 0
     record = rounds.get(agent)
     if record is None or record["round"] != round_number:
-        st = store_as(TurnState)
-        record = {"round": round_number, "n": st.rounds_used.get(agent, 0) + 1, "t0": now(), "t1": None,
+        record = {"round": round_number, "t0": now(), "t1": None,
                   "made": 0, "closed": False, "end": None, "runs": [], "times": {}, "seen": None}
         rounds[agent] = record
     return record
@@ -119,26 +120,36 @@ def name_job_call(job: str, call_id: str) -> None:
         st.set(JOBS_STORE, jobs)
 
 
-def round_line(n: int, of: int) -> str:
-    return load_prompts()["round"]["line"].format(round=n, rounds=of)
+def rounds_left(round_number: int, of: int) -> int:
+    """The rounds left to an agent in this round of R, this one included: every round uses one up."""
+    return max(of - round_number + 1, 0)
+
+
+def round_line(round_number: int, of: int, calls: int) -> str:
+    """The line that opens a round (prompts.yaml round.line): the run's round of R, the rounds left with this one,
+    and N, in words with singular forms ("1 round left", "Up to 1 tool call")."""
+    return load_prompts()["round"]["line"].format(
+        round=round_number, rounds=of, left=in_words(rounds_left(round_number, of), "round"),
+        calls=in_words(calls, "tool call"))
 
 
 def open_round(agent: str, state: AgentState) -> str | None:
-    """Start the agent's round and append its line "Round {n} of {R}." to its conversation (ROUND_TAG metadata), once
-    per round: a boundary edit ORBIT rejects is delivered again at the next. Notes the first round's start
-    (TurnState.started_at). Returns the line appended, or None. Outside a planned step nothing happens."""
+    """Start the agent's round and append its line (round_line) to its conversation (ROUND_TAG metadata: round, of,
+    left, calls), once per round: a boundary edit ORBIT rejects is delivered again at the next. Notes the first round's
+    start (TurnState.started_at). Returns the line appended, or None. Outside a planned step nothing happens."""
     round_number = current_round()
     if round_number is None:
         return None
     st = store_as(TurnState)
     if st.started_at is None:
         st.started_at = now()
-    record = round_record(agent, round_number)
+    round_record(agent, round_number)
     if any(((m.metadata or {}).get(ROUND_TAG) or {}).get("round") == round_number for m in state.messages
            if isinstance(m, ChatMessageUser)):
         return None
-    tag = {"round": round_number, "n": record["n"], "of": st.round_budget}
-    text = round_line(record["n"], st.round_budget)
+    tag = {"round": round_number, "of": st.round_budget, "left": rounds_left(round_number, st.round_budget),
+           "calls": st.calls_per_round}
+    text = round_line(round_number, st.round_budget, st.calls_per_round)
     state.messages.append(ChatMessageUser(content=text, metadata={ROUND_TAG: tag}))
     transcript().info({ROUND_TAG: {"agent": agent, **tag, "content": text}})
     return text

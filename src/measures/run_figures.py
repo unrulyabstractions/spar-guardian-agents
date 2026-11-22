@@ -72,7 +72,9 @@ def kind_of(entry: dict, submission: dict | None = None, submitted: str = rules.
     (turn_rules.orbit_submit_ending). board: a round of board calls alone (charge "board"), an old free step, or one
     whose tools were board actions. work otherwise (idle rounds and capped steps included)."""
     tools = entry.get("tools") or []
-    charge, sub = entry.get("charge"), submission or {}
+    # a round since 2026-11-22 keeps only its ending; it reads as the charge it would have had, work by default
+    charge = entry.get("charge", entry.get("ending") or ("work" if "ending" in entry else None))
+    sub = submission or {}
     ended = submitted if entry.get("ended") == rules.ORBIT_SUBMITTED else entry.get("ended")
     if charge == "stop" or ended == rules.STOP_WORKING:
         return "stop"

@@ -30,7 +30,7 @@ are the benchmark's, then on a board board_status, board_read and board_post and
 (src/swarm/submit_and_stop.py ending_tools), then end_round (src/swarm/end_round.py). They are bound per agent through
 ORBIT's tool_bindings next to the benchmark's own bindings. No agent gets ORBIT's own submit (AgentSpec.submit=False).
 
-The plan's rounds, the scheduler's turn bound and Inspect's message limit follow SwarmConfig.plan_rounds, max_turns and
+The plan's rounds, the scheduler's turn bound and Inspect's message limit follow SwarmConfig.rounds, max_turns and
 sample_message_limit. The turn rules' setup gets the agents' time limit, after which a round ends at its next batch,
 and under stop_after_delivery the benchmark's delivery predicate (Benchmark.delivered).
 

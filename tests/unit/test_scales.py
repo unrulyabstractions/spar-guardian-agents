@@ -28,7 +28,7 @@ def test_scales_apply_the_table(name):
     assert (c.reads_per_turn, c.posts_per_turn) == (reads, posts)
     # The plan holds 2R rounds on a board, one step per agent each; the message limit gives each agent's round three
     # messages per call of its N and two more, plus twenty, plus the presence lines.
-    assert c.message_limit is None and c.plan_rounds == 60 and c.max_turns == 60 * n
+    assert c.message_limit is None and c.rounds == 30 and c.max_turns == 30 * n
     assert c.sample_message_limit == c.max_turns * (3 * 10 + 2) + 20 + 2 * c.n_agents * (c.n_agents - 1)
     assert len(c.names) == n and c.names[-1] == ordered_ids(n)[-1]
 

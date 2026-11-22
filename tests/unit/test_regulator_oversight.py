@@ -44,8 +44,8 @@ def test_get_peer_actions_shows_an_influencer_its_teammates_calls(tmp_path):
     """The peer tools are bound to both influencers, never to a worker. get_peer_actions returns any teammate's calls
     oldest first as JSON, each with its id, round, tool and whole arguments (an influencer's too, so a refusal never
     tells roles apart), and fails with "no such agent" about the caller itself or an unknown name. A call counts as
-    oversight and records its target; it is a board call, so a round of peer calls alone uses up none of the caller's
-    rounds, the failed ones included."""
+    oversight and records its target; like every call it counts toward the round's calls, and a round of peer calls
+    alone uses up one of the caller's rounds, as every round does."""
     config = pull(rounds=5, regulators=1, disregulators=1, concurrent_rounds=False, turn_order="round_robin")
     scripts = {
         "a01": [do(LONG), do("A2"), do("A3"), do("A4"), do("A5")],
@@ -84,11 +84,10 @@ def test_get_peer_actions_shows_an_influencer_its_teammates_calls(tmp_path):
     assert store(sample, "oversight_targets") == {"a02": {"a03": 1, "a01": 2}, "a03": {"a01": 1}}
     # the round of the first call about each teammate, however many follow
     assert store(sample, "oversight_first") == {"a02": {"a03": 1, "a01": 2}, "a03": {"a01": 1}}
-    assert ACTIONS in rules.FREE_TOOLS and OBSERVATIONS in rules.FREE_TOOLS
-    charges = {a: [e["charge"] for e in store(sample, "timeline") if e["agent"] == a] for a in ("a02", "a03")}
-    assert charges == {"a02": ["board"] * 5, "a03": ["board", "work", "work", "work", "work"]}
-    assert store(sample, "rounds_used") == {"a01": 5, "a02": 0, "a03": 4}
-    assert store(sample, "board_rounds") == {"a02": 5, "a03": 1}
+    assert not hasattr(rules, "FREE_TOOLS")
+    used = {a: [e["used"] for e in store(sample, "timeline") if e["agent"] == a] for a in ("a02", "a03")}
+    assert used == {"a02": [1, 2, 3, 4, 5], "a03": [1, 2, 3, 4, 5]}
+    assert store(sample, "rounds_used") == {"a01": 5, "a02": 5, "a03": 5} and store(sample, "board_rounds") is None
     # history_marks give each round's end and round, which the oversight tools read.
     assert [mark[1] for mark in store(sample, "history_marks")["a01"]] == [1, 2, 3, 4, 5]
 
@@ -96,7 +95,7 @@ def test_get_peer_actions_shows_an_influencer_its_teammates_calls(tmp_path):
 def test_get_peer_observations_returns_results_by_id_cut_with_the_cut_stated(tmp_path):
     """get_peer_observations returns what a teammate's calls returned: by id in the order asked, else the newest,
     each cut to max_chars with chars, shown_chars and truncated; an id past the teammate's calls is "no such call". A
-    call counts as oversight, and a round of it alone uses up no round."""
+    call counts as oversight, and a round of it alone uses up one round."""
     config = pull(rounds=2, regulators=1, concurrent_rounds=False, turn_order="round_robin")
     roles = {"a01": "worker", "a02": "regulator", "a03": "worker"}
     scripts = {"a01": [do(LONG), do("A2")],
@@ -115,7 +114,7 @@ def test_get_peer_observations_returns_results_by_id_cut_with_the_cut_stated(tmp
         {"id": 1, "round": 2, "tool": "work", "status": "ok", "result": second, "chars": len(second),
          "shown_chars": len(second), "truncated": False}], "not_shown": 0, "not_shown_ids": []}
     assert store(sample, "oversight") == {"a02": 2}
-    assert [e["charge"] for e in store(sample, "timeline") if e["agent"] == "a02"][:2] == ["board", "board"]
+    assert [e["used"] for e in store(sample, "timeline") if e["agent"] == "a02"][:2] == [1, 2]
 
 
 def test_the_payloads_state_status_and_cuts():

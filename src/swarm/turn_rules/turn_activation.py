@@ -6,11 +6,10 @@ after a call that ended its turns, once the time limit has passed, or at a reply
 (_turn_rounds.ends). It also keeps the agent's conversation at each boundary in memory (Live.messages), for the peer
 tools.
 
-after_activation (ScheduleConfig.after_activation) charges the round by what it did, writes its timeline entry and
-marks why an agent stopped. A round uses up one of the agent's rounds unless every call that ran was a board call
-(FREE_TOOLS), end_round and refused calls left out (a call our rules refused never ran: Refused); a round of end_round
-alone, of refused calls alone or of a reply with no tool call uses one up. An agent that has used up its rounds
-(TurnState.round_budget) ends "rounds". It then amends the pending plan: the ended agents' steps removed, every step
+after_activation (ScheduleConfig.after_activation) counts the round, writes its timeline entry and marks why an agent
+stopped. Every round uses up one of the agent's rounds, whatever it held: work, board calls alone, refused calls,
+end_round alone or a reply with no tool call. An agent that has used up its rounds (TurnState.round_budget) ends
+"rounds". It then amends the pending plan: the ended agents' steps removed, every step
 after the team's hand-in dropped, and every step after the round under way dropped once no worker is left
 (workers_gone), so no regulator holds a run open. An agent that stops simply exits: its rounds go to
 nobody. Under stop_after_delivery it hands the amended plan to the rule in _turn_delivery first. Last it records the
@@ -19,8 +18,6 @@ steps (out_of_steps), so its peers hear of it before their next round.
 
     schedule = ScheduleConfig(steps=steps, after_activation=f"{turn_activation.__name__}.after_activation",
                               end_activation=f"{turn_activation.__name__}.ends_round")
-    round_charge([{"tool": "board_read"}], None)      # "board": it uses up none of the agent's rounds
-    round_charge([{"tool": "submit"}], "submit")      # the hand-in went through
 """
 from __future__ import annotations
 
@@ -39,8 +36,6 @@ from src.swarm.turn_rules._turn_state import (
     ACTOR,
     ALERT,
     DELIVERED,
-    END_ROUND,
-    FREE_TOOLS,
     HALT_TAG,
     STOP_WORKING,
     SUBMIT,
@@ -48,15 +43,12 @@ from src.swarm.turn_rules._turn_state import (
     Delivered,
     TeamSubmission,
     TurnState,
-    bump,
     live_record,
     live_state,
     running_record,
     running_step,
 )
 from src.swarm.turn_rules._turn_steps import step_round
-
-CHARGED = ("work", "idle")       # the round_charge values that use up one of the agent's rounds
 
 
 def ends_round(member: str, boundary) -> bool:
@@ -89,7 +81,7 @@ def _ms(value: float | None) -> float | None:
 
 def round_calls(messages: list, times: dict | None = None, jobs: dict | None = None) -> list[dict]:
     """The round's tool calls in order, from the messages its activation added: each {id, tool, k (its place in the
-    round from 1), free (a board call), error (its result is an error), refused (our rules refused it: Refused),
+    round from 1), error (its result is an error), refused (our rules refused it: Refused),
     t0, t1 (UTC seconds, from the round record's times; None without one)}, and `job` for a command call that was
     still running when the round's time ran out: the id of the job it became (the round record's jobs)."""
     results = {m.tool_call_id: m for m in messages if isinstance(m, ChatMessageTool) and m.tool_call_id}
@@ -100,7 +92,7 @@ def round_calls(messages: list, times: dict | None = None, jobs: dict | None = N
         for call in m.tool_calls or []:
             t0, t1, refused = (times or {}).get(call.id, (None, None, None))
             result = results.get(call.id)
-            out.append({"id": call.id, "tool": call.function, "k": len(out) + 1, "free": call.function in FREE_TOOLS,
+            out.append({"id": call.id, "tool": call.function, "k": len(out) + 1,
                         "error": result is not None and result.error is not None, "refused": refused is not None,
                         "t0": _ms(t0), "t1": _ms(t1), **({"job": jobs[call.id]} if call.id in (jobs or {}) else {})})
     return out
@@ -113,20 +105,6 @@ def over_time(record: dict | None, limit: int | None) -> float | None:
         return None
     over = record["t1"] - record["t0"] - limit
     return _ms(over) if over > 0 else None
-
-
-def round_charge(calls: list[dict], ending: str | None) -> str:
-    """What a completed round counts as. "submit", "stop" or "alert" when the agent's ending tool went through in it
-    (ending, from ending_of), whatever else it called. Otherwise by the calls that ran, end_round and the refused
-    calls left out (a refused call never ran: Refused): "work" when one is not a board call (FREE_TOOLS), "board" when
-    every one is, "idle" when there is none. work and idle use up one of the agent's rounds (CHARGED); board uses up
-    none."""
-    if ending is not None:
-        return ending
-    made = [c["tool"] for c in calls if c["tool"] != END_ROUND and not c.get("refused")]
-    if any(tool not in FREE_TOOLS for tool in made):
-        return "work"
-    return "board" if made else "idle"
 
 
 def ending_of(st: TurnState, submission: TeamSubmission, agent: str, round_number: int) -> str | None:
@@ -200,8 +178,9 @@ def _without_workers(st: TurnState, keep: list[dict], step: ScheduleStep | None)
 def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | None:
     """ORBIT calls this after every round of the plan (ScheduleConfig.after_activation).
 
-    Charges the round by what it did (round_charge), writes its timeline entry (its calls with their times and why it
-    ended), records why the agent stopped, and amends the pending plan: an ended agent's steps (TurnState.ended,
+    Counts the round (every round uses up one of the agent's rounds), writes its timeline entry (its calls with their
+    times, why it ended and its ending: submit, stop or alert when that tool went through), records why the agent
+    stopped, and amends the pending plan: an ended agent's steps (TurnState.ended,
     which submit and stop_working also write) are removed; the team's hand-in (TeamSubmission) cuts every step after
     its last round; once no worker is left (workers_gone) every step after the round under way goes, whatever a
     hand-in left running. The timeline marks an agent's first round ("entered") and the round after which its window
@@ -219,21 +198,17 @@ def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | Non
     messages = _activation_messages(agent, result)
     record = take_round(agent)
     calls = round_calls(messages, (record or {}).get("times"), (record or {}).get("jobs")) if messages else \
-        [{"tool": tool, "k": k, "free": tool in FREE_TOOLS} for k, tool in enumerate(tools, 1)]
+        [{"tool": tool, "k": k} for k, tool in enumerate(tools, 1)]
     st.history_marks = {**st.history_marks,
                         agent: [*st.history_marks.get(agent, []), [result.messages_after, round_number]]}
     submission = store_as(TeamSubmission)
-    charge = round_charge(calls, ending_of(st, submission, agent, round_number))
-    charged = charge in CHARGED
-    n = st.rounds_used.get(agent, 0) + 1
-    used = n - 1 + (1 if charged else 0)
+    ending = ending_of(st, submission, agent, round_number)
+    used = st.rounds_used.get(agent, 0) + 1
     st.activations = {**st.activations, agent: activation}
     st.rounds_used = {**st.rounds_used, agent: used}
-    if charge == "board":
-        st.board_rounds = bump(st.board_rounds, agent)
     pending = list(runtime.pending_steps)
     rules = delivery()
-    reason = _stop_reason(st, agent, used)
+    reason = None if ending is not None else _stop_reason(st, agent, used)   # its own ending comes first
     if reason is None and rules is not None and agent not in st.ended and spent(rules, agent, used) \
             and any(agent in s.agents for s in pending):
         end(st, [agent], round_number)
@@ -241,8 +216,8 @@ def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | Non
         st.ended = {**st.ended, agent: reason}
         st.ended_round = {**st.ended_round, agent: round_number}
     left = _window(st, agent).end is not None and not any(agent in s.agents for s in pending)
-    entry = {"turn": global_turn, "agent": agent, "activation": activation, "round": round_number, "n": n,
-             "step": step.id if step is not None else None, "charge": charge, "charged": charged, "used": used,
+    entry = {"turn": global_turn, "agent": agent, "activation": activation, "round": round_number,
+             "step": step.id if step is not None else None, "ending": ending, "used": used,
              "tools": tools, "calls": calls, "end": _end_reason(agent, record, messages),
              "t0": _ms((record or {}).get("t0")), "t1": _ms((record or {}).get("t1")),
              "ended": st.ended.get(agent), "entered": activation == 1, "left": left}
@@ -252,7 +227,7 @@ def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | Non
     for call in calls:
         if call.get("job"):
             name_job_call(call["job"], call["id"])
-    if charge == ALERT:
+    if ending == ALERT:
         entry["alert"] = next((a for a in reversed(store_as(Alerts).alerts) if a["agent"] == agent), None)
     st.timeline = [*st.timeline, entry]
 

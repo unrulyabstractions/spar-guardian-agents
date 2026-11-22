@@ -356,12 +356,16 @@ STEP_RULES_FIELDS = ("agents", "workers", "cap", "pooled", "turn_order", "seed",
 def rules_state(view: SampleView) -> dict | None:
     """The turn rules' store (src/swarm/turn_rules/_turn_state.py TurnState), or None for a run without them. A log of
     the step rules gives their fields (STEP_RULES_FIELDS: cap, pooled, free_caps, turn_budget, work_steps, free_steps
-    and the rest), so its re-export writes the rules it ran under."""
+    and the rest), so its re-export writes the rules it ran under. A log made before every round counted
+    (2026-11-22) keeps its board_rounds, the rounds of board calls alone that used up none."""
     if view.store_get("TurnState:cap") is not None:
         return {f: view.store_get(f"TurnState:{f}") for f in STEP_RULES_FIELDS}
     state = stored(view, TurnState)
     if state is not None and state.get("round_time_s") is None:
         state.pop("round_time_s")       # a log made before the round clock (2026-11-22) has none
+    board_rounds = view.store_get("TurnState:board_rounds")
+    if state is not None and board_rounds is not None:
+        state["board_rounds"] = board_rounds
     return state
 
 
@@ -372,16 +376,17 @@ def step_rules(state: dict) -> bool:
 
 
 def rules_facts(state: dict | None, agent: str) -> dict | None:
-    """One agent's activations (its rounds), the rounds it used up and its rounds of board calls alone, how it ended
-    and its window of rounds. A round it never had counts 0, as in its engagement (engagement_record). A run before
-    2026-11-21 gives its working steps (work_steps) in place of the rounds, as that export wrote them."""
+    """One agent's activations (its rounds), the rounds it used up, how it ended and its window of rounds, and in a
+    run before 2026-11-22 its rounds of board calls alone (board_rounds). A round it never had counts 0, as in its
+    engagement (engagement_record). A run before 2026-11-21 gives its working steps (work_steps) in place of the
+    rounds, as that export wrote them."""
     if state is None:
         return None
     if step_rules(state):
         return {k: (state.get(k) or {}).get(agent) for k in ("activations", "work_steps", "ended", "windows")}
-    facts = {k: (state.get(k) or {}).get(agent) for k in ("activations", "rounds_used", "board_rounds", "ended",
-                                                          "windows")}
-    return {**facts, **{k: facts[k] or 0 for k in ("rounds_used", "board_rounds")}}
+    kept = ("activations", "rounds_used", *(("board_rounds",) if "board_rounds" in state else ()), "ended", "windows")
+    facts = {k: (state.get(k) or {}).get(agent) for k in kept}
+    return {**facts, **{k: facts[k] or 0 for k in ("rounds_used", "board_rounds") if k in facts}}
 
 
 # A TurnState.ended reason, as the episode's ended_by: the agent's own act or a turn rule ended it before the sample
@@ -522,9 +527,9 @@ def engagement_record(view: SampleView, agent: str, rules: dict | None, submissi
 
     discovery_round is the round of its first board_status or board_read; checks, reads and posts count the board
     tool calls (posts that went through); read_senders holds the senders of the posts board_read returned, the agent
-    itself left out; rounds_used and board_rounds its rounds by charge (free_steps and work_steps, its steps, in a run
-    before 2026-11-21); oversight and oversight_targets count a
-    regulator's oversight calls, oversight_first gives the round of its first call about each target and
+    itself left out; rounds_used its rounds, with board_rounds, its rounds of board calls alone, in a run before
+    2026-11-22 (free_steps and work_steps, its steps, in a run before 2026-11-21); oversight and oversight_targets
+    count a regulator's oversight calls, oversight_first gives the round of its first call about each target and
     checked_in_time whether that met its first rounds; reads_refused and posts_refused the calls the per-round budgets
     refused;
     called_submit whether it called submit (a hand-in, or a call the tool refused); notices the board
@@ -544,7 +549,8 @@ def engagement_record(view: SampleView, agent: str, rules: dict | None, submissi
         "read_senders": recorded("read_senders", {}),
         **({"free_steps": recorded("free_steps", 0), "work_steps": recorded("work_steps", 0)}
            if step_rules(state) else
-           {"rounds_used": recorded("rounds_used", 0), "board_rounds": recorded("board_rounds", 0)}),
+           {"rounds_used": recorded("rounds_used", 0),
+            **({"board_rounds": recorded("board_rounds", 0)} if "board_rounds" in state else {})}),
         "called_submit": agent in hand_ins(submission) or agent in refused,
         "notices": notices.get(agent, 0),
         "oversight": recorded("oversight", 0), "oversight_targets": recorded("oversight_targets", {}),

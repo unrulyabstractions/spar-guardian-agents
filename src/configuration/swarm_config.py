@@ -1,7 +1,7 @@
 """SwarmConfig: every knob of one swarm run.
 
     config = SwarmConfig(n_agents=3, regulators=1, rounds=20, calls_per_round=5)
-    config.plan_rounds, config.max_turns, config.sample_message_limit
+    config.rounds, config.max_turns, config.sample_message_limit
 
 One frozen pydantic model holds the team, the board, the turn rules, the instruction levels, the limits, the model
 calls and the judge. src/tasks.py turns it into an ORBIT task; src/swarm/turn_rules/ reads it inside the run. The
@@ -40,9 +40,6 @@ NONE_TEXT = ("none", "null")
 MESSAGES_PER_CALL = 3
 ROUND_MESSAGES = 2
 MESSAGE_MARGIN = 20
-# The plan's rounds per round of the budget on a board: a round of board calls alone uses up none of an agent's rounds
-# (turn_rules.turn_activation), so the plan holds twice the rounds an agent may use up. A lone agent has no board.
-PLAN_ROUND_FACTOR = 2
 # Presence lines one agent receives about one peer at most: its entry and its exit
 # (src/swarm/turn_rules/_turn_presence.py).
 PRESENCE_MESSAGES = 2
@@ -194,16 +191,16 @@ class SwarmConfig(BaseModel):
     of `names`. random draws a new permutation per round from random.Random(f"{seed}/{round}"). Inside a concurrent
     round the order is ORBIT's."""
     rounds: int = 30
-    """R: the rounds every agent may use up, workers, influencers and a lone agent alike. In a round an agent makes up
-    to calls_per_round tool calls (an inner loop of model calls, each seeing the results before it). A round uses up
-    one of the R unless every call it made was a board call (board_status, board_read, board_post, get_peer_actions,
-    get_peer_observations) other than end_round; a round of end_round alone, or a reply with no tool call, uses one
-    up. An agent that has used up R ends "rounds" (turn_rules.turn_activation). The agent's first message gives R
-    and N; its system prompt states the rules without numbers."""
+    """R: the plan's rounds, and the rounds every agent may use up, workers, influencers and a lone agent alike. In a
+    round an agent makes up to calls_per_round tool calls (an inner loop of model calls, each seeing the results before
+    it). Every round uses up one of the R, whatever it held: work, board calls alone, refused calls, end_round alone or
+    a reply with no tool call. Every agent present shares the run's round number. An agent that has used up R ends
+    "rounds" (turn_rules.turn_activation). The agent's first message and each round's line give R and N; its system
+    prompt states the rules without numbers."""
     calls_per_round: int = 10
-    """N: the tool calls an agent may make in one round. Every call counts, board calls included, so a round always
-    ends; end_round never counts. A reply asking for several calls counts each. A call past N is refused with a
-    ToolError, and the round ends after N calls (turn_rules.turn_activation.ends_round)."""
+    """N: the tool calls an agent may make in one round. Every call counts, board and peer tools included, for every
+    role, so a round always ends; end_round never counts. A reply asking for several calls counts each. A call past N
+    is refused with a ToolError, and the round ends after N calls (turn_rules.turn_activation.ends_round)."""
     round_time_s: int = settings.ROUND_TIME_S
     """T: the seconds one round may last, from its first model call, model time included. After a batch ends past T
     the round ends (turn_rules.turn_activation.ends_round, end reason round_time); a model call under way is never cut,
@@ -274,7 +271,7 @@ class SwarmConfig(BaseModel):
     # ---------------------------------------------------------------- limits
     message_limit: int | None = None
     """Messages per sample (Inspect message_limit); each agent's conversation is capped at it plus ten
-    (AgentSpec.max_messages). None derives it from the plan: per agent and round of plan_rounds, three messages per
+    (AgentSpec.max_messages). None derives it from the plan: per agent and round of rounds, three messages per
     call of calls_per_round and two more, plus twenty (sample_message_limit)."""
     token_limit: int = 0
     """Tokens per sample (Inspect token_limit). 0 means the runaway guard: 64M tokens per agent."""
@@ -385,11 +382,11 @@ class SwarmConfig(BaseModel):
             raise ValueError("stop_after_delivery cannot be negative; stop_after_delivery=none turns the rule off")
         if self.submit_delay_rounds < 0:
             raise ValueError("submit_delay_rounds cannot be negative; 0 ends the run after the round of the submit")
-        rounds = self.plan_rounds
+        rounds = self.rounds
         for name in ("regulator_window", "disregulator_window"):
             window = getattr(self, name)
             if not 1 <= window.start <= rounds or (window.end is not None and not window.start <= window.end <= rounds):
-                raise ValueError(f"{name} needs 1 <= start <= end <= the plan's rounds ({rounds}: plan_rounds), got "
+                raise ValueError(f"{name} needs 1 <= start <= end <= the plan's rounds ({rounds}: rounds), got "
                                  f"{window.start}:{window.end}")
         levels = settings.load_instruction_levels()
         for ladder in LADDERS:
@@ -423,20 +420,13 @@ class SwarmConfig(BaseModel):
         return sorted(self.seats)
 
     @property
-    def plan_rounds(self) -> int:
-        """The rounds turn_rules.schedule writes: rounds, times PLAN_ROUND_FACTOR on a board, where a round of board
-        calls alone uses up none of an agent's rounds."""
-        return self.rounds * (PLAN_ROUND_FACTOR if self.board else 1)
-
-    @property
     def max_turns(self) -> int:
-        """Plan steps at most: one step per agent per round of plan_rounds, a bound for both sequential and concurrent
-        rounds."""
-        return self.plan_rounds * self.n_agents
+        """Plan steps at most: one step per agent per round, a bound for both sequential and concurrent rounds."""
+        return self.rounds * self.n_agents
 
     @property
     def sample_message_limit(self) -> int:
-        """Inspect's message limit: message_limit, else per agent and round of plan_rounds MESSAGES_PER_CALL messages
+        """Inspect's message limit: message_limit, else per agent and round MESSAGES_PER_CALL messages
         per call of calls_per_round and ROUND_MESSAGES more, plus twenty, plus two presence lines per agent per peer,
         so the limit never cuts a run the plan allows."""
         if self.message_limit is not None:

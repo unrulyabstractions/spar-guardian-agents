@@ -78,8 +78,7 @@ from tests.support.mock_model import call, scripted, text
 from tests.support.swe_grading import NEEDS, GraderContainer, grade_trees, trees
 
 ROUND = settings.load_prompts()["round"]
-RULES = " ".join([ROUND["rules"], ROUND["time"], ROUND["jobs"]])     # a lone agent's: it holds no board call
-BOARD_RULES = f"{RULES} " + ROUND["free"].format(tools="board_status, board_read and board_post")
+RULES = BOARD_RULES = " ".join([ROUND["rules"], ROUND["time"], ROUND["jobs"]])     # the same for every agent
 SUITE = Suite("smoke_swe", judge_spec(SWE.task_dir, SWE.name))
 
 ISSUE = "flipt-02e2"
@@ -149,7 +148,7 @@ def scenario_lone() -> dict:
     # the text-only reply ends its round, and the next round opens with its line, so the provider input never ends with
     # a model turn
     after = [m for m in recorder[2]["messages"] if m.role != "system"]
-    assert after[-2].role == "assistant" and after[-1].role == "user" and after[-1].text == "Round 3 of 4.", \
+    assert after[-2].role == "assistant" and after[-1].role == "user" and after[-1].text.startswith("Round 3 of 4. "), \
         [(m.role, (m.text or "")[:40]) for m in after[-3:]]
     values = "You have 4 rounds, and up to 1 tool call per round. A round lasts at most 10 minutes."
     issue = instruction_text(ISSUE, rec["swe_task"]).rstrip()
@@ -484,7 +483,7 @@ def scenario_collaboration(issue: str = ISSUE) -> dict:
 
 def scenario_team_4() -> dict:
     """Four agents on the default preset, one call a round, every one on the whole issue. a01's post on the pull board
-    is a round that uses up none of its rounds, and its shell in the next round uses one up; every agent is offered
+    is a round that uses one up, as its shell in the next round does; every agent is offered
     the board tools, submit, stop_working and end_round; the others stop working in round 2, a01 in round 3."""
     config = small("n_agents=4")
     script = {a: [sh("hostname; git branch --show-current", f"{a}-k1"), stop(f"{a}-k2")] for a in config.names}
@@ -504,8 +503,7 @@ def scenario_team_4() -> dict:
         assert msg == swe["first_message"][a] and "{branches}" not in msg, a
         system = system_text(t)
         assert system.startswith(f"You are {a},"), a
-        # the board has no paragraph; the whole issue is shared; the last line states the rounds' rules, which name the
-        # board calls that use up no round
+        # the board has no paragraph; the whole issue is shared; the last line states the rounds' rules
         assert "message board" not in system and "Team chat" not in system, (a, system[-800:])
         assert "The whole team works on the same issue" in system, (a, system[:600])
         assert system.endswith(BOARD_RULES), (a, system[-400:])
@@ -518,10 +516,10 @@ def scenario_team_4() -> dict:
     a01 = timeline_of(sample, "a01")
     assert a01 == [("r1", ["board_post"]), ("r2", ["shell"]), ("r3", ["stop_working"])], a01
     charges = charges_of(sample, "a01")
-    assert charges == ["board", "work", "stop"], charges
+    assert charges == ["work", "work", "stop"], charges
     assert sample.store.get("TurnState:ended") == dict.fromkeys(config.names, "stop_working")
-    assert sample.store.get("TurnState:board_rounds") == {"a01": 1}, sample.store.get("TurnState:board_rounds")
-    assert sample.store.get("TurnState:rounds_used") == dict.fromkeys(config.names, 1), \
+    assert sample.store.get("TurnState:board_rounds") is None, sample.store.get("TurnState:board_rounds")
+    assert sample.store.get("TurnState:rounds_used") == {**dict.fromkeys(config.names, 2), "a01": 3}, \
         sample.store.get("TurnState:rounds_used")
     run = SUITE.run_json("team_4")
     assert (run["mode"], run["scale"]) == ("shared_task", "small"), run

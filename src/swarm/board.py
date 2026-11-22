@@ -33,9 +33,9 @@ left it refuses the call (turn_rules.Refused) and counts the refusal (TurnState.
 post budget refuses the call, sends nothing and counts the refusal (posts_refused). The counts reset at each round.
 Regulators read without a budget and without the read_page cap: a board_read with no selection returns the whole board.
 
-Each tool also counts the action in turn_rules.TurnState (checks, reads, posts, read_senders, discovery_round). The
-board tools and the peer tools are the board calls (turn_rules.FREE_TOOLS): they count toward a round's calls and use
-up none of the agent's rounds, and round_rules names them in the agent's system prompt.
+Each tool also counts the action in turn_rules.TurnState (checks, reads, posts, read_senders, discovery_round). Like
+every tool call, a board call counts toward the round's calls. round_rules states the rounds' rules in each system
+prompt.
 Descriptions come from src/configuration/prompts.yaml `tools`, argument descriptions from `tool_args`, the result
 lines from `board_output` and the budget texts from `budget`.
 """
@@ -55,7 +55,6 @@ from orbit.configs.scheduler import SchedulerConfig
 from orbit.configs.scheduling import ScheduleConfig
 from orbit.tools import ToolFactory
 
-from src.configuration.prompt_texts import joined
 from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import INFLUENCERS, SwarmConfig, role_of
 from src.swarm._regulator_oversight import get_peer_actions, get_peer_observations
@@ -64,7 +63,6 @@ from src.swarm.turn_rules import (
     ACTIONS_TOOL,
     BOARD_ID,
     BOARD_TOOLS,
-    FREE_TOOLS,
     OBSERVATIONS_TOOL,
     OVERSIGHT_TOOLS,
     SYSTEM_SENDER,
@@ -280,12 +278,10 @@ def agent_tool_names(config: SwarmConfig, roles: dict[str, str] | None = None) -
 
 def round_rules(config: SwarmConfig, agent: str, roles: dict[str, str] | None = None, *,
                 commands: bool = True) -> str:
-    """The rounds' rules in the agent's system prompt, with no number (prompts.yaml round.rules; the first message
-    gives the values, prompt_texts.rounds_values); with a round clock (round_time_s) the time limit (round.time) and,
-    for an agent with a command tool (`commands`), its jobs (round.jobs); then for an agent that holds board calls
-    the sentence that names them (round.free): the board tools, and the peer tools of an influencer
-    (turn_rules.FREE_TOOLS)."""
+    """The rounds' rules in the agent's system prompt, with no number (prompts.yaml round.rules; the first message and
+    each round's line give the values, prompt_texts.rounds_values); with a round clock (round_time_s) the time limit
+    (round.time) and, for an agent with a command tool (`commands`), its jobs (round.jobs). The same for every role;
+    agent and roles are kept for the callers."""
     texts = load_prompts()["round"]
-    free = [tool for tool in agent_tool_names(config, roles).get(agent, []) if tool in FREE_TOOLS]
     timed = [texts["time"], *([texts["jobs"]] if commands else [])] if config.round_time_s else []
-    return " ".join([texts["rules"], *timed, *([texts["free"].format(tools=joined(free))] if free else [])])
+    return " ".join([texts["rules"], *timed])

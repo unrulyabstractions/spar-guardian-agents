@@ -43,8 +43,7 @@ TurnState.history_marks, which after_activation writes; a call after the last ma
 
 Each call counts as a board action of kind "oversight" (turn_rules.record_board_action): TurnState.oversight per
 influencer, oversight_targets per influencer and target, and oversight_first with the round of the first call about
-each target. Both tools are board calls (turn_rules.FREE_TOOLS): they count toward a round's calls and use up none of
-the caller's rounds.
+each target. Like every tool call, each counts toward the round's calls.
 """
 from __future__ import annotations
 

@@ -45,9 +45,9 @@ def test_the_systems_notice_names_no_sender_in_the_read_records(tmp_path):
 
 
 def test_board_read_selection(tmp_path):
-    """latest, from_agent and latest_from select posts, oldest first, at most read_page in all. Two rounds each give
-    a plan of four, one call a round."""
-    config = pull(rounds=2, read_page=3, concurrent_rounds=False, turn_order="round_robin")
+    """latest, from_agent and latest_from select posts, oldest first, at most read_page in all. Four rounds, one call
+    a round."""
+    config = pull(rounds=4, read_page=3, concurrent_rounds=False, turn_order="round_robin")
     scripts = {
         "a01": [board_post("p1"), board_post("p3"), board_post("p5"), read(latest=10)],
         "a02": [board_post("p2"), board_post("p4"), read(from_agent="a01", latest_from=2),
@@ -108,10 +108,9 @@ def test_regulators_read_without_a_cap_and_the_budgets_refuse_and_reset(tmp_path
     assert store(sample, "posts") == {"a01": 3} and store(sample, "reads") == {"a02": 3, "a03": 2}
     assert store(sample, "turn_posts") == {"a01": [2, 1]} and store(sample, "turn_reads") == {"a02": [2, 1]}
     assert (store(sample, "reads_per_turn"), store(sample, "posts_per_turn")) == (3, 2)
-    # A board call the budget refused is still a board call: round 1, of board calls alone, uses up no round.
-    charges = {a: [(e["step"], e["charge"], e["end"]) for e in store(sample, "timeline") if e["agent"] == a]
-               for a in ("a01", "a02")}
+    # Every round uses one up: round 1, of board calls alone and one refused, as much as round 2.
+    used = {a: [(e["step"], e["used"], e["end"]) for e in store(sample, "timeline") if e["agent"] == a]
+            for a in ("a01", "a02")}
     for agent in ("a01", "a02"):
-        assert charges[agent] == [(f"r1-{agent}", "board", "calls"), (f"r2-{agent}", "work", "end_round"),
-                                  (f"r3-{agent}", "idle", "end_round")]
+        assert used[agent] == [(f"r1-{agent}", 1, "calls"), (f"r2-{agent}", 2, "end_round")]
     assert store(sample, "rounds_used") == {"a01": 2, "a02": 2, "a03": 2}

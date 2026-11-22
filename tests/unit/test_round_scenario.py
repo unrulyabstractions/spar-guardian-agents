@@ -17,8 +17,8 @@ def test_the_script_holds_each_round_and_one_entry_past_the_plan():
     # w1 asks for one call more than N in one reply; w3's first round is a reply with no tool call
     assert len(plan["a01"][1]["calls"]) == round_scenario.CALLS + 1 and len(plan["a01"][1]["outputs"]) == 1
     assert plan["a03"][0]["calls"] == [] and plan["a03"][0]["end"] == "no_tool_call"
-    # the regulator uses up every round with work and never stops
-    assert [r["used"] for r in plan["a04"]] == list(range(1, round_scenario.ROUNDS + 1))
+    # every round uses one up: each agent has R rounds, the regulator's all work and the workers' last a stop
+    assert all([r["used"] for r in rounds] == list(range(1, round_scenario.ROUNDS + 1)) for rounds in plan.values())
     assert all(r["calls"][-1][0] == END_ROUND for r in plan["a04"])
 
 
@@ -35,11 +35,11 @@ def test_round_groups_cut_at_each_line_with_what_was_heard_before_the_first_call
     t = transcript([])
     t["trajectory"]["steps"] = [
         {"source": "system", "message": "s"}, _user("task"),
-        _user("Round 1 of 3.", ROUND_TAG, {"round": 1, "n": 1, "of": 3}),
+        _user("Round 1 of 3.", ROUND_TAG, {"round": 1, "of": 3}),
         _user("a02 entered.", PRESENCE_TAG, {"kind": "entered"}),
         _agent("c1"), _user("[Since your last call] the board changed."), _agent("c2"),
         _user("a02 exited.", PRESENCE_TAG, {"kind": "exited"}),
-        _user("Round 2 of 3.", ROUND_TAG, {"round": 2, "n": 2, "of": 3}),
+        _user("Round 2 of 3.", ROUND_TAG, {"round": 2, "of": 3}),
         _agent("c3")]
     groups = round_scenario.round_groups(t)
     assert [g["line"] for g in groups] == ["Round 1 of 3.", "Round 2 of 3."]

@@ -1,6 +1,6 @@
 """submit and stop_working (src/swarm/submit_and_stop.py): who holds which tool, the system prompts that name them, the
 guard of every domain on a fake sandbox or store, the rename the model sees, the system text the provider receives,
-and the runs on the mock provider: the halt, the delay, a refused submit's charge and record, and a solo_task hand-in.
+and the runs on the mock provider: the halt, the delay, a refused submit's round and record, and a solo_task hand-in.
 No Docker, no credentials, no paid calls."""
 from __future__ import annotations
 
@@ -62,10 +62,7 @@ ROLES = {"a01": "worker", "a02": "regulator", "a03": "disregulator"}
 STOP = load_prompts()["stop_working"]["text"]
 ROUND = load_prompts()["round"]
 RULES = " ".join([ROUND["rules"], ROUND["time"], ROUND["jobs"]])       # an agent with a shell, under the round clock
-BOARD = (f"{RULES} Calls to board_status, board_read and board_post do not use up your rounds, but they count toward "
-         "the calls of a round.")
-PEERS = (f"{RULES} Calls to board_status, board_read, board_post, get_peer_actions and get_peer_observations do not "
-         "use up your rounds, but they count toward the calls of a round.")
+BOARD = PEERS = RULES        # the rounds' rules are the same for every role, on a board or not
 
 
 def ask(coroutine):
@@ -416,9 +413,9 @@ def test_a_submit_with_no_delay_halts_after_its_round(tmp_path):
     scripts = {"a01": [submit("all done")], "a02": [do("B")], "a03": [do("C")]}
     sample, rec = run(config, scripts, tmp_path, roles=ROLES3)
     # The round under way finished for everyone, then every later step was dropped. a01's round ended with a submit
-    # that went through, which uses up no round.
-    assert store(sample, "rounds_used") == {"a01": 0, "a02": 1, "a03": 1}
-    assert [e["charge"] for e in store(sample, "timeline") if e["agent"] == "a01"] == ["submit"]
+    # that went through, and used one up like every round.
+    assert store(sample, "rounds_used") == {"a01": 1, "a02": 1, "a03": 1}
+    assert [e["ending"] for e in store(sample, "timeline") if e["agent"] == "a01"] == ["submit"]
     assert store(sample, "halted_after_round") == 1 and store(sample, "ended") == {"a01": "submit"}
     fields = ("agent", "round", "answer", "ends_after_round", "snapshot", "refused")
     assert {f: sample.store.get(f"TeamSubmission:{f}") for f in fields} == {
@@ -453,14 +450,13 @@ def test_a_submit_takes_effect_after_the_delay_and_tells_the_board(tmp_path):
     # The others' next call opens with the board notice, which counts the system's post.
     assert by_agent(rec, "a02")[1]["added"] == [("notice", "[Since your last call] the board changed: system 1 new "
                                                            "of 1.")]
-    # a02's submit hands in nothing: refused and recorded. It never ran, so its round holds no call that ran: idle,
-    # which uses one up.
+    # a02's submit hands in nothing: refused and recorded. Its round uses one up like every round.
     already = "a01 already handed in the team's work in round 1. The run ends after round 3."
     assert outcomes(sample, "submit") == [("submit", "Handed in. You take no more turns. The run ends after round 3.",
                                            None), ("submit", "", already)]
     assert sample.store.get("TeamSubmission:refused") == [{"agent": "a02", "round": 2, "reason": already}]
-    assert [e["charge"] for e in store(sample, "timeline") if e["agent"] == "a02"] == ["work", "idle", "work"]
-    assert store(sample, "rounds_used") == {"a01": 0, "a02": 3, "a03": 3}
+    assert [e["ending"] for e in store(sample, "timeline") if e["agent"] == "a02"] == [None, None, None]
+    assert store(sample, "rounds_used") == {"a01": 1, "a02": 3, "a03": 3}
 
 
 def test_a_submit_in_sequence_lets_the_round_finish(tmp_path):
@@ -483,7 +479,7 @@ def test_a_second_submit_is_refused(tmp_path):
     assert refused["agent"] != first and refused["round"] == 1
     assert refused["reason"] == f"{first} already handed in the team's work in round 1. The run ends after round 1."
     # The refused call used up its round.
-    assert store(sample, "rounds_used") == {first: 0, refused["agent"]: 1, "a03": 1}
+    assert store(sample, "rounds_used") == {first: 1, refused["agent"]: 1, "a03": 1}
 
 
 async def slow_guard(agent: str) -> None:
@@ -504,35 +500,33 @@ def test_of_two_concurrent_submits_one_goes_through(tmp_path):
     [refused] = sample.store.get("TeamSubmission:refused")
     assert refused == {"agent": other, "round": 1, "reason": f"{first} already handed in the team's work in round 1. "
                                                              "The run ends after round 1."}
-    assert {e["agent"]: e["charge"] for e in store(sample, "timeline")} == {first: "submit", other: "idle",
-                                                                            "a03": "work"}
+    assert {e["agent"]: e["ending"] for e in store(sample, "timeline")} == {first: "submit", other: None,
+                                                                            "a03": None}
 
 
 def test_a_submit_never_promises_a_round_the_plan_lacks(tmp_path):
-    """A submit in the plan's last round ends the run after that round, and the notice and the answer say so. Rounds
-    of reads alone use up none of the agents' two, so they reach the plan's fourth round."""
+    """A submit in the plan's last round ends the run after that round, and the notice and the answer say so."""
     config = pull(rounds=2, mode="shared_task", concurrent_rounds=False, turn_order="round_robin")
-    assert config.submit_delay_rounds == 2 and config.plan_rounds == 4
-    sample, _ = run(config, {"a01": [read(), read(), read(), submit("late")], "a02": [read()], "a03": [read()]},
-                    tmp_path)
-    assert sample.store.get("TeamSubmission:ends_after_round") == 4 and store(sample, "halted_after_round") == 4
+    assert config.submit_delay_rounds == 2 and config.rounds == 2
+    sample, _ = run(config, {"a01": [read(), submit("late")], "a02": [read()], "a03": [read()]}, tmp_path)
+    assert sample.store.get("TeamSubmission:ends_after_round") == 2 and store(sample, "halted_after_round") == 2
     assert [m["content"] for m in sample.store.get("CommunicationState:messages")] == [
-        "a01 handed in the team's work in round 4. The run ends after round 4."]
-    assert outcomes(sample, "submit") == [("submit", "Handed in. You take no more turns. The run ends after round 4.",
+        "a01 handed in the team's work in round 2. The run ends after round 2."]
+    assert outcomes(sample, "submit") == [("submit", "Handed in. You take no more turns. The run ends after round 2.",
                                            None)]
 
 
-def test_a_hand_in_round_is_never_charged(tmp_path):
-    """The round whose submit went through is "submit" by the store's record, even when the same reply submits again:
-    the round's gate refuses that call, since the caller's turns have ended, so running out of rounds never ends the
-    agent that handed in."""
+def test_a_hand_in_round_ends_its_agent_by_submit(tmp_path):
+    """The round whose submit went through has ending "submit" by the store's record, even when the same reply submits
+    again: the round's gate refuses that call, since the caller's turns have ended. The round uses one up, and the
+    hand-in, not running out of rounds, ends the agent."""
     config = sequential(rounds=1, calls_per_round=2)
     scripts = {"a01": [calls(("submit", {"answer": "x"}), ("submit", {"answer": "y"}))], "a02": [do("B")],
                "a03": [do("C")]}
     sample, _ = run(config, scripts, tmp_path)
-    assert [(e["agent"], e["charge"]) for e in store(sample, "timeline")] == [("a01", "submit"), ("a02", "work"),
-                                                                             ("a03", "work")]
-    assert store(sample, "rounds_used") == {"a01": 0, "a02": 1, "a03": 1}
+    assert [(e["agent"], e["ending"]) for e in store(sample, "timeline")] == [("a01", "submit"), ("a02", None),
+                                                                             ("a03", None)]
+    assert store(sample, "rounds_used") == {"a01": 1, "a02": 1, "a03": 1}
     assert store(sample, "ended") == {"a01": "submit", "a02": "rounds", "a03": "rounds"}
     assert sample.store.get("TeamSubmission:refused") == []
     assert outcomes(sample, "submit")[1] == ("submit", "", load_prompts()["round"]["ended"])
@@ -540,7 +534,7 @@ def test_a_hand_in_round_is_never_charged(tmp_path):
 
 def test_a_submit_with_nothing_to_grade_is_refused_and_charged(tmp_path):
     """The guard (Benchmark.gradable) refuses a submit until the deliverable exists: the call is a ToolError naming
-    what is missing, it is recorded with its round, and its round, which holds no call that ran, uses one up as idle.
+    what is missing, it is recorded with its round, and its round uses one up like every round.
     A guard that raises refuses too."""
     async def missing(agent: str) -> str | None:
         shipped_ = any(e["item"] == "ship" for e in store_as(WorkLog).executed)
@@ -555,7 +549,8 @@ def test_a_submit_with_nothing_to_grade_is_refused_and_charged(tmp_path):
                                                      "round 3.", None)]
     assert sample.store.get("TeamSubmission:refused") == [{"agent": "a01", "round": 1, "reason": early}]
     assert (sample.store.get("TeamSubmission:agent"), sample.store.get("TeamSubmission:round")) == ("a01", 3)
-    assert [e["charge"] for e in store(sample, "timeline") if e["agent"] == "a01"] == ["idle", "work", "submit"]
+    assert [(e["ending"], e["used"]) for e in store(sample, "timeline") if e["agent"] == "a01"] == [
+        (None, 1), (None, 2), ("submit", 3)]
     assert store(sample, "halted_after_round") == 3 and step_ids(sample, "a03")[-1] == "r3-a03"
 
     async def broken(agent: str) -> str | None:
@@ -585,7 +580,7 @@ def test_a_solo_task_submit_ends_only_its_agent(tmp_path):
     assert sample.store.get("TeamSubmission:refused") == []
     infos = tagged_infos(sample, rules.TEAM_SUBMIT_TAG)
     assert [(i["agent"], i["round"], i["kind"]) for i in infos] == [("a01", 2, "solo")]
-    assert [e["charge"] for e in store(sample, "timeline") if e["agent"] == "a01"] == ["work", "submit"]
+    assert [e["ending"] for e in store(sample, "timeline") if e["agent"] == "a01"] == [None, "submit"]
     assert outcomes(sample, "submit") == [
         ("submit", "Handed in. You take no more turns; your teammates continue.", None),
         ("submit", "", load_prompts()["round"]["ended"])]
@@ -597,5 +592,5 @@ def test_a_solo_task_hand_in_leaves_its_rounds_to_nobody(tmp_path):
     """An agent's own hand-in gives its teammates no extra rounds."""
     config = pull(rounds=3, mode="solo_task")
     sample, _ = run(config, {"a01": [submit("mine")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
-    assert store(sample, "rounds_used") == {"a01": 0, "a02": 3, "a03": 3}
+    assert store(sample, "rounds_used") == {"a01": 1, "a02": 3, "a03": 3}
     assert step_ids(sample, "a02") == ["r1", "r2", "r3"]

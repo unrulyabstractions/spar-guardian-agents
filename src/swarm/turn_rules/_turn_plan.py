@@ -1,6 +1,6 @@
 """The written plan of rounds and the TurnState a sample starts with.
 
-schedule writes config.plan_rounds rounds over the agents whose window holds each round. A round is one concurrent
+schedule writes config.rounds rounds (R) over the agents whose window holds each round. A round is one concurrent
 step or one single-agent step per agent, and an agent's part of it one ORBIT activation of up to calls_per_round tool
 calls, which turn_activation.ends_round ends. The rules_setup solver writes the initial TurnState, sets the sample's
 Live record and, under stop_after_delivery, writes the Delivered record and sets the sample's delivery predicate.
@@ -35,14 +35,14 @@ def concurrent(config: SwarmConfig, agents: list[str]) -> bool:
 
 
 def plan_steps(config: SwarmConfig, agents: list[str], roles: dict[str, str] | None = None) -> list[dict[str, Any]]:
-    """The written plan's steps: config.plan_rounds rounds over the agents whose window holds the round.
+    """The written plan's steps: config.rounds rounds over the agents whose window holds the round.
 
     A round is one concurrent step `r<r>` (concurrent_rounds) or one single-agent step `r<r>-<agent>` per agent.
     after_activation removes an agent's steps once it has ended."""
     steps: list[dict[str, Any]] = []
     held = windows(config, agents, roles)
     together = concurrent(config, agents)
-    for round_number in range(1, config.plan_rounds + 1):
+    for round_number in range(1, config.rounds + 1):
         eligible = [agent for agent in round_order(agents, config.turn_order, config.seed, round_number)
                     if held[agent].contains(round_number)]
         if together:
@@ -63,14 +63,14 @@ def schedule(config: SwarmConfig, agents: list[str], roles: dict[str, str] | Non
 def initial_state(config: SwarmConfig, agents: list[str], roles: dict[str, str] | None = None,
                   time_limit_s: int | None = None) -> dict:
     """The TurnState fields a sample starts with: R and N (rounds, calls_per_round), T (round_time_s), the plan's
-    rounds (plan_rounds) and the agents' time limit; entry_rounds come from the written plan
+    rounds (R) and the agents' time limit; entry_rounds come from the written plan
     (_turn_presence.entry_rounds)."""
     return {"agents": list(agents), "workers": [a for a in agents if role_of(roles, a) == "worker"],
             "round_budget": config.rounds, "calls_per_round": config.calls_per_round,
             "turn_order": config.turn_order, "seed": config.seed,
             "concurrent": concurrent(config, agents), "max_concurrency": config.max_concurrency,
             "reads_per_turn": config.reads_per_turn, "posts_per_turn": config.posts_per_turn,
-            "rounds": config.plan_rounds, "time_limit_s": time_limit_s or None,
+            "rounds": config.rounds, "time_limit_s": time_limit_s or None,
             "round_time_s": config.round_time_s,
             "windows": {a: [w.start, w.end] for a, w in windows(config, agents, roles).items()},
             "entry_rounds": entry_rounds(plan_steps(config, agents, roles))}

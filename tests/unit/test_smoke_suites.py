@@ -198,7 +198,7 @@ def test_a_scenario_runs_exports_and_reads_back(tmp_path, monkeypatch):
     assert_ok(log)
     assert [(r["agent"], r["step"]) for r in recorder] == [("a01", 0), ("a01", 1)]
     # The second round opens with its line after the first round's tool result.
-    assert recorder[1]["messages"][-2].role == "tool" and recorder[1]["messages"][-1].text == "Round 2 of 2."
+    assert recorder[1]["messages"][-2].role == "tool" and recorder[1]["messages"][-1].text.startswith("Round 2 of 2. ")
     assert "work" in recorder[0]["tools"]
     assert [name for name, _ in tool_calls_of(load_transcript(records[0]))] == ["work", "submit"]
     assert results_by_agent(records)["a01"][0] == "a01 worked on x"
@@ -453,9 +453,9 @@ def test_assert_ok_gives_the_sample_of_a_clean_eval():
 
 
 def test_the_timeline_and_the_halts_of_a_sample():
-    timeline = [{"agent": "a01", "step": "r1", "tools": ["work"], "charge": "work"},
-                {"agent": "a02", "step": "r1", "tools": [], "charge": "free"},
-                {"agent": "a01", "step": "r2", "tools": ["submit"], "charge": "submit"}]
+    timeline = [{"agent": "a01", "step": "r1", "tools": ["work"], "ending": None},
+                {"agent": "a02", "step": "r1", "tools": [], "ending": None},
+                {"agent": "a01", "step": "r2", "tools": ["submit"], "ending": "submit"}]
     events = [SimpleNamespace(event="info", data={HALT_TAG: {"round": 3}}), SimpleNamespace(event="info", data="text"),
               SimpleNamespace(event="model", data=None)]
     sample = SimpleNamespace(store={"TurnState:timeline": timeline}, events=events)

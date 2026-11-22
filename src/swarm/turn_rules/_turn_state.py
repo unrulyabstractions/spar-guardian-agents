@@ -41,8 +41,8 @@ ALERT_TOOL = "alert_humans"           # the influencers' alert (src/swarm/submit
 ALERT = "alert"                       # the TurnState.ended reason of alert_humans
 ALERT_TAG = "swarm_alert"             # info event of an alert
 PRESENCE_TAG = "swarm_presence"       # a presence line's metadata key, and the info events of entries and exits
-ROUND_TAG = "swarm_round"             # a round line's metadata key ("Round 3 of 30."), and its info event
-END_ROUND = "end_round"               # ends the caller's round; never counts (src/swarm/end_round.py)
+ROUND_TAG = "swarm_round"             # a round line's metadata key ("Round 3 of 30. ..."), and its info event
+END_ROUND = "end_round"               # ends the caller's round; never counts toward N (src/swarm/end_round.py)
 JOBS_STORE = "command_jobs"           # sample store: {job id: record} of the command jobs (src/sandbox/command_jobs.py)
 SYSTEM_SENDER = "system"                  # the sender of the board's notice of the team's hand-in
 ORBIT_SUBMITTED = "submitted"   # TurnState.ended of ORBIT's own submit, in logs made before submit and stop_working
@@ -51,32 +51,30 @@ OBSERVATIONS_TOOL = "get_peer_observations"
 OVERSIGHT_TOOLS = (ACTIONS_TOOL, OBSERVATIONS_TOOL)
 PEER_SHELL_TOOL = "peer_shell"                           # theirs under SwarmConfig.peer_shell (src/sandbox/)
 CHECK_ROUNDS = 2                                         # a regulator's first rounds, for its check of each teammate
-# The board calls: they count toward a round's calls and use up none of the agent's rounds. peer_shell runs commands,
-# so it counts like shell.
-FREE_TOOLS = (*BOARD_TOOLS, *OVERSIGHT_TOOLS)
 CHANNEL_TOOLS = frozenset({"channel_post", "channel_read", "channel_list"})   # ORBIT's, withheld from the provider
 # The TurnState count each board action kind goes to.
 KIND_FIELDS = {"check": "checks", "read": "reads", "post": "posts", "oversight": "oversight"}
 
 
 class Refused(ToolError):
-    """A call our rules refused: it never ran, so it makes no round use one up (turn_activation.round_charge), and
-    its timeline entry says refused. The round's gate raises it (_turn_rounds: past N, after end_round, after the
-    agent's turns ended), and so do the tools' own rules: the board's per-round budgets, a submit the guard refuses or
-    one made after the hand-in, a second alert, a peer tool asked about a teammate that has not entered."""
+    """A call our rules refused: it never ran, and its timeline entry says refused. The round's gate raises it
+    (_turn_rounds: past N, after end_round, after the agent's turns ended), and so do the tools' own rules: the
+    board's per-round budgets, a submit the guard refuses or one made after the hand-in, a second alert, a peer tool
+    asked about a teammate that has not entered."""
 
 
 class TurnState(StoreModel):
     """Per-sample turn bookkeeping, saved in the eval log. Dicts are keyed by agent name.
 
-    An agent's round is one activation of up to calls_per_round tool calls. A completed round uses up one of the
-    agent's round_budget (rounds_used, charge "work" or "idle"), none (board_rounds, charge "board": every call it made
-    was a board call, FREE_TOOLS) or ends the agent (charge "submit", "stop" or "alert": its ending tool went
-    through). timeline holds one entry per round: its calls in order, each with its time, and why the round ended.
+    An agent's round is one activation of up to calls_per_round tool calls. Every completed round uses up one of the
+    agent's round_budget (rounds_used), whatever it held; ending says when its ending tool went through (submit, stop,
+    alert). timeline holds one entry per round: its calls in order, each with its time, and why the round ended.
     checks, reads and posts count the board tools; oversight counts an influencer's peer-tool calls about a teammate.
 
     A log made before 2026-11-21 holds the steps of the old rules in place of rounds: cap, pooled, free_caps,
-    turn_budget, work_steps and free_steps, with one timeline entry per step; the readers keep reading them."""
+    turn_budget, work_steps and free_steps, with one timeline entry per step. A log made before 2026-11-22 holds
+    board_rounds, the rounds of board calls alone that used up none, and each round's charge and own count (n); the
+    readers keep reading them."""
 
     agents: list[str] = Field(default_factory=list)
     workers: list[str] = Field(default_factory=list)        # the agents of role worker, every agent without roles
@@ -88,14 +86,13 @@ class TurnState(StoreModel):
     max_concurrency: int = 1
     reads_per_turn: int | None = None                       # posts board_read may return per agent per round
     posts_per_turn: int | None = None                       # board_post calls per agent per round
-    rounds: int = 0                                         # the plan's rounds (SwarmConfig.plan_rounds)
+    rounds: int = 0                                         # the plan's rounds: R (SwarmConfig.rounds)
     time_limit_s: int | None = None                         # the agents' time limit; a round ends once it passes
     round_time_s: int | None = None                         # T (SwarmConfig.round_time_s), 0 no clock; None before it
     started_at: float | None = None                         # UTC seconds of the first round's start
     windows: dict[str, list] = Field(default_factory=dict)      # [start, end] rounds per agent; end None is open
-    activations: dict[str, int] = Field(default_factory=dict)   # completed rounds, board rounds included
+    activations: dict[str, int] = Field(default_factory=dict)   # completed rounds
     rounds_used: dict[str, int] = Field(default_factory=dict)   # rounds used up, against round_budget
-    board_rounds: dict[str, int] = Field(default_factory=dict)  # rounds of board calls alone, which use up none
     model_calls: dict[str, int] = Field(default_factory=dict)   # the agent's model calls so far
     checks: dict[str, int] = Field(default_factory=dict)        # board_status calls
     reads: dict[str, int] = Field(default_factory=dict)         # board_read calls

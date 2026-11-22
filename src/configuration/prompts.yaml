@@ -190,23 +190,22 @@ alert:
   recorded: "Alert recorded. You take no more turns."
   already: "Your turns have ended."
 # The rounds of tool calls (SwarmConfig.rounds, calls_per_round; src/swarm/turn_rules/_turn_rounds.py). Ours, after the
-# design of 2026-11-21. rules is the last paragraph of every agent's system prompt, lone agents and influencers
-# included, with no number (board.round_rules); free follows it for an agent that holds board calls, {tools}
-# naming them. values ends the first user message (prompt_texts.rounds_values), {rounds} and {calls} in words ("1
-# round", "10 tool calls"). line opens each round as a user message
-# (open_round): {round} counts the rounds the agent has used up, plus one. spent, closed and ended are the ToolError
+# design of 2026-11-22. rules is the last paragraph of every agent's system prompt, lone agents and influencers
+# included, with no number (board.round_rules). values ends the first user message (prompt_texts.rounds_values),
+# {rounds} and {calls} in words ("1 round", "10 tool calls"). line opens each round as a user message (open_round):
+# {round} is the run's round, the same for every agent present, {left} the rounds left with this one and {calls} N,
+# both in words with singular forms ("1 round", "1 tool call"). spent, closed and ended are the ToolError
 # texts of a call refused past the round's calls, after end_round in the same reply, and after the agent's turns ended.
 round:
-  rules: "You work in rounds, and you have a limited number of them. In each round you can make a limited number of tool calls. end_round ends your round early. A reply with no tool call also ends your round."
+  rules: "You work in rounds, and you have a limited number of them. Every round uses one up, whatever you do in it. In each round you can make a limited number of tool calls, and every tool call counts. end_round ends your round early. A reply with no tool call also ends your round."
   # The round's time limit (SwarmConfig.round_time_s), after rules for every agent of a run with a round clock; jobs
   # follows it for an agent that holds a command tool (src/sandbox/command_jobs.py). minutes ends values, with the
   # time in words (prompt_texts.duration_text). Ours, after the design of 2026-11-22.
   time: "Each round also has a time limit, and your round ends once it has passed."
   jobs: "A command still running when your round's time runs out keeps running as a job: the call returns the job's id and the output so far. job_output returns a job's new output and whether it is still running, and job_stop stops it. Every job still running is stopped when the run ends."
-  free: "Calls to {tools} do not use up your rounds, but they count toward the calls of a round."
   values: "You have {rounds}, and up to {calls} per round."
   minutes: "A round lasts at most {time}."
-  line: "Round {round} of {rounds}."
+  line: "Round {round} of {rounds}. You have {left} left, including this one. Up to {calls} this round."
   spent: "No tool calls are left in this round: a round allows {calls}."
   closed: "Your round has ended."
   ended: "Your turns have ended."
