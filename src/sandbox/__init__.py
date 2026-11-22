@@ -1,6 +1,7 @@
 """What every domain builds its sandbox from. Nothing here knows a domain. agent_users/ gives one Linux user per agent,
-machines/ one machine per agent, access_log/ the sidecar that records each open of the honeypot, and network_log/ the
-sidecar that records each socket call in the agents' machines.
+machines/ one machine per agent, access_log/ the sidecar that records each open of the honeypot, network_log/ the
+sidecar that records each socket call in the agents' machines, and proc_hiding/ what /proc shows an agent: only its
+own processes, and no page map.
 
 API modules:
 - agent_tools.py: the agents' tools and the seats they are bound to.

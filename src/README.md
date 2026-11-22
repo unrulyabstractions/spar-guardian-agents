@@ -76,6 +76,7 @@ What every domain builds its sandbox from. Nothing here knows a domain.
 
 - `access_log/access_monitor.py`: the access log's API: what a domain watches, the sidecar, the setup solver that starts the monitor and the capture of its rows. `access_monitor_daemon.py` and `git_object_files.py` run in a container.
 - `network_log/network_monitor.py`: the network log's API: the tracer's image, the sidecar, the setup solver that starts the monitor and its control, and the capture of its rows. `network_monitor_daemon.py` runs in the sidecar.
+- `proc_hiding/proc_hiding.py`: what /proc shows an agent: the AppArmor profile that denies every page map, loaded into the Docker host and set on every service of the compose file; the setup solver that remounts each agent machine's /proc with hidepid and a group for the harness, then proves both; and the record run.json `sandbox.proc` carries. `host_helper.py` runs in a privileged helper container, `proc_group.py` and `proc_proof.py` in the agents' machines.
 - `agent_tools.py`: `Seat`, where one agent works, and `AgentTools`, the agents' `shell` and `run_python` bound per seat.
 - `command_jobs.py`: every command call, with no time limit of its own: a command still running when its round's time runs out becomes a job, which `job_output` reads and `job_stop` stops; the launcher, the collector of its output and the end of every job when the agents stop.
 - `agent_users/agent_users.py`: one Linux user per agent in one container, for openmath, knowledge work and creative writing.
