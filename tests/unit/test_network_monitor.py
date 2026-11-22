@@ -3,12 +3,14 @@ event and the socket tables, the control's rows, the sidecar's mounts and the se
 from __future__ import annotations
 
 import ast
+import asyncio
 import errno
 import json
 import re
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -47,6 +49,7 @@ def fake_monitor(**fields) -> tuple[daemon.Monitor, Lines]:
     m.log, m.poll_s, m.nonces = daemon.RowLog(lines, 100), 0.25, {"start": b"n0nce"}
     m.machines = {"k7q2m": {"container": "c1", "pid": 10, "down": False, "netns": NS}}
     m.netns, m.execs, m.acked, m.known, m.walked = {NS: ["k7q2m"]}, {}, set(), {}, {}
+    m.control_ops = {}
     who = fields.get("who", {"uid": 1001, "exe": "/usr/bin/python3", "cmd": "python3 -c x", "chain": [], "root": {}})
     m.who = lambda pid, parents=(): dict(who) if pid not in m.execs else {"gone": True, "exe": m.execs[pid],
                                                                          "exe_from": "exec"}
@@ -352,7 +355,7 @@ def test_a_read_that_finds_a_connect_out_of_syn_sent_writes_a_tcp_state_row():
     assert daemon.TCP_STATES[int("02", 16)] == "SYN_SENT"
 
 
-def test_a_controls_row_sends_it_the_signal_once(monkeypatch):
+def test_a_controls_row_names_it_and_sends_no_signal_itself(monkeypatch):
     m, _ = fake_monitor()
     del m.who
     sent = []
@@ -362,7 +365,38 @@ def test_a_controls_row_sends_it_the_signal_once(monkeypatch):
     monkeypatch.setattr(daemon, "link", lambda path: None)
     monkeypatch.setattr(daemon.os, "kill", lambda pid, sig: sent.append((pid, sig)))
     assert m.who(55)["control"] == "start" and m.who(55)["control"] == "start"
+    assert sent == []
+
+
+def test_a_control_gets_its_signal_once_its_connect_and_its_accept_are_written(monkeypatch):
+    """On 2026-11-22 the signal came on the control's bind row: the control exited while the daemon, 2 to 5 ms behind
+    at 15 live runs, had yet to read its connect and accept, which then named a gone process without the nonce. 15 runs
+    of ian_seed_prototyping_0 read broken from it, 8 of them at setup."""
+    control = {"uid": 0, "exe": "/usr/bin/python3", "cmd": "python3 -I -c x n0nce 30", "chain": [], "root": {},
+               "control": "start"}
+    m, lines = fake_monitor(who=control)
+    sent = []
+    monkeypatch.setattr(daemon.os, "kill", lambda pid, sig: sent.append((pid, sig)))
+    for op in ("bind", "listen", "connect"):
+        m.write_net({"op": op, "netns": NS}, 55)
+    assert sent == []
+    m.write_net({"op": "accept", "netns": NS}, 55)
     assert sent == [(55, daemon.signal.SIGUSR1)]
+    m.write_net({"op": "close", "netns": NS}, 55)
+    m.write_net({"op": "accept", "netns": NS}, 55)
+    assert sent == [(55, daemon.signal.SIGUSR1)]
+    assert [row["op"] for row in lines.rows()] == ["bind", "listen", "connect", "accept", "close", "accept"]
+    m.write_net({"op": "accept", "netns": NS}, 56)       # another control: its accept alone is not enough
+    assert sent == [(55, daemon.signal.SIGUSR1)]
+
+
+def test_an_ordinary_processs_rows_send_nothing(monkeypatch):
+    m, _ = fake_monitor()
+    sent = []
+    monkeypatch.setattr(daemon.os, "kill", lambda pid, sig: sent.append((pid, sig)))
+    for op in ("connect", "accept"):
+        m.write_net({"op": op, "netns": NS}, 77)
+    assert sent == [] and m.control_ops == {}
 
 
 # --------------------------------------------------------------------------
@@ -480,3 +514,169 @@ def test_the_package_ships_both_files_the_sidecar_needs():
 def test_a_smoke_reads_a_procnet_log_as_all_the_host_gives(block, worked):
     from tests.smoke.common import network_worked
     assert network_worked(block) is worked
+
+
+# --------------------------------------------------------------------------
+# the controls' tries and their reasons
+# --------------------------------------------------------------------------
+class Sidecar:
+    """The network sidecar: HEALTH answers `alive` while the daemon runs, read_file gives the log's rows."""
+
+    def __init__(self, rows: list[dict], alive: bool = True, health: str = "free: 52 KiB on /") -> None:
+        self.rows, self.alive, self.health, self.commands = rows, alive, health, []
+
+    async def exec(self, command, **_):
+        self.commands.append(command)
+        if command[2] == monitor.HEALTH:
+            out = ("alive" if self.alive else "dead") + "\n" + self.health + "\n"
+            return SimpleNamespace(success=True, returncode=0, stdout=out, stderr="")
+        if command[2] == monitor.STOP:
+            if self.alive:              # a live daemon writes its stopped row; a dead one writes nothing
+                self.rows.append({"row": "stopped", "seq": 99})
+            self.alive = False
+        return SimpleNamespace(success=True, returncode=0, stdout="", stderr="")
+
+    async def read_file(self, path):
+        assert path == monitor.LOG_PATH
+        return "".join(json.dumps(row) + "\n" for row in self.rows)
+
+
+def controls_on(monkeypatch, sidecar: Sidecar, written: dict[str, list[bool]]) -> list[tuple[str, str]]:
+    """monitor.control replaced: each call on a machine pops whether this try's rows reach the log (and the daemon
+    answers). Returns the calls made."""
+    calls = []
+
+    async def control(machine, nonce):
+        name = "start" if nonce == "s" else "end"
+        calls.append((machine, name))
+        wrote = written[machine].pop(0)
+        if wrote:
+            sidecar.rows += [net("connect", machine, name), net("accept", machine, name)]
+        else:                       # the race of 2026-11-22: the rows are there, named through a parent
+            sidecar.rows += [net("connect", machine), net("accept", machine)]
+        return {"port": 1, "acked": wrote}
+
+    monkeypatch.setattr(monitor, "control", control)
+    monkeypatch.setattr(monitor, "sandbox", lambda name: sidecar)
+    return calls
+
+
+RECORD = {"control_machines": ["a", "b"], "nonces": {"start": "s", "end": "e"}, "pid": 4242}
+
+
+def test_a_control_whose_rows_are_missing_is_tried_again_on_that_machine_alone(monkeypatch):
+    sidecar = Sidecar([{"row": "ready", "seq": 1}])
+    calls = controls_on(monkeypatch, sidecar, {"a": [True], "b": [False, True]})
+    missing, why = asyncio.run(monitor.run_controls(sidecar, RECORD, "start"))
+    assert missing == [] and calls == [("a", "start"), ("b", "start"), ("b", "start")]
+    assert why == [f"try 1 on b: no connect and accept row of the control in {monitor.CONTROL_HOLD_S} s"]
+
+
+def test_a_control_that_never_leaves_its_rows_stays_missing_after_every_try(monkeypatch):
+    sidecar = Sidecar([{"row": "ready", "seq": 1}])
+    controls_on(monkeypatch, sidecar, {"a": [True], "b": [False] * monitor.CONTROL_TRIES})
+    missing, why = asyncio.run(monitor.run_controls(sidecar, RECORD, "start"))
+    assert missing == ["b:accept", "b:connect"] and len(why) == monitor.CONTROL_TRIES
+
+
+def test_a_dead_monitor_is_tried_no_more_and_says_why(monkeypatch):
+    sidecar = Sidecar([{"row": "ready", "seq": 1}], alive=False,
+                      health="stderr: OSError: [Errno 28] No space left on device\nfree: 0 KiB on /")
+    calls = controls_on(monkeypatch, sidecar, {"a": [], "b": []})
+    missing, why = asyncio.run(monitor.run_controls(sidecar, RECORD, "end"))
+    assert calls == [] and missing == ["a:accept", "a:connect", "b:accept", "b:connect"]
+    assert why == ["try 1: the monitor (pid 4242) is not running: stderr: OSError: [Errno 28] No space left on "
+                   "device free: 0 KiB on /"]
+
+
+def test_a_control_that_raises_is_a_reason_and_the_other_machines_still_run(monkeypatch):
+    sidecar = Sidecar([{"row": "ready", "seq": 1}])
+    controls_on(monkeypatch, sidecar, {"a": [True], "b": [True]})
+    real = monitor.control
+
+    async def flaky(machine, nonce, tries=[0]):
+        if machine == "a" and not tries[0]:
+            tries[0] += 1
+            raise RuntimeError("exec failed")
+        return await real(machine, nonce)
+
+    monkeypatch.setattr(monitor, "control", flaky)
+    missing, why = asyncio.run(monitor.run_controls(sidecar, RECORD, "start"))
+    assert missing == [] and why == ["try 1 on a: exec failed"]
+
+
+def test_the_capture_says_why_a_control_is_missing_and_why_no_stopped_row_came(monkeypatch):
+    """The four runs of 2026-11-22 whose daemon died with the disk full at 05:45 read broken with error null."""
+    sidecar = Sidecar([{"row": "ready", "seq": 1}], alive=False, health="free: 0 KiB on /")
+    controls_on(monkeypatch, sidecar, {"a": [], "b": []})
+    state = SimpleNamespace(store={monitor.STORE: dict(RECORD)})
+    state.store = Store(state.store)
+    asyncio.run(monitor.capture_network(state))
+    record = state.store.get(monitor.STORE)
+    assert "end control left no row for ['a:accept', 'a:connect', 'b:accept', 'b:connect']" in record["error"]
+    assert "not running: free: 0 KiB on /" in record["error"] and "no stopped row: free: 0 KiB on /" in record["error"]
+
+
+def test_a_capture_that_needed_a_second_try_keeps_its_reason_and_no_error(monkeypatch):
+    sidecar = Sidecar([{"row": "ready", "seq": 1}])
+    controls_on(monkeypatch, sidecar, {"a": [False, True], "b": [True]})
+    state = SimpleNamespace(store=Store({monitor.STORE: {**RECORD, "retried": {"start": ["x"]}}}))
+    asyncio.run(monitor.capture_network(state))
+    record = state.store.get(monitor.STORE)
+    assert record["error"] is None and record["rows"][-1]["row"] == "stopped"
+    assert record["retried"] == {"start": ["x"], "end": [
+        f"try 1 on a: no connect and accept row of the control in {monitor.CONTROL_HOLD_S} s"]}
+    assert monitor.uncontrolled(record["rows"], ["a", "b"], "end") == []
+
+
+def test_the_start_raises_with_every_reason(monkeypatch):
+    sidecar = Sidecar([{"row": "ready", "seq": 1}])
+    controls_on(monkeypatch, sidecar, {"a": [True], "b": [False] * monitor.CONTROL_TRIES})
+
+    async def no_containers():
+        return {"a": {"container": "ca", "pid": 1}, "b": {"container": "cb", "pid": 2}}
+
+    sidecar.exec_real = sidecar.exec
+
+    async def exec_(command, **kwargs):
+        if command[:2] == ["bash", "-c"] and command[2] == monitor.START:
+            return SimpleNamespace(success=True, returncode=0, stdout=json.dumps(
+                {"row": "ready", "pid": 4242, "method": "ebpf"}) + "\n", stderr="")
+        if command[0] == "sh":
+            return SimpleNamespace(success=True, returncode=0, stdout="", stderr="")
+        return await sidecar.exec_real(command, **kwargs)
+
+    async def write_file(path, text):
+        return None
+
+    sidecar.exec, sidecar.write_file = exec_, write_file
+    monkeypatch.setattr(monitor, "sample_containers", no_containers)
+    monkeypatch.setattr(monitor, "seat_record", lambda benchmark, state: [
+        {"machine": "a", "uid": 1000}, {"machine": "b", "uid": 1001}])
+    monkeypatch.setattr(monitor.secrets, "token_hex", lambda n: "s")
+    state = SimpleNamespace(store=Store({}))
+    with pytest.raises(RuntimeError, match=r"left no row for \['b:accept', 'b:connect'\]: try 1 on b: .*try 3 on b"):
+        asyncio.run(monitor.start_network_monitor(None)(state, None))
+
+
+class Store:
+    def __init__(self, data: dict) -> None:
+        self.data = data
+
+    def get(self, key, default=None):
+        return self.data.get(key, default)
+
+    def set(self, key, value) -> None:
+        self.data[key] = value
+
+
+def test_a_docker_failure_names_dockers_stderr(monkeypatch):
+    from src.sandbox import docker_images
+
+    def refused(command, **_):
+        return subprocess.CompletedProcess(command, 125, b"", b"docker: Error response from daemon: failed to create "
+                                           b"prepare snapshot dir: no space left on device.")
+    monkeypatch.setattr(docker_images.subprocess, "run", refused)
+    with pytest.raises(subprocess.CalledProcessError, match="exit status 125. docker said: .*no space left on device"):
+        docker_images.docker("run", "--rm", "x")
+    assert docker_images.docker("run", "x", check=False).returncode == 125

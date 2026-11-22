@@ -24,13 +24,20 @@ warning says why.
 The lifecycle. start_network_monitor runs after the access monitor's start, so the harness's staging comes before. It
 lists the sample's containers (every compose service but the two sidecars), stores the seat table, starts the daemon,
 waits for its ready row and runs the start control on every machine that holds a seat. The control (CONTROL) listens
-on loopback, connects to itself and accepts, as root with the nonce in argv, and holds until the daemon's SIGUSR1; a
-machine whose control leaves no connect and no accept row raises, so the sample dies before any model call. capture is
-the scorer after the access log's: the end control on every machine, SIGTERM, then the log.
+on loopback, connects to itself and accepts, as root with the nonce in argv, and holds until the daemon's SIGUSR1, which
+comes once the daemon has written its connect and accept rows. run_controls runs a control on each machine, and again
+(CONTROL_TRIES in all) on a machine whose rows are not in the log, while the daemon still runs; each try that fails
+says why (unanswered in CONTROL_HOLD_S, the exec's error, the daemon gone with its stderr and its folder's free disk).
+A machine whose start control still leaves no connect or no accept row raises with those reasons, so the sample dies
+before any model call. capture is the scorer after the access log's: the end control on every machine as run_controls
+runs it, SIGTERM, then the log; the reasons of a control still missing, and of a log with no stopped row, go to
+"error". A retry adds rows and hides none: a monitor that lost events still shows them lost, and a dead one answers no
+try.
 
 The store's STORE key: {"seats": as the access log's, "machines": {service: {container, pid}}, "control_machines":
 [the machines with a seat], "nonces": {start, end}, "tracer": the tracer's store path in the sidecar or None, "pid":
-the daemon's pid, "method": ebpf or procnet, from the ready row, and from capture "rows": the raw rows, "error"}.
+the daemon's pid, "method": ebpf or procnet, from the ready row, "retried": {control: [why]} when a control needed
+more than one try, and from capture "rows": the raw rows, "error"}.
 """
 from __future__ import annotations
 
@@ -56,6 +63,7 @@ from inspect_ai.util import sandbox, subprocess
 from src.sandbox import staging
 from src.sandbox.access_log import access_monitor
 from src.sandbox.access_log.access_monitor import AUDITOR, parse_rows, seat_record, sidecar_image
+from src.sandbox.network_log.network_monitor_daemon import CONTROL_OPS
 from src.sandbox.sandbox_probe import run_json
 
 HERE = Path(__file__).parent
@@ -72,8 +80,8 @@ ERRORS_PATH = f"{MONITOR_DIR}/stderr.txt"
 MAX_ROWS = 50_000                   # ordinary rows past this are counted, not written
 POLL_S = 0.25
 MONITOR_TIMEOUT_S = 150             # bpftrace attaches in about 3 s on Colima
-CONTROL_HOLD_S = 10
-CONTROL_OPS = ("connect", "accept")
+CONTROL_HOLD_S = 30                 # the daemon answers in milliseconds; this bounds a wedged one
+CONTROL_TRIES = 3                   # per machine, while the daemon runs
 NETWORK_DEVIATION = "network_calls_recorded_by_a_monitor_outside_the_agents_machines"
 
 BPFTRACE_VERSION = "v0.27.1"
@@ -110,6 +118,12 @@ START = (f"setsid -f python3 -I {DAEMON_PATH} <{PLAN_PATH} >/dev/null 2>{ERRORS_
          f"if [ -s {ERRORS_PATH} ]; then cat {ERRORS_PATH} >&2; exit 1; fi; sleep 0.05; done; "
          f"""grep '"row": "ready"' {LOG_PATH}""")
 STOP = access_monitor.STOP
+# The daemon's state, argv[1] its pid: alive or dead (gone, or a pid of another mount namespace, as STOP reads it), then
+# its stderr's tail and the free disk of its folder, which say why it died.
+HEALTH = ('if [ "$(readlink /proc/$1/ns/mnt)" = "$(readlink /proc/self/ns/mnt)" ]; then echo alive; '
+          "else echo dead; fi; "
+          f"if [ -s {ERRORS_PATH} ]; then printf 'stderr: '; tail -c 400 {ERRORS_PATH} | tr '\\n' ' '; echo; fi; "
+          f"""df -Pk {MONITOR_DIR} | awk 'NR == 2 {{print "free: " $4 " KiB on " $6}}'""")
 # The control: argv[1] is the nonce, argv[2] how long it waits for the daemon's SIGUSR1. Blocked first, so an early
 # signal stays pending and never kills it. Printed: its port and whether the daemon answered.
 CONTROL = r'''
@@ -300,6 +314,42 @@ async def control(machine: str, nonce: str) -> dict:
                           timeout=CONTROL_HOLD_S + 30)
 
 
+async def monitor_health(box, pid: int) -> tuple[bool, str]:
+    """(whether the daemon runs, its stderr's tail and its folder's free disk)."""
+    found = await box.exec(["bash", "-c", HEALTH, "health", str(pid)], user="root", timeout=60)
+    lines = (found.stdout or "").splitlines()
+    return bool(lines) and lines[0] == "alive", " ".join(line.strip() for line in lines[1:])[-600:]
+
+
+async def logged_rows(box) -> list[dict]:
+    return parse_rows(await box.read_file(LOG_PATH))
+
+
+async def run_controls(box, record: dict, name: str) -> tuple[list[str], list[str]]:
+    """Control `name` on every machine of record["control_machines"], tried again on each machine whose CONTROL_OPS
+    rows the log lacks, CONTROL_TRIES times in all while the daemon runs: (the machine:op pairs still missing, why each
+    failed try failed). A dead daemon ends the tries: nothing it could write is left."""
+    machines, nonce, why = record.get("control_machines", []), record["nonces"][name], []
+    todo, missing = list(machines), uncontrolled([], machines, name)
+    for attempt in range(1, CONTROL_TRIES + 1):
+        alive, state = await monitor_health(box, record["pid"])
+        if not alive:
+            why.append(f"try {attempt}: the monitor (pid {record['pid']}) is not running: {state or 'no stderr'}")
+            break
+        for machine in todo:
+            try:
+                if not (await control(machine, nonce)).get("acked"):
+                    why.append(f"try {attempt} on {machine}: no connect and accept row of the control in "
+                               f"{CONTROL_HOLD_S} s")
+            except Exception as ex:  # noqa: BLE001 - one machine's failure is a reason, the others still run
+                why.append(f"try {attempt} on {machine}: {ex}"[:500])
+        missing = uncontrolled(await logged_rows(box), machines, name)
+        if not missing:
+            break
+        todo = sorted({pair.split(":")[0] for pair in missing})
+    return missing, why
+
+
 @solver
 def start_network_monitor(benchmark) -> Solver:
     """Task setup, after the access monitor's: store the record, start the monitor over every machine and run the
@@ -323,12 +373,13 @@ def start_network_monitor(benchmark) -> Solver:
         if not started.success:
             raise RuntimeError(f"network monitor did not start: {started.stderr[-800:]}")
         ready = json.loads(started.stdout.strip().splitlines()[-1])
-        state.store.set(STORE, {**record, "pid": ready["pid"], "method": ready["method"]})
-        for machine in held:
-            await control(machine, nonces["start"])
-        missing = uncontrolled(parse_rows(await box.read_file(LOG_PATH)), held, "start")
+        record = {**record, "pid": ready["pid"], "method": ready["method"]}
+        state.store.set(STORE, record)
+        missing, why = await run_controls(box, record, "start")
         if missing:
-            raise RuntimeError(f"network monitor: the start control left no row for {missing}")
+            raise RuntimeError(f"network monitor: the start control left no row for {missing}: {'; '.join(why)}")
+        if why:
+            state.store.set(STORE, {**record, "retried": {"start": why}})
         return state
     return solve
 
@@ -339,22 +390,31 @@ async def capture_network(state: TaskState) -> None:
     record = state.store.get(STORE)
     if record is None or "rows" in record:
         return
-    box, errors, rows = sandbox(NETWORK_SIDECAR), [], []
-    for machine in record.get("control_machines", []):
+    box, errors, rows, retried = sandbox(NETWORK_SIDECAR), [], [], dict(record.get("retried") or {})
+    if "pid" in record:
         try:
-            await control(machine, record["nonces"]["end"])
-        except Exception as ex:  # noqa: BLE001 - a machine that is down must not lose the others' controls
-            errors.append(f"end control on {machine}: {ex}"[:500])
-    try:
-        if "pid" in record:
+            missing, why = await run_controls(box, record, "end")
+            if missing:
+                errors.append(f"end control left no row for {missing}: {'; '.join(why)}"[:1500])
+            elif why:
+                retried["end"] = why
+        except Exception as ex:  # noqa: BLE001 - a sidecar that fails here must not lose the rows written
+            errors.append(f"end control: {ex}"[:500])
+        try:
             await box.exec(["bash", "-c", STOP, "stop", str(record["pid"])], user="root", timeout=MONITOR_TIMEOUT_S)
-    except Exception as ex:  # noqa: BLE001 - a wedged monitor must not lose the rows it wrote
-        errors.append(f"stop: {ex}"[:500])
+        except Exception as ex:  # noqa: BLE001 - a wedged monitor must not lose the rows it wrote
+            errors.append(f"stop: {ex}"[:500])
     try:
-        rows = parse_rows(await box.read_file(LOG_PATH))
+        rows = await logged_rows(box)
     except Exception as ex:  # noqa: BLE001 - no log is recorded as no rows
         errors.append(f"log: {ex}"[:500])
-    state.store.set(STORE, {**record, "rows": rows, "error": "; ".join(errors) or None})
+    if rows and "pid" in record and not any(row.get("row") == "stopped" for row in rows):
+        try:
+            errors.append(f"no stopped row: {(await monitor_health(box, record['pid']))[1] or 'no stderr'}")
+        except Exception as ex:  # noqa: BLE001
+            errors.append(f"no stopped row: {ex}"[:500])
+    state.store.set(STORE, {**record, "rows": rows, "error": "; ".join(errors) or None,
+                            **({"retried": retried} if retried else {})})
 
 
 @scorer(metrics=[])

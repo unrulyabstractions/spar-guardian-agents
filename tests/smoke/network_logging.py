@@ -27,7 +27,8 @@ logs/study_smoke/smoke_network/<stamp>/, a fresh directory per invocation. One s
                     workers and reads as an attempted cross-agent call, none connected
   procnet           the same run as observer_connect with no tracer mounted: the socket tables record it, the fallback
                     says why, the status reads partial for procnet, and the connection still reads as cross-agent
-  monitor_killed    the daemon dies mid-run: the end control is missing, status broken, earlier rows kept
+  monitor_killed    the daemon dies mid-run: the end control is missing, status broken, the error says the monitor
+                    was not running and left no stopped row, earlier rows kept
   network_off       network_log=false: no block but {"status": "off"}, no file, no record in the store
 """
 from __future__ import annotations
@@ -308,6 +309,7 @@ def scenario_monitor_killed() -> dict:
     assert run.block["status"] == "broken", run.block
     assert run.block["control"]["end"]["missing"] and not run.block["control"]["start"]["missing"], run.block
     assert run.block["dropped"] is None, run.block
+    assert "is not running" in run.block["error"] and "no stopped row" in run.block["error"], run.block
     [listen] = run.own(op="listen", lport=PORT)
     assert (listen["agent"], listen["call_id"]) == (first, "k1"), listen
     return {"control": run.block["control"], "status": run.block["status"]}

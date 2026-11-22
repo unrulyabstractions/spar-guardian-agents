@@ -49,8 +49,10 @@ The rows, each a JSON object on one line with seq, t and row:
   stopped      after SIGTERM: rows seen, dropped, lost
 
 The control. The harness's control (network_monitor.CONTROL) listens on loopback, connects to itself and accepts, with
-the nonce in its argv, and waits for SIGUSR1. The daemon sends it once a row of that process names the nonce, so the
-control lives until its rows are written.
+the nonce in its argv, and waits for SIGUSR1. The daemon sends it once it has written a row of each of CONTROL_OPS of
+that process naming the nonce (Monitor.answer), so the control lives until those rows are written. A signal on its first
+row (the bind) let it exit while the daemon, a few ms behind under load, had yet to read its connect and accept: those
+rows then named a gone process through its parent, without the nonce, and the control read as missing.
 
 Agent-made text (comm, paths, argv) reaches the log only through json.dumps.
 """
@@ -88,6 +90,7 @@ TRACER_GLOB = "/nix/store/*-bpftrace/bin/bpftrace"
 WALKED_MAX = 50_000                   # the walks Monitor.walked keeps, oldest dropped first
 ATTACH_S = 60
 STOP_S = 15
+CONTROL_OPS = ("connect", "accept")   # the control's rows the daemon writes before it answers, and the log must hold
 FAMILIES = {1: "unix", 2: "inet", 10: "inet6"}
 TYPES = {1: "stream", 2: "dgram", 3: "raw", 5: "seqpacket"}
 # The kernel's events: name -> (op, which side holds the unix path)
@@ -442,6 +445,7 @@ class Monitor:
         self.execs: dict[int, str] = {}        # pid -> the file its last exec ran, from the trace
         self.walked: dict[int, tuple[list[str], dict]] = {}   # pid -> (chain, root) of its last walk (Monitor.walk)
         self.acked: set[int] = set()
+        self.control_ops: dict[int, set[str]] = {}     # a control's pid -> the CONTROL_OPS written of it
         self.known: dict[tuple[int, int], dict] = {}   # procnet: (netns, socket inode) -> its last row's fields
 
     @staticmethod
@@ -477,23 +481,17 @@ class Monitor:
         return None
 
     def who(self, pid: int | None, parents: list[int] = ()) -> dict:
-        """The process as the access log names an opener, read from /proc now. A row of the control names it, and the
-        control gets its SIGUSR1. A process that left first is named through the nearest of `parents` (the kernel's
-        parent and grandparent) still there: that ancestor's chain and root, with via its pid and the process's own
-        uid, cmd and cwd unknown; an ancestor gone too stands by its last walk (walked, from an earlier row or exec of
-        it), as does the process's own walk at its exec. A tool call's shell and its timeout leave as soon as the
-        command ends, often before the row is read. With none of these it is gone."""
+        """The process as the access log names an opener, read from /proc now. A row of the control names it (its
+        SIGUSR1 comes from answer, once its rows are written). A process that left first is named through the nearest of
+        `parents` (the kernel's parent and grandparent) still there: that ancestor's chain and root, with via its pid
+        and the process's own uid, cmd and cwd unknown; an ancestor gone too stands by its last walk (walked, from an
+        earlier row or exec of it), as does the process's own walk at its exec. A tool call's shell and its timeout
+        leave as soon as the command ends, often before the row is read. With none of these it is gone."""
         walked = self.walk(pid) if pid else None
         if walked:
             found, chain, root = walked
             args = argv(pid)
             control = next((name for name, nonce in self.nonces.items() if nonce in args), None)
-            if control and pid not in self.acked:
-                self.acked.add(pid)
-                try:
-                    os.kill(pid, signal.SIGUSR1)
-                except OSError:
-                    pass
             return {"uid": found["uid"], "exe": link(f"/proc/{pid}/exe"), "cwd": link(f"/proc/{pid}/cwd"),
                     "cmd": shell_words(args, CMD_CHARS), "chain": chain, "root": root,
                     **({"control": control} if control else {})}
@@ -518,10 +516,25 @@ class Monitor:
             if "uid" not in who:
                 who["uid"] = fields.get("kernel_uid")
             self.log.write("net", **{"pid": pid, **fields}, **who)
+            if who.get("control"):
+                self.answer(pid, fields.get("op"))
             return who
         except Exception as ex:  # noqa: BLE001 - one odd process must not void the run's log
             self.log.write("row_failed", pid=pid, error=repr(ex)[:300])
             return {"gone": True}
+
+    def answer(self, pid: int, op: str | None) -> None:
+        """A control's row of `op` is written: once each of CONTROL_OPS is, the control gets its SIGUSR1, once."""
+        if op in CONTROL_OPS:
+            self.control_ops.setdefault(pid, set()).add(op)
+        if pid in self.acked or not set(CONTROL_OPS) <= self.control_ops.get(pid, set()):
+            return
+        self.acked.add(pid)
+        self.control_ops.pop(pid, None)
+        try:
+            os.kill(pid, signal.SIGUSR1)
+        except OSError:
+            pass
 
     # ---------------------------------------------------------------- the tables
     def snapshot(self) -> dict[tuple[int, int], dict]:
