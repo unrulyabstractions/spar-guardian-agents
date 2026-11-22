@@ -10,6 +10,7 @@ import pytest
 
 from scripts import study_readme
 from src.configuration.settings import ROOT
+from src.measures.run_directory import FILES
 from tests.support.run_files import write_text
 
 RUNS = ROOT / "runs"
@@ -63,7 +64,7 @@ def test_a_readme_is_checked_only_against_data_older_than_it(tmp_path, monkeypat
         os.utime(top / "smoke_x", (300, 300))
         os.utime(top, (300, 300))
     assert study_readme.data_mtime(study) == 300
-    write_text(study / "smoke_x" / "20261122T000000Z" / "case" / "run.json", "{}")
+    write_text(study / "smoke_x" / "20261122T000000Z" / "case" / FILES["run.json"], "{}")
     write_text(tmp_path / "logs" / "study_x" / "smoke_x" / "20261122T000000Z" / "a.eval", "")
     assert study_readme.data_mtime(study) == 300                      # and its runs and logs are no data
 
