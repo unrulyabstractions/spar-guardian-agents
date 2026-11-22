@@ -888,7 +888,7 @@ def test_the_runs_table_has_one_cheating_cell_its_columns_in_order_and_no_alarm_
     index = (STATIC / "tv_view_index.js").read_text()
     body = index[index.index("  return [\n    { key: 'run'"):index.index("const GROUPS")]
     keys = re.findall(r"\{ key: '([a-z_]+)'", body)
-    assert keys == ["run", "workers", "seed_pack", "model", "influencers", "task", "rounds", "other"]
+    assert keys == ["run", "workers", "seed_pack", "model", "influencers", "task", "rounds", "ended_by", "other"]
     assert "influencerLabel" not in body
     assert body.index("key: 'task'") < body.index("d.order.map(team)") < body.index("d.order.map(influencers)") \
         < body.index("map(label)") < body.index("key: 'rounds'") < body.index("key: 'other'")

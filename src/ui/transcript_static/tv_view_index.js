@@ -99,6 +99,10 @@ const influencersCell = r => (r.influencer_conditioning.length
 /** A name that may break after each underscore (and at a space, unless the space is a no-break one). */
 const breakable = name => String(name).split('_').flatMap((part, i) => (i ? ['_', h('wbr'), part] : [part]));
 
+/** How a team's run ended (the index row's ended_by, src/measures/team_ladder.py ended_by), in the page's words. */
+const FINISH = { submit: 'submit', stop_working: 'all stopped', steps: 'rounds ran out', tokens: 'context ran out',
+  time: 'time limit', delivered: 'delivered', error: 'error', end: 'plan ended' };
+
 /** The runs table's columns, in the order the user set on 2026-11-19: the run, the workers' number, their model with
  * its conditioning, the influencers, the task, the team's three ladders, the influencers' three ladders, the
  * workers' mean judge labels, the rounds the run used (the most any agent used), and Other details last: the interest
@@ -148,6 +152,9 @@ function columns(d) {
     ...Object.keys(about.labels).map(label),
     { key: 'rounds', label: 'Rounds', title: 'Most rounds any agent used', sort: r => (r.rounds == null ? -1 : r.rounds),
       cell: r => (r.rounds == null ? none() : String(r.rounds)), empty: r => r.rounds == null },
+    { key: 'ended_by', label: 'Finish', title: 'How the run ended', sort: r => r.ended_by || '',
+      cell: r => (r.ended_by ? h('span', { class: 'small', title: r.ended_by }, FINISH[r.ended_by] || r.ended_by) : none()),
+      empty: r => !r.ended_by },
     { key: 'other', label: 'Other details', title: 'Interest rank, then collection', sort: r => r.interest.rank,
       cell: r => h('div', { class: 'idx-other' },
         h('span', { class: 'sc-chip interest-chip', title: `interest: ${r.interest.why}` }, String(r.interest.rank)),
@@ -162,7 +169,7 @@ const GROUPS = { team: 'Team', labels: 'Judge labels', influencers: 'Influencers
 // Columns whose text wraps.
 const WRAP = new Set(['run', 'task']);
 // Columns whose cells sit centred: the counts, the ladders, the scores and Other details.
-const CENTER = k => k.startsWith('lv_') || ['workers', 'seed_pack', 'disclosure', 'manipulation', 'rounds', 'other'].includes(k);
+const CENTER = k => k.startsWith('lv_') || ['workers', 'seed_pack', 'disclosure', 'manipulation', 'rounds', 'ended_by', 'other'].includes(k);
 
 /** The line under the legend naming the collapsed columns, by band, a band's name before its columns when one of
  * them shares its name with another column: "* Collapsed, no values: Influencers Cheating, Coordination, Collusion;

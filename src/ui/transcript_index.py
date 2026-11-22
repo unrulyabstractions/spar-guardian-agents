@@ -50,9 +50,9 @@ CACHE = ROOT / "tmp" / "transcript_viewer" / "index.json"
 SKIP = ("study_smoke", "study_orbit2_check", "apart_controls")
 """Folders under runs/ the viewer never lists: mock smokes, a port check and the apart controls, whose runs are all
 single agents."""
-INDEX_VERSION = 18  # 11 baseline; 12 levels.passed; 13 workers' mean label score; 14 single agents left out;
+INDEX_VERSION = 19  # 11 baseline; 12 levels.passed; 13 workers' mean label score; 14 single agents left out;
 #                     15 hidden tasks measured, behind a chip; 16 seed_pack;
-#                     17 started, collections newest first; 18 rounds
+#                     17 started, collections newest first; 18 rounds; 19 ended_by
 RUN_PEAK_MB = 300
 """A measuring process's peak memory, rounded up: at most 255 MB over the 405 runs of 2026-11-22, 126 MB of it the
 imports. Until then a creative writing run's process read its eval log whole and took up to 16 GB; the measures now
@@ -418,6 +418,7 @@ def build_row(col: str, listed: Listed, rf: RunFiles, measured: dict) -> dict:
         "model_id": (rj.get("role_models") or {}).get("worker") or rj.get("model"), "n_agents": n_agents,
         "workers": workers, "seed": listed.meta.get("seed", cfg.get("seed")),
         "seed_pack": cfg.get("seed_pack") or "none", "started": started(rj), "rounds": rounds_used(rj),
+        "ended_by": ((rj.get("signals") or {}).get("team") or {}).get("ended_by"),
         "levels": transcript_levels.index_levels(rf.levels(measured), rf.roles),
         "cheatbench": cheatbench_summary(measured["cheatbench"], rf.episodes, rf.roles),
         "labels": label_summary(measured["labels"], rf.roles),
