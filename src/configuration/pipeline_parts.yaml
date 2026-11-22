@@ -82,9 +82,11 @@ parts:
     files: [src/measures/stored_json.py, src/measures/topology_fact.py, src/configuration/seed_packs.py]
     pins: []
     version: 1
-    fingerprint: sha256:14c02b2eae766df6a4f7bdd5edcd8a379bda649f4969e6e0bbbc722fafa20749
+    fingerprint: sha256:520552d22b541465af8d2b3463af926bb7cdf68f18eebe1a0111ed91bb2bd1a8
     log:
-      1: '2026-11-22 first version: who posted, read, was shown and named whom, per board, from communication/'
+      1: '2026-11-22 first version: who posted, read, was shown and named whom, per board, from communication/
+        (re-locked 2026-11-22: 9c48ea6 changed seed_packs.authors only; is_seeded, which topology reads,
+        is unchanged)'
   cheating:
     file: analysis/labels/cheating.json
     make: src.ui.viewer_parts:cheating_part
