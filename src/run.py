@@ -138,7 +138,9 @@ def judge_role_model(config: SwarmConfig) -> Model | None:
     if config.judge is None:
         return None
     judge_model, _ = judging.judge_model_config(config.judge)
-    return get_model(judge_model, config=GenerateConfig(batch=config.batch_judge))
+    # each call priced at the rate it is billed, batch prices with batch_judge (cost_cap.price_calls)
+    return cost_cap.price_calls(get_model(judge_model, config=GenerateConfig(batch=config.batch_judge)),
+                                batch=bool(config.batch_judge))
 
 
 def agent_generate_config(config: SwarmConfig) -> dict:
@@ -251,7 +253,9 @@ def run(name: str, benchmark: Benchmark, config: SwarmConfig, model: str, timeou
     generate = agent_generate_config(config)
     # Inspect merges the eval's generate config into the eval's model only; the role models get it from the provider
     provider.set_agent_config(GenerateConfig(**generate))
-    agents = get_model(model, memoize=False, **models.model_args(model))
+    # Inspect prices each call at the rate the provider bills it, so the cap counts what is billed (cost_cap)
+    agents = cost_cap.price_calls(get_model(model, memoize=False, **models.model_args(model)),
+                                  batch=bool(generate.get("batch")))
     # every raw model call is kept (Inspect keeps five per model by default): OpenRouter's billed cost per call
     # lives in the raw response, and the export sums it per episode
     [log] = inspect_ai.eval(task, model=agents, log_dir=str(log_dir), display="plain", timeout=timeout,

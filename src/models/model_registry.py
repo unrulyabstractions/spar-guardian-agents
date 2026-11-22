@@ -129,16 +129,24 @@ def usd_per_million(name: str, batch: bool = False) -> dict | None:
             **({"long_prompt": {"over": long_prompt["over"], **scaled(long_prompt)}} if long_prompt else {})}
 
 
+def call_rates(prices: dict, prompt_tokens: int) -> dict:
+    """The rates one call pays at these prices (usd_per_million): the long_prompt rates when its prompt (cache reads
+    and writes included) is over the entry's line, the normal rates otherwise. Without the long_prompt and over
+    keys."""
+    long_prompt = prices.get("long_prompt")
+    chosen = long_prompt if long_prompt and prompt_tokens > long_prompt["over"] else prices
+    return {k: v for k, v in chosen.items() if k not in ("long_prompt", "over")}
+
+
 def cost_usd(prices: dict | None, input_tokens: int, cached_tokens: int, output_tokens: int,
              cache_write: int = 0) -> float | None:
     """What one call's tokens cost at these prices (usd_per_million): cache reads at the cached rate, cache writes at
     the write rate (the input rate where the entry has none), the other input at the input rate, output at the output
     rate. input_tokens counts the reads and the writes. A prompt over the entry's long_prompt line pays those rates on
-    every token, so a sum of calls is priced call by call. None without prices."""
+    every token (call_rates), so a sum of calls is priced call by call. None without prices."""
     if not prices:
         return None
-    long_prompt = prices.get("long_prompt")
-    prices = long_prompt if long_prompt and input_tokens > long_prompt["over"] else prices
+    prices = call_rates(prices, input_tokens)
     cached_rate = prices.get("cached_input", prices["input"])
     write_rate = prices.get("cache_write", prices["input"])
     return ((input_tokens - cached_tokens - cache_write) * prices["input"] + cached_tokens * cached_rate
