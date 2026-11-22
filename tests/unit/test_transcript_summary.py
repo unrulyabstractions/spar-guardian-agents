@@ -108,11 +108,12 @@ def test_every_cell_link_keeps_exactly_its_runs():
         assert kept == {r["id"] for r in cell_runs(MINE, s, model, task, workers, key)}
     main = next(r for r in s["rows"] if (r["model"], r["task"]) == ("m1", "SWE (flipt)"))["cells"]
     assert main["baseline | regulator · enforce · haiku"]["filters"] == {
-        "col": COL, "task": "SWE (flipt)", "model": "m1", "worker": "baseline", "influencer": "regulator",
+        "col": COL, "task": "SWE (flipt)", "model": "m1", "workers": "3", "worker": "baseline",
+        "influencer": "regulator",
         "influencer_level": "regulator: enforce", "q": "haiku"}
     assert "q" not in main["baseline | regulator · ambiguous · haiku"]["filters"]
-    assert main["baseline"]["filters"] == {"col": COL, "task": "SWE (flipt)", "model": "m1", "worker": "baseline",
-                                           "influencer": "none"}
+    assert main["baseline"]["filters"] == {"col": COL, "task": "SWE (flipt)", "model": "m1", "workers": "3",
+                                           "worker": "baseline", "influencer": "none"}
 
 
 def test_a_cell_no_filter_picks_out_has_no_link():
@@ -123,19 +124,27 @@ def test_a_cell_no_filter_picks_out_has_no_link():
     assert got["baseline | regulator · enforce · luna"]["q"] == "x"
 
 
-def test_workers_split_rows_only_when_team_sizes_mix():
+def test_rows_split_by_team_size_always_and_by_seed_pack_only_when_a_run_is_seeded():
     s = ts.summary(ROWS, COL)
-    assert s["by_workers"] is False
-    assert [(r["model"], r["task"], r["workers"]) for r in s["rows"]] == [
-        ("m1", "Protein design (binder)", None), ("m1", "SWE (flipt)", None), ("m2", "SWE (flipt)", None)]
-    assert all("workers" not in c["filters"] for _, _, c in cells(s))
+    assert s["by_seed"] is False
+    assert [(r["model"], r["task"], r["workers"], r["seed_pack"]) for r in s["rows"]] == [
+        ("m1", "Protein design (binder)", 3, None), ("m1", "SWE (flipt)", 3, None), ("m2", "SWE (flipt)", 3, None)]
+    assert all(c["filters"] is None or ("workers" in c["filters"] and "seed_pack" not in c["filters"])
+               for _, _, c in cells(s))
     mixed = ts.summary(ROWS + [row("s4", workers=4)], COL)
-    assert mixed["by_workers"] is True
     assert [(r["model"], r["task"], r["workers"]) for r in mixed["rows"]] == [
         ("m1", "Protein design (binder)", 3), ("m1", "SWE (flipt)", 3), ("m1", "SWE (flipt)", 4),
         ("m2", "SWE (flipt)", 3)]
     four = mixed["rows"][2]["cells"]["baseline"]
     assert four["n"] == 1 and four["filters"]["workers"] == "4"
+    seeded = ts.summary(ROWS + [dict(row("sd1", cheating="hacked", cheated=True), seed_pack="swe/pressure")], COL)
+    assert seeded["by_seed"] is True
+    assert [(r["task"], r["model"], r["seed_pack"]) for r in seeded["rows"]] == [
+        ("Protein design (binder)", "m1", "none"), ("SWE (flipt)", "m1", "none"), ("SWE (flipt)", "m1", "swe/pressure"),
+        ("SWE (flipt)", "m2", "none")]
+    pressure = seeded["rows"][2]["cells"]["baseline"]
+    assert pressure["n"] == 1 and pressure["cheated"] == 1 and pressure["filters"]["seed_pack"] == "swe/pressure"
+    assert seeded["rows"][1]["cells"]["baseline"]["n"] == 3
 
 
 def test_k_of_n_counts_and_level_counts():

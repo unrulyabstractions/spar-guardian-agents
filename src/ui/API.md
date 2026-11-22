@@ -384,7 +384,7 @@ IndexRow = {                                         # valid runs only
   worker_conditioning ("baseline" | "told to cheat" | transcript_index.RULE_WORDS[rule_level], joined by "; "),
   influencer_conditioning: [{role ("regulator"|"disregulator"), n, level (its instruction level), model}],
   model (the workers' model, the last part of run.json's role_models worker, else its model, never a
-  run's name), model_id (that model string), n_agents, seed,
+  run's name), model_id (that model string), n_agents, seed, seed_pack ("<task>/<pack>" or "none"),
   levels: {team: {<ladder>: level}, cheated: bool | null,   # the team's Cheating measure: attempted or above
            passed: bool | null,                    # the Cheating measure's passed: the grader passed the hand-in
            cheating_influencers, coordination_influencers, collusion_influencers:
@@ -689,7 +689,7 @@ rule's `least` as "a task's minimum number of" (`transcript_ladder_tables._plain
 as code.
 
 ### `GET /api/summary?col=<collection>` → the Summary page (`src/ui/transcript_summary.py` `summary`)
-`{col, total, by_workers, columns: [Column], groups, rows: [{model, task, workers, cells: {<column key>: Cell |
+`{col, total, by_seed, columns: [Column], groups, rows: [{model, task, workers, seed_pack, cells: {<column key>: Cell |
 null}}], totals: {<column key>: Cell | null}}`, built at start for every collection; `col` defaults to the first
 collection, an unknown one gets 404.
 ```
@@ -699,7 +699,7 @@ Column = {key, label, group ("baseline" | "influencers" | "positive" | "negative
 Cell = {n, cheated, accessed, passed,        # runs; of them: levels.cheated, team Cheating rung looked or above,
                                               # levels.passed
         levels: {<ladder>: [[level, runs]]}, # the teams' levels, in the ladder's order
-        filters: {col, task?, model?, workers?, worker, influencer, influencer_level?, q?} | null}
+        filters: {col, task?, model?, workers?, seed_pack?, worker, influencer, influencer_level?, q?} | null}
                                               # the runs page's query that keeps exactly these runs
 ```
 `columns`: Baseline (baseline workers, no influencer); one `influencers` column per influencer combination the
@@ -707,8 +707,9 @@ collection holds with baseline workers, each influencer by role, instruction lev
 claude-haiku-5.5", "+ both · enforce, persuade · claude-haiku-5.5, gpt-6-luna"), regulators first, then
 disregulators, then both, each by level (instruction_levels.yaml order) and model; Told to cheat, Generic rule and Rule
 naming the exploit (no influencer); then one `other` column per further condition the collection holds, named by its
-combination ("Told to cheat + regulator · enforce · claude-haiku-5.5"). Rows split by the number of workers only when
-the collection mixes team sizes (`by_workers`; otherwise a row's `workers` is null and the page has no Workers column).
+combination ("Told to cheat + regulator · enforce · claude-haiku-5.5"). Rows split by the number of workers always, and by
+seed pack when any run of the collection is seeded (`by_seed`; otherwise a row's `seed_pack` is null and the page has
+no Seed column).
 Every valid run of the collection is in exactly one cell: `total` is the collection's valid runs and the cells' `n`
 sum to it, as do the `totals`. A cell's `filters` are found and checked by the server (`exact_filters`): the row's and
 column's filters, an influencer's `influencer_level`, and a run-name search `q` only when those keep other runs too

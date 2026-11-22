@@ -1,5 +1,5 @@
-"""The transcript viewer's #/summary page: one collection's valid runs as a table, a row per workers' model and task
-(and number of workers, only in a collection that mixes team sizes), a column per condition, read from the index's
+"""The transcript viewer's #/summary page: one collection's valid runs as a table, a row per workers' model, task and
+number of workers (and seed pack, only in a collection with seeded runs), a column per condition, read from the index's
 rows (src/ui/transcript_index.py build_row).
 
     summary(rows, "study_exploration_1")    # what /api/summary?col=study_exploration_1 answers
@@ -130,6 +130,7 @@ def runs_page_keeps(row: dict, f: dict) -> bool:
              "task": lambda v: row["task_label"] == v,
              "model": lambda v: (row["model"] or "") == v,
              "workers": lambda v: str(row["workers"]) == v,
+             "seed_pack": lambda v: row.get("seed_pack", "none") == v,
              "worker": lambda v: row["worker_conditioning"] == v,
              "influencer": lambda v: (influencer_set(row) != "none") if v == "any" else influencer_set(row) == v,
              "influencer_level": lambda v: any(influencer_level(x) == v for x in row["influencer_conditioning"]),
@@ -185,12 +186,12 @@ def cell(rows: list[dict]) -> dict:
 
 
 def summary(rows: list[dict], col: str) -> dict:
-    """The #/summary page's data for collection `col`: {col, total (its valid runs), by_workers (whether its runs mix
-    team sizes, so rows split by them), columns (column_of, in column_order), groups, rows: [{model, task, workers
-    (None unless by_workers), cells: {column key: cell or None}}], totals: {column key: cell or None}}. A cell carries
-    `filters`, the runs page's query that keeps exactly its runs, or None when none does."""
+    """The #/summary page's data for collection `col`: {col, total (its valid runs), by_seed (whether any run is
+    seeded, so rows split by seed pack), columns (column_of, in column_order), groups, rows: [{model, task, workers,
+    seed_pack (None unless by_seed), cells: {column key: cell or None}}], totals: {column key: cell or None}}. A cell
+    carries `filters`, the runs page's query that keeps exactly its runs, or None when none does."""
     mine = [r for r in rows if r["col"] == col]
-    by_workers = len({r["workers"] for r in mine}) > 1
+    by_seed = any(r.get("seed_pack", "none") != "none" for r in mine)
     found = {condition_of(r): column_of(*condition_of(r)) for r in mine}
     columns = {c["key"]: dict(c, influencer="none", influencers=[]) for c in COLUMNS}
     columns.update({c["key"]: c for c in found.values()})
@@ -207,13 +208,14 @@ def summary(rows: list[dict], col: str) -> dict:
         return {**cell(runs), "filters": exact_filters(mine, runs, base, c["influencers"], of_column[c["key"]])}
     groups: dict[tuple, dict[str, list[dict]]] = {}
     for r in mine:
-        key = (r["model"] or "", r["task_label"], r["workers"] if by_workers else None)
+        key = (r["model"] or "", r["task_label"], r["workers"], r.get("seed_pack", "none") if by_seed else None)
         groups.setdefault(key, {}).setdefault(key_of[condition_of(r)], []).append(r)
     out_rows = []
-    for (model, task, workers), by_col in sorted(groups.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[0][2] or 0)):
-        where = {"task": task, "model": model, **({"workers": str(workers)} if by_workers else {})}
-        out_rows.append({"model": model, "task": task, "workers": workers,
+    for (model, task, workers, pack), by_col in sorted(
+            groups.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[0][2], kv[0][3] != "none", kv[0][3] or "")):
+        where = {"task": task, "model": model, "workers": str(workers), **({"seed_pack": pack} if by_seed else {})}
+        out_rows.append({"model": model, "task": task, "workers": workers, "seed_pack": pack,
                          "cells": {c["key"]: filled(by_col.get(c["key"], []), c, where) for c in columns}})
     totals = {c["key"]: filled(of_column.get(c["key"], []), c, {}) for c in columns}
-    return {"col": col, "total": len(mine), "by_workers": by_workers, "columns": columns, "groups": GROUPS,
+    return {"col": col, "total": len(mine), "by_seed": by_seed, "columns": columns, "groups": GROUPS,
             "rows": out_rows, "totals": totals}

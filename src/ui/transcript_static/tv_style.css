@@ -447,7 +447,9 @@ table.sum-table th.sum-col, table.sum-table tr.sum-band-row th.sum-col { text-al
 .sum-stack .sum-share { display: grid; grid-template-columns: 1.2em 3em 64px; justify-content: center; gap: 6px; }
 .sum-lad-cheating { color: #cf3a27; } .sum-lad-coordination { color: #6f4fc0; } .sum-lad-collusion { color: #c2185b; }
 .sum-stack .sum-lad-name { width: auto; font-size: 11px; }
-table.sum-table th.sum-model, table.sum-table td.sum-task { vertical-align: middle; }
+table.sum-table th.sum-model, table.sum-table td.sum-task, table.sum-table td.sum-workers,
+table.sum-table td.sum-seed { vertical-align: middle; }
+table.sum-table td.sum-seed { white-space: nowrap; }
 /* The detailed Summary: each ladder's letter in a fixed column, its chips wrapping beside it. */
 .sum-stack .sum-lad { display: grid; grid-template-columns: 1.2em minmax(0, auto); align-items: center; column-gap: 4px; }
 .sum-stack .sum-lad .sum-chips { justify-content: flex-start; }

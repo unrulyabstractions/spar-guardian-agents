@@ -1,6 +1,6 @@
 /* View: one collection's runs by condition (#/summary?col=<collection>), from /api/summary
- * (src/ui/transcript_summary.py). A row per workers' model and task (and number of workers, only in a collection that
- * mixes team sizes); a column per condition: the baseline, one column per influencer combination with baseline workers
+ * (src/ui/transcript_summary.py). A row per workers' model, task and number of workers (and seed pack, only in a
+ * collection with seeded runs); a column per condition: the baseline, one column per influencer combination with baseline workers
  * (role, instruction level and model, stacked on three lines in the header), the positive control (told to cheat), the
  * two negative controls (a rule), and a column per other combination the collection holds. A cell: its runs (a link
  * to the runs page filtered to exactly them, when the server found such filters), cheated, accessed and passed as k of
@@ -27,7 +27,7 @@ async function loadSummary(col) {
 /** The runs page's address that keeps exactly a cell's runs: its filters, the model as the runs page names it. */
 function runsHref(filters) {
   const p = new URLSearchParams();
-  for (const k of ['col', 'task', 'model', 'workers', 'worker', 'influencer', 'influencer_level', 'q']) {
+  for (const k of ['col', 'task', 'model', 'workers', 'seed_pack', 'worker', 'influencer', 'influencer_level', 'q']) {
     const v = k === 'model' && filters.model ? modelLabel({ model: filters.model }) : filters[k];
     if (v != null && v !== '') p.set(k, v);
   }
@@ -164,7 +164,7 @@ export async function viewSummary(q) {
     wmodel, v => nav({ wmodel: v }), { 'aria-label': 'Workers\' model' });
   const iPick = select([['', 'All influencer models'], ...uniqueModels(s.columns.flatMap(c => c.influencers.map(x => x.model)).filter(Boolean))
     .map(m => [m, modelLabel({ model: m })])], imodel, v => nav({ imodel: v }), { 'aria-label': 'Influencer model' });
-  const lead = s.by_workers ? 3 : 2;
+  const lead = s.by_seed ? 4 : 3;
 
   // The band over the condition columns: one cell per run of columns of the same group. A group of one column named
   // as its column is that column's header, over both header rows.
@@ -181,7 +181,8 @@ export async function viewSummary(q) {
   // The lead columns' headers stand over both header rows, on the condition headers' baseline, and stick at the left.
   const band = [h('th', { scope: 'col', rowspan: '2', class: 'sum-lead sum-model' }, 'Workers\' model'),
     h('th', { scope: 'col', rowspan: '2', class: 'sum-lead sum-task' }, 'Task'),
-    s.by_workers ? h('th', { scope: 'col', rowspan: '2', class: 'sum-lead sum-workers', title: 'Workers per team' }, 'Workers') : null];
+    h('th', { scope: 'col', rowspan: '2', class: 'sum-lead sum-workers', title: 'Workers per team' }, 'Workers'),
+    s.by_seed ? h('th', { scope: 'col', rowspan: '2', class: 'sum-lead sum-seed', title: 'Board posts and files planted before round 1' }, 'Seed') : null];
   const spanned = new Set();
   for (let i = 0; i < C.length;) {
     let j = i;
@@ -204,7 +205,8 @@ export async function viewSummary(q) {
   });
   const body = rows.map(r => h('tr', null,
     h('th', { scope: 'row', class: 'sum-model' }, modelLabel({ model: r.model })),
-    h('td', { class: 'sum-task' }, r.task), s.by_workers ? h('td', { class: 'num sum-workers' }, String(r.workers)) : null,
+    h('td', { class: 'sum-task' }, r.task), h('td', { class: 'num sum-workers' }, String(r.workers)),
+    s.by_seed ? h('td', { class: 'sum-seed' }, r.seed_pack.split('/').pop()) : null,
     cells(r.cells)));
   const totals = wmodel || task ? summed(rows, s.columns, ladders) : s.totals;
   const total = h('tr', { class: 'sum-total' }, h('th', { scope: 'row', colspan: String(lead), class: 'sum-model' }, 'All'),
@@ -221,7 +223,7 @@ export async function viewSummary(q) {
     const lefts = [0];
     for (const th of [...band].filter(Boolean).slice(0, lead - 1)) lefts.push(lefts[lefts.length - 1] + th.getBoundingClientRect().width);
     for (const tr of table.querySelectorAll('tr')) {
-      [...tr.children].filter(x => x.matches('.sum-model, .sum-task, .sum-workers'))
+      [...tr.children].filter(x => x.matches('.sum-model, .sum-task, .sum-workers, .sum-seed'))
         .forEach((x, i) => { x.classList.add('sum-stick'); x.style.left = `${lefts[i]}px`; });
     }
   });

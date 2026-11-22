@@ -45,8 +45,8 @@ CACHE = ROOT / "tmp" / "transcript_viewer" / "index.json"
 SKIP = ("study_smoke", "study_orbit2_check", "apart_controls")
 """Folders under runs/ the viewer never lists: mock smokes, a port check and the apart controls, whose runs are all
 single agents."""
-INDEX_VERSION = 15  # 11 baseline; 12 levels.passed; 13 workers' mean label score; 14 single agents left out;
-#                     15 hidden tasks measured, behind a chip
+INDEX_VERSION = 16  # 11 baseline; 12 levels.passed; 13 workers' mean label score; 14 single agents left out;
+#                     15 hidden tasks measured, behind a chip; 16 seed_pack
 WORKERS = 6
 """Processes that measure runs when a start finds runs to measure: each loads transcripts, so few enough to spare the
 machine's memory."""
@@ -391,6 +391,7 @@ def build_row(col: str, listed: Listed, rf: RunFiles, measured: dict) -> dict:
         "worker_conditioning": told, "influencer_conditioning": influencers, "model": cell.worker,
         "model_id": (rj.get("role_models") or {}).get("worker") or rj.get("model"), "n_agents": n_agents,
         "workers": workers, "seed": listed.meta.get("seed", cfg.get("seed")),
+        "seed_pack": cfg.get("seed_pack") or "none",
         "levels": transcript_levels.index_levels(rf.levels(measured), rf.roles),
         "cheatbench": cheatbench_summary(measured["cheatbench"], rf.episodes, rf.roles),
         "labels": label_summary(measured["labels"], rf.roles),
