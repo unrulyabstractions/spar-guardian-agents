@@ -17,11 +17,12 @@ file must sit at its new path with the same bytes, and the counts must match. Th
 .backups/migrate_run_layout/<stamp>/moves.tsv, which hub reads.
 
 **hub.** Lists the dataset unrulyabstractions/spar-swarm. study_exploration_0 and _1 (the old names) are deleted in one
-commit only when every file there has a twin of the same size and hash at the same path under
-ian_baseline_explorations_0 / _1. Then each study (HUB_STUDIES) goes up through scripts/upload_runs_to_hf.py with
---delete-stale, after a check that every Hub file the upload would delete has its bytes at the path its local move
-took it to (moves.tsv), a file the upload sends. apart_controls's old folders outside its runs/ and logs/ go in the
-same way, by its own commit. Nothing is deleted on the Hub without its twin.
+commit only when every file there has a twin at the same path under ian_baseline_explorations_0 / _1: the same bytes,
+or the same bytes once the old study name reads the new one (a run.json names its study). A study document with no
+twin (a README) is copied there in the same commit, its study name changed. Then each study (HUB_STUDIES) goes up
+through scripts/upload_runs_to_hf.py with --delete-stale, after a check that every Hub file the upload would delete
+has its bytes at the path its local move took it to (moves.tsv), a file the upload sends. apart_controls's old folders
+outside its runs/ and logs/ go in the same way, by its own commit. Nothing is deleted on the Hub without its twin.
 """
 from __future__ import annotations
 
@@ -310,6 +311,22 @@ def hub_listing(api, repo: str) -> dict:
             if isinstance(entry, RepoFile)}
 
 
+def hub_bytes(paths: list[str]) -> dict[str, bytes]:
+    """The Hub's bytes of each path, by one download into a temporary folder."""
+    import glob
+    import tempfile
+
+    from huggingface_hub import snapshot_download
+
+    from scripts import upload_runs_to_hf as upload
+    if not paths:
+        return {}
+    with tempfile.TemporaryDirectory() as folder:
+        snapshot_download(upload.REPO, repo_type="dataset", local_dir=folder,
+                          allow_patterns=sorted(glob.escape(path) for path in paths))
+        return {path: (Path(folder) / path).read_bytes() for path in paths}
+
+
 def identity(entry) -> tuple:
     """A Hub file's size and hash: its LFS sha256, else its git blob id."""
     lfs = entry.lfs
@@ -346,7 +363,7 @@ def local_to_hub(local: str, study: str, base: str) -> str:
 
 
 def hub(dry_run: bool, skip: list[str]) -> int:
-    from huggingface_hub import CommitOperationDelete, HfApi
+    from huggingface_hub import CommitOperationAdd, CommitOperationDelete, HfApi
 
     from elicitation.publish import same
     from scripts import upload_runs_to_hf as upload
@@ -359,24 +376,35 @@ def hub(dry_run: bool, skip: list[str]) -> int:
     progress.detail("files", len(listing))
 
     progress.step("Old study names")
-    deletes = []
+    deletes, adds = [], []
     for old, new in RENAMED.items():
         files = {path: entry for path, entry in listing.items() if path.startswith(f"{old}/")}
-        missing = [path for path, entry in files.items()
-                   if identity(listing.get(new + path[len(old):], entry)) != identity(entry)
-                   or new + path[len(old):] not in listing]
-        progress.detail(old, f"{len(files)} files, {len(files) - len(missing)} with a twin under {new}")
-        for path in missing[:10]:
+        twin_of = {path: new + path[len(old):] for path in files}
+        exact = [path for path in files if twin_of[path] in listing
+                 and identity(listing[twin_of[path]]) == identity(files[path])]
+        renamed = [path for path in files if path not in exact and twin_of[path] in listing]
+        documents = [path for path in files if twin_of[path] not in listing
+                     and path.split("/")[1] not in ("runs", "logs")]
+        orphans = [path for path in files if path not in exact and path not in renamed and path not in documents]
+        held = hub_bytes(renamed + [twin_of[path] for path in renamed] + documents)
+        differ = [path for path in renamed if held[path].replace(old.encode(), new.encode()) != held[twin_of[path]]]
+        progress.detail(old, f"{len(files)} files: {len(exact)} with a twin of the same bytes under {new}, "
+                             f"{len(renamed) - len(differ)} equal to theirs once {old} reads {new}, "
+                             f"{len(documents)} study documents to copy there")
+        for path in (differ + orphans)[:10]:
             progress.detail("", f"no twin: {path}", err=True)
-        if missing:
-            refuse(f"{old} holds {len(missing)} files with no twin under {new}; nothing deleted")
+        if differ or orphans:
+            refuse(f"{old} holds {len(differ) + len(orphans)} files with no twin under {new}; nothing deleted")
+        adds += [(twin_of[path], held[path].replace(old.encode(), new.encode())) for path in documents]
         deletes += list(files)
     if deletes and not dry_run:
         api.create_commit(repo_id=upload.REPO, repo_type="dataset",
                           commit_message=f"Delete {', '.join(RENAMED)}: every file has its twin under "
-                                         f"{', '.join(RENAMED.values())}",
-                          operations=[CommitOperationDelete(path_in_repo=path) for path in deletes])
-        progress.detail("deleted", f"{len(deletes)} files")
+                                         f"{', '.join(RENAMED.values())}, the study documents copied there",
+                          operations=[CommitOperationAdd(path_in_repo=path, path_or_fileobj=data)
+                                      for path, data in adds]
+                          + [CommitOperationDelete(path_in_repo=path) for path in deletes])
+        progress.detail("deleted", f"{len(deletes)} files; copied {len(adds)} study documents")
 
     moves = latest_moves()
     failures = 0
