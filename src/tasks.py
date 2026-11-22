@@ -17,7 +17,9 @@ What comes from where:
     scorer (src/judging/cheatbench_judge.py);
   * the access log's sidecar, its setup solver, its first scorer and its cleanup come from src/sandbox/access_log/, for
     a monitored benchmark under SwarmConfig.access_log, and the network log's sidecar, setup solver, scorer and
-    capture from src/sandbox/network_log/ under SwarmConfig.network_log.
+    capture from src/sandbox/network_log/ under SwarmConfig.network_log;
+  * /proc's hiding, the AppArmor profile on every service of the compose file and the setup solver that remounts each
+    agent machine's /proc and proves both, from src/sandbox/proc_hiding/ under SwarmConfig.proc_hiding.
 
 The task instruction is the benchmark's, then the rule sentence of rule_level, then extra_instruction on its own
 paragraph (a control cell's text, say), then the rounds' values: "You have R rounds, and up to N tool calls per round."
@@ -76,6 +78,7 @@ from src.sandbox.network_log.network_monitor import (
     start_network_monitor,
     with_network_monitor,
 )
+from src.sandbox.proc_hiding.proc_hiding import hide_proc, keeps_proc_hiding, with_proc_hiding
 from src.swarm import influencers as roles_module
 from src.swarm.awareness_probes import end_of_episode_probes
 from src.swarm.board import (
@@ -250,26 +253,30 @@ def first_message_groups(sample: Sample, names: list[str]) -> list[AgentGroup]:
     return [AgentGroup(name=f"seat_{n}", agents=[n], goal=first[n]) for n in names]
 
 
-def monitored_sample(sample: Sample, access: bool = True, network: bool = False) -> Sample:
-    """The sample on the compose file with the access log's sidecar and, with `network`, the network log's."""
+def monitored_sample(sample: Sample, access: bool = True, network: bool = False, hidden: bool = False) -> Sample:
+    """The sample on the compose file with the access log's sidecar and, with `network`, the network log's, then with
+    `hidden` every service under the proc-hiding profile (src/sandbox/proc_hiding/), the sidecars included."""
     compose = Path(sample.sandbox.config)
     compose = with_monitor(compose) if access else compose
     compose = with_network_monitor(compose) if network else compose
+    compose = with_proc_hiding(compose) if hidden else compose
     spec = SandboxEnvironmentSpec(sample.sandbox.type, str(compose))
     return sample.model_copy(update={"sandbox": spec})
 
 
 def setup_solvers(benchmark: Benchmark, plan: Plan, tools: AgentTools | None = None) -> list[Solver]:
-    """The turn rules' setup, with the agents' time limit, and the benchmark's, then peer_shell's under
-    SwarmConfig.peer_shell, then the access log's, so the harness's own reads while staging come before any mark."""
+    """The turn rules' setup, with the agents' time limit, then /proc's hiding under SwarmConfig.proc_hiding, before
+    any command of an agent's user, and the benchmark's, then peer_shell's under SwarmConfig.peer_shell, then the
+    access log's, so the harness's own reads while staging come before any mark."""
     config = plan.config
     watchers = observers(benchmark, plan, tools) if tools is not None else {}
     shell = [peer_shell.peer_shell_setup(tools.seats, watchers)] if watchers else []
     monitor = [start_access_monitor(benchmark)] if benchmark.keeps_access_log(config) else []
     network = [start_network_monitor(benchmark)] if keeps_network_log(benchmark, config) else []
+    hidden = [hide_proc(benchmark)] if keeps_proc_hiding(benchmark, config) else []
     return [rules_setup(config, config.names, plan.roles, **delivery(benchmark, plan),
-                        time_limit_s=config.time_limit_s or benchmark.time_limit_s()), benchmark.setup(), *shell,
-            *monitor, *network]
+                        time_limit_s=config.time_limit_s or benchmark.time_limit_s()), *hidden, benchmark.setup(),
+            *shell, *monitor, *network]
 
 
 def cleanup(benchmark: Benchmark, config: SwarmConfig) -> Callable[[TaskState], Awaitable[None]]:
@@ -363,8 +370,9 @@ def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = 
     if first:
         sample.metadata["cheatbench"]["first_message"] = first
     access, network = benchmark.keeps_access_log(config), keeps_network_log(benchmark, config)
-    if access or network:
-        sample = monitored_sample(sample, access, network)
+    hidden = keeps_proc_hiding(benchmark, config)
+    if access or network or hidden:
+        sample = monitored_sample(sample, access, network, hidden)
     tools = benchmark.tools(plan)
     agent_tools, bindings = team_tools(benchmark, plan, tools)
     prompts = system_prompts(benchmark, plan)

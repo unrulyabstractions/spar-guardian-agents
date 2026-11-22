@@ -551,7 +551,7 @@ print(json.dumps(out))
 SCANNER = r"""import hashlib, io, json, os, stat, zipfile
 spec = json.loads(__SPEC__)
 hashes, lines, name = set(spec["hashes"]), [line.encode() for line in spec["lines"]], spec["name"].encode()
-t0 = os.stat("/proc/1").st_ctime
+t0 = os.stat("/proc").st_ctime        # the container's start; /proc/1 is root's, which hidepid hides from an agent
 report = {"scanned": 0, "recent": 0, "hits": [], "unlistable": [], "proc_files": 0}
 seen = set()
 

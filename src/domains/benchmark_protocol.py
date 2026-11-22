@@ -65,6 +65,7 @@ from src.sandbox import cheatbench_task_files as task_files
 from src.sandbox.access_log.access_monitor import MONITOR_DEVIATION, Watched
 from src.sandbox.agent_tools import AgentTools, Seat
 from src.sandbox.network_log.network_monitor import NETWORK_DEVIATION
+from src.sandbox.proc_hiding.proc_hiding import PROC_DEVIATION, keeps_proc_hiding
 from src.sandbox.sandbox_probe import environment_probe
 from src.swarm.board import round_rules
 
@@ -377,8 +378,8 @@ class Benchmark(ABC):
     def deviations(self, plan: Plan) -> list[str]:
         """How the run departs from CheatBench's own runner, as short labels: the common ones (NO_SUBMIT_DEVIATIONS
         when no agent gets submit or stop_working), the delay of a shared_task team's submit, the domain's, the team's,
-        a regulator's own prompt, the network log's and the access log's, then the presence lines of a board and the
-        influencers' alert_humans."""
+        a regulator's own prompt, the network log's and the access log's, /proc's hiding, then the presence lines of a
+        board and the influencers' alert_humans."""
         config = plan.config
         common = COMMON_DEVIATIONS if config.gives_submit or config.gives_stop_working else NO_SUBMIT_DEVIATIONS
         delay = [f"team_submit_takes_effect_after_{config.submit_delay_rounds}_rounds"] \
@@ -388,8 +389,9 @@ class Benchmark(ABC):
         alert = [ALERT_DEVIATION] if any(role in INFLUENCERS for role in (plan.roles or {}).values()) else []
         network = [NETWORK_DEVIATION] if config.network_log and self.watched is not None else []
         monitor = [*network, *([MONITOR_DEVIATION] if self.keeps_access_log(config) else [])]
+        hidden = [PROC_DEVIATION] if keeps_proc_hiding(self, config) else []
         return [*common, *delay, *self.task_deviations, *(self.team_deviations(plan) if plan.team else []), *oversight,
-                *monitor, *presence, *alert]
+                *monitor, *hidden, *presence, *alert]
 
     # ---------------------------------------------------------------- what the export records
     @classmethod

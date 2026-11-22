@@ -4,18 +4,19 @@
     bindings = peer_shell_binding(tools.seats, observers, cap=cap)
     setup = peer_shell_setup(tools.seats, observers)         # in the task setup, before any agent runs
 
-peer_shell(peer, command) runs `bash --login -c command` in the peer's seat (its service, in its working directory)
-as the caller's observer: a Linux uid of its own (OBSERVER_UID_FROM upward, one per influencer in roster order), given
-by number, so a root agent's /etc/passwd cannot turn it into another user. Read-only comes from that uid and nothing
-else: there is no command list. Before each command GRANT gives the observer read on the peer's working directory and
-home, through the POSIX access ACL that setfacl would write (no image has setfacl): every file and directory there that
-others cannot read gets a named entry for the observer, read on a file and read and search on a directory, and each
-directory above them search. A file the peer writes later is granted at the next call. The observer can write only
-where anyone can, the temporary directories included, which keep the layout's own modes. After each command REAP kills
-the observer's processes, in every layout, SWE's included, so none outlives its call, but those of its calls still
-running there and its jobs. The command runs through src/sandbox/command_jobs.py, with no time limit of its own: one
-still running when the influencer's round runs out of time becomes the influencer's job (job_output, job_stop), and the
-answer holds `job`, its id, with exit_code null and the output so far.
+peer_shell(peer, command) runs `bash --login -c command` in the peer's seat (its service, in its working directory) as
+the caller's observer: a Linux uid of its own (OBSERVER_UID_FROM upward, one per influencer in roster order), given by
+number, so a root agent's /etc/passwd cannot turn it into another user, with the group PROC_GID, which lets it see every
+process of the peer's machine where /proc hides other users' (src/sandbox/proc_hiding/). Read-only comes from that uid
+and nothing else: there is no command list, and the group owns no file. Before each command GRANT gives the observer
+read on the peer's working directory and home, through the POSIX access ACL that setfacl would write (no image has
+setfacl): every file and directory there that others cannot read gets a named entry for the observer, read on a file and
+read and search on a directory, and each directory above them search. A file the peer writes later is granted at the
+next call. The observer can write only where anyone can, the temporary directories included, which keep the layout's own
+modes. After each command REAP kills the observer's processes, in every layout, SWE's included, so none outlives its
+call, but those of its calls still running there and its jobs. The command runs through src/sandbox/command_jobs.py,
+with no time limit of its own: one still running when the influencer's round runs out of time becomes the influencer's
+job (job_output, job_stop), and the answer holds `job`, its id, with exit_code null and the output so far.
 
 The answer is JSON {peer, command, exit_code, output, truncated}, the output stderr then stdout as the agents' own shell
 gives it. An output past the run's cap (src/swarm/tool_output_caps.py, 64 KiB by default) keeps its start and its end
@@ -60,6 +61,7 @@ from src.configuration.swarm_config import INFLUENCERS, role_of
 from src.sandbox import command_jobs as jobs
 from src.sandbox import sandbox_hygiene as hygiene
 from src.sandbox.agent_tools import Seat
+from src.sandbox.proc_hiding.proc_hiding import PROC_GID
 from src.sandbox.sandbox_probe import run_json
 from src.swarm._regulator_oversight import WRAP_MARGIN, checked_peer, presence_head, size
 from src.swarm.tool_output_caps import middle_cut
@@ -293,7 +295,7 @@ async def run_as_observer(seat: Seat, places: dict, uid: int, command: str, *, o
     box = seat.box()
     await run_json(GRANT, stdin={"uid": uid, "tops": tops(places)}, box=box)
     store().set(LAST_REAP, {})
-    where = jobs.Where(box=box, service=seat.service, user=f"{uid}:{uid}", cwd=places.get("workdir"),
+    where = jobs.Where(box=box, service=seat.service, user=f"{uid}:{PROC_GID}", cwd=places.get("workdir"),
                        env={**GIT_ENV, "HOME": NO_HOME})
     return await jobs.run_command(where, owner, TOOL, command, ["bash", "--login", "-c", command],
                                   after=lambda keep: observer_reap(box, uid, keep), cap=cap)

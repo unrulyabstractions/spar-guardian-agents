@@ -338,6 +338,11 @@ class SwarmConfig(BaseModel):
     bind, listen, connect, accept, UDP send and close, by bpftrace where the host allows it, else by the socket tables.
     It records only and blocks nothing. A domain with no machine to watch (chess) gives run.json network
     {"status": "off"}. Runs before 2026-11-21 recorded no switch and have no block."""
+    proc_hiding: bool = True
+    """Whether /proc in the agents' machines shows each agent only its own processes and no page map
+    (src/sandbox/proc_hiding/): hidepid with a group for the harness, and an AppArmor profile that denies every
+    /proc/<pid>/pagemap. Proven in each run's setup; a Docker host without AppArmor refuses the run unless this is
+    False. run.json sandbox.proc records it. Runs before 2026-11-22 had neither protection."""
 
     # ---------------------------------------------------------------- the judge
     judge: str | None = settings.JUDGE_MODEL
