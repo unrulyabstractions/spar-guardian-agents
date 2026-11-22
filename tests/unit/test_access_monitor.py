@@ -99,8 +99,10 @@ def test_the_hash_of_an_exec_is_the_hash_of_the_tools_argv(monkeypatch):
     asyncio.run(agent_tools.run(Seat(service="k7q2m"), "k7q2m", "python3 -"))
     # the exec is the command jobs' launcher, which replaces itself with the tool's argv: the root process the daemon
     # walks to runs that argv (tests/unit/test_command_jobs.py runs it for real)
-    tool = command_jobs.command_argv(execs[0])
-    assert execs[0][:3] == [b"python3", b"-I", b"-c"] and tool != execs[0]
+    root = command_jobs.command_argv(execs[0])
+    assert execs[0][:3] == [b"python3", b"-I", b"-c"] and root[:4] == [b"/usr/bin/timeout", b"-k", b"5s", b"0s"]
+    tool = root[4:]
+    assert daemon.exec_digest(root) == daemon.exec_digest(tool)          # the wrap with no limit hashes as the tool
     expected = hashlib.sha256(b"\0".join(tool)).hexdigest()[:daemon.DIGEST_CHARS]
     assert tool[:3] == [b"bash", b"--login", b"-c"]
     assert daemon.exec_digest(tool) == daemon.exec_digest([b"timeout", b"-k", b"5s", b"60s", *tool]) == expected

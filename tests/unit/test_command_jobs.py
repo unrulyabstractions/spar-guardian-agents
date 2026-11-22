@@ -68,15 +68,29 @@ def test_a_command_that_ends_in_its_round_answers_as_inspects_exec_did(jobs, tmp
     assert outcome == command_jobs.Outcome(command_jobs.joined(direct.stderr, direct.stdout), returncode=3)
     assert outcome.text == "err\n\nout\n" and spared == [[]]
     (launch, user, _), (read, _, _) = jobs.box.calls[:2]
-    assert user == "root" and command_jobs.command_argv(launch) == ["bash", "-c", text]
+    assert user == "root" and command_jobs.command_argv(launch) == [*command_jobs.WRAP, "bash", "-c", text]
     assert read[:4] == ["python3", "-I", "-c", command_jobs.READ]
     assert not list((tmp_path / "jobs").iterdir()) and command_jobs.calls() == {}
     assert jobs.store == {} and jobs.marked == []
 
 
-def test_the_launcher_replaces_itself_with_the_command(jobs):
+def test_the_command_runs_under_the_wrap_as_the_root_of_the_exec(jobs, monkeypatch):
+    """In a sandbox the command runs under Inspect's timeout with its limit disabled, so the root keeps the shape the
+    logs know even when bash replaces itself with a lone command; here a forking wrapper stands in for it. The root's
+    argv is command_argv's."""
+    monkeypatch.setattr(command_jobs, "WRAP", ["/usr/bin/time", "-p"])
+    outcome = asyncio.run(command(jobs, "ps -o args= -p $PPID; true"))
+    launch = jobs.box.calls[0][0]
+    assert command_jobs.command_argv(launch) == ["/usr/bin/time", "-p", "bash", "-c", "ps -o args= -p $PPID; true"]
+    assert outcome.text.splitlines()[-1].strip() == "/usr/bin/time -p bash -c ps -o args= -p $PPID; true"
+    monkeypatch.setattr(command_jobs, "WRAP", ["/no/such/wrapper"])          # a machine without it: the command bare
+    assert asyncio.run(command(jobs, "echo bare")).text == "bare\n"
+
+
+def test_the_launcher_replaces_itself_with_the_command(jobs, monkeypatch):
     """The exec's root process runs the tool's argv, so the access log and the network log hash and name it as before;
     nothing but the command writes its output. The command keeps the exec's umask, the call's own files 077."""
+    monkeypatch.setattr(command_jobs, "WRAP", [])
     outcome = asyncio.run(command(jobs, "ps -o args= -p $$; true"))
     assert outcome.text.strip() == "bash -c ps -o args= -p $$; true"
     direct = asyncio.run(jobs.box.exec(["bash", "-c", "umask"])).stdout

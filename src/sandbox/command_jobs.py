@@ -22,11 +22,12 @@ err}}.
 How a command runs. One exec per call, as root: LAUNCH makes the call's directory under JOBS_DIR (mode 700, root's,
 outside /tmp and every workspace, so neither a teammate nor a /tmp snapshot sees it), writes its pid, starts a
 collector, gives the command the user, the working directory and the environment Inspect's exec would (docker gives
-the passwd home as HOME, "/" for a uid with no entry), and replaces itself with the command. The exec's root process
-is therefore `bash --login -c <command>` as before: the access log and the network log name its origin, its agent and
-its call as they did (exec_digest of the same argv). The exec leads a session of its own (docker makes every exec a
-session leader), so the reaps after each command (sandbox_hygiene.REAP, peer_shell.REAP) spare the session of every
-call still running, a job's included, through the pid file, and STOP kills a job by its session. The collector, a
+the passwd home as HOME, "/" for a uid with no entry, and the exec's umask), and replaces itself with the command.
+The exec's root process is therefore `/usr/bin/timeout -k 5s 0s bash --login -c <command>`, Inspect's own wrapper with
+its timeout disabled (WRAP), as before but for the duration: the access log and the network log name its origin, its
+agent and its call as they did (exec_digest of the same argv). The exec leads a session of its own (docker makes every
+exec a session leader), so the reaps after each command (sandbox_hygiene.REAP, peer_shell.REAP) spare the session of
+every call still running, a job's included, through the pid file, and STOP kills a job by its session. The collector, a
 detached root process, copies the command's stdout and stderr from two pipes to `out` and `err` in that directory and
 keeps the last KEEP_BYTES of each (Inspect keeps as much of a stream); `meta` holds each stream's total and the bytes
 dropped from its front, and `done` once both pipes closed. READ prints a stream's bytes from an offset: its stderr the
@@ -68,6 +69,12 @@ STOP_WAIT_S = 30          # how long a stop waits for the killed command's exec 
 TOOLS = ("job_output", "job_stop")
 COMMAND_TOOLS = ("shell", "run_python", "bash", "python", "peer_shell")
 """The tools whose calls run here; an agent that holds one gets the job tools."""
+WRAP = ["/usr/bin/timeout", "-k", "5s", "0s"]
+"""What the command runs under: Inspect's own wrapper with its timeout disabled (GNU timeout reads a duration of 0 as
+none), so it limits nothing. It keeps the root of the exec's process tree the shape the access log and the network log
+name as an agent's and hash as the call's (shell_commands.AGENT_EXEC, access_monitor_daemon.exec_digest): bash alone
+would replace itself with a lone command (`bash -c 'grep x f'` runs grep in its place), and the root would read as
+the harness's. A machine without /usr/bin/timeout runs the command bare."""
 
 LAUNCH = r'''
 import fcntl, json, os, pwd, select, signal, sys, time
@@ -171,15 +178,18 @@ if user and user != "root":
     env["HOME"] = home
 env.update(spec.get("env") or {})
 os.umask(umask)
+wrap = spec.get("wrap") or []
+if wrap and os.access(wrap[0], os.X_OK):
+    argv = [*wrap, *argv]
 try:
     os.execvpe(argv[0], argv, env)
 except OSError as ex:
     os.write(2, f"{argv[0]}: {ex.strerror}\n".encode())
     os._exit(127)
 '''
-"""argv: the spec ({top, name, user, env, keep}) as JSON, then the command's argv. The pid file is written as root,
-before the user is taken: a reap that sees a process of the user reads its pid file after. From the pid file on, the
-launcher's own failures (a user with no passwd entry) go to the command's stderr. The command gets the exec's own
+"""argv: the spec ({top, name, user, env, keep, wrap}) as JSON, then the command's argv. The pid file is written as
+root, before the user is taken: a reap that sees a process of the user reads its pid file after. From the pid file on,
+the launcher's own failures (a user with no passwd entry) go to the command's stderr. The command gets the exec's own
 umask back; the call's files are made under 077."""
 
 READ = r'''
@@ -329,11 +339,13 @@ def launch_argv(spec: dict, argv: list[str]) -> list[str]:
 
 
 def command_argv(exec_argv: list) -> list:
-    """The argv the exec's root process runs under once LAUNCH has replaced itself: the command's (launch_argv's
-    tail), in the exec's own type (str or bytes). Any other exec's argv comes back as it is."""
-    text = [x.decode(errors="replace") if isinstance(x, bytes) else x for x in exec_argv[:4]]
-    if len(exec_argv) > 5 and text == ["python3", "-I", "-c", LAUNCH]:
-        return list(exec_argv[5:])
+    """The argv the exec's root process runs under once LAUNCH has replaced itself: the spec's wrap (WRAP), then the
+    command's (launch_argv's tail), in the exec's own type (str or bytes). Any other exec's argv comes back as it is."""
+    text = [x.decode(errors="replace") if isinstance(x, bytes) else x for x in exec_argv[:5]]
+    if len(exec_argv) > 5 and text[:4] == ["python3", "-I", "-c", LAUNCH]:
+        wrap = json.loads(text[4]).get("wrap") or []
+        kind = type(exec_argv[5])
+        return [*(w.encode() if kind is bytes else w for w in wrap), *exec_argv[5:]]
     return list(exec_argv)
 
 
@@ -427,7 +439,7 @@ async def run_command(where: Where, agent: str, tool: str, command: str, argv: l
     `after(pid files to spare)` runs first (the seat's reap), then the output comes back whole, as Inspect's exec
     gave it. Past it: the call becomes a job (the module's docstring), its answer within `cap` bytes."""
     handle = uuid.uuid4().hex[:16]
-    spec = {"top": JOBS_DIR, "name": handle, "user": where.user, "env": where.env, "keep": KEEP_BYTES}
+    spec = {"top": JOBS_DIR, "name": handle, "user": where.user, "env": where.env, "keep": KEEP_BYTES, "wrap": WRAP}
     with untracked_sandbox_execs():
         task = asyncio.ensure_future(where.box.exec(launch_argv(spec, argv), input=input, cwd=where.cwd, user="root",
                                                     concurrency=False))
