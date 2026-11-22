@@ -177,6 +177,8 @@ and creative writing runs. The package docstring gives steps.jsonl's schema.
 - `replay_run.py`: `replay(run_dir, out_dir)`, which writes `steps.jsonl` and `replay.json`, and the command's loop.
 - `replay_report.py`: `ReplayReport` and `faithful_steps`, which refuses a replay whose end state differs from the
   stored one.
+- `replay_jobs.py`: a run made since the round clock: its commands with no fixed limit, its command jobs, their reads
+  and stops and peer_shell on the run's clock, and what makes such a replay unfaithful.
 - `recorded_calls.py`: the recorded calls in one global order, each with its agent and its number k.
 - `commit_dates.py`: the commit date that gives a replayed commit its recorded id.
 - `output_match.py`: a replayed output against the recorded one, and the likely cause of a difference.

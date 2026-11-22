@@ -15,7 +15,9 @@ gets the date in the call's window that gives its recorded id (commit_dates.py),
 it. Host tools (board_read, board_post, board_status, submit, stop_working, a regulator's oversight tools) are replayed
 from their recorded outputs: they change no machine. Two do run: protein design's check_design, re-run on the host on
 its recorded arguments, and creative writing's submit, which keeps writing.md. At the end the grader's own commands
-read the end state, which must equal the stored one.
+read the end state, which must equal the stored one. A run made since the round clock (2026-11-22) runs its commands
+as command_jobs ran them, with no fixed limit, and replays its jobs, their job_output and job_stop calls and peer_shell
+on the run's clock (replay_jobs.py); a run before it replays each command under its old limit.
 
 steps.jsonl. One line per call in global order. An SWE line:
 
@@ -52,6 +54,8 @@ API modules:
 - replay_report.py: ReplayReport, replay.json, and the faithful gate.
 - step_snapshots.py: steps.jsonl's delta encoding.
 - tmp_snapshots.py: tmp_snapshots.json, /tmp, /var/tmp and /dev/shm of every machine before and after every call.
+- replay_jobs.py: a run made since the round clock: its commands through command_jobs with no fixed limit, its jobs,
+  job_output, job_stop and peer_shell on the run's clock, and the problems that make the replay unfaithful.
 - recorded_calls.py: the recorded calls in global order.
 - commit_dates.py: the date that gives a commit its recorded id.
 - output_match.py: a replayed output against the recorded one.

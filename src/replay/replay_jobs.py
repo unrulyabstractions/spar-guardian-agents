@@ -27,9 +27,11 @@ run kept as a job that ended in time in the replay; a call that ended in time in
 replay; a job whose replayed status or exit code differs from its record; a recorded job the replay never started; a
 job call (the call that became the job, job_output, job_stop, peer_shell) whose output differs from the record.
 
-Not reproduced. A commit a job makes is dated in the window of the job call that follows it (window), or of the next
-call of its agent; one made after its last job call stays undated. The job directories' names are random, as they were
-in the run, so a command that lists them differs.
+Not reproduced. The replay's machines do not hide /proc (src/sandbox/proc_hiding/), so a command that reads another
+process's /proc differs in a run that hid it. A commit a job makes is dated in the window of the job call that follows
+it (window), or of the next call of its agent; one made after its last job call stays undated. The job directories'
+names are random, as they were in the run, so a command that lists them differs, and so may one that races another
+call of the same machine for them.
 """
 from __future__ import annotations
 
@@ -48,6 +50,7 @@ from src.replay.recorded_calls import RecordedCall, ReplayRefused, sample_store
 from src.replay.replay_sandbox import Exec
 from src.sandbox import command_jobs as cj
 from src.sandbox import peer_shell as ps
+from src.sandbox.proc_hiding.proc_hiding import PROC_GID
 from src.swarm.tool_output_caps import DEFAULT_CAP, NO_CAP
 
 JOB_TOOLS = cj.TOOLS
@@ -131,6 +134,7 @@ class JobPlayer:
         self.places = places or {}
         self.service_of, self.top = service_of, top
         self.cap = cap_of(run_json.get("config") or {})
+        self.observer_gid = PROC_GID if (run_json.get("config") or {}).get("proc_hiding") else None
         self.calls = {c.n: c for c in calls}
         self.offset = 0.0
         self.lock = threading.Lock()
@@ -331,7 +335,8 @@ class JobPlayer:
 
     def peer_shell(self, box, call: RecordedCall) -> tuple[str, bool]:
         """peer_shell as run_as_observer ran it: GRANT on the peer's machine, the command as the influencer's observer
-        in the peer's working directory through command, then the observer's REAP; the answer's JSON. A call the tool
+        (its group PROC_GID in a run that hid /proc, else its own) in the peer's working directory through command,
+        then the observer's REAP; the answer's JSON. A call the tool
         refused (no observer, or no such peer) keeps its recorded output."""
         peer, command = str(call.arguments.get("peer") or ""), str(call.arguments.get("command") or "")
         uid, places = self.observers.get(call.agent), self.places.get(peer)
@@ -344,8 +349,8 @@ class JobPlayer:
 
         def reap(box, keep: list[str]) -> None:
             self.script(box, service, ps.REAP, {"uid": uid, "keep": keep})
-        place = Place(service, f"{uid}:{uid}", places.get("workdir"), {**ps.GIT_ENV, "HOME": ps.NO_HOME},
-                      ["bash", "--login", "-c", command], None, reap)
+        place = Place(service, f"{uid}:{self.observer_gid or uid}", places.get("workdir"),
+                      {**ps.GIT_ENV, "HOME": ps.NO_HOME}, ["bash", "--login", "-c", command], None, reap)
         text, timed_out, code, job = self.command(box, call, place)
         try:
             gone = (json.loads(call.result) or {}).get("status") == "exited"
