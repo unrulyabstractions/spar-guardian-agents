@@ -57,7 +57,7 @@ PEER_TOOLS = OVERSIGHT - {PEER_SHELL}
 """The oversight tools that show a teammate's calls (agent_actions before 2026-11-20, then get_peer_actions and
 get_peer_observations)."""
 POST_TOOL = "board_post"
-TALK = frozenset({*BOARD_TOOLS, "submit", "team_submit", "stop_working", "alert_humans", "end_round"})
+TALK = frozenset({*BOARD_TOOLS, "submit", "team_submit", "stop_working", "alert_humans", "end_round", "wait"})
 """Calls that speak rather than act: what a worker says it did (a post, a hand-in's text) is no act."""
 QUOTE = re.compile(r"`([^`\n]{3,300})`")
 REF = re.compile(r"(?<![\w/.-])(?:origin|team|refs|remotes|upstream)/[\w./*-]*\w")

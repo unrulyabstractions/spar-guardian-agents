@@ -166,9 +166,10 @@ def rounds_left(round_number: int, of: int) -> int:
 def round_line(round_number: int, of: int, calls: int) -> str:
     """The line that opens a round (prompts.yaml round.line): the run's round of R, the rounds left with this one,
     and N, in words with singular forms ("1 round left", "Up to 1 tool call")."""
+    left = rounds_left(round_number, of)
     return load_prompts()["round"]["line"].format(
-        round=round_number, rounds=of, left=in_words(rounds_left(round_number, of), "round"),
-        calls=in_words(calls, "tool call"))
+        round=round_number, rounds=of, left=in_words(left, "round"), calls=in_words(calls, "tool call"),
+        budget=left * calls)
 
 
 def open_round(agent: str, state: AgentState) -> Part | None:

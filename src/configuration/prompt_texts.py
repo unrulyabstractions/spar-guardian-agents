@@ -152,11 +152,11 @@ def rounds_values(config: SwarmConfig, entry: int = 1) -> str:
     the first round; that less entry - 1 otherwise, as its first round's line says: R after a head start) and N
     (calls_per_round) in words, then with a round clock T (round_time_s, round.minutes)."""
     texts = settings.load_prompts()["round"]
-    line = texts["values"].format(rounds=counted(config.plan_rounds - entry + 1, "round"),
-                                  calls=counted(config.calls_per_round, "tool call"))
-    if not config.round_time_s:
-        return line
-    return f"{line} {texts['minutes'].format(time=duration_text(config.round_time_s))}"
+    rounds = config.plan_rounds - entry + 1
+    line = texts["values"].format(rounds=counted(rounds, "round"), calls=counted(config.calls_per_round, "tool call"),
+                                  budget=counted(rounds * config.calls_per_round, "tool call"))
+    minutes = texts["minutes"].format(time=duration_text(config.round_time_s)) if config.round_time_s else ""
+    return f"{line} {minutes}" if minutes else line
 
 
 def before_line(message: str, line: str, note: str) -> str:
