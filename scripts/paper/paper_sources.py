@@ -42,6 +42,7 @@ from src.judging import verdict_files
 from src.judging.cheatbench_judge import judge_entry
 from src.measures import cheating_ladder, collusion, coordination, judge_labels, measure_readings
 from src.measures.rungs import RUNGS
+from src.sandbox.command_jobs import LATE_START_S
 from src.swarm.influencers import level_text, role_text
 from src.swarm.turn_rules import CHECK_ROUNDS
 from src.ui.transcript_levels import CHEAT_GLOSSES, CLAUSE_GLOSSES, COLLUSION_GLOSSES
@@ -189,6 +190,7 @@ def params_tex() -> str:
         "Rounds": c.rounds,
         "CallsPerRound": c.calls_per_round,
         "RoundMinutes": c.round_time_s // 60,
+        "LateStartSeconds": LATE_START_S,
         "CheckRounds": CHECK_ROUNDS,
         "SubmitDelayRounds": c.submit_delay_rounds,
     }
@@ -199,7 +201,8 @@ def params_tex() -> str:
     judge["CheatingAlarm"] = cheating_ladder.ALARM
     judge["CheatedFrom"] = cheating_ladder.CHEATED_FROM
     judge["AccessedFrom"] = ACCESSED_FROM
-    lines = [HEADER.format(source="PRESETS['default'], settings.JUDGE_MODEL, src/judging/judge_models.yaml, "
+    lines = [HEADER.format(source="PRESETS['default'], src/sandbox/command_jobs.py LATE_START_S, "
+                                  "settings.JUDGE_MODEL, src/judging/judge_models.yaml, "
                                   "src/measures/cheating_ladder.py ALARM and CHEATED_FROM, "
                                   "scripts/paper/study_ladders.py ACCESSED_FROM")]
     lines += [rf"\newcommand{{\{k}}}{{{v}}}" for k, v in macros.items()]

@@ -213,9 +213,9 @@ def fig_topology_compare():
 ROUND_CALLS = (
     {"k7q2m": ["post", "work", "work", "work"], "t4x9n": ["status", "read", "post", "end_round"],
      "p8s3z": ["read", "work", "no call"], "n5j6q": ["read", "post", "work", "end_round"],
-     "x2m7s": ["status", "work", "work", "work"]},
+     "x2m7s": ["status", "work", "job j1", "round time"]},
     {"k7q2m": ["read", "work", "end_round"], "t4x9n": ["status", "read", "end_round"],
-     "p8s3z": ["work", "work", "post", "work"], "n5j6q": ["post", "end_round"], "x2m7s": ["work", "submit"]},
+     "p8s3z": ["work", "work", "post", "work"], "n5j6q": ["post", "end_round"], "x2m7s": ["job_output", "submit"]},
 )
 SHOWN_N = 4
 
@@ -230,7 +230,8 @@ def live_arrow(ax, a, b):
 
 def fig_round_structure():
     """Two rounds, call by call per agent: up to N calls a round, end_round, a reply with no tool call, a read of a
-    post made in the same round, and the submitter's exit."""
+    post made in the same round, a command that outlives its round's time as job j1 and its read in the next round
+    (command_jobs), and the submitter's exit."""
     fig = plt.figure(figsize=(FULL, 3.05))
     ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
     ax.set_xlim(0, 17.0)
@@ -251,7 +252,7 @@ def fig_round_structure():
             place = 0
             for k, a in enumerate(calls[n]):
                 step(ax, a, x0 + k * pitch, y - lane_h / 2 + 0.04, w, lane_h - 0.08)
-                if a in ("end_round", "no call"):    # end_round has no place in its round (transcript_rounds.places)
+                if a in ("end_round", "no call", "round time"):    # no place in its round (transcript_rounds.places)
                     continue
                 place += 1
                 ax.text(x0 + k * pitch + w - 0.13, y + lane_h / 2 - 0.13, str(place) if place < SHOWN_N else "N",
@@ -296,17 +297,19 @@ BOARD_ACTIONS = {"status", "read", "post", "get_peer_actions", "get_peer_observa
 
 
 def step(ax, a, x, y, w, h, text=True):
-    """One call of the round diagram: dashed for a board call, solid grey for a work call, white for submit and
-    end_round, dotted for a reply with no tool call."""
+    """One call of the round diagram: dashed for a board call, solid grey for a work call (a job's is labelled with
+    its id), white for submit, end_round and a round's end on its time, dotted for a reply with no tool call."""
     if a in BOARD_ACTIONS:
         style = dict(fc=PLANE, ec=MUTED, ls=DASH, color=INK)
-    elif a in ("submit", "end_round"):
+    elif a in ("submit", "end_round", "round time"):
         style = dict(fc=WHITE, ec=INK_SECONDARY, ls="-", color=INK)
     elif a == "no call":
         style = dict(fc=SURFACE, ec=MUTED, ls=DOT, color=MUTED)
     else:
         style = dict(fc=TOOL, ec=INK_SECONDARY, ls="-", color=INK_SECONDARY)
-    box(ax, x, y, w, h, a if text else None, fc=style["fc"], ec=style["ec"], ls=style["ls"], fs=7.2,
+    label = "work\n" + a if a.startswith("job ") else a
+    box(ax, x, y, w, h, label if text else None, fc=style["fc"], ec=style["ec"], ls=style["ls"],
+        fs=6.8 if len(a) >= 10 else 7.2,
         color=style["color"], weight="bold" if a == "submit" else "normal")
 
 

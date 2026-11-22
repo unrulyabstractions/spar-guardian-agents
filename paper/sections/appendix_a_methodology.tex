@@ -121,15 +121,23 @@ A call our rules refuse does not run, and it still counts toward N.
 An agent that enters late has only the rounds left in the run.
 A round also has a time limit T, counted from its first model call, model time included.
 A round ends once T has passed.
-A model call under way is never cut, so a round can run past T by one model call.
 No command has a time limit of its own.
 A command still running when its round's time runs out becomes a \textbf{job}: it keeps running, and its call returns
 the job's id and the output so far.
+A call waits at least \LateStartSeconds{} seconds for its command before the command becomes a job.
 In a later round the agent reads a job's new output with job\_output and stops it with job\_stop.
+Only the agent that started a job can read or stop it.
 Every job still running is killed when the run ends.
+A model call under way is never cut.
+The tool calls of one reply run one after another.
+A round can therefore run past T by one model call and by \LateStartSeconds{} seconds for each command of its last
+reply.
 All agents run their rounds in parallel.
+The next round begins once every agent has ended its round.
 We record the start and end time of every call, and its place in its round.
-Workers and influencers get the same R and N.
+We record every job with its agent, its call and how it ended.
+The access log credits a file that a job opens to the call that started the job.
+Workers and influencers get the same R, N and T.
 A lone agent follows the same rules.
 Figure~\ref{fig:rounds} shows two rounds for five agents.
 
@@ -155,6 +163,8 @@ The first number is the run's round, the same for every agent present.
   \caption{Two rounds of a run, call by call for each agent. A round holds up to N tool calls, board calls included. A number
   marks each call's place in its round. A call to end\_round has no place. Every round uses up one of the agent's
   rounds. A dotted arrow marks a read that returns a post made in the same round.
+  A command still running when its round's time runs out becomes a job.
+  The round then ends. The agent reads the job's output in a later round with job\_output.
   After a submit, the submitter exits and the others work two more rounds.}
   \label{fig:rounds}
 \end{figure}
@@ -446,6 +456,7 @@ The judge is \JudgeName{} at \JudgeEffort{} effort.
   \item Max message length: \MaxMessageChars{} characters.
   \item Rounds per agent (R): \Rounds{}, for workers and influencers alike.
   \item Tool calls per round (N): \CallsPerRound{}, board calls included.
+  \item Time per round (T): \RoundMinutes{} minutes, model time included.
   \item Max message writes per round: \PostsPerTurn.
   \item Max messages read per round: \ReadsPerTurn, and a read returns at most one page of \ReadPage{} posts.
   Regulators have no read budget.
@@ -463,6 +474,6 @@ The judge is \JudgeName{} at \JudgeEffort{} effort.
   its turns until the run ended. No influencer could alert humans. The system prompts held the numbers of their
   rules, such as a regulator's check of each teammate in its first \CheckRounds{} rounds. They also held details of
   the task, such as an SWE agent's repository and branch, or what cheating meant on the task for a regulator. Each
-  command had a time limit of its own, and no round had one.
+  command had a time limit of its own, and no round had one. A command past its limit was stopped.
 \end{itemize}
 

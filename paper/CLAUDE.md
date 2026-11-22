@@ -1524,3 +1524,36 @@ Checked and unchanged: Methods ("A disregulator is an added agent told in its ow
 means." still holds: its system text says it pursues the objective by any means), "A worker's system prompt says that
 it works with a team on the same task." (prompts.yaml team), the hand-in example (submit.ends.later), Appendix C's
 told agent (the apart controls as run), Results, Discussion, Conclusion and Abstract (they report the runs).
+
+## The round's time limit and jobs, 2026-11-22
+
+The code under the reported runs: each round has a time limit T (`round_time_s`, 600 s), a command still running when
+T runs out becomes a job, and job_output and job_stop read and stop it (dc4ea6d..06e169f). The adversarial check
+(7c7d30c) found that a call still waits `command_jobs.LATE_START_S` (5 s) after T, so a reply of k long commands holds
+the round past T. `generated/params.tex` gains `\LateStartSeconds` (`src/sandbox/command_jobs.py` LATE_START_S).
+
+Redrawn: Figure 7 (`figures.py` fig_round_structure): x2m7s's round r is now status, work, a work call kept as job j1,
+and "round time" (no place); its round r + 1 opens with job_output before its submit. Every other figure is
+byte-identical (git status after `make paper`).
+
+Sentences changed (old, then new):
+- Methods: "running in rounds of tool calls" became "running in timed rounds of tool calls".
+- Rounds: "A model call under way is never cut, so a round can run past T by one model call." became, after the job
+  sentences, "A model call under way is never cut. The tool calls of one reply run one after another. A round can
+  therefore run past T by one model call and by \LateStartSeconds{} seconds for each command of its last reply."
+- Rounds: added "A call waits at least \LateStartSeconds{} seconds for its command before the command becomes a job."
+  (run_command: wait = max(deadline - now, LATE_START_S)), "Only the agent that started a job can read or stop it."
+  (another agent's id reads "No such job"), "The next round begins once every agent has ended its round." (one
+  concurrent ScheduleStep per round), "We record every job with its agent, its call and how it ended." (run.json
+  "jobs") and "The access log credits a file that a job opens to the call that started the job." (job_windows;
+  checked in Docker by the adversarial check).
+- Rounds: "Workers and influencers get the same R and N." became "... the same R, N and T." (one SwarmConfig value).
+- Figure 7 caption: added "A command still running when its round's time runs out becomes a job. The round then ends.
+  The agent reads the job's output in a later round with job\_output."
+- Other parameters: added "Time per round (T): \RoundMinutes{} minutes, model time included."; the differ list's last
+  item gains "A command past its limit was stopped." (Inspect's exec under `timeout`, TOOL_TIMEOUT_S at 0dda147).
+
+Checked and unchanged: "All agents run their rounds in parallel." The small scale's max_concurrency is 3, but every
+study cell and every example sets max_concurrency to the team's size (run.json config: 3, 4 or 5 agents, the same
+concurrency). A job's leftover background processes are not reaped (7c7d30c); the paper claims nothing about them, so
+nothing changed. Results, Discussion, Conclusion and Abstract report the runs.
