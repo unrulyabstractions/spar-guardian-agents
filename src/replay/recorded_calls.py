@@ -86,6 +86,15 @@ def tool_events(eval_log: Path) -> dict[str, dict]:
     return out
 
 
+def sample_store(eval_log: Path) -> dict:
+    """The store of the eval log's one sample."""
+    with zipfile.ZipFile(eval_log) as archive:
+        names = [n for n in archive.namelist() if n.startswith("samples/")]
+        if len(names) != 1:
+            raise ReplayRefused(f"{eval_log.name} holds {len(names)} samples; a replay plays back one")
+        return json.loads(archive.read(names[0])).get("store") or {}
+
+
 def agent_calls(run: RunDir) -> dict[str, list[tuple[int, str, str, dict, str]]]:
     """agent -> [(k, call id, tool, arguments, transcript result)] from the stored transcripts."""
     out: dict[str, list[tuple[int, str, str, dict, str]]] = {}

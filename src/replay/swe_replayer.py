@@ -31,6 +31,7 @@ from src.replay.commit_dates import RecordedIds, find_date, renamed_text, repare
 from src.replay.git_state import SHARED, git_line
 from src.replay.random_content import CertificateSwap
 from src.replay.recorded_calls import RecordedCall, ReplayRefused
+from src.replay.replay_jobs import JobPlayer, Place
 from src.replay.replay_sandbox import ReplaySandbox
 from src.replay.warm_image import described, warm_image
 from src.sandbox.agent_tools import PYTHON_COMMANDS
@@ -61,6 +62,7 @@ class SweReplayer:
         self.initial_refs: dict[str, dict[str, str]] = {}
         self.last: dict[str, dict] = {}
         self.warm: str | None = None               # the warm image's tag, once use_warm_image built it
+        self.jobs = JobPlayer.of(run, calls, service_of=self.service_of)    # None before the round clock
 
     # ---------------------------------------------------------------- the sandbox
     def services(self) -> dict[str, dict]:
@@ -152,8 +154,23 @@ class SweReplayer:
 
     # ---------------------------------------------------------------- the calls
     def in_sandbox(self, call: RecordedCall) -> bool:
-        """Whether the call ran in the agent's machine: a shell or python call whose arguments the tool accepted."""
+        """Whether the call ran in a machine: a shell or python call whose arguments the tool accepted; since the round
+        clock also job_output, job_stop and peer_shell (replay_jobs.py)."""
+        if self.jobs is not None and self.jobs.handles(call):
+            return True
         return call.tool in TOOLS and call.error != "parsing"
+
+    @staticmethod
+    def service_of(agent: str) -> str:
+        return agent
+
+    def place(self, call: RecordedCall) -> Place:
+        """Where the run's command ran since the round clock: the agent's machine as root in the image's directory
+        (its seat names neither), shell as `bash --login -c`, run_python's code on python's stdin. No reap."""
+        if call.tool in PYTHON_TOOLS:
+            return Place(call.agent, None, None, {}, ["bash", "--login", "-c", PYTHON_COMMANDS[0]],
+                         self.command(call).encode())
+        return Place(call.agent, None, None, {}, ["bash", "--login", "-c", self.command(call)])
 
     def shared(self, call: RecordedCall) -> bool:
         return self.team and bool(SHARED.search(self.command(call)))
@@ -164,7 +181,9 @@ class SweReplayer:
 
     def execute(self, box: ReplaySandbox, call: RecordedCall) -> tuple[str, bool]:
         """The call as the agent's tool ran it: `bash --login -c` for shell, the code on python's stdin for
-        run_python, in /app, with the tool's timeout."""
+        run_python, in /app, with the tool's timeout; since the round clock through replay_jobs, with none."""
+        if self.jobs is not None:
+            return self.jobs.execute(box, call, self)
         if call.tool in PYTHON_TOOLS:
             return box.tool(call.agent, ["bash", "--login", "-c", PYTHON_COMMANDS[0]], TOOL_TIMEOUT_S, WORKDIR,
                             stdin=self.command(call).encode())

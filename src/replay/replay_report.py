@@ -4,8 +4,9 @@
     write_report(out_dir, report)
     steps = faithful_steps(out_dir)       # steps.jsonl's lines in full; NotFaithful unless replay.json says faithful
 
-A replay is faithful when its end state equals the stored one: every diff of swe/diffs byte-identical, the team
-remote's refs and log, and each agent's log, status and branch. A replay that was refused, failed or ended elsewhere
+A replay is faithful when its end state equals the stored one (every diff of swe/diffs byte-identical, the team
+remote's refs and log, and each agent's log, status and branch) and, for a run made since the round clock, its command
+jobs played as recorded (replay_jobs.py). A replay that was refused, failed or ended elsewhere
 is not, and its steps.jsonl must not be read as the run's states. Pure apart from the files it reads and writes.
 """
 from __future__ import annotations
@@ -33,8 +34,10 @@ class ReplayReport:
     remote. end compares the end state with the stored one, part by part; seconds holds each phase's wall time and
     the calls' and snapshots' summed time, slowest the slowest calls. options holds the opt-in remedies the replay ran
     with ({"pem": bool, "warm_image": bool}), swaps each call whose drawn certificates gave way to the recorded ones
-    (random_content.py). read_before lists each call that read the team remote before an overlapping write, by the
-    record's evidence, and played against the remote's refs as they stood before it (replay_run.play_before)."""
+    (random_content.py). jobs, for a run made since the round clock, holds each recorded job against its replay and the
+    problems that make the replay unfaithful (replay_jobs.py); None for an older run. read_before lists each call
+    that read the team remote before an overlapping write, by the record's evidence, and played against the remote's
+    refs as they stood before it (replay_run.play_before)."""
     run: str
     run_dir: str
     faithful: bool
@@ -61,6 +64,7 @@ class ReplayReport:
     options: dict = field(default_factory=dict)
     swaps: list[dict] = field(default_factory=list)
     read_before: list[dict] = field(default_factory=list)
+    jobs: dict | None = None
     code: dict = field(default_factory=dict)
     schema: int = SCHEMA
 

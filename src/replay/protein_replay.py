@@ -52,6 +52,7 @@ from src.replay.commit_dates import RecordedIds, find_date, renamed_text, repare
 from src.replay.git_state import SHARED, git_line
 from src.replay.output_match import mask
 from src.replay.recorded_calls import RecordedCall, ReplayRefused
+from src.replay.replay_jobs import JobPlayer, Place
 from src.replay.replay_sandbox import ReplaySandbox
 from src.sandbox import cheatbench_task_files as task_files
 from src.sandbox import sandbox_hygiene as hygiene
@@ -165,6 +166,7 @@ class ProteinReplayer:
         self.lock = threading.Lock()
         self.last: dict[str, dict] = {}
         self.probe: dict[str, dict[str, bool]] = {}
+        self.jobs = JobPlayer.of(run, calls, service_of=self.service_of)    # None before the round clock
 
     # ---------------------------------------------------------------- the sandbox
     def services(self) -> dict[str, dict]:
@@ -246,8 +248,30 @@ class ProteinReplayer:
     # ---------------------------------------------------------------- the calls
     def in_sandbox(self, call: RecordedCall) -> bool:
         """A shell or python call, or a check_design call, whose arguments the tool accepted: the checker is re-run
-        on the host, every other host tool keeps its recorded output."""
+        on the host, every other host tool keeps its recorded output. Since the round clock also job_output, job_stop
+        and peer_shell (replay_jobs.py)."""
+        if self.jobs is not None and self.jobs.handles(call):
+            return True
         return call.tool in (*TOOLS, CHECKER) and call.error != "parsing"
+
+    @staticmethod
+    def service_of(agent: str) -> str:
+        return agent
+
+    def place(self, call: RecordedCall) -> Place:
+        """Where the run's command ran since the round clock: the agent's seat (agent_tools.run), with the seat's reap
+        sparing the commands still running."""
+        seat = Seat.read(self.seats[call.agent])
+        if call.tool in PYTHON_TOOLS:
+            argv = ["bash", "--login", "-c", python_command(seat, {a: Seat.read(s) for a, s in self.seats.items()})]
+            stdin = self.command(call).encode()
+        else:
+            argv, stdin = ["bash", "--login", "-c", self.command(call)], None
+        user = seat.user
+
+        def reap(box: ReplaySandbox, keep: list[str]) -> None:
+            box.run(call.agent, script_command(hygiene.REAP, user, *keep), timeout=READ_TIMEOUT_S)
+        return Place(call.agent, user, seat.workdir, {}, argv, stdin, reap if seat.reap else None)
 
     def shared(self, call: RecordedCall) -> bool:
         """A call that runs alone: one that may touch the team remote, and every check_design call, whose state is the
@@ -263,6 +287,8 @@ class ProteinReplayer:
         python's stdin, as `user` in /workspace with the tool's timeout, then the seat's reap."""
         if call.tool == CHECKER:
             return self.check(call), False
+        if self.jobs is not None:
+            return self.jobs.execute(box, call, self)
         seat = Seat.read(self.seats[call.agent])
         if call.tool in PYTHON_TOOLS:
             argv = ["bash", "--login", "-c", python_command(seat, {a: Seat.read(s) for a, s in self.seats.items()})]

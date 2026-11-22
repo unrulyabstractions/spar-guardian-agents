@@ -89,7 +89,8 @@ def play_call(box, replayer, call: RecordedCall, cut: OutputCut, swap=None) -> d
     swapped = None
     if swap is not None:
         output, swapped = swap.apply(box, call.agent, call.result, output, replayer.command(call))
-    output, state, dated, undated = replayer.after(box, call, output)
+    jobs = getattr(replayer, "jobs", None)
+    output, state, dated, undated = replayer.after(box, jobs.window(call) if jobs else call, output)
     team = replayer.team_state(box) if replayer.shared(call) else None
     if call.error == "timeout" or timed_out:
         match = "exact" if call.error == "timeout" and timed_out else "differs"
@@ -155,6 +156,72 @@ def play(box, replayer, calls: list[RecordedCall], cut: OutputCut, parallel: boo
         for lane in lanes.values():
             lane.shutdown(wait=True, cancel_futures=True)
     return done
+
+
+def pace(call: RecordedCall, pending: list[tuple[RecordedCall, Future]], jobs) -> None:
+    """Hold the call until its recorded start on the replay's clock (jobs.offset) while anything runs; with nothing
+    running, skip ahead to it."""
+    target = call.t0 + jobs.offset
+    while (now := time.time()) < target:
+        if all(f.done() for _, f in pending) and not jobs.running():
+            jobs.offset -= target - now
+            return
+        time.sleep(min(0.05, target - now))
+
+
+def play_paced(box, replayer, calls: list[RecordedCall], cut: OutputCut, jobs, swap=None,
+               team0: dict | None = None) -> dict[int, dict]:
+    """play for a run made since the round clock (replay_jobs.py): each sandbox call at its recorded start on the
+    replay's clock (pace) while anything runs, a job left running between calls, and a call that runs alone waiting
+    for each earlier call to end, a kept call only until its command has started (it runs on as a job). A kept call
+    that runs alone waits so too, then plays in its agent's lane, so the clock keeps going while it waits out its
+    round."""
+    lanes = {agent: ThreadPoolExecutor(max_workers=1) for agent in replayer.agents}
+    pending: list[tuple[RecordedCall, Future]] = []
+    done: dict[int, dict] = {}
+    rewinds = getattr(replayer, "set_team_refs", None) is not None
+    refs = dict((team0 or {}).get("refs") or {})
+    write = None
+    first = next((c.t0 for c in calls if replayer.in_sandbox(c)), None)
+    jobs.offset = time.time() - first if first is not None else 0.0
+
+    def settle() -> list[tuple[RecordedCall, Future]]:
+        for c, f in pending:
+            while not f.done() and not (jobs.kept(c) and jobs.out_of_the_way(c)):
+                time.sleep(0.05)
+            if f.done():
+                done[c.n] = f.result()
+        return [(c, f) for c, f in pending if not f.done()]
+
+    try:
+        for call in calls:
+            if not replayer.in_sandbox(call):
+                continue
+            pace(call, pending, jobs)
+            if replayer.shared(call):
+                pending = settle()
+            if replayer.shared(call) and not jobs.kept(call):
+                if rewinds and write and read_before_write(call, replayer.command(call), *write):
+                    done[call.n] = play_before(box, replayer, call, cut, swap, write, refs)
+                    continue
+                done[call.n] = play_call(box, replayer, call, cut, swap)
+                if rewinds and done[call.n]["team"] is not None:
+                    changed = changed_refs(refs, done[call.n]["team"]["refs"])
+                    if changed:
+                        write, refs = (call, changed), dict(done[call.n]["team"]["refs"])
+            else:
+                pending.append((call, lanes[agent_lane(call, lanes)].submit(play_call, box, replayer, call, cut,
+                                                                             swap)))
+        for c, f in pending:
+            done[c.n] = f.result()
+    finally:
+        for lane in lanes.values():
+            lane.shutdown(wait=True, cancel_futures=True)
+    return done
+
+
+def agent_lane(call: RecordedCall, lanes: dict) -> str:
+    return call.agent if call.agent in lanes else next(iter(lanes))
 
 
 def step_rows(replayer, calls: list[RecordedCall], played: dict[int, dict], initial: dict[str, dict],
@@ -240,7 +307,14 @@ def replay(run_dir: Path, out_dir: Path, *, parallel: bool = True, pem: bool = F
             initial, team0 = replayer.initial(box), replayer.team_state(box)
             report.seconds["setup"] = round(time.time() - mark, 1)
             mark = time.time()
-            played = play(box, replayer, calls, cut, parallel, swap, team0)
+            jobs = getattr(replayer, "jobs", None)
+            if jobs is None:
+                played = play(box, replayer, calls, cut, parallel, swap, team0)
+            else:
+                try:
+                    played = play_paced(box, replayer, calls, cut, jobs, swap, team0)
+                finally:
+                    jobs.end(box)
             report.seconds["calls"] = round(time.time() - mark, 1)
             mark = time.time()
             report.end = replayer.end_state(box, out_dir / END)
@@ -248,11 +322,13 @@ def replay(run_dir: Path, out_dir: Path, *, parallel: bool = True, pem: bool = F
             mark = time.time()
         report.seconds["compose_down"] = round(time.time() - mark, 1)
         fill_report(report, calls, played, replayer)
+        if jobs is not None:
+            report.jobs = jobs.report(played)
         lines = encode(step_rows(replayer, calls, played, initial, team0))
         tmp = out_dir / (STEPS + ".tmp")
         tmp.write_text("".join(json.dumps(line) + "\n" for line in lines))
         tmp.replace(out_dir / STEPS)
-        report.faithful = bool(report.end.get("equal"))
+        report.faithful = bool(report.end.get("equal")) and not (report.jobs or {}).get("problems")
     except ReplayRefused as refused:
         report.refused = str(refused)
     except Exception as error:  # noqa: BLE001 - the report carries any failure; the next run still plays
@@ -290,7 +366,8 @@ def replay_runs(paths: list[Path], out: Path, *, only_missing: bool = False, par
     def one(path: Path) -> bool:
         report = replay(path, Path(out) / path.name, parallel=parallel, pem=pem, warm_image=warm_image)
         shares = ", ".join(f"{k} {v:.1%}" for k, v in sorted(report.shares().items()))
-        why = report.refused or (report.error or "").split("\n")[0] or "its end state differs"
+        why = report.refused or (report.error or "").split("\n")[0] or (
+            "its command jobs differ" if (report.jobs or {}).get("problems") else "its end state differs")
         verdict = "faithful" if report.faithful else f"NOT faithful: {why}"
         log(f"{path.name}: {verdict}; {report.sandbox_calls} sandbox calls ({shares}); {report.wall_seconds:.0f} s",
             flush=True)

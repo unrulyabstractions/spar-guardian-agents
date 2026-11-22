@@ -204,7 +204,12 @@ class TmpRecorder:
         return getattr(self.inner, name)
 
     def machine(self, call: RecordedCall) -> str:
-        """The compose service the call runs in: the agent's own, else the shared one."""
+        """The compose service the call runs in: a peer_shell call's peer's and a job call's job's (replay_jobs.py),
+        else the agent's own, else the shared one."""
+        jobs = getattr(self.inner, "jobs", None)
+        found = jobs.machine(call) if jobs is not None else None
+        if found is not None:
+            return found
         return call.agent if call.agent in self.service_names else DEFAULT_SERVICE
 
     def services(self) -> dict[str, dict]:

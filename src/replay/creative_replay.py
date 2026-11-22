@@ -34,7 +34,6 @@ import asyncio
 import json
 import re
 import tempfile
-import zipfile
 from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
 from typing import NamedTuple
@@ -67,7 +66,8 @@ from src.measures import honeypot_fingerprints as prints_module
 from src.measures.run_directory import RunDir
 from src.measures.shell_commands import PYTHON_TOOLS, TOOLS, line_hits
 from src.replay.output_match import match_of
-from src.replay.recorded_calls import RecordedCall, ReplayRefused
+from src.replay.recorded_calls import RecordedCall, ReplayRefused, sample_store
+from src.replay.replay_jobs import JobPlayer, Place
 from src.replay.replay_sandbox import ReplaySandbox, timed_out, under_timeout
 from src.sandbox import sandbox_hygiene as hygiene
 from src.sandbox.agent_tools import TOOL_TIMEOUT_S, WORKDIR, Seat, python_command
@@ -141,15 +141,6 @@ class RecordedSecrets:
         if not drawn:
             raise ReplayRefused(f"the staging drew token_hex({nbytes}) beyond what the record holds")
         return drawn.pop(0)
-
-
-def sample_store(eval_log: Path) -> dict:
-    """The store of the eval log's one sample."""
-    with zipfile.ZipFile(eval_log) as archive:
-        names = [n for n in archive.namelist() if n.startswith("samples/")]
-        if len(names) != 1:
-            raise ReplayRefused(f"{eval_log.name} holds {len(names)} samples; a replay plays back one")
-        return json.loads(archive.read(names[0])).get("store") or {}
 
 
 def recorded_secrets(block: dict, store: dict) -> RecordedSecrets:
@@ -403,6 +394,7 @@ class CreativeReplayer:
         self.review_seen = 0
         self.logs_seen: set[str] = set()
         self.world: dict | None = None
+        self.jobs = JobPlayer.of(run, calls, service_of=self.service_of)    # None before the round clock
 
     # ---------------------------------------------------------------- the sandbox
     def services(self) -> dict[str, dict]:
@@ -455,11 +447,30 @@ class CreativeReplayer:
 
     # ---------------------------------------------------------------- the calls
     def in_sandbox(self, call: RecordedCall) -> bool:
-        """A shell or python call whose arguments the tool accepted, and a submit that kept writing.md."""
+        """A shell or python call whose arguments the tool accepted, and a submit that kept writing.md; since the round
+        clock also job_output, job_stop and peer_shell (replay_jobs.py)."""
+        if self.jobs is not None and self.jobs.handles(call):
+            return True
         return (call.tool in TOOLS and call.error != "parsing") or call.id in self.submits
 
     def shared(self, call: RecordedCall) -> bool:
         return True
+
+    @staticmethod
+    def service_of(agent: str) -> str:
+        return DEFAULT_SERVICE
+
+    def place(self, call: RecordedCall) -> Place:
+        """Where the run's command ran since the round clock: the agent's seat in the one machine (agent_tools.run),
+        with the seat's reap sparing the commands still running."""
+        seat, code = self.seats[call.agent], self.command(call)
+        python = call.tool in PYTHON_TOOLS
+        argv = ["bash", "--login", "-c", python_command(seat, self.seats) if python else code]
+
+        def reap(box: ReplaySandbox, keep: list[str]) -> None:
+            run_async(hygiene.reap(seat.user, box=ContainerBox(box), keep=keep))
+        return Place(DEFAULT_SERVICE, seat.user, seat.workdir, {}, argv, code.encode() if python else None,
+                     reap if seat.reap else None)
 
     @staticmethod
     def command(call: RecordedCall) -> str:
@@ -471,6 +482,8 @@ class CreativeReplayer:
         through keeps writing.md as _creative_scoring.snapshot_writing does (snapshot)."""
         if call.id in self.submits:
             return self.snapshot(box, call), False
+        if self.jobs is not None:
+            return self.jobs.execute(box, call, self)
         seat, code = self.seats[call.agent], self.command(call)
         python = call.tool in PYTHON_TOOLS
         argv = ["bash", "--login", "-c", python_command(seat, self.seats) if python else code]
