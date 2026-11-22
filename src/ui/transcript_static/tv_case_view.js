@@ -202,11 +202,11 @@ function foldButton(kind) {
 // Why a round ended (src/swarm/turn_rules/_turn_rounds.py END_REASONS), as its chip says it; "ending" names the tool
 // that ended the agent's turns by the round's charge.
 const END_WORDS = { end_round: 'end_round', calls: 'N reached', no_tool_call: 'no tool call', time: 'time limit',
-  context: 'context limit' };
+  round_time: 'round time', context: 'context limit' };
 const ENDING_TOOL = { stop: 'stop_working', submit: 'submit', alert: 'alert_humans' };
 const END_TIPS = { end_round: 'the agent called end_round', calls: 'the round made its N calls',
   no_tool_call: 'a reply with no tool call', time: 'the run\'s time limit passed', context: 'the reply hit the context limit',
-  ending: 'the agent\'s turns ended' };
+  ending: 'the agent\'s turns ended', round_time: 'the round\'s time limit passed' };
 /** A round's end in a word or two; null when the round recorded none. e: the round's entry ({end, charge}). */
 export function roundEndWord(e) {
   if (!e || !e.end) return null;
