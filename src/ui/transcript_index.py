@@ -493,7 +493,7 @@ def build_index(runs: Path, cached: dict | None = None) -> dict:
             else:
                 todo.append((run_id, st, name, item))
     found = sum(len(listed) for _, listed in cols)
-    progress.detail("found", f"{found} valid runs in {len(cols)} collections")
+    progress.detail("found", f"{progress.plural(found, 'valid run')} in {progress.plural(len(cols), 'collection')}")
     progress.detail("to measure", f"{len(todo)}, {len(entries)} unchanged since the cache" if old else
                     f"{len(todo)}, every run")
     entries.update(measure_all(todo))

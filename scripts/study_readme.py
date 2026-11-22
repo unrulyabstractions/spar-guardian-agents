@@ -616,8 +616,8 @@ def main(argv: list[str] | None = None) -> int:
     if not studies:
         parser.error("name a study or pass --all")
     status, counts = 0, Counter()
-    progress.step(f"{'Check' if args.check else 'Write'} the README of {len(studies)} "
-                  f"{'study' if len(studies) == 1 else 'studies'}")
+    progress.step(f"{'Check' if args.check else 'Write'} the README of "
+                  f"{progress.plural(len(studies), 'study', 'studies')}")
     for study in studies:
         text = render(study)
         path = study / README

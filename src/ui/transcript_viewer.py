@@ -354,15 +354,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"no runs folder at {runs}", file=sys.stderr)
         return 1
     idx = load_or_build(runs, args.rebuild, args.cache)
-    progress.detail("served", f"{len(idx['rows'])} runs")
+    progress.detail("served", progress.plural(len(idx["rows"]), "run"))
     for c in idx["collections"]:
         progress.detail("", f"{c['key']}: {c['runs']}" + (f" and {c['other_tasks']} of other tasks"
                                                           if c["other_tasks"] else ""))
     left = idx["left_out"]
     if left["runs"]:
-        progress.detail("other tasks", f"{left['runs']} runs of {', '.join(left['tasks'])}")
+        progress.detail("other tasks", f"{progress.plural(left['runs'], 'run')} of {', '.join(left['tasks'])}")
     if left.get("single_agent"):
-        progress.detail("left out", f"{left['single_agent']} single-agent runs")
+        progress.detail("left out", progress.plural(left["single_agent"], "single-agent run"))
     progress.detail("unreadable", len(idx["errors"]))
     by_error: dict[str, list[str]] = {}
     for e in idx["errors"]:
@@ -375,7 +375,7 @@ def main(argv: list[str] | None = None) -> int:
         progress.detail("", f"{runs_of}: {error}", err=True)
     progress.step("Prepare the pages")
     Handler.viewer = Viewer(idx)
-    progress.detail("summaries", f"{len(Handler.viewer.summaries)} collections")
+    progress.detail("summaries", progress.plural(len(Handler.viewer.summaries), "collection"))
     srv = Server((args.host, args.port), Handler)
 
     def stop(signum, frame):  # a background start ignores Ctrl-C, so SIGTERM stops the server cleanly too
@@ -383,7 +383,8 @@ def main(argv: list[str] | None = None) -> int:
 
     signal.signal(signal.SIGTERM, stop)
     url = f"http://{args.host}:{args.port}/"
-    progress.done(f"{len(idx['rows'])} runs served, {idx['measured']} measured; open {url} (Ctrl-C stops it)",
+    progress.done(f"{progress.plural(len(idx['rows']), 'run')} served, {idx['measured']} measured; open {url} "
+                  f"(Ctrl-C stops it)",
                   word="Ready")
     try:
         srv.serve_forever()

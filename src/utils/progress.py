@@ -38,7 +38,25 @@ LABEL = 12
 """The width of a detail's label, so the values line up."""
 NESTED = "PROGRESS_NESTED"
 """The environment variable the step runner sets for its commands."""
-START = time.monotonic()
+
+
+def _process_start() -> float:
+    """When this process started, on time.monotonic()'s clock: its age from ps, so the imports before this module
+    count; the import time of this module where ps cannot tell."""
+    now = time.monotonic()
+    try:
+        etime = subprocess.run(["ps", "-o", "etime=", "-p", str(os.getpid())], capture_output=True, text=True,
+                               timeout=2).stdout.strip()
+        days, _, clock = etime.rpartition("-")
+        seconds = 0
+        for part in clock.split(":"):
+            seconds = seconds * 60 + int(part)
+        return now - seconds - 86400 * int(days or 0)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return now
+
+
+START = _process_start()
 _printed = False
 _in_step = False
 
@@ -107,6 +125,11 @@ def detail(label: str, value: object = None, err: bool = False) -> None:
         _emit(pad + " " * (LABEL + 1) + line, err)
 
 
+def plural(n: int, noun: str, many: str | None = None) -> str:
+    """`n` and its noun: "1 run", "3 runs", "1 study", "2 studies" (`many` when not the noun and an s)."""
+    return f"{n} {noun if n == 1 else many or noun + 's'}"
+
+
 def short(path: object) -> str:
     """`path` relative to the working directory when under it, for shorter lines."""
     text = str(path)
@@ -129,8 +152,9 @@ def verbose(*parts: object) -> None:
 
 
 def done(summary: str, out: object = None, word: str = "Done", started: float | None = None) -> None:
-    """The last line, "Done in 12 s: what was done; output in <out>", timed from `started` (the process's start by
-    default). Under the step runner it is an indented detail instead, since the runner ends with its own."""
+    """The last line, "Done in 12 s: what was done; output in <out>", timed from `started` (the process's start, to
+    the second, by default). Under the step runner it is an indented detail instead, since the runner ends with its
+    own."""
     global _in_step
     took = duration(time.monotonic() - (START if started is None else started))
     where = f"; output in {out}" if out else ""
