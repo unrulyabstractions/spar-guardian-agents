@@ -192,11 +192,12 @@ def test_a_long_ids_list_stays_under_the_cap_and_bad_ids_are_rows():
                     oversight.actions_payload("a01", calls_, 20, None, ids=many, budget=65536)):
         rows = payload.get("observations", payload.get("actions"))
         assert len(oversight._dump(payload).encode()) <= 65536, len(oversight._dump(payload).encode())
-        assert [r["id"] for r in rows[:4]] == [0, 1, 2, 3] and rows[3] == {"id": 3, "status": "no such call"}
+        assert [r["id"] for r in rows[:4]] == [0, 1, 2, 3]
+        assert rows[3] == {"agent": "a01", "id": 3, "status": "no such call"}
         assert payload["not_shown"] == 20_000 - len(rows) and payload["not_shown_ids"] == many[len(rows):][
             :len(payload["not_shown_ids"])] and payload["not_shown_ids"]
     for budget in (65536, 64):
         bad = oversight.actions_payload("a01", calls_, 20, None, ids=[99, 0], budget=budget)
-        assert bad["actions"][0] == {"id": 99, "status": "no such call"}, bad
+        assert bad["actions"][0] == {"agent": "a01", "id": 99, "status": "no such call"}, bad
         assert oversight.observations_payload("a01", calls_, [99], 20, 16000, budget=budget)["observations"][0] == \
-            {"id": 99, "status": "no such call"}
+            {"agent": "a01", "id": 99, "status": "no such call"}

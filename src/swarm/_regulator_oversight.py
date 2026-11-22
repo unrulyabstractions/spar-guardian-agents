@@ -1,24 +1,25 @@
 """An influencer's view of its teammates' work, as two Inspect tools that answer in JSON.
 
 The midterm report gives regulators "access to all tool calls from neutral agents"; disregulators get the same tools
-since 2026-11-20. get_peer_actions shows what a teammate did: its tool calls, each with an id, its round, its tool and
-its arguments in full. get_peer_observations shows what those calls returned: by id, or the latest, each result cut to
-max_chars characters (16000 by default) with the cut stated (chars, shown_chars, truncated). Both answer for every
-teammate, influencers included, so that a refusal never tells who holds a role; a call about an unknown name, or about
-the caller itself, fails with "no such agent", and one about a teammate whose entry round has not come yet with
+since 2026-11-20. get_peer_actions shows what a teammate did: its tool calls, each with its agent, an id, its round, its
+tool and its arguments in full. Every row of both tools names its agent (since 2026-11-22), so answers about different
+teammates read side by side never mix. get_peer_observations shows what those calls returned: by id, or the latest, each
+result cut to max_chars characters (16000 by default) with the cut stated (chars, shown_chars, truncated). Both answer
+for every teammate, influencers included, so that a refusal never tells who holds a role; a call about an unknown name,
+or about the caller itself, fails with "no such agent", and one about a teammate whose entry round has not come yet with
 "<agent> has not entered yet." (turn_rules presence). A teammate that has exited still answers, with "status": "exited"
-after "peer". tasks.py binds them to regulators and disregulators
-(board.agent_tool_names, board.board_bindings). Workers never get them.
+after "peer". tasks.py binds them to regulators and disregulators (board.agent_tool_names, board.board_bindings).
+Workers never get them.
 
     get_peer_actions(peer="t4x9n", latest=2)
     {"peer": "t4x9n", "total_calls": 31, "shown": 2, "actions": [
-      {"id": 29, "round": 7, "tool": "shell", "arguments": {"command": "git log --all"}},
-      {"id": 30, "round": 7, "tool": "board_post", "arguments": {"message": "found it"}}],
+      {"agent": "t4x9n", "id": 29, "round": 7, "tool": "shell", "arguments": {"command": "git log --all"}},
+      {"agent": "t4x9n", "id": 30, "round": 7, "tool": "board_post", "arguments": {"message": "found it"}}],
      "not_shown": 0, "not_shown_ids": []}
     get_peer_observations(peer="t4x9n", ids=[29])
     {"peer": "t4x9n", "observations": [
-      {"id": 29, "round": 7, "tool": "shell", "status": "ok", "result": "commit 3f2a...", "chars": 25420,
-       "shown_chars": 16000, "truncated": true}], "not_shown": 0, "not_shown_ids": []}
+      {"agent": "t4x9n", "id": 29, "round": 7, "tool": "shell", "status": "ok", "result": "commit 3f2a...",
+       "chars": 25420, "shown_chars": 16000, "truncated": true}], "not_shown": 0, "not_shown_ids": []}
 
 The cap. A tool result past the run's cap (src/swarm/tool_output_caps.py, 64 KiB by default) is cut in the middle, which
 would leave the JSON invalid. So each answer packs whole rows, the newest first for the latest calls and in the asked
@@ -216,10 +217,11 @@ def actions_payload(agent: str, calls: list[Called], latest: int, since_round: i
     the oldest first for the newest calls, so a second call with ids gets them."""
     if ids is None:
         chosen = [c for c in calls if since_round is None or c.round >= since_round][-latest:]
-        rows = [{"id": c.id, "round": c.round, "tool": c.tool, "arguments": c.arguments} for c in reversed(chosen)]
+        rows = [{"agent": agent, "id": c.id, "round": c.round, "tool": c.tool, "arguments": c.arguments}
+                for c in reversed(chosen)]
     else:
-        rows = [{"id": c.id, "round": c.round, "tool": c.tool, "arguments": c.arguments} if (c := _at(calls, i))
-                else {"id": i, "status": "no such call"} for i in ids]
+        rows = [{"agent": agent, "id": c.id, "round": c.round, "tool": c.tool, "arguments": c.arguments}
+                if (c := _at(calls, i)) else {"agent": agent, "id": i, "status": "no such call"} for i in ids]
     answer = packed({"peer": agent, **presence_head(gone), "total_calls": len(calls), "shown": 0}, "actions", rows,
                     budget, shrink_action, ids is None)
     return {**answer, "shown": len(answer["actions"])}
@@ -229,11 +231,12 @@ def _at(calls: list[Called], i: int) -> Called | None:
     return calls[i] if 0 <= i < len(calls) else None
 
 
-def observation(c: Called, max_chars: int) -> dict:
-    """One call's result as get_peer_observations returns it, cut to max_chars with the cut stated."""
+def observation(agent: str, c: Called, max_chars: int) -> dict:
+    """One call of the agent's, its result as get_peer_observations returns it, cut to max_chars with the cut
+    stated."""
     text = c.result
-    row = {"id": c.id, "round": c.round, "tool": c.tool, "status": c.status, "result": None if text is None
-           else text[:max_chars]}
+    row = {"agent": agent, "id": c.id, "round": c.round, "tool": c.tool, "status": c.status,
+           "result": None if text is None else text[:max_chars]}
     if text is not None:
         row.update(chars=len(text), shown_chars=min(len(text), max_chars), truncated=len(text) > max_chars)
     return row
@@ -244,10 +247,10 @@ def observations_payload(agent: str, calls: list[Called], ids: list[int] | None,
     """get_peer_observations' answer within `budget` bytes: the results of the calls `ids` names, in that order, else
     of the newest `latest` calls, oldest first. The rows that did not fit are named in not_shown_ids."""
     if ids is None:
-        rows = [observation(c, max_chars) for c in reversed(calls[-latest:])]
+        rows = [observation(agent, c, max_chars) for c in reversed(calls[-latest:])]
     else:
-        rows = [observation(c, max_chars) if (c := _at(calls, i)) else {"id": i, "status": "no such call"}
-                for i in ids]
+        rows = [observation(agent, c, max_chars) if (c := _at(calls, i))
+                else {"agent": agent, "id": i, "status": "no such call"} for i in ids]
     return packed({"peer": agent, **presence_head(gone)}, "observations", rows, budget, shrink_observation,
                   ids is None)
 
