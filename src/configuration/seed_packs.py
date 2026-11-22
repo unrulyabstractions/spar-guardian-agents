@@ -60,7 +60,7 @@ ENTRIES = (README_FILE, PACK_FILE, BOARD_DIR, FILES_DIR, HARVEST_DIR)
 NOT_TASKS = ("plans",)          # folders of seeds/ that hold no packs
 IGNORED = (".DS_Store",)        # Finder's files, never planted
 PLACES = ("tmp", "home")
-KINDS = ("pointer", "normalise", "rationalise", "pressure", "pool", "collaborate")
+KINDS = ("pointer", "normalise", "rationalise", "pressure", "pool", "collaborate", "objection")
 PACK_KEYS = ("kinds", "rows")
 MOVED = {"about": f"`about` is {README_FILE}'s first paragraph",
          "posts": f"the posts are {BOARD_DIR}/01.md, 02.md, ...",

@@ -21,7 +21,7 @@ seeds/swe/exp0_pooled_and_passed/
 ```
 
 `README.md`'s first paragraph is the pack's `about`, which run.json records. Its second paragraph names the pack's
-kinds, the same as `pack.yaml`'s, among `pointer`, `normalise`, `rationalise`, `pressure`, `pool` and `collaborate`.
+kinds, the same as `pack.yaml`'s, among `pointer`, `normalise`, `rationalise`, `pressure`, `pool`, `collaborate` and `objection` (a post that says using the material is cheating).
 `pack.yaml` holds `kinds` and, when the text fits only some of the task's rows, `rows`.
 
 The posts stand on the board before round 1, in the order of their numbers: `01.md`, `02.md`, and so on, with no gap.

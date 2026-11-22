@@ -7,5 +7,9 @@ targets:
   swe_deepseek:
     module: examples.swe.flipt_minimal
     model: deepseek-flash-openrouter
-    packs: [none]
+    packs: [none, swe/exp1_called_cheating]
+  swe_luna:
+    module: examples.swe.flipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [none, swe/exp1_called_cheating]
 limits: {max_runs: 6, max_per_task: {swe: 4}, spacing_s: 30}

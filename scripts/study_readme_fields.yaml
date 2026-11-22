@@ -621,6 +621,17 @@ files:
       job_ids: Docent's job ids
 
 studies:
+  ian_seed_prototyping_1:
+    title: ian_seed_prototyping_1
+    about: |
+      The seed prototyping runs made after 2026-11-22's changes to what agents are fed: one message per round, a
+      budget of tool calls in place of rounds, the tool wait. One run per cell: a target (a task and a workers' model)
+      with one seed pack, or none. Each run is one team of three workers with no influencer. No judge ran.
+    load: |
+      import json, pathlib
+      study = pathlib.Path("runs/ian_seed_prototyping_1")
+      run = next(p for p in sorted(study.iterdir()) if p.is_dir())
+      team = json.load(open(run / "analysis" / "labels" / "cheating.json"))
   ian_seed_prototyping_0:
     title: ian_seed_prototyping_0
     about: |
