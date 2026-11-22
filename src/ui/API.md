@@ -389,7 +389,7 @@ Collection = {key (the folder name), label, tag, about, runs (its valid runs lis
 IndexRow = {                                         # valid runs only
   id ("<collection>/<run key>"), col, key (the run's path under the collection), run (its name; a manifest's key),
   hidden_task (a task the study does not read: off by default in Settings),
-  task_name (CheatBench's), task_label (its domain and the stem of the cell's script, as "SWE (flipt)": task_label),
+  task_name (CheatBench's), task_label (its domain and its instance, the sample's id, as "SWE (flipt-02e2)": task_label),
   instance (the sample id),
   arm_label (agents; workers' conditioning; influencers, in words), agents ("One agent" | "3 workers" | "3 workers,
   1 influencer" ...), workers (their number),

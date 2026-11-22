@@ -299,8 +299,9 @@ def cell_of(listed: Listed, rf: RunFiles) -> Cell:
 
 
 def task_label(task: str | None, stem: str | None) -> str:
-    """The run's task in the pages' words: its domain (ladder_by_domain.TASK_DOMAIN, the tasks the study reads) and the
-    stem of its cell, as "SWE (flipt)"; the task's name for a task with no domain."""
+    """The run's task in the pages' words: its domain (ladder_by_domain.TASK_DOMAIN, the tasks the study reads) and its
+    instance, as "SWE (flipt-02e2)" (the sample's id, which every run records; the stem of its cell for a run with no
+    episode); the task's name for a task with no domain."""
     if task in TASK_DOMAIN:
         return f"{TASK_DOMAIN[task]} ({stem})" if stem else TASK_DOMAIN[task]
     return (task or stem or "?").replace("_", " ")
@@ -411,7 +412,7 @@ def build_row(col: str, listed: Listed, rf: RunFiles, measured: dict) -> dict:
     return {
         "id": f"{col}/{listed.key}", "col": col, "key": listed.key,
         "run": run_name(listed.path) if listed.source != "manifest" else listed.meta.get("key"),
-        "task_name": rf.task, "task_label": task_label(rf.task, cell.stem),
+        "task_name": rf.task, "task_label": task_label(rf.task, sample.split("#")[0] or cell.stem),
         "instance": sample.split("#")[0] or None,
         "arm_label": f"{agents}; workers {told}; {influencer_words(influencers)}", "agents": agents,
         "worker_conditioning": told, "influencer_conditioning": influencers, "model": cell.worker,

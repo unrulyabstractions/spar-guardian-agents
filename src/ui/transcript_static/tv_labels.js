@@ -37,7 +37,7 @@ export const isInfluencer = role => INFLUENCERS.includes(role);
 export const ROLE_LABEL = { worker: 'worker', regulator: 'regulator (influencer)', disregulator: 'disregulator (influencer)' };
 
 export const armLabel = r => r.arm_label;
-// A run's task in the server's words: its domain and the stem of its cell (src/ui/transcript_index.py task_label).
+// A run's task in the server's words: its domain and its instance (src/ui/transcript_index.py task_label).
 export const taskLabel = r => r.task_label;
 export const modelLabel = r => MODELS[r.model] || r.model || r.model_id;
 /** One influencer of a run's influencer_conditioning ({role, n, level, model}) in words: its role, its instruction
