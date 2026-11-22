@@ -9,7 +9,7 @@ STEPS := python3 -m src.utils.progress
 RUN ?= riemann_minimal
 SAMPLES ?= 15
 
-.PHONY: help ui ui-stop transcripts smoke smoke-swe smoke-kw smoke-interview smoke-protein smoke-creative smoke-chess smoke-seeds seeds-check \
+.PHONY: help ui ui-stop transcripts transcript smoke smoke-swe smoke-kw smoke-interview smoke-protein smoke-creative smoke-chess smoke-seeds seeds-check \
 	smoke-access smoke-network smoke-load smoke-all smoke-replay test test-tools lint \
 	tools-setup scout docent graph transect contagion failures hawk analyse figures tables \
 	results-tables paper-figures paper-sources paper-check paper
@@ -25,6 +25,8 @@ ui-stop:  ## stop the results browser started by make ui
 
 transcripts:  ## serve the transcript viewer on port 8770 in the foreground (REBUILD=1 rebuilds its index)
 	@$(PY) -m src.ui.transcript_viewer $(if $(REBUILD),--rebuild)
+
+transcript: transcripts  ## the same, under the name without the s
 
 smoke:  ## openmath mock-model scenarios on the real sandbox, no model spend
 	@$(PY) -m tests.smoke.openmath
