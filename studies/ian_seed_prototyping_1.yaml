@@ -1,0 +1,11 @@
+# ian_seed_prototyping_1 (2026-11-22): the first runs after agents stopped being told of rounds (c632292: a budget of
+# tool calls and wait) and got one message per round (acdb786). One run per cell. The control first, to compare with
+# ian_seed_prototyping_0's swe_deepseek_none runs; add packs and targets below as needed.
+study: ian_seed_prototyping_1
+seeds: [1]
+targets:
+  swe_deepseek:
+    module: examples.swe.flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+limits: {max_runs: 6, max_per_task: {swe: 4}, spacing_s: 30}
