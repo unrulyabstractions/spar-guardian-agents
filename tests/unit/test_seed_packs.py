@@ -197,7 +197,8 @@ def test_the_field_takes_a_pack_or_none_and_refuses_the_rest():
     with pytest.raises(ValidationError, match="lone agent has no board"):
         build_config("default", "small", ["n_agents=1", f"seed_pack={pack}"])
     # a pack of files alone fits a lone agent
-    assert build_config("default", "small", ["n_agents=1", "seed_pack=swe/exp0_notes_only"]).seed_pack == "swe/exp0_notes_only"
+    lone = build_config("default", "small", ["n_agents=1", "seed_pack=swe/exp0_notes_only"])
+    assert lone.seed_pack == "swe/exp0_notes_only"
 
 
 def test_the_record_draws_a_previous_team_off_the_roster_and_fills_its_ids():

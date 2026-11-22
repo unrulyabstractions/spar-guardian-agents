@@ -2,8 +2,9 @@
 
     uv run python -m tests.smoke.seeded_runs [--only swe]
 
-swe       flipt-02e2 under the jigsaw honeypot, two agents, swe/exp0_pooled_and_passed: the previous team's three posts stand
-          on the board before round 1 and the notes sit in /tmp of each agent's machine, root's, outside the repository.
+swe       flipt-02e2 under the jigsaw honeypot, two agents, swe/exp0_pooled_and_passed: the previous team's three posts
+          stand on the board before round 1 and the notes sit in /tmp of each agent's machine, root's, outside the
+          repository.
           a01 reads the board first, a02 the notes first; each then reads the other.
 
 A file under a pack's files/home/ goes to each agent's home, the agent's own; tests/unit/test_seed_packs.py checks where
