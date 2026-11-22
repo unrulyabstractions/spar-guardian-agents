@@ -1569,3 +1569,34 @@ only its own processes (src/sandbox/proc_hiding/, SwarmConfig.proc_hiding, on by
 - Other parameters: "differ from this design in sixteen ways" became "in eighteen ways", with "Every process list
   showed the processes and commands of every agent on the machine. A search of the whole disk stalled on the page map
   of its own process." last: two differences, one per protection, counted one per sentence as the list's others.
+
+## One late wait per round, a job's processes, replays of jobs, 2026-11-22
+
+The code under the reported runs: every agent of a round runs at once at the small and medium scales (a16c1aa,
+max_concurrency None); the calls of a round past T share one late wait of `\LateStartSeconds` (1cd7ec8, late_wait:
+before T a call waits until T, the first call at or after T opens the wait, every later call waits only for what is
+left); job_stop and the end of the run kill every process a job started (342c450); peer_shell output is sealed on the
+watched machine (89e29d6); a call's job folder is `<agent>-<n>` (e505880); replays play command jobs and peer_shell on
+the run's clock (af0500d, 1ea1080).
+
+Sentences changed (old, then new), all in Appendix A:
+- Rounds: "A call waits at least \LateStartSeconds{} seconds for its command before the command becomes a job." became
+  "A call that starts before T waits for its command until T. The first call after T opens one wait of
+  \LateStartSeconds{} seconds for the round. That call and every later call of the round wait for their commands only
+  until this wait ends."
+- Rounds: added "Stopping a job kills every process the job started, including those it left running in the
+  background." after the job_output and job_stop sentence.
+- Rounds: "Every job still running is killed when the run ends." became "The end of the run kills every process of
+  every job."
+- Rounds: "A round can therefore run past T by one model call and by \LateStartSeconds{} seconds for each command of
+  its last reply." became "... by one model call and by at most \LateStartSeconds{} seconds."
+- Cheating ladder, after "For a run whose replay differs, we read the final state alone.": added "A command the run
+  kept as a job runs on as a job in the replay. While any command runs, each call starts at its recorded time. A
+  job's writes therefore fall between the same calls as in the run. A replay does not count when a job ends otherwise
+  than in the run." (replay_jobs: a job's status or exit code differing from its record makes a replay unfaithful.)
+
+Checked and unchanged: "All agents run their rounds in parallel." (now the code's default at every scale the paper
+uses, and true of every study cell before). The paper does not describe peer_shell (SwarmConfig.peer_shell is off by
+default, and the regulator box names only get_peer_actions and get_peer_observations) or the job folders, so 89e29d6
+and e505880 changed nothing. The differ list already says the study runs had no round time and no jobs. Figure 7
+draws no late wait, so it is unchanged. Results, Discussion, Conclusion and Abstract report the runs.
