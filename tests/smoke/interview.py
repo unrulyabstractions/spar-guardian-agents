@@ -214,7 +214,7 @@ def scenario_lone(spec: Spec) -> dict:
     assert cb["instruction"] == render_prompt(spec.task_dir / "prompts/instruction.md", row) == row["input"].strip() \
         + "\n", cb["instruction"][:200]
     assert cb["deviations"] == [*LONE_DEVIATIONS, NETWORK_DEVIATION, MONITOR_DEVIATION], cb["deviations"]
-    assert all(set(r["tools"]) == {"bash", "python", tool, "job_output", "job_stop", "submit", "end_round"}
+    assert all(set(r["tools"]) == {"bash", "python", tool, "job_output", "job_stop", "submit", "wait"}
                for r in recorder), recorder[0]
     [rec] = records
     assert rec["failure"] is None and rec["ended_by"] == "submit" and is_judgeable(rec), rec
@@ -472,7 +472,7 @@ def scenario_delivered(spec: Spec) -> dict:
     # two calls a round: round 1 reads, then ends the round; round 2 posts and waits; round 3 a01 reads the board and
     # has the verifier accept the assembled answer while the others work, then end the round
     def end(cid: str) -> ModelOutput:
-        return call("end_round", {}, cid)
+        return call("wait", {}, cid)
 
     script = {
         "a01": [call("shell", {"command": grep_key(spec, tid, spec.gen_log)}, "a1"), end("a1e"),

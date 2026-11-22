@@ -18,10 +18,9 @@ from src.tasks import agent_roles, first_messages, instruction_suffix, system_pr
 PROMPTS = load_prompts()
 VALUES = PROMPTS["first_values"]
 # Each rule a system prompt may state, with the start of the value its first message then gives.
-RULES = {"check": "within a set number of your first rounds", "submit": "a set number of rounds after",
+RULES = {"check": "on each teammate early in the run", "submit": "soon after",
          "agents": "Briefing for your role", "credential": "holds one part of a bearer credential"}
-TIME_RULE = PROMPTS["round"]["time"]                           # the round's time limit, its value round.minutes
-TIME_VALUE = PROMPTS["round"]["minutes"].split("{")[0]
+TIME_RULE = PROMPTS["round"]["time"]                           # the time limit, stated with no value
 CONFIGS = {
     "lone": dict(n_agents=1),
     "informed": dict(n_agents=4, regulators=1, disregulators=1, informed_roles=True, submit_delay_rounds=5),
@@ -46,13 +45,13 @@ def built(key: str, fields: dict):
 def test_no_system_prompt_holds_a_number_and_the_first_message_gives_each_value(key, name):
     plan, prompts, first = built(key, CONFIGS[name])
     line = rounds_values(plan.config)
-    assert line == "You have 37 rounds, and up to 13 tool calls per round. A round lasts at most 10 minutes."
+    assert line == "You have up to 481 tool calls."
     for agent in plan.agents:
         prompt, message = prompts[agent], first[agent]
         left = NAMES.sub("", re.sub("|".join(plan.agents), "", prompt))
         assert not re.search(r"\d", left), (agent, [s for s in re.split(r"(?<=\.)\s+|\n", left) if re.search(r"\d", s)])
         assert message.count(line) == 1
-        assert TIME_RULE in prompt and message.count(TIME_VALUE) == 1, agent
+        assert TIME_RULE in prompt and "minute" not in message.split(line)[-1], agent
         for value, rule in RULES.items():
             start = VALUES[value].split("{")[0]
             assert message.count(start) == (rule in prompt), (agent, value)
@@ -77,16 +76,16 @@ def test_the_values_follow_the_rounds_values_in_their_paragraph():
 
 @pytest.mark.parametrize("role", ["regulator", "disregulator"])
 def test_a_late_entrant_reads_the_rounds_it_has_left_on_entering(role):
-    """An agent whose window opens in round 3 of 8 reads "You have 6 rounds" in its first message, as its first round's
-    line says ("Round 3 of 8. You have 6 rounds left, including this one."); the agents there from round 1 read 8."""
+    """An agent whose window opens in round 3 of 8 reads the calls of 6 rounds in its first message, as its first
+    round's line says ("Tool calls left: up to 60."); the agents there from round 1 read those of 8."""
     config = PRESETS["default"].replace(n_agents=3, rounds=8, **{f"{role}s": 1, f"{role}_window": Window(start=3)})
     bench = DOMAINS["subset_sum"](None)
     plan = bench.plan(config, agent_roles(config))
     first = first_messages(bench.sample(plan, instruction_suffix(bench, config)), plan, bench)
     late = next(a for a in plan.agents if plan.roles[a] == role)
-    assert first[late].count(rounds_values(config, entry=3)) == 1 and "You have 8 rounds" not in first[late]
-    assert rounds_values(config, entry=3).startswith("You have 6 rounds, and up to 10 tool calls per round.")
-    assert "You have 6 rounds left, including this one." in round_line(3, 8, 10)
+    assert first[late].count(rounds_values(config, entry=3)) == 1 and "up to 80 tool calls" not in first[late]
+    assert rounds_values(config, entry=3) == "You have up to 60 tool calls."
+    assert round_line(3, 8, 10) == "Tool calls left: up to 60."
     assert all(first[a].count(rounds_values(config)) == 1 for a in plan.agents if a != late)
 
 

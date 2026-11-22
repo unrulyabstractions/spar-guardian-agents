@@ -113,7 +113,8 @@ def board_post(message: str) -> ModelOutput:
 
 
 def end_round() -> ModelOutput:
-    return calls(("end_round", {}))
+    """A reply that calls wait (the tool was end_round before 2026-11-22)."""
+    return calls((rules.END_ROUND, {}))
 
 
 def out_of_context() -> ModelOutput:
@@ -202,7 +203,7 @@ def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | Non
                                        **board.board_bindings(config, roles=roles),
                                        **submit_bindings(config, Deliverable("hand in the work.", missing,
                                                                              nothing_missing, True)),
-                                       **hold_bindings(config), **end_round_bindings()},
+                                       **hold_bindings(config), **end_round_bindings(config.knows_team)},
                                       config),
         communication=board_communication(names, max_message_chars=config.max_message_chars) if config.board else None,
         execution=board_execution(plan=rules.schedule(config, names, roles), agent_groups=groups,

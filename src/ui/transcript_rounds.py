@@ -38,6 +38,8 @@ from __future__ import annotations
 
 from src.swarm.turn_rules import END_ROUND
 
+OLD_END_ROUND = "end_round"         # wait's name in runs before 2026-11-22
+
 ROUND_KEYS = ("turn", "round", "n", "end", "ending", "charge", "charged", "used", "ended", "t0", "t1")
 """What the viewer keeps of a timeline entry besides its calls."""
 CALL_KEYS = ("id", "tool", "free", "refused", "error", "t0", "t1", "job")
@@ -46,10 +48,11 @@ command call became when its round's time ran out (src/sandbox/command_jobs.py),
 
 
 def places(calls: list[dict]) -> list[int | None]:
-    """Each call's place in its round, from 1, among the calls that count toward N: end_round has none."""
+    """Each call's place in its round, from 1, among the calls that count toward N: wait has none, nor end_round, its
+    name in runs before 2026-11-22."""
     out, n = [], 0
     for call in calls:
-        counts = call.get("tool") != END_ROUND
+        counts = call.get("tool") not in (END_ROUND, OLD_END_ROUND)
         n += counts
         out.append(n if counts else None)
     return out

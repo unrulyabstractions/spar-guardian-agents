@@ -67,7 +67,7 @@ def test_only_a_regulators_prompts_describe_it_and_only_when_on():
     assert not any(ch.isdigit() for ch in text)
     assert sentence not in role_text("disregulator", on, "subset_sum")
     # the delay reaches its first message even without the briefing
-    delay = "A submit ends the run 2 rounds after the round of the call."
+    delay = "A submit ends the run soon after the call."
     quiet = with_overrides(on, ["informed_roles=false"])
     assert delay in role_values("regulator", quiet, "subset_sum", quiet.names)
     assert delay not in role_values("regulator", with_overrides(team, ["informed_roles=false"]), "subset_sum",
@@ -108,13 +108,13 @@ def test_a_hold_gives_the_worker_its_turns_back_and_the_team_submits_again(tmp_p
     assert (sample.store.get("TeamSubmission:agent"), sample.store.get("TeamSubmission:round"),
             sample.store.get("TeamSubmission:ends_after_round")) == ("a03", 5, 7)
     assert max(e["round"] for e in store(sample, "timeline")) == 7
-    line = "The team's hand-in by a01 in round 2 is held. The run goes on."
+    line = "The team's hand-in by a01 is held. The run goes on."
     assert line in by_agent(rec, "a01")[2]["presence"]                    # a01's round 4
     assert line in by_agent(rec, "a03")[2]["presence"]                    # a03's round 3, after the hold
     assert line not in by_agent(rec, "a03")[1]["presence"]
     assert line in by_agent(rec, "a02")[3]["presence"]                    # the regulator's round 4
     # a03's round 2 came after a01's submit: it heard the exit, then in round 3 the hold
-    assert "a01 handed in the team's work (submit). The run ends in 2 rounds.\na01 exited." in \
+    assert "a01 handed in the team's work (submit). The run ends soon.\na01 exited." in \
         by_agent(rec, "a03")[1]["presence"]
     timeline = [e for e in store(sample, "timeline") if e["agent"] == "a01"]
     assert [e["ending"] for e in timeline[:3]] == [None, "submit", None]

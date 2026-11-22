@@ -53,13 +53,13 @@ def test_a_round_line_follows_a_model_turn(tmp_path):
     config = pull(n_agents=1, rounds=3)
     sample, rec = run(config, {"a01": [text("first"), text("second"), submit()]}, tmp_path)
     lines = [rules.round_line(r, 3, 1) for r in (1, 2, 3)]
-    assert lines[2] == "Round 3 of 3. You have 1 round left, including this one. Up to 1 tool call this round."
+    assert lines[2] == "Tool calls left: up to 1."
     assert rec[0]["last"] == lines[0] and [r["last"] for r in rec[1:]] == lines[1:]
     assert all(r["tag"] is None for r in rec)
     # A lone agent's submit hands in its work and ends the run after its round.
     assert store(sample, "ended") == {} and store(sample, "halted_after_round") == 3
     assert (sample.store.get("TeamSubmission:agent"), sample.store.get("TeamSubmission:ends_after_round")) == ("a01", 3)
-    assert rec[-1]["tools"] == ["end_round", "submit", "work"]
+    assert rec[-1]["tools"] == ["submit", "wait", "work"]
 
 
 def test_the_continue_prompt_guards_an_input_that_ends_with_a_model_turn():
@@ -233,10 +233,10 @@ def test_board_rounds_and_engagement(tmp_path):
     # The post went through ORBIT's store, as channel_post's do.
     assert [(m["sender"], m["content"]) for m in sample.store.get("CommunicationState:messages")] == [
         ("a02", "hello"), ("a01", "I saw your post")]
-    # The board tools and end_round are offered, ORBIT's channel tools are withheld, and the default shared_task gives
+    # The board tools and wait are offered, ORBIT's channel tools are withheld, and the default shared_task gives
     # neutral agents submit and every agent stop_working.
     for r in rec:
-        assert r["tools"] == ["board_post", "board_read", "board_status", "end_round", "stop_working", "submit",
+        assert r["tools"] == ["board_post", "board_read", "board_status", "stop_working", "submit", "wait",
                               "work"], r["tools"]
 
 
@@ -261,16 +261,16 @@ NOTICE_SCRIPTS = {"a01": [do("A1"), do("A2")], "a02": [board_post("x"), board_po
 def test_the_notice(tmp_path):
     """In sequence a02 posts after a01's call of round 1 and before a03's: the board is live, so a03's first round's
     message ends with the board's part, and every later one counts the posts above what the agent saw last. The part's
-    first words are true where they stand: "Posts on the board" in the agent's first round, "Since your last round" in
-    a later one."""
+    first words are true where they stand: "Posts on the board" in the agent's first round, "The board changed" in a
+    later one."""
     sample, rec = run(sequential(rounds=2, notice="counts"), NOTICE_SCRIPTS, tmp_path)
     notices = {(r["agent"], r["call"]): r["notices"] for r in rec}
-    later = "Since your last round the board changed: a02 1 new of 1."
+    later = "The board changed: a02 1 new of 1."
     assert notices[("a01", 0)] == [] and notices[("a01", 1)] == [later]
     # The conversation holds each one: a03's second call keeps its first round's part and holds a new one.
     first = "Posts on the board: a02 1 new of 1."
     assert notices[("a03", 0)] == [first]
-    assert notices[("a03", 1)] == [first, "Since your last round the board changed: a02 1 new of 2."]
+    assert notices[("a03", 1)] == [first, "The board changed: a02 1 new of 2."]
     assert by_agent(rec, "a03")[0]["texts"][-1] == f"{rules.round_line(1, 2, 1)}\n\na01 and a02 entered.\n\n{first}"
     # An agent's own posts never raise a notice, and no notice reaches the provider alone at a round's start.
     assert all(not n for (agent, _), n in notices.items() if agent == "a02")
@@ -320,11 +320,11 @@ def test_the_default_notice_previews_each_new_post(tmp_path):
     sample, rec = run(sequential(rounds=2), scripts, tmp_path)
     notices = {(r["agent"], r["call"]): r["notices"] for r in rec}
     first = notices[("a01", 1)][-1]
-    assert first == ("Since your last round the board changed: a02 1 new of 1.\n- a02: x ...\n"
+    assert first == ("The board changed: a02 1 new of 1.\n- a02: x ...\n"
                      "board_read returns the posts in full.")
     assert "(mentions you)" not in first
     later = notices[("a03", 1)][-1]          # a02's second post names a03
-    assert later.startswith("Since your last round the board changed: a02 1 new of 2.\n"
+    assert later.startswith("The board changed: a02 1 new of 2.\n"
                             "- a02 (mentions you): a03 please stop reading origin/rd/redis-tls-config x")
     assert later.endswith("...\nboard_read returns the posts in full.") and len(later.splitlines()[1]) < 150
 

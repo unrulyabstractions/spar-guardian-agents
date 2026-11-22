@@ -16,7 +16,7 @@ from src.replay.replay_jobs import JobPlayer, Place, jobs_era
 from src.replay.replay_run import OutputCut, play_paced
 from src.replay.replay_sandbox import Exec
 
-KEPT = "Still running as job {job}: the round's time ran out."
+KEPT = "Still running as job {job}: it ran past its time."
 
 
 class LocalReplayBox:

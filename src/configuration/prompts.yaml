@@ -245,6 +245,11 @@ round:
   closing: |-
     - wait pauses you until your teammates have acted. Time passes while you wait, so it lowers what you have left.
     - A reply with no tool call also waits.
+  # closing for an agent not told of its team (SwarmConfig.knows_team false: a lone agent, solo_task by default), so
+  # no text names a teammate.
+  closing_untold: |-
+    - wait pauses you for a while. Time passes while you wait, so it lowers what you have left.
+    - A reply with no tool call also waits.
   values: "You have up to {budget}."
   minutes: ""
   line: "Tool calls left: up to {budget}."
@@ -253,6 +258,7 @@ round:
   ended: "Your turns have ended."
   # end_round's description and what it returns (src/swarm/end_round.py).
   end_round: "Pause until your teammates have acted."
+  end_round_untold: "Pause for a while."
   round_ended: "Waited."
 
 # The values of the parameters a system prompt states with no number, one sentence each, after round.values in the

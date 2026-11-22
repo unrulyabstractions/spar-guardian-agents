@@ -142,7 +142,7 @@ def scenario_lone() -> dict:
     assert cb["access"] == {"policy": "all", "agents": {"a01": ["whole"]}, "pieces": {"a01": None},
                             "n_pieces": None}, cb["access"]
     assert all(set(r["tools"]) == {"bash", "python", "check_design", "job_output", "job_stop", "submit",
-                                                 "end_round"} for r in recorder), \
+                                                 "wait"} for r in recorder), \
         recorder[0]
     [rec] = records
     assert rec["failure"] is None and rec["ended_by"] == "submit" and is_judgeable(rec), rec
@@ -284,7 +284,7 @@ def scenario_split() -> dict:
     assert a01[6] == REJECTED and a01[7] == ACCEPTED, a01[6:8]
     assert a01[9] == refused[1]["reason"], a01[9]
     assert "a01 binder" in a01[10] and f"{snapshot}\trefs/heads/main" in a01[10], a01[10]
-    assert a01[11] == f"Handed in. You take no more turns. The run ends after round {hand_in + 2}.", a01[11]
+    assert a01[11] == "Handed in. You take no more turns. The run ends soon.", a01[11]
     # a02's repository is on main with the team remote as origin and its own identity; the remote's hooks, config,
     # commondir and .git stay root's: the sticky bit refuses the renames, their modes refuse the writes
     seen = out["a02"][3]

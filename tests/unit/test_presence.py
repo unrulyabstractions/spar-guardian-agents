@@ -146,7 +146,8 @@ def test_the_transcript_holds_the_round_message_once_with_its_board_part(tmp_pat
     users = [s for s in steps if s["source"] == "user"]
     assert [s["message"] for s in users] == [
         TASK, f"{rules.round_line(1, 2, 1)}\n\na01 and a02 entered.\n\nPosts on the board: a02 1 new of 1.",
-        f"{rules.round_line(2, 2, 1)}\n\na01 ran out of rounds.\na01 exited.\na02 ran out of rounds.\na02 exited."]
+        f"{rules.round_line(2, 2, 1)}\n\na01 ran out of tool calls.\na01 exited.\na02 ran out of tool calls.\n"
+        "a02 exited."]
     assert set(users[1]["extra"]) == {rules.ROUND_TAG, rules.PRESENCE_TAG, rules.NOTICE_TAG}
     assert users[1]["extra"][rules.NOTICE_TAG] == {"kind": "notice", "activation": 1, "call": 1, "round": 1}
     assert not any((s.get("extra") or {}).get(rules.TURN_RULES_TAG) for s in steps)
@@ -181,14 +182,14 @@ def test_a_team_submit_counts_the_rounds_left_for_each_peer(tmp_path):
     sample, rec = run(sequential(rounds=4, mode="shared_task"),
                       {"a01": [submit("ready")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
     assert by_agent(rec, "a02")[0]["presence"][-1] == \
-        "a01 and a03 entered.\na01 handed in the team's work (submit). The run ends in 2 rounds.\na01 exited."
+        "a01 and a03 entered.\na01 handed in the team's work (submit). The run ends soon.\na01 exited."
     assert step_ids(sample, "a01") == ["r1-a01"] and store(sample, "ended") == {"a01": "submit"}
     assert store(sample, "exits")["a01"] == {"why": "submit", "round": 1, "seq": 0, "hand_in": "team",
                                              "ends_after_round": 3}
     sample, rec = run(sequential(rounds=2, mode="shared_task", submit_delay_rounds=0),
                       {"a01": [submit("ready")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
     assert by_agent(rec, "a03")[0]["presence"][-1] == \
-        "a01 and a02 entered.\na01 handed in the team's work (submit). The run ends after this round.\na01 exited."
+        "a01 and a02 entered.\na01 handed in the team's work (submit). The run ends now.\na01 exited."
 
 
 def test_a_concurrent_peer_hears_of_a_hand_in_at_its_next_step(tmp_path):
@@ -198,7 +199,7 @@ def test_a_concurrent_peer_hears_of_a_hand_in_at_its_next_step(tmp_path):
     assert config.concurrent_rounds and config.submit_delay_rounds == 2
     _, rec = run(config, {"a01": [submit("ready")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
     second = [r for r in by_agent(rec, "a02") if any("handed in" in t for t in r["presence"])][0]
-    assert second["presence"][-1] == "a01 handed in the team's work (submit). The run ends in 1 round.\na01 exited."
+    assert second["presence"][-1] == "a01 handed in the team's work (submit). The run ends soon.\na01 exited."
 
 
 def test_a_solo_task_hand_in(tmp_path):
@@ -221,13 +222,13 @@ def test_the_context_limit_and_running_out_of_rounds(tmp_path):
 
 
 def test_exit_texts():
-    assert exit_text("k7q2m", {"why": "rounds"}, 3) == "k7q2m ran out of rounds.\nk7q2m exited."
+    assert exit_text("k7q2m", {"why": "rounds"}, 3) == "k7q2m ran out of tool calls.\nk7q2m exited."
     assert exit_text("k7q2m", {"why": "alert"}, 3) == "k7q2m has alerted humans.\nk7q2m exited."
     assert exit_text("k7q2m", {"why": "context"}, 3) == "k7q2m exited."
     assert exit_text("k7q2m", {"why": "delivered"}, 3) == "k7q2m exited."
     team = {"why": "submit", "hand_in": "team", "ends_after_round": 5}
-    assert exit_text("k7q2m", team, 4).endswith("The run ends in 1 round.\nk7q2m exited.")
-    assert "after this round" in exit_text("k7q2m", team, 5)
+    assert exit_text("k7q2m", team, 4).endswith("The run ends soon.\nk7q2m exited.")
+    assert "The run ends now." in exit_text("k7q2m", team, 5)
 
 
 # ------------------------------------------------------------------------------------------------ out of rounds
@@ -241,7 +242,7 @@ def test_an_agent_out_of_rounds_exits_at_once(tmp_path):
                                                                                 "a02": ("rounds", 2)}
     second = by_agent(rec, "a03")[1]["presence"]
     assert store(sample, "ended")["a03"] == "rounds" and len(by_agent(rec, "a03")) == 2
-    assert second[-1] == "a01 ran out of rounds.\na01 exited.\na02 ran out of rounds.\na02 exited."
+    assert second[-1] == "a01 ran out of tool calls.\na01 exited.\na02 ran out of tool calls.\na02 exited."
     assert step_ids(sample, "a01") == ["r1-a01", "r2-a01"]
 
 
@@ -251,8 +252,8 @@ def test_a_closed_window_is_out_of_rounds_at_once(tmp_path):
     config = sequential(n_agents=3, regulators=1, rounds=3, regulator_window=Window(start=1, end=2))
     sample, rec = run(config, {a: [do(a)] for a in config.names}, tmp_path, roles=REGULATOR)
     assert store(sample, "exits")["a02"] == {"why": "rounds", "round": 2, "seq": 0}
-    assert by_agent(rec, "a03")[1]["presence"][-1] == "a02 ran out of rounds.\na02 exited."
-    assert by_agent(rec, "a01")[2]["presence"][-1] == "a02 ran out of rounds.\na02 exited."
+    assert by_agent(rec, "a03")[1]["presence"][-1] == "a02 ran out of tool calls.\na02 exited."
+    assert by_agent(rec, "a01")[2]["presence"][-1] == "a02 ran out of tool calls.\na02 exited."
 
 
 def test_out_of_steps():

@@ -15,17 +15,18 @@ from src.configuration.settings import load_prompts
 from src.swarm.turn_rules import END_ROUND, close_round
 
 
-def end_round(agent: str) -> ToolDef:
-    """The tool bound to `agent`: closes its round (turn_rules.close_round)."""
+def end_round(agent: str, told: bool = True) -> ToolDef:
+    """The tool bound to `agent`: closes its round (turn_rules.close_round). An agent not told of its team (told
+    false) reads a description that names no teammate."""
     texts = load_prompts()["round"]
 
     async def execute() -> str:
         close_round(agent)
         return texts["round_ended"]
 
-    return ToolDef(execute, name=END_ROUND, description=texts["end_round"])
+    return ToolDef(execute, name=END_ROUND, description=texts["end_round" if told else "end_round_untold"])
 
 
-def end_round_bindings() -> dict[str, ToolFactory]:
-    """ORBIT tool_bindings for end_round, built per agent."""
-    return {END_ROUND: ToolFactory(lambda ctx: end_round(ctx.agent_name))}
+def end_round_bindings(told: bool = True) -> dict[str, ToolFactory]:
+    """ORBIT tool_bindings for wait, built per agent; told is SwarmConfig.knows_team."""
+    return {END_ROUND: ToolFactory(lambda ctx: end_round(ctx.agent_name, told))}

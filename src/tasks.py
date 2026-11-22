@@ -234,7 +234,7 @@ def team_tools(benchmark: Benchmark, plan: Plan, tools: AgentTools) -> tuple[dic
     jobs = command_jobs.job_bindings(cap=lambda a: cap_of(config)) if any(job_tools.values()) else {}
     bindings = {**tools.bindings, **jobs, **board_bindings(config, roles=roles), **extra,
                 **submit_bindings(config, deliverable(benchmark, plan)), **hold_bindings(config),
-                **end_round_bindings()}
+                **end_round_bindings(config.knows_team)}
     return names, capped_bindings(bindings, config)
 
 

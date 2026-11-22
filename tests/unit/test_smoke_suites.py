@@ -200,7 +200,8 @@ def test_a_scenario_runs_exports_and_reads_back(tmp_path, monkeypatch):
     assert_ok(log)
     assert [(r["agent"], r["step"]) for r in recorder] == [("a01", 0), ("a01", 1)]
     # The second round opens with its line after the first round's tool result.
-    assert recorder[1]["messages"][-2].role == "tool" and recorder[1]["messages"][-1].text.startswith("Round 2 of 2. ")
+    last = recorder[1]["messages"][-1].text
+    assert recorder[1]["messages"][-2].role == "tool" and last.startswith("Tool calls left: ")
     assert "work" in recorder[0]["tools"]
     assert [name for name, _ in tool_calls_of(load_transcript(records[0]))] == ["work", "submit"]
     assert results_by_agent(records)["a01"][0] == "a01 worked on x"

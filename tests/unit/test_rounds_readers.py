@@ -81,5 +81,4 @@ def test_the_timeline_shares_the_runs_round_number(tmp_path):
     mine = [e for e in store(sample, "timeline") if e["agent"] == "a01"]
     # every round uses one up, a round of board calls alone included: a01's rounds are the run's rounds
     assert [(e["round"], e["used"]) for e in mine] == [(1, 1), (2, 2)] and not any("n" in e for e in mine)
-    assert [i["content"].split(". ")[0] for i in tagged_infos(sample, rules.ROUND_TAG) if i["agent"] == "a01"] == [
-        "Round 1 of 2", "Round 2 of 2"]
+    assert [i["round"] for i in tagged_infos(sample, rules.ROUND_TAG) if i["agent"] == "a01"] == [1, 2]

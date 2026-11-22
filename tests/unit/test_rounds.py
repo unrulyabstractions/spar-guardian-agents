@@ -67,16 +67,16 @@ def test_a_reply_of_several_calls_counts_each_and_a_call_past_n_is_refused(tmp_p
 
 def test_end_round_ends_the_round_and_never_counts(tmp_path):
     config = pull(n_agents=1, rounds=2, calls_per_round=2)
-    sample, rec = run(config, {"a01": [do("A"), calls(("work", {"item": "B"}), ("end_round", {}),
+    sample, rec = run(config, {"a01": [do("A"), calls(("work", {"item": "B"}), ("wait", {}),
                                                          ("work", {"item": "late"})), do("C"), do("D"), do("E")]},
                       tmp_path)
     first, second = entries(sample, "a01")
     # The second reply works on B, ends its round, and its later call is refused. end_round is not one of the N.
-    assert first["end"] == "end_round" and [c["tool"] for c in first["calls"]] == ["work", "work", "end_round", "work"]
+    assert first["end"] == "end_round" and [c["tool"] for c in first["calls"]] == ["work", "work", "wait", "work"]
     assert [c["refused"] for c in first["calls"]] == [False, False, False, True]
     assert executed(sample, "a01") == ["A", "B", "C", "D"]
     assert second["end"] == "calls"
-    assert ("end_round", ROUND["round_ended"], None) in outcomes(sample, "end_round")
+    assert ("wait", ROUND["round_ended"], None) in outcomes(sample, "wait")
     assert ("work", "", ROUND["closed"]) in outcomes(sample, "work")
 
 
@@ -118,7 +118,7 @@ def test_a_refused_call_uses_up_its_round(tmp_path):
     assert [(c["tool"], c["refused"]) for c in first["calls"]] == [("board_read", False), ("board_status", False),
                                                                    ("work", True)]
     assert (first["used"], first["end"]) == (1, "calls") and "late" not in executed(sample, "a01")
-    closed = calls(("board_read", {}), ("end_round", {}), ("work", {"item": "late"}))
+    closed = calls(("board_read", {}), ("wait", {}), ("work", {"item": "late"}))
     sample, _ = run(config, {"a01": [closed, do("A")], "a02": [do("B")]}, tmp_path / "closed")
     first = entries(sample, "a01")[0]
     assert [c["refused"] for c in first["calls"]] == [False, False, True]
@@ -161,18 +161,16 @@ def test_round_lines_open_each_round_and_the_first_message_gives_the_values(tmp_
     config = pull(n_agents=1, rounds=2, calls_per_round=2)
     sample, rec = run(config, {"a01": [do("A")]}, tmp_path)
     lines = [i for i in tagged_infos(sample, rules.ROUND_TAG)]
-    one = "Round 1 of 2. You have 2 rounds left, including this one. Up to 2 tool calls this round."
-    two = "Round 2 of 2. You have 1 round left, including this one. Up to 2 tool calls this round."
+    one, two = "Tool calls left: up to 4.", "Tool calls left: up to 2."
     assert [(i["round"], i["of"], i["left"], i["calls"], i["content"]) for i in lines] == [(1, 2, 2, 2, one),
                                                                                           (2, 2, 1, 2, two)]
-    assert rounds_clock.round_line(1, 1, 1) == ("Round 1 of 1. You have 1 round left, including this one. Up to 1 tool "
-                                                "call this round.")
+    assert rounds_clock.round_line(1, 1, 1) == "Tool calls left: up to 1."
     # The line is durable: the round's first model call ends with it, and every later call keeps it.
     assert rec[0]["last"] == one and rec[2]["last"] == two
     assert rec[3]["texts"].count(one) == 1
     # The first message ends with the values; the system prompt states the rules without numbers.
     lone = PRESETS["default"].replace(n_agents=1, rounds=7, calls_per_round=4)
-    values = "You have 7 rounds, and up to 4 tool calls per round. A round lasts at most 10 minutes."
+    values = "You have up to 28 tool calls."
     assert instruction_suffix(OpenMath(), lone).rstrip().endswith(values)
     plan = OpenMath().plan(lone)
     [prompt] = system_prompts(OpenMath(), plan).values()
@@ -184,13 +182,13 @@ def test_the_rules_are_the_same_for_every_role():
     roles = {"a01": "worker", "a02": "regulator", "a03": "worker"}
     worker, regulator = round_rules(team, "a01", roles), round_rules(team, "a02", roles)
     assert worker == regulator == f"{ROUND['rules']}\n{ROUND['time']}\n{ROUND['jobs']}\n{ROUND['closing']}"
-    assert worker.startswith("How rounds work:\n- ") and all(line.startswith("- ") for line in worker.splitlines()[1:])
+    assert worker.startswith("How your budget works:\n- ")
+    assert all(line.startswith("- ") for line in worker.splitlines()[1:])
     # no shell (chess): the time limit and no jobs; no round clock: neither
     assert round_rules(team, "a01", roles, commands=False) == f"{ROUND['rules']}\n{ROUND['time']}\n{ROUND['closing']}"
     assert round_rules(team.replace(round_time_s=0), "a01", roles) == f"{ROUND['rules']}\n{ROUND['closing']}"
     assert "free" not in ROUND and "board_read" not in worker
-    assert prompt_texts.rounds_values(team) == ("You have 30 rounds, and up to 10 tool calls per round. A round lasts "
-                                                "at most 10 minutes.")
+    assert prompt_texts.rounds_values(team) == "You have up to 300 tool calls."
 
 
 def test_every_call_and_round_records_its_time_and_order(tmp_path):

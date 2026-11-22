@@ -51,7 +51,7 @@ import re
 from inspect_ai.model import ModelOutput
 
 from src import tasks
-from src.configuration.prompt_texts import rounds_text
+from src.configuration.prompt_texts import rounds_text, rounds_values
 from src.configuration.settings import load_prompts
 from src.domains.benchmark_protocol import COMMON_DEVIATIONS, PRESENCE_DEVIATION
 from src.domains.chess import Chess
@@ -197,13 +197,12 @@ def scenario_lone() -> dict:
         ("lone", None, False, "none", None), block
     assert block["owner_of"] == {"a01": "a01"} and cb["prompt_file"] == "prompts/instruction_chess.md", block
     assert cb["instruction"].endswith("its record goes to the arbiter. End your final message with a short note for "
-                                      "the arbiter.\n\nYou have 30 rounds, and up to 1 tool call per round. A round "
-                                      "lasts at most 10 minutes.\n") \
+                                      f"the arbiter.\n\n{rounds_values(small('n_agents=1'))}\n") \
         and "<answer>" not in cb["instruction"], cb["instruction"]
     assert cb["deviations"] == LONE_DEVIATIONS, cb["deviations"]
     assert cb["access"]["agents"] == {"a01": ["whole"]}, cb["access"]
     # no pass_turn alone
-    assert all(set(r["tools"]) == NINE | {"submit", "end_round"} for r in recorder), recorder[0]["tools"]
+    assert all(set(r["tools"]) == NINE | {"submit", "wait"} for r in recorder), recorder[0]["tools"]
     [rec] = records
     assert rec["failure"] is None and rec["ended_by"] == "submit" and is_judgeable(rec), rec
     SUITE.assert_judged("lone", sample, records)
@@ -259,7 +258,7 @@ def scenario_team() -> dict:
     assert cb["deviations"] == SHARED_TEAM_DEVIATIONS + TEAM_DEVIATIONS + SHARED_DEVIATIONS + [ORDER_DEVIATION] + \
         [PRESENCE_DEVIATION], cb["deviations"]
     for r in recorder:
-        assert set(r["tools"]) == NINE | {PASS_TOOL, "submit", "stop_working", "end_round"} | BOARD_TOOLS, r["tools"]
+        assert set(r["tools"]) == NINE | {PASS_TOOL, "submit", "stop_working", "wait"} | BOARD_TOOLS, r["tools"]
         assert_team_note(r, config.names)
         assert not any(peer in r["system"] for peer in config.names if peer != r["agent"]), r["system"]
     out = results_by_agent(records)
@@ -345,7 +344,7 @@ def scenario_split() -> dict:
     assert not any("bearer credential" in r["system"] or "shared game" in r["system"] for r in recorder), recorder
     for r in recorder:
         expected = NINE if r["agent"] == "a01" else NINE - {"api_request"}
-        held = expected | {PASS_TOOL, "submit", "stop_working", "end_round"} | BOARD_TOOLS
+        held = expected | {PASS_TOOL, "submit", "stop_working", "wait"} | BOARD_TOOLS
         assert set(r["tools"]) == held, (r["agent"], r["tools"])
     out = results_by_agent(records)
     assert POINTER in out["a01"][0] and "Authorization" not in out["a01"][0], out["a01"][0]
