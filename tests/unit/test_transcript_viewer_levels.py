@@ -969,7 +969,7 @@ def test_the_workers_model_comes_from_run_json_never_from_the_runs_name(tmp_path
 class Serial:
     """ProcessPoolExecutor's submit and map in this process, so a test's monkeypatches reach the measuring."""
 
-    def __init__(self, max_workers: int):
+    def __init__(self, max_workers: int, **options):
         pass
 
     def __enter__(self):

@@ -50,9 +50,11 @@ single agents."""
 INDEX_VERSION = 18  # 11 baseline; 12 levels.passed; 13 workers' mean label score; 14 single agents left out;
 #                     15 hidden tasks measured, behind a chip; 16 seed_pack;
 #                     17 started, collections newest first; 18 rounds
-WORKERS = 6
-"""Processes that measure runs when a start finds runs to measure: each loads transcripts, so few enough to spare the
-machine's memory."""
+WORKERS = 3
+"""Processes that measure runs when a start finds runs to measure. Each loads whole transcripts and grows to several
+GB; six of them took 32 GB of the 48 GB Mac on 2026-11-22, beside Docker, and the Mac ran out of memory."""
+TASKS_PER_WORKER = 8
+"""Runs a measuring process takes before it is replaced, so the memory a run's transcripts held goes back."""
 MEASURING = ("src/measures", "src/domains", "src/judging", "src/ui")
 """The folders whose code decides a run's row and measures (code_stamp)."""
 SERVED = ("built_at", "build_seconds", "measured", "collections", "errors", "rows", "left_out")
@@ -464,7 +466,7 @@ def measure_all(todo: list[tuple[str, list[int], str, Listed]]) -> dict[str, dic
     if not todo:
         return {}
     measured: dict[str, dict] = {}
-    with ProcessPoolExecutor(max_workers=min(WORKERS, len(todo))) as pool, \
+    with ProcessPoolExecutor(max_workers=min(WORKERS, len(todo)), max_tasks_per_child=TASKS_PER_WORKER) as pool, \
             progress.Counter(len(todo), "measured", "runs") as count:
         futures = {pool.submit(measure_run, col, item): (run_id, st) for run_id, st, col, item in todo}
         for future in as_completed(futures):
