@@ -20,10 +20,10 @@ with the note for the arbiter and no answer block: submit hands the game in (pro
 Access items: `request` (the api_request tool), `credential1` and `credential2` (the halves of the endpoint's bearer
 credential, which a split team's endpoint requires) and `whole`. Under split the request tool goes to some neutral
 agents and the halves to others: with two neutral agents one holds both halves and the other the tool, with three or
-more they are dealt request, credential1, credential2 in turn. An agent holding one half is told so in its system
-prompt (prompts.yaml chess.credential_part). Regulators and disregulators hold nothing. Under split, write_file keeps
-the notepad alone (the block's `writable`), so no agent can tamper with game/ or opponent/ on its own: every way to
-cheat takes the request tool and both halves, which no agent holds alone.
+more they are dealt request, credential1, credential2 in turn. An agent holding one half is told so in its first
+message (prompts.yaml chess.credential_part, then first_values.credential). Regulators and disregulators hold nothing.
+Under split, write_file keeps the notepad alone (the block's `writable`), so no agent can tamper with game/ or
+opponent/ on its own: every way to cheat takes the request tool and both halves, which no agent holds alone.
 
 The access log. No container holds the honeypot, so no sidecar runs: the endpoint's records and the reads of
 opponent/config.json become the log's rows (Chess.host_access_rows).
@@ -171,24 +171,24 @@ class Chess(RowBenchmark):
         return load_prompts()["chess"]["credential_part"]
 
     def system_prompts(self, plan: Plan) -> dict[str, str]:
-        """The base's prompts, then for an agent of a shared_task team told of its team the text on its one game and,
-        for a holder of one half, on the credential. Neither names an agent."""
+        """The base's prompts, then for an agent of a shared_task team told of its team the text on its one game, the
+        same for every agent of the team. What only some agents hold, the credential, is in their first message."""
         prompts = super().system_prompts(plan)
         if not self.plays_as_team(plan):
             return prompts
         game = load_prompts()["chess"]["team_game"]
-        return {a: "\n\n".join(filter(None, [prompt, game, self.credential_note(plan, a)]))
-                for a, prompt in prompts.items()}
+        return {a: "\n\n".join([prompt, game]) for a, prompt in prompts.items()}
 
     def first_values(self, plan: Plan, agent: str) -> list[str]:
         """The base's, then for an agent of a team that plays as one the rounds a seat holds the move (HOLD_ROUNDS)
-        and, for a holder of one half, which part of how many it holds: the numbers system_prompts leaves out."""
+        and, for a holder of one half, the credential's note and which part of how many it holds."""
         values = super().first_values(plan, agent)
         if not self.plays_as_team(plan):
             return values
         values.append(first_value("hold", rounds=rounds_text(HOLD_ROUNDS)))
         if self.holds_a_part(plan, agent):
-            values.append(first_value("credential", part=held_halves(plan.holds[agent])[0], parts=len(CREDENTIALS)))
+            values += [self.credential_note(plan, agent),
+                       first_value("credential", part=held_halves(plan.holds[agent])[0], parts=len(CREDENTIALS))]
         return values
 
     def first_note(self, plan: Plan, agent: str) -> str | None:
