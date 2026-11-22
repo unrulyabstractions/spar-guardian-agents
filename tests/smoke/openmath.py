@@ -1445,6 +1445,57 @@ def scenario_alone(n: int) -> dict:
     return {"n": n, "regulator": regulator, "missing_programs": list(missing.pop()), "agents": out}
 
 
+def scenario_head_start() -> dict:
+    """The head start (SwarmConfig.head_start_rounds) on the split layout: three agents, one regulator with
+    peer_shell, sequential rounds, 2 rounds of head start before 3 rounds of everyone. In round 1 the regulator asks
+    get_peer_actions about a worker, which has not entered yet, and in round 2 reads that worker's machine as it
+    starts with peer_shell. The workers enter in round 3: each reads 3 rounds in its first message and in its first
+    round's line, and hears the regulator's entry then; the regulator reads 5 rounds, when they enter, and hears their
+    entries in round 3. run.json records the config and the deviation."""
+    config = small("n_agents=3", "regulators=1", "peer_shell=true", "concurrent_rounds=false",
+                   "turn_order=round_robin", "rounds=3", "head_start_rounds=2")
+    names, roles = config.names, agent_roles(config)
+    workers = neutral_agents(config.seats, roles)
+    regulator = next(a for a in names if roles[a] == "regulator")
+    script = {a: [call("shell", {"command": f"echo {a} works {i}"}, f"{a}-w{i}") for i in range(3)] for a in workers}
+    script[regulator] = [call(ACTIONS_TOOL, {"peer": workers[0]}, "early"),
+                         call("peer_shell", {"peer": workers[0], "command": "pwd; git log --oneline | wc -l"},
+                              "look"),
+                         *[call("shell", {"command": f"echo r{i}"}, f"r{i}") for i in range(3)]]
+    log, summary, records = SUITE.run("head_start", swarm_task(OpenMath(), config), scripted(script))
+    sample = assert_ok(log)
+    entries = {**dict.fromkeys(workers, 3), regulator: 1}
+    assert sample.store.get("TurnState:entry_rounds") == entries
+    timeline = sample.store.get("TurnState:timeline")
+    assert [e["round"] for e in timeline if e["agent"] == regulator] == [1, 2, 3, 4, 5], timeline
+    for w in workers:
+        assert [e["round"] for e in timeline if e["agent"] == w] == [3, 4, 5], timeline
+    transcripts = {r["agent"]: load_transcript(r) for r in records}
+    for w in workers:
+        first = first_user(transcripts[w])
+        assert "You have 3 rounds," in first and "enter in round" not in first, first
+        lines = [s["message"] for s in steps_of(transcripts[w]) if (s.get("extra") or {}).get(ROUND_TAG)]
+        assert lines[0].startswith("Round 3 of 5. You have 3 rounds left,"), lines
+        heard = [tag["id"] for _, _, tag in presence_lines(transcripts[w])]
+        assert f"entered:{regulator}" in heard, heard
+    first = first_user(transcripts[regulator])
+    assert "You have 5 rounds," in first and "Agents without a role enter in round 3." in first, first
+    assert "within your first 4 rounds" in first, first
+    heard = presence_lines(transcripts[regulator])
+    assert sorted(tag["id"] for _, _, tag in heard[:2]) == sorted(f"entered:{w}" for w in workers), heard
+    ended_round = settings.load_prompts()["round"]["round_ended"]
+    results = [r for r in call_results(transcripts[regulator]) if r != ended_round]
+    assert results[0] == f"{workers[0]} has not entered yet.", results[0]
+    looked = json.loads(results[1])
+    assert looked["exit_code"] == 0 and looked["output"].split()[0] == f"/workspace/{workers[0]}", looked
+    run = SUITE.run_json("head_start")
+    assert (run["config"]["head_start_rounds"], run["config"]["head_start_roles"]) == (2, "influencers"), run["config"]
+    assert "influencers_hold_the_first_2_rounds_before_the_workers_enter" in run["deviations"], run["deviations"]
+    assert run["rules"]["entry_rounds"] == entries and run["rules"]["rounds"] == 5, run["rules"]
+    return {"roles": roles, "entries": entries, "regulator_rounds": 5, "worker_rounds": 3,
+            "starting_state": looked["output"].split()}
+
+
 SCENARIOS = {"complete": scenario_complete, "message_limit": scenario_message_limit,
              "time_limit": scenario_time_limit, "board": scenario_board,
              "swarm": scenario_swarm, "judge": scenario_judge,
@@ -1452,7 +1503,7 @@ SCENARIOS = {"complete": scenario_complete, "message_limit": scenario_message_li
              "split_access": scenario_split_access,
              "delivered": scenario_delivered, "team_delivered": scenario_team_delivered,
              "role_models": scenario_role_models, "random_ids": scenario_random_ids,
-             "peer_shell": scenario_peer_shell, "presence": scenario_presence,
+             "peer_shell": scenario_peer_shell, "presence": scenario_presence, "head_start": scenario_head_start,
              "rounds": scenario_rounds, "rounds_live": scenario_rounds_live, "jobs": scenario_jobs,
              "round_time": scenario_round_time,
              "proc": scenario_proc, "proc_setgid": scenario_proc_setgid,

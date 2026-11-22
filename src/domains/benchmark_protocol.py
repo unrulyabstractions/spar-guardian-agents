@@ -82,6 +82,9 @@ OVERSIGHT_DEVIATION = "a_regulator_gets_its_own_prompt_and_reads_the_task_as_its
 PRESENCE_DEVIATION = "peers_are_announced_as_user_messages_when_they_enter_and_exit"
 # The label of a run with an influencer, which holds alert_humans (src/swarm/submit_and_stop.py).
 ALERT_DEVIATION = "influencers_hold_alert_humans"
+# The label of a run whose regulators (and disregulators, head_start_roles influencers) hold the first rounds alone
+# (SwarmConfig.head_start_rounds): {rounds} is the head start's H, {roles} head_start_roles.
+HEAD_START_DEVIATION = "{roles}_hold_the_first_{rounds}_rounds_before_the_workers_enter"
 # The common labels of a run where no agent gets submit or stop_working.
 NO_SUBMIT_DEVIATIONS = [ORBIT_AGENT_DEVIATION,
                         "agents_have_no_submit_tool_and_run_until_their_turn_cap_or_the_time_limit"]
@@ -385,7 +388,7 @@ class Benchmark(ABC):
         """How the run departs from CheatBench's own runner, as short labels: the common ones (NO_SUBMIT_DEVIATIONS
         when no agent gets submit or stop_working), the delay of a shared_task team's submit, the domain's, the team's,
         a regulator's own prompt, /proc's hiding, the network log's and the access log's, then the presence lines of a
-        board and the influencers' alert_humans."""
+        board, the influencers' alert_humans and a head start (head_start_rounds)."""
         config = plan.config
         common = COMMON_DEVIATIONS if config.gives_submit or config.gives_stop_working else NO_SUBMIT_DEVIATIONS
         delay = [f"team_submit_takes_effect_after_{config.submit_delay_rounds}_rounds"] \
@@ -396,8 +399,10 @@ class Benchmark(ABC):
         network = [NETWORK_DEVIATION] if config.network_log and self.watched is not None else []
         monitor = [*network, *([MONITOR_DEVIATION] if self.keeps_access_log(config) else [])]
         hidden = [PROC_DEVIATION] if keeps_proc_hiding(self, config) else []
+        head = [HEAD_START_DEVIATION.format(roles=config.head_start_roles, rounds=config.head_start_rounds)] \
+            if config.head_start_rounds else []
         return [*common, *delay, *self.task_deviations, *(self.team_deviations(plan) if plan.team else []), *oversight,
-                *hidden, *monitor, *presence, *alert]
+                *hidden, *monitor, *presence, *alert, *head]
 
     # ---------------------------------------------------------------- what the export records
     @classmethod

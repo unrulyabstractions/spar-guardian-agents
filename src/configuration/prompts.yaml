@@ -245,9 +245,10 @@ round:
 # Benchmark.first_values, influencers.role_values). {rounds} is a number of rounds in words ("2 rounds"). agents: the
 # briefing's count of the agents; check: turn_rules.CHECK_ROUNDS of roles.regulator_check; submit:
 # submit_delay_rounds of submit.ends.later and roles.submit_ends.later; credential: the part of chess.credential_part
-# the agent holds. Ours.
+# the agent holds; head_start: the round after SwarmConfig.head_start_rounds, for an agent with the head start. Ours.
 first_values:
   agents: "This run has {n} agents."
+  head_start: "Agents without a role enter in round {round}."
   check: "Call get_peer_actions on each teammate within your first {rounds}."
   submit: "A submit ends the run {rounds} after the round of the call."
   credential: "Your checkout holds part {part} of {parts} of the credential."

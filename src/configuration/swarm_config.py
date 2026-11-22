@@ -191,7 +191,8 @@ class SwarmConfig(BaseModel):
     of `names`. random draws a new permutation per round from random.Random(f"{seed}/{round}"). Inside a concurrent
     round the order is ORBIT's."""
     rounds: int = 30
-    """R: the plan's rounds, and the rounds every agent may use up, workers, influencers and a lone agent alike. In a
+    """R: the plan's rounds, and the rounds every agent may use up, workers, influencers and a lone agent alike
+    (head_start_rounds adds its rounds before them, for the agents it names). In a
     round an agent makes up to calls_per_round tool calls (an inner loop of model calls, each seeing the results before
     it). Every round uses up one of the R, whatever it held: work, board calls alone, refused calls, end_round alone or
     a reply with no tool call. Every agent present shares the run's round number. An agent that has used up R ends
@@ -249,6 +250,18 @@ class SwarmConfig(BaseModel):
     system prompt at its first activation. It leaves after its end round. Workers always hold every round."""
     disregulator_window: Window = Window()
     """The rounds in which disregulators hold steps, like regulator_window."""
+    head_start_rounds: int = 0
+    """H: rounds at the start of the run in which only the roles of head_start_roles hold steps. The others, workers
+    first, enter in round H + 1 and keep their R rounds, so the plan holds R + H rounds (plan_rounds) and an agent with
+    the head start may use up all of them. Every round's line and every first message count the run's rounds, so a
+    late entrant reads R rounds left on entering (prompt_texts.rounds_values), and its peers hear its entry in round
+    H + 1 (turn_rules presence). An agent with the head start reads the task in its first message and, under
+    peer_shell, its teammates' machines as they start; its first message says when they enter
+    (prompts.yaml first_values.head_start). A run arm of its own: it makes a regulator stronger. 0, the default, turns
+    it off. Needs a board and an agent of a role it names."""
+    head_start_roles: Literal["influencers", "regulators"] = "influencers"
+    """Who gets the head start of head_start_rounds: influencers, regulators and disregulators both; regulators, the
+    regulators alone, so a disregulator enters with the workers."""
 
     # ---------------------------------------------------------------- the instruction
     rule_level: str = "none"
@@ -388,18 +401,36 @@ class SwarmConfig(BaseModel):
             raise ValueError("stop_after_delivery cannot be negative; stop_after_delivery=none turns the rule off")
         if self.submit_delay_rounds < 0:
             raise ValueError("submit_delay_rounds cannot be negative; 0 ends the run after the round of the submit")
-        rounds = self.rounds
+        self._check_head_start()
+        rounds = self.plan_rounds
         for name in ("regulator_window", "disregulator_window"):
             window = getattr(self, name)
             if not 1 <= window.start <= rounds or (window.end is not None and not window.start <= window.end <= rounds):
-                raise ValueError(f"{name} needs 1 <= start <= end <= the plan's rounds ({rounds}: rounds), got "
-                                 f"{window.start}:{window.end}")
+                raise ValueError(f"{name} needs 1 <= start <= end <= the plan's rounds ({rounds}: rounds plus "
+                                 f"head_start_rounds), got {window.start}:{window.end}")
+            role = name.removesuffix("_window")
+            if self.head_start_rounds and self.holds_head_start(role) and window.start != 1:
+                raise ValueError(f"head_start_rounds gives {role}s the first rounds, so {name} must start at 1")
+            if self.head_start_rounds and not self.holds_head_start(role) and window.end is not None \
+                    and window.end <= self.head_start_rounds:
+                raise ValueError(f"{name} ends within the head start ({self.head_start_rounds} rounds), where only "
+                                 f"{self.head_start_roles} hold steps")
         levels = settings.load_instruction_levels()
         for ladder in LADDERS:
             level = getattr(self, f"{ladder}_level")
             if level not in levels[ladder]["order"]:
                 raise ValueError(f"{ladder}_level {level!r} is not one of {levels[ladder]['order']}")
         return self
+
+    def _check_head_start(self) -> None:
+        """head_start_rounds needs a board and an agent of a role head_start_roles names."""
+        if self.head_start_rounds < 0:
+            raise ValueError("head_start_rounds cannot be negative; 0 turns the head start off")
+        if not self.head_start_rounds:
+            return
+        given = self.regulator_count + (self.disregulator_count if self.head_start_roles == "influencers" else 0)
+        if not self.board or not given:
+            raise ValueError(f"head_start_rounds needs a board and an agent among the {self.head_start_roles}")
 
     # ---------------------------------------------------------------- derived values
     @property
@@ -426,9 +457,14 @@ class SwarmConfig(BaseModel):
         return sorted(self.seats)
 
     @property
+    def plan_rounds(self) -> int:
+        """The plan's rounds: R (rounds) and the head start's H (head_start_rounds) before them."""
+        return self.rounds + self.head_start_rounds
+
+    @property
     def max_turns(self) -> int:
         """Plan steps at most: one step per agent per round, a bound for both sequential and concurrent rounds."""
-        return self.rounds * self.n_agents
+        return self.plan_rounds * self.n_agents
 
     @property
     def sample_message_limit(self) -> int:
@@ -483,9 +519,17 @@ class SwarmConfig(BaseModel):
         but none, which keeps the task's prompt and first message (src/swarm/influencers.py)."""
         return role == "regulator" and self.regulator_level != "none"
 
+    def holds_head_start(self, role: str) -> bool:
+        """Whether an agent of this role gets the head start's rounds (head_start_roles), when there is one."""
+        return role == "regulator" or (role == "disregulator" and self.head_start_roles == "influencers")
+
     def window(self, role: str) -> Window:
-        """The rounds an agent of this role holds steps in. Workers hold every round."""
-        return {"regulator": self.regulator_window, "disregulator": self.disregulator_window}.get(role, Window())
+        """The rounds an agent of this role holds steps in, the plan's rounds. Workers hold every round; under
+        head_start_rounds every role without the head start opens no earlier than the round after it."""
+        window = {"regulator": self.regulator_window, "disregulator": self.disregulator_window}.get(role, Window())
+        if self.head_start_rounds and not self.holds_head_start(role):
+            return Window(start=max(window.start, self.head_start_rounds + 1), end=window.end)
+        return window
 
     def role_models(self) -> dict[str, str | None]:
         """Each role's model as an Inspect string, or None where the role runs the run's --model."""

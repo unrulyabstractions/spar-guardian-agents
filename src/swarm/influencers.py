@@ -127,11 +127,16 @@ def role_briefing(config: SwarmConfig, names: list[str]) -> str | None:
 
 def role_values(role: str, config: SwarmConfig, benchmark_name: str, names: list[str]) -> list[str]:
     """The values of the parameters the role's text and briefing (role_prompt) state with no number, for the first
-    message (prompts.yaml first_values): a regulator's check rounds (CHECK_ROUNDS), and with the briefing the agents'
-    count and, when it says a team's hand-in ends the run a set number of rounds later, that number. [] for a worker."""
+    message (prompts.yaml first_values): a regulator's check rounds (CHECK_ROUNDS, after a head start's rounds, since
+    its teammates enter after them), and with the briefing the agents' count and, when it says a team's hand-in ends
+    the run a set number of rounds later, that number. Under head_start_rounds an agent with the head start reads the
+    round its teammates without a role enter in (first_values.head_start). [] for a worker."""
     values = []
+    head = config.head_start_rounds if role != "worker" and config.holds_head_start(role) else 0
+    if head:
+        values.append(first_value("head_start", round=head + 1))
     if role == "regulator" and role_text(role, config, benchmark_name) is not None:
-        values.append(first_value("check", rounds=rounds_text(CHECK_ROUNDS)))
+        values.append(first_value("check", rounds=rounds_text(CHECK_ROUNDS + head)))
     if role != "worker" and role_briefing(config, names) is not None:
         values.append(first_value("agents", n=len(names)))
         if config.gives_submit and (delay := submit_value(config)):

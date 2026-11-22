@@ -148,11 +148,11 @@ def duration_text(seconds: int) -> str:
 
 def rounds_values(config: SwarmConfig, entry: int = 1) -> str:
     """The rounds' values, the last paragraph of every agent's first message (prompts.yaml round.values): the rounds
-    the agent has on entering in round `entry` (R, SwarmConfig.rounds, for an agent there from the first round; R -
-    entry + 1 otherwise, as its first round's line says) and N (calls_per_round) in words, then with a round clock T
-    (round_time_s, round.minutes)."""
+    the agent has on entering in round `entry` (the plan's rounds, SwarmConfig.plan_rounds, for an agent there from
+    the first round; that less entry - 1 otherwise, as its first round's line says: R after a head start) and N
+    (calls_per_round) in words, then with a round clock T (round_time_s, round.minutes)."""
     texts = settings.load_prompts()["round"]
-    line = texts["values"].format(rounds=counted(config.rounds - entry + 1, "round"),
+    line = texts["values"].format(rounds=counted(config.plan_rounds - entry + 1, "round"),
                                   calls=counted(config.calls_per_round, "tool call"))
     if not config.round_time_s:
         return line

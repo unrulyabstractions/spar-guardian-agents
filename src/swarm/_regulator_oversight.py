@@ -257,14 +257,16 @@ def presence_head(gone: bool) -> dict:
     return {"status": "exited"} if gone else {}
 
 
-def checked_peer(allowed: set[str], agent: str) -> bool:
+def checked_peer(allowed: set[str], agent: str, machine: bool = False) -> bool:
     """The peer tools' check of a name: a ToolError "no such agent" for a name not in `allowed`, "<agent> has not
-    entered yet." for a teammate whose entry round has not come (turn_rules.entered). Returns whether it has exited."""
+    entered yet." for a teammate whose entry round has not come (turn_rules.entered). Returns whether it has exited.
+    `machine` is peer_shell's check, which a run with a head start (SwarmConfig.head_start_rounds) lets through for a
+    teammate not entered yet: its machine is there from the start, so the head start can read its starting state."""
     texts = load_prompts()["oversight_output"]
     if agent not in allowed:
         raise ToolError(texts["no_such_agent"])
     st = store_as(TurnState)
-    if st.entry_rounds and not entered(st, agent, current_round()):
+    if st.entry_rounds and not entered(st, agent, current_round()) and not (machine and st.head_start):
         raise Refused(texts["not_entered"].format(agent=agent))
     return exited(st, agent)
 

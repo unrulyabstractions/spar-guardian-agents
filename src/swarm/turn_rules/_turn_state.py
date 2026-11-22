@@ -78,7 +78,7 @@ class TurnState(StoreModel):
 
     agents: list[str] = Field(default_factory=list)
     workers: list[str] = Field(default_factory=list)        # the agents of role worker, every agent without roles
-    round_budget: int = 0                                   # R: the rounds each agent may use up
+    round_budget: int = 0                                   # the rounds each agent may use up: the plan's
     calls_per_round: int = 0                                # N: the tool calls of one round
     turn_order: str = "round_robin"
     seed: int = 0
@@ -86,7 +86,8 @@ class TurnState(StoreModel):
     max_concurrency: int | None = None                      # None: every agent of a step at once
     reads_per_turn: int | None = None                       # posts board_read may return per agent per round
     posts_per_turn: int | None = None                       # board_post calls per agent per round
-    rounds: int = 0                                         # the plan's rounds: R (SwarmConfig.rounds)
+    rounds: int = 0                                         # the plan's rounds (SwarmConfig.plan_rounds)
+    head_start: int = 0                                     # SwarmConfig.head_start_rounds
     time_limit_s: int | None = None                         # the agents' time limit; a round ends once it passes
     round_time_s: int | None = None                         # T (SwarmConfig.round_time_s), 0 no clock; None before it
     started_at: float | None = None                         # UTC seconds of the first round's start

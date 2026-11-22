@@ -24,11 +24,12 @@ finds only sealed bytes.
 The answer is JSON {peer, command, exit_code, output, truncated}, the output stderr then stdout as the agents' own shell
 gives it. An output past the run's cap (src/swarm/tool_output_caps.py, 64 KiB by default) keeps its start and its end
 with one line between them that says how much was cut, the rule of every tool, so the JSON stays whole. A call about
-the caller, or about a name not on the roster, fails with "no
-such agent", the peer tools' refusal. Each call counts as a board action of kind "oversight" about the peer
-(turn_rules.record_board_action), and the sample store's STORE keeps per influencer its calls and the processes its
-reaps killed. Git runs with safe.directory=* and GIT_OPTIONAL_LOCKS=0: a repository owned by another user is refused
-otherwise, and `git status` would try to write the index.
+the caller, or about a name not on the roster, fails with "no such agent", the peer tools' refusal, and one about a
+teammate that has not entered yet with theirs, but in a run with a head start (SwarmConfig.head_start_rounds), whose
+influencers read their teammates' machines as they start. Each call counts as a board action of kind "oversight" about
+the peer (turn_rules.record_board_action), and the sample store's STORE keeps per influencer its calls and the
+processes its reaps killed. Git runs with safe.directory=* and GIT_OPTIONAL_LOCKS=0: a repository owned by another
+user is refused otherwise, and `git status` would try to write the index.
 
 The setup (peer_shell_setup) resolves each seat's working directory and home and proves the mechanism on every machine
 before any agent runs: a file only its owner may read becomes readable to the observer, which can neither change nor
@@ -335,7 +336,7 @@ def peer_shell_binding(seats: dict[str, Seat], observers: dict[str, int], *,
         owner = ctx.agent_name
 
         async def execute(peer: str, command: str) -> str:
-            gone = checked_peer(set(seats) - {owner}, peer)
+            gone = checked_peer(set(seats) - {owner}, peer, machine=True)
             record_board_action(owner, "oversight", target=peer)
             places = (store().get(PLACES) or {}).get(peer)
             if places is None:
