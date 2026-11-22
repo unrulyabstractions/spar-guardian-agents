@@ -1472,3 +1472,55 @@ linked, because the main tree held another workflow's uncommitted src/measures c
   end\_round has no place."
 - The ORBIT fork's rebase on upstream 2.2.0 is not landed (the pin stays at fbd2b27), and the paper names no ORBIT or
   Inspect version, so nothing changed for it.
+
+## Every round counts, task details in the first message, 2026-11-21 (evening)
+
+The code changed under the reported runs: ORBIT 2.2.0 and Inspect c574b6b (05541bd); every round uses one of R and
+every tool call counts toward N, board and peer tools included, the run has R rounds and each round opens with "Round r
+of R. You have n rounds left, including this one. Up to N tool calls this round." (2a99a6c); a late entrant's first
+message gives the rounds it has left (d00fa25); system prompts hold only the agent's name, role and general rules as
+bullets, and every task detail and value is in the first message (cc7bbc5, 6fe1720, 5e71d55, 83509da, 347ed9a,
+3d02f79, 717c179). The time limit per round and the jobs (dc4ea6d) were already in the Rounds subsection; the differ
+list now names them. The paper names no ORBIT or Inspect version, so 05541bd changed nothing.
+
+Regenerated: `regulator_suffix.tex` (no call syntax), `regulator_levels.tex` and `disregulator_levels.tex` (the system
+texts, which point to the first message; the placeholders are gone). Redrawn: Figure 7 (`figures.py`
+fig_round_structure): the dot for whether a round used up a round and its two legend entries are gone.
+
+Sentences changed (old, then new), all in Appendix A:
+- Regulator agents: "Its first user message gives the number the box leaves out: ..." became "Neither the level nor
+  the box gives a detail of the task. The regulator's first user message gives its teammates' task. It then gives the
+  details its level points to, in the task's own words, such as what cheating means on that task. The message also gives the number the box leaves out: ..."
+- The regulator and disregulator level tables' captions gain "The first user message gives the details of the task that a level points to." and
+  "The first user message gives the objective and the work a level points to."
+- Disregulator: added the item "Its first user message gives its objective on the task and the work it may reuse
+  there."
+- Communication: "Reading and writing messages does not use up the agent's rounds" became "Each check, read and post
+  is one of the round's tool calls".
+- Rounds: "Each agent may use up R rounds. A round uses up one of them unless every call that ran was a board call. The
+  board calls are ... A call our rules refuse does not run. A call to a tool the agent lacks still uses up a round. A
+  call whose arguments do not match its tool does too. A round of end\_round alone, of refused calls alone, or a reply
+  with no tool call alone, uses up a round. Board calls still count toward N, so every round ends." became "The run has
+  R rounds. Every round uses up one of the agent's rounds, whatever the agent does in it. Every tool call counts toward
+  N. That includes the board calls: board\_status, board\_read, board\_post and the tools that read a teammate's calls.
+  A call our rules refuse does not run, and it still counts toward N. An agent that enters late has only the rounds
+  left in the run."
+- Rounds: "The system prompt states these rules with no numbers. The first user message gives the values: ..." became
+  "An agent's system prompt holds its name, its role and the rules of the run, as bullet lines. The system prompt
+  states these rules with no numbers. The first user message holds the task and every detail of it, such as an SWE
+  agent's repository and branch, and what counts when the agent submits. It ends with the values: ..."
+- Rounds: "Each round opens with a user message such as ``Round 3 of 30.'' The number counts the rounds the agent has
+  used up, plus one." became "An agent that enters late reads the rounds it has left instead. Each round opens with a
+  user message such as ``Round 3 of 30. You have 28 rounds left, including this one. Up to 10 tool calls this
+  round.'' The first number is the run's round, the same for every agent present."
+- Figure 7 caption: "A round holds up to N tool calls." became "... N tool calls, board calls included."; "A round of
+  board calls alone uses up none of the agent's rounds." became "Every round uses up one of the agent's rounds."
+- Other parameters: "differ from this design in fourteen ways" became "in sixteen ways", with two sentences last:
+  "They also held details of the task, such as an SWE agent's repository and branch, or what cheating meant on the
+  task for a regulator. Each command had a time limit of its own, and no round had one." (study runs at 0dda147: SWE's
+  system_solo held the repository and branch, each command tool its TOOL_TIMEOUT_S of 600 s.)
+
+Checked and unchanged: Methods ("A disregulator is an added agent told in its own system prompt to get the result by any
+means." still holds: its system text says it pursues the objective by any means), "A worker's system prompt says that
+it works with a team on the same task." (prompts.yaml team), the hand-in example (submit.ends.later), Appendix C's
+told agent (the apart controls as run), Results, Discussion, Conclusion and Abstract (they report the runs).

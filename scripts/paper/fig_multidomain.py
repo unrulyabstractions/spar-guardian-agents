@@ -142,7 +142,9 @@ def wording() -> tuple[list[str], list[str]]:
     levels = yaml.safe_load(LEVELS.read_text())
     generic = levels["rule"]["generic"]["text"]
     identified = levels["rule"]["identified"]
-    regulator = levels["regulator"]
+    # a level's system text and its first-message text together: the task's cheating moved to the first message
+    regulator = {k: {"text": (v.get("text") or "") + " " + (v.get("first") or "")}
+                 for k, v in levels["regulator"].items() if isinstance(v, dict)}
     broken = [name for name, ok in [
         ("rule.identified names the prior work and calls its use cheating",
          all("That includes {protected}" in t and "is cheating" in t for t in identified.values())),

@@ -207,9 +207,9 @@ def fig_topology_compare():
 
 
 # ---------------------------------------------------------------- the round structure
-# Two rounds of five agents, drawn with N = 4 calls per round. Each lane is one agent's round: its calls in order, then
-# a dot for whether the round used up one of the agent's rounds. A round of board calls alone uses up none
-# (src/swarm/turn_rules turn_activation; SwarmConfig.rounds and calls_per_round).
+# Two rounds of five agents, drawn with N = 4 calls per round. Each lane is one agent's round: its calls in order. Every
+# round uses up one of the agent's rounds and every call counts toward N, board calls included
+# (src/swarm/turn_rules _turn_rounds; SwarmConfig.rounds and calls_per_round).
 ROUND_CALLS = (
     {"k7q2m": ["post", "work", "work", "work"], "t4x9n": ["status", "read", "post", "end_round"],
      "p8s3z": ["read", "work", "no call"], "n5j6q": ["read", "post", "work", "end_round"],
@@ -218,12 +218,6 @@ ROUND_CALLS = (
      "p8s3z": ["work", "work", "post", "work"], "n5j6q": ["post", "end_round"], "x2m7s": ["work", "submit"]},
 )
 SHOWN_N = 4
-
-
-def uses_up_round(calls: list[str]) -> bool:
-    """Whether a round uses up one of the agent's rounds: unless every call, end_round left out, was a board call."""
-    made = [c for c in calls if c not in ("end_round", "no call")]
-    return not made or any(c not in BOARD_ACTIONS for c in made)
 
 
 def live_arrow(ax, a, b):
@@ -235,8 +229,8 @@ def live_arrow(ax, a, b):
 
 
 def fig_round_structure():
-    """Two rounds, call by call per agent: up to N calls a round, end_round, a reply with no tool call, the round each
-    one uses up, a read of a post made in the same round, and the submitter's exit."""
+    """Two rounds, call by call per agent: up to N calls a round, end_round, a reply with no tool call, a read of a
+    post made in the same round, and the submitter's exit."""
     fig = plt.figure(figsize=(FULL, 3.05))
     ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
     ax.set_xlim(0, 17.0)
@@ -262,10 +256,6 @@ def fig_round_structure():
                 place += 1
                 ax.text(x0 + k * pitch + w - 0.13, y + lane_h / 2 - 0.13, str(place) if place < SHOWN_N else "N",
                         ha="right", va="top", fontsize=6.9, color=MUTED, zorder=5)
-            dot_x = x0 + SHOWN_N * pitch + 0.12
-            used = uses_up_round(calls[n])
-            ax.add_patch(Circle((dot_x, y), 0.13, fc=INK_SECONDARY if used else SURFACE, ec=INK_SECONDARY, lw=0.9,
-                                zorder=4))
     # the board is live: t4x9n's read sees k7q2m's post of the same round
     live_arrow(ax, (starts[0] + 0.72 * w, top - 0.2), (starts[0] + pitch + 0.2 * w, top - lane_h + 0.2))
     # the submitter (bottom lane) exits at its submit; the others work two more rounds
@@ -285,17 +275,12 @@ def fig_round_structure():
     by = top - 4 * lane_h - lane_h / 2
     rows = ([("box", "work", "work call"), ("box", "read", "board call"),
              ("box", "no call", "reply with no tool call")],
-            [("dot", True, "uses up a round"), ("dot", False, "uses up no round"),
-             ("arrow", None, "read of a post of the same round")])
+            [("arrow", None, "read of a post of the same round")])
     for r, row in enumerate(rows):
         ky, kx = by - 0.38 - r * 0.5, 1.2
         for kind, a, label in row:
             if kind == "box":
                 step(ax, a, kx, ky - 0.18, 0.8, 0.36, text=False)
-                lx = kx + 0.95
-            elif kind == "dot":
-                ax.add_patch(Circle((kx + 0.4, ky), 0.13, fc=INK_SECONDARY if a else SURFACE, ec=INK_SECONDARY,
-                                    lw=0.9, zorder=4))
                 lx = kx + 0.95
             else:
                 live_arrow(ax, (kx, ky), (kx + 0.8, ky))
