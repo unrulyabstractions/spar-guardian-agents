@@ -8,7 +8,10 @@
 
 Every command tool (shell and run_python, a lone agent's bash and python, an influencer's peer_shell) runs its command
 here. The call waits for its command until its round's time runs out (turn_rules.round_deadline: the round's start
-plus SwarmConfig.round_time_s); a call that starts after that still waits LATE_START_S. A command that ends in time
+plus SwarmConfig.round_time_s). Once that has passed, the round has one late wait of LATE_START_S, from the start of its
+first call past the deadline: that call and every later call of the round (the calls of one reply run one after
+another) wait only for what is left of it (late_wait), so a reply of k long calls ends its round at T plus one wait,
+not k. A command that ends in time
 returns as it did under Inspect's exec: stderr, a newline, then stdout, the last KEEP_BYTES of each stream, which the
 tool output cap then cuts. A command still running then becomes a job: it keeps running, the call returns its job id
 and its output so far (prompts.yaml jobs.kept) within the agent's cap, and the round ends on time. job_output returns
@@ -62,7 +65,7 @@ from src.swarm.turn_rules import JOBS_STORE, mark_job, round_deadline
 
 JOBS_DIR = "/var/lib/swarm_jobs"
 KEEP_BYTES = SandboxEnvironmentLimits.MAX_EXEC_OUTPUT_SIZE     # 10 MiB, what Inspect's exec keeps of a stream
-LATE_START_S = 5          # what a call that starts at or after its round's end still waits for its command
+LATE_START_S = 5          # the one wait of a round's calls that start at or after its end (late_wait)
 SETTLE_S = 2.0            # how long a read waits for the collector to drain, as docker exec waits for a stream
 INFRA_TIMEOUT_S = 120     # READ, STOP and the end of the run: our own scripts
 STOP_WAIT_S = 30          # how long a stop waits for the killed command's exec to return
@@ -349,18 +352,44 @@ def command_argv(exec_argv: list) -> list:
     return list(exec_argv)
 
 
-_SAMPLES: dict[int, tuple[object, dict[str, Call]]] = {}
-"""id(the sample's store) -> (that store, its command calls by handle). The store is the one object every context of
-a sample shares, the scorers' included, which a ContextVar set in the setup is not."""
+@dataclass
+class Memory:
+    """One sample's command calls by handle (those still running and the jobs), and the end of each round's late wait
+    by (agent, deadline)."""
+    store: object
+    calls: dict[str, Call] = field(default_factory=dict)
+    late: dict[tuple[str, float], float] = field(default_factory=dict)
+
+
+_SAMPLES: dict[int, Memory] = {}
+"""id(the sample's store) -> its Memory. The store is the one object every context of a sample shares, the scorers'
+included, which a ContextVar set in the setup is not."""
+
+
+def memory() -> Memory:
+    st = store()
+    held = _SAMPLES.get(id(st))
+    if held is None or held.store is not st:
+        held = _SAMPLES[id(st)] = Memory(st)
+    return held
 
 
 def calls() -> dict[str, Call]:
     """The sample's command calls in memory: those still running and the jobs, by handle."""
-    st = store()
-    held = _SAMPLES.get(id(st))
-    if held is None or held[0] is not st:
-        held = _SAMPLES[id(st)] = (st, {})
-    return held[1]
+    return memory().calls
+
+
+def late_wait(agent: str, deadline: float | None) -> float | None:
+    """How long a call of the agent's round that starts now waits for its command: None with no round clock; until
+    the deadline before it; past it, what is left of the round's one late wait of LATE_START_S, which the round's
+    first call past the deadline starts (0 once it has run out)."""
+    if deadline is None:
+        return None
+    at = now()
+    if at < deadline:
+        return deadline - at
+    until = memory().late.setdefault((agent, deadline), at + LATE_START_S)
+    return max(until - at, 0.0)
 
 
 def forget() -> None:
@@ -448,7 +477,7 @@ async def run_command(where: Where, agent: str, tool: str, command: str, argv: l
     task.add_done_callback(lambda _: setattr(call, "ended", call.ended or now()))
     calls()[handle] = call
     deadline = round_deadline(agent)
-    wait = None if deadline is None else max(deadline - now(), LATE_START_S)
+    wait = late_wait(agent, deadline)
     done, _ = await asyncio.wait({task}, timeout=wait)
     if done:
         calls().pop(handle, None)

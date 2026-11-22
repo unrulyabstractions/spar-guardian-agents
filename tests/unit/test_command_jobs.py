@@ -160,6 +160,31 @@ def test_the_end_of_the_run_kills_every_job_still_running(jobs):
     asyncio.run(scenario())
 
 
+def test_the_calls_of_a_reply_past_its_round_time_share_one_late_wait(jobs, monkeypatch):
+    """The calls of one reply run one after another. Once the round's time has passed, the first call to start waits
+    LATE_START_S and every later call of that round waits only what is left of that wait, so k long calls end the
+    round at T plus one wait, not k waits. A quick command inside the wait still answers whole; the next round's
+    deadline gets a wait of its own."""
+    monkeypatch.setattr(command_jobs, "LATE_START_S", 1.0)
+
+    async def scenario():
+        jobs.deadline = time.time() - 0.5
+        started = time.time()
+        quick = await command(jobs, "echo quick")
+        assert quick.job is None and quick.text == "quick\n"
+        kept = [await command(jobs, "sleep 30") for _ in range(4)]
+        took = time.time() - started
+        assert [o.job for o in kept] == ["j1", "j2", "j3", "j4"]
+        assert 0.9 < took < 1.8, took                       # one wait of 1 s; four waits would be 4 s
+        jobs.deadline = time.time() - 0.1                   # the next round, also past its time
+        started = time.time()
+        assert (await command(jobs, "sleep 30")).job == "j5"
+        assert 0.9 < time.time() - started < 1.8
+        await command_jobs.end_jobs()
+
+    asyncio.run(scenario())
+
+
 def test_a_batch_kept_at_once_takes_one_id_each(jobs):
     async def scenario():
         jobs.deadline = time.time() + 0.5
