@@ -89,7 +89,7 @@ from src.swarm.board import (
 from src.swarm.end_round import end_round_bindings
 from src.swarm.submit_and_stop import Deliverable, ending_tools, submit_bindings
 from src.swarm.tool_output_caps import cap_of, capped_bindings
-from src.swarm.turn_rules import END_ROUND, rules_setup, schedule, turn_rules_defense
+from src.swarm.turn_rules import END_ROUND, planned_entries, rules_setup, schedule, turn_rules_defense
 
 # Stops a runaway per agent. Inspect counts cached prompt tokens in full, so the count grows with the square of the
 # steps while the bill barely moves: a context that grows steadily to 1M over 100 steps stays under this. An episode
@@ -162,9 +162,15 @@ def first_messages(sample: Sample, plan: Plan, benchmark: Benchmark) -> dict[str
     overseers = {a for a in plan.agents if plan.config.oversees(role_of(plan.roles, a))}
     values = {a: agent_values(benchmark, plan, a) for a in plan.agents}
     own = {a: roles_module.role_first(role_of(plan.roles, a), plan.config, benchmark.key) for a in plan.agents}
-    if not overseers and not any(values.values()) and not any(own.values()):
+    entries = planned_entries(plan.config, plan.agents, plan.roles)
+    late = {a for a in plan.agents if entries.get(a, 1) > 1}
+    if not overseers and not any(values.values()) and not any(own.values()) and not late:
         return None
     line = rounds_values(plan.config)
+
+    def entered(agent: str, text: str) -> str:
+        """A late entrant's message with the rounds it has left on entering, as its first round's line says."""
+        return text.replace(line, rounds_values(plan.config, entries[agent]), 1) if agent in late else text
 
     def message(agent: str) -> str:
         text = own[agent].strip() if own[agent] else None
@@ -174,7 +180,7 @@ def first_messages(sample: Sample, plan: Plan, benchmark: Benchmark) -> dict[str
         parts = [roles_module.oversight_first_message(first[agent]).rstrip(), text, " ".join(values[agent])]
         return "\n\n".join(p for p in parts if p) + "\n"
 
-    return {a: message(a) for a in plan.agents}
+    return {a: entered(a, message(a)) for a in plan.agents}
 
 
 def deliverable(benchmark: Benchmark, plan: Plan) -> Deliverable:

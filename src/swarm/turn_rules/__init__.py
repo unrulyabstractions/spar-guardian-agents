@@ -36,7 +36,7 @@ API modules:
 
 The rest of the API is what this package exports.
 """
-from src.swarm.turn_rules._turn_plan import rules_setup, schedule
+from src.swarm.turn_rules._turn_plan import planned_entries, rules_setup, schedule
 from src.swarm.turn_rules._turn_presence import entered, exited, record_exit
 from src.swarm.turn_rules._turn_rounds import SWAPS, close_round, mark_job, round_deadline, round_line
 from src.swarm.turn_rules._turn_rules_filter import provider_system_text, turn_rules_defense
@@ -90,5 +90,5 @@ __all__ = [
     "refuse", "current_round", "last_round", "live_state", "live_record", "step_round", "provider_system_text",
     "orbit_submit_ending", "ALERT", "ALERT_TAG", "ALERT_TOOL", "PRESENCE_TAG", "ROUND_TAG", "END_ROUND",
     "Alerts", "Refused", "entered", "exited", "record_exit", "close_round", "round_line",
-    "JOBS_STORE", "SWAPS", "mark_job", "round_deadline",
+    "JOBS_STORE", "SWAPS", "mark_job", "round_deadline", "planned_entries",
 ]

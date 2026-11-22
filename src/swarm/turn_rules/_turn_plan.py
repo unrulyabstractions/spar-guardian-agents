@@ -52,6 +52,12 @@ def plan_steps(config: SwarmConfig, agents: list[str], roles: dict[str, str] | N
     return steps
 
 
+def planned_entries(config: SwarmConfig, agents: list[str], roles: dict[str, str] | None = None) -> dict[str, int]:
+    """Each agent's entry round in the written plan (plan_steps, _turn_presence.entry_rounds); an agent no step holds is
+    absent."""
+    return entry_rounds(plan_steps(config, agents, roles))
+
+
 def schedule(config: SwarmConfig, agents: list[str], roles: dict[str, str] | None = None) -> ScheduleConfig:
     """The written plan (plan_steps) with ORBIT's two callbacks: after_activation after every round, and ends_round at
     every boundary of one, which ends it (ScheduleConfig.end_activation)."""
@@ -73,7 +79,7 @@ def initial_state(config: SwarmConfig, agents: list[str], roles: dict[str, str] 
             "rounds": config.rounds, "time_limit_s": time_limit_s or None,
             "round_time_s": config.round_time_s,
             "windows": {a: [w.start, w.end] for a, w in windows(config, agents, roles).items()},
-            "entry_rounds": entry_rounds(plan_steps(config, agents, roles))}
+            "entry_rounds": planned_entries(config, agents, roles)}
 
 
 def team_delivery(config: SwarmConfig, agents: list[str]) -> bool:

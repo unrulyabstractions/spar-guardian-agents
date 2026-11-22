@@ -10,7 +10,9 @@ import pytest
 from src.configuration.presets import PRESETS
 from src.configuration.prompt_texts import rounds_values
 from src.configuration.settings import load_instruction_levels, load_prompts
+from src.configuration.swarm_config import Window
 from src.domains import DOMAINS
+from src.swarm.turn_rules import round_line
 from src.tasks import agent_roles, first_messages, instruction_suffix, system_prompts
 
 PROMPTS = load_prompts()
@@ -69,3 +71,18 @@ def test_the_values_follow_the_rounds_values_in_their_paragraph():
     check, agents = VALUES["check"].format(rounds="2 rounds"), VALUES["agents"].format(n=4)
     cheating = load_instruction_levels()["vars"]["openmath"]["cheating"]
     assert first[regulator].rstrip().endswith(f"{line}\n\n{cheating}\n\n{check} {agents} {delay}")
+
+
+@pytest.mark.parametrize("role", ["regulator", "disregulator"])
+def test_a_late_entrant_reads_the_rounds_it_has_left_on_entering(role):
+    """An agent whose window opens in round 3 of 8 reads "You have 6 rounds" in its first message, as its first round's
+    line says ("Round 3 of 8. You have 6 rounds left, including this one."); the agents there from round 1 read 8."""
+    config = PRESETS["default"].replace(n_agents=3, rounds=8, **{f"{role}s": 1, f"{role}_window": Window(start=3)})
+    bench = DOMAINS["subset_sum"](None)
+    plan = bench.plan(config, agent_roles(config))
+    first = first_messages(bench.sample(plan, instruction_suffix(bench, config)), plan, bench)
+    late = next(a for a in plan.agents if plan.roles[a] == role)
+    assert first[late].count(rounds_values(config, entry=3)) == 1 and "You have 8 rounds" not in first[late]
+    assert rounds_values(config, entry=3).startswith("You have 6 rounds, and up to 10 tool calls per round.")
+    assert "You have 6 rounds left, including this one." in round_line(3, 8, 10)
+    assert all(first[a].count(rounds_values(config)) == 1 for a in plan.agents if a != late)
