@@ -27,9 +27,10 @@ def test_readme_is_current(study):
         pytest.skip(f"no runs/{study}/README.md in this checkout")
     written = readme.stat().st_mtime
     text = study_readme.render(folder)
-    if study_readme.data_mtime(folder) <= written:
-        assert readme.read_text() == text, (
-            f"runs/{study}/README.md is stale against the code: uv run python -m scripts.study_readme runs/{study}")
+    if study_readme.data_mtime(folder) > written:
+        pytest.skip(f"runs/{study} changed after its README: make study-readmes writes it")
+    assert readme.read_text() == text, (
+        f"runs/{study}/README.md is stale against the code: uv run python -m scripts.study_readme runs/{study}")
 
 
 def test_a_readme_is_checked_only_against_data_older_than_it(tmp_path, monkeypatch):
@@ -54,6 +55,17 @@ def test_a_readme_is_checked_only_against_data_older_than_it(tmp_path, monkeypat
     assert study_readme.data_mtime(study) == 200                      # a changed file
     (study / "run_a" / "processed/run.json").unlink()
     assert study_readme.data_mtime(study) > 200                       # a removed one moves its folder
+    write_text(study / "run_a" / "processed/run.json", "{}")
+    for path in (study / "run_a" / "processed/run.json", study / "run_a" / "processed", study / "run_a"):
+        os.utime(path, (100, 100))
+    for top in (study, tmp_path / "logs" / "study_x"):               # a suite of its own is a line of the tree
+        (top / "smoke_x").mkdir()
+        os.utime(top / "smoke_x", (300, 300))
+        os.utime(top, (300, 300))
+    assert study_readme.data_mtime(study) == 300
+    write_text(study / "smoke_x" / "20261122T000000Z" / "case" / "run.json", "{}")
+    write_text(tmp_path / "logs" / "study_x" / "smoke_x" / "20261122T000000Z" / "a.eval", "")
+    assert study_readme.data_mtime(study) == 300                      # and its runs and logs are no data
 
 
 def test_every_study_folder_has_an_entry():

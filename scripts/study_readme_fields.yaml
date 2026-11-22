@@ -199,7 +199,7 @@ files:
       delivery: the stop-after-delivery record
       peer_shell: "the influencers' peer shells: the observers' uids, their calls, what their reaps killed"
       deliverables: openmath's deliverables scorer's record
-      tmp_snapshots: '/tmp snapshots the run took itself: `status` (`written`, `error`, `off`, `none`), the file, the shots, the calls with one, the errors, the listing times in ms and the file''s bytes; null for a run before 2026-11-22'
+      tmp_snapshots: '/tmp snapshots the run took itself: `status` (`written`, `error`, `off`, `none`), the file, the shots, the calls with one, the errors, the listing times in ms and the file''s bytes; a run before 2026-11-22 lacks it'
   episodes:
     about: One row per agent of the run, in roster order.
     fields:
@@ -591,7 +591,7 @@ files:
       machines: each machine and its agents
       users: each machine's login users
       replay: the replay's verdict and match counts
-      capture: "the run's own shots (`clock` run): their count, errors, listing times in ms, each machine's first shot, truncated listings and unread files"
+      capture: "the run's own shots (`clock` run): their count, errors and the errors' messages, listing times in ms, each machine's first shot, truncated listings and unread files"
       steps: every call with the directories' change before and after it
   swe_summary:
     about: SWE only. Lucy's measures for the run (src/measures/swe_measures.py).

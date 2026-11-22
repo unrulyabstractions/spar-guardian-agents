@@ -618,18 +618,33 @@ def render(study: Path) -> str:
 
 def data_mtime(study: Path) -> float:
     """The newest change to the data a README is rendered from: every file and folder under runs/<study>/ but the
-    README, and under logs/<study>/. A folder's time moves when an entry is added to it, removed or renamed, so a run
-    moved into a group counts. A path that vanishes during the walk is a change now: infinity."""
+    README, and under logs/<study>/ (the folder tree reads). A folder's time moves when an entry is added to it,
+    removed or renamed, so a run moved into a group counts. A smoke suite's folder (smoke*, no run) is left out with
+    all it holds: the tree names a suite and counts none of its runs or logs. A path that vanishes during the walk is a
+    change now: infinity."""
+    study = Path(study)
+    runs = runs_of(study)
+    kept = {*GROUPS, *(run.relative_to(study).parts[0] for run in runs)}
+    logs = study.resolve().parent.parent / "logs" / study.name
+    log_kept = {*GROUPS, *meanings()["log_groups"], *(run.name for run in runs if run.parent == study)}
+
+    def suite(path: Path, top: Path) -> bool:
+        first = path.relative_to(top).parts[0] if path != top else None
+        if first is None:
+            return False
+        return first.startswith("smoke") and first not in (kept if top == study else log_kept)
+
     newest = 0.0
-    for top in (Path(study), ROOT / "logs" / Path(study).name):
+    for top in (study, logs):
         if not top.is_dir():
             continue
         for path in (top, *top.rglob("*")):
-            if path != Path(study) / README:
-                try:
-                    newest = max(newest, path.lstat().st_mtime)
-                except FileNotFoundError:
-                    return float("inf")
+            if path == study / README or suite(path, top):
+                continue
+            try:
+                newest = max(newest, path.lstat().st_mtime)
+            except FileNotFoundError:
+                return float("inf")
     return newest
 
 
@@ -652,6 +667,8 @@ def main(argv: list[str] | None = None) -> int:
         current = path.read_text() if path.is_file() else None
         if current == text:
             state = "current"
+            if not args.check:
+                path.touch()        # its time marks the data it is current against (data_mtime)
         elif args.check:
             state, status = "out of date", 1
         else:
