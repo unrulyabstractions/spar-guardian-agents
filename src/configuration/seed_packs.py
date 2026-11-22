@@ -1,6 +1,6 @@
 """Seed packs: what a run's environment holds before round 1 beyond the task, from a "previous team".
 
-    config = build_config("default", "small", ["seed_pack=swe/pointer"])
+    config = build_config("default", "small", ["seed_pack=swe/exp0_pointer"])
     record = seed_record(config, "swe", "flipt-02e2")      # run.json "seed": pack, authors, posts, files
     texts(record)                                        # every seeded text, for the ladders and the tests
     uv run python -m src.configuration.seed_packs        # load and check every pack, list them (make seeds-check)

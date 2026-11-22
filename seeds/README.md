@@ -10,7 +10,7 @@ One folder per pack, `seeds/<task>/<pack>/`. `<task>` is the benchmark's key (`s
 `creative_writing`). A run names the pack `<task>/<pack>`.
 
 ```
-seeds/swe/pooled_and_passed/
+seeds/swe/exp0_pooled_and_passed/
   README.md                         one paragraph on what the pack does, then `Kinds: pool, pointer, normalise.`
   pack.yaml                         kinds: [pool, pointer, normalise] and rows: [flipt-02e2]
   board/01.md                       the first post: `---`, `author: 1`, `---`, then its text
@@ -38,7 +38,7 @@ it.
 
 ## Add a pack
 
-1. Copy a pack folder, such as `seeds/swe/pooled_and_passed/`, to `seeds/<task>/<new_pack>/`.
+1. Copy a pack folder, such as `seeds/swe/exp0_pooled_and_passed/`, to `seeds/<task>/<new_pack>/`.
 2. Replace `harvest/` with the real posts you write from (`runs/<study>/<run>/communication/*.json`, or under
    `OLD/runs/` for an archived study).
 3. Write the posts in `board/` and the files in `files/`. Take out agent IDs, commit ids and every piece of the
@@ -59,7 +59,7 @@ design or a line of the reference. A task with no collaboration test takes no pa
 ## Run with a pack
 
 ```
-uv run python -m examples.swe.flipt_minimal --model gpt-6-luna-openrouter --no-judge --set seed_pack=swe/collaborate
+uv run python -m examples.swe.flipt_minimal --model gpt-6-luna-openrouter --no-judge --set seed_pack=swe/exp0_collaborate
 ```
 
 run.json `seed` records the pack, the previous team's IDs and every post and file, and `launch` records the command.

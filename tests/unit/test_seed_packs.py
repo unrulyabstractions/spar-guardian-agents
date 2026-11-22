@@ -190,18 +190,18 @@ def test_three_tasks_have_a_collaborate_pack():
 def test_the_field_takes_a_pack_or_none_and_refuses_the_rest():
     assert build_config("default", "small", []).seed_pack is None
     assert build_config("default", "small", ["seed_pack=none"]).seed_pack is None
-    pack = "protein_design/pressure"
+    pack = "protein_design/exp0_pressure"
     assert build_config("default", "small", [f"seed_pack={pack}"]).seed_pack == pack
     with pytest.raises(ValidationError, match="unknown seed pack"):
         build_config("default", "small", ["seed_pack=protein_design/nothing"])
     with pytest.raises(ValidationError, match="lone agent has no board"):
         build_config("default", "small", ["n_agents=1", f"seed_pack={pack}"])
     # a pack of files alone fits a lone agent
-    assert build_config("default", "small", ["n_agents=1", "seed_pack=swe/notes_only"]).seed_pack == "swe/notes_only"
+    assert build_config("default", "small", ["n_agents=1", "seed_pack=swe/exp0_notes_only"]).seed_pack == "swe/exp0_notes_only"
 
 
 def test_the_record_draws_a_previous_team_off_the_roster_and_fills_its_ids():
-    config = build_config("default", "small", ["n_agents=3", "seed=4", "seed_pack=swe/pooled_and_passed"])
+    config = build_config("default", "small", ["n_agents=3", "seed=4", "seed_pack=swe/exp0_pooled_and_passed"])
     record = seed_packs.seed_record(config, "swe", "flipt-02e2")
     assert record == seed_packs.seed_record(config, "swe", "flipt-02e2")
     assert len(record["authors"]) == 2 and not set(record["authors"]) & set(config.names)
@@ -217,22 +217,22 @@ def test_the_record_draws_a_previous_team_off_the_roster_and_fills_its_ids():
 
 
 def test_a_pack_is_refused_on_another_task_or_a_row_it_does_not_fit():
-    config = build_config("default", "small", ["n_agents=3", "seed_pack=swe/pointer"])
+    config = build_config("default", "small", ["n_agents=3", "seed_pack=swe/exp0_pointer"])
     with pytest.raises(ValueError, match="is for swe"):
         seed_packs.seed_record(config, "creative_writing", "museum_poem")
     with pytest.raises(ValueError, match="fits the rows"):
         seed_packs.seed_record(config, "swe", "vuls-1832")
-    assert seed_packs.seed_record(config.replace(seed_pack="swe/pressure"), "swe", "vuls-1832")
+    assert seed_packs.seed_record(config.replace(seed_pack="swe/exp0_pressure"), "swe", "vuls-1832")
     with pytest.raises(ValueError, match="fits the rows"):
         tasks.swarm_task(SWE("vuls-1832"), config)
 
 
 def test_the_task_records_the_seed_and_runs_its_setup_after_the_benchmarks():
-    config = build_config("default", "small", ["n_agents=3", "seed_pack=swe/pooled_and_passed"])
+    config = build_config("default", "small", ["n_agents=3", "seed_pack=swe/exp0_pooled_and_passed"])
     task = tasks.swarm_task(SWE("flipt-02e2"), config)
     cb = task.dataset[0].metadata["cheatbench"]
     assert cb["seed"] == seed_packs.seed_record(config, "swe", "flipt-02e2")
-    assert cb["config"]["seed_pack"] == "swe/pooled_and_passed" and tasks.SEED_DEVIATION in cb["deviations"]
+    assert cb["config"]["seed_pack"] == "swe/exp0_pooled_and_passed" and tasks.SEED_DEVIATION in cb["deviations"]
     plain = tasks.swarm_task(SWE("flipt-02e2"), config.replace(seed_pack=None)).dataset[0].metadata["cheatbench"]
     assert "seed" not in plain and tasks.SEED_DEVIATION not in plain["deviations"]
     plan = SWE("flipt-02e2").plan(config, tasks.agent_roles(config))
@@ -252,7 +252,7 @@ def test_seeded_posts_stand_on_the_board_before_round_1_and_name_no_teammate(tmp
     previous team's two posts, numbered 1 and 2, under IDs off the roster. read_senders leaves them out, and the
     store marks them seeded."""
     config = pull(rounds=2, n_agents=2, concurrent_rounds=False, turn_order="round_robin",
-                  seed_pack="protein_design/pressure")
+                  seed_pack="protein_design/exp0_pressure")
     record = seed_packs.seed_record(config, "protein_design", "alfalfa_chi")
     original = rules.rules_setup
     monkeypatch.setattr(rules, "rules_setup",

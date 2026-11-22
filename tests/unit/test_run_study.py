@@ -15,17 +15,19 @@ PILOT = settings.ROOT / "studies" / "ian_seed_prototyping_0.yaml"
 def test_the_pilots_stage_1_is_22_cells_in_its_order():
     plan = seed_study.load_plan(PILOT)
     names = [c.name for c in seed_study.cells(plan)]
-    assert len(names) == 22 and names[0] == "protein_luna_none_s1" and names[-1] == "creative_luna_pooled_and_passed_s1"
+    assert len(names) == 22 and names[0] == "protein_luna_none_s1"
+    assert names[-1] == "creative_luna_exp0_pooled_and_passed_s1"
     assert len(set(names)) == 22
 
 
 def test_a_cell_runs_the_pilots_command():
     """launch.sh of the pilot: the model, no judge, the name, the seed, the five settings, the salt, then the pack."""
-    cell = next(c for c in seed_study.cells(seed_study.load_plan(PILOT)) if c.name == "swe_deepseek_pressure_s1")
+    cell = next(c for c in seed_study.cells(seed_study.load_plan(PILOT)) if c.name == "swe_deepseek_exp0_pressure_s1")
     assert seed_study.command(cell, "study_x", [], False) == (
         "STUDY=study_x exec uv run python -m examples.swe.flipt_minimal --model deepseek-flash-openrouter --no-judge "
-        "--name swe_deepseek_pressure_s1 --set seed=1 --set rounds=30 --set calls_per_round=10 --set round_time_s=600 "
-        "--set time_limit_s=18000 --set cost_limit_usd=5 --set id_salt=swe_deepseek_s1 --set seed_pack=swe/pressure")
+        "--name swe_deepseek_exp0_pressure_s1 --set seed=1 --set rounds=30 --set calls_per_round=10 "
+        "--set round_time_s=600 --set time_limit_s=18000 --set cost_limit_usd=5 --set id_salt=swe_deepseek_s1 "
+        "--set seed_pack=swe/exp0_pressure")
     control = next(c for c in seed_study.cells(seed_study.load_plan(PILOT)) if c.name == "swe_deepseek_none_s1")
     assert "seed_pack" not in seed_study.command(control, "s", [], False)
     assert "--replace" in control.argv([], True)
@@ -38,7 +40,7 @@ def test_a_bad_plan_is_refused(tmp_path):
     with pytest.raises(ValueError, match="no script"):
         seed_study.load_plan(bad)
     bad.write_text("study: s\nseeds: [1]\ntargets:\n  t:\n    module: examples.swe.flipt_minimal\n    model: m\n"
-                   "    packs: [swe/pressure, protein_design/pressure]\n")
+                   "    packs: [swe/exp0_pressure, protein_design/exp0_pressure]\n")
     with pytest.raises(ValueError, match="several tasks"):
         seed_study.load_plan(bad)
     bad.write_text("study: s\nseeds: [1]\ntargets:\n  t:\n    module: examples.swe.flipt_minimal\n    model: m\n"

@@ -11,7 +11,7 @@ A plan (studies/*.yaml, seeds/README.md) names the study, the seeds, the targets
       protein_luna:                                  # the run's name: <target>_<pack>_s<seed>
         module: examples.protein_design.binder_minimal
         model: gpt-6-luna-openrouter
-        packs: [none, protein_design/pointer]        # "none" is the unseeded control
+        packs: [none, protein_design/exp0_pointer]        # "none" is the unseeded control
     settings: []                                     # more --set pairs after PILOT_SETTINGS
     limits: {max_runs: 10, max_per_task: {swe: 4}, spacing_s: 60}
 
@@ -53,7 +53,9 @@ PILOT_SETTINGS = ["rounds=30", "calls_per_round=10", "round_time_s=600", "time_l
 MIN_FREE_MEMORY_PCT = 40
 MIN_FREE_DISK_GB = 10
 LIMITS = {"max_runs": 10, "max_per_task": {}, "spacing_s": 60}
-PLAN_KEYS = {"study", "seeds", "targets", "settings", "limits"}
+PLAN_KEYS = {"study", "seeds", "targets", "settings", "limits", "closed"}
+"""closed: true marks a study that is over: its plan is kept as a record, lists its cells with --dry-run and never
+launches (its runs may be named after packs that were renamed since)."""
 TARGET_KEYS = {"module", "model", "packs"}
 NAME = re.compile(r"[a-z0-9_]+")
 
@@ -187,6 +189,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  now    memory {free_memory_pct()}% free (needs {MIN_FREE_MEMORY_PCT}%), docker disk "
               f"{free_disk_gb()} GB free (needs {MIN_FREE_DISK_GB}); limits {plan['limits']}")
         return 0
+    if plan.get("closed"):
+        print(f"{args.plan}: this study is closed, its plan is a record: copy it under a new study to run it again",
+              file=sys.stderr)
+        return 2
     if not args.yes:
         print("a launch makes paid model calls: add --yes, or --dry-run to look", file=sys.stderr)
         return 2

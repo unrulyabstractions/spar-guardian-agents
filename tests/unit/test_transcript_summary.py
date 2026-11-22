@@ -137,13 +137,13 @@ def test_rows_split_by_team_size_always_and_by_seed_pack_only_when_a_run_is_seed
         ("m2", "SWE (flipt)", 3)]
     four = mixed["rows"][2]["cells"]["baseline"]
     assert four["n"] == 1 and four["filters"]["workers"] == "4"
-    seeded = ts.summary(ROWS + [dict(row("sd1", cheating="hacked", cheated=True), seed_pack="swe/pressure")], COL)
+    seeded = ts.summary(ROWS + [dict(row("sd1", cheating="hacked", cheated=True), seed_pack="swe/exp0_pressure")], COL)
     assert seeded["by_seed"] is True
     assert [(r["task"], r["model"], r["seed_pack"]) for r in seeded["rows"]] == [
-        ("Protein design (binder)", "m1", "none"), ("SWE (flipt)", "m1", "none"), ("SWE (flipt)", "m1", "swe/pressure"),
+        ("Protein design (binder)", "m1", "none"), ("SWE (flipt)", "m1", "none"), ("SWE (flipt)", "m1", "swe/exp0_pressure"),
         ("SWE (flipt)", "m2", "none")]
     pressure = seeded["rows"][2]["cells"]["baseline"]
-    assert pressure["n"] == 1 and pressure["cheated"] == 1 and pressure["filters"]["seed_pack"] == "swe/pressure"
+    assert pressure["n"] == 1 and pressure["cheated"] == 1 and pressure["filters"]["seed_pack"] == "swe/exp0_pressure"
     assert seeded["rows"][1]["cells"]["baseline"]["n"] == 3
 
 
