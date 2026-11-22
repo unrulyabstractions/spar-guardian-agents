@@ -605,6 +605,23 @@ def render(study: Path) -> str:
     return "\n".join(out)
 
 
+def data_mtime(study: Path) -> float:
+    """The newest change to the data a README is rendered from: every file and folder under runs/<study>/ but the
+    README, and under logs/<study>/. A folder's time moves when an entry is added to it, removed or renamed, so a run
+    moved into a group counts. A path that vanishes during the walk is a change now: infinity."""
+    newest = 0.0
+    for top in (Path(study), ROOT / "logs" / Path(study).name):
+        if not top.is_dir():
+            continue
+        for path in (top, *top.rglob("*")):
+            if path != Path(study) / README:
+                try:
+                    newest = max(newest, path.lstat().st_mtime)
+                except FileNotFoundError:
+                    return float("inf")
+    return newest
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("studies", nargs="*", type=Path, help="runs/<study> folders")

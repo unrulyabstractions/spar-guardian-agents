@@ -3,6 +3,7 @@ has an entry, and the generator refuses a field or a file it has no meaning for.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -15,11 +16,44 @@ RUNS = ROOT / "runs"
 
 @pytest.mark.parametrize("study", study_readme.STUDIES)
 def test_readme_is_current(study):
+    """The code describes every field and file the study holds now. When no data changed since the README was
+    written, the README is the render: a difference then comes from the code. Data that changed since (a run, a
+    replay's files, a smoke run) is the data's own news, which `make study-readmes` writes; `make study-readmes CHECK=1`
+    reports it."""
     folder = RUNS / study
-    if not (folder / study_readme.README).is_file():
+    readme = folder / study_readme.README
+    if not readme.is_file():
         pytest.skip(f"no runs/{study}/README.md in this checkout")
-    assert (folder / study_readme.README).read_text() == study_readme.render(folder), (
-        f"runs/{study}/README.md is stale: uv run python -m scripts.study_readme runs/{study}")
+    written = readme.stat().st_mtime
+    text = study_readme.render(folder)
+    if study_readme.data_mtime(folder) <= written:
+        assert readme.read_text() == text, (
+            f"runs/{study}/README.md is stale against the code: uv run python -m scripts.study_readme runs/{study}")
+
+
+def test_a_readme_is_checked_only_against_data_older_than_it(tmp_path, monkeypatch):
+    """data_mtime moves with a new file, a changed one and a removed one under runs/<study>/ and logs/<study>/, and
+    not with the README itself."""
+    monkeypatch.setattr(study_readme, "ROOT", tmp_path)
+    study = tmp_path / "runs" / "study_x"
+    (study / "run_a").mkdir(parents=True)
+    (study / "run_a" / "run.json").write_text("{}")
+    (tmp_path / "logs" / "study_x").mkdir(parents=True)
+    os.utime(study / "run_a" / "run.json", (100, 100))
+    for path in (study / "run_a", study, tmp_path / "logs" / "study_x"):
+        os.utime(path, (100, 100))
+    assert study_readme.data_mtime(study) == 100
+    (study / study_readme.README).write_text("x")
+    os.utime(study, (100, 100))
+    assert study_readme.data_mtime(study) == 100                     # the README is no data
+    (tmp_path / "logs" / "study_x" / "a.eval").write_text("")
+    assert study_readme.data_mtime(study) > 100                       # a new log
+    os.utime(tmp_path / "logs" / "study_x" / "a.eval", (100, 100))
+    os.utime(tmp_path / "logs" / "study_x", (100, 100))
+    os.utime(study / "run_a" / "run.json", (200, 200))
+    assert study_readme.data_mtime(study) == 200                      # a changed file
+    (study / "run_a" / "run.json").unlink()
+    assert study_readme.data_mtime(study) > 200                       # a removed one moves its folder
 
 
 def test_every_study_folder_has_an_entry():

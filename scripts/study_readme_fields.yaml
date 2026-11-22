@@ -30,6 +30,7 @@ groups:
 log_groups:
   _unpaired: eval logs with no run, kept at the path they had; never read
   screen: each run's console output (`.log`) and each box's launch record (`.json`)
+  run_study: each run's console output (`.log`), as the study's launcher wrote it
   set_aside_regulator_log: the first copies, eval logs (`logs/`) and run folders (`runs/`), of nine runs made again
   set_aside_8M_guard: the first copy, eval log and run folder, of game_solo_cheat_dsflash1, made again
 
@@ -187,6 +188,7 @@ files:
       delivery: the stop-after-delivery record
       peer_shell: "the influencers' peer shells: the observers' uids, their calls, what their reaps killed"
       deliverables: openmath's deliverables scorer's record
+      tmp_snapshots: '/tmp snapshots the run took itself: `status` (`written`, `error`, `off`, `none`), the file, the shots, the calls with one, the errors, the listing times in ms and the file''s bytes; null for a run before 2026-11-22'
   episodes:
     about: One row per agent of the run, in roster order.
     fields:
@@ -566,7 +568,7 @@ files:
       schema: the report's schema version
       shares: each match class's share of the sandbox calls
   tmp_snapshots:
-    about: /tmp, /var/tmp and /dev/shm of every machine before and after every call, by replay. DATA_AND_VIEWER.md gives the full schema.
+    about: /tmp, /var/tmp and /dev/shm of every machine before and after every call, taken by the run itself or by a replay. DATA_AND_VIEWER.md gives the full schema.
     fields:
       schema: the file's schema version
       run: the run's name
@@ -578,6 +580,7 @@ files:
       machines: each machine and its agents
       users: each machine's login users
       replay: the replay's verdict and match counts
+      capture: "the run's own shots (`clock` run): their count, errors, listing times in ms, each machine's first shot, truncated listings and unread files"
       steps: every call with the directories' change before and after it
   swe_summary:
     about: SWE only. Lucy's measures for the run (src/measures/swe_measures.py).
