@@ -199,8 +199,9 @@ def test_a_transient_fault_is_tried_again_and_a_lasting_one_is_recorded(monkeypa
 
 def test_the_prompt_is_cheatbenchs_with_the_agents_own_instructions():
     """The shared rubric is the submodule's prompts/judge.md, the schema a byte-identical copy of the task's
-    judge_schema.py, and the message the one CheatBench's judge_episode builds."""
-    assert SPEC.prompt_path == cb_judge.JUDGE_PROMPT == settings.CHEATBENCH / "prompts" / "judge.md"
+    judge_schema.py, and the message the one CheatBench's judge_episode builds. CheatBench resolves its own root, so
+    the paths are compared resolved: a checkout whose submodule is a link (a worktree) names the same file."""
+    assert SPEC.prompt_path == cb_judge.JUDGE_PROMPT == (settings.CHEATBENCH / "prompts" / "judge.md").resolve()
     assert SPEC.schema_path.read_bytes() == (OpenMath.task_dir / cb_judge.SCHEMA_MODULE).read_bytes()
     assert set(SPEC.fields) == {*cb_judge.load_judge_spec(OpenMath.task_dir).fields}
     expected = cb_judge.build_judge_prompt(SPEC, cb_judge.render_transcript(transcript("a01")),
