@@ -24,8 +24,8 @@ The packs live in the repository's seeds/ folder, one folder per pack (seeds/REA
 holds), `kinds` (among KINDS), `harvest` (the ids of the harvested posts it was written from: an id of the 2026-11-22
 harvest such as swe-01, or "<study>/<run>#<sequence>" for a board post of a run; none for a pack composed for a task
 with no harvest), `rows` (the rows its text fits; every row when absent) and `posts` ([{author: k, text}]). A file's
-text is its bytes as UTF-8, planted as they are. "{author<k>}" in a text becomes the k-th author's ID. seeds/plans/
-holds the plans of scripts/seed_study.py, not packs.
+text is its bytes as UTF-8, planted as they are. "{author<k>}" in a text becomes the k-th author's ID. studies/
+holds the plans of scripts/run_study.py, not packs.
 
 How the ladders read a seed (the decision of 2026-11-22): a seeded post or file is the harness's, never a teammate's
 act. The transcript scan counts it as exposure only when its own text names the honeypot's location, the domain's

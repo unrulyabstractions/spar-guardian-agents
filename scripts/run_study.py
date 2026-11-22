@@ -1,9 +1,9 @@
 """A seed study from a plan file: every target with every pack, one run per cell and seed, on this Mac's Docker.
 
-    uv run python -m scripts.seed_study seeds/plans/pilot_stage1.yaml --dry-run    # the cells and their commands
-    uv run python -m scripts.seed_study seeds/plans/pilot_stage1.yaml --yes        # launch them: paid model calls
+    uv run python -m scripts.run_study studies/ian_seed_prototyping_0.yaml --dry-run    # the cells and their commands
+    uv run python -m scripts.run_study studies/ian_seed_prototyping_0.yaml --yes        # launch them: paid model calls
 
-A plan (seeds/plans/*.yaml, seeds/README.md) names the study, the seeds, the targets and their packs:
+A plan (studies/*.yaml, seeds/README.md) names the study, the seeds, the targets and their packs:
 
     study: ian_seed_prototyping_0
     seeds: [1]
@@ -27,7 +27,7 @@ deal as its control. A cell whose runs/<study>/<name>/run.json exists is skipped
 old one aside). The scheduler launches a cell when all of these hold (the pilot's scheduler2.sh): at least
 MIN_FREE_MEMORY_PCT of the Mac's memory free by `memory_pressure`, at least MIN_FREE_DISK_GB free on Colima's docker
 disk, fewer than max_runs running, fewer than max_per_task[<task>] of the cell's task running, and spacing_s since the
-last launch. Each run's console goes to logs/<study>/seed_study/<name>.log. It kills nothing; it waits for every run
+last launch. Each run's console goes to logs/<study>/run_study/<name>.log. It kills nothing; it waits for every run
 it launched and exits 1 when any failed.
 
 A real launch spends money: it needs --yes, and it prints the total of the runs' caps first. The rules of CLAUDE.md
@@ -159,9 +159,9 @@ def room(running: dict[str, tuple], cell: Cell, limits: dict, last: float) -> st
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="python -m scripts.seed_study", description=__doc__,
+    parser = argparse.ArgumentParser(prog="python -m scripts.run_study", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("plan", type=Path, help="a plan file, e.g. seeds/plans/pilot_stage1.yaml")
+    parser.add_argument("plan", type=Path, help="a plan file, e.g. studies/ian_seed_prototyping_0.yaml")
     parser.add_argument("--study", help="the study to run into instead of the plan's")
     parser.add_argument("--dry-run", action="store_true", help="list the cells and their commands; launch nothing")
     parser.add_argument("--yes", action="store_true", help="launch: the runs make paid model calls")
@@ -190,7 +190,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.yes:
         print("a launch makes paid model calls: add --yes, or --dry-run to look", file=sys.stderr)
         return 2
-    logs = settings.ROOT / "logs" / study / "seed_study"
+    logs = settings.ROOT / "logs" / study / "run_study"
     logs.mkdir(parents=True, exist_ok=True)
     running: dict[str, tuple[subprocess.Popen, Cell]] = {}
     failed, last, said = [], 0.0, 0.0

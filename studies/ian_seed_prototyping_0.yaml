@@ -1,6 +1,6 @@
-# The seed pilot's stage 1 (2026-11-22): one run per pack on every target, seed 1, 3 workers, the default preset at
+# The study ian_seed_prototyping_0, stage 1 (2026-11-22): one run per pack on every target, seed 1, 3 workers, the default preset at
 # the small scale. Its 22 runs are in runs/ian_seed_prototyping_0 (launched as study_seeds, renamed). Protein Luna
-# comes first: it is the cheapest. scripts/seed_study.py runs it; --study <new study> runs it again elsewhere.
+# comes first: it is the cheapest. scripts/run_study.py runs it; --study <new study> runs it again elsewhere.
 study: ian_seed_prototyping_0
 seeds: [1]
 targets:

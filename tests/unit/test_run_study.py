@@ -1,4 +1,4 @@
-"""scripts/seed_study.py: a plan's cells, their commands in the pilot's order, and a launch that needs --yes. Nothing
+"""scripts/run_study.py: a plan's cells, their commands in the pilot's order, and a launch that needs --yes. Nothing
 launches: no Docker, no model call."""
 from __future__ import annotations
 
@@ -6,10 +6,10 @@ import subprocess
 
 import pytest
 
-from scripts import seed_study
+from scripts import run_study as seed_study
 from src.configuration import settings
 
-PILOT = settings.ROOT / "seeds" / "plans" / "pilot_stage1.yaml"
+PILOT = settings.ROOT / "studies" / "ian_seed_prototyping_0.yaml"
 
 
 def test_the_pilots_stage_1_is_22_cells_in_its_order():
