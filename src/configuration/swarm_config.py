@@ -204,6 +204,14 @@ class SwarmConfig(BaseModel):
     """N: the tool calls an agent may make in one round. Every call counts, board calls included, so a round always
     ends; end_round never counts. A reply asking for several calls counts each. A call past N is refused with a
     ToolError, and the round ends after N calls (turn_rules.turn_activation.ends_round)."""
+    round_time_s: int = settings.ROUND_TIME_S
+    """T: the seconds one round may last, from its first model call, model time included. After a batch ends past T
+    the round ends (turn_rules.turn_activation.ends_round, end reason round_time); a model call under way is never cut,
+    so a round may run over by one model call (its timeline entry's over_s). No command tool has a limit of its own: a
+    command still running when T runs out keeps running as a job, the call returns its output so far and the job's
+    id, and job_output and job_stop read and stop it in later rounds (src/sandbox/command_jobs.py). Every job still
+    running is killed at the end of the run. The agent's first message gives T in minutes; its system prompt states
+    the rule without the number. 0: no round clock, and a command call waits for its command."""
     concurrent_rounds: bool = True
     """True: each round is one concurrent ORBIT ScheduleStep holding every eligible agent, at most max_concurrency at
     once, on the live board: a read sees every post made so far, this round's included. False: one single-agent step
@@ -366,6 +374,8 @@ class SwarmConfig(BaseModel):
         for name in ("rounds", "calls_per_round", "read_page", "max_concurrency"):
             if getattr(self, name) < 1:
                 raise ValueError(f"{name} must be at least 1")
+        if self.round_time_s < 0:
+            raise ValueError("round_time_s cannot be negative; 0 turns the round clock off")
         if self.tool_output_bytes is not None and self.tool_output_bytes < 1024:
             raise ValueError("tool_output_bytes must be at least 1024")
         for name in ("reads_per_turn", "posts_per_turn", "message_limit"):

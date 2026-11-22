@@ -179,7 +179,8 @@ def scenario_lone() -> dict:
         ("lone", None, False, "none", None), block
     assert block["owner_of"] == {"a01": "a01"} and cb["prompt_file"] == "prompts/instruction_chess.md", block
     assert cb["instruction"].endswith("its record goes to the arbiter. End your final message with a short note for "
-                                      "the arbiter.\n\nYou have 30 rounds, and up to 1 tool calls per round.\n") \
+                                      "the arbiter.\n\nYou have 30 rounds, and up to 1 tool call per round. A round "
+                                      "lasts at most 10 minutes.\n") \
         and "<answer>" not in cb["instruction"], cb["instruction"]
     assert cb["deviations"] == LONE_DEVIATIONS, cb["deviations"]
     assert cb["access"]["agents"] == {"a01": ["whole"]}, cb["access"]

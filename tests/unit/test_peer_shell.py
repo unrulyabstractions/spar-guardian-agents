@@ -62,9 +62,9 @@ def test_peer_shell_counts_like_shell():
 def test_a_call_about_itself_or_an_unknown_name_is_refused():
     bench, plan = plan_of("openmath", "peer_shell=true")
     tools = bench.tools(plan)
-    binding = peer_shell.peer_shell_binding(tools.seats, {"a02": 3001}, timeout=tools.timeout, cap=lambda a: 65536)
+    binding = peer_shell.peer_shell_binding(tools.seats, {"a02": 3001}, cap=lambda a: 65536)
     tool = binding[peer_shell.TOOL].create(ToolContext(agent_name="a02", sample_id="s", epoch=1))
-    assert "Stopped after 300 seconds" in tool.description
+    assert "Stopped after" not in tool.description and "job" in tool.description      # no limit of its own
     for name in ("a02", "zz"):
         with pytest.raises(ToolError, match="no such agent"):
             asyncio.run(tool.tool(peer=name, command="ls"))

@@ -278,10 +278,14 @@ def agent_tool_names(config: SwarmConfig, roles: dict[str, str] | None = None) -
     return {n: [*BOARD_TOOLS, *(OVERSIGHT_TOOLS if role_of(roles, n) in INFLUENCERS else ())] for n in config.names}
 
 
-def round_rules(config: SwarmConfig, agent: str, roles: dict[str, str] | None = None) -> str:
+def round_rules(config: SwarmConfig, agent: str, roles: dict[str, str] | None = None, *,
+                commands: bool = True) -> str:
     """The rounds' rules in the agent's system prompt, with no number (prompts.yaml round.rules; the first message
-    gives the values, prompt_texts.rounds_values), then for an agent that holds board calls the sentence that names
-    them (round.free): the board tools, and the peer tools of an influencer (turn_rules.FREE_TOOLS)."""
+    gives the values, prompt_texts.rounds_values); with a round clock (round_time_s) the time limit (round.time) and,
+    for an agent with a command tool (`commands`), its jobs (round.jobs); then for an agent that holds board calls
+    the sentence that names them (round.free): the board tools, and the peer tools of an influencer
+    (turn_rules.FREE_TOOLS)."""
     texts = load_prompts()["round"]
     free = [tool for tool in agent_tool_names(config, roles).get(agent, []) if tool in FREE_TOOLS]
-    return " ".join([texts["rules"], *([texts["free"].format(tools=joined(free))] if free else [])])
+    timed = [texts["time"], *([texts["jobs"]] if commands else [])] if config.round_time_s else []
+    return " ".join([texts["rules"], *timed, *([texts["free"].format(tools=joined(free))] if free else [])])

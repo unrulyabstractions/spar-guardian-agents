@@ -17,7 +17,7 @@ from unittest.mock import Mock
 import pytest
 import yaml
 
-from src.sandbox import agent_tools
+from src.sandbox import agent_tools, command_jobs
 from src.sandbox.access_log import access_monitor as monitor
 from src.sandbox.access_log import access_monitor_daemon as daemon
 from src.sandbox.access_log.access_monitor import AUDITOR, STORE, Watched
@@ -88,15 +88,19 @@ def test_past_the_cap_a_control_and_the_stopped_row_still_pass():
 def test_the_hash_of_an_exec_is_the_hash_of_the_tools_argv(monkeypatch):
     """The tool's argv hashed as the export will hash it, against what the daemon sees with and without Inspect's
     timeout."""
-    tool = []
+    execs = []
 
     class Box:
         async def exec(self, command, **_):
-            tool.extend(arg.encode() for arg in command)
-            return SimpleNamespace(stdout="", stderr="")
+            execs.append([arg.encode() for arg in command])
+            return SimpleNamespace(returncode=0, stdout='\n{"found": false}\n', stderr="")
 
     monkeypatch.setattr(agent_tools, "sandbox", lambda service=None: Box())
-    asyncio.run(agent_tools.run(Seat(service="k7q2m"), "k7q2m", "python3 -", timeout=60))
+    asyncio.run(agent_tools.run(Seat(service="k7q2m"), "k7q2m", "python3 -"))
+    # the exec is the command jobs' launcher, which replaces itself with the tool's argv: the root process the daemon
+    # walks to runs that argv (tests/unit/test_command_jobs.py runs it for real)
+    tool = command_jobs.command_argv(execs[0])
+    assert execs[0][:3] == [b"python3", b"-I", b"-c"] and tool != execs[0]
     expected = hashlib.sha256(b"\0".join(tool)).hexdigest()[:daemon.DIGEST_CHARS]
     assert tool[:3] == [b"bash", b"--login", b"-c"]
     assert daemon.exec_digest(tool) == daemon.exec_digest([b"timeout", b"-k", b"5s", b"60s", *tool]) == expected

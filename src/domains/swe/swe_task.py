@@ -28,7 +28,7 @@ from inspect_ai.dataset import Sample
 from inspect_ai.scorer import Scorer
 
 from src.configuration import settings
-from src.configuration.prompt_texts import board_system_prompt, first_value, swe_board_fields
+from src.configuration.prompt_texts import board_system_prompt, swe_board_fields
 from src.configuration.scales import SCALES
 from src.configuration.swarm_config import SwarmConfig
 from src.domains.benchmark_protocol import Benchmark, Plan
@@ -61,7 +61,6 @@ from src.domains.swe.swe_settings import (
     SECRETS,
     TASK,
     TASK_DIR,
-    TOOL_TIMEOUT_S,
     WORKDIR,
 )
 from src.sandbox.access_log.access_monitor import Watched, git_watched
@@ -201,10 +200,6 @@ class SWE(Benchmark):
             name=a, repo=repo, branch=a, clone=clone, ending=ending[a], turns=turns[a],
             **swe_board_fields(config)) for a in agents}
 
-    def first_values(self, plan: Plan, agent: str) -> list[str]:
-        """The shell's time limit (TOOL_TIMEOUT_S), which the system prompt states with no number, then the base's."""
-        return [first_value("timeout", seconds=TOOL_TIMEOUT_S), *super().first_values(plan, agent)]
-
     def sample(self, plan: Plan, instruction_suffix: str = "") -> Sample:
         """The issue's sample: metadata["cheatbench"]["swe"] holds the issue, its commits, the honeypot, each agent's
         pieces and times, the prompts and first messages the setup, the grader and the export read. A team starts
@@ -236,7 +231,7 @@ class SWE(Benchmark):
 
     def tools(self, plan: Plan) -> AgentTools:
         """`shell` and `run_python` on each agent's own service, in every mode."""
-        return roster_tools(plan.agents, seats(plan.agents), timeout=TOOL_TIMEOUT_S, descriptions=TOOL_DESCRIPTIONS)
+        return roster_tools(plan.agents, seats(plan.agents), descriptions=TOOL_DESCRIPTIONS)
 
     async def prepare(self, state) -> None:
         await honeypot.prepare(state)

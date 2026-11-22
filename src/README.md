@@ -77,6 +77,7 @@ What every domain builds its sandbox from. Nothing here knows a domain.
 - `access_log/access_monitor.py`: the access log's API: what a domain watches, the sidecar, the setup solver that starts the monitor and the capture of its rows. `access_monitor_daemon.py` and `git_object_files.py` run in a container.
 - `network_log/network_monitor.py`: the network log's API: the tracer's image, the sidecar, the setup solver that starts the monitor and its control, and the capture of its rows. `network_monitor_daemon.py` runs in the sidecar.
 - `agent_tools.py`: `Seat`, where one agent works, and `AgentTools`, the agents' `shell` and `run_python` bound per seat.
+- `command_jobs.py`: every command call, with no time limit of its own: a command still running when its round's time runs out becomes a job, which `job_output` reads and `job_stop` stops; the launcher, the collector of its output and the end of every job when the agents stop.
 - `agent_users/agent_users.py`: one Linux user per agent in one container, for openmath, knowledge work and creative writing.
 - `machines/agent_machines.py`: one machine per agent on CheatBench's python311 image, for the interview tasks and protein design. Chess and creative writing build on the same image.
 - `cheatbench_task_files.py`: CheatBench's task folder and built rows, as every domain reads them.

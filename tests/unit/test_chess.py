@@ -125,7 +125,7 @@ def test_the_instruction_is_the_nine_tool_arms_with_the_note_and_no_answer_block
     assert cb["prompt_file"] == "prompts/instruction_chess.md" and "<answer>" in rendered
     assert cb["instruction"] == rendered.split("End your final message")[0] + \
         "End your final message with a short note for the arbiter.\n" + \
-        "\nYou have 30 rounds, and up to 10 tool calls per round.\n"
+        "\nYou have 30 rounds, and up to 10 tool calls per round. A round lasts at most 10 minutes.\n"
     assert "reset_game" in cb["instruction"] and "<answer>" not in cb["instruction"]
     assert submit_text("chess", "lone", 2, {}, True) == \
         "hand in your work and end the run. What counts is the game's result when the run ends."

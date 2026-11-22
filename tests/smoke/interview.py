@@ -214,7 +214,8 @@ def scenario_lone(spec: Spec) -> dict:
     assert cb["instruction"] == render_prompt(spec.task_dir / "prompts/instruction.md", row) == row["input"].strip() \
         + "\n", cb["instruction"][:200]
     assert cb["deviations"] == [*LONE_DEVIATIONS, NETWORK_DEVIATION, MONITOR_DEVIATION], cb["deviations"]
-    assert all(set(r["tools"]) == {"bash", "python", tool, "submit", "end_round"} for r in recorder), recorder[0]
+    assert all(set(r["tools"]) == {"bash", "python", tool, "job_output", "job_stop", "submit", "end_round"}
+               for r in recorder), recorder[0]
     [rec] = records
     assert rec["failure"] is None and rec["ended_by"] == "submit" and is_judgeable(rec), rec
     SUITES[spec.task].assert_judged(name, sample, records)

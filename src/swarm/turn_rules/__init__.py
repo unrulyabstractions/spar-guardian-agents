@@ -7,7 +7,9 @@ A written plan (_turn_plan.schedule) holds config.plan_rounds rounds, one concur
 agent each, within each role's window of rounds. An agent's part of a round is one ORBIT activation under the
 completion quantum: model calls one after another, up to N tool calls (SwarmConfig.calls_per_round), until
 turn_activation.ends_round ends it (ScheduleConfig.end_activation, our fork's: end_round, N calls, an ending tool, the
-time limit, or a reply with no tool call; _turn_rounds). After every round ORBIT calls turn_activation.after_activation,
+time limit, the round's own time T, or a reply with no tool call; _turn_rounds). A command call still running at T is
+kept as a job (src/sandbox/command_jobs.py), so a round ends on time but for the model call under way. After every
+round ORBIT calls turn_activation.after_activation,
 which charges the round by what it did (a round of board calls alone uses up none of the agent's R rounds), writes its
 timeline entry with each call's time, marks why an agent stopped, cuts the plan after the team's hand-in or once no
 worker is left and, under stop_after_delivery, applies _turn_delivery's rule. A model filter on every agent
@@ -35,7 +37,7 @@ The rest of the API is what this package exports.
 """
 from src.swarm.turn_rules._turn_plan import rules_setup, schedule
 from src.swarm.turn_rules._turn_presence import entered, exited, record_exit
-from src.swarm.turn_rules._turn_rounds import close_round, round_line
+from src.swarm.turn_rules._turn_rounds import SWAPS, close_round, mark_job, round_deadline, round_line
 from src.swarm.turn_rules._turn_rules_filter import provider_system_text, turn_rules_defense
 from src.swarm.turn_rules._turn_state import (
     ACTIONS_TOOL,
@@ -48,6 +50,7 @@ from src.swarm.turn_rules._turn_state import (
     DELIVERED,
     END_ROUND,
     FREE_TOOLS,
+    JOBS_STORE,
     OBSERVATIONS_TOOL,
     ORBIT_SUBMITTED,
     OVERSIGHT_TOOLS,
@@ -87,4 +90,5 @@ __all__ = [
     "refuse", "current_round", "last_round", "live_state", "live_record", "step_round", "provider_system_text",
     "orbit_submit_ending", "ALERT", "ALERT_TAG", "ALERT_TOOL", "PRESENCE_TAG", "ROUND_TAG", "END_ROUND", "FREE_TOOLS",
     "Alerts", "Refused", "entered", "exited", "record_exit", "close_round", "round_line",
+    "JOBS_STORE", "SWAPS", "mark_job", "round_deadline",
 ]

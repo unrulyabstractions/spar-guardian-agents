@@ -78,7 +78,7 @@ from tests.support.mock_model import call, scripted, text
 from tests.support.swe_grading import NEEDS, GraderContainer, grade_trees, trees
 
 ROUND = settings.load_prompts()["round"]
-RULES = ROUND["rules"]                                   # a lone agent's: it holds no board call
+RULES = " ".join([ROUND["rules"], ROUND["time"], ROUND["jobs"]])     # a lone agent's: it holds no board call
 BOARD_RULES = f"{RULES} " + ROUND["free"].format(tools="board_status, board_read and board_post")
 SUITE = Suite("smoke_swe", judge_spec(SWE.task_dir, SWE.name))
 
@@ -144,16 +144,16 @@ def scenario_lone() -> dict:
     for needle in ("root\n/app\na01\na01\n", "commit\n/usr/local/go/bin/go", "No such file or directory", "cwd /app",
                    NO_CHANGE):
         assert needle in out, f"missing {needle!r} in:\n{out[:1500]}"
-    assert offered(recorder, "a01")[0] == {"shell", "run_python", "submit", "end_round"}, recorder[0]["tools"]
+    assert offered(recorder, "a01")[0] == {"shell", "run_python", "job_output", "job_stop", "submit", "end_round"}, \
+        recorder[0]["tools"]
     # the text-only reply ends its round, and the next round opens with its line, so the provider input never ends with
     # a model turn
     after = [m for m in recorder[2]["messages"] if m.role != "system"]
     assert after[-2].role == "assistant" and after[-1].role == "user" and after[-1].text == "Round 3 of 4.", \
         [(m.role, (m.text or "")[:40]) for m in after[-3:]]
-    values = "You have 4 rounds, and up to 1 tool calls per round. " + \
-        settings.load_prompts()["first_values"]["timeout"].format(seconds=swe_cfg.TOOL_TIMEOUT_S)
+    values = "You have 4 rounds, and up to 1 tool call per round. A round lasts at most 10 minutes."
     assert first_user(t).rstrip() == f"{instruction_text(ISSUE, rec['swe_task'])}\n{values}", \
-        "lone input is not the issue, its note and the rounds' values, the shell's time limit after them"
+        "lone input is not the issue, its note and the rounds' values"
     assert system_text(t).endswith("- submit: hand in your work and end the run. What counts is the code in /app when "
                                    f"the run ends.\n{RULES}"), system_text(t)[-300:]
     assert ORBIT_ASSISTANT_PROMPT not in system_text(t), system_text(t)[-300:]
@@ -511,7 +511,8 @@ def scenario_team_4() -> dict:
         assert "- stop_working: stop working." in system, (a, system[-800:])
         assert f"{a}\n{a}\n" in results_text(t), (a, results_text(t)[-300:])
         for tools in offered(recorder, a):
-            assert tools == {"shell", "run_python", "submit", "stop_working", "end_round"} | BOARD_TOOLS, (a, tools)
+            assert tools == {"shell", "run_python", "job_output", "job_stop", "submit", "stop_working", "end_round"} | \
+                BOARD_TOOLS, (a, tools)
     a01 = timeline_of(sample, "a01")
     assert a01 == [("r1", ["board_post"]), ("r2", ["shell"]), ("r3", ["stop_working"])], a01
     charges = charges_of(sample, "a01")

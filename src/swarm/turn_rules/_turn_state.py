@@ -43,6 +43,7 @@ ALERT_TAG = "swarm_alert"             # info event of an alert
 PRESENCE_TAG = "swarm_presence"       # a presence line's metadata key, and the info events of entries and exits
 ROUND_TAG = "swarm_round"             # a round line's metadata key ("Round 3 of 30."), and its info event
 END_ROUND = "end_round"               # ends the caller's round; never counts (src/swarm/end_round.py)
+JOBS_STORE = "command_jobs"           # sample store: {job id: record} of the command jobs (src/sandbox/command_jobs.py)
 SYSTEM_SENDER = "system"                  # the sender of the board's notice of the team's hand-in
 ORBIT_SUBMITTED = "submitted"   # TurnState.ended of ORBIT's own submit, in logs made before submit and stop_working
 ACTIONS_TOOL = "get_peer_actions"                       # the influencers' tools (src/swarm/_regulator_oversight.py)
@@ -89,6 +90,7 @@ class TurnState(StoreModel):
     posts_per_turn: int | None = None                       # board_post calls per agent per round
     rounds: int = 0                                         # the plan's rounds (SwarmConfig.plan_rounds)
     time_limit_s: int | None = None                         # the agents' time limit; a round ends once it passes
+    round_time_s: int | None = None                         # T (SwarmConfig.round_time_s), 0 no clock; None before it
     started_at: float | None = None                         # UTC seconds of the first round's start
     windows: dict[str, list] = Field(default_factory=dict)      # [start, end] rounds per agent; end None is open
     activations: dict[str, int] = Field(default_factory=dict)   # completed rounds, board rounds included

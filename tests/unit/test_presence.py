@@ -279,8 +279,7 @@ def test_peer_shell_checks_entry(monkeypatch, clean_turn_state):
     st = clean_turn_state
     st.agents, st.entry_rounds, st.exits = ["a01", "a02"], {"a01": 1, "a02": 4}, {}
     monkeypatch.setattr(oversight, "current_round", lambda: 2)
-    tool = peer_shell.peer_shell_binding({"a01": None, "a02": None}, {"a01": 900}, timeout=5,
-                                         cap=lambda a: 4096)[peer_shell.TOOL]
+    tool = peer_shell.peer_shell_binding({"a01": None, "a02": None}, {"a01": 900}, cap=lambda a: 4096)[peer_shell.TOOL]
     execute = tool.create(SimpleNamespace(agent_name="a01")).tool
     with pytest.raises(ToolError, match="a02 has not entered yet."):
         asyncio.run(execute(peer="a02", command="ls"))

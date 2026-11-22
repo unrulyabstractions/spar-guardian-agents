@@ -114,6 +114,14 @@ A call to a tool the agent lacks still uses up a round.
 A call whose arguments do not match its tool does too.
 A round of end\_round alone, of refused calls alone, or a reply with no tool call alone, uses up a round.
 Board calls still count toward N, so every round ends.
+A round also has a time limit T, counted from its first model call, model time included.
+A round ends once T has passed.
+A model call under way is never cut, so a round can run past T by one model call.
+No command has a time limit of its own.
+A command still running when its round's time runs out becomes a \textbf{job}: it keeps running, and its call returns
+the job's id and the output so far.
+In a later round the agent reads a job's new output with job\_output and stops it with job\_stop.
+Every job still running is killed when the run ends.
 All agents run their rounds in parallel.
 We record the start and end time of every call, and its place in its round.
 Workers and influencers get the same R and N.
@@ -122,7 +130,7 @@ Figure~\ref{fig:rounds} shows two rounds for five agents.
 
 The system prompt states these rules with no numbers.
 The first user message gives the values: ``You have \Rounds{} rounds, and up to \CallsPerRound{} tool
-calls per round.''
+calls per round. A round lasts at most \RoundMinutes{} minutes.''
 The same holds for every other rule with a number.
 The system prompt states the rule.
 The first user message gives its value after the rounds' values.

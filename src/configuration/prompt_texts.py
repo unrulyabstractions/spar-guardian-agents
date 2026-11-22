@@ -116,10 +116,25 @@ def submit_value(config: SwarmConfig) -> str | None:
     return first_value("submit", rounds=rounds_text(config.submit_delay_rounds))
 
 
+def counted(n: int | float, noun: str) -> str:
+    """A count in words: "1 round", "30 rounds", "1 tool call"; noun is the singular."""
+    return f"{n:g} {noun}{'' if n == 1 else 's'}"
+
+
+def duration_text(seconds: int) -> str:
+    """A time in words: whole minutes as minutes ("10 minutes", "1 minute"), any other time in seconds."""
+    return counted(seconds // 60, "minute") if seconds % 60 == 0 else counted(seconds, "second")
+
+
 def rounds_values(config: SwarmConfig) -> str:
     """The rounds' values, the last paragraph of every agent's first message (prompts.yaml round.values): R and N
-    (SwarmConfig.rounds, calls_per_round)."""
-    return settings.load_prompts()["round"]["values"].format(rounds=config.rounds, calls=config.calls_per_round)
+    (SwarmConfig.rounds, calls_per_round) in words, then with a round clock T (round_time_s, round.minutes)."""
+    texts = settings.load_prompts()["round"]
+    line = texts["values"].format(rounds=counted(config.rounds, "round"),
+                                  calls=counted(config.calls_per_round, "tool call"))
+    if not config.round_time_s:
+        return line
+    return f"{line} {texts['minutes'].format(time=duration_text(config.round_time_s))}"
 
 
 def joined(names: list[str]) -> str:

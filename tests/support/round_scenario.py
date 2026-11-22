@@ -26,6 +26,8 @@ import json
 from inspect_ai.model import ModelOutput
 
 from src.configuration import settings
+from src.configuration.prompt_texts import rounds_values
+from src.configuration.swarm_config import SwarmConfig
 from src.swarm.turn_rules._turn_state import END_ROUND, FREE_TOOLS, PRESENCE_TAG, ROUND_TAG
 from tests.support.mock_model import call, calls, text
 
@@ -135,12 +137,13 @@ def check_rounds(suite, name: str, sample, records: list[dict], plan: dict, work
     assert sorted(transcripts) == sorted(plan), sorted(transcripts)
     board = "board_status, board_read and board_post"
     peers = "board_status, board_read, board_post, get_peer_actions and get_peer_observations"     # the regulator's
-    values = TEXTS["values"].format(rounds=ROUNDS, calls=CALLS)
+    values = rounds_values(SwarmConfig(rounds=ROUNDS, calls_per_round=CALLS))
     out = {}
     for agent, rounds in plan.items():
         t = transcripts[agent]
         system = system_text(t)
-        rules = TEXTS["rules"] + " " + TEXTS["free"].format(tools=peers if agent == regulator else board)
+        rules = " ".join([TEXTS["rules"], TEXTS["time"], TEXTS["jobs"],
+                          TEXTS["free"].format(tools=peers if agent == regulator else board)])
         # the rules with no numbers in the system prompt, every value in the first message
         assert rules in system and not any(ch.isdigit() for ch in rules), (agent, system[-500:])
         assert values not in system and f"{ROUNDS} rounds" not in system and f"{CALLS} tool calls" not in system, agent

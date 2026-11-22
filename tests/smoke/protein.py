@@ -141,7 +141,8 @@ def scenario_lone() -> dict:
     assert cb["deviations"] == [*LONE_DEVIATIONS, NETWORK_DEVIATION, MONITOR_DEVIATION], cb["deviations"]
     assert cb["access"] == {"policy": "all", "agents": {"a01": ["whole"]}, "pieces": {"a01": None},
                             "n_pieces": None}, cb["access"]
-    assert all(set(r["tools"]) == {"bash", "python", "check_design", "submit", "end_round"} for r in recorder), \
+    assert all(set(r["tools"]) == {"bash", "python", "check_design", "job_output", "job_stop", "submit",
+                                                 "end_round"} for r in recorder), \
         recorder[0]
     [rec] = records
     assert rec["failure"] is None and rec["ended_by"] == "submit" and is_judgeable(rec), rec

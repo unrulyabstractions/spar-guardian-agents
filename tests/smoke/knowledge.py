@@ -170,7 +170,8 @@ def scenario_lone() -> dict:
     assert sample.metadata["cheatbench"]["instruction"] == (
         settings.CHEATBENCH / "tasks/knowledge_work/prompts/instruction.md").read_text().strip() + "\n"
     assert {r["agent"] for r in recorder} == {"a01"}
-    assert all(set(r["tools"]) == {"bash", "python", "review_deliverable", "submit", "end_round"} for r in recorder), \
+    assert all(set(r["tools"]) == {"bash", "python", "review_deliverable", "job_output", "job_stop", "submit",
+                                                 "end_round"} for r in recorder), \
         recorder[0]
     [rec] = records
     assert rec["failure"] is None and rec["ended_by"] == "submit" and is_judgeable(rec), rec

@@ -21,6 +21,7 @@ from src.sandbox import agent_tools
 from src.sandbox.access_log import access_monitor_daemon as daemon
 from src.sandbox.access_log.access_monitor import STORE
 from src.sandbox.agent_tools import Seat
+from src.swarm.turn_rules import JOBS_STORE
 
 START = 1793400000.0
 TOOL_ROOT = "timeout -k 5s 300s bash --login -c"
@@ -201,6 +202,26 @@ def test_a_call_the_time_limit_cut_has_no_end_and_still_holds_its_open():
     assert tool_window(cut) == (START, float("inf"))
     _, [row] = exported(opened("cat k", t=START + 500), events=(cut,))
     assert row["origin"] == "agent" and row["call_id"] == "c1"
+
+
+def test_a_call_that_became_a_job_holds_its_opens_until_the_job_ended():
+    """A job runs on after its ToolEvent (src/sandbox/command_jobs.py): its call's window ends where the job's record
+    says it ended, open while the job had no end; in the shared layout the call still names the agent."""
+    events = (call("c1", "k7q2m", "grep -r x /", end=START + 3), call("c2", "m3p4x", "ls"))
+    jobs = {"j1": {"id": "j1", "call_id": "c1", "ended": START + 900.0}}
+    late = opened("grep -r x /", machine="default", uid=1000, t=START + 600)
+    block, out = export.access_log(view({STORE: record(late, seats=SHARED), JOBS_STORE: jobs}, *events))
+    [row] = [r for r in out if r["origin"] != "control"]
+    assert (row["agent"], row["named_by"], row["call_id"]) == ("k7q2m", "tool_call", "c1")
+    after = opened("grep -r x /", machine="default", uid=1000, t=START + 1000)
+    _, out = export.access_log(view({STORE: record(after, seats=SHARED), JOBS_STORE: jobs}, *events))
+    assert [r["call_id"] for r in out if r["origin"] != "control"] == [None]
+    running = {"j1": {"id": "j1", "call_id": "c1", "ended": None}}
+    _, out = export.access_log(view({STORE: record(after, seats=SHARED), JOBS_STORE: running}, *events))
+    assert [r["call_id"] for r in out if r["origin"] != "control"] == ["c1"]
+    # without the record, as in every run before the jobs, the call ends with its ToolEvent
+    _, [row] = exported(late, events=events, seats=SHARED)
+    assert row["call_id"] is None
 
 
 def test_an_open_matches_inside_the_window_with_its_slack():

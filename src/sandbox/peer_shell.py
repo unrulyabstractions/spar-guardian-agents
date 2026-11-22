@@ -1,7 +1,7 @@
 """peer_shell: an influencer's shell on a teammate's machine with read access to its files (SwarmConfig.peer_shell).
 
     observers = observer_uids(config.names, roles)          # {influencer: uid}
-    bindings = peer_shell_binding(tools.seats, observers, timeout=tools.timeout, cap=cap)
+    bindings = peer_shell_binding(tools.seats, observers, cap=cap)
     setup = peer_shell_setup(tools.seats, observers)         # in the task setup, before any agent runs
 
 peer_shell(peer, command) runs `bash --login -c command` in the peer's seat (its service, in its working directory)
@@ -12,12 +12,15 @@ home, through the POSIX access ACL that setfacl would write (no image has setfac
 others cannot read gets a named entry for the observer, read on a file and read and search on a directory, and each
 directory above them search. A file the peer writes later is granted at the next call. The observer can write only
 where anyone can, the temporary directories included, which keep the layout's own modes. After each command REAP kills
-the observer's processes, in every layout, SWE's included, so none outlives its call.
+the observer's processes, in every layout, SWE's included, so none outlives its call, but those of its calls still
+running there and its jobs. The command runs through src/sandbox/command_jobs.py, with no time limit of its own: one
+still running when the influencer's round runs out of time becomes the influencer's job (job_output, job_stop), and the
+answer holds `job`, its id, with exit_code null and the output so far.
 
 The answer is JSON {peer, command, exit_code, output, truncated}, the output stderr then stdout as the agents' own shell
 gives it. An output past the run's cap (src/swarm/tool_output_caps.py, 64 KiB by default) keeps its start and its end
-with one line between them that says how much was cut, the rule of every tool, so the JSON stays whole. The timeout is
-the peer's own shell's (AgentTools.timeout). A call about the caller, or about a name not on the roster, fails with "no
+with one line between them that says how much was cut, the rule of every tool, so the JSON stays whole. A call about
+the caller, or about a name not on the roster, fails with "no
 such agent", the peer tools' refusal. Each call counts as a board action of kind "oversight" about the peer
 (turn_rules.record_board_action), and the sample store's STORE keeps per influencer its calls and the processes its
 reaps killed. Git runs with safe.directory=* and GIT_OPTIONAL_LOCKS=0: a repository owned by another user is refused
@@ -54,6 +57,7 @@ from orbit.tools import ToolContext, ToolFactory
 
 from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import INFLUENCERS, role_of
+from src.sandbox import command_jobs as jobs
 from src.sandbox import sandbox_hygiene as hygiene
 from src.sandbox.agent_tools import Seat
 from src.sandbox.sandbox_probe import run_json
@@ -147,8 +151,9 @@ print(json.dumps({"granted": sum(grant(top, spec["uid"]) for top in spec["tops"]
 '''
 
 REAP = hygiene.PROC_COMMON + r'''
-uid = json.load(sys.stdin)["uid"]
-found, left = kill_all([uid])
+spec = json.load(sys.stdin)
+uid = spec["uid"]
+found, left = kill_all([uid], spec.get("keep") or [])
 print(json.dumps({"killed": len(found[uid]), "survivors": len(left[uid])}))
 '''
 
@@ -270,28 +275,37 @@ def record_call(influencer: str, reaped: dict) -> None:
     st.set(STORE, record)
 
 
-async def run_as_observer(seat: Seat, places: dict, uid: int, command: str, *, timeout: int) -> tuple[int, str]:
-    """GRANT, then the command as the observer in the peer's working directory, then REAP the observer's processes
-    whatever happened (its report in the store's LAST_REAP): (exit code, stderr then stdout)."""
+async def observer_reap(box, uid: int, keep: list[str]) -> None:
+    """REAP the observer's processes on the machine, those of `keep` (calls still running) spared; the report goes to
+    the store's LAST_REAP, a failure included: a failed reap never fails the call."""
+    try:
+        reaped = await run_json(REAP, stdin={"uid": uid, "keep": keep}, box=box)
+    except Exception as ex:  # noqa: BLE001 - a failed reap never fails the call
+        reaped = {"error": f"{type(ex).__name__}: {ex}"[:300]}
+    store().set(LAST_REAP, reaped)
+
+
+async def run_as_observer(seat: Seat, places: dict, uid: int, command: str, *, owner: str,
+                          cap: int) -> jobs.Outcome:
+    """GRANT, then the command as the observer in the peer's working directory through command_jobs, then, once it
+    ended in time, REAP the observer's processes (LAST_REAP). The outcome is the exit code and stderr then stdout, or
+    the owner's job with its output so far."""
     box = seat.box()
     await run_json(GRANT, stdin={"uid": uid, "tops": tops(places)}, box=box)
-    try:
-        result = await box.exec(["bash", "--login", "-c", command], user=f"{uid}:{uid}", cwd=places.get("workdir"),
-                                env={**GIT_ENV, "HOME": NO_HOME}, timeout=timeout)
-    finally:
-        try:
-            reaped = await run_json(REAP, stdin={"uid": uid}, box=box)
-        except Exception as ex:  # noqa: BLE001 - a failed reap never fails the call
-            reaped = {"error": f"{type(ex).__name__}: {ex}"[:300]}
-        store().set(LAST_REAP, reaped)
-    return result.returncode, (f"{result.stderr}\n" if result.stderr else "") + f"{result.stdout}"
+    store().set(LAST_REAP, {})
+    where = jobs.Where(box=box, service=seat.service, user=f"{uid}:{uid}", cwd=places.get("workdir"),
+                       env={**GIT_ENV, "HOME": NO_HOME})
+    return await jobs.run_command(where, owner, TOOL, command, ["bash", "--login", "-c", command],
+                                  after=lambda keep: observer_reap(box, uid, keep), cap=cap)
 
 
-def answer(peer: str, command: str, code: int, output: str, cap: int, gone: bool = False) -> dict:
+def answer(peer: str, command: str, code: int | None, output: str, cap: int, gone: bool = False,
+           job: str | None = None) -> dict:
     """peer_shell's JSON within `cap` bytes: the whole output, or its start and its end with the cut line between them
     (tool_output_caps.middle_cut), as long as fits, so Inspect never cuts the JSON. A peer that has exited gets
-    "status": "exited" after "peer"; its machine stays."""
-    row = {"peer": peer, **presence_head(gone), "command": command, "exit_code": code}
+    "status": "exited" after "peer"; its machine stays. A command kept as a job gets "job" before its exit code."""
+    row = {"peer": peer, **presence_head(gone), "command": command, **({"job": job} if job else {}),
+           "exit_code": code}
     room = cap - WRAP_MARGIN
     if size({**row, "output": output, "truncated": False}) <= room:
         return {**row, "output": output, "truncated": False}
@@ -305,7 +319,7 @@ def answer(peer: str, command: str, code: int, output: str, cap: int, gone: bool
     return {**row, "output": middle_cut(output, low) or output, "truncated": True}
 
 
-def peer_shell_binding(seats: dict[str, Seat], observers: dict[str, int], *, timeout: int,
+def peer_shell_binding(seats: dict[str, Seat], observers: dict[str, int], *,
                        cap: Callable[[str], int]) -> dict[str, ToolFactory]:
     """The ORBIT tool binding of peer_shell, built for the influencers that hold it (AgentSpec.tools names it);
     cap(owner) is the bytes of one answer the owner sees whole (tool_output_caps.cap_of)."""
@@ -322,12 +336,14 @@ def peer_shell_binding(seats: dict[str, Seat], observers: dict[str, int], *, tim
             if places is None:
                 raise ToolError(f"{TOOL}: the setup recorded no places for {peer}")
             try:
-                code, output = await run_as_observer(seats[peer], places, observers[owner], command, timeout=timeout)
+                outcome = await run_as_observer(seats[peer], places, observers[owner], command, owner=owner,
+                                                cap=cap(owner))
             finally:
                 record_call(owner, store().get(LAST_REAP) or {})
-            return json.dumps(answer(peer, command, code, output, cap(owner), gone), ensure_ascii=False)
+            return json.dumps(answer(peer, command, outcome.returncode, outcome.text, cap(owner), gone, outcome.job),
+                              ensure_ascii=False)
 
-        return ToolDef(execute, name=TOOL, description=prompts["tools"][TOOL].format(timeout=timeout),
+        return ToolDef(execute, name=TOOL, description=prompts["tools"][TOOL],
                        parameters={"peer": args["peer"], "command": args["command"]})
 
     return {TOOL: ToolFactory(factory)}

@@ -53,13 +53,13 @@ def sidecar_services(benchmark, *pairs: str) -> set[str]:
 def test_the_access_log_adds_the_sidecar_the_solver_and_the_first_scorer():
     sidecar, setup, scorers = monitor_parts(SubsetSum())
     assert sidecar and setup == ["rules_setup", "environment_probe", "start_access_monitor", "start_network_monitor"]
-    assert scorers[:3] == ["access_capture", "network_capture", "interview_deliverables"]
+    assert scorers[:4] == ["jobs_capture", "access_capture", "network_capture", "interview_deliverables"]
 
 
 def test_the_network_switch_off_keeps_the_access_log_alone():
     sidecar, setup, scorers = monitor_parts(SubsetSum(), "network_log=false")
     assert sidecar and setup == ["rules_setup", "environment_probe", "start_access_monitor"]
-    assert scorers[:2] == ["access_capture", "interview_deliverables"]
+    assert scorers[:3] == ["jobs_capture", "access_capture", "interview_deliverables"]
     assert sidecar_services(SubsetSum(), "network_log=false") == {AUDITOR}
 
 
@@ -84,7 +84,7 @@ def test_the_switch_off_adds_nothing():
     assert "network_capture" not in scorers
     sidecar, setup, scorers = monitor_parts(SubsetSum(), "access_log=false")
     assert setup == ["rules_setup", "environment_probe", "start_network_monitor"] and "access_capture" not in scorers
-    assert scorers[:2] == ["network_capture", "interview_deliverables"]
+    assert scorers[:3] == ["jobs_capture", "network_capture", "interview_deliverables"]
 
 
 @pytest.mark.parametrize("pairs", [[], ["access_log=false"]])
@@ -92,6 +92,7 @@ def test_a_domain_with_no_machine_to_watch_gets_no_sidecar(pairs):
     sidecar, setup, scorers = monitor_parts(Chess(), *pairs)
     assert not sidecar and "start_access_monitor" not in setup and "access_capture" not in scorers
     assert "start_network_monitor" not in setup and "network_capture" not in scorers
+    assert "jobs_capture" not in scorers          # no shell, no jobs
 
 
 @pytest.mark.parametrize(("benchmark", "pairs", "labels"), [
@@ -119,13 +120,20 @@ def test_the_cleanup_captures_and_then_runs_the_benchmarks(monkeypatch):
     async def capture_network(state):
         order.append("network")
 
+    async def end_jobs():
+        order.append("jobs")
+
     monkeypatch.setattr(tasks, "capture", capture)
     monkeypatch.setattr(tasks, "capture_network", capture_network)
+    monkeypatch.setattr(tasks.command_jobs, "end_jobs", end_jobs)
     asyncio.run(tasks.cleanup(Bench(), build_config("default", "small", []))(None))
-    assert order == ["capture", "network", "benchmark"]
+    assert order == ["jobs", "capture", "network", "benchmark"]
+    order.clear()
+    asyncio.run(tasks.cleanup(Bench(), build_config("default", "small", ["access_log=false", "network_log=false"]))(
+        None))
+    assert order == ["jobs", "benchmark"]         # the jobs end in every domain with a shell, logs or none
 
 
-@pytest.mark.parametrize(("benchmark", "pairs"), [(SubsetSum(), ["access_log=false", "network_log=false"]),
-                                                  (Chess(), [])])
-def test_a_run_with_no_log_keeps_the_benchmarks_cleanup(benchmark, pairs):
-    assert tasks.cleanup(benchmark, build_config("default", "small", pairs)) == benchmark.cleanup
+def test_a_run_with_no_log_and_no_shell_keeps_the_benchmarks_cleanup():
+    chess = Chess()
+    assert tasks.cleanup(chess, build_config("default", "small", [])) == chess.cleanup

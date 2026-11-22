@@ -188,6 +188,7 @@ def params_tex() -> str:
         "TurnBudget": STUDY_STEPS["TurnBudget"],
         "Rounds": c.rounds,
         "CallsPerRound": c.calls_per_round,
+        "RoundMinutes": c.round_time_s // 60,
         "CheckRounds": CHECK_ROUNDS,
         "SubmitDelayRounds": c.submit_delay_rounds,
     }

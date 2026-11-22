@@ -6,7 +6,9 @@ Three scripts run inside a sandbox as root, in Python 3, which every image has:
   REAP             kills every process of one Linux user, after each of the agent's tool commands (reap_after), so
                    no process of the agent outlives the command. A background process could otherwise write files or
                    hold a socket while the agent waits for its next step, after its episode ended, or while the probe
-                   reads the disk.
+                   reads the disk. The sessions of the user's command calls still running, a teammate's in a shared
+                   uid and the jobs among them (src/sandbox/command_jobs.py), are spared: each call's exec leads a
+                   session of its own, and the pid files after the user name it.
   LOOPBACK_GUARD   refuses loopback traffic from the agent users with iptables owner rules (uids from 1001, every
                    per-agent user), except to the "ip:port" services the layout allows (openmath's article mirror,
                    creative writing's review endpoint), and proves
@@ -60,20 +62,47 @@ def cmdline(pid):
     except OSError:
         return ""
 
-def processes(uids):
-    """{uid: [{pid, cmd}]} of the live (not zombie) processes of these uids."""
+def session(pid):
+    """The session id of a process, from /proc/<pid>/stat (the field after the state, ppid and pgrp), or None."""
+    try:
+        with open(f"/proc/{pid}/stat") as f:
+            fields = f.read().rsplit(")", 1)[1].split()
+        return int(fields[3])
+    except (OSError, IndexError, ValueError):
+        return None
+
+def kept_sessions(pid_files):
+    """The sessions to spare: each pid file's pid, a command call still running or kept as a job, whose exec made it
+    a session leader (src/sandbox/command_jobs.py)."""
+    out = set()
+    for path in pid_files or []:
+        try:
+            with open(path) as f:
+                out.add(int(f.read().strip()))
+        except (OSError, ValueError):
+            pass
+    return out
+
+def processes(uids, keep=()):
+    """{uid: [{pid, cmd}]} of the live (not zombie) processes of these uids, those in a session of `keep` left
+    out."""
     out = {uid: [] for uid in uids}
     for pid in os.listdir("/proc"):
         if not pid.isdigit() or int(pid) == os.getpid():
             continue
         st = status(pid)
-        if st and st[0] in out and st[1] != "Z":
+        if st and st[0] in out and st[1] != "Z" and (not keep or session(pid) not in keep):
             out[st[0]].append({"pid": int(pid), "cmd": cmdline(pid)})
     return out
 
-def kill_all(uids):
-    """SIGKILL every process of these uids; the survivors after a short wait (zombies excluded)."""
+def kill_all(uids, pid_files=()):
+    """SIGKILL every process of these uids but those of a call still running (pid_files: kept_sessions, read after
+    the scan, so a call that turned to its user's uid during the scan has written its pid first); the survivors after
+    a short wait (zombies excluded)."""
     found = processes(uids)
+    keep = kept_sessions(pid_files)
+    found = {uid: [p for p in procs if session(p["pid"]) not in keep] for uid, procs in found.items()} if keep \
+        else found
     for procs in found.values():
         for p in procs:
             try:
@@ -82,13 +111,13 @@ def kill_all(uids):
                 pass
     if any(found.values()):
         time.sleep(0.3)
-    return found, processes(uids)
+    return found, processes(uids, keep)
 '''
 
 REAP = PROC_COMMON + r'''
 import pwd
 uid = pwd.getpwnam(sys.argv[1]).pw_uid
-found, left = kill_all([uid])
+found, left = kill_all([uid], sys.argv[2:])
 print(json.dumps({"killed": found[uid], "survivors": left[uid]}))
 '''
 
@@ -244,11 +273,12 @@ print(json.dumps(report))
 '''
 
 
-async def reap(user: str, box=None) -> dict:
-    """Kill every process of the Linux user `user` in the sandbox (or `box`); {killed: [{pid, cmd}], survivors:
-    [...]}, or {"error": ...}: a failed reap never fails the tool call."""
+async def reap(user: str, box=None, keep: list[str] | None = None) -> dict:
+    """Kill every process of the Linux user `user` in the sandbox (or `box`) but those in the session of a pid file
+    of `keep` (command calls still running); {killed: [{pid, cmd}], survivors: [...]}, or {"error": ...}: a failed
+    reap never fails the tool call."""
     try:
-        return await run_json(REAP, args=[user], box=box)
+        return await run_json(REAP, args=[user, *(keep or [])], box=box)
     except Exception as ex:  # noqa: BLE001
         return {"killed": [], "survivors": [], "error": f"{type(ex).__name__}: {ex}"[:300]}
 
@@ -271,9 +301,10 @@ def record_reap(agent: str, result: dict) -> None:
     st.set(REAP_STORE, reaps)
 
 
-async def reap_after(agent: str, user: str, box=None) -> None:
-    """After one of the agent's tool commands: kill what the command left running, and count it."""
-    record_reap(agent, await reap(user, box=box))
+async def reap_after(agent: str, user: str, box=None, keep: list[str] | None = None) -> None:
+    """After one of the agent's tool commands: kill what the command left running, the calls of `keep` spared, and
+    count it."""
+    record_reap(agent, await reap(user, box=box, keep=keep))
 
 
 async def guard_loopback(first: str, second: str, *, allow: list[str] | None = None, box=None) -> dict:

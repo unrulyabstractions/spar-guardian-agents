@@ -149,6 +149,9 @@ class Benchmark(ABC):
     """How every layout of the domain departs from CheatBench's runner, after COMMON_DEVIATIONS."""
     time_grace_s: int | None = None
     """The time Inspect's limit leaves above ORBIT's halt; None takes the config's time_grace_s."""
+    commands: bool = True
+    """Whether the agents hold a command tool (a shell), whose calls can become jobs (src/sandbox/command_jobs.py):
+    the rounds' rules then name the jobs (board.round_rules). Chess holds none."""
     harness_reads: tuple[str, ...] = ()
     """How each command starts that the harness itself runs once the agents have begun and that opens content."""
 
@@ -246,7 +249,7 @@ class Benchmark(ABC):
         config = plan.config
         return {a: "\n\n".join(filter(None, [texts.opening(config, a, plan.agents),
                                               "\n".join(self.ending_lines(plan, a)),
-                                              round_rules(config, a, plan.roles)]))
+                                              round_rules(config, a, plan.roles, commands=self.commands)]))
                 for a in plan.agents}
 
     def access_note(self, plan: Plan) -> str | None:

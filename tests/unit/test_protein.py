@@ -670,7 +670,7 @@ def test_the_tools_keep_cheatbenchs_checker_and_one_state_per_owner(monkeypatch)
     bench = ProteinDesign()
     lone = bench.tools(bench.plan(build_config("default", "small", ["n_agents=1"])))
     assert lone.names == ["bash", "python", "check_design"]
-    assert lone.tool_kwargs == agent_tools.lone_tool_kwargs(agent_tools.AGENT_NAME, agent_tools.TOOL_TIMEOUT_S)
+    assert lone.tool_kwargs == agent_tools.lone_tool_kwargs(agent_tools.AGENT_NAME)
     team = bench.tools(bench.plan(build_config("default", "small", [])))
     assert team.names == ["shell", "run_python", "check_design"] and team.tool_kwargs == {}
     assert set(team.bindings) == {"shell", "run_python", "check_design"}

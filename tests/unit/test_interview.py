@@ -610,7 +610,7 @@ def test_the_sample_stages_each_agents_copy_in_its_own_service(spec, monkeypatch
     assert data == files
     tools = lone.tools(one_plan)
     assert tools.names == ["bash", "python", tool_name(spec)]
-    assert tools.tool_kwargs == agent_tools.lone_tool_kwargs(agent_tools.AGENT_NAME, agent_tools.TOOL_TIMEOUT_S)
+    assert tools.tool_kwargs == agent_tools.lone_tool_kwargs(agent_tools.AGENT_NAME)
 
 
 GIT_ENV = {"PATH": os.environ.get("PATH", ""), "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull,

@@ -34,7 +34,7 @@ from orbit.configs.scheduling import ScheduleStep
 from src.configuration.swarm_config import Window
 from src.swarm.turn_rules._turn_delivery import after_delivery, delivery, end, spent
 from src.swarm.turn_rules._turn_presence import ENDED_WHY, record_exit
-from src.swarm.turn_rules._turn_rounds import ends, take_round
+from src.swarm.turn_rules._turn_rounds import ends, name_job_call, take_round
 from src.swarm.turn_rules._turn_state import (
     ACTOR,
     ALERT,
@@ -87,10 +87,11 @@ def _ms(value: float | None) -> float | None:
     return None if value is None else round(value, 3)
 
 
-def round_calls(messages: list, times: dict | None = None) -> list[dict]:
+def round_calls(messages: list, times: dict | None = None, jobs: dict | None = None) -> list[dict]:
     """The round's tool calls in order, from the messages its activation added: each {id, tool, k (its place in the
     round from 1), free (a board call), error (its result is an error), refused (our rules refused it: Refused),
-    t0, t1 (UTC seconds, from the round record's times; None without one)}."""
+    t0, t1 (UTC seconds, from the round record's times; None without one)}, and `job` for a command call that was
+    still running when the round's time ran out: the id of the job it became (the round record's jobs)."""
     results = {m.tool_call_id: m for m in messages if isinstance(m, ChatMessageTool) and m.tool_call_id}
     out = []
     for m in messages:
@@ -101,8 +102,17 @@ def round_calls(messages: list, times: dict | None = None) -> list[dict]:
             result = results.get(call.id)
             out.append({"id": call.id, "tool": call.function, "k": len(out) + 1, "free": call.function in FREE_TOOLS,
                         "error": result is not None and result.error is not None, "refused": refused is not None,
-                        "t0": _ms(t0), "t1": _ms(t1)})
+                        "t0": _ms(t0), "t1": _ms(t1), **({"job": jobs[call.id]} if call.id in (jobs or {}) else {})})
     return out
+
+
+def over_time(record: dict | None, limit: int | None) -> float | None:
+    """How far past T (TurnState.round_time_s) the round ran, in seconds: its end less its start and T. None for a
+    round within T, without times or with no round clock."""
+    if not record or not limit or record.get("t1") is None:
+        return None
+    over = record["t1"] - record["t0"] - limit
+    return _ms(over) if over > 0 else None
 
 
 def round_charge(calls: list[dict], ending: str | None) -> str:
@@ -208,7 +218,7 @@ def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | Non
     round_number = step_round(step.id) if step is not None else 0
     messages = _activation_messages(agent, result)
     record = take_round(agent)
-    calls = round_calls(messages, (record or {}).get("times")) if messages else \
+    calls = round_calls(messages, (record or {}).get("times"), (record or {}).get("jobs")) if messages else \
         [{"tool": tool, "k": k, "free": tool in FREE_TOOLS} for k, tool in enumerate(tools, 1)]
     st.history_marks = {**st.history_marks,
                         agent: [*st.history_marks.get(agent, []), [result.messages_after, round_number]]}
@@ -236,6 +246,12 @@ def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | Non
              "tools": tools, "calls": calls, "end": _end_reason(agent, record, messages),
              "t0": _ms((record or {}).get("t0")), "t1": _ms((record or {}).get("t1")),
              "ended": st.ended.get(agent), "entered": activation == 1, "left": left}
+    over = over_time(record, st.round_time_s)
+    if over is not None:
+        entry["over_s"] = over
+    for call in calls:
+        if call.get("job"):
+            name_job_call(call["job"], call["id"])
     if charge == ALERT:
         entry["alert"] = next((a for a in reversed(store_as(Alerts).alerts) if a["agent"] == agent), None)
     st.timeline = [*st.timeline, entry]

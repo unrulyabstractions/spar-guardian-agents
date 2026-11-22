@@ -62,14 +62,16 @@ def schedule(config: SwarmConfig, agents: list[str], roles: dict[str, str] | Non
 
 def initial_state(config: SwarmConfig, agents: list[str], roles: dict[str, str] | None = None,
                   time_limit_s: int | None = None) -> dict:
-    """The TurnState fields a sample starts with: R and N (rounds, calls_per_round), the plan's rounds
-    (plan_rounds) and the agents' time limit; entry_rounds come from the written plan (_turn_presence.entry_rounds)."""
+    """The TurnState fields a sample starts with: R and N (rounds, calls_per_round), T (round_time_s), the plan's
+    rounds (plan_rounds) and the agents' time limit; entry_rounds come from the written plan
+    (_turn_presence.entry_rounds)."""
     return {"agents": list(agents), "workers": [a for a in agents if role_of(roles, a) == "worker"],
             "round_budget": config.rounds, "calls_per_round": config.calls_per_round,
             "turn_order": config.turn_order, "seed": config.seed,
             "concurrent": concurrent(config, agents), "max_concurrency": config.max_concurrency,
             "reads_per_turn": config.reads_per_turn, "posts_per_turn": config.posts_per_turn,
             "rounds": config.plan_rounds, "time_limit_s": time_limit_s or None,
+            "round_time_s": config.round_time_s,
             "windows": {a: [w.start, w.end] for a, w in windows(config, agents, roles).items()},
             "entry_rounds": entry_rounds(plan_steps(config, agents, roles))}
 

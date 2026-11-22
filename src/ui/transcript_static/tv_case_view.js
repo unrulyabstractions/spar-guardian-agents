@@ -402,6 +402,23 @@ export function renderCase(t, ctx) {
       title: `call ${p.pos} of round ${p.round}${p.refused ? ', refused' : ''}` },
     rounds.perRound != null ? `${p.pos}/${rounds.perRound}` : String(p.pos));
   };
+  // A call that kept running past its round as a job: a "job" chip with its id; a job_output or job_stop call: the same
+  // chip, which brings the call that started the job into view.
+  const jobStart = new Map([...placeOf.entries()].filter(([, p]) => p.job).map(([id, p]) => [p.job, id]));
+  const JOB_TOOLS = new Set(['job_output', 'job_stop']);
+  const jobChip = tc => {
+    const own = (placeOf.get(tc.tool_call_id) || {}).job;
+    if (own) return h('span', { class: 'job-chip', title: `kept running as job ${own}` }, `job ${own}`);
+    const job = JOB_TOOLS.has(tc.function_name) && tc.arguments && tc.arguments.job;
+    if (!job) return null;
+    const start = jobStart.get(job);
+    return h('button', { type: 'button', class: ['job-chip', 'job-link'], disabled: !start,
+      title: start ? `go to the call that started job ${job}` : `job ${job}`,
+      onclick: e => {
+        e.stopPropagation();
+        centreVertically(right.querySelector(`.call[data-tcid="${CSS.escape(start)}"]`));
+      } }, `job ${job}`);
+  };
   const blocks = [];
   const right = h('div', { class: 'right' });
   const looseEls = new Map();
@@ -441,8 +458,10 @@ export function renderCase(t, ctx) {
     const k = c.k;
     const labs = own.get(k) || [];
     const el = h('div', { class: ['call', labelled(k) && 'has-label', labs.some(l => l.ladder === 'coordination') && 'has-board'], id: `a-${ctx.agent}-call-${k}`,
-      dataset: { call: String(k) }, style: labs.length ? `--step:${RAMP[labs[0].ladder][labs[0].index]}` : null },
+      dataset: { call: String(k), tcid: c.tc.tool_call_id || '' },
+      style: labs.length ? `--step:${RAMP[labs[0].ladder][labs[0].index]}` : null },
       h('div', { class: 'ch' }, foldButton('call'), h('span', { class: 'cn' }, `Call ${k}`), posChip(c.tc.tool_call_id),
+        jobChip(c.tc),
         lv ? headChips(k, true) : null, h('span', { class: 'mz' }, c.tc.function_name || '')),
       h('div', { class: 'cb' },
         section('call', 'Tool call', h('span', { class: 'sec-tool' }, c.tc.function_name || '?'), argText(c.tc.arguments), null),

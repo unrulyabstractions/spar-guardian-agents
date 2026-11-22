@@ -5,7 +5,7 @@ Board tab draws the rounds on each lane (/api/board, each agent's "rounds" and e
     r["rounds"], r["calls_per_round"]       # R and N as the turn rules recorded them (rules.round_budget,
                                             # rules.calls_per_round)
     r["agents"]["a02"][1]                   # {turn, round, n, end, charge, charged, used, ended, t0, t1, calls}
-    r["agents"]["a02"][1]["calls"][0]       # {id, tool, pos, free, refused, error, t0, t1}
+    r["agents"]["a02"][1]["calls"][0]       # {id, tool, pos, free, refused, error, t0, t1, job}
     placed = on_clock(r, run.calls, at, timed)   # agent -> [{turn, round, n, end, charge, charged, t, dur, calls}]
                                                  # on the board's clock, and (agent, k) -> {round, pos} of each call
     from_start(r, start)                    # agent -> [{round, n, end, charge, t, t_end}] in seconds from start: the
@@ -34,8 +34,9 @@ from src.swarm.turn_rules import END_ROUND
 
 ROUND_KEYS = ("turn", "round", "n", "end", "charge", "charged", "used", "ended", "t0", "t1")
 """What the viewer keeps of a timeline entry besides its calls."""
-CALL_KEYS = ("id", "tool", "free", "refused", "error", "t0", "t1")
-"""What the viewer keeps of a call of a timeline entry besides its place (`pos`, places)."""
+CALL_KEYS = ("id", "tool", "free", "refused", "error", "t0", "t1", "job")
+"""What the viewer keeps of a call of a timeline entry besides its place (`pos`, places): job is the id of the job a
+command call became when its round's time ran out (src/sandbox/command_jobs.py), None for any other call."""
 
 
 def places(calls: list[dict]) -> list[int | None]:

@@ -43,6 +43,10 @@ MODEL_TIMEOUT_S = 2700
 # halts between turns at time_limit_s, so a step in flight finishes and its usage is logged; the hard limit cuts only
 # a run whose step never returns.
 HARD_TIME_GRACE_S = 600
+# Seconds one round of an agent may last, model time included (SwarmConfig.round_time_s default). Measured on
+# 2026-11-22 over every eval log under runs/ and logs/: for the worker models in use, 10 minutes cuts 0.73% of the
+# rounds, and a hung whole-filesystem grep freezes the team's round barrier for 10 minutes at most.
+ROUND_TIME_S = 600
 
 # Episode failure labels that mean the run is incomplete: a harness crash or a provider error.
 INCOMPLETE_FAILURES = ("harness", "connection_closed")

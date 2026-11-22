@@ -664,6 +664,9 @@ table.sum-table .sum-level-alt { background: color-mix(in srgb, var(--text) 3%, 
 .case .round-board { border-style: dashed; }
 .case .round-pos { font: 600 11px var(--mono, ui-monospace, monospace); color: var(--muted); border: 1px solid var(--line-2); border-radius: 4px; padding: 0 5px; }
 .case .round-pos.is-refused { color: var(--bad); border-color: currentColor; }
+.case .job-chip { font: 600 11px var(--mono, ui-monospace, monospace); color: var(--accent, #6b5bd6); border: 1px solid currentColor; border-radius: 4px; padding: 0 5px; background: none; }
+.case button.job-link { cursor: pointer; }
+.case button.job-link:disabled { cursor: default; opacity: .6; }
 .case .right, .case .round-box, .case .round-b { min-width: 0; max-width: 100%; }
 /* The strip's round boundaries: solid, above the step lines. */
 .case .cs-roundline { stroke: var(--accent); stroke-opacity: .55; stroke-width: 1.5; }

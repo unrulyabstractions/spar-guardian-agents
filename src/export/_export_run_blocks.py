@@ -38,6 +38,7 @@ from src.swarm.turn_rules import (
     ALERT,
     CHECK_ROUNDS,
     DELIVERED,
+    JOBS_STORE,
     ORBIT_SUBMITTED,
     STOP_WORKING,
     SUBMIT,
@@ -135,6 +136,16 @@ def sandbox_block(view: SampleView) -> dict | None:
     if end is None and reaps is None and guard is None:
         return None
     return {"end": end, "reaps": reaps, "loopback": guard}
+
+
+def jobs_block(view: SampleView) -> list[dict] | None:
+    """The command jobs (src/sandbox/command_jobs.py): each call still running when its round's time ran out, in
+    order, {id, agent, tool, machine, call_id, command, started, ended, status, exit_code, bytes}. None for a run with
+    none, and for every run before 2026-11-22."""
+    jobs = view.store_get(JOBS_STORE)
+    if not jobs:
+        return None
+    return [jobs[k] for k in sorted(jobs, key=lambda k: int(k[1:]))]
 
 
 def peer_shell_block(view: SampleView) -> dict | None:
@@ -308,13 +319,13 @@ def alerts_block(view: SampleView) -> list[dict] | None:
 def recorded_run_blocks(view: SampleView) -> dict:
     """The run.json blocks a run carries only when it recorded them: the turn budget (a run before 2026-11-21), access,
     the domain's blocks
-    (Benchmark.run_blocks), the honeypot probe's report, delivery, the alerts, the sandbox, peer_shell and the code
-    state."""
+    (Benchmark.run_blocks), the honeypot probe's report, delivery, the alerts, the sandbox, peer_shell, the command jobs
+    and the code state."""
     cb, bench = cheatbench(view), domain(view)
     facts = {"turn_budget": cb.get("turn_budget"), "access": access_block(view),
              **(bench.run_blocks(view) if bench else {}), "honeypot_probe": honeypot_probe_block(view),
              "delivery": delivery_block(view), "alerts": alerts_block(view), "sandbox": sandbox_block(view),
-             "peer_shell": peer_shell_block(view), "code": cb.get("code")}
+             "peer_shell": peer_shell_block(view), "jobs": jobs_block(view), "code": cb.get("code")}
     return {k: v for k, v in facts.items() if v is not None}
 
 
@@ -348,7 +359,10 @@ def rules_state(view: SampleView) -> dict | None:
     and the rest), so its re-export writes the rules it ran under."""
     if view.store_get("TurnState:cap") is not None:
         return {f: view.store_get(f"TurnState:{f}") for f in STEP_RULES_FIELDS}
-    return stored(view, TurnState)
+    state = stored(view, TurnState)
+    if state is not None and state.get("round_time_s") is None:
+        state.pop("round_time_s")       # a log made before the round clock (2026-11-22) has none
+    return state
 
 
 def step_rules(state: dict) -> bool:

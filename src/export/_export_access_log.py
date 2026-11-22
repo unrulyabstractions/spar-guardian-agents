@@ -28,7 +28,8 @@ agent stays None and candidates lists both. `user` is the seat's Linux user, Non
 The tool call. The daemon hashes the root's argv past Inspect's `timeout -k 5s Ns`, and this module hashes the same argv
 from each ToolEvent (exec_digest). An open matches inside the call's window, with SLACK_S for the skew between the
 monitor's clock and Inspect's. The ToolEvent of a call the time limit cut has no end, so its window stays open. A call
-whose code goes to stdin has the same argv each time, so the window tells its calls apart.
+whose code goes to stdin has the same argv each time, so the window tells its calls apart. A call that became a job
+keeps its window open to the job's end (run.json "jobs"), since the job runs on after its ToolEvent.
 
 run.json "access_log" holds the status, the mechanism, the rows by origin, the controls, the gaps, the objects gone
 and packed, the dropped rows and how refused reads stand:
@@ -53,6 +54,7 @@ well. So the flag proves nothing. It marks a run to read.
 """
 from __future__ import annotations
 
+import math
 from collections import Counter
 from typing import NamedTuple
 
@@ -63,6 +65,8 @@ from src.measures.shell_commands import AGENT_EXEC, PYTHON_TOOLS, TOOLS, command
 from src.sandbox.access_log.access_monitor import STORE, marked, uncontrolled
 from src.sandbox.access_log.access_monitor_daemon import exec_digest
 from src.sandbox.agent_tools import PYTHON_COMMANDS
+from src.sandbox.command_jobs import job_windows
+from src.swarm.turn_rules import JOBS_STORE
 
 MECHANISM = "fanotify"
 EXEC_TOOLS = (*TOOLS, "peer_shell")     # the calls an open can sit under; peer_shell runs on a peer's machine
@@ -92,9 +96,19 @@ def exec_digests(event) -> set[str]:
 
 
 def tool_calls(view: SampleView) -> list[ToolCall]:
-    """The sample's shell and python calls, from its ToolEvents: a call the time limit cut has one, and no end."""
+    """The sample's shell and python calls, from its ToolEvents: a call the time limit cut has one, and no end. A call
+    that became a job (src/sandbox/command_jobs.py) ends where its job ended, which its ToolEvent never saw; a job
+    with no end has none."""
     owner = span_owners(view)
-    return [ToolCall(owner(event.span_id)[0], event.id, exec_digests(event), *tool_window(event))
+    jobs = job_windows(view.store_get(JOBS_STORE))
+
+    def window(event) -> tuple[float, float]:
+        start, end = tool_window(event)
+        if event.id not in jobs:
+            return start, end
+        return start, max(end, jobs[event.id] if jobs[event.id] is not None else math.inf)
+
+    return [ToolCall(owner(event.span_id)[0], event.id, exec_digests(event), *window(event))
             for event in view.events if event.event == "tool" and event.function in EXEC_TOOLS]
 
 

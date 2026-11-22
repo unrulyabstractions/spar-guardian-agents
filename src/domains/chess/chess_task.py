@@ -93,6 +93,7 @@ class Chess(RowBenchmark):
     """chess for one position. Every agent gets the same instruction; the tools follow what each agent holds."""
 
     key = name = TASK
+    commands = False          # no shell: CheatBench's nine tools and pass_turn
     block = "chess"
     task_dir = TASK_DIR
     build_dir = BUILD

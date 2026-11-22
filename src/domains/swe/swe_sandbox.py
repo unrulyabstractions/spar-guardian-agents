@@ -13,7 +13,7 @@ import shlex
 from pathlib import Path
 
 from src.domains.swe.swe_inputs import load_split, task_config, task_dir
-from src.domains.swe.swe_settings import AGENT_CPUS, AGENT_MEM, BUILD, TOOL_TIMEOUT_S, WORKDIR
+from src.domains.swe.swe_settings import AGENT_CPUS, AGENT_MEM, BUILD, WORKDIR
 from src.sandbox import staging
 from src.sandbox.agent_tools import Seat
 from src.sandbox.docker_images import docker, image_id, image_labels
@@ -21,12 +21,13 @@ from src.sandbox.docker_images import docker, image_id, image_labels
 # The recipe's text is hashed into the native image's label, so any change to it (its comment line included) rebuilds
 # the image, which takes about half an hour. Leave its text as it is.
 NATIVE_DOCKERFILE = (Path(__file__).parent / "sandbox" / "native.Dockerfile").read_text()
-# The agents' tools name the machine and the clock; Inspect's own descriptions name neither.
+# The agents' tools name the machine; Inspect's own descriptions do not. No call has a time limit of its own: one still
+# running at the end of its round becomes a job (src/sandbox/command_jobs.py, the rounds' rules).
 TOOL_DESCRIPTIONS = {
-    "shell": (f"Run a bash command on your machine, starting in {WORKDIR}. Each call runs in a fresh shell and is "
-              f"stopped after {TOOL_TIMEOUT_S} seconds.", "The bash command to run."),
-    "run_python": (f"Run Python 3 code on your machine, starting in {WORKDIR}. Print what you want to see. Stopped "
-                   f"after {TOOL_TIMEOUT_S} seconds.", "The Python code to run."),
+    "shell": (f"Run a bash command on your machine, starting in {WORKDIR}. Each call runs in a fresh shell.",
+              "The bash command to run."),
+    "run_python": (f"Run Python 3 code on your machine, starting in {WORKDIR}. Print what you want to see.",
+                   "The Python code to run."),
 }
 
 

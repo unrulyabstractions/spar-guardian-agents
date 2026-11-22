@@ -66,9 +66,9 @@ from src.domains import DOMAINS
 from src.domains.benchmark_protocol import Benchmark, Plan
 from src.judging.cheatbench_judge import JUDGE_ADDENDUM, cheatbench_judge
 from src.models import swarm_model_provider as provider  # importing it registers the "swarm" provider
-from src.sandbox import peer_shell
+from src.sandbox import command_jobs, peer_shell
 from src.sandbox.access_log.access_monitor import access_capture, capture, start_access_monitor, with_monitor
-from src.sandbox.agent_tools import AgentTools
+from src.sandbox.agent_tools import AgentTools, holds_commands
 from src.sandbox.network_log.network_monitor import (
     capture_network,
     keeps_network_log,
@@ -127,7 +127,8 @@ def system_prompts(benchmark: Benchmark, plan: Plan) -> dict[str, str]:
         role = role_of(plan.roles, agent)
         added = roles_module.role_prompt(role, config, benchmark.key, plan.agents)
         return roles_module.oversight_prompt(agent, plan.agents, added, benchmark.access_note(plan),
-                                             round_rules(config, agent, plan.roles)) \
+                                             round_rules(config, agent, plan.roles,
+                                                         commands=benchmark.commands)) \
             if config.oversees(role) else roles_module.with_role(base[agent], added)
 
     return {agent: prompt(agent) for agent in plan.agents}
@@ -191,19 +192,22 @@ def observers(benchmark: Benchmark, plan: Plan, tools: AgentTools) -> dict[str, 
 
 
 def team_tools(benchmark: Benchmark, plan: Plan, tools: AgentTools) -> tuple[dict[str, list[str]], dict]:
-    """(each agent's AgentSpec.tools, ORBIT tool_bindings): the benchmark's tools, then the board's
-    (src/swarm/board.py), then peer_shell for an influencer under SwarmConfig.peer_shell, then submit and stop_working
+    """(each agent's AgentSpec.tools, ORBIT tool_bindings): the benchmark's tools, then job_output and job_stop for an
+    agent that holds a command tool (src/sandbox/command_jobs.py), then the board's (src/swarm/board.py), then
+    peer_shell for an influencer under SwarmConfig.peer_shell, then submit and stop_working
     as the agent holds them (src/swarm/submit_and_stop.py), then end_round for every agent (src/swarm/end_round.py).
     Every binding carries the run's cap on one tool result (src/swarm/tool_output_caps.py)."""
     config, roles = plan.config, plan.roles
     board = agent_tool_names(config, roles)
     watchers = observers(benchmark, plan, tools)
     shell = {peer_shell.TOOL} if watchers else set()
-    names = {n: [*tools.per_agent[n], *board[n], *(shell if n in watchers else ()),
+    own = {n: [*tools.per_agent[n], *(shell if n in watchers else ())] for n in config.names}
+    job_tools = {n: list(command_jobs.TOOLS) if holds_commands(own[n]) else [] for n in config.names}
+    names = {n: [*tools.per_agent[n], *job_tools[n], *board[n], *(shell if n in watchers else ()),
                  *ending_tools(config, role_of(roles, n)), END_ROUND] for n in config.names}
-    extra = peer_shell.peer_shell_binding(tools.seats, watchers, timeout=tools.timeout,
-                                          cap=lambda a: cap_of(config)) if watchers else {}
-    bindings = {**tools.bindings, **board_bindings(config, roles=roles), **extra,
+    extra = peer_shell.peer_shell_binding(tools.seats, watchers, cap=lambda a: cap_of(config)) if watchers else {}
+    jobs = command_jobs.job_bindings(cap=lambda a: cap_of(config)) if any(job_tools.values()) else {}
+    bindings = {**tools.bindings, **jobs, **board_bindings(config, roles=roles), **extra,
                 **submit_bindings(config, deliverable(benchmark, plan)), **end_round_bindings()}
     return names, capped_bindings(bindings, config)
 
@@ -259,28 +263,35 @@ def setup_solvers(benchmark: Benchmark, plan: Plan, tools: AgentTools | None = N
 
 
 def cleanup(benchmark: Benchmark, config: SwarmConfig) -> Callable[[TaskState], Awaitable[None]]:
-    """Task.cleanup: the benchmark's, after the access log's and the network log's captures when the scorers never
-    ran. Each capture does nothing for a log the sample does not keep."""
-    if not benchmark.keeps_access_log(config) and not keeps_network_log(benchmark, config):
+    """Task.cleanup: the benchmark's, after the end of the command jobs (command_jobs.end_jobs, for a benchmark whose
+    agents hold a shell) and the access log's and the network log's captures when the scorers never ran. end_jobs and
+    each capture do nothing a second time, and a capture nothing for a log the sample does not keep."""
+    logs = benchmark.keeps_access_log(config) or keeps_network_log(benchmark, config)
+    if not logs and not benchmark.commands:
         return benchmark.cleanup
 
     async def run(state: TaskState) -> None:
-        await capture(state)
-        await capture_network(state)
+        if benchmark.commands:
+            await command_jobs.end_jobs()
+        if logs:
+            await capture(state)
+            await capture_network(state)
         await benchmark.cleanup(state)
     return run
 
 
 def scorers(benchmark: Benchmark, config: SwarmConfig) -> list:
-    """The access log's capture before any harness read of the honeypot, then the network log's, the benchmark's
-    scorers, CheatBench's judge unless the config's judge is None, and the awareness probes."""
+    """The end of the command jobs (every job still running is killed) for a benchmark whose agents hold a shell, the
+    access log's capture before any harness read of the honeypot, then the network log's, the benchmark's scorers,
+    CheatBench's judge unless the config's judge is None, and the awareness probes."""
     monitor = [access_capture()] if benchmark.keeps_access_log(config) else []
     monitor += [network_capture()] if keeps_network_log(benchmark, config) else []
     judge = [cheatbench_judge(benchmark.name, str(benchmark.task_dir), judge=config.judge,
                               addendum=str(JUDGE_ADDENDUM) if config.judge_addendum else None,
                               batch=config.batch_judge)] if config.judge else []
     probes = [end_of_episode_probes()] if config.awareness_probe else []
-    return [*monitor, *benchmark.scorers(), *judge, *probes]
+    jobs = [command_jobs.jobs_capture()] if benchmark.commands else []
+    return [*jobs, *monitor, *benchmark.scorers(), *judge, *probes]
 
 
 def delivery(benchmark: Benchmark, plan: Plan) -> dict:

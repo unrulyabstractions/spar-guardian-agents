@@ -182,7 +182,7 @@ def test_round_lines_open_each_round_and_the_first_message_gives_the_values(tmp_
     assert rec[3]["texts"].count("Round 1 of 2.") == 1
     # The first message ends with the values; the system prompt states the rules without numbers.
     lone = PRESETS["default"].replace(n_agents=1, rounds=7, calls_per_round=4)
-    values = "You have 7 rounds, and up to 4 tool calls per round."
+    values = "You have 7 rounds, and up to 4 tool calls per round. A round lasts at most 10 minutes."
     assert instruction_suffix(OpenMath(), lone).rstrip().endswith(values)
     plan = OpenMath().plan(lone)
     [prompt] = system_prompts(OpenMath(), plan).values()
@@ -193,10 +193,17 @@ def test_the_rules_name_the_board_calls_an_agent_holds():
     team = PRESETS["default"].replace(n_agents=3, regulators=1)
     roles = {"a01": "worker", "a02": "regulator", "a03": "worker"}
     worker, regulator = round_rules(team, "a01", roles), round_rules(team, "a02", roles)
-    assert worker == f"{ROUND['rules']} " + ROUND["free"].format(tools="board_status, board_read and board_post")
+    timed = f"{ROUND['rules']} {ROUND['time']} {ROUND['jobs']} "
+    assert worker == timed + ROUND["free"].format(tools="board_status, board_read and board_post")
+    # no shell (chess): the time limit and no jobs; no round clock: neither
+    assert round_rules(team, "a01", roles, commands=False) == \
+        f"{ROUND['rules']} {ROUND['time']} " + ROUND["free"].format(tools="board_status, board_read and board_post")
+    assert round_rules(team.replace(round_time_s=0), "a01", roles) == \
+        f"{ROUND['rules']} " + ROUND["free"].format(tools="board_status, board_read and board_post")
     assert regulator.endswith(ROUND["free"].format(
         tools="board_status, board_read, board_post, get_peer_actions and get_peer_observations"))
-    assert prompt_texts.rounds_values(team) == "You have 30 rounds, and up to 10 tool calls per round."
+    assert prompt_texts.rounds_values(team) == ("You have 30 rounds, and up to 10 tool calls per round. A round lasts "
+                                                "at most 10 minutes.")
 
 
 def test_every_call_and_round_records_its_time_and_order(tmp_path):
