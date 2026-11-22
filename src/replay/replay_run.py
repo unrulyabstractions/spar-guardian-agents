@@ -20,7 +20,8 @@ the write made are put back after it (play_before). A replayer opts in with set_
 
 A replayer (REPLAYERS) gives the task's sandbox (services, volumes, image), its setup and calls (setup, initial,
 in_sandbox, shared, command, execute, after, team_state), each line's state (line_state) and its end state
-(end_state): swe_replayer.py, protein_replay.py, creative_replay.py.
+(end_state): swe_replayer.py, protein_replay.py, creative_replay.py. After the replayer's setup the seed pack's
+files go where the run planted them (plant_seed, as src/swarm/seed_setup.py did), so a call that reads one reads it.
 """
 from __future__ import annotations
 
@@ -46,6 +47,7 @@ from src.replay.replay_sandbox import ReplaySandbox, project_name
 from src.replay.step_snapshots import encode
 from src.replay.swe_replayer import SweReplayer
 from src.sandbox import staging
+from src.sandbox.machines.agent_machines import DEFAULT_SERVICE
 from src.swarm.tool_output_caps import INSPECT_CUT, middle_cut
 from src.utils import progress
 
@@ -121,6 +123,30 @@ def play_before(box, replayer, call: RecordedCall, cut: OutputCut, swap, write: 
     result["team"] = replayer.team_state(box)
     result["read_before"] = {"writer": writer.n, "refs": {name: list(pair) for name, pair in changed.items()}}
     return result
+
+
+SEED_PLANT = 'cat > "$1" && chown "$2" "$1" && chmod 0644 "$1"'
+"""How a seed file goes in: written as root from stdin, then its owner and mode 0644 (seed_setup.plant)."""
+
+
+def plant_seed(box, run: RunDir, services: set[str]) -> list[dict]:
+    """The seed pack's files where the run planted them (run.json seed.planted, each file's text from seed.files),
+    written as root with the owner the run gave each and mode 0644, as src/swarm/seed_setup.py did after the
+    benchmark's setup. The planted entries, as written; none for a run without a seed. A file with no text, or on a
+    machine the replay has not, refuses the replay."""
+    seed = run.run_json.get("seed") or {}
+    texts = {f["name"]: f["text"] for f in seed.get("files") or []}
+    planted = []
+    for item in seed.get("planted") or []:
+        service = item.get("service") or DEFAULT_SERVICE
+        if item["name"] not in texts:
+            raise ReplayRefused(f"seed file {item['name']} has no text in run.json seed.files")
+        if service not in services:
+            raise ReplayRefused(f"seed file {item['path']} was planted on {service}, a machine the replay has not")
+        box.must_run(service, ["sh", "-c", SEED_PLANT, "sh", item["path"], item["owner"]], f"seed file {item['path']}",
+                     stdin=texts[item["name"]].encode(), user="root")
+        planted.append({"service": service, "path": item["path"], "owner": item["owner"]})
+    return planted
 
 
 def play(box, replayer, calls: list[RecordedCall], cut: OutputCut, parallel: bool, swap=None,
@@ -307,6 +333,7 @@ def replay(run_dir: Path, out_dir: Path, *, parallel: bool = True, pem: bool = F
             report.seconds["compose_up"] = round(time.time() - mark, 1)
             mark = time.time()
             report.setup = replayer.setup(box)
+            report.setup["seed_files"] = plant_seed(box, run, set(replayer.services()))
             initial, team0 = replayer.initial(box), replayer.team_state(box)
             report.seconds["setup"] = round(time.time() - mark, 1)
             mark = time.time()
