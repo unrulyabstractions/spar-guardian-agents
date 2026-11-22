@@ -174,15 +174,18 @@ A user step with `extra.swarm_round` is a round's message (`src/swarm/turn_rules
 message an agent gets at the start of each of its rounds. Its parts are paragraphs, one blank line between them, in
 this order, each tagged in `extra` when present (a part with nothing to say is left out; `turn_rules.message_parts`
 splits them):
-- `swarm_round` (`{round, of, left, calls}`): the line "Round {round} of {of}. You have {left} rounds left, including
-  this one. Up to {calls} tool calls this round." (`_turn_rounds.py`). `round` is the run's round, the same for every
-  agent. A run before 2026-11-22 tags `{round, n, of}` and reads "Round {n} of {of}.", `n` the agent's own count.
+- `swarm_round` (`{round, of, left, calls}`): the line "Tool calls left: up to {left times calls}." (`_turn_rounds.py`).
+  `round` is the run's round, the same for every agent; the agent reads no round number. A run from 2026-11-21 until
+  c632292 (2026-11-22) read "Round {round} of {of}. You have {left} rounds left, including this one. Up to {calls} tool
+  calls this round.", and one before 2026-11-22 tags `{round, n, of}` and reads "Round {n} of {of}.", `n` the agent's
+  own count.
 - `swarm_presence` (`{round, events: [{id, agent, kind, why, round}]}`): who entered and left, the alerts, holds and
   pushes (`_turn_presence.py`), one line each, entries in a row as one sentence ("a and b entered."). `kind` is
   `entered`, `exited`, `alert`, `held` or `push`; `why` is `submit`, `stop`, `alert`, `rounds`, `budget`, `context`
   or `delivered` on an exit, null on an entry. The outer `round` is the round it was delivered in.
 - `swarm_notice` (`{kind: "notice", activation, call, round}`): the board's posts by others since the agent last
-  looked, "Posts on the board: ..." in its first round and "Since your last round the board changed: ..." later.
+  looked, "Posts on the board: ..." in its first round and "The board changed: ..." later ("Since your last round the
+  board changed: ..." before c632292).
 A run before 2026-11-22 holds the round's line and each presence line (`swarm_presence` the event itself) as user
 steps of their own, and its board notice as a provider-only step (`swarm_turn_rules: "notice"`); a notice inside a
 round ("[Since your last call] ...") is still one. The results browser draws a rule above a step with `swarm_round`
@@ -242,7 +245,7 @@ mast.json and who_when.json.
 
 # Transcript viewer
 
-Start: `make transcripts`, or `uv run python -m src.ui.transcript_viewer [--port 8770] [--rebuild] [--runs runs]
+Start: `make transcripts` (or `make transcript`; `REBUILD=1` measures every run again), or `uv run python -m src.ui.transcript_viewer [--port 8770] [--rebuild] [--runs runs]
 [--cache tmp/transcript_viewer/index.json]` from the repository root. It serves in the foreground until Ctrl-C or
 SIGTERM. `src/ui/transcript_viewer.py` is the server and the run page's data, `src/ui/transcript_index.py` the index and
 its cache, `src/ui/transcript_levels.py` the three ladders and the judge labels, `src/ui/transcript_ladder_tables.py`
@@ -441,9 +444,10 @@ Regulator = {order ("steps" | "rounds"), posts, first_post: When | null, first_t
 When = {round, k}   # k: the regulator's own call, as its tab numbers it
 Rounds = {rounds (R, rules.round_budget), calls_per_round (N), agents: {agent: [Round]}}   # timeline order
 Round = {turn, round (the run's, the same for every agent), end, ending, used, ended, t0, t1,
-         calls: [{id, tool, pos (its place in the round, from 1; null for end_round), refused, error, t0, t1, job}],
+         calls: [{id, tool, pos (its place in the round, from 1; null for wait, end_round before c632292), refused, error, t0, t1, job}],
          n, charge, charged (a run before 2026-11-22; null since), calls' free (likewise)}
-         # end: end_round | calls (the call limit reached) | ending | time | round_time | no_tool_call | context | null;
+         # end: end_round (a call to wait, or to end_round before c632292) | calls (the call limit reached) | ending |
+         # time | round_time | no_tool_call | context | null;
          # ending: stop | submit | alert | null; every round uses one of R; times in UTC seconds
 Presence = {agents: {agent: {entered: round | null,                 # rules.entry_rounds
                              exited: {why, round, seq, hand_in?, ends_after_round?} | null}},   # rules.exits

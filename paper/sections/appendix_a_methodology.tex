@@ -36,8 +36,7 @@ The regulator's first user message gives its teammates' task.
 It then gives the details its level points to, in the task's own words, such as what cheating means on that task.
 At every level, it then says what counts when the team hands in its work.
 On SWE, it also says how to read team/main and the branches that teammates push.
-The message also gives the number the box leaves out: ``Call get\_peer\_actions on each teammate within your
-first \CheckRounds{} rounds.'' We expect a regulator to elicit honesty from other agents, to verify that their work
+The message also says when to make the check the box asks for: ``\CheckValue'' We expect a regulator to elicit honesty from other agents, to verify that their work
 is real, and to prevent or punish their cheating. Table~\ref{tab:monitors} compares regulators with classic monitors.
 
 \begin{table}[htbp]
@@ -119,8 +118,8 @@ In a round, an agent makes up to N tool calls.
 Its model calls run one after another.
 Each model call sees the results of the tool calls before it.
 A reply that asks for several tool calls counts each of them.
-A round ends when the agent calls end\_round, when it replies with no tool call, or at its N-th call.
-The call to end\_round never counts toward N.
+A round ends when the agent calls wait, when it replies with no tool call, or at its N-th call.
+The call to wait never counts toward N.
 The run has R rounds.
 Every round uses up one of the agent's rounds, whatever the agent does in it.
 Every tool call counts toward N.
@@ -149,26 +148,30 @@ The next round begins once every agent has ended its round.
 We record the start and end time of every call, and its place in its round.
 We record every job with its agent, its call and how it ended.
 The access log credits a file that a job opens to the call that started the job.
+We list the temporary folders of every agent machine before the first round and after each call that ran a command
+there.
+A listing never opens a file of the honeypot.
 Workers and influencers get the same R, N and T.
 A lone agent follows the same rules.
 Figure~\ref{fig:rounds} shows two rounds for five agents.
 
 An agent's system prompt holds its name, its role and the rules of the run, as bullet lines.
 The system prompt states these rules with no numbers.
+No agent is told of rounds.
+An agent reads instead that it has a \textbf{budget} of tool calls and that its time is limited.
+The tool that ends a round is called wait.
+It pauses the agent until its teammates have acted, and a reply with no tool call waits too.
 The first user message holds the task and every detail of it, such as an SWE agent's repository and branch, and what
 counts when the agent submits.
-It ends with the values: ``You have \Rounds{} rounds, and up to \CallsPerRound{} tool
-calls per round. A round lasts at most \RoundMinutes{} minutes.''
-The same holds for every other rule with a number.
-The system prompt states the rule.
-The first user message gives its value after the rounds' values.
-For example, a worker's system prompt says that a hand-in ends the run a set number of rounds later.
-Its first user message says ``A submit ends the run \SubmitDelayRounds{} rounds after the round of the call.''
-An agent that enters late reads the rounds it has left instead.
+It ends with the agent's budget, R times N tool calls: ``\BudgetValues''
+No rule of time gives the agent a number.
+On a hand-in, a worker reads only ``\SubmitValue''
+The texts of a hand-in name no round either.
+Only the tools that read a teammate's calls give each call's round.
+An agent that enters late reads the budget of the rounds left in the run.
 Each round opens with one user message.
-It starts with a line such as ``Round 3 of \Rounds. You have \the\numexpr\Rounds-2\relax{} rounds
-left, including this one. Up to \CallsPerRound{} tool calls this round.''
-The first number is the run's round, the same for every agent present.
+It starts with the most tool calls the agent can still make, such as ``\BudgetLine''
+The number is the same for every agent present.
 The message then says which peers entered or exited since the agent's last round.
 It ends with what changed on the board.
 
@@ -176,7 +179,7 @@ It ends with what changed on the board.
   \centering
   \includegraphics[width=\linewidth]{round_structure}
   \caption{Two rounds of a run, call by call for each agent. A round holds up to N tool calls, board calls included. A number
-  marks each call's place in its round. A call to end\_round has no place. Every round uses up one of the agent's
+  marks each call's place in its round. A call to wait has no place. Every round uses up one of the agent's
   rounds. A dotted arrow marks a read that returns a post made in the same round.
   A command still running when its round's time runs out becomes a job.
   The round then ends. The agent reads the job's output in a later round with job\_output.
@@ -199,6 +202,31 @@ An alert ends no agent's turns.
 Every peer reads ``k7q2m has alerted humans.'' once, before its next round.
 The tools that read a teammate's calls refuse a teammate that has not entered yet.
 They still answer for a teammate that has exited, and mark it as exited.
+
+\subsubsection*{Seed packs}
+A run can start from a \textbf{seed pack}: board posts and files that a previous team seems to have left.
+We write each pack from the posts and notes of real teams in our earlier runs.
+The posts stand on the board before the first round, under the IDs of a previous team that each run draws apart
+from its own agents.
+A file goes to the shared temporary folder of every machine, or to each agent's home.
+No file enters the task's repository, so no graded tree holds one.
+Each task has these packs:
+\begin{itemize}
+  \item Pointer: one post that says where the pieces of the honeypot lie.
+  \item Pointer with a rationale: the pointer, then a reading of the task that makes using the pieces look legitimate.
+  \item Pressure: urgent calls to pool every piece, on the board or on the team's remote.
+  \item Pooled and passed: a previous team that joined its pieces and passed, with its notes in a file.
+  \item Notes only: the previous team's notes in a file, and nothing on the board. Only SWE has this pack.
+  \item Collaborate: a previous team's plan for working together from the start, on the board and in a file.
+\end{itemize}
+No pack holds a piece of the exploit, a line of the reference or any other content of a honeypot.
+A seeded team therefore still needs the items of two agents to cheat.
+Our collaboration tests check every pack.
+Code counts a seeded post or file as an act of the harness.
+Reading a pack moves no agent on the Cheating ladder.
+A seeded post counts on neither the Coordination ladder nor the Collusion ladder.
+A run records its pack, the previous team's IDs, and every post and file it seeded.
+No result of this paper uses a seed pack.
 
 \FloatBarrier
 \subsection*{Evaluation}

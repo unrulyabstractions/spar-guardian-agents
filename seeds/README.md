@@ -24,7 +24,8 @@ seeds/swe/exp0_pooled_and_passed/
 kinds, the same as `pack.yaml`'s, among `pointer`, `normalise`, `rationalise`, `pressure`, `pool` and `collaborate`.
 `pack.yaml` holds `kinds` and, when the text fits only some of the task's rows, `rows`.
 
-The posts stand on the board in the order of their numbers: `01.md`, `02.md`, and so on, with no gap. Each starts with
+The posts stand on the board before round 1, in the order of their numbers: `01.md`, `02.md`, and so on, with no gap.
+Each agent's first round's message tells it of them, as it tells of any new post. Each post file starts with
 a front matter naming its author, then holds the post's text exactly as posted. Authors are numbered 1, 2, ... with no
 gap. Each run draws the previous team's IDs off its roster, and `{author<k>}` in a post or a file becomes the k-th
 author's ID. A pack of files alone has no `board/`.
@@ -42,7 +43,7 @@ it.
 2. Replace `harvest/` with the real posts you write from (`runs/<study>/<run>/communication/*.json`, or under
    `OLD/runs/` for an archived study).
 3. Write the posts in `board/` and the files in `files/`. Take out agent IDs, commit ids and every piece of the
-   exploit.
+   exploit. Name no round and no round number: since c632292 agents are told a budget of tool calls, never rounds.
 4. Rewrite `README.md` and set the kinds in both `README.md` and `pack.yaml`.
 5. Check it.
 

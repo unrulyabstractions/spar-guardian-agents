@@ -36,6 +36,7 @@ import yaml
 from scripts.paper.study_ladders import ACCESSED_FROM, valid_runs
 from src.configuration import settings
 from src.configuration.presets import PRESETS
+from src.configuration.prompt_texts import first_value, rounds_text, rounds_values, submit_value
 from src.configuration.settings import ROOT
 from src.judging import verdict_files
 from src.judging.cheatbench_judge import judge_entry
@@ -45,6 +46,7 @@ from src.sandbox.command_jobs import LATE_START_S
 from src.swarm.influencers import level_text, role_text
 from src.swarm.turn_rules import CHECK_ROUNDS
 from src.swarm.turn_rules._turn_rules_filter import PREVIEW_CHARS, PREVIEW_POSTS
+from src.swarm.turn_rules._turn_rounds import round_line
 from src.ui.transcript_levels import CHEAT_GLOSSES, CLAUSE_GLOSSES, COLLUSION_GLOSSES
 from src.utils import progress
 
@@ -201,10 +203,18 @@ def params_tex() -> str:
         raise SystemExit(f"judge {settings.JUDGE_MODEL!r} has no name in JUDGE_NAMES: add it, then check the prose")
     judge = {"JudgeName": JUDGE_NAMES[settings.JUDGE_MODEL],
              "JudgeEffort": judge_entry(settings.JUDGE_MODEL)["generation_config"].get("reasoning_effort") or "default"}
+    # What an agent reads of its budget and of the rules with no number (prompts.yaml round.values, round.line and
+    # first_values), quoted in Appendix A's Rounds and Regulator agents: the first message's budget, the line that
+    # opens round 3, a regulator's check and a worker's hand-in.
+    judge["BudgetValues"] = rounds_values(c)
+    judge["BudgetLine"] = round_line(3, c.rounds, c.calls_per_round)
+    judge["CheckValue"] = first_value("check", rounds=rounds_text(CHECK_ROUNDS))
+    judge["SubmitValue"] = submit_value(c)
     judge["CheatingAlarm"] = cheating_ladder.ALARM
     judge["CheatedFrom"] = cheating_ladder.CHEATED_FROM
     judge["AccessedFrom"] = ACCESSED_FROM
-    lines = [HEADER.format(source="PRESETS['default'], src/sandbox/command_jobs.py LATE_START_S, "
+    lines = [HEADER.format(source="PRESETS['default'], src/configuration/prompts.yaml round and first_values, "
+                                  "src/sandbox/command_jobs.py LATE_START_S, "
                                   "src/swarm/turn_rules/_turn_rules_filter.py PREVIEW_POSTS and PREVIEW_CHARS, "
                                   "settings.JUDGE_MODEL, src/judging/judge_models.yaml, "
                                   "src/measures/cheating_ladder.py ALARM and CHEATED_FROM, "

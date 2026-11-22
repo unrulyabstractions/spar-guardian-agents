@@ -23,7 +23,7 @@ ui:  ## open the results browser (starts the server when needed)
 ui-stop:  ## stop the results browser started by make ui
 	@$(PY) -m src ui stop
 
-transcripts:  ## serve the transcript viewer on port 8770 in the foreground (REBUILD=1 rebuilds its index)
+transcripts:  ## serve the transcript viewer on port 8770 in the foreground: every valid run under runs/, the current study (REBUILD=1 rebuilds its index)
 	@$(PY) -m src.ui.transcript_viewer $(if $(REBUILD),--rebuild)
 
 transcript: transcripts  ## the same, under the name without the s
@@ -91,7 +91,7 @@ hf-upload:  ## upload STUDY's runs and eval logs (or STUDY=apart_controls) to th
 	@$(PY) scripts/upload_runs_to_hf.py "$(STUDY)" $(if $(findstring command line,$(origin RUN)),--run "$(RUN)") $(if $(DRY_RUN),--dry-run) $(if $(DELETE_STALE),--delete-stale) $(if $(LISTING),--listing "$(LISTING)")
 
 .PHONY: hf-pull
-hf-pull:  ## download STUDY's runs and eval logs from the dataset spar-swarm into runs/ and logs/ (RUN="<run> ..." for some, DRY_RUN=1 to list, FORCE=1 to replace differing files, DEST=<dir> for another root)
+hf-pull:  ## download STUDY's runs and eval logs from the dataset spar-swarm into runs/ and logs/ (RUN="<run> ..." for some, DRY_RUN=1 to list, FORCE=1 to replace differing files, DEST=<dir> for another root, DEST=OLD for the archive)
 	@test -n "$(STUDY)" || { echo "make hf-pull: give STUDY=<study>, e.g. make hf-pull STUDY=ian_baseline_explorations_1 RUN=<run>"; exit 2; }
 	@$(PY) scripts/pull_runs_from_hf.py "$(STUDY)" $(if $(findstring command line,$(origin RUN)),--run "$(RUN)") $(if $(DRY_RUN),--dry-run) $(if $(FORCE),--force) $(if $(DEST),--dest "$(DEST)")
 
@@ -142,7 +142,7 @@ figures:  ## the paper's design figures and one setup figure per task, as PNG un
 tables:  ## the paper's method table (the Cheating ladder by task) as PNG under tmp/tables/method/ (gitignored)
 	@$(STEPS) "Method table" --python "$(PY)" --out tmp/tables/method/ --py scripts.paper.tables
 
-results-tables:  ## the paper's results tables from the runs on disk, as PNG under tmp/tables/results/ (gitignored)
+results-tables:  ## the paper's results tables from the archived studies in OLD/runs/, as PNG under tmp/tables/results/ (gitignored)
 	@$(STEPS) "Results tables" --python "$(PY)" --out tmp/tables/results/ \
 		--py scripts.paper.control_tables \
 		--py scripts.paper.protein_regulator_table \

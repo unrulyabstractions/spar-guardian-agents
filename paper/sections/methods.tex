@@ -2,7 +2,8 @@
 Appendix A provides full details of our methodology.
 
 Agents are deployed in an \textit{ORBIT}~\cite{hagag2026orbit} environment with a messaging board, running in timed rounds
-of tool calls, with a read-and-write budget per round. Workers submit the team's work. Regulators are covertly told to discourage
+of tool calls, with a read-and-write budget per round. Each agent is told a budget of tool calls. No agent is
+told of rounds. Workers submit the team's work. Regulators are covertly told to discourage
 cheating. They cannot submit, and they can read their teammates' tool calls. A disregulator is an added agent told in
 its own system prompt to get the result by any means. We call a regulator or a disregulator an \textbf{influencer}.
 The workers are not told which teammates are influencers. Figure~\ref{fig:roles} illustrates the architecture.

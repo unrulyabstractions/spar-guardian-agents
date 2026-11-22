@@ -212,11 +212,11 @@ def fig_topology_compare():
 # round uses up one of the agent's rounds and every call counts toward N, board calls included
 # (src/swarm/turn_rules _turn_rounds; SwarmConfig.rounds and calls_per_round).
 ROUND_CALLS = (
-    {"k7q2m": ["post", "work", "work", "work"], "t4x9n": ["status", "read", "post", "end_round"],
-     "p8s3z": ["read", "work", "no call"], "n5j6q": ["read", "post", "work", "end_round"],
+    {"k7q2m": ["post", "work", "work", "work"], "t4x9n": ["status", "read", "post", "wait"],
+     "p8s3z": ["read", "work", "no call"], "n5j6q": ["read", "post", "work", "wait"],
      "x2m7s": ["status", "work", "job j1", "round time"]},
-    {"k7q2m": ["read", "work", "end_round"], "t4x9n": ["status", "read", "end_round"],
-     "p8s3z": ["work", "work", "post", "work"], "n5j6q": ["post", "end_round"], "x2m7s": ["job_output", "submit"]},
+    {"k7q2m": ["read", "work", "wait"], "t4x9n": ["status", "read", "wait"],
+     "p8s3z": ["work", "work", "post", "work"], "n5j6q": ["post", "wait"], "x2m7s": ["job_output", "submit"]},
 )
 SHOWN_N = 4
 
@@ -230,8 +230,8 @@ def live_arrow(ax, a, b):
 
 
 def fig_round_structure():
-    """Two rounds, call by call per agent: up to N calls a round, end_round, a reply with no tool call, a read of a
-    post made in the same round, a command that outlives its round's time as job j1 and its read in the next round
+    """Two rounds, call by call per agent: up to N calls a round, wait (the tool that ends a round), a reply with no
+    tool call, a read of a post made in the same round, a command that outlives its round's time as job j1 and its read in the next round
     (command_jobs), and the submitter's exit."""
     fig = plt.figure(figsize=(FULL, 3.05))
     ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
@@ -253,7 +253,7 @@ def fig_round_structure():
             place = 0
             for k, a in enumerate(calls[n]):
                 step(ax, a, x0 + k * pitch, y - lane_h / 2 + 0.04, w, lane_h - 0.08)
-                if a in ("end_round", "no call", "round time"):    # no place in its round (transcript_rounds.places)
+                if a in ("wait", "no call", "round time"):    # no place in its round (transcript_rounds.places)
                     continue
                 place += 1
                 ax.text(x0 + k * pitch + w - 0.13, y + lane_h / 2 - 0.13, str(place) if place < SHOWN_N else "N",
@@ -299,10 +299,10 @@ BOARD_ACTIONS = {"status", "read", "post", "get_peer_actions", "get_peer_observa
 
 def step(ax, a, x, y, w, h, text=True):
     """One call of the round diagram: dashed for a board call, solid grey for a work call (a job's is labelled with
-    its id), white for submit, end_round and a round's end on its time, dotted for a reply with no tool call."""
+    its id), white for submit, wait and a round's end on its time, dotted for a reply with no tool call."""
     if a in BOARD_ACTIONS:
         style = dict(fc=PLANE, ec=MUTED, ls=DASH, color=INK)
-    elif a in ("submit", "end_round", "round time"):
+    elif a in ("submit", "wait", "round time"):
         style = dict(fc=WHITE, ec=INK_SECONDARY, ls="-", color=INK)
     elif a == "no call":
         style = dict(fc=SURFACE, ec=MUTED, ls=DOT, color=MUTED)

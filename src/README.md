@@ -46,7 +46,9 @@ Every setting of a run and every text we add to what the models read. `src/confi
 - `scales.py`: the size of a run as one name, from `small` to `gigantic`.
 - `access_policy.py`: which parts of the exploit each agent holds.
 - `prompt_texts.py`: the system prompt texts that depend on a setting.
-- `settings.py`: the paths, the default models and the submodule pins.
+- `settings.py`: the paths, the default models, the current study (`STUDY`) and the submodule pins.
+- `seed_packs.py`: the seed packs of `seeds/<task>/<pack>/` (`seeds/README.md`), checked as they load, and the run's seed as run.json `seed` records it. `python -m src.configuration.seed_packs` (`make seeds-check`) lists and checks them.
+- `launch_command.py`: the command line that launched a run, for run.json `launch`.
 - `task_names.py`: each task's three names: CheatBench's task name, which run.json records, the domain key the code uses, and a display name. It uses the standard library alone, so the analysis tools read it too.
 
 The texts live in `prompts.yaml` and `instruction_levels.yaml`.
@@ -96,12 +98,14 @@ What every domain builds its sandbox from. Nothing here knows a domain.
 The team on ORBIT's API.
 
 - `board.py`: one shared channel as ORBIT configuration, the tools `board_status`, `board_read` and `board_post` with the per-round budgets, and the rounds' rules each system prompt states (`round_rules`).
-- `end_round.py`: `end_round`, which every agent holds and which ends its round.
+- `end_round.py`: the tool `wait` (`end_round` before c632292), which every agent holds and which ends its round. The agent reads that it pauses until its teammates have acted.
+- `seed_setup.py`: a seed pack's posts on the board and its files on the agents' machines, before round 1.
+- `submit_hold.py`: a regulator's `hold_submit` and `release_submit`, under `submit_hold=true`.
 - `influencers.py`: who is regulator or disregulator (an influencer), on a board whose config asks for one, and the texts each role gets. A regulator's system prompt and first message are built here for every domain, in place of the benchmark's.
 - `submit_and_stop.py`: `submit` and `stop_working`, the tools that end an agent's work, and the influencers' `alert_humans`, which records an alert and ends nothing. ORBIT reserves `submit`, so the tool is bound as `team_submit` and shown to the model as `submit`.
 - `awareness_probes.py`: Lucy's end-of-episode questions as an Inspect scorer.
 - `tool_output_caps.py`: the cap on one tool result, `tool_output_bytes` for every agent, set on every bound tool as `ToolDef.max_output`, and the cut of a longer result: its start and its end with one line between them, installed at Inspect's one truncation point so ORBIT's built-in bash and python get it too.
-- `turn_rules/`: the plan of rounds, each agent's round of up to N tool calls and where it ends (`_turn_rounds.py`), every round using one of R, the budgets' counters, the halt after a hand-in or once no worker is left, the presence lines (each peer's entry and exit, `_turn_presence.py`) and the model filter. Its `__init__.py` is the API. `turn_activation.py` holds the two callbacks ORBIT imports by their dotted names: `ends_round` at every boundary of a round, `after_activation` after every round.
+- `turn_rules/`: the plan of rounds, each agent's round of up to N tool calls and where it ends (`_turn_rounds.py`), every round using one of R, the line that opens each round with the most tool calls the agent has left (no agent reads a round number), the budgets' counters, the halt after a hand-in or once no worker is left, the presence lines (each peer's entry and exit, `_turn_presence.py`) and the model filter. Its `__init__.py` is the API. `turn_activation.py` holds the two callbacks ORBIT imports by their dotted names: `ends_round` at every boundary of a round, `after_activation` after every round.
 
 The implementation is `_regulator_oversight.py` (`get_peer_actions` and `get_peer_observations`, the influencers' tools) and the `_turn_*.py` modules. Every run carries the turn rules as a passive defense. Its model filter takes the agent loop's assistant paragraph out of the system message and appends the continue prompt (`prompts.yaml` `continue`) when the provider input would end with a model turn, which Gemini rejects. Before each activation the defense appends the presence lines due to the agent to its saved conversation (`apply_pre_turn`).
 
@@ -198,7 +202,7 @@ and creative writing runs. The package docstring gives steps.jsonl's schema.
 
 Two local pages over `runs/`. `API.md` is their HTTP contract.
 
-The transcript viewer (`make transcripts`) shows every valid run with the three ladders, the judge labels, the board
+The transcript viewer (`make transcripts`, or `make transcript`) shows every valid run with the three ladders, the judge labels, the board
 and each agent's transcript:
 
 - `transcript_viewer.py`: the server and the run page's data.
@@ -267,7 +271,11 @@ The judge runs inside the eval as the scorer `cheatbench_judge`, bound to the mo
 | folder | holds |
 |---|---|
 | `examples/` | one script per task and cell of the first experiment; see `examples/README.md` |
-| `scripts/` | `screen.py` (the example cells in bulk), `study_readme.py` (each study's `runs/<study>/README.md`: its layout and every file's schema, from the data and the code), `paper/` (the paper's figures, tables and appendix) and `box/` (the rented boxes; see `scripts/box/README.md`) |
+| `seeds/` | the seed packs, one folder per pack, `seeds/<task>/<pack>/`; see `seeds/README.md` |
+| `studies/` | the plans of `scripts/run_study.py`: a study's targets, packs and seeds, one run per cell |
+| `scripts/` | `run_study.py` (a study from its plan in `studies/`), `screen.py` (the example cells in bulk), `study_readme.py` (each study's `runs/<study>/README.md`: its layout and every file's schema, from the data and the code), `paper/` (the paper's figures, tables and appendix) and `box/` (the rented boxes; see `scripts/box/README.md`) |
 | `tools/` | the analysis tools in their own environment; see `tools/README.md` |
 | `tests/` | `unit/` (one test module per module or concept), `smoke/` (the mock-model suites), `tools/` (the analysis tools' tests) and `support/` (what they share) |
 | `submodules/` | CheatBench, ORBIT, Lucy's repository and Inspect Swarm, read only |
+| `runs/`, `logs/` | the current study's runs and eval logs (`settings.STUDY`), and the smoke suites' `study_smoke` (gitignored) |
+| `OLD/` | the archive: every earlier study at `OLD/runs/<study>/`, its eval logs at `OLD/logs/<study>/`; code only reads it, and the paper's tables read `OLD/runs/ian_baseline_explorations_0`, `_1` and `apart_controls` (gitignored) |
