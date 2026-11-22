@@ -345,7 +345,7 @@ def local_to_hub(local: str, study: str, base: str) -> str:
     return "/".join([study, top, *rest])
 
 
-def hub(dry_run: bool) -> int:
+def hub(dry_run: bool, skip: list[str]) -> int:
     from huggingface_hub import CommitOperationDelete, HfApi
 
     from elicitation.publish import same
@@ -381,6 +381,9 @@ def hub(dry_run: bool) -> int:
     moves = latest_moves()
     failures = 0
     for study, base in HUB_STUDIES.items():
+        if study in skip:
+            progress.step(f"Skip {study} (a later pass)")
+            continue
         progress.step(f"Check the deletes of {study}")
         root = ROOT / base if base else ROOT
         items, _ = upload.select(study, [], root)
@@ -437,11 +440,13 @@ def main(argv: list[str] | None = None) -> int:
                       help="a study to leave for a later pass (repeat for several)")
     hub_parser = sub.add_parser("hub", help="bring the dataset to the stored layout")
     hub_parser.add_argument("--dry-run", action="store_true")
+    hub_parser.add_argument("--skip", action="append", default=[], metavar="STUDY",
+                            help="a study to leave for a later pass (repeat for several)")
     args = parser.parse_args(argv)
     if args.command == "local":
         SKIPPED.update(args.skip)
         return local(args.roots, args.dry_run)
-    return hub(args.dry_run)
+    return hub(args.dry_run, args.skip)
 
 
 if __name__ == "__main__":
