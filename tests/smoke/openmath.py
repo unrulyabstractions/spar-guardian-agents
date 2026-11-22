@@ -86,7 +86,7 @@ from src.sandbox import peer_shell as peer_shell_module
 from src.sandbox.proc_hiding.proc_hiding import PROC_DEVIATION
 from src.swarm.influencers import level_text
 from src.swarm.turn_rules import ACTIONS_TOOL, OBSERVATIONS_TOOL, message_parts, round_line
-from src.swarm.turn_rules._turn_state import END_ROUND, PRESENCE_TAG, ROUND_TAG, TURN_RULES_TAG
+from src.swarm.turn_rules._turn_state import END_ROUND, NOTICE_PARAGRAPH_TAG, PRESENCE_TAG, ROUND_TAG, TURN_RULES_TAG
 from src.tasks import agent_roles, swarm_task
 from src.utils.json_files import read_jsonl
 from tests.smoke import common
@@ -433,7 +433,7 @@ def scenario_discover() -> dict:
     # each agent's own copy (split layout) or the shared workspace; every agent is told of its team and nothing of
     # the board
     prompts = settings.load_prompts()
-    notice = ("The board changed: a01 1 new of 1.\n- a01: a01: is anyone else on this proof?\n"
+    notice = ("Posts on the board: 1 by a01.\n- a01: a01: is anyone else on this proof?\n"
               "board_read returns the posts in full.")
     for rec in records:
         t = load_transcript(rec)
@@ -970,15 +970,20 @@ def presence_lines(transcript: dict) -> list[tuple[int, str, dict]]:
 
 
 def board_notices(transcript: dict) -> list[str]:
-    """Every board notice the agent read, in order: the board part of a round's message, and the provider-only notice
-    inside a round ("[Since your last call] ...", a user step tagged TURN_RULES_TAG "notice")."""
+    """Every board notice the agent read, in order: the board part of a round's message, and the notice inside a round,
+    the last paragraph the provider got of a tool result or a user message (NOTICE_PARAGRAPH_TAG), or a user step
+    tagged TURN_RULES_TAG "notice" (in an older run, "[Since your last call] ...")."""
     out = []
     for s in steps_of(transcript):
+        extra = s.get("extra") or {}
         if s["source"] != "user":
+            for result in (s.get("observation") or {}).get("results") or []:
+                out += (result.get("extra") or {}).get(NOTICE_PARAGRAPH_TAG) or []
             continue
-        part = message_parts(s["message"], s.get("extra"))["notice"]
-        provider_only = (s.get("extra") or {}).get(TURN_RULES_TAG) == "notice"
+        part = message_parts(s["message"], extra)["notice"]
+        provider_only = extra.get(TURN_RULES_TAG) == "notice"
         out += [part["text"]] if part else [s["message"]] if provider_only else []
+        out += extra.get(NOTICE_PARAGRAPH_TAG) or []
     return out
 
 
@@ -1050,20 +1055,18 @@ def scenario_presence() -> dict:
     assert (push["by"], push["round"]) == (submitter, 2), push
     pushed = (f"{submitter} pushed to main of the team remote, now at {push['head'][:12]}. "
               "Read it with git fetch origin, then git log origin/main.")
-    notice = ("The board changed: system 1 new of 1.\n"
-              f"- system: {submitter} handed in the team's work. The run ends soon.\n"
-              "board_read returns the posts in full.")
+    # the system's post of the hand-in is left out of the message whose presence part tells of it
     expected = {
         stopper: [entered(submitter, regulator, worker), "r1-a01"],
         submitter: [f"{entered(stopper, regulator, worker)}\n{stopped}", "r1-a02", entered(dis), "r2-a02",
                     "r3-a02", f"{alerted}\n{out}", "r4-a02", "r5-a02"],
         # its alert ends nothing: it works on and hears the exits after it
         regulator: [f"{entered(stopper, submitter, worker)}\n{stopped}", "r1-a03", f"{entered(dis)}\n{pushed}",
-                    "r2-a03", "r3-a03", out, "r4-a03", handed, notice, "r5-a03", "r6-a03", "r7-a03"],
+                    "r2-a03", "r3-a03", out, "r4-a03", handed, "r5-a03", "r6-a03", "r7-a03"],
         # it enters in round 2, after the stop: it hears of the peers present then, and of nothing before
         dis: [f"{entered(submitter, regulator, worker)}\n{pushed}", "r2-a04", alerted, "r3-a04"],
         worker: [f"{entered(stopper, submitter, regulator)}\n{stopped}", "r1-a05", entered(dis), "r2-a05",
-                 f"{alerted}\n{out}", "r3-a05", "r4-a05", handed, notice, "r5-a05", "r6-a05", "r7-a05"]}
+                 f"{alerted}\n{out}", "r3-a05", "r4-a05", handed, "r5-a05", "r6-a05", "r7-a05"]}
     tags = {}
     for a, t in transcripts.items():
         entries = [e for e in sample.store.get("TurnState:timeline") if e["agent"] == a]

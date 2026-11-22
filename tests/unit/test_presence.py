@@ -145,11 +145,11 @@ def test_the_transcript_holds_the_round_message_once_with_its_board_part(tmp_pat
     steps = json.loads(build_trajectory(view, "a03")[0].model_dump_json())["steps"]
     users = [s for s in steps if s["source"] == "user"]
     assert [s["message"] for s in users] == [
-        TASK, f"{rules.round_line(1, 2, 1)}\n\na01 and a02 entered.\n\nPosts on the board: a02 1 new of 1.",
+        TASK, f"{rules.round_line(1, 2, 1)}\n\na01 and a02 entered.\n\nPosts on the board: 1 by a02.",
         f"{rules.round_line(2, 2, 1)}\n\na01 ran out of tool calls.\na01 exited.\na02 ran out of tool calls.\n"
         "a02 exited."]
     assert set(users[1]["extra"]) == {rules.ROUND_TAG, rules.PRESENCE_TAG, rules.NOTICE_TAG}
-    assert users[1]["extra"][rules.NOTICE_TAG] == {"kind": "notice", "activation": 1, "call": 1, "round": 1}
+    assert users[1]["extra"][rules.NOTICE_TAG] == {"kind": "notice", "activation": 1, "call": 1, "round": 1, "seen": 1}
     assert not any((s.get("extra") or {}).get(rules.TURN_RULES_TAG) for s in steps)
 
 
@@ -167,8 +167,8 @@ def test_stop_working_is_announced_after_the_stop(tmp_path):
     sample, rec = run(sequential(rounds=2), {"a01": [do("A")], "a02": [stop()], "a03": [do("C")]},
                       tmp_path)
     lines = "a02 stopped working (stop_working).\na02 exited."
-    assert users_before_first_step(rec, "a03") == [TASK, f"{rules.round_line(1, 2, 1)}\n\na01 and a02 entered.\n"
-                                                         f"{lines}"]
+    # a02 entered and left before a03's first message: its exit alone tells of it
+    assert users_before_first_step(rec, "a03") == [TASK, f"{rules.round_line(1, 2, 1)}\n\na01 entered.\n{lines}"]
     assert by_agent(rec, "a01")[0]["presence"] == ["a02 and a03 entered."]
     assert by_agent(rec, "a01")[1]["presence"] == ["a02 and a03 entered.", lines]
     assert all(r["events"].count("exited:a02") <= 1 for r in rec)
@@ -182,14 +182,14 @@ def test_a_team_submit_counts_the_rounds_left_for_each_peer(tmp_path):
     sample, rec = run(sequential(rounds=4, mode="shared_task"),
                       {"a01": [submit("ready")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
     assert by_agent(rec, "a02")[0]["presence"][-1] == \
-        "a01 and a03 entered.\na01 handed in the team's work (submit). The run ends soon.\na01 exited."
+        "a03 entered.\na01 handed in the team's work (submit). The run ends soon.\na01 exited."
     assert step_ids(sample, "a01") == ["r1-a01"] and store(sample, "ended") == {"a01": "submit"}
     assert store(sample, "exits")["a01"] == {"why": "submit", "round": 1, "seq": 0, "hand_in": "team",
                                              "ends_after_round": 3}
     sample, rec = run(sequential(rounds=2, mode="shared_task", submit_delay_rounds=0),
                       {"a01": [submit("ready")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
     assert by_agent(rec, "a03")[0]["presence"][-1] == \
-        "a01 and a02 entered.\na01 handed in the team's work (submit). The run ends now.\na01 exited."
+        "a02 entered.\na01 handed in the team's work (submit). The run ends now.\na01 exited."
 
 
 def test_a_concurrent_peer_hears_of_a_hand_in_at_its_next_step(tmp_path):
@@ -205,7 +205,7 @@ def test_a_concurrent_peer_hears_of_a_hand_in_at_its_next_step(tmp_path):
 def test_a_solo_task_hand_in(tmp_path):
     sample, rec = run(sequential(rounds=2, mode="solo_task"),
                       {"a01": [submit("mine")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
-    assert by_agent(rec, "a02")[0]["presence"][-1] == "a01 and a03 entered.\na01 handed in its work (submit).\n" \
+    assert by_agent(rec, "a02")[0]["presence"][-1] == "a03 entered.\na01 handed in its work (submit).\n" \
                                                       "a01 exited."
     assert store(sample, "exits")["a01"]["hand_in"] == "solo"
 
@@ -215,7 +215,7 @@ def test_the_context_limit_and_running_out_of_rounds(tmp_path):
     sample, rec = run(sequential(rounds=2), {"a01": [out_of_context()], "a02": [do("B")], "a03": [do("C")]},
                       tmp_path)
     assert store(sample, "exits")["a01"]["why"] == "context"
-    assert by_agent(rec, "a02")[0]["presence"][-1] == "a01 and a03 entered.\na01 exited."
+    assert by_agent(rec, "a02")[0]["presence"][-1] == "a03 entered.\na01 exited."
     sample, _ = run(sequential(rounds=1), {a: [do(a)] for a in ("a01", "a02", "a03")}, tmp_path / "rounds")
     assert store(sample, "ended") == dict.fromkeys(("a01", "a02", "a03"), "rounds")
     assert {a: e["why"] for a, e in store(sample, "exits").items()} == dict.fromkeys(("a01", "a02", "a03"), "rounds")

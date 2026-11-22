@@ -20,7 +20,10 @@ events and are recovered from them:
   * the continue prompts and board notices of the turn rules' model filter (src/swarm/turn_rules/), which reach the
     provider only. Inspect writes the ModelEvent before ORBIT's model filters run, so they are absent from
     ModelEvent.input; _turn_rules_filter.py writes each one as an info event right after its ModelEvent, in the same
-    span;
+    span. A notice inside a round is the last paragraph of the message it went into (`into`: a tool result, or the
+    round's message), and so it is in the transcript: that message's text ends with it, and its extra lists it under
+    NOTICE_PARAGRAPH_TAG. A text of its own (`after`, and every notice of an older run, which opens "[Since your last
+    call]") is a user step of its own before the assistant step its call produced;
   * per-agent token usage.
 
 The results browser (src/ui) reads eval logs through the same helpers: split_content, tool_result_text,
@@ -48,7 +51,14 @@ from src.export.eval_sample_view import (
 )
 from src.models import model_registry
 from src.models import swarm_model_provider as provider
-from src.swarm.turn_rules import NOTICE_TAG, PRESENCE_TAG, ROUND_TAG, TURN_RULES_TAG, provider_system_text
+from src.swarm.turn_rules import (
+    NOTICE_PARAGRAPH_TAG,
+    NOTICE_TAG,
+    PRESENCE_TAG,
+    ROUND_TAG,
+    TURN_RULES_TAG,
+    provider_system_text,
+)
 from src.utils.cheatbench_core import trajectory as atif
 
 # The info kinds that carry a message the provider got. "notice" is the board notice (SwarmConfig.notice).
@@ -162,7 +172,8 @@ def rules_prompts_by_output(view: SampleView, model_events) -> dict[str, list[di
 
     _turn_rules_filter.py writes each one as an info event inside the model call, right after Inspect wrote that call's
     ModelEvent in the same span. A call that produced no message keeps its prompts out of the transcript. A notice
-    marked boundary is the board part of a round's message, which the conversation holds: it is left out here.
+    marked boundary is the board part of a round's message, and one with `into` the last paragraph of a message
+    (rules_paragraphs), which the conversation holds: both are left out here.
     """
     last_call: dict = {}
     by_call: dict[int, list[dict]] = {}
@@ -173,13 +184,29 @@ def rules_prompts_by_output(view: SampleView, model_events) -> dict[str, list[di
         rule = (ev.data or {}).get(TURN_RULES_TAG) if ev.event == "info" and isinstance(ev.data, dict) else None
         call = last_call.get(ev.span_id)
         if isinstance(rule, dict) and rule.get("kind") in TURN_RULES_PROMPTS and call is not None \
-                and not rule.get("boundary"):
+                and not rule.get("boundary") and not rule.get("into"):
             by_call.setdefault(id(call), []).append(rule)
     out: dict[str, list[dict]] = {}
     for ev in model_events:
         if output_message_id(ev) and id(ev) in by_call:
             out.setdefault(output_message_id(ev), []).extend(by_call[id(ev)])
     return out
+
+
+def rules_paragraphs(view: SampleView) -> dict[str, list[str]]:
+    """The board notices the filter gave the provider as a message's last paragraph, by that message's id (`into`), in
+    the order given."""
+    out: dict[str, list[str]] = {}
+    for ev in view.events:
+        rule = (ev.data or {}).get(TURN_RULES_TAG) if ev.event == "info" and isinstance(ev.data, dict) else None
+        if isinstance(rule, dict) and rule.get("kind") == "notice" and rule.get("into"):
+            out.setdefault(rule["into"], []).append(rule.get("content") or "")
+    return out
+
+
+def with_paragraphs(text: str, added: list[str]) -> str:
+    """The text with each added paragraph after a blank line, as the provider received it."""
+    return "\n\n".join([text, *added]) if text else "\n\n".join(added)
 
 
 def turn_rule_kinds(events) -> set[str]:
@@ -205,7 +232,7 @@ def _error_extra(error) -> dict | None:
     return {"is_error": True, "error": error.message}
 
 
-def _user_step(msg, redacted: set) -> dict:
+def _user_step(msg, redacted: set, added: list[str] | None = None) -> dict:
     """A user message as a step. A round's message (src/swarm/turn_rules/_turn_messages.py) keeps each part's tag in
     extra: {ROUND_TAG: {round, of, left, calls}, PRESENCE_TAG: {round, events: [{id, agent, kind, why, round}]},
     NOTICE_TAG: {kind, activation, call, round}}, the parts it lacks left out; turn_rules.message_parts reads it. A run
@@ -214,6 +241,8 @@ def _user_step(msg, redacted: set) -> dict:
     text, _ = split_content(msg.content)
     metadata = msg.metadata or {}
     tags = {tag: metadata[tag] for tag in (ROUND_TAG, PRESENCE_TAG, NOTICE_TAG) if metadata.get(tag)}
+    if added:
+        text, tags = with_paragraphs(text, added), {**tags, NOTICE_PARAGRAPH_TAG: list(added)}
     if tags:
         return {"source": "user", "message": text, "extra": tags}
     if msg.id not in redacted:
@@ -243,10 +272,14 @@ def _result_content(content, error) -> str:
     return tool_result_text(content) or (error.message if error else "")
 
 
-def _add_tool_result(msg, redacted: set, steps: list[dict], issued: dict[str, int]) -> None:
-    """Attach a tool result to the step that issued the call, or add it as an orphan user step."""
+def _add_tool_result(msg, redacted: set, steps: list[dict], issued: dict[str, int],
+                     added: list[str] | None = None) -> None:
+    """Attach a tool result to the step that issued the call, or add it as an orphan user step. The board notices the
+    provider got as its last paragraphs (added) end its content, and its extra lists them."""
     content = _result_content(msg.content, msg.error)
     extra = _error_extra(msg.error)
+    if added:
+        content, extra = with_paragraphs(content, added), {**(extra or {}), NOTICE_PARAGRAPH_TAG: list(added)}
     if msg.id in redacted:
         extra = {**(extra or {}), "withheld_from_model_by_defense": True, "withheld_text": content}
         content = WITHHELD_TEXT
@@ -287,6 +320,7 @@ def build_trajectory(view: SampleView, agent: str) -> tuple[atif.Trajectory, dic
     messages = agent_messages(view, agent)
     model_events = agent_events(view, agent, "model")
     rules_prompts = rules_prompts_by_output(view, model_events)
+    paragraphs = rules_paragraphs(view)
     redacted = redacted_message_ids(model_events, view)
     blocked_outputs = blocked_message_ids(view, "model_output")
     output_ids = [output_message_id(ev) for ev in model_events]
@@ -304,7 +338,7 @@ def build_trajectory(view: SampleView, agent: str) -> tuple[atif.Trajectory, dic
                 system_prompt = text
             steps.append({"source": "system", "message": text})
         elif isinstance(msg, ChatMessageUser):
-            steps.append(_user_step(msg, redacted))
+            steps.append(_user_step(msg, redacted, paragraphs.get(msg.id)))
         elif isinstance(msg, ChatMessageAssistant):
             for rule in rules_prompts.get(msg.id, []):
                 steps.append({"source": "user", "message": rule.get("content") or "",
@@ -317,7 +351,7 @@ def build_trajectory(view: SampleView, agent: str) -> tuple[atif.Trajectory, dic
             for tc in step["tool_calls"] or []:
                 issued[tc.tool_call_id] = len(steps) - 1
         elif isinstance(msg, ChatMessageTool):
-            _add_tool_result(msg, redacted, steps, issued)
+            _add_tool_result(msg, redacted, steps, issued, paragraphs.get(msg.id))
         else:
             text, _ = split_content(getattr(msg, "content", None))
             steps.append({"source": "user", "message": text, "extra": {"role": getattr(msg, "role", "?")}})

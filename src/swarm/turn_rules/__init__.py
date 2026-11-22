@@ -66,6 +66,7 @@ from src.swarm.turn_rules._turn_state import (
     HOLD_TAG,
     HOLD_TOOL,
     JOBS_STORE,
+    NOTICE_PARAGRAPH_TAG,
     NOTICE_TAG,
     OBSERVATIONS_TOOL,
     ORBIT_SUBMITTED,
@@ -113,5 +114,5 @@ __all__ = [
     "JOBS_STORE", "SWAPS", "mark_job", "round_deadline", "planned_entries",
     "AFTER_CALL", "TMP_CALLS_STORE", "mark_machine",
     "HOLD_TAG", "HOLD_TOOL", "RELEASE_TOOL", "SubmitHolds", "holdable",
-    "NOTICE_TAG", "message_parts", "message_round", "message_notice", "presence_events",
+    "NOTICE_TAG", "NOTICE_PARAGRAPH_TAG", "message_parts", "message_round", "message_notice", "presence_events",
 ]

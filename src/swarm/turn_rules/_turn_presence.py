@@ -180,11 +180,12 @@ def delivered_ids(state: AgentState) -> set[str]:
 
 def presence_text(events: list[dict]) -> str:
     """The presence part's text: one line per event in due's order, with each run of entries in a row as one sentence
-    ("a and b entered.", "a, b and c entered."; prompts.yaml presence.entered); an exit keeps its lines."""
+    ("a and b entered.", "a, b and c entered."; prompts.yaml presence.entered); an exit keeps its lines. An entry
+    folded into its exit (folded) says nothing."""
     texts = load_prompts()["presence"]
     lines: list[str] = []
     entries: list[str] = []
-    for event in [*events, None]:
+    for event in [*(e for e in events if not e.get("folded")), None]:
         if event is not None and event["kind"] == "entered":
             entries.append(event["agent"])
             continue
@@ -198,9 +199,10 @@ def presence_text(events: list[dict]) -> str:
 
 def presence_part(recipient: str, state: AgentState) -> Part | None:
     """The round's message's presence part: every due event the recipient's conversation lacks (due, delivered_ids),
-    tagged PRESENCE_TAG {round: the round delivered in, events: [{id, agent, kind, why, round}]}. Its record writes one
-    "delivered" info event per event, with the event's own line. None when nothing is due, and outside a planned
-    step."""
+    tagged PRESENCE_TAG {round: the round delivered in, events: [{id, agent, kind, why, round}]}. A peer that entered
+    and left before this message is told of by its exit alone: its entry is held, so it never comes later, with
+    folded true and no line. Its record writes one "delivered" info event per event, with the event's own line. None
+    when nothing is due, and outside a planned step."""
     round_number = current_round()
     if round_number is None:
         return None
@@ -208,11 +210,13 @@ def presence_part(recipient: str, state: AgentState) -> Part | None:
     events = [e for e in due(recipient, round_number) if e["id"] not in have]
     if not events:
         return None
-    tags = [{k: e[k] for k in ("id", "agent", "kind", "why", "round")} for e in events]
+    gone = {e["agent"] for e in events if e["kind"] == "exited"}
+    events = [{**e, "folded": True} if e["kind"] == "entered" and e["agent"] in gone else e for e in events]
+    tags = [{k: e[k] for k in ("id", "agent", "kind", "why", "round", "folded") if k in e} for e in events]
 
-    def record() -> None:
+    def record(_message: str) -> None:
         for event, tag in zip(events, tags):
             transcript().info({PRESENCE_TAG: {"event": "delivered", "to": recipient, "at_round": round_number, **tag,
-                                              "content": event["text"]}})
+                                              "content": "" if tag.get("folded") else event["text"]}})
 
     return Part(PRESENCE_TAG, {"round": round_number, "events": tags}, presence_text(events), record)

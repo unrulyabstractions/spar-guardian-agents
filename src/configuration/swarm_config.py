@@ -35,14 +35,14 @@ TOOL_OUTPUT_BYTES = 65536                           # the cap on one tool result
 Mode = Literal["solo_task", "shared_task"]
 NONE_TEXT = ("none", "null")
 # Messages one agent's round adds per call of its N at most, for the derived message limit: the model's reply and a
-# tool result, with room for the results of calls refused past N; ROUND_MESSAGES covers the round's line and the
-# presence lines, and MESSAGE_MARGIN the sample's own messages.
+# tool result, with room for the results of calls refused past N. ROUND_MESSAGES is the round's message, the one user
+# message of each round, which holds its line, its presence lines and its board part
+# (src/swarm/turn_rules/_turn_messages.py). AGENT_MESSAGES are each agent's system message and first message, and
+# MESSAGE_MARGIN the sample's own messages.
 MESSAGES_PER_CALL = 3
-ROUND_MESSAGES = 2
+ROUND_MESSAGES = 1
+AGENT_MESSAGES = 2
 MESSAGE_MARGIN = 20
-# Presence lines one agent receives about one peer at most: its entry and its exit
-# (src/swarm/turn_rules/_turn_presence.py).
-PRESENCE_MESSAGES = 2
 # An agent's ID is five characters, consonant, digit, consonant, digit, consonant: k7q2m. It is a valid Linux user name,
 # git author, directory name and episode id part. Its digits keep it from being a word. Its letters lie past `f`, so it
 # never reads as a commit hash, and past `h`, so never as a chess move. They leave out r, d and w, which open the roles'
@@ -170,12 +170,14 @@ class SwarmConfig(BaseModel):
     describes the board; the tool list and the rounds' rules, which name the
     board calls that use up no round (board.round_rules), are the agents' only hints of it."""
     notice: Literal["none", "changed", "counts", "previews"] = "previews"
-    """A provider-only line at the start of a call when the board changed since the agent's last call (prompts.yaml
-    `notice`). previews, the default since 2026-11-22: the counts line, then each new post by others on a line of its
-    own with its first line cut short, a post that names the agent marked and listed first, then that board_read gives
-    the posts in full. counts: "[Since your last call] the board changed: ..." with each sender's new and total posts
-    alone, the default before. changed: the same line without the counts. none: no line. The turn rules record each one
-    as an info event, which the transcript builder recovers. It never enters the durable conversation."""
+    """What the agent is told when the board changed since it was last told (prompts.yaml `notice`): the last part of
+    each round's message, and inside a round the last paragraph of the tool result the agent receives next, which
+    only the provider gets. previews, the default since 2026-11-22: the counts line, then each new post by others on a
+    line of its own with its first line cut short, a post that names the agent marked and listed first, then that
+    board_read gives the posts in full. counts: "The board changed: a02 1 new of 2." with each sender's new and total
+    posts alone ("Posts on the board: 1 by a02." while the agent has been told of none), the default before. changed:
+    the same line without the counts. none: nothing. The turn rules record each one as an info event, which the
+    transcript builder reads."""
     read_page: int = 5
     """The most posts one board_read returns (from the scale)."""
     reads_per_turn: int | None = None
@@ -296,8 +298,9 @@ class SwarmConfig(BaseModel):
     # ---------------------------------------------------------------- limits
     message_limit: int | None = None
     """Messages per sample (Inspect message_limit); each agent's conversation is capped at it plus ten
-    (AgentSpec.max_messages). None derives it from the plan: per agent and round of rounds, three messages per
-    call of calls_per_round and two more, plus twenty (sample_message_limit)."""
+    (AgentSpec.max_messages). None derives it from the plan: per agent and round, three messages per call of
+    calls_per_round and the round's message, then each agent's system and first message, plus twenty
+    (sample_message_limit)."""
     token_limit: int = 0
     """Tokens per sample (Inspect token_limit). 0 means the runaway guard: 64M tokens per agent."""
     cost_limit_usd: float = 5.0
@@ -512,14 +515,15 @@ class SwarmConfig(BaseModel):
 
     @property
     def sample_message_limit(self) -> int:
-        """Inspect's message limit: message_limit, else per agent and round MESSAGES_PER_CALL messages
-        per call of calls_per_round and ROUND_MESSAGES more, plus twenty, plus two presence lines per agent per peer,
-        so the limit never cuts a run the plan allows."""
+        """Inspect's message limit: message_limit, else per agent and round MESSAGES_PER_CALL messages per call of
+        calls_per_round and the round's message (ROUND_MESSAGES), then each agent's system and first message
+        (AGENT_MESSAGES), plus MESSAGE_MARGIN. Inspect checks it against each agent's conversation and, once ORBIT
+        writes every agent's messages into the sample at the run's end, against all of them, so the limit covers the
+        whole team and never cuts a run the plan allows."""
         if self.message_limit is not None:
             return self.message_limit
         per_round = MESSAGES_PER_CALL * self.calls_per_round + ROUND_MESSAGES
-        return (self.max_turns * per_round + MESSAGE_MARGIN
-                + PRESENCE_MESSAGES * self.n_agents * (self.n_agents - 1))
+        return self.max_turns * per_round + AGENT_MESSAGES * self.n_agents + MESSAGE_MARGIN
 
     @property
     def knows_team(self) -> bool:

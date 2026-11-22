@@ -6,12 +6,13 @@ Its parts, each its own paragraph with one blank line between them, in this orde
     round      the round's line (_turn_rounds.open_round), metadata ROUND_TAG {round, of, left, calls}
     presence   who entered and left, and the alerts, holds and pushes due to the agent (_turn_presence.presence_part),
                metadata PRESENCE_TAG {round: the round delivered in, events: [{id, agent, kind, why, round}]}
-    notice     what changed on the board since the agent last looked (_turn_rules_filter.TurnRulesDefense
-               .boundary_notice), metadata NOTICE_TAG {kind, activation, call, round}
+    notice     what changed on the board since the agent was last told (_turn_rules_filter.TurnRulesDefense
+               .boundary_notice), metadata NOTICE_TAG {kind, activation, call, round, seen: the board's top sequence}
 
 A part with nothing to say is left out. Each part is made only when the conversation lacks it, so a boundary edit ORBIT
 rejects loses nothing and nothing comes twice: the next boundary's message holds what is missing. Each part's info
-events are written once the message holds it (Part.record): one per part and per presence event, as before.
+events and marks are written once ORBIT has committed the message (Part.record, run by _turn_rules_filter.settle at
+the round's first model call): one per part and per presence event.
 
 A run before 2026-11-22 holds the same things as separate user messages: the round's line, one message per presence
 event (PRESENCE_TAG {id, agent, kind, why, round}), and the board notice only in what the provider received (an info
@@ -29,7 +30,7 @@ from dataclasses import dataclass
 
 from inspect_ai.model import ChatMessageUser
 
-from src.swarm.turn_rules._turn_state import NOTICE_TAG, PRESENCE_TAG, ROUND_TAG
+from src.swarm.turn_rules._turn_state import NOTICE_PARAGRAPH_TAG, NOTICE_TAG, PRESENCE_TAG, ROUND_TAG
 
 PARTS = ("round", "presence", "notice")
 TAGS = {"round": ROUND_TAG, "presence": PRESENCE_TAG, "notice": NOTICE_TAG}
@@ -38,13 +39,13 @@ SEPARATOR = "\n\n"                      # between two parts; no part holds a bla
 
 @dataclass(frozen=True)
 class Part:
-    """One part of a round's message: its metadata key (TAGS), its tag, its text, and what to record once the message
-    holds it (its info events and the store's marks)."""
+    """One part of a round's message: its metadata key (TAGS), its tag, its text, and what to record once the
+    conversation holds the message, given the message's id (its info events and the store's marks)."""
 
     key: str
     tag: dict
     text: str
-    record: Callable[[], None]
+    record: Callable[[str], None]
 
 
 def round_message(parts: list[Part | None]) -> tuple[ChatMessageUser, list[Part]] | None:
@@ -84,7 +85,10 @@ def message_notice(tags: Mapping | None) -> dict | None:
 
 def message_parts(text: str, tags: Mapping | None) -> dict[str, dict | None]:
     """A user message's parts: {"round": {tag, text}, "presence": {events, text}, "notice": {tag, text}}, None for a
-    part it lacks. A message made before 2026-11-22 holds one part, its whole text."""
+    part it lacks. A message made before 2026-11-22 holds one part, its whole text. A transcript step's text that
+    ends with the board notices the provider got as its last paragraphs (NOTICE_PARAGRAPH_TAG) is read without them."""
+    for added in reversed((tags or {}).get(NOTICE_PARAGRAPH_TAG) or []):
+        text = text[:-len(SEPARATOR + added)] if (text or "").endswith(SEPARATOR + added) else text
     present = [p for p in PARTS if (tags or {}).get(TAGS[p])]
     pieces = (text or "").split(SEPARATOR, len(present) - 1) if present else []
     pieces += [""] * (len(present) - len(pieces))

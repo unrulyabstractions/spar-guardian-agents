@@ -25,11 +25,12 @@ def test_defaults_and_properties():
     # The plan holds R rounds, a lone agent's one step each.
     assert (c.max_message_chars, c.message_limit, c.rounds) == (4000, None, 30)
     assert not c.board and c.names == ["a01"] and c.max_turns == 30
-    assert c.sample_message_limit == 30 * (3 * 10 + 2) + 20
+    assert c.sample_message_limit == 30 * (3 * 10 + 1) + 2 + 20
     c = SwarmConfig(n_agents=10, regulators=3, disregulators=2, rounds=5, calls_per_round=4)
     # On a board too the plan holds R rounds, influencers' as workers', one step per agent each.
     assert c.board and c.names[-1] == "a10" and (c.rounds, c.max_turns) == (5, 50)
-    assert c.sample_message_limit == 50 * (3 * 4 + 2) + 20 + 2 * 10 * 9
+    # one round's message a round, whatever the team's size; each agent's system and first message
+    assert c.sample_message_limit == 50 * (3 * 4 + 1) + 2 * 10 + 20
     assert c.judge == settings.JUDGE_MODEL
 
 

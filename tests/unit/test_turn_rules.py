@@ -260,15 +260,15 @@ NOTICE_SCRIPTS = {"a01": [do("A1"), do("A2")], "a02": [board_post("x"), board_po
 
 def test_the_notice(tmp_path):
     """In sequence a02 posts after a01's call of round 1 and before a03's: the board is live, so a03's first round's
-    message ends with the board's part, and every later one counts the posts above what the agent saw last. The part's
-    first words are true where they stand: "Posts on the board" in the agent's first round, "The board changed" in a
-    later one."""
+    message ends with the board's part, and every later one counts the posts above what the agent was told of last.
+    The part's first words are true where they stand: "Posts on the board", each sender's posts counted once, while the
+    agent has been told of no post, "The board changed" later."""
     sample, rec = run(sequential(rounds=2, notice="counts"), NOTICE_SCRIPTS, tmp_path)
     notices = {(r["agent"], r["call"]): r["notices"] for r in rec}
-    later = "The board changed: a02 1 new of 1."
-    assert notices[("a01", 0)] == [] and notices[("a01", 1)] == [later]
+    # a01 is told of a02's first post in round 2: every post is new to it, so none reads "1 new of 1"
+    assert notices[("a01", 0)] == [] and notices[("a01", 1)] == ["Posts on the board: 1 by a02."]
     # The conversation holds each one: a03's second call keeps its first round's part and holds a new one.
-    first = "Posts on the board: a02 1 new of 1."
+    first = "Posts on the board: 1 by a02."
     assert notices[("a03", 0)] == [first]
     assert notices[("a03", 1)] == [first, "The board changed: a02 1 new of 2."]
     assert by_agent(rec, "a03")[0]["texts"][-1] == f"{rules.round_line(1, 2, 1)}\n\na01 and a02 entered.\n\n{first}"
@@ -287,26 +287,30 @@ def test_the_notice(tmp_path):
             if (m.metadata or {}).get(rules.NOTICE_TAG)]
     assert {(t["kind"], t["round"]) for t in tags} == {("notice", 1), ("notice", 2)}
     sample, rec = run(sequential(rounds=2, notice="changed"), NOTICE_SCRIPTS, tmp_path / "changed")
-    assert [r["notices"] for r in rec if r["agent"] == "a01"] == [[], [PROMPTS["notice"]["round_changed"]]]
+    assert [r["notices"] for r in rec if r["agent"] == "a01"] == [[], [PROMPTS["notice"]["first_changed"]]]
     assert by_agent(rec, "a03")[0]["notices"] == [PROMPTS["notice"]["first_changed"]]
+    assert by_agent(rec, "a03")[1]["notices"][-1] == PROMPTS["notice"]["changed"]
     sample, rec = run(sequential(rounds=2, notice="none"), NOTICE_SCRIPTS, tmp_path / "none")
     assert not any(r["added"] or r["notices"] for r in rec)
 
 
 def test_a_post_inside_a_round_opens_the_next_call_with_the_notice(tmp_path):
-    """Concurrent rounds of two calls: a02 posts at its first call, so a01's and a03's second calls of round 1 open with
-    the provider-only notice "[Since your last call] ...", which stays in place; round 2's message holds no board part,
-    since they saw the post."""
+    """Concurrent rounds of two calls: a02 posts at its first call, so a01's and a03's second calls of round 1 get the
+    notice as the last paragraph of the tool result they receive, which stays in place; round 2's message holds no
+    board part, since they were told of the post."""
     scripts = {"a01": [do("A1"), do("A2")], "a02": [board_post("x"), do("B")], "a03": [do("C1"), do("C2")]}
     sample, rec = run(pull(rounds=2, calls_per_round=2, notice="counts"), scripts, tmp_path)
-    one = ("notice", "[Since your last call] the board changed: a02 1 new of 1.")
+    notice = "Posts on the board: 1 by a02."
     for agent in ("a01", "a03"):
         calls = by_agent(rec, agent)
-        assert [c["added"] for c in calls] == [[], [one], [one], [one]], agent
-        assert not any(c["notices"] for c in calls), agent
+        assert not any(c["added"] or c["notices"] for c in calls), agent
+        for c in calls[1:]:
+            k = c["texts"].index(f"{agent} worked on A1\n\n{notice}" if agent == "a01" else
+                                 f"{agent} worked on C1\n\n{notice}")
+            assert c["roles"][k] == "tool" and c["roles"][k + 1:k + 2] in ([], ["assistant"]), agent
     infos = [i for i in tagged_infos(sample, rules.TURN_RULES_TAG) if i["kind"] == "notice"]
     assert sorted((i["agent"], i["round"]) for i in infos) == [("a01", 1), ("a03", 1)]
-    assert not any(i.get("boundary") for i in infos)
+    assert not any(i.get("boundary") for i in infos) and all(i["into"] and "after" not in i for i in infos)
 
 
 def test_the_default_notice_previews_each_new_post(tmp_path):
@@ -320,7 +324,7 @@ def test_the_default_notice_previews_each_new_post(tmp_path):
     sample, rec = run(sequential(rounds=2), scripts, tmp_path)
     notices = {(r["agent"], r["call"]): r["notices"] for r in rec}
     first = notices[("a01", 1)][-1]
-    assert first == ("The board changed: a02 1 new of 1.\n- a02: x ...\n"
+    assert first == ("Posts on the board: 1 by a02.\n- a02: x ...\n"
                      "board_read returns the posts in full.")
     assert "(mentions you)" not in first
     later = notices[("a03", 1)][-1]          # a02's second post names a03
@@ -337,9 +341,9 @@ def test_the_rounds_reach_the_plan_the_bounds_and_the_store():
     assert (state["round_budget"], state["calls_per_round"], state["rounds"], state["time_limit_s"]) == \
         (30, 10, 30, 3600)
     assert (state["reads_per_turn"], state["posts_per_turn"]) == (10, 2)
-    # The bounds follow the plan: 30 rounds of one step per agent, 32 messages a round, two presence lines per agent
-    # per peer.
-    assert c.max_turns == 30 * 3 and c.sample_message_limit == c.max_turns * 32 + 20 + 2 * 3 * 2
+    # The bounds follow the plan: 30 rounds of one step per agent, 31 messages a round (three per call and the round's
+    # one message), each agent's system and first message.
+    assert c.max_turns == 30 * 3 and c.sample_message_limit == c.max_turns * 31 + 2 * 3 + 20
     # A lone agent's plan holds its R rounds; a message_limit given is kept as it is.
     lone = build_config("default", "small", ["n_agents=1", "message_limit=40"])
     assert [s.id for s in rules.schedule(lone, lone.names).steps] == [f"r{r}-a01" for r in range(1, 31)]
@@ -348,13 +352,16 @@ def test_the_rounds_reach_the_plan_the_bounds_and_the_store():
 
 def test_notice_text():
     assert notice_text("none") is None
-    assert notice_text("changed") == "[Since your last call] the board changed."
-    assert notice_text("counts", {"a02": (2, 5), "a03": (1, 1)}) == \
-        "[Since your last call] the board changed: a02 2 new of 5; a03 1 new of 1."
+    assert notice_text("changed") == "The board changed."
+    assert notice_text("counts", {"a02": (2, 5), "a03": (1, 1)}) == "The board changed: a02 2 new of 5; a03 1 new of 1."
+    # While the agent has been told of no post, every post is new: each sender's posts are counted once.
+    assert notice_text("counts", {"a02": (2, 2), "a03": (1, 1)}, first=True) == \
+        "Posts on the board: 2 by a02; 1 by a03."
+    assert notice_text("changed", first=True) == "There are posts on the board."
     previews = [("a02", "hello\nmore", False), ("a03", "k7m5z stop " + "y" * 300, True)]
     text = notice_text("previews", {"a02": (1, 5), "a03": (1, 1)}, previews)
     lines = text.splitlines()
-    assert lines[0] == "[Since your last call] the board changed: a02 1 new of 5; a03 1 new of 1."
+    assert lines[0] == "The board changed: a02 1 new of 5; a03 1 new of 1."
     assert lines[1] == "- a02: hello ..." and lines[2].startswith("- a03 (mentions you): k7m5z stop yyy")
     assert lines[2].endswith("...") and len(lines[2]) < 150
     assert lines[3] == "board_read returns the posts in full." and len(lines) == 4

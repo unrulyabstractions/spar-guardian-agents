@@ -29,7 +29,7 @@ from src.configuration.prompt_texts import joined, rounds_values
 from src.configuration.swarm_config import SwarmConfig
 from src.swarm.turn_rules._turn_messages import message_parts
 from src.swarm.turn_rules._turn_rounds import round_line, rounds_left
-from src.swarm.turn_rules._turn_state import END_ROUND
+from src.swarm.turn_rules._turn_state import END_ROUND, NOTICE_PARAGRAPH_TAG, TURN_RULES_TAG
 from tests.support.mock_model import call, calls, text
 
 ROUNDS, CALLS = 3, 3
@@ -98,24 +98,29 @@ def round_groups(transcript: dict) -> list[dict]:
     """The transcript cut at each round's message: for each round, its line, its tag, the presence parts heard between
     the previous round's last model call and this round's first (the round's message's, or in a run before 2026-11-22
     the separate presence lines on either side of the line), the board's notices of the round (its message's board part,
-    then the provider-only notices inside the round), and the round's agent steps. Any other user line fails."""
+    then the notices inside the round: the last paragraphs the provider got of a message, NOTICE_PARAGRAPH_TAG, or in an
+    older run a user line of its own), and the round's agent steps. Any other user line fails."""
     groups, pending = [], []
     for step in transcript["trajectory"]["steps"][2:]:
         parts = message_parts(step.get("message") or "", step.get("extra")) if step["source"] == "user" else {}
         if parts.get("round"):
             groups.append({"line": parts["round"]["text"], "tag": parts["round"]["tag"], "heard": None,
-                           "notices": [parts["notice"]["text"]] if parts.get("notice") else [], "steps": []})
+                           "notices": ([parts["notice"]["text"]] if parts.get("notice") else [])
+                           + list((step.get("extra") or {}).get(NOTICE_PARAGRAPH_TAG) or []), "steps": []})
             pending += [parts["presence"]["text"]] if parts.get("presence") else []
         elif parts.get("presence"):
             pending.append(parts["presence"]["text"])
         elif step["source"] == "user":
-            assert groups and step["message"].startswith(NOTICE), ("a user line of no round", step["message"])
+            own = step["message"].startswith(NOTICE) or (step.get("extra") or {}).get(TURN_RULES_TAG) == "notice"
+            assert groups and own, ("a user line of no round", step["message"])
             groups[-1]["notices"].append(step["message"])
         else:
             assert groups, ("an agent step before any round line", step)
             if not groups[-1]["steps"]:
                 groups[-1]["heard"], pending = pending, []
             groups[-1]["steps"].append(step)
+            for result in (step.get("observation") or {}).get("results") or []:
+                groups[-1]["notices"] += (result.get("extra") or {}).get(NOTICE_PARAGRAPH_TAG) or []
     assert not pending, ("presence lines after the last model call", pending)
     return groups
 

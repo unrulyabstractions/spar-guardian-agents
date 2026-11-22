@@ -336,21 +336,21 @@ presence:
   held: "The team's hand-in by {agent} is held. The run goes on."
 
 # What changed on the board since the agent last looked (notice=changed, counts or previews;
-# src/swarm/turn_rules/_turn_rules_filter.py notice_text): the last part of a round's message, opened by first_* in the
-# agent's first round and round_* in a later one, and inside a round a provider-only line at the start of a call when
-# the board changed since the agent's last call, opened by changed and counts. *counts joins one `count` per sender
-# with "; ". previews, the default, follows it with one `preview` per new post by others: up to PREVIEW_POSTS, chosen
-# with the posts that name the agent first and then the newest, printed in board order, each its first line cut to
-# PREVIEW_CHARS and `cut` where anything was left out, `mention` after the sender of a post that names the agent, then
-# `full`. Ours.
+# src/swarm/turn_rules/_turn_rules_filter.py notice_text): the last part of a round's message, and inside a round the
+# last paragraph of the tool result the agent receives next when the board changed since its last call. Opened by
+# first_* while the agent has been told of no post (every post is new, so each sender's `first_count`), else by
+# changed and counts (each sender's `count`). *counts joins one count per sender with "; ". previews, the default,
+# follows it with one `preview` per new post by others: up to PREVIEW_POSTS, chosen with the posts that name the agent
+# first and then the newest, printed in board order, each its first line cut to PREVIEW_CHARS and `cut` where anything
+# was left out, `mention` after the sender of a post that names the agent, then `full`. A round's message whose
+# presence part tells of the team's hand-in or its hold leaves out the system's post of it. Ours.
 notice:
-  changed: "[Since your last call] the board changed."
-  counts: "[Since your last call] the board changed: {counts}."
+  changed: "The board changed."
+  counts: "The board changed: {counts}."
   first_changed: "There are posts on the board."
   first_counts: "Posts on the board: {counts}."
-  round_changed: "The board changed."
-  round_counts: "The board changed: {counts}."
   count: "{sender} {new} new of {total}"
+  first_count: "{total} by {sender}"
   preview: "- {sender}{mention}: {line}"
   mention: " (mentions you)"
   cut: " ..."

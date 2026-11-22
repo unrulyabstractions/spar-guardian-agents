@@ -46,6 +46,9 @@ ALERT_TAG = "swarm_alert"             # info event of an alert
 PRESENCE_TAG = "swarm_presence"       # the presence part's metadata key, and the info events of entries and exits
 ROUND_TAG = "swarm_round"             # the round line's metadata key ("Round 3 of 30. ..."), and its info event
 NOTICE_TAG = "swarm_notice"           # the board part's metadata key in a round's message (_turn_messages)
+# A transcript step's or tool result's extra: the board notices the filter gave the provider as the message's last
+# paragraphs (src/export/atif_transcripts.py)
+NOTICE_PARAGRAPH_TAG = "swarm_notice_paragraph"
 END_ROUND = "wait"                    # ends the caller's round; never counts toward N (src/swarm/end_round.py)
 JOBS_STORE = "command_jobs"           # sample store: {job id: record} of the command jobs (src/sandbox/command_jobs.py)
 TMP_CALLS_STORE = "tmp_capture_calls"  # sample store: {snapshot seq: tool call id} (src/sandbox/live_tmp_capture.py)
@@ -115,7 +118,7 @@ class TurnState(StoreModel):
     history_marks: dict[str, list[list[int]]] = Field(default_factory=dict)  # [messages_after, round] per activation
     halted_after_round: int | None = None                   # the round after which the plan was cut
     notice_seen: dict[str, int] = Field(default_factory=dict)   # highest board sequence of others the agent was told of
-    added: dict[str, list[dict]] = Field(default_factory=dict)  # what the filter added: {after, kind, activation, text}
+    added: dict[str, list[dict]] = Field(default_factory=dict)  # every notice and prompt (_turn_rules_filter)
     ended: dict[str, str] = Field(default_factory=dict)     # stop_working submit alert rounds context delivered
     ended_round: dict[str, int] = Field(default_factory=dict)  # the round of a limit's ending (rounds, context)
     entry_rounds: dict[str, int] = Field(default_factory=dict)  # the first round of a plan step holding the agent
@@ -209,13 +212,15 @@ ROUND_END_TAG = "swarm_round_end"       # info event of a round-end callback tha
 @dataclass
 class Live:
     """What a sample keeps in memory only, set by rules_setup and shared by every member's task: each agent's round
-    under way (_turn_rounds.round_record) and its conversation at its last boundary (turn_activation.ends_round),
-    which the peer tools read while the agent's round runs. ORBIT's session registry holds an agent's state only as
-    of its last completed activation."""
+    under way (_turn_rounds.round_record), its conversation at its last boundary (turn_activation.ends_round),
+    which the peer tools read while the agent's round runs, and the records of each round's message ORBIT has not yet
+    committed (pending). ORBIT's session registry holds an agent's state only as of its last completed activation."""
 
     rounds: dict[str, dict] = field(default_factory=dict)
     messages: dict[str, list] = field(default_factory=dict)
     plan: list[dict] = field(default_factory=list)          # the written plan's steps, under submit_hold
+    # a round's message id -> what to record once the conversation holds it (_turn_rules_filter.settle)
+    pending: dict[str, list[Callable[[], None]]] = field(default_factory=dict)
 
 
 LIVE: ContextVar[Live | None] = ContextVar("swarm_live", default=None)

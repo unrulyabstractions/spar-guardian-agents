@@ -190,7 +190,8 @@ def open_round(agent: str, state: AgentState) -> Part | None:
     tag = {"round": round_number, "of": st.round_budget, "left": rounds_left(round_number, st.round_budget),
            "calls": st.calls_per_round}
     text = round_line(round_number, st.round_budget, st.calls_per_round)
-    return Part(ROUND_TAG, tag, text, lambda: transcript().info({ROUND_TAG: {"agent": agent, **tag, "content": text}}))
+    info = {ROUND_TAG: {"agent": agent, **tag, "content": text}}
+    return Part(ROUND_TAG, tag, text, lambda _message: transcript().info(info))
 
 
 # ------------------------------------------------------------------------------------------------ the gate on calls
