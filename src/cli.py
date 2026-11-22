@@ -22,6 +22,7 @@ call their modules.
     python -m src models [NAME]
     python -m src plots <run> [--out DIR]
     python -m src replay <run or study ...> --out DIR [--only-missing] [--serial] [--jobs N] [--pem] [--warm-image]
+    python -m src pipeline status | add <part> "<line>" | bump <part> "<line>" | re-lock <part> "<why>"
 
 A run is a run directory, or a run name of the study: runs/<study>/<name>/, or the group that holds it
 (run_directory.find_run). The config is built in this order: the preset, then the scale,
@@ -40,7 +41,10 @@ stored records instead, under a dollar cap, and writes only runs/<study>/<run>/j
 log. `budget` prints lone runs' turns and their median. `--model` takes an entry of
 src/models/model_registry.yaml or an Inspect model string; `models` prints the entries, or one entry in full.
 `--worker-model`, `--regulator-model` and `--disregulator-model` give a role its own model the same way; each sets the
-config's `<role>_model` after every `--set`, so the flag wins.
+config's `<role>_model` after every `--set`, so the flag wins. `pipeline` reads and locks the pipeline's registry,
+src/configuration/pipeline_parts.yaml (src/measures/pipeline_parts.py): `status` lists every part with its version and
+whether its code moved since its lock, `add` locks a new entry at version 1, `bump` gives a part a new version, and
+`re-lock` takes a part's new code at its version, for a change that moves no stored byte.
 """
 from __future__ import annotations
 
@@ -55,9 +59,11 @@ from src.configuration.presets import add_config_arguments, build_config, config
 from src.judging.verdict_files import PASSES
 from src.measures import board_engagement as engagement
 from src.measures import episode_summary as summary
+from src.measures import pipeline_parts
 from src.measures.run_directory import figures_dir, find_run
 from src.models import model_registry as models
 from src.ui import launch
+from src.utils import progress
 
 
 def env_timeout() -> int:
@@ -329,6 +335,53 @@ def add_tool_parsers(subparsers) -> None:
     table.set_defaults(func=cmd_models)
 
 
+def cmd_pipeline(args: argparse.Namespace) -> int:
+    registry = pipeline_parts.load(Path(args.registry))
+    if args.action != "status":
+        change = {"add": pipeline_parts.add, "bump": pipeline_parts.bump, "re-lock": pipeline_parts.re_lock}
+        part = change[args.action](registry, args.part, args.line)
+        pipeline_parts.save(registry)
+        progress.step(f"Pipeline {args.action} {args.part}")
+        progress.detail("version", part.version)
+        progress.detail("log", part.log[part.version])
+        progress.detail("fingerprint", part.fingerprint)
+        progress.done(f"{args.part} at v{part.version}", out=progress.short(registry.path))
+        return 0
+    progress.step("Pipeline parts")
+    progress.detail("registry", progress.short(registry.path))
+    states = {name: pipeline_parts.state(registry, name) for name in pipeline_parts.order(registry)}
+    for name, state in states.items():
+        part = registry.parts[name]
+        version = "-" if part.version is None else f"v{part.version}"
+        needs = f"needs {', '.join(part.needs)}" if part.needs else ""
+        progress.detail(f"{name:<18}{part.kind:<10}{version:<5}{state:<11}{needs}".rstrip())
+    found = pipeline_parts.problems(registry)
+    for problem in found:
+        progress.detail("problem", problem)
+    moved = sum(state != "locked" for state in states.values())
+    summary_line = (f"{progress.plural(len(states), 'part')}, {moved} not locked, "
+                    f"{progress.plural(len(found), 'problem')}")
+    if moved or found:
+        progress.failed(summary_line)
+        return 1
+    progress.done(summary_line)
+    return 0
+
+
+def add_pipeline_parser(subparsers) -> None:
+    pipeline = subparsers.add_parser("pipeline", help="the pipeline's registry: status, add, bump, re-lock")
+    actions = pipeline.add_subparsers(dest="action", required=True)
+    actions.add_parser("status", help="every part, its version, whether its code moved, and the guard's problems")
+    for action, what, line in (("add", "lock a new entry at version 1", "what the first version does"),
+                               ("bump", "a new version: its output changes", "what changed"),
+                               ("re-lock", "take the part's new code at its version", "why no stored byte changes")):
+        parser = actions.add_parser(action, help=what)
+        parser.add_argument("part")
+        parser.add_argument("line", help=line)
+    pipeline.add_argument("--registry", default=str(pipeline_parts.REGISTRY), help=argparse.SUPPRESS)
+    pipeline.set_defaults(func=cmd_pipeline)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m src", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -338,6 +391,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_measure_parsers(subparsers)
     add_tool_parsers(subparsers)
     add_replay_parser(subparsers)
+    add_pipeline_parser(subparsers)
     return parser
 
 

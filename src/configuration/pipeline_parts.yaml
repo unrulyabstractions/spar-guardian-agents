@@ -1,0 +1,58 @@
+# The pipeline's parts: every part a run's stored files come from, its version and the code it is made by.
+# Read and written only by src/measures/pipeline_parts.py; tests/unit/test_pipeline_parts.py is the guard.
+#
+# To add a part: write its module, write its entry below with file, make, needs, files and pins, run
+# `python -m src pipeline add <part> "<what the first version does>"`, and describe its file and fields in
+# scripts/study_readme_fields.yaml.
+# When a part's code changes its output: `python -m src pipeline bump <part> "<what changed>"`.
+# When it changes no stored byte: `python -m src pipeline re-lock <part> "<why no output changes>"`.
+# `python -m src pipeline status` lists every part and whether its code moved since it was locked.
+#
+# files: the code a part's fingerprint covers. Two parts may list the same file.
+# make: null marks a recorded part, stamped when it happens and never run by processing.
+parts:
+  export:
+    file: [processed/run.json, processed/episodes.jsonl, processed/access_log.jsonl, processed/network.jsonl,
+      processed/trajectories/, processed/communication/, processed/defense/, processed/swe/]
+    make: null
+    needs: []
+    files: [src/export/*.py]
+    pins: []
+    version: 1
+    fingerprint: sha256:2a7e573295905bfab2038c27d4d48f3644598ae1fb7eb926c2874ae6e96d6ad2
+    log:
+      1: '2026-11-22 first version: the eval log turned into run files by src/export of c619e3d'
+  replay:
+    file: [processed/replay/steps.jsonl, processed/replay/replay.json, processed/tmp_snapshots.json]
+    make: null
+    needs: [export]
+    files: [src/replay/*.py, src/domains/*/*_replay.py, scripts/replay_study.py]
+    pins: []
+    version: 1
+    fingerprint: sha256:832d03fb0fe2cbd6e22c5d20277bd7935d599e52563744d83dddc361c17ff02f
+    log:
+      1: '2026-11-22 first version: the faithful replay''s steps.jsonl and replay.json, and its tmp_snapshots.json
+        of c619e3d'
+  judge_cheatbench:
+    file: analysis/judges/cheatbench.*.jsonl
+    make: null
+    needs: [export]
+    files: [src/judging/cheatbench_judge.py, src/judging/judge_pass.py, src/judging/verdict_files.py,
+      src/judging/judge_models.yaml]
+    pins: ['submodule:cheatbench']
+    version: 1
+    fingerprint: sha256:2f3c1e32a9ef0ab91c906ca3dfe9d2a829e4cf9635a6b1c176c679427a49491c
+    log:
+      1: '2026-11-22 first version: CheatBench''s verdicts per episode, the eval''s scorer and judge-pass
+        of c619e3d'
+  judge_scores:
+    file: analysis/judges/labels.*.jsonl
+    make: null
+    needs: [export]
+    files: [src/judging/labels_judge.py, src/judging/judge_records.py, src/judging/labels_prompt.md, src/judging/labels_disclosure.md,
+      src/judging/labels_manipulation.md]
+    pins: []
+    version: 1
+    fingerprint: sha256:8fb9d2cd7f7d18b33718e4de58b16a4b88d3ba4aeb5f7c2fbdfbcc926138a610
+    log:
+      1: '2026-11-22 first version: the labels pass, disclosure and manipulation per agent of c619e3d'

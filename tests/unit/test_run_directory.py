@@ -14,8 +14,8 @@ from src.measures.run_directory import (
     checkout_of,
     figures_dir,
     find_run,
+    log_dir,
     log_link,
-    mirrored_in_logs,
     run_name,
     run_place,
     set_aside_attempt,
@@ -66,9 +66,9 @@ def test_a_run_knows_its_study_and_its_group(tmp_path):
 
 def test_the_log_folder_mirrors_the_run_folder(tmp_path):
     runs, logs = tmp_path / "runs" / "study_x", tmp_path / "logs" / "study_x"
-    assert mirrored_in_logs(runs / "mock" / "a1") == logs / "mock" / "a1"
-    assert mirrored_in_logs(runs / "a1") == logs / "a1"
-    assert mirrored_in_logs(tmp_path / "study_x" / "a1") is None
+    assert log_dir(runs / "mock" / "a1") == logs / "mock" / "a1"
+    assert log_dir(runs / "a1") == logs / "a1"
+    assert log_dir(tmp_path / "study_x" / "a1") is None
 
 
 def test_a_run_in_a_group_finds_its_log_at_the_mirrored_path(tmp_path, elsewhere):
