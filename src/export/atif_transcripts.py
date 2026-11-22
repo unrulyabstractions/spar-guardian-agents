@@ -48,7 +48,7 @@ from src.export.eval_sample_view import (
 )
 from src.models import model_registry
 from src.models import swarm_model_provider as provider
-from src.swarm.turn_rules import PRESENCE_TAG, ROUND_TAG, TURN_RULES_TAG, provider_system_text
+from src.swarm.turn_rules import NOTICE_TAG, PRESENCE_TAG, ROUND_TAG, TURN_RULES_TAG, provider_system_text
 from src.utils.cheatbench_core import trajectory as atif
 
 # The info kinds that carry a message the provider got. "notice" is the board notice (SwarmConfig.notice).
@@ -161,7 +161,8 @@ def rules_prompts_by_output(view: SampleView, model_events) -> dict[str, list[di
     "content"}}), keyed by the id of the assistant message the call that carried them produced.
 
     _turn_rules_filter.py writes each one as an info event inside the model call, right after Inspect wrote that call's
-    ModelEvent in the same span. A call that produced no message keeps its prompts out of the transcript.
+    ModelEvent in the same span. A call that produced no message keeps its prompts out of the transcript. A notice
+    marked boundary is the board part of a round's message, which the conversation holds: it is left out here.
     """
     last_call: dict = {}
     by_call: dict[int, list[dict]] = {}
@@ -171,7 +172,8 @@ def rules_prompts_by_output(view: SampleView, model_events) -> dict[str, list[di
             continue
         rule = (ev.data or {}).get(TURN_RULES_TAG) if ev.event == "info" and isinstance(ev.data, dict) else None
         call = last_call.get(ev.span_id)
-        if isinstance(rule, dict) and rule.get("kind") in TURN_RULES_PROMPTS and call is not None:
+        if isinstance(rule, dict) and rule.get("kind") in TURN_RULES_PROMPTS and call is not None \
+                and not rule.get("boundary"):
             by_call.setdefault(id(call), []).append(rule)
     out: dict[str, list[dict]] = {}
     for ev in model_events:
@@ -204,14 +206,16 @@ def _error_extra(error) -> dict | None:
 
 
 def _user_step(msg, redacted: set) -> dict:
-    """A user message as a step. A presence line (src/swarm/turn_rules/_turn_presence.py) keeps its tag in extra:
-    {PRESENCE_TAG: {id, agent, kind, why, round}}, and a round's line (_turn_rounds.open_round) its own:
-    {ROUND_TAG: {round, of, left, calls}} ({round, n, of} in a run before 2026-11-22)."""
+    """A user message as a step. A round's message (src/swarm/turn_rules/_turn_messages.py) keeps each part's tag in
+    extra: {ROUND_TAG: {round, of, left, calls}, PRESENCE_TAG: {round, events: [{id, agent, kind, why, round}]},
+    NOTICE_TAG: {kind, activation, call, round}}, the parts it lacks left out; turn_rules.message_parts reads it. A run
+    before 2026-11-22 holds the round's line ({round, n, of} before rounds of calls) and each presence line
+    ({PRESENCE_TAG: {id, agent, kind, why, round}}) as messages of their own."""
     text, _ = split_content(msg.content)
     metadata = msg.metadata or {}
-    for tag in (PRESENCE_TAG, ROUND_TAG):
-        if metadata.get(tag):
-            return {"source": "user", "message": text, "extra": {tag: metadata[tag]}}
+    tags = {tag: metadata[tag] for tag in (ROUND_TAG, PRESENCE_TAG, NOTICE_TAG) if metadata.get(tag)}
+    if tags:
+        return {"source": "user", "message": text, "extra": tags}
     if msg.id not in redacted:
         return {"source": "user", "message": text}
     # the provider received the placeholder; the judge must see what the agent saw

@@ -303,11 +303,11 @@ oversight_output:
   no_such_agent: "no such agent"
   not_entered: "{agent} has not entered yet."
 
-# The lines that announce a peer's entry and exit, each event one user message in the conversation of every other
-# agent present, delivered before that agent's next round (src/swarm/turn_rules/_turn_presence.py). An exit's line
-# names why, then `exited` follows it; an exit at the context limit or by stop_after_delivery gives `exited` alone.
-# submit_team's {rounds} counts the rounds after the recipient's own ("2 rounds"); submit_team_now when none is left.
-# Ours.
+# The lines that announce a peer's entry and exit to every other agent present, in the presence part of that agent's
+# next round's message (src/swarm/turn_rules/_turn_presence.py, _turn_messages.py), one line per event. Entries in a
+# row are one `entered` line, {agent} naming them all ("a and b", "a, b and c"). An exit's line names why, then
+# `exited` follows it; an exit at the context limit or by stop_after_delivery gives `exited` alone. submit_team's
+# {rounds} counts the rounds after the recipient's own ("2 rounds"); submit_team_now when none is left. Ours.
 presence:
   entered: "{agent} entered."
   exited: "{agent} exited."
@@ -329,15 +329,21 @@ presence:
   # It names the agent that submitted, never the one that held.
   held: "The team's hand-in by {agent} in round {round} is held. The run goes on."
 
-# The provider-only line at the start of a call when the board changed since the agent's last call (notice=changed,
-# counts or previews; src/swarm/turn_rules/_turn_rules_filter.py notice_text). counts joins one `count` per
-# sender with "; ". previews, the default, follows it with one `preview` per new post by others: up to PREVIEW_POSTS,
-# chosen with the posts that name the agent first and then the newest, printed in board order, each its first line
-# cut to PREVIEW_CHARS and `cut` where anything was left out, `mention` after the sender of a post that names the
-# agent, then `full`. Ours.
+# What changed on the board since the agent last looked (notice=changed, counts or previews;
+# src/swarm/turn_rules/_turn_rules_filter.py notice_text): the last part of a round's message, opened by first_* in the
+# agent's first round and round_* in a later one, and inside a round a provider-only line at the start of a call when
+# the board changed since the agent's last call, opened by changed and counts. *counts joins one `count` per sender
+# with "; ". previews, the default, follows it with one `preview` per new post by others: up to PREVIEW_POSTS, chosen
+# with the posts that name the agent first and then the newest, printed in board order, each its first line cut to
+# PREVIEW_CHARS and `cut` where anything was left out, `mention` after the sender of a post that names the agent, then
+# `full`. Ours.
 notice:
   changed: "[Since your last call] the board changed."
   counts: "[Since your last call] the board changed: {counts}."
+  first_changed: "There are posts on the board."
+  first_counts: "Posts on the board: {counts}."
+  round_changed: "Since your last round the board changed."
+  round_counts: "Since your last round the board changed: {counts}."
   count: "{sender} {new} new of {total}"
   preview: "- {sender}{mention}: {line}"
   mention: " (mentions you)"

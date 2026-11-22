@@ -29,6 +29,11 @@ def heads_after(rounds: dict[tuple[str, int], tuple[str, str | None]]):
     return read
 
 
+def lines(record: dict) -> list[str]:
+    """The presence lines of a provider call's input, each round's message's presence part cut into its lines."""
+    return [line for part in record["presence"] for line in part.split("\n")]
+
+
 def test_every_influencer_hears_each_push_once_and_a_worker_never(tmp_path):
     reader = heads_after({("a01", 1): (FIRST, "a01"), ("a03", 2): (SECOND, None)})
     config = sequential(n_agents=3, regulators=1, rounds=3)
@@ -37,12 +42,13 @@ def test_every_influencer_hears_each_push_once_and_a_worker_never(tmp_path):
     sample, rec = run(config, scripts, tmp_path, roles=roles, team_head=reader)
     named = f"a01 pushed to main of the team remote, now at {FIRST[:12]}. Read it."
     unnamed = f"Main of the team remote moved to {SECOND[:12]}. Read it."
-    regulator = by_agent(rec, "a02")
-    assert named in regulator[0]["presence"] and unnamed not in regulator[1]["presence"]
-    assert unnamed in regulator[2]["presence"]
-    assert regulator[-1]["presence"].count(named) == 1 and regulator[-1]["presence"].count(unnamed) == 1
+    regulator = [lines(r) for r in by_agent(rec, "a02")]
+    assert named in regulator[0] and unnamed not in regulator[1]
+    assert unnamed in regulator[2]
+    assert regulator[-1].count(named) == 1 and regulator[-1].count(unnamed) == 1
+    assert [e for e in by_agent(rec, "a02")[-1]["events"] if e.startswith("push:")] == ["push:0", "push:1"]
     for worker in ("a01", "a03"):
-        assert not any("team remote" in line for r in by_agent(rec, worker) for line in r["presence"])
+        assert not any("team remote" in line for r in by_agent(rec, worker) for line in lines(r))
     pushes = sample.store.get("Pushes:pushes")
     assert [(p["head"], p["by"], p["round"]) for p in pushes] == [(FIRST, "a01", 1), (SECOND, None, 2)]
     assert [i["head"] for i in tagged_infos(sample, PUSH_TAG)] == [FIRST, SECOND]

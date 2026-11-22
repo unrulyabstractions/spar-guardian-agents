@@ -6,6 +6,7 @@ script entry is one model call; the last repeats.
     sample, recorded = run(pull(rounds=2), {"a01": [do("A")], "a02": [stop()], "a03": [do("C")]}, tmp_path)
     store(sample, "ended")                                  # {"a02": "stop_working"}
     by_agent(recorded, "a01")[0]["tools"]                   # what the provider was offered
+    by_agent(recorded, "a01")[0]["presence"]                # the presence part of each round's message it holds
 """
 from __future__ import annotations
 
@@ -139,7 +140,9 @@ def scripted_model(scripts: dict[str, list[ModelOutput]], recorder: list[dict]):
             "texts": [m.text for m in messages if m.role != "system"],
             "added": [((m.metadata or {})[rules.TURN_RULES_TAG]["kind"], m.text) for m in messages
                       if (m.metadata or {}).get(rules.TURN_RULES_TAG)],
-            "presence": [m.text for m in messages if (m.metadata or {}).get(rules.PRESENCE_TAG)],
+            "presence": parts_of(messages, "presence"),
+            "events": [e["id"] for m in messages for e in rules.presence_events(m.metadata)],
+            "notices": parts_of(messages, "notice"),
             "batch": config.batch,
         })
         script = scripts[agent]
@@ -152,6 +155,13 @@ def scripted_model(scripts: dict[str, list[ModelOutput]], recorder: list[dict]):
 
     model.api.count_text_tokens = count_text_tokens
     return model
+
+
+def parts_of(messages, part: str) -> list[str]:
+    """The text of one part (round, presence or notice) of every round's message in the input, in order
+    (turn_rules.message_parts)."""
+    found = (rules.message_parts(m.text, m.metadata)[part] for m in messages if m.role == "user")
+    return [p["text"] for p in found if p is not None]
 
 
 def renewed(output: ModelOutput, k: int) -> ModelOutput:

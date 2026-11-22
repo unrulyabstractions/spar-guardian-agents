@@ -145,3 +145,16 @@ def test_a_hover_shows_at_most_twelve_words_of_a_reason_and_an_exit_in_a_word_or
     for why in tp.EXIT_WHY:     # every exit's reason has its word
         assert re.search(rf"\b{why}: '", source), why
     assert not re.search(r"#[0-9a-fA-F]{3,6}\b|rgb\(", source + (STATIC / "tv_presence.css").read_text())
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node runs the page's own functions")
+def test_a_user_steps_presence_events_in_both_shapes():
+    """A round's message holds {round, events}; a presence line before 2026-11-22 was one event."""
+    event = {"id": "entered:a01", "agent": "a01", "kind": "entered", "why": None, "round": 1}
+    script = "\n".join([js_function("presenceEvents"), "console.log(JSON.stringify([" + ", ".join(
+        f"presenceEvents({json.dumps(extra)})" for extra in (
+            {"swarm_presence": {"round": 2, "events": [event, {**event, "id": "exited:a02", "agent": "a02"}]}},
+            {"swarm_presence": event}, {"swarm_round": {"round": 1}}, None)) + "]));"])
+    done = subprocess.run(["node", "-e", script], capture_output=True, text=True, timeout=60)
+    assert done.returncode == 0, done.stderr
+    assert json.loads(done.stdout) == [[event, {**event, "id": "exited:a02", "agent": "a02"}], [event], [], []]

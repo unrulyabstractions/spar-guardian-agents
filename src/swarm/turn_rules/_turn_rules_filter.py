@@ -1,21 +1,24 @@
 """The model filter of the turn rules and the passive defense that carries it.
 
 TurnRulesFilter changes what the provider receives and never the durable conversation. It removes react()'s assistant
-paragraph from the system message (provider_system_text), withholds ORBIT's channel tools, opens a call with the board
-notice when the board changed (by default the counts and each new post's first line, notice_text), and appends the
-continue prompt when the input would end with a model turn. Everything it adds stays in place on every later call
-(TurnState.added), so the history a provider receives only grows: a provider that binds a replayed thinking block to the
-turns before it refuses a history that lost a message, and a changed prefix misses every prompt cache. The defense that
-carries it also shows team_submit to the model as submit (shown_as_submit), gates and times every tool call of a round
-(_turn_rounds.counted), and is the one part of the turn rules that writes the durable conversation: before each round it
-appends the round's line and the presence lines due to the activated member (apply_pre_turn: _turn_rounds.open_round,
-_turn_presence.deliver). turn_rules_defense builds the DefenseConfig that installs all of it on every agent.
+paragraph from the system message (provider_system_text), withholds ORBIT's channel tools, opens a call inside a round
+with the board notice when the board changed since the agent's last call (by default the counts and each new post's
+first line, notice_text), and appends the continue prompt when the input would end with a model turn. Everything it adds
+stays in place on every later call (TurnState.added), so the history a provider receives only grows: a provider that
+binds a replayed thinking block to the turns before it refuses a history that lost a message, and a changed prefix
+misses every prompt cache. The defense that carries it also shows team_submit to the model as submit (shown_as_submit),
+gates and times every tool call of a round (_turn_rounds.counted), and is the one part of the turn rules that writes the
+durable conversation: before each round it appends one user message to the activated member's conversation, the round's
+message (apply_pre_turn, _turn_messages): the round's line (_turn_rounds.open_round), the presence lines due to it
+(_turn_presence.presence_part) and the board's changes since it last looked (boundary_notice), each its own paragraph.
+turn_rules_defense builds the DefenseConfig that installs all of it on every agent.
 
 Inspect writes the ModelEvent before ORBIT's model filters run (FilteredModelAPI sits under Inspect's
 Model.generate), so ModelEvent.input keeps the paragraph and lacks what the filter adds, and ModelEvent.tools
 still lists the channel tools. The filter therefore writes info events tagged TURN_RULES_TAG: "system_prompt" at an
 agent's first call, when its system message lost the paragraph; "withheld_tools" naming the tools the provider did
-not receive; and "notice" and "continue" carrying each added message, which the transcript builder reads.
+not receive; and "notice" and "continue" carrying each added message, which the transcript builder reads. The board
+part of a round's message writes its "notice" info event too, marked boundary: the conversation holds that one.
 
     experiment["defenses"] = [turn_rules_defense(config).model_dump(mode="json")]
 """
@@ -36,12 +39,14 @@ from orbit.defenses.registry import register_defense
 
 from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import SwarmConfig
-from src.swarm.turn_rules._turn_presence import deliver
+from src.swarm.turn_rules._turn_messages import Part, round_message
+from src.swarm.turn_rules._turn_presence import presence_part
 from src.swarm.turn_rules._turn_pushes import look
 from src.swarm.turn_rules._turn_rounds import counted, open_round
 from src.swarm.turn_rules._turn_state import (
     BOARD_ID,
     CHANNEL_TOOLS,
+    NOTICE_TAG,
     SUBMIT,
     TEAM_SUBMIT,
     TURN_RULES_TAG,
@@ -115,25 +120,74 @@ def mentions(text: str, agent: str) -> bool:
     return re.search(rf"(?<![\w-]){re.escape(agent)}(?![\w-])", text) is not None
 
 
+NOTICE_OPENINGS = {"call": ("changed", "counts"), "first": ("first_changed", "first_counts"),
+                   "round": ("round_changed", "round_counts")}
+"""The board notice's first words (prompts.yaml notice) by where it stands: "call" after a tool call inside a round,
+"first" in the agent's first round's message, "round" in a later round's message."""
+
+
 def notice_text(kind: str, counts: dict[str, tuple[int, int]] | None = None,
-                previews: list[tuple[str, str, bool]] | None = None) -> str | None:
-    """The board notice (prompts.yaml notice) for notice=kind, or None for "none".
+                previews: list[tuple[str, str, bool]] | None = None, opening: str = "call") -> str | None:
+    """The board notice (prompts.yaml notice) for notice=kind, or None for "none". opening picks its first words
+    (NOTICE_OPENINGS): "[Since your last call] the board changed" inside a round, "Posts on the board" in the agent's
+    first round's message, "Since your last round the board changed" in a later one.
 
     counts maps each sender with new posts to (new, total), in the order to print. previews, for kind "previews",
     lists the posts to preview as (sender, text, whether it names the agent), in the order to print."""
     if kind == "none":
         return None
     notice = load_prompts()["notice"]
+    changed, with_counts = NOTICE_OPENINGS[opening]
     if kind == "changed":
-        return notice["changed"]
+        return notice[changed]
     lines = "; ".join(notice["count"].format(sender=sender, new=new, total=total)
                       for sender, (new, total) in (counts or {}).items())
-    head = notice["counts"].format(counts=lines)
+    head = notice[with_counts].format(counts=lines)
     if kind == "counts":
         return head
     shown = [notice["preview"].format(sender=sender, mention=notice["mention"] if named else "",
                                       line=preview_line(text)) for sender, text, named in previews or []]
     return "\n".join([head, *shown, notice["full"]])
+
+
+def board_news(config: SwarmConfig, st: TurnState, agent: str, team: bool, opening: str) -> tuple[str, int] | None:
+    """The board notice (notice_text, opened by `opening`) when the board holds posts by others above the sequence the
+    agent last saw (TurnState.notice_seen), and that post's sequence, which the caller marks seen once the agent holds
+    the notice. None for notice=none, off a board, or with nothing new.
+
+    counts gives each such sender's new posts (above that sequence) and total posts; previews, for notice=previews, up
+    to PREVIEW_POSTS of those posts, chosen with the ones that name the agent first and then the newest, and printed in
+    board order. The board is read through ORBIT's read_messages, live: a post made earlier in the round counts."""
+    if config.notice == "none" or not team:
+        return None
+    try:
+        posts = [m for m in read_messages(BOARD_ID, agent_id=agent) if m.sender != agent]
+    except (PermissionError, RuntimeError, ValueError):
+        return None
+    seen = st.notice_seen.get(agent, 0)
+    top = max((m.sequence for m in posts), default=0)
+    if top <= seen:
+        return None
+    counts: dict[str, tuple[int, int]] = {}
+    for sender in sorted({m.sender for m in posts if m.sequence > seen}):
+        mine = [m for m in posts if m.sender == sender]
+        counts[sender] = (sum(1 for m in mine if m.sequence > seen), len(mine))
+    fresh = [m for m in posts if m.sequence > seen]
+    named = {m.sequence: mentions(str(m.content), agent) for m in fresh}
+    chosen = sorted(fresh, key=lambda m: (not named[m.sequence], -m.sequence))[:PREVIEW_POSTS]
+    previews = [(m.sender, str(m.content), named[m.sequence]) for m in sorted(chosen, key=lambda m: m.sequence)]
+    text = notice_text(config.notice, counts, previews, opening)
+    return (text, top) if text else None
+
+
+def on_team(st: TurnState, config: SwarmConfig) -> bool:
+    """Whether the agents share a board: more than one agent, or the config's board before the store names any."""
+    return len(st.agents) > 1 if st.agents else config.board
+
+
+def mark_seen(agent: str, top: int) -> None:
+    st = store_as(TurnState)
+    st.notice_seen = {**st.notice_seen, agent: max(top, st.notice_seen.get(agent, 0))}
 
 
 class TurnRulesFilter(ModelFilter):
@@ -152,8 +206,7 @@ class TurnRulesFilter(ModelFilter):
         st = store_as(TurnState)
         n = st.model_calls.get(agent, 0)
         st.model_calls = bump(st.model_calls, agent)
-        team = len(st.agents) > 1 if st.agents else self.config.board
-        return st, n, team
+        return st, n, on_team(st, self.config)
 
     def _continue(self, messages: list) -> tuple[str, str] | None:
         """The continue prompt when the input would end with a model turn, which Gemini rejects."""
@@ -163,33 +216,15 @@ class TurnRulesFilter(ModelFilter):
         return None
 
     def _notice(self, st: TurnState, agent: str, team: bool) -> tuple[str, str] | None:
-        """The board notice when the board holds posts by others above the sequence the agent saw at its last call.
-
-        counts gives each such sender's new posts (above that sequence) and total posts; previews, for
-        notice=previews, up to PREVIEW_POSTS of those posts, chosen with the ones that name the agent first and then the
-        newest, and printed in board order. The board is read
-        through ORBIT's read_messages, live: a post made earlier in the round counts."""
-        if self.config.notice == "none" or not team:
+        """The board notice after a tool call inside a round (board_news, "[Since your last call] ..."), marked seen.
+        At a round's start the round's message holds it (TurnRulesDefense.boundary_notice), so the round's first call
+        finds nothing new unless a post came in between."""
+        news = board_news(self.config, st, agent, team, "call")
+        if news is None:
             return None
-        try:
-            posts = [m for m in read_messages(BOARD_ID, agent_id=agent) if m.sender != agent]
-        except (PermissionError, RuntimeError, ValueError):
-            return None
-        seen = st.notice_seen.get(agent, 0)
-        top = max((m.sequence for m in posts), default=0)
-        if top <= seen:
-            return None
-        st.notice_seen = {**st.notice_seen, agent: top}
-        counts: dict[str, tuple[int, int]] = {}
-        for sender in sorted({m.sender for m in posts if m.sequence > seen}):
-            mine = [m for m in posts if m.sender == sender]
-            counts[sender] = (sum(1 for m in mine if m.sequence > seen), len(mine))
-        fresh = [m for m in posts if m.sequence > seen]
-        named = {m.sequence: mentions(str(m.content), agent) for m in fresh}
-        chosen = sorted(fresh, key=lambda m: (not named[m.sequence], -m.sequence))[:PREVIEW_POSTS]
-        previews = [(m.sender, str(m.content), named[m.sequence]) for m in sorted(chosen, key=lambda m: m.sequence)]
-        text = notice_text(self.config.notice, counts, previews)
-        return ("notice", text) if text else None
+        text, top = news
+        mark_seen(agent, top)
+        return "notice", text
 
     def _restored(self, st: TurnState, agent: str, messages: list) -> list:
         """The input with everything the filter added on earlier calls back after the message it followed."""
@@ -242,8 +277,8 @@ class TurnRulesFilter(ModelFilter):
 
 
 class TurnRulesDefense(DefenseBase):
-    """Passive defense that carries TurnRulesFilter and delivers the presence lines. It allows every message and tool
-    call."""
+    """Passive defense that carries TurnRulesFilter and appends each round's message. It allows every message and
+    tool call."""
 
     def __init__(self, config: DefenseConfig) -> None:
         super().__init__(config)
@@ -266,18 +301,50 @@ class TurnRulesDefense(DefenseBase):
         return None
 
     async def apply_pre_turn(self, state, turn, agent_states=None) -> None:
-        """The round's line, then a read of the team's head (_turn_pushes.look), then the presence lines due to the
-        activated member, appended to its editable state (_turn_rounds.open_round, _turn_presence.deliver). ORBIT's
-        swarm executor calls this once per activation, at the member's defense boundary before the round's first model
-        call, with that member alone, and commits the edit into its conversation. A call with any other number of states
-        (another executor) changes nothing."""
+        """The round's message (_turn_messages): the round's line (_turn_rounds.open_round), then, after a read of the
+        team's head (_turn_pushes.look), the presence lines due to the activated member (_turn_presence.presence_part)
+        and what changed on the board since it last looked (boundary_notice), as one user message appended to its
+        editable state. Each part's info events are written once the message holds it. ORBIT's swarm executor calls
+        this once per activation, at the member's defense boundary before the round's first model call, with that
+        member alone, and commits the edit into its conversation. A call with any other number of states (another
+        executor) changes nothing."""
         if agent_states is None or len(agent_states) != 1:
             return None
         [(name, conversation)] = agent_states.items()
-        open_round(name, conversation)
+        line = open_round(name, conversation)
         await look()
-        deliver(name, conversation)
+        made = round_message([line, presence_part(name, conversation), self.boundary_notice(name)])
+        if made is None:
+            return None
+        message, parts = made
+        conversation.messages.append(message)
+        for part in parts:
+            part.record()
         return None
+
+    def boundary_notice(self, agent: str) -> Part | None:
+        """The round's message's board part: the notice of the posts by others since the agent last looked
+        (board_news), opened "Posts on the board: ..." in the agent's first round and "Since your last round the board
+        changed: ..." in a later one, tagged NOTICE_TAG {kind, activation, call, round}. Its record marks the posts
+        seen and writes the "notice" info event (TURN_RULES_TAG, with boundary true: the conversation holds it, so no
+        reader places it as a provider-only message). None outside a planned step and with nothing new."""
+        round_number = current_round()
+        if round_number is None:
+            return None
+        st = store_as(TurnState)
+        later = st.activations.get(agent, 0) > 0
+        news = board_news(self.rules, st, agent, on_team(st, self.rules), "round" if later else "first")
+        if news is None:
+            return None
+        text, top = news
+        tag = {"kind": "notice", "activation": st.activations.get(agent, 0) + 1,
+               "call": st.model_calls.get(agent, 0) + 1, "round": round_number}
+
+        def record() -> None:
+            mark_seen(agent, top)
+            transcript().info({TURN_RULES_TAG: {**tag, "agent": agent, "content": text, "boundary": True}})
+
+        return Part(NOTICE_TAG, tag, text, record)
 
     async def monitor_message(self, message, agent_name, turn) -> DefenseVerdict:
         return DefenseVerdict(allow=True, reason="passive_turn_rules")

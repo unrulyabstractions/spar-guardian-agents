@@ -125,11 +125,11 @@ def test_a_run_with_a_head_start(tmp_path):
     assert [e["round"] for e in store(sample, "timeline") if e["agent"] == "a02"] == [1, 2, 3, 4]
     assert [e["round"] for e in store(sample, "timeline") if e["agent"] == "a01"] == [3, 4]
     assert store(sample, "rounds_used") == {"a01": 2, "a02": 4, "a03": 2}
-    assert by_agent(rec, "a01")[0]["texts"][:4] == [TASK, rules.round_line(3, 4, 1), "a02 entered.", "a03 entered."]
+    assert by_agent(rec, "a01")[0]["texts"][:2] == [TASK, f"{rules.round_line(3, 4, 1)}\n\na02 and a03 entered."]
     assert rules.round_line(3, 4, 1).startswith("Round 3 of 4. You have 2 rounds left,")
     regulator = by_agent(rec, "a02")
     # rounds 1 and 2 hold no presence line; in round 4 a01, before it in the round, is out of the plan's steps
-    entries = ["a01 entered.", "a03 entered."]
+    entries = ["a01 and a03 entered."]
     assert [r["presence"] for r in regulator] == [[], [], entries, [*entries, "a01 ran out of rounds.\na01 exited."]]
     assert outcomes(sample, "get_peer_actions") == [("get_peer_actions", "", "a01 has not entered yet.")]
 

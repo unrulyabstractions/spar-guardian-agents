@@ -25,10 +25,11 @@ import json
 from inspect_ai.model import ModelOutput
 
 from src.configuration import settings
-from src.configuration.prompt_texts import rounds_values
+from src.configuration.prompt_texts import joined, rounds_values
 from src.configuration.swarm_config import SwarmConfig
+from src.swarm.turn_rules._turn_messages import message_parts
 from src.swarm.turn_rules._turn_rounds import round_line, rounds_left
-from src.swarm.turn_rules._turn_state import END_ROUND, PRESENCE_TAG, ROUND_TAG
+from src.swarm.turn_rules._turn_state import END_ROUND
 from tests.support.mock_model import call, calls, text
 
 ROUNDS, CALLS = 3, 3
@@ -94,17 +95,19 @@ def rounds_script(workers: list[str], regulator: str, shell: str = "shell") -> t
 # ------------------------------------------------------------------------------------------------ reading it back
 
 def round_groups(transcript: dict) -> list[dict]:
-    """The transcript cut at each round's line: for each round, the line, its tag, the presence lines heard between
-    the previous round's last model call and this round's first (on either side of the line), the board's notices
-    inside the round, and the round's agent steps. Any other user line fails."""
+    """The transcript cut at each round's message: for each round, its line, its tag, the presence parts heard between
+    the previous round's last model call and this round's first (the round's message's, or in a run before 2026-11-22
+    the separate presence lines on either side of the line), the board's notices of the round (its message's board part,
+    then the provider-only notices inside the round), and the round's agent steps. Any other user line fails."""
     groups, pending = [], []
     for step in transcript["trajectory"]["steps"][2:]:
-        extra = step.get("extra") or {}
-        if step["source"] == "user" and extra.get(ROUND_TAG):
-            groups.append({"line": step["message"], "tag": extra[ROUND_TAG], "heard": None, "notices": [],
-                           "steps": []})
-        elif step["source"] == "user" and extra.get(PRESENCE_TAG):
-            pending.append(step["message"])
+        parts = message_parts(step.get("message") or "", step.get("extra")) if step["source"] == "user" else {}
+        if parts.get("round"):
+            groups.append({"line": parts["round"]["text"], "tag": parts["round"]["tag"], "heard": None,
+                           "notices": [parts["notice"]["text"]] if parts.get("notice") else [], "steps": []})
+            pending += [parts["presence"]["text"]] if parts.get("presence") else []
+        elif parts.get("presence"):
+            pending.append(parts["presence"]["text"])
         elif step["source"] == "user":
             assert groups and step["message"].startswith(NOTICE), ("a user line of no round", step["message"])
             groups[-1]["notices"].append(step["message"])
@@ -207,16 +210,16 @@ def check_rounds(suite, name: str, sample, records: list[dict], plan: dict, work
     [silent] = round_groups(transcripts[w3])[0]["steps"]
     assert silent["message"] == THINKING and not silent.get("tool_calls"), silent
     assert round_groups(transcripts[w3])[1]["heard"] == [], round_groups(transcripts[w3])[1]["heard"]
-    # each agent hears every peer enter, in seat order, before its first round
+    # each agent hears every peer enter, in seat order and in one sentence, in its first round's message
     order = [*workers, regulator]
     for agent, t in transcripts.items():
         heard = round_groups(t)[0]["heard"]
-        assert heard == [PRESENCE["entered"].format(agent=a) for a in order if a != agent], (agent, heard)
+        assert heard == [PRESENCE["entered"].format(agent=joined([a for a in order if a != agent]))], (agent, heard)
     # every worker stops in round 3: w2 hears w1 before its round 3, and the regulator, last in the order, hears all
     # three before its round 3, the last, after which it has used up its rounds and nobody is left to hear it
     left = {w: f"{PRESENCE['stop'].format(agent=w)}\n{PRESENCE['exited'].format(agent=w)}" for w in workers}
     assert round_groups(transcripts[w2])[2]["heard"] == [left[w1]], round_groups(transcripts[w2])[2]["heard"]
-    assert round_groups(transcripts[regulator])[2]["heard"] == [left[w] for w in workers], \
+    assert round_groups(transcripts[regulator])[2]["heard"] == ["\n".join(left[w] for w in workers)], \
         round_groups(transcripts[regulator])[2]["heard"]
     exits = run["rules"]["exits"]
     assert {a: exits[a]["why"] for a in workers} == dict.fromkeys(workers, "stop"), exits

@@ -20,7 +20,7 @@ from src.sandbox import peer_shell
 from src.swarm import _regulator_oversight as oversight
 from src.swarm import turn_rules as rules
 from src.swarm.turn_rules import TurnState
-from src.swarm.turn_rules._turn_presence import due, entry_rounds, exit_text
+from src.swarm.turn_rules._turn_presence import due, entry_rounds, exit_text, presence_text
 from src.swarm.turn_rules.turn_activation import out_of_steps
 from tests.support.mock_model import calls, tagged_infos
 from tests.support.turn_rules_harness import (
@@ -45,8 +45,7 @@ REGULATOR = {"a01": "worker", "a02": "regulator", "a03": "worker"}
 
 
 def users_before_first_step(rec: list[dict], agent: str) -> list[str]:
-    """The user messages of the agent's first provider call, in order: its task, its first round's line, then the
-    presence lines."""
+    """The user messages of the agent's first provider call, in order: its task, then its first round's message."""
     first = by_agent(rec, agent)[0]
     return [t for role, t in zip(first["roles"], first["texts"]) if role == "user"]
 
@@ -54,32 +53,42 @@ def users_before_first_step(rec: list[dict], agent: str) -> list[str]:
 # ------------------------------------------------------------------------------------------------ entries
 
 def test_every_peer_is_announced_before_the_first_step_after_the_task(tmp_path):
-    """No system prompt names a peer; each agent's first call holds its task, its round's line, then one line per
-    peer."""
+    """No system prompt names a peer; each agent's first call holds its task, then one message: its round's line and,
+    after a blank line, its peers' entries as one sentence."""
     sample, rec, log = run(sequential(rounds=2), {a: [do(a)] for a in ("a01", "a02", "a03")}, tmp_path,
                            with_log=True)
     line, two = rules.round_line(1, 2, 1), rules.round_line(2, 2, 1)
-    assert users_before_first_step(rec, "a01") == [TASK, line, "a02 entered.", "a03 entered."]
-    assert users_before_first_step(rec, "a02") == [TASK, line, "a01 entered.", "a03 entered."]
-    assert users_before_first_step(rec, "a03") == [TASK, line, "a01 entered.", "a02 entered."]
+    assert users_before_first_step(rec, "a01") == [TASK, f"{line}\n\na02 and a03 entered."]
+    assert users_before_first_step(rec, "a02") == [TASK, f"{line}\n\na01 and a03 entered."]
+    assert users_before_first_step(rec, "a03") == [TASK, f"{line}\n\na01 and a02 entered."]
+    assert by_agent(rec, "a01")[1]["roles"] == ["user", "user", "assistant", "tool", "user"]   # round 2: one message
     assert store(sample, "entry_rounds") == {"a01": 1, "a02": 1, "a03": 1}
-    # durable: the lines are in each agent's saved conversation, tagged, and the transcript keeps the tag
+    # durable: the message is in each agent's saved conversation, each part tagged, and the transcript keeps the tags
     view = SampleView.from_eval_sample(sample, log)
     saved = [m for m in agent_messages(view, "a01") if (m.metadata or {}).get(rules.PRESENCE_TAG)]
-    assert [(m.role, m.text, m.metadata[rules.PRESENCE_TAG]["id"]) for m in saved] == [
-        ("user", "a02 entered.", "entered:a02"), ("user", "a03 entered.", "entered:a03")]
+    assert [(m.role, m.text) for m in saved] == [("user", f"{line}\n\na02 and a03 entered.")]
+    assert saved[0].metadata[rules.PRESENCE_TAG] == {"round": 1, "events": [
+        {"id": "entered:a02", "agent": "a02", "kind": "entered", "why": None, "round": 1},
+        {"id": "entered:a03", "agent": "a03", "kind": "entered", "why": None, "round": 1}]}
+    assert saved[0].metadata[rules.ROUND_TAG] == {"round": 1, "of": 2, "left": 2, "calls": 1}
     trajectory, _ = build_trajectory(view, "a01")
     steps = json.loads(trajectory.model_dump_json())["steps"]
     tagged = [s for s in steps if (s.get("extra") or {}).get(rules.PRESENCE_TAG)]
-    assert [(s["source"], s["message"], s["extra"][rules.PRESENCE_TAG]["kind"]) for s in tagged] == [
-        ("user", "a02 entered.", "entered"), ("user", "a03 entered.", "entered")]
+    assert len(tagged) == 1 and tagged[0]["source"] == "user"
+    parts = rules.message_parts(tagged[0]["message"], tagged[0]["extra"])
+    assert parts["round"] == {"tag": {"round": 1, "of": 2, "left": 2, "calls": 1}, "text": line}
+    assert parts["presence"]["text"] == "a02 and a03 entered." and parts["notice"] is None
+    assert [e["id"] for e in parts["presence"]["events"]] == ["entered:a02", "entered:a03"]
     # the round's line keeps its own tag in the transcript, for grouping a conversation by round
     rounds = [(s["message"], s["extra"][rules.ROUND_TAG]) for s in steps if (s.get("extra") or {}).get(rules.ROUND_TAG)]
-    assert rounds == [(line, {"round": 1, "of": 2, "left": 2, "calls": 1}),
+    assert rounds == [(f"{line}\n\na02 and a03 entered.", {"round": 1, "of": 2, "left": 2, "calls": 1}),
                       (two, {"round": 2, "of": 2, "left": 1, "calls": 1})]
+    # one info event per part and per presence event, as before
     delivered = [i for i in tagged_infos(sample, rules.PRESENCE_TAG) if i["event"] == "delivered"
                  and i["kind"] == "entered"]
     assert len(delivered) == 6 and {i["to"] for i in delivered} == {"a01", "a02", "a03"}
+    assert {i["content"] for i in delivered} == {"a01 entered.", "a02 entered.", "a03 entered."}
+    assert len(tagged_infos(sample, rules.ROUND_TAG)) == 6
 
 
 def test_a_later_window_is_announced_when_it_enters(tmp_path):
@@ -91,7 +100,56 @@ def test_a_later_window_is_announced_when_it_enters(tmp_path):
     presence = [r["presence"] for r in by_agent(rec, "a01")]
     assert presence[:2] == [["a03 entered."], ["a03 entered."]]           # rounds 1 and 2: a02 is not there yet
     assert presence[2] == ["a03 entered.", "a02 entered."]                # round 3, before a01's step
-    assert users_before_first_step(rec, "a02")[-2:] == ["a01 entered.", "a03 entered."]
+    assert users_before_first_step(rec, "a02")[-1].endswith("\n\na01 and a03 entered.")
+
+
+def test_entries_in_a_row_read_as_one_sentence_and_exits_keep_their_lines():
+    def entered(agent: str) -> dict:
+        return {"kind": "entered", "agent": agent, "text": f"{agent} entered."}
+
+    gone = {"kind": "exited", "agent": "a02", "text": "a02 stopped working (stop_working).\na02 exited."}
+    alerted = {"kind": "alert", "agent": "a04", "text": "a04 has alerted humans."}
+    assert presence_text([entered("a01")]) == "a01 entered."
+    assert presence_text([entered("a01"), entered("a02")]) == "a01 and a02 entered."
+    assert presence_text([entered("a01"), entered("a02"), entered("a03")]) == "a01, a02 and a03 entered."
+    assert presence_text([entered("a01"), entered("a02"), gone, entered("a04"), alerted]) == (
+        "a01 and a02 entered.\na02 stopped working (stop_working).\na02 exited.\na04 entered.\na04 has alerted humans.")
+
+
+def test_message_parts_read_a_rounds_message_and_the_older_messages():
+    event = {"id": "entered:a02", "agent": "a02", "kind": "entered", "why": None, "round": 1}
+    tags = {rules.ROUND_TAG: {"round": 2, "of": 3, "left": 2, "calls": 1}, rules.PRESENCE_TAG: {"round": 2, "events": [
+        event]}, rules.NOTICE_TAG: {"kind": "notice", "activation": 2, "call": 2, "round": 2}}
+    parts = rules.message_parts("Round 2 of 3.\n\na02 entered.\n\nPosts on the board: a02 1 new of 1.\n- a02: x", tags)
+    assert parts == {"round": {"tag": tags[rules.ROUND_TAG], "text": "Round 2 of 3."},
+                     "presence": {"events": [event], "text": "a02 entered."},
+                     "notice": {"tag": tags[rules.NOTICE_TAG], "text": "Posts on the board: a02 1 new of 1.\n- a02: x"}}
+    without = rules.message_parts("Round 2 of 3.\n\nSince your last round the board changed.",
+                                  {k: v for k, v in tags.items() if k != rules.PRESENCE_TAG})
+    assert without["presence"] is None and without["notice"]["text"] == "Since your last round the board changed."
+    # a presence line of a run before 2026-11-22, a round's line alone, and a message of neither
+    old = rules.message_parts("a02 entered.", {rules.PRESENCE_TAG: event})
+    assert old == {"round": None, "presence": {"events": [event], "text": "a02 entered."}, "notice": None}
+    assert rules.presence_events({rules.PRESENCE_TAG: event}) == [event] and rules.presence_events(None) == []
+    assert rules.message_parts("Round 1 of 3.", {rules.ROUND_TAG: {"round": 1}})["round"]["text"] == "Round 1 of 3."
+    assert rules.message_parts("task", None) == {"round": None, "presence": None, "notice": None}
+
+
+def test_the_transcript_holds_the_round_message_once_with_its_board_part(tmp_path):
+    """The board part is in the durable message, so the export shows it there and never again as a provider-only
+    notice."""
+    scripts = {"a01": [do("A1"), do("A2")], "a02": [calls(("board_post", {"message": "x"})), do("B")],
+               "a03": [do("C1"), do("C2")]}
+    sample, _, log = run(sequential(rounds=2, notice="counts"), scripts, tmp_path, with_log=True)
+    view = SampleView.from_eval_sample(sample, log)
+    steps = json.loads(build_trajectory(view, "a03")[0].model_dump_json())["steps"]
+    users = [s for s in steps if s["source"] == "user"]
+    assert [s["message"] for s in users] == [
+        TASK, f"{rules.round_line(1, 2, 1)}\n\na01 and a02 entered.\n\nPosts on the board: a02 1 new of 1.",
+        f"{rules.round_line(2, 2, 1)}\n\na01 ran out of rounds.\na01 exited.\na02 ran out of rounds.\na02 exited."]
+    assert set(users[1]["extra"]) == {rules.ROUND_TAG, rules.PRESENCE_TAG, rules.NOTICE_TAG}
+    assert users[1]["extra"][rules.NOTICE_TAG] == {"kind": "notice", "activation": 1, "call": 1, "round": 1}
+    assert not any((s.get("extra") or {}).get(rules.TURN_RULES_TAG) for s in steps)
 
 
 def test_entry_rounds_come_from_the_plan():
@@ -108,12 +166,12 @@ def test_stop_working_is_announced_after_the_stop(tmp_path):
     sample, rec = run(sequential(rounds=2), {"a01": [do("A")], "a02": [stop()], "a03": [do("C")]},
                       tmp_path)
     lines = "a02 stopped working (stop_working).\na02 exited."
-    assert users_before_first_step(rec, "a03") == [TASK, rules.round_line(1, 2, 1), "a01 entered.", "a02 entered.",
-                                                   lines]
-    assert by_agent(rec, "a01")[0]["presence"] == ["a02 entered.", "a03 entered."]
-    assert by_agent(rec, "a01")[1]["presence"] == ["a02 entered.", "a03 entered.", lines]
-    assert all(r["presence"].count(lines) <= 1 for r in rec)
-    assert not any(lines in r["presence"] for r in by_agent(rec, "a02"))
+    assert users_before_first_step(rec, "a03") == [TASK, f"{rules.round_line(1, 2, 1)}\n\na01 and a02 entered.\n"
+                                                         f"{lines}"]
+    assert by_agent(rec, "a01")[0]["presence"] == ["a02 and a03 entered."]
+    assert by_agent(rec, "a01")[1]["presence"] == ["a02 and a03 entered.", lines]
+    assert all(r["events"].count("exited:a02") <= 1 for r in rec)
+    assert not any("exited:a02" in r["events"] for r in by_agent(rec, "a02"))
     assert store(sample, "exits")["a02"] == {"why": "stop", "round": 1, "seq": 0}
 
 
@@ -123,14 +181,14 @@ def test_a_team_submit_counts_the_rounds_left_for_each_peer(tmp_path):
     sample, rec = run(sequential(rounds=4, mode="shared_task"),
                       {"a01": [submit("ready")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
     assert by_agent(rec, "a02")[0]["presence"][-1] == \
-        "a01 handed in the team's work (submit). The run ends in 2 rounds.\na01 exited."
+        "a01 and a03 entered.\na01 handed in the team's work (submit). The run ends in 2 rounds.\na01 exited."
     assert step_ids(sample, "a01") == ["r1-a01"] and store(sample, "ended") == {"a01": "submit"}
     assert store(sample, "exits")["a01"] == {"why": "submit", "round": 1, "seq": 0, "hand_in": "team",
                                              "ends_after_round": 3}
     sample, rec = run(sequential(rounds=2, mode="shared_task", submit_delay_rounds=0),
                       {"a01": [submit("ready")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
     assert by_agent(rec, "a03")[0]["presence"][-1] == \
-        "a01 handed in the team's work (submit). The run ends after this round.\na01 exited."
+        "a01 and a02 entered.\na01 handed in the team's work (submit). The run ends after this round.\na01 exited."
 
 
 def test_a_concurrent_peer_hears_of_a_hand_in_at_its_next_step(tmp_path):
@@ -146,7 +204,8 @@ def test_a_concurrent_peer_hears_of_a_hand_in_at_its_next_step(tmp_path):
 def test_a_solo_task_hand_in(tmp_path):
     sample, rec = run(sequential(rounds=2, mode="solo_task"),
                       {"a01": [submit("mine")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
-    assert by_agent(rec, "a02")[0]["presence"][-1] == "a01 handed in its work (submit).\na01 exited."
+    assert by_agent(rec, "a02")[0]["presence"][-1] == "a01 and a03 entered.\na01 handed in its work (submit).\n" \
+                                                      "a01 exited."
     assert store(sample, "exits")["a01"]["hand_in"] == "solo"
 
 
@@ -155,7 +214,7 @@ def test_the_context_limit_and_running_out_of_rounds(tmp_path):
     sample, rec = run(sequential(rounds=2), {"a01": [out_of_context()], "a02": [do("B")], "a03": [do("C")]},
                       tmp_path)
     assert store(sample, "exits")["a01"]["why"] == "context"
-    assert by_agent(rec, "a02")[0]["presence"][-1] == "a01 exited."
+    assert by_agent(rec, "a02")[0]["presence"][-1] == "a01 and a03 entered.\na01 exited."
     sample, _ = run(sequential(rounds=1), {a: [do(a)] for a in ("a01", "a02", "a03")}, tmp_path / "rounds")
     assert store(sample, "ended") == dict.fromkeys(("a01", "a02", "a03"), "rounds")
     assert {a: e["why"] for a, e in store(sample, "exits").items()} == dict.fromkeys(("a01", "a02", "a03"), "rounds")
@@ -182,7 +241,7 @@ def test_an_agent_out_of_rounds_exits_at_once(tmp_path):
                                                                                 "a02": ("rounds", 2)}
     second = by_agent(rec, "a03")[1]["presence"]
     assert store(sample, "ended")["a03"] == "rounds" and len(by_agent(rec, "a03")) == 2
-    assert second[-2:] == ["a01 ran out of rounds.\na01 exited.", "a02 ran out of rounds.\na02 exited."]
+    assert second[-1] == "a01 ran out of rounds.\na01 exited.\na02 ran out of rounds.\na02 exited."
     assert step_ids(sample, "a01") == ["r1-a01", "r2-a01"]
 
 

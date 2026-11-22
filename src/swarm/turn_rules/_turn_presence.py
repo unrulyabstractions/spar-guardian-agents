@@ -1,11 +1,11 @@
-"""Who is present: each agent's entry and exit, announced to its peers as user messages in their conversations.
+"""Who is present: each agent's entry and exit, announced to its peers in their conversations.
 
-No system prompt names a peer. Each agent of a board hears of every other agent as a durable user message (prompts.yaml
-`presence`), delivered before its next round: "<agent> entered." once the peer's entry round has come (TurnState
-entry_rounds: the first round of a plan step that holds it), and when the peer leaves the line of its exit, then
-"<agent> exited.". The entries of the run's first round arrive before every agent's first model call, after its task
-message and its round's line (_turn_rounds.open_round); an agent whose window starts later is announced in that round,
-not before.
+No system prompt names a peer. Each agent of a board hears of every other agent in the presence part of its next
+round's message (_turn_messages; prompts.yaml `presence`): "<agent> entered." once the peer's entry round has come
+(TurnState entry_rounds: the first round of a plan step that holds it), and when the peer leaves the line of its exit,
+then "<agent> exited.". Entries in a row read as one sentence: "a and b entered.", "a, b and c entered."
+(presence_text). The entries of the run's first round arrive before every agent's first model call, in its first
+round's message after the round's line; an agent whose window starts later is announced in that round, not before.
 
 An exit's `why`, recorded once per agent in TurnState.exits by record_exit:
 
@@ -22,12 +22,12 @@ An influencer hears each push to the team's shared result the harness saw (_turn
 An influencer's alert (alert_humans, recorded in Alerts) ends nothing: every peer present hears "<agent> has alerted
 humans." once per alert, before its next round, after the round's entries.
 
-Delivery is a pull. TurnRulesDefense.apply_pre_turn calls deliver on the activated member's own editable state at
-ORBIT's defense boundary, which commits what it appends into that member's conversation, so the lines are saved in the
-transcript. deliver appends every due line the conversation lacks, found by the event id in the message's metadata
-(PRESENCE_TAG), so a boundary edit that ORBIT rejects loses nothing: the next boundary delivers it again. Messages are
-only appended at the end, so a provider's cached prefix holds. A peer whose round is under way when another agent exits
-hears of it at its next round.
+Delivery is a pull. TurnRulesDefense.apply_pre_turn asks presence_part for the activated member's due events at
+ORBIT's defense boundary and appends the round's message to the member's own editable state, which ORBIT commits into
+its conversation, so the lines are saved in the transcript. presence_part takes every due event the conversation
+lacks, found by the event ids in its messages' metadata (PRESENCE_TAG: {round, events}), so a boundary edit that ORBIT
+rejects loses nothing: the next boundary's message holds it. Messages are only appended at the end, so a provider's
+cached prefix holds. A peer whose round is under way when another agent exits hears of it at its next round.
 
 Under SwarmConfig.submit_hold a regulator's hold takes a hand-in back (src/swarm/submit_hold.py): every agent present,
 the one that submitted included, hears "The team's hand-in by <agent> in round <r> is held. The run goes on." (id
@@ -38,7 +38,8 @@ delivered, and neither is the entry of a peer that left then. The peer tools sti
 exited (entered, exited).
 
     record_exit("k7q2m", "stop", 3)
-    messages = due("t4x9n", 4)      # [{"id": "exit:k7q2m", "text": "k7q2m stopped working ...", ...}]
+    events = due("t4x9n", 4)        # [{"id": "exited:k7q2m", "text": "k7q2m stopped working ...", ...}]
+    part = presence_part("t4x9n", state)    # Part(PRESENCE_TAG, {round, events}, text, record), or None
 """
 from __future__ import annotations
 
@@ -47,8 +48,9 @@ from inspect_ai.log import transcript
 from inspect_ai.model import ChatMessageUser
 from inspect_ai.util import store_as
 
-from src.configuration.prompt_texts import rounds_text
+from src.configuration.prompt_texts import joined, rounds_text
 from src.configuration.settings import load_prompts
+from src.swarm.turn_rules._turn_messages import Part, presence_events
 from src.swarm.turn_rules._turn_pushes import push_events
 from src.swarm.turn_rules._turn_state import PRESENCE_TAG, Alerts, TurnState, current_round, submit_holds
 from src.swarm.turn_rules._turn_steps import step_round
@@ -170,25 +172,47 @@ def alert_events(recipient: str, own: int, st: TurnState) -> list[dict]:
 
 
 def delivered_ids(state: AgentState) -> set[str]:
-    return {m.metadata[PRESENCE_TAG]["id"] for m in state.messages
-            if isinstance(m, ChatMessageUser) and (m.metadata or {}).get(PRESENCE_TAG)}
+    """The ids of the presence events the conversation holds, in a round's message or, in a log made before 2026-11-22,
+    one message per event (_turn_messages.presence_events)."""
+    return {e["id"] for m in state.messages if isinstance(m, ChatMessageUser)
+            for e in presence_events(m.metadata) if e.get("id")}
 
 
-def deliver(recipient: str, state: AgentState) -> list[str]:
-    """Append to the recipient's conversation every due line it lacks (due, delivered_ids), one user message per
-    event with PRESENCE_TAG metadata, each recorded as an info event. Returns the ids appended. Outside a planned step
-    nothing is due."""
+def presence_text(events: list[dict]) -> str:
+    """The presence part's text: one line per event in due's order, with each run of entries in a row as one sentence
+    ("a and b entered.", "a, b and c entered."; prompts.yaml presence.entered); an exit keeps its lines."""
+    texts = load_prompts()["presence"]
+    lines: list[str] = []
+    entries: list[str] = []
+    for event in [*events, None]:
+        if event is not None and event["kind"] == "entered":
+            entries.append(event["agent"])
+            continue
+        if entries:
+            lines.append(texts["entered"].format(agent=joined(entries)))
+            entries = []
+        if event is not None:
+            lines.append(event["text"])
+    return "\n".join(lines)
+
+
+def presence_part(recipient: str, state: AgentState) -> Part | None:
+    """The round's message's presence part: every due event the recipient's conversation lacks (due, delivered_ids),
+    tagged PRESENCE_TAG {round: the round delivered in, events: [{id, agent, kind, why, round}]}. Its record writes one
+    "delivered" info event per event, with the event's own line. None when nothing is due, and outside a planned
+    step."""
     round_number = current_round()
     if round_number is None:
-        return []
+        return None
     have = delivered_ids(state)
-    added = []
-    for event in due(recipient, round_number):
-        if event["id"] in have:
-            continue
-        tag = {k: event[k] for k in ("id", "agent", "kind", "why", "round")}
-        state.messages.append(ChatMessageUser(content=event["text"], metadata={PRESENCE_TAG: tag}))
-        transcript().info({PRESENCE_TAG: {"event": "delivered", "to": recipient, "at_round": round_number, **tag,
-                                          "content": event["text"]}})
-        added.append(event["id"])
-    return added
+    events = [e for e in due(recipient, round_number) if e["id"] not in have]
+    if not events:
+        return None
+    tags = [{k: e[k] for k in ("id", "agent", "kind", "why", "round")} for e in events]
+
+    def record() -> None:
+        for event, tag in zip(events, tags):
+            transcript().info({PRESENCE_TAG: {"event": "delivered", "to": recipient, "at_round": round_number, **tag,
+                                              "content": event["text"]}})
+
+    return Part(PRESENCE_TAG, {"round": round_number, "events": tags}, presence_text(events), record)

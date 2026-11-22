@@ -2,7 +2,10 @@
  * is the payload's presence (src/ui/transcript_presence.py): /api/run's for the bar and the Details tab, /api/board's,
  * placed on the board's clock, for the Board tab's lanes.
  *
- *   presenceChip(step.extra.swarm_presence)      // a transcript's entered or exited line, as a chip in its header
+ *   presenceEvents(step.extra)                   // the presence events a user step holds: a round's message's events,
+ *                                                // or the one event of a presence line before 2026-11-22
+ *   presenceChip(event)                          // one presence event, as a chip in the step's header
+ *   roundChip(step.extra.swarm_round), boardChip(step.extra.swarm_notice)   // a round's message's other chips
  *   alertsBadge(p.alerts, onclick)                // the bar's badge, null without an alert
  *   alertsCard(p, roles, openCall), presenceCard(p, roles)    // the Details tab's two cards, null when empty
  *   laneMarks(p, lay)                             // the Board tab: {g, tipOf(el), callOf(el)}
@@ -46,13 +49,38 @@ export function outcomeBadge(a) {
   return badge(word, kind, tip);
 }
 
-/** A transcript's entered or exited line (its step's extra.swarm_presence) as a chip for its header. */
+/** The presence events of a user step (its extra.swarm_presence, src/swarm/turn_rules/_turn_messages.py): a round's
+ * message holds {round, events}; a presence line before 2026-11-22 was one event. [] without. */
+export function presenceEvents(extra) {
+  const p = extra && extra.swarm_presence;
+  if (!p) return [];
+  return Array.isArray(p.events) ? p.events : p.agent ? [p] : [];
+}
+
+const EVENT_WORDS = { entered: 'entered', exited: 'exited', alert: 'alerted', held: 'hand-in held', push: 'pushed' };
+
+/** One presence event as a chip for its step's header: who, what, and its round. */
 export function presenceChip(p) {
-  if (!p || !p.agent) return null;
+  if (!p || !p.kind) return null;
   const gone = p.kind === 'exited';
-  const words = gone ? `${p.agent} exited${p.why ? ` · ${WHY_WORDS[p.why] || p.why}` : ''}` : `${p.agent} entered`;
-  return h('span', { class: ['pr-chip', gone ? 'pr-chip-out' : 'pr-chip-in', p.why === 'alert' && 'pr-chip-alert'],
-    title: p.round != null ? `round ${p.round}` : null }, words, p.round != null ? h('span', { class: 'pr-round' }, `r${p.round}`) : null);
+  const what = EVENT_WORDS[p.kind] || p.kind;
+  const words = [p.agent, what].filter(Boolean).join(' ') + (gone && p.why ? ` · ${WHY_WORDS[p.why] || p.why}` : '');
+  return h('span', { class: ['pr-chip', gone ? 'pr-chip-out' : p.kind === 'entered' ? 'pr-chip-in' : 'pr-chip-event',
+    (p.why === 'alert' || p.kind === 'alert') && 'pr-chip-alert'],
+  title: p.round != null ? `round ${p.round}` : null }, words, p.round != null ? h('span', { class: 'pr-round' }, `r${p.round}`) : null);
+}
+
+/** A round's message's round chip (its extra.swarm_round): the round of R, its rounds left and calls on hover. */
+export function roundChip(r) {
+  if (!r || r.round == null) return null;
+  const tip = r.left != null ? `${plural(r.left, 'round')} left · up to ${plural(r.calls, 'call')}` : null;
+  return h('span', { class: ['pr-chip', 'pr-chip-round'], title: tip }, `round ${r.round}${r.of != null ? ` of ${r.of}` : ''}`);
+}
+
+/** A round's message's board chip (its extra.swarm_notice): the board changed since the agent last looked. */
+export function boardChip(n) {
+  if (!n) return null;
+  return h('span', { class: ['pr-chip', 'pr-chip-board'], title: 'board changed since the last round' }, 'board');
 }
 
 /** The bar's badge: how many alerts the run has, their reasons clipped on hover; null without one. */

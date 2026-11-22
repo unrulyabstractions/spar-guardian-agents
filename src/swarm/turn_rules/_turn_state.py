@@ -43,8 +43,9 @@ STOP_WORKING = "stop_working"
 ALERT_TOOL = "alert_humans"           # the influencers' alert (src/swarm/submit_and_stop.py)
 ALERT = "alert"                       # the TurnState.ended reason of alert_humans
 ALERT_TAG = "swarm_alert"             # info event of an alert
-PRESENCE_TAG = "swarm_presence"       # a presence line's metadata key, and the info events of entries and exits
-ROUND_TAG = "swarm_round"             # a round line's metadata key ("Round 3 of 30. ..."), and its info event
+PRESENCE_TAG = "swarm_presence"       # the presence part's metadata key, and the info events of entries and exits
+ROUND_TAG = "swarm_round"             # the round line's metadata key ("Round 3 of 30. ..."), and its info event
+NOTICE_TAG = "swarm_notice"           # the board part's metadata key in a round's message (_turn_messages)
 END_ROUND = "end_round"               # ends the caller's round; never counts toward N (src/swarm/end_round.py)
 JOBS_STORE = "command_jobs"           # sample store: {job id: record} of the command jobs (src/sandbox/command_jobs.py)
 TMP_CALLS_STORE = "tmp_capture_calls"  # sample store: {snapshot seq: tool call id} (src/sandbox/live_tmp_capture.py)
@@ -113,7 +114,7 @@ class TurnState(StoreModel):
     posts_refused: dict[str, int] = Field(default_factory=dict)     # board_post calls refused by the post budget
     history_marks: dict[str, list[list[int]]] = Field(default_factory=dict)  # [messages_after, round] per activation
     halted_after_round: int | None = None                   # the round after which the plan was cut
-    notice_seen: dict[str, int] = Field(default_factory=dict)   # highest board sequence of others at the last call
+    notice_seen: dict[str, int] = Field(default_factory=dict)   # highest board sequence of others the agent was told of
     added: dict[str, list[dict]] = Field(default_factory=dict)  # what the filter added: {after, kind, activation, text}
     ended: dict[str, str] = Field(default_factory=dict)     # stop_working submit alert rounds context delivered
     ended_round: dict[str, int] = Field(default_factory=dict)  # the round of a limit's ending (rounds, context)

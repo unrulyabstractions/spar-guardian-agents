@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.swarm.turn_rules._turn_state import END_ROUND, PRESENCE_TAG, ROUND_TAG
+from src.swarm.turn_rules._turn_state import END_ROUND, NOTICE_TAG, PRESENCE_TAG, ROUND_TAG
 from tests.support import round_scenario
 from tests.support.atif_builder import transcript
 
@@ -32,6 +32,8 @@ def _agent(cid: str) -> dict:
 
 
 def test_round_groups_cut_at_each_line_with_what_was_heard_before_the_first_call():
+    """A run before 2026-11-22: the round's line, each presence line and the provider-only notice as messages of their
+    own."""
     t = transcript([])
     t["trajectory"]["steps"] = [
         {"source": "system", "message": "s"}, _user("task"),
@@ -45,6 +47,29 @@ def test_round_groups_cut_at_each_line_with_what_was_heard_before_the_first_call
     assert [g["line"] for g in groups] == ["Round 1 of 3.", "Round 2 of 3."]
     assert [g["heard"] for g in groups] == [["a02 entered."], ["a02 exited."]]
     assert groups[0]["notices"] == ["[Since your last call] the board changed."] and groups[1]["notices"] == []
+    assert [[s["tool_calls"][0]["tool_call_id"] for s in g["steps"]] for g in groups] == [["c1", "c2"], ["c3"]]
+
+
+def test_round_groups_read_each_rounds_one_message():
+    """Since 2026-11-22: one message per round, its line, its presence part and its board part, each a paragraph."""
+    t = transcript([])
+    entered = {"id": "entered:a02", "agent": "a02", "kind": "entered", "why": None, "round": 1}
+    t["trajectory"]["steps"] = [
+        {"source": "system", "message": "s"}, _user("task"),
+        {"source": "user", "message": "Round 1 of 3.\n\na02 and a03 entered.",
+         "extra": {ROUND_TAG: {"round": 1, "of": 3}, PRESENCE_TAG: {"round": 1, "events": [entered, {
+             **entered, "id": "entered:a03", "agent": "a03"}]}}},
+        _agent("c1"), _user("[Since your last call] the board changed."), _agent("c2"),
+        {"source": "user", "message": "Round 2 of 3.\n\na02 exited.\n\nSince your last round the board changed.",
+         "extra": {ROUND_TAG: {"round": 2, "of": 3}, PRESENCE_TAG: {"round": 2, "events": [
+             {**entered, "id": "exited:a02", "kind": "exited", "why": "context"}]},
+                   NOTICE_TAG: {"kind": "notice", "activation": 2, "call": 3, "round": 2}}},
+        _agent("c3")]
+    groups = round_scenario.round_groups(t)
+    assert [g["line"] for g in groups] == ["Round 1 of 3.", "Round 2 of 3."]
+    assert [g["heard"] for g in groups] == [["a02 and a03 entered."], ["a02 exited."]]
+    assert groups[0]["notices"] == ["[Since your last call] the board changed."]
+    assert groups[1]["notices"] == ["Since your last round the board changed."]
     assert [[s["tool_calls"][0]["tool_call_id"] for s in g["steps"]] for g in groups] == [["c1", "c2"], ["c3"]]
 
 

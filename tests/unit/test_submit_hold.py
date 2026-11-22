@@ -168,8 +168,10 @@ def test_the_last_worker_s_submit_leaves_the_regulator_its_rounds_and_a_second_e
     assert step_ids(sample, "a01") == ["r1-a01", "r3-a01"]
     assert store(sample, "ended")["a01"] == "stop_working"
     assert store(sample, "exits")["a01"]["why"] == "stop" and store(sample, "exits")["a01"]["life"] == 1
-    heard = [line for r in by_agent(rec, "a02") for line in r["presence"]]
-    assert heard.count("a01 stopped working (stop_working).\na01 exited.") >= 1
+    heard = "\n".join(by_agent(rec, "a02")[-1]["presence"])
+    assert heard.count("a01 exited.") == 2 and heard.count("a01 stopped working (stop_working).") == 1   # hand-in, stop
+    assert [e for e in by_agent(rec, "a02")[-1]["events"] if e.startswith("exited:a01")] == ["exited:a01",
+                                                                                            "exited:a01:1"]
     delivered = [i["id"] for i in tagged_infos(sample, rules.PRESENCE_TAG)
                  if i["event"] == "delivered" and i["to"] == "a02"]
     assert "exited:a01" in delivered and "exited:a01:1" in delivered and "held:0" in delivered

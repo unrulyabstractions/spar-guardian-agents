@@ -139,7 +139,7 @@ def test_a_late_regulator_enters_at_its_start_round(tmp_path):
     # ORBIT inserts its system prompt at the agent's first activation, and its first round's line gives the run's
     # round: a late agent has the rounds left of the plan.
     assert by_agent(rec, "a02")[0]["system"].startswith("You are a02,")
-    assert rules.round_line(3, 4, 1) in by_agent(rec, "a02")[0]["texts"]
+    assert by_agent(rec, "a02")[0]["texts"][-1].startswith(rules.round_line(3, 4, 1) + "\n\n")
     # The workers use up their four rounds by round 4; the run ends with them.
     assert store(sample, "rounds_used") == {"a01": 4, "a02": 2, "a03": 4}
     assert store(sample, "windows")["a02"] == [3, None]
@@ -259,28 +259,54 @@ NOTICE_SCRIPTS = {"a01": [do("A1"), do("A2")], "a02": [board_post("x"), board_po
 
 
 def test_the_notice(tmp_path):
-    """In sequence a02 posts after a01's call of round 1 and before a03's: the board is live, so a03's first call opens
-    with the notice, and every later notice counts the posts above what the agent saw at its last call."""
+    """In sequence a02 posts after a01's call of round 1 and before a03's: the board is live, so a03's first round's
+    message ends with the board's part, and every later one counts the posts above what the agent saw last. The part's
+    first words are true where they stand: "Posts on the board" in the agent's first round, "Since your last round" in
+    a later one."""
     sample, rec = run(sequential(rounds=2, notice="counts"), NOTICE_SCRIPTS, tmp_path)
-    added = {(r["agent"], r["call"]): r["added"] for r in rec}
-    one = ("notice", "[Since your last call] the board changed: a02 1 new of 1.")
-    assert added[("a01", 0)] == [] and added[("a01", 1)] == [one]
-    # What the filter added stays in place: a03's second call keeps its first notice and opens with a new one.
-    assert added[("a03", 0)] == [one]
-    assert added[("a03", 1)] == [one, ("notice", "[Since your last call] the board changed: a02 1 new of 2.")]
-    # An agent's own posts never raise a notice.
-    assert all(not a for (agent, _), a in added.items() if agent == "a02")
-    # Each notice is recorded for the transcript builder, with its round.
-    infos = [(i["agent"], i["round"]) for i in tagged_infos(sample, rules.TURN_RULES_TAG) if i["kind"] == "notice"]
-    assert sorted(infos) == [("a01", 2), ("a03", 1), ("a03", 2)]
-    # It reaches the provider only: the durable conversation never holds it.
+    notices = {(r["agent"], r["call"]): r["notices"] for r in rec}
+    later = "Since your last round the board changed: a02 1 new of 1."
+    assert notices[("a01", 0)] == [] and notices[("a01", 1)] == [later]
+    # The conversation holds each one: a03's second call keeps its first round's part and holds a new one.
+    first = "Posts on the board: a02 1 new of 1."
+    assert notices[("a03", 0)] == [first]
+    assert notices[("a03", 1)] == [first, "Since your last round the board changed: a02 1 new of 2."]
+    assert by_agent(rec, "a03")[0]["texts"][-1] == f"{rules.round_line(1, 2, 1)}\n\na01 and a02 entered.\n\n{first}"
+    # An agent's own posts never raise a notice, and no notice reaches the provider alone at a round's start.
+    assert all(not n for (agent, _), n in notices.items() if agent == "a02")
+    assert not any(r["added"] for r in rec)
+    # Each notice is recorded for the measures, with its round, and marked as a round's message's part.
+    infos = [(i["agent"], i["round"], i["boundary"]) for i in tagged_infos(sample, rules.TURN_RULES_TAG)
+             if i["kind"] == "notice"]
+    assert sorted(infos) == [("a01", 2, True), ("a03", 1, True), ("a03", 2, True)]
+    # The durable message tags it NOTICE_TAG, never TURN_RULES_TAG, which marks what only the provider got.
     for e in sample.events:
         if e.event == "model":
             assert not any((m.metadata or {}).get(rules.TURN_RULES_TAG) for m in e.input)
+    tags = [m.metadata[rules.NOTICE_TAG] for e in sample.events if e.event == "model" for m in e.input
+            if (m.metadata or {}).get(rules.NOTICE_TAG)]
+    assert {(t["kind"], t["round"]) for t in tags} == {("notice", 1), ("notice", 2)}
     sample, rec = run(sequential(rounds=2, notice="changed"), NOTICE_SCRIPTS, tmp_path / "changed")
-    assert [r["added"] for r in rec if r["agent"] == "a01"] == [[], [("notice", PROMPTS["notice"]["changed"])]]
+    assert [r["notices"] for r in rec if r["agent"] == "a01"] == [[], [PROMPTS["notice"]["round_changed"]]]
+    assert by_agent(rec, "a03")[0]["notices"] == [PROMPTS["notice"]["first_changed"]]
     sample, rec = run(sequential(rounds=2, notice="none"), NOTICE_SCRIPTS, tmp_path / "none")
-    assert not any(r["added"] for r in rec)
+    assert not any(r["added"] or r["notices"] for r in rec)
+
+
+def test_a_post_inside_a_round_opens_the_next_call_with_the_notice(tmp_path):
+    """Concurrent rounds of two calls: a02 posts at its first call, so a01's and a03's second calls of round 1 open with
+    the provider-only notice "[Since your last call] ...", which stays in place; round 2's message holds no board part,
+    since they saw the post."""
+    scripts = {"a01": [do("A1"), do("A2")], "a02": [board_post("x"), do("B")], "a03": [do("C1"), do("C2")]}
+    sample, rec = run(pull(rounds=2, calls_per_round=2, notice="counts"), scripts, tmp_path)
+    one = ("notice", "[Since your last call] the board changed: a02 1 new of 1.")
+    for agent in ("a01", "a03"):
+        calls = by_agent(rec, agent)
+        assert [c["added"] for c in calls] == [[], [one], [one], [one]], agent
+        assert not any(c["notices"] for c in calls), agent
+    infos = [i for i in tagged_infos(sample, rules.TURN_RULES_TAG) if i["kind"] == "notice"]
+    assert sorted((i["agent"], i["round"]) for i in infos) == [("a01", 1), ("a03", 1)]
+    assert not any(i.get("boundary") for i in infos)
 
 
 def test_the_default_notice_previews_each_new_post(tmp_path):
@@ -292,13 +318,13 @@ def test_the_default_notice_previews_each_new_post(tmp_path):
     scripts = {"a01": [do("A1"), do("A2")], "a02": [board_post("x\nsecond line"), board_post(long), do("B")],
                "a03": [do("C1"), do("C2")]}
     sample, rec = run(sequential(rounds=2), scripts, tmp_path)
-    added = {(r["agent"], r["call"]): r["added"] for r in rec}
-    first = added[("a01", 1)][-1][1]
-    assert first == ("[Since your last call] the board changed: a02 1 new of 1.\n- a02: x ...\n"
+    notices = {(r["agent"], r["call"]): r["notices"] for r in rec}
+    first = notices[("a01", 1)][-1]
+    assert first == ("Since your last round the board changed: a02 1 new of 1.\n- a02: x ...\n"
                      "board_read returns the posts in full.")
     assert "(mentions you)" not in first
-    later = added[("a03", 1)][-1][1]          # a02's second post names a03
-    assert later.startswith("[Since your last call] the board changed: a02 1 new of 2.\n"
+    later = notices[("a03", 1)][-1]          # a02's second post names a03
+    assert later.startswith("Since your last round the board changed: a02 1 new of 2.\n"
                             "- a02 (mentions you): a03 please stop reading origin/rd/redis-tls-config x")
     assert later.endswith("...\nboard_read returns the posts in full.") and len(later.splitlines()[1]) < 150
 

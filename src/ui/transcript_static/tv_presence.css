@@ -1,13 +1,16 @@
 /* Entries, exits and alerts (tv_presence.js): the transcript's chips, the bar's badge, the Details tab's cards and the
    Board tab's lane marks. */
 
-/* a transcript's entered or exited line, in its header */
+/* a round's message's chips, in its header: the round, each presence event, the board */
 .pr-chip { display: inline-flex; align-items: center; gap: 5px; margin-left: 6px; padding: 0 6px; border-radius: 4px;
   font-size: 11.5px; font-weight: 600; line-height: 1.6; border: 1px solid var(--border-strong);
   background: var(--panel-2); color: var(--text); }
 .pr-chip-in { border-color: var(--good); color: var(--good); background: var(--good-bg); }
 .pr-chip-out { border-color: var(--border-strong); color: var(--muted); }
+.pr-chip-event { border-color: var(--border-strong); }
 .pr-chip-alert { border-color: var(--bad); color: var(--on-bad); background: var(--bad); }
+.pr-chip-round { font-family: var(--mono); font-weight: 500; }
+.pr-chip-board { border-style: dashed; }
 .pr-round { font-weight: 500; opacity: .8; font-family: var(--mono); font-size: 10.5px; }
 
 /* the bar's badge and the alerts card */

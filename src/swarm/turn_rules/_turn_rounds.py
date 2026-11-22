@@ -27,9 +27,10 @@ it wraps them: ORBIT's built-in bash and python of a lone agent, which ORBIT bin
 run through the sandbox's command jobs (src/sandbox/agent_tools.py registers them).
 
 The round under way lives in memory (TurnState's Live.rounds), never in the store: after_activation turns it into the
-round's timeline entry. open_round starts it before the round's first model call and appends the durable round line
-to the agent's conversation: "Round 3 of 30. You have 28 rounds left, including this one. Up to 10 tool calls this
-round." Every agent present reads the run's round number, the plan's (round_line).
+round's timeline entry. open_round starts it before the round's first model call and gives the round's line, the
+first part of the one message the agent gets at the round's boundary (_turn_messages): "Round 3 of 30. You have 28
+rounds left, including this one. Up to 10 tool calls this round." Every agent present reads the run's round number,
+the plan's (round_line).
 
     record = round_record("k7q2m")
     record["made"], record["closed"], record["end"]       # 3, False, None
@@ -50,6 +51,7 @@ from inspect_ai.util import store, store_as
 
 from src.configuration.prompt_texts import counted as in_words
 from src.configuration.settings import load_prompts
+from src.swarm.turn_rules._turn_messages import Part, message_round
 from src.swarm.turn_rules._turn_state import (
     END_ROUND,
     JOBS_STORE,
@@ -169,10 +171,11 @@ def round_line(round_number: int, of: int, calls: int) -> str:
         calls=in_words(calls, "tool call"))
 
 
-def open_round(agent: str, state: AgentState) -> str | None:
-    """Start the agent's round and append its line (round_line) to its conversation (ROUND_TAG metadata: round, of,
-    left, calls), once per round: a boundary edit ORBIT rejects is delivered again at the next. Notes the first round's
-    start (TurnState.started_at). Returns the line appended, or None. Outside a planned step nothing happens."""
+def open_round(agent: str, state: AgentState) -> Part | None:
+    """Start the agent's round and give its line (round_line) as the round's message's first part (ROUND_TAG metadata:
+    round, of, left, calls), once per round: a boundary edit ORBIT rejects is given again at the next, and a
+    conversation that holds this round's line gets none. Notes the first round's start (TurnState.started_at). The
+    part's record writes the line's info event. None outside a planned step and when the line is there."""
     round_number = current_round()
     if round_number is None:
         return None
@@ -180,15 +183,13 @@ def open_round(agent: str, state: AgentState) -> str | None:
     if st.started_at is None:
         st.started_at = now()
     round_record(agent, round_number)
-    if any(((m.metadata or {}).get(ROUND_TAG) or {}).get("round") == round_number for m in state.messages
+    if any((message_round(m.metadata) or {}).get("round") == round_number for m in state.messages
            if isinstance(m, ChatMessageUser)):
         return None
     tag = {"round": round_number, "of": st.round_budget, "left": rounds_left(round_number, st.round_budget),
            "calls": st.calls_per_round}
     text = round_line(round_number, st.round_budget, st.calls_per_round)
-    state.messages.append(ChatMessageUser(content=text, metadata={ROUND_TAG: tag}))
-    transcript().info({ROUND_TAG: {"agent": agent, **tag, "content": text}})
-    return text
+    return Part(ROUND_TAG, tag, text, lambda: transcript().info({ROUND_TAG: {"agent": agent, **tag, "content": text}}))
 
 
 # ------------------------------------------------------------------------------------------------ the gate on calls

@@ -167,16 +167,26 @@ Transcript = {agent (the bare ID), model (the agent's own model), model_key (its
 ATIF.steps[i] = {step_id, source: "system"|"user"|"agent", message, reasoning_content?, model_name?,
                  tool_calls?: [{tool_call_id, function_name, arguments}],
                  observation?: {results: [{source_call_id, content, extra?: {is_error?, error?, withheld_from_model_by_defense?}}]},
-                 extra?: {swarm_turn_rules?, swarm_presence?, defense_refusal?, refusal_text_written_by_model?, ...}}
+                 extra?: {swarm_turn_rules?, swarm_round?, swarm_presence?, swarm_notice?, defense_refusal?,
+                          refusal_text_written_by_model?, ...}}
 ```
-A user step with `extra.swarm_round` (`{round, of, left, calls}`) is the line "Round {round} of {of}. You have {left}
-rounds left, including this one. Up to {calls} tool calls this round." that opens a round
-(`src/swarm/turn_rules/_turn_rounds.py`): `round` is the run's round, the same for every agent. A run before 2026-11-22
-tags `{round, n, of}` and reads "Round {n} of {of}.", `n` the agent's own count. The transcript page draws a rule above
-it and a chip `round {round} · {n or round} of {of}`.
-A user step with `extra.swarm_presence` (`{id, agent, kind: "entered"|"exited", why, round}`) is a presence line: a
-peer's entry or exit, saved in the agent's conversation (`src/swarm/turn_rules/_turn_presence.py`). `why` is
-`submit`, `stop`, `alert`, `budget`, `context` or `delivered` on an exit, null on an entry.
+A user step with `extra.swarm_round` is a round's message (`src/swarm/turn_rules/_turn_messages.py`), the one user
+message an agent gets at the start of each of its rounds. Its parts are paragraphs, one blank line between them, in
+this order, each tagged in `extra` when present (a part with nothing to say is left out; `turn_rules.message_parts`
+splits them):
+- `swarm_round` (`{round, of, left, calls}`): the line "Round {round} of {of}. You have {left} rounds left, including
+  this one. Up to {calls} tool calls this round." (`_turn_rounds.py`). `round` is the run's round, the same for every
+  agent. A run before 2026-11-22 tags `{round, n, of}` and reads "Round {n} of {of}.", `n` the agent's own count.
+- `swarm_presence` (`{round, events: [{id, agent, kind, why, round}]}`): who entered and left, the alerts, holds and
+  pushes (`_turn_presence.py`), one line each, entries in a row as one sentence ("a and b entered."). `kind` is
+  `entered`, `exited`, `alert`, `held` or `push`; `why` is `submit`, `stop`, `alert`, `rounds`, `budget`, `context`
+  or `delivered` on an exit, null on an entry. The outer `round` is the round it was delivered in.
+- `swarm_notice` (`{kind: "notice", activation, call, round}`): the board's posts by others since the agent last
+  looked, "Posts on the board: ..." in its first round and "Since your last round the board changed: ..." later.
+A run before 2026-11-22 holds the round's line and each presence line (`swarm_presence` the event itself) as user
+steps of their own, and its board notice as a provider-only step (`swarm_turn_rules: "notice"`); a notice inside a
+round ("[Since your last call] ...") is still one. The results browser draws a rule above a step with `swarm_round`
+and a chip `round {round} · {n or round} of {of}`.
 A blocked tool call has a result whose `extra.error` starts with `Blocked by defense`.
 
 ### `GET /api/runs/<study>/<run>/sample` → the sample's facts from the eval log
@@ -623,8 +633,10 @@ agent's own count `n of R`, its calls, its end as a chip (`end_round`, `call lim
 `context limit`, or the tool that ended its turns: `stop_working`, `submit`, `alert_humans`), `board only` for a round
 that used up none, and its time. Each call's head carries its place in the round, `pos/N` (a refused call in the bad
 colour), and the strip draws a solid line where a round begins.
-The agent tab shows a step with `extra.swarm_presence` as a User message whose header carries a chip: the agent,
-`entered` or `exited` with its `why`, and the round (`tv_presence.js presenceChip`).
+The agent tab shows a round's message as a User message whose header carries the round's chip (`round r of R`,
+`tv_presence.js roundChip`), one chip per presence event (the agent, `entered`, `exited` with its `why`, `alerted`,
+`hand-in held` or `pushed`, and the round: `presenceEvents`, `presenceChip`) and the board's chip (`boardChip`). A
+presence line of a run before 2026-11-22 gets its one event's chip.
 ### `GET /api/tools?id=<id>&agent=<agent>` → the tool definitions the agent's model calls sent the provider
 `{tools, tool_choice, same_in_every_call, from_request}` (`transcript_viewer.agent_tools`), read from the run's eval log
 once per run: `tools` is `[{name, description, parameters}]` as the agent's first model call's provider request
