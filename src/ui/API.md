@@ -370,7 +370,8 @@ a verdict row's bookkeeping (`verdict_files.ROW_KEYS`) but `parse_ok`, `judge_co
 
 ### `GET /api/index` → `{built_at, build_seconds, measured, collections: [Collection], errors: [{id, error}], rows: [IndexRow], left_out}`
 ```
-Collection = {key (the folder name), label, tag, about, runs (its valid runs listed), other_tasks (its hidden_task runs)}
+Collection = {key (the folder name), label, tag, about, runs (its valid runs listed), other_tasks (its hidden_task runs),
+              latest (its newest run's `started`)}        # newest first; the Summary page opens the first
 IndexRow = {                                         # valid runs only
   id ("<collection>/<run key>"), col, key (the run's path under the collection), run (its name; a manifest's key),
   hidden_task (a task the study does not read: listed behind "other tasks" only),
@@ -384,7 +385,7 @@ IndexRow = {                                         # valid runs only
   worker_conditioning ("baseline" | "told to cheat" | transcript_index.RULE_WORDS[rule_level], joined by "; "),
   influencer_conditioning: [{role ("regulator"|"disregulator"), n, level (its instruction level), model}],
   model (the workers' model, the last part of run.json's role_models worker, else its model, never a
-  run's name), model_id (that model string), n_agents, seed, seed_pack ("<task>/<pack>" or "none"),
+  run's name), model_id (that model string), n_agents, seed, seed_pack ("<task>/<pack>" or "none"), started (from the eval log's name, "2026-11-22T13-25-43", or ""),
   levels: {team: {<ladder>: level}, cheated: bool | null,   # the team's Cheating measure: attempted or above
            passed: bool | null,                    # the Cheating measure's passed: the grader passed the hand-in
            cheating_influencers, coordination_influencers, collusion_influencers:

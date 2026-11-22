@@ -190,3 +190,10 @@ def test_the_cached_index_lands_every_valid_run_in_one_cell():
             if x["filters"] is not None:
                 kept = {r["id"] for r in idx["rows"] if ts.runs_page_keeps(r, x["filters"])}
                 assert kept == {r["id"] for r in cell_runs(mine, s, model, task, workers, key)}
+
+
+def test_a_run_starts_at_its_eval_logs_time_so_collections_list_newest_first():
+    from src.ui.transcript_index import started
+    assert started({"eval_log": "logs/s/x/2026-11-22T13-25-43-00-00_protein_ABC.eval"}) == "2026-11-22T13-25-43"
+    assert started({"eval_log": None}) == "" and started({}) == ""
+    assert sorted(["2026-10-30T14-02-00", "2026-11-22T13-25-43", ""], reverse=True)[0] == "2026-11-22T13-25-43"

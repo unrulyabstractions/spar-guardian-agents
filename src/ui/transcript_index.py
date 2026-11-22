@@ -46,7 +46,8 @@ SKIP = ("study_smoke", "study_orbit2_check", "apart_controls")
 """Folders under runs/ the viewer never lists: mock smokes, a port check and the apart controls, whose runs are all
 single agents."""
 INDEX_VERSION = 16  # 11 baseline; 12 levels.passed; 13 workers' mean label score; 14 single agents left out;
-#                     15 hidden tasks measured, behind a chip; 16 seed_pack
+#                     15 hidden tasks measured, behind a chip; 16 seed_pack;
+#                     17 started, collections newest first
 WORKERS = 6
 """Processes that measure runs when a start finds runs to measure: each loads transcripts, so few enough to spare the
 machine's memory."""
@@ -373,6 +374,13 @@ def interest_order(row: dict) -> tuple:
             row["col"], row["run"] or "")
 
 
+def started(run_json: dict) -> str:
+    """When the run started, from its eval log's name ("2026-11-22T13-25-43-00-00_..."): "2026-11-22T13-25-43", or ""
+    when the name holds no time."""
+    m = re.match(r"(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})", Path(str(run_json.get("eval_log") or "")).name)
+    return m.group(1) if m else ""
+
+
 def build_row(col: str, listed: Listed, rf: RunFiles, measured: dict) -> dict:
     """The run's index row from its files and its measures (RunFiles.measured's answer)."""
     rj, cfg = rf.run_json, rf.run_json.get("config") or {}
@@ -391,7 +399,7 @@ def build_row(col: str, listed: Listed, rf: RunFiles, measured: dict) -> dict:
         "worker_conditioning": told, "influencer_conditioning": influencers, "model": cell.worker,
         "model_id": (rj.get("role_models") or {}).get("worker") or rj.get("model"), "n_agents": n_agents,
         "workers": workers, "seed": listed.meta.get("seed", cfg.get("seed")),
-        "seed_pack": cfg.get("seed_pack") or "none",
+        "seed_pack": cfg.get("seed_pack") or "none", "started": started(rj),
         "levels": transcript_levels.index_levels(rf.levels(measured), rf.roles),
         "cheatbench": cheatbench_summary(measured["cheatbench"], rf.episodes, rf.roles),
         "labels": label_summary(measured["labels"], rf.roles),
@@ -479,8 +487,10 @@ def build_index(runs: Path, cached: dict | None = None) -> dict:
     for name, listed in cols:
         label, tag, about = COLLECTION_ABOUT.get(name, (name, "", ""))
         shown = other = 0
+        latest = ""
         for item in listed:
             entry = entries[f"{name}/{item.key}"]
+            latest = max(latest, (entry.get("row") or {}).get("started") or "")
             if "error" in entry:
                 errors.append({"id": f"{name}/{item.key}", "error": entry["error"]})
             elif single_agent(entry["row"]):
@@ -493,7 +503,8 @@ def build_index(runs: Path, cached: dict | None = None) -> dict:
         left_out += other
         if shown or other:
             collections_out.append({"key": name, "label": label, "tag": tag, "about": about, "runs": shown,
-                                    "other_tasks": other})
+                                    "other_tasks": other, "latest": latest})
+    collections_out.sort(key=lambda c: c["latest"], reverse=True)  # newest first; a collection with no time last
     rows.sort(key=interest_order)
     return {"version": INDEX_VERSION, "runs": str(runs), "code": code,
             "built_at": time.strftime("%Y-%m-%d %H:%M:%S %Z"), "build_seconds": round(time.time() - t0, 2),

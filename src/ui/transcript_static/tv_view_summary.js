@@ -120,7 +120,7 @@ function summed(rows, columns, d) {
 export async function viewSummary(q) {
   const ladders = await loadLadders();
   const cols = COLLECTION_ORDER;
-  const col = cols.includes(q.get('col')) ? q.get('col') : (cols.includes('study_exploration_1') ? 'study_exploration_1' : cols[0]);
+  const col = cols.includes(q.get('col')) ? q.get('col') : cols[0];  // the newest study (the index lists newest first)
   const s = await loadSummary(col);
   // The influencer bands the page hides (hide=regulator,disregulator,both), each toggled by its button.
   const BANDS = [['regulator', 'Regulators'], ['disregulator', 'Disregulators'], ['both', 'Both']]
