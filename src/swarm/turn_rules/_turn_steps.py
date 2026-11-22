@@ -40,7 +40,8 @@ def single_step(step_id: str, agent: str) -> dict[str, Any]:
     return {"id": step_id, "agents": [agent]}
 
 
-def concurrent_step(step_id: str, agents: list[str], max_concurrency: int) -> dict[str, Any]:
-    """A concurrent step on the live board: a read sees every post made so far, this round's included."""
+def concurrent_step(step_id: str, agents: list[str], max_concurrency: int | None) -> dict[str, Any]:
+    """A concurrent step on the live board: a read sees every post made so far, this round's included. max_concurrency
+    None runs every agent of the step at once."""
     return {"id": step_id, "agents": list(agents), "concurrent": True, "max_concurrency": max_concurrency,
             "visibility": "live"}

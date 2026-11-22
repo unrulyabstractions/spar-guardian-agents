@@ -180,12 +180,12 @@ def test_running_record_is_the_step_orbits_history_ends_on():
 
 def test_concurrent_rounds_plan_shape():
     config = pull(rounds=3)
-    assert (config.n_agents, config.max_concurrency, config.rounds) == (3, 3, 3)
+    assert (config.n_agents, config.max_concurrency, config.rounds) == (3, None, 3)
     schedule = rules.schedule(config, config.names)
     plan = schedule.steps
     assert [s.id for s in plan] == ["r1", "r2", "r3"]
     for s in plan:
-        assert sorted(s.agents) == config.names and s.concurrent and s.max_concurrency == 3
+        assert sorted(s.agents) == config.names and s.concurrent and s.max_concurrency is None
         assert s.visibility == "live"
     # ORBIT calls after_activation after every round and ends_round at every boundary of one.
     assert (schedule.after_activation, schedule.end_activation) == (

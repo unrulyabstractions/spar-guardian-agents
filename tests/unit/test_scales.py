@@ -7,12 +7,13 @@ from pydantic import ValidationError
 from src.configuration.presets import PRESETS, build_config, with_overrides
 from src.configuration.scales import SCALES
 from src.configuration.swarm_config import SwarmConfig
+from src.swarm import turn_rules as rules
 from tests.support.ordered_ids import ordered_ids
 
 SCALE_TABLE = {   # n_agents, max_message_chars, read_page, time_limit_s, max_concurrency, batch, reads_per_turn,
     #               posts_per_turn
-    "small": (3, 2000, 10, 3600, 3, False, 10, 2),
-    "medium": (10, 2000, 10, 7200, 10, False, 10, 2),
+    "small": (3, 2000, 10, 3600, None, False, 10, 2),
+    "medium": (10, 2000, 10, 7200, None, False, 10, 2),
     "large": (100, 2000, 10, 14400, 50, True, 10, 2),
     "extra_large": (500, 2000, 10, 28800, 50, True, 10, 2),
     "gigantic": (1000, 2000, 10, 43200, 50, True, 10, 2),
@@ -52,3 +53,14 @@ def test_rounds_and_calls_at_every_scale(name):
     for bad in (["rounds=0"], ["calls_per_round=0"], ["rounds=none"]):
         with pytest.raises(ValidationError):
             build_config("default", name, bad)
+
+
+@pytest.mark.parametrize("name, size", [("small", 4), ("small", 5), ("medium", 12)])
+def test_every_agent_of_a_team_runs_its_round_at_once(name, size):
+    """A team larger than its scale's default (a regulator added to the small scale's three workers) still runs every
+    agent of a round at once: ORBIT runs a concurrent step's agents under a semaphore of max_concurrency, or all of
+    them when it is None, so no agent waits for a slot and a round lasts T, not 2T."""
+    c = build_config("default", name, [f"n_agents={size}", "regulators=1"])
+    for step in rules.schedule(c, c.names).steps:
+        assert step.concurrent and len(step.agents) == size
+        assert (step.max_concurrency or len(step.agents)) == size

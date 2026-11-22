@@ -67,5 +67,5 @@ def test_order_preset_then_scale_then_set():
     c = build_config("default", "medium", ["n_agents=4", "max_concurrency=2"])
     assert (c.n_agents, c.max_concurrency, c.time_limit_s, c.scale) == (4, 2, 7200, "medium")
     # a scale given among the pairs applies before them, whatever its position
-    assert build_config("default", None, ["n_agents=4", "scale=medium"]) == with_overrides(c, ["max_concurrency=10"])
+    assert build_config("default", None, ["n_agents=4", "scale=medium"]) == with_overrides(c, ["max_concurrency=none"])
     assert build_config("default").scale == "small" and build_config("default") == PRESETS["default"]

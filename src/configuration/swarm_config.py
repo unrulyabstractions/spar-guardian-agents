@@ -211,11 +211,12 @@ class SwarmConfig(BaseModel):
     the rule without the number. 0: no round clock, and a command call waits for its command."""
     concurrent_rounds: bool = True
     """True: each round is one concurrent ORBIT ScheduleStep holding every eligible agent, at most max_concurrency at
-    once, on the live board: a read sees every post made so far, this round's included. False: one single-agent step
-    per agent per round, in sequence. Either way an agent's round is one ORBIT activation of up to calls_per_round
-    tool calls."""
-    max_concurrency: int = 3
-    """Most agents running at once in a concurrent step (ORBIT ScheduleStep.max_concurrency), from the scale."""
+    once (every one with None), on the live board: a read sees every post made so far, this round's included. False:
+    one single-agent step per agent per round, in sequence. Either way an agent's round is one ORBIT activation of up
+    to calls_per_round tool calls."""
+    max_concurrency: int | None = None
+    """Most agents running at once in a concurrent step (ORBIT ScheduleStep.max_concurrency), from the scale. None:
+    every agent of the step at once, so no agent of a round waits for a slot."""
     shutdown: bool = True
     """Whether the neutral agents and the disregulators of a shared_task team get stop_working (holds_stop_working;
     src/swarm/submit_and_stop.py). A regulator never does. A call ends the caller's turns at once (TurnState.ended
@@ -374,7 +375,7 @@ class SwarmConfig(BaseModel):
             raise ValueError("regulators + disregulators cannot exceed n_agents")
         access_policy.check_seats(self.access, self.n_agents)
         for name in ("rounds", "calls_per_round", "read_page", "max_concurrency"):
-            if getattr(self, name) < 1:
+            if getattr(self, name) is not None and getattr(self, name) < 1:
                 raise ValueError(f"{name} must be at least 1")
         if self.round_time_s < 0:
             raise ValueError("round_time_s cannot be negative; 0 turns the round clock off")

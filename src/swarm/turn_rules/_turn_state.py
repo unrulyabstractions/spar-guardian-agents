@@ -83,7 +83,7 @@ class TurnState(StoreModel):
     turn_order: str = "round_robin"
     seed: int = 0
     concurrent: bool = False                                # rounds are concurrent steps
-    max_concurrency: int = 1
+    max_concurrency: int | None = None                      # None: every agent of a step at once
     reads_per_turn: int | None = None                       # posts board_read may return per agent per round
     posts_per_turn: int | None = None                       # board_post calls per agent per round
     rounds: int = 0                                         # the plan's rounds: R (SwarmConfig.rounds)
