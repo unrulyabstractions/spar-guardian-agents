@@ -58,7 +58,8 @@ END = "end"
 SLOWEST = 10
 """The slowest calls the report lists."""
 RECORDED = "recorded"
-"""The match of a call replayed from its recorded output: a host tool, or a call whose arguments were refused."""
+"""The match of a call replayed from its recorded output: a host tool, or a call that never ran (its arguments refused,
+or the turn rules refused it: recorded_calls.NEVER_RAN)."""
 
 
 class OutputCut(NamedTuple):

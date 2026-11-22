@@ -66,7 +66,7 @@ from src.measures import honeypot_fingerprints as prints_module
 from src.measures.run_directory import RunDir
 from src.measures.shell_commands import PYTHON_TOOLS, TOOLS, line_hits
 from src.replay.output_match import match_of
-from src.replay.recorded_calls import RecordedCall, ReplayRefused, sample_store
+from src.replay.recorded_calls import NEVER_RAN, RecordedCall, ReplayRefused, sample_store
 from src.replay.replay_jobs import JobPlayer, Place
 from src.replay.replay_sandbox import ReplaySandbox, timed_out, under_timeout
 from src.sandbox import sandbox_hygiene as hygiene
@@ -447,11 +447,11 @@ class CreativeReplayer:
 
     # ---------------------------------------------------------------- the calls
     def in_sandbox(self, call: RecordedCall) -> bool:
-        """A shell or python call whose arguments the tool accepted, and a submit that kept writing.md; since the round
-        clock also job_output, job_stop and peer_shell (replay_jobs.py)."""
+        """A shell or python call that ran (recorded_calls.NEVER_RAN), and a submit that kept writing.md; since the
+        round clock also job_output, job_stop and peer_shell (replay_jobs.py)."""
         if self.jobs is not None and self.jobs.handles(call):
             return True
-        return (call.tool in TOOLS and call.error != "parsing") or call.id in self.submits
+        return (call.tool in TOOLS and call.error not in NEVER_RAN) or call.id in self.submits
 
     def shared(self, call: RecordedCall) -> bool:
         return True

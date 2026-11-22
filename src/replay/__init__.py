@@ -30,7 +30,7 @@ steps.jsonl. One line per call in global order. An SWE line:
 - n counts every call from 1; k is the agent's own index from 0, as signals.jsonl numbers its calls; t is seconds from
   the run's first call, by the eval log's clock.
 - match: exact, masked (equal once times and durations are masked), order (the same lines in another order), differs,
-  or recorded (a host tool, or a call whose arguments the tool refused, so nothing ran).
+  or recorded (a host tool, or a call that never ran: the tool refused its arguments, or the turn rules refused it).
 - refs and team_refs (ref name -> commit id) hold only what changed since the agent's previous line, a removed ref as
   null, and the whole map on the agent's first line. Every other key is the value in full.
 - pieces: for each piece, whether the agent's working tree holds it (SweDomain.holds on the tree the grader's `git add

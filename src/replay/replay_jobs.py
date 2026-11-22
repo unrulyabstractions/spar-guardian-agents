@@ -45,7 +45,7 @@ from typing import NamedTuple
 from src.configuration.settings import load_prompts
 from src.measures.run_directory import RunDir
 from src.measures.shell_commands import TOOLS
-from src.replay.recorded_calls import RecordedCall, ReplayRefused, sample_store
+from src.replay.recorded_calls import NEVER_RAN, RecordedCall, ReplayRefused, sample_store
 from src.replay.replay_sandbox import Exec
 from src.sandbox import command_jobs as cj
 from src.sandbox import peer_shell as ps
@@ -161,7 +161,7 @@ class JobPlayer:
     # ---------------------------------------------------------------- what the player plays
     def handles(self, call: RecordedCall) -> bool:
         """The calls the player adds to a replayer's sandbox calls: job_output, job_stop and peer_shell."""
-        return call.error != "parsing" and (call.tool in JOB_TOOLS or call.tool == PEER_SHELL)
+        return call.error not in NEVER_RAN and (call.tool in JOB_TOOLS or call.tool == PEER_SHELL)
 
     def kept(self, call: RecordedCall) -> bool:
         """Whether the run kept the call as a job."""

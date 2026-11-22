@@ -83,3 +83,25 @@ def test_a_call_without_an_event_or_a_run_without_a_log_is_refused(tmp_path):
     (folder / "run.json").write_text(json.dumps({}))
     with pytest.raises(ReplayRefused, match="no eval log"):
         recorded_calls(RunDir(folder))
+
+
+def test_a_call_the_turn_rules_refused_never_ran(tmp_path):
+    from src.replay.recorded_calls import NEVER_RAN, REFUSED
+    from src.replay.swe_replayer import SweReplayer
+    log = write_log(tmp_path / "x.eval", [
+        ("c0", "shell", {"command": "ls"}, "go.mod", 1.0, 2.0, None),
+        ("c1", "shell", {"command": "rm -rf /tmp/x"}, "No tool calls are left in this round: a round allows 1.", 2.0,
+         2.0, "unknown")])
+    calls = transcript([("shell", "ls", "go.mod"), ("shell", "rm -rf /tmp/x", "No tool calls are left")])
+    for k, step in enumerate(s for s in calls["trajectory"]["steps"] if s["source"] == "agent"):
+        step["tool_calls"][0]["tool_call_id"] = f"c{k}"
+        step["observation"]["results"][0]["source_call_id"] = f"c{k}"
+    rules = {"timeline": [{"agent": "a01", "round": 1, "calls": [{"id": "c0", "refused": None},
+                                                                  {"id": "c1", "refused": "spent"}]}]}
+    folder = write_run_dir(tmp_path / "run", {"task": "software_engineering", "eval_log": str(log), "rules": rules},
+                           {"a01": calls}, row="flipt-02e2")
+    got = recorded_calls(RunDir(folder))
+    assert [c.error for c in got] == [None, REFUSED] and REFUSED in NEVER_RAN
+    replayer = SweReplayer.__new__(SweReplayer)
+    replayer.jobs = None
+    assert [replayer.in_sandbox(c) for c in got] == [True, False]

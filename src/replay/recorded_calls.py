@@ -5,7 +5,9 @@ arguments, output, error and times.
     calls = recorded_calls(RunDir(path))       # [RecordedCall(n=1, agent="k7q2m", k=0, ...), ...]
 
 The global order is each agent's calls in k order, merged by the eval log's start time (then the agent, then k), so no
-agent's calls ever change order. n counts from 1. Pure: nothing is written.
+agent's calls ever change order. n counts from 1. A call the run's turn rules refused (run.json rules.timeline marks it
+refused: its round's calls spent, its round closed, its agent's turns ended) never ran, and its error is REFUSED
+whatever the log's type; NEVER_RAN holds the error types of calls that never ran. Pure: nothing is written.
 """
 from __future__ import annotations
 
@@ -22,13 +24,19 @@ from src.measures.shell_commands import results_of, tool_calls_of
 ATTACHMENT = "attachment://"
 
 
+REFUSED = "refused"
+"""The error of a call the run's turn rules refused before it ran."""
+NEVER_RAN = ("parsing", REFUSED)
+"""The errors of calls that never ran: the tool's schema refused the arguments, or the turn rules refused the call."""
+
+
 class ReplayRefused(RuntimeError):
     """The record cannot be replayed as it stands: the reason says what is missing or different."""
 
 
 class RecordedCall(NamedTuple):
-    """One recorded tool call. error is the eval log's error type ("timeout", "parsing", ...) or None; t0 and t1
-    the start and end in seconds since the epoch."""
+    """One recorded tool call. error is the eval log's error type ("timeout", "parsing", ...), REFUSED, or None; t0
+    and t1 the start and end in seconds since the epoch."""
     n: int
     agent: str
     k: int
@@ -125,6 +133,12 @@ def merge_by_start(per_agent: dict[str, list[tuple[float, int, object]]]) -> lis
     return out
 
 
+def refused_ids(run: RunDir) -> set[str]:
+    """The ids of the calls the run's turn rules refused (run.json rules.timeline); none for a run before them."""
+    return {call.get("id") for entry in (run.run_json.get("rules") or {}).get("timeline") or []
+            for call in entry.get("calls") or [] if call.get("refused") and call.get("id")}
+
+
 def recorded_calls(run: RunDir) -> list[RecordedCall]:
     """The run's calls in global order (merge_by_start). A call the transcripts hold and the eval log does not is
     refused, as is a run without an eval log."""
@@ -132,6 +146,7 @@ def recorded_calls(run: RunDir) -> list[RecordedCall]:
     if log is None:
         raise ReplayRefused(f"{run.path.name}: no eval log (run.json eval_log names none that exists)")
     events = tool_events(log)
+    refused = refused_ids(run)
     per_agent: dict[str, list[tuple[float, int, dict]]] = {}
     for agent, calls in agent_calls(run).items():
         rows = []
@@ -143,7 +158,7 @@ def recorded_calls(run: RunDir) -> list[RecordedCall]:
                                           "arguments": event["arguments"] or arguments,
                                           "result": event["result"] if event["result"] or not transcript_result
                                           else transcript_result,
-                                          "error": event["error"], "t0": event["t0"],
+                                          "error": REFUSED if cid in refused else event["error"], "t0": event["t0"],
                                           "t1": event["t1"] if event["t1"] is not None else event["t0"]}))
         per_agent[agent] = rows
     return [RecordedCall(n=n, **row) for n, row in enumerate(merge_by_start(per_agent), 1)]

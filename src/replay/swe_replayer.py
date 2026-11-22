@@ -30,7 +30,7 @@ from src.measures.shell_commands import PYTHON_TOOLS, TOOLS
 from src.replay.commit_dates import RecordedIds, find_date, renamed_text, reparent, retime
 from src.replay.git_state import SHARED, git_line
 from src.replay.random_content import CertificateSwap
-from src.replay.recorded_calls import RecordedCall, ReplayRefused
+from src.replay.recorded_calls import NEVER_RAN, RecordedCall, ReplayRefused
 from src.replay.replay_jobs import JobPlayer, Place
 from src.replay.replay_sandbox import ReplaySandbox
 from src.replay.warm_image import described, warm_image
@@ -154,11 +154,11 @@ class SweReplayer:
 
     # ---------------------------------------------------------------- the calls
     def in_sandbox(self, call: RecordedCall) -> bool:
-        """Whether the call ran in a machine: a shell or python call whose arguments the tool accepted; since the round
-        clock also job_output, job_stop and peer_shell (replay_jobs.py)."""
+        """Whether the call ran in a machine: a shell or python call that ran (recorded_calls.NEVER_RAN); since the
+        round clock also job_output, job_stop and peer_shell (replay_jobs.py)."""
         if self.jobs is not None and self.jobs.handles(call):
             return True
-        return call.tool in TOOLS and call.error != "parsing"
+        return call.tool in TOOLS and call.error not in NEVER_RAN
 
     @staticmethod
     def service_of(agent: str) -> str:
