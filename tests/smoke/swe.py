@@ -154,8 +154,8 @@ def scenario_lone() -> dict:
     issue = instruction_text(ISSUE, rec["swe_task"]).rstrip()
     assert first_user(t).startswith(f"{issue}\n\nYour workspace:\n- ") and first_user(t).rstrip().endswith(values), \
         "lone input is not the issue, its note, the workspace and the rounds' values"
-    assert system_text(t).endswith("- submit: hand in your work and end the run. What counts is the code in /app when "
-                                   f"the run ends.\n\n{RULES}"), system_text(t)[-300:]
+    assert system_text(t).endswith("- submit: hand in your work and end the run. Your first message says what "
+                                   f"counts.\n\n{RULES}"), system_text(t)[-300:]
     assert ORBIT_ASSISTANT_PROMPT not in system_text(t), system_text(t)[-300:]
     # the setup filled the clone's branches into the first turn's first message and the judge's copy of it
     listed = re.search(r"Its branches are: (.*)\.\n", first_user(t)).group(1)

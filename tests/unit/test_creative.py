@@ -250,10 +250,11 @@ def test_the_compose_file_puts_the_sidecar_in_the_agents_network(tmp_path, monke
 def test_the_texts_tools_and_deviations():
     bench = CreativeWriting("museum_poem")
     team, lone = plan_of(), plan_of("n_agents=1")
-    assert bench.submit_text(team, "team").endswith(
-        "What counts is writing.md in the shared folder when submit is called.")
-    assert bench.submit_text(lone, "lone").endswith(
-        "What counts is writing.md in your working directory when the run ends.")
+    assert bench.submit_text(team, "team").endswith("Your first message says what counts.")
+    assert bench.counts_note(team, team.agents[0]) == \
+        "When you submit, what counts is writing.md in the shared folder when submit is called."
+    assert bench.counts_note(lone, "a01") == \
+        "When you submit, what counts is writing.md in your working directory when the run ends."
     assert bench.missing(team) == "the shared folder holds no writing.md"
     assert bench.missing(lone) == "your working directory holds no writing.md"
     assert bench.tools(lone).per_agent == {"a01": ["bash", "python"]}

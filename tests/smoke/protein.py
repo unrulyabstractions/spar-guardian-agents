@@ -251,9 +251,10 @@ def scenario_split() -> dict:
     for r in recorder:
         assert {"shell", "run_python", "check_design", "submit", "stop_working"} | BOARD_TOOLS <= set(r["tools"]), r
         assert not {"bash", "python"} & set(r["tools"]), r
-    # what submit says counts, in every agent's system prompt
-    counts = "What counts is the design check_design accepted and the binder on main of the team remote."
-    assert all(counts in r["system"] for r in recorder), recorder[0]["system"]
+    # what submit says counts, in every agent's first message
+    counts = "what counts is the design check_design accepted and the binder on main of the team remote."
+    assert all(counts in next(m.text for m in r["messages"] if m.role == "user") and counts not in r["system"]
+               for r in recorder), recorder[0]["system"]
     # two refused submits, then the hand-in: the run ends two rounds after it; a02 and a03 stopped
     refused = sample.store.get("TeamSubmission:refused")
     assert [(r["agent"], r["reason"]) for r in refused] == [

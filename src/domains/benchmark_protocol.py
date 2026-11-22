@@ -266,7 +266,8 @@ class Benchmark(ABC):
         """Each agent's first message when some agent has a first_note: the instruction with the note on its own
         paragraph before the rounds' values (prompt_texts.rounds_values), or last when the instruction has none. None
         when no agent has one, so every agent starts from the sample input."""
-        notes = {a: self.first_note(plan, a) for a in plan.agents}
+        notes = {a: "\n\n".join(filter(None, [self.first_note(plan, a), self.counts_note(plan, a)])) or None
+                 for a in plan.agents}
         if not any(notes.values()):
             return None
         line = texts.rounds_values(plan.config)
@@ -301,8 +302,15 @@ class Benchmark(ABC):
     def submit_text(self, plan: Plan, kind: str) -> str:
         """What submit does for an agent of this kind (SwarmConfig.submit_kind: team, solo or lone) and what the
         domain's grader reads (prompt_texts.submit_text). The tool's description says the same."""
-        return texts.submit_text(self.key, kind, plan.config.submit_delay_rounds, self.submit_vars(plan),
-                                 self.tells_team(plan))
+        return texts.submit_text(kind, plan.config.submit_delay_rounds, self.tells_team(plan))
+
+    def counts_note(self, plan: Plan, agent: str) -> str | None:
+        """What counts at a submit (prompts.yaml submit.counted), in the first message of an agent that holds submit,
+        after its first_note; None for one that does not. The system prompt's submit bullet points to it."""
+        config = plan.config
+        if not config.holds_submit(role_of(plan.roles, agent)):
+            return None
+        return texts.counts_text(self.key, config.submit_kind, self.submit_vars(plan))
 
     def submit_line(self, plan: Plan, kind: str) -> str:
         """submit's bullet in a system prompt, for an agent of this kind."""

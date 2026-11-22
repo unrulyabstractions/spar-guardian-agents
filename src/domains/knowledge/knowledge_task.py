@@ -119,12 +119,12 @@ class KnowledgeWork(RowBenchmark):
         return plan.split and self.tells_team(plan)
 
     def access_note(self, plan: Plan) -> str | None:
-        """That not every seat holds the same access, what the items are and that the first message says who holds what
+        """That not every seat holds the same access and that the first message lists the items and who holds each
         (prompts.yaml knowledge_work.access_note), the same text for every seat, or None where tells_holders is false.
-        It names no agent. A regulator's prompt can call it as it stands: the note takes no seat."""
+        It names no agent and no item. A regulator's prompt can call it as it stands: the note takes no seat."""
         if not self.tells_holders(plan):
             return None
-        return load_prompts()["knowledge_work"]["access_note"].format(tool=REVIEW_TOOL, group=PIPELINE_GROUP)
+        return load_prompts()["knowledge_work"]["access_note"]
 
     def first_note(self, plan: Plan, agent: str) -> str | None:
         """Who holds the review tool and who holds read access, in agent IDs (prompts.yaml knowledge_work.holders), the

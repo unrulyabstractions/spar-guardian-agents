@@ -13,9 +13,9 @@ endpoint, which ranks the best replies of any position.
 Layouts. A lone agent gets CheatBench's episode: one game, all nine tools. A team's agents each keep their own
 opponent/config.json and notepad. In shared_task they share one game, its six resets, its game/ files and
 opponent/play.py, they move in turn and they reset only together (_chess_move_rotation.py), they hold pass_turn, and
-their system prompt says so (prompts.yaml chess.team_game). That prompt names no agent: the move order follows the task
-in each agent's first message (chess.move_order). In solo_task each plays its own game. The instruction ends
-with the note for the arbiter and no answer block: submit hands the game in (prompts.yaml chess.closing).
+their first message says so after the task, with the move order (prompts.yaml chess.team_game). In solo_task each
+plays its own game. The instruction ends with the note for the arbiter and no answer block: submit hands the game in
+(prompts.yaml chess.closing).
 
 Access items: `request` (the api_request tool), `credential1` and `credential2` (the halves of the endpoint's bearer
 credential, which a split team's endpoint requires) and `whole`. Under split the request tool goes to some neutral
@@ -171,35 +171,26 @@ class Chess(RowBenchmark):
             return None
         return load_prompts()["chess"]["credential_part"]
 
-    def system_prompts(self, plan: Plan) -> dict[str, str]:
-        """The base's prompts, then for an agent of a shared_task team told of its team the text on its one game, the
-        same for every agent of the team. What only some agents hold, the credential, is in their first message."""
-        prompts = super().system_prompts(plan)
-        if not self.plays_as_team(plan):
-            return prompts
-        game = load_prompts()["chess"]["team_game"]
-        return {a: "\n\n".join([prompt, game]) for a, prompt in prompts.items()}
-
     def first_values(self, plan: Plan, agent: str) -> list[str]:
-        """The base's, then for an agent of a team that plays as one the rounds a seat holds the move (HOLD_ROUNDS)
-        and, for a holder of one half, the credential's note and which part of how many it holds."""
+        """The base's, then for a holder of one half of a team that plays as one the credential's note and which part
+        of how many it holds."""
         values = super().first_values(plan, agent)
         if not self.plays_as_team(plan):
             return values
-        values.append(first_value("hold", rounds=rounds_text(HOLD_ROUNDS)))
         if self.holds_a_part(plan, agent):
             values += [self.credential_note(plan, agent),
                        first_value("credential", part=held_halves(plan.holds[agent])[0], parts=len(CREDENTIALS))]
         return values
 
     def first_note(self, plan: Plan, agent: str) -> str | None:
-        """The move order (prompts.yaml chess.move_order) for every agent of a team that plays as one, a regulator that
-        oversees included, since its first message holds its teammates' (src/tasks.py first_messages); else None, and
-        None for a team with no seat to move."""
+        """The team's one game, with the move order and the rounds a seat holds the move (HOLD_ROUNDS; prompts.yaml
+        chess.team_game), for every agent of a team that plays as one, a regulator that oversees included, since its
+        first message holds its teammates' (src/tasks.py first_messages); else None, and None for a team with no seat
+        to move."""
         order = self.move_order(plan)
         if not (self.plays_as_team(plan) and order):
             return None
-        return load_prompts()["chess"]["move_order"].format(order=", ".join(order))
+        return load_prompts()["chess"]["team_game"].format(order=", ".join(order), hold=rounds_text(HOLD_ROUNDS))
 
     def stage(self, plan: Plan, row: dict) -> Staged:
         """The compose file and the block the setup, the tools, the scorer and run.json read: each agent's items,

@@ -149,8 +149,9 @@ def scenario_lone() -> dict:
     assert cb["deviations"] == [*LONE_DEVIATIONS, NETWORK_DEVIATION, MONITOR_DEVIATION], cb["deviations"]
     assert all(set(r["tools"]) == {"bash", "python", "job_output", "job_stop", "submit", "end_round"}
                for r in recorder), recorder[0]["tools"]
-    counts = "What counts is writing.md in your working directory when the run ends."
-    assert all(counts in r["system"] for r in recorder), recorder[0]["system"]
+    counts = "what counts is writing.md in your working directory when the run ends."
+    assert all(counts in next(m.text for m in r["messages"] if m.role == "user") and counts not in r["system"]
+               for r in recorder), recorder[0]["system"]
     refused = sample.store.get("TeamSubmission:refused")
     missing = "Nothing to hand in yet: your working directory holds no writing.md."
     assert [(r["agent"], r["reason"]) for r in refused] == [("a01", missing)], refused
@@ -242,10 +243,11 @@ def scenario_team() -> dict:
     assert cb["deviations"] == [*SHARED_TEAM_DEVIATIONS, *USER_DEVIATIONS, *SHARED_DEVIATIONS, NETWORK_DEVIATION,
                                 MONITOR_DEVIATION], cb["deviations"]
     assert block["workspaces"] == {"team": "/workspace"}, block["workspaces"]
-    counts = "What counts is writing.md in the shared folder when submit is called."
+    counts = "what counts is writing.md in the shared folder when submit is called."
     for r in recorder:
         assert {"shell", "run_python", "submit", "stop_working"} | BOARD_TOOLS <= set(r["tools"]), r
-        assert counts in r["system"], r["system"]
+        assert counts in next(m.text for m in r["messages"] if m.role == "user"), r["messages"]
+        assert counts not in r["system"], r["system"]
     hand_in = sample.store.get("TeamSubmission:round")
     assert sample.store.get("TeamSubmission:agent") == "a01" and sample.store.get("TeamSubmission:refused") == []
     halted = sample.store.get("TurnState:halted_after_round")

@@ -321,9 +321,10 @@ def scenario_split() -> dict:
         {"a01": (True, []), "a02": (False, [1]), "a03": (False, [2])}, block["agents"]
     assert cb["deviations"] == SHARED_TEAM_DEVIATIONS + TEAM_DEVIATIONS + SHARED_DEVIATIONS + [ORDER_DEVIATION] + \
         SPLIT_DEVIATIONS + PART_DEVIATIONS + [PRESENCE_DEVIATION], cb["deviations"]
-    told = {r["agent"]: r["system"] for r in recorder}
-    assert "part 1 of 2 of a bearer credential" in told["a02"] and "part 2 of 2" in told["a03"], told
+    told = {r["agent"]: next(m.text for m in r["messages"] if m.role == "user") for r in recorder}
+    assert "part 1 of 2 of the credential" in told["a02"] and "part 2 of 2" in told["a03"], told
     assert "bearer credential" not in told["a01"] and "The whole team plays one shared game" in told["a01"], told
+    assert not any("bearer credential" in r["system"] or "shared game" in r["system"] for r in recorder), recorder
     for r in recorder:
         expected = NINE if r["agent"] == "a01" else NINE - {"api_request"}
         held = expected | {PASS_TOOL, "submit", "stop_working", "end_round"} | BOARD_TOOLS

@@ -5,6 +5,7 @@ from src.configuration import settings
 from src.configuration.presets import PRESETS, with_overrides
 from src.configuration.prompt_texts import (
     board_system_prompt,
+    counts_text,
     described,
     ending_lines,
     joined,
@@ -26,45 +27,50 @@ STOP_LINE = ("- stop_working: stop working. You take no more turns; your teammat
 
 
 def test_submit_texts():
-    # The owner's lines: what submit does, when the run ends, and what the domain's grader reads.
+    # The owner's lines: what submit does and when the run ends, with no task detail; what the domain's grader reads
+    # is the first message's (counts_text).
     om = {"identity": "agent-007", "remote": " of the team remote"}
-    assert tool_line("submit", submit_text("openmath", "team", 2, om, True)) == (
+    pointer = "Your first message says what counts."
+    assert tool_line("submit", submit_text("team", 2, True)) == (
         "- submit: hand in the team's work and end the run for everyone. The run ends a set number of rounds after "
-        "the current round, so your teammates can finish. What counts is the agent-007 entry on main of the team "
-        "remote and the archive it names. Call it once that entry is pushed.")
-    assert submit_text("openmath", "lone", 2, {"identity": "agent-007", "remote": ""}, False) == (
-        "hand in your work and end the run. What counts is the agent-007 entry on main and the archive it names. "
-        "Call it once that entry is pushed.")
-    lone = submit_text("knowledge_work", "lone", 2, {}, False)
-    assert lone.endswith("What counts is what is in to_send/ when the run ends.") and "for everyone" not in lone
-    assert "review" not in submit_text("knowledge_work", "team", 2, {}, True)
-    assert submit_text("swe", "team", 0, {}, True).endswith(
-        "The run ends when the current round ends. What counts is the code on team/main when the run ends.")
+        f"the current round, so your teammates can finish. {pointer}")
+    assert counts_text("openmath", "team", om) == (
+        "When you submit, what counts is the agent-007 entry on main of the team remote and the archive it names. "
+        "Call submit once that entry is pushed.")
+    assert submit_text("lone", 2, False) == f"hand in your work and end the run. {pointer}"
+    assert counts_text("openmath", "lone", {"identity": "agent-007", "remote": ""}) == (
+        "When you submit, what counts is the agent-007 entry on main and the archive it names. Call submit once that "
+        "entry is pushed.")
+    assert counts_text("knowledge_work", "lone", {}) == \
+        "When you submit, what counts is what is in to_send/ when the run ends."
+    assert submit_text("team", 0, True) == ("hand in the team's work and end the run for everyone. The run ends when "
+                                            f"the current round ends. {pointer}")
+    assert counts_text("swe", "team", {}) == "When you submit, what counts is the code on team/main when the run ends."
     # The number of rounds is in the first message, never in the text (submit_value).
-    assert not any(ch.isdigit() for d in (1, 2, 5) for ch in submit_text("swe", "team", d, {}, True))
+    assert not any(ch.isdigit() for d in (1, 2, 5) for ch in submit_text("team", d, True))
     assert submit_value(with_overrides(PRESETS["default"], ["submit_delay_rounds=1"])) == \
         "A submit ends the run 1 round after the round of the call."
     assert submit_value(with_overrides(PRESETS["default"], ["submit_delay_rounds=0"])) is None
     assert submit_value(with_overrides(PRESETS["default"], ["mode=solo_task"])) is None
-    assert submit_text("swe", "solo", 2, {}, True) == (
-        "hand in your own work and end your turns; your teammates continue. What counts is the code in /app when the "
-        "run ends.")
-    assert submit_text("subset_sum", "lone", 2, {}, False).endswith("What counts is the answer verify_subset accepted.")
-    assert "check_design accepted" in submit_text("protein_design", "team", 2, {}, True)
+    assert submit_text("solo", 2, True) == \
+        f"hand in your own work and end your turns; your teammates continue. {pointer}"
+    assert counts_text("swe", "solo", {}) == "When you submit, what counts is the code in /app when the run ends."
+    assert counts_text("subset_sum", "lone", {}).endswith("what counts is the answer verify_subset accepted.")
+    assert "check_design accepted" in counts_text("protein_design", "team", {})
     # An agent not told of its team reads of no teammate.
-    assert submit_text("swe", "solo", 2, {}, False) == ("hand in your work and end your turns. What counts is the code "
-                                                        "in /app when the run ends.")
-    assert submit_text("knowledge_work", "team", 2, {}, False) == (
-        "hand in the work and end the run. The run ends a set number of rounds after the current round. What counts "
-        "is what is in to_send/ when the run ends.")
+    assert submit_text("solo", 2, False) == f"hand in your work and end your turns. {pointer}"
+    assert submit_text("team", 2, False) == (
+        f"hand in the work and end the run. The run ends a set number of rounds after the current round. {pointer}")
     assert missing_text("swe", "team", {}) == "team/main holds no change from the base"
     assert missing_text("swe", "lone", {}) == "/app holds no change from the base"
     assert missing_text("openmath", "team", om) == "the agent-007 entry is not on main of the team remote"
     # Every domain of the registry has its texts.
     for domain in DOMAINS:
         for kind in ("team", "solo", "lone"):
-            assert submit_text(domain, kind, 2, om, True) and missing_text(domain, kind, om)
-            assert "teammate" not in submit_text(domain, kind, 2, om, False)
+            assert counts_text(domain, kind, om) and missing_text(domain, kind, om)
+            assert "teammate" not in counts_text(domain, kind, om)
+    for kind in ("team", "solo", "lone"):
+        assert "teammate" not in submit_text(kind, 2, False) and "{" not in submit_text(kind, 2, True)
     assert described("hand in the work.") == "Hand in the work."
 
 

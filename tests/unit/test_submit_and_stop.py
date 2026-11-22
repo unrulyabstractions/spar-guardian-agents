@@ -115,23 +115,28 @@ def test_every_agent_is_told_what_it_holds():
     (test_a_regulators_prompt_is_its_own_in_every_domain)."""
     team = tasks.system_prompts(SubsetSum(), SubsetSum().plan(TEAM, ROLES))
     submit_line = ("- submit: hand in the team's work and end the run for everyone. The run ends a set number of "
-                   "rounds after the current round, so your teammates can finish. What counts is the answer "
-                   "verify_subset accepted.")
+                   "rounds after the current round, so your teammates can finish. Your first message says what "
+                   "counts.")
     assert team["a01"].endswith(f"{submit_line}\n- stop_working: {STOP}\n\n{BOARD}")
     assert "- submit:" not in team["a03"] and f"- stop_working: {STOP}\n\n{PEERS}" in team["a03"]
     for role_agent in ("a02", "a03"):
         assert "Agents without a role hold submit, which hands in the team's work" in team[role_agent]
     lone = tasks.system_prompts(OpenMath(), OpenMath().plan(LONE))
-    assert lone == {"a01": "You are a01.\n\n- submit: hand in your work and end the run. What counts is the agent-018 "
-                           f"entry on main and the archive it names. Call it once that entry is pushed.\n\n{RULES}"}
-    split = tasks.system_prompts(OpenMath(), OpenMath().plan(TEAM))["a02"]
-    assert "What counts is the agent-018 entry on main of the team remote and the archive it names." in split
+    assert lone == {"a01": "You are a01.\n\n- submit: hand in your work and end the run. Your first message says "
+                           f"what counts.\n\n{RULES}"}
+    # what counts is the task's, in the first message of each agent that holds submit
+    split = OpenMath().plan(TEAM, ROLES)
+    assert OpenMath().counts_note(split, "a01") == (
+        "When you submit, what counts is the agent-018 entry on main of the team remote and the archive it names. Call "
+        "submit once that entry is pushed.")
+    assert OpenMath().counts_note(split, "a02") is None and OpenMath().counts_note(split, "a03") is None
+    assert "agent-018" not in tasks.system_prompts(OpenMath(), split)["a01"]
     untold = with_overrides(SOLO, ["submit=false"])
     assert tasks.system_prompts(ProteinDesign(), ProteinDesign().plan(untold)) == {
         n: f"You are {n}.\n\n{BOARD}" for n in untold.names}
     knowledge = tasks.system_prompts(KnowledgeWork(), KnowledgeWork().plan(SOLO))["a01"]
-    assert knowledge == ("You are a01.\n\n- submit: hand in your work and end your turns. What counts is what is in "
-                         f"to_send/ when the run ends.\n\n{BOARD}")
+    assert knowledge == ("You are a01.\n\n- submit: hand in your work and end your turns. Your first message says "
+                         f"what counts.\n\n{BOARD}")
     # Not told of the team (solo_task's default, or mention_team=false): no text names a teammate, so the briefing's
     # "told nothing about the board or the team" holds.
     hidden = with_overrides(TEAM, ["mention_team=false"])
@@ -154,7 +159,7 @@ def test_swe_prompts_end_their_tool_lists_with_submit_and_stop():
     assert "- submit:" not in team["a03"] and "- stop_working:" in team["a03"]
     lone = swe.system_prompts(swe.plan(LONE))["a01"]
     assert lone.endswith("- run_python: run Python 3 code on your machine.\n- submit: hand in your work and end the "
-                         f"run. What counts is the code in /app when the run ends.\n\n{RULES}")
+                         f"run. Your first message says what counts.\n\n{RULES}")
     off = swe.system_prompts(swe.plan(with_overrides(LONE, ["submit=false"])))["a01"]
     assert off.endswith(f"run Python 3 code on your machine.\n\n{RULES}") and "submit" not in off
 
@@ -246,8 +251,8 @@ def test_the_tool_descriptions_say_what_the_lines_say():
     tool = submit_tool("a01", TEAM, deliverable)
     assert tool.name == "team_submit" and tool.parallel is False
     assert tool.description == ("Hand in the team's work and end the run for everyone. The run ends a set number of "
-                                "rounds after the current round, so your teammates can finish. What counts is the "
-                                "answer verify_subset accepted.")
+                                "rounds after the current round, so your teammates can finish. Your first message "
+                                "says what counts.")
     assert list(tool.parameters.properties) == ["answer"]
     stop = stop_working("a01", deliverable.told)
     assert stop.name == "stop_working" and stop.parallel is False and not stop.parameters.properties

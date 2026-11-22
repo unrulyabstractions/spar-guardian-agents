@@ -163,9 +163,8 @@ def scenario_complete() -> dict:
         assert needle in out, f"missing {needle!r} in tool results:\n{out[:2000]}"
     # the system prompt is ours alone: the agent's name and the submit bullet, without the loop's assistant paragraph
     assert steps_of(t)[0]["source"] == "system" and steps_of(t)[0]["message"] == (
-        "You are a01.\n\n- submit: hand in your work and end the run. What counts is the agent-018 entry on main and "
-        "the archive it names. Call it once that entry is pushed.\n\n" + " ".join(
-            settings.load_prompts()["round"][k] for k in ("rules", "time", "jobs"))), \
+        "You are a01.\n\n- submit: hand in your work and end the run. Your first message says what counts.\n\n" +
+        " ".join(settings.load_prompts()["round"][k] for k in ("rules", "time", "jobs"))), \
         steps_of(t)[0]
     assert rec["usage"]["input"] > 0, rec["usage"]
     offered = tool_names_offered(sample)
@@ -860,7 +859,8 @@ def scenario_random_ids() -> dict:
         entered = [s["message"] for s in steps_of(transcript) if s.get("source") == "user"
                    and ((s.get("extra") or {}).get("swarm_presence") or {}).get("kind") == "entered"]
         assert entered == [f"{o} entered." for o in others], (a, entered)
-    assert "this run has 3 agents." in system_text(transcripts[regulator])
+    assert "This run has 3 agents." in first_user(transcripts[regulator]), first_user(transcripts[regulator])
+    assert "This run has" not in system_text(transcripts[regulator])
     # the step ids carry the drawn ID, and the post's round uses one of the pusher's up
     assert timeline_of(sample, pusher)[:4] == [(f"r1-{pusher}", ["shell"]), (f"r2-{pusher}", ["shell"]),
                                                (f"r3-{pusher}", ["board_post"]), (f"r4-{pusher}", ["shell"])], \

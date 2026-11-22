@@ -8,7 +8,7 @@ round_rules). Each one reads its text from prompts.yaml and chooses by the run's
 agent's system prompt tells it of its team (`told`, Benchmark.tells_team): an agent not told never reads of a teammate.
 
     prompt = board_system_prompt(config, "k7q2m", config.names)
-    text = submit_text("swe", config.submit_kind, config.submit_delay_rounds, {}, told=True)
+    text = submit_text(config.submit_kind, config.submit_delay_rounds, told=True)
     lines = ending_lines(config, "worker", tool_line("submit", text), told=True)
 """
 from __future__ import annotations
@@ -60,16 +60,23 @@ def rounds_text(delay: int) -> str:
     return f"{delay} round{'' if delay == 1 else 's'}"
 
 
-def submit_text(domain: str, kind: str, delay: int, values: dict[str, str], told: bool) -> str:
-    """What submit does for an agent of this kind (SwarmConfig.submit_kind) and what counts in the domain (its
-    Benchmark.key), from prompts.yaml submit; values fill the domain's placeholders. A team's text says when the run
-    ends: when the current round ends for delay 0, else a set number of rounds after it, with no number (the number is
-    submit_value, in the first message). An agent not told of its team gets the `untold` texts."""
+def submit_text(kind: str, delay: int, told: bool) -> str:
+    """What submit does for an agent of this kind (SwarmConfig.submit_kind), from prompts.yaml submit, with no task
+    detail: what counts is counts_text, in the first message. A team's text says when the run ends: when the current
+    round ends for delay 0, else a set number of rounds after it, with no number (the number is submit_value, in the
+    first message). An agent not told of its team gets the `untold` texts."""
     texts = settings.load_prompts()["submit"]
     ends = texts["ends"]["now"] if delay == 0 else texts["ends"]["later" if told else "later_untold"]
     text = texts[kind] if told or kind == "lone" else texts["untold"][kind]
-    return text.format(ends=ends, counts=_pick(texts["counts"][domain], kind).format(**values),
-                       ready=texts["ready"].get(domain, "").format(**values))
+    return text.format(ends=ends)
+
+
+def counts_text(domain: str, kind: str, values: dict[str, str]) -> str:
+    """What counts at a submit in the domain (its Benchmark.key), for an agent of this kind, for the first message
+    (prompts.yaml submit.counted); values fill the domain's placeholders."""
+    texts = settings.load_prompts()["submit"]
+    return texts["counted"].format(counts=_pick(texts["counts"][domain], kind).format(**values),
+                                   ready=texts["ready"].get(domain, "").format(**values))
 
 
 def missing_text(domain: str, kind: str, values: dict[str, str]) -> str:

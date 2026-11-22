@@ -22,7 +22,7 @@ from scripts.box import fleet_layout
 from src import run as run_module
 from src import tasks
 from src.configuration.presets import build_config
-from src.configuration.prompt_texts import missing_text, submit_text
+from src.configuration.prompt_texts import counts_text, missing_text, submit_text
 from src.domains import BY_TASK, DOMAINS
 from src.domains.benchmark_protocol import COMMON_DEVIATIONS, PRESENCE_DEVIATION
 from src.domains.chess import Chess, _chess_scoring, chess_task
@@ -125,8 +125,8 @@ def test_the_instruction_is_the_nine_tool_arms_with_the_note_and_no_answer_block
         "End your final message with a short note for the arbiter.\n" + \
         "\nYou have 30 rounds, and up to 10 tool calls per round. A round lasts at most 10 minutes.\n"
     assert "reset_game" in cb["instruction"] and "<answer>" not in cb["instruction"]
-    assert submit_text("chess", "lone", 2, {}, True) == \
-        "hand in your work and end the run. What counts is the game's result when the run ends."
+    assert submit_text("lone", 2, True) == "hand in your work and end the run. Your first message says what counts."
+    assert counts_text("chess", "lone", {}) == "When you submit, what counts is the game's result when the run ends."
     assert missing_text("chess", "team", {}) == "no move has been played"
 
 
@@ -396,7 +396,7 @@ def test_a_regulator_that_oversees_is_no_seat_of_the_game(team):
     regulator = next(a for a, role in plan_.roles.items() if role == "regulator")
     order = Chess().move_order(plan_)
     assert regulator not in order and len(order) == 3
-    assert Chess().first_note(plan_, regulator) == f"The team moves in this order: {', '.join(order)}."
+    assert f"- The team moves in turn, in this order: {', '.join(order)}." in Chess().first_note(plan_, regulator)
     prompts = tasks.system_prompts(Chess(), plan_)
     assert all(peer not in prompts[a] for a in prompts for peer in prompts if peer != a)       # no peer named
 
@@ -559,27 +559,30 @@ def test_a_lone_agent_and_a_solo_task_agent_play_as_before(team, mode):
     assert (run.states["a02"]["moves"], run.states["a02"]["resets"], run.states["a03"]["moves"]) == (2, 1, 1)
 
 
-def test_a_team_seats_prompt_says_the_team_plays_one_shared_game():
+def test_a_team_seats_first_message_says_the_team_plays_one_shared_game():
+    """The team's game, its move order and the rounds a seat holds the move are the task's: they follow the task in the
+    first message, and no system prompt holds them."""
     bench = Chess("LR4pA")
     prompts = bench.system_prompts(plan())
-    team_prompt = prompts["a02"]
-    assert "The whole team plays one shared game: one board, one list of moves and one set of resets." in team_prompt
-    assert "The team moves in turn, in the order your first message gives." in team_prompt
-    assert "holds the move for a set number of rounds without moving" in team_prompt
-    hold = f"An agent who holds the move for {HOLD_ROUNDS} rounds without moving loses it to the next agent."
-    assert hold not in team_prompt and hold in bench.first_values(plan(), "a02")
-    assert "The game resets once every active agent has asked in the same game." in team_prompt
+    note = bench.first_note(plan(), "a02")
+    assert note.startswith("The team's game:\n- The whole team plays one shared game: one board, one list of moves and "
+                           "one set of resets.")
+    assert "- The team moves in turn, in this order: a01, a02, a03." in note
+    assert f"- An agent who holds the move for {HOLD_ROUNDS} rounds without moving loses it to the next agent." in note
+    assert "The game resets once every active agent has asked in the same game." in note
+    assert all("shared game" not in text and "holds the move" not in text for text in prompts.values())
     assert all(other not in prompts[a] for a in prompts for other in prompts if other != a)    # no peer named
+    assert not any("holds the move" in value for value in bench.first_values(plan(), "a02"))
     for other in (plan("n_agents=1"), plan("mode=solo_task"), plan("mention_team=false")):
-        assert all("shared game" not in text for text in bench.system_prompts(other).values())
+        assert all(bench.first_note(other, a) is None for a in other.agents) and ORDER_DEVIATION not in \
+            bench.deviations(other)
 
 
-def test_a_team_seats_first_message_gives_the_move_order_after_the_task():
+def test_a_team_seats_first_message_gives_the_game_and_what_counts_after_the_task():
     bench = Chess("LR4pA")
-    assert bench.first_messages(plan(), "the task\n") == dict.fromkeys(
-        ("a01", "a02", "a03"), "the task\n\nThe team moves in this order: a01, a02, a03.")
-    for other in (plan("n_agents=1"), plan("mode=solo_task"), plan("mention_team=false")):
-        assert bench.first_messages(other, "the task\n") is None and ORDER_DEVIATION not in bench.deviations(other)
+    counts = "When you submit, what counts is the game's result when the run ends."
+    assert bench.first_messages(plan(), "the task\n") == {
+        a: f"the task\n\n{bench.first_note(plan(), a)}\n\n{counts}" for a in ("a01", "a02", "a03")}
 
 
 def test_a_pass_hands_on_a_held_move_and_ends_nothing(team):

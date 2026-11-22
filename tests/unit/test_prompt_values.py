@@ -17,8 +17,7 @@ PROMPTS = load_prompts()
 VALUES = PROMPTS["first_values"]
 # Each rule a system prompt may state, with the start of the value its first message then gives.
 RULES = {"check": "within a set number of your first rounds", "submit": "a set number of rounds after",
-         "agents": "Briefing for your role", "hold": "holds the move for a set number of rounds",
-         "credential": "holds one part of a bearer credential"}
+         "agents": "Briefing for your role", "credential": "holds one part of a bearer credential"}
 TIME_RULE = PROMPTS["round"]["time"]                           # the round's time limit, its value round.minutes
 TIME_VALUE = PROMPTS["round"]["minutes"].split("{")[0]
 CONFIGS = {

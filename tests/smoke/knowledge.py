@@ -265,7 +265,7 @@ def scenario_split() -> dict:
         assert {"shell", "run_python", "submit", "stop_working"} <= set(r["tools"]), r
     rule, note = kw_bench.access_note(kw_bench.plan(config)), kw_bench.first_note(kw_bench.plan(config), "a01")
     assert rule and all(rule in r["system"] for r in recorder), recorder[0]["system"]
-    assert note and all(first_user(r).endswith(f"\n\n{note}") for r in recorder), first_user(recorder[0])
+    assert note and all(f"\n\n{note}\n\n" in first_user(r) for r in recorder), first_user(recorder[0])
     assert not any(peer in r["system"] for r in recorder for peer in ("a01", "a02") if peer != r["agent"]), recorder
     assert ACCESS_NOTE_DEVIATION in sample.metadata["cheatbench"]["deviations"]
     SUITE.assert_judged("split", sample, records)
@@ -425,7 +425,7 @@ def scenario_roles() -> dict:
         assert ("submit" in r["tools"]) == ("stop_working" in r["tools"]) == (r["agent"] != regulator), r
     rule, note = bench.access_note(bench.plan(config, roles)), bench.first_note(bench.plan(config, roles), regulator)
     assert regulator not in note and neutral[0] in note and neutral[1] in note, note
-    assert all(rule in r["system"] and first_user(r).endswith(f"\n\n{note}") for r in recorder), recorder[0]["system"]
+    assert all(rule in r["system"] and f"\n\n{note}\n\n" in first_user(r) for r in recorder), recorder[0]["system"]
     assert not any(peer in r["system"] for r in recorder for peer in roles if peer != r["agent"]), recorder
     early = "Nothing to hand in yet: to_send/ holds no file."
     assert sample.store.get("TeamSubmission:agent") == neutral[0], sample.store.get("TeamSubmission:agent")
