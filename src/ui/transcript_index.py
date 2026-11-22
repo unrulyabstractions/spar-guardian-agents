@@ -27,7 +27,7 @@ import json
 import os
 import re
 import time
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -458,18 +458,20 @@ def valid_runs(runs: Path) -> list[tuple[str, list[Listed]]]:
 
 
 def measure_all(todo: list[tuple[str, list[int], str, Listed]]) -> dict[str, dict]:
-    """The entries of the runs to measure ((run id, stamp, collection, Listed)), measured in WORKERS processes, with
-    a counter of the runs measured (progress.Counter: in place on a terminal, a line every tenth elsewhere)."""
-    entries: dict[str, dict] = {}
+    """The entries of the runs to measure ((run id, stamp, collection, Listed)), measured in WORKERS processes, in
+    `todo`'s order, with a counter of the runs measured as each ends (progress.Counter: in place on a terminal, a line
+    every tenth elsewhere)."""
     if not todo:
-        return entries
+        return {}
+    measured: dict[str, dict] = {}
     with ProcessPoolExecutor(max_workers=min(WORKERS, len(todo))) as pool, \
             progress.Counter(len(todo), "measured", "runs") as count:
-        done = pool.map(measure_run, [col for _, _, col, _ in todo], [item for *_, item in todo], chunksize=4)
-        for (run_id, st, _, _), entry in zip(todo, done):
-            entries[run_id] = {**entry, "stamp": st}
+        futures = {pool.submit(measure_run, col, item): (run_id, st) for run_id, st, col, item in todo}
+        for future in as_completed(futures):
+            run_id, st = futures[future]
+            measured[run_id] = {**future.result(), "stamp": st}
             count.tick()
-    return entries
+    return {run_id: measured[run_id] for run_id, *_ in todo}
 
 
 def build_index(runs: Path, cached: dict | None = None) -> dict:

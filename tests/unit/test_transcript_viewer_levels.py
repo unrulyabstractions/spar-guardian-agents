@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from concurrent.futures import Future
 from pathlib import Path
 
 import pytest
@@ -966,7 +967,7 @@ def test_the_workers_model_comes_from_run_json_never_from_the_runs_name(tmp_path
 
 
 class Serial:
-    """ProcessPoolExecutor's map in this process, so a test's monkeypatches reach the measuring."""
+    """ProcessPoolExecutor's submit and map in this process, so a test's monkeypatches reach the measuring."""
 
     def __init__(self, max_workers: int):
         pass
@@ -976,6 +977,11 @@ class Serial:
 
     def __exit__(self, *exc) -> bool:
         return False
+
+    def submit(self, fn, *args) -> Future:
+        future = Future()
+        future.set_result(fn(*args))
+        return future
 
     def map(self, fn, *iterables, chunksize: int = 1):
         return map(fn, *iterables)

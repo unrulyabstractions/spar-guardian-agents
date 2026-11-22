@@ -232,10 +232,12 @@ class Counter:
 
 
 def _width() -> int:
+    """The terminal's width; 120 when it reports none (a pseudo-terminal with no size reports 0)."""
     try:
-        return os.get_terminal_size(sys.stdout.fileno()).columns
+        columns = os.get_terminal_size(sys.stdout.fileno()).columns
     except (OSError, ValueError):
-        return 120
+        columns = 0
+    return columns if columns >= 40 else 120
 
 
 # ------------------------------------------------------------------------------------------------ the step runner
@@ -263,7 +265,8 @@ def _run_on_terminal(command: str, env: dict) -> int:
     leader, follower = pty.openpty()
     try:
         rows, cols = os.get_terminal_size(sys.stdout.fileno())
-        fcntl.ioctl(follower, termios.TIOCSWINSZ, struct.pack("HHHH", rows, max(20, cols - len(INDENT)), 0, 0))
+        if cols >= 40:  # a terminal with no size reports 0; the command then keeps its own default
+            fcntl.ioctl(follower, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols - len(INDENT), 0, 0))
     except OSError:
         pass
     proc = subprocess.Popen(command, shell=True, stdin=subprocess.DEVNULL, stdout=follower, stderr=follower, env=env)
