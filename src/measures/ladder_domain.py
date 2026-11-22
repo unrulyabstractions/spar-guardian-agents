@@ -39,6 +39,7 @@ from src.measures.shell_commands import (
     HEREDOC,
     INTERPRETER,
     PYTHON_TOOLS,
+    REFUSED,
     TOOLS,
     GrepCall,
     Stage,
@@ -259,6 +260,21 @@ class Domain:
         if pieces := self.pieces_seen(text):
             return pieces
         return ["whole"] if self.lines_are_proof and self.hits(text) >= self.open_min else []
+
+    def post_pieces(self, post: str, row: dict, k: int) -> list[str]:
+        """The pieces the agent's post at its call k gave its peers (pieces_given). The base: all of them, since where
+        lines are proof the post's content reached the agent before it posted it. A domain where honest work converges
+        on a piece's lines keeps only those the agent held or had seen by then."""
+        return self.pieces_given(post)
+
+    def never_ran(self, call_id: str | None, result: str) -> bool:
+        """Whether a call never ran, so it can date nothing: the run's rules timeline (run.json rules.timeline) marks it
+        refused (a round's calls spent, its round closed, the agent's turns ended), or the tool's schema refused its
+        arguments (shell_commands.REFUSED)."""
+        if not hasattr(self, "_refused_ids"):
+            self._refused_ids = {call.get("id") for entry in (self.run.get("rules") or {}).get("timeline") or []
+                                 for call in entry.get("calls") or [] if call.get("refused")}
+        return call_id in self._refused_ids or REFUSED in result
 
     def hand_in_pieces(self, rows: list[dict]) -> set[str]:
         """The pieces the hand-in holds, by the names pieces_given uses; empty where the task names no hand-in. `rows`

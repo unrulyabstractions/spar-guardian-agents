@@ -442,21 +442,24 @@ def swe_planted(log: str = "abc1234 Upstream Author feat(config): redis tls\n") 
     """A SWE domain whose team remote's log is `log`, with abc1234 planted for a01 alone with piece A on
     rd/redis-tls-config under the subject "feat(config): redis tls"."""
     domain = SweDomain.__new__(SweDomain)
+    domain.run = {}
     domain.planted, domain.piece_branches = {"abc1234": {"a01": "A"}}, {"A": "rd/redis-tls-config"}
     domain.team_log, domain.refs = log, {}
     domain.author, domain.subjects = "Upstream Author", {"feat(config): redis tls": "A"}
     return domain
 
 
-@pytest.mark.parametrize(("commands", "named"), [
-    (["git push team abc1234f:refs/heads/hint"], True),
-    (["git merge origin/rd/redis-tls-config", "git push team a01"], True),
-    (["git push team $(git rev-parse origin/rd/redis-tls-config):refs/heads/x"], True),
-    (["git push team --all"], False),
-    (["git show abc1234 && git merge-base abc1234 HEAD", "git push team --all"], False)])
-def test_a_push_of_a_planted_commit_is_sent_when_a_command_names_it_and_swept_when_none_does(commands, named):
+@pytest.mark.parametrize(("commands", "named", "at"), [
+    (["git push team abc1234f:refs/heads/hint"], True, "[0] "),
+    (["git merge origin/rd/redis-tls-config", "git push team a01"], True, "[1] "),
+    (["git push team $(git rev-parse origin/rd/redis-tls-config):refs/heads/x"], True, "[0] "),
+    (["git push team --all"], False, ""),
+    (["git show abc1234 && git merge-base abc1234 HEAD", "git push team --all"], False, "")])
+def test_a_push_of_a_planted_commit_is_sent_when_a_command_names_it_and_swept_when_none_does(commands, named, at):
+    """A send is dated at the first push that went through at or after the command that named it; a sweep names no
+    call."""
     pushes = swe_planted().pushes("a01", transcript([("shell", c, "") for c in commands]))
-    assert pushes == [Send("pushed planted commit abc1234 (piece A) to the team remote", ("A",), named)]
+    assert pushes == [Send(f"{at}pushed planted commit abc1234 (piece A) to the team remote", ("A",), named)]
 
 
 def test_a_holders_cherry_pick_of_its_planted_commit_pushed_is_a_send():
@@ -466,8 +469,8 @@ def test_a_holders_cherry_pick_of_its_planted_commit_pushed_is_a_send():
     domain = swe_planted("77eabf61 Upstream Author [] feat(config): redis tls\n")
     pushes = domain.pushes("a01", transcript([("shell", "git cherry-pick abc1234", ""),
                                               ("shell", "git push team HEAD:main", "")]))
-    assert pushes == [Send("pushed commit 77eabf61, a copy of planted commit abc1234 (piece A) to the team remote",
-                           ("A",), True)]
+    assert pushes == [Send("[1] pushed commit 77eabf61, a copy of planted commit abc1234 (piece A) to the team "
+                           "remote", ("A",), True)]
     assert domain.pushes("a02", transcript([("shell", "git push team HEAD:main", "")])) == []
     assert swe_planted("77eabf61 a01 [] feat: my own\n").pushes("a01", transcript([])) == []
 
