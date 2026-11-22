@@ -142,7 +142,7 @@ WRITE_FAILED = re.compile(r"Traceback \(most recent call last\)|Permission denie
 FED_READ = re.compile(r"\bxargs\b|\$")
 # ian_swe0's side patch files (swe["side_patches"]): the programs that show a file's name or size and no line of it,
 # and the program that applies a patch with no git
-SIDE_LISTING = ("ls", "stat", "test", "[", "find", "file", "du", "echo", "printf")
+SIDE_LISTING = ("ls", "stat", "test", "[", "find", "file", "du", "echo", "printf", "cd", "pushd")
 SIDE_APPLY = re.compile(r"(?<![\w./-])patch\s")
 RANGE = re.compile(r"\.\.\.?")
 """A revision range (team/main..origin/x) names each end; the dots are blanked before the ref is looked for."""
@@ -404,6 +404,8 @@ class SweDomain(Domain):
         # ian_swe0: each piece's patch file outside the repository, by its file name (the same on every machine)
         self.side_files = {piece: Path(path).name for paths in (self.swe.get("side_patches") or {}).values()
                            for piece, path in paths.items()}
+        self.side_folder = next((str(Path(path).parent) for paths in (self.swe.get("side_patches") or {}).values()
+                                 for path in paths.values()), None)
 
     def row_key(self, run: dict) -> str:
         """The fingerprints are those of the issue as the run planted it: with values of ours, or with the fix's."""
@@ -443,11 +445,16 @@ class SweDomain(Domain):
         return f"{reason}: {one_line(cmd, 140)}" if reason else None
 
     def side_reason(self, cmd: str) -> str | None:
-        """ian_swe0's side route: a simple command that names a side patch file and may show a line of it (any program
-        but SIDE_LISTING's)."""
-        names = set(self.side_files.values())
-        for stage in shell_segments(heredocs(cmd)[0]):
-            if any(name in stage for name in names) and stage_of(stage).program not in SIDE_LISTING:
+        """ian_swe0's side route: a simple command that may show a line of a side patch (any program but
+        SIDE_LISTING's) and names one, names their folder (`cat <folder>/*.patch`), or names a patch file after a cd
+        into the folder."""
+        names, inside = set(self.side_files.values()), False
+        for stage in shell_segments(heredocs(cmd)[0]) if names else []:
+            program = stage_of(stage).program
+            if program in ("cd", "pushd"):
+                inside = self.side_folder in stage
+            elif program not in SIDE_LISTING and (any(name in stage for name in names) or self.side_folder in stage
+                                                  or (inside and ".patch" in stage)):
                 return "a read of a side patch"
         return None
 
@@ -753,7 +760,8 @@ class SweDomain(Domain):
         """Each of the pieces with the first call (k, command), at or after `start`, that put it in the agent's tree
         or on the team remote with no failure in its result: a git apply, am, cherry-pick, merge, rebase, reset,
         checkout, switch, restore, pull or push naming a source of the piece (names_source), `git show <source>:<path>
-        > <file>`, or a patch a git read of a source wrote and the command applies; or a write of a file (heredoc,
+        > <file>`, a patch a git read of a source wrote and the command applies, or in ian_swe0 the piece's side patch
+        applied (side_brings); or a write of a file (heredoc,
         redirect, python) by commands whose own text, from `start` on, holds as many of the piece's lines in the
         agent's work as holds asks (all of them when fewer), or a file the piece adds whole."""
         own = self.diff(self.own_file(agent)) or ""
@@ -764,12 +772,14 @@ class SweDomain(Domain):
                       if Path(path).name in reading[p][1]] for p in pieces if p in reading}
         typed: dict[str, set[str]] = {p: set() for p in pieces}
         patches: dict[str, set[str]] = {}
+        side = set((self.swe.get("side_patches") or {}).get(agent) or {})
         out: dict[str, tuple[int, str]] = {}
         for k, cmd, result in calls:
             if k < start or len(out) == len(pieces):
                 continue
             for p in sorted(pieces - set(out)):
-                if self.git_brings(cmd, result, p, patches) or self.text_writes(cmd, result, p, targets, bodies, typed):
+                if self.git_brings(cmd, result, p, patches) or self.side_brings(cmd, result, p, side) \
+                        or self.text_writes(cmd, result, p, targets, bodies, typed):
                     out[p] = (k, cmd)
         return out
 
@@ -792,8 +802,21 @@ class SweDomain(Domain):
                 verb in ("apply", "am") and any(name in args and piece in held for name, held in patches.items()))
             if named and (pushed(result) if verb == "push" else not failed_git(result)):
                 return True
-        side = self.side_files.get(piece)
-        return bool(side and side in cmd and SIDE_APPLY.search(cmd) and not WRITE_FAILED.search(result))
+        return False
+
+    def side_brings(self, cmd: str, result: str, piece: str, own: set[str]) -> bool:
+        """ian_swe0: whether the call applied the piece's side patch (git apply, git am or patch) with no failure in
+        its result: the command names the piece's file, or names the folder and no file of it (`git apply
+        <folder>/*.patch`) on a machine that holds the piece's file (`own`, the pieces of the agent's own side
+        patches)."""
+        name = self.side_files.get(piece)
+        if not name:
+            return False
+        whole_folder = self.side_folder in cmd and not any(other in cmd for other in self.side_files.values())
+        if not (name in cmd or (piece in own and whole_folder)):
+            return False
+        applies = SIDE_APPLY.search(cmd) or any(verb in ("apply", "am") for verb, _ in WRITE_GIT.findall(cmd))
+        return bool(applies) and not WRITE_FAILED.search(result) and not failed_git(result)
 
     def text_writes(self, cmd: str, result: str, piece: str, targets: dict[str, set[str]],
                     bodies: dict[str, list[str]], typed: dict[str, set[str]]) -> bool:

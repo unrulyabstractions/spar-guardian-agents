@@ -58,6 +58,8 @@ PLAN_KEYS = {"study", "seeds", "targets", "settings", "limits", "closed"}
 """closed: true marks a study that is over: its plan is kept as a record, lists its cells with --dry-run and never
 launches (its runs may be named after packs that were renamed since)."""
 TARGET_KEYS = {"module", "model", "packs"}
+TARGET_OPTIONAL = {"settings"}
+"""settings: the target's own --set pairs, after the plan's (a rule level, a regulator's model)."""
 NAME = re.compile(r"[a-z0-9_]+")
 
 
@@ -69,6 +71,7 @@ class Cell:
     module: str
     model: str
     task: str | None        # the pack's task; None for a control
+    settings: tuple[str, ...] = ()   # the target's own settings, after the plan's
 
     @property
     def name(self) -> str:
@@ -78,7 +81,7 @@ class Cell:
         """The example's arguments, in the pilot's order."""
         out = ["--model", self.model, "--no-judge", "--name", self.name, *(["--replace"] if replace else []),
                "--set", f"seed={self.seed}"]
-        for pair in [*PILOT_SETTINGS, *extra, f"id_salt={self.target}_s{self.seed}"]:
+        for pair in [*PILOT_SETTINGS, *extra, *self.settings, f"id_salt={self.target}_s{self.seed}"]:
             out += ["--set", pair]
         if self.pack != "none":
             out += ["--set", f"seed_pack={self.pack}"]
@@ -93,8 +96,9 @@ def load_plan(path: Path) -> dict:
     if not plan["seeds"] or not all(isinstance(s, int) for s in plan["seeds"]):
         raise ValueError(f"{path}: seeds is a list of integers")
     for target, spec in plan["targets"].items():
-        if not NAME.fullmatch(target) or set(spec) != TARGET_KEYS:
-            raise ValueError(f"{path}: target {target!r} needs a name of a-z, 0-9 and _, and {sorted(TARGET_KEYS)}")
+        if not NAME.fullmatch(target) or not TARGET_KEYS <= set(spec) <= TARGET_KEYS | TARGET_OPTIONAL:
+            raise ValueError(f"{path}: target {target!r} needs a name of a-z, 0-9 and _, and {sorted(TARGET_KEYS)} "
+                             f"(and may take {sorted(TARGET_OPTIONAL)})")
         if not (settings.ROOT / Path(*spec["module"].split("."))).with_suffix(".py").is_file():
             raise ValueError(f"{path}: {target}'s module {spec['module']} is no script of this checkout")
         tasks = {seed_packs.pack_of(p)["task"] for p in spec["packs"] if p != "none"}
@@ -113,7 +117,8 @@ def cells(plan: dict) -> list[Cell]:
         for target, spec in plan["targets"].items():
             tasks = {seed_packs.pack_of(p)["task"] for p in spec["packs"] if p != "none"}
             for pack in spec["packs"]:
-                out.append(Cell(target, pack, seed, spec["module"], spec["model"], next(iter(tasks), None)))
+                out.append(Cell(target, pack, seed, spec["module"], spec["model"], next(iter(tasks), None),
+                                tuple(spec.get("settings") or ())))
     return out
 
 

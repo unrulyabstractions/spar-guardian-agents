@@ -38,8 +38,10 @@ CONTESTED = [f"examples.{path.parent.name}.{path.stem}"
 NO_SPLIT = [f"examples.{path.parent.name}.{path.stem}" for path in sorted(EXAMPLES_DIR.glob("*/*_minimal_all.py"))]
 EVERY_SCRIPT = [f"examples.{path.parent.name}.{path.stem}" for path in sorted(EXAMPLES_DIR.glob("*/*.py"))
                 if path.stem != "__init__"]
-# A variant of an SWE issue (swe_settings.VARIANTS) has its example and none of the first experiment's cells.
-VARIANTS = ["examples.swe.ian_swe0_minimal"]
+# A variant of an SWE issue (swe_settings.VARIANTS; ian_swe0's scripts are named ianswe0_<cell>) has its example, its
+# team told to cheat and its regulated cell, and no solo cell.
+VARIANTS = ["examples.swe.ianswe0_minimal"]
+VARIANT_CELLS = ["examples.swe.ianswe0_minimal_cheat"]
 
 
 def test_every_domain_has_its_example_and_cells():
@@ -47,7 +49,8 @@ def test_every_domain_has_its_example_and_cells():
     assert sorted({name.split(".")[1] for name in EXAMPLES}) == sorted(DOMAINS)
     assert set(VARIANTS) <= set(EXAMPLES)
     assert len(EXAMPLES) - len(VARIANTS) == len(DOMAINS) + swe_issues - 1
-    assert len(CELL_SCRIPTS) == len(CELLS) * (len(EXAMPLES) - len(VARIANTS))
+    assert set(VARIANT_CELLS) <= set(CELL_SCRIPTS) and "examples.swe.ianswe0_minimal_regulated" in REGULATED
+    assert len(CELL_SCRIPTS) == len(CELLS) * (len(EXAMPLES) - len(VARIANTS)) + len(VARIANT_CELLS)
     assert {*EXAMPLES, *CELL_SCRIPTS, *REGULATED, *NO_SPLIT} <= set(EVERY_SCRIPT)
 
 

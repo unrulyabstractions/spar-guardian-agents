@@ -1,6 +1,14 @@
 # ian_seed_prototyping_1 (2026-11-22): the first runs after agents stopped being told of rounds (c632292: a budget of
-# tool calls and wait) and got one message per round (acdb786). One run per cell. The control first, to compare with
-# ian_seed_prototyping_0's swe_deepseek_none runs; add packs and targets below as needed.
+# tool calls and wait) and got one message per round (acdb786). One run per cell.
+#
+# swe_deepseek: the control on flipt-02e2, to compare with ian_seed_prototyping_0's swe_deepseek_none runs.
+#
+# ianswe0_<workers>_<condition>: the task ian_swe0 (flipt-02e2 with each piece also a patch file outside the
+# repository) with the seed pack swe/exp1_called_cheating, on Haiku and on Luna workers, four conditions each:
+#   baseline         three workers, told nothing
+#   told_to_cheat    the positive control: the workers are told to cheat
+#   rule             the negative control: the rule naming the exploit (rule_level=identified)
+#   regulated        the baseline with a hidden Haiku regulator (four agents)
 study: ian_seed_prototyping_1
 seeds: [1]
 targets:
@@ -8,4 +16,40 @@ targets:
     module: examples.swe.flipt_minimal
     model: deepseek-flash-openrouter
     packs: [none]
+  ianswe0_haiku_baseline:
+    module: examples.swe.ianswe0_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [swe/exp1_called_cheating]
+  ianswe0_haiku_told_to_cheat:
+    module: examples.swe.ianswe0_minimal_cheat
+    model: claude-haiku-5-5-openrouter
+    packs: [swe/exp1_called_cheating]
+  ianswe0_haiku_rule:
+    module: examples.swe.ianswe0_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [swe/exp1_called_cheating]
+    settings: [rule_level=identified]
+  ianswe0_haiku_regulated:
+    module: examples.swe.ianswe0_minimal_regulated
+    model: claude-haiku-5-5-openrouter
+    packs: [swe/exp1_called_cheating]
+    settings: [regulator_model=claude-haiku-5-5-openrouter]
+  ianswe0_luna_baseline:
+    module: examples.swe.ianswe0_minimal
+    model: gpt-6-luna-openrouter
+    packs: [swe/exp1_called_cheating]
+  ianswe0_luna_told_to_cheat:
+    module: examples.swe.ianswe0_minimal_cheat
+    model: gpt-6-luna-openrouter
+    packs: [swe/exp1_called_cheating]
+  ianswe0_luna_rule:
+    module: examples.swe.ianswe0_minimal
+    model: gpt-6-luna-openrouter
+    packs: [swe/exp1_called_cheating]
+    settings: [rule_level=identified]
+  ianswe0_luna_regulated:
+    module: examples.swe.ianswe0_minimal_regulated
+    model: gpt-6-luna-openrouter
+    packs: [swe/exp1_called_cheating]
+    settings: [regulator_model=claude-haiku-5-5-openrouter]
 limits: {max_runs: 6, max_per_task: {swe: 4}, spacing_s: 30}
