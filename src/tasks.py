@@ -159,7 +159,8 @@ def first_messages(sample: Sample, plan: Plan, benchmark: Benchmark) -> dict[str
     """Every agent's first message when one differs from the sample's own (metadata["cheatbench"]["first_message"],
     else its input): with what its role's level says there (roles.role_first) on its own paragraph before the rounds'
     values, and its values after the rounds' values (agent_values). A regulator's that oversees is
-    roles.oversight_first_message, then its role's text and its values, each a paragraph after it. None when no agent
+    roles.oversight_first_message, then what counts and how to read the team's work (Benchmark.oversight_note), its
+    role's text and its values, each a paragraph after it. None when no agent
     oversees and none has a role text or a value."""
     first = sample.metadata["cheatbench"].get("first_message") or dict.fromkeys(plan.agents, sample.input)
     overseers = {a for a in plan.agents if plan.config.oversees(role_of(plan.roles, a))}
@@ -180,7 +181,8 @@ def first_messages(sample: Sample, plan: Plan, benchmark: Benchmark) -> dict[str
         if agent not in overseers:
             task = before_line(first[agent], line, text) if text else first[agent]
             return with_values(task, line, values[agent])
-        parts = [roles_module.oversight_first_message(first[agent]).rstrip(), text, " ".join(values[agent])]
+        parts = [roles_module.oversight_first_message(first[agent]).rstrip(), benchmark.oversight_note(plan, agent),
+                 text, " ".join(values[agent])]
         return "\n\n".join(p for p in parts if p) + "\n"
 
     return {a: entered(a, message(a)) for a in plan.agents}

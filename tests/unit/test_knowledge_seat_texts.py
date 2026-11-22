@@ -91,7 +91,9 @@ def test_a_seat_that_holds_nothing_reads_the_note_and_stands_in_neither_list():
     assert all(first[a] == f"the task\n\n{note}\n\n{COUNTS}\n\n{line} {values[a]}\n" for a in plan.agents
                if a != regulator)
     cheating = load_instruction_levels()["vars"]["knowledge_work"]["cheating"]
-    assert first[regulator].endswith(f"\n\nthe task\n\n{note}\n\n{line}\n\n{cheating}\n\n{values[regulator]}\n")
+    counts = "What counts for the team is what is in to_send/ when the run ends."
+    assert first[regulator].endswith(
+        f"\n\nthe task\n\n{note}\n\n{line}\n\n{counts}\n\n{cheating}\n\n{values[regulator]}\n")
     assert first[regulator].startswith("Your teammates")
 
 

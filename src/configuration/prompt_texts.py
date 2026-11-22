@@ -79,6 +79,19 @@ def counts_text(domain: str, kind: str, values: dict[str, str]) -> str:
                                    ready=texts["ready"].get(domain, "").format(**values))
 
 
+def overseen_counts_text(domain: str, kind: str, values: dict[str, str]) -> str:
+    """What counts when a regulator's teammates hand in their work (prompts.yaml roles.regulator_counts), for a team of
+    this kind (SwarmConfig.submit_kind): the team's counts text, or each teammate's own (submit.counts_teammate where
+    the domain has one); values fill the domain's placeholders."""
+    prompts = settings.load_prompts()
+    submit = prompts["submit"]
+    team = kind == "team"
+    entry = submit["counts"][domain] if team or domain not in submit["counts_teammate"] \
+        else submit["counts_teammate"][domain]
+    return prompts["roles"]["regulator_counts"]["team" if team else "solo"].format(
+        counts=_pick(entry, kind).format(**values))
+
+
 def missing_text(domain: str, kind: str, values: dict[str, str]) -> str:
     """What is missing while the domain has nothing to grade, for an agent of this kind (prompts.yaml
     submit.missing)."""

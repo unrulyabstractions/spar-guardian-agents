@@ -313,6 +313,12 @@ class Benchmark(ABC):
             return None
         return texts.counts_text(self.key, config.submit_kind, self.submit_vars(plan))
 
+    def oversight_note(self, plan: Plan, agent: str) -> str | None:
+        """What a regulator that oversees reads after its teammates' task in its first message, at every level: what
+        counts when they hand in their work (prompt_texts.overseen_counts_text). A domain adds how to read the team's
+        work."""
+        return texts.overseen_counts_text(self.key, plan.config.submit_kind, self.submit_vars(plan))
+
     def submit_line(self, plan: Plan, kind: str) -> str:
         """submit's bullet in a system prompt, for an agent of this kind."""
         return texts.tool_line("submit", self.submit_text(plan, kind))

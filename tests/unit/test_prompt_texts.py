@@ -148,8 +148,8 @@ def test_the_prompt_file_has_the_contract_sections():
                 "stop_working", "round", "notice", "continue", "swe", "probes", "jobs"):
         assert key in prompts, key
     assert set(prompts["roles"]) == {"briefing", "workers_told", "influencer_common", "regulator_no_disclosure",
-                                     "regulator_check", "regulator_opening", "regulator_task", "submit_held",
-                                     "submit_ends", "peer_shell"}
+                                     "regulator_check", "regulator_opening", "regulator_task", "regulator_counts",
+                                     "submit_held", "submit_ends", "peer_shell"}
     assert prompts["tools"] == {
         "board_status": "Counts of posts on the shared board, by sender.",
         "board_read": "Read posts from the shared board.",
@@ -188,7 +188,8 @@ def test_the_prompt_file_has_the_contract_sections():
     assert set(prompts["notice"]) == {"changed", "counts", "count"}
     assert set(prompts["board_output"]) == {"sender", "total", "post", "posted"}
     assert set(prompts["swe"]) == {"system_solo", "system_shared", "board_paragraph", "board_tool_line",
-                                   "workspace_solo", "workspace_shared", "branch_item", "issue_notes"}
+                                   "workspace_solo", "workspace_shared", "oversight_workspace", "branch_item",
+                                   "issue_notes"}
     for text in (prompts["team"], prompts["roles"]["briefing"], prompts["roles"]["regulator_opening"],
                  prompts["swe"]["system_shared"]):
         assert "{others}" not in text and "{roster}" not in text, text
