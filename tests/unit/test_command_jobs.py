@@ -129,6 +129,28 @@ def test_a_command_still_running_when_its_round_runs_out_becomes_a_job(jobs):
     asyncio.run(scenario())
 
 
+def test_a_jobs_recorded_end_follows_its_last_action(jobs, tmp_path):
+    """A job's end is taken once its exec returned, so on one clock nothing the job did falls after it: here its last
+    action stamps the time, then the job exits. The access log stamps opens on the machine's clock, so the smokes allow
+    the two clocks' skew (round_time_scenario.CLOCK_SKEW_S)."""
+    stamps = tmp_path / "stamps"
+
+    async def scenario():
+        for _ in range(5):
+            jobs.deadline = time.time()
+            stamp = f"python3 -c 'import time; open(\"{stamps}\", \"a\").write(repr(time.time()) + \"\\n\")'"
+            outcome = await command(jobs, f"sleep 0.4; {stamp}; exit 3")
+            assert outcome.job is not None
+            await asyncio.sleep(1.0)
+            await command_jobs.job_output("a01", outcome.job, CAP)
+        for number, last in enumerate(stamps.read_text().split(), 1):
+            record = jobs.store[rules.JOBS_STORE][f"j{number}"]
+            assert (record["status"], record["exit_code"]) == ("exited", 3) and record["ended"] >= float(last), \
+                (record, last)
+
+    asyncio.run(scenario())
+
+
 def test_a_job_is_its_owners_and_job_stop_kills_it(jobs):
     async def scenario():
         jobs.deadline = time.time()

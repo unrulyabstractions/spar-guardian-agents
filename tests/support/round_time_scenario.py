@@ -44,6 +44,7 @@ from inspect_ai.scorer import scorer
 from inspect_ai.util import sandbox
 
 from src.configuration import settings
+from src.export import _export_access_log as access_export
 from src.replay.tmp_snapshots import LISTING, TMP_DIRS, listing_spec
 from src.sandbox.command_jobs import JOBS_DIR
 from src.swarm.turn_rules._turn_state import END_ROUND
@@ -54,6 +55,11 @@ from tests.support.mock_model import call
 T = 20
 ROUNDS, CALLS = 8, 3
 SLACK_S = 5                 # what a round may run past T: the batch that ends past it, an exec's return
+CLOCK_SKEW_S = access_export.SLACK_S
+"""What the access log's stamps may stand past the harness's. The monitor stamps an open on the
+machine's clock (Colima's VM, NTP-synced on its own) and a job's end is the harness's, on the Mac's: the two drift
+several ms apart between runs, so an open a job made just before it exited can read later than its recorded end. The
+export matches an open to a call within the same slack."""
 MARK, OBS = "JOBMARK", "OBSMARK"
 JOBS = settings.load_prompts()["jobs"]
 WAIT = "sleep 15; echo waited"
@@ -323,8 +329,8 @@ def check_round_time(suite, name: str, sample, records: list[dict], plan: Plan, 
     assert late_long and {(r["agent"], r["origin"]) for r in late_long} == {(plan.long, "agent")}, late_long
     assert late_obs and {(r["agent"], r["named_by"], r["uid"]) for r in late_obs} == \
         {(plan.regulator, "observer", uid)}, late_obs
-    assert all(r["t"] <= long_job["ended"] for r in late_long), (late_long, long_job)
-    assert all(r["t"] <= obs_job["ended"] for r in late_obs), (late_obs, obs_job)
+    assert all(r["t"] <= long_job["ended"] + CLOCK_SKEW_S for r in late_long), (late_long, long_job)
+    assert all(r["t"] <= obs_job["ended"] + CLOCK_SKEW_S for r in late_obs), (late_obs, obs_job)
 
     # (6) the jobs' output: no peer finds it, no agent of its own user, nothing in /tmp; root finds it (the control)
     peer_look = sections(json.loads(results["rt-peer-look"])["output"])
