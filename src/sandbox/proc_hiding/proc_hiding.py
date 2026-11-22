@@ -34,7 +34,8 @@ digest of its text. A host whose Docker has no AppArmor refuses the run.
 
 What stays. `grep -R /` (which follows symlinks) still does not end in a round: it walks /sys's symlinks over and over
 and blocks reading a pipe through /proc/<pid>/fd. Only `grep -r` and its kind end. Root in a machine (SWE's agents)
-can undo none of it, but sees every process there, as before. The group's line in /etc/group and the mount's options
+can undo none of it, but sees every process there, as before; a machine whose init it kills comes back with a fresh
+/proc that hides nothing (the profile stays). The group's line in /etc/group and the mount's options
 in /proc/mounts are visible to an agent.
 
 The proof (proc_proof.py, as root in each machine): a holder process of one throwaway uid and a viewer of another;
