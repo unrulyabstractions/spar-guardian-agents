@@ -50,6 +50,8 @@ BACKUPS = ROOT / ".backups" / "migrate_run_layout"
 HUB_STUDIES = {"apart_controls": "OLD", "ian_baseline_explorations_0": "OLD", "ian_baseline_explorations_1": "OLD",
                "study_orbit2_check": "OLD", "study_smoke": "", "ian_seed_prototyping_0": ""}
 """Each study the dataset holds, by the folder here whose runs/ and logs/ hold it."""
+REMADE = ("signals.jsonl", "run.json")
+"""The files processing rewrites after the move: the signals part's rows and run.json's signals block."""
 RENAMED = {"study_exploration_0": "ian_baseline_explorations_0", "study_exploration_1": "ian_baseline_explorations_1"}
 """Old study names on the Hub and the names their files live under now."""
 
@@ -418,20 +420,26 @@ def hub(dry_run: bool, skip: list[str]) -> int:
         sent = {remote: path for files in items.values() for remote, path in files}
         old_files = [path for path in listing if path.startswith(f"{study}/") and path not in sent
                      and hub_to_local(path, base) is not None]
-        orphans, twinned = [], []
+        orphans, twinned, remade = [], [], []
         for remote in old_files:
             local_old = hub_to_local(remote, base)
             if (ROOT / local_old).is_file():
                 continue  # a local file the upload leaves out (a smoke folder, a study document): it stays
             new = moves.get(local_old)
             twin = new and local_to_hub(new[0], study, base)
-            if not new or twin not in sent or not same(sent[twin], listing[remote]):
+            if not new or twin not in sent:
                 orphans.append(remote)
-            else:
+            elif same(sent[twin], listing[remote]):
                 twinned.append(remote)
+            elif new[0].rsplit("/", 1)[-1] in REMADE and listing[remote].size == new[1]:
+                remade.append(remote)  # moved with the Hub's size, then remade by processing (the signals part)
+            else:
+                orphans.append(remote)
         progress.detail("hub files", sum(1 for path in listing if path.startswith(f"{study}/")))
         progress.detail("to send", len(sent))
         progress.detail("moved", f"{len(twinned)} Hub files whose bytes moved here, each sent at its new path")
+        progress.detail("remade", f"{len(remade)} moved with the Hub's size, then remade by processing "
+                                  f"({', '.join(REMADE)})")
         for remote in orphans[:10]:
             progress.detail("", f"no local twin: {remote}", err=True)
         if orphans:
