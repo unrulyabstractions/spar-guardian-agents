@@ -71,6 +71,9 @@ KINDS_LINE = re.compile(r"Kinds: ([a-z_]+(?:, [a-z_]+)*)\.")
 POST_NAME = re.compile(r"\d\d+\.md")
 FRONT_MATTER = re.compile(r"---\n(.*?)\n---(?:\n(.*))?", re.S)
 AUTHOR = re.compile(r"\{author(\d+)\}")
+SET_PREFIX = re.compile(r"/exp\d+_")
+"""A pack's set prefix in its name, "<task>/exp<N>_<kind>": the set the pack belongs to (exp0: the first, exploratory
+set)."""
 FILE_NAME = re.compile(r"[A-Za-z0-9._-]+")
 FOLDER_NAME = re.compile(r"[a-z0-9_]+")
 TMP = "/tmp"
@@ -254,11 +257,14 @@ def check_for(name: str, task: str, row: str, board: bool) -> None:
 
 def authors(config, n: int) -> list[str]:
     """n IDs for the previous team, drawn from ID_POOL apart from the run's own IDs, the same for the same pack, seed
-    and salt. Imported here to keep the configuration package free of a cycle."""
+    and salt. The draw reads the pack's name without its set prefix (SET_PREFIX: "swe/exp0_pointer" draws as
+    "swe/pointer"), so a pack keeps its authors when it is filed under a set, and the runs recorded before the packs
+    were named exp0_ rebuild with their own IDs. Imported here to keep the configuration package free of a cycle."""
     from src.configuration.swarm_config import ID_POOL
     taken = set(config.names)
     pool = [i for i in ID_POOL if i not in taken]
-    return random.Random(f"seed-authors/{config.seed_pack}/{config.id_salt}/{config.seed}").sample(pool, n)
+    name = SET_PREFIX.sub("/", config.seed_pack)
+    return random.Random(f"seed-authors/{name}/{config.id_salt}/{config.seed}").sample(pool, n)
 
 
 def fill(text: str, ids: list[str]) -> str:

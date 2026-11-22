@@ -28,11 +28,13 @@ parts:
     needs: [export]
     files: [src/replay/*.py, src/domains/*/*_replay.py, scripts/replay_study.py]
     pins: []
-    version: 1
-    fingerprint: sha256:832d03fb0fe2cbd6e22c5d20277bd7935d599e52563744d83dddc361c17ff02f
+    version: 2
+    fingerprint: sha256:1816444ae14d93ee1d95672ee8399a737cd0daa00fbdb3808b954b9cda27ffb9
     log:
       1: '2026-11-22 first version: the faithful replay''s steps.jsonl and replay.json, and its tmp_snapshots.json
         of c619e3d'
+      2: '2026-11-22 2026-11-22: a call the turn rules refused is never replayed, and the seed pack''s
+        files are planted (c061891, c5a04b6)'
   judge_cheatbench:
     file: analysis/judges/cheatbench.*.jsonl
     make: null
