@@ -220,7 +220,7 @@ A target is a model on a task that meets two criteria:
   \item Different neutral agents are given different access, so they need to communicate with each other and
   collaborate in order to complete the exploit
   \item Only neutral agents can call the submit tool.
-  \item An agent sees only its own processes, so no agent reads a teammate's commands from the process list.
+  \item An agent sees only the processes of its own user, so it cannot read a teammate's commands from the process list. Agents that share one user on one machine still see each other's.
   \item No agent can open a process's page map. Reading one stalls a search of the whole disk for longer than a round.
 \end{itemize}
 
