@@ -12,11 +12,14 @@ An exit's `why`, recorded once per agent in TurnState.exits by record_exit:
     submit     its hand-in (submit_and_stop.submit): hand_in "team" with the run's last round (ends_after_round), or
                hand_in "solo", its own work
     stop       stop_working
-    alert      alert_humans (an influencer)
+    alert      alert_humans in a log made before 2026-11-22, when the call ended its caller's turns
     rounds     it used up its rounds (TurnState.ended "rounds"), or no plan step is left for it
                (turn_activation.out_of_steps): "<agent> ran out of rounds."
     context    its last generation stopped at the context limit: "exited." alone
     delivered  stop_after_delivery ended it: "exited." alone
+
+An influencer's alert (alert_humans, recorded in Alerts) ends nothing: every peer present hears "<agent> has alerted
+humans." once per alert, before its next round, after the round's entries.
 
 Delivery is a pull. TurnRulesDefense.apply_pre_turn calls deliver on the activated member's own editable state at
 ORBIT's defense boundary, which commits what it appends into that member's conversation, so the lines are saved in the
@@ -45,7 +48,7 @@ from inspect_ai.util import store_as
 
 from src.configuration.prompt_texts import rounds_text
 from src.configuration.settings import load_prompts
-from src.swarm.turn_rules._turn_state import PRESENCE_TAG, TurnState, current_round, submit_holds
+from src.swarm.turn_rules._turn_state import PRESENCE_TAG, Alerts, TurnState, current_round, submit_holds
 from src.swarm.turn_rules._turn_steps import step_round
 
 EXIT_WHY = ("submit", "stop", "alert", "rounds", "context", "delivered")
@@ -125,7 +128,7 @@ def exit_text(agent: str, event: dict, round_number: int) -> str:
 
 def due(recipient: str, round_number: int) -> list[dict]:
     """Every presence line due to the recipient in this round, oldest first: {id, agent, kind, why, round, text}.
-    Entries come before exits within a round."""
+    Within a round, entries come first, then alerts, then exits."""
     st = store_as(TurnState)
     if recipient not in st.agents or len(st.agents) < 2:
         return []
@@ -151,7 +154,17 @@ def due(recipient: str, round_number: int) -> list[dict]:
             events.append({"id": f"held:{i}", "agent": handed["agent"], "kind": "held", "why": "hold",
                            "round": decision["round"], "order": (decision["round"], 2, i),
                            "text": texts["held"].format(agent=handed["agent"], round=handed["round"])})
+    events += alert_events(recipient, own, st)
     return [{k: v for k, v in e.items() if k != "order"} for e in sorted(events, key=lambda e: e["order"])]
+
+
+def alert_events(recipient: str, own: int, st: TurnState) -> list[dict]:
+    """The alerts of the recipient's peers made in its entry round or later, as due's events, in the order made."""
+    texts = load_prompts()["presence"]
+    return [{"id": f"alert:{i}", "agent": a["agent"], "kind": "alert", "why": None, "round": a.get("round") or 0,
+             "order": (a.get("round") or 0, 1, -1, i), "text": texts["alert"].format(agent=a["agent"])}
+            for i, a in enumerate(store_as(Alerts).alerts)
+            if a["agent"] != recipient and a["agent"] in st.agents and (a.get("round") or 0) >= own]
 
 
 def delivered_ids(state: AgentState) -> set[str]:

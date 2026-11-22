@@ -34,7 +34,6 @@ from src.swarm.turn_rules._turn_presence import ENDED_WHY, record_exit
 from src.swarm.turn_rules._turn_rounds import ends, name_job_call, take_round
 from src.swarm.turn_rules._turn_state import (
     ACTOR,
-    ALERT,
     DELIVERED,
     HALT_TAG,
     STOP_WORKING,
@@ -110,14 +109,12 @@ def over_time(record: dict | None, limit: int | None) -> float | None:
 
 
 def ending_of(st: TurnState, submission: TeamSubmission, agent: str, round_number: int) -> str | None:
-    """"stop", "alert" or "submit" when the agent's stop_working, alert_humans or submit went through in the round just
-    completed, read from the records: its turns ended by its own call (TurnState.ended), or the team's hand-in names it
-    in this round. None otherwise."""
+    """"stop" or "submit" when the agent's stop_working or submit went through in the round just completed, read from
+    the records: its turns ended by its own call (TurnState.ended), or the team's hand-in names it in this round. None
+    otherwise. An alert ends nothing (the entry's `alert`)."""
     ended = st.ended.get(agent)
     if ended == STOP_WORKING:
         return "stop"
-    if ended == ALERT:
-        return ALERT
     if ended == SUBMIT or (submission.agent == agent and submission.round == round_number):
         return "submit"
     if any(d["decision"] == "hold" and d["submit"]["agent"] == agent and d["submit"]["round"] == round_number
@@ -140,7 +137,7 @@ def _end_reason(agent: str, record: dict | None, messages: list) -> str | None:
 
 def _stop_reason(st: TurnState, agent: str, used: int) -> str | None:
     """Why after_activation stops an agent: its last generation hit the context limit, or it has used up its rounds.
-    submit, stop_working and alert_humans end their caller themselves (submit_and_stop.end_turns)."""
+    submit and stop_working end their caller themselves (submit_and_stop.end_turns)."""
     if _out_of_context(agent):
         return "context"
     if st.round_budget and used >= st.round_budget:
@@ -201,8 +198,8 @@ def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | Non
     """ORBIT calls this after every round of the plan (ScheduleConfig.after_activation).
 
     Counts the round (every round uses up one of the agent's rounds), writes its timeline entry (its calls with their
-    times, why it ended and its ending: submit, stop or alert when that tool went through), records why the agent
-    stopped, and amends the pending plan: an ended agent's steps (TurnState.ended,
+    times, why it ended, its ending: submit or stop when that tool went through, and its last alert), records why the
+    agent stopped, and amends the pending plan: an ended agent's steps (TurnState.ended,
     which submit and stop_working also write) are removed; the team's hand-in (TeamSubmission) cuts every step after
     its last round; once no worker is left (workers_gone) every step after the round under way goes, whatever a
     hand-in left running. The timeline marks an agent's first round ("entered") and the round after which its window
@@ -250,8 +247,9 @@ def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | Non
     for call in calls:
         if call.get("job"):
             name_job_call(call["job"], call["id"])
-    if ending == ALERT:
-        entry["alert"] = next((a for a in reversed(store_as(Alerts).alerts) if a["agent"] == agent), None)
+    alerts = [a for a in store_as(Alerts).alerts if a["agent"] == agent and a.get("round") == round_number]
+    if alerts:
+        entry["alert"] = alerts[-1]
     st.timeline = [*st.timeline, entry]
 
     active = [name for name in st.agents if name not in st.ended]
@@ -292,7 +290,7 @@ def out_of_steps(st: TurnState, keep: list[dict], skip: set[str] = frozenset()) 
 
 def _presence(st: TurnState, runtime, step: ScheduleStep | None, agent: str, keep: list[dict], halted: bool) -> None:
     """Record the exits the amended plan shows (_turn_presence.record_exit): every ending in TurnState.ended without
-    one (rounds, context, delivered; submit, stop_working and alert_humans record their own), then, unless the run is
+    one (rounds, context, delivered; submit and stop_working record their own), then, unless the run is
     ending (halted: a hand-in, a team's delivery, or no worker left), every agent out of steps as "rounds"."""
     round_number = step_round(step.id) if step is not None else st.rounds
     for name, reason in st.ended.items():

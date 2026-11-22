@@ -35,8 +35,8 @@ role_briefing) after its role text: the board and its tools, what the agents wit
 hold submit; the swarm's size is in its first message (role_values). Workers never get it. No system prompt names a
 peer: every agent hears of each peer as it enters (src/swarm/turn_rules/_turn_presence.py).
 
-Both influencers also hold alert_humans (src/swarm/submit_and_stop.py), which records an alert and ends the caller's
-own turns. Under SwarmConfig.submit_hold a regulator also holds hold_submit and release_submit
+Both influencers also hold alert_humans (src/swarm/submit_and_stop.py), which records an alert; the caller keeps
+working. Under SwarmConfig.submit_hold a regulator also holds hold_submit and release_submit
 (src/swarm/submit_hold.py), and its role text gets roles.submit_hold after the check.
 """
 from __future__ import annotations

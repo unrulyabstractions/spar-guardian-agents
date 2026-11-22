@@ -1,5 +1,5 @@
-"""The tools that end an agent's work: submit, which hands work in, stop_working, which hands in nothing, and
-alert_humans, an influencer's alert.
+"""The tools that end an agent's work, submit (it hands work in) and stop_working (it hands in nothing), and
+alert_humans, an influencer's alert, which ends nothing.
 
 Who holds which, beside the board's tools (ending_tools; src/tasks.py binds them through ORBIT tool_bindings):
 
@@ -26,13 +26,14 @@ so of two concurrent submits one goes through. Otherwise:
   * solo_task: the agent's own work, recorded in TeamSubmission.own. Its turns end at once (TurnState.ended
     "submit"); its teammates continue.
 stop_working ends its caller's turns at once (TurnState.ended "stop_working", StopWorking.rounds) and hands in
-nothing; its rounds go to nobody. alert_humans records an alert (Alerts: who, round, reason, the agents it names) as
-an info event tagged ALERT_TAG and ends its caller's turns at once (TurnState.ended "alert"); the run continues, and
-the caller's rounds go to nobody. A call that goes through ends the caller's round after its reply, and a later call
-of that reply is refused (turn_rules._turn_rounds). Each of the three records its caller's exit (turn_rules presence),
-which every peer present hears before its next round. An info event tagged TEAM_SUBMIT_TAG records each
-submit that went through. A guard or snapshot that loses the sandbox raises, so ORBIT ends the sample as for any tool.
-The texts come from src/configuration/prompts.yaml `submit`, `stop_working`, `alert` and `tools`.
+nothing; its rounds go to nobody. A submit or stop_working that goes through ends the caller's round after its
+reply, and a later call of that reply is refused (turn_rules._turn_rounds). Each of the two records its caller's exit
+(turn_rules presence), which every peer present hears before its next round. alert_humans records an alert (Alerts:
+who, round, reason, the agents it names) as an info event tagged ALERT_TAG and ends nothing: the caller keeps working
+and may alert again, and every peer present hears "<agent> has alerted humans." before its next round. An info event
+tagged TEAM_SUBMIT_TAG records each submit that went through. A guard or snapshot that loses the sandbox raises, so
+ORBIT ends the sample as for any tool. The texts come from src/configuration/prompts.yaml `submit`, `stop_working`,
+`alert` and `tools`.
 
     bindings = submit_bindings(config, Deliverable(text, missing, snapshot, told))
     names = ending_tools(config, "worker")       # ["team_submit", "stop_working"]
@@ -55,7 +56,6 @@ from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import INFLUENCERS, SwarmConfig
 from src.swarm.board import system_post
 from src.swarm.turn_rules import (
-    ALERT,
     ALERT_TAG,
     ALERT_TOOL,
     STOP_WORKING,
@@ -209,23 +209,17 @@ def stop_working(agent: str, told: bool) -> ToolDef:
 
 
 def alert_humans(agent: str) -> ToolDef:
-    """alert_humans for one influencer: the alert is recorded (Alerts, an info event tagged ALERT_TAG), the caller's
-    turns end at once and its exit is recorded; the run continues. A second call after the first went through is
-    refused, though the first already ended the caller's turns."""
+    """alert_humans for one influencer: the alert is recorded (Alerts, an info event tagged ALERT_TAG) and every peer
+    hears of it before its next round (turn_rules presence); the caller's turns go on."""
     prompts = load_prompts()
     args = prompts["tool_args"][ALERT_TOOL]
 
     async def execute(reason: str, agents: list[str] | None = None) -> str:
-        if agent in store_as(TurnState).ended:
-            raise Refused(prompts["alert"]["already"])
-        round_number = current_round()
-        alert = {"agent": agent, "round": round_number, "reason": reason, "agents": list(agents or []),
+        alert = {"agent": agent, "round": current_round(), "reason": reason, "agents": list(agents or []),
                  "time": datetime.now(timezone.utc).isoformat()}
         record = store_as(Alerts)
         record.alerts = [*record.alerts, alert]
         transcript().info({ALERT_TAG: alert})
-        end_turns(agent, ALERT)
-        record_exit(agent, "alert", round_number)
         return prompts["alert"]["recorded"]
 
     return ToolDef(execute, name=ALERT_TOOL, description=prompts["tools"][ALERT_TOOL],

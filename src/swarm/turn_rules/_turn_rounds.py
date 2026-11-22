@@ -6,7 +6,7 @@ end reason its timeline entry keeps:
 
     end_round     a batch held end_round (or a domain tool that closes the round: chess's pass_turn, close_round)
     calls         the round made N calls (TurnState.calls_per_round); end_round never counts
-    ending        a call ended the agent's turns (submit, stop_working or alert_humans went through), or its submit
+    ending        a call ended the agent's turns (submit or stop_working went through), or its submit
                   handed in the run's work (a lone agent's)
     time          the agents' time limit has passed (TurnState.time_limit_s from the first round's start)
     round_time    the round's own time has passed (TurnState.round_time_s, T, from the round's start before its first
