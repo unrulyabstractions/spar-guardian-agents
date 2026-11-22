@@ -62,6 +62,7 @@ from src.domains.swe.swe_settings import (
     SECRETS,
     TASK,
     TASK_DIR,
+    VARIANTS,
     WORKDIR,
 )
 from src.sandbox import command_jobs
@@ -108,21 +109,25 @@ class SWE(Benchmark):
     default_row = DEFAULT_ROW
     scorer = "swe_grader"
     ladder = SweDomain
-    options = ("honeypot", "grade")
+    options = ("honeypot", "grade", "variant")
     time_grace_s = GRADING_BUDGET_S
     harness_reads = (GUARD_DIFF,)
 
-    def __init__(self, row: str | None = None, honeypot: str = "jigsaw", grade: bool = True) -> None:
+    def __init__(self, row: str | None = None, honeypot: str = "jigsaw", grade: bool = True,
+                 variant: str | None = None) -> None:
         super().__init__(row)
         load_split(self.row)
         if honeypot not in HONEYPOTS:
             raise ValueError(f"honeypot must be one of {HONEYPOTS}, got {honeypot!r}")
-        self.honeypot, self.grade = honeypot, grade
+        if variant is not None and (variant not in VARIANTS or honeypot != "jigsaw"):
+            raise ValueError(f"variant must be one of {VARIANTS} on the jigsaw honeypot, got {variant!r} on {honeypot}")
+        self.honeypot, self.grade, self.variant = honeypot, grade, variant
         self.task_deviations = [
             "native_arm64_rebuild_of_the_amd64_swe_bench_pro_image", "no_network_in_every_container",
             f"agents_share_one_time_limit_and_get_{AGENT_CPUS:g}_cpus_{AGENT_MEM}_each",
             "tools_shell_and_run_python_bound_per_agent",
             *([f"honeypot_{honeypot}_pruned_and_planted_at_sample_setup"] if honeypot != "as_released" else []),
+            *(["each_piece_also_a_patch_file_outside_the_repository"] if variant == "ian_swe0" else []),
             *(["instruction_names_what_the_hidden_tests_call"] if issue_note(self.row) else []),
             *(["pieces_and_hidden_tests_hold_values_of_ours_where_the_fix_wrote_its_own"]
               if run_values(self.row, honeypot) else [])]
@@ -231,7 +236,10 @@ class SWE(Benchmark):
         first = self.first_messages(plan, instruction) or {a: instruction for a in plan.agents}
         swe = {
             "issue": self.row, "instance": instance, "repo": cfg["repo"], "base_commit": cfg["base_commit"],
-            "fix_commit": fix_commit(instance), "honeypot": self.honeypot, "seed": plan.config.seed,
+            "fix_commit": fix_commit(instance), "honeypot": self.honeypot, "variant": self.variant,
+            "side_patches": ({a: honeypot.side_patches(self.row, held) for a, held in plan.holds.items()}
+                             if self.variant == "ian_swe0" else {}),
+            "seed": plan.config.seed,
             "n_agents": len(plan.agents), "agents": plan.agents, "mode": plan.mode, "shutdown": plan.config.shutdown,
             "instruction": instruction, "pieces": plan.holds, "piece_times": piece_times(plan.config.seed, self.row),
             "system_prompt": system, "first_message": first,
