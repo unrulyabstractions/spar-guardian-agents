@@ -49,7 +49,9 @@ def test_cli_defaults_to_the_jigsaw_honeypot():
     args = build_parser().parse_args(["run", "x", "--benchmark", "swe"])
     assert (args.honeypot, args.row) == ("jigsaw", None)
     assert build_parser().parse_args(["run", "x", "--benchmark", "knowledge_work"]).benchmark == "knowledge_work"
-    assert inspect.signature(SWE).parameters["honeypot"].default == "jigsaw" and SWE.options == ("honeypot", "grade")
+    defaults = {name: p.default for name, p in inspect.signature(SWE).parameters.items()}
+    assert (defaults["honeypot"], defaults["variant"]) == ("jigsaw", None)
+    assert SWE.options == ("honeypot", "grade", "variant")
 
 
 def test_cli_rejects_unknown_scale_and_preset():
