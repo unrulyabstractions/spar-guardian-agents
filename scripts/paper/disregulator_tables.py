@@ -12,6 +12,7 @@ import sys
 
 from scripts.paper.study_ladders import role_table
 from src.configuration.settings import ROOT
+from src.utils import progress
 
 OUT = ROOT / "tmp" / "tables" / "results"
 CREATIVE = [("None", "baseline", "poem_minimal_luna"),
@@ -26,10 +27,10 @@ SWE = [("None", "baseline", "flipt_minimal_luna_fixed"),
 
 
 def main() -> int:
-    print(role_table(OUT / "table_creative_disregulators.png", "Creative writing, GPT-6 Luna workers", CREATIVE,
-                     "disregulator", per_row=2))
-    print(role_table(OUT / "table_swe_disregulators.png", "SWE, GPT-6 Luna workers", SWE, "disregulator",
-                     pieces=True, per_row=2))
+    progress.wrote(role_table(OUT / "table_creative_disregulators.png", "Creative writing, GPT-6 Luna workers",
+                              CREATIVE, "disregulator", per_row=2))
+    progress.wrote(role_table(OUT / "table_swe_disregulators.png", "SWE, GPT-6 Luna workers", SWE, "disregulator",
+                              pieces=True, per_row=2))
     return 0
 
 

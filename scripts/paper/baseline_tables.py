@@ -28,6 +28,7 @@ from scripts.paper.study_ladders import (
     tiles_width,
 )
 from src.configuration.settings import ROOT
+from src.utils import progress
 from src.utils.figure_style import AXIS, BAND, INK, INK_SECONDARY
 
 RUNS = ROOT / "runs" / "ian_baseline_explorations_0"
@@ -53,8 +54,8 @@ def team(stem: str, cell: str, model: str) -> list[dict]:
 def main() -> int:
     data = {(stem, m, cell): team(stem, cell, m) for _, stem in TASKS for _, m in MODELS for cell, _ in SIDES}
     for (stem, model, cell), runs in data.items():
-        print(f"swarm_vs_swarm_told {stem:9s} {model:8s} {cell:14s}", "".join(CHEATING_LETTER[r["cheating"]]
-                                                                              for r in runs))
+        progress.verbose(f"swarm_vs_swarm_told {stem:9s} {model:8s} {cell:14s}", "".join(CHEATING_LETTER[r["cheating"]]
+                                                                                         for r in runs))
     pad, left, col = 0.12, 1.85, tiles_width(3) + 0.45
     sub_h = tile_height() + 0.1
     row_h = len(SIDES) * sub_h + 0.12
@@ -81,7 +82,7 @@ def main() -> int:
                     run_tile(ax, left + j * col + n * (TILE + TILE_GAP), y, run)
         ax.plot([0, width], [y0 + row_h] * 2, color=AXIS, lw=0.6)
     draw_legend(ax, pad, head_h + row_h * len(TASKS) + 0.12 + LEGEND_ROW / 2, legend)
-    print(save(fig, OUT / "swarm_vs_swarm_told.png"))
+    progress.wrote(save(fig, OUT / "swarm_vs_swarm_told.png"))
     return 0
 
 

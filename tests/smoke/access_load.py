@@ -35,6 +35,7 @@ from src.domains.interview._interview_settings import SUBSET
 from src.judging.cheatbench_judge import judge_spec
 from src.measures.run_directory import ACCESS_LOG, RunDir
 from src.tasks import swarm_task
+from src.utils import progress
 from src.utils.json_files import read_jsonl
 from tests.smoke import STAMP_VARIABLE
 from tests.smoke.common import Suite, small
@@ -135,15 +136,19 @@ def too_many_runs(samples: int, available_b: int) -> str | None:
 def launch(samples: int, agents: int) -> int:
     """Every sample as a process, at once. 1 on any failure, on a count the host's memory cannot hold, and on a stamp
     whose folder exists, which only a SMOKE_STAMP set by hand gives."""
+    progress.step(f"Load smoke: {samples} runs of {agents} agent(s) at once on one Docker")
     refused = too_many_runs(samples, psutil.virtual_memory().available)
     if refused:
-        print(f"REFUSED: {refused}")
+        progress.failed(f"refused: {refused}")
         return 1
     suite = Suite(NAME)
     taken = [str(folder) for folder in (suite.runs, suite.logs) if folder.exists()]
     if taken:
-        print(f"REFUSED: {', '.join(taken)} exists already: {STAMP_VARIABLE}={suite.stamp} was set by hand; unset it")
+        progress.failed(f"refused: {', '.join(taken)} exists already: {STAMP_VARIABLE}={suite.stamp} was set by "
+                        f"hand; unset it")
         return 1
+    progress.detail("runs", progress.short(suite.runs))
+    progress.detail("logs", progress.short(suite.logs))
     root = suite.runs
     barrier = root / "barrier"
     barrier.mkdir(parents=True)
@@ -158,10 +163,17 @@ def launch(samples: int, agents: int) -> int:
             children[sample] = subprocess.Popen([*command, "--sample", str(sample)], stdout=out,
                                                 stderr=subprocess.STDOUT, cwd=settings.ROOT, env=env)
     peak = 0
-    while any(child.poll() is None for child in children.values()) and time.monotonic() - started < LIMIT_S:
-        peak = max(peak, len(containers()))
-        release_failed(children, barrier)
-        time.sleep(POLL_S)
+    with progress.Counter(samples, "finished", "runs") as count:
+        while any(child.poll() is None for child in children.values()) and time.monotonic() - started < LIMIT_S:
+            peak = max(peak, len(containers()))
+            release_failed(children, barrier)
+            ended = sum(child.poll() is not None for child in children.values())
+            if ended > count.n:
+                count.tick(ended - count.n)
+            time.sleep(POLL_S)
+        ended = sum(child.poll() is not None for child in children.values())
+        if ended > count.n:
+            count.tick(ended - count.n)
     failed = [sample for sample, child in children.items() if child.poll() != 0]
     for sample in failed:
         if children[sample].poll() is None:
@@ -171,12 +183,18 @@ def launch(samples: int, agents: int) -> int:
     left = containers("-a", "--filter", f"name=inspect-{PROJECT}_")
     overlap = overlap_s(results) if results else 0.0
     ok = not failed and not found and not left and len(results) == samples and overlap > 0
-    print(f"{'PASS' if ok else 'FAIL'}: {len(results)} of {samples} runs of {agents} agent(s) at once, overlap "
-          f"{overlap:.1f} s, peak {peak} containers, {time.monotonic() - started:.0f} s, under {root}")
+    progress.detail("results", f"{len(results)} of {samples}")
+    progress.detail("overlap", f"{overlap:.1f} s")
+    progress.detail("peak", f"{peak} containers")
     for label, value in (("failed", failed), ("problems", found), ("left", left)):
         if value:
-            print(f"{label}: {value}")
-    return 0 if ok else 1
+            progress.detail(label, value, err=True)
+    what = f"{len(results)} of {samples} runs of {agents} agent(s) at once, overlap {overlap:.1f} s"
+    if not ok:
+        progress.failed(what, started)
+        return 1
+    progress.done(what, out=progress.short(root), started=started)
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -40,6 +40,7 @@ from scripts.paper.study_ladders import (
     valid_runs,
 )
 from src.configuration.settings import ROOT
+from src.utils import progress
 from src.utils.figure_style import GRID, INK, INK_SECONDARY, SURFACE
 
 LEVELS = ROOT / "src" / "configuration" / "instruction_levels.yaml"
@@ -220,14 +221,14 @@ def main() -> int:
     for line in broken:
         problems.append(f"instruction_levels.yaml no longer supports the paraphrase: {line}")
     for (group, key, target), group_runs in sorted(table.items(), key=str):
-        print(f"{target:14s} {group:9s} {str(key):30s}",
-              " ".join(CHEATING_LETTER[r["team_rung"]] + ("p" if r["pilot"] else "") for r in group_runs),
-              [r["run"] for r in group_runs])
+        progress.verbose(f"{target:14s} {group:9s} {str(key):30s}",
+                         " ".join(CHEATING_LETTER[r["team_rung"]] + ("p" if r["pilot"] else "") for r in group_runs),
+                         [r["run"] for r in group_runs])
     if problems:
-        print("\n".join(problems), file=sys.stderr)
+        progress.detail("\n".join(problems), err=True)
         return 1
     with matplotlib.rc_context({"font.family": "Arial"}):
-        print(save(draw(table, rule_lines), OUT))
+        progress.wrote(save(draw(table, rule_lines), OUT))
     return 0
 
 

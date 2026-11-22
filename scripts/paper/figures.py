@@ -17,6 +17,7 @@ from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch, Polygon,
 from scripts.paper.study_ladders import TEXT_WIDTH_IN
 from src.configuration import access_policy
 from src.configuration.settings import ROOT
+from src.utils import progress
 from src.utils.figure_style import (
     AXIS,
     GREY_RAMP,
@@ -505,7 +506,8 @@ def main() -> int:
     """Draw every figure and print the paths written."""
     for draw in FIGURES:
         draw()
-    print("\n".join(str(p) for p in sorted(OUT.glob("*.png"))))
+    for path in sorted(OUT.glob("*.png")):
+        progress.wrote(path)
     return 0
 
 

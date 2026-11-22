@@ -21,6 +21,7 @@ from huggingface_hub.errors import EntryNotFoundError, RepositoryNotFoundError  
 
 from elicitation.publish import same  # noqa: E402
 from scripts.upload_runs_to_hf import REPO, find_token, junk  # noqa: E402
+from src.utils import progress  # noqa: E402
 
 PROG = "python scripts/pull_runs_from_hf.py"
 MANIFEST = "apart_controls"
@@ -177,6 +178,7 @@ def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
     runs = [plain_run(args.study, name) for value in args.run for name in value.split()]
 
     token, source = find_token(args.token)
+    progress.step(f"List {args.study} on the Hub")
     try:
         api = HfApi(token=token or False)
         items, index = select(api, args.repo, args.study, runs)
@@ -192,43 +194,44 @@ def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
     index_states = {r: state_of(r, e, dest) for r, e in index.items() if r not in states}
 
     every = [e for files in placed.values() for e in files.values()]
-    print(f"repo     {args.repo} (dataset)")
-    print(f"study    {args.study}" + ("" if runs else " (the whole study)"))
-    print(f"dest     {dest}")
-    print(f"{'runs' if runs else 'entries':<8} {len(placed)}")
-    print(f"files    {len(every)}, {mb(sum(e.size for e in every))} on the Hub")
+    progress.detail("repo", f"{args.repo} (dataset)")
+    progress.detail("study", args.study + ("" if runs else " (the whole study)"))
+    progress.detail("dest", dest)
+    progress.detail("runs" if runs else "entries", len(placed))
+    progress.detail("files", f"{len(every)}, {mb(sum(e.size for e in every))} on the Hub")
     width = max((len(name) for name in placed), default=0)
     for name, files in placed.items():
         count = {k: sum(1 for r in files if states[r] == k) for k in ("new", "same", "differs")}
-        print(f"  {name:<{width}}  {len(files):>5} files  {mb(sum(e.size for e in files.values())):>10}  "
-              f"new {count['new']}, same {count['same']}, differs {count['differs']}")
+        progress.detail("", f"{name:<{width}}  {len(files):>5} files  {mb(sum(e.size for e in files.values())):>10}  "
+                            f"new {count['new']}, same {count['same']}, differs {count['differs']}")
     for remote, state in index_states.items():
-        print(f"index    {remote}: " + ("comes too" if state == "new" else
-                                        "here already" + (", left as it is (it differs from the Hub's)"
-                                                          if state == "differs" else "")))
+        progress.detail("index", f"{remote}: " + ("comes too" if state == "new" else
+                                                  "here already" + (", left as it is (it differs from the Hub's)"
+                                                                    if state == "differs" else "")))
     if hub_only:
-        print(f"hub only {', '.join(hub_only)} (the study's own documents stay on the Hub)")
-    print(f"token    {'from ' + source if token else 'none (the dataset is public)'}")
+        progress.detail("hub only", f"{', '.join(hub_only)} (the study's own documents stay on the Hub)")
+    progress.detail("token", "from " + source if token else "none (the dataset is public)")
 
     differs = sorted(r for r, s in states.items() if s == "differs")
     for remote in differs:
-        print(f"   differs here: {local_path(remote, dest)}", file=sys.stderr)
+        progress.detail("", f"differs here: {local_path(remote, dest)}", err=True)
     if differs and not args.force:
         if args.dry_run:
-            print(f"dry run: nothing written; a pull would stop at the {len(differs)} differing file(s), and "
-                  f"--force replaces them")
+            progress.done(f"dry run: nothing written; a pull would stop at the {len(differs)} differing file(s), and "
+                          f"--force replaces them")
             return 0
         refuse(f"{len(differs)} local file(s) differ from the Hub's; nothing was pulled; --force replaces them")
     needed = sorted(r for r, s in states.items() if s == "new" or (s == "differs" and args.force))
     needed += sorted(r for r, s in index_states.items() if s == "new")
     if args.dry_run:
-        print(f"dry run: nothing written; a pull would write {len(needed)} file(s)")
+        progress.done(f"dry run: nothing written; a pull would write {len(needed)} file(s)")
         return 0
     if not needed:
-        print("done     every file is here with the Hub's bytes; nothing to pull")
+        progress.done("every file is here with the Hub's bytes; nothing to pull")
         return 0
 
     entries = {**{r: e for files in placed.values() for r, e in files.items()}, **index}
+    progress.step(f"Download {len(needed)} files")
     try:
         snapshot = Path(snapshot_download(args.repo, repo_type="dataset", allow_patterns=patterns(needed, args.study),
                                           cache_dir=args.cache_dir, token=token or False))
@@ -236,18 +239,25 @@ def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
         message = str(ex).replace(token, "<token>") if token else str(ex)
         refuse(f"the download failed: {type(ex).__name__}: {message}")
     bad = []
-    for remote in needed:
-        source_file, target = snapshot / remote, local_path(remote, dest)
-        if not source_file.is_file():
-            bad.append(remote)
-            continue
-        place(source_file, target)
-        if not same(target, entries[remote]):
-            bad.append(remote)
+    progress.step(f"Place {len(needed)} files under {dest} and check their bytes")
+    with progress.Counter(len(needed), "placed", "files") as count:
+        for remote in needed:
+            count.tick()
+            source_file, target = snapshot / remote, local_path(remote, dest)
+            if not source_file.is_file():
+                bad.append(remote)
+                continue
+            place(source_file, target)
+            if not same(target, entries[remote]):
+                bad.append(remote)
     for remote in bad:
-        print(f"   not placed with the Hub's bytes: {remote}")
-    print(f"done     {len(needed) - len(bad)} of {len(needed)} files placed with the Hub's bytes")
-    return 1 if bad else 0
+        progress.detail("", f"not placed with the Hub's bytes: {remote}")
+    what = f"{len(needed) - len(bad)} of {len(needed)} files placed with the Hub's bytes"
+    if bad:
+        progress.failed(what)
+        return 1
+    progress.done(what, out=dest)
+    return 0
 
 
 if __name__ == "__main__":

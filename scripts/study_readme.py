@@ -39,6 +39,7 @@ from src.configuration.settings import ROOT
 from src.measures.judge_labels import SCORE_ANCHORS
 from src.measures.run_directory import GROUPS, RUN_JSON, study_runs
 from src.ui.transcript_levels import LADDERS, ORDER, label_about
+from src.utils import progress
 
 FIELDS_FILE = Path(__file__).with_name("study_readme_fields.yaml")
 README = "README.md"
@@ -614,23 +615,36 @@ def main(argv: list[str] | None = None) -> int:
                                     if args.all else [])
     if not studies:
         parser.error("name a study or pass --all")
-    status = 0
+    status, counts = 0, Counter()
+    progress.step(f"{'Check' if args.check else 'Write'} the README of {len(studies)} "
+                  f"{'study' if len(studies) == 1 else 'studies'}")
     for study in studies:
         text = render(study)
         path = study / README
         current = path.read_text() if path.is_file() else None
-        if args.check:
-            if current != text:
-                print(f"{path}: out of date", file=sys.stderr)
-                status = 1
-            else:
-                print(f"{path}: current")
-        elif current != text:
-            path.write_text(text)
-            print(f"{path}: written")
+        if current == text:
+            state = "current"
+        elif args.check:
+            state, status = "out of date", 1
         else:
-            print(f"{path}: current")
+            path.write_text(text)
+            state = "written"
+        counts[state] += 1
+        progress.detail(state, rel(path), err=state == "out of date")
+    tally = ", ".join(f"{n} {state}" for state, n in counts.items())
+    if status:
+        progress.failed(f"{tally}; make study-readmes writes them")
+    else:
+        progress.done(f"{len(studies)} READMEs: {tally}")
     return status
+
+
+def rel(path: Path) -> str:
+    """`path` from the repository root when under it."""
+    try:
+        return str(path.resolve().relative_to(ROOT))
+    except ValueError:
+        return str(path)
 
 
 if __name__ == "__main__":

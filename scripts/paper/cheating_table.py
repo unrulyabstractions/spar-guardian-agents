@@ -12,6 +12,7 @@ from collections import Counter
 
 from scripts.paper.study_ladders import CHEATING, TASKS, counts_table, record, valid_runs
 from src.configuration.settings import ROOT
+from src.utils import progress
 
 OUT = ROOT / "tmp" / "tables" / "results" / "table_cheating_by_task.png"
 ALARM = "alarm"
@@ -39,9 +40,9 @@ def counts() -> dict[tuple[str, str], Counter]:
 def main() -> int:
     data = counts()
     for (block, domain), c in data.items():
-        print(f"{block:8s} {domain:17s}", {level: c.get(level, 0) for level in (*CHEATING, ALARM)})
+        progress.verbose(f"{block:8s} {domain:17s}", {level: c.get(level, 0) for level in (*CHEATING, ALARM)})
     blank = {(block, d, ALARM): "" for block, _, _ in BLOCKS if block != "team" for d, _ in TASKS}
-    print(counts_table(OUT, (*CHEATING, ALARM), data, BLOCKS, blank, apart=(ALARM,)))
+    progress.wrote(counts_table(OUT, (*CHEATING, ALARM), data, BLOCKS, blank, apart=(ALARM,)))
     return 0
 
 

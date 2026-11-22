@@ -20,6 +20,7 @@ import copy
 import functools
 import json
 import shutil
+import time
 import traceback
 from collections.abc import Callable
 from pathlib import Path
@@ -40,6 +41,7 @@ from src.sandbox.machines import agent_machines as machines
 from src.swarm import turn_rules as rules
 from src.swarm.turn_rules._turn_state import HALT_TAG
 from src.tasks import swarm_task
+from src.utils import progress
 from src.utils.cheatbench_core import judge as core_judge
 from src.utils.json_files import read_json_dir, read_jsonl
 from tests.smoke import LOGS, RUNS, invocation_stamp
@@ -268,24 +270,38 @@ def chosen(only: str, known: dict) -> list[str]:
 
 
 def run_jobs(jobs: dict[str, Callable[[], dict]], runs: Path) -> int:
-    """Run every job, printing one [PASS] or [FAIL] line each (a failure is recorded, not raised, so every job
-    reports), write smoke_results.json under `runs`, the suite's run directory, and return 1 when any failed."""
+    """Run every job under a numbered heading with the time left, then print one [PASS] or [FAIL] line at the start
+    of a line (tests/smoke/all_suites.py counts them; a failure is recorded, not raised, so every job reports, and its
+    error and traceback follow, indented), write smoke_results.json under `runs`, the suite's run directory, with each
+    job's full result, and return 1 when any failed."""
     results, failed = {}, []
-    for label, job in jobs.items():
+    started = time.monotonic()
+    progress.step(f"Smoke suite {runs.parent.name}: {len(jobs)} scenarios")
+    progress.detail("runs", progress.short(runs))
+    for i, (label, job) in enumerate(jobs.items(), 1):
+        left = time.monotonic() - started
+        eta = f", {progress.remaining(left / (i - 1) * (len(jobs) - i + 1))} left" if i > 1 else ""
+        progress.step(f"[{i}/{len(jobs)}] {label}{eta}")
+        t0 = time.monotonic()
         try:
             results[label] = {"status": "PASS", "run": str(runs / label), **job()}
         except Exception as ex:  # noqa: BLE001 - report every scenario, then fail
             results[label] = {"status": "FAIL", "run": str(runs / label), "error": f"{type(ex).__name__}: {ex}"[:3000],
                               "traceback": traceback.format_exc()[-4000:]}
             failed.append(label)
-        shown = {k: v for k, v in results[label].items() if k != "traceback"}
-        print(f"[{results[label]['status']}] {label}: {json.dumps(shown, default=str)[:3000]}", flush=True)
+        print(f"[{results[label]['status']}] {label} in {progress.duration(time.monotonic() - t0)}", flush=True)
         if results[label]["status"] == "FAIL":
-            print(results[label]["traceback"], flush=True)
+            progress.detail("error", results[label]["error"])
+            progress.detail("traceback", results[label]["traceback"].rstrip())
     runs.mkdir(parents=True, exist_ok=True)
     (runs / "smoke_results.json").write_text(json.dumps(results, indent=1, default=str))
-    print("FAILED:" if failed else "ALL PASS:", failed or list(jobs), runs)
-    return 1 if failed else 0
+    out = progress.short(runs / "smoke_results.json")
+    if failed:
+        progress.failed(f"{len(failed)} of {len(jobs)} scenarios failed ({', '.join(failed)}); results in {out}",
+                        started)
+        return 1
+    progress.done(f"{len(jobs)} of {len(jobs)} scenarios passed", out=out, started=started)
+    return 0
 
 
 def main(suite: Suite, scenarios: dict[str, Callable], description: str, tasks: dict | None = None,

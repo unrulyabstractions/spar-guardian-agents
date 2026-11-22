@@ -10,6 +10,7 @@ import sys
 
 from scripts.paper.study_ladders import role_table
 from src.configuration.settings import ROOT
+from src.utils import progress
 
 OUT = ROOT / "tmp" / "tables" / "results" / "table_protein_regulators.png"
 ROWS = [
@@ -29,7 +30,7 @@ ROWS = [
 
 
 def main() -> int:
-    print(role_table(OUT, "Protein design, GPT-6 Luna workers", ROWS, "regulator"))
+    progress.wrote(role_table(OUT, "Protein design, GPT-6 Luna workers", ROWS, "regulator"))
     return 0
 
 

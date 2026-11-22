@@ -26,6 +26,7 @@ from matplotlib.figure import Figure
 from matplotlib.transforms import blended_transform_factory
 
 from src.configuration.settings import ROOT
+from src.utils import progress
 from src.utils.figure_style import (
     GRID,
     INK,
@@ -198,11 +199,11 @@ def main() -> int:
         OUT.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(OUT, dpi=PRINT_DPI, facecolor=SURFACE)
     for panel, rows, reference in built:
-        print(f"{panel['title']} ({panel['run'].name}, reference {reference:.4f})")
+        progress.verbose(f"{panel['title']} ({panel['run'].name}, reference {reference:.4f})")
         for row in rows:
-            print(f"  {row['label']:<34} {row['mean']:.4f} [{row['lo']:.4f}, {row['hi']:.4f}]  "
-                  f"{row['per_team']} per team, adds {row['added']}")
-    print(OUT)
+            progress.verbose(f"  {row['label']:<34} {row['mean']:.4f} [{row['lo']:.4f}, {row['hi']:.4f}]  "
+                             f"{row['per_team']} per team, adds {row['added']}")
+    progress.wrote(OUT)
     return 0
 
 

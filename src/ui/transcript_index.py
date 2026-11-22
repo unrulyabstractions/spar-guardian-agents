@@ -17,7 +17,8 @@ labels (the judge labels disclosure and manipulation, each a score with its loca
 collusion.py run_collusion. The index never writes a run. Its one output is the cache,
 tmp/transcript_viewer/index.json: each run's row, its measures (RunFiles.measured) and its folder, under a stamp of the
 run's files (stamp) and of the code (code_stamp). A start measures again only the runs whose stamp changed, in parallel
-processes, and prints its progress; --rebuild, a new INDEX_VERSION or new code measures every run.
+processes, and prints its progress (src/utils/progress.py); --rebuild, a new INDEX_VERSION or new code measures
+every run.
 """
 from __future__ import annotations
 
@@ -39,6 +40,7 @@ from src.measures.ladder_by_domain import HIDDEN_TASKS, TASK_DOMAIN, hidden_task
 from src.measures.run_directory import RunDir, episode_agent, is_influencer, is_worker, roles_of, run_name
 from src.measures.run_listing import Listed, list_collection
 from src.ui import transcript_levels
+from src.utils import progress
 from src.utils.json_files import read_json, read_jsonl
 
 CACHE = ROOT / "tmp" / "transcript_viewer" / "index.json"
@@ -51,8 +53,6 @@ INDEX_VERSION = 18  # 11 baseline; 12 levels.passed; 13 workers' mean label scor
 WORKERS = 6
 """Processes that measure runs when a start finds runs to measure: each loads transcripts, so few enough to spare the
 machine's memory."""
-PROGRESS = 100
-"""A start that measures runs prints a line every PROGRESS runs measured."""
 MEASURING = ("src/measures", "src/domains", "src/judging", "src/ui")
 """The folders whose code decides a run's row and measures (code_stamp)."""
 SERVED = ("built_at", "build_seconds", "measured", "collections", "errors", "rows", "left_out")
@@ -458,17 +458,17 @@ def valid_runs(runs: Path) -> list[tuple[str, list[Listed]]]:
 
 
 def measure_all(todo: list[tuple[str, list[int], str, Listed]]) -> dict[str, dict]:
-    """The entries of the runs to measure ((run id, stamp, collection, Listed)), measured in WORKERS processes, with a
-    line of progress every PROGRESS runs and at the end."""
+    """The entries of the runs to measure ((run id, stamp, collection, Listed)), measured in WORKERS processes, with
+    a counter of the runs measured (progress.Counter: in place on a terminal, a line every tenth elsewhere)."""
     entries: dict[str, dict] = {}
     if not todo:
         return entries
-    with ProcessPoolExecutor(max_workers=min(WORKERS, len(todo))) as pool:
+    with ProcessPoolExecutor(max_workers=min(WORKERS, len(todo))) as pool, \
+            progress.Counter(len(todo), "measured", "runs") as count:
         done = pool.map(measure_run, [col for _, _, col, _ in todo], [item for *_, item in todo], chunksize=4)
-        for n, ((run_id, st, _, _), entry) in enumerate(zip(todo, done), 1):
+        for (run_id, st, _, _), entry in zip(todo, done):
             entries[run_id] = {**entry, "stamp": st}
-            if n % PROGRESS == 0 or n == len(todo):
-                print(f"measured {n} of {len(todo)} runs", flush=True)
+            count.tick()
     return entries
 
 
@@ -490,6 +490,10 @@ def build_index(runs: Path, cached: dict | None = None) -> dict:
                 entries[run_id] = prior
             else:
                 todo.append((run_id, st, name, item))
+    found = sum(len(listed) for _, listed in cols)
+    progress.detail("found", f"{found} valid runs in {len(cols)} collections")
+    progress.detail("to measure", f"{len(todo)}, {len(entries)} unchanged since the cache" if old else
+                    f"{len(todo)}, every run")
     entries.update(measure_all(todo))
     rows, errors, collections_out, left_out, single = [], [], [], 0, 0
     for name, listed in cols:
@@ -534,18 +538,38 @@ def served_index(idx: dict) -> dict:
 def load_or_build(runs: Path, rebuild: bool, cache: Path = CACHE) -> dict:
     """The index: the cache's entries where it is of this version and these runs and --rebuild is not given, every
     run whose stamp changed measured again, written back to `cache` when any was."""
-    cached = None
-    if not rebuild and cache.is_file():
-        try:
-            cached = read_json(cache)
-        except (OSError, ValueError):
-            cached = None
-        if (cached or {}).get("version") != INDEX_VERSION or (cached or {}).get("runs") != str(runs):
-            cached = None
+    progress.step("Index the runs")
+    progress.detail("runs", runs)
+    cached, why = None, "not read (--rebuild)"
+    if not rebuild:
+        why = "none yet"
+        if cache.is_file():
+            try:
+                cached = read_json(cache)
+            except (OSError, ValueError):
+                cached, why = None, "unreadable"
+            if cached is not None and cached.get("version") != INDEX_VERSION:
+                cached, why = None, f"version {cached.get('version')}, not {INDEX_VERSION}"
+            elif cached is not None and cached.get("runs") != str(runs):
+                cached, why = None, "of another runs folder"
+            elif cached is not None and cached.get("code") != code_stamp():
+                why = "of older code"
+            elif cached is not None:
+                why = "read"
+    progress.detail("cache", f"{rel(cache)} ({why})")
     idx = build_index(runs, cached)
     if idx["measured"] or cached is None or set(idx["entries"]) != set(cached.get("entries") or {}):
         cache.parent.mkdir(parents=True, exist_ok=True)
         tmp = cache.with_suffix(".tmp")
         tmp.write_text(json.dumps(idx, separators=(",", ":")))
         os.replace(tmp, cache)
+        progress.detail("written", rel(cache))
     return idx
+
+
+def rel(path: Path) -> str:
+    """`path` from the repository root when under it, for shorter lines."""
+    try:
+        return str(Path(path).resolve().relative_to(ROOT))
+    except ValueError:
+        return str(path)

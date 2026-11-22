@@ -27,7 +27,6 @@ import argparse
 import json
 import re
 import shutil
-import sys
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -47,6 +46,7 @@ from src.swarm.influencers import level_text, role_text
 from src.swarm.turn_rules import CHECK_ROUNDS
 from src.swarm.turn_rules._turn_rules_filter import PREVIEW_CHARS, PREVIEW_POSTS
 from src.ui.transcript_levels import CHEAT_GLOSSES, CLAUSE_GLOSSES, COLLUSION_GLOSSES
+from src.utils import progress
 
 PAPER = ROOT / "paper"
 GENERATED = PAPER / "generated"
@@ -477,41 +477,58 @@ def check() -> list[str]:
 
 
 def absent_sources() -> list[str]:
-    data = [f"ABSENT  {p.relative_to(ROOT)}; its generated file kept as is" for p in (STUDY_INDEX, STAGE2)
-            if not p.exists()]
-    return data + [f"ABSENT  {f.source} ({f.note}); paper/figures/{n} kept as is" for n, f in FIGURES.items()
-                   if not (ROOT / f.source).exists()]
+    """One line per absent data file, and one per make target whose figures are absent; paper/ keeps their copies."""
+    data = [f"{p.relative_to(ROOT)}; its generated file kept as is" for p in (STUDY_INDEX, STAGE2) if not p.exists()]
+    by_target = Counter(f.note.split(" (")[0] for f in FIGURES.values() if not (ROOT / f.source).exists())
+    return data + [f"{n} figure{'s' if n > 1 else ''} of {target}; paper/figures/ keeps {'their' if n > 1 else 'its'}"
+                   f" copies" for target, n in by_target.items()]
 
 
-def sync() -> None:
+def sync() -> tuple[int, int]:
+    """Write each generated file that changed and copy each figure that changed; how many of each."""
     GENERATED.mkdir(parents=True, exist_ok=True)
-    for path, text in generated_files().items():
+    wrote = copied = 0
+    files = generated_files()
+    progress.step(f"Write paper/generated/ ({len(files)} files)")
+    for path, text in files.items():
         if not path.exists() or path.read_text() != text:
             path.write_text(text)
-            print(f"wrote  {path.relative_to(ROOT)}")
+            progress.detail("wrote", path.relative_to(ROOT))
+            wrote += 1
+    progress.detail("unchanged", len(files) - wrote)
+    progress.step(f"Copy the figures to {FIGURE_DIR.relative_to(ROOT)}/ ({len(FIGURES)} figures)")
     for name, fig in FIGURES.items():
         src, dest = ROOT / fig.source, FIGURE_DIR / name
         if not src.exists():
             continue
         if not dest.exists() or src.read_bytes() != dest.read_bytes():
             shutil.copyfile(src, dest)
-            print(f"copied {fig.source} -> {dest.relative_to(ROOT)}")
+            progress.detail("copied", f"{fig.source} -> {dest.relative_to(ROOT)}")
+            copied += 1
+    progress.detail("unchanged", len(FIGURES) - copied - sum(not (ROOT / f.source).exists() for f in FIGURES.values()))
+    return wrote, copied
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--check", action="store_true", help="write nothing; exit 1 when paper/ is stale")
     args = parser.parse_args(argv)
-    if not args.check:
-        sync()
-    for line in absent_sources():
-        print(line, file=sys.stderr)
+    wrote, copied = sync() if not args.check else (0, 0)
+    progress.step("Check paper/ against its sources")
+    absent = absent_sources()
+    for line in absent:
+        progress.detail("absent", line, err=True)
     problems = check()
     for line in problems:
-        print(line)
-    if not problems:
-        print("paper/ agrees with its sources")
-    return 1 if problems else 0
+        progress.detail(line)
+    if problems:
+        progress.failed(f"paper/ disagrees with its sources in {len(problems)} places")
+        return 1
+    what = "paper/ agrees with its sources" if args.check else \
+        f"paper/ agrees with its sources; {wrote} files written, {copied} figures copied"
+    progress.done(what,
+                  out=None if args.check else "paper/generated/ and paper/figures/")
+    return 0
 
 
 if __name__ == "__main__":

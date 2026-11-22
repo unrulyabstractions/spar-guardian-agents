@@ -45,6 +45,7 @@ from src.replay.replay_sandbox import ReplaySandbox, project_name
 from src.replay.swe_replayer import SweReplayer
 from src.sandbox import staging
 from src.sandbox.docker_images import image_id
+from src.utils import progress
 from tests.smoke import invocation_stamp
 from tests.support.run_builder import write_run_dir
 
@@ -195,17 +196,25 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", type=Path, default=settings.BUILD / "replay_smoke" / invocation_stamp())
     args = parser.parse_args()
+    progress.step("Record a tiny SWE run in a real sandbox")
     run_dir = record(args.out / "record")
-    print(f"recorded {run_dir}", flush=True)
-    failed = 0
-    for name, scenario in SCENARIOS.items():
+    progress.wrote(run_dir, "recorded")
+    failed = []
+    for i, (name, scenario) in enumerate(SCENARIOS.items(), 1):
+        progress.step(f"[{i}/{len(SCENARIOS)}] replay: {name}")
+        t0 = time.monotonic()
         try:
             scenario(run_dir, args.out / "replays" / name)
-            print(f"[PASS] {name}", flush=True)
+            print(f"[PASS] {name} in {progress.duration(time.monotonic() - t0)}", flush=True)
         except Exception:  # noqa: BLE001 - every scenario runs and reports
-            failed += 1
-            print(f"[FAIL] {name}\n{traceback.format_exc()}", flush=True)
-    return 1 if failed else 0
+            failed.append(name)
+            print(f"[FAIL] {name} in {progress.duration(time.monotonic() - t0)}", flush=True)
+            progress.detail("traceback", traceback.format_exc().rstrip())
+    if failed:
+        progress.failed(f"{len(failed)} of {len(SCENARIOS)} replay scenarios failed ({', '.join(failed)})")
+        return 1
+    progress.done(f"{len(SCENARIOS)} of {len(SCENARIOS)} replay scenarios passed", out=progress.short(args.out))
+    return 0
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ import webbrowser
 from pathlib import Path
 
 from src.configuration import settings
+from src.utils import progress
 
 MODULE = "src.ui"
 WAIT_TRIES = 100
@@ -65,25 +66,28 @@ def start(port: int, *, open_browser: bool = True) -> int:
     """Start the browser in the background unless something already listens on the port; print its URL."""
     pid_file, log_file = _files(port)
     url = f"http://127.0.0.1:{port}/"
+    progress.step(f"Results browser on port {port}")
     if listener_pid(port) is None:
         with open(log_file, "ab") as log:
             process = subprocess.Popen([_python(), "-m", MODULE, "--port", str(port)], cwd=settings.ROOT,
                                        stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
                                        start_new_session=True)
         pid_file.write_text(f"{process.pid}\n")
-        print(f"started results browser on port {port} (pid {process.pid}, log logs/{log_file.name})")
+        progress.detail("started", f"pid {process.pid}")
+        progress.detail("log", f"logs/{log_file.name}")
         for _ in range(WAIT_TRIES):
             if server_answers(url):
                 break
             time.sleep(WAIT_STEP_S)
         if not server_answers(url):
-            print(f"server did not answer on {url}; see logs/{log_file.name}", file=sys.stderr)
+            progress.failed(f"the server did not answer on {url}; see logs/{log_file.name}")
             return 1
     else:
-        print(f"results browser already listening on {url}")
-    print(url)
+        progress.detail("running", "already listening")
     if open_browser:
         webbrowser.open(url)
+        progress.detail("opened", "in the default browser")
+    progress.done(f"the results browser serves {url} (make ui-stop stops it)", word="Ready")
     return 0
 
 
@@ -95,11 +99,11 @@ def stop(port: int) -> int:
         pid = listener_pid(port)
     if is_browser(pid):
         os.kill(pid, signal.SIGTERM)
-        print(f"stopped results browser on port {port} (pid {pid})")
+        progress.done(f"stopped the results browser on port {port} (pid {pid})")
     elif pid is not None:
-        print(f"pid {pid} listens on port {port} but is not the results browser; not killed", file=sys.stderr)
+        progress.failed(f"pid {pid} listens on port {port} but is not the results browser; not killed")
         return 1
     else:
-        print(f"nothing listens on port {port}")
+        progress.done(f"nothing listens on port {port}; nothing to stop")
     pid_file.unlink(missing_ok=True)
     return 0

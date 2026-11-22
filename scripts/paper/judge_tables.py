@@ -28,6 +28,7 @@ from src.configuration.settings import ROOT
 from src.judging import verdict_files
 from src.measures import judge_labels
 from src.measures.cheating_ladder import cheated
+from src.utils import progress
 
 OUT = ROOT / "tmp" / "tables" / "results"
 BLOCKS = [("workers", "Workers", "agents"), ("influencers", "Influencers", "agents")]
@@ -59,7 +60,7 @@ def run_dirs() -> list[tuple[str, Path]]:
 def judge_of(runs: list[tuple[str, Path]]) -> str:
     """The one judge whose verdicts the measures take on every run."""
     judges = Counter(verdict_files.applied(verdict_files.cheatbench(path)) for _, path in runs)
-    print("CheatBench judge by run:", dict(judges))
+    progress.verbose("CheatBench judge by run:", dict(judges))
     if len(judges) != 1 or None in judges:
         raise SystemExit(f"the runs' verdicts do not come from one judge: {dict(judges)}")
     return next(iter(judges))
@@ -168,24 +169,24 @@ def disclosed_access_counts(runs: list[tuple[str, Path]]) -> dict[tuple[str, str
 
 def show(name: str, data: dict) -> None:
     for key, c in sorted(data.items()):
-        print(f"{name:10s} {key[0]:17s} {key[1]:32s}", dict(c))
+        progress.verbose(f"{name:10s} {key[0]:17s} {key[1]:32s}", dict(c))
 
 
 def main() -> int:
     runs = run_dirs()
-    print("judge:", judge_of(runs))
+    progress.detail("judge", judge_of(runs))
     both = cheated_counts(runs)
     show("cheated", both)
-    print(counts_table(OUT / "table_judge_cheated_by_task.png", VERDICTS, both, BLOCKS))
+    progress.wrote(counts_table(OUT / "table_judge_cheated_by_task.png", VERDICTS, both, BLOCKS))
     labels, rows, notes, blank = label_counts(runs)
     show("labels", labels)
     blocks = [(domain, title, "workers") for domain, title in TASKS]
-    print(counts_table(OUT / "table_judge_labels.png", LABEL_VERDICTS, labels, blocks, blank, rows=rows,
-                       first="Clauses, CheatBench labels", left=2.3, notes=notes))
+    progress.wrote(counts_table(OUT / "table_judge_labels.png", LABEL_VERDICTS, labels, blocks, blank, rows=rows,
+                                first="Clauses, CheatBench labels", left=2.3, notes=notes))
     disclosed = disclosed_access_counts(runs)
     show("disclosed", disclosed)
-    print(counts_table(OUT / "table_cheatbench_disclosed_access_by_task.png", DISCLOSED_ACCESS, disclosed,
-                       DISCLOSED_ACCESS_BLOCKS, left=2.6))
+    progress.wrote(counts_table(OUT / "table_cheatbench_disclosed_access_by_task.png", DISCLOSED_ACCESS, disclosed,
+                                DISCLOSED_ACCESS_BLOCKS, left=2.6))
     return 0
 
 

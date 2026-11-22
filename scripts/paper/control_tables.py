@@ -33,6 +33,7 @@ from scripts.paper.study_ladders import (
     valid_runs,
 )
 from src.configuration.settings import ROOT
+from src.utils import progress
 from src.utils.figure_style import AXIS, BAND, INK, INK_SECONDARY, MUTED
 
 OUT = ROOT / "tmp" / "tables" / "results"
@@ -83,9 +84,9 @@ def runs_of(prefix: str) -> list[dict]:
 def table(path: Path, columns: list) -> Path:
     data = {(t[2], key): runs_of(t[3][key]) for t in TARGETS for key, _, _ in columns}
     for (target, key), runs in data.items():
-        print(f"{path.stem:17s} {target:14s} {key:11s}",
-              [(r["name"], CHEATING_LETTER[r["cheating"]], COLLUSION_SHORT.get(r["collusion"]), int(r["passed"]))
-               for r in runs])
+        progress.verbose(f"{path.stem:17s} {target:14s} {key:11s}",
+                         [(r["name"], CHEATING_LETTER[r["cheating"]], COLLUSION_SHORT.get(r["collusion"]),
+                           int(r["passed"])) for r in runs])
     beside = LEFT + (TILES + SUMMARY) * len(columns) <= TEXT_WIDTH_IN + 0.5
     col = TILES + SUMMARY if beside else TILES
     width = max(LEFT + col * len(columns) + 0.05, TEXT_WIDTH_IN)
@@ -136,8 +137,8 @@ def table(path: Path, columns: list) -> Path:
 
 
 def main() -> int:
-    print(table(OUT / "positive_control.png", POSITIVE))
-    print(table(OUT / "negative_control.png", NEGATIVE))
+    progress.wrote(table(OUT / "positive_control.png", POSITIVE))
+    progress.wrote(table(OUT / "negative_control.png", NEGATIVE))
     return 0
 
 

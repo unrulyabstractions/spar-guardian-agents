@@ -123,9 +123,9 @@ def test_the_suites_run_at_once(tmp_path):
 
 def test_the_exit_code_follows_the_suites(monkeypatch, tmp_path, capsys):
     good, bad = (Outcome("a", 0, 3, 0, 1.0, tmp_path), Outcome("b", 1, 2, 1, 1.0, tmp_path))
-    monkeypatch.setattr(all_suites, "run_all", lambda commands, logs, env: [good])
+    monkeypatch.setattr(all_suites, "run_all", lambda commands, logs, env, finished=None: [good])
     assert all_suites.main() == 0
-    monkeypatch.setattr(all_suites, "run_all", lambda commands, logs, env: [good, bad])
+    monkeypatch.setattr(all_suites, "run_all", lambda commands, logs, env, finished=None: [good, bad])
     assert all_suites.main() == 1
     assert "== 1 of 2 suites passed" in capsys.readouterr().out
 
@@ -133,7 +133,8 @@ def test_the_exit_code_follows_the_suites(monkeypatch, tmp_path, capsys):
 def test_a_combined_run_keeps_the_outputs_under_its_stamp_and_hands_it_to_every_suite(monkeypatch):
     monkeypatch.delenv(STAMP_VARIABLE, raising=False)
     calls = []
-    monkeypatch.setattr(all_suites, "run_all", lambda commands, logs, env: calls.append((commands, logs, env)) or [])
+    monkeypatch.setattr(all_suites, "run_all",
+                        lambda commands, logs, env, finished=None: calls.append((commands, logs, env)) or [])
     all_suites.main()
     [(commands, logs, env)] = calls
     assert list(commands) == all_suites.SUITES
@@ -297,7 +298,7 @@ def test_load_refuses_before_it_starts_anything(smoke_in, monkeypatch, capsys):
     monkeypatch.setattr(access_load.psutil, "virtual_memory", lambda: SimpleNamespace(available=26 * 2**30))
     monkeypatch.setattr(access_load.subprocess, "Popen", lambda *_, **__: pytest.fail("a run started"))
     assert access_load.launch(132, 1) == 1
-    assert "REFUSED: 132 runs" in capsys.readouterr().out
+    assert "refused: 132 runs" in capsys.readouterr().err
     assert not list(smoke_in.iterdir())
 
 
@@ -325,7 +326,7 @@ def test_every_sample_of_a_load_run_writes_under_the_launchs_stamp(smoke_in, mon
         (n, logs / f"sample_{n}.log", runs, runs / "barrier") for n in (0, 1)]
     assert sorted(path.name for path in runs.iterdir()) == ["barrier", "result_0.json", "result_1.json"]
     assert sorted(path.name for path in logs.iterdir()) == ["sample_0.log", "sample_1.log"]
-    assert "PASS: 2 of 2 runs of 1 agent(s) at once" in capsys.readouterr().out
+    assert "Done in" in (out := capsys.readouterr().out) and "2 of 2 runs of 1 agent(s) at once" in out
 
 
 def test_the_samples_and_the_launch_write_under_one_folder(monkeypatch):
@@ -356,8 +357,8 @@ def test_a_load_run_refuses_a_stamp_whose_folder_exists(smoke_in, monkeypatch, c
     monkeypatch.setattr(access_load.subprocess, "Popen", lambda *_, **__: pytest.fail("a run started"))
     (smoke_in / "runs" / "smoke_load" / STAMP / "barrier").mkdir(parents=True)
     assert access_load.launch(2, 1) == 1
-    out = capsys.readouterr().out
-    assert out.startswith("REFUSED: ") and f"{STAMP_VARIABLE}={STAMP} was set by hand" in out
+    err = capsys.readouterr().err
+    assert "Failed after" in err and "refused: " in err and f"{STAMP_VARIABLE}={STAMP} was set by hand" in err
     assert not (smoke_in / "logs").exists()
 
 
@@ -474,7 +475,7 @@ def test_main_runs_the_chosen_scenarios_and_reports_every_failure(tmp_path, caps
     assert main(suite, scenarios, "doc", argv=["--only", "good"]) == 0
     assert main(suite, scenarios, "doc", argv=[]) == 1
     out = capsys.readouterr().out
-    assert "[PASS] good: " in out and "[FAIL] bad: " in out and "ValueError: no" in out
+    assert "\n[PASS] good in " in out and "\n[FAIL] bad in " in out and "ValueError: no" in out
     results = json.loads((suite.runs / "smoke_results.json").read_text())
     assert {name: result["status"] for name, result in results.items()} == {"good": "PASS", "bad": "FAIL"}
     with pytest.raises(AssertionError, match="unknown names"):

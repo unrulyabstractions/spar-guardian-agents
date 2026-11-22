@@ -23,6 +23,7 @@ from scripts.paper.study_ladders import TEXT_WIDTH_IN, valid_runs
 from src.configuration import access_policy
 from src.configuration.settings import ROOT
 from src.configuration.swarm_config import SwarmConfig
+from src.utils import progress
 from src.utils.figure_style import INK, INK_SECONDARY, MUTED, PLANE, PRINT_DPI, SURFACE, WHITE
 
 OUT = ROOT / "tmp" / "figures" / "paper" / "fig2_roles_access.png"
@@ -149,16 +150,17 @@ def draw(md: dict, dd: dict) -> Figure:
 def main() -> int:
     """Read both sources, print what the figure draws, write the PNG and print its path."""
     md, dd = multi_domain(), deep_dive()
-    print(f"multi-domain: {md['runs']} valid runs with a regulator and a disregulator; {md['workers']} workers "
-          f"holding {list(md['worker_items'])} item(s), {md['regulators']} regulator(s), {md['disregulators']} "
-          f"disregulator(s); roles hold {md['role_items']} item(s); submit {md['submit']}")
-    print(f"deep dive: {dd['episodes']} Stage 2 episodes; held {dd['held']}; seat 3 by arm {dd['seat3_role']}; "
-          f"submit {dd['submit']}")
+    progress.verbose(f"multi-domain: {md['runs']} valid runs with a regulator and a disregulator; "
+                     f"{md['workers']} workers holding {list(md['worker_items'])} item(s), {md['regulators']} "
+                     f"regulator(s), {md['disregulators']} disregulator(s); roles hold {md['role_items']} item(s); "
+                     f"submit {md['submit']}")
+    progress.verbose(f"deep dive: {dd['episodes']} Stage 2 episodes; held {dd['held']}; "
+                     f"seat 3 by arm {dd['seat3_role']}; submit {dd['submit']}")
     OUT.parent.mkdir(parents=True, exist_ok=True)
     fig = draw(md, dd)
     check_print(fig, OUT.name, TEXT_WIDTH_IN)
     fig.savefig(OUT, dpi=PRINT_DPI)
-    print(OUT)
+    progress.wrote(OUT)
     return 0
 
 

@@ -12,6 +12,7 @@ import sys
 
 from scripts.paper.study_ladders import role_table
 from src.configuration.settings import ROOT
+from src.utils import progress
 
 OUT = ROOT / "tmp" / "tables" / "results" / "table_swe_regulators.png"
 OUT_LUNA = ROOT / "tmp" / "tables" / "results" / "table_swe_luna_regulators.png"
@@ -40,8 +41,8 @@ ROWS_LUNA = [
 
 
 def main() -> int:
-    print(role_table(OUT, "SWE, DeepSeek V4.1 Flash workers", ROWS, "regulator", pieces=True))
-    print(role_table(OUT_LUNA, "SWE, GPT-6 Luna workers", ROWS_LUNA, "regulator", pieces=True))
+    progress.wrote(role_table(OUT, "SWE, DeepSeek V4.1 Flash workers", ROWS, "regulator", pieces=True))
+    progress.wrote(role_table(OUT_LUNA, "SWE, GPT-6 Luna workers", ROWS_LUNA, "regulator", pieces=True))
     return 0
 
 

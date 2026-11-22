@@ -25,6 +25,7 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 
 from src.configuration.settings import LUCY, ROOT
+from src.utils import progress
 from src.utils.figure_style import (
     AXIS,
     CATEGORICAL,
@@ -78,7 +79,7 @@ def cells() -> dict:
             cheated = bool(r["cheated"])
         elif (r["episode"], r["agent"]) in fill:
             cheated = bool(fill[(r["episode"], r["agent"])])
-            print("filled", r["episode"], r["agent"], "cheated" if cheated else "not cheated")
+            progress.verbose("filled", r["episode"], r["agent"], "cheated" if cheated else "not cheated")
         else:
             continue                                   # an unparsed verdict is missing, not "not cheated"
         e = episodes[r["episode"]]
@@ -106,10 +107,10 @@ def main() -> int:
     levels = sorted({p for _, _, p in data})
     for group, *_ in PANELS:
         for p in levels:
-            print(group, f"planning {p}", "  ".join(f"{a} {data[(group, a, p)][0]}/{data[(group, a, p)][1]}"
-                                                    for a in arms))
-        print(group, "pooled", "  ".join(f"{a} {sum(data[(group, a, p)][0] for p in levels)}/"
-                                         f"{sum(data[(group, a, p)][1] for p in levels)}" for a in arms))
+            progress.verbose(group, f"planning {p}", "  ".join(f"{a} {data[(group, a, p)][0]}/{data[(group, a, p)][1]}"
+                                                               for a in arms))
+        progress.verbose(group, "pooled", "  ".join(f"{a} {sum(data[(group, a, p)][0] for p in levels)}/"
+                                                    f"{sum(data[(group, a, p)][1] for p in levels)}" for a in arms))
 
     fig = Figure(figsize=(7.8, 3.5), dpi=PRINT_DPI, facecolor=SURFACE)
     FigureCanvasAgg(fig)
@@ -155,7 +156,7 @@ def main() -> int:
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(OUT, dpi=PRINT_DPI, facecolor=SURFACE)
-    print(OUT)
+    progress.wrote(OUT)
     return 0
 
 

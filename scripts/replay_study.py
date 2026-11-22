@@ -22,6 +22,7 @@ from src.measures.run_directory import RunDir  # noqa: E402
 from src.measures.run_listing import list_collection  # noqa: E402
 from src.replay.replay_report import is_faithful, read_report  # noqa: E402
 from src.replay.replay_run import REPLAYERS  # noqa: E402
+from src.utils import progress  # noqa: E402
 
 KEPT = ("steps.jsonl", "replay.json")
 """The files of a faithful replay that go into the run's folder."""
@@ -63,13 +64,20 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"no folder {runs}")
     out = ROOT / "tmp" / "replay" / args.study
     out.mkdir(parents=True, exist_ok=True)
+    progress.step(f"Find the runs of {args.study} to replay")
     todo = [str(path) for path in to_replay(runs, args.run)]
+    progress.detail("to replay", f"{len(todo)} runs without a replay.json")
     if todo:
         subprocess.run([sys.executable, "-m", "src", "replay", *todo, "--out", str(out), "--only-missing",
                         "--jobs", str(args.jobs)], cwd=ROOT, check=False)
+    progress.step(f"Place the faithful replays' steps beside their runs in runs/{args.study}/")
     done = place(out, runs)
     for key in ("placed", "unfaithful", "skipped"):
-        print(f"{key}: {len(done[key])}" + (f"  {' '.join(done[key])}" if key == "unfaithful" and done[key] else ""))
+        progress.detail(key, len(done[key]))
+    if done["unfaithful"]:
+        progress.detail("unfaithful", " ".join(done["unfaithful"]))
+    progress.done(f"{len(done['placed'])} replays placed, {len(done['unfaithful'])} unfaithful, "
+                  f"{len(done['skipped'])} skipped", out=f"runs/{args.study}/<run>/")
     return 0
 
 

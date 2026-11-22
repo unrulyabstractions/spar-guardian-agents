@@ -21,6 +21,7 @@ from scripts.paper.figures import PRINT_FLOOR_PT
 from scripts.paper.study_ladders import CHEATING_FILL, TEXT_WIDTH_IN
 from src.configuration.settings import ROOT
 from src.measures.ladder_by_domain import cheating_by_task
+from src.utils import progress
 from src.utils.figure_style import AXIS, BAND, INK, INK_SECONDARY, PRINT_DPI, WHITE
 
 OUT = ROOT / "tmp" / "tables" / "method"
@@ -118,7 +119,8 @@ def write_rungs_by_domain() -> list[Path]:
 
 def main() -> int:
     """Write the two parts of the table and print their paths."""
-    print("\n".join(str(path) for path in write_rungs_by_domain()))
+    for path in write_rungs_by_domain():
+        progress.wrote(path)
     return 0
 
 

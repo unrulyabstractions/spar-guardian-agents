@@ -150,9 +150,9 @@ def test_a_run_pull_places_its_files_and_its_index_with_the_hubs_bytes(tmp_path,
     [call] = fake_hub
     assert call["token"] is False and "study_x/runs/run_ab/run.json" not in str(call["patterns"])
     out = capsys.readouterr().out
-    assert "token    none (the dataset is public)" in out
-    assert "index    study_x/runs/INDEX.jsonl: comes too" in out
-    assert "done     5 of 5 files placed with the Hub's bytes" in out
+    assert "token        none (the dataset is public)" in out
+    assert "index        study_x/runs/INDEX.jsonl: comes too" in out
+    assert "5 of 5 files placed with the Hub's bytes" in out
     assert pull.main(["study_x", "--run", "run_a"], root=tmp_path) == 0
     assert "nothing to pull" in capsys.readouterr().out and len(fake_hub) == 1
 
@@ -163,7 +163,7 @@ def test_a_whole_study_leaves_its_documents_on_the_hub(tmp_path, capsys):
         "logs/study_x/run_a/a.eval", "logs/study_x/screen/run_a.log", "runs/study_x/INDEX.jsonl",
         "runs/study_x/mock/run_m/run.json", "runs/study_x/run_a/run.json",
         "runs/study_x/run_a/trajectories/t#1@k7q2m/transcript.json", "runs/study_x/run_ab/run.json"]
-    assert "hub only README.md, figures/" in capsys.readouterr().out
+    assert "hub only     README.md, figures/" in capsys.readouterr().out
 
 
 def test_an_apart_control_run_comes_with_the_manifest(tmp_path):
@@ -237,7 +237,7 @@ def test_a_given_token_is_used_and_never_shown(tmp_path, fake_hub, capsys):
     assert pull.main(["study_x", "--run", "run_a", "--token", FAKE], root=tmp_path) == 0
     assert [api.token for api in FakeApi.instances] == [FAKE] and fake_hub[0]["token"] == FAKE
     out = capsys.readouterr()
-    assert FAKE not in out.out + out.err and "token    from --token" in out.out
+    assert FAKE not in out.out + out.err and "token        from --token" in out.out
 
 
 def test_a_download_error_that_quotes_the_token_is_shown_without_it(tmp_path, monkeypatch, capsys):

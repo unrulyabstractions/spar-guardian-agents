@@ -6,6 +6,7 @@ from pathlib import Path
 
 from src.configuration import settings
 from src.ui._server import serve
+from src.utils import progress
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -13,7 +14,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--runs", type=Path, default=settings.RUNS)
     ap.add_argument("--port", type=int, default=settings.UI_PORT)
     args = ap.parse_args(argv)
-    print(f"results browser: http://127.0.0.1:{args.port}/  (runs: {args.runs})", flush=True)
+    progress.step("Results browser")
+    progress.detail("runs", args.runs)
+    progress.done(f"the results browser serves http://127.0.0.1:{args.port}/ (Ctrl-C stops it)", word="Ready")
     serve(args.runs, port=args.port)
     return 0
 

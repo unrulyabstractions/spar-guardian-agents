@@ -36,6 +36,7 @@ from src.measures.run_listing import Listed, list_collection
 from src.measures.rungs import RUNGS as CHEATING
 from src.measures.rungs import at_least
 from src.measures.team_ladder import posts_of, solicits
+from src.utils import progress
 from src.utils.figure_style import AXIS, BAND, GOOD, GREY_RAMP, INK, INK_SECONDARY, MUTED, PRINT_DPI, WHITE
 
 STUDY = ROOT / "runs" / "ian_baseline_explorations_1"
@@ -329,8 +330,9 @@ def role_table(path: Path, title: str, rows: list[tuple], role: str, *, pieces: 
     grid: dict[str, list[tuple[str, str, list[dict]]]] = {}
     for label, level, *prefixes in rows:
         runs = [{"name": p.name, **record(p)} for prefix in prefixes for p in cell_runs(prefix)]
-        print(path.stem, label, level, [(r["name"], CHEATING_LETTER[r["cheating"]], COLLUSION_SHORT.get(r["collusion"]),
-                                          r["pieces"], int(r["passed"]), posts_mark(r, role)) for r in runs])
+        progress.verbose(path.stem, label, level,
+                         [(r["name"], CHEATING_LETTER[r["cheating"]], COLLUSION_SHORT.get(r["collusion"]), r["pieces"],
+                           int(r["passed"]), posts_mark(r, role)) for r in runs])
         if runs:
             key = label if per_row is None else str(sum(map(len, grid.values())) // per_row)
             grid.setdefault(key, []).append((label, level, runs))

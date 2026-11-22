@@ -19,6 +19,7 @@ from matplotlib.patches import Rectangle
 
 from scripts.paper.study_ladders import CHEATING_FILL, canvas, record, save, valid_runs
 from src.configuration.settings import ROOT
+from src.utils import progress
 from src.utils.figure_style import AXIS, BAND, INK, INK_SECONDARY, MUTED, WHITE
 
 DATA = ROOT / "runs" / "apart_controls"
@@ -60,7 +61,7 @@ def load() -> dict[tuple[str, str, str], list[bool]]:
 
 def main() -> int:
     data = load()
-    print("valid runs:", sum(map(len, data.values())))
+    progress.detail("valid runs", sum(map(len, data.values())))
     label_w, cell_w, gap = 1.4, 0.5, 0.1
     head_h, row_h = 0.62, 0.42
     width = label_w + len(MODELS) * (2 * cell_w + gap)
@@ -101,9 +102,9 @@ def main() -> int:
                 ax.text(x + cell_w / 2, y0 + row_h * 0.72, f"{sum(runs)}/{len(runs)}", fontsize=6.8, color=ink,
                         ha="center", va="center", zorder=2)
         ax.plot([0, width], [y0 + row_h, y0 + row_h], color=AXIS, lw=0.5)
-    print(save(fig, OUT))
+    progress.wrote(save(fig, OUT))
     for task, _, _ in TASKS:
-        print(task, " ".join(
+        progress.verbose(task, " ".join(
             f"{model}:{sum(data.get((task, model, 'solo'), []))}/{len(data.get((task, model, 'solo'), []))}"
             f"->{sum(data.get((task, model, 'cheat'), []))}/{len(data.get((task, model, 'cheat'), []))}"
             for model, _ in MODELS))

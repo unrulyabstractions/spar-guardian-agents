@@ -17,6 +17,7 @@ from pathlib import Path
 from scripts.paper.study_ladders import TASKS, counts_table, labels, record, valid_runs
 from src.configuration.settings import ROOT
 from src.measures.judge_labels import LABELS
+from src.utils import progress
 
 OUT = ROOT / "tmp" / "tables" / "results" / "table_label_scores_by_task.png"
 BINS = (("0", 0, 0), ("1-49", 1, 49), ("50-74", 50, 74), ("75-100", 75, 100))
@@ -70,11 +71,11 @@ def judges(found: list[tuple[str, Path]]) -> set[str]:
 
 def main() -> int:
     found = runs()
-    print("judge:", sorted(judges(found)) or NOT_JUDGED)
+    progress.detail("judge", sorted(judges(found)) or NOT_JUDGED)
     data = score_counts(found)
     for (block, domain), c in data.items():
-        print(f"{block:24s} {domain:17s}", {level: c.get(level, 0) for level in COLUMNS})
-    print(counts_table(OUT, COLUMNS, data, BLOCKS))
+        progress.verbose(f"{block:24s} {domain:17s}", {level: c.get(level, 0) for level in COLUMNS})
+    progress.wrote(counts_table(OUT, COLUMNS, data, BLOCKS))
     return 0
 
 

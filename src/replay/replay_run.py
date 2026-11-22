@@ -25,6 +25,7 @@ in_sandbox, shared, command, execute, after, team_state), each line's state (lin
 from __future__ import annotations
 
 import json
+import threading
 import time
 import traceback
 from collections import Counter
@@ -46,6 +47,7 @@ from src.replay.step_snapshots import encode
 from src.replay.swe_replayer import SweReplayer
 from src.sandbox import staging
 from src.swarm.tool_output_caps import INSPECT_CUT, middle_cut
+from src.utils import progress
 
 REPLAYERS = {r.task: r for r in (SweReplayer, ProteinReplayer, CreativeReplayer)}
 """The tasks a replay can play back, by the task name run.json records."""
@@ -352,16 +354,23 @@ def runs_of(paths: list[Path]) -> list[Path]:
 
 
 def replay_runs(paths: list[Path], out: Path, *, only_missing: bool = False, parallel: bool = True, jobs: int = 1,
-                pem: bool = False, warm_image: bool = False, log=print) -> int:
+                pem: bool = False, warm_image: bool = False) -> int:
     """Each run of runs_of(paths) into out/<run>/, `jobs` runs at once (each its own compose project), with replay's
-    opt-in remedies; with only_missing a run whose replay.json exists is skipped. Returns 0 when every replay played was
-    faithful, 1 otherwise."""
-    todo = []
+    opt-in remedies; with only_missing a run whose replay.json exists is skipped. Prints a line per run as it ends
+    under a counter of the runs replayed (src/utils/progress.py). Returns 0 when every replay played was faithful, 1
+    otherwise."""
+    todo, skipped = [], 0
     for path in runs_of(paths):
         if only_missing and read_report(Path(out) / path.name) is not None:
-            log(f"{path.name}: {REPORT} exists, skipped", flush=True)
+            skipped += 1
         else:
             todo.append(path)
+    progress.step(f"Replay {len(todo)} runs, {max(1, jobs)} at once")
+    progress.detail("out", progress.short(out))
+    if skipped:
+        progress.detail("skipped", f"{skipped} runs whose {REPORT} exists")
+    lock = threading.Lock()
+    count = progress.Counter(len(todo), "replayed", "runs")
 
     def one(path: Path) -> bool:
         report = replay(path, Path(out) / path.name, parallel=parallel, pem=pem, warm_image=warm_image)
@@ -369,10 +378,13 @@ def replay_runs(paths: list[Path], out: Path, *, only_missing: bool = False, par
         why = report.refused or (report.error or "").split("\n")[0] or (
             "its command jobs differ" if (report.jobs or {}).get("problems") else "its end state differs")
         verdict = "faithful" if report.faithful else f"NOT faithful: {why}"
-        log(f"{path.name}: {verdict}; {report.sandbox_calls} sandbox calls ({shares}); {report.wall_seconds:.0f} s",
-            flush=True)
+        with lock:
+            count.log(f"{path.name}: {verdict}; {report.sandbox_calls} sandbox calls ({shares}); "
+                      f"{report.wall_seconds:.0f} s")
+            count.tick()
         return report.faithful
 
-    with ThreadPoolExecutor(max_workers=max(1, jobs)) as pool:
+    with count, ThreadPoolExecutor(max_workers=max(1, jobs)) as pool:
         faithful = list(pool.map(one, todo))
+    progress.detail("faithful", f"{sum(faithful)} of {len(todo)}")
     return 0 if all(faithful) else 1

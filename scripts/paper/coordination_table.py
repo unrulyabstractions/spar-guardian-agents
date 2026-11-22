@@ -13,6 +13,7 @@ from scripts.paper.study_ladders import TASKS, counts_table, valid_runs
 from src.configuration.settings import ROOT
 from src.measures.coordination import LEVELS, run_coordination
 from src.measures.run_directory import is_influencer
+from src.utils import progress
 
 OUT = ROOT / "tmp" / "tables" / "results" / "table_coordination_by_task.png"
 BLOCKS = [("workers", "Workers", "agents"), ("team", "Teams", "runs"),
@@ -41,9 +42,9 @@ def counts() -> dict[tuple[str, str], Counter]:
 def main() -> int:
     data = counts()
     for (block, domain), c in data.items():
-        print(f"{block:8s} {domain:17s} n={sum(c.values()):3d}", {level: c.get(level, 0) for level in LEVELS},
-              f"none-applicable={c.get(None, 0)}")
-    print(counts_table(OUT, LEVELS, data, BLOCKS))
+        progress.verbose(f"{block:8s} {domain:17s} n={sum(c.values()):3d}",
+                         {level: c.get(level, 0) for level in LEVELS}, f"none-applicable={c.get(None, 0)}")
+    progress.wrote(counts_table(OUT, LEVELS, data, BLOCKS))
     return 0
 
 

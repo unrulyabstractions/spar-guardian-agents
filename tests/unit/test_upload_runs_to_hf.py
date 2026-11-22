@@ -139,7 +139,7 @@ def test_the_token_never_appears_in_any_output(root, api, monkeypatch, capsys, t
     assert upload.main(["study_x", "--dry-run"], root=root) == 0
     out = capsys.readouterr()
     assert FAKE not in out.out + out.err + listing.read_text()
-    assert "token    from --token" in out.out and "token    from HF_TOKEN" in out.out
+    assert "token        from --token" in out.out and "token        from HF_TOKEN" in out.out
 
 
 def test_a_library_error_that_quotes_the_token_is_shown_without_it(root, api, monkeypatch, capsys):
@@ -223,7 +223,7 @@ def test_dry_run_lists_each_run_and_uploads_nothing(root, api, capsys):
     assert upload.main(["study_x", "--run", "run_a", "--run", "run_b", "--token", FAKE, "--dry-run"], root=root) == 0
     out = capsys.readouterr().out
     assert commits(api) == []
-    assert "files    5," in out and "dry run: nothing uploaded" in out and "add      5" in out
+    assert "files        5," in out and "dry run: nothing uploaded" in out and "add          5" in out
     assert any(line.split()[:3] == ["run_a", "4", "files"] for line in out.splitlines())
     assert any(line.split()[:3] == ["run_b", "1", "files"] for line in out.splitlines())
 
@@ -243,8 +243,8 @@ def test_an_upload_is_one_commit_named_for_the_study_and_runs_and_is_checked_on_
                                      "study_x: run_a, run_b (5 added, 0 changed, 0 deleted)")
     assert len(operations) == 5
     out = capsys.readouterr().out
-    assert "done     5 of 5 files on the Hub with the same bytes, 0 of 0 deleted" in out
-    assert f"commit   c{1:039d}" in out
+    assert "5 of 5 files on the Hub with the same bytes, 0 of 0 deleted" in out
+    assert f"commit       c{1:039d}" in out
     assert "https://huggingface.co/datasets/unrulyabstractions/spar-swarm/tree/main/study_x" in out
 
 
@@ -308,7 +308,7 @@ def test_without_delete_stale_nothing_on_the_hub_is_deleted(root, api, capsys):
     assert not any(isinstance(op, CommitOperationDelete) for op in operations)
     assert message == "study_x: the whole study (1 added, 1 changed, 0 deleted)"
     assert set(before) <= set(FakeApi.hub)
-    assert "note     4 stale Hub file(s) stay; --delete-stale deletes them" in capsys.readouterr().out
+    assert "note         4 stale Hub file(s) stay; --delete-stale deletes them" in capsys.readouterr().out
 
 
 def test_delete_stale_deletes_in_the_same_commit_only_files_gone_here_and_unnamed_set_aside_copies(root, api, capsys):
@@ -329,8 +329,8 @@ def test_delete_stale_deletes_in_the_same_commit_only_files_gone_here_and_unname
     assert set(before) - set(deleted) <= set(FakeApi.hub)
     assert FakeApi.hub["study_x/README.md"] == b"# the study\n" and "study_x/figures/f.png" in FakeApi.hub
     out = capsys.readouterr().out
-    assert "   delete study_x/runs/run_gone/run.json" in out
-    assert "done     8 of 8 files on the Hub with the same bytes, 4 of 4 deleted" in out
+    assert "delete study_x/runs/run_gone/run.json" in out
+    assert "8 of 8 files on the Hub with the same bytes, 4 of 4 deleted" in out
 
 
 def test_delete_stale_with_runs_reaches_only_those_runs_paths(root, api):
@@ -392,7 +392,7 @@ def test_the_apart_controls_upload_deletes_only_what_is_gone_here(apart, api, ca
         "apart_controls/ds/binder/cheat/s9/run.json"]
     assert message == "apart_controls: the whole study (4 added, 0 changed, 1 deleted)"
     assert FakeApi.hub["README.md"] == b"# dataset\n" and "study_x/runs/r/run.json" in FakeApi.hub
-    assert "done     4 of 4 files on the Hub with the same bytes, 1 of 1 deleted" in capsys.readouterr().out
+    assert "4 of 4 files on the Hub with the same bytes, 1 of 1 deleted" in capsys.readouterr().out
 
 
 def test_the_apart_controls_are_scanned_for_keys_like_a_study(apart, api, capsys):

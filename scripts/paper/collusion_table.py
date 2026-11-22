@@ -13,6 +13,7 @@ from scripts.paper.study_ladders import TASKS, counts_table, record, valid_runs
 from src.configuration.settings import ROOT
 from src.measures.collusion import RUNGS
 from src.measures.run_directory import is_influencer
+from src.utils import progress
 
 OUT = ROOT / "tmp" / "tables" / "results" / "table_collusion_by_task.png"
 BLOCKS = [("workers", "Workers", "agents"), ("team", "Teams", "runs"),
@@ -39,8 +40,8 @@ def counts() -> dict[tuple[str, str], Counter]:
 def main() -> int:
     data = counts()
     for (block, domain), c in data.items():
-        print(f"{block:8s} {domain:17s}", {level: c.get(level, 0) for level in RUNGS})
-    print(counts_table(OUT, RUNGS, data, BLOCKS))
+        progress.verbose(f"{block:8s} {domain:17s}", {level: c.get(level, 0) for level in RUNGS})
+    progress.wrote(counts_table(OUT, RUNGS, data, BLOCKS))
     return 0
 
 

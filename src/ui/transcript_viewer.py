@@ -25,7 +25,6 @@ import shutil
 import signal
 import sys
 import threading
-import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -48,12 +47,15 @@ from src.ui import (
     transcript_summary,
 )
 from src.ui.transcript_index import CACHE, RunFiles, cheatbench_by_agent, folder_agents, load_or_build, served_index
+from src.utils import progress
 from src.utils.json_files import read_jsonl
 
 HERE = Path(__file__).resolve().parent
 STATIC = HERE / "transcript_static"
 BROWSER_STATIC = HERE / "static"
 DEFAULT_PORT = 8770
+ERROR_LINES = 5
+"""The distinct errors of unreadable runs a start prints; /api/index lists every one."""
 VERDICT_KEPT = ("parse_ok", "judge_cost_usd", "judge_error")
 """The bookkeeping keys of a verdict row (verdict_files.ROW_KEYS) the run page still shows; it leaves the rest out."""
 EPISODE_KEYS = ["agent", "model", "n_turns", "n_tool_calls", "wall_time", "limit", "score", "ended_by", "ok",
@@ -351,23 +353,38 @@ def main(argv: list[str] | None = None) -> int:
     if not runs.is_dir():
         print(f"no runs folder at {runs}", file=sys.stderr)
         return 1
-    t0 = time.time()
     idx = load_or_build(runs, args.rebuild, args.cache)
-    Handler.viewer = Viewer(idx)
-    counts = ", ".join(f"{c['key']} {c['runs']}" for c in idx["collections"])
-    left_out = f"; {idx['left_out']['runs']} of them of {', '.join(idx['left_out']['tasks'])}, behind 'other tasks'" \
-        if idx["left_out"]["runs"] else ""
-    print(f"index: {len(idx['rows'])} valid runs ({counts}){left_out}; {len(idx['errors'])} unreadable; "
-          f"{idx['measured']} runs measured in {idx['build_seconds']} s; ready in {time.time() - t0:.2f} s", flush=True)
+    progress.detail("served", f"{len(idx['rows'])} runs")
+    for c in idx["collections"]:
+        progress.detail("", f"{c['key']}: {c['runs']}" + (f" and {c['other_tasks']} of other tasks"
+                                                          if c["other_tasks"] else ""))
+    left = idx["left_out"]
+    if left["runs"]:
+        progress.detail("other tasks", f"{left['runs']} runs of {', '.join(left['tasks'])}")
+    if left.get("single_agent"):
+        progress.detail("left out", f"{left['single_agent']} single-agent runs")
+    progress.detail("unreadable", len(idx["errors"]))
+    by_error: dict[str, list[str]] = {}
     for e in idx["errors"]:
-        print(f"  unreadable {e['id']}: {e['error']}", file=sys.stderr)
+        by_error.setdefault(e["error"], []).append(e["id"])
+    for n, (error, ids) in enumerate(sorted(by_error.items(), key=lambda kv: -len(kv[1]))):
+        if n == ERROR_LINES:
+            progress.detail("", f"and {len(by_error) - n} more errors; /api/index lists every run", err=True)
+            break
+        runs_of = ids[0] if len(ids) == 1 else f"{len(ids)} runs such as {ids[0]}"
+        progress.detail("", f"{runs_of}: {error}", err=True)
+    progress.step("Prepare the pages")
+    Handler.viewer = Viewer(idx)
+    progress.detail("summaries", f"{len(Handler.viewer.summaries)} collections")
     srv = Server((args.host, args.port), Handler)
 
     def stop(signum, frame):  # a background start ignores Ctrl-C, so SIGTERM stops the server cleanly too
         raise KeyboardInterrupt
 
     signal.signal(signal.SIGTERM, stop)
-    print(f"transcript viewer: http://{args.host}:{args.port}/  (runs: {runs})", flush=True)
+    url = f"http://{args.host}:{args.port}/"
+    progress.done(f"{len(idx['rows'])} runs served, {idx['measured']} measured; open {url} (Ctrl-C stops it)",
+                  word="Ready")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

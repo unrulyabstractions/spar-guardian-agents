@@ -22,6 +22,7 @@ from huggingface_hub import CommitOperationAdd, CommitOperationDelete, HfApi, Re
 from huggingface_hub.errors import EntryNotFoundError  # noqa: E402
 
 from elicitation.publish import same, secrets  # noqa: E402  (publish also teaches zipfile Inspect's zstd members)
+from src.utils import progress  # noqa: E402
 
 REPO = "unrulyabstractions/spar-swarm"
 PROG = "python scripts/upload_runs_to_hf.py"
@@ -256,27 +257,29 @@ def megabytes(files: list[tuple[str, Path]]) -> str:
 
 def plan(repo: str, study: str, items: dict, skipped: list[str], whole: bool) -> None:
     every = [f for files in items.values() for f in files]
-    print(f"repo     {repo} (dataset)")
-    print(f"study    {study}" + (" (the whole study)" if whole else ""))
-    print(f"{'entries' if whole else 'runs':<8} {len(items)}")
-    print(f"files    {len(every)}, {megabytes(every)}")
+    progress.step(f"Plan the upload of {study}")
+    progress.detail("repo", f"{repo} (dataset)")
+    progress.detail("study", study + (" (the whole study)" if whole else ""))
+    progress.detail("entries" if whole else "runs", len(items))
+    progress.detail("files", f"{len(every)}, {megabytes(every)}")
     width = max(len(name) for name in items)
     for name, files in items.items():
         logs = sum(1 for remote, _ in files if remote.endswith(".eval"))
-        print(f"  {name:<{width}}  {len(files):>5} files  {megabytes(files):>10}  ({logs} .eval)")
+        progress.detail("", f"{name:<{width}}  {len(files):>5} files  {megabytes(files):>10}  ({logs} .eval)")
     if skipped:
-        print(f"skipped  {', '.join(skipped)}")
+        progress.detail("skipped", ", ".join(skipped))
 
 
 def show(ops: dict[str, list[str]], local: dict[str, Path], hub: dict[str, RepoFile], listing: Path | None) -> None:
     """The counts of each kind, every delete, and with listing a file of every path by kind and both sizes."""
-    print(f"hub      {len(hub)} files in reach")
+    progress.step("Compare with the Hub")
+    progress.detail("hub", f"{len(hub)} files in reach")
     for kind in KINDS:
-        print(f"{kind:<8} {len(ops[kind])}")
+        progress.detail(kind, len(ops[kind]))
     for remote in ops["delete"]:
-        print(f"   delete {remote}")
+        progress.detail("", f"delete {remote}")
     if ops["stale"]:
-        print(f"note     {len(ops['stale'])} stale Hub file(s) stay; --delete-stale deletes them")
+        progress.detail("note", f"{len(ops['stale'])} stale Hub file(s) stay; --delete-stale deletes them")
     if listing:
         listing.parent.mkdir(parents=True, exist_ok=True)
         with listing.open("w") as out:
@@ -285,7 +288,7 @@ def show(ops: dict[str, list[str]], local: dict[str, Path], hub: dict[str, RepoF
                 for remote in ops[kind]:
                     size = local[remote].stat().st_size if remote in local else ""
                     out.write(f"{kind}\t{remote}\t{size}\t{hub[remote].size if remote in hub else ''}\n")
-        print(f"listing  {listing}")
+        progress.detail("listing", listing)
 
 
 def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
@@ -311,12 +314,12 @@ def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
     for run in runs:
         if args.study != APART and not any(remote.startswith(f"{args.study}/logs/{run}/")
                                            for remote, _ in items.get(run, [])):
-            print(f"note     {run} has no eval log under logs/{args.study}/{run}/")
+            progress.detail("note", f"{run} has no eval log under logs/{args.study}/{run}/")
 
     token, source = find_token(args.token)
     if not token and not args.dry_run:
         refuse(NO_TOKEN)
-    print(f"token    {'from ' + source if token else 'none found; the real upload needs one'}")
+    progress.detail("token", "from " + source if token else "none found; the real upload needs one")
 
     def failed(what: str, ex: Exception, then: str = "") -> None:  # the library's message, the token taken out
         refuse(f"{what} failed: {type(ex).__name__}: {str(ex).replace(token, '<token>') if token else ex}{then}")
@@ -324,11 +327,12 @@ def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
     every = [f for files in items.values() for f in files]
     local = dict(every)
     values = secrets() | ({"the Hugging Face token in use": token.encode()} if token else {})
+    progress.step(f"Check {len(every)} files for secrets")
     found = leaks([path for _, path in every], values)
     if found:
         print("\n".join(found), file=sys.stderr)
         refuse(f"{len(found)} file(s) hold a key, the token or the git email; nothing was uploaded")
-    print("check    no key, token or git email in any file")
+    progress.detail("check", "no key, token or git email in any file")
 
     folders, single = reach(args.study, runs)
     try:
@@ -339,24 +343,27 @@ def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
     ops = compare(every, hub, args.study, root, args.delete_stale)
     show(ops, local, hub, args.listing)
     if args.dry_run:
-        print("dry run: nothing uploaded")
+        progress.done("dry run: nothing uploaded")
         return 0
     operations = ([CommitOperationAdd(path_in_repo=remote, path_or_fileobj=str(local[remote]))
                    for remote in ops["add"] + ops["change"]]
                   + [CommitOperationDelete(path_in_repo=remote) for remote in ops["delete"]])
     if not operations:
-        print("done     the Hub already holds every file with the same bytes; nothing to commit")
+        progress.done("the Hub already holds every file with the same bytes; nothing to commit")
         return 0
 
     message = f"{args.study}: " + ("the whole study" if not runs else ", ".join(runs[:5])
                                    + (f" and {len(runs) - 5} more" if len(runs) > 5 else ""))
     message += f" ({len(ops['add'])} added, {len(ops['change'])} changed, {len(ops['delete'])} deleted)"
+    progress.step(f"Upload {len(ops['add']) + len(ops['change'])} files and delete {len(ops['delete'])} in one commit")
     try:
         commit = api.create_commit(repo_id=args.repo, repo_type="dataset", commit_message=message,
                                    operations=operations)
     except Exception as ex:  # a gateway timeout can come back while the Hub still applies the commit
         failed("the upload", ex, "; the commit may still land, so look at the dataset's commits, then rerun with "
                                  "--dry-run to see what the Hub holds")
+    progress.detail("commit", getattr(commit, "oid", None) or "unknown")
+    progress.step("Confirm the Hub's bytes")
     try:
         after = hub_tree(api, args.repo, args.study, folders, single)
     except Exception as ex:
@@ -364,14 +371,17 @@ def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
     bad = [name for name, path in every if name not in after or not same(path, after[name])]
     left = [name for name in ops["delete"] if name in after]
     for name in bad:
-        print(f"   not on the Hub with the same bytes: {name}")
+        progress.detail("", f"not on the Hub with the same bytes: {name}")
     for name in left:
-        print(f"   still on the Hub after its delete: {name}")
-    print(f"commit   {getattr(commit, 'oid', None) or 'unknown'}")
-    print(f"done     {len(every) - len(bad)} of {len(every)} files on the Hub with the same bytes, "
-          f"{len(ops['delete']) - len(left)} of {len(ops['delete'])} deleted")
-    print(f"url      https://huggingface.co/datasets/{args.repo}/tree/main/{args.study}")
-    return 1 if bad or left else 0
+        progress.detail("", f"still on the Hub after its delete: {name}")
+    url = f"https://huggingface.co/datasets/{args.repo}/tree/main/{args.study}"
+    what = (f"{len(every) - len(bad)} of {len(every)} files on the Hub with the same bytes, "
+            f"{len(ops['delete']) - len(left)} of {len(ops['delete'])} deleted")
+    if bad or left:
+        progress.failed(f"{what}; {url}")
+        return 1
+    progress.done(what, out=url)
+    return 0
 
 
 if __name__ == "__main__":
