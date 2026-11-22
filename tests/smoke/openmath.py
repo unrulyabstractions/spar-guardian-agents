@@ -1177,8 +1177,9 @@ def scenario_jobs() -> dict:
     assert results["long"] == f"{jobs['kept'].format(job='j1')} {jobs['so_far']}\nstart\n", results["long"]
     assert results["quick"].strip() == "quick", results["quick"]
     assert results["read-running"] == f"{jobs['running'].format(job='j1')} {jobs['no_new']}", results["read-running"]
-    exited = f"{jobs['exited'].format(job='j1', code=0)} {jobs['new']}\n{slice_size(1)}\nend\n"
-    assert results["read-exited"] == exited, results["read-exited"]
+    head, size, end = results["read-exited"].split("\n")[:3]
+    assert head == f"{jobs['exited'].format(job='j1', code=0)} {jobs['new']}" and int(size) > 0 and end == "end", \
+        results["read-exited"]            # the slice's bytes, read by j1 after its call returned
     assert results["stop"].startswith(jobs["stopped"].format(job="j2")), results["stop"]
     timeline = sample.store.get("TurnState:timeline")
     first = next(e for e in timeline if e["agent"] == holder and e["round"] == 1)

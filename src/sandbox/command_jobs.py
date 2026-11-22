@@ -74,7 +74,7 @@ import fcntl, json, os, pwd, select, signal, sys, time
 spec = json.loads(sys.argv[1])
 argv = sys.argv[2:]
 keep = int(spec["keep"])
-os.umask(0o077)
+umask = os.umask(0o077)
 top = spec["top"]
 os.makedirs(top, mode=0o700, exist_ok=True)
 if os.geteuid() == 0:
@@ -170,6 +170,7 @@ if user and user != "root":
     os.setuid(uid)
     env["HOME"] = home
 env.update(spec.get("env") or {})
+os.umask(umask)
 try:
     os.execvpe(argv[0], argv, env)
 except OSError as ex:
@@ -178,7 +179,8 @@ except OSError as ex:
 '''
 """argv: the spec ({top, name, user, env, keep}) as JSON, then the command's argv. The pid file is written as root,
 before the user is taken: a reap that sees a process of the user reads its pid file after. From the pid file on, the
-launcher's own failures (a user with no passwd entry) go to the command's stderr."""
+launcher's own failures (a user with no passwd entry) go to the command's stderr. The command gets the exec's own
+umask back; the call's files are made under 077."""
 
 READ = r'''
 import fcntl, json, os, sys, time

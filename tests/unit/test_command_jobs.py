@@ -76,9 +76,11 @@ def test_a_command_that_ends_in_its_round_answers_as_inspects_exec_did(jobs, tmp
 
 def test_the_launcher_replaces_itself_with_the_command(jobs):
     """The exec's root process runs the tool's argv, so the access log and the network log hash and name it as before;
-    nothing but the command writes its output."""
+    nothing but the command writes its output. The command keeps the exec's umask, the call's own files 077."""
     outcome = asyncio.run(command(jobs, "ps -o args= -p $$; true"))
     assert outcome.text.strip() == "bash -c ps -o args= -p $$; true"
+    direct = asyncio.run(jobs.box.exec(["bash", "-c", "umask"])).stdout
+    assert asyncio.run(command(jobs, "umask")).text == direct and direct.strip() != "0077"
 
 
 def test_a_command_still_running_when_its_round_runs_out_becomes_a_job(jobs):
