@@ -277,6 +277,25 @@ def test_a_sealed_call_keeps_no_output_on_its_machine(jobs, tmp_path):
     asyncio.run(scenario())
 
 
+def test_each_call_folder_is_named_by_its_agent_and_its_number(jobs, tmp_path):
+    """A call's folder under JOBS_DIR is <agent>-<n>, the agent's n-th command call of the run (call_name), so a
+    command that lists the folder reads the same names in the run and in its replay, and two calls on one machine
+    never race for a name; calls of one batch started at once take one number each."""
+    async def scenario():
+        jobs.deadline = time.time()
+        kept = await command(jobs, "sleep 30")
+        listed = await command(jobs, f"ls {tmp_path / 'jobs'}", agent="a02")
+        assert listed.text == "a01-1\na02-1\n"           # the a01 job's folder and the listing call's own
+        jobs.deadline = time.time() + 0.5
+        pair = await asyncio.gather(command(jobs, "sleep 5"), command(jobs, "sleep 5"))
+        assert kept.job == "j1" and sorted(o.job for o in pair) == ["j2", "j3"]
+        assert sorted(p.name for p in (tmp_path / "jobs").iterdir()) == ["a01-1", "a01-2", "a01-3"]
+        assert command_jobs.call_name("a01", 2) == "a01-2" and command_jobs.call_name("x/../y", 1) == "x_.._y-1"
+        await command_jobs.end_jobs()
+
+    asyncio.run(scenario())
+
+
 def test_a_batch_kept_at_once_takes_one_id_each(jobs):
     async def scenario():
         jobs.deadline = time.time() + 0.5

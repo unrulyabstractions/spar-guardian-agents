@@ -29,16 +29,15 @@ job call (the call that became the job, job_output, job_stop, peer_shell) whose 
 
 Not reproduced. The replay's machines do not hide /proc (src/sandbox/proc_hiding/), so a command that reads another
 process's /proc differs in a run that hid it. A commit a job makes is dated in the window of the job call that follows
-it (window), or of the next call of its agent; one made after its last job call stays undated. The job directories'
-names are random, as they were in the run, so a command that lists them differs, and so may one that races another
-call of the same machine for them.
+it (window), or of the next call of its agent; one made after its last job call stays undated. Each command's directory
+is named as the run named it (command_jobs.call_name: its owner and its number among the owner's command calls), so a
+command that lists them reads the same names.
 """
 from __future__ import annotations
 
 import json
 import threading
 import time
-import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import NamedTuple
@@ -141,6 +140,7 @@ class JobPlayer:
         self.live: dict[str, Live] = {}          # recorded job id -> the replayed job
         self.inflight: dict[str, Live] = {}      # handle -> a command still running inside its call
         self.launched: dict[int, threading.Event] = {}
+        self.numbers: dict[str, int] = {}        # each owner's command calls so far, for command_jobs.call_name
         self.problems: list[dict] = []
         self.texts = load_prompts()["jobs"]
 
@@ -256,7 +256,10 @@ class JobPlayer:
     def command(self, box, call: RecordedCall, place: Place, owner: str | None = None
                 ) -> tuple[str, bool, int | None, str | None]:
         """command_jobs.run_command on the replay's clock: (text, timed out, return code, job id)."""
-        handle = uuid.uuid4().hex[:16]
+        with self.lock:
+            name = owner or call.agent
+            self.numbers[name] = self.numbers.get(name, 0) + 1
+            handle = cj.call_name(name, self.numbers[name])
         spec = {"top": self.top, "name": handle, "user": place.user, "env": place.env, "keep": cj.KEEP_BYTES,
                 "wrap": cj.WRAP}
         live = Live(handle=handle, owner=owner or call.agent, service=place.service, started=time.time(),

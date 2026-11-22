@@ -149,3 +149,20 @@ def test_only_a_run_made_since_the_round_clock_plays_through_the_job_player():
     assert jobs_era({"config": {"round_time_s": 0}})
     assert not jobs_era({"config": {"rounds": 8}})
     assert not jobs_era({})
+
+
+@pytest.mark.skipif(not os.path.exists("/bin/bash"), reason="needs bash")
+def test_a_listing_of_the_job_folder_replays_the_names_the_run_saw(tmp_path):
+    """The replay names each command's folder as the run did (command_jobs.call_name), so a02's listing, which in
+    the run showed a01's job and its own call, matches exactly."""
+    top = tmp_path / "jobs"
+    calls = [shell(1, "a01", 0, "echo START; sleep 600", KEPT.format(job="j1") + " Its output so far:\nSTART\n",
+                   T0, T0 + 1.0, "kept1"),
+             shell(2, "a02", 0, f"ls {top}", "a01-1\na02-1\n", T0 + 1.2, T0 + 1.3),
+             job_call(3, "a01", 1, "job_stop", "j1", "Job j1 was stopped. It has no new output.", T0 + 1.5)]
+    run_json = {"config": {"round_time_s": 1, "tool_output_bytes": 65536, "tool_output_cut": "middle"},
+                "jobs": [{"id": "j1", "agent": "a01", "tool": "shell", "machine": "m", "call_id": "kept1",
+                          "started": T0, "ended": T0 + 1.6, "status": "stopped", "exit_code": 137}]}
+    jobs, played, _ = replayed(tmp_path, calls, run_json)
+    assert played[2]["match"] == "exact", (played[2]["call"].result, played[2].get("output"))
+    assert jobs.report(played)["problems"] == []

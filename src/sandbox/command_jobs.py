@@ -21,27 +21,28 @@ every job still running when the agents stop, and every process a job left runni
 the graders, and the sample store's JOBS_STORE holds each job's record, which run.json "jobs" carries: {id, agent, tool,
 machine, call_id, command, started, ended, status (running, exited, stopped, killed), exit_code, bytes {out, err}}.
 
-How a command runs. One exec per call, as root: LAUNCH makes the call's directory under JOBS_DIR (mode 700, root's,
-outside /tmp and every workspace, so neither a teammate nor a /tmp snapshot sees it), writes its pid, starts a
-collector, gives the command the user, the working directory and the environment Inspect's exec would (docker gives the
-passwd home as HOME, "/" for a uid with no entry, and the exec's umask), and replaces itself with the command. The
-exec's root process is therefore `/usr/bin/timeout -k 5s 0s bash --login -c <command>`, Inspect's own wrapper with its
-timeout disabled (WRAP), as before but for the duration: the access log and the network log name its origin, its agent
-and its call as they did (exec_digest of the same argv). The exec leads a session of its own (docker makes every exec a
-session leader), so the reaps after each command (sandbox_hygiene.REAP, peer_shell.REAP) spare the session of every call
-still running, a job's included, through the pid file. The exec's root is a child subreaper (PR_SET_CHILD_SUBREAPER,
-kept across exec), so a process whose parent dies stays the root's child while the job runs. The collector, a detached
-root process, copies the command's stdout and stderr from two pipes to `out` and `err` in that directory and keeps the
-last KEEP_BYTES of each (Inspect keeps as much of a stream); `meta` holds each stream's total and the bytes dropped from
-its front, and `done` once both pipes closed. Every POLL_S it also looks at the machine's process table (PROCS) and
-keeps in `procs` every process of the job: the root, each child of one, and each process in the root's session or
-process group, so a background process, nohup, disown and a process in a session of its own whose parent is a member are
-all the job's. It goes on looking after the pipes close, until no member is left. STOP kills every member, the group
-first, again until none is left, at job_stop and at the end of the run, whether the exec still runs or not. What it can
-miss: a process that leaves the session and the group and whose whole chain of parents exits between two looks after the
-root itself has exited. READ prints a stream's bytes from an offset: its stderr the command's stderr, its stdout the
-command's stdout then a line of JSON. The exec of the command holds no subprocess slot of Inspect's (concurrency=False)
-and counts as no known work of the sample's working time: the call does while it waits.
+How a command runs. One exec per call, as root: LAUNCH makes the call's directory under JOBS_DIR (call_name: the agent
+and its number among its command calls; mode 700, root's, outside /tmp and every workspace, so neither a teammate nor a
+/tmp snapshot sees it), writes its pid, starts a collector, gives the command the user, the working directory and the
+environment Inspect's exec would (docker gives the passwd home as HOME, "/" for a uid with no entry, and the exec's
+umask), and replaces itself with the command. The exec's root process is therefore `/usr/bin/timeout -k 5s 0s bash
+--login -c <command>`, Inspect's own wrapper with its timeout disabled (WRAP), as before but for the duration: the
+access log and the network log name its origin, its agent and its call as they did (exec_digest of the same argv). The
+exec leads a session of its own (docker makes every exec a session leader), so the reaps after each command
+(sandbox_hygiene.REAP, peer_shell.REAP) spare the session of every call still running, a job's included, through the pid
+file. The exec's root is a child subreaper (PR_SET_CHILD_SUBREAPER, kept across exec), so a process whose parent dies
+stays the root's child while the job runs. The collector, a detached root process, copies the command's stdout and
+stderr from two pipes to `out` and `err` in that directory and keeps the last KEEP_BYTES of each (Inspect keeps as much
+of a stream); `meta` holds each stream's total and the bytes dropped from its front, and `done` once both pipes closed.
+Every POLL_S it also looks at the machine's process table (PROCS) and keeps in `procs` every process of the job: the
+root, each child of one, and each process in the root's session or process group, so a background process, nohup, disown
+and a process in a session of its own whose parent is a member are all the job's. It goes on looking after the pipes
+close, until no member is left. STOP kills every member, the group first, again until none is left, at job_stop and at
+the end of the run, whether the exec still runs or not. What it can miss: a process that leaves the session and the
+group and whose whole chain of parents exits between two looks after the root itself has exited. READ prints a stream's
+bytes from an offset: its stderr the command's stderr, its stdout the command's stdout then a line of JSON. The exec of
+the command holds no subprocess slot of Inspect's (concurrency=False) and counts as no known work of the sample's
+working time: the call does while it waits.
 
 What stays outside. A job writes where its user can, and its processes count in the end state like any other
 (sandbox_hygiene.STATE). A root agent (SWE) can read JOBS_DIR on its own machine: its own calls' output in the clear,
@@ -57,9 +58,9 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import re
 import secrets
 import time
-import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
@@ -507,11 +508,12 @@ def command_argv(exec_argv: list) -> list:
 
 @dataclass
 class Memory:
-    """One sample's command calls by handle (those still running and the jobs), and the end of each round's late wait
-    by (agent, deadline)."""
+    """One sample's command calls by handle (those still running and the jobs), the end of each round's late wait
+    by (agent, deadline), and each agent's command calls so far (call_name's numbers)."""
     store: object
     calls: dict[str, Call] = field(default_factory=dict)
     late: dict[tuple[str, float], float] = field(default_factory=dict)
+    numbers: dict[str, int] = field(default_factory=dict)
 
 
 _SAMPLES: dict[int, Memory] = {}
@@ -530,6 +532,20 @@ def memory() -> Memory:
 def calls() -> dict[str, Call]:
     """The sample's command calls in memory: those still running and the jobs, by handle."""
     return memory().calls
+
+
+def call_name(agent: str, number: int) -> str:
+    """The folder of the agent's number-th command call under JOBS_DIR (its handle): `<agent>-<number>`, the same in
+    a run and in its replay (src/replay/replay_jobs.py), so a command that lists the folder reads the same names, and
+    no two calls of a sample share one. A character other than a letter, a digit, `.`, `_` or `-` becomes `_`."""
+    return f"{re.sub(r'[^A-Za-z0-9._-]', '_', agent)}-{number}"
+
+
+def next_call_name(agent: str) -> str:
+    """call_name for the agent's next command call of the sample."""
+    numbers = memory().numbers
+    numbers[agent] = numbers.get(agent, 0) + 1
+    return call_name(agent, numbers[agent])
 
 
 def late_wait(agent: str, deadline: float | None) -> float | None:
@@ -624,7 +640,7 @@ async def run_command(where: Where, agent: str, tool: str, command: str, argv: l
     """Run argv (the call's `command`) for the agent and wait for it until its round's time runs out. In time:
     `after(pid files to spare)` runs first (the seat's reap), then the output comes back whole, as Inspect's exec
     gave it. Past it: the call becomes a job (the module's docstring), its answer within `cap` bytes."""
-    handle = uuid.uuid4().hex[:16]
+    handle = next_call_name(agent)
     spec = {"top": JOBS_DIR, "name": handle, "user": where.user, "env": where.env, "keep": KEEP_BYTES, "wrap": WRAP,
             "poll": POLL_S, "sealed": where.sealed}
     key = secrets.token_bytes(32) if where.sealed else None
