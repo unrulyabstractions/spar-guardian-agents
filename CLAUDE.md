@@ -59,8 +59,10 @@ code with tests that fail when it breaks:
   the box's runs may spend at their caps. `--allow-main-key` is gone. On 2026-11-02 the user ordered the other way for
   study_exploration_1: "Capped key NO, JUST USE THE KEY WE HAVE". `box_run.sh <id> --main-key` sends the main key
   under the same limit checks. Any other study needs the user's word again.
-- Claude through OpenRouter is refused until `scripts/check_anthropic_cache.py` (two calls, under one cent, only
-  with the user's yes) shows the cache is read and `src/models/model_registry.yaml` records `caching_verified`.
+- Claude through OpenRouter is refused until `scripts/check_anthropic_cache.py` (three calls, under two cents)
+  shows the cache is read under the installed Inspect and `src/models/model_registry.yaml` records `caching_verified`
+  with that Inspect commit. An Inspect bump refuses Claude until the check passes again. Inspect places the cache marks
+  itself; a Claude request may carry at most 4 (Anthropic refuses a fifth with HTTP 400).
 - An estimate comes from a pilot with the same models in the same roles. In the first 10 minutes of every new
   cell, price the live runs: `uv run python -m scripts.box.live_cost <box ids>`, and again with `--since`. Stop
   any run running past its estimate and tell the user.
@@ -93,13 +95,29 @@ Submodules:
 code, the runs and Lucy's latest results say. `paper/CLAUDE.md` holds the procedure; read it before touching `paper/` or anything the paper describes.
 
 - Any change to what the paper describes (`src/configuration/`, the ladder, the domains, the board, the roles,
-  `scripts/paper/`, new runs, or a new stage in `submodules/lucy`) updates `paper/` in the same commit: `make paper`,
-  then `make paper-check`.
+  `scripts/paper/`, new runs, or a new stage in `submodules/lucy`) gets the paper updated by one separate background
+  agent started right after the change lands (`make paper`, then `make paper-check`). The paper never blocks a change
+  and is never a step inside a build's workflow (the user, 2026-11-20: "always update paper with agent in background";
+  2026-11-22: "PAPER CHANGES NEVER NEED TO BLOCK").
 - `make test` fails when `paper/generated/` is stale (`tests/unit/test_paper_sources.py`).
 - Never hand-edit `paper/generated/`. When anything makes a sentence, table or figure of the paper wrong, fix it in
   the same turn: rewrite the sentence in the user's voice (`writing-voice` skill), redraw the figure from its data,
   and list each change to the user. Never leave an "open" list and never wait to be asked twice (the user,
   2026-11-08: "I SAID UPDATE EVERYTHING TODAY, WHY ARE U WAITING", "WHY IS THERE still open"). Every figure has a
   script; a new one gets a script before it enters the paper.
-- Other branches never go into main unless the user says so.
+- Our own worktree branches land on main when their tests pass. Anyone else's branch never goes into main unless the
+  user says so.
 - View every page you changed in `paper/build/main.pdf` before calling it done.
+
+## 7. Speed (the user, 2026-11-22: "WE NEED TO KEEP MOVING")
+
+The global rules' "WORK FAST" section applies. Here:
+
+- Each build works in its own `worktree/<name>`, with main's `.venv` by absolute path or its own venv, and lands on
+  main as soon as its own tests pass. Checks, wider smokes and the paper run after landing.
+- Run only the affected tests and smokes before landing: `uv run pytest tests/unit -k <area>` plus
+  `-k collaboration` when a task, its access or its grader changed. The full suite runs in the background after.
+- Docker runs in Colima's VM, capped at 24 GiB of the Mac's 48 GB, so it cannot starve the Mac. Run smokes in
+  parallel while the containers' total (`docker stats`) stays under about 16 GiB. `docker compose down` your own.
+- `tests/unit/test_paper_sources.py` fails between a landing and the paper agent's commit. That is expected; the
+  paper agent clears it.
