@@ -5,7 +5,7 @@ a replay (replay_run.replay) with no model call.
     states = decode(doc)                                # every step's before and after in full, by n
     state = state_at(doc, n=51)                         # {machine: {path: entry}} once call 51 has run
 
-    python -m src.replay.tmp_snapshots <run dir> --out <replay dir> [--force]
+    python -m src.replay.tmp_snapshots <run dir> --out <replay dir> [--force] [--pem] [--warm-image]
 
 The command replays the run into the replay dir (steps.jsonl, replay.json, end/ as `python -m src replay` writes them)
 and writes <run dir>/tmp_snapshots.json only when the replay is faithful. It refuses to replace an existing file
@@ -64,109 +64,23 @@ from src.replay.replay_report import STEPS
 from src.replay.replay_sandbox import ReplaySandbox
 from src.replay.step_snapshots import apply_delta, delta
 from src.sandbox.machines.agent_machines import DEFAULT_SERVICE
+from src.sandbox.tmp_listing import (  # noqa: F401 - the listing's names, read here and by the tests
+    HASH_MAX_BYTES,
+    LISTING,
+    LISTING_LIB,
+    NOBODY_UID,
+    TEXT_MAX_BYTES,
+    TMP_DIRS,
+    USER_MIN_UID,
+    USERS,
+    listing_spec,
+)
 
 FILE = "tmp_snapshots.json"
 SCHEMA = 2
-TMP_DIRS = ["/tmp", "/var/tmp", "/dev/shm"]
-HASH_MAX_BYTES = 1 << 20
-TEXT_MAX_BYTES = 8 << 10
 MEMORY_LIMIT = "4g"
 """The memory limit each container of the replay gets (compose mem_limit)."""
 LIST_TIMEOUT_S = 120
-USER_MIN_UID, NOBODY_UID = 1000, 65534
-LISTING_LIB = r"""
-import grp, hashlib, json, os, pwd, stat, struct, sys
-kinds = ((stat.S_ISREG, "file"), (stat.S_ISDIR, "dir"), (stat.S_ISLNK, "link"), (stat.S_ISFIFO, "fifo"),
-         (stat.S_ISSOCK, "socket"))
-ACL_XATTRS = (("acl", "system.posix_acl_access"), ("default_acl", "system.posix_acl_default"))
-ACL_TAGS = {0x01: "user", 0x02: "user", 0x04: "group", 0x08: "group", 0x10: "mask", 0x20: "other"}
-names = {}
-def name_of(table, ident):
-    key = (table, ident)
-    if key not in names:
-        try:
-            names[key] = pwd.getpwuid(ident).pw_name if table == "user" else grp.getgrgid(ident).gr_name
-        except KeyError:
-            names[key] = str(ident)
-    return names[key]
-def acl_lines(raw):
-    # linux/posix_acl_xattr.h: a u32 version, then one (u16 tag, u16 perm, u32 id) entry per tag, little-endian
-    out = []
-    for off in range(4, len(raw) - 7, 8):
-        tag, perm, ident = struct.unpack_from("<HHI", raw, off)
-        who = name_of("user", ident) if tag == 0x02 else name_of("group", ident) if tag == 0x08 else ""
-        bits = "".join(c if perm & b else "-" for c, b in (("r", 4), ("w", 2), ("x", 1)))
-        out.append(f"{ACL_TAGS.get(tag, str(tag))}:{who}:{bits}")
-    return out
-def acls(path):
-    out = {}
-    if not hasattr(os, "getxattr"):
-        return out
-    for key, attr in ACL_XATTRS:
-        try:
-            out[key] = acl_lines(os.getxattr(path, attr, follow_symlinks=False))
-        except OSError:
-            pass
-    return out
-def entry(path, spec):
-    info = os.lstat(path)
-    kind = next((name for test, name in kinds if test(info.st_mode)), "other")
-    out = {"type": kind, "size": info.st_size, "mode": stat.filemode(info.st_mode),
-           "owner": name_of("user", info.st_uid), "uid": info.st_uid, "group": name_of("group", info.st_gid),
-           "gid": info.st_gid, "mtime": info.st_mtime}
-    if kind == "link":
-        out["target"] = os.readlink(path)
-        return out
-    out.update(acls(path))
-    if kind == "file" and info.st_size <= spec["hash_max"]:
-        try:
-            with open(path, "rb") as f:
-                data = f.read(spec["hash_max"] + 1)
-        except OSError:
-            return out
-        out["sha256"] = hashlib.sha256(data).hexdigest()
-        if len(data) <= spec["text_max"] and b"\0" not in data:
-            try:
-                out["text"] = data.decode("utf-8")
-            except UnicodeDecodeError:
-                pass
-    return out
-"""
-"""The listing's functions, with no top-level effect: tests exec them to decode an ACL off the box."""
-LISTING = LISTING_LIB + r"""
-spec = json.load(sys.stdin)
-found = {}
-for root in spec["roots"]:
-    if not os.path.lexists(root):
-        continue
-    found[root] = entry(root, spec)
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames.sort()
-        for name in sorted(dirnames) + sorted(filenames):
-            path = os.path.join(dirpath, name)
-            try:
-                found[path] = entry(path, spec)
-            except OSError:
-                continue
-print(json.dumps(found))
-"""
-"""Every entry under the roots as root, by path (the module docstring's entry); the roots themselves included."""
-USERS = r"""
-import grp, json, os, pwd, sys
-spec = json.load(sys.stdin)
-groups = {g.gr_gid: g.gr_name for g in grp.getgrall()}
-found = {}
-for u in sorted(pwd.getpwall(), key=lambda u: u.pw_uid):
-    if spec["min_uid"] <= u.pw_uid < spec["nobody_uid"]:
-        found[u.pw_name] = {"uid": u.pw_uid, "gid": u.pw_gid, "groups": sorted(
-            {groups.get(g, str(g)) for g in os.getgrouplist(u.pw_name, u.pw_gid)})}
-print(json.dumps(found))
-"""
-"""The machine's login users (uid from min_uid, below nobody's) with their groups by name, primary included."""
-
-
-def listing_spec(roots: list[str] | None = None) -> dict:
-    return {"roots": list(roots or TMP_DIRS), "hash_max": HASH_MAX_BYTES, "text_max": TEXT_MAX_BYTES}
 
 
 def as_root(box: ReplaySandbox, machine: str, script: str, spec: dict, what: str) -> dict:
@@ -277,9 +191,12 @@ def state_at(doc: dict, n: int, *, before: bool = False) -> dict[str, dict]:
     return last
 
 
-def replay_tmp(run_dir: Path, out_dir: Path) -> tuple[replay_run.ReplayReport, dict | None]:
+def replay_tmp(run_dir: Path, out_dir: Path, *, pem: bool = False, warm_image: bool = False
+               ) -> tuple[replay_run.ReplayReport, dict | None]:
     """replay_run.replay with every replayer wrapped in a TmpRecorder; the report, and the file's dict (None when the
-    replay refused or failed). Writes nothing beyond what replay writes into out_dir."""
+    replay refused or failed). pem and warm_image are replay's opt-in remedies (SWE): the certificate swap
+    (random_content.py) and the image with Go's build cache filled (warm_image.py). Writes nothing beyond what replay
+    writes into out_dir."""
     made: list[TmpRecorder] = []
 
     def wrap(cls):
@@ -288,7 +205,7 @@ def replay_tmp(run_dir: Path, out_dir: Path) -> tuple[replay_run.ReplayReport, d
             return made[-1]
         return make
     with mock.patch.dict(replay_run.REPLAYERS, {task: wrap(cls) for task, cls in replay_run.REPLAYERS.items()}):
-        report = replay_run.replay(Path(run_dir), Path(out_dir))
+        report = replay_run.replay(Path(run_dir), Path(out_dir), pem=pem, warm_image=warm_image)
     if report.refused or report.error or not made:
         return report, None
     recorder = made[0]
@@ -326,12 +243,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("run", type=Path)
     parser.add_argument("--out", type=Path, required=True, help="the replay's own folder (steps.jsonl, replay.json)")
     parser.add_argument("--force", action="store_true", help="replace an existing tmp_snapshots.json")
+    parser.add_argument("--pem", action="store_true",
+                        help="swap the certificates and keys the run's calls drew for the recorded ones (SWE)")
+    parser.add_argument("--warm-image", action="store_true",
+                        help="run every machine on the run's image with Go's build cache filled (SWE)")
     args = parser.parse_args(argv)
     target = args.run / FILE
     if target.exists() and not args.force:
         print(f"{target} exists; pass --force to replace it", file=sys.stderr)
         return 2
-    report, doc = replay_tmp(args.run, args.out)
+    report, doc = replay_tmp(args.run, args.out, pem=args.pem, warm_image=args.warm_image)
     if doc is None or not report.faithful:
         why = report.refused or (report.error or "").split("\n")[0] or "its end state differs"
         if doc is not None:

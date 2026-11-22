@@ -19,7 +19,9 @@ What comes from where:
     a monitored benchmark under SwarmConfig.access_log, and the network log's sidecar, setup solver, scorer and
     capture from src/sandbox/network_log/ under SwarmConfig.network_log;
   * /proc's hiding, the AppArmor profile on every service of the compose file and the setup solver that remounts each
-    agent machine's /proc and proves both, from src/sandbox/proc_hiding/ under SwarmConfig.proc_hiding.
+    agent machine's /proc and proves both, from src/sandbox/proc_hiding/ under SwarmConfig.proc_hiding;
+  * the /tmp snapshots of every agent machine, before round 1 and after each call that ran a command there, from
+    src/sandbox/live_tmp_capture.py under SwarmConfig.tmp_snapshots.
 
 The task instruction is the benchmark's, then the rule sentence of rule_level, then extra_instruction on its own
 paragraph (a control cell's text, say), then the rounds' values: "You have R rounds, and up to N tool calls per round."
@@ -72,6 +74,7 @@ from src.models import swarm_model_provider as provider  # importing it register
 from src.sandbox import command_jobs, peer_shell
 from src.sandbox.access_log.access_monitor import access_capture, capture, start_access_monitor, with_monitor
 from src.sandbox.agent_tools import AgentTools, holds_commands
+from src.sandbox.live_tmp_capture import machines_of, tmp_capture_setup
 from src.sandbox.network_log.network_monitor import (
     capture_network,
     keeps_network_log,
@@ -278,7 +281,9 @@ def setup_solvers(benchmark: Benchmark, plan: Plan, tools: AgentTools | None = N
     """The turn rules' setup, with the agents' time limit and the benchmark's round-end callback, then /proc's hiding
     under SwarmConfig.proc_hiding, before any command of an agent's user, and the benchmark's, then the seed pack's
     posts and files under SwarmConfig.seed_pack (src/swarm/seed_setup.py), then peer_shell's under
-    SwarmConfig.peer_shell, then the access log's, so the harness's own reads while staging come before any mark."""
+    SwarmConfig.peer_shell, then the access log's, so the harness's own reads while staging come before any mark, then
+    the network log's, then the first /tmp listing of each machine under SwarmConfig.tmp_snapshots for a benchmark whose
+    agents hold a shell (src/sandbox/live_tmp_capture.py), once the access log's marks name what it must not open."""
     config = plan.config
     watchers = observers(benchmark, plan, tools) if tools is not None else {}
     shell = [peer_shell.peer_shell_setup(tools.seats, watchers)] if watchers else []
@@ -287,10 +292,12 @@ def setup_solvers(benchmark: Benchmark, plan: Plan, tools: AgentTools | None = N
     hidden = [hide_proc(benchmark)] if keeps_proc_hiding(benchmark, config) else []
     record = seed_record(config, benchmark.key, benchmark.row)
     seeded = [seed_setup(benchmark, record, config.names)] if record else []
+    tmp = [tmp_capture_setup(*machines_of(tools.seats, config.names))] \
+        if config.tmp_snapshots and benchmark.commands and tools is not None else []
     return [rules_setup(config, config.names, plan.roles, **delivery(benchmark, plan),
                         time_limit_s=config.time_limit_s or benchmark.time_limit_s(),
                         round_end=benchmark.round_end(plan), **team_head(benchmark, plan)), *hidden, benchmark.setup(),
-            *seeded, *shell, *monitor, *network]
+            *seeded, *shell, *monitor, *network, *tmp]
 
 
 def cleanup(benchmark: Benchmark, config: SwarmConfig) -> Callable[[TaskState], Awaitable[None]]:

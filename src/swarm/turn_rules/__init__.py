@@ -40,7 +40,15 @@ The rest of the API is what this package exports.
 """
 from src.swarm.turn_rules._turn_plan import planned_entries, rules_setup, schedule
 from src.swarm.turn_rules._turn_presence import entered, exited, record_exit
-from src.swarm.turn_rules._turn_rounds import SWAPS, close_round, mark_job, round_deadline, round_line
+from src.swarm.turn_rules._turn_rounds import (
+    AFTER_CALL,
+    SWAPS,
+    close_round,
+    mark_job,
+    mark_machine,
+    round_deadline,
+    round_line,
+)
 from src.swarm.turn_rules._turn_rules_filter import provider_system_text, turn_rules_defense
 from src.swarm.turn_rules._turn_state import (
     ACTIONS_TOOL,
@@ -67,6 +75,7 @@ from src.swarm.turn_rules._turn_state import (
     SYSTEM_SENDER,
     TEAM_SUBMIT,
     TEAM_SUBMIT_TAG,
+    TMP_CALLS_STORE,
     TURN_RULES_TAG,
     Alerts,
     Delivered,
@@ -98,5 +107,6 @@ __all__ = [
     "orbit_submit_ending", "ALERT", "ALERT_TAG", "ALERT_TOOL", "PRESENCE_TAG", "ROUND_TAG", "END_ROUND",
     "Alerts", "Refused", "entered", "exited", "record_exit", "close_round", "round_line",
     "JOBS_STORE", "SWAPS", "mark_job", "round_deadline", "planned_entries",
+    "AFTER_CALL", "TMP_CALLS_STORE", "mark_machine",
     "HOLD_TAG", "HOLD_TOOL", "RELEASE_TOOL", "SubmitHolds", "holdable",
 ]

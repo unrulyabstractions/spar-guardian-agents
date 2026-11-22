@@ -47,6 +47,7 @@ PRESENCE_TAG = "swarm_presence"       # a presence line's metadata key, and the 
 ROUND_TAG = "swarm_round"             # a round line's metadata key ("Round 3 of 30. ..."), and its info event
 END_ROUND = "end_round"               # ends the caller's round; never counts toward N (src/swarm/end_round.py)
 JOBS_STORE = "command_jobs"           # sample store: {job id: record} of the command jobs (src/sandbox/command_jobs.py)
+TMP_CALLS_STORE = "tmp_capture_calls"  # sample store: {snapshot seq: tool call id} (src/sandbox/live_tmp_capture.py)
 SYSTEM_SENDER = "system"                  # the sender of the board's notice of the team's hand-in
 ORBIT_SUBMITTED = "submitted"   # TurnState.ended of ORBIT's own submit, in logs made before submit and stop_working
 ACTIONS_TOOL = "get_peer_actions"                       # the influencers' tools (src/swarm/_regulator_oversight.py)

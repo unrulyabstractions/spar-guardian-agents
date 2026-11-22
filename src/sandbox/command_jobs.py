@@ -75,7 +75,7 @@ from orbit.tools import ToolContext, ToolFactory
 
 from src.configuration.settings import load_prompts
 from src.swarm.tool_output_caps import middle_cut
-from src.swarm.turn_rules import JOBS_STORE, mark_job, round_deadline
+from src.swarm.turn_rules import JOBS_STORE, mark_job, mark_machine, round_deadline
 
 JOBS_DIR = "/var/lib/swarm_jobs"
 TRACKED_FILES = ["pid", "procs"]      # what a tracked call's folder keeps once it ended in time, for reap_round
@@ -596,6 +596,7 @@ async def read(call: Call, *, wait_s: float = 0.0, final: bool = False, data: bo
     """(stderr, stdout, head) of the call's streams from its cursor (READ); `final` reads from the start and removes
     the call's directory, a tracked call's pid and procs kept (Where.tracked). The cursor moves to each stream's
     total."""
+    mark_machine(call.where.service, call.where.box)
     spec = {"dir": call.dir, "keep": SEALED_READ_BYTES if call.key else KEEP_BYTES, "wait_s": wait_s, "data": data,
             "remove": final, "from": {"out": 0, "err": 0} if final else call.cursor, "sealed": bool(call.key),
             "keep_files": TRACKED_FILES if final and call.where.tracked else []}
@@ -658,6 +659,7 @@ async def run_command(where: Where, agent: str, tool: str, command: str, argv: l
     gave it. Past it: the call becomes a job (the module's docstring), its answer within `cap` bytes."""
     handle = next_call_name(agent)
     memory().machines[handle] = (agent, where.service)
+    mark_machine(where.service, where.box)
     spec = {"top": JOBS_DIR, "name": handle, "user": where.user, "env": where.env, "keep": KEEP_BYTES, "wrap": WRAP,
             "poll": POLL_S, "sealed": where.sealed}
     key = secrets.token_bytes(32) if where.sealed else None
@@ -719,6 +721,7 @@ async def stop(call: Call, status: str) -> None:
     """Kill every process of the call's job (STOP), the exec's and what it left running, and wait for its exec to
     return; status names who stopped it. A job that had exited keeps "exited": only what it left running dies."""
     running = not call.task.done()
+    mark_machine(call.where.service, call.where.box)
     await call.where.box.exec(["python3", "-I", "-c", STOP], input=json.dumps({"dirs": [call.dir]}), user="root",
                               timeout=INFRA_TIMEOUT_S)
     if running:

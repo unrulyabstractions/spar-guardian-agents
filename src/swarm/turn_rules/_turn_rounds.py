@@ -20,7 +20,9 @@ ends decides at each boundary of the activation (ORBIT ScheduleConfig.end_activa
 counted, a tool wrapper on every agent's tools, refuses (Refused, prompts.yaml `round`) a call past N, a call after
 end_round in the same batch and a call after the agent's turns ended, marks refused a call its tool refuses by our
 rules, and times every call. A command tool reads its round's deadline (round_deadline) and names the job its call
-became (mark_job), which the call's timeline entry keeps as `job`. SWAPS holds the tools that counted replaces before
+became (mark_job), which the call's timeline entry keeps as `job`, and names each machine it ran a command on
+(mark_machine): after such a call the AFTER_CALL hooks run (the /tmp capture, src/sandbox/live_tmp_capture.py), and
+_settle names the call's snapshots by its call id (TMP_CALLS_STORE). SWAPS holds the tools that counted replaces before
 it wraps them: ORBIT's built-in bash and python of a lone agent, which ORBIT binds under names a binding may not use,
 run through the sandbox's command jobs (src/sandbox/agent_tools.py registers them).
 
@@ -34,8 +36,10 @@ round." Every agent present reads the run's round number, the plan's (round_line
 """
 from __future__ import annotations
 
+import asyncio
+import sys
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
 
 from inspect_ai.agent import AgentState
@@ -50,6 +54,7 @@ from src.swarm.turn_rules._turn_state import (
     END_ROUND,
     JOBS_STORE,
     ROUND_TAG,
+    TMP_CALLS_STORE,
     Refused,
     TeamSubmission,
     TurnState,
@@ -62,6 +67,10 @@ RUN: ContextVar[dict | None] = ContextVar("swarm_round_run", default=None)
 """The run record of the tool call under way (counted), which mark_job writes."""
 SWAPS: dict[str, Callable[[str, ToolDef], ToolDef]] = {}
 """Tool name -> make(agent, definition): the tool counted wraps in place of the one ORBIT built."""
+AFTER_CALL: list[Callable[[str, dict], Awaitable[None]]] = []
+"""hook(agent, run record) after every call the gate let through that ran a command on a machine (mark_machine), once
+its end time is kept, the call's answer waiting on it: the /tmp capture registers itself. A hook never raises; one that
+does is skipped."""
 
 
 def now() -> float:
@@ -109,6 +118,33 @@ def mark_job(job: str) -> None:
     run = RUN.get()
     if run is not None:
         run["job"] = job
+
+
+def mark_machine(service: str | None, box) -> None:
+    """Name a machine the tool call under way ran a command on (its service, None for the sample's default, and its
+    sandbox environment); AFTER_CALL reads them. Outside counted, nothing."""
+    run = RUN.get()
+    if run is not None:
+        run.setdefault("machines", {})[service] = box
+
+
+async def after_call(agent: str, run: dict) -> None:
+    """The AFTER_CALL hooks for a call that ran a command on a machine."""
+    if not run.get("machines"):
+        return
+    for hook in AFTER_CALL:
+        try:
+            await hook(agent, run)
+        except Exception:  # noqa: BLE001 - a hook's failure never reaches the agent's call
+            continue
+
+
+def name_snapshot_call(seqs: list[int], call_id: str) -> None:
+    """Write the id of the tool call that took these /tmp snapshots into TMP_CALLS_STORE, once its batch is settled."""
+    st = store()
+    named = dict(st.get(TMP_CALLS_STORE) or {})
+    named.update({str(seq): call_id for seq in seqs})
+    st.set(TMP_CALLS_STORE, named)
 
 
 def name_job_call(job: str, call_id: str) -> None:
@@ -206,6 +242,8 @@ def counted(agent: str):
             finally:
                 run["t1"] = now()
                 RUN.reset(token)
+                if not isinstance(sys.exc_info()[1], (asyncio.CancelledError, Refused)):
+                    await after_call(agent, run)
 
         wrapped = ToolDef(execute, name=definition.name, description=definition.description,
                           parameters=definition.parameters, parallel=definition.parallel, viewer=definition.viewer,
@@ -234,6 +272,8 @@ def _settle(record: dict, messages: list) -> None:
         record["times"][call.id] = (run["t0"], run["t1"], run["refused"])
         if run.get("job"):
             record.setdefault("jobs", {})[call.id] = run["job"]
+        if run.get("tmp"):
+            name_snapshot_call(run["tmp"], call.id)
         if call.function == END_ROUND:
             record["closed"] = True
         else:

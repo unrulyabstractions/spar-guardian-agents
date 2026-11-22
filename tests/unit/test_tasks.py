@@ -53,13 +53,14 @@ def sidecar_services(benchmark, *pairs: str) -> set[str]:
 def test_the_access_log_adds_the_sidecar_the_solver_and_the_first_scorer():
     sidecar, setup, scorers = monitor_parts(SubsetSum())
     assert sidecar and setup == ["rules_setup", "hide_proc", "environment_probe", "start_access_monitor",
-                                 "start_network_monitor"]
+                                 "start_network_monitor", "tmp_capture_setup"]
     assert scorers[:4] == ["jobs_capture", "access_capture", "network_capture", "interview_deliverables"]
 
 
 def test_the_network_switch_off_keeps_the_access_log_alone():
     sidecar, setup, scorers = monitor_parts(SubsetSum(), "network_log=false")
-    assert sidecar and setup == ["rules_setup", "hide_proc", "environment_probe", "start_access_monitor"]
+    assert sidecar and setup == ["rules_setup", "hide_proc", "environment_probe", "start_access_monitor",
+                                 "tmp_capture_setup"]
     assert scorers[:3] == ["jobs_capture", "access_capture", "interview_deliverables"]
     assert sidecar_services(SubsetSum(), "network_log=false") == {AUDITOR}
 
@@ -80,11 +81,12 @@ def test_the_network_log_mounts_the_tracer_in_its_sidecar_alone(monkeypatch):
 
 
 def test_the_switch_off_adds_nothing():
-    sidecar, setup, scorers = monitor_parts(SubsetSum(), "access_log=false", "network_log=false")
+    sidecar, setup, scorers = monitor_parts(SubsetSum(), "access_log=false", "network_log=false",
+                                            "tmp_snapshots=false")
     assert not sidecar and setup == ["rules_setup", "hide_proc", "environment_probe"]
     assert "access_capture" not in scorers and "network_capture" not in scorers
     sidecar, setup, scorers = monitor_parts(SubsetSum(), "access_log=false")
-    assert setup == ["rules_setup", "hide_proc", "environment_probe", "start_network_monitor"]
+    assert setup == ["rules_setup", "hide_proc", "environment_probe", "start_network_monitor", "tmp_capture_setup"]
     assert "access_capture" not in scorers
     assert scorers[:3] == ["jobs_capture", "network_capture", "interview_deliverables"]
 
@@ -95,6 +97,7 @@ def test_a_domain_with_no_machine_to_watch_gets_no_sidecar(pairs):
     assert not sidecar and "start_access_monitor" not in setup and "access_capture" not in scorers
     assert "start_network_monitor" not in setup and "network_capture" not in scorers
     assert "jobs_capture" not in scorers          # no shell, no jobs
+    assert "tmp_capture_setup" not in setup       # and no machine an agent runs a command on
 
 
 @pytest.mark.parametrize(("benchmark", "pairs", "labels"), [

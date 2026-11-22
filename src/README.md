@@ -88,6 +88,8 @@ What every domain builds its sandbox from. Nothing here knows a domain.
 - `sandbox_probe.py`: one command's record, a table of commands and the setup solver that probes the seats.
 - `staging.py`: files written on the host for a sandbox: atomic writes, compose files and staging tarballs. It also sends `team_remote_lock.sh`, which locks a bare team remote.
 - `task_tool_store.py`: the sample store of a task's own tool.
+- `tmp_listing.py`: the listing of a machine's /tmp, /var/tmp and /dev/shm as root that every /tmp snapshot is made of, run and replay alike.
+- `live_tmp_capture.py`: the run's own /tmp snapshots under `tmp_snapshots=true` (the default): every agent machine listed before round 1 and after each tool call that ran a command there.
 
 ### swarm/
 
@@ -120,7 +122,7 @@ The eval log as a CheatBench run directory.
 - `eval_sample_view.py`: one sample read the same way, finished or live.
 - `atif_transcripts.py`: one sample as one ATIF trajectory per agent.
 
-`_export_run_blocks.py`, `_export_access_log.py` and `_export_network_log.py` are the implementation: the blocks of `run.json`, the access log's rows with an agent, an origin and a tool call as `access_log.jsonl`, and the network log's rows with the agent at the other end as `network.jsonl`.
+`_export_run_blocks.py`, `_export_access_log.py`, `_export_network_log.py` and `_export_tmp_snapshots.py` are the implementation: the blocks of `run.json`, the access log's rows with an agent, an origin and a tool call as `access_log.jsonl`, the network log's rows with the agent at the other end as `network.jsonl`, and the run's own /tmp snapshots as `tmp_snapshots.json`.
 
 ### judging/
 
@@ -189,6 +191,8 @@ and creative writing runs. The package docstring gives steps.jsonl's schema.
 - `swe_replayer.py`: an SWE run's setup, state after a call and end state, from `domains/swe/swe_replay.py`'s commands.
 - `protein_replay.py`: a protein design run's, with check_design re-run on the host.
 - `creative_replay.py`: a creative writing run's, with the record's random values handed to the run's own staging.
+- `tmp_snapshots.py`: `tmp_snapshots.json` for a run made before the run took its own: a replay that lists each machine's
+  /tmp before and after every call.
 
 ### ui/
 

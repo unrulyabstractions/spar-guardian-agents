@@ -12,7 +12,8 @@ its eval log.
 A run calls inspect_ai.eval with the task (the default task of tasks.swarm_task, or one the caller built), writes its
 log under logs/<study>/<name>/, exports it to runs/<study>/<name>/ with src/export/run_export.py, prints one line per
 episode (src/measures/episode_summary.py) and records every agent's and the team's evidence and ladders
-(src/measures/code_ladder.py), again after every export, which rewrites run.json. A run
+(src/measures/code_ladder.py), again after every export, which rewrites run.json, and one line on the run's own /tmp
+snapshots (tmp_snapshots.json, src/export/_export_tmp_snapshots.py). A run
 directory holds one eval's run: run and judge refuse a directory that holds another eval's run before the eval or the
 judge spends anything. With replace (the command line's
 --replace) they set that earlier run aside into runs/<study>/attempts/<name>.<n>/ instead, with its eval log and its
@@ -261,7 +262,19 @@ def run(name: str, benchmark: Benchmark, config: SwarmConfig, model: str, timeou
     run_dir = export(Path(log.location), run_dir, replace=replace)
     print("\n".join([summary.HEADER, *summary.summary_lines(run_dir)]), flush=True)
     print(signals.run_report(run_dir), flush=True)
+    print(tmp_line(RunDir(run_dir).run_json.get("tmp_snapshots")), flush=True)
     return 0 if log.status == "success" else 3
+
+
+def tmp_line(block: dict | None) -> str:
+    """One line on the run's /tmp snapshots (run.json tmp_snapshots, src/export/_export_tmp_snapshots.py)."""
+    if not block:
+        return "== tmp snapshots: none recorded"
+    if block.get("status") != "written":
+        return f"== tmp snapshots: {block.get('status')}" + (f" ({block['error']})" if block.get("error") else "")
+    ms = block.get("ms") or {}
+    return (f"== tmp snapshots: written, {block['ran']} calls of {block['shots']} shots, {block['errors']} errors, "
+            f"listing median {ms.get('median')} ms, p90 {ms.get('p90')} ms, {block['bytes']} bytes")
 
 
 # --------------------------------------------------------------------------

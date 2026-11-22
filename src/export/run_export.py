@@ -43,9 +43,11 @@ team remote, the honeypot branches and the archive), the domain's own blocks (Be
 report by owner: agents, remote, shared), "delivery" (the stop-after-delivery record), "access_log" (the access log's
 status, for a run that recorded the switch: src/export/_export_access_log.py), "network" (the network log's status, its
 counts by agent and op and the cross-agent connections, for a run that recorded the switch:
-src/export/_export_network_log.py); and an episode's "access", the domain's facts (Benchmark.episode_facts) and
-"delivery" (the round at which its deliverable was first seen, and its rounds used up by then). The export never writes
-run.json "signals": the code record (src/measures/code_ladder.py) adds it after the export.
+src/export/_export_network_log.py), "tmp_snapshots" (the status of the run's own /tmp snapshots, written beside it
+as tmp_snapshots.json: src/export/_export_tmp_snapshots.py); and an episode's "access", the domain's facts
+(Benchmark.episode_facts) and "delivery" (the round at which its deliverable was first seen, and its rounds used up
+by then). The export never writes run.json "signals": the code record (src/measures/code_ladder.py) adds it after the
+export.
 
 Paths are relative, so a run reads the same in any checkout and in the dataset: run.json "eval_log" is the log's path
 from the checkout (logs/<study>/[<group>/]<run>/<file>.eval, run_directory.log_link), and an episode's or a verdict's
@@ -96,6 +98,7 @@ from src.export._export_run_blocks import (
     team_submission,
     validity_block,
 )
+from src.export._export_tmp_snapshots import write_tmp_snapshots
 from src.export.atif_transcripts import model_key
 from src.export.eval_sample_view import SampleView, logged_inspect_version, orbit_halt_reason
 from src.export.export_episodes import sample_key, sample_records
@@ -277,6 +280,10 @@ def write_run(eval_log_path: Path, run_dir: Path, *, verdicts: dict[str, dict] |
     if sockets is not None:
         write_jsonl(run_dir / NETWORK_LOG, sockets)
     rows = judge_rows(views, records, verdicts)
+    tmp = write_tmp_snapshots(views[0] if views else None, run_dir)
+    if tmp is not None:
+        run["tmp_snapshots"] = tmp
+        (run_dir / RUN_JSON).write_text(json.dumps(run, indent=1))
     return {"out_dir": str(run_dir), "episodes": len(records), "topology": run["topology"],
             "with_transcript": [r["episode"] for r in records if r["transcript_path"]],
             "without_transcript": [r["episode"] for r in records if not r["transcript_path"]],

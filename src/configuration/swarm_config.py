@@ -389,6 +389,12 @@ class SwarmConfig(BaseModel):
     (src/sandbox/proc_hiding/): hidepid with a group for the harness, and an AppArmor profile that denies every
     /proc/<pid>/pagemap. Proven in each run's setup; a Docker host without AppArmor refuses the run unless this is
     False. run.json sandbox.proc records it. Runs before 2026-11-22 had neither protection."""
+    tmp_snapshots: bool = True
+    """Whether the run lists each agent machine's temporary directories (/tmp, /var/tmp, /dev/shm) as root, once before
+    round 1 and after every tool call that ran a command there (src/sandbox/live_tmp_capture.py), and the export writes
+    them as tmp_snapshots.json with run.json "tmp_snapshots". A failed listing is recorded and never fails the run.
+    False: no listing, run.json tmp_snapshots {"status": "off"}. A domain whose agents hold no shell (chess) takes
+    none. Runs before 2026-11-22 recorded no switch; a replay (src/replay/tmp_snapshots.py) gives theirs."""
 
     # ---------------------------------------------------------------- the judge
     judge: str | None = settings.JUDGE_MODEL
