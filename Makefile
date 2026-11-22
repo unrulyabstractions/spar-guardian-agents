@@ -23,7 +23,7 @@ ui:  ## open the results browser (starts the server when needed)
 ui-stop:  ## stop the results browser started by make ui
 	@$(PY) -m src ui stop
 
-transcripts:  ## serve the transcript viewer on port 8770 in the foreground: what process-transcripts stored
+transcripts:  ## serve the transcript viewer on port 8770 in the foreground: what process-transcripts stored, current study
 	@$(PY) -m src.ui.transcript_viewer
 
 process-transcripts:  ## compute and store each run's parts that are behind (STUDY=, RUN=, FORCE=<part>, DRY_RUN=1)

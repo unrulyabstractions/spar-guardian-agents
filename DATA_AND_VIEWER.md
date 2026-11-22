@@ -125,7 +125,7 @@ make process-transcripts
 make transcripts
 ```
 
-`make transcript` is the same. Open http://127.0.0.1:8770/. The viewer runs until Ctrl-C. It computes nothing: it serves what `make process-transcripts` stored in each run's folder (`analysis/row.json` and `analysis/labels/`). That command redoes only the parts behind the registry, `src/configuration/pipeline_parts.yaml` (`STUDY=`, `RUN=`, `FORCE=<part>`, `DRY_RUN=1`). A new run processes itself at its end. The runs page counts the runs behind or not processed in one chip. For another port, run `uv run python -m src.ui.transcript_viewer --port <port>`. The viewer lists valid runs only. Board and Details appear on runs with more than one agent.
+`make transcript` is the same. Open http://127.0.0.1:8770/. The viewer runs until Ctrl-C. It computes nothing: it serves what `make process-transcripts` stored in each run's folder (`analysis/row.json` and `analysis/labels/`). That command redoes only the parts behind the registry, `src/configuration/pipeline_parts.yaml` (`STUDY=`, `RUN=`, `FORCE=<part>`, `DRY_RUN=1`). A new run processes itself at its end. The runs page counts the runs behind or not processed in one chip. For another port, run `uv run python -m src.ui.transcript_viewer --port <port>`. The viewer lists the valid runs under `runs/` only, so it shows the current study. Board and Details appear on runs with more than one agent. The header's Settings turn each task's runs on or off, kept in the browser; the tasks the study does not read start off.
 
 | Page or tab | What it holds |
 |---|---|

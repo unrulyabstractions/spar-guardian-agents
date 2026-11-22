@@ -245,9 +245,10 @@ mast.json and who_when.json.
 
 # Transcript viewer
 
-Start: `make transcripts` (or `make transcript`), or `uv run python -m src.ui.transcript_viewer [--port 8770] [--runs runs]` from the
-repository root. It serves in the foreground until Ctrl-C or SIGTERM. `src/ui/transcript_viewer.py` is the server and
-the run page's data, `src/ui/transcript_index.py` the index, `src/ui/transcript_levels.py` the three ladders and the judge labels, `src/ui/transcript_ladder_tables.py`
+Start: `make transcripts` (or `make transcript`), or `uv run python -m src.ui.transcript_viewer [--port 8770] [--runs
+runs]` from the repository root. It serves in the foreground until Ctrl-C or SIGTERM. `src/ui/transcript_viewer.py` is
+the server and the run page's data, `src/ui/transcript_index.py` the index, `src/ui/transcript_levels.py` the three
+ladders and the judge labels, `src/ui/transcript_ladder_tables.py`
 the Ladders page's tables, `src/ui/transcript_board.py` the Board tab's data and `src/ui/transcript_static/` the page
 (`tv_*.js`, `tv_style.css`, `tv_board.css`). The page reuses the results browser's `style.css`, `app/dom.js`,
 `app/charts.js` and `app/components.js`, served under `/static/`.
