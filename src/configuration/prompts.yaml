@@ -331,9 +331,10 @@ presence:
 
 # The provider-only line at the start of a call when the board changed since the agent's last call (notice=changed,
 # counts or previews; src/swarm/turn_rules/_turn_rules_filter.py notice_text). counts joins one `count` per
-# sender with "; ". previews, the default, follows it with one `preview` per new post by others, newest first up to
-# PREVIEW_POSTS with the posts that name the agent first, each its first line cut to PREVIEW_CHARS and `cut` where
-# anything was left out, `mention` after the sender of a post that names the agent, then `full`. Ours.
+# sender with "; ". previews, the default, follows it with one `preview` per new post by others: up to PREVIEW_POSTS,
+# chosen with the posts that name the agent first and then the newest, printed in board order, each its first line
+# cut to PREVIEW_CHARS and `cut` where anything was left out, `mention` after the sender of a post that names the
+# agent, then `full`. Ours.
 notice:
   changed: "[Since your last call] the board changed."
   counts: "[Since your last call] the board changed: {counts}."

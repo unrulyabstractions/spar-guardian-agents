@@ -166,7 +166,8 @@ class TurnRulesFilter(ModelFilter):
         """The board notice when the board holds posts by others above the sequence the agent saw at its last call.
 
         counts gives each such sender's new posts (above that sequence) and total posts; previews, for
-        notice=previews, the newest PREVIEW_POSTS of those posts, the ones that name the agent first. The board is read
+        notice=previews, up to PREVIEW_POSTS of those posts, chosen with the ones that name the agent first and then the
+        newest, and printed in board order. The board is read
         through ORBIT's read_messages, live: a post made earlier in the round counts."""
         if self.config.notice == "none" or not team:
             return None
