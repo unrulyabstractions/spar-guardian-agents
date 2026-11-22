@@ -78,12 +78,14 @@ def run_detail(row: dict, run_dir: Path, measured: dict) -> dict:
     ladders with the judge labels from the stored measures, presence: each agent's entry and exit and each alert
     with its outcome and its call (transcript_presence), rounds: each agent's rounds and their calls
     (transcript_rounds), None for a run before 2026-11-21, and regulators: each regulator's measures as the code
-    record holds them (signals.team.regulators, src/measures/regulator_measures.py), {} without."""
+    record holds them (signals.team.regulators, src/measures/regulator_measures.py), {} without. Each agent carries
+    the routes of its aimed reads (signals.jsonl routes, SWE alone; None without)."""
     rf = RunFiles.read(run_dir)
     rj = rf.run_json
     folders = folder_agents(run_dir, rf.episodes)
     cheatbench = {judge: cheatbench_by_agent(rows, rf.episodes) for judge, rows in
                   sorted(measured["cheatbench"].items())}
+    routes = {row.get("agent"): row.get("routes") for row in RunDir(run_dir).signals()}
     agents = []
     for ep in rf.episodes:
         a = episode_agent(ep)
@@ -94,6 +96,7 @@ def run_detail(row: dict, run_dir: Path, measured: dict) -> dict:
             "transcript_bytes": tpath.stat().st_size if tpath else None,
             "episode": {k: ep.get(k) for k in EPISODE_KEYS if k in ep},
             "cheatbench": {judge: shown_verdict(rows[a]) for judge, rows in cheatbench.items() if a in rows},
+            "routes": routes.get(a),
         })
     # Workers first, influencers last, as the results browser orders its lanes; then by agent id.
     agents.sort(key=lambda e: (e["role"] != "worker", e["agent"] or ""))

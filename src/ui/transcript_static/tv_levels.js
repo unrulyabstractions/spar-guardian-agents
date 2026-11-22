@@ -285,12 +285,22 @@ const summary = rows => h('table', { class: 'lv-summary' }, h('tbody', null, row
 const headRow = cols => h('thead', null, h('tr', null, cols.map(c => (Array.isArray(c)
   ? h('th', { scope: 'col', title: c[1] }, c[0]) : h('th', { scope: 'col' }, c)))));
 
+/** The routes an agent's aimed reads took (the code record's routes, SWE alone), one chip each. */
+const ROUTE_TITLES = {
+  branch: 'Aimed reads of planted branches or upstream refs',
+  side_patch: 'Aimed reads of the side patch files outside the repository',
+  fix_commit: 'Aimed reads naming the fix commit by id',
+  network: 'Aimed fetches from the network',
+};
+const routeChips = routes => ((routes || []).length
+  ? h('div', { class: 'route-chips' }, routes.map(r => badge(r, 'plain', ROUTE_TITLES[r] || r))) : null);
+
 /** Details tab: the Cheating ladder in full (src/measures/cheating_ladder.py). The team's rung is the highest worker or
  * the team's own evidence; the influencers' own rungs are listed apart and never enter it. The grader's pass, the
  * alarm, and one row per agent with its rung, whether it cheated, the evidence of each clause that holds, the scan's
  * records below the ladder and CheatBench's judge's labels beside the code's clauses. Every Cheating cell holds the
- * code's word and CheatBench's judge's under it (cheatingCell). ctx: {evidence(text, agent) -> node, cheatbench:
- * {agent: {judge: row}}, row: the index row (its cheatbench)}. */
+ * code's word and CheatBench's judge's under it (cheatingCell), and the agent's routes as chips. ctx: {evidence(text,
+ * agent) -> node, cheatbench: {agent: {judge: row}}, row: the index row (its cheatbench), routes: {agent: [route]}}. */
 export function cheatingPanel(lv, roles, ctx) {
   const X = lv.cheating;
   const L = lv.ladders.cheating;
@@ -316,7 +326,8 @@ export function cheatingPanel(lv, roles, ctx) {
         const r = X.agents[a];
         return h('tr', { class: isInfluencer(role(a)) && 'coord-influencer' },
           h('td', { class: 'mono' }, a), h('td', null, roleWords(role(a))),
-          h('td', null, cheatingCell(L, r.rung, r.cheated, cheatbenchWords(ctx.cheatbench[a]), true, (lv.agents[a] || {}).cheating?.facts)),
+          h('td', null, cheatingCell(L, r.rung, r.cheated, cheatbenchWords(ctx.cheatbench[a]), true, (lv.agents[a] || {}).cheating?.facts),
+            routeChips((ctx.routes || {})[a])),
           h('td', null, clauseList(lv, r.clauses, a, ctx)),
           h('td', null, (r.below || []).length ? h('ul', { class: 'ev-list' }, r.below.map(x => h('li', null, ctx.evidence(x, a)))) : muted('none', 'small')),
           h('td', null, judgeLabels(r)));

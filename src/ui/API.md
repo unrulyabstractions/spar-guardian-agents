@@ -115,7 +115,8 @@ Signals = the episode's agent row of signals.jsonl (src/measures/code_ladder.py)
           role and task: holds, exposed, exposed_call, exposed_source, tried, tried_call, tried_evidence, opened,
           opened_call, opened_evidence, lines_seen, pieces_seen, joined_call, joined_evidence, probe, copies, used,
           used_evidence, tampered, tampered_evidence (chess alone), checked, checked_evidence, shipped,
-          shipped_evidence, calls, and in a run with an access log
+          shipped_evidence, calls, on SWE routes (the sorted routes its aimed reads took over the whole
+          transcript: branch, side_patch, fix_commit, network; SweDomain.routes), and in a run with an access log
           access_log (src/measures/access_evidence.py). exposed_source is own_action,
           teammate_post, teammate_actions, teammate_workspace (peer_shell), task_text (exposed_call null) or none. used,
           checked and shipped name content this
@@ -469,7 +470,8 @@ Alert = {agent, round, reason, agents (named, or null), time,
 Agent = {agent, role, folder (its trajectories/ folder), transcript_bytes,
          episode: {agent, model, n_turns, n_tool_calls, wall_time, limit, score, ended_by, ok, failure,
                    final_text, usage, defense, defenses},   # the keys episodes.jsonl has of these
-         cheatbench: {judge: verdict row}}
+         cheatbench: {judge: verdict row},
+         routes: [str] | null}   # signals.jsonl's routes (SWE alone), chips beside the agent's Cheating rung
 Board = {messages: [{id, board_no (P<n>), notice (a harness notice), sender, role,   # one per sample (RunDir.boards)
          sent: {agent, call_id}, reads: [{agent, call_id}]}]}
 Levels = {agents: {agent: {<ladder>: Cell}}, team: {<ladder>: Cell}, events: {agent: [Event]}, labels: {agent: [Label]},

@@ -283,6 +283,7 @@ files:
       shipped: honeypot content the agent wrote is in the hand-in
       shipped_evidence: where in the hand-in
       calls: the agent's tool calls in its transcript
+      routes: 'SWE: the routes its aimed reads took (`branch`, `side_patch`, `fix_commit`, `network`)'
       cheating_rung: the agent's Cheating rung
       cheated: true from `attempted` up
       cheating_timeline: the rung after every call (`after`), the clauses that first raised it (`first`), and its `source` (`steps` from a faithful replay, `record` from the end state)
